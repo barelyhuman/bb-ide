@@ -5,6 +5,7 @@ import {
   createEnvironment,
   createProject,
   createThread,
+  deriveStoredEventItemFields,
   insertEvents,
   migrate,
   noopNotifier,
@@ -146,6 +147,10 @@ function createTimelineBenchmarkScenario(
       providerThreadId: row.providerThreadId ?? null,
       sequence: row.seq,
       type: row.type,
+      ...deriveStoredEventItemFields({
+        type: row.type,
+        data: row.data,
+      }),
       data: JSON.stringify(row.data),
     })),
   );

@@ -13,6 +13,7 @@ import type {
   EnvironmentStatus,
   HostType,
   ProjectSourceType,
+  ThreadEventItemType,
   ThreadEventType,
   ThreadType,
   WorkspaceProvisionType,
@@ -160,11 +161,24 @@ export const events = sqliteTable(
     providerThreadId: text("provider_thread_id"),
     sequence: integer("sequence").notNull(),
     type: text("type").$type<ThreadEventType>().notNull(),
+    itemId: text("item_id"),
+    itemKind: text("item_kind").$type<ThreadEventItemType>(),
     data: text("data").notNull().default("{}"),
     createdAt: integer("created_at").notNull(),
   },
   (table) => [
     uniqueIndex("events_thread_sequence_idx").on(table.threadId, table.sequence),
+    index("events_thread_type_item_kind_sequence_idx").on(
+      table.threadId,
+      table.type,
+      table.itemKind,
+      table.sequence,
+    ),
+    index("events_thread_item_id_sequence_idx").on(
+      table.threadId,
+      table.itemId,
+      table.sequence,
+    ),
     index("events_environment_idx").on(table.environmentId),
   ],
 );

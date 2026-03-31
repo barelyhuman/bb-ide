@@ -4,6 +4,7 @@ import {
   systemManagerUserMessageEventDataSchema,
   systemOperationEventDataSchema,
   systemProvisioningEventDataSchema,
+  systemEventTypeValues,
   systemThreadInterruptedEventDataSchema,
   systemThreadTitleUpdatedEventDataSchema,
   turnRequestEventDataSchema,
@@ -196,6 +197,7 @@ export const threadEventItemSchema = z.discriminatedUnion("type", [
   }),
 ]);
 export type ThreadEventItem = z.infer<typeof threadEventItemSchema>;
+export type ThreadEventItemType = ThreadEventItem["type"];
 
 /**
  * Events originating from a provider process via the agent runtime.
@@ -416,5 +418,13 @@ export const threadEventSchema = z.union([
   systemEventSchema,
 ]);
 export type ThreadEvent = z.infer<typeof threadEventSchema>;
-
 export type ThreadEventType = ThreadEvent["type"];
+export const threadEventTypeValues = [
+  ...providerEventTypeValues,
+  ...systemEventTypeValues,
+] as const;
+const threadEventTypeSet = new Set<string>(threadEventTypeValues);
+export const threadEventTypeSchema = z.string().refine(
+  (value): value is ThreadEventType => threadEventTypeSet.has(value),
+  "Invalid thread event type",
+);

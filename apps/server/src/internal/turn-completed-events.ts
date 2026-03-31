@@ -42,6 +42,8 @@ export function handleTurnCompletedEvents(
       createdAt: events.createdAt,
       data: events.data,
       id: events.id,
+      itemId: events.itemId,
+      itemKind: events.itemKind,
       providerThreadId: events.providerThreadId,
       sequence: events.sequence,
       threadId: events.threadId,

@@ -1,6 +1,7 @@
 import {
   createEnvironment,
   createDraft,
+  deriveStoredEventItemFields,
   insertEvents,
   createProject,
   createThread,
@@ -160,6 +161,10 @@ export function seedEvent(
       sequence: args.sequence,
       turnId: args.turnId ?? null,
       type: args.type,
+      ...deriveStoredEventItemFields({
+        type: args.type,
+        data: args.data,
+      }),
       data: JSON.stringify(args.data),
     },
   ]);

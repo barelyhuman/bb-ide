@@ -15,6 +15,8 @@ export {
 } from "./ids.js";
 
 export { migrate } from "./migrate.js";
+export { deriveStoredEventItemFields } from "./stored-event-item-fields.js";
+export type { StoredEventItemFields } from "./stored-event-item-fields.js";
 
 export { noopNotifier } from "./notifier.js";
 export type { DbNotifier } from "./notifier.js";

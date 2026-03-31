@@ -48,6 +48,34 @@ describe("events", () => {
     expect(all).toHaveLength(2);
   });
 
+  it("stores derived item columns when provided", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "item/completed",
+        itemId: "msg-1",
+        itemKind: "agentMessage",
+        data: JSON.stringify({
+          item: {
+            id: "msg-1",
+            type: "agentMessage",
+            text: "hello",
+          },
+        }),
+      },
+    ]);
+
+    const all = listEvents(db, { threadId: thread.id });
+    expect(all).toHaveLength(1);
+    expect(all[0]).toMatchObject({
+      itemId: "msg-1",
+      itemKind: "agentMessage",
+    });
+  });
+
   it("deduplicates on (threadId, sequence)", () => {
     const { db, thread } = setup();
 

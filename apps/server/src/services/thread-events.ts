@@ -1,6 +1,7 @@
 import { eq, max, sql } from "drizzle-orm";
 import {
   createEventId,
+  deriveStoredEventItemFields,
   events,
 } from "@bb/db";
 import type {
@@ -64,10 +65,11 @@ export function appendThreadEvent(
         .where(eq(events.threadId, args.threadId))
         .get();
       const sequence = (maxRow?.maxSeq ?? 0) + 1;
+      const itemFields = deriveStoredEventItemFields(args);
 
       tx.run(
         sql`INSERT INTO events
-          (id, thread_id, environment_id, turn_id, provider_thread_id, sequence, type, data, created_at)
+          (id, thread_id, environment_id, turn_id, provider_thread_id, sequence, type, item_id, item_kind, data, created_at)
           VALUES (
             ${createEventId()},
             ${args.threadId},
@@ -76,6 +78,8 @@ export function appendThreadEvent(
             ${args.providerThreadId ?? null},
             ${sequence},
             ${args.type},
+            ${itemFields.itemId},
+            ${itemFields.itemKind},
             ${JSON.stringify(args.data)},
             ${now}
           )`,

@@ -1,5 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import {
+  deriveStoredEventItemFields,
   environments,
   getHighWaterMarks,
   getThread,
@@ -83,6 +84,10 @@ function toStoredEvent(envelope: HostDaemonEventEnvelope) {
     // Provider events keep the daemon timestamp even though server-originated
     // events still use server time.
     createdAt: envelope.createdAt,
+    ...deriveStoredEventItemFields({
+      type,
+      data,
+    }),
     data: JSON.stringify(data),
   };
 }

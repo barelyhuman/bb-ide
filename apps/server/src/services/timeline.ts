@@ -25,46 +25,6 @@ const TIMELINE_EXCLUDED_EVENT_TYPES = [
 ] as const;
 const MIN_AGENT_MESSAGE_DELTAS_FOR_SUMMARY_COMPACTION = 1000;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && Array.isArray(value) === false;
-}
-
-function parseStoredEventData(data: string): Record<string, unknown> | null {
-  try {
-    const parsed: unknown = JSON.parse(data);
-    return isRecord(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
-}
-
-function getCompletedAgentMessageItemId(row: StoredEventRow): string | null {
-  if (row.type !== "item/completed") {
-    return null;
-  }
-
-  const parsed = parseStoredEventData(row.data);
-  if (!parsed) {
-    return null;
-  }
-  const item = parsed.item;
-  if (!isRecord(item)) {
-    return null;
-  }
-  return item.type === "agentMessage" && typeof item.id === "string"
-    ? item.id
-    : null;
-}
-
-function getAgentMessageDeltaItemId(row: StoredEventRow): string | null {
-  if (row.type !== "item/agentMessage/delta") {
-    return null;
-  }
-
-  const parsed = parseStoredEventData(row.data);
-  return parsed && typeof parsed.itemId === "string" ? parsed.itemId : null;
-}
-
 export function compactSummaryStoredEventRows(
   rows: readonly StoredEventRow[],
 ): StoredEventRow[] {
@@ -81,7 +41,10 @@ export function compactSummaryStoredEventRows(
 
   const completedAgentMessageItemIds = new Set<string>();
   for (const row of rows) {
-    const itemId = getCompletedAgentMessageItemId(row);
+    const itemId =
+      row.type === "item/completed" && row.itemKind === "agentMessage"
+        ? row.itemId
+        : null;
     if (itemId) {
       completedAgentMessageItemIds.add(itemId);
     }
@@ -95,7 +58,10 @@ export function compactSummaryStoredEventRows(
   const compactedRows: StoredEventRow[] = [];
 
   for (const row of rows) {
-    const itemId = getAgentMessageDeltaItemId(row);
+    const itemId =
+      row.type === "item/agentMessage/delta"
+        ? row.itemId
+        : null;
     if (!itemId || !completedAgentMessageItemIds.has(itemId)) {
       compactedRows.push(row);
       continue;

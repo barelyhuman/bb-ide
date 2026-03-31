@@ -224,8 +224,8 @@ describe("public thread data routes", () => {
           },
         },
       });
-      // Malformed: missing item.type, so json_extract(data, '$.item.type') != 'agentMessage'
-      // — filtered out at the DB level, not a 500
+      // Malformed: missing item.type, so the derived item_kind column is null.
+      // The row is filtered out at the DB level instead of turning into a 500.
       seedEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
@@ -1174,6 +1174,33 @@ describe("public thread data routes", () => {
         `/api/v1/threads/nonexistent-thread-id/events/wait?type=item/completed&waitMs=100`,
       );
       expect(response.status).toBe(404);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects invalid event types on /events/wait", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/events/wait?type=not-a-real-event&waitMs=100`,
+      );
+      expect(response.status).toBe(400);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: "Invalid event type",
+      });
     } finally {
       await harness.cleanup();
     }

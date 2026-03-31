@@ -1,5 +1,5 @@
 import { eq, sql, max, inArray } from "drizzle-orm";
-import type { ThreadEventType } from "@bb/domain";
+import type { ThreadEventItemType, ThreadEventType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { events } from "../schema.js";
@@ -12,6 +12,8 @@ export interface InsertEventInput {
   providerThreadId?: string | null;
   sequence: number;
   type: ThreadEventType;
+  itemId: string | null;
+  itemKind: ThreadEventItemType | null;
   createdAt?: number;
   data: string;
 }
@@ -37,8 +39,8 @@ export function insertEvents(
     const id = createEventId();
     const createdAt = input.createdAt ?? Date.now();
     const result = db.run(
-      sql`INSERT OR IGNORE INTO events (id, thread_id, environment_id, turn_id, provider_thread_id, sequence, type, data, created_at)
-          VALUES (${id}, ${input.threadId}, ${input.environmentId ?? null}, ${input.turnId ?? null}, ${input.providerThreadId ?? null}, ${input.sequence}, ${input.type}, ${input.data}, ${createdAt})`,
+      sql`INSERT OR IGNORE INTO events (id, thread_id, environment_id, turn_id, provider_thread_id, sequence, type, item_id, item_kind, data, created_at)
+          VALUES (${id}, ${input.threadId}, ${input.environmentId ?? null}, ${input.turnId ?? null}, ${input.providerThreadId ?? null}, ${input.sequence}, ${input.type}, ${input.itemId}, ${input.itemKind}, ${input.data}, ${createdAt})`,
     );
     if (result.changes > 0) {
       insertedCount++;

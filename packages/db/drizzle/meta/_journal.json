@@ -89,8 +89,15 @@
     {
       "idx": 12,
       "version": "6",
-      "when": 1774979263000,
+      "when": 1779943200000,
       "tag": "0011_clear_maverick",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1779943200000,
+      "tag": "0012_candid_tracker",
       "breakpoints": true
     }
   ]

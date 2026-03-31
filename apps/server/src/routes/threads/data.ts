@@ -1,6 +1,7 @@
 import path from "node:path";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
+import { threadEventTypeSchema } from "@bb/domain";
 import {
   threadStorageContentQuerySchema,
   threadStorageFilesQuerySchema,
@@ -128,7 +129,11 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
 
     const afterSeq = parseOptionalInteger(query.afterSeq, "afterSeq");
     const waitMs = Math.min(parseOptionalInteger(query.waitMs, "waitMs") ?? 30_000, 60_000);
-    const eventType = query.type;
+    const parsedEventType = threadEventTypeSchema.safeParse(query.type);
+    if (!parsedEventType.success) {
+      throw new ApiError(400, "invalid_request", "Invalid event type");
+    }
+    const eventType = parsedEventType.data;
 
     const findMatch = () => findThreadEvent(deps.db, { threadId, type: eventType, afterSeq });
 
