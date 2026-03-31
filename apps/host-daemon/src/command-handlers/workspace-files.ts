@@ -1,4 +1,3 @@
-import path from "node:path";
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
 import { runGit } from "@bb/workspace";
 import type { RuntimeManager } from "../runtime-manager.js";
@@ -8,7 +7,6 @@ import {
 } from "../command-dispatch-support.js";
 import type { CommandOf } from "../command-dispatch-support.js";
 import { finalizeListedFiles, listFilesRecursively } from "./file-list.js";
-import { readFileForTransport } from "./file-read.js";
 
 export async function listWorkspaceFiles(
   command: CommandOf<"workspace.list_files">,
@@ -40,27 +38,6 @@ export async function listWorkspaceFiles(
     filePaths,
     limit: command.limit,
     ...(command.query ? { query: command.query } : {}),
-  });
-}
-
-export async function readWorkspaceFile(
-  command: CommandOf<"workspace.read_file">,
-  runtimeManager: RuntimeManager,
-): Promise<HostDaemonCommandResult<"workspace.read_file">> {
-  const entry = await requireWorkspaceEnvironment(command, runtimeManager);
-  const workspacePath = entry.workspace.path;
-
-  const resolved = path.resolve(workspacePath, command.path);
-  if (!resolved.startsWith(workspacePath + path.sep) && resolved !== workspacePath) {
-    throw new CommandDispatchError(
-      "invalid_path",
-      `Path "${command.path}" escapes workspace root`,
-    );
-  }
-
-  return readFileForTransport({
-    resolvedPath: resolved,
-    resultPath: command.path,
   });
 }
 

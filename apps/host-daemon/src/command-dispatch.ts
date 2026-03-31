@@ -14,7 +14,7 @@ import { listHostFiles, readHostFile } from "./command-handlers/host-files.js";
 import { ensureThreadRuntime, startThread } from "./command-handlers/thread.js";
 import { WorkspaceError } from "@bb/workspace";
 import { demoteWorkspace, promoteWorkspace, squashMerge } from "./command-handlers/workspace.js";
-import { listBranches, listWorkspaceFiles, readWorkspaceFile } from "./command-handlers/workspace-files.js";
+import { listBranches, listWorkspaceFiles } from "./command-handlers/workspace-files.js";
 
 /** System stability caps — applied when the server doesn't specify its own. */
 const SYSTEM_MAX_DIFF_BYTES = 2 * 1024 * 1024; // 2 MB
@@ -174,10 +174,6 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       >;
     case "workspace.list_files":
       return listWorkspaceFiles(command, options.runtimeManager) as Promise<
-        HostDaemonCommandResult<TCommand["type"]>
-      >;
-    case "workspace.read_file":
-      return readWorkspaceFile(command, options.runtimeManager) as Promise<
         HostDaemonCommandResult<TCommand["type"]>
       >;
     case "workspace.list_branches":

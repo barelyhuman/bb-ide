@@ -38,7 +38,6 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "workspace.promote",
   "workspace.demote",
   "workspace.list_files",
-  "workspace.read_file",
   "workspace.list_branches",
 ] as const;
 export const hostDaemonCommandTypeSchema = z.enum(HOST_DAEMON_COMMAND_TYPES);
@@ -277,11 +276,6 @@ export const workspaceListFilesCommandSchema = hostDaemonWorkspaceTargetSchema.e
   limit: z.number().int().positive(),
 });
 
-export const workspaceReadFileCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
-  type: z.literal("workspace.read_file"),
-  path: z.string().min(1),
-});
-
 export const workspaceListBranchesCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.list_branches"),
 });
@@ -305,7 +299,6 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   workspacePromoteCommandSchema,
   workspaceDemoteCommandSchema,
   workspaceListFilesCommandSchema,
-  workspaceReadFileCommandSchema,
   workspaceListBranchesCommandSchema,
 ]);
 export const hostDaemonCommandSchema = z.union([
@@ -373,7 +366,6 @@ export const hostDaemonCommandResultSchemaByType = {
     ok: z.boolean(),
   }),
   "workspace.list_files": fileListResultSchema,
-  "workspace.read_file": fileReadResultSchema,
   "workspace.list_branches": z.object({
     branches: z.array(z.string()),
     current: z.string().nullable(),

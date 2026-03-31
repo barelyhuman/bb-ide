@@ -220,32 +220,6 @@ describe("workspace command dispatch", () => {
     });
   });
 
-  it("covers workspace.read_file", async () => {
-    const tempDir = await makeTempDir("bb-dispatch-read-file-");
-    await fs.writeFile(path.join(tempDir, "readme.txt"), "contents here");
-
-    const harness = createHarness({ workspacePath: tempDir });
-    await harness.manager.ensureEnvironment({
-      environmentId: "env-1",
-      workspacePath: tempDir,
-    });
-
-    const result = await dispatchCommand(
-      {
-        type: "workspace.read_file",
-        environmentId: "env-1",
-        workspaceContext: { workspacePath: tempDir, workspaceProvisionType: "unmanaged" },
-        path: "readme.txt",
-      },
-      { runtimeManager: harness.manager },
-    );
-
-    expect(result.path).toBe("readme.txt");
-    expect(result.content).toBe("contents here");
-    expect(result.contentEncoding).toBe("utf8");
-    expect(result.sizeBytes).toBe("contents here".length);
-  });
-
   it("covers host.read_file", async () => {
     const tempDir = await makeTempDir("bb-dispatch-host-read-file-");
     const filePath = path.join(tempDir, "PREFERENCES.md");
@@ -288,27 +262,6 @@ describe("workspace command dispatch", () => {
     expect(result.contentEncoding).toBe("base64");
     expect(result.mimeType).toBe("image/png");
     expect(result.sizeBytes).toBe(imageBytes.length);
-  });
-
-  it("rejects workspace.read_file with path traversal", async () => {
-    const tempDir = await makeTempDir("bb-dispatch-read-escape-");
-    const harness = createHarness({ workspacePath: tempDir });
-    await harness.manager.ensureEnvironment({
-      environmentId: "env-1",
-      workspacePath: tempDir,
-    });
-
-    await expect(
-      dispatchCommand(
-        {
-          type: "workspace.read_file",
-          environmentId: "env-1",
-          workspaceContext: { workspacePath: tempDir, workspaceProvisionType: "unmanaged" },
-          path: "../../../etc/passwd",
-        },
-        { runtimeManager: harness.manager },
-      ),
-    ).rejects.toThrow("escapes workspace root");
   });
 
   it("rejects host.read_file with a relative path", async () => {
