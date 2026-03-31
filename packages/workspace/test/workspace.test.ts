@@ -90,6 +90,7 @@ describe("Workspace", () => {
     await runGit(["add", "README.md"], { cwd: repoPath });
     await runGit(["commit", "-m", "Feature commit"], { cwd: repoPath });
     await fs.writeFile(path.join(repoPath, "README.md"), "feature plus pending\n", "utf8");
+    await fs.writeFile(path.join(repoPath, "notes.txt"), "untracked pending\n", "utf8");
 
     const workspace = new Workspace(repoPath);
     const status = await workspace.getStatus({ mergeBaseBranch: "main" });
@@ -100,8 +101,10 @@ describe("Workspace", () => {
       target: { type: "uncommitted" },
     });
     expect(uncommitted.diff).toContain("feature plus pending");
+    expect(uncommitted.diff).toContain("untracked pending");
     expect(uncommitted.files).toContain("README.md");
-    expect(uncommitted.shortstat).toContain("1 file changed");
+    expect(uncommitted.files).toContain("notes.txt");
+    expect(uncommitted.shortstat).toContain("2 files changed");
 
     const branchCommitted = await workspace.getDiff({
       target: { type: "branch_committed", mergeBaseBranch: "main" },

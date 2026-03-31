@@ -133,6 +133,38 @@ function resolveWorkspaceState(args: {
   return "committed_unmerged";
 }
 
+function parseNullSeparatedLines(output: string): string[] {
+  return output
+    .split("\0")
+    .filter((value) => value.length > 0);
+}
+
+function formatShortstat(args: {
+  changedFiles: number;
+  deletions: number;
+  insertions: number;
+}): string {
+  if (args.changedFiles === 0) {
+    return "";
+  }
+
+  const parts = [
+    `${args.changedFiles} file${args.changedFiles === 1 ? "" : "s"} changed`,
+  ];
+  if (args.insertions > 0) {
+    parts.push(
+      `${args.insertions} insertion${args.insertions === 1 ? "" : "s"}(+)`,
+    );
+  }
+  if (args.deletions > 0) {
+    parts.push(
+      `${args.deletions} deletion${args.deletions === 1 ? "" : "s"}(-)`,
+    );
+  }
+
+  return `${parts.join(", ")}\n`;
+}
+
 export class Workspace {
   readonly path: string;
 
@@ -491,7 +523,7 @@ export class Workspace {
   private async readDiffArtifacts(target: WorkspaceDiffTarget): Promise<[string, string, string]> {
     switch (target.type) {
       case "uncommitted":
-        return this.runDiffCommands(["HEAD", "--"], ["HEAD", "--"], ["HEAD", "--"]);
+        return this.readUncommittedDiffArtifacts();
       case "branch_committed": {
         const mergeBaseRef = await readMergeBaseRef(this.path, target.mergeBaseBranch);
         if (!mergeBaseRef) {
@@ -549,5 +581,82 @@ export class Workspace {
     ]);
 
     return [diff.stdout, shortstat.stdout, files.stdout];
+  }
+
+  private async readUncommittedDiffArtifacts(): Promise<[string, string, string]> {
+    const [trackedDiff, trackedNumstat, trackedFiles, untrackedFilesOutput] = await Promise.all([
+      runGit(["diff", "--no-ext-diff", "--binary", "HEAD", "--"], {
+        cwd: this.path,
+      }),
+      runGit(["diff", "--no-ext-diff", "--numstat", "HEAD", "--"], {
+        cwd: this.path,
+      }),
+      runGit(["diff", "--no-ext-diff", "--name-status", "HEAD", "--"], {
+        cwd: this.path,
+      }),
+      runGit(["ls-files", "--others", "--exclude-standard", "-z"], {
+        cwd: this.path,
+      }),
+    ]);
+
+    const untrackedPaths = parseNullSeparatedLines(untrackedFilesOutput.stdout);
+    if (untrackedPaths.length === 0) {
+      const trackedSummary = summarizeNumstat(trackedNumstat.stdout);
+      return [
+        trackedDiff.stdout,
+        formatShortstat(trackedSummary),
+        trackedFiles.stdout,
+      ];
+    }
+
+    const untrackedArtifacts = await Promise.all(
+      untrackedPaths.map(async (relativePath) => {
+        const [diff, numstat, files] = await Promise.all([
+          runGit(
+            ["diff", "--no-index", "--no-ext-diff", "--binary", "--", "/dev/null", relativePath],
+            { cwd: this.path, allowFailure: true },
+          ),
+          runGit(
+            ["diff", "--no-index", "--numstat", "--", "/dev/null", relativePath],
+            { cwd: this.path, allowFailure: true },
+          ),
+          runGit(
+            ["diff", "--no-index", "--name-status", "--", "/dev/null", relativePath],
+            { cwd: this.path, allowFailure: true },
+          ),
+        ]);
+
+        return {
+          diff: diff.stdout,
+          files: files.stdout,
+          numstat: numstat.stdout,
+        };
+      }),
+    );
+
+    const combinedNumstat = [
+      trackedNumstat.stdout.trimEnd(),
+      ...untrackedArtifacts.map((artifact) => artifact.numstat.trimEnd()),
+    ]
+      .filter((value) => value.length > 0)
+      .join("\n");
+    const combinedDiff = [
+      trackedDiff.stdout.trimEnd(),
+      ...untrackedArtifacts.map((artifact) => artifact.diff.trimEnd()),
+    ]
+      .filter((value) => value.length > 0)
+      .join("\n");
+    const combinedFiles = [
+      trackedFiles.stdout.trimEnd(),
+      ...untrackedArtifacts.map((artifact) => artifact.files.trimEnd()),
+    ]
+      .filter((value) => value.length > 0)
+      .join("\n");
+
+    return [
+      combinedDiff.length > 0 ? `${combinedDiff}\n` : "",
+      formatShortstat(summarizeNumstat(combinedNumstat)),
+      combinedFiles.length > 0 ? `${combinedFiles}\n` : "",
+    ];
   }
 }
