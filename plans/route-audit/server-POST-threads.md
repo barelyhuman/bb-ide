@@ -33,7 +33,7 @@
 
    **Path B: `"host"` + `"unmanaged"`** (direct workspace path)
    - `requireConnectedHostSession(db, hostId)` — looks up active session (indexed: `host_daemon_sessions_host_status_idx`)
-   - `requireDefaultSource(db, projectId)` — fetches default source (scan `project_sources` filtered by `projectId` + `isDefault`)
+   - `requireSourceForHost(db, projectId, hostId)` — fetches source for the requested host (`project_sources` filtered by `projectId` + `hostId`, unique index)
    - Resolves `unmanagedPath` from request or falls back to default source path
    - `maybeReuseUnmanagedEnvironment()`:
      - `findEnvironmentByHostPath(db, hostId, path)` — unique index lookup (`environments_host_path_idx`)
@@ -102,7 +102,7 @@
 | --- | ------------------------- | ---------------------- | ------------------------ | -------------------------------------------------- |
 | 1   | Validate project          | `projects`             | PK                       | —                                                  |
 | 2   | Look up session           | `host_daemon_sessions` | `host_status_idx`        | Path B/C only                                      |
-| 3   | Default source            | `project_sources`      | `project_idx`            | Path B/C only, filtered by `isDefault` in app code |
+| 3   | Source for host            | `project_sources`      | `project_host_idx` (unique) | Path B/C only, looked up by `(projectId, hostId)` |
 | 4   | Find reusable env         | `environments`         | `host_path_idx` (unique) | Path B only                                        |
 | 5   | INSERT environment        | `environments`         | —                        | Path C only                                        |
 | 6   | INSERT thread             | `threads`              | —                        | —                                                  |
@@ -138,9 +138,7 @@
    - Per AGENTS.md: "Accepted-but-ignored route or command fields are forbidden."
    - Arguably a 501 is "handling" it, but the schema advertises a capability that doesn't exist.
 
-4. **`isDefault` source lookup is filtered in application code, not DB.**
-   - `requireDefaultSource` fetches sources by `projectId` (indexed) then filters `isDefault` in JS.
-   - Not a bug — small table, low volume — but there's no partial unique index enforcing "one default per project" either (comment in schema acknowledges this).
+4. ~~**`isDefault` source lookup is filtered in application code, not DB.**~~ **Resolved.** Source lookup now uses `requireSourceForHost(projectId, hostId)` which hits the `project_sources_project_host_idx` unique index directly. `requireDefaultSource` is only used by callers without a host (`POST /projects/:id/managers`, file listing).
 
 ## Usages
 
