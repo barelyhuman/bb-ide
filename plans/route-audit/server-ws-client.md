@@ -17,10 +17,10 @@
 
 | Type | Fields | Notes |
 |---|---|---|
-| `subscribe` | `entity`, `id?` | Subscribe to change notifications for an entity type (thread, project, environment, system) and optionally a specific ID. |
+| `subscribe` | `entity`, `id?` | Subscribe to change notifications for an entity type (thread, project, environment, host, system) and optionally a specific ID. |
 | `unsubscribe` | `entity`, `id?` | Remove a prior subscription. |
 
-**Validation**: `isClientMessage` is a manual runtime type guard (not Zod). Checks `type` is "subscribe"/"unsubscribe" and `entity` is one of "thread", "project", "environment", "host", "system". Invalid messages close the socket with code 1008.
+**Validation**: `clientMessageSchema` from `@bb/domain` parses client messages with Zod. It validates `type`, `entity`, and optional `id` as a string. Invalid messages, including malformed JSON, close the socket with code 1008.
 
 > **Updated 2026-03-29:** `"host"` entity added to subscription types. `"host-connected"` and `"host-disconnected"` now notify on the host entity instead of system. `SYSTEM_CHANGE_KINDS` is now empty.
 
@@ -35,7 +35,8 @@
 1. **onOpen** — `hub.registerClient(socket)`: Adds socket to `clientKeysBySocket` map with an empty subscription set.
 2. **onMessage** — `onClientSocketMessage(hub, socket, event.data)`:
    - Decodes raw payload via `decodeSocketPayload` (handles string, ArrayBuffer, TypedArray).
-   - `JSON.parse` + `isClientMessage` type guard.
+   - `JSON.parse` inside a try/catch.
+   - `clientMessageSchema.safeParse(...)`.
    - If invalid: `socket.close(1008, "invalid-message")`.
    - If `subscribe`: `hub.subscribe(socket, entity, id)` — adds socket to `clientSocketsByKey` map keyed by `"entity"` or `"entity:id"`.
    - If `unsubscribe`: `hub.unsubscribe(socket, entity, id)` — removes socket from the key set.
@@ -51,14 +52,12 @@ When server code calls `hub.notifyThread(threadId, changes)` (or notifyProject, 
 
 - `decodeSocketPayload` — shared with daemon WebSocket.
 - `NotificationHub` — singleton, shared across all routes.
-- `isClientMessage` — local to client-protocol.ts.
+- `clientMessageSchema` — shared domain schema exported from `@bb/domain`.
 
 ## Flags
 
 1. **No authentication**: The `/ws` endpoint has no auth check. The `/internal/*` middleware only covers the `/internal/` prefix. Any client can connect, subscribe to any entity, and receive change notifications. This may be intentional (the UI is assumed to be on a trusted network) but is worth documenting.
-2. **Manual type guard instead of Zod**: `isClientMessage` is a hand-written type guard rather than a Zod schema parse. This is less maintainable — if the `ClientMessage` type adds new fields or variants, the guard must be updated manually.
-3. **No rate limiting on subscriptions**: A client can subscribe to an unbounded number of entity keys. No protection against a client subscribing to every thread ID.
-4. **JSON.parse is unguarded**: If `decodeSocketPayload` returns non-JSON, `JSON.parse` throws and the error propagates to the WebSocket framework (likely closes the connection). No explicit try/catch.
+2. **No rate limiting on subscriptions**: A client can subscribe to an unbounded number of entity keys. No protection against a client subscribing to every thread ID.
 
 ## Usages
 
@@ -82,4 +81,4 @@ When server code calls `hub.notifyThread(threadId, changes)` (or notifyProject, 
 
 ## Review Comments
 
-<!-- Flag 1 is the most significant — depending on the deployment model, unauthenticated WebSocket access could be a security concern. Flag 4 is a robustness issue — a malformed message crashes the handler instead of cleanly closing the socket. -->
+<!-- Flag 1 remains the most significant — depending on the deployment model, unauthenticated WebSocket access could be a security concern. Flag 2 is an abuse-resistance issue rather than a correctness bug. -->

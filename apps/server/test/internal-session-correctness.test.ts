@@ -144,7 +144,6 @@ describe("internal session correctness", () => {
       socket.send(
         JSON.stringify({
           type: "heartbeat",
-          bufferDepth: 0,
         }),
       );
       await sleep(25);

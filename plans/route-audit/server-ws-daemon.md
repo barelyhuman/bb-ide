@@ -24,7 +24,7 @@
 
 | Type | Fields | Notes |
 |---|---|---|
-| `heartbeat` | `bufferDepth`, `lastCommandCursor` | Daemon sends periodically. Parsed via `hostDaemonDaemonWsMessageSchema`. Triggers lease renewal. `bufferDepth` and `lastCommandCursor` are validated by schema but **not consumed** — only the heartbeat side effect (lease extension) matters. |
+| `heartbeat` | (none) | Daemon sends periodically. Parsed via `hostDaemonDaemonWsMessageSchema`. The message exists only to renew the session lease. |
 
 ## Message Types (Server -> Daemon)
 
@@ -54,7 +54,7 @@
 
 `onDaemonSocketMessage(deps, sessionId, raw)`:
 1. Decode payload via `decodeSocketPayload`.
-2. Parse via `hostDaemonDaemonWsMessageSchema` (validates `type: "heartbeat"`, `bufferDepth`, `lastCommandCursor`).
+2. Parse via `hostDaemonDaemonWsMessageSchema` (validates `type: "heartbeat"`).
 3. `requireActiveSession(db, sessionId)` — re-validates session is still active.
 4. `heartbeatSession(db, sessionId, Date.now() + session.leaseTimeoutMs)`:
    - UPDATE `host_daemon_sessions` SET `lastHeartbeatAt`, `leaseExpiresAt`, `updatedAt`.
@@ -102,11 +102,10 @@
 
 ## Flags
 
-1. **Heartbeat `bufferDepth` and `lastCommandCursor` are dead params**: The daemon sends these fields, the schema validates them, but `onDaemonSocketMessage` doesn't read or store them. They could be useful for monitoring (e.g., detecting stuck daemons) but are currently wasted.
-2. **Session re-validated on every heartbeat**: `requireActiveSession` does a full DB read on each heartbeat message (~every 5s). This is correct for safety but adds query load. Could cache the session in-memory and only re-validate periodically.
-3. **No graceful shutdown notification**: When the server itself shuts down, there's no mechanism to send `session-close` to all connected daemons. The daemons will only discover the disconnect via WebSocket close/error.
-4. **`validateDaemonWebSocket` throws plain `Error`**: Unlike other routes that throw `ApiError`, the WebSocket validation throws `Error("Unauthorized websocket")`. This is caught by the Hono WebSocket upgrade handler, but the error format differs from the rest of the API.
-5. **Thread interruption on close is not batched**: The close handler iterates threads individually, inserting events and transitioning one at a time. For hosts with many active threads, this could be slow and block the close handler.
+1. **Session re-validated on every heartbeat**: `requireActiveSession` does a full DB read on each heartbeat message (~every 5s). This is correct for safety but adds query load. Could cache the session in-memory and only re-validate periodically.
+2. **No graceful shutdown notification**: When the server itself shuts down, there's no mechanism to send `session-close` to all connected daemons. The daemons will only discover the disconnect via WebSocket close/error.
+3. **`validateDaemonWebSocket` throws plain `Error`**: Unlike other routes that throw `ApiError`, the WebSocket validation throws `Error("Unauthorized websocket")`. This is caught by the Hono WebSocket upgrade handler, but the error format differs from the rest of the API.
+4. **Thread interruption on close is not batched**: The close handler iterates threads individually, inserting events and transitioning one at a time. For hosts with many active threads, this could be slow and block the close handler.
 
 ## Usages
 
@@ -129,4 +128,4 @@
 
 ## Review Comments
 
-<!-- Flag 1 is a contract issue per AGENTS.md — `bufferDepth` and `lastCommandCursor` are accepted-but-ignored. They should either be stored/used or removed from the heartbeat schema. Flag 4 is a minor inconsistency — should probably throw ApiError for consistent error handling. -->
+<!-- Flag 1 is now query-load/operational rather than a contract issue. Flag 3 is still a minor inconsistency — it should probably throw ApiError for consistent error handling. -->

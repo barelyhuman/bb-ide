@@ -24,7 +24,7 @@ All individual audits live in `plans/route-audit/`. One file per route/command.
 - `events[].id` + `events[].createdAt` in `POST /session/events`
 - `requestId` in `POST /session/tool-call`
 - `activeThreads[].providerThreadId` + `activeThreads[].environmentId` in `POST /session/open`
-- `bufferDepth` + `lastCommandCursor` in daemon WebSocket heartbeat
+- ~~`bufferDepth` + `lastCommandCursor` in daemon WebSocket heartbeat~~ (resolved: heartbeat now has no payload)
 
 ### Missing Guards
 - `DELETE /threads/:id` — no guard against deleting active thread mid-run
