@@ -52,7 +52,6 @@ import type { EnvironmentActionFailureDetails } from "@bb/server-contract";
 import { environmentActionFailureDetailsSchema } from "@bb/server-contract";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { HttpError } from "@/lib/api";
-import { getAutoArchivePreferences } from "@/lib/auto-archive-preferences";
 import { useStoredShowAllEvents } from "@/lib/show-all-events-preference";
 import { getGitStatusDisplay } from "@/lib/workspace-status";
 import {
@@ -117,7 +116,6 @@ function buildAskAgentInputForGitOperation(args: {
               threadId: "thread",
               options: {
                 mergeBaseBranch,
-                autoArchiveOnSuccess: false,
               },
             },
             { conflictFiles: details.conflictFiles },
@@ -137,7 +135,6 @@ function buildAskAgentInputForGitOperation(args: {
               threadId: "thread",
               options: {
                 mergeBaseBranch,
-                autoArchiveOnSuccess: false,
               },
             },
             {
@@ -808,15 +805,11 @@ export function ThreadDetailView() {
     if (!threadId || !attachedEnvironmentId) {
       return;
     }
-    const autoArchiveOnSuccess = getAutoArchivePreferences().autoArchiveThreadOnCommit;
     try {
       await requestEnvironmentAction.mutateAsync({
         id: attachedEnvironmentId,
         threadId,
         action: "commit",
-        options: {
-          autoArchiveOnSuccess,
-        },
       });
     } catch (nextError) {
       throw toThreadGitActionDialogError({ error: nextError });
@@ -831,7 +824,6 @@ export function ThreadDetailView() {
     if (!threadId || !attachedEnvironmentId) {
       return;
     }
-    const autoArchiveOnSuccess = getAutoArchivePreferences().autoArchiveThreadOnCommit;
     try {
       await requestEnvironmentAction.mutateAsync({
         id: attachedEnvironmentId,
@@ -839,7 +831,6 @@ export function ThreadDetailView() {
         action: "squash_merge",
         options: {
           mergeBaseBranch,
-          autoArchiveOnSuccess,
         },
       });
     } catch (nextError) {

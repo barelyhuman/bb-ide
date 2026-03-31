@@ -2,20 +2,18 @@
 
 **Route:** `apps/server/src/routes/environments.ts:93`
 **Contract:** `PathId & { json: EnvironmentActionRequest } -> EnvironmentActionResponse` (200) | `EnvironmentActionApiError` (409) | `ApiError` (404)
-**Complexity:** High (4 action types, daemon commands, conditional thread archiving, conditional environment cleanup)
+**Complexity:** Medium (4 action types, daemon commands, AI commit message generation)
 
 ## Request Body (or Params)
 
 | Field                          | Required                    | Notes                                                                                                                                                                                           |
 | ------------------------------ | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `:id` (path)                   | Yes                         | Environment ID. Looked up via `requireReadyEnvironment`.                                                                                                                                        |
-| `threadId`                     | Yes (all actions)           | Validated to belong to this environment via `requireThreadInEnvironment`. Used for promote/demote daemon commands. For commit/squash_merge, the thread is the target for optional auto-archive. |
+| `threadId`                     | Yes (all actions)           | Validated to belong to this environment via `requireThreadInEnvironment`.                                                                                                                        |
 | `action`                       | Yes                         | Discriminant: `"commit"`, `"squash_merge"`, `"promote"`, `"demote"`.                                                                                                                            |
-| `options.autoArchiveOnSuccess` | Required for `commit`       | If true and commit succeeds, archives the acting thread and may trigger environment cleanup.                                                                                                    |
 | `options.mergeBaseBranch`      | Required for `squash_merge` | Target branch for squash merge, passed as `targetBranch` to `workspace.squash_merge`.                                                                                                           |
-| `options.autoArchiveOnSuccess` | Required for `squash_merge` | Same as commit — archives thread on success.                                                                                                                                                    |
 
-**All fields consumed. No dead params.** The `promote` and `demote` variants have no `options` field.
+**All fields consumed. No dead params.** The `commit`, `promote`, and `demote` variants have no `options` field.
 
 ## Implementation Trace
 
@@ -33,13 +31,7 @@
 5. (async) `generateCommitMessage(deps, { diffDescription, shortstat, files, patch })` — calls inference model with 10s timeout. Falls back to `"bb: automated commit"` on failure. Diff and file list are truncated before sending to the LLM (32KB / 4KB caps).
 6. (async) `queueCommandAndWait` with `workspace.commit` command (`environmentId`, `workspaceContext`, `message`).
 7. (sync) Parses result — extracts `commitSha`, `commitSubject`.
-8. (sync) If `autoArchiveOnSuccess`:
-   - `archiveThread(deps.db, deps.hub, actingThread.id)` — sets `archivedAt` on the thread, notifies hub.
-9. (async) If thread was archived: `maybeCleanupEnvironment(deps, archivedThread.environmentId)`:
-   - Looks up environment, checks `managed`, not already `destroying`/`destroyed`.
-   - Counts non-archived threads in this environment (`threads WHERE environmentId = ? AND archivedAt IS NULL`).
-   - If count is 0: updates environment status to `"destroying"`, queues `environment.destroy` command to daemon.
-10. Returns `{ ok, action: "commit", message, autoArchived, commitSha, commitSubject }`.
+8. Returns `{ ok, action: "commit", message, commitSha, commitSubject }`.
 
 ### `squash_merge` action
 
@@ -49,24 +41,23 @@
 6. (async) `generateCommitMessage(deps, ...)` — same inference call as commit, falls back to `"bb: squash merge"`.
 7. (async) `queueCommandAndWait` with `workspace.squash_merge` command (`environmentId`, `workspaceContext`, `targetBranch`, `commitMessage`).
 8. (sync) Parses result — extracts `merged`, `commitSha`.
-   9-10. Same auto-archive + cleanup flow as `commit`.
-11. Returns `{ ok, action: "squash_merge", merged, message, autoArchived, commitSha }`.
+9. Returns `{ ok, action: "squash_merge", merged, message, commitSha }`.
 
 ### `promote` action
 
 3. (sync) `getDefaultProjectSource(deps.db, environment.projectId)` — queries `project_sources WHERE projectId = ? AND isDefault = true`.
 4. (sync) Validates `source?.path` exists and `source.hostId === environment.hostId`. Throws 409 if not promotable.
-5. (async) `queueCommandAndWait` with `workspace.promote` command (`environmentId`, `workspaceContext`, `threadId`, `primaryPath`).
+5. (async) `queueCommandAndWait` with `workspace.promote` command (`environmentId`, `workspaceContext`, `primaryPath`).
 6. Returns `{ ok, action: "promote", message }`.
 
 ### `demote` action
 
 3. (sync) `getDefaultProjectSource(deps.db, environment.projectId)` — same query as promote.
 4. (sync) Validates `source?.path`, `source.hostId === environment.hostId`, `environment.branchName`, and `actingThread.mergeBaseBranch` are all present. Throws 409 if not demotable.
-5. (async) `queueCommandAndWait` with `workspace.demote` command (`environmentId`, `workspaceContext`, `threadId`, `primaryPath`, `defaultBranch`, `envBranch`).
+5. (async) `queueCommandAndWait` with `workspace.demote` command (`environmentId`, `workspaceContext`, `primaryPath`, `defaultBranch`, `envBranch`).
 6. Returns `{ ok, action: "demote", message }`.
 
-> **-> HTTP 200 returns here.** For commit/squash_merge with autoArchive: the environment cleanup (including potential `environment.destroy` command) runs **before** the response — it's awaited. The `environment.destroy` command is fire-and-forget (queued but not awaited).
+> **-> HTTP 200 returns here.**
 
 ## DB Query Summary
 
@@ -79,24 +70,13 @@
 | 3   | `SELECT * FROM host_daemon_sessions WHERE hostId = ? AND status = 'active' AND leaseExpiresAt > ?` | `host_daemon_sessions` | `host_daemon_sessions_host_status_idx` |               |
 | 4-5 | cursor max + INSERT into `host_daemon_commands`                                                    | `host_daemon_commands` | `host_daemon_commands_host_cursor_idx` | Transaction   |
 
-### Additional for commit/squash_merge with autoArchive
-
-| #     | Query                                                                         | Table                  | Index                                  | Notes                                |
-| ----- | ----------------------------------------------------------------------------- | ---------------------- | -------------------------------------- | ------------------------------------ |
-| 6     | `UPDATE threads SET archivedAt = ?, updatedAt = ?`                            | `threads`              | PK                                     | `archiveThread`                      |
-| 7     | `SELECT * FROM environments WHERE id = ?`                                     | `environments`         | PK                                     | `maybeCleanupEnvironment` re-fetches |
-| 8     | `SELECT count(*) FROM threads WHERE environmentId = ? AND archivedAt IS NULL` | `threads`              | `threads_environment_idx`              | Live thread count                    |
-| 9     | `UPDATE environments SET status = 'destroying'`                               | `environments`         | PK                                     | Only if count = 0                    |
-| 10    | `SELECT * FROM host_daemon_sessions ...`                                      | `host_daemon_sessions` | `host_daemon_sessions_host_status_idx` | For destroy command                  |
-| 11-12 | cursor max + INSERT `environment.destroy`                                     | `host_daemon_commands` | `host_daemon_commands_host_cursor_idx` | Fire-and-forget                      |
-
 ### Additional for promote/demote
 
 | #   | Query                                                                    | Table             | Index                         | Notes |
 | --- | ------------------------------------------------------------------------ | ----------------- | ----------------------------- | ----- |
 | 6   | `SELECT * FROM project_sources WHERE projectId = ? AND isDefault = true` | `project_sources` | `project_sources_project_idx` |       |
 
-**Total: 5-12 queries depending on action type. No N+1.**
+**Total: 5-6 queries depending on action type. No N+1.**
 
 ## Code Reuse
 
@@ -105,18 +85,12 @@
 | `requireReadyEnvironment`        | Shared  | status, diff, diff/branches            |
 | `requireThreadInEnvironment`     | Shared  | Only this route                        |
 | `queueCommandAndWait`            | Shared  | All daemon-proxying routes             |
-| `archiveThread`                  | Shared  | Thread archive route                   |
-| `maybeCleanupEnvironment`        | Shared  | Thread archive route                   |
 | `getDefaultProjectSource`        | Shared  | DB data layer, used by thread creation |
 | `queueEnvironmentDestroyCommand` | Shared  | Called from `maybeCleanupEnvironment`  |
 
 ## Flags
 
-1. **`maybeCleanupEnvironment` re-fetches the environment** even though `requireReadyEnvironment` already fetched it at the top. This is a minor redundancy but ensures fresh state after the daemon command completes, so it's arguably correct.
-
-2. **`environment.destroy` command is fire-and-forget** — queued via `queueCommand` (not `queueCommandAndWait`). If the daemon is disconnected, `getActiveSession` returns null and the command is queued with `sessionId: null`. The command will sit pending until a daemon connects. This seems intentional.
-
-3. **Exhaustive switch**: the `default` branch uses `never` typing to catch unhandled action types at compile time.
+1. **Exhaustive switch**: the `default` branch uses `never` typing to catch unhandled action types at compile time.
 
 ## Usages
 
@@ -144,4 +118,4 @@
 
 Should the request payload be a discriminated union? is it already one?
 
-> Yes — `environmentActionRequestSchema` is already a discriminated union on `action`. Four variants: `promote` (no options), `demote` (no options), `commit` (with `commitOptionsSchema`), `squash_merge` (with `squashMergeOptionsSchema`).
+> Yes — `environmentActionRequestSchema` is already a discriminated union on `action`. Four variants: `promote` (no options), `demote` (no options), `commit` (no options), `squash_merge` (with `squashMergeOptionsSchema`).

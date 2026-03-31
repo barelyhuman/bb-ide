@@ -425,9 +425,6 @@ describe.sequential("fake provider smoke integration", () => {
       const result = await runEnvironmentAction(harness.api, environment.id, {
         action: "commit",
         threadId: thread.id,
-        options: {
-          autoArchiveOnSuccess: false,
-        },
       });
       expect(result.action).toBe("commit");
       if (result.action !== "commit") {
@@ -465,9 +462,6 @@ describe.sequential("fake provider smoke integration", () => {
       await runEnvironmentAction(harness.api, environment.id, {
         action: "commit",
         threadId: thread.id,
-        options: {
-          autoArchiveOnSuccess: false,
-        },
       });
       await runEnvironmentAction(harness.api, environment.id, {
         action: "promote",

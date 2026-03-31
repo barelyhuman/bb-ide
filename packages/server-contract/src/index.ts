@@ -13,7 +13,6 @@ export type { ApiError, DomainErrorCode } from "./errors.js";
 export {
   archiveThreadRequestSchema,
   commitActionResponseSchema,
-  commitOptionsSchema,
   createDraftRequestSchema,
   createManagerThreadRequestSchema,
   createProjectRequestSchema,
@@ -69,7 +68,6 @@ export {
 export type {
   ArchiveThreadRequest,
   CommitActionResponse,
-  CommitOptions,
   CreateDraftRequest,
   CreateManagerThreadRequest,
   CreateProjectRequest,

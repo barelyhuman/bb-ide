@@ -96,7 +96,6 @@ describe("server-contract canonical schemas", () => {
       environmentActionRequestSchema.parse({
         action: "commit",
         threadId: "thr_123",
-        options: { autoArchiveOnSuccess: false },
       }),
     ).toMatchObject({
       action: "commit",
@@ -254,7 +253,6 @@ describe("server-contract clients", () => {
     const optionalFieldPaths = collectOptionalFieldPaths({
       apiErrorSchema: contract.apiErrorSchema,
       commitActionResponseSchema: contract.commitActionResponseSchema,
-      commitOptionsSchema: contract.commitOptionsSchema,
       createDraftRequestSchema: contract.createDraftRequestSchema,
       createManagerThreadRequestSchema: contract.createManagerThreadRequestSchema,
       createThreadRequestSchema: contract.createThreadRequestSchema,

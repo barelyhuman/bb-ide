@@ -1,10 +1,6 @@
 import { type ReactNode } from "react";
 import { PageShell } from "@/components/layout/PageShell";
-import {
-  useAutoArchivePreferences,
-} from "@/lib/auto-archive-preferences";
 import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme";
-import { toast } from "sonner";
 
 function SettingsWithControl({
   label,
@@ -29,32 +25,11 @@ function SettingsWithControl({
 }
 
 export function AppSettingsView() {
-  const [autoArchivePreferences, setAutoArchivePreferences] = useAutoArchivePreferences();
-  const autoArchiveThreadOnCommit = autoArchivePreferences.autoArchiveThreadOnCommit;
   const theme = usePreferredTheme();
-
-  const saveAutoArchiveSettings = (checked: boolean) => {
-    setAutoArchivePreferences({ autoArchiveThreadOnCommit: checked });
-    toast.success("Auto-archive setting saved");
-  };
 
   return (
     <PageShell contentClassName="pt-8 md:pt-10">
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 pt-2">
-        <SettingsWithControl
-          label="Auto-archive on commit"
-          description="Automatically archive local threads after commit and worktree threads after squash merge."
-        >
-          <label className="inline-flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={autoArchiveThreadOnCommit}
-              onChange={(event) => saveAutoArchiveSettings(event.target.checked)}
-              className="h-4 w-4 rounded border-border"
-            />
-            <span>Enabled</span>
-          </label>
-        </SettingsWithControl>
         <SettingsWithControl
           label="Theme"
           description="Choose your interface theme."

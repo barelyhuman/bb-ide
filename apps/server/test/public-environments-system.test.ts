@@ -243,9 +243,6 @@ describe("public environment and system routes", () => {
           body: JSON.stringify({
             action: "commit",
             threadId: thread.id,
-            options: {
-              autoArchiveOnSuccess: false,
-            },
           }),
         },
       );
@@ -367,7 +364,6 @@ describe("public environment and system routes", () => {
       );
       expect(promoteCommand.command).toMatchObject({
         workspaceContext: { workspacePath: "/tmp/promote-project/.bb-worktrees/thread", workspaceProvisionType: "managed-worktree" },
-        threadId: primaryThread.id,
         primaryPath: source.path,
       });
       await reportQueuedCommandSuccess(harness, promoteCommand, { ok: true });
@@ -401,7 +397,6 @@ describe("public environment and system routes", () => {
       );
       expect(demoteCommand.command).toMatchObject({
         workspaceContext: { workspacePath: "/tmp/promote-project/.bb-worktrees/thread", workspaceProvisionType: "managed-worktree" },
-        threadId: primaryThread.id,
         primaryPath: source.path,
         defaultBranch: "main",
         envBranch: "bb/promote-test",
@@ -448,7 +443,6 @@ describe("public environment and system routes", () => {
             threadId: thread.id,
             options: {
               mergeBaseBranch: "main",
-              autoArchiveOnSuccess: false,
             },
           }),
         },
@@ -553,7 +547,7 @@ describe("public environment and system routes", () => {
           body: JSON.stringify({
             action: "squash_merge",
             threadId: thread.id,
-            options: { mergeBaseBranch: "main", autoArchiveOnSuccess: false },
+            options: { mergeBaseBranch: "main" },
           }),
         },
       );
@@ -614,7 +608,6 @@ describe("public environment and system routes", () => {
           body: JSON.stringify({
             action: "commit",
             threadId: thread.id,
-            options: { autoArchiveOnSuccess: false },
           }),
         },
       );
@@ -695,7 +688,7 @@ describe("public environment and system routes", () => {
           body: JSON.stringify({
             action: "squash_merge",
             threadId: thread.id,
-            options: { mergeBaseBranch: "main", autoArchiveOnSuccess: false },
+            options: { mergeBaseBranch: "main" },
           }),
         },
       );

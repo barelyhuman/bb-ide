@@ -1,4 +1,3 @@
-import { archiveThread } from "@bb/db";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import {
   environmentActionRequestSchema,
@@ -12,7 +11,6 @@ import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
-import { maybeCleanupEnvironment } from "../services/environment-cleanup.js";
 import {
   requireEnvironment,
   requireReadyEnvironment,
@@ -186,18 +184,10 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           },
         });
         const result = hostDaemonCommandResultSchemaByType["workspace.commit"].parse(rawResult);
-        const autoArchiveRequested = payload.options.autoArchiveOnSuccess;
-        const archivedThread = autoArchiveRequested
-          ? archiveThread(deps.db, deps.hub, actingThread.id)
-          : null;
-        if (archivedThread) {
-          await maybeCleanupEnvironment(deps, archivedThread.environmentId);
-        }
         return context.json({
           ok: true,
           action: "commit",
           message: `Created commit ${result.commitSha}`,
-          autoArchived: Boolean(archivedThread),
           commitSha: result.commitSha,
           commitSubject: result.commitSubject,
         });
@@ -272,19 +262,11 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           },
         });
         const result = hostDaemonCommandResultSchemaByType["workspace.squash_merge"].parse(rawResult);
-        const autoArchiveRequested = payload.options.autoArchiveOnSuccess;
-        const archivedThread = autoArchiveRequested
-          ? archiveThread(deps.db, deps.hub, actingThread.id)
-          : null;
-        if (archivedThread) {
-          await maybeCleanupEnvironment(deps, archivedThread.environmentId);
-        }
         return context.json({
           ok: true,
           action: "squash_merge",
           merged: result.merged,
           message: "Squash merge completed",
-          autoArchived: Boolean(archivedThread),
           commitSha: result.commitSha,
         });
       }
@@ -304,7 +286,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
               workspacePath: environment.path,
               workspaceProvisionType: environment.workspaceProvisionType,
             },
-            threadId: actingThread.id,
             primaryPath: source.path,
           },
         });
@@ -333,7 +314,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
               workspacePath: environment.path,
               workspaceProvisionType: environment.workspaceProvisionType,
             },
-            threadId: actingThread.id,
             primaryPath: source.path,
             defaultBranch: actingThread.mergeBaseBranch,
             envBranch: environment.branchName,

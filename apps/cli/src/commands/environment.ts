@@ -55,9 +55,6 @@ export function registerEnvironmentCommands(
             json: {
               action: "commit",
               threadId: opts.thread,
-              options: {
-                autoArchiveOnSuccess: false,
-              },
             },
           }),
         );
@@ -87,7 +84,6 @@ export function registerEnvironmentCommands(
             threadId: opts.thread,
             options: {
               mergeBaseBranch: opts.mergeBaseBranch,
-              autoArchiveOnSuccess: false,
             },
           },
         }),

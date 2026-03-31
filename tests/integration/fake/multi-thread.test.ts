@@ -361,16 +361,10 @@ describe.sequential("fake provider multi-thread integration", () => {
         runEnvironmentAction(harness.api, threadA.environment.id, {
           action: "commit",
           threadId: threadA.thread.id,
-          options: {
-            autoArchiveOnSuccess: false,
-          },
         }),
         runEnvironmentAction(harness.api, threadB.environment.id, {
           action: "commit",
           threadId: threadB.thread.id,
-          options: {
-            autoArchiveOnSuccess: false,
-          },
         }),
       ]);
 
@@ -588,16 +582,10 @@ describe.sequential("fake provider multi-thread integration", () => {
         runEnvironmentAction(harnessA.api, threadA.environment.id, {
           action: "commit",
           threadId: threadA.thread.id,
-          options: {
-            autoArchiveOnSuccess: false,
-          },
         }),
         runEnvironmentAction(harnessB.api, threadB.environment.id, {
           action: "commit",
           threadId: threadB.thread.id,
-          options: {
-            autoArchiveOnSuccess: false,
-          },
         }),
       ]);
 

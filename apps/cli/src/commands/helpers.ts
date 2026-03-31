@@ -58,7 +58,6 @@ export function printEnvironmentGitOperationResult(
     ...(result.action === "commit"
       ? ["committed"]
       : [result.merged ? "merged" : "noop"]),
-    ...(result.autoArchived ? ["archived"] : []),
   ];
   console.log(`${result.message} [${flags.join(", ")}]`);
 }
