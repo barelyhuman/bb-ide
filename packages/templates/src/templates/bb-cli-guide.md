@@ -72,6 +72,8 @@ bb thread delete <thread-id>          # Delete permanently
 Operations:
 
 ```
+bb environment update <environment-id> --merge-base-branch <branch>   # Set the environment merge-base override
+bb environment update <environment-id> --clear-merge-base-branch      # Clear the environment merge-base override
 bb environment commit <environment-id> --thread <thread-id>            # Request an agent-driven commit
 bb environment commit <environment-id> --self                          # Commit using the current thread as initiator
 bb environment squash-merge <environment-id> --thread <thread-id>      # Request an agent-driven squash merge

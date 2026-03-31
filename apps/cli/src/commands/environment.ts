@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import type { Environment } from "@bb/domain";
 import type {
   CommitActionResponse,
   SquashMergeActionResponse,
@@ -14,6 +15,12 @@ import {
 interface EnvironmentCommitCommandOptions {
   json?: boolean;
   thread: string;
+}
+
+interface EnvironmentUpdateCommandOptions {
+  clearMergeBaseBranch?: boolean;
+  json?: boolean;
+  mergeBaseBranch?: string;
 }
 
 interface EnvironmentSquashMergeCommandOptions {
@@ -39,6 +46,45 @@ export function registerEnvironmentCommands(
   const environment = program
     .command("environment")
     .description("Inspect and operate on first-class environments");
+
+  environment
+    .command("update <id>")
+    .description("Update environment metadata")
+    .option("--merge-base-branch <branch>", "Set the merge-base branch override")
+    .option("--clear-merge-base-branch", "Clear the merge-base branch override")
+    .option("--json", "Print machine-readable JSON output")
+    .action(action(async (id: string, opts: EnvironmentUpdateCommandOptions) => {
+      const client = createClient(getUrl());
+      if (opts.mergeBaseBranch && opts.clearMergeBaseBranch) {
+        throw new Error(
+          "Cannot combine --merge-base-branch with --clear-merge-base-branch.",
+        );
+      }
+      if (!opts.mergeBaseBranch && !opts.clearMergeBaseBranch) {
+        throw new Error(
+          "No changes requested. Provide --merge-base-branch or --clear-merge-base-branch.",
+        );
+      }
+
+      const environment = await unwrap<Environment>(
+        client.api.v1.environments[":id"].$patch({
+          param: { id },
+          json: {
+            mergeBaseBranch: opts.clearMergeBaseBranch
+              ? null
+              : opts.mergeBaseBranch ?? null,
+          },
+        }),
+      );
+
+      if (outputJson(opts, environment)) return;
+      console.log(`Environment ${environment.id} updated`);
+      console.log(
+        environment.mergeBaseBranch
+          ? `Merge base branch: ${environment.mergeBaseBranch}`
+          : "Merge base branch cleared",
+      );
+    }));
 
   environment
     .command("commit <id>")

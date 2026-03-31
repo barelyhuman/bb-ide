@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
-import type { Thread } from "@bb/domain";
+import type { Environment, Thread } from "@bb/domain";
 
 const readlineState = vi.hoisted(() => ({
   question: vi.fn(),
@@ -47,6 +47,25 @@ function makeThread(overrides: Partial<Thread> & { id: string; projectId: string
     parentThreadId: null,
     archivedAt: null,
     lastReadAt: null,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    ...overrides,
+  };
+}
+
+function makeEnvironment(
+  overrides: Partial<Environment> & { id: string; projectId: string; hostId: string },
+): Environment {
+  return {
+    path: "/tmp/environment",
+    managed: false,
+    isGitRepo: true,
+    isWorktree: false,
+    workspaceProvisionType: "unmanaged",
+    branchName: "bb/thread",
+    defaultBranch: "main",
+    mergeBaseBranch: null,
+    status: "ready",
     createdAt: Date.now(),
     updatedAt: Date.now(),
     ...overrides,
@@ -1007,6 +1026,81 @@ describe("CLI command output contracts", () => {
     );
   });
 
+  it("bb environment update sets the merge base branch", async () => {
+    const environment = makeEnvironment({
+      id: "env-update-1",
+      projectId: "proj-1",
+      hostId: "host-1",
+      mergeBaseBranch: "release",
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    const patch = vi.fn(async () => environment);
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          environments: {
+            ":id": {
+              $patch: patch,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["environment", "update", "env-update-1", "--merge-base-branch", "release"],
+      (program) => registerEnvironmentCommands(program, () => "http://server"),
+    );
+
+    expect(patch).toHaveBeenCalledWith({
+      param: { id: "env-update-1" },
+      json: { mergeBaseBranch: "release" },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Environment env-update-1 updated",
+    );
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Merge base branch: release",
+    );
+  });
+
+  it("bb environment update clears the merge base branch", async () => {
+    const environment = makeEnvironment({
+      id: "env-update-2",
+      projectId: "proj-1",
+      hostId: "host-1",
+      mergeBaseBranch: null,
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    const patch = vi.fn(async () => environment);
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          environments: {
+            ":id": {
+              $patch: patch,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["environment", "update", "env-update-2", "--clear-merge-base-branch"],
+      (program) => registerEnvironmentCommands(program, () => "http://server"),
+    );
+
+    expect(patch).toHaveBeenCalledWith({
+      param: { id: "env-update-2" },
+      json: { mergeBaseBranch: null },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Merge base branch cleared",
+    );
+  });
+
   it("bb thread show prints archived timestamp for archived threads", async () => {
     const thread: Thread = makeThread({
       id: "thread-archived-1",
@@ -1174,6 +1268,38 @@ describe("CLI JSON output contracts", () => {
     });
     expect(collectLogLines(vi.mocked(console.log))).toContain(
       "No managing parent thread",
+    );
+  });
+
+  it("bb environment update --json prints the updated environment", async () => {
+    const environment = makeEnvironment({
+      id: "env-json-update",
+      projectId: "proj-1",
+      hostId: "host-1",
+      mergeBaseBranch: "release",
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    const patch = vi.fn(async () => environment);
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          environments: {
+            ":id": {
+              $patch: patch,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["environment", "update", "env-json-update", "--merge-base-branch", "release", "--json"],
+      (program) => registerEnvironmentCommands(program, () => "http://server"),
+    );
+
+    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
+      environment,
     );
   });
 
