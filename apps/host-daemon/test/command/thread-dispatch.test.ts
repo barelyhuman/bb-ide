@@ -307,14 +307,14 @@ describe("thread command dispatch", () => {
   });
 
   it("uses the server-provided manager runtime config", async () => {
-    const managerWorkspace = await makeTempDir("bb-manager-runtime-");
-    const harness = createHarness({ workspacePath: managerWorkspace });
+    const threadStorage = await makeTempDir("bb-manager-runtime-");
+    const harness = createHarness({ workspacePath: threadStorage });
     const managerInstructions = [
       "You are a manager for this project.",
       "Prefer concise user updates.",
       "Delegate implementation quickly.",
       "Manager Project",
-      managerWorkspace,
+      threadStorage,
     ].join("\n");
 
     await dispatchCommand(
@@ -322,7 +322,7 @@ describe("thread command dispatch", () => {
         type: "thread.start",
         environmentId: "env-manager",
         threadId: "thread-manager",
-        workspaceContext: { workspacePath: managerWorkspace, workspaceProvisionType: "unmanaged" },
+        workspaceContext: { workspacePath: threadStorage, workspaceProvisionType: "unmanaged" },
         projectId: "project-1",
         providerId: "fake",
         eventSequence: 1,
@@ -371,7 +371,7 @@ describe("thread command dispatch", () => {
       "Manager Project",
     );
     expect(harness.runtimeState.startedInstructions).toContain(
-      managerWorkspace,
+      threadStorage,
     );
   });
 });

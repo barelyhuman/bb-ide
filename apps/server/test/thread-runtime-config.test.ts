@@ -51,14 +51,14 @@ describe("thread runtime config", () => {
         "Project root: `/tmp/runtime-project-root`",
       );
       expect(runtimeConfig.instructions).toContain(
-        `Manager workspace: \`/tmp/bb-host-data/${hostId}/workspace/${managerThread.id}\``,
+        `Thread storage: \`/tmp/bb-host-data/${hostId}/thread-storage/${managerThread.id}\``,
       );
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("reads manager preferences from the manager workspace on the host", async () => {
+  it("reads manager preferences from the thread storage on the host", async () => {
     const harness = await createTestAppHarness();
     try {
       const hostId = "host-runtime-preferences";
@@ -77,8 +77,8 @@ describe("thread runtime config", () => {
         environmentId: environment.id,
         type: "manager",
       });
-      const managerWorkspacePath = `/tmp/bb-host-data/${hostId}/workspace/${managerThread.id}`;
-      const preferencesPath = `${managerWorkspacePath}/PREFERENCES.md`;
+      const threadStoragePath = `/tmp/bb-host-data/${hostId}/thread-storage/${managerThread.id}`;
+      const preferencesPath = `${threadStoragePath}/PREFERENCES.md`;
 
       const runtimeConfigPromise = resolveThreadRuntimeCommandConfig(harness.deps, {
         thread: managerThread,
@@ -99,7 +99,7 @@ describe("thread runtime config", () => {
       if (queued.command.type !== "host.read_file") {
         throw new Error(`Expected host.read_file, got ${queued.command.type}`);
       }
-      expect(queued.command.rootPath).toBe(managerWorkspacePath);
+      expect(queued.command.rootPath).toBe(threadStoragePath);
 
       const response = await reportQueuedCommandSuccess(
         harness,
@@ -119,7 +119,7 @@ describe("thread runtime config", () => {
         "Project root: `/tmp/runtime-project-root`",
       );
       expect(runtimeConfig.instructions).toContain(
-        `Manager workspace: \`${managerWorkspacePath}\``,
+        `Thread storage: \`${threadStoragePath}\``,
       );
       expect(runtimeConfig.instructions).toContain("# Preferences");
       expect(runtimeConfig.instructions).toContain("terse updates");
@@ -128,7 +128,7 @@ describe("thread runtime config", () => {
     }
   });
 
-  it("treats missing manager preferences as an empty manager workspace", async () => {
+  it("treats missing manager preferences as an empty thread storage", async () => {
     const harness = await createTestAppHarness();
     try {
       const hostId = "host-runtime-missing-preferences";
@@ -147,8 +147,8 @@ describe("thread runtime config", () => {
         environmentId: environment.id,
         type: "manager",
       });
-      const managerWorkspacePath = `/tmp/bb-host-data/${hostId}/workspace/${managerThread.id}`;
-      const preferencesPath = `${managerWorkspacePath}/PREFERENCES.md`;
+      const threadStoragePath = `/tmp/bb-host-data/${hostId}/thread-storage/${managerThread.id}`;
+      const preferencesPath = `${threadStoragePath}/PREFERENCES.md`;
 
       const runtimeConfigPromise = resolveThreadRuntimeCommandConfig(harness.deps, {
         thread: managerThread,
@@ -169,7 +169,7 @@ describe("thread runtime config", () => {
       if (queued.command.type !== "host.read_file") {
         throw new Error(`Expected host.read_file, got ${queued.command.type}`);
       }
-      expect(queued.command.rootPath).toBe(managerWorkspacePath);
+      expect(queued.command.rootPath).toBe(threadStoragePath);
       const response = await reportQueuedCommandError(harness, queued, {
         errorCode: "ENOENT",
         errorMessage: `Path does not exist: ${preferencesPath}`,

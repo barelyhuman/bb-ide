@@ -31,8 +31,8 @@ import type {
   EnvironmentActionResponse,
   EnvironmentStatusQuery,
   EnvironmentStatusResponse,
-  ManagerWorkspaceContentQuery,
-  ManagerWorkspaceFilesQuery,
+  ThreadStorageContentQuery,
+  ThreadStorageFilesQuery,
   ProjectAttachmentContentQuery,
   ProjectAttachmentUploadForm,
   ProjectFilesQuery,
@@ -262,22 +262,22 @@ export type PublicApiSchema = {
     /** Returns the last used options for the thread for use as defaults in the UI. */
     $get: Endpoint<PathId, ResolvedThreadExecutionOptions | null>;
   };
-  "/threads/:id/manager-workspace/files": {
+  "/threads/:id/thread-storage/files": {
     /**
-     * List files in the durable manager workspace for a manager thread.
-     * Resolves the manager workspace root from the active host session `dataDir`
+     * List files in the durable thread storage for a thread environment.
+     * Resolves the thread storage root from the active host session `dataDir`
      * and proxies to `host.list_files`.
      */
-    $get: Endpoint<PathId & { query?: ManagerWorkspaceFilesQuery }, WorkspaceFileListResponse>;
+    $get: Endpoint<PathId & { query?: ThreadStorageFilesQuery }, WorkspaceFileListResponse>;
   };
-  "/threads/:id/manager-workspace/content": {
+  "/threads/:id/thread-storage/content": {
     /**
-     * Serve manager workspace file content as raw bytes with `Content-Type`.
-     * Resolves the manager workspace root from the active host session `dataDir`
+     * Serve thread storage file content as raw bytes with `Content-Type`.
+     * Resolves the thread storage root from the active host session `dataDir`
      * and proxies to `host.read_file`.
      */
     $get: Endpoint<
-      PathId & { query: ManagerWorkspaceContentQuery },
+      PathId & { query: ThreadStorageContentQuery },
       Uint8Array,
       200,
       "binary"

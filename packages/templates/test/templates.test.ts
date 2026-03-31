@@ -44,7 +44,7 @@ describe("@bb/templates", () => {
     const rendered = renderTemplate("managerAgentInstructions", {
       managerPreferencesContent: "No preferences yet.",
       managerThreadId: "test-thread-123",
-      managerWorkspacePath: "/tmp/test-workspace",
+      threadStoragePath: "/tmp/test-thread-storage",
       projectId: "test-project-id",
       projectName: "Test Project",
       projectRootPath: "/tmp/test-project",
@@ -64,7 +64,7 @@ describe("@bb/templates", () => {
     // Verify the leaf variables are also rendered
     expect(rendered).toContain("test-thread-123");
     expect(rendered).toContain("Test Project");
-    expect(rendered).toContain("/tmp/test-workspace");
+    expect(rendered).toContain("/tmp/test-thread-storage");
   });
 
   it("renders all templates without error", () => {

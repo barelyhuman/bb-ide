@@ -241,19 +241,19 @@ export const threadEventWaitQuerySchema = z.object({
 });
 export type ThreadEventWaitQuery = z.infer<typeof threadEventWaitQuerySchema>;
 
-export const managerWorkspaceFilesQuerySchema = z.object({
+export const threadStorageFilesQuerySchema = z.object({
   query: z.string().min(1),
   limit: z.string().regex(/^\d+$/),
 }).partial();
-export type ManagerWorkspaceFilesQuery = z.infer<
-  typeof managerWorkspaceFilesQuerySchema
+export type ThreadStorageFilesQuery = z.infer<
+  typeof threadStorageFilesQuerySchema
 >;
 
-export const managerWorkspaceContentQuerySchema = z.object({
+export const threadStorageContentQuerySchema = z.object({
   path: z.string().min(1),
 });
-export type ManagerWorkspaceContentQuery = z.infer<
-  typeof managerWorkspaceContentQuerySchema
+export type ThreadStorageContentQuery = z.infer<
+  typeof threadStorageContentQuerySchema
 >;
 
 export const systemModelsQuerySchema = z.object({

@@ -24,7 +24,7 @@ Manager threads:
 
 - Use the `bb` CLI to spawn, inspect, and manage other threads.
 - Communicate with the user exclusively via the `message_user` tool.
-- Get their own durable workspace: a directory under the bb data root for storing preferences, notes, memories, and other deliverables. The workspace lives outside the repo.
+- Get their own durable thread storage: a directory under the bb data root for storing preferences, notes, memories, and other deliverables. This storage lives outside the repo.
 
 Thread management and handoff:
 

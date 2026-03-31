@@ -12,12 +12,12 @@ export function buildProjectAttachmentContentUrl(
   );
 }
 
-export function buildManagerWorkspaceContentUrl(
+export function buildThreadStorageContentUrl(
   threadId: string,
   path: string,
 ): string {
   return toRelativeUrl(
-    apiClient.threads[":id"]["manager-workspace"].content.$url({
+    apiClient.threads[":id"]["thread-storage"].content.$url({
       param: { id: threadId },
       query: { path },
     }),

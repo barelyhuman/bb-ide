@@ -37,29 +37,29 @@
 ## Flags
 
 1. **Containment is always enforced.** Callers must declare the absolute root that bounds the read, and the daemon checks the symlink-resolved file against that root.
-2. **Current server callers both use the manager workspace root.** The public manager-workspace content route and manager preferences read both send `rootPath = <dataDir>/workspace/<threadId>`.
+2. **Current server callers both use the thread storage root.** The public thread-storage content route and manager preferences read both send `rootPath = <dataDir>/thread-storage/<threadId>`.
 3. **Transport is preview-oriented, not opaque streaming.** The full file is still loaded into memory and returned as either UTF-8 text or base64.
 
 ## Usages
 
 | Caller | Location | Trigger |
 |---|---|---|
-| `resolveThreadRuntimeCommandConfig` | `apps/server/src/services/thread-runtime-config.ts` | Reads `PREFERENCES.md` from the manager workspace at `<dataDir>/workspace/<threadId>/PREFERENCES.md` |
-| `GET /api/v1/threads/:id/manager-workspace/content` | `apps/server/src/routes/threads/data.ts` | Reads a durable manager workspace file for the manager workspace viewer |
+| `resolveThreadRuntimeCommandConfig` | `apps/server/src/services/thread-runtime-config.ts` | Reads `PREFERENCES.md` from the thread storage at `<dataDir>/thread-storage/<threadId>/PREFERENCES.md` |
+| `GET /api/v1/threads/:id/thread-storage/content` | `apps/server/src/routes/threads/data.ts` | Reads a durable thread storage file for the thread storage viewer |
 
 ---
 
 ## Updates
 
 - March 30, 2026 investigation:
-  1. `host.read_file` is still the daemon primitive for durable manager workspace file reads.
-  2. `host.list_files` now exists as the companion browse primitive for the same durable manager workspace root.
+  1. `host.read_file` is still the daemon primitive for durable thread storage file reads.
+  2. `host.list_files` now exists as the companion browse primitive for the same durable thread storage root.
   3. `host.read_file` and `workspace.read_file` now share `readFileForTransport`, so both commands support text previews, image previews, and attachment-aligned size limits.
 - March 31, 2026 hardening:
   1. `host.read_file` now requires `rootPath`, so every caller must declare the absolute root that bounds the read.
-  2. The manager-workspace content route and manager preferences read both use that bound root to prevent symlink escapes outside `<dataDir>/workspace/<threadId>`.
+  2. The thread-storage content route and manager preferences read both use that bound root to prevent symlink escapes outside `<dataDir>/thread-storage/<threadId>`.
   3. UTF-8 transport now requires the file bytes to be valid UTF-8; declared text MIME types with non-UTF-8 bytes fall back to base64 so the server preserves the original bytes.
-  4. The daemon now rejects declared roots that are themselves symlinks, so replacing the durable workspace directory with a symlink can no longer retarget the trusted root.
+  4. The daemon now rejects declared roots that are themselves symlinks, so replacing the durable thread storage directory with a symlink can no longer retarget the trusted root.
 
 ## Review Comments
 

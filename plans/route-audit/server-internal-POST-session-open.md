@@ -12,7 +12,7 @@
 | `instanceId` | Yes | Daemon process instance identifier. Stored on the session row for disambiguation. |
 | `hostName` | Yes | Display name for the host. Passed through to `upsertHost` and `openSession`. |
 | `hostType` | Yes | Enum via `hostTypeSchema`. Stored on host and session rows. |
-| `dataDir` | Yes | Absolute daemon data directory on the host. Stored on the session row so the server can derive manager workspace paths like `<dataDir>/workspace/<threadId>`. |
+| `dataDir` | Yes | Absolute daemon data directory on the host. Stored on the session row so the server can derive thread storage paths like `<dataDir>/thread-storage/<threadId>`. |
 | `protocolVersion` | Yes | Must be exactly `2` (`z.literal(HOST_DAEMON_PROTOCOL_VERSION)`). Stored on session row. |
 | `activeThreads` | Yes | Array of `{ environmentId, threadId, providerThreadId }`. Used by `reconcileSessionThreads` to sync thread status against what the daemon reports as running. |
 

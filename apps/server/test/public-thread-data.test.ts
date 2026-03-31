@@ -676,7 +676,7 @@ describe("public thread data routes", () => {
     }
   });
 
-  it("lists manager workspace files via host.list_files", async () => {
+  it("lists thread storage files via host.list_files", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -694,19 +694,19 @@ describe("public thread data routes", () => {
         environmentId: environment.id,
         type: "manager",
       });
-      const managerWorkspacePath = `/tmp/bb-host-data/${host.id}/workspace/${thread.id}`;
+      const threadStoragePath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
 
       const filesPromise = harness.app.request(
-        `/api/v1/threads/${thread.id}/manager-workspace/files?query=notes`,
+        `/api/v1/threads/${thread.id}/thread-storage/files?query=notes`,
       );
       const filesCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
           command.type === "host.list_files" &&
-          command.path === managerWorkspacePath,
+          command.path === threadStoragePath,
       );
       expect(filesCommand.command).toMatchObject({
-        path: managerWorkspacePath,
+        path: threadStoragePath,
         query: "notes",
         limit: 1000,
       });
@@ -731,7 +731,52 @@ describe("public thread data routes", () => {
     }
   });
 
-  it("lists manager workspace files without requiring a ready environment", async () => {
+  it("lists thread storage files for standard threads with environments", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-source",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/project-source",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "standard",
+      });
+      const threadStoragePath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
+
+      const filesPromise = harness.app.request(
+        `/api/v1/threads/${thread.id}/thread-storage/files`,
+      );
+      const filesCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.list_files" &&
+          command.path === threadStoragePath,
+      );
+      await reportQueuedCommandSuccess(harness, filesCommand, {
+        files: [{ path: "notes/plan.md", name: "plan.md" }],
+        truncated: false,
+      });
+
+      const filesResponse = await filesPromise;
+      expect(filesResponse.status).toBe(200);
+      await expect(readJson(filesResponse)).resolves.toEqual({
+        files: [{ path: "notes/plan.md", name: "plan.md" }],
+        truncated: false,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("lists thread storage files without requiring a ready environment", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -759,16 +804,16 @@ describe("public thread data routes", () => {
         type: "manager",
         status: "provisioning",
       });
-      const managerWorkspacePath = `/tmp/bb-host-data/${host.id}/workspace/${thread.id}`;
+      const threadStoragePath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
 
       const filesPromise = harness.app.request(
-        `/api/v1/threads/${thread.id}/manager-workspace/files`,
+        `/api/v1/threads/${thread.id}/thread-storage/files`,
       );
       const filesCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
           command.type === "host.list_files" &&
-          command.path === managerWorkspacePath,
+          command.path === threadStoragePath,
       );
       await reportQueuedCommandSuccess(harness, filesCommand, {
         files: [{ path: "notes/plan.md", name: "plan.md" }],
@@ -786,7 +831,7 @@ describe("public thread data routes", () => {
     }
   });
 
-  it("serves manager workspace file content as raw bytes", async () => {
+  it("serves thread storage file content as raw bytes", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -805,25 +850,25 @@ describe("public thread data routes", () => {
         type: "manager",
       });
       const pngBytes = Uint8Array.from([137, 80, 78, 71]);
-      const managerWorkspaceRoot = `/tmp/bb-host-data/${host.id}/workspace/${thread.id}`;
-      const managerWorkspaceFilePath =
-        `${managerWorkspaceRoot}/images/diagram.png`;
+      const threadStorageRoot = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
+      const threadStorageFilePath =
+        `${threadStorageRoot}/images/diagram.png`;
 
       const filePromise = harness.app.request(
-        `/api/v1/threads/${thread.id}/manager-workspace/content?path=${encodeURIComponent("images/diagram.png")}`,
+        `/api/v1/threads/${thread.id}/thread-storage/content?path=${encodeURIComponent("images/diagram.png")}`,
       );
       const fileCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
           command.type === "host.read_file" &&
-          command.path === managerWorkspaceFilePath,
+          command.path === threadStorageFilePath,
       );
       expect(fileCommand.command).toMatchObject({
-        path: managerWorkspaceFilePath,
-        rootPath: managerWorkspaceRoot,
+        path: threadStorageFilePath,
+        rootPath: threadStorageRoot,
       });
       await reportQueuedCommandSuccess(harness, fileCommand, {
-        path: managerWorkspaceFilePath,
+        path: threadStorageFilePath,
         content: Buffer.from(pngBytes).toString("base64"),
         contentEncoding: "base64",
         mimeType: "image/png",
@@ -840,7 +885,7 @@ describe("public thread data routes", () => {
     }
   });
 
-  it("maps manager workspace root-escape failures to invalid_path", async () => {
+  it("maps thread storage root-escape failures to invalid_path", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -854,20 +899,20 @@ describe("public thread data routes", () => {
         environmentId: environment.id,
         type: "manager",
       });
-      const managerWorkspaceRoot = `/tmp/bb-host-data/${host.id}/workspace/${thread.id}`;
+      const threadStorageRoot = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
 
       const filePromise = harness.app.request(
-        `/api/v1/threads/${thread.id}/manager-workspace/content?path=${encodeURIComponent("notes/secrets")}`,
+        `/api/v1/threads/${thread.id}/thread-storage/content?path=${encodeURIComponent("notes/secrets")}`,
       );
       const fileCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
           command.type === "host.read_file" &&
-          command.path === `${managerWorkspaceRoot}/notes/secrets`,
+          command.path === `${threadStorageRoot}/notes/secrets`,
       );
       expect(fileCommand.command).toMatchObject({
-        path: `${managerWorkspaceRoot}/notes/secrets`,
-        rootPath: managerWorkspaceRoot,
+        path: `${threadStorageRoot}/notes/secrets`,
+        rootPath: threadStorageRoot,
       });
       const fileErrorResponse = await reportQueuedCommandError(harness, fileCommand, {
         errorCode: "invalid_path",
@@ -887,7 +932,7 @@ describe("public thread data routes", () => {
     }
   });
 
-  it("returns an empty manager workspace file list when the durable workspace is absent", async () => {
+  it("returns an empty thread storage file list when the durable storage is absent", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -903,7 +948,7 @@ describe("public thread data routes", () => {
       });
 
       const filesPromise = harness.app.request(
-        `/api/v1/threads/${thread.id}/manager-workspace/files`,
+        `/api/v1/threads/${thread.id}/thread-storage/files`,
       );
       const filesCommand = await waitForQueuedCommand(
         harness,
@@ -926,7 +971,7 @@ describe("public thread data routes", () => {
     }
   });
 
-  it("maps manager workspace file read failures to user-facing 4xx responses", async () => {
+  it("maps thread storage file read failures to user-facing 4xx responses", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -942,7 +987,7 @@ describe("public thread data routes", () => {
       });
 
       const filePromise = harness.app.request(
-        `/api/v1/threads/${thread.id}/manager-workspace/content?path=${encodeURIComponent("notes/missing.txt")}`,
+        `/api/v1/threads/${thread.id}/thread-storage/content?path=${encodeURIComponent("notes/missing.txt")}`,
       );
       const fileCommand = await waitForQueuedCommand(
         harness,

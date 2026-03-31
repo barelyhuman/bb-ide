@@ -28,7 +28,7 @@ type ThreadTimelinePaneProps = Omit<
 >;
 type ThreadSecondaryPanelProps = Omit<
   ComponentProps<typeof ThreadSecondaryPanel>,
-  "workspaceContent" | "metadataContent"
+  "threadStorageContent" | "metadataContent"
 >;
 
 interface ManagerSelectorOption {
@@ -73,7 +73,7 @@ interface ThreadDetailMetadataProps {
   workspaceStatusFiles?: ComponentProps<typeof WorkspaceChangesList>["files"];
 }
 
-interface ThreadDetailWorkspaceProps {
+interface ThreadDetailThreadStorageProps {
   fileError?: Error | null;
   filePreview?: FilePreview;
   files?: readonly WorkspaceFile[];
@@ -86,7 +86,7 @@ interface ThreadDetailSecondaryContentProps {
   footer: ReactNode;
   header: ReactNode;
   isSecondaryPanelOpen: boolean;
-  workspace?: ThreadDetailWorkspaceProps;
+  threadStorage?: ThreadDetailThreadStorageProps;
   metadata: ThreadDetailMetadataProps;
   secondaryPanel: ThreadSecondaryPanelProps;
   showThreadMetadata: boolean;
@@ -341,14 +341,14 @@ function ThreadMetadataContent({
   );
 }
 
-function WorkspaceContent({
+function ThreadStorageContent({
   fileError,
   filePreview,
   files,
   isFileLoading,
   onTogglePath,
   selectedPath,
-}: ThreadDetailWorkspaceProps) {
+}: ThreadDetailThreadStorageProps) {
   if ((files?.length ?? 0) === 0) {
     return (
       <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
@@ -412,7 +412,7 @@ function WorkspaceContent({
                   </p>
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    Select a manager workspace file to view it.
+                    Select a thread storage file to view it.
                   </p>
                 )}
               </div>
@@ -428,7 +428,7 @@ export function ThreadDetailSecondaryContent({
   footer,
   header,
   isSecondaryPanelOpen,
-  workspace,
+  threadStorage,
   metadata,
   secondaryPanel,
   showThreadMetadata,
@@ -469,9 +469,9 @@ export function ThreadDetailSecondaryContent({
               </div>
             )
           }
-          workspaceContent={
-            workspace ? (
-              <WorkspaceContent {...workspace} />
+          threadStorageContent={
+            threadStorage ? (
+              <ThreadStorageContent {...threadStorage} />
             ) : undefined
           }
         />

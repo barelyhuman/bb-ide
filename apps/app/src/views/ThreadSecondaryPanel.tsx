@@ -292,8 +292,8 @@ function GitDiffFileCard({
 export function ThreadSecondaryPanel({
   activePanel,
   metadataContent,
-  workspaceContent,
-  showWorkspaceTab = false,
+  threadStorageContent,
+  showThreadStorageTab = false,
   showGitDiffTab = true,
   onPanelChange,
   threadId,
@@ -331,8 +331,8 @@ export function ThreadSecondaryPanel({
 }: {
   activePanel: ThreadSecondaryPanelTab | null;
   metadataContent: ReactNode;
-  workspaceContent?: ReactNode;
-  showWorkspaceTab?: boolean;
+  threadStorageContent?: ReactNode;
+  showThreadStorageTab?: boolean;
   showGitDiffTab?: boolean;
   onPanelChange: (panel: ThreadSecondaryPanelTab) => void;
   threadId: string;
@@ -369,7 +369,7 @@ export function ThreadSecondaryPanel({
   onOpenFile?: (path: string) => void;
 }) {
   const isDiffPanelActive = activePanel === "git-diff";
-  const isWorkspacePanelActive = activePanel === "manager-workspace";
+  const isThreadStoragePanelActive = activePanel === "thread-storage";
   const hasCurrentGitDiff = currentGitDiff.trim().length > 0;
 
   return (
@@ -472,21 +472,21 @@ export function ThreadSecondaryPanel({
                     <FileDiffIcon className="size-3.5" />
                   </Button>
                 ) : null}
-                {showWorkspaceTab ? (
+                {showThreadStorageTab ? (
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     className={cn(
                       "h-7 w-7 rounded-md p-0",
-                      isWorkspacePanelActive
+                      isThreadStoragePanelActive
                         ? "bg-accent/35 text-foreground hover:bg-accent/45"
                         : "text-muted-foreground hover:bg-muted/45 hover:text-foreground",
                     )}
-                    onClick={() => onPanelChange("manager-workspace")}
-                    aria-label="Show manager workspace panel"
-                    aria-pressed={isWorkspacePanelActive}
-                    title="Workspace"
+                    onClick={() => onPanelChange("thread-storage")}
+                    aria-label="Show thread storage panel"
+                    aria-pressed={isThreadStoragePanelActive}
+                    title="Storage"
                   >
                     <FolderOpen className="size-3.5" />
                   </Button>
@@ -658,10 +658,10 @@ export function ThreadSecondaryPanel({
                   No diff to display.
                 </p>
               )
-            ) : isWorkspacePanelActive ? (
-              workspaceContent ?? (
+            ) : isThreadStoragePanelActive ? (
+              threadStorageContent ?? (
                 <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
-                  No manager workspace available.
+                  No thread storage available.
                 </p>
               )
             ) : (

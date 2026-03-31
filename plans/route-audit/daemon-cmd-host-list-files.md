@@ -43,7 +43,7 @@
 
 | Caller | Location | Trigger |
 |---|---|---|
-| `GET /api/v1/threads/:id/manager-workspace/files` | `apps/server/src/routes/threads/data.ts` | Lists files from the durable manager workspace root `<dataDir>/workspace/<threadId>` |
+| `GET /api/v1/threads/:id/thread-storage/files` | `apps/server/src/routes/threads/data.ts` | Lists files from the durable thread storage root `<dataDir>/thread-storage/<threadId>` |
 
 ## Review Comments
 

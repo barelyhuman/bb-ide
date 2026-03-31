@@ -21,7 +21,7 @@ import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
 import { queueCommandAndWait } from "./command-wait.js";
 import { getLastExecutionOptions } from "./thread-events.js";
-import { requireManagerWorkspacePath } from "./manager-workspace.js";
+import { requireThreadStoragePath } from "./thread-storage.js";
 
 const DEFAULT_SERVICE_TIER: ServiceTier = "flex";
 const DEFAULT_REASONING_LEVEL: ReasoningLevel = "medium";
@@ -99,7 +99,7 @@ async function readManagerPreferences(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
     hostId: string;
-    managerWorkspacePath: string;
+    threadStoragePath: string;
   },
 ): Promise<string> {
   try {
@@ -108,8 +108,8 @@ async function readManagerPreferences(
       timeoutMs: COMMAND_TIMEOUT_MS,
       command: {
         type: "host.read_file",
-        path: path.join(args.managerWorkspacePath, MANAGER_PREFERENCES_FILE_NAME),
-        rootPath: args.managerWorkspacePath,
+        path: path.join(args.threadStoragePath, MANAGER_PREFERENCES_FILE_NAME),
+        rootPath: args.threadStoragePath,
       },
     });
     const result = hostDaemonCommandResultSchemaByType["host.read_file"].parse(rawResult);
@@ -186,7 +186,7 @@ export async function resolveThreadRuntimeCommandConfig(
       workspaceProvisionType,
     };
   }
-  const managerWorkspacePath = requireManagerWorkspacePath(
+  const threadStoragePath = requireThreadStoragePath(
     deps,
     { hostId: args.environment.hostId, threadId: args.thread.id },
   );
@@ -195,7 +195,7 @@ export async function resolveThreadRuntimeCommandConfig(
     ? NO_MANAGER_PREFERENCES
     : await readManagerPreferences(deps, {
         hostId: args.environment.hostId,
-        managerWorkspacePath,
+        threadStoragePath,
       });
 
   return {
@@ -203,7 +203,7 @@ export async function resolveThreadRuntimeCommandConfig(
     instructions: renderTemplate("managerAgentInstructions", {
       managerPreferencesContent,
       managerThreadId: args.thread.id,
-      managerWorkspacePath,
+      threadStoragePath,
       projectId: args.thread.projectId,
       projectName: project.name,
       projectRootPath,

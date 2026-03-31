@@ -14,11 +14,9 @@ All individual audits live in `plans/route-audit/`. One file per route/command.
 ### Security
 - **Daemon local API `cors({ origin: "*" })`** — any webpage can hit `POST /open`, `POST /restart`, `POST /pick-folder`
 - **`GET /ws`** — no authentication on client WebSocket
-- **`GET /threads/:id/workspace/file`** — passes user-provided `path` to daemon; path traversal protection unconfirmed
 
 ### Dead Params (AGENTS.md violation: "accepted-but-ignored fields are forbidden")
 - `turnId` in `GET /threads/:id/timeline/tool-details`
-- `limit` in `GET /threads/:id/workspace/files`
 - ~~`projectId` in `environment.provision`~~ (resolved)
 - `path` + `workspaceProvisionType` in `environment.destroy`
 - `threadId` in `workspace.promote` and `workspace.demote`
@@ -111,8 +109,8 @@ All individual audits live in `plans/route-audit/`. One file per route/command.
 - [x] `GET /threads/:id/output` → `server-GET-threads-id-output.md`
 - [x] `GET /threads/:id/events` → `server-GET-threads-id-events.md`
 - [x] `GET /threads/:id/default-execution-options` → `server-GET-threads-id-default-execution-options.md`
-- [x] `GET /threads/:id/workspace/files` → `server-GET-threads-id-workspace-files.md`
-- [x] `GET /threads/:id/workspace/file` → `server-GET-threads-id-workspace-file.md`
+- [x] `GET /threads/:id/thread-storage/files` → `server-GET-threads-id-thread-storage-files.md`
+- [x] `GET /threads/:id/thread-storage/content` → `server-GET-threads-id-thread-storage-content.md`
 
 ### Server Internal Routes
 - [x] `POST /internal/session/open` → `server-internal-POST-session-open.md`

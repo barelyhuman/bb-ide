@@ -94,24 +94,24 @@ describe("host-daemon command schemas", () => {
     expect(
       hostDaemonCommandSchema.parse({
         type: "host.read_file",
-        path: "/tmp/bb-data/workspace/thread-123/PREFERENCES.md",
-        rootPath: "/tmp/bb-data/workspace/thread-123",
+        path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
+        rootPath: "/tmp/bb-data/thread-storage/thread-123",
       }),
     ).toMatchObject({
       type: "host.read_file",
-      path: "/tmp/bb-data/workspace/thread-123/PREFERENCES.md",
-      rootPath: "/tmp/bb-data/workspace/thread-123",
+      path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
+      rootPath: "/tmp/bb-data/thread-storage/thread-123",
     });
 
     expect(
       hostDaemonCommandSchema.parse({
         type: "host.list_files",
-        path: "/tmp/bb-data/workspace/thread-123",
+        path: "/tmp/bb-data/thread-storage/thread-123",
         limit: 100,
       }),
     ).toMatchObject({
       type: "host.list_files",
-      path: "/tmp/bb-data/workspace/thread-123",
+      path: "/tmp/bb-data/thread-storage/thread-123",
       limit: 100,
     });
   });
@@ -140,7 +140,7 @@ describe("host-daemon command schemas", () => {
     expect(() =>
       hostDaemonCommandSchema.parse({
         type: "host.read_file",
-        path: "/tmp/bb-data/workspace/thread-123/PREFERENCES.md",
+        path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
       }),
     ).toThrow();
   });
@@ -344,14 +344,14 @@ describe("host-daemon command schemas", () => {
 
     expect(
       hostDaemonCommandResultSchemaByType["host.read_file"].parse({
-        path: "/tmp/bb-data/workspace/thread-123/PREFERENCES.md",
+        path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
         content: "# Preferences",
         contentEncoding: "utf8",
         mimeType: "text/markdown",
         sizeBytes: 13,
       }),
     ).toMatchObject({
-      path: "/tmp/bb-data/workspace/thread-123/PREFERENCES.md",
+      path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
       content: "# Preferences",
       contentEncoding: "utf8",
     });

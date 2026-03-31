@@ -69,7 +69,7 @@ import { useThreadTimelineController } from "./useThreadTimelineController";
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
 import { ThreadFollowUpComposer } from "./ThreadFollowUpComposer";
 import { ThreadDetailSecondaryContent } from "./ThreadDetailSecondaryContent";
-import { useWorkspaceViewer } from "./useWorkspaceViewer";
+import { useThreadStorageViewer } from "./useThreadStorageViewer";
 import { useThreadFollowUpTracking } from "./useThreadFollowUpTracking";
 import { useThreadMergeBase } from "./useThreadMergeBase";
 import { useThreadReadTracking } from "./useThreadReadTracking";
@@ -178,15 +178,15 @@ export function ThreadDetailView() {
   });
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
   const {
-    handleWorkspaceViewerChange,
-    isWorkspaceFilePreviewLoading,
-    workspaceFilePreview,
-    workspaceFilePreviewError,
-    workspaceFiles,
-    selectedWorkspacePath,
-    setSelectedWorkspacePath,
-    showWorkspaceViewer,
-  } = useWorkspaceViewer({
+    handleThreadStorageViewerChange,
+    isThreadStorageFilePreviewLoading,
+    threadStorageFilePreview,
+    threadStorageFilePreviewError,
+    threadStorageFiles,
+    selectedThreadStoragePath,
+    setSelectedThreadStoragePath,
+    showThreadStorageViewer,
+  } = useThreadStorageViewer({
     threadId,
     threadType: thread?.type,
   });
@@ -199,7 +199,7 @@ export function ThreadDetailView() {
     threadId ?? "",
     {
       refetchOnMount: "always",
-      includeWorkspaceViewer: showWorkspaceViewer,
+      includeWorkspaceViewer: showThreadStorageViewer,
     },
   );
   const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
@@ -365,7 +365,7 @@ export function ThreadDetailView() {
     loadToolGroupMessages: (args) =>
       timelineToolDetails.mutateAsync({
         ...args,
-        includeWorkspaceViewer: showWorkspaceViewer,
+        includeWorkspaceViewer: showThreadStorageViewer,
       }),
   });
   captureTimelineScrollPositionRef.current = captureTimelineScrollPosition;
@@ -576,11 +576,11 @@ export function ThreadDetailView() {
       parentThreadId: nextParentThreadId,
     });
   }, [thread, updateThread]);
-  const handleWorkspacePathToggle = useCallback((path: string) => {
-    setSelectedWorkspacePath((currentPath) =>
+  const handleThreadStoragePathToggle = useCallback((path: string) => {
+    setSelectedThreadStoragePath((currentPath) =>
       currentPath === path ? null : path,
     );
-  }, [setSelectedWorkspacePath]);
+  }, [setSelectedThreadStoragePath]);
   const handleAttachFiles = useCallback(async (files: File[]) => {
     if (!projectId || files.length === 0) return;
 
@@ -872,9 +872,9 @@ export function ThreadDetailView() {
         threadDeleteDialog.onOpen(thread);
       }}
       viewerToggleLabel={isManagerThread ? "Show all events" : undefined}
-      viewerToggleChecked={isManagerThread ? showWorkspaceViewer : undefined}
+      viewerToggleChecked={isManagerThread ? showThreadStorageViewer : undefined}
       onViewerToggleCheckedChange={
-        isManagerThread ? handleWorkspaceViewerChange : undefined
+        isManagerThread ? handleThreadStorageViewerChange : undefined
       }
       isArchived={thread.archivedAt != null}
       threadType={thread.type}
@@ -989,7 +989,7 @@ export function ThreadDetailView() {
   const effectiveSecondaryPanel =
     !canUseGitUi && activeSecondaryPanel === "git-diff"
       ? "thread-info"
-      : !isManagerThread && activeSecondaryPanel === "manager-workspace"
+      : !isManagerThread && activeSecondaryPanel === "thread-storage"
         ? "thread-info"
         : activeSecondaryPanel;
   const hasParsedGitDiffFiles = parsedGitDiffFileEntries.length > 0;
@@ -1100,19 +1100,19 @@ export function ThreadDetailView() {
       }}
     />
   );
-  const workspace = thread.type === "manager"
+  const threadStorage = thread.type === "manager"
     ? {
-        filePreview: workspaceFilePreview,
+        filePreview: threadStorageFilePreview,
         fileError:
-          workspaceFilePreviewError instanceof Error
-            ? workspaceFilePreviewError
-            : workspaceFilePreviewError
-              ? new Error("Failed to load workspace file")
+          threadStorageFilePreviewError instanceof Error
+            ? threadStorageFilePreviewError
+            : threadStorageFilePreviewError
+              ? new Error("Failed to load thread storage file")
               : null,
-        files: workspaceFiles?.files,
-        isFileLoading: isWorkspaceFilePreviewLoading,
-        onTogglePath: handleWorkspacePathToggle,
-        selectedPath: selectedWorkspacePath,
+        files: threadStorageFiles?.files,
+        isFileLoading: isThreadStorageFilePreviewLoading,
+        onTogglePath: handleThreadStoragePathToggle,
+        selectedPath: selectedThreadStoragePath,
       }
     : undefined;
 
@@ -1122,7 +1122,7 @@ export function ThreadDetailView() {
         footer={composerFooter}
         header={timelineHeader}
         isSecondaryPanelOpen={isSecondaryPanelOpen}
-        workspace={workspace}
+        threadStorage={threadStorage}
         metadata={{
           canAssignToManager,
           canSelectThreadMergeBase,
@@ -1200,7 +1200,7 @@ export function ThreadDetailView() {
           resizablePanelRef: secondaryResizablePanelRef,
           setGitDiffFileRef,
           showGitDiffTab: canUseGitUi,
-          showWorkspaceTab: thread.type === "manager",
+          showThreadStorageTab: thread.type === "manager",
           threadGitDiff: canUseGitUi ? threadGitDiff : undefined,
           threadId: thread.id,
         }}

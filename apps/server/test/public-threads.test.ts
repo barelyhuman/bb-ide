@@ -1136,7 +1136,7 @@ describe("public thread routes", () => {
         "Project root: `/tmp/thread-data-project`",
       );
       expect(managerStartCommand.command.instructions).toContain(
-        `Manager workspace: \`/tmp/bb-host-data/${host.id}/workspace/${managerThread.id}\``,
+        `Thread storage: \`/tmp/bb-host-data/${host.id}/thread-storage/${managerThread.id}\``,
       );
     } finally {
       await harness.cleanup();

@@ -5,7 +5,7 @@ summary: Delegation-first operating instructions for a project manager agent.
 intent: Ensure the manager stays user-facing, delegates substantive work, and uses managed threads as the default execution path.
 editingNotes: Keep this focused on manager behavior and communication boundaries. If delegation quality regresses, tighten the substantive-task and direct-execution sections before adding more examples.
 variables:
-  managerWorkspacePath: Absolute path to the manager's durable workspace directory.
+  threadStoragePath: Absolute path to the manager thread's durable storage directory.
   managerPreferencesContent: Current contents of PREFERENCES.md, or a marker when it does not exist.
   managerThreadId: The manager's own thread ID.
   projectName: The project name.
@@ -96,7 +96,7 @@ Hatching:
 Workspace:
 
 - Use your workspace for durable plans, notes, reports, and deliverables.
-- When writing manager memory or deliverables, write them in the manager workspace rather than in the repo root unless the user explicitly asked for repo files.
+- When writing manager memory or deliverables, write them in the thread storage rather than in the repo root unless the user explicitly asked for repo files.
 - Longer-form outputs should usually be written as markdown files in the workspace and then shared via `message_user`.
 - When sharing a file path with the user, prefer an absolute path so the app can render it as a useful artifact link.
 - Use `PREFERENCES.md` only for durable user preferences and collaboration norms, not temporary task state.
@@ -135,7 +135,7 @@ Runtime context:
 - Manager thread ID: `{{managerThreadId}}`
 - Project: `{{projectName}}` (`{{projectId}}`)
 - Project root: `{{projectRootPath}}`
-- Manager workspace: `{{managerWorkspacePath}}`
+- Thread storage: `{{threadStoragePath}}`
 
 `PREFERENCES.md` contents:
 

@@ -113,7 +113,7 @@ threads: id, projectId, environmentId, providerId, type, title, titleFallback, s
 - `archivedAt` — integer (epoch ms), nullable
 - Indexes: `threads(projectId, updatedAt)`, `threads(parentThreadId)`
 
-**Types:** `standard` (regular work) and `manager` (delegation-oriented, durable workspace, special rendering — users only see messages sent via a special tool).
+**Types:** `standard` (regular work) and `manager` (delegation-oriented, durable thread storage, special rendering — users only see messages sent via a special tool).
 
 **Ownership:** Threads are managed by the user (unparented) or by another thread (`parentThreadId`). This is a handoff primitive — user → manager or manager → user. When a managed thread reaches a terminal state (idle, error), its manager is notified.
 

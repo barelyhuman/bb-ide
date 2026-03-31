@@ -32,8 +32,8 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
   "createThreadRequestSchema.title": "Thread creation may omit a custom title and use the generated title flow.",
   "environmentActionApiErrorSchema.details": "Some environment action failures do not have structured detail payloads.",
   "environmentActionApiErrorSchema.retryable": "Environment action errors may omit retryability when no retry hint exists.",
-  "managerWorkspaceFilesQuerySchema.limit": "Manager workspace file listing may omit limit to use the default result count.",
-  "managerWorkspaceFilesQuerySchema.query": "Manager workspace file listing may omit a search string to list files without filtering.",
+  "threadStorageFilesQuerySchema.limit": "Thread storage file listing may omit limit to use the default result count.",
+  "threadStorageFilesQuerySchema.query": "Thread storage file listing may omit a search string to list files without filtering.",
   "projectFilesQuerySchema.limit": "Project file search may omit limit to use the server-side default result count.",
   "projectFilesQuerySchema.query": "Project file search may omit a search string to list files without filtering.",
   "sendMessageRequestSchema.model": "Follow-up sends may inherit the thread's default model.",
@@ -226,16 +226,16 @@ describe("server-contract clients", () => {
       }).pathname,
     ).toBe("/api/v1/threads/thr_123/timeline/tool-details");
     expect(
-      publicClient.threads[":id"]["manager-workspace"].files.$url({
+      publicClient.threads[":id"]["thread-storage"].files.$url({
         param: { id: "thr_123" },
       }).pathname,
-    ).toBe("/api/v1/threads/thr_123/manager-workspace/files");
+    ).toBe("/api/v1/threads/thr_123/thread-storage/files");
     expect(
-      publicClient.threads[":id"]["manager-workspace"].content.$url({
+      publicClient.threads[":id"]["thread-storage"].content.$url({
         param: { id: "thr_123" },
         query: { path: "notes/plan.md" },
       }).pathname,
-    ).toBe("/api/v1/threads/thr_123/manager-workspace/content");
+    ).toBe("/api/v1/threads/thr_123/thread-storage/content");
   });
 
   it("keeps route inputs in shared named types instead of inline objects", () => {
@@ -260,7 +260,7 @@ describe("server-contract clients", () => {
       createThreadRequestSchema: contract.createThreadRequestSchema,
       environmentActionApiErrorSchema: contract.environmentActionApiErrorSchema,
       environmentStatusResponseSchema: contract.environmentStatusResponseSchema,
-      managerWorkspaceFilesQuerySchema: contract.managerWorkspaceFilesQuerySchema,
+      threadStorageFilesQuerySchema: contract.threadStorageFilesQuerySchema,
       projectFilesQuerySchema: contract.projectFilesQuerySchema,
       sendDraftResponseSchema: contract.sendDraftResponseSchema,
       sendMessageRequestSchema: contract.sendMessageRequestSchema,

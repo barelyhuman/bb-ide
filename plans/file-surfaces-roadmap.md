@@ -6,7 +6,7 @@ Move the current file-related features toward two stable product capabilities:
 
 1. **Blob-backed file delivery**
    - Attachments
-   - Published manager workspace files
+   - Published thread storage files
 2. **Source-backed file discovery**
    - Project source file listing for both `local_path` and `github_repo`
 
@@ -20,10 +20,10 @@ The public API should stay stable where possible while the server swaps route in
   - Uploaded through `POST /api/v1/projects/:id/attachments`
   - Served through `GET /api/v1/projects/:id/attachments/content`
   - Backed by server-local filesystem in `apps/server/src/services/attachments.ts`
-- **Manager workspace**
-  - Listed through `GET /api/v1/threads/:id/manager-workspace/files`
-  - Read through `GET /api/v1/threads/:id/manager-workspace/content`
-  - Authored in a live host-local folder derived from `<session.dataDir>/workspace/<threadId>`
+- **Thread storage**
+  - Listed through `GET /api/v1/threads/:id/thread-storage/files`
+  - Read through `GET /api/v1/threads/:id/thread-storage/content`
+  - Authored in a live host-local folder derived from `<session.dataDir>/thread-storage/<threadId>`
   - Still served from the live host today
 
 ### Source-backed listing today
@@ -38,10 +38,10 @@ The public API should stay stable where possible while the server swaps route in
 ### Blob-backed file delivery
 
 - Attachments remain uploadable and readable through their current public routes.
-- Manager workspace files continue to be authored locally by the manager agent in a host-local folder.
-- Manager workspace user-facing reads stop depending on the live host.
-- Instead, manager workspace files are published into object storage and served from a synced snapshot.
-- The app treats attachment URLs and manager-workspace URLs as ordinary file URLs.
+- Thread storage files continue to be authored locally by the owning agent in a host-local folder.
+- Thread storage user-facing reads stop depending on the live host.
+- Instead, thread storage files are published into object storage and served from a synced snapshot.
+- The app treats attachment URLs and thread-storage URLs as ordinary file URLs.
 
 ### Source-backed file discovery
 
@@ -57,28 +57,28 @@ The public API should stay stable where possible while the server swaps route in
 - Do not collapse all file features into one generic route family that hides meaningful differences.
 - Server owns product policy, route behavior, source dispatch, snapshot selection, and storage configuration.
 - Daemon owns host-local filesystem access and optional host-local change detection.
-- Manager workspace should have a **write model** and a separate **read model**:
+- Thread storage should have a **write model** and a separate **read model**:
   - write model: live host-local folder
   - read model: published snapshot
 - Prefer metadata-first preview flows. Consumers should not need to download arbitrary binary payloads just to learn they are not previewable.
 
 ## Completed Pre-Work
 
-The current live manager-workspace path was hardened before this roadmap:
+The current live thread-storage path was hardened before this roadmap:
 
 1. `host.read_file` now requires a declared `rootPath`, and the daemon enforces symlink-resolved containment under that root.
-2. `GET /threads/:id/manager-workspace/content` and manager preferences reads both use the durable manager workspace root as that bound.
+2. `GET /threads/:id/thread-storage/content` and manager preferences reads both use the durable thread storage root as that bound.
 3. The daemon now uses UTF-8 transport only when the file bytes are actually valid UTF-8; otherwise it falls back to base64 and preserves the original bytes.
 
 ## Proposed Package Boundary
 
 Introduce **`@bb/blob-storage`** as the first new shared package.
 
-This package should be **storage-only**. It should not know about attachments, manager workspaces, projects, previewability, or route semantics.
+This package should be **storage-only**. It should not know about attachments, thread storage, projects, previewability, or route semantics.
 
 ### Why this package comes first
 
-- Attachments and published manager workspace are converging on the same storage substrate.
+- Attachments and published thread storage are converging on the same storage substrate.
 - If storage abstractions start inside `server` first, they are likely to accrete product concepts and become hard to extract cleanly later.
 - S3 and R2 are both stable enough that we can commit to a provider-neutral storage interface now.
 
@@ -139,8 +139,8 @@ interface BlobUrlSigner {
 ### Explicit non-goals for `@bb/blob-storage`
 
 - No bucket traversal or `list` in the core interface
-  - manager workspace should list from a manifest, not from raw object-store prefixes
-- No attachment or manager-workspace domain types
+  - thread storage should list from a manifest, not from raw object-store prefixes
+- No attachment or thread-storage domain types
 - No GitHub client logic
 - No MIME preview policy
 - No route/auth logic
@@ -157,8 +157,8 @@ interface BlobUrlSigner {
 ### Server-owned code
 
 - `AttachmentStore`
-- `PublishedManagerWorkspaceStore`
-- `ManagerWorkspacePublisher`
+- `PublishedThreadStorageStore`
+- `ThreadStoragePublisher`
 - `ProjectSourceFileLister`
 - Object key naming
 - Snapshot manifest persistence
@@ -167,7 +167,7 @@ interface BlobUrlSigner {
 ### Daemon-owned code
 
 - Host-local bounded file listing and reading primitives
-- Optional file change reporting hooks if we later want more immediate manager-workspace publishing
+- Optional file change reporting hooks if we later want more immediate thread-storage publishing
 
 ### Maybe later: `@bb/files`
 
@@ -186,7 +186,7 @@ If that package happens later, it should sit above `@bb/blob-storage`, not repla
 ### Phase 0: Remove dead `workspace.read_file` if it stays unused by product code
 
 1. Remove `workspace.read_file` if it stays unused by product code
-   - After the manager-workspace migration, this command appears to be dead outside daemon contracts/tests.
+   - After the thread-storage migration, this command appears to be dead outside daemon contracts/tests.
    - If no caller needs it, delete it end to end instead of keeping parallel read surfaces around.
 
 Exit condition:
@@ -201,7 +201,7 @@ Exit condition:
 5. Add implementation-agnostic contract tests
 
 Exit condition:
-- the repo has a storage package whose public API is provider-neutral and does not mention attachments or manager workspaces
+- the repo has a storage package whose public API is provider-neutral and does not mention attachments or thread storage
 
 ### Phase 2: Move attachments onto `@bb/blob-storage`
 
@@ -213,25 +213,25 @@ Exit condition:
 Exit condition:
 - attachments can be stored either locally or in object storage without route changes
 
-### Phase 3: Introduce a published manager-workspace read model
+### Phase 3: Introduce a published thread-storage read model
 
-1. Introduce a server-side `PublishedManagerWorkspaceStore`
-2. Define a manifest format for manager workspace snapshots
-3. Persist a pointer to the latest published snapshot for each manager thread
-4. Keep the live host-local manager workspace as the write path
+1. Introduce a server-side `PublishedThreadStorageStore`
+2. Define a manifest format for thread storage snapshots
+3. Persist a pointer to the latest published snapshot for each thread that uses thread storage
+4. Keep the live host-local thread storage as the write path
 5. Treat the published snapshot as the read path for `files` and `content`
 
 Preferred behavior:
-- the manager keeps writing to disk exactly as it does today
+- the writing agent keeps writing to disk exactly as it does today
 - publication happens on turn completion and/or explicit file change events
 - user-facing list/read routes serve the latest completed snapshot
 
 Exit condition:
-- manager workspace list/read routes no longer require the host to be online for previously-published content
+- thread storage list/read routes no longer require the host to be online for previously-published content
 
-### Phase 4: Publish manager workspace snapshots into object storage
+### Phase 4: Publish thread storage snapshots into object storage
 
-1. Add a sync/publish pipeline for manager workspace snapshots
+1. Add a sync/publish pipeline for thread storage snapshots
 2. Upload changed files to object storage
 3. Publish a manifest for list/read lookup
 4. Decide whether file content routes should proxy bytes or redirect to signed object URLs
@@ -240,7 +240,7 @@ Open question:
 - persist manifests in DB rows, object storage, or both
 
 Exit condition:
-- manager workspace reads come from published storage, not live host reads
+- thread storage reads come from published storage, not live host reads
 
 ### Phase 5: Dispatch project file listing by source type
 
@@ -273,22 +273,22 @@ Exit condition:
 
 - `POST /api/v1/projects/:id/attachments`
 - `GET /api/v1/projects/:id/attachments/content`
-- `GET /api/v1/threads/:id/manager-workspace/files`
-- `GET /api/v1/threads/:id/manager-workspace/content`
+- `GET /api/v1/threads/:id/thread-storage/files`
+- `GET /api/v1/threads/:id/thread-storage/content`
 - `GET /api/v1/projects/:id/files`
 
 ### Internal changes behind those routes
 
 - attachments: filesystem-backed -> `@bb/blob-storage`-backed attachment store
-- manager workspace: live host read -> published snapshot read
+- thread storage: live host read -> published snapshot read
 - project file listing: local-path-only -> source-type dispatcher
 
 ## Exit Criteria
 
 - `@bb/blob-storage` exists with a stable provider-neutral interface and at least local + S3-compatible implementations.
 - Attachments can be backed by either local filesystem or object storage without changing public routes.
-- Manager workspace list/read routes serve published snapshots rather than live host files.
-- Manager workspace live writes remain unchanged for the agent.
+- Thread storage list/read routes serve published snapshots rather than live host files.
+- Thread storage live writes remain unchanged for the agent.
 - `/projects/:id/files` supports both `local_path` and `github_repo`.
 
 ## Validation
@@ -299,11 +299,11 @@ Exit condition:
 - `pnpm exec turbo run test --filter=@bb/blob-storage`
 - contract tests should run against both local and S3-compatible implementations
 
-### Attachments and manager workspace
+### Attachments and thread storage
 
 - attachments: test both local and object-backed implementations against the same route behavior
-- manager workspace: test list/read behavior against published snapshots
-- manager workspace: test snapshot publication from a host-local write directory into object storage
+- thread storage: test list/read behavior against published snapshots
+- thread storage: test snapshot publication from a host-local write directory into object storage
 
 ### Project source listing
 

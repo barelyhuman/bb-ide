@@ -40,7 +40,7 @@
      - If no providerThreadId: dispatches `thread.start` command (new provider session).
      - Both paths:
        - Call `resolveThreadRuntimeCommandConfig` which reads `getProject`.
-       - For manager threads, `resolveThreadRuntimeCommandConfig` also reads the active host session to derive `managerWorkspacePath = <dataDir>/workspace/<threadId>` and synchronously fetches `PREFERENCES.md` via a bounded `host.read_file` command with `rootPath = managerWorkspacePath` before queueing the actual turn command.
+       - For manager threads, `resolveThreadRuntimeCommandConfig` also reads the active host session to derive `threadStoragePath = <dataDir>/thread-storage/<threadId>` and synchronously fetches `PREFERENCES.md` via a bounded `host.read_file` command with `rootPath = threadStoragePath` before queueing the actual turn command.
        - Call `requireConnectedHostSession` -- queries `host_daemon_sessions` for active session with valid lease.
        - Call `queueCommand` -- transactional insert into `host_daemon_commands` with monotonic cursor.
      - `turn.run` also transitions thread to "active" if currently "idle".
@@ -62,7 +62,7 @@
 | 3   | SELECT latest execution event       | `events`               | `events_thread_sequence_idx`           | `getLastExecutionOptions` -- WHERE threadId + type IN (...) ORDER BY sequence DESC LIMIT 1 |
 | 4   | SELECT MAX(sequence) + INSERT event | `events`               | `events_thread_sequence_idx`           | `appendThreadEvent` in transaction                                                         |
 | 5   | SELECT latest providerThreadId      | `events`               | `events_thread_sequence_idx`           | `getLastProviderThreadId` (start mode only)                                                |
-| 6   | SELECT active session               | `host_daemon_sessions` | `host_daemon_sessions_host_status_idx` | `getActiveSession` / `requireConnectedHostSession`; manager threads do this again when deriving `managerWorkspacePath` |
+| 6   | SELECT active session               | `host_daemon_sessions` | `host_daemon_sessions_host_status_idx` | `getActiveSession` / `requireConnectedHostSession`; manager threads do this again when deriving `threadStoragePath` |
 | 7   | SELECT project                      | `projects`             | PK                                     | `resolveThreadRuntimeCommandConfig`                                                        |
 | 8   | Manager only: SELECT MAX(cursor) + INSERT `host.read_file` command | `host_daemon_commands` | `host_daemon_commands_host_cursor_idx` | `queueCommandAndWait` inside `readManagerPreferences`                                      |
 | 9   | SELECT MAX(cursor) + INSERT command | `host_daemon_commands` | `host_daemon_commands_host_cursor_idx` | `queueCommand` in transaction                                                              |

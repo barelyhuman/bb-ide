@@ -2,8 +2,8 @@ import path from "node:path";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import {
-  managerWorkspaceContentQuerySchema,
-  managerWorkspaceFilesQuerySchema,
+  threadStorageContentQuerySchema,
+  threadStorageFilesQuerySchema,
   threadEventWaitQuerySchema,
   threadEventsQuerySchema,
   threadTimelineQuerySchema,
@@ -23,7 +23,7 @@ import {
   createDaemonFileContentResponse,
   remapDaemonFileRouteError,
 } from "../../services/daemon-file-response.js";
-import { requireManagerWorkspacePath } from "../../services/manager-workspace.js";
+import { requireThreadStoragePath } from "../../services/thread-storage.js";
 import { buildThreadTimeline, buildTimelineToolDetails } from "../../services/timeline.js";
 import {
   findThreadEvent,
@@ -43,16 +43,16 @@ function validateFilePath(filePath: string): void {
   }
 }
 
-interface ManagerWorkspaceTarget {
+interface ThreadStorageTarget {
   hostId: string;
-  workspacePath: string;
+  storagePath: string;
 }
 
-interface RequireManagerWorkspaceTargetArgs {
+interface RequireThreadStorageTargetArgs {
   threadId: string;
 }
 
-function parseWorkspaceFileListLimit(rawLimit: string | undefined): number {
+function parseThreadStorageFileListLimit(rawLimit: string | undefined): number {
   const limit = Math.min(parseOptionalInteger(rawLimit, "limit") ?? 1000, 10000);
   if (limit <= 0) {
     throw new ApiError(400, "invalid_request", "limit must be a positive integer");
@@ -60,21 +60,18 @@ function parseWorkspaceFileListLimit(rawLimit: string | undefined): number {
   return limit;
 }
 
-function requireManagerWorkspaceTarget(
+function requireThreadStorageTarget(
   deps: Pick<AppDeps, "db">,
-  args: RequireManagerWorkspaceTargetArgs,
-): ManagerWorkspaceTarget {
+  args: RequireThreadStorageTargetArgs,
+): ThreadStorageTarget {
   const thread = requireThread(deps.db, args.threadId);
-  if (thread.type !== "manager") {
-    throw new ApiError(409, "invalid_request", "Thread is not a manager");
-  }
   if (!thread.environmentId) {
     throw new ApiError(409, "invalid_request", "Thread has no environment");
   }
   const environment = requireEnvironment(deps.db, thread.environmentId);
   return {
     hostId: environment.hostId,
-    workspacePath: requireManagerWorkspacePath(deps, {
+    storagePath: requireThreadStoragePath(deps, {
       hostId: environment.hostId,
       threadId: thread.id,
     }),
@@ -163,13 +160,13 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
   });
 
   get(
-    "/threads/:id/manager-workspace/files",
-    managerWorkspaceFilesQuerySchema,
+    "/threads/:id/thread-storage/files",
+    threadStorageFilesQuerySchema,
     async (context, query) => {
-      const target = requireManagerWorkspaceTarget(deps, {
+      const target = requireThreadStorageTarget(deps, {
         threadId: context.req.param("id"),
       });
-      const limit = parseWorkspaceFileListLimit(query.limit);
+      const limit = parseThreadStorageFileListLimit(query.limit);
 
       try {
         const rawResult = await queueCommandAndWait(deps, {
@@ -177,7 +174,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
           timeoutMs: COMMAND_TIMEOUT_MS,
           command: {
             type: "host.list_files",
-            path: target.workspacePath,
+            path: target.storagePath,
             ...(query.query ? { query: query.query } : {}),
             limit,
           },
@@ -194,11 +191,11 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
   );
 
   get(
-    "/threads/:id/manager-workspace/content",
-    managerWorkspaceContentQuerySchema,
+    "/threads/:id/thread-storage/content",
+    threadStorageContentQuerySchema,
     async (context, query) => {
       validateFilePath(query.path);
-      const target = requireManagerWorkspaceTarget(deps, {
+      const target = requireThreadStorageTarget(deps, {
         threadId: context.req.param("id"),
       });
 
@@ -208,8 +205,8 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
           timeoutMs: COMMAND_TIMEOUT_MS,
           command: {
             type: "host.read_file",
-            path: path.join(target.workspacePath, query.path),
-            rootPath: target.workspacePath,
+            path: path.join(target.storagePath, query.path),
+            rootPath: target.storagePath,
           },
         });
         return createDaemonFileContentResponse(

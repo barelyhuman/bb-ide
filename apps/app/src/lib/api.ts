@@ -45,7 +45,7 @@ import {
   type FilePreview,
   type FilePreviewTarget,
 } from "./file-preview";
-import { buildManagerWorkspaceContentUrl } from "./file-content-urls";
+import { buildThreadStorageContentUrl } from "./file-content-urls";
 export type { FilePreview } from "./file-preview";
 
 const MAX_ERROR_MESSAGE_LENGTH = 180;
@@ -373,15 +373,15 @@ export async function getThread(id: string): Promise<Thread> {
   return request<Thread>(apiClient.threads[":id"].$get({ param: { id } }));
 }
 
-export async function listManagerWorkspaceFiles(
+export async function listThreadStorageFiles(
   id: string,
 ): Promise<WorkspaceFileListResponse> {
   return request<WorkspaceFileListResponse>(
-    apiClient.threads[":id"]["manager-workspace"].files.$get({ param: { id } }),
+    apiClient.threads[":id"]["thread-storage"].files.$get({ param: { id } }),
   );
 }
 
-export async function getManagerWorkspaceFilePreview(
+export async function getThreadStorageFilePreview(
   id: string,
   path: string,
   signal?: AbortSignal,
@@ -389,7 +389,7 @@ export async function getManagerWorkspaceFilePreview(
   return loadFilePreview(
     {
       path,
-      url: buildManagerWorkspaceContentUrl(id, path),
+      url: buildThreadStorageContentUrl(id, path),
     },
     signal,
   );

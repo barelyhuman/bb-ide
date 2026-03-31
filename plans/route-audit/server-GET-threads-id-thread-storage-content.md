@@ -1,15 +1,15 @@
-# `GET /api/v1/threads/:id/manager-workspace/content` — Read Durable Manager Workspace File Content
+# `GET /api/v1/threads/:id/thread-storage/content` — Read Durable Thread Storage File Content
 
 **Route:** `apps/server/src/routes/threads/data.ts`
-**Contract:** `PathId & { query: ManagerWorkspaceContentQuery } -> binary` (200)
+**Contract:** `PathId & { query: ThreadStorageContentQuery } -> binary` (200)
 **Complexity:** Medium
 
 ## Request Params
 
 | Field | Required | Notes |
 |---|---|---|
-| `:id` | Yes | Thread ID. Must resolve to a manager thread. |
-| `path` | Yes | Relative durable-workspace path. Absolute paths and `..` traversal are rejected at the route layer. |
+| `:id` | Yes | Thread ID. Must resolve to a thread with an environment. |
+| `path` | Yes | Relative thread-storage path. Absolute paths and `..` traversal are rejected at the route layer. |
 
 **Both fields consumed. No dead params.**
 
@@ -18,11 +18,11 @@
 1. `validateFilePath(path)` rejects:
    - absolute paths
    - `..` path traversal via `/` or `\\`
-2. `requireManagerWorkspaceTarget(deps, { threadId })` resolves the durable manager workspace root `<dataDir>/workspace/<threadId>` through:
+2. `requireThreadStorageTarget(deps, { threadId })` resolves the durable thread storage root `<dataDir>/thread-storage/<threadId>` through:
    - `requireThread`
    - `requireEnvironment`
    - `requireConnectedHostSession`
-3. Calls `queueCommandAndWait(...)` with `host.read_file` on `path.join(managerWorkspaceRoot, query.path)` and `rootPath = managerWorkspaceRoot`.
+3. Calls `queueCommandAndWait(...)` with `host.read_file` on `path.join(threadStorageRoot, query.path)` and `rootPath = threadStorageRoot`.
 4. Parses the daemon result as `host.read_file`.
 5. `createDaemonFileContentResponse(...)`:
    - decodes UTF-8 or base64 payloads to raw bytes
@@ -47,7 +47,7 @@
 ## Flags
 
 1. **Raw response body, not JSON.** The app must inspect `Content-Type` and, for non-images, body bytes to decide whether to render text or an unsupported preview state.
-2. **Server-owned host path plus daemon-enforced containment.** The user only supplies a relative path inside the durable manager workspace; the server resolves the host root and the daemon rejects symlink-resolved reads that escape it.
+2. **Server-owned host path plus daemon-enforced containment.** The user only supplies a relative path inside the durable thread storage; the server resolves the host root and the daemon rejects symlink-resolved reads that escape it.
 3. **Attachment-like error handling.** Missing files, invalid paths, and oversize files now return 404/400/413 instead of a generic 502.
 
 ## Usages
@@ -55,9 +55,9 @@
 | Caller | Location | Purpose |
 |---|---|---|
 | `loadFilePreview` | `apps/app/src/lib/api.ts` | Shared URL-based preview loader used for route-agnostic file previews |
-| `getManagerWorkspaceFilePreview` | `apps/app/src/lib/api.ts` | Builds the manager workspace content URL and delegates to `loadFilePreview` |
-| `useManagerWorkspaceFilePreview` | `apps/app/src/hooks/useApi.ts` | React Query wrapper for the preview request |
-| `useWorkspaceViewer` | `apps/app/src/views/useWorkspaceViewer.ts` | Loads the selected manager workspace preview in the thread detail side panel |
+| `getThreadStorageFilePreview` | `apps/app/src/lib/api.ts` | Builds the thread storage content URL and delegates to `loadFilePreview` |
+| `useThreadStorageFilePreview` | `apps/app/src/hooks/useApi.ts` | React Query wrapper for the preview request |
+| `useThreadStorageViewer` | `apps/app/src/views/useThreadStorageViewer.ts` | Loads the selected thread storage preview in the thread detail side panel |
 
 ## Review Comments
 
