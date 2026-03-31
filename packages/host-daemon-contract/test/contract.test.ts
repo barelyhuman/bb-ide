@@ -24,6 +24,7 @@ const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
   "hostDaemonCommandSchema.options.seq": "Daemon command metadata may omit sequence when the command source does not assign one.",
   "hostDaemonCommandSchema.options.source": "Daemon command metadata may omit source when the command origin is not being tracked.",
   "hostDaemonCommandSchema.query": "host.list_files and workspace.list_files may omit a search string to list files without filtering.",
+  "hostDaemonCommandSchema.rootPath": "host.read_file may optionally enforce that the resolved file stays under an absolute root after following symlinks.",
 };
 
 describe("host-daemon command schemas", () => {
@@ -95,10 +96,12 @@ describe("host-daemon command schemas", () => {
       hostDaemonCommandSchema.parse({
         type: "host.read_file",
         path: "/tmp/bb-data/workspace/thread-123/PREFERENCES.md",
+        rootPath: "/tmp/bb-data/workspace/thread-123",
       }),
     ).toMatchObject({
       type: "host.read_file",
       path: "/tmp/bb-data/workspace/thread-123/PREFERENCES.md",
+      rootPath: "/tmp/bb-data/workspace/thread-123",
     });
 
     expect(

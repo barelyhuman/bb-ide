@@ -11,32 +11,33 @@
 |---|---|---|
 | `type` | Yes | Literal `"host.read_file"`. |
 | `path` | Yes | Absolute host path to read. Relative paths are rejected before any filesystem access. |
+| `rootPath` | No | Optional absolute containment root. When present, the daemon resolves symlinks and rejects reads whose real path escapes this root. |
 
-**All 2 fields consumed. No dead params.**
+**All 3 fields consumed. No dead params.**
 
 ## Implementation Trace
 
 1. `dispatchCommand` matches `"host.read_file"` and calls `readHostFile(command)`.
-2. `readHostFile` rejects non-absolute paths with `CommandDispatchError("invalid_path")`.
-3. `readHostFile` delegates to `readFileForTransport(command.path, command.path)`.
+2. `readHostFile` rejects non-absolute `path` values and non-absolute `rootPath` values with `CommandDispatchError("invalid_path")`.
+3. `readHostFile` delegates to `readFileForTransport({ resolvedPath, resultPath, rootPath? })`.
 4. `readFileForTransport`:
+   - when `rootPath` is present, resolves symlinks for both `rootPath` and `resolvedPath` and rejects files whose real path escapes the root
    - `stat`s the path
    - rejects directories
    - infers `mimeType` from the file extension when possible
    - enforces attachment-aligned limits:
-     - 10 MB for `image/*`
+     - 10 MB for binary `image/*`
      - 25 MB for other files
    - reads the file bytes
-   - returns UTF-8 text when the file is text-like or valid UTF-8
+   - returns UTF-8 text only when the bytes are valid UTF-8
    - returns base64 when the file is binary or image content
 5. Returns `{ path, content, contentEncoding, mimeType?, sizeBytes }`.
 
 ## Flags
 
-1. **No root restriction beyond absolute paths.** The server can request any readable absolute path on the host. This is intentional for host-local manager workspace reads, but broader than `workspace.read_file`.
-2. **Server-owned root selection is still the main safety boundary.** The daemon only requires an absolute path. The server currently uses this command for durable manager workspace files and `PREFERENCES.md`, not arbitrary client-supplied host paths.
-3. **Symlinks are followed.** There is no containment check against `BB_DATA_DIR`; the resolved file is whatever the absolute path points to on disk.
-4. **Transport is preview-oriented, not opaque streaming.** The full file is still loaded into memory and returned as either UTF-8 text or base64.
+1. **Containment is optional.** Without `rootPath`, the server can request any readable absolute path on the host. With `rootPath`, the daemon enforces that the symlink-resolved file stays under that root.
+2. **Manager workspace reads now use bounded containment.** The server sends `rootPath = <dataDir>/workspace/<threadId>` for the public manager-workspace content route.
+3. **Transport is preview-oriented, not opaque streaming.** The full file is still loaded into memory and returned as either UTF-8 text or base64.
 
 ## Usages
 
@@ -53,6 +54,10 @@
   1. `host.read_file` is still the daemon primitive for durable manager workspace file reads.
   2. `host.list_files` now exists as the companion browse primitive for the same durable manager workspace root.
   3. `host.read_file` and `workspace.read_file` now share `readFileForTransport`, so both commands support text previews, image previews, and attachment-aligned size limits.
+- March 31, 2026 hardening:
+  1. `host.read_file` gained optional `rootPath` so callers can bound reads to a symlink-resolved root without changing unrestricted host-file reads.
+  2. The manager-workspace content route now uses that bound root to prevent symlink escapes outside `<dataDir>/workspace/<threadId>`.
+  3. UTF-8 transport now requires the file bytes to be valid UTF-8; declared text MIME types with non-UTF-8 bytes fall back to base64 so the server preserves the original bytes.
 
 ## Review Comments
 

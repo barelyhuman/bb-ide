@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hosts } from "@bb/db";
+import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import { initDb } from "../src/db.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
 
@@ -33,7 +34,7 @@ describe("server skeleton", () => {
           hostName: "Host",
           hostType: "persistent",
           dataDir: "/tmp/host-data",
-          protocolVersion: 2,
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
           activeThreads: [],
         }),
       });

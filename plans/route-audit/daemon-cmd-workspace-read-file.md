@@ -21,16 +21,16 @@
 1. `dispatchCommand` matches `"workspace.read_file"` and calls `readWorkspaceFile(command, runtimeManager)`.
 2. `readWorkspaceFile` resolves the environment with `requireWorkspaceEnvironment(...)`.
 3. It resolves `command.path` against the workspace root and rejects anything that escapes the workspace.
-4. It delegates to `readFileForTransport(resolvedPath, command.path)`.
+4. It delegates to `readFileForTransport({ resolvedPath, resultPath: command.path })`.
 5. `readFileForTransport`:
    - `stat`s the file
    - rejects directories
    - infers `mimeType` from the relative path when possible
    - enforces attachment-aligned limits:
-     - 10 MB for `image/*`
+     - 10 MB for binary `image/*`
      - 25 MB for other files
    - reads the file bytes
-   - returns UTF-8 text when the file is text-like or valid UTF-8
+   - returns UTF-8 text only when the bytes are valid UTF-8
    - returns base64 when the file is binary or image content
 6. Returns `{ path, content, contentEncoding, mimeType?, sizeBytes }`.
 

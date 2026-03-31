@@ -7,6 +7,7 @@ import {
   openSession,
   upsertHost,
 } from "@bb/db";
+import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import type { PromptInput, ThreadEventType } from "@bb/domain";
 import type { AppDeps } from "../../src/types.js";
 
@@ -40,7 +41,7 @@ export function seedSession(
     hostName: "Test Host",
     hostType: "persistent",
     dataDir: `/tmp/bb-host-data/${hostId}`,
-    protocolVersion: 2,
+    protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
     heartbeatIntervalMs: 5_000,
     leaseTimeoutMs: 30_000,
   });

@@ -1,27 +1,12 @@
 import { isUtf8 } from "node:buffer";
 import fs from "node:fs/promises";
+import path from "node:path";
 import mimeTypes from "mime-types";
 import { CommandDispatchError } from "../command-dispatch-support.js";
 import { isFsErrorWithCode } from "../fs-errors.js";
 
 const IMAGE_FILE_SIZE_LIMIT_BYTES = 10 * 1024 * 1024;
 const NON_IMAGE_FILE_SIZE_LIMIT_BYTES = 25 * 1024 * 1024;
-const UTF8_TEXT_MIME_TYPES = new Set([
-  "application/ecmascript",
-  "application/javascript",
-  "application/json",
-  "application/ld+json",
-  "application/sql",
-  "application/toml",
-  "application/typescript",
-  "application/x-httpd-php",
-  "application/x-sh",
-  "application/x-typescript",
-  "application/xml",
-  "application/x-yaml",
-  "application/yaml",
-  "image/svg+xml",
-]);
 
 type FileContentEncoding = "base64" | "utf8";
 
@@ -31,6 +16,12 @@ export interface ReadFileForTransportResult {
   mimeType?: string;
   path: string;
   sizeBytes: number;
+}
+
+export interface ReadFileForTransportArgs {
+  resolvedPath: string;
+  resultPath: string;
+  rootPath?: string;
 }
 
 function isBinaryImageMimeType(mimeType?: string): boolean {
@@ -47,11 +38,13 @@ function getFileSizeLimitBytes(mimeType?: string): number {
     : NON_IMAGE_FILE_SIZE_LIMIT_BYTES;
 }
 
-function isUtf8TextMimeType(mimeType?: string): boolean {
-  if (!mimeType) {
-    return false;
-  }
-  return mimeType.startsWith("text/") || UTF8_TEXT_MIME_TYPES.has(mimeType);
+function isPathWithinRoot(
+  candidatePath: string,
+  rootPath: string,
+): boolean {
+  const relativePath = path.relative(rootPath, candidatePath);
+  return relativePath === "" ||
+    (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
 }
 
 function getContentEncoding(
@@ -61,18 +54,40 @@ function getContentEncoding(
   if (isBinaryImageMimeType(mimeType)) {
     return "base64";
   }
-  if (isUtf8TextMimeType(mimeType) || isUtf8(fileContents)) {
+
+  if (isUtf8(fileContents)) {
     return "utf8";
   }
   return "base64";
 }
 
+async function resolveReadablePath(
+  args: ReadFileForTransportArgs,
+): Promise<string> {
+  if (!args.rootPath) {
+    return args.resolvedPath;
+  }
+
+  const [realRootPath, realResolvedPath] = await Promise.all([
+    fs.realpath(args.rootPath),
+    fs.realpath(args.resolvedPath),
+  ]);
+  if (!isPathWithinRoot(realResolvedPath, realRootPath)) {
+    throw new CommandDispatchError(
+      "invalid_path",
+      `Path "${args.resultPath}" escapes read root`,
+    );
+  }
+
+  return realResolvedPath;
+}
+
 export async function readFileForTransport(
-  resolvedPath: string,
-  resultPath: string,
+  args: ReadFileForTransportArgs,
 ): Promise<ReadFileForTransportResult> {
   try {
-    const stat = await fs.stat(resolvedPath);
+    const readablePath = await resolveReadablePath(args);
+    const stat = await fs.stat(readablePath);
     if (stat.isDirectory()) {
       throw new CommandDispatchError(
         "invalid_path",
@@ -80,7 +95,7 @@ export async function readFileForTransport(
       );
     }
 
-    const mimeType = mimeTypes.lookup(resultPath) || undefined;
+    const mimeType = mimeTypes.lookup(args.resultPath) || undefined;
     const fileSizeLimitBytes = getFileSizeLimitBytes(mimeType);
     if (stat.size > fileSizeLimitBytes) {
       throw new CommandDispatchError(
@@ -89,10 +104,10 @@ export async function readFileForTransport(
       );
     }
 
-    const fileContents = await fs.readFile(resolvedPath);
+    const fileContents = await fs.readFile(readablePath);
     const contentEncoding = getContentEncoding(fileContents, mimeType);
     return {
-      path: resultPath,
+      path: args.resultPath,
       content:
         contentEncoding === "utf8"
           ? fileContents.toString("utf8")
@@ -105,7 +120,7 @@ export async function readFileForTransport(
     if (isFsErrorWithCode(error, "ENOENT")) {
       throw new CommandDispatchError(
         "ENOENT",
-        `Path does not exist: ${resultPath}`,
+        `Path does not exist: ${args.resultPath}`,
       );
     }
     throw error;

@@ -1,6 +1,7 @@
 import type { RawData } from "ws";
 import { WebSocket } from "ws";
 import {
+  HOST_DAEMON_PROTOCOL_VERSION,
   createHostDaemonClient,
   type HostDaemonCommandEnvelope,
 } from "@bb/host-daemon-contract";
@@ -131,7 +132,7 @@ describe("server integration", () => {
           hostName: "Test Host",
           hostType: "persistent",
           dataDir: "/tmp/host-1-data",
-          protocolVersion: 2,
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
           activeThreads: [],
         },
       });
@@ -217,7 +218,7 @@ describe("server integration", () => {
             hostName: "Test Host",
             hostType: "persistent",
             dataDir: "/tmp/host-1-data",
-            protocolVersion: 2,
+            protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
             activeThreads: [],
           },
         })
@@ -352,7 +353,7 @@ describe("server integration", () => {
             hostName: "Lifecycle Host",
             hostType: "persistent",
             dataDir: "/tmp/host-1-data",
-            protocolVersion: 2,
+            protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
             activeThreads: [],
           },
         })
@@ -548,7 +549,7 @@ describe("server integration", () => {
             hostName: "Test Host",
             hostType: "persistent",
             dataDir: "/tmp/host-1-data",
-            protocolVersion: 2,
+            protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
             activeThreads: [],
           },
         })
@@ -579,7 +580,7 @@ describe("server integration", () => {
           hostName: "Test Host",
           hostType: "persistent",
           dataDir: "/tmp/host-1-data",
-          protocolVersion: 2,
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
           activeThreads: [],
         },
       });

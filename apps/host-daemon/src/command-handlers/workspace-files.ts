@@ -58,7 +58,10 @@ export async function readWorkspaceFile(
     );
   }
 
-  return readFileForTransport(resolved, command.path);
+  return readFileForTransport({
+    resolvedPath: resolved,
+    resultPath: command.path,
+  });
 }
 
 export async function listBranches(

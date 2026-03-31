@@ -22,7 +22,7 @@
    - `requireThread`
    - `requireEnvironment`
    - `requireConnectedHostSession`
-3. Calls `queueCommandAndWait(...)` with `host.read_file` on `path.join(managerWorkspaceRoot, query.path)`.
+3. Calls `queueCommandAndWait(...)` with `host.read_file` on `path.join(managerWorkspaceRoot, query.path)` and `rootPath = managerWorkspaceRoot`.
 4. Parses the daemon result as `host.read_file`.
 5. `createDaemonFileContentResponse(...)`:
    - decodes UTF-8 or base64 payloads to raw bytes
@@ -47,7 +47,7 @@
 ## Flags
 
 1. **Raw response body, not JSON.** The app must inspect `Content-Type` and, for non-images, body bytes to decide whether to render text or an unsupported preview state.
-2. **Server-owned host path.** The user only supplies a relative path inside the durable manager workspace; the host root is resolved entirely on the server.
+2. **Server-owned host path plus daemon-enforced containment.** The user only supplies a relative path inside the durable manager workspace; the server resolves the host root and the daemon rejects symlink-resolved reads that escape it.
 3. **Attachment-like error handling.** Missing files, invalid paths, and oversize files now return 404/400/413 instead of a generic 502.
 
 ## Usages

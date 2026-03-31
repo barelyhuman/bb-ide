@@ -209,6 +209,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
           command: {
             type: "host.read_file",
             path: path.join(target.workspacePath, query.path),
+            rootPath: target.workspacePath,
           },
         });
         return createDaemonFileContentResponse(

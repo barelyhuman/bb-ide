@@ -316,6 +316,32 @@ describe("workspace command dispatch", () => {
     });
   });
 
+  it("rejects host.read_file when the resolved path escapes rootPath through a symlink", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-host-read-root-escape-");
+    const outsidePath = path.join(tempDir, "..", "outside.txt");
+    const nestedDir = path.join(tempDir, "notes");
+    const symlinkPath = path.join(nestedDir, "secrets");
+    await fs.writeFile(outsidePath, "outside");
+    await fs.mkdir(nestedDir);
+    await fs.symlink(outsidePath, symlinkPath);
+
+    const harness = createHarness();
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "host.read_file",
+          path: symlinkPath,
+          rootPath: tempDir,
+        },
+        { runtimeManager: harness.manager },
+      ),
+    ).rejects.toMatchObject({
+      code: "invalid_path",
+      message: expect.stringContaining("escapes read root"),
+    });
+  });
+
   it("enforces the 10 MB image read limit", async () => {
     const tempDir = await makeTempDir("bb-dispatch-host-read-large-image-");
     const imagePath = path.join(tempDir, "large.png");
@@ -376,6 +402,26 @@ describe("workspace command dispatch", () => {
     expect(result.mimeType).toBe("image/svg+xml");
     expect(result.contentEncoding).toBe("utf8");
     expect(result.content).toBe(svg);
+  });
+
+  it("falls back to base64 for declared text files whose bytes are not valid utf8", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-host-read-invalid-utf8-");
+    const filePath = path.join(tempDir, "notes.txt");
+    const bytes = Buffer.from([0x63, 0x61, 0x66, 0xe9]);
+    await fs.writeFile(filePath, bytes);
+
+    const harness = createHarness();
+    const result = await dispatchCommand(
+      {
+        type: "host.read_file",
+        path: filePath,
+      },
+      { runtimeManager: harness.manager },
+    );
+
+    expect(result.mimeType).toBe("text/plain");
+    expect(result.contentEncoding).toBe("base64");
+    expect(result.content).toBe(bytes.toString("base64"));
   });
 
   it("covers workspace.list_branches", async () => {

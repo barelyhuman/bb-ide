@@ -805,8 +805,9 @@ describe("public thread data routes", () => {
         type: "manager",
       });
       const pngBytes = Uint8Array.from([137, 80, 78, 71]);
+      const managerWorkspaceRoot = `/tmp/bb-host-data/${host.id}/workspace/${thread.id}`;
       const managerWorkspaceFilePath =
-        `/tmp/bb-host-data/${host.id}/workspace/${thread.id}/images/diagram.png`;
+        `${managerWorkspaceRoot}/images/diagram.png`;
 
       const filePromise = harness.app.request(
         `/api/v1/threads/${thread.id}/manager-workspace/content?path=${encodeURIComponent("images/diagram.png")}`,
@@ -819,6 +820,7 @@ describe("public thread data routes", () => {
       );
       expect(fileCommand.command).toMatchObject({
         path: managerWorkspaceFilePath,
+        rootPath: managerWorkspaceRoot,
       });
       await reportQueuedCommandSuccess(harness, fileCommand, {
         path: managerWorkspaceFilePath,
@@ -833,6 +835,53 @@ describe("public thread data routes", () => {
       expect(fileResponse.headers.get("x-bb-content-encoding")).toBeNull();
       expect(fileResponse.headers.get("x-bb-size-bytes")).toBeNull();
       expect(new Uint8Array(await fileResponse.arrayBuffer())).toEqual(pngBytes);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("maps manager workspace root-escape failures to invalid_path", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+      });
+      const managerWorkspaceRoot = `/tmp/bb-host-data/${host.id}/workspace/${thread.id}`;
+
+      const filePromise = harness.app.request(
+        `/api/v1/threads/${thread.id}/manager-workspace/content?path=${encodeURIComponent("notes/secrets")}`,
+      );
+      const fileCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file" &&
+          command.path === `${managerWorkspaceRoot}/notes/secrets`,
+      );
+      expect(fileCommand.command).toMatchObject({
+        path: `${managerWorkspaceRoot}/notes/secrets`,
+        rootPath: managerWorkspaceRoot,
+      });
+      const fileErrorResponse = await reportQueuedCommandError(harness, fileCommand, {
+        errorCode: "invalid_path",
+        errorMessage: "Path escapes read root",
+      });
+      expect(fileErrorResponse.status).toBe(200);
+
+      const fileResponse = await filePromise;
+      expect(fileResponse.status).toBe(400);
+      await expect(readJson(fileResponse)).resolves.toEqual({
+        code: "invalid_path",
+        message: "Path escapes read root",
+        retryable: false,
+      });
     } finally {
       await harness.cleanup();
     }
