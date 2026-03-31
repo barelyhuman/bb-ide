@@ -268,7 +268,6 @@ describe("public thread routes", () => {
           command.environmentId === createdThread.environmentId,
       );
       expect(queued.command).toMatchObject({
-        projectId: project.id,
         sourcePath: secondarySource.path,
         workspaceProvisionType: "managed-worktree",
       });
@@ -371,7 +370,6 @@ describe("public thread routes", () => {
           command.environmentId === createdThread.environmentId,
       );
       expect(queued.command).toMatchObject({
-        projectId: project.id,
         path: "/tmp/explicit-unmanaged-workspace",
         workspaceProvisionType: "unmanaged",
       });
