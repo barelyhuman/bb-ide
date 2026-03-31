@@ -116,6 +116,18 @@ describe("project-sources", () => {
     expect(getProjectSourceByHost(db, project.id, missingHost.id)).toBeNull();
   });
 
+  it("rejects duplicate sources for the same project and host", () => {
+    const { db, host, project } = setup();
+
+    expect(() => createProjectSource(db, noopNotifier, {
+      projectId: project.id,
+      type: "local_path",
+      hostId: host.id,
+      path: "/tmp/duplicate",
+    })).toThrow();
+    expect(listProjectSources(db, project.id)).toHaveLength(1);
+  });
+
   it("updates a project source", () => {
     const { db, project } = setup();
     const updateHost = upsertHost(db, noopNotifier, {

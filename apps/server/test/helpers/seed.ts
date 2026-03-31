@@ -82,8 +82,8 @@ export function seedEnvironment(
     isGitRepo: true,
     isWorktree: args.workspaceProvisionType === "managed-worktree",
     workspaceProvisionType: args.workspaceProvisionType ?? "unmanaged",
-    branchName: args.branchName ?? "bb/test",
-    defaultBranch: args.defaultBranch ?? "main",
+    branchName: args.branchName !== undefined ? args.branchName : "bb/test",
+    defaultBranch: args.defaultBranch !== undefined ? args.defaultBranch : "main",
   });
 }
 
@@ -109,7 +109,7 @@ export function seedThread(
     type: args.type ?? "standard",
     title: args.title ?? "Test Thread",
     titleFallback: args.titleFallback ?? "Test Thread",
-    mergeBaseBranch: args.mergeBaseBranch ?? "main",
+    mergeBaseBranch: args.mergeBaseBranch !== undefined ? args.mergeBaseBranch : "main",
     parentThreadId: args.parentThreadId ?? null,
   });
 }

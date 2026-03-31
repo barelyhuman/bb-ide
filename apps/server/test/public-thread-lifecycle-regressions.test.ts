@@ -174,6 +174,76 @@ describe("public thread lifecycle regressions", () => {
     }
   });
 
+  it("demotes a non-default-host environment using that host's source path", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host: defaultHost } = seedHostSession(harness.deps, {
+        id: "host-demote-default",
+      });
+      const { host: secondaryHost } = seedHostSession(harness.deps, {
+        id: "host-demote-secondary",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: defaultHost.id,
+        path: "/tmp/demote-default-source",
+      });
+      const secondarySource = createProjectSource(harness.db, harness.hub, {
+        projectId: project.id,
+        type: "local_path",
+        hostId: secondaryHost.id,
+        path: "/tmp/demote-secondary-source",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: secondaryHost.id,
+        projectId: project.id,
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        path: "/tmp/demote-secondary-source/.bb-worktrees/thread",
+        branchName: "bb/demote-secondary",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        mergeBaseBranch: "main",
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/environments/${environment.id}/actions`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "demote",
+            threadId: thread.id,
+          }),
+        },
+      );
+
+      const demoteCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.demote" &&
+          command.environmentId === environment.id,
+      );
+      expect(demoteCommand.command).toMatchObject({
+        threadId: thread.id,
+        primaryPath: secondarySource.path,
+        defaultBranch: "main",
+        envBranch: "bb/demote-secondary",
+      });
+      await reportQueuedCommandSuccess(harness, demoteCommand, { ok: true });
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toMatchObject({
+        ok: true,
+        action: "demote",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("deletes a reused thread if queueing the initial start fails", async () => {
     const harness = await createTestAppHarness();
     try {

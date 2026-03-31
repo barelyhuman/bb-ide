@@ -59,4 +59,43 @@ describe("thread runtime config", () => {
       await harness.cleanup();
     }
   });
+
+  it("rejects manager runtime config when the environment host has no project source", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const defaultHost = seedHost(harness.deps, { id: "host-runtime-missing-default" });
+      const missingSourceHost = seedHost(harness.deps, { id: "host-runtime-missing-secondary" });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: defaultHost.id,
+        path: "/tmp/runtime-missing-default-root",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: missingSourceHost.id,
+        projectId: project.id,
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        path: "/tmp/runtime-missing-default-root/.bb-worktrees/manager",
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+      });
+
+      await expect(
+        resolveThreadRuntimeCommandConfig(harness.deps, {
+          thread: managerThread,
+          environment: {
+            hostId: environment.hostId,
+            id: environment.id,
+            path: environment.path,
+            workspaceProvisionType: environment.workspaceProvisionType,
+          },
+          isThreadCreation: true,
+        }),
+      ).rejects.toThrow("No project source configured for this host");
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });

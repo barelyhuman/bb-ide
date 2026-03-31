@@ -322,6 +322,64 @@ describe("public thread routes", () => {
     }
   });
 
+  it("creates unmanaged threads with an explicit path even when the host has no project source", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host: defaultHost } = seedHostSession(harness.deps, {
+        id: "host-unmanaged-default",
+      });
+      const { host: explicitPathHost } = seedHostSession(harness.deps, {
+        id: "host-unmanaged-explicit",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: defaultHost.id,
+        path: "/tmp/unmanaged-default-source",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Use the explicit workspace path" }],
+          environment: {
+            type: "host",
+            hostId: explicitPathHost.id,
+            workspace: {
+              type: "unmanaged",
+              path: "/tmp/explicit-unmanaged-workspace",
+            },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const createdThread = await readJson(response) as {
+        environmentId: string;
+        status: string;
+      };
+      expect(createdThread.status).toBe("provisioning");
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "environment.provision" &&
+          command.environmentId === createdThread.environmentId,
+      );
+      expect(queued.command).toMatchObject({
+        projectId: project.id,
+        path: "/tmp/explicit-unmanaged-workspace",
+        workspaceProvisionType: "unmanaged",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("reuses the ready unmanaged environment for the default source path", async () => {
     const harness = await createTestAppHarness();
     try {

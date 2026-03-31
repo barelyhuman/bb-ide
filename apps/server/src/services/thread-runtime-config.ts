@@ -1,7 +1,4 @@
-import {
-  getProjectSourceByHost,
-  getProject,
-} from "@bb/db";
+import { getProject } from "@bb/db";
 import type {
   DynamicTool,
   ReasoningLevel,
@@ -19,6 +16,7 @@ import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
 import { queueCommandAndWait } from "./command-wait.js";
+import { requireSourceForHost } from "./thread-create-helpers.js";
 import { getLastExecutionOptions } from "./thread-events.js";
 
 const DEFAULT_SERVICE_TIER: ServiceTier = "flex";
@@ -167,13 +165,6 @@ export async function resolveThreadRuntimeCommandConfig(
     throw new ApiError(404, "project_not_found", "Project not found");
   }
 
-  const source = getProjectSourceByHost(
-    deps.db,
-    args.thread.projectId,
-    args.environment.hostId,
-  );
-  const projectRootPath = source?.path ?? workspacePath;
-
   const { workspaceProvisionType } = args.environment;
 
   if (args.thread.type !== "manager") {
@@ -194,6 +185,11 @@ export async function resolveThreadRuntimeCommandConfig(
         workspacePath,
         workspaceProvisionType,
       });
+  const projectRootPath = requireSourceForHost(
+    deps,
+    args.thread.projectId,
+    args.environment.hostId,
+  ).path;
 
   return {
     dynamicTools: MANAGER_DYNAMIC_TOOLS,

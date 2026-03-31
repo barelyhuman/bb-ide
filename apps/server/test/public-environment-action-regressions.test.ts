@@ -288,4 +288,78 @@ describe("public environment action regressions", () => {
       await harness.cleanup();
     }
   });
+
+  it("rejects demote when the environment branch or merge base branch is missing", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, { id: "host-demote-guard" });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/demote-guard-project",
+      });
+      const missingEnvBranch = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        path: "/tmp/demote-guard-project/.bb-worktrees/missing-env-branch",
+        branchName: null,
+      });
+      const threadMissingEnvBranch = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: missingEnvBranch.id,
+        mergeBaseBranch: "main",
+      });
+
+      const missingEnvBranchResponse = await harness.app.request(
+        `/api/v1/environments/${missingEnvBranch.id}/actions`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "demote",
+            threadId: threadMissingEnvBranch.id,
+          }),
+        },
+      );
+      expect(missingEnvBranchResponse.status).toBe(409);
+      await expect(readJson(missingEnvBranchResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: "Environment cannot be demoted",
+      });
+
+      const missingMergeBase = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        path: "/tmp/demote-guard-project/.bb-worktrees/missing-merge-base",
+        branchName: "bb/demote-guard",
+      });
+      const threadMissingMergeBase = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: missingMergeBase.id,
+        mergeBaseBranch: null,
+      });
+
+      const missingMergeBaseResponse = await harness.app.request(
+        `/api/v1/environments/${missingMergeBase.id}/actions`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "demote",
+            threadId: threadMissingMergeBase.id,
+          }),
+        },
+      );
+      expect(missingMergeBaseResponse.status).toBe(409);
+      await expect(readJson(missingMergeBaseResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: "Environment cannot be demoted",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });
