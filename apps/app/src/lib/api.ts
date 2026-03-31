@@ -479,7 +479,6 @@ export async function requestEnvironmentAction(
 
 export async function getThreadTimeline(
   id: string,
-  limit?: number,
   includeToolGroupMessages: boolean = false,
   includeWorkspaceViewer: boolean = false,
 ): Promise<ThreadTimelineResponse> {
@@ -487,7 +486,6 @@ export async function getThreadTimeline(
     apiClient.threads[":id"].timeline.$get({
       param: { id },
       query: {
-        ...(limit !== undefined ? { limit: String(limit) } : {}),
         ...(includeToolGroupMessages ? { includeToolGroupMessages: "true" } : {}),
         ...(includeWorkspaceViewer ? { includeManagerDebugView: "true" } : {}),
       },

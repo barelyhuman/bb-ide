@@ -21,12 +21,10 @@ export function buildThreadTimeline(
   options: {
     includeManagerDebugView?: boolean;
     includeToolGroupMessages?: boolean;
-    limit?: number;
   },
 ): ThreadTimelineResponse {
   const eventRows = listRecentThreadEventRows(db, {
     threadId: thread.id,
-    limit: options.limit,
   });
   const messages = toViewMessages(eventRows.map((row) => decodeRow(row)), {
     includeDebugRawEvents: options.includeManagerDebugView,

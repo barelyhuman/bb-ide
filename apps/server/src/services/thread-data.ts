@@ -78,7 +78,6 @@ export function listThreadEventRowsInRange(
 export function listRecentThreadEventRows(
   db: DbConnection,
   args: {
-    limit?: number;
     threadId: string;
   },
 ): ThreadEventRow[] {
@@ -86,10 +85,8 @@ export function listRecentThreadEventRows(
     .select()
     .from(events)
     .where(eq(events.threadId, args.threadId))
-    .orderBy(desc(events.sequence))
-    .limit(args.limit ?? Number.MAX_SAFE_INTEGER)
-    .all()
-    .reverse();
+    .orderBy(events.sequence)
+    .all();
 
   return rows.map((row) => decodeEventRow(row));
 }

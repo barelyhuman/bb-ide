@@ -502,7 +502,6 @@ export function useThreadTimeline(
   id: string,
   options?: {
     enabled?: boolean;
-    limit?: number;
     refetchOnMount?: boolean | "always";
     includeWorkspaceViewer?: boolean;
   },
@@ -511,13 +510,11 @@ export function useThreadTimeline(
     queryKey: [
       "threadTimeline",
       id,
-      options?.limit ?? null,
       options?.includeWorkspaceViewer ?? false,
     ],
     queryFn: () =>
       api.getThreadTimeline(
         id,
-        options?.limit,
         false,
         options?.includeWorkspaceViewer ?? false,
       ),

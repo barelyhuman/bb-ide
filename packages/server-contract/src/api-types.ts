@@ -209,7 +209,6 @@ export const threadListQuerySchema = z.object({
 export type ThreadListQuery = z.infer<typeof threadListQuerySchema>;
 
 export const threadTimelineQuerySchema = z.object({
-  limit: z.string().regex(/^\d+$/),
   includeManagerDebugView: z.enum(["true", "false"]),
   includeToolGroupMessages: z.enum(["true", "false"]),
 }).partial();

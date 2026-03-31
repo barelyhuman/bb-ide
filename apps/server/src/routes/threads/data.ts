@@ -45,7 +45,6 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
   get("/threads/:id/timeline", threadTimelineQuerySchema, (context, query) =>
     context.json(
       buildThreadTimeline(deps.db, requireThread(deps.db, context.req.param("id")), {
-        limit: parseOptionalInteger(query.limit, "limit"),
         includeManagerDebugView: query.includeManagerDebugView === "true",
         includeToolGroupMessages: query.includeToolGroupMessages === "true",
       }),

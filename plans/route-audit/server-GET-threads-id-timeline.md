@@ -9,18 +9,17 @@
 | Field | Required | Notes |
 |---|---|---|
 | `:id` | Yes | Thread ID. Looked up via `requireThread` which throws 404 if missing. |
-| `limit` | No | String integer. Parsed via `parseOptionalInteger`. Limits the number of **most recent** events fetched (DESC + LIMIT + reverse). Passed to `listRecentThreadEventRows`. |
 | `includeManagerDebugView` | No | `"true"/"false"`. When `"true"`, includes raw debug events and internal system messages in the view message transform. |
 | `includeToolGroupMessages` | No | `"true"/"false"`. When `"true"`, includes tool group messages in the timeline row builder. |
 
-**All 4 fields consumed. No dead params.**
+**All 3 fields consumed. No dead params.**
 
 ## Implementation Trace
 
 1. **Sync** `requireThread(db, id)` -- looks up thread by PK. Throws 404 if not found.
 2. **Sync** `buildThreadTimeline(db, thread, options)` (`services/timeline.ts:18`):
-   - Calls `listRecentThreadEventRows(db, { threadId, limit })`:
-     - Queries `events` table: `WHERE threadId = ? ORDER BY sequence DESC LIMIT ?`, then `.reverse()` to get ascending order.
+   - Calls `listRecentThreadEventRows(db, { threadId })`:
+     - Queries `events` table: `WHERE threadId = ? ORDER BY sequence ASC`.
      - Maps each row through `decodeEventRow` (JSON.parse on `data` column).
    - Calls `decodeRow(row)` from `@bb/core-ui` on each event row (further decoding/normalization).
    - Calls `toViewMessages(decodedRows, options)` from `@bb/core-ui` -- transforms raw events into UI view messages. Filters based on `includeDebugRawEvents`, `includeInternalSystemMessages`, `threadStatus`, `threadType`.
@@ -35,7 +34,7 @@
 | # | Query | Table | Index | Notes |
 |---|-------|-------|-------|-------|
 | 1 | `SELECT * FROM threads WHERE id = ?` | threads | PK | `requireThread` |
-| 2 | `SELECT * FROM events WHERE threadId = ? ORDER BY sequence DESC LIMIT ?` | events | `events_thread_sequence_idx(threadId, sequence)` | Covered by the composite unique index. |
+| 2 | `SELECT * FROM events WHERE threadId = ? ORDER BY sequence ASC` | events | `events_thread_sequence_idx(threadId, sequence)` | Covered by the composite unique index. |
 
 **Total: 2 queries. No N+1.**
 
@@ -46,17 +45,18 @@
 | `requireThread` | Most thread routes |
 | `listRecentThreadEventRows` | Only used by timeline route |
 | `decodeEventRow` | `listThreadEventRows`, `listThreadEventRowsInRange`, `listRecentThreadEventRows` |
+| ~~`parseOptionalInteger`~~ | ~~No longer used by this route~~ |
 | `buildTimelineRows`, `toViewMessages`, `decodeRow`, `extractThreadContextWindowUsage` | `@bb/core-ui` -- shared with tool-details route |
 | `parseOptionalInteger` | Multiple routes |
 
 ## Flags
 
-1. **`limit` defaults to `Number.MAX_SAFE_INTEGER`** -- if no limit is provided, it loads every event for the thread into memory. For long-running threads this could be very large. Consider a sane server-side default.
-2. **DESC + reverse pattern** -- `listRecentThreadEventRows` fetches in DESC order then reverses in JS. This is correct for "last N events in ascending order" but allocates a full array copy. Fine for reasonable sizes, wasteful if no limit is set (see #1).
+1. ~~**`limit` defaults to `Number.MAX_SAFE_INTEGER`**~~ -- **Resolved.** `limit` param removed entirely. It operated on raw events, which made the downstream state machine produce broken timelines for partial windows. No caller ever passed it.
+2. ~~**DESC + reverse pattern**~~ -- **Resolved.** Query now uses `ORDER BY sequence ASC` directly.
 3. **No response caching** -- the pre-rebuild daemon had an in-memory `ThreadTimelineCacheEntry` cache keyed by `(threadId, latestSeq, threadStatus, requestKey)`. If `latestSeq` and `threadStatus` hadn't changed since the last call, it returned the cached `ThreadTimelineResponse` without re-querying or reprocessing. The rebuild dropped this entirely. Every poll reconstructs from scratch.
 4. **No noise-event filtering at the DB level** -- the pre-rebuild daemon excluded `TIMELINE_NOISE_EVENT_TYPES` (`thread/started`, `account/rateLimits/updated`, `thread/tokenUsage/updated`, `item/reasoning/summaryPartAdded`) from the query itself via `NOT IN (...)`. The current implementation fetches all events including noise, then filters in `toViewMessages`. This means noise events consume memory and processing time for no purpose.
 5. **Context-window extraction scans all fetched events** -- `extractThreadContextWindowUsage` walks the full `eventRows` array backward looking for token-usage events. The pre-rebuild daemon fetched the latest `thread/tokenUsage/updated` event with a separate targeted query (`getLatestByType`), which is O(1) instead of O(N).
-6. **Heavy per-event processing** -- every fetched event goes through: `decodeEventRow` (JSON.parse), `decodeRow` (Zod parse via `threadEventSchema.safeParse` + legacy normalization), `toViewMessages` (1860-line state machine), and `buildTimelineRows` (479-line grouper). With no limit and no caching, this runs on every poll for the full event history.
+6. **Heavy per-event processing** -- every fetched event goes through: `decodeEventRow` (JSON.parse), `decodeRow` (Zod parse via `threadEventSchema.safeParse` + legacy normalization), `toViewMessages` (1860-line state machine), and `buildTimelineRows` (479-line grouper). With no caching, this runs on every poll for the full event history.
 7. **No noise-event pruning** -- the pre-rebuild daemon had automatic noise-event pruning (deleting old noise events based on `IDLE_NOISE_EVENT_KEEP_RECENT=300`, `ARCHIVED_NOISE_EVENT_KEEP_RECENT=120`, `ACTIVE_NOISE_EVENT_KEEP_RECENT=1000`). The rebuild has no equivalent, so the events table grows without bound for noise types.
 
 ## Performance Summary (vs. Pre-rebuild)
@@ -67,10 +67,8 @@
 | Noise filtering | DB-level `NOT IN (...)` exclusion | None; filtered in JS | Missing |
 | Context-window lookup | Separate `getLatestByType` query (O(1)) | Linear scan of all fetched events (O(N)) | Missing |
 | Noise pruning | Automatic periodic deletion of old noise events | None | Missing |
-| Default limit | Caller-provided; daemon exposed it | `Number.MAX_SAFE_INTEGER` (all events) | No server default |
+| Default limit | Caller-provided; daemon exposed it | No limit param (loads all events) | Removed -- see Flags #1 |
 | Processing cost | Same `toUIMessages` + `buildThreadDetailRows` pipeline | Same pipeline (now `toViewMessages` + `buildTimelineRows`) | Equivalent |
-| Client default limit | Not passed (loads all) | Not passed (loads all) | Same -- both unbounded |
-
 **Net effect:** For a thread with N events, every timeline poll does: 1 unbounded SELECT, N JSON.parse calls, N Zod safeParse calls, a ~1860-line state machine pass, a grouping pass, and a linear context-window scan. The pre-rebuild version would short-circuit with a cache hit for repeated polls, exclude noise rows from the query, and fetch context-window data with a targeted index lookup.
 
 ## Usages
@@ -92,10 +90,10 @@
 
 ## Review Comments
 
-<!-- Flags #1 and #3 are the primary concerns.
-  #1: Unbounded event loading with no server default limit.
+<!-- Flags #1 and #2 resolved.
+  Remaining concerns:
   #3: Lost response cache means every poll recomputes the full timeline.
   #4: Noise events are fetched from DB and processed for nothing.
   #5: Context-window extraction is O(N) when it should be O(1).
   #7: No noise pruning means unbounded table growth.
-  Priority ordering: #3 (cache) > #1 (default limit) > #4 (noise filtering) > #5 (context-window) > #7 (pruning) > #2 (minor array copy). -->
+  Priority ordering: #3 (cache) > #4 (noise filtering) > #5 (context-window) > #7 (pruning). -->
