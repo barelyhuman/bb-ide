@@ -8,13 +8,17 @@ import type {
 import * as api from "@/lib/api";
 import {
   optimisticallyInsertThread,
+} from "../queries/query-cache";
+import {
   projectFilesQueryKeyPrefix,
   projectsQueryKey,
   statusQueryKey,
   threadQueryKey,
   threadsQueryKey,
+} from "../queries/query-keys";
+import {
   useApiClient,
-} from "../queries/shared";
+} from "../queries/query-client";
 
 interface HireProjectManagerRequest {
   projectId: string;

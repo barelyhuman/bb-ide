@@ -12,11 +12,13 @@ import {
   buildOptimisticUserThreadRow,
   getEnvironmentActionInvalidationQueryKeys,
   getEnvironmentStateInvalidationQueryKeys,
-  resolveThreadPlaceholder,
+} from "./query-cache";
+import {
   resolveEnvironmentGitDiffPlaceholder,
+  resolveThreadPlaceholder,
   resolveThreadTimelinePlaceholder,
   resolveWorkspaceStatusPlaceholder,
-} from "./shared";
+} from "./query-placeholders";
 
 function makeStatus(state: WorkspaceStatus["workingTree"]["state"]): WorkspaceStatus {
   return {

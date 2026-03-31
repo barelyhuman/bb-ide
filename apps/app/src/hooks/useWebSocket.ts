@@ -6,7 +6,7 @@ import {
 import type { Thread } from "@bb/domain";
 import type { ThreadChangeKind } from "@bb/domain";
 import { wsManager } from "../lib/ws";
-import { getEnvironmentStateInvalidationQueryKeys } from "./queries/shared";
+import { getEnvironmentStateInvalidationQueryKeys } from "./queries/query-cache";
 
 const INVALIDATION_DEBOUNCE_MS = 250;
 // Keep realtime thread updates responsive while still coalescing bursts.

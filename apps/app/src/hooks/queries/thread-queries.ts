@@ -13,8 +13,12 @@ import type { ThreadListFilters, FilePreview } from "@/lib/api";
 import * as api from "@/lib/api";
 import {
   getCachedThreadListPlaceholder,
+} from "./query-cache";
+import {
   resolveThreadPlaceholder,
   resolveThreadTimelinePlaceholder,
+} from "./query-placeholders";
+import {
   threadDefaultExecutionOptionsQueryKey,
   threadDraftsQueryKey,
   threadListQueryKey,
@@ -22,8 +26,10 @@ import {
   threadStorageFilesQueryKey,
   threadStorageFilePreviewQueryKey,
   threadTimelineQueryKey,
+} from "./query-keys";
+import {
   useApiClient,
-} from "./shared";
+} from "./query-client";
 
 interface QueryOptions {
   enabled?: boolean;

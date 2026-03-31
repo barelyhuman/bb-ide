@@ -12,10 +12,13 @@ import type {
 import * as api from "@/lib/api";
 import { wsManager } from "@/lib/ws";
 import {
+  optimisticallyInsertThread,
+  updateCachedThread,
+} from "../queries/query-cache";
+import {
   environmentGitDiffQueryKeyPrefix,
   environmentMergeBaseBranchesQueryKeyPrefix,
   environmentWorkStatusQueryKeyPrefix,
-  optimisticallyInsertThread,
   projectsQueryKey,
   statusQueryKey,
   threadDefaultExecutionOptionsQueryKey,
@@ -25,9 +28,10 @@ import {
   threadStorageFilePreviewQueryKeyPrefix,
   threadTimelineQueryKeyPrefix,
   threadsQueryKey,
-  updateCachedThread,
+} from "../queries/query-keys";
+import {
   useApiClient,
-} from "../queries/shared";
+} from "../queries/query-client";
 
 interface ThreadMutationRequest {
   id: string;

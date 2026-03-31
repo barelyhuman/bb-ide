@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ProjectResponse, WorkspaceFileListResponse } from "@bb/server-contract";
 import * as api from "@/lib/api";
-import { projectFilesQueryKey, projectsQueryKey } from "./shared";
+import { projectFilesQueryKey, projectsQueryKey } from "./query-keys";
 
 export function useProjects() {
   return useQuery<ProjectResponse[]>({

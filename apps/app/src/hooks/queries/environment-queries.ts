@@ -11,9 +11,11 @@ import {
   environmentMergeBaseBranchesQueryKey,
   environmentQueryKey,
   environmentWorkStatusQueryKey,
+} from "./query-keys";
+import {
   resolveEnvironmentGitDiffPlaceholder,
   resolveWorkspaceStatusPlaceholder,
-} from "./shared";
+} from "./query-placeholders";
 
 interface QueryOptions {
   enabled?: boolean;

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { Host, AvailableModel } from "@bb/domain";
 import type { SystemProviderInfo } from "@bb/server-contract";
 import * as api from "@/lib/api";
-import { availableModelsQueryKey, hostsQueryKey, systemProvidersQueryKey } from "./shared";
+import { availableModelsQueryKey, hostsQueryKey, systemProvidersQueryKey } from "./query-keys";
 
 export function useHosts() {
   return useQuery<Host[]>({

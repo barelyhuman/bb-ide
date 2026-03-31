@@ -9,9 +9,13 @@ import * as api from "@/lib/api";
 import {
   getEnvironmentActionInvalidationQueryKeys,
   getEnvironmentStateInvalidationQueryKeys,
+} from "../queries/query-cache";
+import {
   environmentQueryKey,
+} from "../queries/query-keys";
+import {
   useApiClient,
-} from "../queries/shared";
+} from "../queries/query-client";
 
 type RequestEnvironmentActionMutationRequest = { id: string } & EnvironmentActionRequest;
 type UpdateEnvironmentMutationRequest = { id: string } & UpdateEnvironmentRequest;
