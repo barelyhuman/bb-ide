@@ -9,18 +9,17 @@
 | Field | Required | Notes |
 |---|---|---|
 | `sessionId` | Yes | Validated via `requireActiveSession`. Used to verify host ownership of the thread. |
-| `requestId` | Yes | From `toolCallRequestSchema`. **Not consumed** by the handler — accepted but ignored. |
 | `threadId` | Yes | Used to look up the thread and its environment. Verified that `environment.hostId === session.hostId`. Also passed to `appendThreadEvent` for the `message_user` tool. |
 | `turnId` | Yes | Passed through to `appendThreadEvent` as the event's `turnId`. |
 | `callId` | Yes | Stored in the `system/manager/user_message` event data as `toolCallId`. |
 | `tool` | Yes | Tool name string. Currently only `"message_user"` is implemented. All other values return `{ success: false }`. |
-| `arguments` | No (optional) | Tool-specific arguments. For `message_user`: parsed via `messageUserToolArgumentsSchema` which expects `{ text?: string, message?: string }` with a refinement that at least one is present. |
+| `arguments` | No (optional) | Tool-specific arguments. For `message_user`: parsed via `messageUserToolArgumentsSchema`, which accepts `{ text?: string, message?: string }`, requires one of them, and transforms to `{ text }`. |
 
-**6/7 fields consumed. `requestId` is accepted but ignored.**
+**All endpoint fields consumed. No dead params.**
 
 ## Implementation Trace
 
-1. **Validate request** (sync) — Zod middleware parses body against `hostDaemonToolCallRequestSchema` (intersection of `toolCallRequestSchema` and `{ sessionId }`).
+1. **Validate request** (sync) — Zod middleware parses body against `hostDaemonToolCallRequestSchema`, which picks `threadId`, `turnId`, `callId`, `tool`, and `arguments` from `toolCallRequestSchema` and adds `sessionId`.
 2. **Require active session** (sync) — `requireActiveSession(db, payload.sessionId)`.
 3. **Require thread environment** (sync) — `requireThreadEnvironment(db, payload.threadId)`:
    - `requireThread` — SELECT thread by PK, throw 404 if missing.
@@ -58,9 +57,7 @@
 
 ## Flags
 
-1. **`requestId` is a dead param**: Comes from `toolCallRequestSchema` but is never read by the handler. The daemon sends it, the server ignores it. Should be consumed (e.g., for idempotency or logging) or removed from the schema intersection.
-2. **Only one tool implemented**: `message_user` is the sole server-side tool. All other tool names silently return `{ success: false }`. There is no logging for unsupported tool calls — the daemon gets a generic failure message.
-3. **`text` field resolution**: `messageUserToolArgumentsSchema` accepts either `text` or `message` (with a refinement that one must be present). The handler only reads `args.text`. If the daemon sends `{ message: "hello" }` without `text`, the refinement produces `text` via a transform — worth verifying the schema refinement handles this correctly.
+1. **Only one tool implemented**: `message_user` is the sole server-side tool. All other tool names return `{ success: false }`. There is no logging for unsupported tool calls — the daemon gets a generic failure message.
 
 ## Usages
 
@@ -68,8 +65,8 @@
 |---|---|---|
 | `createServerClient().callTool` | `apps/host-daemon/src/server-client.ts:333` | POSTs tool call request to `/session/tool-call` for server-side tool execution |
 | `createDaemonApp` (onToolCall) | `apps/host-daemon/src/app.ts:151` | Wires `serverClient.callTool` as the default `onToolCall` handler for the runtime manager |
-| `HostDaemonInternalSchema["/session/tool-call"]` | `packages/host-daemon-contract/src/session.ts:163` | Type-level contract definition for the endpoint |
-| `createHostDaemonClient` | `packages/host-daemon-contract/src/session.ts:174` | Typed Hono RPC client used by integration tests |
+| `HostDaemonInternalSchema["/session/tool-call"]` | `packages/host-daemon-contract/src/session.ts:164` | Type-level contract definition for the endpoint |
+| `createHostDaemonClient` | `packages/host-daemon-contract/src/session.ts:175` | Typed Hono RPC client used by integration tests |
 | Test: tool-call regressions | `apps/server/test/internal-tool-call-regressions.test.ts:36` | Tests tool-call authorization and validation |
 | Test: event + tool-call routes | `apps/server/test/internal-events-tool-calls.test.ts:162` | Tests message_user tool call |
 | Test: unsupported tool | `apps/server/test/internal-events-tool-calls.test.ts:208` | Tests unsupported tool returns `{ success: false }` |
@@ -79,4 +76,4 @@
 
 ## Review Comments
 
-<!-- Flag 1 is a contract violation per AGENTS.md. Flag 2 is fine for now but should be documented — when new server-side tools are added, this is where they go. -->
+<!-- This file is current as long as server-side tool support remains limited to `message_user`. -->

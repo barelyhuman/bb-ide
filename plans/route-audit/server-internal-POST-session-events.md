@@ -10,14 +10,13 @@
 |---|---|---|
 | `sessionId` | Yes | Validated via `requireActiveSession`. Used to resolve `hostId` for ownership check. |
 | `events` | Yes | Array of `HostDaemonEventEnvelope`. Each contains: |
-| `events[].id` | Yes | Sent by daemon but **not used** — the server generates its own event ID via `createEventId()` in `insertEvents`. |
-| `events[].environmentId` | Yes | Stored on the event row. Used in ownership validation (join to verify host owns the environment). |
+| `events[].environmentId` | Yes | Stored on the event row. Not used directly in ownership validation; ownership is checked from `threadId` -> thread environment -> host. |
 | `events[].threadId` | Yes | Stored on the event row. Used for ownership validation, side effects, and HWM response. |
 | `events[].sequence` | Yes | Per-thread monotonic sequence number. Used as the dedup key via `INSERT OR IGNORE` on unique index `(threadId, sequence)`. |
-| `events[].createdAt` | Yes | Sent by daemon but **not used** — the server sets its own `createdAt = Date.now()` in `insertEvents`. |
+| `events[].createdAt` | Yes | Forwarded into the stored event row as `createdAt`. |
 | `events[].event` | Yes | The typed `threadEventSchema` discriminated union. Decomposed by `toStoredEvent`: `type` extracted, rest serialized as JSON `data`. `resolveProviderIdentifiers` extracts `providerThreadId` and `turnId` based on event type. |
 
-**7/8 envelope fields consumed. `id` and `createdAt` are accepted but ignored.**
+**All envelope fields consumed. No dead params.**
 
 ## Implementation Trace
 
@@ -28,7 +27,7 @@
    - SELECT `threads.id` FROM `threads` INNER JOIN `environments` WHERE `threads.id IN (...)` AND `environments.hostId = session.hostId`.
    - If count of owned threads !== count of unique thread IDs, throws 403.
 4. **Insert events** (sync) — `insertEvents(db, hub, events.map(toStoredEvent))`:
-   - `toStoredEvent` transforms each envelope: extracts `type`, serializes remaining `event` data as JSON, resolves `providerThreadId` and `turnId` via exhaustive switch on event type.
+   - `toStoredEvent` transforms each envelope: extracts `type`, serializes remaining `event` data as JSON, resolves `providerThreadId` and `turnId` via exhaustive switch on event type, and preserves the daemon-supplied `createdAt`.
    - For each event: `INSERT OR IGNORE INTO events (...)` — deduplicates on `(threadId, sequence)` unique index.
    - For each thread that got new events: `hub.notifyThread(threadId, ["events-appended"])` — pushes to subscribed client WebSockets.
 5. **Apply side effects** (async) — `applyEventEffects(deps, events)`:
@@ -71,12 +70,11 @@
 
 ## Flags
 
-1. **`events[].id` is a dead param**: The daemon generates and sends an event ID, but `insertEvents` generates its own via `createEventId()`. The daemon's ID is discarded. Should be removed from the contract or used as the actual event ID.
-2. **`events[].createdAt` is a dead param**: Same issue — the server overwrites with `Date.now()`. The daemon's timestamp is discarded.
-3. **Side effects are non-transactional with inserts**: Events are inserted first, then side effects run in a separate loop. If the server crashes mid-side-effects, events are persisted but effects (thread transitions, queued draft sends) may be lost. The `INSERT OR IGNORE` dedup means re-sending the batch won't re-trigger side effects for already-inserted events.
-4. **`sendNextQueuedDraftIfPresent` is awaited in the hot path**: For `turn/completed` with `status=completed`, the route awaits the full draft send flow (claim, build execution options, queue command, transition). This blocks the HTTP response for potentially expensive work.
-5. **Ownership check uses `inArray` for thread IDs**: For very large batches with many distinct threads, the `IN (...)` clause could be large. Unlikely in practice (batches are usually for 1-2 threads).
-6. **Error swallowing in `applyEventEffects`**: Side-effect errors are logged but not propagated. This means the route returns 200 even if thread transitions fail. This is intentional (events are persisted regardless) but could mask systematic issues.
+1. **`environmentId` is trusted from the payload**: Ownership is checked only from `threadId`. If the daemon ever sent a mismatched `environmentId` and `threadId`, the route would still store the provided `environmentId`.
+2. **Side effects are non-transactional with inserts**: Events are inserted first, then side effects run in a separate loop. If the server crashes mid-side-effects, events are persisted but effects (thread transitions, queued draft sends) may be lost. The `INSERT OR IGNORE` dedup means re-sending the batch will not re-trigger side effects for already-inserted events.
+3. **`sendNextQueuedDraftIfPresent` is awaited in the hot path**: For `turn/completed` with `status=completed`, the route awaits the full draft send flow (claim, build execution options, queue command, transition). This blocks the HTTP response for potentially expensive work.
+4. **Ownership check uses `inArray` for thread IDs**: For very large batches with many distinct threads, the `IN (...)` clause could be large. Unlikely in practice (batches are usually for 1-2 threads).
+5. **Error swallowing in `applyEventEffects`**: Side-effect errors are logged but not propagated. This means the route returns 200 even if thread transitions fail. This is intentional (events are persisted regardless) but could mask systematic issues.
 
 ## Usages
 
@@ -86,8 +84,8 @@
 | `createEventBuffer` | `apps/host-daemon/src/event-buffer.ts:153` | Calls `postEvents` to flush buffered provider events to the server |
 | `createDaemonApp` | `apps/host-daemon/src/app.ts:139` | Wires `serverClient.postEvents` into the event buffer |
 | `RuntimeManager.onEvent` | `apps/host-daemon/src/app.ts:144` | Pushes runtime events into the event buffer, which flushes via `postEvents` |
-| `HostDaemonInternalSchema["/session/events"]` | `packages/host-daemon-contract/src/session.ts:156` | Type-level contract definition for the endpoint |
-| `createHostDaemonClient` | `packages/host-daemon-contract/src/session.ts:174` | Typed Hono RPC client used by integration tests |
+| `HostDaemonInternalSchema["/session/events"]` | `packages/host-daemon-contract/src/session.ts:157` | Type-level contract definition for the endpoint |
+| `createHostDaemonClient` | `packages/host-daemon-contract/src/session.ts:175` | Typed Hono RPC client used by integration tests |
 | Test: event envelope threadId regression | `apps/server/test/internal-event-envelope-threadid-regression.test.ts:45` | Tests threadId validation in event envelopes |
 | Test: event + tool-call routes | `apps/server/test/internal-events-tool-calls.test.ts:34` | Tests event ingestion and side effects |
 | Test: event side effects | `apps/server/test/internal-event-side-effects.test.ts:50` | Tests turn/started and turn/completed side effects |
@@ -99,4 +97,4 @@
 
 ## Review Comments
 
-<!-- Flags 1 and 2 are contract violations per AGENTS.md: "Accepted-but-ignored route or command fields are forbidden." The daemon-generated `id` and `createdAt` should either be used or removed. Flag 3 describes a subtle reliability gap — if side effects are critical, they should be recoverable. -->
+<!-- Flag 1 is the main contract-risk detail left in this route. Flags 2-5 are reliability and performance tradeoffs. -->

@@ -13,8 +13,8 @@
 | `hostName` | Yes | Display name for the host. Passed through to `upsertHost` and `openSession`. |
 | `hostType` | Yes | Enum via `hostTypeSchema`. Stored on host and session rows. |
 | `dataDir` | Yes | Absolute daemon data directory on the host. Stored on the session row so the server can derive thread storage paths like `<dataDir>/thread-storage/<threadId>`. |
-| `protocolVersion` | Yes | Must be exactly `2` (`z.literal(HOST_DAEMON_PROTOCOL_VERSION)`). Stored on session row. |
-| `activeThreads` | Yes | Array of `{ environmentId, threadId, providerThreadId }`. Used by `reconcileSessionThreads` to sync thread status against what the daemon reports as running. |
+| `protocolVersion` | Yes | Must be exactly `4` (`z.literal(HOST_DAEMON_PROTOCOL_VERSION)` as currently defined). Stored on session row. |
+| `activeThreads` | Yes | Array of `{ threadId }`. Used by `reconcileSessionThreads` to sync thread status against what the daemon reports as running. |
 
 **All 7 fields consumed. No dead params.**
 
@@ -76,7 +76,6 @@
 1. **Double active-session lookup**: `getActiveSession` is called at line 21, then `openSession` internally does another `SELECT ... WHERE status='active'` for the same hostId. The first lookup is only used to detect whether to close the daemon WebSocket; the second (inside `openSession`) does the actual DB close. This is redundant but not incorrect.
 2. **Reconciliation is unbounded**: If a host has many threads, the three reconciliation queries plus per-thread `tryTransition` calls could be slow. No pagination or batching.
 3. **No transaction wrapping**: The entire open flow (upsert host, open session, reconcile) is not wrapped in a single DB transaction. A crash between `openSession` and `reconcileSessionThreads` could leave threads in stale states. The window is small since this is SQLite (single-writer), but worth noting.
-4. **`activeThreads.providerThreadId` is unused**: The `HostDaemonActiveThread` schema requires `providerThreadId`, but `reconcileSessionThreads` only uses `threadId`. The `providerThreadId` and `environmentId` fields from each active thread are accepted but ignored by the reconciliation logic.
 
 ## Usages
 
@@ -88,7 +87,7 @@
 | `ServerConnection.connectWebSocket` (reconnect) | `apps/host-daemon/src/server-connection.ts:127` | Re-opens session when WS reconnects with a new URL |
 | `createDaemonApp` | `apps/host-daemon/src/app.ts:178` | Wires `ServerConnection` with `serverClient`, triggering session open on app start |
 | `HostDaemonInternalSchema["/session/open"]` | `packages/host-daemon-contract/src/session.ts:135` | Type-level contract definition for the endpoint |
-| `createHostDaemonClient` | `packages/host-daemon-contract/src/session.ts:174` | Typed Hono RPC client used by integration tests |
+| `createHostDaemonClient` | `packages/host-daemon-contract/src/session.ts:175` | Typed Hono RPC client used by integration tests |
 | Test: session open | `apps/server/test/internal-session.test.ts:63` | Tests successful session open and reconciliation |
 | Test: replaced session | `apps/server/test/internal-session.test.ts:666` | Tests that opening a new session replaces the old one |
 | Test: reconciliation regression | `apps/server/test/internal-reconciliation-idle-active-regression.test.ts:31` | Tests idle-to-active thread reconciliation on session open |
@@ -102,4 +101,4 @@
 
 ## Review Comments
 
-<!-- Flag 4 is the most actionable — providerThreadId is a dead param inside reconciliation. Either use it (e.g., to update the thread's provider thread ID) or remove it from the contract. -->
+<!-- Flag 1 is the easiest cleanup. Flags 2 and 3 are scale and reliability concerns rather than contract drift. -->
