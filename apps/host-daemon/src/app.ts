@@ -1,4 +1,3 @@
-import { readCommandCursor, writeCommandCursor } from "./command-cursor.js";
 import { CommandRouter } from "./command-router.js";
 import { createDaemon, type HostDaemon } from "./daemon.js";
 import { createEventBuffer, type EventBuffer } from "./event-buffer.js";
@@ -13,10 +12,6 @@ import {
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import type { HostType, ToolCallRequest, ToolCallResponse } from "@bb/domain";
 
-interface CursorState {
-  value: number;
-}
-
 interface SessionState {
   value: string | null;
 }
@@ -25,8 +20,7 @@ const COMMAND_FETCH_RETRY_DELAY_MS = 2_000;
 
 export function createCommandFetchLoop(args: {
   logger: HostDaemonLogger;
-  getCursor: () => number;
-  fetchCommands: (options: { afterCursor: number }) => Promise<unknown[]>;
+  fetchCommands: () => Promise<unknown[]>;
   handleCommands: (commands: unknown[]) => Promise<void>;
   retryDelayMs?: number;
 }) {
@@ -34,15 +28,11 @@ export function createCommandFetchLoop(args: {
   let fetchPromise: Promise<void> | null = null;
 
   async function drainPendingCommands(): Promise<void> {
-    let commands = await args.fetchCommands({
-      afterCursor: args.getCursor(),
-    });
+    let commands = await args.fetchCommands();
 
     while (commands.length > 0) {
       await args.handleCommands(commands);
-      commands = await args.fetchCommands({
-        afterCursor: args.getCursor(),
-      });
+      commands = await args.fetchCommands();
     }
   }
 
@@ -92,8 +82,6 @@ export interface CreateHostDaemonAppOptions {
   restart: () => Promise<void>;
   enableLocalApi: boolean;
   localApiPort: number;
-  readCursor?: typeof readCommandCursor;
-  writeCursor?: typeof writeCommandCursor;
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
   onToolCall?: (request: ToolCallRequest) => Promise<ToolCallResponse>;
   openPath?: (path: string) => Promise<void>;
@@ -114,9 +102,6 @@ export interface HostDaemonApp {
 export async function createHostDaemonApp(
   options: CreateHostDaemonAppOptions,
 ): Promise<HostDaemonApp> {
-  const cursorState: CursorState = {
-    value: await (options.readCursor ?? readCommandCursor)(options.dataDir),
-  };
   const sessionState: SessionState = {
     value: null,
   };
@@ -154,27 +139,20 @@ export async function createHostDaemonApp(
   const router = new CommandRouter({
     runtimeManager,
     logger: options.logger,
-    initialCursor: cursorState.value,
     seedThreadHighWaterMark: ({ threadId, sequence }) =>
       eventBuffer.seed({ [threadId]: sequence }),
     eventSink: {
       emit: (event) => eventBuffer.push(event),
       flush: () => eventBuffer.flush(),
     },
-    reportResult: async (result) => {
-      await serverClient.reportCommandResult(result.report);
-      cursorState.value = result.cursor;
-      await (options.writeCursor ?? writeCommandCursor)(
-        options.dataDir,
-        result.cursor,
-      );
+    reportResult: async (report) => {
+      await serverClient.reportCommandResult(report);
     },
   });
 
   const commandFetchLoop = createCommandFetchLoop({
     logger: options.logger,
-    getCursor: () => cursorState.value,
-    fetchCommands: (fetchOptions) => serverClient.fetchCommands(fetchOptions),
+    fetchCommands: () => serverClient.fetchCommands(),
     handleCommands: (commands) =>
       router.handleCommands(commands as Parameters<typeof router.handleCommands>[0]),
   });
@@ -192,7 +170,6 @@ export async function createHostDaemonApp(
     createWebSocket: options.createWebSocket,
     getHeartbeatPayload: () => ({
       bufferDepth: eventBuffer.depth(),
-      lastCommandCursor: cursorState.value,
     }),
     getActiveThreads: () => runtimeManager.listActiveThreads(),
     onCommandsAvailable: () => commandFetchLoop.request(),

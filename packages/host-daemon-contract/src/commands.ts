@@ -378,8 +378,8 @@ export type HostDaemonCommandResult<
  *
  * Each command is self-describing — `command` contains the discriminated
  * `type` field plus its payload. `id` is a unique command identifier used
- * to correlate results. `cursor` is per-host monotonic, used by the daemon
- * to detect gaps and request replays.
+ * to correlate results. `cursor` is per-host monotonic and preserves
+ * deterministic fetch order for a host.
  */
 export const hostDaemonCommandEnvelopeSchema = z.object({
   id: z.string().min(1),

@@ -92,7 +92,7 @@ describe("internal session correctness", () => {
       });
 
       const response = await harness.app.request(
-        `/internal/session/commands?sessionId=${session.id}&afterCursor=0&limit=100&waitMs=0`,
+        `/internal/session/commands?sessionId=${session.id}&limit=100&waitMs=0`,
         {
           headers: {
             authorization: `Bearer ${harness.config.authToken}`,
@@ -145,7 +145,6 @@ describe("internal session correctness", () => {
         JSON.stringify({
           type: "heartbeat",
           bufferDepth: 0,
-          lastCommandCursor: 0,
         }),
       );
       await sleep(25);

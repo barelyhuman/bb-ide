@@ -1,4 +1,4 @@
-import { eq, and, max, gt, inArray } from "drizzle-orm";
+import { eq, and, max, inArray } from "drizzle-orm";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { hostDaemonCommands } from "../schema.js";
@@ -56,12 +56,11 @@ export function queueCommand(
 
 export interface FetchCommandsOptions {
   hostId: string;
-  afterCursor?: number;
   limit?: number;
 }
 
 /**
- * Fetch pending commands for a host after the given cursor.
+ * Fetch pending commands for a host.
  * Marks them as fetched.
  */
 export function fetchCommands(
@@ -69,7 +68,7 @@ export function fetchCommands(
   notifier: DbNotifier,
   options: FetchCommandsOptions,
 ) {
-  const { hostId, afterCursor = 0, limit = 100 } = options;
+  const { hostId, limit = 100 } = options;
   const now = Date.now();
 
   return db.transaction((tx) => {
@@ -80,7 +79,6 @@ export function fetchCommands(
         and(
           eq(hostDaemonCommands.hostId, hostId),
           eq(hostDaemonCommands.state, "pending"),
-          gt(hostDaemonCommands.cursor, afterCursor),
         ),
       )
       .orderBy(hostDaemonCommands.cursor)

@@ -387,7 +387,6 @@ describe("host-daemon session schemas", () => {
     expect(
       hostDaemonCommandsQuerySchema.parse({
         sessionId: "session_123",
-        afterCursor: "12",
         limit: "100",
         waitMs: "0",
       }),
@@ -484,7 +483,6 @@ describe("host-daemon session schemas", () => {
       hostDaemonDaemonWsMessageSchema.parse({
         type: "heartbeat",
         bufferDepth: 3,
-        lastCommandCursor: 12,
       }),
     ).toMatchObject({
       type: "heartbeat",
@@ -494,10 +492,9 @@ describe("host-daemon session schemas", () => {
       hostDaemonDaemonWsMessageSchema.parse({
         type: "heartbeat",
         bufferDepth: 0,
-        lastCommandCursor: null,
       }),
     ).toMatchObject({
-      lastCommandCursor: null,
+      bufferDepth: 0,
     });
   });
 

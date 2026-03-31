@@ -122,7 +122,6 @@ describe("ServerConnection", () => {
     const { connection } = createConnection(testServer, {
       getHeartbeatPayload: () => ({
         bufferDepth: 3,
-        lastCommandCursor: 7,
       }),
     });
 
@@ -133,7 +132,6 @@ describe("ServerConnection", () => {
       sessionId: "session-1",
       message: {
         bufferDepth: 3,
-        lastCommandCursor: 7,
       },
     });
 

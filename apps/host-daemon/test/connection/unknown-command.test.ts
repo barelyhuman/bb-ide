@@ -62,9 +62,7 @@ describe("fetchCommands with unknown command types", () => {
       },
     });
 
-    const commands = await serverClient.fetchCommands({
-      afterCursor: 0,
-    });
+    const commands = await serverClient.fetchCommands();
 
     // Only the known command should be returned
     expect(commands).toHaveLength(1);
@@ -113,7 +111,7 @@ describe("fetchCommands with unknown command types", () => {
       command: { type: "future.command" },
     });
 
-    const commands = await serverClient.fetchCommands({ afterCursor: 0 });
+    const commands = await serverClient.fetchCommands();
 
     expect(commands).toHaveLength(0);
     expect(logger.warn).toHaveBeenCalled();
@@ -154,7 +152,7 @@ describe("fetchCommands with unknown command types", () => {
       command: { type: "future.missing_fields" },
     });
 
-    const commands = await serverClient.fetchCommands({ afterCursor: 0 });
+    const commands = await serverClient.fetchCommands();
 
     expect(commands).toHaveLength(0);
 

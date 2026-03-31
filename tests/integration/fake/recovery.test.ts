@@ -3,7 +3,6 @@ import {
   queueCommand,
   transitionThreadStatus,
 } from "@bb/db";
-import { readCommandCursor } from "@bb/host-daemon/test";
 import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
 import { describe, expect, it } from "vitest";
 import {
@@ -28,6 +27,7 @@ import {
   withHarness,
 } from "../helpers/harness.js";
 import {
+  listQueuedCommands,
   readLatestProviderThreadId,
   readSessionRow,
 } from "../helpers/queries.js";
@@ -266,11 +266,11 @@ describe.sequential("fake provider recovery integration", () => {
       );
     }));
 
-  it("preserves cursor continuity and event sequencing across restart", () =>
+  it("preserves event sequencing and completes new commands across restart", () =>
     withHarness(async (harness) => {
       const { thread } = await createRecoveryThread(
         harness,
-        "Cursor Continuity",
+        "Restart Continuity",
       );
 
       await sendTextMessage(harness.api, thread.id, {
@@ -278,12 +278,12 @@ describe.sequential("fake provider recovery integration", () => {
       });
       await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
 
-      const cursorBefore = await readCommandCursor(harness.daemonDataDir);
+      const commandsBefore = listQueuedCommands(harness.db);
       const eventsBefore = await getThreadEvents(harness.api, thread.id);
       const baselineCompletedCount = eventsBefore.filter(
         (event) => event.type === "turn/completed",
       ).length;
-      expect(cursorBefore).toBeGreaterThan(0);
+      expect(commandsBefore.length).toBeGreaterThan(0);
 
       await harness.restartDaemon("cursor-restart");
       await waitForHostConnected(harness.api, RECOVERY_TIMEOUT_MS);
@@ -293,9 +293,15 @@ describe.sequential("fake provider recovery integration", () => {
       });
       await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
 
-      const cursorAfter = await readCommandCursor(harness.daemonDataDir);
+      const commandsAfter = listQueuedCommands(harness.db);
+      const newCommands = commandsAfter.slice(commandsBefore.length);
       const eventsAfter = await getThreadEvents(harness.api, thread.id);
-      expect(cursorAfter).toBeGreaterThan(cursorBefore);
+      expect(newCommands.length).toBeGreaterThan(0);
+      expect(
+        newCommands.every(
+          (command) => command.state === "success" && command.completedAt !== null,
+        ),
+      ).toBe(true);
       expect(eventsAfter.length).toBeGreaterThan(eventsBefore.length);
       assertMonotonicSequences(eventsAfter);
       expect(

@@ -89,12 +89,10 @@ async function waitForThreadSubscription(
 async function fetchSingleCommand(
   daemonClient: ReturnType<typeof createHostDaemonClient>,
   sessionId: string,
-  afterCursor: number,
 ): Promise<HostDaemonCommandEnvelope> {
   const response = await daemonClient.session.commands.$get({
     query: {
       sessionId,
-      afterCursor: String(afterCursor),
       limit: "100",
       waitMs: "0",
     },
@@ -167,7 +165,6 @@ describe("server integration", () => {
       const provisionCommand = await fetchSingleCommand(
         daemonClient,
         session.sessionId,
-        0,
       );
       expect(provisionCommand.command.type).toBe("environment.provision");
 

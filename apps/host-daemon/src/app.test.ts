@@ -18,13 +18,12 @@ describe("createCommandFetchLoop", () => {
     vi.useFakeTimers();
     const logger = createLogger();
     const fetchCommands = vi
-      .fn<(_: { afterCursor: number }) => Promise<unknown[]>>()
+      .fn<() => Promise<unknown[]>>()
       .mockRejectedValueOnce(new Error("boom"))
       .mockResolvedValueOnce([]);
     const handleCommands = vi.fn(async () => undefined);
     const loop = createCommandFetchLoop({
       logger,
-      getCursor: () => 0,
       fetchCommands,
       handleCommands,
     });

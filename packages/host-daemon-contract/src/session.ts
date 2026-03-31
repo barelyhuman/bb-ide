@@ -46,7 +46,6 @@ export type HostDaemonSessionOpenResponse = z.infer<
 
 export const hostDaemonCommandsQuerySchema = z.object({
   sessionId: z.string().min(1),
-  afterCursor: nonNegativeIntegerStringSchema,
   limit: nonNegativeIntegerStringSchema,
   waitMs: nonNegativeIntegerStringSchema,
 });
@@ -87,7 +86,6 @@ export type HostDaemonEventBatchResponse = z.infer<
 
 export const hostDaemonHeartbeatPayloadSchema = z.object({
   bufferDepth: z.number().int().nonnegative(),
-  lastCommandCursor: z.number().int().nonnegative().nullable(),
 });
 export type HostDaemonHeartbeatPayload = z.infer<
   typeof hostDaemonHeartbeatPayloadSchema
@@ -109,7 +107,6 @@ export type HostDaemonServerWsMessage = z.infer<
 export const hostDaemonDaemonWsMessageSchema = z.object({
   type: z.literal("heartbeat"),
   bufferDepth: z.number().int().nonnegative(),
-  lastCommandCursor: z.number().int().nonnegative().nullable(),
 });
 export type HostDaemonDaemonWsMessage = z.infer<
   typeof hostDaemonDaemonWsMessageSchema

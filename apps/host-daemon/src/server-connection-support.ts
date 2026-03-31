@@ -50,7 +50,6 @@ export interface ServerConnectionOptions {
     | Promise<HostDaemonActiveThread[]>;
   getHeartbeatPayload?: () => {
     bufferDepth: number;
-    lastCommandCursor: number | null;
   };
   onCommandsAvailable?: () => void | Promise<void>;
   onSessionClose?: (

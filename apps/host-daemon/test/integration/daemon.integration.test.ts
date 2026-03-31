@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { createFakeAdapter } from "@bb/agent-runtime/test";
-import { readCommandCursor } from "../../src/command-cursor.js";
 import { startHostDaemon } from "../../src/index.js";
 import {
   createTestServer,
@@ -30,17 +29,15 @@ async function waitFor(
   }
 }
 
-async function waitForCursor(
-  dataDir: string,
-  expectedCursor: number,
-  timeoutMs = 5_000,
-): Promise<void> {
-  const startedAt = Date.now();
-  while ((await readCommandCursor(dataDir)) !== expectedCursor) {
-    if (Date.now() - startedAt > timeoutMs) {
-      throw new Error("Timed out waiting for command cursor");
+async function pathExists(pathToCheck: string): Promise<boolean> {
+  try {
+    await fs.access(pathToCheck);
+    return true;
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return false;
     }
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    throw error;
   }
 }
 
@@ -145,7 +142,7 @@ afterEach(async () => {
 });
 
 describe("host daemon integration", () => {
-  it("opens a session, sends heartbeats, and advances the command cursor after command results", async () => {
+  it("opens a session, sends heartbeats, reports command results, and does not persist a cursor file", async () => {
     const harness = await setupDaemonHarness();
 
     try {
@@ -170,7 +167,12 @@ describe("host daemon integration", () => {
         ok: true,
       });
       expect(harness.server.heartbeats[0]?.sessionId).toBe("session-1");
-      await waitForCursor(harness.dataDir, 1);
+      expect(harness.server.heartbeats[0]?.message).toEqual({
+        bufferDepth: 0,
+      });
+      expect(
+        await pathExists(path.join(harness.dataDir, "command-cursor")),
+      ).toBe(false);
     } finally {
       await harness.daemon.shutdown("test");
       await harness.server.close();
@@ -227,14 +229,13 @@ describe("host daemon integration", () => {
           .filter((event) => event.threadId === "thread-a")
           .map((event) => event.event.type),
       ).toContain("turn/completed");
-      expect(await readCommandCursor(harness.dataDir)).toBe(2);
     } finally {
       await harness.daemon.shutdown("test");
       await harness.server.close();
     }
   });
 
-  it("reopens the session after websocket disconnects and resumes fetching from the persisted cursor", async () => {
+  it("reopens the session after websocket disconnects and resumes fetching pending commands", async () => {
     const harness = await setupDaemonHarness();
 
     try {
@@ -251,7 +252,6 @@ describe("host daemon integration", () => {
       });
       harness.server.sendWebSocketMessage({ type: "commands-available" });
       await waitFor(() => harness.server.commandResults.length === 1);
-      await waitForCursor(harness.dataDir, 1);
 
       harness.server.closeWebSockets();
       await waitFor(() => harness.server.sessionOpenCalls.length === 2);
@@ -269,10 +269,9 @@ describe("host daemon integration", () => {
 
       expect(
         harness.server.commandFetches.some(
-          (fetch) => fetch.sessionId === "session-2" && fetch.afterCursor === 1,
+          (fetch) => fetch.sessionId === "session-2",
         ),
       ).toBe(true);
-      await waitForCursor(harness.dataDir, 2);
     } finally {
       await harness.daemon.shutdown("test");
       await harness.server.close();

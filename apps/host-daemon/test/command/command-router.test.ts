@@ -262,7 +262,7 @@ describe("CommandRouter", () => {
     await handling;
   });
 
-  it("reports completed commands in contiguous cursor order", async () => {
+  it("reports completed commands in completion order", async () => {
     const runtime = createFakeRuntime();
     const threadOne = createDeferred<{ providerThreadId: string }>();
     const threadTwo = createDeferred<{ providerThreadId: string }>();
@@ -276,14 +276,13 @@ describe("CommandRouter", () => {
       provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
       createRuntime: vi.fn(() => runtime as unknown as AgentRuntime),
     });
-    const reported: number[] = [];
+    const reported: string[] = [];
     const router = new CommandRouter({
       runtimeManager: manager,
       logger: createLogger(),
       reportResult: async (result) => {
-        reported.push(result.cursor);
+        reported.push(result.commandId);
       },
-      initialCursor: 4,
     });
 
     const handling = router.handleCommands([
@@ -332,16 +331,18 @@ describe("CommandRouter", () => {
     ]);
 
     threadThree.resolve({ providerThreadId: "provider-3" });
-    await Promise.resolve();
-    expect(reported).toEqual([]);
+    await vi.waitFor(() => {
+      expect(reported).toEqual(["cmd-7"]);
+    });
 
     threadOne.resolve({ providerThreadId: "provider-1" });
-    await Promise.resolve();
-    expect(reported).toEqual([]);
+    await vi.waitFor(() => {
+      expect(reported).toEqual(["cmd-7", "cmd-5"]);
+    });
 
     threadTwo.resolve({ providerThreadId: "provider-2" });
     await handling;
-    expect(reported).toEqual([5, 6, 7]);
+    expect(reported).toEqual(["cmd-7", "cmd-5", "cmd-6"]);
   });
 
   it("captures completedAt after execution in success and error paths", async () => {
@@ -360,16 +361,16 @@ describe("CommandRouter", () => {
       createRuntime: vi.fn(() => runtime as unknown as AgentRuntime),
     });
     let nowValue = 100;
-    const results: Array<{ cursor: number; completedAt: number; ok: boolean }> = [];
+    const results: Array<{ commandId: string; completedAt: number; ok: boolean }> = [];
     const router = new CommandRouter({
       runtimeManager: manager,
       logger: createLogger(),
       now: () => nowValue,
       reportResult: async (result) => {
         results.push({
-          cursor: result.cursor,
-          completedAt: result.report.completedAt,
-          ok: result.report.ok,
+          commandId: result.commandId,
+          completedAt: result.completedAt,
+          ok: result.ok,
         });
       },
     });
@@ -408,7 +409,7 @@ describe("CommandRouter", () => {
     nowValue = 200;
     success.resolve({ providerThreadId: "provider-1" });
     await vi.waitFor(() => {
-      expect(results.some((result) => result.cursor === 1)).toBe(true);
+      expect(results.some((result) => result.commandId === "success")).toBe(true);
     });
 
     nowValue = 300;
@@ -416,8 +417,8 @@ describe("CommandRouter", () => {
     await handling;
 
     expect(results).toEqual([
-      { cursor: 1, completedAt: 200, ok: true },
-      { cursor: 2, completedAt: 300, ok: false },
+      { commandId: "success", completedAt: 200, ok: true },
+      { commandId: "failure", completedAt: 300, ok: false },
     ]);
   });
 
@@ -457,67 +458,6 @@ describe("CommandRouter", () => {
     ).toBe(false);
   });
 
-  it("warns on cursor gaps and holds later results until the gap closes", async () => {
-    const logger = createLogger();
-    const manager = new RuntimeManager({
-      provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
-      createRuntime: vi.fn(() => createFakeRuntime() as unknown as AgentRuntime),
-    });
-    const reported: number[] = [];
-    const router = new CommandRouter({
-      runtimeManager: manager,
-      logger,
-      reportResult: async (result) => {
-        reported.push(result.cursor);
-      },
-    });
-
-    await router.handleCommands([
-      {
-        id: "cmd-1",
-        cursor: 1,
-        command: {
-          type: "thread.start",
-          environmentId: "env-1",
-          threadId: "thread-1",
-          ...createStandardRuntimeCommandContext({
-            workspacePath: "/tmp/env-1",
-          }),
-          eventSequence: 1,
-          input: [{ type: "text", text: "start thread 1" }],
-        },
-      },
-      {
-        id: "cmd-3",
-        cursor: 3,
-        command: {
-          type: "thread.start",
-          environmentId: "env-1",
-          threadId: "thread-3",
-          ...createStandardRuntimeCommandContext({
-            workspacePath: "/tmp/env-1",
-          }),
-          eventSequence: 3,
-          input: [{ type: "text", text: "start thread 3" }],
-        },
-      },
-    ]);
-
-    expect(reported).toEqual([1]);
-    expect(logger.warn.mock.calls[0]).toEqual([
-      expect.objectContaining({
-        cursor: 3,
-        lastReportedCursor: 0,
-      }),
-      "gap detected in command cursor sequence",
-    ]);
-    expect(
-      (
-        router as unknown as { completedResults: Map<number, unknown> }
-      ).completedResults.has(3),
-    ).toBe(true);
-  });
-
   it("recovers result reporting after a transient report failure", async () => {
     const manager = new RuntimeManager({
       provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
@@ -525,7 +465,7 @@ describe("CommandRouter", () => {
     });
     const logger = createLogger();
     let shouldFail = true;
-    const reported: number[] = [];
+    const reported: string[] = [];
     const router = new CommandRouter({
       runtimeManager: manager,
       logger,
@@ -534,7 +474,7 @@ describe("CommandRouter", () => {
           shouldFail = false;
           throw new Error("report failed");
         }
-        reported.push(result.cursor);
+        reported.push(result.commandId);
       },
     });
 
@@ -574,12 +514,12 @@ describe("CommandRouter", () => {
       },
     ]);
 
-    expect(reported).toEqual([1, 2]);
+    expect(reported).toEqual(["cmd-1", "cmd-2"]);
     expect(logger.warn).toHaveBeenCalledWith(
       {
         err: expect.any(Error),
       },
-      "failed to report command results, will retry on next completion",
+      "failed to report command result, will retry on next completion",
     );
   });
 });

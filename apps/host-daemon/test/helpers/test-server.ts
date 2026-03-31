@@ -1,7 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { Hono } from "hono";
 import {
-  hostDaemonCommandBatchSchema,
   hostDaemonCommandResultReportSchema,
   hostDaemonCommandsQuerySchema,
   hostDaemonDaemonWsMessageSchema,
@@ -75,13 +74,13 @@ export interface CreateTestServerOptions {
 
 export interface TestServer {
   baseUrl: string;
-  commandFetches: Array<{ sessionId: string; afterCursor: number }>;
+  commandFetches: Array<{ sessionId: string }>;
   commandResultReports: HostDaemonCommandResultReport[];
   commandResults: HostDaemonCommandResultReport[];
   events: HostDaemonEventEnvelope[];
   heartbeats: Array<{
     sessionId: string;
-    message: { bufferDepth: number; lastCommandCursor: number | null };
+    message: { bufferDepth: number };
   }>;
   sessionOpenCalls: HostDaemonSessionOpenRequest[];
   toolCalls: Array<{ sessionId: string; tool: string }>;
@@ -101,9 +100,9 @@ export async function createTestServer(
   const sessionOpenCalls: HostDaemonSessionOpenRequest[] = [];
   const heartbeats: Array<{
     sessionId: string;
-    message: { bufferDepth: number; lastCommandCursor: number | null };
+    message: { bufferDepth: number };
   }> = [];
-  const commandFetches: Array<{ sessionId: string; afterCursor: number }> = [];
+  const commandFetches: Array<{ sessionId: string }> = [];
   const commandResultReports: HostDaemonCommandResultReport[] = [];
   const toolCalls: Array<{ sessionId: string; tool: string }> = [];
   const events: HostDaemonEventEnvelope[] = [];
@@ -111,6 +110,8 @@ export async function createTestServer(
   const commands = new Map<number, HostDaemonCommandEnvelope>();
   // Raw commands bypass Zod validation — used to test unknown command types
   const rawCommands = new Map<number, unknown>();
+  const fetchedCommandIds = new Set<string>();
+  const fetchedRawCommandCursors = new Set<number>();
   const completedCommandIds = new Set<string>();
   const threadHighWaterMarks = {
     ...(options.threadHighWaterMarks ?? { threadA: 4 }),
@@ -142,33 +143,37 @@ export async function createTestServer(
   });
   app.get("/internal/session/commands", (context) => {
     const query = hostDaemonCommandsQuerySchema.parse(context.req.query());
-    const afterCursor = Number.parseInt(query.afterCursor, 10);
     commandFetches.push({
       sessionId: query.sessionId,
-      afterCursor,
     });
 
     const available = [...commands.values()].filter(
       (command) =>
-        command.cursor > afterCursor &&
+        !fetchedCommandIds.has(command.id) &&
         !completedCommandIds.has(command.id),
     );
 
-    const availableRaw = [...rawCommands.entries()]
+    const availableRawEntries = [...rawCommands.entries()]
       .filter(
         ([cursor, rawCommand]) =>
-          cursor > afterCursor &&
+          !fetchedRawCommandCursors.has(cursor) &&
           !completedCommandIds.has(getRawCommandId(rawCommand) ?? ""),
-      )
-      .map(([, value]) => value);
+      );
 
     const allCommands = [
       ...available.sort((left, right) => left.cursor - right.cursor),
-      ...availableRaw,
+      ...availableRawEntries.map(([, value]) => value),
     ];
 
     if (allCommands.length === 0) {
       return new Response(null, { status: 204 });
+    }
+
+    for (const command of available) {
+      fetchedCommandIds.add(command.id);
+    }
+    for (const [cursor] of availableRawEntries) {
+      fetchedRawCommandCursors.add(cursor);
     }
 
     // Return raw JSON to avoid schema validation on the server side
@@ -248,7 +253,6 @@ export async function createTestServer(
           sessionId: url.searchParams.get("sessionId") ?? "",
           message: {
             bufferDepth: message.bufferDepth,
-            lastCommandCursor: message.lastCommandCursor,
           },
         });
       });

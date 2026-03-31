@@ -213,21 +213,12 @@ host_daemon_commands: id, hostId, sessionId, cursor, type, payload, state, resul
 
 - `hostId` — FK to hosts, NOT NULL. Commands are **host-scoped** so they survive session replacement.
 - `sessionId` — FK to sessions, nullable (`onDelete: "set null"`). Records which session queued the command for audit. Nullable so commands survive session cleanup.
-- `cursor` — integer, NOT NULL. Unique constraint: `host_daemon_commands(hostId, cursor)` (per-host monotonic cursor). The daemon persists one cursor to disk per host; this works because the cursor space is per-host, not per-session.
+- `cursor` — integer, NOT NULL. Unique constraint: `host_daemon_commands(hostId, cursor)` (per-host monotonic cursor). Used for deterministic fetch ordering and audit.
 - `state` — text, NOT NULL (`pending`, `fetched`, `success`, `error`)
 - `retryCount` — integer, NOT NULL, default `0`
 - Index: `host_daemon_commands(hostId, state)`
 
-**Why host-scoped, not session-scoped:** The daemon persists a single cursor to `$BB_DATA_DIR/command-cursor` and resumes from it after reconnecting (which creates a new session). If commands were session-scoped, the old session's pending commands would be stranded and the new session's cursor space would start empty. Host-scoped commands ensure the "read cursor from disk and refetch" path works correctly across session replacement.
-
-### Host-Daemon Cursors
-
-```
-host_daemon_cursors: hostId, cursor, updatedAt
-```
-
-- `hostId` — FK to hosts, PRIMARY KEY
-- `cursor` — integer, NOT NULL (last successfully reported command cursor)
+**Why host-scoped, not session-scoped:** When a session is replaced, the new daemon session must continue draining the host's pending work. If commands were session-scoped, pending or fetched commands tied to the old session would be stranded. Host-scoped commands let session replacement and TTL recovery work without special migration logic.
 
 ---
 
@@ -247,9 +238,9 @@ Auth: `BB_SECRET_TOKEN` env var, sent as `Authorization: Bearer` on HTTP and as 
 
 ### Commands (server → daemon)
 
-Server queues commands in DB (host-scoped), sends `{ type: "commands-available" }` over WS. Daemon fetches via `GET /internal/session/commands?afterCursor={N}` (server resolves the host from the session and returns commands for that host). Reports results via `POST /internal/session/command-result`.
+Server queues commands in DB (host-scoped), sends `{ type: "commands-available" }` over WS. Daemon fetches via `GET /internal/session/commands` (server resolves the host from the session and returns pending commands for that host). Reports results via `POST /internal/session/command-result`.
 
-**Delivery semantics: at-least-once.** Daemon persists cursor to disk after reporting command results, not after fetching. This ensures at-least-once delivery — if the daemon crashes after fetch but before reporting, it re-fetches the same commands on restart. All commands must be idempotent:
+**Delivery semantics: at-least-once.** The server marks commands `fetched` when it hands them to the daemon. If the daemon reports a result, the command moves to `success` or `error`. If the daemon crashes after fetch but before reporting, the command stays `fetched` until the command TTL sweep re-queues it to `pending`. The daemon does not persist cursor state on disk; recovery relies on command state plus the sweep. All commands must be idempotent:
 - `thread.start` — checks if a provider process already exists for this thread before spawning
 - `environment.provision` — checks if the target path already exists before creating
 - `environment.destroy` — no-op if path doesn't exist
@@ -278,7 +269,7 @@ Each command carries `environmentId` and `threadId` inside its own payload (not 
 
 **Provisioning timeout:** `environment.provision` has a configurable timeout (default: 5 minutes, much longer than the generic 60s command TTL) because large repo checkouts and setup scripts can be slow. Other commands use the standard 60s TTL.
 
-**Cursor advancement:** The daemon may execute multiple commands concurrently (workspace commands serialize per-environment, but commands for different environments or provider commands run in parallel). The cursor must advance contiguously — if commands 5, 6, 7 are fetched and 7 completes first, the cursor stays at 4 until 5 and 6 also complete. This prevents gaps that would cause missed commands on restart.
+**Result reporting:** The daemon may execute multiple commands concurrently (workspace commands serialize per-environment, but commands for different environments or provider commands run in parallel). Results are reported as soon as each command completes. Reporting is serialized through a small in-memory retry queue so transient POST failures are retried before newer results, but there is no cursor-ordering constraint on result delivery.
 
 ### Events (daemon → server)
 
@@ -302,7 +293,7 @@ Synchronous: daemon posts `POST /internal/session/tool-call`, blocks on HTTP res
 ### WS notifications
 
 **Server → Daemon:** `commands-available`, `session-close` (with reason)
-**Daemon → Server:** `heartbeat` (with bufferDepth, lastCommandCursor)
+**Daemon → Server:** `heartbeat` (with bufferDepth)
 
 ### Reconnection
 
@@ -312,13 +303,13 @@ On WS drop:
 1. Buffer events, retry HTTP with `p-retry` (max 5 retries, exponential backoff, 4xx not retried)
 2. `partysocket` handles WS reconnect (exponential backoff, 1s–30s)
 3. If WS down >5s, fall back to polling commands every ~10s
-4. On WS reconnect, re-open session, fetch from last cursor, stop polling
+4. On WS reconnect, re-open session, resume fetching pending commands, stop polling
 
 ### Resilience invariants
 
 - **Event ingestion is idempotent** on `(threadId, sequence)`. Server silently accepts already-seen events.
-- **Command cursor persisted to disk.** Daemon writes to `$BB_DATA_DIR/command-cursor` after reporting command results (atomic write: write to temp, rename). On restart, reads from disk and re-fetches from that cursor.
-- **Command result delivery with retry.** After executing a command, the daemon POSTs the result to the server with retry via `p-retry` (max 5 retries, exponential backoff, 4xx errors not retried). The cursor is advanced only after successful POST. If the daemon crashes mid-retry, the cursor wasn't advanced — the command is re-fetched and re-executed on restart. Commands are idempotent.
+- **Command delivery is tracked in DB state.** Server moves commands through `pending → fetched → success/error`. If a daemon disappears after fetch, the command TTL sweep re-queues abandoned `fetched` commands.
+- **Command result delivery with retry.** After executing a command, the daemon POSTs the result to the server with retry via `p-retry` (max 5 retries, exponential backoff, 4xx errors not retried). If the in-memory retry queue still cannot deliver a result and no further completions occur, recovery falls back to the command TTL sweep. Commands are idempotent.
 - **Command TTL.** Server tracks commands that were fetched but never got a `command-result`. Standard commands: 60s timeout. `environment.provision`: 5 minute timeout. Abandoned commands re-queue once (retryCount 0 → 1), then error the thread (retryCount 1 → error).
 - **Protocol version mismatch** → 400 rejection with supported versions.
 - **File locking.** Daemon acquires an exclusive lock on `$BB_DATA_DIR/daemon.lock` at startup. If lock is held, another daemon instance is running — the new instance waits or exits.
@@ -327,7 +318,7 @@ On WS drop:
 
 When the daemon reconnects after a network partition or restart, the server and daemon may have diverged. Reconciliation happens during session open:
 
-1. **Daemon reports active provider sessions** as part of session open: `{ activeThreads: [{ environmentId, threadId, providerThreadId }] }`. Empty on fresh restart (all processes died).
+1. **Daemon reports active provider sessions** as part of session open: `{ activeThreads: [{ threadId }] }`. Empty on fresh restart (all processes died).
 2. **Server compares** against its DB state:
    - Thread in `error` (due to lease timeout) but daemon reports it active → server transitions thread back to `active`
    - Thread in `active` but daemon has no session for it → server transitions thread to `idle`
@@ -454,12 +445,12 @@ One `AgentRuntime` instance per environment (since `workspacePath` is per-enviro
 
 **Provider processes are children of the daemon — they die on restart.** This is the accepted tradeoff for architectural simplicity.
 
-**State on disk:** `$BB_DATA_DIR/command-cursor`
+**State on disk:** `$BB_DATA_DIR/host-id`, `$BB_DATA_DIR/daemon.lock`, logs
 
 **Restart flow:**
 1. Daemon spawns a new instance of itself (detached)
 2. Old process exits — all provider processes die
-3. New daemon reads `command-cursor` from disk, reconnects WS to server
+3. New daemon reconnects WS to server
 4. Server detects reconnect, runs state reconciliation
 5. Server transitions active threads to `idle` (interrupted, not errored)
 6. Server re-queues `thread.resume` commands for threads that need provider sessions re-established
@@ -547,7 +538,7 @@ The server runs periodic sweeps:
 | Host-daemon | `@bb/config/host-daemon` | `BB_SERVER_URL`, `BB_HOST_DAEMON_PORT` |
 | CLI | `@bb/config/cli` | `BB_SERVER_URL`, `BB_HOST_DAEMON_PORT` |
 
-`BB_DATA_DIR` is used by both server and host-daemon. Server: `bb.db`, `logs/server.log`. Host-daemon: `host-id`, `command-cursor`, `daemon.lock`, `logs/host-daemon.log`.
+`BB_DATA_DIR` is used by both server and host-daemon. Server: `bb.db`, `logs/server.log`. Host-daemon: `host-id`, `daemon.lock`, `logs/host-daemon.log`.
 
 Config sources: env vars and `.env` files. `~/.bb/config.json` deferred (easy to add — just merge into `process.env` before envsafe runs). No per-project settings in DB.
 

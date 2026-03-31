@@ -91,7 +91,7 @@ describe("commands", () => {
     expect(fetched2).toHaveLength(0);
   });
 
-  it("fetches commands after a given cursor", () => {
+  it("fetches pending commands in cursor order and respects the limit", () => {
     const { db, host } = setup();
 
     queueCommand(db, noopNotifier, {
@@ -112,11 +112,11 @@ describe("commands", () => {
 
     const fetched = fetchCommands(db, noopNotifier, {
       hostId: host.id,
-      afterCursor: 1,
+      limit: 2,
     });
     expect(fetched).toHaveLength(2);
-    expect(fetched[0]!.cursor).toBe(2);
-    expect(fetched[1]!.cursor).toBe(3);
+    expect(fetched[0]!.cursor).toBe(1);
+    expect(fetched[1]!.cursor).toBe(2);
   });
 
   it("reports command result", () => {

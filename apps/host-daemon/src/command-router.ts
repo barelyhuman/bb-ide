@@ -12,20 +12,14 @@ import { RuntimeManager } from "./runtime-manager.js";
 
 type CommandResultReport = Omit<HostDaemonCommandResultReport, "sessionId">;
 
-export interface RoutedCommandResult {
-  cursor: number;
-  report: CommandResultReport;
-}
-
 export interface CommandRouterOptions {
   runtimeManager: RuntimeManager;
-  reportResult?: (result: RoutedCommandResult) => Promise<void>;
+  reportResult?: (result: CommandResultReport) => Promise<void>;
   seedThreadHighWaterMark?: CommandDispatchOptions["seedThreadHighWaterMark"];
   eventSink?: CommandDispatchOptions["eventSink"];
   listModels?: CommandDispatchOptions["listModels"];
   logger: Pick<HostDaemonLogger, "warn">;
   now?: () => number;
-  initialCursor?: number;
 }
 
 export class CommandRouter {
@@ -33,15 +27,13 @@ export class CommandRouter {
   private readonly logger;
   private readonly now;
   private readonly environmentLanes = new Map<string, Promise<unknown>>();
-  private readonly completedResults = new Map<number, RoutedCommandResult>();
-  private lastReportedCursor = 0;
+  private readonly pendingResults: CommandResultReport[] = [];
   private reportingPromise: Promise<void> = Promise.resolve();
 
   constructor(private readonly options: CommandRouterOptions) {
     this.reportResult = options.reportResult ?? (async () => undefined);
     this.logger = options.logger;
     this.now = options.now ?? Date.now;
-    this.lastReportedCursor = options.initialCursor ?? 0;
   }
 
   async handleCommands(commands: HostDaemonCommandEnvelope[]): Promise<void> {
@@ -53,7 +45,7 @@ export class CommandRouter {
   private async dispatchEnvelope(
     envelope: HostDaemonCommandEnvelope,
   ): Promise<void> {
-    let task: Promise<RoutedCommandResult>;
+    let task: Promise<CommandResultReport>;
     if (
       this.requiresWorkspaceLane(envelope.command.type) &&
       "environmentId" in envelope.command
@@ -73,46 +65,32 @@ export class CommandRouter {
     }
 
     const result = await task;
-    if (envelope.command.type === "environment.destroy" && result.report.ok) {
+    if (envelope.command.type === "environment.destroy" && result.ok) {
       this.environmentLanes.delete(envelope.command.environmentId);
     }
-    this.recordCompletedResult(result);
     this.reportingPromise = this.reportingPromise
-      .then(() => this.flushCompleted())
+      .then(async () => {
+        await this.drainPending();
+        await this.reportResult(result);
+      })
       .catch((error) => {
+        this.pendingResults.push(result);
         this.logger.warn(
           { err: error },
-          "failed to report command results, will retry on next completion",
+          "failed to report command result, will retry on next completion",
         );
       });
     await this.reportingPromise;
   }
 
-  private recordCompletedResult(result: RoutedCommandResult): void {
-    const { cursor } = result;
-    const pendingCount = this.completedResults.size;
-    if (cursor > this.lastReportedCursor + pendingCount + 1) {
-      this.logger.warn(
-        {
-          cursor,
-          lastReportedCursor: this.lastReportedCursor,
-        },
-        "gap detected in command cursor sequence",
-      );
-    }
-    this.completedResults.set(cursor, result);
-  }
-
-  private async flushCompleted(): Promise<void> {
-    while (this.completedResults.has(this.lastReportedCursor + 1)) {
-      const nextCursor = this.lastReportedCursor + 1;
-      const result = this.completedResults.get(nextCursor);
+  private async drainPending(): Promise<void> {
+    while (this.pendingResults.length > 0) {
+      const result = this.pendingResults[0];
       if (!result) {
-        break;
+        return;
       }
       await this.reportResult(result);
-      this.completedResults.delete(nextCursor);
-      this.lastReportedCursor = nextCursor;
+      this.pendingResults.shift();
     }
   }
 
@@ -134,11 +112,11 @@ export class CommandRouter {
 
   private async executeCommand(
     envelope: HostDaemonCommandEnvelope,
-  ): Promise<RoutedCommandResult> {
-    const baseReport = {
+  ): Promise<CommandResultReport> {
+    const baseReport: Pick<CommandResultReport, "commandId" | "type"> = {
       commandId: envelope.id,
       type: envelope.command.type,
-    } as const;
+    };
 
     try {
       const result = await dispatchCommand(envelope.command, {
@@ -148,33 +126,26 @@ export class CommandRouter {
         listModels: this.options.listModels,
       });
       return {
-        cursor: envelope.cursor,
-        report: {
-          ...baseReport,
-          completedAt: this.now(),
-          ok: true as const,
-          result,
-        },
+        ...baseReport,
+        completedAt: this.now(),
+        ok: true,
+        result,
       };
     } catch (error) {
       this.logger.warn(
         {
           err: error,
           commandId: envelope.id,
-          cursor: envelope.cursor,
           type: envelope.command.type,
         },
         "command execution failed",
       );
       return {
-        cursor: envelope.cursor,
-        report: {
-          ...baseReport,
-          completedAt: this.now(),
-          ok: false as const,
-          errorCode: getErrorCode(error),
-          errorMessage: error instanceof Error ? error.message : String(error),
-        },
+        ...baseReport,
+        completedAt: this.now(),
+        ok: false,
+        errorCode: getErrorCode(error),
+        errorMessage: error instanceof Error ? error.message : String(error),
       };
     }
   }

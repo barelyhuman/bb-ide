@@ -72,8 +72,7 @@ export interface OpenSessionArgs {
 
 export interface ServerClient {
   openSession(args: OpenSessionArgs): Promise<HostDaemonSessionOpenResponse>;
-  fetchCommands(options: {
-    afterCursor: number;
+  fetchCommands(options?: {
     limit?: number;
     waitMs?: number;
   }): Promise<HostDaemonCommandEnvelope[]>;
@@ -200,10 +199,9 @@ export function createServerClient(
       return hostDaemonSessionOpenResponseSchema.parse(await response.json());
     },
 
-    async fetchCommands(optionsArg): Promise<HostDaemonCommandEnvelope[]> {
+    async fetchCommands(optionsArg = {}): Promise<HostDaemonCommandEnvelope[]> {
       const query = hostDaemonCommandsQuerySchema.parse({
         sessionId: requireSessionId(),
-        afterCursor: String(optionsArg.afterCursor),
         limit: String(optionsArg.limit ?? DEFAULT_COMMAND_FETCH_LIMIT),
         waitMs: String(optionsArg.waitMs ?? DEFAULT_COMMAND_FETCH_WAIT_MS),
       });
@@ -253,7 +251,7 @@ export function createServerClient(
       }
 
       // Wait for all unknown command reports to complete before returning
-      // so the server can advance past them and not re-send them in the next batch
+      // so callers don't race ahead of the error reports within the same fetch cycle.
       await Promise.all(reportPromises);
 
       return accepted;

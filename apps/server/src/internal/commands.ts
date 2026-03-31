@@ -19,7 +19,6 @@ export function registerInternalCommandRoutes(app: Hono, deps: AppDeps): void {
     const fetchPending = () =>
       fetchCommands(deps.db, deps.hub, {
         hostId: session.hostId,
-        afterCursor: parseInteger(query.afterCursor, "afterCursor"),
         limit: parseInteger(query.limit, "limit"),
       });
 
