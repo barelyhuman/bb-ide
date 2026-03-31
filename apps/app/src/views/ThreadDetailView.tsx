@@ -53,7 +53,7 @@ import { environmentActionFailureDetailsSchema } from "@bb/server-contract";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { HttpError } from "@/lib/api";
 import { getAutoArchivePreferences } from "@/lib/auto-archive-preferences";
-import { useStoredThreadShowAllEvents } from "@/lib/thread-show-all-events";
+import { useStoredShowAllEvents } from "@/lib/show-all-events-preference";
 import { getGitStatusDisplay } from "@/lib/workspace-status";
 import {
   formatChangeSummary,
@@ -179,9 +179,7 @@ export function ThreadDetailView() {
   });
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
   const isManagerThread = thread?.type === "manager";
-  const [storedShowAllEvents, setStoredShowAllEvents] = useStoredThreadShowAllEvents(
-    threadId,
-  );
+  const [storedShowAllEvents, setStoredShowAllEvents] = useStoredShowAllEvents();
   const showAllEvents = isManagerThread ? storedShowAllEvents : false;
   const {
     isThreadStorageFilePreviewLoading,
