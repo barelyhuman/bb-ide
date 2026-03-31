@@ -30,6 +30,7 @@ import type {
   CreateThreadRequest,
   SystemProviderInfo,
   SendMessageRequest,
+  ThreadDraftListResponse,
   ThreadTimelineResponse,
   TimelineToolDetailsResponse,
   UpdateProjectRequest,
@@ -46,11 +47,13 @@ const ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY = "environmentMergeBaseBranches"
 const ENVIRONMENT_GIT_DIFF_QUERY_KEY = "environmentGitDiff";
 const THREAD_TIMELINE_QUERY_KEY = "threadTimeline";
 const THREAD_QUERY_KEY = "thread";
+const THREAD_DRAFTS_QUERY_KEY = "threadDrafts";
 type ThreadScopedQueryKeyPrefix =
   | typeof THREAD_QUERY_KEY
   | typeof WORKSPACE_STATUS_QUERY_KEY
   | typeof ENVIRONMENT_GIT_DIFF_QUERY_KEY
-  | typeof THREAD_TIMELINE_QUERY_KEY;
+  | typeof THREAD_TIMELINE_QUERY_KEY
+  | typeof THREAD_DRAFTS_QUERY_KEY;
 
 function extractThreadIdFromThreadScopedQueryKey(
   queryKey: QueryKey | undefined,
@@ -439,6 +442,18 @@ export function useThreadDefaultExecutionOptions(
   });
 }
 
+export function useThreadDrafts(
+  id: string,
+  options?: { enabled?: boolean },
+) {
+  return useQuery<ThreadDraftListResponse>({
+    queryKey: [THREAD_DRAFTS_QUERY_KEY, id],
+    queryFn: () => api.listThreadDrafts(id),
+    enabled: (options?.enabled ?? true) && !!id,
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function useThreadStorageFiles(
   id: string,
   options?: { enabled?: boolean },
@@ -690,6 +705,7 @@ export function useCreateThreadDraft() {
       }),
     onSuccess: (_queuedMessage, variables) => {
       queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
+      queryClient.invalidateQueries({ queryKey: [THREAD_DRAFTS_QUERY_KEY, variables.id] });
     },
   });
 }
@@ -707,6 +723,7 @@ export function useSendThreadDraft() {
       api.sendThreadDraft(id, queuedMessageId),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
+      queryClient.invalidateQueries({ queryKey: [THREAD_DRAFTS_QUERY_KEY, variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threadTimeline", variables.id] });
       queryClient.invalidateQueries({ queryKey: ["threads"] });
       queryClient.invalidateQueries({ queryKey: ["status"] });
@@ -726,6 +743,7 @@ export function useDeleteThreadDraft() {
     }) => api.deleteThreadDraft(id, queuedMessageId),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["thread", variables.id] });
+      queryClient.invalidateQueries({ queryKey: [THREAD_DRAFTS_QUERY_KEY, variables.id] });
     },
   });
 }

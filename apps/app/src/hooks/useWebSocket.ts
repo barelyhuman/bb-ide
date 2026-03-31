@@ -14,6 +14,7 @@ const TIMELINE_EVENT_REFETCH_INTERVAL_MS = 500;
 
 interface ThreadChangeFlags {
   listChanged: boolean;
+  queueChanged: boolean;
   threadChanged: boolean;
   timelineChanged: boolean;
   statusChanged: boolean;
@@ -22,6 +23,7 @@ interface ThreadChangeFlags {
 function toThreadChangeFlags(changes: readonly ThreadChangeKind[]): ThreadChangeFlags {
   const flags: ThreadChangeFlags = {
     listChanged: false,
+    queueChanged: false,
     threadChanged: false,
     timelineChanged: false,
     statusChanged: false,
@@ -41,6 +43,7 @@ function toThreadChangeFlags(changes: readonly ThreadChangeKind[]): ThreadChange
         }
         break;
       case "queue-changed":
+        flags.queueChanged = true;
         flags.threadChanged = true;
         break;
       case "status-changed":
@@ -102,6 +105,7 @@ export function useWebSocket(): void {
     const lastTimelineRefetchAtByThread = new Map<string, number>();
     let shouldInvalidateThreads = false;
     let shouldInvalidateStatus = false;
+    let shouldInvalidateAllThreadDrafts = false;
     let shouldInvalidateAllThreadTimeline = false;
     let shouldInvalidateAllThreadsById = false;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -136,6 +140,9 @@ export function useWebSocket(): void {
       if (shouldInvalidateAllThreadsById) {
         queryClient.invalidateQueries({ queryKey: ["thread"] });
       }
+      if (shouldInvalidateAllThreadDrafts) {
+        queryClient.invalidateQueries({ queryKey: ["threadDrafts"] });
+      }
       if (shouldInvalidateAllThreadTimeline) {
         queryClient.invalidateQueries({ queryKey: ["threadTimeline"] });
       }
@@ -149,6 +156,9 @@ export function useWebSocket(): void {
 
         if (flags.threadChanged) {
           queryClient.invalidateQueries({ queryKey: ["thread", id] });
+        }
+        if (flags.queueChanged) {
+          queryClient.invalidateQueries({ queryKey: ["threadDrafts", id] });
         }
         if (flags.timelineChanged) {
           if (flags.statusChanged) {
@@ -176,6 +186,7 @@ export function useWebSocket(): void {
       globalChangeKinds.clear();
       shouldInvalidateThreads = false;
       shouldInvalidateStatus = false;
+      shouldInvalidateAllThreadDrafts = false;
       shouldInvalidateAllThreadTimeline = false;
       shouldInvalidateAllThreadsById = false;
     };
@@ -221,6 +232,7 @@ export function useWebSocket(): void {
               shouldInvalidateStatus = true;
             }
             shouldInvalidateAllThreadsById = globalFlags.threadChanged;
+            shouldInvalidateAllThreadDrafts = globalFlags.queueChanged;
             shouldInvalidateAllThreadTimeline = globalFlags.timelineChanged;
           }
           if (shouldFlushThreadChangesImmediately(message.changes)) {

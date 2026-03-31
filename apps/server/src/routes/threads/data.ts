@@ -1,4 +1,5 @@
 import path from "node:path";
+import { listDrafts } from "@bb/db";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import { threadEventTypeSchema } from "@bb/domain";
@@ -25,6 +26,7 @@ import {
   remapDaemonFileRouteError,
 } from "../../services/daemon-file-response.js";
 import { requireThreadStoragePath } from "../../services/thread-storage.js";
+import { toQueuedMessage } from "../../services/drafts.js";
 import { buildThreadTimeline, buildTimelineToolDetails } from "../../services/timeline.js";
 import {
   findThreadEvent,
@@ -110,6 +112,12 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
   get("/threads/:id/output", (context) => {
     requireThread(deps.db, context.req.param("id"));
     return context.json({ output: getLastThreadOutput(deps.db, context.req.param("id")) });
+  });
+
+  get("/threads/:id/drafts", (context) => {
+    const threadId = context.req.param("id");
+    requireThread(deps.db, threadId);
+    return context.json(listDrafts(deps.db, threadId).map((draft) => toQueuedMessage(draft)));
   });
 
   get("/threads/:id/events", threadEventsQuerySchema, (context, query) => {

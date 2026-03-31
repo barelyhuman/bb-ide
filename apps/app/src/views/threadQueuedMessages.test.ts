@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PromptInput } from "@bb/domain";
 import {
-  extractThreadQueuedMessages,
   formatQueuedFollowUpPreview,
   queuedInputToDraft,
 } from "./threadQueuedMessages";
@@ -49,9 +48,5 @@ describe("threadQueuedMessages", () => {
         },
       ],
     });
-  });
-
-  it("returns empty array (server does not embed drafts in thread response)", () => {
-    expect(extractThreadQueuedMessages({})).toEqual([]);
   });
 });

@@ -40,6 +40,7 @@ import type {
   SendDraftRequest,
   SendDraftResponse,
   SendMessageRequest,
+  ThreadDraftListResponse,
   SystemConfigResponse,
   SystemModelsQuery,
   SystemProviderInfo,
@@ -203,6 +204,7 @@ export type PublicApiSchema = {
     $post: Endpoint<PathId & { json: SendMessageRequest }, { ok: true }>;
   };
   "/threads/:id/drafts": {
+    $get: Endpoint<PathId, ThreadDraftListResponse>;
     $post: Endpoint<PathId & { json: CreateDraftRequest }, ThreadQueuedMessage, 201>;
   };
   "/threads/:id/drafts/:draftId/send": {

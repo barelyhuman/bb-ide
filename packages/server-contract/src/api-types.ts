@@ -110,6 +110,9 @@ export const sendDraftResponseSchema = z.object({
 });
 export type SendDraftResponse = z.infer<typeof sendDraftResponseSchema>;
 
+export const threadDraftListResponseSchema = z.array(threadQueuedMessageSchema);
+export type ThreadDraftListResponse = z.infer<typeof threadDraftListResponseSchema>;
+
 export const archiveThreadRequestSchema = z.object({
   force: z.boolean(),
 });

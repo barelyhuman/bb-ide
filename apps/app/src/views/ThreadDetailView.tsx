@@ -18,6 +18,7 @@ import {
   useDeleteThread,
   useUnarchiveThread,
   useThreadDefaultExecutionOptions,
+  useThreadDrafts,
   useThreads,
   useUpdateThread,
   useUploadPromptAttachment,
@@ -63,7 +64,7 @@ import {
   isArchiveForceRequiredError,
   requiresArchiveConfirmation,
 } from "@/lib/thread-archive";
-import { extractThreadQueuedMessages, queuedInputToDraft } from "./threadQueuedMessages";
+import { queuedInputToDraft } from "./threadQueuedMessages";
 import { useGitDiffPanel } from "./useGitDiffPanel";
 import { useThreadTimelineController } from "./useThreadTimelineController";
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
@@ -197,6 +198,7 @@ export function ThreadDetailView() {
     setStoredShowAllEvents(checked);
   }, [isManagerThread, setStoredShowAllEvents]);
   const { data: allProjectThreads } = useThreads({ projectId });
+  const { data: queuedMessages = [] } = useThreadDrafts(threadId ?? "");
   const managerThreads = useMemo(
     () => (allProjectThreads ?? []).filter((candidate) => candidate.type === "manager"),
     [allProjectThreads],
@@ -643,7 +645,6 @@ export function ThreadDetailView() {
   const isCreated = thread.status === "created";
   const isProvisioning = thread.status === "provisioning";
   const isRuntimeError = thread.status === "error";
-  const queuedMessages = extractThreadQueuedMessages(thread);
   const isQueueMutationPending =
     createDraft.isPending ||
     sendDraft.isPending ||

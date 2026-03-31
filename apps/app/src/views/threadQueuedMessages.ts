@@ -1,6 +1,5 @@
 import {
   type PromptInput,
-  type ThreadQueuedMessage,
 } from "@bb/domain";
 import { type PromptDraftState } from "@/lib/prompt-draft";
 
@@ -102,13 +101,4 @@ export function queuedInputToDraft(input: PromptInput[]): PromptDraftState {
     text: textSegments.join("\n\n"),
     attachments,
   };
-}
-
-// TODO: The server does not include queuedMessages in the Thread response.
-// This function always returns []. To make drafts visible, either the server
-// should embed them in GET /threads/:id or the app should fetch them separately.
-export function extractThreadQueuedMessages(
-  _thread: unknown,
-): ThreadQueuedMessage[] {
-  return [];
 }

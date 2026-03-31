@@ -24,18 +24,19 @@ import type {
   EnvironmentActionRequest,
   EnvironmentActionResponse,
   EnvironmentStatusResponse,
-  SendDraftResponse,
   CreateThreadRequest,
+  ProjectResponse,
+  SendDraftResponse,
+  SendMessageRequest,
   SystemProviderInfo,
   SystemVoiceTranscriptionResponse,
-  SendMessageRequest,
+  ThreadDraftListResponse,
   ThreadTimelineResponse,
   TimelineToolDetailsResponse,
   UpdateProjectRequest,
   UpdateThreadRequest,
   UpdateProjectSourceRequest,
   UploadedPromptAttachment,
-  ProjectResponse,
   WorkspaceFileListResponse,
 } from "@bb/server-contract";
 import { apiClient, toRelativeUrl } from "./api-server";
@@ -419,6 +420,12 @@ export async function createThreadDraft(
 ): Promise<ThreadQueuedMessage> {
   return request<ThreadQueuedMessage>(
     apiClient.threads[":id"].drafts.$post({ param: { id }, json: req }),
+  );
+}
+
+export async function listThreadDrafts(id: string): Promise<ThreadDraftListResponse> {
+  return request<ThreadDraftListResponse>(
+    apiClient.threads[":id"].drafts.$get({ param: { id } }),
   );
 }
 

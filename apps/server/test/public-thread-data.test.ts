@@ -7,6 +7,7 @@ import {
   waitForQueuedCommand,
 } from "./helpers/commands.js";
 import {
+  seedDraft,
   seedEnvironment,
   seedEvent,
   seedHostSession,
@@ -510,6 +511,62 @@ describe("public thread data routes", () => {
       expect(deleteResponse.status).toBe(200);
       await expect(readJson(deleteResponse)).resolves.toEqual({ ok: true });
       expect(getDraft(harness.db, draft.id)).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("lists queued thread drafts", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      seedDraft(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "First queued draft" }],
+        model: "gpt-5",
+        reasoningLevel: "medium",
+        sandboxMode: "danger-full-access",
+        serviceTier: "flex",
+      });
+      seedDraft(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "Second queued draft" }],
+        model: "gpt-5",
+        reasoningLevel: "high",
+        sandboxMode: "danger-full-access",
+        serviceTier: "fast",
+      });
+
+      const response = await harness.app.request(`/api/v1/threads/${thread.id}/drafts`);
+
+      expect(response.status).toBe(200);
+      const drafts = await readJson(response) as unknown[];
+      expect(drafts).toHaveLength(2);
+      expect(drafts).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          content: [{ type: "text", text: "First queued draft" }],
+          model: "gpt-5",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          serviceTier: "flex",
+        }),
+        expect.objectContaining({
+          content: [{ type: "text", text: "Second queued draft" }],
+          model: "gpt-5",
+          reasoningLevel: "high",
+          sandboxMode: "danger-full-access",
+          serviceTier: "fast",
+        }),
+      ]));
     } finally {
       await harness.cleanup();
     }
