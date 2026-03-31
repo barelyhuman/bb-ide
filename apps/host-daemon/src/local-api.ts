@@ -4,7 +4,9 @@ import { promisify } from "node:util";
 import { serve } from "@hono/node-server";
 import {
   openRequestSchema,
+  restartRequestSchema,
   typedRoutes,
+  type HostDaemonActiveThread,
   type HostDaemonLocalSchema,
 } from "@bb/host-daemon-contract";
 import { Hono } from "hono";
@@ -20,6 +22,7 @@ export interface StartLocalApiServerOptions {
   getConnected: () => boolean;
   openPath?: (path: string) => Promise<void>;
   pickFolder?: () => Promise<string | null>;
+  listActiveThreads: () => HostDaemonActiveThread[];
   restart: () => Promise<void> | void;
   scheduleRestart?: (restart: () => void) => void;
 }
@@ -59,7 +62,10 @@ export async function startLocalApiServer(
     return c.json({ path });
   });
 
-  post("/restart", (c) => {
+  post("/restart", restartRequestSchema, (c, payload) => {
+    if (!payload.force && options.listActiveThreads().length > 0) {
+      return c.json({ message: "Cannot restart: threads are currently active. Use force to override." }, 409);
+    }
     (options.scheduleRestart ?? defaultScheduleRestart)(() => {
       void options.restart();
     });

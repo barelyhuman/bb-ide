@@ -30,6 +30,7 @@ describe("local API server", () => {
       serverUrl: "http://server.test",
       getConnected: () => true,
       restart: () => undefined,
+      listActiveThreads: () => [],
     });
     const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
 
@@ -53,6 +54,7 @@ describe("local API server", () => {
       openPath,
       pickFolder,
       restart: () => undefined,
+      listActiveThreads: () => [],
     });
     const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
 
@@ -72,13 +74,55 @@ describe("local API server", () => {
       serverUrl: "http://server.test",
       getConnected: () => true,
       restart,
+      listActiveThreads: () => [],
       scheduleRestart: (callback) => {
         setTimeout(callback, 0);
       },
     });
     const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
 
-    const response = await client.restart.$post({});
+    const response = await client.restart.$post({ json: {} });
+    expect(response.ok).toBe(true);
+    await waitFor(() => restart.mock.calls.length === 1);
+    expect(restart).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects restart with 409 when threads are active and force is not set", async () => {
+    const restart = vi.fn(async () => undefined);
+    server = await startLocalApiServer({
+      hostId: "host-1",
+      port: 0,
+      serverUrl: "http://server.test",
+      getConnected: () => true,
+      restart,
+      listActiveThreads: () => [{ threadId: "thread-1" }],
+      scheduleRestart: (callback) => {
+        setTimeout(callback, 0);
+      },
+    });
+    const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
+
+    const response = await client.restart.$post({ json: {} });
+    expect(response.status).toBe(409);
+    expect(restart).not.toHaveBeenCalled();
+  });
+
+  it("allows restart with force even when threads are active", async () => {
+    const restart = vi.fn(async () => undefined);
+    server = await startLocalApiServer({
+      hostId: "host-1",
+      port: 0,
+      serverUrl: "http://server.test",
+      getConnected: () => true,
+      restart,
+      listActiveThreads: () => [{ threadId: "thread-1" }],
+      scheduleRestart: (callback) => {
+        setTimeout(callback, 0);
+      },
+    });
+    const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
+
+    const response = await client.restart.$post({ json: { force: true } });
     expect(response.ok).toBe(true);
     await waitFor(() => restart.mock.calls.length === 1);
     expect(restart).toHaveBeenCalledTimes(1);

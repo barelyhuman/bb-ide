@@ -192,6 +192,7 @@ export async function createHostDaemonApp(
           getConnected: () => connection.sessionId != null,
           openPath: options.openPath,
           pickFolder: options.pickFolder,
+          listActiveThreads: () => runtimeManager.listActiveThreads(),
           restart: () => {
             process.kill(process.pid, "SIGUSR2");
           },

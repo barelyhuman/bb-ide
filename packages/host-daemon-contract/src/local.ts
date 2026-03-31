@@ -12,6 +12,11 @@ export const openRequestSchema = z.object({
 });
 export type OpenRequest = z.infer<typeof openRequestSchema>;
 
+export const restartRequestSchema = z.object({
+  force: z.boolean().optional(),
+});
+export type RestartRequest = z.infer<typeof restartRequestSchema>;
+
 export const pickFolderResponseSchema = z.object({
   path: z.string().nullable(),
 });
@@ -39,7 +44,9 @@ export type HostDaemonLocalSchema = {
     $get: Endpoint<EmptyInput, StatusResponse>;
   };
   "/restart": {
-    $post: Endpoint<EmptyInput, Record<string, never>>;
+    $post:
+      | Endpoint<{ json: RestartRequest }, Record<string, never>, 200>
+      | Endpoint<{ json: RestartRequest }, { message: string }, 409>;
   };
 };
 

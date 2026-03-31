@@ -5,6 +5,7 @@ export {
   createHostDaemonLocalClient,
   openRequestSchema,
   pickFolderResponseSchema,
+  restartRequestSchema,
   statusResponseSchema,
 } from "./local.js";
 export type {
@@ -12,6 +13,7 @@ export type {
   HostDaemonLocalSchema,
   OpenRequest,
   PickFolderResponse,
+  RestartRequest,
   StatusResponse,
 } from "./local.js";
 
