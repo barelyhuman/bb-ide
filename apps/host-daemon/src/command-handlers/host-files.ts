@@ -52,7 +52,7 @@ export async function readHostFile(
     );
   }
 
-  if (command.rootPath && !path.isAbsolute(command.rootPath)) {
+  if (!path.isAbsolute(command.rootPath)) {
     throw new CommandDispatchError(
       "invalid_path",
       "rootPath must be absolute",
@@ -62,6 +62,6 @@ export async function readHostFile(
   return readFileForTransport({
     resolvedPath: command.path,
     resultPath: command.path,
-    ...(command.rootPath ? { rootPath: command.rootPath } : {}),
+    rootPath: command.rootPath,
   });
 }

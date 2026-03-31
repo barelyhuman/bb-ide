@@ -99,6 +99,7 @@ describe("thread runtime config", () => {
       if (queued.command.type !== "host.read_file") {
         throw new Error(`Expected host.read_file, got ${queued.command.type}`);
       }
+      expect(queued.command.rootPath).toBe(managerWorkspacePath);
 
       const response = await reportQueuedCommandSuccess(
         harness,
@@ -165,6 +166,10 @@ describe("thread runtime config", () => {
           candidate.command.type === "host.read_file" &&
           candidate.command.path === preferencesPath,
       );
+      if (queued.command.type !== "host.read_file") {
+        throw new Error(`Expected host.read_file, got ${queued.command.type}`);
+      }
+      expect(queued.command.rootPath).toBe(managerWorkspacePath);
       const response = await reportQueuedCommandError(harness, queued, {
         errorCode: "ENOENT",
         errorMessage: `Path does not exist: ${preferencesPath}`,

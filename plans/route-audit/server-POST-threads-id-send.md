@@ -40,7 +40,7 @@
      - If no providerThreadId: dispatches `thread.start` command (new provider session).
      - Both paths:
        - Call `resolveThreadRuntimeCommandConfig` which reads `getProject`.
-       - For manager threads, `resolveThreadRuntimeCommandConfig` also reads the active host session to derive `managerWorkspacePath = <dataDir>/workspace/<threadId>` and synchronously fetches `PREFERENCES.md` via a `host.read_file` command before queueing the actual turn command.
+       - For manager threads, `resolveThreadRuntimeCommandConfig` also reads the active host session to derive `managerWorkspacePath = <dataDir>/workspace/<threadId>` and synchronously fetches `PREFERENCES.md` via a bounded `host.read_file` command with `rootPath = managerWorkspacePath` before queueing the actual turn command.
        - Call `requireConnectedHostSession` -- queries `host_daemon_sessions` for active session with valid lease.
        - Call `queueCommand` -- transactional insert into `host_daemon_commands` with monotonic cursor.
      - `turn.run` also transitions thread to "active" if currently "idle".

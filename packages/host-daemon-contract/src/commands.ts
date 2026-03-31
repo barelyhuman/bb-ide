@@ -16,7 +16,7 @@ import {
 } from "@bb/domain";
 import { z } from "zod";
 
-export const HOST_DAEMON_PROTOCOL_VERSION = 3 as const;
+export const HOST_DAEMON_PROTOCOL_VERSION = 4 as const;
 
 export const HOST_DAEMON_COMMAND_TYPES = [
   "thread.start",
@@ -127,16 +127,13 @@ export const threadRenameCommandSchema = hostDaemonThreadTargetSchema.extend({
 });
 
 /**
- * Read a file from an absolute host path.
- *
- * When `rootPath` is present, the daemon resolves symlinks and rejects reads
- * whose real path escapes that root. Omitting `rootPath` preserves the
- * existing unrestricted absolute-host read behavior.
+ * Read a file from an absolute host path while enforcing that the resolved file
+ * stays under the declared absolute root.
  */
 export const hostReadFileCommandSchema = z.object({
   type: z.literal("host.read_file"),
   path: z.string().min(1),
-  rootPath: z.string().min(1).optional(),
+  rootPath: z.string().min(1),
 });
 
 export const hostListFilesCommandSchema = z.object({

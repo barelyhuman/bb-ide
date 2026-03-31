@@ -109,6 +109,7 @@ async function readManagerPreferences(
       command: {
         type: "host.read_file",
         path: path.join(args.managerWorkspacePath, MANAGER_PREFERENCES_FILE_NAME),
+        rootPath: args.managerWorkspacePath,
       },
     });
     const result = hostDaemonCommandResultSchemaByType["host.read_file"].parse(rawResult);

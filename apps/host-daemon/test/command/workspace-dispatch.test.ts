@@ -231,6 +231,7 @@ describe("workspace command dispatch", () => {
       {
         type: "host.read_file",
         path: filePath,
+        rootPath: tempDir,
       },
       { runtimeManager: harness.manager },
     );
@@ -252,6 +253,7 @@ describe("workspace command dispatch", () => {
       {
         type: "host.read_file",
         path: imagePath,
+        rootPath: tempDir,
       },
       { runtimeManager: harness.manager },
     );
@@ -292,6 +294,7 @@ describe("workspace command dispatch", () => {
         {
           type: "host.read_file",
           path: "PREFERENCES.md",
+          rootPath: "/tmp",
         },
         { runtimeManager: harness.manager },
       ),
@@ -307,6 +310,7 @@ describe("workspace command dispatch", () => {
         {
           type: "host.read_file",
           path: path.join(tempDir, "missing.md"),
+          rootPath: tempDir,
         },
         { runtimeManager: harness.manager },
       ),
@@ -354,6 +358,7 @@ describe("workspace command dispatch", () => {
         {
           type: "host.read_file",
           path: imagePath,
+          rootPath: tempDir,
         },
         { runtimeManager: harness.manager },
       ),
@@ -375,6 +380,7 @@ describe("workspace command dispatch", () => {
         {
           type: "host.read_file",
           path: filePath,
+          rootPath: tempDir,
         },
         { runtimeManager: harness.manager },
       ),
@@ -395,6 +401,7 @@ describe("workspace command dispatch", () => {
       {
         type: "host.read_file",
         path: filePath,
+        rootPath: tempDir,
       },
       { runtimeManager: harness.manager },
     );
@@ -415,6 +422,7 @@ describe("workspace command dispatch", () => {
       {
         type: "host.read_file",
         path: filePath,
+        rootPath: tempDir,
       },
       { runtimeManager: harness.manager },
     );
