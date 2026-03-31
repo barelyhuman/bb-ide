@@ -18,13 +18,11 @@ async function assertWorkspaceClean(
 /**
  * Promote: switch primary checkout to the environment's branch.
  * Both workspaces must be clean. Fails loudly if either has uncommitted changes.
- * Same-host: detach source HEAD, checkout branch on primary.
- * Cross-host: fetch from remote if branch not locally available, checkout on primary.
+ * Detach source HEAD, checkout branch on primary (same-host worktree constraint).
  */
 export async function promoteWorkspace(
   source: Workspace,
   primary: Workspace,
-  options?: { remote?: string },
 ): Promise<void> {
   await assertWorkspaceClean(source, "promote source");
   await assertWorkspaceClean(primary, "promote primary");
@@ -34,11 +32,6 @@ export async function promoteWorkspace(
 
   // Detach source HEAD to free the branch (same-host worktree constraint)
   await source.detachHead();
-
-  // If remote specified, fetch first (cross-host)
-  if (options?.remote) {
-    await primary.fetch({ remote: options.remote, branch });
-  }
 
   await primary.checkoutBranch(branch);
 }

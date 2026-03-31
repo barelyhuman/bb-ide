@@ -257,14 +257,12 @@ export const workspaceCheckpointCommandSchema = hostDaemonWorkspaceTargetSchema.
 /** Switch the project's primary checkout to the environment's branch so the user can work with the changes directly. */
 export const workspacePromoteCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.promote"),
-  threadId: z.string().min(1),
   primaryPath: z.string().min(1),
 });
 
 /** Reverse a prior promote — restore the primary checkout to the default branch. */
 export const workspaceDemoteCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.demote"),
-  threadId: z.string().min(1),
   primaryPath: z.string().min(1),
   defaultBranch: z.string().min(1),
   envBranch: z.string().min(1),

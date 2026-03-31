@@ -158,7 +158,6 @@ describe("public thread lifecycle regressions", () => {
           command.environmentId === environment.id,
       );
       expect(promoteCommand.command).toMatchObject({
-        threadId: thread.id,
         primaryPath: secondarySource.path,
       });
       await reportQueuedCommandSuccess(harness, promoteCommand, { ok: true });
@@ -226,7 +225,6 @@ describe("public thread lifecycle regressions", () => {
           command.environmentId === environment.id,
       );
       expect(demoteCommand.command).toMatchObject({
-        threadId: thread.id,
         primaryPath: secondarySource.path,
         defaultBranch: "main",
         envBranch: "bb/demote-secondary",

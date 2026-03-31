@@ -109,7 +109,7 @@ export interface IWorkspace {
   squashMergeInto(options: SquashMergeOptions): Promise<SquashMergeResult>;
 
   // Promote/demote
-  promote(primary: IWorkspace, options?: { remote?: string }): Promise<void>;
+  promote(primary: IWorkspace): Promise<void>;
   demote(args: {
     primary: IWorkspace;
     defaultBranch: string;
@@ -201,12 +201,9 @@ class WorkspaceImpl implements IWorkspace {
     return this.ws.squashMergeInto(options);
   }
 
-  async promote(
-    primary: IWorkspace,
-    options?: { remote?: string },
-  ): Promise<void> {
+  async promote(primary: IWorkspace): Promise<void> {
     const primaryWs = new Workspace(primary.path);
-    await promoteWorkspace(this.ws, primaryWs, options);
+    await promoteWorkspace(this.ws, primaryWs);
   }
 
   async demote(args: {
