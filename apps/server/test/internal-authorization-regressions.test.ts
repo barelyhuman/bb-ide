@@ -171,6 +171,70 @@ describe("internal authorization regressions", () => {
     }
   });
 
+  it("rejects event batches whose environmentId does not match the thread environment", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-events-environment-check",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const threadEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/thread-environment",
+      });
+      const otherEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/other-environment",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: threadEnvironment.id,
+        status: "idle",
+      });
+
+      const response = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            {
+              environmentId: otherEnvironment.id,
+              threadId: thread.id,
+              sequence: 1,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/started",
+                threadId: thread.id,
+                providerThreadId: "provider-environment-mismatch",
+                turnId: "turn-environment-mismatch",
+              },
+            },
+          ],
+        }),
+      });
+
+      expect(response.status).toBe(400);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+      });
+      expect(
+        harness.db
+          .select()
+          .from(events)
+          .where(eq(events.threadId, thread.id))
+          .all(),
+      ).toHaveLength(0);
+      expect(getThread(harness.db, thread.id)?.status).toBe("idle");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("rejects reusing an environment from a different project", async () => {
     const harness = await createTestAppHarness();
     try {

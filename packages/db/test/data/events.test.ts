@@ -33,7 +33,7 @@ describe("events", () => {
   it("inserts events and returns count", () => {
     const { db, thread } = setup();
 
-    const count = insertEvents(db, noopNotifier, [
+    const result = insertEvents(db, noopNotifier, [
       {
         threadId: thread.id,
         sequence: 1,
@@ -50,7 +50,10 @@ describe("events", () => {
       },
     ]);
 
-    expect(count).toBe(2);
+    expect(result).toEqual({
+      insertedCount: 2,
+      insertedInputIndexes: [0, 1],
+    });
     const all = listEvents(db, { threadId: thread.id });
     expect(all).toHaveLength(2);
   });
@@ -86,7 +89,7 @@ describe("events", () => {
   it("deduplicates on (threadId, sequence)", () => {
     const { db, thread } = setup();
 
-    const count1 = insertEvents(db, noopNotifier, [
+    const result1 = insertEvents(db, noopNotifier, [
       {
         threadId: thread.id,
         sequence: 1,
@@ -95,10 +98,13 @@ describe("events", () => {
         data: JSON.stringify({ message: "first" }),
       },
     ]);
-    expect(count1).toBe(1);
+    expect(result1).toEqual({
+      insertedCount: 1,
+      insertedInputIndexes: [0],
+    });
 
     // Same threadId + sequence should be ignored
-    const count2 = insertEvents(db, noopNotifier, [
+    const result2 = insertEvents(db, noopNotifier, [
       {
         threadId: thread.id,
         sequence: 1,
@@ -114,7 +120,10 @@ describe("events", () => {
         data: JSON.stringify({ message: "new" }),
       },
     ]);
-    expect(count2).toBe(1); // only sequence 2 inserted
+    expect(result2).toEqual({
+      insertedCount: 1,
+      insertedInputIndexes: [1],
+    }); // only sequence 2 inserted
 
     const all = listEvents(db, { threadId: thread.id });
     expect(all).toHaveLength(2);

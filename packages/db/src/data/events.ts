@@ -18,24 +18,35 @@ export interface InsertEventInput {
   data: string;
 }
 
+export interface InsertEventsResult {
+  insertedCount: number;
+  insertedInputIndexes: number[];
+}
+
 /**
  * Insert events with dedup on (threadId, sequence).
  * Uses INSERT OR IGNORE to skip duplicates.
- * Returns the count of actually inserted events.
+ * Returns the count and input indexes of actually inserted events.
  */
 export function insertEvents(
   db: DbConnection,
   notifier: DbNotifier,
   eventInputs: InsertEventInput[],
-): number {
-  if (eventInputs.length === 0) return 0;
+): InsertEventsResult {
+  if (eventInputs.length === 0) {
+    return {
+      insertedCount: 0,
+      insertedInputIndexes: [],
+    };
+  }
 
   let insertedCount = 0;
+  const insertedInputIndexes: number[] = [];
 
   // Track which threads get new events for notification
   const threadIds = new Set<string>();
 
-  for (const input of eventInputs) {
+  for (const [index, input] of eventInputs.entries()) {
     const id = createEventId();
     const createdAt = input.createdAt ?? Date.now();
     const result = db.run(
@@ -44,6 +55,7 @@ export function insertEvents(
     );
     if (result.changes > 0) {
       insertedCount++;
+      insertedInputIndexes.push(index);
       threadIds.add(input.threadId);
     }
   }
@@ -52,7 +64,10 @@ export function insertEvents(
     notifier.notifyThread(threadId, ["events-appended"]);
   }
 
-  return insertedCount;
+  return {
+    insertedCount,
+    insertedInputIndexes,
+  };
 }
 
 /**

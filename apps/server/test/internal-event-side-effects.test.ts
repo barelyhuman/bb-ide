@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { getDraft, threads } from "@bb/db";
+import { getDraft, hostDaemonCommands, listDrafts, threads } from "@bb/db";
 import { describe, expect, it, vi } from "vitest";
 import {
   internalAuthHeaders,
@@ -176,6 +176,112 @@ describe("internal event side effects", () => {
         },
       });
       expect(getDraft(harness.db, draft.id)).toBeNull();
+      expect(
+        harness.db
+          .select()
+          .from(threads)
+          .where(eq(threads.id, thread.id))
+          .get()?.status,
+      ).toBe("active");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not replay turn/completed side effects for a duplicate batch", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-event-completed-dedupe",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/queued-draft-dedupe",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-dedupe",
+        sequence: 1,
+        type: "thread/identity",
+        data: {},
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-dedupe",
+        sequence: 2,
+        turnId: "turn-dedupe",
+        type: "turn/started",
+        data: {},
+      });
+      seedDraft(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "Queued follow-up one" }],
+        model: "gpt-5",
+        serviceTier: "flex",
+      });
+      seedDraft(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "Queued follow-up two" }],
+        model: "gpt-5",
+        serviceTier: "flex",
+      });
+
+      const requestBody = JSON.stringify({
+        sessionId: session.id,
+        events: [
+          {
+            environmentId: environment.id,
+            threadId: thread.id,
+            sequence: 3,
+            createdAt: Date.now(),
+            event: {
+              type: "turn/completed",
+              threadId: thread.id,
+              providerThreadId: "provider-dedupe",
+              turnId: "turn-dedupe",
+              status: "completed",
+            },
+          },
+        ],
+      });
+
+      const firstResponse = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: requestBody,
+      });
+      expect(firstResponse.status).toBe(200);
+
+      const queuedCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "turn.run" && command.threadId === thread.id,
+      );
+      expect(queuedCommand.command.type).toBe("turn.run");
+
+      const duplicateResponse = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: requestBody,
+      });
+      expect(duplicateResponse.status).toBe(200);
+
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .all(),
+      ).toHaveLength(1);
+      expect(listDrafts(harness.db, thread.id)).toHaveLength(1);
       expect(
         harness.db
           .select()

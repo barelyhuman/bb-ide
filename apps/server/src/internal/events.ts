@@ -22,6 +22,20 @@ import { tryTransition } from "../services/thread-transitions.js";
 import { applyTurnCompletedEvent } from "./turn-completed-events.js";
 import { requireActiveSession } from "./session-state.js";
 
+interface ToStoredEventArgs {
+  envelope: HostDaemonEventEnvelope;
+  environmentId: string;
+}
+
+interface ResolveCanonicalEventBatchEnvironmentsArgs {
+  hostId: string;
+  events: HostDaemonEventEnvelope[];
+}
+
+interface ResolveCanonicalEventBatchEnvironmentsResult {
+  canonicalEnvironmentIds: string[];
+}
+
 function resolveProviderIdentifiers(
   event: HostDaemonEventEnvelope["event"],
 ): { providerThreadId: string | null; turnId: string | null } {
@@ -73,11 +87,12 @@ function resolveProviderIdentifiers(
   }
 }
 
-function toStoredEvent(envelope: HostDaemonEventEnvelope) {
+function toStoredEvent(args: ToStoredEventArgs) {
+  const envelope = args.envelope;
   const { type, threadId, ...data } = envelope.event;
   return {
     threadId: envelope.threadId,
-    environmentId: envelope.environmentId,
+    environmentId: args.environmentId,
     ...resolveProviderIdentifiers(envelope.event),
     sequence: envelope.sequence,
     type,
@@ -139,20 +154,22 @@ async function applyEventEffects(
   }
 }
 
-function validateEventBatchOwnership(
+function resolveCanonicalEventBatchEnvironments(
   deps: Pick<AppDeps, "db">,
-  args: {
-    hostId: string;
-    events: HostDaemonEventEnvelope[];
-  },
-): void {
+  args: ResolveCanonicalEventBatchEnvironmentsArgs,
+): ResolveCanonicalEventBatchEnvironmentsResult {
   const threadIds = [...new Set(args.events.map((entry) => entry.threadId))];
   if (threadIds.length === 0) {
-    return;
+    return {
+      canonicalEnvironmentIds: [],
+    };
   }
 
-  const ownedThreadIds = deps.db
-    .select({ id: threads.id })
+  const ownedThreads = deps.db
+    .select({
+      threadId: threads.id,
+      environmentId: environments.id,
+    })
     .from(threads)
     .innerJoin(environments, eq(threads.environmentId, environments.id))
     .where(
@@ -163,13 +180,43 @@ function validateEventBatchOwnership(
     )
     .all();
 
-  if (ownedThreadIds.length !== threadIds.length) {
+  if (ownedThreads.length !== threadIds.length) {
     throw new ApiError(
       403,
       "invalid_request",
       "Event batch contains threads that do not belong to the session host",
     );
   }
+
+  const canonicalEnvironmentIdByThreadId = new Map<string, string>();
+  for (const ownedThread of ownedThreads) {
+    canonicalEnvironmentIdByThreadId.set(
+      ownedThread.threadId,
+      ownedThread.environmentId,
+    );
+  }
+
+  const canonicalEnvironmentIds: string[] = [];
+  for (const entry of args.events) {
+    const canonicalEnvironmentId = canonicalEnvironmentIdByThreadId.get(
+      entry.threadId,
+    );
+    if (!canonicalEnvironmentId) {
+      throw new Error("Validated thread is missing a canonical environment");
+    }
+    if (entry.environmentId !== canonicalEnvironmentId) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        "Event batch contains environmentIds that do not match the thread environment",
+      );
+    }
+    canonicalEnvironmentIds.push(canonicalEnvironmentId);
+  }
+
+  return {
+    canonicalEnvironmentIds,
+  };
 }
 
 export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
@@ -179,18 +226,35 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
 
   post("/session/events", hostDaemonEventBatchRequestSchema, async (context, payload) => {
     const session = requireActiveSession(deps.db, payload.sessionId);
-    validateEventBatchOwnership(deps, {
+    const { canonicalEnvironmentIds } = resolveCanonicalEventBatchEnvironments(deps, {
       hostId: session.hostId,
       events: payload.events,
     });
 
-    insertEvents(
+    const insertResult = insertEvents(
       deps.db,
       deps.hub,
-      payload.events.map((entry) => toStoredEvent(entry)),
+      payload.events.map((entry, index) => {
+        const environmentId = canonicalEnvironmentIds[index];
+        if (!environmentId) {
+          throw new Error("Missing canonical environment for validated event");
+        }
+        return toStoredEvent({
+          envelope: entry,
+          environmentId,
+        });
+      }),
     );
 
-    await applyEventEffects(deps, payload.events);
+    const insertedEventIndexLookup = new Set(insertResult.insertedInputIndexes);
+    await applyEventEffects(
+      deps,
+      payload.events.filter(
+        (entry, index) =>
+          entry.event.type !== "turn/completed" ||
+          insertedEventIndexLookup.has(index),
+      ),
+    );
 
     return context.json({
       threadHighWaterMarks: getHighWaterMarks(

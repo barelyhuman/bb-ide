@@ -55,7 +55,11 @@ export { upsertHost, getHost, listHosts } from "./hosts.js";
 export type { UpsertHostInput } from "./hosts.js";
 
 export { insertEvents, getHighWaterMarks, listEvents } from "./events.js";
-export type { InsertEventInput, ListEventsOptions } from "./events.js";
+export type {
+  InsertEventInput,
+  InsertEventsResult,
+  ListEventsOptions,
+} from "./events.js";
 
 export {
   queueCommand,
