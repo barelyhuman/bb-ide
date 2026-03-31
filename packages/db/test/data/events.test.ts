@@ -131,6 +131,7 @@ describe("events", () => {
         threadId: thread.id,
         sequence: 1,
         type: "system/error",
+        ...emptyItemFields,
         createdAt,
         data: JSON.stringify({ message: "timestamped" }),
       },
