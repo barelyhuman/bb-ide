@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { eq } from "drizzle-orm";
 import {
+  createProjectSource,
   createEnvironment,
   createThread,
   events,
@@ -207,6 +208,116 @@ describe("public thread routes", () => {
       expect(thread?.mergeBaseBranch).toBeNull();
     } finally {
       await repo.cleanup();
+      await harness.cleanup();
+    }
+  });
+
+  it("creates managed-worktree threads on a non-default host using that host's source", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host: defaultHost } = seedHostSession(harness.deps, {
+        id: "host-managed-default",
+      });
+      const { host: secondaryHost } = seedHostSession(harness.deps, {
+        id: "host-managed-secondary",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: defaultHost.id,
+        path: "/tmp/default-managed-source",
+      });
+      const secondarySource = createProjectSource(harness.db, harness.hub, {
+        projectId: project.id,
+        type: "local_path",
+        hostId: secondaryHost.id,
+        path: "/tmp/secondary-managed-source",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          title: "Secondary host thread",
+          input: [{ type: "text", text: "Build it on the secondary host" }],
+          environment: {
+            type: "host",
+            hostId: secondaryHost.id,
+            workspace: {
+              type: "managed-worktree",
+            },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const createdThread = await readJson(response) as {
+        environmentId: string;
+        id: string;
+        status: string;
+      };
+      expect(createdThread.status).toBe("provisioning");
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "environment.provision" &&
+          command.environmentId === createdThread.environmentId,
+      );
+      expect(queued.command).toMatchObject({
+        projectId: project.id,
+        sourcePath: secondarySource.path,
+        workspaceProvisionType: "managed-worktree",
+      });
+      expect(queued.command.targetPath).toContain(`.bb-worktrees/${project.id}/${createdThread.id}`);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns 409 when the requested host has no configured project source", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host: defaultHost } = seedHostSession(harness.deps, {
+        id: "host-source-default",
+      });
+      const { host: missingSourceHost } = seedHostSession(harness.deps, {
+        id: "host-source-missing",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: defaultHost.id,
+        path: "/tmp/source-present",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Try the missing host" }],
+          environment: {
+            type: "host",
+            hostId: missingSourceHost.id,
+            workspace: {
+              type: "managed-worktree",
+            },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(409);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: "No project source configured for this host",
+      });
+    } finally {
       await harness.cleanup();
     }
   });

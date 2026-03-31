@@ -1,7 +1,13 @@
 import { eq } from "drizzle-orm";
-import { hostDaemonCommands, listThreads, transitionThreadStatus } from "@bb/db";
+import {
+  createProjectSource,
+  hostDaemonCommands,
+  listThreads,
+  transitionThreadStatus,
+} from "@bb/db";
 import { describe, expect, it } from "vitest";
 import {
+  reportQueuedCommandSuccess,
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
 } from "./helpers/commands.js";
@@ -10,6 +16,7 @@ import {
   seedHost,
   seedHostSession,
   seedProjectWithSource,
+  seedThread,
 } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
 
@@ -94,6 +101,74 @@ describe("public thread lifecycle regressions", () => {
       expect(firstProvision.command.branchName).toContain(firstThread.id.slice(0, 8));
       expect(secondProvision.command.branchName).toContain(secondThread.id.slice(0, 8));
       expect(firstProvision.command.branchName).not.toBe(secondProvision.command.branchName);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("promotes a non-default-host environment using that host's source path", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host: defaultHost } = seedHostSession(harness.deps, {
+        id: "host-promote-default",
+      });
+      const { host: secondaryHost } = seedHostSession(harness.deps, {
+        id: "host-promote-secondary",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: defaultHost.id,
+        path: "/tmp/promote-default-source",
+      });
+      const secondarySource = createProjectSource(harness.db, harness.hub, {
+        projectId: project.id,
+        type: "local_path",
+        hostId: secondaryHost.id,
+        path: "/tmp/promote-secondary-source",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: secondaryHost.id,
+        projectId: project.id,
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        path: "/tmp/promote-secondary-source/.bb-worktrees/thread",
+        branchName: "bb/promote-secondary",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        mergeBaseBranch: "main",
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/environments/${environment.id}/actions`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "promote",
+            threadId: thread.id,
+          }),
+        },
+      );
+
+      const promoteCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.promote" &&
+          command.environmentId === environment.id,
+      );
+      expect(promoteCommand.command).toMatchObject({
+        threadId: thread.id,
+        primaryPath: secondarySource.path,
+      });
+      await reportQueuedCommandSuccess(harness, promoteCommand, { ok: true });
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toMatchObject({
+        ok: true,
+        action: "promote",
+      });
     } finally {
       await harness.cleanup();
     }
