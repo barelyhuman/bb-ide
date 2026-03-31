@@ -144,6 +144,85 @@ describe("internal event and tool-call routes", () => {
     }
   });
 
+  it("does not reactivate a thread when a started/completed batch is replayed", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      const requestBody = JSON.stringify({
+        sessionId: session.id,
+        events: [
+          {
+            environmentId: environment.id,
+            threadId: thread.id,
+            sequence: 1,
+            createdAt: Date.now(),
+            event: {
+              type: "turn/started",
+              threadId: thread.id,
+              providerThreadId: "provider-thread",
+              turnId: "turn-1",
+            },
+          },
+          {
+            environmentId: environment.id,
+            threadId: thread.id,
+            sequence: 2,
+            createdAt: Date.now(),
+            event: {
+              type: "turn/completed",
+              threadId: thread.id,
+              providerThreadId: "provider-thread",
+              turnId: "turn-1",
+              status: "completed",
+            },
+          },
+        ],
+      });
+
+      const firstResponse = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: requestBody,
+      });
+      expect(firstResponse.status).toBe(200);
+
+      const duplicateResponse = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: requestBody,
+      });
+      expect(duplicateResponse.status).toBe(200);
+
+      expect(
+        harness.db
+          .select()
+          .from(threads)
+          .where(eq(threads.id, thread.id))
+          .get()?.status,
+      ).toBe("idle");
+      expect(
+        harness.db
+          .select()
+          .from(events)
+          .where(eq(events.threadId, thread.id))
+          .all(),
+      ).toHaveLength(2);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("rejects unsupported tool calls", async () => {
     const harness = await createTestAppHarness();
     try {

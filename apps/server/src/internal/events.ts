@@ -1,6 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import {
   deriveStoredEventItemFields,
+  events as storedEvents,
   environments,
   getHighWaterMarks,
   getThread,
@@ -27,13 +28,31 @@ interface ToStoredEventArgs {
   environmentId: string;
 }
 
-interface ResolveCanonicalEventBatchEnvironmentsArgs {
+interface ValidateAndResolveCanonicalEventBatchEnvironmentsArgs {
   hostId: string;
   events: HostDaemonEventEnvelope[];
 }
 
-interface ResolveCanonicalEventBatchEnvironmentsResult {
+interface ValidateAndResolveCanonicalEventBatchEnvironmentsResult {
   canonicalEnvironmentIds: string[];
+}
+
+interface ResolveEventsToApplyArgs {
+  db: AppDeps["db"];
+  events: HostDaemonEventEnvelope[];
+  insertedEventIndexes: number[];
+}
+
+interface ShouldApplyEventEffectArgs {
+  completedTurnKeyLookup: Set<string>;
+  entry: HostDaemonEventEnvelope;
+  index: number;
+  insertedEventIndexLookup: Set<number>;
+}
+
+interface TurnKeyArgs {
+  threadId: string;
+  turnId: string;
 }
 
 function resolveProviderIdentifiers(
@@ -154,10 +173,108 @@ async function applyEventEffects(
   }
 }
 
-function resolveCanonicalEventBatchEnvironments(
+function toTurnKey(args: TurnKeyArgs): string {
+  return `${args.threadId}:${args.turnId}`;
+}
+
+function listCompletedTurnKeysForStartedEvents(
+  db: AppDeps["db"],
+  batchEvents: HostDaemonEventEnvelope[],
+): Set<string> {
+  const startedTurnKeys = new Set<string>();
+  const threadIds = new Set<string>();
+
+  for (const entry of batchEvents) {
+    if (entry.event.type !== "turn/started") {
+      continue;
+    }
+    startedTurnKeys.add(
+      toTurnKey({
+        threadId: entry.threadId,
+        turnId: entry.event.turnId,
+      }),
+    );
+    threadIds.add(entry.threadId);
+  }
+
+  if (startedTurnKeys.size === 0 || threadIds.size === 0) {
+    return new Set<string>();
+  }
+
+  const rows = db
+    .select({
+      threadId: storedEvents.threadId,
+      turnId: storedEvents.turnId,
+    })
+    .from(storedEvents)
+    .where(
+      and(
+        inArray(storedEvents.threadId, [...threadIds]),
+        eq(storedEvents.type, "turn/completed"),
+      ),
+    )
+    .all();
+
+  const completedTurnKeys = new Set<string>();
+  for (const row of rows) {
+    if (!row.turnId) {
+      continue;
+    }
+    const turnKey = toTurnKey({
+      threadId: row.threadId,
+      turnId: row.turnId,
+    });
+    if (startedTurnKeys.has(turnKey)) {
+      completedTurnKeys.add(turnKey);
+    }
+  }
+  return completedTurnKeys;
+}
+
+function shouldApplyEventEffect(args: ShouldApplyEventEffectArgs): boolean {
+  const { entry } = args;
+
+  if (entry.event.type === "turn/completed") {
+    return args.insertedEventIndexLookup.has(args.index);
+  }
+
+  if (entry.event.type === "turn/started") {
+    return !args.completedTurnKeyLookup.has(
+      toTurnKey({
+        threadId: entry.threadId,
+        turnId: entry.event.turnId,
+      }),
+    );
+  }
+
+  // Keep other projections replayable so a daemon retry can repair them if the
+  // event insert committed before the projection side effect ran.
+  return true;
+}
+
+function resolveEventsToApply(
+  args: ResolveEventsToApplyArgs,
+): HostDaemonEventEnvelope[] {
+  const insertedEventIndexLookup = new Set(args.insertedEventIndexes);
+  const completedTurnKeyLookup = listCompletedTurnKeysForStartedEvents(
+    args.db,
+    args.events,
+  );
+
+  return args.events.filter((entry, index) =>
+    shouldApplyEventEffect({
+      completedTurnKeyLookup,
+      entry,
+      index,
+      insertedEventIndexLookup,
+    }),
+  );
+}
+
+function validateAndResolveCanonicalEventBatchEnvironments(
   deps: Pick<AppDeps, "db">,
-  args: ResolveCanonicalEventBatchEnvironmentsArgs,
-): ResolveCanonicalEventBatchEnvironmentsResult {
+  args: ValidateAndResolveCanonicalEventBatchEnvironmentsArgs,
+): ValidateAndResolveCanonicalEventBatchEnvironmentsResult {
   const threadIds = [...new Set(args.events.map((entry) => entry.threadId))];
   if (threadIds.length === 0) {
     return {
@@ -226,7 +343,7 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
 
   post("/session/events", hostDaemonEventBatchRequestSchema, async (context, payload) => {
     const session = requireActiveSession(deps.db, payload.sessionId);
-    const { canonicalEnvironmentIds } = resolveCanonicalEventBatchEnvironments(deps, {
+    const { canonicalEnvironmentIds } = validateAndResolveCanonicalEventBatchEnvironments(deps, {
       hostId: session.hostId,
       events: payload.events,
     });
@@ -246,14 +363,13 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
       }),
     );
 
-    const insertedEventIndexLookup = new Set(insertResult.insertedInputIndexes);
     await applyEventEffects(
       deps,
-      payload.events.filter(
-        (entry, index) =>
-          entry.event.type !== "turn/completed" ||
-          insertedEventIndexLookup.has(index),
-      ),
+      resolveEventsToApply({
+        db: deps.db,
+        events: payload.events,
+        insertedEventIndexes: insertResult.insertedInputIndexes,
+      }),
     );
 
     return context.json({

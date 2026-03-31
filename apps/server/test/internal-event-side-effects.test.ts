@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   internalAuthHeaders,
   waitForQueuedCommand,
+  waitForQueuedCommandAfter,
 } from "./helpers/commands.js";
 import {
   seedDraft,
@@ -289,6 +290,155 @@ describe("internal event side effects", () => {
           .where(eq(threads.id, thread.id))
           .get()?.status,
       ).toBe("active");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("applies only the newly inserted completion side effects from a mixed batch", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-event-completed-mixed-batch",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/queued-draft-mixed-batch",
+      });
+      const threadA = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      const threadB = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      for (const thread of [threadA, threadB]) {
+        seedEvent(harness.deps, {
+          threadId: thread.id,
+          environmentId: environment.id,
+          providerThreadId: `provider-${thread.id}`,
+          sequence: 1,
+          type: "thread/identity",
+          data: {},
+        });
+        seedEvent(harness.deps, {
+          threadId: thread.id,
+          environmentId: environment.id,
+          providerThreadId: `provider-${thread.id}`,
+          sequence: 2,
+          turnId: `turn-${thread.id}`,
+          type: "turn/started",
+          data: {},
+        });
+      }
+
+      seedDraft(harness.deps, {
+        threadId: threadA.id,
+        content: [{ type: "text", text: "Queued follow-up one" }],
+        model: "gpt-5",
+        serviceTier: "flex",
+      });
+      seedDraft(harness.deps, {
+        threadId: threadA.id,
+        content: [{ type: "text", text: "Queued follow-up two" }],
+        model: "gpt-5",
+        serviceTier: "flex",
+      });
+      seedDraft(harness.deps, {
+        threadId: threadB.id,
+        content: [{ type: "text", text: "Queued follow-up three" }],
+        model: "gpt-5",
+        serviceTier: "flex",
+      });
+
+      const firstResponse = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            {
+              environmentId: environment.id,
+              threadId: threadA.id,
+              sequence: 3,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/completed",
+                threadId: threadA.id,
+                providerThreadId: `provider-${threadA.id}`,
+                turnId: `turn-${threadA.id}`,
+                status: "completed",
+              },
+            },
+          ],
+        }),
+      });
+      expect(firstResponse.status).toBe(200);
+
+      const firstQueuedCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "turn.run" && command.threadId === threadA.id,
+      );
+
+      const mixedResponse = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            {
+              environmentId: environment.id,
+              threadId: threadA.id,
+              sequence: 3,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/completed",
+                threadId: threadA.id,
+                providerThreadId: `provider-${threadA.id}`,
+                turnId: `turn-${threadA.id}`,
+                status: "completed",
+              },
+            },
+            {
+              environmentId: environment.id,
+              threadId: threadB.id,
+              sequence: 3,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/completed",
+                threadId: threadB.id,
+                providerThreadId: `provider-${threadB.id}`,
+                turnId: `turn-${threadB.id}`,
+                status: "completed",
+              },
+            },
+          ],
+        }),
+      });
+      expect(mixedResponse.status).toBe(200);
+
+      await waitForQueuedCommandAfter(
+        harness,
+        firstQueuedCommand.row.cursor,
+        ({ command }) =>
+          command.type === "turn.run" && command.threadId === threadB.id,
+      );
+
+      expect(listDrafts(harness.db, threadA.id)).toHaveLength(1);
+      expect(listDrafts(harness.db, threadB.id)).toHaveLength(0);
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .all(),
+      ).toHaveLength(2);
     } finally {
       await harness.cleanup();
     }
