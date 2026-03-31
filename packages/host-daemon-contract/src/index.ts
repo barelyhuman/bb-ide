@@ -26,6 +26,7 @@ export {
   hostDaemonCommandSchema,
   hostDaemonCommandTypeSchema,
   hostDaemonExecutionOptionsSchema,
+  hostListFilesCommandSchema,
   hostReadFileCommandSchema,
   providerListCommandSchema,
   providerListModelsCommandSchema,

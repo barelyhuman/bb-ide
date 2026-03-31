@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
 import { runGit } from "@bb/workspace";
@@ -8,7 +7,8 @@ import {
   requireWorkspaceEnvironment,
 } from "../command-dispatch-support.js";
 import type { CommandOf } from "../command-dispatch-support.js";
-import { readTextFile } from "./file-read.js";
+import { finalizeListedFiles, listFilesRecursively } from "./file-list.js";
+import { readFileForTransport } from "./file-read.js";
 
 export async function listWorkspaceFiles(
   command: CommandOf<"workspace.list_files">,
@@ -36,43 +36,11 @@ export async function listWorkspaceFiles(
     );
   }
 
-  if (command.query) {
-    const lowerQuery = command.query.toLowerCase();
-    filePaths = filePaths.filter((p) => p.toLowerCase().includes(lowerQuery));
-  }
-
-  let truncated = false;
-  if (filePaths.length > command.limit) {
-    filePaths = filePaths.slice(0, command.limit);
-    truncated = true;
-  }
-
-  return {
-    files: filePaths.map((filePath) => ({
-      path: filePath,
-      name: path.basename(filePath),
-    })),
-    truncated,
-  };
-}
-
-async function listFilesRecursively(
-  dir: string,
-  root: string,
-): Promise<string[]> {
-  const entries = await fs.readdir(dir, { withFileTypes: true });
-  const results: string[] = [];
-  for (const entry of entries) {
-    if (entry.name.startsWith(".")) continue;
-    if (entry.name === "node_modules") continue;
-    const fullPath = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      results.push(...(await listFilesRecursively(fullPath, root)));
-    } else {
-      results.push(path.relative(root, fullPath));
-    }
-  }
-  return results;
+  return finalizeListedFiles({
+    filePaths,
+    limit: command.limit,
+    ...(command.query ? { query: command.query } : {}),
+  });
 }
 
 export async function readWorkspaceFile(
@@ -90,7 +58,7 @@ export async function readWorkspaceFile(
     );
   }
 
-  return readTextFile(resolved, command.path);
+  return readFileForTransport(resolved, command.path);
 }
 
 export async function listBranches(

@@ -10,7 +10,7 @@ import {
   type CommandDispatchOptions,
 } from "./command-dispatch-support.js";
 import { provisionEnvironment } from "./command-handlers/environment.js";
-import { readHostFile } from "./command-handlers/host-files.js";
+import { listHostFiles, readHostFile } from "./command-handlers/host-files.js";
 import { ensureThreadRuntime, startThread } from "./command-handlers/thread.js";
 import { WorkspaceError } from "@bb/workspace";
 import { demoteWorkspace, promoteWorkspace, squashMerge } from "./command-handlers/workspace.js";
@@ -96,6 +96,10 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       });
       return {} as HostDaemonCommandResult<TCommand["type"]>;
     }
+    case "host.list_files":
+      return listHostFiles(command) as Promise<
+        HostDaemonCommandResult<TCommand["type"]>
+      >;
     case "host.read_file":
       return readHostFile(command) as Promise<
         HostDaemonCommandResult<TCommand["type"]>

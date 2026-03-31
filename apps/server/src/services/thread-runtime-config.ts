@@ -112,6 +112,13 @@ async function readManagerPreferences(
       },
     });
     const result = hostDaemonCommandResultSchemaByType["host.read_file"].parse(rawResult);
+    if (result.contentEncoding !== "utf8") {
+      throw new ApiError(
+        502,
+        "invalid_request",
+        "Manager preferences must be UTF-8 text",
+      );
+    }
     return result.content;
   } catch (error) {
     if (error instanceof ApiError && error.body.code === "ENOENT") {

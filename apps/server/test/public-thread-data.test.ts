@@ -742,12 +742,16 @@ describe("public thread data routes", () => {
       await reportQueuedCommandSuccess(harness, fileCommand, {
         path: "src/index.ts",
         content: "export const value = 1;\n",
+        contentEncoding: "utf8",
+        sizeBytes: "export const value = 1;\n".length,
       });
       const fileResponse = await filePromise;
       expect(fileResponse.status).toBe(200);
       await expect(readJson(fileResponse)).resolves.toEqual({
         path: "src/index.ts",
         content: "export const value = 1;\n",
+        contentEncoding: "utf8",
+        sizeBytes: "export const value = 1;\n".length,
       });
     } finally {
       await harness.cleanup();

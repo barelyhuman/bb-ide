@@ -171,6 +171,30 @@ describe("workspace command dispatch", () => {
     expect(limited.truncated).toBe(true);
   });
 
+  it("covers host.list_files", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-host-list-files-");
+    await fs.writeFile(path.join(tempDir, "PREFERENCES.md"), "hello");
+    await fs.mkdir(path.join(tempDir, "notes"));
+    await fs.writeFile(path.join(tempDir, "notes", "todo.md"), "world");
+
+    const harness = createHarness();
+    const result = await dispatchCommand(
+      {
+        type: "host.list_files",
+        path: tempDir,
+        limit: 1000,
+      },
+      { runtimeManager: harness.manager },
+    );
+
+    const paths = result.files.map((file) => file.path).sort();
+    expect(paths).toEqual([
+      "PREFERENCES.md",
+      path.join("notes", "todo.md"),
+    ]);
+    expect(result.truncated).toBe(false);
+  });
+
   it("covers workspace.read_file", async () => {
     const tempDir = await makeTempDir("bb-dispatch-read-file-");
     await fs.writeFile(path.join(tempDir, "readme.txt"), "contents here");
@@ -193,6 +217,8 @@ describe("workspace command dispatch", () => {
 
     expect(result.path).toBe("readme.txt");
     expect(result.content).toBe("contents here");
+    expect(result.contentEncoding).toBe("utf8");
+    expect(result.sizeBytes).toBe("contents here".length);
   });
 
   it("covers host.read_file", async () => {
@@ -211,6 +237,30 @@ describe("workspace command dispatch", () => {
 
     expect(result.path).toBe(filePath);
     expect(result.content).toBe("durable manager notes");
+    expect(result.contentEncoding).toBe("utf8");
+    expect(result.sizeBytes).toBe("durable manager notes".length);
+  });
+
+  it("returns base64 for image files", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-host-read-image-");
+    const imagePath = path.join(tempDir, "preview.png");
+    const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    await fs.writeFile(imagePath, imageBytes);
+
+    const harness = createHarness();
+    const result = await dispatchCommand(
+      {
+        type: "host.read_file",
+        path: imagePath,
+      },
+      { runtimeManager: harness.manager },
+    );
+
+    expect(result.path).toBe(imagePath);
+    expect(result.content).toBe(imageBytes.toString("base64"));
+    expect(result.contentEncoding).toBe("base64");
+    expect(result.mimeType).toBe("image/png");
+    expect(result.sizeBytes).toBe(imageBytes.length);
   });
 
   it("rejects workspace.read_file with path traversal", async () => {
@@ -263,6 +313,48 @@ describe("workspace command dispatch", () => {
     ).rejects.toMatchObject({
       code: "ENOENT",
       message: expect.stringContaining("Path does not exist"),
+    });
+  });
+
+  it("enforces the 10 MB image read limit", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-host-read-large-image-");
+    const imagePath = path.join(tempDir, "large.png");
+    await fs.writeFile(imagePath, Buffer.alloc((10 * 1024 * 1024) + 1));
+
+    const harness = createHarness();
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "host.read_file",
+          path: imagePath,
+        },
+        { runtimeManager: harness.manager },
+      ),
+    ).rejects.toMatchObject({
+      code: "file_too_large",
+      message: expect.stringContaining("10 MB"),
+    });
+  });
+
+  it("enforces the 25 MB non-image read limit", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-host-read-large-file-");
+    const filePath = path.join(tempDir, "large.bin");
+    await fs.writeFile(filePath, Buffer.alloc((25 * 1024 * 1024) + 1));
+
+    const harness = createHarness();
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "host.read_file",
+          path: filePath,
+        },
+        { runtimeManager: harness.manager },
+      ),
+    ).rejects.toMatchObject({
+      code: "file_too_large",
+      message: expect.stringContaining("25 MB"),
     });
   });
 

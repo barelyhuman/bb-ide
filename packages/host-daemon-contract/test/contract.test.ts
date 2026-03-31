@@ -23,7 +23,7 @@ const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
   "hostDaemonCommandSchema.options.approvalPolicy": "Daemon command metadata may omit approval policy when the server does not need to override the default.",
   "hostDaemonCommandSchema.options.seq": "Daemon command metadata may omit sequence when the command source does not assign one.",
   "hostDaemonCommandSchema.options.source": "Daemon command metadata may omit source when the command origin is not being tracked.",
-  "hostDaemonCommandSchema.query": "workspace.list_files may omit a search string to list files without filtering.",
+  "hostDaemonCommandSchema.query": "host.list_files and workspace.list_files may omit a search string to list files without filtering.",
 };
 
 describe("host-daemon command schemas", () => {
@@ -99,6 +99,18 @@ describe("host-daemon command schemas", () => {
     ).toMatchObject({
       type: "host.read_file",
       path: "/tmp/bb-data/workspace/thread-123/PREFERENCES.md",
+    });
+
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "host.list_files",
+        path: "/tmp/bb-data/workspace/thread-123",
+        limit: 100,
+      }),
+    ).toMatchObject({
+      type: "host.list_files",
+      path: "/tmp/bb-data/workspace/thread-123",
+      limit: 100,
     });
   });
 
@@ -312,14 +324,27 @@ describe("host-daemon command schemas", () => {
     });
 
     expect(
+      hostDaemonCommandResultSchemaByType["host.list_files"].parse({
+        files: [{ path: "notes/today.md", name: "today.md" }],
+        truncated: false,
+      }),
+    ).toMatchObject({
+      files: [{ path: "notes/today.md", name: "today.md" }],
+      truncated: false,
+    });
+
+    expect(
       hostDaemonCommandResultSchemaByType["host.read_file"].parse({
         path: "/tmp/bb-data/workspace/thread-123/PREFERENCES.md",
         content: "# Preferences",
+        contentEncoding: "utf8",
         mimeType: "text/markdown",
+        sizeBytes: 13,
       }),
     ).toMatchObject({
       path: "/tmp/bb-data/workspace/thread-123/PREFERENCES.md",
       content: "# Preferences",
+      contentEncoding: "utf8",
     });
 
     expect(() =>

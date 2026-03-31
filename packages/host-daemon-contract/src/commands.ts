@@ -24,6 +24,7 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "turn.steer",
   "thread.stop",
   "thread.rename",
+  "host.list_files",
   "host.read_file",
   "provider.list",
   "provider.list_models",
@@ -128,6 +129,13 @@ export const threadRenameCommandSchema = hostDaemonThreadTargetSchema.extend({
 export const hostReadFileCommandSchema = z.object({
   type: z.literal("host.read_file"),
   path: z.string().min(1),
+});
+
+export const hostListFilesCommandSchema = z.object({
+  type: z.literal("host.list_files"),
+  path: z.string().min(1),
+  query: z.string().optional(),
+  limit: z.number().int().positive(),
 });
 
 export const providerListCommandSchema = z.object({
@@ -279,6 +287,7 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   turnSteerCommandSchema,
   threadStopCommandSchema,
   threadRenameCommandSchema,
+  hostListFilesCommandSchema,
   hostReadFileCommandSchema,
   providerListCommandSchema,
   providerListModelsCommandSchema,
@@ -300,6 +309,19 @@ export const hostDaemonCommandSchema = z.union([
 ]);
 export type HostDaemonCommand = z.infer<typeof hostDaemonCommandSchema>;
 
+const fileReadResultSchema = z.object({
+  path: z.string(),
+  content: z.string(),
+  contentEncoding: z.enum(["base64", "utf8"]),
+  mimeType: z.string().optional(),
+  sizeBytes: z.number().int().nonnegative(),
+});
+
+const fileListResultSchema = z.object({
+  files: z.array(z.object({ path: z.string(), name: z.string() })),
+  truncated: z.boolean(),
+});
+
 export const hostDaemonCommandResultSchemaByType = {
   "thread.start": z.object({
     providerThreadId: z.string().min(1),
@@ -308,11 +330,8 @@ export const hostDaemonCommandResultSchemaByType = {
   "turn.steer": z.object({}),
   "thread.stop": z.object({}),
   "thread.rename": z.object({}),
-  "host.read_file": z.object({
-    path: z.string(),
-    content: z.string(),
-    mimeType: z.string().optional(),
-  }),
+  "host.list_files": fileListResultSchema,
+  "host.read_file": fileReadResultSchema,
   "provider.list": z.object({
     providers: z.array(providerInfoSchema),
   }),
@@ -348,15 +367,8 @@ export const hostDaemonCommandResultSchemaByType = {
   "workspace.demote": z.object({
     ok: z.boolean(),
   }),
-  "workspace.list_files": z.object({
-    files: z.array(z.object({ path: z.string(), name: z.string() })),
-    truncated: z.boolean(),
-  }),
-  "workspace.read_file": z.object({
-    path: z.string(),
-    content: z.string(),
-    mimeType: z.string().optional(),
-  }),
+  "workspace.list_files": fileListResultSchema,
+  "workspace.read_file": fileReadResultSchema,
   "workspace.list_branches": z.object({
     branches: z.array(z.string()),
     current: z.string().nullable(),

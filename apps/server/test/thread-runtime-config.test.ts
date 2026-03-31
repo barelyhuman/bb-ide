@@ -106,7 +106,9 @@ describe("thread runtime config", () => {
         {
           path: preferencesPath,
           content: "# Preferences\n\n- terse updates\n",
+          contentEncoding: "utf8",
           mimeType: "text/markdown",
+          sizeBytes: "# Preferences\n\n- terse updates\n".length,
         },
       );
       expect(response.status).toBe(200);
