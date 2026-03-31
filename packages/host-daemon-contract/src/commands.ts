@@ -10,6 +10,7 @@ import {
   reasoningLevelSchema,
   sandboxModeSchema,
   serviceTierSchema,
+  provisioningTranscriptEntrySchema,
   workspaceDiffTargetSchema,
   workspaceStatusSchema,
 } from "@bb/domain";
@@ -138,8 +139,17 @@ export const providerListModelsCommandSchema = z.object({
   providerId: z.string().min(1),
 });
 
+const provisionInitiatorSchema = z.object({
+  /** Thread that initiated provisioning. Used to stream progress events. */
+  threadId: z.string().min(1),
+  /** Current max event sequence for the thread. Seeds the event buffer so daemon-emitted events don't collide with server-side sequences. */
+  eventSequence: z.number().int().nonnegative(),
+});
+
 const environmentProvisionCommandBaseSchema = hostDaemonEnvironmentTargetSchema.extend({
   type: z.literal("environment.provision"),
+  /** Initiating thread for live progress streaming. Null when no thread is associated (e.g., project source provisioning). */
+  initiator: provisionInitiatorSchema.nullable(),
 });
 
 const unmanagedEnvironmentProvisionCommandSchema =
@@ -186,7 +196,7 @@ const managedCloneEnvironmentProvisionCommandSchema =
  * Idempotent — if path already exists and is valid, reports success.
  * Rolls back partial state on failure.
  *
- * Result: `{ path, isGitRepo, isWorktree, branchName, ranSetup }`.
+ * Result: `{ path, isGitRepo, isWorktree, branchName, transcript }`.
  *
  * Lane-serialized per environmentId.
  */
@@ -310,7 +320,7 @@ export const hostDaemonCommandResultSchemaByType = {
     models: z.array(availableModelSchema),
   }),
   "environment.provision": discoveredWorkspacePropertiesSchema.extend({
-    ranSetup: z.boolean(),
+    transcript: z.array(provisioningTranscriptEntrySchema),
   }),
   "environment.destroy": z.object({}),
   "workspace.status": z.object({

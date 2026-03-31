@@ -1038,7 +1038,7 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
   it("collapses multiple provisioning events into one operation row", () => {
     const rows = getOperationRows([
       provisioningOperation(1, "Provisioning started", "pending", undefined, {
-        transcript: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
+        transcript: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
       }),
       provisioningOperation(2, "Provisioning environment", "pending", undefined, {
         transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.ts", status: "started" }],
@@ -1047,17 +1047,17 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
         transcript: [{ type: "step", key: "setup", text: "ran .bb-env-setup.ts in 3s", status: "completed" }],
       }),
       provisioningOperation(4, "Provisioning ready", "completed", undefined, {
-        transcript: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
+        transcript: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
       }),
     ]);
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("provisioning");
     expect(rows[0]?.title).toBe("Provisioned environment");
-    const envEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "environment");
+    const envEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "provision");
     expect(envEntry).toBeDefined();
     if (envEntry?.type === "step") {
-      expect(envEntry.text).toBe("environment: Worktree");
+      expect(envEntry.text).toBe("Provisioning worktree");
     }
     const setupEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "setup");
     expect(setupEntry).toBeDefined();
@@ -1073,20 +1073,20 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
   it("keeps completed provisioning rows fully structured", () => {
     const rows = getOperationRows([
       provisioningOperation(1, "Provisioning started", "pending", undefined, {
-        transcript: [{ type: "step", key: "environment", text: "environment: Direct", status: "completed" }],
+        transcript: [{ type: "step", key: "provision", text: "Provisioning environment", status: "started" }],
       }),
       provisioningOperation(2, "Provisioning ready", "completed", undefined, {
-        transcript: [{ type: "step", key: "environment", text: "environment: Direct", status: "completed" }],
+        transcript: [{ type: "step", key: "provision", text: "Provisioning environment", status: "started" }],
       }),
     ]);
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("provisioning");
     expect(rows[0]?.title).toBe("Provisioned environment");
-    const envEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "environment");
+    const envEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "provision");
     expect(envEntry).toBeDefined();
     if (envEntry?.type === "step") {
-      expect(envEntry.text).toBe("environment: Direct");
+      expect(envEntry.text).toBe("Provisioning environment");
     }
     expect(rows[0]?.detail).toBeUndefined();
   });
@@ -1094,12 +1094,12 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
   it("keeps a stable merged provisioning id as new lifecycle updates arrive", () => {
     const startedRows = getOperationRows([
       provisioningOperation(1, "Provisioning started", "pending", undefined, {
-        transcript: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
+        transcript: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
       }),
     ]);
     const mergedRows = getOperationRows([
       provisioningOperation(1, "Provisioning started", "pending", undefined, {
-        transcript: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
+        transcript: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
       }),
       provisioningOperation(2, "Provisioning environment", "pending", undefined, {
         transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" }],
@@ -1118,7 +1118,7 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
   it("preserves transcript entries when collapsing provisioning rows", () => {
     const rows = getOperationRows([
       provisioningOperation(1, "Provisioning started", "pending", undefined, {
-        transcript: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
+        transcript: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
       }),
       provisioningOperation(2, "Provisioning environment", "pending", undefined, {
         transcript: [{ type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" }],
@@ -1134,10 +1134,10 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("provisioning");
     expect(rows[0]?.title).toBe("Provisioning environment");
-    const envEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "environment");
+    const envEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "provision");
     expect(envEntry).toBeDefined();
     if (envEntry?.type === "step") {
-      expect(envEntry.text).toBe("environment: Worktree");
+      expect(envEntry.text).toBe("Provisioning worktree");
     }
     const setupEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "setup");
     expect(setupEntry).toBeDefined();
@@ -1151,7 +1151,7 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
     const rows = getOperationRows([
       provisioningOperation(1, "Provisioning started", "pending", undefined, {
         transcript: [
-          { type: "step", key: "environment", text: "environment: Direct Workspace", status: "completed" },
+          { type: "step", key: "provision", text: "Provisioning environment", status: "started" },
         ],
       }),
       provisioningOperation(2, "Provisioning environment", "pending", undefined, {
@@ -1165,7 +1165,7 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
     expect(rows[0]?.opType).toBe("provisioning");
     expect(rows[0]?.title).toBe("Provisioning environment");
     expect(rows[0]?.provisioning?.transcript?.map((entry) => entry.key)).toEqual([
-      "environment",
+      "provision",
       "session",
     ]);
   });
@@ -1174,7 +1174,7 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
     const rows = buildTimelineRows([
       provisioningOperation(1, "Provisioning started", "pending", undefined, {
         transcript: [
-          { type: "step", key: "environment", text: "environment: Direct Workspace", status: "completed" },
+          { type: "step", key: "provision", text: "Provisioning environment", status: "started" },
         ],
       }),
       provisioningOperation(2, "Provisioning environment", "pending", undefined, {
@@ -1230,7 +1230,7 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
     const rows = getOperationRows([
       provisioningOperation(1, "Provisioning started", "pending", undefined, {
         transcript: [
-          { type: "step", key: "environment", text: "environment: Worktree", status: "completed" },
+          { type: "step", key: "provision", text: "Provisioning worktree", status: "started" },
           { type: "step", key: "worktree", text: "creating worktree", status: "completed" },
         ],
       }),
@@ -1250,7 +1250,7 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("provisioning");
     expect(rows[0]?.provisioning?.transcript?.map((entry) => entry.key)).toEqual([
-      "environment",
+      "provision",
       "worktree",
       "branch",
       "setup",

@@ -157,6 +157,10 @@ export async function createHostDaemonApp(
     initialCursor: cursorState.value,
     seedThreadHighWaterMark: ({ threadId, sequence }) =>
       eventBuffer.seed({ [threadId]: sequence }),
+    eventSink: {
+      emit: (event) => eventBuffer.push(event),
+      flush: () => eventBuffer.flush(),
+    },
     reportResult: async (result) => {
       await serverClient.reportCommandResult(result);
       cursorState.value = result.cursor;

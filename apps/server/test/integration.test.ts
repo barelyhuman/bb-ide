@@ -185,7 +185,7 @@ describe("server integration", () => {
             defaultBranch: "main",
             isGitRepo: true,
             isWorktree: false,
-            ranSetup: false,
+            transcript: [],
           },
         },
       });
@@ -268,7 +268,7 @@ describe("server integration", () => {
             defaultBranch: "main",
             isGitRepo: true,
             isWorktree: false,
-            ranSetup: false,
+            transcript: [],
           },
         },
       });
@@ -407,7 +407,7 @@ describe("server integration", () => {
             defaultBranch: "main",
             isGitRepo: true,
             isWorktree: false,
-            ranSetup: false,
+            transcript: [],
           },
         },
       });

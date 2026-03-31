@@ -35,7 +35,7 @@
    - `requireConnectedHostSession(db, hostId)` — looks up active session (indexed: `host_daemon_sessions_host_status_idx`)
    - `requireSourceForHost(db, projectId, hostId)` — fetches source for the requested host (`project_sources` filtered by `projectId` + `hostId`, unique index)
    - Resolves `unmanagedPath` from request or falls back to default source path
-   - `maybeReuseUnmanagedEnvironment()`:
+   - `reuseEnvironmentByHostPath()`:
      - `findEnvironmentByHostPath(db, hostId, path)` — unique index lookup (`environments_host_path_idx`)
      - If found + same project + `"ready"`: reuses via `createThreadInEnvironment()` with `threadStatus: "idle"`
      - If found + same project + `"provisioning"`: reuses with `threadStatus: "provisioning"`

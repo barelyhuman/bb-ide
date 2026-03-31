@@ -14,7 +14,7 @@ import { ApiError } from "../errors.js";
 import { queueCommandAndWait } from "./command-wait.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
-import { appendClientTurnEvent, appendProvisioningEvent } from "./thread-events.js";
+import { appendClientTurnEvent, appendProvisioningEvent, buildCwdBranchEntries } from "./thread-events.js";
 import { buildExecutionOptions, queueThreadStartCommand } from "./thread-commands.js";
 import { generateThreadTitle } from "./title-generation.js";
 import {
@@ -39,7 +39,7 @@ interface CreateThreadInEnvironmentArgs {
   threadStatus: "idle" | "provisioning";
 }
 
-interface ReuseUnmanagedEnvironmentArgs {
+interface ReuseEnvironmentByHostPathArgs {
   hostId: string;
   mergeBaseBranch: string | null;
   path: string;
@@ -89,21 +89,34 @@ async function createThreadInEnvironment(
       entries: [
         {
           type: "step",
-          key: "environment",
-          text: "environment: Direct",
-          status: "completed",
+          key: "provision",
+          text: "Waiting for environment...",
+          status: "started",
         },
       ],
     });
   }
 
   if (args.threadStatus === "idle") {
+    let latestSequence = eventSequence;
+    if (args.environment.path) {
+      const cwdEntries = buildCwdBranchEntries({
+        path: args.environment.path,
+        branchName: args.environment.branchName,
+      });
+      latestSequence = appendProvisioningEvent(deps, {
+        threadId: thread.id,
+        environmentId: args.environment.id,
+        status: "completed",
+        entries: cwdEntries,
+      });
+    }
     try {
       await startQueuedThreadIfNeeded(deps, {
         thread,
         environment: args.environment,
         execution,
-        eventSequence,
+        eventSequence: latestSequence,
         request: args.request,
       });
     } catch (error) {
@@ -122,9 +135,9 @@ async function createThreadInEnvironment(
   return getThreadSafe(deps, thread.id);
 }
 
-async function maybeReuseUnmanagedEnvironment(
+async function reuseEnvironmentByHostPath(
   deps: Pick<AppDeps, "config" | "db" | "hub" | "logger">,
-  args: ReuseUnmanagedEnvironmentArgs,
+  args: ReuseEnvironmentByHostPathArgs,
 ): Promise<ReturnType<typeof getThreadSafe> | null> {
   const existing = findEnvironmentByHostPath(deps.db, args.hostId, args.path);
   if (!existing) {
@@ -253,7 +266,7 @@ export async function createThreadFromRequest(
   const mergeBaseBranch = null;
 
   if (workspace.type === "unmanaged" && unmanagedPath) {
-    const reusedThread = await maybeReuseUnmanagedEnvironment(deps, {
+    const reusedThread = await reuseEnvironmentByHostPath(deps, {
       hostId,
       mergeBaseBranch,
       path: unmanagedPath,
@@ -298,20 +311,20 @@ export async function createThreadFromRequest(
   });
 
   const provisioningLabel = workspace.type === "unmanaged"
-    ? "Direct"
+    ? "Provisioning environment"
     : workspace.type === "managed-worktree"
-      ? "Worktree"
-      : "Clone";
-  appendProvisioningEvent(deps, {
+      ? "Provisioning worktree"
+      : "Provisioning clone";
+  const provisionEventSequence = appendProvisioningEvent(deps, {
     threadId: thread.id,
     environmentId: environment.id,
     status: "started",
     entries: [
       {
         type: "step",
-        key: "environment",
-        text: `environment: ${provisioningLabel}`,
-        status: "completed",
+        key: "provision",
+        text: provisioningLabel,
+        status: "started",
       },
     ],
   });
@@ -321,6 +334,7 @@ export async function createThreadFromRequest(
       queueEnvironmentProvision(deps, {
         environmentId: environment.id,
         hostId,
+        initiator: { threadId: thread.id, eventSequence: provisionEventSequence },
         path: unmanagedPath ?? undefined,
         workspaceProvisionType: "unmanaged",
       });
@@ -336,6 +350,7 @@ export async function createThreadFromRequest(
       queueEnvironmentProvision(deps, {
         environmentId: environment.id,
         hostId,
+        initiator: { threadId: thread.id, eventSequence: provisionEventSequence },
         workspaceProvisionType: workspace.type,
         sourcePath: source.path,
         targetPath: buildManagedTargetPath(source.path, request.projectId, thread.id),
@@ -387,6 +402,7 @@ export async function ensureProjectSourceEnvironment(
     command: {
       type: "environment.provision",
       environmentId: environment.id,
+      initiator: null,
       workspaceProvisionType: "unmanaged",
       path: args.path,
     },

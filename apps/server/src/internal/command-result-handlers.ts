@@ -16,6 +16,7 @@ import {
 import type { AppDeps } from "../types.js";
 import {
   appendProvisioningEvent,
+  buildCwdBranchEntries,
   parseStoredTurnRequestEvent,
   appendSystemErrorEvent,
   appendThreadInterruptedEvent,
@@ -128,24 +129,28 @@ async function handleProvisionCommandResult(
       return;
     }
 
+    const cwdBranchEntries = buildCwdBranchEntries({
+      path: report.result.path,
+      branchName: report.result.branchName,
+    });
+
     for (const thread of boundThreads) {
       if (!thread.mergeBaseBranch && report.result.defaultBranch) {
         updateThread(deps.db, deps.hub, thread.id, {
           mergeBaseBranch: report.result.defaultBranch,
         });
       }
-      appendProvisioningEvent(deps, {
+
+      const isInitiator = thread.id === command.initiator?.threadId;
+      let entries = cwdBranchEntries;
+      if (isInitiator && report.result.transcript.length > 0) {
+        entries = report.result.transcript;
+      }
+      const completedEventSequence = appendProvisioningEvent(deps, {
         threadId: thread.id,
         environmentId: command.environmentId,
         status: "completed",
-        entries: [
-          {
-            type: "step",
-            key: "environment",
-            text: `environment ready: ${report.result.path}`,
-            status: "completed",
-          },
-        ],
+        entries,
       });
 
       if (thread.status === "created" || thread.status === "provisioning") {
@@ -196,7 +201,7 @@ async function handleProvisionCommandResult(
           path: report.result.path,
           workspaceProvisionType: command.workspaceProvisionType,
         },
-        eventSequence: startEvent.sequence,
+        eventSequence: completedEventSequence,
         input: parsedStartEvent.input,
         execution: parsedStartEvent.execution,
         projectId: thread.projectId,

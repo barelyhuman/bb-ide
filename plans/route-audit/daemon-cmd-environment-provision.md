@@ -123,7 +123,7 @@
 ## Flags
 
 1. ~~**`projectId` is a dead param.**~~ **Resolved.** Removed from `environmentProvisionCommandBaseSchema` and all callers.
-2. **`ranSetup` reports script existence, not execution.** `detectSetupScript` checks if `command.setupScript` exists in the source path. Meanwhile the actual setup script execution happens inside `createWorktree`/`createClone` via `runSetupScript`, which checks the *target* path. These are different paths -- the script might exist in source but not be copied to target (e.g., if it is gitignored). The name `ranSetup` implies the script ran, but the check is only whether it exists at the source. On idempotent re-provision (target already exists), `runSetupScript` is skipped but `detectSetupScript` would still return true.
+2. ~~**`ranSetup` reports script existence, not execution.**~~ **Resolved.** Removed `ranSetup` and `detectSetupScript`. Replaced with `transcript: ProvisioningTranscriptEntry[]` on the command result. The daemon now collects the full provisioning transcript via `onProgress` callback threaded through `provisionWorkspace`, with live streaming to the initiator thread via the event buffer. Added `initiatorThreadId` (required, nullable) and `eventSequence` (optional, for buffer seeding) to the provision command. Transcript entries now show raw git commands, cwd context, script output, and branch/SHA info.
 3. ~~**`toProvisionWorkspaceOptions` has redundant validation.**~~ **Resolved.** Removed the dead guard; schema validation is sufficient.
 4. ~~**Setup script timeout and scriptName are not configurable from the command.**~~ **Resolved.** `setupScript` (`z.string().min(1)`) and `setupTimeoutMs` (`z.number().int().positive()`) are now required fields on both managed variants. The server passes `".bb-env-setup.sh"` and `15 * 60 * 1000` (15 min). The daemon passes them through to `provisionWorkspace` as `scriptName` and `timeoutMs`. Default timeout in `packages/workspace/src/provisioning.ts` also updated from 5 min to 15 min, and shell changed from `/bin/sh` to `/bin/bash`.
 
@@ -147,3 +147,10 @@
 ## Review Comments
 
 <!-- Leave comments, questions, or follow-ups below. Delete this file if no action needed. -->
+
+
+---
+
+## Deferred: Git clone output streaming
+
+`createClone` runs `git clone` via `runGit` (which uses `execFileAsync` — buffered, not streaming). For large repos, the user sees the "git clone" step start and nothing until it completes. To stream line-by-line, switch from `runGit` to `spawn` with piped stdio — the same pattern `runSetupScript` already uses. Extract the process management (timeout, signal handling, output collection) from `runSetupScript` into a shared `runCommandWithProgress` helper that both `runSetupScript` and git commands can use.

@@ -816,7 +816,7 @@ describe("toViewMessages replay coverage", () => {
         data: {
           status: "started",
           environmentId: "env-1",
-          entries: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
+          entries: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
         },
         createdAt: 1,
       },
@@ -2466,7 +2466,7 @@ describe("toViewMessages replay coverage", () => {
         data: {
           status: "started",
           environmentId: "env-1",
-          entries: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
+          entries: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
         },
         createdAt: 1,
       },
@@ -3138,7 +3138,7 @@ describe("toViewMessages replay coverage", () => {
         data: {
           status: "started",
           environmentId: "env-1",
-          entries: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
+          entries: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
         },
         createdAt: 2,
       },
@@ -3232,7 +3232,7 @@ describe("toViewMessages replay coverage", () => {
         data: {
           status: "started",
           environmentId: "env-1",
-          entries: [{ type: "step", key: "environment", text: "environment: Direct", status: "completed" }],
+          entries: [{ type: "step", key: "provision", text: "Provisioning environment", status: "started" }],
         },
         createdAt: 2,
       },
@@ -3603,7 +3603,7 @@ describe("toViewMessages replay coverage", () => {
         data: {
           status: "started",
           environmentId: "env-1",
-          entries: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
+          entries: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
         },
         createdAt: 2,
       },
@@ -3615,7 +3615,7 @@ describe("toViewMessages replay coverage", () => {
         data: {
           status: "completed",
           environmentId: "env-1",
-          entries: [{ type: "step", key: "environment", text: "environment: Worktree", status: "completed" }],
+          entries: [{ type: "step", key: "provision", text: "Provisioning worktree", status: "started" }],
         },
         createdAt: 3,
       },
@@ -3718,7 +3718,7 @@ describe("toViewMessages replay coverage", () => {
         data: {
           status: "started",
           environmentId: "env-1",
-          entries: [{ type: "step", key: "environment", text: "environment: Docker Sandbox", status: "completed" }],
+          entries: [{ type: "step", key: "provision", text: "Provisioning environment", status: "started" }],
         },
         createdAt: 2,
       },
@@ -3730,7 +3730,7 @@ describe("toViewMessages replay coverage", () => {
         data: {
           status: "completed",
           environmentId: "env-1",
-          entries: [{ type: "step", key: "environment", text: "environment: Docker Sandbox", status: "completed" }],
+          entries: [{ type: "step", key: "provision", text: "Provisioning environment", status: "started" }],
         },
         createdAt: 3,
       },
@@ -3756,7 +3756,7 @@ describe("toViewMessages replay coverage", () => {
     expect(messageRows[1].message.opType).toBe("provisioning");
     expect(messageRows[1].message.title).toBe("Provisioned environment");
     expect(messageRows[1].message.provisioning?.transcript?.[0]?.text).toBe(
-      "environment: Docker Sandbox",
+      "Provisioning environment",
     );
     expect(messageRows[1].message.detail).toBeUndefined();
   });

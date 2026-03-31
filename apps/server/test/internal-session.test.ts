@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import {
   events,
   getEnvironment,
@@ -217,6 +217,7 @@ describe("internal session routes", () => {
         payload: JSON.stringify({
           type: "environment.provision",
           environmentId: successEnvironment.id,
+          initiator: { threadId: successThread.id, eventSequence: 0 },
           workspaceProvisionType: "unmanaged",
           path: "/tmp/provision-success",
         }),
@@ -238,7 +239,7 @@ describe("internal session routes", () => {
             defaultBranch: "main",
             isGitRepo: true,
             isWorktree: false,
-            ranSetup: false,
+            transcript: [],
           },
         }),
       });
@@ -275,6 +276,7 @@ describe("internal session routes", () => {
         payload: JSON.stringify({
           type: "environment.provision",
           environmentId: failureEnvironment.id,
+          initiator: { threadId: failureThread.id, eventSequence: 0 },
           workspaceProvisionType: "unmanaged",
           path: "/tmp/provision-failure",
         }),
@@ -310,6 +312,99 @@ describe("internal session routes", () => {
         code: "thread_provisioning_failed",
         detail: "Provisioning failed",
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("gives the initiator thread the daemon transcript when non-empty", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-transcript",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/transcript-test",
+        status: "provisioning",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+      appendClientTurnEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        type: "client/thread/start",
+        input: [{ type: "text", text: "Start" }],
+        execution: {
+          model: "gpt-5",
+          serviceTier: "flex",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          source: "client/thread/start",
+        },
+        initiator: "user",
+        requestMethod: "thread/start",
+        source: "spawn",
+      });
+      const command = queueCommand(harness.db, harness.hub, {
+        hostId: host.id,
+        sessionId: session.id,
+        type: "environment.provision",
+        payload: JSON.stringify({
+          type: "environment.provision",
+          environmentId: environment.id,
+          initiator: { threadId: thread.id, eventSequence: 0 },
+          workspaceProvisionType: "managed-worktree",
+          targetPath: "/tmp/transcript-test",
+          sourcePath: "/tmp/transcript-source",
+          branchName: "bb/transcript",
+          setupScript: ".bb-env-setup.sh",
+          setupTimeoutMs: 900000,
+        }),
+      });
+
+      const transcriptEntries = [
+        { type: "step", key: "cwd", text: "cwd: /tmp/transcript-source", status: "completed" },
+        { type: "step", key: "git-worktree", text: "git worktree add -B bb/transcript /tmp/transcript-test", status: "completed" },
+        { type: "step", key: "cwd", text: "cwd: /tmp/transcript-test", status: "completed" },
+        { type: "step", key: "branch", text: "Branch: bb/transcript (abc1234)", status: "completed" },
+      ];
+      const response = await harness.app.request("/internal/session/command-result", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          commandId: command.id,
+          cursor: command.cursor,
+          completedAt: Date.now(),
+          type: "environment.provision",
+          ok: true,
+          result: {
+            path: "/tmp/transcript-test",
+            branchName: "bb/transcript",
+            defaultBranch: "main",
+            isGitRepo: true,
+            isWorktree: true,
+            transcript: transcriptEntries,
+          },
+        }),
+      });
+      expect(response.status).toBe(200);
+
+      const completedEvents = harness.db
+        .select({ data: events.data })
+        .from(events)
+        .where(and(eq(events.threadId, thread.id), eq(events.type, "system/provisioning")))
+        .all()
+        .map((row) => JSON.parse(row.data))
+        .filter((d: { status: string }) => d.status === "completed");
+      expect(completedEvents).toHaveLength(1);
+      expect(completedEvents[0].entries).toEqual(transcriptEntries);
     } finally {
       await harness.cleanup();
     }
@@ -366,6 +461,7 @@ describe("internal session routes", () => {
         payload: JSON.stringify({
           type: "environment.provision",
           environmentId: environment.id,
+          initiator: { threadId: thread.id, eventSequence: 0 },
           workspaceProvisionType: "managed-worktree",
           targetPath: "/tmp/reprovision-start",
           sourcePath: "/tmp/reprovision-source",
@@ -391,7 +487,7 @@ describe("internal session routes", () => {
             defaultBranch: "main",
             isGitRepo: true,
             isWorktree: true,
-            ranSetup: false,
+            transcript: [],
           },
         }),
       });
@@ -490,6 +586,7 @@ describe("internal session routes", () => {
         payload: JSON.stringify({
           type: "environment.provision",
           environmentId: environment.id,
+          initiator: { threadId: thread.id, eventSequence: 0 },
           workspaceProvisionType: "managed-worktree",
           targetPath: "/tmp/reprovision-malformed",
           sourcePath: "/tmp/reprovision-malformed-source",
@@ -515,7 +612,7 @@ describe("internal session routes", () => {
             defaultBranch: "main",
             isGitRepo: true,
             isWorktree: true,
-            ranSetup: false,
+            transcript: [],
           },
         }),
       });
@@ -605,6 +702,7 @@ describe("internal session routes", () => {
         payload: JSON.stringify({
           type: "environment.provision",
           environmentId: environment.id,
+          initiator: { threadId: provisioningThread.id, eventSequence: 0 },
           workspaceProvisionType: "managed-worktree",
           targetPath: "/tmp/reprovision-filter",
           sourcePath: "/tmp/reprovision-filter-source",
@@ -630,7 +728,12 @@ describe("internal session routes", () => {
             defaultBranch: "main",
             isGitRepo: true,
             isWorktree: true,
-            ranSetup: false,
+            transcript: [
+              { type: "step", key: "cwd-source", text: "cwd: /tmp/reprovision-filter-source", status: "completed" },
+              { type: "step", key: "git-worktree", text: "git worktree add -B bb/reprovision-filter /tmp/reprovision-filter", status: "completed" },
+              { type: "step", key: "cwd-target", text: "cwd: /tmp/reprovision-filter", status: "completed" },
+              { type: "step", key: "branch", text: "Branch: bb/reprovision-filter (abc1234)", status: "completed" },
+            ],
           },
         }),
       });
@@ -638,6 +741,39 @@ describe("internal session routes", () => {
       expect(response.status).toBe(200);
       expect(getThread(harness.db, provisioningThread.id)?.status).toBe("active");
       expect(getThread(harness.db, idleSibling.id)?.status).toBe("idle");
+
+      // Initiator gets the full daemon transcript
+      const initiatorEvents = harness.db
+        .select({ data: events.data })
+        .from(events)
+        .where(and(eq(events.threadId, provisioningThread.id), eq(events.type, "system/provisioning")))
+        .all()
+        .map((row) => JSON.parse(row.data))
+        .filter((d: { status: string }) => d.status === "completed");
+      expect(initiatorEvents).toHaveLength(1);
+      expect(initiatorEvents[0].entries).toHaveLength(4);
+      expect(initiatorEvents[0].entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ key: "git-worktree" }),
+          expect.objectContaining({ key: "branch", text: "Branch: bb/reprovision-filter (abc1234)" }),
+        ]),
+      );
+      // Sibling gets server-generated cwd/branch fallback (no git commands)
+      const siblingEvents = harness.db
+        .select({ data: events.data })
+        .from(events)
+        .where(and(eq(events.threadId, idleSibling.id), eq(events.type, "system/provisioning")))
+        .all()
+        .map((row) => JSON.parse(row.data))
+        .filter((d: { status: string }) => d.status === "completed");
+      expect(siblingEvents).toHaveLength(1);
+      expect(siblingEvents[0].entries).toHaveLength(2);
+      expect(siblingEvents[0].entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ key: "cwd", text: "cwd: /tmp/reprovision-filter" }),
+          expect.objectContaining({ key: "branch", text: "Branch: bb/reprovision-filter" }),
+        ]),
+      );
 
       const queuedStarts = harness.db
         .select({ cursor: hostDaemonCommands.cursor, payload: hostDaemonCommands.payload })

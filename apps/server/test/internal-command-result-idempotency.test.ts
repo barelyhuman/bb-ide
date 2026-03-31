@@ -61,6 +61,7 @@ describe("internal command result idempotency", () => {
         payload: JSON.stringify({
           type: "environment.provision",
           environmentId: environment.id,
+          initiator: { threadId: thread.id, eventSequence: 0 },
           workspaceProvisionType: "unmanaged",
           path: "/tmp/idempotent-provision",
         }),
@@ -76,7 +77,7 @@ describe("internal command result idempotency", () => {
         defaultBranch: "main",
         isGitRepo: true,
         isWorktree: false,
-        ranSetup: false,
+        transcript: [],
       });
       expect(firstResponse.status).toBe(200);
 
@@ -98,7 +99,7 @@ describe("internal command result idempotency", () => {
         defaultBranch: "main",
         isGitRepo: true,
         isWorktree: false,
-        ranSetup: false,
+        transcript: [],
       });
       expect(secondResponse.status).toBe(200);
 

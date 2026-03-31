@@ -100,12 +100,14 @@ type QueueEnvironmentProvisionArgs =
       workspaceProvisionType: "unmanaged";
       environmentId: string;
       hostId: string;
+      initiator: { threadId: string; eventSequence: number } | null;
       path?: string;
     }
   | {
       workspaceProvisionType: "managed-worktree" | "managed-clone";
       environmentId: string;
       hostId: string;
+      initiator: { threadId: string; eventSequence: number } | null;
       sourcePath: string;
       targetPath: string;
       branchName: string;
@@ -123,12 +125,14 @@ export function queueEnvironmentProvision(
       ? {
           type: "environment.provision" as const,
           environmentId: args.environmentId,
+          initiator: args.initiator,
           workspaceProvisionType: args.workspaceProvisionType,
           ...(args.path != null ? { path: args.path } : {}),
         }
       : {
           type: "environment.provision" as const,
           environmentId: args.environmentId,
+          initiator: args.initiator,
           workspaceProvisionType: args.workspaceProvisionType,
           sourcePath: args.sourcePath,
           targetPath: args.targetPath,

@@ -17,6 +17,8 @@ import {
 } from "../src/index.js";
 
 const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
+  "hostDaemonCommandSchema.maxDiffBytes": "workspace.diff may omit maxDiffBytes to use the system default cap.",
+  "hostDaemonCommandSchema.maxFileListBytes": "workspace.diff may omit maxFileListBytes to use the system default cap.",
   "hostDaemonCommandSchema.mergeBaseBranch": "workspace.status may omit mergeBaseBranch when the caller only needs working-tree state.",
   "hostDaemonCommandSchema.options.approvalPolicy": "Daemon command metadata may omit approval policy when the server does not need to override the default.",
   "hostDaemonCommandSchema.options.seq": "Daemon command metadata may omit sequence when the command source does not assign one.",
@@ -44,6 +46,7 @@ describe("host-daemon command schemas", () => {
       hostDaemonCommandSchema.parse({
         type: "environment.provision",
         environmentId: "env_123",
+        initiator: { threadId: "thr_123", eventSequence: 0 },
         workspaceProvisionType: "managed-worktree",
         sourcePath: "/tmp/project",
         targetPath: "/tmp/project/.bb/env",
@@ -104,6 +107,7 @@ describe("host-daemon command schemas", () => {
       hostDaemonCommandSchema.parse({
         type: "environment.provision",
         environmentId: "env_123",
+        initiator: null,
         workspaceProvisionType: "managed-worktree",
         sourcePath: "/tmp/project",
         targetPath: "/tmp/project/.bb/env",
@@ -114,6 +118,7 @@ describe("host-daemon command schemas", () => {
       hostDaemonCommandSchema.parse({
         type: "environment.provision",
         environmentId: "env_123",
+        initiator: null,
         workspaceProvisionType: "unmanaged",
       }),
     ).toThrow();
@@ -332,7 +337,7 @@ describe("host-daemon command schemas", () => {
         isWorktree: true,
         branchName: "bb/env-123",
         defaultBranch: "main",
-        ranSetup: true,
+        transcript: [{ type: "step", key: "setup", text: "/bin/bash .bb-env-setup.sh", status: "completed" }],
       }),
     ).toMatchObject({
       isGitRepo: true,

@@ -65,6 +65,7 @@ describe("internal authorization regressions", () => {
         payload: JSON.stringify({
           type: "environment.provision",
           environmentId: environment.id,
+          initiator: { threadId: thread.id, eventSequence: 0 },
           workspaceProvisionType: "unmanaged",
           path: "/tmp/cross-host-command",
         }),
@@ -86,7 +87,7 @@ describe("internal authorization regressions", () => {
             defaultBranch: "main",
             isGitRepo: true,
             isWorktree: false,
-            ranSetup: false,
+            transcript: [],
           },
         }),
       });

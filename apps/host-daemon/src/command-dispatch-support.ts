@@ -3,6 +3,7 @@ import type {
   AvailableModel,
   ProviderInfo,
 } from "@bb/domain";
+import type { BufferedEventInput } from "./event-buffer.js";
 import type {
   HostDaemonCommand,
   WorkspaceContext,
@@ -14,12 +15,18 @@ export type CommandOf<TType extends HostDaemonCommand["type"]> = Extract<
   { type: TType }
 >;
 
+export interface EventSink {
+  emit: (event: BufferedEventInput) => void;
+  flush: () => Promise<void>;
+}
+
 export interface CommandDispatchOptions {
   runtimeManager: RuntimeManager;
   seedThreadHighWaterMark?: (args: {
     sequence: number;
     threadId: string;
   }) => void;
+  eventSink?: EventSink;
   listModels?: (providerId: string) => Promise<AvailableModel[]>;
   listProviders?: () => ProviderInfo[];
 }

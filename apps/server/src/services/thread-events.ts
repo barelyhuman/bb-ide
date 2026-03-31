@@ -5,6 +5,7 @@ import {
 } from "@bb/db";
 import type {
   PromptInput,
+  ProvisioningTranscriptEntry,
   TurnRequestEventData,
   ThreadEventType,
   ResolvedThreadExecutionOptions,
@@ -140,7 +141,7 @@ export function parseStoredTurnRequestEvent(
 export function appendProvisioningEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
-    entries: Array<Record<string, unknown>>;
+    entries: ProvisioningTranscriptEntry[];
     environmentId: string;
     status: "completed" | "failed" | "in_progress" | "started";
     threadId: string;
@@ -156,6 +157,22 @@ export function appendProvisioningEvent(
       entries: args.entries,
     },
   });
+}
+
+export function buildCwdBranchEntries(args: {
+  path: string;
+  branchName?: string | null;
+}): ProvisioningTranscriptEntry[] {
+  const now = Date.now();
+  const entries: ProvisioningTranscriptEntry[] = [
+    { type: "step", key: "cwd", text: `cwd: ${args.path}`, status: "completed", startedAt: now },
+  ];
+  if (args.branchName) {
+    entries.push({
+      type: "step", key: "branch", text: `Branch: ${args.branchName}`, status: "completed", startedAt: now,
+    });
+  }
+  return entries;
 }
 
 export function appendSystemErrorEvent(

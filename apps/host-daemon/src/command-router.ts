@@ -16,6 +16,7 @@ export interface CommandRouterOptions {
   runtimeManager: RuntimeManager;
   reportResult?: (result: RoutedCommandResult) => Promise<void>;
   seedThreadHighWaterMark?: CommandDispatchOptions["seedThreadHighWaterMark"];
+  eventSink?: CommandDispatchOptions["eventSink"];
   listModels?: CommandDispatchOptions["listModels"];
   logger: Pick<HostDaemonLogger, "warn">;
   now?: () => number;
@@ -141,6 +142,7 @@ export class CommandRouter {
       const result = await dispatchCommand(envelope.command, {
         runtimeManager: this.options.runtimeManager,
         seedThreadHighWaterMark: this.options.seedThreadHighWaterMark,
+        eventSink: this.options.eventSink,
         listModels: this.options.listModels,
       });
       return {

@@ -101,16 +101,16 @@ export function queueManagedEnvironmentReprovision(
   if (args.thread.status === "idle") {
     tryTransition(deps.db, deps.hub, args.thread.id, "provisioning");
   }
-  appendProvisioningEvent(deps, {
+  const provisionEventSequence = appendProvisioningEvent(deps, {
     threadId: args.thread.id,
     environmentId: args.environment.id,
     status: "started",
     entries: [
       {
         type: "step",
-        key: "environment",
-        text: `environment: ${toProvisioningLabel(args.environment.workspaceProvisionType)}`,
-        status: "completed",
+        key: "provision",
+        text: `Provisioning ${toProvisioningLabel(args.environment.workspaceProvisionType).toLowerCase()}`,
+        status: "started",
       },
     ],
   });
@@ -118,6 +118,7 @@ export function queueManagedEnvironmentReprovision(
     branchName,
     environmentId: args.environment.id,
     hostId: args.environment.hostId,
+    initiator: { threadId: args.thread.id, eventSequence: provisionEventSequence },
     sourcePath: source.path,
     targetPath,
     workspaceProvisionType: provisionType,
