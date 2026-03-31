@@ -42,6 +42,7 @@ export interface ServerConnectionOptions {
   hostId: string;
   hostName: string;
   hostType: HostDaemonSessionOpenRequest["hostType"];
+  dataDir: string;
   instanceId: string;
   setSession?: (session: HostDaemonSessionOpenResponse | null) => void;
   getActiveThreads?: () =>

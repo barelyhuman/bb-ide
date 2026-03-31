@@ -181,6 +181,7 @@ export async function createHostDaemonApp(
     hostId: options.hostId,
     hostName: options.hostName,
     hostType: options.hostType,
+    dataDir: options.dataDir,
     instanceId: options.instanceId,
     logger: options.logger,
     serverClient,

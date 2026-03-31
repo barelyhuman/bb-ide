@@ -1,6 +1,5 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import mimeTypes from "mime-types";
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
 import { runGit } from "@bb/workspace";
 import type { RuntimeManager } from "../runtime-manager.js";
@@ -9,6 +8,7 @@ import {
   requireWorkspaceEnvironment,
 } from "../command-dispatch-support.js";
 import type { CommandOf } from "../command-dispatch-support.js";
+import { readTextFile } from "./file-read.js";
 
 export async function listWorkspaceFiles(
   command: CommandOf<"workspace.list_files">,
@@ -90,29 +90,7 @@ export async function readWorkspaceFile(
     );
   }
 
-  const stat = await fs.stat(resolved);
-  if (stat.isDirectory()) {
-    throw new CommandDispatchError(
-      "invalid_path",
-      "Path is a directory, not a file",
-    );
-  }
-
-  const maxFileSize = 10 * 1024 * 1024;
-  if (stat.size > maxFileSize) {
-    throw new CommandDispatchError(
-      "file_too_large",
-      `File size ${stat.size} bytes exceeds the 10 MB limit`,
-    );
-  }
-
-  const content = await fs.readFile(resolved, "utf-8");
-  const mimeType = mimeTypes.lookup(command.path) || undefined;
-  return {
-    path: command.path,
-    content,
-    mimeType,
-  };
+  return readTextFile(resolved, command.path);
 }
 
 export async function listBranches(

@@ -135,7 +135,7 @@ Runtime context:
 - Manager thread ID: `{{managerThreadId}}`
 - Project: `{{projectName}}` (`{{projectId}}`)
 - Project root: `{{projectRootPath}}`
-- Workspace path: `{{managerWorkspacePath}}`
+- Manager workspace: `{{managerWorkspacePath}}`
 
 `PREFERENCES.md` contents:
 

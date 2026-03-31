@@ -12,10 +12,11 @@
 | `instanceId` | Yes | Daemon process instance identifier. Stored on the session row for disambiguation. |
 | `hostName` | Yes | Display name for the host. Passed through to `upsertHost` and `openSession`. |
 | `hostType` | Yes | Enum via `hostTypeSchema`. Stored on host and session rows. |
+| `dataDir` | Yes | Absolute daemon data directory on the host. Stored on the session row so the server can derive manager workspace paths like `<dataDir>/workspace/<threadId>`. |
 | `protocolVersion` | Yes | Must be exactly `2` (`z.literal(HOST_DAEMON_PROTOCOL_VERSION)`). Stored on session row. |
 | `activeThreads` | Yes | Array of `{ environmentId, threadId, providerThreadId }`. Used by `reconcileSessionThreads` to sync thread status against what the daemon reports as running. |
 
-**All 6 fields consumed. No dead params.**
+**All 7 fields consumed. No dead params.**
 
 ## Implementation Trace
 
@@ -27,7 +28,7 @@
    - If not: INSERT new row, notify host `["host-connected"]`.
 4. **Open new session** (sync) — `openSession(db, hub, { ... })`.
    - Selects all active sessions for this `hostId` and closes them (status="closed", closeReason="replaced").
-   - Inserts new session row with `status="active"`, `leaseExpiresAt = now + LEASE_TIMEOUT_MS` (30s).
+   - Inserts new session row with `status="active"`, `dataDir = payload.dataDir`, `leaseExpiresAt = now + LEASE_TIMEOUT_MS` (30s).
    - Notifies host `["host-connected"]`.
    - Returns the newly inserted session row.
 5. **Close stale daemon WebSocket** (sync) — If `existingSession` (from step 2) exists and its `id` differs from the new session's `id`, calls `hub.closeDaemonSession(existingSession.id, "replaced")`.

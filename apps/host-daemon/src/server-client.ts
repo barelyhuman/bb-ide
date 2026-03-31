@@ -64,6 +64,7 @@ export interface OpenSessionArgs {
   hostId: string;
   hostName: string;
   hostType: HostDaemonSessionOpenRequest["hostType"];
+  dataDir: string;
   instanceId: string;
   activeThreads: HostDaemonActiveThread[] | Promise<HostDaemonActiveThread[]>;
   protocolVersion?: typeof HOST_DAEMON_PROTOCOL_VERSION;
@@ -181,6 +182,7 @@ export function createServerClient(
         instanceId: args.instanceId,
         hostName: args.hostName,
         hostType: args.hostType,
+        dataDir: args.dataDir,
         protocolVersion: args.protocolVersion ?? HOST_DAEMON_PROTOCOL_VERSION,
         activeThreads: await args.activeThreads,
       });

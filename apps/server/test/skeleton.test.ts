@@ -32,6 +32,7 @@ describe("server skeleton", () => {
           instanceId: "instance-1",
           hostName: "Host",
           hostType: "persistent",
+          dataDir: "/tmp/host-data",
           protocolVersion: 2,
           activeThreads: [],
         }),

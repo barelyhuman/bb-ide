@@ -1,6 +1,6 @@
 # Server & Host-Daemon Route Audit
 
-All individual audits live in `plans/route-audit/`. One file per route/command. **77 files total.**
+All individual audits live in `plans/route-audit/`. One file per route/command.
 
 **Workflow:** Review each file. Delete files that need no action. Leave comments in the `## Review Comments` section for files that need follow-up.
 
@@ -47,7 +47,6 @@ All individual audits live in `plans/route-audit/`. One file per route/command. 
 - `GET /threads/:id/timeline` + `/events` — default limit is `Number.MAX_SAFE_INTEGER`
 - `GET /system/models` — N+1 fan-out (1+P daemon commands when no providerId)
 - `GET /session/commands` — N+1 per-command UPDATE + re-SELECT in fetchCommands
-- `workspace.read_file` — no file size limit
 
 ### Dead Code / Unused
 - **`workspace.reset`** and **`workspace.checkpoint`** — daemon commands with zero server-side callers (never queued)
@@ -136,6 +135,7 @@ All individual audits live in `plans/route-audit/`. One file per route/command. 
 - [x] `thread.resume` → `daemon-cmd-thread-resume.md`
 - [x] `thread.stop` → `daemon-cmd-thread-stop.md`
 - [x] `thread.rename` → `daemon-cmd-thread-rename.md`
+- [x] `host.read_file` → `daemon-cmd-host-read-file.md`
 - [x] `turn.run` → `daemon-cmd-turn-run.md`
 - [x] `turn.steer` → `daemon-cmd-turn-steer.md`
 - [x] `provider.list` → `daemon-cmd-provider-list.md`

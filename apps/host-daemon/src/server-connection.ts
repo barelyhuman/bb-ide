@@ -108,6 +108,7 @@ export class ServerConnection {
       instanceId: this.options.instanceId,
       hostName: this.options.hostName,
       hostType: this.options.hostType,
+      dataDir: this.options.dataDir,
       protocolVersion:
         this.options.protocolVersion ?? HOST_DAEMON_PROTOCOL_VERSION,
       activeThreads: this.options.getActiveThreads?.() ?? [],

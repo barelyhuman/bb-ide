@@ -1,3 +1,4 @@
+import path from "node:path";
 import { getProject } from "@bb/db";
 import type {
   DynamicTool,
@@ -16,7 +17,7 @@ import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
 import { queueCommandAndWait } from "./command-wait.js";
-import { requireSourceForHost } from "./thread-create-helpers.js";
+import { requireConnectedHostSession } from "./entity-lookup.js";
 import { getLastExecutionOptions } from "./thread-events.js";
 
 const DEFAULT_SERVICE_TIER: ServiceTier = "flex";
@@ -94,26 +95,20 @@ function requireWorkspacePath(environment: ThreadRuntimeCommandEnvironment): str
 async function readManagerPreferences(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
-    environment: ThreadRuntimeCommandEnvironment;
-    workspacePath: string;
-    workspaceProvisionType: WorkspaceProvisionType;
+    hostId: string;
+    managerWorkspacePath: string;
   },
 ): Promise<string> {
   try {
     const rawResult = await queueCommandAndWait(deps, {
-      hostId: args.environment.hostId,
+      hostId: args.hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
       command: {
-        type: "workspace.read_file",
-        environmentId: args.environment.id,
-        workspaceContext: {
-          workspacePath: args.workspacePath,
-          workspaceProvisionType: args.workspaceProvisionType,
-        },
-        path: MANAGER_PREFERENCES_FILE_NAME,
+        type: "host.read_file",
+        path: path.join(args.managerWorkspacePath, MANAGER_PREFERENCES_FILE_NAME),
       },
     });
-    const result = hostDaemonCommandResultSchemaByType["workspace.read_file"].parse(rawResult);
+    const result = hostDaemonCommandResultSchemaByType["host.read_file"].parse(rawResult);
     return result.content;
   } catch (error) {
     if (error instanceof ApiError && error.body.code === "ENOENT") {
@@ -155,6 +150,22 @@ export async function resolveExecutionOptions(
   };
 }
 
+function requireManagerWorkspacePath(
+  deps: Pick<AppDeps, "db">,
+  hostId: string,
+  threadId: string,
+): string {
+  const session = requireConnectedHostSession(deps, hostId);
+  if (!session.dataDir) {
+    throw new ApiError(
+      502,
+      "host_protocol_mismatch",
+      "Connected host session did not report its data directory",
+    );
+  }
+  return path.join(session.dataDir, "workspace", threadId);
+}
+
 export async function resolveThreadRuntimeCommandConfig(
   deps: Pick<AppDeps, "db" | "hub">,
   args: ResolveThreadRuntimeCommandConfigArgs,
@@ -177,26 +188,26 @@ export async function resolveThreadRuntimeCommandConfig(
       workspaceProvisionType,
     };
   }
+  const managerWorkspacePath = requireManagerWorkspacePath(
+    deps,
+    args.environment.hostId,
+    args.thread.id,
+  );
 
   const managerPreferencesContent = args.isThreadCreation
     ? NO_MANAGER_PREFERENCES
     : await readManagerPreferences(deps, {
-        environment: args.environment,
-        workspacePath,
-        workspaceProvisionType,
+        hostId: args.environment.hostId,
+        managerWorkspacePath,
       });
-  const projectRootPath = requireSourceForHost(
-    deps,
-    args.thread.projectId,
-    args.environment.hostId,
-  ).path;
+  const projectRootPath = workspacePath;
 
   return {
     dynamicTools: MANAGER_DYNAMIC_TOOLS,
     instructions: renderTemplate("managerAgentInstructions", {
       managerPreferencesContent,
       managerThreadId: args.thread.id,
-      managerWorkspacePath: workspacePath,
+      managerWorkspacePath,
       projectId: args.thread.projectId,
       projectName: project.name,
       projectRootPath,

@@ -1,36 +1,33 @@
-import { createProjectSource } from "@bb/db";
+import { eq } from "drizzle-orm";
+import { hostDaemonSessions } from "@bb/db";
 import { describe, expect, it } from "vitest";
 import { resolveThreadRuntimeCommandConfig } from "../src/services/thread-runtime-config.js";
 import {
+  reportQueuedCommandSuccess,
+  waitForQueuedCommand,
+} from "./helpers/commands.js";
+import {
   seedEnvironment,
-  seedHost,
+  seedHostSession,
   seedProjectWithSource,
   seedThread,
 } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
 
 describe("thread runtime config", () => {
-  it("uses the environment host's source path for manager project root instructions", async () => {
+  it("uses the project root as cwd and a host data-dir workspace for managers", async () => {
     const harness = await createTestAppHarness();
     try {
-      const defaultHost = seedHost(harness.deps, { id: "host-runtime-default" });
-      const secondaryHost = seedHost(harness.deps, { id: "host-runtime-secondary" });
+      const hostId = "host-runtime";
+      seedHostSession(harness.deps, { id: hostId });
       const { project } = seedProjectWithSource(harness.deps, {
-        hostId: defaultHost.id,
-        path: "/tmp/runtime-default-root",
-      });
-      createProjectSource(harness.db, harness.hub, {
-        projectId: project.id,
-        type: "local_path",
-        hostId: secondaryHost.id,
-        path: "/tmp/runtime-secondary-root",
+        hostId,
+        path: "/tmp/runtime-project-root",
       });
       const environment = seedEnvironment(harness.deps, {
-        hostId: secondaryHost.id,
+        hostId,
         projectId: project.id,
-        managed: true,
-        workspaceProvisionType: "managed-worktree",
-        path: "/tmp/runtime-secondary-root/.bb-worktrees/manager",
+        path: "/tmp/runtime-project-root",
       });
       const managerThread = seedThread(harness.deps, {
         projectId: project.id,
@@ -50,37 +47,107 @@ describe("thread runtime config", () => {
       });
 
       expect(runtimeConfig.instructions).toContain(
-        "Project root: `/tmp/runtime-secondary-root`",
+        "Project root: `/tmp/runtime-project-root`",
       );
-      expect(runtimeConfig.instructions).not.toContain(
-        "Project root: `/tmp/runtime-default-root`",
+      expect(runtimeConfig.instructions).toContain(
+        `Manager workspace: \`/tmp/bb-host-data/${hostId}/workspace/${managerThread.id}\``,
       );
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("rejects manager runtime config when the environment host has no project source", async () => {
+  it("reads manager preferences from the manager workspace on the host", async () => {
     const harness = await createTestAppHarness();
     try {
-      const defaultHost = seedHost(harness.deps, { id: "host-runtime-missing-default" });
-      const missingSourceHost = seedHost(harness.deps, { id: "host-runtime-missing-secondary" });
+      const hostId = "host-runtime-preferences";
+      seedHostSession(harness.deps, { id: hostId });
       const { project } = seedProjectWithSource(harness.deps, {
-        hostId: defaultHost.id,
-        path: "/tmp/runtime-missing-default-root",
+        hostId,
+        path: "/tmp/runtime-project-root",
       });
       const environment = seedEnvironment(harness.deps, {
-        hostId: missingSourceHost.id,
+        hostId,
         projectId: project.id,
-        managed: true,
-        workspaceProvisionType: "managed-worktree",
-        path: "/tmp/runtime-missing-default-root/.bb-worktrees/manager",
+        path: "/tmp/runtime-project-root",
       });
       const managerThread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
         type: "manager",
       });
+      const managerWorkspacePath = `/tmp/bb-host-data/${hostId}/workspace/${managerThread.id}`;
+      const preferencesPath = `${managerWorkspacePath}/PREFERENCES.md`;
+
+      const runtimeConfigPromise = resolveThreadRuntimeCommandConfig(harness.deps, {
+        thread: managerThread,
+        environment: {
+          hostId: environment.hostId,
+          id: environment.id,
+          path: environment.path,
+          workspaceProvisionType: environment.workspaceProvisionType,
+        },
+      });
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        (candidate) =>
+          candidate.command.type === "host.read_file" &&
+          candidate.command.path === preferencesPath,
+      );
+      if (queued.command.type !== "host.read_file") {
+        throw new Error(`Expected host.read_file, got ${queued.command.type}`);
+      }
+
+      const response = await reportQueuedCommandSuccess(
+        harness,
+        { command: queued.command, row: queued.row },
+        {
+          path: preferencesPath,
+          content: "# Preferences\n\n- terse updates\n",
+          mimeType: "text/markdown",
+        },
+      );
+      expect(response.status).toBe(200);
+
+      const runtimeConfig = await runtimeConfigPromise;
+      expect(runtimeConfig.instructions).toContain(
+        "Project root: `/tmp/runtime-project-root`",
+      );
+      expect(runtimeConfig.instructions).toContain(
+        `Manager workspace: \`${managerWorkspacePath}\``,
+      );
+      expect(runtimeConfig.instructions).toContain("# Preferences");
+      expect(runtimeConfig.instructions).toContain("terse updates");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects manager runtime config when the active session has no data directory", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { session } = seedHostSession(harness.deps, {
+        id: "host-runtime-missing-data-dir",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: session.hostId,
+        path: "/tmp/runtime-project-root",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: session.hostId,
+        projectId: project.id,
+        path: "/tmp/runtime-project-root",
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+      });
+      harness.db.update(hostDaemonSessions)
+        .set({ dataDir: null })
+        .where(eq(hostDaemonSessions.id, session.id))
+        .run();
 
       await expect(
         resolveThreadRuntimeCommandConfig(harness.deps, {
@@ -93,7 +160,7 @@ describe("thread runtime config", () => {
           },
           isThreadCreation: true,
         }),
-      ).rejects.toThrow("No project source configured for this host");
+      ).rejects.toThrow("Connected host session did not report its data directory");
     } finally {
       await harness.cleanup();
     }

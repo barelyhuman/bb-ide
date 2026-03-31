@@ -176,6 +176,7 @@ describe("sweepExpiredLeases", () => {
       instanceId: "inst-1",
       hostName: "test-host",
       hostType: "persistent",
+      dataDir: "/tmp/test-host-data",
       protocolVersion: 1,
       heartbeatIntervalMs: 10_000,
       leaseTimeoutMs: 30_000,

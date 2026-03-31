@@ -196,6 +196,24 @@ describe("workspace command dispatch", () => {
     expect(result.content).toBe("contents here");
   });
 
+  it("covers host.read_file", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-host-read-file-");
+    const filePath = path.join(tempDir, "PREFERENCES.md");
+    await fs.writeFile(filePath, "durable manager notes");
+
+    const harness = createHarness();
+    const result = await dispatchCommand(
+      {
+        type: "host.read_file",
+        path: filePath,
+      },
+      { runtimeManager: harness.manager },
+    );
+
+    expect(result.path).toBe(filePath);
+    expect(result.content).toBe("durable manager notes");
+  });
+
   it("rejects workspace.read_file with path traversal", async () => {
     const tempDir = await makeTempDir("bb-dispatch-read-escape-");
     const harness = createHarness({ workspacePath: tempDir });
@@ -215,6 +233,20 @@ describe("workspace command dispatch", () => {
         { runtimeManager: harness.manager },
       ),
     ).rejects.toThrow("escapes workspace root");
+  });
+
+  it("rejects host.read_file with a relative path", async () => {
+    const harness = createHarness();
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "host.read_file",
+          path: "PREFERENCES.md",
+        },
+        { runtimeManager: harness.manager },
+      ),
+    ).rejects.toThrow("Path must be absolute");
   });
 
   it("covers workspace.list_branches", async () => {

@@ -39,6 +39,7 @@ export function seedSession(
     instanceId: "instance-1",
     hostName: "Test Host",
     hostType: "persistent",
+    dataDir: `/tmp/bb-host-data/${hostId}`,
     protocolVersion: 2,
     heartbeatIntervalMs: 5_000,
     leaseTimeoutMs: 30_000,

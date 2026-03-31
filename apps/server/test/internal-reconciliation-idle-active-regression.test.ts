@@ -36,6 +36,7 @@ describe("internal reconciliation idle-active regression", () => {
           instanceId: "instance-idle-active-reconcile",
           hostName: "Idle Active Host",
           hostType: "persistent",
+          dataDir: "/tmp/idle-active-reconcile-data",
           protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
           activeThreads: [
             {

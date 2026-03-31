@@ -68,13 +68,20 @@ describe("internal session routes", () => {
           instanceId: "instance-2",
           hostName: "Reconnected Host",
           hostType: "persistent",
+          dataDir: "/tmp/host-open-data",
           protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
           activeThreads: [],
         }),
       });
 
       expect(response.status).toBe(201);
-      await expect(readJson(response)).resolves.toMatchObject({
+      const body = await readJson(response) as {
+        heartbeatIntervalMs: number;
+        leaseTimeoutMs: number;
+        sessionId: string;
+        threadHighWaterMarks: Record<string, number>;
+      };
+      expect(body).toMatchObject({
         heartbeatIntervalMs: 5_000,
         leaseTimeoutMs: 30_000,
         threadHighWaterMarks: {
@@ -88,6 +95,12 @@ describe("internal session routes", () => {
         .get();
       expect(replaced?.status).toBe("closed");
       expect(replaced?.closeReason).toBe("replaced");
+      const current = harness.db
+        .select()
+        .from(hostDaemonSessions)
+        .where(eq(hostDaemonSessions.id, body.sessionId))
+        .get();
+      expect(current?.dataDir).toBe("/tmp/host-open-data");
     } finally {
       await harness.cleanup();
     }
@@ -672,6 +685,7 @@ describe("internal session routes", () => {
           instanceId: "instance-reconcile",
           hostName: "Reconcile Host",
           hostType: "persistent",
+          dataDir: "/tmp/host-reconcile-data",
           protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
           activeThreads: [
             {

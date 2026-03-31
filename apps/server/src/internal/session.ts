@@ -29,6 +29,7 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
       instanceId: payload.instanceId,
       hostName: payload.hostName,
       hostType: payload.hostType,
+      dataDir: payload.dataDir,
       protocolVersion: payload.protocolVersion,
       heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
       leaseTimeoutMs: LEASE_TIMEOUT_MS,

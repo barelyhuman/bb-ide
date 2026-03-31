@@ -1123,7 +1123,12 @@ describe("public thread routes", () => {
         "(file does not exist)",
       );
       expect(managerStartCommand.command.instructions).toContain(project.name);
-      expect(managerStartCommand.command.instructions).toContain("/tmp/thread-data-project");
+      expect(managerStartCommand.command.instructions).toContain(
+        "Project root: `/tmp/thread-data-project`",
+      );
+      expect(managerStartCommand.command.instructions).toContain(
+        `Manager workspace: \`/tmp/bb-host-data/${host.id}/workspace/${managerThread.id}\``,
+      );
     } finally {
       await harness.cleanup();
     }

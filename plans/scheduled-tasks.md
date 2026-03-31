@@ -170,7 +170,7 @@ Add to `@bb/db/src/ids.ts`:
 When a manager thread transitions to idle:
 
 1. Server sees: this is a manager-type thread going idle (thread `type` column = `"manager"`).
-2. Server issues a `workspace.read_file` command to the daemon to fetch `ASYNC.md` from the manager's workspace path.
+2. Server derives the manager workspace path from the active daemon session's `dataDir` as `<dataDir>/workspace/<threadId>`, then issues a `host.read_file` command to fetch `ASYNC.md` from that path.
 3. Server parses frontmatter for schedule entries. If parsing fails (malformed YAML, invalid cron), log a warning and leave existing nudges unchanged — do not delete them on a parse error.
 4. Server diffs against existing nudge rows for this threadId (matched by `name` within the project+thread, using the unique index).
 5. Upserts: add new, update changed crons, delete removed entries. All in one transaction.

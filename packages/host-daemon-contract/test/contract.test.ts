@@ -2,6 +2,7 @@ import { collectOptionalFieldPaths } from "@bb/test-helpers";
 import { describe, expect, it } from "vitest";
 import * as contract from "../src/index.js";
 import {
+  HOST_DAEMON_PROTOCOL_VERSION,
   createHostDaemonClient,
   hostDaemonCommandEnvelopeSchema,
   hostDaemonCommandResultSchemaByType,
@@ -84,6 +85,16 @@ describe("host-daemon command schemas", () => {
       type: "workspace.list_files",
       workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
       limit: 1000,
+    });
+
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "host.read_file",
+        path: "/tmp/bb-data/workspace/thread-123/PREFERENCES.md",
+      }),
+    ).toMatchObject({
+      type: "host.read_file",
+      path: "/tmp/bb-data/workspace/thread-123/PREFERENCES.md",
     });
   });
 
@@ -294,6 +305,17 @@ describe("host-daemon command schemas", () => {
       ok: true,
     });
 
+    expect(
+      hostDaemonCommandResultSchemaByType["host.read_file"].parse({
+        path: "/tmp/bb-data/workspace/thread-123/PREFERENCES.md",
+        content: "# Preferences",
+        mimeType: "text/markdown",
+      }),
+    ).toMatchObject({
+      path: "/tmp/bb-data/workspace/thread-123/PREFERENCES.md",
+      content: "# Preferences",
+    });
+
     expect(() =>
       hostDaemonCommandResultSchemaByType["workspace.commit"].parse({
         commitSha: "",
@@ -327,7 +349,8 @@ describe("host-daemon session schemas", () => {
         instanceId: "instance_1",
         hostName: "Michael's MacBook",
         hostType: "persistent",
-        protocolVersion: 2,
+        dataDir: "/tmp/bb-data",
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         activeThreads: [
           {
             environmentId: "env_123",
@@ -347,7 +370,8 @@ describe("host-daemon session schemas", () => {
         instanceId: "instance_1",
         hostName: "Michael's MacBook",
         hostType: "persistent",
-        protocolVersion: 2,
+        dataDir: "/tmp/bb-data",
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         activeThreads: [
           {
             environmentId: "env_124",

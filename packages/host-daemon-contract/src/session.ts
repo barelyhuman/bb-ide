@@ -28,6 +28,7 @@ export const hostDaemonSessionOpenRequestSchema = z.object({
   instanceId: z.string().min(1),
   hostName: z.string().min(1),
   hostType: hostTypeSchema,
+  dataDir: z.string().min(1),
   protocolVersion: z.literal(HOST_DAEMON_PROTOCOL_VERSION),
   activeThreads: z.array(hostDaemonActiveThreadSchema),
 });

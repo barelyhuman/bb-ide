@@ -23,6 +23,7 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "turn.steer",
   "thread.stop",
   "thread.rename",
+  "host.read_file",
   "provider.list",
   "provider.list_models",
   "environment.provision",
@@ -121,6 +122,11 @@ export const threadStopCommandSchema = hostDaemonThreadTargetSchema.extend({
 export const threadRenameCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("thread.rename"),
   title: z.string().min(1),
+});
+
+export const hostReadFileCommandSchema = z.object({
+  type: z.literal("host.read_file"),
+  path: z.string().min(1),
 });
 
 export const providerListCommandSchema = z.object({
@@ -261,6 +267,7 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   turnSteerCommandSchema,
   threadStopCommandSchema,
   threadRenameCommandSchema,
+  hostReadFileCommandSchema,
   providerListCommandSchema,
   providerListModelsCommandSchema,
   environmentDestroyCommandSchema,
@@ -289,6 +296,11 @@ export const hostDaemonCommandResultSchemaByType = {
   "turn.steer": z.object({}),
   "thread.stop": z.object({}),
   "thread.rename": z.object({}),
+  "host.read_file": z.object({
+    path: z.string(),
+    content: z.string(),
+    mimeType: z.string().optional(),
+  }),
   "provider.list": z.object({
     providers: z.array(providerInfoSchema),
   }),

@@ -10,6 +10,7 @@ export interface OpenSessionInput {
   instanceId: string;
   hostName: string;
   hostType: HostType;
+  dataDir: string;
   protocolVersion: number;
   heartbeatIntervalMs: number;
   leaseTimeoutMs: number;
@@ -60,6 +61,7 @@ export function openSession(
       instanceId: input.instanceId,
       hostName: input.hostName,
       hostType: input.hostType,
+      dataDir: input.dataDir,
       protocolVersion: input.protocolVersion,
       heartbeatIntervalMs: input.heartbeatIntervalMs,
       leaseTimeoutMs: input.leaseTimeoutMs,

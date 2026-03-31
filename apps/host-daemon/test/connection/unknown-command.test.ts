@@ -38,6 +38,7 @@ describe("fetchCommands with unknown command types", () => {
       hostId: "host-1",
       hostName: "Host One",
       hostType: "persistent",
+      dataDir: "/tmp/daemon-data",
       instanceId: "instance-1",
       activeThreads: [],
     });
@@ -101,6 +102,7 @@ describe("fetchCommands with unknown command types", () => {
       hostId: "host-1",
       hostName: "Host One",
       hostType: "persistent",
+      dataDir: "/tmp/daemon-data",
       instanceId: "instance-1",
       activeThreads: [],
     });
@@ -141,6 +143,7 @@ describe("fetchCommands with unknown command types", () => {
       hostId: "host-1",
       hostName: "Host One",
       hostType: "persistent",
+      dataDir: "/tmp/daemon-data",
       instanceId: "instance-1",
       activeThreads: [],
     });

@@ -71,6 +71,13 @@
       "when": 1779701400000,
       "tag": "0009_nimble_hercules",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1779772800000,
+      "tag": "0010_swift_nomad",
+      "breakpoints": true
     }
   ]
 }

@@ -196,6 +196,7 @@ export const hostDaemonSessions = sqliteTable(
     instanceId: text("instance_id").notNull(),
     hostName: text("host_name").notNull(),
     hostType: text("host_type").$type<HostType>().notNull(),
+    dataDir: text("data_dir"),
     protocolVersion: integer("protocol_version").notNull(),
     heartbeatIntervalMs: integer("heartbeat_interval_ms").notNull(),
     leaseTimeoutMs: integer("lease_timeout_ms").notNull(),
