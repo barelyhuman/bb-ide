@@ -24,18 +24,6 @@ Blocking, unstyled browser dialogs. The codebase already has proper dialog compo
 
 ---
 
-## Correctness
-
-### Queued messages never displayed
-
-**Files:** `views/threadQueuedMessages.ts`, `views/ThreadFollowUpComposer.tsx`
-
-The server does not include `queuedMessages` in the `GET /threads/:id` response. `extractThreadQueuedMessages` always returns `[]`, so the `QueuedFollowUpList` component never shows any items. The create/send/delete draft endpoints work, but the UI has no way to fetch and display drafts.
-
-**Fix:** Add a `GET /threads/:id/drafts` route to the server (the `listDrafts` DB function and `toQueuedMessage` converter already exist). Add a `useThreadDrafts` query hook in the app. Invalidate on `queue-changed` WS notifications. Replace `extractThreadQueuedMessages` with the query hook.
-
----
-
 ## Maintainability — Oversized Files
 
 ### ThreadDetailView.tsx — 1,327 lines
@@ -43,6 +31,7 @@ The server does not include `queuedMessages` in the `GET /threads/:id` response.
 Contains ~200 lines of helper functions, then a single 1,100+ line component with ~25 hooks, ~15 state variables, and ~20 callback definitions.
 
 **Fix:** Extract into focused modules:
+
 - Git action handlers → `useThreadGitActions.ts`
 - Prompt/composer state wiring → colocate with `ThreadDetailPromptArea`
 
@@ -51,6 +40,7 @@ Contains ~200 lines of helper functions, then a single 1,100+ line component wit
 All 30+ query and mutation hooks in a single file.
 
 **Fix:** Split by domain:
+
 - `hooks/queries/project-queries.ts`
 - `hooks/queries/thread-queries.ts`
 - `hooks/queries/environment-queries.ts`
@@ -74,6 +64,7 @@ Mixes project CRUD, thread archive/rename/delete flows, sidebar rendering, and t
 Zero tests for React components or hooks. The hooks contain behavioral complexity (reconnection, caching, localStorage sync) that is untested.
 
 **Fix:** Add tests for these hooks in priority order:
+
 1. `useWebSocket` — connection lifecycle, reconnection, message routing
 2. `useHostDaemon` — daemon probing, fallback behavior
 3. `useThreadCreationOptions` — option persistence, provider/model resolution
@@ -90,6 +81,7 @@ pnpm exec turbo run test --filter=@bb/app
 ```
 
 Grep for regressions:
+
 ```bash
 grep -rn "text-\[.*px\]" apps/app/src/
 grep -rn "window\.alert\|window\.confirm\|window\.prompt" apps/app/src/
