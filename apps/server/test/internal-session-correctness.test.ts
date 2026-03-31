@@ -13,6 +13,8 @@ import {
   createHostDaemonClient,
 } from "@bb/host-daemon-contract";
 import { describe, expect, it } from "vitest";
+import { ApiError } from "../src/errors.js";
+import { validateDaemonWebSocket } from "../src/ws/daemon-protocol.js";
 import { internalAuthHeaders } from "./helpers/commands.js";
 import {
   seedEnvironment,
@@ -98,6 +100,26 @@ async function waitForThreadStatus(
 }
 
 describe("internal session correctness", () => {
+  it("throws ApiError for daemon websocket upgrades missing a sessionId", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      expect(() =>
+        validateDaemonWebSocket(harness.deps, {
+          sessionId: null,
+          token: harness.config.authToken,
+        })
+      ).toThrowError(ApiError);
+      expect(() =>
+        validateDaemonWebSocket(harness.deps, {
+          sessionId: null,
+          token: harness.config.authToken,
+        })
+      ).toThrowError("Unauthorized");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("returns an empty command batch instead of timing out when the queue is empty", async () => {
     const harness = await createTestAppHarness();
     try {

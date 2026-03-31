@@ -7,6 +7,7 @@ import {
   threads,
 } from "@bb/db";
 import { hostDaemonDaemonWsMessageSchema } from "@bb/host-daemon-contract";
+import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
 import { requireActiveSession } from "../internal/session-state.js";
 import { appendSystemErrorEvent } from "../services/thread-events.js";
@@ -29,7 +30,7 @@ export function validateDaemonWebSocket(
   args: { sessionId: string | null; token: string | null },
 ): { hostId: string; sessionId: string } {
   if (!args.sessionId || args.token !== deps.config.authToken) {
-    throw new Error("Unauthorized websocket");
+    throw new ApiError(401, "unauthorized", "Unauthorized");
   }
   const session = requireActiveSession(deps.db, args.sessionId);
   return {

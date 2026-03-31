@@ -38,7 +38,7 @@
 ### Upgrade / Validation (sync, before WebSocket opens)
 
 `validateDaemonWebSocket(deps, { sessionId, token })`:
-1. If `sessionId` is null or `token` doesn't match: throws `Error("Unauthorized websocket")`.
+1. If `sessionId` is null or `token` doesn't match: throws `ApiError(401, "unauthorized", "Unauthorized")`.
 2. `requireActiveSession(db, sessionId)` — SELECT from `host_daemon_sessions` with active+lease check. Throws `ApiError(401)` if invalid.
 3. Returns `{ sessionId, hostId }`.
 
@@ -106,8 +106,7 @@
 
 1. **Session re-validated on every heartbeat**: `requireActiveSession` does a full DB read on each heartbeat message (~every 5s). This is correct for safety but adds query load. Could cache the session in-memory and only re-validate periodically.
 2. **No graceful shutdown notification**: When the server itself shuts down, there's no mechanism to send `session-close` to all connected daemons. The daemons will only discover the disconnect via WebSocket close/error.
-3. **`validateDaemonWebSocket` throws plain `Error`**: Unlike other routes that throw `ApiError`, the WebSocket validation throws `Error("Unauthorized websocket")`. This is caught by the Hono WebSocket upgrade handler, but the error format differs from the rest of the API.
-4. **Thread interruption on close is not batched**: The close handler iterates threads individually, inserting events and transitioning one at a time. For hosts with many active threads, this could be slow and block the close handler.
+3. **Thread interruption on close is not batched**: The close handler iterates threads individually, inserting events and transitioning one at a time. For hosts with many active threads, this could be slow and block the close handler.
 
 ## Usages
 
@@ -130,4 +129,4 @@
 
 ## Review Comments
 
-<!-- Flag 1 is now query-load/operational rather than a contract issue. Flag 3 is still a minor inconsistency — it should probably throw ApiError for consistent error handling. -->
+<!-- Flag 1 is now query-load/operational rather than a contract issue. Flag 3 is the primary remaining scalability concern in this route. -->
