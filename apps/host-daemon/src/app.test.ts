@@ -4,6 +4,15 @@ import {
   createCommandFetchLoop,
 } from "./app.js";
 
+interface FetchCommandsArgs {
+  afterCursor: number;
+}
+
+interface EnvironmentChangeReport {
+  environmentId: string;
+  change: "work-status-changed";
+}
+
 function createLogger() {
   return {
     info: vi.fn(),
@@ -99,5 +108,35 @@ describe("createBufferedEnvironmentChangeReporter", () => {
     await vi.advanceTimersByTimeAsync(100);
 
     expect(reportEnvironmentChange).not.toHaveBeenCalled();
+  });
+
+  it("retries failed environment change reports until one succeeds", async () => {
+    vi.useFakeTimers();
+    const logger = createLogger();
+    const reportEnvironmentChange = vi
+      .fn<(_: EnvironmentChangeReport) => Promise<void>>()
+      .mockRejectedValueOnce(new Error("boom"))
+      .mockResolvedValueOnce(undefined);
+    const reporter = createBufferedEnvironmentChangeReporter({
+      logger,
+      debounceMs: 100,
+      retryDelayMs: 250,
+      reportEnvironmentChange,
+    });
+
+    reporter.queue({
+      environmentId: "env-1",
+      change: "work-status-changed",
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(reportEnvironmentChange).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(249);
+    expect(reportEnvironmentChange).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(reportEnvironmentChange).toHaveBeenCalledTimes(2);
   });
 });

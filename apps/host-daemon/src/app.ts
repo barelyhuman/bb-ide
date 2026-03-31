@@ -19,51 +19,121 @@ interface SessionState {
 
 const COMMAND_FETCH_RETRY_DELAY_MS = 2_000;
 const ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS = 150;
+const ENVIRONMENT_CHANGE_REPORT_RETRY_DELAY_MS = 1_000;
 
 type BufferedEnvironmentChange = Omit<
   HostDaemonEnvironmentChangeRequest,
   "sessionId"
 >;
 
-export function createBufferedEnvironmentChangeReporter(args: {
+interface BufferedEnvironmentChangeReporterArgs {
   debounceMs?: number;
   logger: HostDaemonLogger;
   reportEnvironmentChange: (
     change: BufferedEnvironmentChange,
   ) => Promise<void>;
-}) {
-  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  retryDelayMs?: number;
+}
+
+interface BufferedEnvironmentChangeEntry {
+  change: BufferedEnvironmentChange;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
+interface ScheduledEntryArgs {
+  delayMs: number;
+  key: string;
+}
+
+interface FlushEntryArgs {
+  key: string;
+}
+
+export function createBufferedEnvironmentChangeReporter(
+  args: BufferedEnvironmentChangeReporterArgs,
+) {
+  let disposed = false;
+  const entries = new Map<string, BufferedEnvironmentChangeEntry>();
 
   function toKey(change: BufferedEnvironmentChange): string {
     return `${change.environmentId}:${change.change}`;
   }
 
-  return {
-    queue(change: BufferedEnvironmentChange): void {
-      const key = toKey(change);
-      if (timers.has(key)) {
+  function scheduleEntry(args: ScheduledEntryArgs): void {
+    const entry = entries.get(args.key);
+    if (!entry || disposed) {
+      return;
+    }
+    if (entry.timer !== null) {
+      clearTimeout(entry.timer);
+    }
+    entry.timer = setTimeout(() => {
+      entry.timer = null;
+      void flushEntry({
+        key: args.key,
+      });
+    }, args.delayMs);
+  }
+
+  async function flushEntry(payload: FlushEntryArgs): Promise<void> {
+    const entry = entries.get(payload.key);
+    if (!entry || disposed) {
+      return;
+    }
+    try {
+      await args.reportEnvironmentChange(entry.change);
+      if (disposed) {
         return;
       }
+      if (entries.get(payload.key) === entry) {
+        entries.delete(payload.key);
+      }
+    } catch (error) {
+      if (disposed) {
+        return;
+      }
+      args.logger.warn(
+        {
+          change: entry.change,
+          err: error,
+        },
+        "Failed to report environment change",
+      );
+      scheduleEntry({
+        delayMs:
+          args.retryDelayMs ?? ENVIRONMENT_CHANGE_REPORT_RETRY_DELAY_MS,
+        key: payload.key,
+      });
+    }
+  }
 
-      const timer = setTimeout(() => {
-        timers.delete(key);
-        void args.reportEnvironmentChange(change).catch((error) => {
-          args.logger.warn(
-            {
-              change,
-              err: error,
-            },
-            "Failed to report environment change",
-          );
-        });
-      }, args.debounceMs ?? ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS);
-      timers.set(key, timer);
+  return {
+    queue(change: BufferedEnvironmentChange): void {
+      if (disposed) {
+        return;
+      }
+      const key = toKey(change);
+      if (entries.has(key)) {
+        return;
+      }
+      entries.set(key, {
+        change,
+        timer: null,
+      });
+      scheduleEntry({
+        delayMs: args.debounceMs ?? ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS,
+        key,
+      });
     },
     dispose(): void {
-      for (const timer of timers.values()) {
-        clearTimeout(timer);
+      disposed = true;
+      for (const entry of entries.values()) {
+        if (entry.timer === null) {
+          continue;
+        }
+        clearTimeout(entry.timer);
       }
-      timers.clear();
+      entries.clear();
     },
   };
 }
