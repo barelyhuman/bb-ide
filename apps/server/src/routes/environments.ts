@@ -1,4 +1,4 @@
-import { updateEnvironment as updateEnvironmentRecord } from "@bb/db";
+import { updateEnvironmentMetadata } from "@bb/db";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import {
   environmentActionRequestSchema,
@@ -67,7 +67,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
 
   patch("/environments/:id", updateEnvironmentRequestSchema, (context, payload) => {
     const environment = requireEnvironment(deps.db, context.req.param("id"));
-    const updated = updateEnvironmentRecord(
+    const updated = updateEnvironmentMetadata(
       deps.db,
       deps.hub,
       environment.id,

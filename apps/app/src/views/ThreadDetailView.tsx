@@ -73,7 +73,7 @@ import { ThreadFollowUpComposer } from "./ThreadFollowUpComposer";
 import { ThreadDetailSecondaryContent } from "./ThreadDetailSecondaryContent";
 import { useThreadStorageViewer } from "./useThreadStorageViewer";
 import { useThreadFollowUpTracking } from "./useThreadFollowUpTracking";
-import { useThreadMergeBase } from "./useThreadMergeBase";
+import { useEnvironmentMergeBase } from "./useEnvironmentMergeBase";
 import { useThreadReadTracking } from "./useThreadReadTracking";
 import { toast } from "sonner";
 
@@ -397,14 +397,14 @@ export function ThreadDetailView() {
     thread,
   });
   const {
-    canSelectThreadMergeBase,
+    canSelectMergeBase,
     effectiveMergeBaseBranch,
-    handleThreadMergeBaseBranchChange,
+    handleMergeBaseBranchChange,
     showBranchComparisonUi,
-    showThreadMergeBase,
-    threadMergeBaseBranch,
-    threadMergeBaseCandidates,
-  } = useThreadMergeBase({
+    showMergeBase,
+    mergeBaseBranch,
+    mergeBaseCandidates,
+  } = useEnvironmentMergeBase({
     environment,
     mergeBaseBranchOptions,
     selectedMergeBaseBranch,
@@ -754,7 +754,7 @@ export function ThreadDetailView() {
   const threadGitStatusDisplay = getGitStatusDisplay(
     workspaceStatus,
     {
-      mergeBaseBranch: threadMergeBaseBranch,
+      mergeBaseBranch,
       showBranchComparison: showBranchComparisonUi,
     },
   );
@@ -777,7 +777,7 @@ export function ThreadDetailView() {
     parentThreadId ||
       (!isManagerThread && threadEnvironmentType) ||
       (!isManagerThread && threadBranchName) ||
-      (!isManagerThread && showThreadMergeBase) ||
+      (!isManagerThread && showMergeBase) ||
       showWorkspaceStatus ||
       showThreadChangedFiles ||
       thread.archivedAt != null,
@@ -1029,7 +1029,7 @@ export function ThreadDetailView() {
         mergeBaseBranchOptionsLoading: isLoadingMergeBaseBranchOptions,
         onPromptBannerFileClick: canUseGitUi ? handlePromptBannerFileClick : () => {},
         onPromptBannerMergeBaseBranchChange: showBranchComparisonUi
-          ? handleThreadMergeBaseBranchChange
+          ? handleMergeBaseBranchChange
           : undefined,
         onPromptBannerMergeBaseBranchPickerOpenChange: showBranchComparisonUi
           ? onMergeBaseBranchPickerOpenChange
@@ -1130,7 +1130,7 @@ export function ThreadDetailView() {
         threadStorage={threadStorage}
         metadata={{
           canAssignToManager,
-          canSelectThreadMergeBase,
+          canSelectMergeBase,
           canTakeOverThread,
           isLoadingMergeBaseBranchOptions,
           isManagerThread,
@@ -1140,7 +1140,7 @@ export function ThreadDetailView() {
           onCopyThreadBranch: () => {
             void handleCopyThreadBranch();
           },
-          onMergeBaseBranchChange: handleThreadMergeBaseBranchChange,
+          onMergeBaseBranchChange: handleMergeBaseBranchChange,
           onMergeBaseBranchPickerOpenChange: onMergeBaseBranchPickerOpenChange,
           onUnarchive: () => {
             unarchiveThread.mutate({ id: thread.id });
@@ -1149,7 +1149,7 @@ export function ThreadDetailView() {
           projectId,
           selectedManagerOptionLabel: selectedManagerOption?.label,
           showThreadChangedFiles,
-          showThreadMergeBase,
+          showMergeBase,
           showWorkspaceStatus,
           thread,
           threadBranchName,
@@ -1157,8 +1157,8 @@ export function ThreadDetailView() {
           threadEnvironmentValue,
           threadGitStatusDisplay,
           threadGitStatusLabelClass,
-          threadMergeBaseBranch,
-          threadMergeBaseCandidates,
+          mergeBaseBranch,
+          mergeBaseCandidates,
           unarchivePending:
             unarchiveThread.isPending &&
             unarchiveThread.variables?.id === thread.id,
@@ -1273,7 +1273,7 @@ export function ThreadDetailView() {
           mergeBaseBranchOptions={mergeBaseBranchOptions}
           mergeBaseBranchOptionsLoading={isLoadingMergeBaseBranchOptions}
           onMergeBaseBranchChange={
-            showBranchComparisonUi ? handleThreadMergeBaseBranchChange : undefined
+            showBranchComparisonUi ? handleMergeBaseBranchChange : undefined
           }
           onMergeBaseBranchPickerOpenChange={
             showBranchComparisonUi ? onMergeBaseBranchPickerOpenChange : undefined

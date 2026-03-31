@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { getMergeBaseBranchCandidates } from "@/components/thread/MergeBaseBranchPicker";
 import { useUpdateEnvironment } from "../hooks/useApi";
 
-interface UseThreadMergeBaseParams {
+interface UseEnvironmentMergeBaseParams {
   environment?: Environment;
   mergeBaseBranchOptions?: readonly string[];
   selectedMergeBaseBranch?: string;
@@ -16,7 +16,7 @@ interface UseThreadMergeBaseParams {
 
 type MergeBaseBranchChangeHandler = (branch: string) => void;
 
-export function useThreadMergeBase({
+export function useEnvironmentMergeBase({
   environment,
   mergeBaseBranchOptions,
   selectedMergeBaseBranch,
@@ -24,7 +24,7 @@ export function useThreadMergeBase({
   thread,
   updateEnvironment,
   workspaceStatus,
-}: UseThreadMergeBaseParams) {
+}: UseEnvironmentMergeBaseParams) {
   const mergeBaseStateKeyRef = useRef<string | undefined>(undefined);
   const mergeBaseStateKey = environment?.id ?? thread?.id;
 
@@ -44,23 +44,23 @@ export function useThreadMergeBase({
   const showBranchComparisonUi = Boolean(
     effectiveMergeBaseBranch || workspaceStatus?.branch.defaultBranch,
   );
-  const threadMergeBaseBranch = effectiveMergeBaseBranch;
-  const threadMergeBaseCandidates = useMemo(
+  const mergeBaseBranch = effectiveMergeBaseBranch;
+  const mergeBaseCandidates = useMemo(
     () =>
       getMergeBaseBranchCandidates({
-        mergeBaseBranch: threadMergeBaseBranch,
+        mergeBaseBranch,
         mergeBaseBranchOptions,
       }),
-    [mergeBaseBranchOptions, threadMergeBaseBranch],
+    [mergeBaseBranch, mergeBaseBranchOptions],
   );
-  const showThreadMergeBase = showBranchComparisonUi && Boolean(threadMergeBaseBranch);
-  const canSelectThreadMergeBase = Boolean(
-    showThreadMergeBase &&
-      threadMergeBaseBranch &&
-      threadMergeBaseCandidates.length > 0,
+  const showMergeBase = showBranchComparisonUi && Boolean(mergeBaseBranch);
+  const canSelectMergeBase = Boolean(
+    showMergeBase &&
+      mergeBaseBranch &&
+      mergeBaseCandidates.length > 0,
   );
 
-  const handleThreadMergeBaseBranchChange: MergeBaseBranchChangeHandler = useCallback(
+  const handleMergeBaseBranchChange: MergeBaseBranchChangeHandler = useCallback(
     (branch) => {
       if (!environment || !thread?.environmentId) {
         return;
@@ -106,12 +106,12 @@ export function useThreadMergeBase({
   );
 
   return {
-    canSelectThreadMergeBase,
+    canSelectMergeBase,
     effectiveMergeBaseBranch,
-    handleThreadMergeBaseBranchChange,
+    handleMergeBaseBranchChange,
     showBranchComparisonUi,
-    showThreadMergeBase,
-    threadMergeBaseBranch,
-    threadMergeBaseCandidates,
+    showMergeBase,
+    mergeBaseBranch,
+    mergeBaseCandidates,
   };
 }

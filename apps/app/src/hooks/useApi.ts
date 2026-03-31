@@ -138,17 +138,42 @@ interface EnvironmentActionInvalidationParams {
   environmentId: string;
 }
 
-export function getEnvironmentActionInvalidationQueryKeys({
+export function getEnvironmentStateInvalidationQueryKeys({
   environmentId,
 }: EnvironmentActionInvalidationParams): QueryKey[] {
   return [
     [ENVIRONMENT_QUERY_KEY, environmentId],
-    ["threads"],
     [ENVIRONMENT_WORK_STATUS_QUERY_KEY, environmentId],
     [ENVIRONMENT_GIT_DIFF_QUERY_KEY, environmentId],
     [ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY, environmentId],
+  ];
+}
+
+export function getEnvironmentActionInvalidationQueryKeys({
+  environmentId,
+}: EnvironmentActionInvalidationParams): QueryKey[] {
+  return [
+    ...getEnvironmentStateInvalidationQueryKeys({ environmentId }),
+    ["threads"],
     ["status"],
   ];
+}
+
+function removeEnvironmentTransientQueries(
+  queryClient: QueryClient,
+  environmentId: string | null | undefined,
+) {
+  if (!environmentId) {
+    return;
+  }
+
+  for (const queryKey of getEnvironmentStateInvalidationQueryKeys({ environmentId })) {
+    if (queryKey[0] === ENVIRONMENT_QUERY_KEY) {
+      continue;
+    }
+
+    queryClient.removeQueries({ queryKey });
+  }
 }
 
 function getCachedThreadListPlaceholder(
@@ -781,15 +806,14 @@ export function useUpdateEnvironment() {
         [ENVIRONMENT_QUERY_KEY, environment.id],
         environment,
       );
-      queryClient.invalidateQueries({
-        queryKey: [ENVIRONMENT_WORK_STATUS_QUERY_KEY, environment.id],
-      });
-      queryClient.invalidateQueries({
-        queryKey: [ENVIRONMENT_GIT_DIFF_QUERY_KEY, environment.id],
-      });
-      queryClient.invalidateQueries({
-        queryKey: [ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY, environment.id],
-      });
+      for (const queryKey of getEnvironmentStateInvalidationQueryKeys({
+        environmentId: environment.id,
+      })) {
+        if (queryKey[0] === ENVIRONMENT_QUERY_KEY) {
+          continue;
+        }
+        queryClient.invalidateQueries({ queryKey });
+      }
       queryClient.invalidateQueries({ queryKey: ["status"] });
     },
   });
@@ -926,8 +950,7 @@ export function useDeleteThread() {
       queryClient.removeQueries({ queryKey: ["thread", args.id] });
       queryClient.removeQueries({ queryKey: ["threadTimeline", args.id] });
       queryClient.removeQueries({ queryKey: [WORKSPACE_STATUS_QUERY_KEY, args.id] });
-      queryClient.removeQueries({ queryKey: ["threadGitDiff", args.id] });
-      queryClient.removeQueries({ queryKey: ["threadMergeBaseBranches", args.id] });
+      removeEnvironmentTransientQueries(queryClient, previousThread?.environmentId);
 
       for (const [queryKey, list] of previousThreadLists) {
         if (!list) continue;
@@ -948,12 +971,11 @@ export function useDeleteThread() {
       }
       queryClient.setQueryData(["projects"], context.previousProjects);
     },
-    onSettled: (_data, _error, args) => {
+    onSettled: (_data, _error, args, context) => {
       queryClient.removeQueries({ queryKey: ["thread", args.id] });
       queryClient.removeQueries({ queryKey: ["threadTimeline", args.id] });
       queryClient.removeQueries({ queryKey: [WORKSPACE_STATUS_QUERY_KEY, args.id] });
-      queryClient.removeQueries({ queryKey: ["threadGitDiff", args.id] });
-      queryClient.removeQueries({ queryKey: ["threadMergeBaseBranches", args.id] });
+      removeEnvironmentTransientQueries(queryClient, context?.previousThread?.environmentId);
       queryClient.invalidateQueries({ queryKey: ["projects"] });
       queryClient.invalidateQueries({ queryKey: ["threads"] });
       queryClient.invalidateQueries({ queryKey: ["status"] });

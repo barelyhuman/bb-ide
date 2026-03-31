@@ -11,6 +11,7 @@ import {
   appendOptimisticUserRowToTimeline,
   buildOptimisticUserThreadRow,
   getEnvironmentActionInvalidationQueryKeys,
+  getEnvironmentStateInvalidationQueryKeys,
   resolveThreadPlaceholder,
   resolveEnvironmentGitDiffPlaceholder,
   resolveThreadTimelinePlaceholder,
@@ -220,6 +221,21 @@ describe("resolveEnvironmentGitDiffPlaceholder", () => {
   });
 });
 
+describe("getEnvironmentStateInvalidationQueryKeys", () => {
+  it("targets environment state queries", () => {
+    expect(
+      getEnvironmentStateInvalidationQueryKeys({
+        environmentId: "env-1",
+      }),
+    ).toEqual([
+      ["environment", "env-1"],
+      ["environmentWorkStatus", "env-1"],
+      ["environmentGitDiff", "env-1"],
+      ["environmentMergeBaseBranches", "env-1"],
+    ]);
+  });
+});
+
 describe("getEnvironmentActionInvalidationQueryKeys", () => {
   it("targets environment-scoped queries", () => {
     expect(
@@ -228,10 +244,10 @@ describe("getEnvironmentActionInvalidationQueryKeys", () => {
       }),
     ).toEqual([
       ["environment", "env-1"],
-      ["threads"],
       ["environmentWorkStatus", "env-1"],
       ["environmentGitDiff", "env-1"],
       ["environmentMergeBaseBranches", "env-1"],
+      ["threads"],
       ["status"],
     ]);
   });

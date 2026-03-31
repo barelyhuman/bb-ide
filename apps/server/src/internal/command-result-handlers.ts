@@ -1,11 +1,12 @@
 import { and, desc, eq, or } from "drizzle-orm";
 import {
+  applyProvisionedEnvironment,
   events,
   getEnvironment,
   getThread,
   hostDaemonCommands,
   threads,
-  updateEnvironment,
+  updateEnvironmentStatus,
 } from "@bb/db";
 import {
   hostDaemonCommandSchema,
@@ -48,7 +49,7 @@ async function handleProvisionCommandResult(
 
   if (report.ok) {
     const shouldDestroyAfterProvision = environment?.status === "destroying";
-    updateEnvironment(deps.db, deps.hub, command.environmentId, {
+    applyProvisionedEnvironment(deps.db, deps.hub, command.environmentId, {
       path: report.result.path,
       status: shouldDestroyAfterProvision ? "destroying" : "ready",
       isGitRepo: report.result.isGitRepo,
@@ -145,7 +146,7 @@ async function handleProvisionCommandResult(
     return;
   }
 
-  updateEnvironment(deps.db, deps.hub, command.environmentId, {
+  updateEnvironmentStatus(deps.db, deps.hub, command.environmentId, {
     status: "error",
   });
 
@@ -190,7 +191,7 @@ function handleEnvironmentDestroyResult(
   if (environment?.status !== "destroying") {
     return;
   }
-  updateEnvironment(deps.db, deps.hub, command.environmentId, {
+  updateEnvironmentStatus(deps.db, deps.hub, command.environmentId, {
     status: "destroyed",
   });
 }

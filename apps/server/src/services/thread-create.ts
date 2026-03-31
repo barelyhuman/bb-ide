@@ -1,11 +1,11 @@
 import {
+  applyProvisionedEnvironment,
   createEnvironment,
   createThread,
   deleteThread,
   findEnvironmentByHostPath,
   getEnvironment,
   transitionThreadStatus,
-  updateEnvironment,
 } from "@bb/db";
 import type { Environment } from "@bb/domain";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
@@ -398,7 +398,7 @@ export async function ensureProjectSourceEnvironment(
   });
   const result = hostDaemonCommandResultSchemaByType["environment.provision"].parse(rawResult);
 
-  const updated = updateEnvironment(deps.db, deps.hub, environment.id, {
+  const updated = applyProvisionedEnvironment(deps.db, deps.hub, environment.id, {
     path: result.path,
     status: "ready",
     isGitRepo: result.isGitRepo,
