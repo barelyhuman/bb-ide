@@ -249,6 +249,24 @@ describe("workspace command dispatch", () => {
     ).rejects.toThrow("Path must be absolute");
   });
 
+  it("normalizes missing host.read_file paths to ENOENT", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-host-read-missing-");
+    const harness = createHarness();
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "host.read_file",
+          path: path.join(tempDir, "missing.md"),
+        },
+        { runtimeManager: harness.manager },
+      ),
+    ).rejects.toMatchObject({
+      code: "ENOENT",
+      message: expect.stringContaining("Path does not exist"),
+    });
+  });
+
   it("covers workspace.list_branches", async () => {
     const harness = createHarness();
     await harness.manager.ensureEnvironment({

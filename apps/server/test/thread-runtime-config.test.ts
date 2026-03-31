@@ -3,6 +3,7 @@ import { hostDaemonSessions } from "@bb/db";
 import { describe, expect, it } from "vitest";
 import { resolveThreadRuntimeCommandConfig } from "../src/services/thread-runtime-config.js";
 import {
+  reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
 } from "./helpers/commands.js";
@@ -119,6 +120,57 @@ describe("thread runtime config", () => {
       );
       expect(runtimeConfig.instructions).toContain("# Preferences");
       expect(runtimeConfig.instructions).toContain("terse updates");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("treats missing manager preferences as an empty manager workspace", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const hostId = "host-runtime-missing-preferences";
+      seedHostSession(harness.deps, { id: hostId });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId,
+        path: "/tmp/runtime-project-root",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId,
+        projectId: project.id,
+        path: "/tmp/runtime-project-root",
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+      });
+      const managerWorkspacePath = `/tmp/bb-host-data/${hostId}/workspace/${managerThread.id}`;
+      const preferencesPath = `${managerWorkspacePath}/PREFERENCES.md`;
+
+      const runtimeConfigPromise = resolveThreadRuntimeCommandConfig(harness.deps, {
+        thread: managerThread,
+        environment: {
+          hostId: environment.hostId,
+          id: environment.id,
+          path: environment.path,
+          workspaceProvisionType: environment.workspaceProvisionType,
+        },
+      });
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        (candidate) =>
+          candidate.command.type === "host.read_file" &&
+          candidate.command.path === preferencesPath,
+      );
+      const response = await reportQueuedCommandError(harness, queued, {
+        errorCode: "ENOENT",
+        errorMessage: `Path does not exist: ${preferencesPath}`,
+      });
+      expect(response.status).toBe(200);
+
+      const runtimeConfig = await runtimeConfigPromise;
+      expect(runtimeConfig.instructions).toContain("(file does not exist)");
     } finally {
       await harness.cleanup();
     }
