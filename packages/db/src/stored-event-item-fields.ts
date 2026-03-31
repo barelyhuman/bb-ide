@@ -5,13 +5,22 @@ export interface StoredEventItemFields {
   itemKind: ThreadEventItemType | null;
 }
 
-function fromItem(args: {
+interface StoredEventItemIdentity {
   id: string;
   type: ThreadEventItemType;
-}): StoredEventItemFields {
+}
+
+function fromItem(args: StoredEventItemIdentity): StoredEventItemFields {
   return {
     itemId: args.id,
     itemKind: args.type,
+  };
+}
+
+function fromItemId(itemId: string | undefined): StoredEventItemFields {
+  return {
+    itemId: itemId ?? null,
+    itemKind: null,
   };
 }
 
@@ -20,9 +29,8 @@ export function deriveStoredEventItemFields(
 ): StoredEventItemFields {
   switch (event.type) {
     case "item/started":
-    case "item/completed": {
+    case "item/completed":
       return fromItem(event.item);
-    }
     case "item/agentMessage/delta":
     case "item/commandExecution/outputDelta":
     case "item/fileChange/outputDelta":
@@ -31,10 +39,7 @@ export function deriveStoredEventItemFields(
     case "item/plan/delta":
     case "item/mcpToolCall/progress":
     case "item/toolCall/progress":
-      return {
-        itemId: event.itemId ?? null,
-        itemKind: null,
-      };
+      return fromItemId(event.itemId);
     default:
       return {
         itemId: null,

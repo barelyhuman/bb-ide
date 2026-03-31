@@ -14,14 +14,12 @@ import {
 import {
   buildTimelineRows,
   decodeRow,
-  extractThreadContextWindowUsage,
   toViewMessages,
   type ThreadEventWithMeta,
 } from "@bb/core-ui";
 import { replayFixtures } from "@bb/provider-audit";
 import { buildThreadEvent } from "@bb/domain";
-import type { ThreadEventRow, ViewMessage } from "@bb/domain";
-import type { ThreadTimelineResponse } from "@bb/server-contract";
+import type { ViewMessage } from "@bb/domain";
 import {
   buildThreadTimeline,
   compactSummaryStoredEventRows,
@@ -45,15 +43,14 @@ export interface TimelineBenchmarkScenario {
   summaryEventCount: number;
   summaryBytes: number;
   fullBytes: number;
-  buildSummary: () => ThreadTimelineResponse;
-  buildExpectedSummary: () => ThreadTimelineResponse;
+  buildSummary: () => ReturnType<typeof buildThreadTimeline>;
   buildAndSerializeSummary: () => string;
   loadSummaryStoredRows: () => StoredEventRow[];
   loadTokenUsageRows: () => StoredEventRow[];
   compactSummaryStoredRows: () => StoredEventRow[];
   decodeSummaryEvents: () => ThreadEventWithMeta[];
   projectSummaryMessages: () => ViewMessage[];
-  buildSummaryRowsOnly: () => ThreadTimelineResponse["rows"];
+  buildSummaryRowsOnly: () => ReturnType<typeof buildThreadTimeline>["rows"];
 }
 
 const FIXTURE_ROOT = resolve(
@@ -85,19 +82,6 @@ const TIMELINE_EXCLUDED_EVENT_TYPES = [
   "thread/identity",
   "thread/tokenUsage/updated",
 ] as const;
-
-function applyStoredMetadata(args: {
-  row: ThreadEventRow;
-  storedRow: StoredEventRow;
-}): ThreadEventRow {
-  return {
-    ...args.row,
-    createdAt: args.storedRow.createdAt,
-    id: args.storedRow.id,
-    seq: args.storedRow.sequence,
-    threadId: args.storedRow.threadId,
-  };
-}
 
 function createTimelineBenchmarkScenario(
   fixture: TimelineBenchmarkFixture,
@@ -174,47 +158,15 @@ function createTimelineBenchmarkScenario(
     excludedTypes: TIMELINE_EXCLUDED_EVENT_TYPES,
   });
   const summaryEventRows = compactSummaryStoredEventRows(storedEventRows);
-  const fixtureEventRows = replay.bundle.threadEventRows;
-  const summaryFixtureEventRows = fixtureEventRows.filter(
-    (row) => TIMELINE_EXCLUDED_EVENT_TYPES.includes(row.type) === false,
+  const decodedSummaryEvents = summaryEventRows.map((row) =>
+    decodeRow(parseStoredEventRow(row)),
   );
-  const summaryStoredEventRowsBySequence = new Map(
-    storedEventRows.map((row) => [row.sequence, row]),
-  );
-  const summaryExpectedEventRows = summaryFixtureEventRows.map((row) => {
-    const storedRow = summaryStoredEventRowsBySequence.get(row.seq);
-    if (!storedRow) {
-      throw new Error(`Missing stored row for summary event sequence ${row.seq}`);
-    }
-    return applyStoredMetadata({
-      row,
-      storedRow,
-    });
-  });
-  const decodedSummaryEvents = summaryEventRows.map((row) => decodeRow(parseStoredEventRow(row)));
   const summaryMessages = toViewMessages(decodedSummaryEvents, {
     threadStatus: thread.status,
     threadType: thread.type,
   });
-
   const buildSummary = () => buildThreadTimeline(db, thread, {});
-  const buildExpectedSummary = () => {
-    const messages = toViewMessages(
-      summaryExpectedEventRows.map((row) => decodeRow(row)),
-      {
-        threadStatus: thread.status,
-        threadType: thread.type,
-      },
-    );
 
-    return {
-      rows: buildTimelineRows(messages, {
-        includeToolGroupMessages: false,
-      }),
-      contextWindowUsage:
-        extractThreadContextWindowUsage(fixtureEventRows) ?? undefined,
-    };
-  };
   const buildAndSerializeSummary = () => JSON.stringify(buildSummary());
   const loadSummaryStoredRows = () =>
     listRecentStoredEventRows(db, {
@@ -249,12 +201,11 @@ function createTimelineBenchmarkScenario(
 
   return {
     id: `${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`,
-    eventCount: fixtureEventRows.length,
+    eventCount: replay.bundle.threadEventRows.length,
     summaryEventCount: summaryEventRows.length,
     summaryBytes,
     fullBytes,
     buildSummary,
-    buildExpectedSummary,
     buildAndSerializeSummary,
     loadSummaryStoredRows,
     loadTokenUsageRows,

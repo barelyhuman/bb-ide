@@ -159,15 +159,6 @@ export function listRecentStoredEventRows(
     .all();
 }
 
-export function listRecentThreadEventRows(
-  db: DbConnection,
-  args: {
-    threadId: string;
-  },
-): ThreadEventRow[] {
-  return listRecentStoredEventRows(db, args).map((row) => parseStoredEventRow(row));
-}
-
 export function listTokenUsageRowsForContextWindowUsage(
   db: DbConnection,
   args: {

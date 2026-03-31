@@ -1,11 +1,10 @@
 import { eq, max, sql } from "drizzle-orm";
 import {
   createEventId,
-  deriveStoredEventItemFields,
   events,
 } from "@bb/db";
+import type { StoredEventItemFields } from "@bb/db";
 import {
-  parseStoredThreadEvent,
   turnRequestEventDataSchema,
 } from "@bb/domain";
 import type {
@@ -20,14 +19,16 @@ import type {
 import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
 
-export interface AppendThreadEventArgs<TType extends ThreadEventType> {
-  data: StoredThreadEventDataForType<TType>;
-  environmentId?: string | null;
-  providerThreadId?: string | null;
-  threadId: string;
-  turnId?: string | null;
-  type: TType;
-}
+export type AppendThreadEventArgs<TType extends ThreadEventType = ThreadEventType> = {
+  [TEventType in TType]: {
+    data: StoredThreadEventDataForType<TEventType>;
+    environmentId?: string | null;
+    providerThreadId?: string | null;
+    threadId: string;
+    turnId?: string | null;
+    type: TEventType;
+  };
+}[TType];
 
 export interface ClientTurnEventArgs {
   environmentId: string | null;
@@ -56,13 +57,43 @@ export interface AppendThreadOwnershipChangeEventArgs {
   threadId: string;
 }
 
-export function appendThreadEvent(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: AppendThreadEventArgs<ThreadEventType>,
-): number;
+function deriveStoredEventItemFieldsFromAppendArgs(
+  args: AppendThreadEventArgs,
+): StoredEventItemFields {
+  switch (args.type) {
+    case "item/started":
+    case "item/completed":
+      return {
+        itemId: args.data.item.id,
+        itemKind: args.data.item.type,
+      };
+    case "item/agentMessage/delta":
+    case "item/commandExecution/outputDelta":
+    case "item/fileChange/outputDelta":
+    case "item/reasoning/summaryTextDelta":
+    case "item/reasoning/textDelta":
+    case "item/plan/delta":
+    case "item/mcpToolCall/progress":
+    case "item/toolCall/progress":
+      return {
+        itemId: args.data.itemId ?? null,
+        itemKind: null,
+      };
+    default:
+      return {
+        itemId: null,
+        itemKind: null,
+      };
+  }
+}
+
 export function appendThreadEvent<TType extends ThreadEventType>(
   deps: Pick<AppDeps, "db" | "hub">,
   args: AppendThreadEventArgs<TType>,
+): number;
+export function appendThreadEvent(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: AppendThreadEventArgs,
 ): number {
   const now = Date.now();
   const nextSequence = deps.db.transaction(
@@ -73,13 +104,7 @@ export function appendThreadEvent<TType extends ThreadEventType>(
         .where(eq(events.threadId, args.threadId))
         .get();
       const sequence = (maxRow?.maxSeq ?? 0) + 1;
-      const itemFields = deriveStoredEventItemFields(
-        parseStoredThreadEvent({
-          data: args.data,
-          threadId: args.threadId,
-          type: args.type,
-        }),
-      );
+      const itemFields = deriveStoredEventItemFieldsFromAppendArgs(args);
 
       tx.run(
         sql`INSERT INTO events

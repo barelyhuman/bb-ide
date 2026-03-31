@@ -83,8 +83,8 @@ export function parseStoredThreadEvent(
 ): ThreadEvent {
   return threadEventSchema.parse({
     ...args.data,
-    ...(args.providerThreadId ? { providerThreadId: args.providerThreadId } : {}),
-    ...(args.turnId ? { turnId: args.turnId } : {}),
+    ...(args.providerThreadId != null ? { providerThreadId: args.providerThreadId } : {}),
+    ...(args.turnId != null ? { turnId: args.turnId } : {}),
     threadId: args.threadId,
     type: args.type,
   });
