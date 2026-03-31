@@ -8,11 +8,16 @@ import {
   requiresArchiveConfirmation,
 } from "./thread-archive"
 
-function makeStatus(state: WorkspaceStatus["workingTree"]["state"]): WorkspaceStatus {
+type StatusFactoryArgs = {
+  state: WorkspaceStatus["workingTree"]["state"];
+  hasCommittedUnmergedChanges?: boolean;
+}
+
+function makeStatus(args: StatusFactoryArgs): WorkspaceStatus {
   return {
     workingTree: {
       hasUncommittedChanges: false,
-      state,
+      state: args.state,
       changedFiles: 0,
       insertions: 0,
       deletions: 0,
@@ -27,7 +32,7 @@ function makeStatus(state: WorkspaceStatus["workingTree"]["state"]): WorkspaceSt
       baseRef: "origin/main",
       aheadCount: 0,
       behindCount: 0,
-      hasCommittedUnmergedChanges: false,
+      hasCommittedUnmergedChanges: args.hasCommittedUnmergedChanges ?? false,
       commits: [],
     },
   }
@@ -43,7 +48,7 @@ describe("thread-archive", () => {
   it("does not warn for dirty direct workspaces", () => {
     expect(
       requiresArchiveConfirmation(
-        makeStatus("dirty_uncommitted"),
+        makeStatus({ state: "dirty_uncommitted" }),
         makeEnvironment(false),
       ),
     ).toBe(false)
@@ -52,7 +57,7 @@ describe("thread-archive", () => {
   it("warns for dirty isolated workspaces", () => {
     expect(
       requiresArchiveConfirmation(
-        makeStatus("dirty_and_committed_unmerged"),
+        makeStatus({ state: "dirty_and_committed_unmerged" }),
         makeEnvironment(true),
       ),
     ).toBe(true)
@@ -61,16 +66,37 @@ describe("thread-archive", () => {
   it("does not warn for clean or deleted isolated workspaces", () => {
     expect(
       requiresArchiveConfirmation(
-        makeStatus("clean"),
+        makeStatus({ state: "clean" }),
         makeEnvironment(true),
       ),
     ).toBe(false)
     expect(
       requiresArchiveConfirmation(
-        makeStatus("deleted"),
+        makeStatus({ state: "deleted" }),
         makeEnvironment(true),
       ),
     ).toBe(false)
+  })
+
+  it("warns for clean or deleted isolated workspaces with unmerged commits", () => {
+    expect(
+      requiresArchiveConfirmation(
+        makeStatus({
+          state: "clean",
+          hasCommittedUnmergedChanges: true,
+        }),
+        makeEnvironment(true),
+      ),
+    ).toBe(true)
+    expect(
+      requiresArchiveConfirmation(
+        makeStatus({
+          state: "deleted",
+          hasCommittedUnmergedChanges: true,
+        }),
+        makeEnvironment(true),
+      ),
+    ).toBe(true)
   })
 
   it("recognizes force-required archive conflicts", () => {

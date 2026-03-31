@@ -727,24 +727,12 @@ export function ThreadDetailView() {
       : undefined;
   const promptBannerSummary = workspaceStatus
     ? showBranchComparisonUi
-      ? formatChangeSummary({
-          changedFiles: workspaceWorkingTree?.changedFiles ?? 0,
-          insertions: workspaceWorkingTree?.insertions ?? 0,
-          deletions: workspaceWorkingTree?.deletions ?? 0,
-        })
-      : formatWorkspaceChangeSummary(workspaceWorkingTree ?? {
-          changedFiles: 0,
-          insertions: 0,
-          deletions: 0,
-        })
+      ? formatChangeSummary(workspaceStatus.workingTree)
+      : formatWorkspaceChangeSummary(workspaceStatus.workingTree)
     : "";
   const showPromptGitStatsBanner = canUseGitUi && Boolean(
     workspaceStatus &&
-    (
-      showBranchComparisonUi
-        ? (workspaceWorkingTree?.changedFiles ?? 0) > 0
-        : (workspaceWorkingTree?.changedFiles ?? 0) > 0
-    ),
+    workspaceStatus.workingTree.changedFiles > 0,
   );
   const canExpandPromptChangeList = Boolean(
     canUseGitUi &&
