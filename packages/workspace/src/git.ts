@@ -2,6 +2,7 @@ import { execFile, type ExecFileException } from "node:child_process";
 import {
   existsSync,
   lstatSync,
+  readdirSync,
   readFileSync,
   watch,
   type FSWatcher,
@@ -56,6 +57,36 @@ interface ReadWorkspaceFileFingerprintEntryArgs {
   cwd: string;
   entry: PorcelainEntry;
 }
+
+interface ParsedPorcelainPathToken {
+  nextIndex: number;
+  value: string;
+}
+
+interface GitMetadataLayout {
+  commonDirPath: string;
+  dotGitPath: string;
+  gitDirPath: string;
+}
+
+interface GitRefRoots {
+  headsRootPath: string;
+  originRootPath: string;
+  refsRootPath: string;
+  remotesRootPath: string;
+}
+
+const GIT_QUOTED_PATH_ESCAPE_BYTES = new Map<string, number>([
+  ['"', 34],
+  ["\\", 92],
+  ["a", 7],
+  ["b", 8],
+  ["f", 12],
+  ["n", 10],
+  ["r", 13],
+  ["t", 9],
+  ["v", 11],
+]);
 
 function toExecError(error: unknown): ExecFileException | undefined {
   if (error instanceof Error) {
@@ -168,6 +199,104 @@ export function parseBranchStatus(line: string | undefined): BranchStatus {
   };
 }
 
+function appendUtf8Bytes(bytes: number[], value: string): void {
+  bytes.push(...Buffer.from(value, "utf8"));
+}
+
+function isOctalDigit(value: string | undefined): boolean {
+  return value !== undefined && value >= "0" && value <= "7";
+}
+
+function readEscapedPorcelainPathBytes(
+  bytes: number[],
+  rawPath: string,
+  startIndex: number,
+): number {
+  const escapeChar = rawPath[startIndex + 1];
+  if (escapeChar === undefined) {
+    return startIndex + 1;
+  }
+  if (isOctalDigit(escapeChar)) {
+    let octalValue = escapeChar;
+    let index = startIndex + 2;
+    while (octalValue.length < 3 && isOctalDigit(rawPath[index])) {
+      octalValue += rawPath[index] ?? "";
+      index += 1;
+    }
+    bytes.push(Number.parseInt(octalValue, 8));
+    return index;
+  }
+  const escapedByte = GIT_QUOTED_PATH_ESCAPE_BYTES.get(escapeChar);
+  if (escapedByte !== undefined) {
+    bytes.push(escapedByte);
+  } else {
+    appendUtf8Bytes(bytes, escapeChar);
+  }
+  return startIndex + 2;
+}
+
+function parseQuotedPorcelainPathToken(
+  rawPath: string,
+  startIndex: number,
+): ParsedPorcelainPathToken {
+  const bytes: number[] = [];
+  let index = startIndex + 1;
+  while (index < rawPath.length) {
+    const currentChar = rawPath[index];
+    if (currentChar === '"') {
+      return {
+        nextIndex: index + 1,
+        value: Buffer.from(bytes).toString("utf8"),
+      };
+    }
+    if (currentChar === "\\") {
+      index = readEscapedPorcelainPathBytes(bytes, rawPath, index);
+      continue;
+    }
+    const codePoint = rawPath.codePointAt(index);
+    if (codePoint === undefined) {
+      break;
+    }
+    const character = String.fromCodePoint(codePoint);
+    appendUtf8Bytes(bytes, character);
+    index += character.length;
+  }
+  return {
+    nextIndex: rawPath.length,
+    value: rawPath.slice(startIndex),
+  };
+}
+
+function parseUnquotedPorcelainPathToken(
+  rawPath: string,
+  startIndex: number,
+): ParsedPorcelainPathToken {
+  const separatorIndex = rawPath.indexOf(" -> ", startIndex);
+  const endIndex = separatorIndex === -1 ? rawPath.length : separatorIndex;
+  return {
+    nextIndex: endIndex,
+    value: rawPath.slice(startIndex, endIndex),
+  };
+}
+
+function parsePorcelainPathToken(
+  rawPath: string,
+  startIndex: number,
+): ParsedPorcelainPathToken {
+  if (rawPath[startIndex] === '"') {
+    return parseQuotedPorcelainPathToken(rawPath, startIndex);
+  }
+  return parseUnquotedPorcelainPathToken(rawPath, startIndex);
+}
+
+function parsePorcelainPath(rawPath: string): string {
+  const sourcePath = parsePorcelainPathToken(rawPath, 0);
+  if (rawPath.slice(sourcePath.nextIndex, sourcePath.nextIndex + 4) !== " -> ") {
+    return sourcePath.value;
+  }
+  return parsePorcelainPathToken(rawPath, sourcePath.nextIndex + 4).value;
+}
+
 export function parsePorcelainEntries(statusOutput: string): PorcelainEntry[] {
   return statusOutput
     .split("\n")
@@ -177,10 +306,9 @@ export function parsePorcelainEntries(statusOutput: string): PorcelainEntry[] {
       const worktreeStatus = line[1] ?? " ";
       const status = line.slice(0, 2).trim() || line.slice(0, 2);
       const rawPath = line.slice(3).trim();
-      const renamedParts = rawPath.split(" -> ");
 
       return {
-        path: renamedParts.at(-1) ?? rawPath,
+        path: parsePorcelainPath(rawPath),
         status,
         indexStatus,
         worktreeStatus,
@@ -349,34 +477,137 @@ function resolveGitDirectorySync(cwd: string): string | undefined {
   }
 }
 
-function resolveGitMetadataWatchPathsSync(cwd: string): string[] {
+async function resolveGitCommonDirectory(gitDirPath: string): Promise<string> {
+  try {
+    const relativeCommonDirPath = trimOutput(
+      await fs.readFile(path.join(gitDirPath, "commondir"), "utf8"),
+    );
+    if (relativeCommonDirPath.length === 0) {
+      return gitDirPath;
+    }
+    return path.resolve(gitDirPath, relativeCommonDirPath);
+  } catch {
+    return gitDirPath;
+  }
+}
+
+function resolveGitCommonDirectorySync(gitDirPath: string): string {
+  try {
+    const relativeCommonDirPath = trimOutput(
+      readFileSync(path.join(gitDirPath, "commondir"), "utf8"),
+    );
+    if (relativeCommonDirPath.length === 0) {
+      return gitDirPath;
+    }
+    return path.resolve(gitDirPath, relativeCommonDirPath);
+  } catch {
+    return gitDirPath;
+  }
+}
+
+async function resolveGitMetadataLayout(cwd: string): Promise<GitMetadataLayout> {
   const dotGitPath = path.join(cwd, ".git");
-  const gitDirPath = resolveGitDirectorySync(cwd);
-  const metadataRoot = gitDirPath ?? dotGitPath;
-  return [
+  const gitDirPath = (await resolveGitDirectory(cwd)) ?? dotGitPath;
+  return {
+    commonDirPath: await resolveGitCommonDirectory(gitDirPath),
     dotGitPath,
-    metadataRoot,
-    path.join(metadataRoot, "HEAD"),
-    path.join(metadataRoot, "index"),
-    path.join(metadataRoot, "packed-refs"),
-    path.join(metadataRoot, "refs", "heads"),
-    path.join(metadataRoot, "refs", "remotes", "origin"),
-  ];
+    gitDirPath,
+  };
+}
+
+function resolveGitMetadataLayoutSync(cwd: string): GitMetadataLayout {
+  const dotGitPath = path.join(cwd, ".git");
+  const gitDirPath = resolveGitDirectorySync(cwd) ?? dotGitPath;
+  return {
+    commonDirPath: resolveGitCommonDirectorySync(gitDirPath),
+    dotGitPath,
+    gitDirPath,
+  };
+}
+
+function createGitRefRoots(commonDirPath: string): GitRefRoots {
+  const refsRootPath = path.join(commonDirPath, "refs");
+  const remotesRootPath = path.join(refsRootPath, "remotes");
+  return {
+    headsRootPath: path.join(refsRootPath, "heads"),
+    originRootPath: path.join(remotesRootPath, "origin"),
+    refsRootPath,
+    remotesRootPath,
+  };
+}
+
+function dedupePaths(paths: string[]): string[] {
+  return Array.from(new Set(paths));
+}
+
+function collectExistingDirectoryTreeSync(rootPath: string): string[] {
+  try {
+    if (!lstatSync(rootPath).isDirectory()) {
+      return [];
+    }
+    const childPaths = readdirSync(rootPath).flatMap((childName) =>
+      collectExistingDirectoryTreeSync(path.join(rootPath, childName)),
+    );
+    return [rootPath, ...childPaths];
+  } catch {
+    return [];
+  }
+}
+
+async function collectMetadataTreePaths(rootPath: string): Promise<string[]> {
+  try {
+    const rootStat = await fs.lstat(rootPath);
+    if (!rootStat.isDirectory()) {
+      return [rootPath];
+    }
+    const childNames = await fs.readdir(rootPath);
+    const childPaths = await Promise.all(
+      childNames.map((childName) =>
+        collectMetadataTreePaths(path.join(rootPath, childName)),
+      ),
+    );
+    return [rootPath, ...childPaths.flat()];
+  } catch {
+    return [rootPath];
+  }
+}
+
+function resolveGitMetadataWatchPathsSync(cwd: string): string[] {
+  const layout = resolveGitMetadataLayoutSync(cwd);
+  const refRoots = createGitRefRoots(layout.commonDirPath);
+  return dedupePaths([
+    layout.dotGitPath,
+    layout.gitDirPath,
+    layout.commonDirPath,
+    path.join(layout.gitDirPath, "HEAD"),
+    path.join(layout.gitDirPath, "index"),
+    path.join(layout.commonDirPath, "packed-refs"),
+    refRoots.refsRootPath,
+    refRoots.remotesRootPath,
+    refRoots.headsRootPath,
+    refRoots.originRootPath,
+    ...collectExistingDirectoryTreeSync(refRoots.headsRootPath),
+    ...collectExistingDirectoryTreeSync(refRoots.originRootPath),
+  ]);
 }
 
 async function resolveGitMetadataFingerprintPaths(
   cwd: string,
 ): Promise<string[]> {
-  const gitDirPath = await resolveGitDirectory(cwd);
-  const metadataRoot = gitDirPath ?? path.join(cwd, ".git");
-  return [
+  const layout = await resolveGitMetadataLayout(cwd);
+  const refRoots = createGitRefRoots(layout.commonDirPath);
+  const [headRefPaths, originRefPaths] = await Promise.all([
+    collectMetadataTreePaths(refRoots.headsRootPath),
+    collectMetadataTreePaths(refRoots.originRootPath),
+  ]);
+  return dedupePaths([
     // Exclude index/root mtimes here: running git status can refresh those
     // without any user-visible workspace change, which would cause false positives.
-    path.join(metadataRoot, "HEAD"),
-    path.join(metadataRoot, "packed-refs"),
-    path.join(metadataRoot, "refs", "heads"),
-    path.join(metadataRoot, "refs", "remotes", "origin"),
-  ];
+    path.join(layout.gitDirPath, "HEAD"),
+    path.join(layout.commonDirPath, "packed-refs"),
+    ...headRefPaths,
+    ...originRefPaths,
+  ]);
 }
 
 async function readMetadataFingerprintEntry(targetPath: string): Promise<string> {
@@ -470,6 +701,58 @@ export function watchWorkspaceStatus(
   let checkInFlight = false;
   let recheckRequested = false;
   const watchers: FSWatcher[] = [];
+  const metadataWatchers = new Map<string, FSWatcher>();
+
+  const closeMetadataWatcher = (watchedPath: string) => {
+    const watcher = metadataWatchers.get(watchedPath);
+    if (!watcher) {
+      return;
+    }
+    try {
+      watcher.close();
+    } catch {
+      // Ignore close failures during metadata watcher teardown.
+    }
+    metadataWatchers.delete(watchedPath);
+  };
+
+  const refreshMetadataWatchers = () => {
+    if (disposed) {
+      return;
+    }
+    let nextPaths: string[];
+    try {
+      nextPaths = resolveGitMetadataWatchPathsSync(cwd).filter(existsSync);
+    } catch {
+      return;
+    }
+    const nextPathSet = new Set(nextPaths);
+    for (const watchedPath of metadataWatchers.keys()) {
+      if (nextPathSet.has(watchedPath)) {
+        continue;
+      }
+      closeMetadataWatcher(watchedPath);
+    }
+    for (const watchedPath of nextPaths) {
+      if (metadataWatchers.has(watchedPath)) {
+        continue;
+      }
+      try {
+        const watcher = watch(watchedPath, { persistent: false }, () => {
+          refreshMetadataWatchers();
+          scheduleCheck();
+        });
+        watcher.on("error", () => {
+          closeMetadataWatcher(watchedPath);
+          refreshMetadataWatchers();
+          scheduleCheck();
+        });
+        metadataWatchers.set(watchedPath, watcher);
+      } catch {
+        // Ignore unsupported watch targets; other targets and mutation-triggered hints remain.
+      }
+    }
+  };
 
   const runChecks = async () => {
     if (checkInFlight) {
@@ -482,6 +765,7 @@ export function watchWorkspaceStatus(
         recheckRequested = false;
         try {
           const nextFingerprint = await createWorkspaceStatusWatchFingerprint(cwd);
+          refreshMetadataWatchers();
           if (disposed) {
             return;
           }
@@ -552,23 +836,7 @@ export function watchWorkspaceStatus(
   } catch {
     startFallbackPolling();
   }
-  try {
-    const metadataPaths = resolveGitMetadataWatchPathsSync(cwd);
-    for (const metadataPath of metadataPaths) {
-      if (!existsSync(metadataPath)) {
-        continue;
-      }
-      try {
-        const watcher = watch(metadataPath, { persistent: false }, scheduleCheck);
-        watcher.on("error", scheduleCheck);
-        watchers.push(watcher);
-      } catch {
-        // Ignore unsupported watch targets; other targets and mutation-triggered hints remain.
-      }
-    }
-  } catch {
-    // Ignore initial watch setup failures; explicit command-triggered refresh remains.
-  }
+  refreshMetadataWatchers();
 
   return () => {
     disposed = true;
@@ -586,6 +854,9 @@ export function watchWorkspaceStatus(
       } catch {
         // Ignore close failures during teardown.
       }
+    }
+    for (const watchedPath of metadataWatchers.keys()) {
+      closeMetadataWatcher(watchedPath);
     }
   };
 }

@@ -44,6 +44,15 @@ async function initBareRemoteFrom(repoPath: string): Promise<string> {
   return barePath;
 }
 
+async function addDetachedWorktree(repoPath: string): Promise<string> {
+  const worktreeParent = await makeTempDir("bb-workspace-worktree-");
+  const worktreePath = path.join(worktreeParent, "env");
+  await runGit(["worktree", "add", "--detach", worktreePath, "HEAD"], {
+    cwd: repoPath,
+  });
+  return worktreePath;
+}
+
 async function waitForCallCount(
   getCallCount: () => number,
   expectedCount: number,
@@ -403,6 +412,36 @@ describe("Workspace", () => {
     }
   });
 
+  it("detects repeated edits to dirty files with quoted porcelain paths", async () => {
+    const repoPath = await initRepo();
+    await fs.writeFile(path.join(repoPath, "a b.txt"), "base\n", "utf8");
+    await runGit(["add", "a b.txt"], { cwd: repoPath });
+    await runGit(["commit", "-m", "Add spaced file"], { cwd: repoPath });
+
+    const workspace = new Workspace(repoPath);
+    const calls: number[] = [];
+    const stopWatching = workspace.watchStatus(() => {
+      calls.push(Date.now());
+    });
+
+    try {
+      await sleep(300);
+      await fs.writeFile(path.join(repoPath, "a b.txt"), "first edit\n", "utf8");
+      await waitForCallCount(() => calls.length, 1);
+
+      await sleep(100);
+      await fs.writeFile(path.join(repoPath, "a b.txt"), "second edit\n", "utf8");
+      await waitForCallCount(() => calls.length, 2);
+
+      const diff = await workspace.getDiff({
+        target: { type: "uncommitted" },
+      });
+      expect(diff.diff).toContain("second edit");
+    } finally {
+      stopWatching();
+    }
+  });
+
   it("falls back to polling when recursive workspace watch setup fails", async () => {
     const repoPath = await initRepo();
     const watchWorkspaceStatus =
@@ -417,6 +456,37 @@ describe("Workspace", () => {
       await fs.writeFile(path.join(repoPath, "README.md"), "polled edit\n", "utf8");
       await waitForCallCount(() => calls.length, 1, 2_000);
       expect(calls).toHaveLength(1);
+    } finally {
+      stopWatching();
+    }
+  });
+
+  it("detects namespaced branch ref updates for detached worktree environments", async () => {
+    const repoPath = await initRepo();
+    const initialHead = (await runGit(["rev-parse", "HEAD"], { cwd: repoPath })).stdout.trim();
+    await fs.writeFile(path.join(repoPath, "README.md"), "second commit\n", "utf8");
+    await runGit(["add", "README.md"], { cwd: repoPath });
+    await runGit(["commit", "-m", "Second commit"], { cwd: repoPath });
+    const nextHead = (await runGit(["rev-parse", "HEAD"], { cwd: repoPath })).stdout.trim();
+    const worktreePath = await addDetachedWorktree(repoPath);
+    const workspace = new Workspace(worktreePath);
+    const calls: number[] = [];
+    const stopWatching = workspace.watchStatus(() => {
+      calls.push(Date.now());
+    });
+
+    try {
+      await sleep(300);
+      await runGit(["update-ref", "refs/heads/feature/foo", initialHead], {
+        cwd: repoPath,
+      });
+      await waitForCallCount(() => calls.length, 1, 2_000);
+
+      await sleep(100);
+      await runGit(["update-ref", "refs/heads/feature/foo", nextHead], {
+        cwd: repoPath,
+      });
+      await waitForCallCount(() => calls.length, 2, 2_000);
     } finally {
       stopWatching();
     }
