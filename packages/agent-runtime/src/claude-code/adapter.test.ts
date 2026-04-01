@@ -1036,7 +1036,47 @@ describe("claude-code provider adapter", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "item/agentMessage/delta",
+        itemId: expect.stringMatching(/^claude-assistant-/),
         delta: "streaming...",
+      }),
+    );
+  });
+
+  it("translateEvent reuses the streamed assistant item id when the final assistant arrives", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    const deltaEvents = adapter.translateEvent({
+      type: "stream_event",
+      event: {
+        type: "content_block_delta",
+        delta: { type: "text_delta", text: "PONG" },
+      },
+      session_id: "sess-1",
+    });
+    const deltaEvent = deltaEvents.find(
+      (event): event is Extract<(typeof deltaEvents)[number], { type: "item/agentMessage/delta" }> =>
+        event.type === "item/agentMessage/delta",
+    );
+
+    const assistantEvents = adapter.translateEvent({
+      type: "assistant",
+      message: {
+        id: "provider-msg-1",
+        role: "assistant",
+        content: [{ type: "text", text: "PONG" }],
+      },
+      session_id: "sess-1",
+    });
+
+    expect(deltaEvent?.itemId).toMatch(/^claude-assistant-/);
+    expect(assistantEvents).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "agentMessage",
+          id: deltaEvent?.itemId,
+          text: "PONG",
+        }),
       }),
     );
   });
@@ -1062,6 +1102,7 @@ describe("claude-code provider adapter", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "item/agentMessage/delta",
+        itemId: expect.stringMatching(/^claude-assistant-/),
         turnId: "turn-1",
         delta: "PONG",
       }),

@@ -265,7 +265,31 @@ describe("pi provider adapter", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "item/agentMessage/delta",
+        itemId: expect.stringMatching(/^pi-assistant-/),
         delta: expect.any(String),
+      }),
+    );
+  });
+
+  it("translateEvent reuses the streamed assistant item id when the turn ends", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+
+    const deltaEvents = adapter.translateEvent(loadFixture("message-update-delta.json"));
+    const deltaEvent = deltaEvents.find(
+      (event): event is Extract<(typeof deltaEvents)[number], { type: "item/agentMessage/delta" }> =>
+        event.type === "item/agentMessage/delta",
+    );
+    const completedEvents = adapter.translateEvent(loadFixture("agent-end-with-message.json"));
+
+    expect(deltaEvent?.itemId).toMatch(/^pi-assistant-/);
+    expect(completedEvents).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "agentMessage",
+          id: deltaEvent?.itemId,
+        }),
       }),
     );
   });

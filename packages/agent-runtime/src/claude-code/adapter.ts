@@ -369,10 +369,12 @@ export interface CreateClaudeCodeProviderAdapterOptions {
 }
 
 interface ClaudeTurnState {
+  assistantMessageCounter: number;
   counter: number;
   currentTurnId: string | undefined;
   cumulativeTokens: ThreadEventTokenUsageBreakdown;
   currentStructuredErrorKey: string | undefined;
+  openAssistantMessageIdsByScope: Map<string, string>;
   toolItemsByCallId: Map<string, ThreadEventItem>;
 }
 
@@ -395,14 +397,57 @@ export function createClaudeCodeProviderAdapter(
   function getTurnState(threadId: string): ClaudeTurnState {
     if (!turnState.has(threadId)) {
       turnState.set(threadId, {
+        assistantMessageCounter: 0,
         counter: 0,
         currentTurnId: undefined,
         cumulativeTokens: { totalTokens: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 },
         currentStructuredErrorKey: undefined,
+        openAssistantMessageIdsByScope: new Map(),
         toolItemsByCallId: new Map(),
       });
     }
     return turnState.get(threadId)!;
+  }
+
+  function toAssistantScopeKey(parentToolCallId: string | undefined): string {
+    return parentToolCallId ?? "root";
+  }
+
+  function createAssistantMessageId(state: ClaudeTurnState): string {
+    state.assistantMessageCounter += 1;
+    return `claude-assistant-${state.assistantMessageCounter}`;
+  }
+
+  function getOrCreateOpenAssistantMessageId(
+    state: ClaudeTurnState,
+    parentToolCallId: string | undefined,
+  ): string {
+    const scopeKey = toAssistantScopeKey(parentToolCallId);
+    const existing = state.openAssistantMessageIdsByScope.get(scopeKey);
+    if (existing) {
+      return existing;
+    }
+
+    const itemId = createAssistantMessageId(state);
+    state.openAssistantMessageIdsByScope.set(scopeKey, itemId);
+    return itemId;
+  }
+
+  function resolveCompletedAssistantMessageId(
+    state: ClaudeTurnState,
+    args: {
+      parentToolCallId: string | undefined;
+      providerMessageId: string | undefined;
+    },
+  ): string {
+    const scopeKey = toAssistantScopeKey(args.parentToolCallId);
+    const existing = state.openAssistantMessageIdsByScope.get(scopeKey);
+    if (existing) {
+      state.openAssistantMessageIdsByScope.delete(scopeKey);
+      return existing;
+    }
+
+    return args.providerMessageId ?? createAssistantMessageId(state);
   }
 
   function ensureTurnStarted(
@@ -411,6 +456,7 @@ export function createClaudeCodeProviderAdapter(
     state: ClaudeTurnState,
   ): string {
     if (!state.currentTurnId) {
+      state.openAssistantMessageIdsByScope.clear();
       state.toolItemsByCallId.clear();
       state.currentStructuredErrorKey = undefined;
       state.counter += 1;
@@ -537,6 +583,10 @@ export function createClaudeCodeProviderAdapter(
               ...(structuredError.detail ? { detail: structuredError.detail } : {}),
             });
           } else {
+            const itemId = resolveCompletedAssistantMessageId(state, {
+              parentToolCallId,
+              providerMessageId: assistantMessageId,
+            });
             events.push({
               type: "item/completed",
               threadId,
@@ -544,7 +594,7 @@ export function createClaudeCodeProviderAdapter(
               turnId,
               item: {
                 type: "agentMessage",
-                id: assistantMessageId ?? `msg-${state.counter}`,
+                id: itemId,
                 text,
                 ...(parentToolCallId ? { parentToolCallId } : {}),
               },
@@ -581,11 +631,13 @@ export function createClaudeCodeProviderAdapter(
         const delta = extractStreamTextDelta(message);
         if (delta) {
           const turnId = ensureTurnStarted(events, threadId, state);
+          const itemId = getOrCreateOpenAssistantMessageId(state, parentToolCallId);
           events.push({
             type: "item/agentMessage/delta",
             threadId,
             providerThreadId: "",
             turnId,
+            itemId,
             delta,
             ...(parentToolCallId ? { parentToolCallId } : {}),
           });
@@ -664,6 +716,7 @@ export function createClaudeCodeProviderAdapter(
                 ? "failed"
                 : "completed",
           });
+          state.openAssistantMessageIdsByScope.clear();
           state.toolItemsByCallId.clear();
           state.currentStructuredErrorKey = undefined;
           state.currentTurnId = undefined;

@@ -502,9 +502,11 @@ export interface CreatePiProviderAdapterOptions {
 }
 
 interface PiTurnState {
+  assistantMessageCounter: number;
   counter: number;
   currentTurnId: string | undefined;
   cumulativeTokens: ThreadEventTokenUsageBreakdown;
+  openAssistantMessageIdsByScope: Map<string, string>;
   toolItemsByCallId: Map<string, ThreadEventItem>;
 }
 
@@ -527,13 +529,53 @@ export function createPiProviderAdapter(
   function getTurnState(threadId: string): PiTurnState {
     if (!turnState.has(threadId)) {
       turnState.set(threadId, {
+        assistantMessageCounter: 0,
         counter: 0,
         currentTurnId: undefined,
         cumulativeTokens: { totalTokens: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 },
+        openAssistantMessageIdsByScope: new Map(),
         toolItemsByCallId: new Map(),
       });
     }
     return turnState.get(threadId)!;
+  }
+
+  function toAssistantScopeKey(parentToolCallId: string | undefined): string {
+    return parentToolCallId ?? "root";
+  }
+
+  function createAssistantMessageId(state: PiTurnState): string {
+    state.assistantMessageCounter += 1;
+    return `pi-assistant-${state.assistantMessageCounter}`;
+  }
+
+  function getOrCreateOpenAssistantMessageId(
+    state: PiTurnState,
+    parentToolCallId: string | undefined,
+  ): string {
+    const scopeKey = toAssistantScopeKey(parentToolCallId);
+    const existing = state.openAssistantMessageIdsByScope.get(scopeKey);
+    if (existing) {
+      return existing;
+    }
+
+    const itemId = createAssistantMessageId(state);
+    state.openAssistantMessageIdsByScope.set(scopeKey, itemId);
+    return itemId;
+  }
+
+  function resolveCompletedAssistantMessageId(
+    state: PiTurnState,
+    parentToolCallId: string | undefined,
+  ): string {
+    const scopeKey = toAssistantScopeKey(parentToolCallId);
+    const existing = state.openAssistantMessageIdsByScope.get(scopeKey);
+    if (existing) {
+      state.openAssistantMessageIdsByScope.delete(scopeKey);
+      return existing;
+    }
+
+    return createAssistantMessageId(state);
   }
 
   function translatePiEvent(
@@ -608,6 +650,7 @@ export function createPiProviderAdapter(
           return buildUnexpectedPiSdkEvent(event, context);
         }
         if (!state.currentTurnId) {
+          state.openAssistantMessageIdsByScope.clear();
           state.toolItemsByCallId.clear();
           state.counter += 1;
           state.currentTurnId = `turn-${state.counter}`;
@@ -625,12 +668,16 @@ export function createPiProviderAdapter(
         if (lastAssistant) {
           const text = extractAssistantText(lastAssistant);
           if (text) {
+            const itemId = resolveCompletedAssistantMessageId(
+              state,
+              context?.parentToolCallId,
+            );
             events.push({
               type: "item/completed",
               threadId,
               providerThreadId: "",
               turnId: state.currentTurnId ?? "",
-              item: { type: "agentMessage", id: `msg-${state.counter}`, text },
+              item: { type: "agentMessage", id: itemId, text },
             });
           }
         }
@@ -652,6 +699,7 @@ export function createPiProviderAdapter(
             turnId: state.currentTurnId,
             status: "completed",
           });
+          state.openAssistantMessageIdsByScope.clear();
           state.toolItemsByCallId.clear();
           state.currentTurnId = undefined;
         }
@@ -667,11 +715,16 @@ export function createPiProviderAdapter(
         if (assistantEvent.type === "text_delta" && state.currentTurnId) {
           const delta = assistantEvent.delta;
           if (delta) {
+            const itemId = getOrCreateOpenAssistantMessageId(
+              state,
+              context?.parentToolCallId,
+            );
             events.push({
               type: "item/agentMessage/delta",
               threadId,
               providerThreadId: "",
               turnId: state.currentTurnId,
+              itemId,
               delta,
             });
           }
