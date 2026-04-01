@@ -325,6 +325,32 @@ describe("Workspace", () => {
     }
   });
 
+  it("detects repeated edits to an already dirty file", async () => {
+    const repoPath = await initRepo();
+    const workspace = new Workspace(repoPath);
+    const calls: number[] = [];
+    const stopWatching = workspace.watchStatus(() => {
+      calls.push(Date.now());
+    });
+
+    try {
+      await sleep(300);
+      await fs.writeFile(path.join(repoPath, "README.md"), "first edit\n", "utf8");
+      await waitForCallCount(() => calls.length, 1);
+
+      await sleep(100);
+      await fs.writeFile(path.join(repoPath, "README.md"), "second edit\n", "utf8");
+      await waitForCallCount(() => calls.length, 2);
+
+      const diff = await workspace.getDiff({
+        target: { type: "uncommitted" },
+      });
+      expect(diff.diff).toContain("second edit");
+    } finally {
+      stopWatching();
+    }
+  });
+
   it("stops emitting callbacks after watch teardown", async () => {
     const repoPath = await initRepo();
     const workspace = new Workspace(repoPath);

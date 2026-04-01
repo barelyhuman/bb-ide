@@ -44,6 +44,18 @@ type BranchStatus = {
   behindCount: number;
 };
 
+export interface PorcelainEntry {
+  path: string;
+  status: string;
+  indexStatus: string;
+  worktreeStatus: string;
+}
+
+interface ReadWorkspaceFileFingerprintEntryArgs {
+  cwd: string;
+  entry: PorcelainEntry;
+}
+
 function toExecError(error: unknown): ExecFileException | undefined {
   if (error instanceof Error) {
     return error as ExecFileException;
@@ -155,12 +167,7 @@ export function parseBranchStatus(line: string | undefined): BranchStatus {
   };
 }
 
-export function parsePorcelainEntries(statusOutput: string): Array<{
-  path: string;
-  status: string;
-  indexStatus: string;
-  worktreeStatus: string;
-}> {
+export function parsePorcelainEntries(statusOutput: string): PorcelainEntry[] {
   return statusOutput
     .split("\n")
     .filter((line) => line && !line.startsWith("##"))
@@ -390,6 +397,30 @@ async function readMetadataFingerprintEntry(targetPath: string): Promise<string>
   }
 }
 
+async function readWorkspaceFileFingerprintEntry(
+  args: ReadWorkspaceFileFingerprintEntryArgs,
+): Promise<string> {
+  try {
+    const stat = await fs.lstat(path.join(args.cwd, args.entry.path));
+    const fileKind = stat.isDirectory()
+      ? "dir"
+      : stat.isFile()
+        ? "file"
+        : stat.isSymbolicLink()
+          ? "symlink"
+          : "other";
+    return [
+      args.entry.path,
+      fileKind,
+      String(stat.size),
+      String(stat.mtimeMs),
+      String(stat.ctimeMs),
+    ].join(":");
+  } catch {
+    return `${args.entry.path}:missing`;
+  }
+}
+
 async function createWorkspaceStatusWatchFingerprint(cwd: string): Promise<string> {
   await ensureGitRepo(cwd);
   const [statusOutput, metadataPaths] = await Promise.all([
@@ -399,10 +430,15 @@ async function createWorkspaceStatusWatchFingerprint(cwd: string): Promise<strin
     ),
     resolveGitMetadataFingerprintPaths(cwd),
   ]);
+  const statusEntries = parsePorcelainEntries(statusOutput.stdout);
   const metadataEntries = await Promise.all(
     metadataPaths.map((metadataPath) => readMetadataFingerprintEntry(metadataPath)),
   );
+  const dirtyFileEntries = await Promise.all(
+    statusEntries.map((entry) => readWorkspaceFileFingerprintEntry({ cwd, entry })),
+  );
   return JSON.stringify({
+    dirtyFileEntries,
     metadataEntries,
     status: statusOutput.stdout,
   });
