@@ -71,11 +71,13 @@ export function useEnvironmentWorkStatus(
     enabled: (options?.enabled ?? true) && Boolean(environmentId),
     refetchOnWindowFocus: false,
     placeholderData: (previousData, previousQuery) =>
-      resolveEnvironmentWorkStatusPlaceholder(
-        previousData,
-        previousQuery?.queryKey,
-        requireEnvironmentId(environmentId, "useEnvironmentWorkStatus"),
-      ),
+      environmentId
+        ? resolveEnvironmentWorkStatusPlaceholder(
+            previousData,
+            previousQuery?.queryKey,
+            environmentId,
+          )
+        : undefined,
   });
 }
 

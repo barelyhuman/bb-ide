@@ -226,16 +226,14 @@ function ThreadMetadataContent({
 }: ThreadDetailMetadataProps) {
   return (
     <DetailCard className="rounded-none border-0 bg-transparent px-0 py-0">
-      <DetailRow
-        label={isManagerThread ? "Kind" : "Type"}
-        valueClassName="min-w-0 truncate"
-      >
-        {isManagerThread
-          ? "Manager"
-          : parentThreadId
-            ? "Managed thread"
-            : "Thread"}
-      </DetailRow>
+      {isManagerThread ? (
+        <DetailRow
+          label="Kind"
+          valueClassName="min-w-0 truncate"
+        >
+          Manager
+        </DetailRow>
+      ) : null}
       {!isManagerThread ? (
         <ThreadManagerSelector
           canAssignToManager={canAssignToManager}

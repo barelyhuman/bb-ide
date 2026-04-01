@@ -99,7 +99,10 @@ export function useEnvironmentMergeBase({
       }),
     [mergeBaseBranch, mergeBaseBranchOptions],
   );
-  const showMergeBase = showBranchComparisonUi && Boolean(mergeBaseBranch);
+  const isOnDefaultBranch =
+    workspaceStatus?.branch.currentBranch != null &&
+    workspaceStatus.branch.currentBranch === workspaceStatus.branch.defaultBranch;
+  const showMergeBase = showBranchComparisonUi && Boolean(mergeBaseBranch) && !isOnDefaultBranch;
   const canSelectMergeBase = Boolean(
     showMergeBase &&
       mergeBaseBranch &&
