@@ -2,9 +2,14 @@
 
 Quality audit of `apps/app` based on AGENTS.md guidelines and CODE_REVIEW.md checklist.
 
+## Status
+
+- Completed on `codex/fix-oversized-files`: oversized-file refactors and the follow-up maintainability fixes from review
+- Remaining work: replace the last browser dialogs and add the remaining high-value hook tests
+
 ## Exit Criteria
 
-- All issues below resolved or explicitly deferred with rationale
+- All remaining issues below resolved or explicitly deferred with rationale
 - `pnpm exec turbo run build --filter=@bb/app` passes
 - `pnpm exec turbo run test --filter=@bb/app` passes
 - No new `as` casts, no new arbitrary `text-[Npx]` classes
@@ -12,62 +17,46 @@ Quality audit of `apps/app` based on AGENTS.md guidelines and CODE_REVIEW.md che
 
 ---
 
-## AGENTS.md Violations
+## Completed
 
-### 13+ uses of `window.alert` / `window.confirm` / `window.prompt`
+### Maintainability — Oversized Files
 
-**Files:** `components/layout/ProjectList.tsx`, `views/ThreadDetailView.tsx`, `hooks/useQuickCreateProject.ts`
+- `ThreadDetailView.tsx` reduced from 1,327 lines to 763 lines, with git actions and prompt wiring extracted
+- `ProjectList.tsx` reduced from 818 lines to 253 lines, with row rendering and action/dialog logic extracted
+- `useApi.ts` removed; queries and mutations now import from their owning modules directly
+- Query helper concerns split into `query-keys.ts`, `query-cache.ts`, `query-placeholders.ts`, and `query-client.ts`
+- Thread mutations split into `thread-runtime-mutations.ts` and `thread-state-mutations.ts`
+- Review follow-ups completed: dialog state identity stabilized, duplicated thread-detail mutation types deduplicated, and environment work status helper naming aligned
 
-Blocking, unstyled browser dialogs. The codebase already has proper dialog components.
+Validation on current branch head:
 
-**Fix:** Replace all `window.confirm` callsites with the existing `AlertDialog` primitive. Replace `window.prompt` callsites with small modal forms. Replace `window.alert` callsites with toast notifications.
-
----
-
-## Maintainability — Oversized Files
-
-### ThreadDetailView.tsx — 1,327 lines
-
-Contains ~200 lines of helper functions, then a single 1,100+ line component with ~25 hooks, ~15 state variables, and ~20 callback definitions.
-
-**Fix:** Extract into focused modules:
-
-- Git action handlers → `useThreadGitActions.ts`
-- Prompt/composer state wiring → colocate with `ThreadDetailPromptArea`
-
-### useApi.ts — 1,094 lines
-
-All 30+ query and mutation hooks in a single file.
-
-**Fix:** Split by domain:
-
-- `hooks/queries/project-queries.ts`
-- `hooks/queries/thread-queries.ts`
-- `hooks/queries/environment-queries.ts`
-- `hooks/queries/system-queries.ts`
-- `hooks/mutations/thread-mutations.ts`
-- `hooks/mutations/environment-mutations.ts`
-- `hooks/queries/shared.ts` for query key factories and `useApiClient`
-
-### ProjectList.tsx — 818 lines
-
-Mixes project CRUD, thread archive/rename/delete flows, sidebar rendering, and three dialog states. `renderThreadRow` alone is ~150 lines of inline JSX.
-
-**Fix:** Extract `ThreadRow` and `ProjectRow` as standalone components. Move dialog state into dedicated hooks.
+- `pnpm exec turbo run build --filter=@bb/app`
+- `pnpm exec turbo run test --filter=@bb/app`
 
 ---
+
+## Remaining
+
+### AGENTS.md Violations
+
+#### 3 remaining uses of `window.alert` / `window.confirm` / `window.prompt`
+
+**Files:** `views/ThreadDetailView.tsx`, `hooks/useQuickCreateProject.ts`
+
+Blocking, unstyled browser dialogs still remain in archive/delete confirmation flows and quick-create error handling.
+
+**Fix:** Replace `window.confirm` callsites with existing dialog primitives and replace the `window.alert` callsite with toast-based feedback.
 
 ## Testing
 
-### No component or hook tests
+### Missing direct tests for remaining stateful hooks
 
-Zero tests for React components or hooks. The hooks contain behavioral complexity (reconnection, caching, localStorage sync) that is untested.
+The app now has coverage for `useWebSocket`, `useTheme`, `HireManagerModal`, `ImageLightbox`, and query/helper behavior, but two high-value hooks still lack direct tests.
 
 **Fix:** Add tests for these hooks in priority order:
 
-1. `useWebSocket` — connection lifecycle, reconnection, message routing
-2. `useHostDaemon` — daemon probing, fallback behavior
-3. `useThreadCreationOptions` — option persistence, provider/model resolution
+1. `useHostDaemon` — daemon probing, local-host resolution, and open-path/pick-folder availability
+2. `useThreadCreationOptions` — localStorage persistence, provider/model fallback, and environment selection reset behavior
 
 ---
 
@@ -83,6 +72,6 @@ pnpm exec turbo run test --filter=@bb/app
 Grep for regressions:
 
 ```bash
-grep -rn "text-\[.*px\]" apps/app/src/
-grep -rn "window\.alert\|window\.confirm\|window\.prompt" apps/app/src/
+rg -n "text-\\[.*px\\]" apps/app/src/
+rg -n "window\\.alert|window\\.confirm|window\\.prompt" apps/app/src/
 ```
