@@ -9,10 +9,11 @@ import { runGit } from "../src/git.js";
 
 type GitModule = typeof import("../src/git.js");
 type WatchWorkspaceStatus = GitModule["watchWorkspaceStatus"];
-type NodeFsModule = typeof import("node:fs");
-type NodeFsWatch = NodeFsModule["watch"];
-type NodeFsWatchArgs = Parameters<NodeFsWatch>;
-type NodeFsWatchResult = ReturnType<NodeFsWatch>;
+type ParcelWatcherModule = typeof import("@parcel/watcher");
+type ParcelWatcherDefault = ParcelWatcherModule["default"];
+type ParcelWatcherSubscribe = ParcelWatcherDefault["subscribe"];
+type ParcelWatcherSubscribeArgs = Parameters<ParcelWatcherSubscribe>;
+type ParcelWatcherSubscribeResult = Awaited<ReturnType<ParcelWatcherSubscribe>>;
 
 const tempDirs: string[] = [];
 
@@ -68,42 +69,41 @@ async function waitForCallCount(
   throw new Error("Timed out waiting for watcher callback");
 }
 
-function usesRecursiveWorkspaceWatch(watchArgs: NodeFsWatchArgs): boolean {
-  const watchOptions = watchArgs[1];
-  return (
-    typeof watchOptions === "object" &&
-    watchOptions !== null &&
-    "recursive" in watchOptions &&
-    watchOptions.recursive === true
-  );
+function isWorkspaceRootSubscription(
+  watchArgs: ParcelWatcherSubscribeArgs,
+  workspaceRootPath: string,
+): boolean {
+  const [rootPath, _callback, options] = watchArgs;
+  return rootPath === workspaceRootPath && options?.ignore?.includes(".git") === true;
 }
 
-function callNodeFsWatch(
-  nodeFs: NodeFsModule,
-  watchArgs: NodeFsWatchArgs,
-): NodeFsWatchResult {
-  const secondArg = watchArgs[1];
-  const thirdArg = watchArgs[2];
-  if (typeof secondArg === "function" || secondArg === undefined) {
-    return nodeFs.watch(watchArgs[0], secondArg);
-  }
-  if (thirdArg === undefined) {
-    return nodeFs.watch(watchArgs[0], secondArg);
-  }
-  return nodeFs.watch(watchArgs[0], secondArg, thirdArg);
-}
-
-async function importWatchWorkspaceStatusWithRecursiveWatchFailure(): Promise<WatchWorkspaceStatus> {
+async function importWatchWorkspaceStatusWithWorkspaceSubscriptionFailure(
+  workspaceRootPath: string,
+): Promise<WatchWorkspaceStatus> {
   vi.resetModules();
-  vi.doMock("node:fs", async () => {
-    const actualFs = await vi.importActual<NodeFsModule>("node:fs");
+  vi.doMock("@parcel/watcher", async () => {
+    const actualWatcher =
+      await vi.importActual<ParcelWatcherModule>("@parcel/watcher");
     return {
-      ...actualFs,
-      watch(...watchArgs: NodeFsWatchArgs): NodeFsWatchResult {
-        if (usesRecursiveWorkspaceWatch(watchArgs)) {
-          throw new Error("recursive watch unavailable");
+      ...actualWatcher,
+      default: {
+        ...actualWatcher.default,
+        subscribe(
+          ...watchArgs: ParcelWatcherSubscribeArgs
+        ): Promise<ParcelWatcherSubscribeResult> {
+          if (isWorkspaceRootSubscription(watchArgs, workspaceRootPath)) {
+            throw new Error("workspace subscription unavailable");
+          }
+          return actualWatcher.default.subscribe(...watchArgs);
         }
-        return callNodeFsWatch(actualFs, watchArgs);
+      },
+      subscribe(
+        ...watchArgs: ParcelWatcherSubscribeArgs
+      ): Promise<ParcelWatcherSubscribeResult> {
+        if (isWorkspaceRootSubscription(watchArgs, workspaceRootPath)) {
+          throw new Error("workspace subscription unavailable");
+        }
+        return actualWatcher.subscribe(...watchArgs);
       },
     };
   });
@@ -112,7 +112,7 @@ async function importWatchWorkspaceStatusWithRecursiveWatchFailure(): Promise<Wa
 }
 
 afterEach(async () => {
-  vi.doUnmock("node:fs");
+  vi.doUnmock("@parcel/watcher");
   vi.resetModules();
   await Promise.all(
     tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
@@ -442,10 +442,10 @@ describe("Workspace", () => {
     }
   });
 
-  it("falls back to polling when recursive workspace watch setup fails", async () => {
+  it("falls back to polling when workspace subscription setup fails", async () => {
     const repoPath = await initRepo();
     const watchWorkspaceStatus =
-      await importWatchWorkspaceStatusWithRecursiveWatchFailure();
+      await importWatchWorkspaceStatusWithWorkspaceSubscriptionFailure(repoPath);
     const calls: number[] = [];
     const stopWatching = watchWorkspaceStatus(repoPath, () => {
       calls.push(Date.now());

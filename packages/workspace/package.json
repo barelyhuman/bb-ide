@@ -10,7 +10,9 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "rm -rf dist tsconfig.tsbuildinfo && tsc",
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
@@ -18,7 +20,8 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "@bb/domain": "workspace:*"
+    "@bb/domain": "workspace:*",
+    "@parcel/watcher": "2.5.6"
   },
   "devDependencies": {
     "@bb/tsconfig": "workspace:*",

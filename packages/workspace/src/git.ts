@@ -1,12 +1,5 @@
 import { execFile, type ExecFileException } from "node:child_process";
-import {
-  existsSync,
-  lstatSync,
-  readdirSync,
-  readFileSync,
-  watch,
-  type FSWatcher,
-} from "node:fs";
+import parcelWatcher from "@parcel/watcher";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -58,6 +51,12 @@ interface ReadWorkspaceFileFingerprintEntryArgs {
   entry: PorcelainEntry;
 }
 
+type ParcelWatcherSubscribe = typeof parcelWatcher.subscribe;
+type ParcelWatcherAsyncSubscription = Awaited<
+  ReturnType<ParcelWatcherSubscribe>
+>;
+type ParcelWatcherOptions = Parameters<ParcelWatcherSubscribe>[2];
+
 interface ParsedPorcelainPathToken {
   nextIndex: number;
   value: string;
@@ -72,8 +71,11 @@ interface GitMetadataLayout {
 interface GitRefRoots {
   headsRootPath: string;
   originRootPath: string;
-  refsRootPath: string;
-  remotesRootPath: string;
+}
+
+interface WatchSubscriptionSpec {
+  options?: ParcelWatcherOptions;
+  rootPath: string;
 }
 
 const GIT_QUOTED_PATH_ESCAPE_BYTES = new Map<string, number>([
@@ -452,49 +454,10 @@ async function resolveGitDirectory(cwd: string): Promise<string | undefined> {
   }
 }
 
-function resolveGitDirectorySync(cwd: string): string | undefined {
-  const dotGitPath = path.join(cwd, ".git");
-  try {
-    const dotGitStat = lstatSync(dotGitPath);
-    if (dotGitStat.isDirectory()) {
-      return dotGitPath;
-    }
-    if (!dotGitStat.isFile()) {
-      return undefined;
-    }
-    const dotGitContents = readFileSync(dotGitPath, "utf8");
-    const firstLine = dotGitContents.split("\n")[0]?.trim() ?? "";
-    if (!firstLine.startsWith("gitdir:")) {
-      return undefined;
-    }
-    const relativeGitDir = firstLine.slice("gitdir:".length).trim();
-    if (relativeGitDir.length === 0) {
-      return undefined;
-    }
-    return path.resolve(cwd, relativeGitDir);
-  } catch {
-    return undefined;
-  }
-}
-
 async function resolveGitCommonDirectory(gitDirPath: string): Promise<string> {
   try {
     const relativeCommonDirPath = trimOutput(
       await fs.readFile(path.join(gitDirPath, "commondir"), "utf8"),
-    );
-    if (relativeCommonDirPath.length === 0) {
-      return gitDirPath;
-    }
-    return path.resolve(gitDirPath, relativeCommonDirPath);
-  } catch {
-    return gitDirPath;
-  }
-}
-
-function resolveGitCommonDirectorySync(gitDirPath: string): string {
-  try {
-    const relativeCommonDirPath = trimOutput(
-      readFileSync(path.join(gitDirPath, "commondir"), "utf8"),
     );
     if (relativeCommonDirPath.length === 0) {
       return gitDirPath;
@@ -515,43 +478,17 @@ async function resolveGitMetadataLayout(cwd: string): Promise<GitMetadataLayout>
   };
 }
 
-function resolveGitMetadataLayoutSync(cwd: string): GitMetadataLayout {
-  const dotGitPath = path.join(cwd, ".git");
-  const gitDirPath = resolveGitDirectorySync(cwd) ?? dotGitPath;
-  return {
-    commonDirPath: resolveGitCommonDirectorySync(gitDirPath),
-    dotGitPath,
-    gitDirPath,
-  };
-}
-
 function createGitRefRoots(commonDirPath: string): GitRefRoots {
   const refsRootPath = path.join(commonDirPath, "refs");
   const remotesRootPath = path.join(refsRootPath, "remotes");
   return {
     headsRootPath: path.join(refsRootPath, "heads"),
     originRootPath: path.join(remotesRootPath, "origin"),
-    refsRootPath,
-    remotesRootPath,
   };
 }
 
 function dedupePaths(paths: string[]): string[] {
   return Array.from(new Set(paths));
-}
-
-function collectExistingDirectoryTreeSync(rootPath: string): string[] {
-  try {
-    if (!lstatSync(rootPath).isDirectory()) {
-      return [];
-    }
-    const childPaths = readdirSync(rootPath).flatMap((childName) =>
-      collectExistingDirectoryTreeSync(path.join(rootPath, childName)),
-    );
-    return [rootPath, ...childPaths];
-  } catch {
-    return [];
-  }
 }
 
 async function collectMetadataTreePaths(rootPath: string): Promise<string[]> {
@@ -572,23 +509,34 @@ async function collectMetadataTreePaths(rootPath: string): Promise<string[]> {
   }
 }
 
-function resolveGitMetadataWatchPathsSync(cwd: string): string[] {
-  const layout = resolveGitMetadataLayoutSync(cwd);
-  const refRoots = createGitRefRoots(layout.commonDirPath);
-  return dedupePaths([
-    layout.dotGitPath,
-    layout.gitDirPath,
-    layout.commonDirPath,
-    path.join(layout.gitDirPath, "HEAD"),
-    path.join(layout.gitDirPath, "index"),
-    path.join(layout.commonDirPath, "packed-refs"),
-    refRoots.refsRootPath,
-    refRoots.remotesRootPath,
-    refRoots.headsRootPath,
-    refRoots.originRootPath,
-    ...collectExistingDirectoryTreeSync(refRoots.headsRootPath),
-    ...collectExistingDirectoryTreeSync(refRoots.originRootPath),
-  ]);
+function createCommonDirWatchOptions(): ParcelWatcherOptions {
+  return {
+    ignore: [
+      "hooks",
+      "info",
+      "logs",
+      "modules",
+      "objects",
+      "worktrees",
+    ],
+  };
+}
+
+async function resolveMetadataWatchSpecs(cwd: string): Promise<WatchSubscriptionSpec[]> {
+  const layout = await resolveGitMetadataLayout(cwd);
+  const commonDirSpec = {
+    options: createCommonDirWatchOptions(),
+    rootPath: layout.commonDirPath,
+  };
+  if (layout.gitDirPath === layout.commonDirPath) {
+    return [commonDirSpec];
+  }
+  return [
+    {
+      rootPath: layout.gitDirPath,
+    },
+    commonDirSpec,
+  ];
 }
 
 async function resolveGitMetadataFingerprintPaths(
@@ -676,19 +624,6 @@ async function createWorkspaceStatusWatchFingerprint(cwd: string): Promise<strin
   });
 }
 
-function shouldIgnoreWorkspaceWatchFilename(
-  filename: string | Buffer | null | undefined,
-): boolean {
-  if (!filename) {
-    return false;
-  }
-  const normalizedPath = path.normalize(filename.toString());
-  return (
-    normalizedPath === ".git" ||
-    normalizedPath.startsWith(`.git${path.sep}`)
-  );
-}
-
 export function watchWorkspaceStatus(
   cwd: string,
   onChange: WorkspaceStatusChangeCallback,
@@ -700,58 +635,17 @@ export function watchWorkspaceStatus(
   let baselineLoaded = false;
   let checkInFlight = false;
   let recheckRequested = false;
-  const watchers: FSWatcher[] = [];
-  const metadataWatchers = new Map<string, FSWatcher>();
+  const subscriptions = new Map<string, ParcelWatcherAsyncSubscription>();
 
-  const closeMetadataWatcher = (watchedPath: string) => {
-    const watcher = metadataWatchers.get(watchedPath);
-    if (!watcher) {
+  const stopSubscription = (rootPath: string) => {
+    const subscription = subscriptions.get(rootPath);
+    if (!subscription) {
       return;
     }
-    try {
-      watcher.close();
-    } catch {
-      // Ignore close failures during metadata watcher teardown.
-    }
-    metadataWatchers.delete(watchedPath);
-  };
-
-  const refreshMetadataWatchers = () => {
-    if (disposed) {
-      return;
-    }
-    let nextPaths: string[];
-    try {
-      nextPaths = resolveGitMetadataWatchPathsSync(cwd).filter(existsSync);
-    } catch {
-      return;
-    }
-    const nextPathSet = new Set(nextPaths);
-    for (const watchedPath of metadataWatchers.keys()) {
-      if (nextPathSet.has(watchedPath)) {
-        continue;
-      }
-      closeMetadataWatcher(watchedPath);
-    }
-    for (const watchedPath of nextPaths) {
-      if (metadataWatchers.has(watchedPath)) {
-        continue;
-      }
-      try {
-        const watcher = watch(watchedPath, { persistent: false }, () => {
-          refreshMetadataWatchers();
-          scheduleCheck();
-        });
-        watcher.on("error", () => {
-          closeMetadataWatcher(watchedPath);
-          refreshMetadataWatchers();
-          scheduleCheck();
-        });
-        metadataWatchers.set(watchedPath, watcher);
-      } catch {
-        // Ignore unsupported watch targets; other targets and mutation-triggered hints remain.
-      }
-    }
+    subscriptions.delete(rootPath);
+    void subscription.unsubscribe().catch(() => {
+      // Ignore unsubscribe failures during watcher teardown.
+    });
   };
 
   const runChecks = async () => {
@@ -765,7 +659,6 @@ export function watchWorkspaceStatus(
         recheckRequested = false;
         try {
           const nextFingerprint = await createWorkspaceStatusWatchFingerprint(cwd);
-          refreshMetadataWatchers();
           if (disposed) {
             return;
           }
@@ -813,30 +706,79 @@ export function watchWorkspaceStatus(
     }, WORKSPACE_STATUS_WATCH_FALLBACK_POLL_INTERVAL_MS);
   };
 
-  void runChecks();
-  try {
-    const workspaceWatcher = watch(
-      cwd,
-      {
-        persistent: false,
-        recursive: true,
-      },
-      (_eventType, filename) => {
-        if (shouldIgnoreWorkspaceWatchFilename(filename)) {
+  const handleWatchFailure = () => {
+    startFallbackPolling();
+    scheduleCheck();
+  };
+
+  const startWatchSubscription = (spec: WatchSubscriptionSpec) => {
+    void (async () => {
+      if (disposed || subscriptions.has(spec.rootPath)) {
+        return;
+      }
+      if (!(await pathExists(spec.rootPath))) {
+        return;
+      }
+      try {
+        const subscription = await parcelWatcher.subscribe(
+          spec.rootPath,
+          (error, events) => {
+            if (disposed) {
+              return;
+            }
+            if (error) {
+              handleWatchFailure();
+              return;
+            }
+            if (events.length === 0) {
+              return;
+            }
+            scheduleCheck();
+          },
+          spec.options,
+        );
+        if (disposed) {
+          void subscription.unsubscribe().catch(() => {
+            // Ignore unsubscribe failures after late subscription setup.
+          });
           return;
         }
-        scheduleCheck();
-      },
-    );
-    workspaceWatcher.on("error", () => {
-      startFallbackPolling();
-      scheduleCheck();
-    });
-    watchers.push(workspaceWatcher);
-  } catch {
-    startFallbackPolling();
-  }
-  refreshMetadataWatchers();
+        if (subscriptions.has(spec.rootPath)) {
+          void subscription.unsubscribe().catch(() => {
+            // Ignore duplicate unsubscribe failures.
+          });
+          return;
+        }
+        subscriptions.set(spec.rootPath, subscription);
+      } catch {
+        if (disposed) {
+          return;
+        }
+        handleWatchFailure();
+      }
+    })();
+  };
+
+  void runChecks();
+  startWatchSubscription({
+    options: {
+      ignore: [".git"],
+    },
+    rootPath: cwd,
+  });
+  void (async () => {
+    try {
+      const metadataSpecs = await resolveMetadataWatchSpecs(cwd);
+      for (const spec of metadataSpecs) {
+        startWatchSubscription(spec);
+      }
+    } catch {
+      if (disposed) {
+        return;
+      }
+      handleWatchFailure();
+    }
+  })();
 
   return () => {
     disposed = true;
@@ -848,15 +790,8 @@ export function watchWorkspaceStatus(
       clearInterval(fallbackPollTimer);
       fallbackPollTimer = null;
     }
-    for (const watcher of watchers) {
-      try {
-        watcher.close();
-      } catch {
-        // Ignore close failures during teardown.
-      }
-    }
-    for (const watchedPath of metadataWatchers.keys()) {
-      closeMetadataWatcher(watchedPath);
+    for (const rootPath of subscriptions.keys()) {
+      stopSubscription(rootPath);
     }
   };
 }
