@@ -76,7 +76,7 @@ automations
   triggerType     TEXT NOT NULL ("schedule")
   triggerConfig   TEXT NOT NULL (JSON, discriminated by triggerType)
   action          TEXT NOT NULL (JSON, discriminated by actionType — v1: only "scheduled-thread")
-  autoArchive     INTEGER NOT NULL DEFAULT 1
+  autoArchive     INTEGER NOT NULL DEFAULT 0
   nextRunAt       INTEGER (epoch ms, NULL when disabled or non-schedule trigger)
   lastRunAt       INTEGER
   runCount        INTEGER NOT NULL DEFAULT 0
@@ -87,11 +87,11 @@ INDEX idx_automations_project ON automations(projectId)
 INDEX idx_automations_due ON automations(enabled, triggerType, nextRunAt)
 ```
 
-**Trigger config** (discriminated by `triggerType`):
+**Trigger config** (discriminated by `triggerType` inside the JSON, mirroring the top-level column):
 
 ```typescript
 // v1: only schedule
-type ScheduleTriggerConfig = { cron: string; timezone: string };
+type ScheduleTriggerConfig = { triggerType: "schedule"; cron: string; timezone: string };
 
 // Future: PR, issue, webhook, etc.
 ```
@@ -108,13 +108,13 @@ type ScheduledThreadAction = {
 // Future: send-message, run-command, etc.
 ```
 
-The `threadRequest` field stores a `CreateThreadRequest` (from `@bb/server-contract`) minus `projectId` (which comes from the automation row). This is the same shape the `POST /threads` API accepts. When the sweep fires, it reconstructs a full `CreateThreadRequest` by merging `projectId` from the automation row with `threadRequest` from the action, then calls the same `createThreadFromRequest()` function that the API route uses.
+The `threadRequest` field stores a `CreateThreadRequest` (from `@bb/server-contract`) minus `projectId` (which comes from the automation row). This is the same shape the `POST /threads` API accepts. When the sweep fires, it reconstructs a full `CreateThreadRequest`, wraps it in a `ThreadCreateServiceRequest` (adding `type` and optional `spawnInitiator`), and calls the same `createThreadFromRequest()` function that the API route uses.
 
 This ensures automation thread creation and regular thread creation are **literally the same code path**. The `CreateThreadRequest` already supports all the knobs a user might want: `providerId`, `environment` (reuse/host/sandbox), `input` (prompt), `model`, `serviceTier`, `reasoningLevel`, `sandboxMode`, `spawnInitiator`, etc.
 
 **Design notes:**
 - `triggerConfig` and `action` are separate JSON columns because they vary on independent axes — a schedule trigger could fire any action type, and a PR trigger could also create a thread.
-- `autoArchive` controls whether completed threads are archived immediately or left visible. Default `true`.
+- `autoArchive` controls whether completed threads are archived immediately or left visible. Default `false`. Optional on the API input (server fills in the default), non-optional in the domain type.
 - `runCount`, `lastRunAt`, and `nextRunAt` live on the automation row (like Terragon), not in a separate runs table. Thread history is queryable via the `automationId` FK on threads.
 - No `oneShot` — automations are recurring by design. A user who wants a one-time run can disable the automation after it fires, or just create a thread directly.
 - No environment type restriction — the `threadRequest` can specify any environment type that `CreateThreadRequest` supports.
@@ -180,6 +180,8 @@ If the file doesn't exist or has no frontmatter → delete all nudge rows for th
 
 If the file has valid frontmatter but a parse error on a specific schedule entry (e.g., invalid cron expression), skip that entry and sync the rest. Log a warning for the invalid entry.
 
+**Limits:** Max 20 schedule entries per thread. If the file contains more, sync the first 20 and log a warning. Minimum cron interval is 5 minutes — reject entries that fire more frequently (e.g., `* * * * *`) with a warning. These limits apply to both ASYNC.md sync and the automation CRUD API.
+
 ### Timezone for manager nudges
 
 The `ASYNC.md` frontmatter includes a top-level `timezone` field (IANA). If omitted, default to UTC. Individual schedule entries can optionally override with their own `timezone`.
@@ -212,17 +214,23 @@ sweepDueAutomations(deps, now):
   due = SELECT * FROM automations WHERE enabled = 1 AND triggerType = 'schedule' AND nextRunAt <= now
   for each automation in due:
     try:
-      // Dedup: skip if an open thread already exists for this automation
-      if hasOpenAutomationThread(db, automation.id):
+      // 1. Validate stored config (pure parse, no I/O — cheapest check)
+      parsed = parseAutomationAction(automation.action)
+      if !parsed.success:
+        log validation error with automation.id, continue
+
+      // 2. Check host is online (single DB lookup)
+      if !hasConnectedHostSession(db, resolveHostId(automation)):
+        advanceAutomationAfterRun(db, automation)  // skip run, don't retry every 10s
         continue
 
-      // Create thread using the SAME code path as regular thread creation.
-      // This is critical — no parallel implementation allowed.
-      request = { projectId: automation.projectId, ...automation.action.threadRequest }
-      thread = createThreadFromRequest(deps, request, { automationId: automation.id })
+      // 3. CAS-advance schedule first (prevents double-fire)
+      if !advanceAutomationAfterRun(db, automation):
+        continue  // another sweep got it
 
-      // Advance schedule (optimistic lock)
-      advanceAutomationAfterRun(db, automation)
+      // 4. Create thread using the SAME code path as regular thread creation.
+      request = { projectId: automation.projectId, ...parsed.threadRequest }
+      thread = createThreadFromRequest(deps, request, { automationId: automation.id })
     catch error:
       log error, continue to next automation
 ```
@@ -234,20 +242,25 @@ sweepDueNudges(deps, now):
   due = SELECT * FROM manager_thread_nudges WHERE enabled = 1 AND nextFireAt <= now
   for each nudge in due:
     try:
+      // 1. Check thread exists and is eligible (single DB lookup, cheapest)
       thread = getThread(db, nudge.threadId)
       if !thread or thread.archivedAt != null:
-        // Thread gone — cascade should have cleaned this up, but be safe
-        deleteNudge(db, nudge.id)
+        deleteNudge(db, nudge.id)  // cascade should have handled this, be safe
         continue
       if thread.status != "idle":
-        continue
-      if hasPendingTurnRun(db, nudge.threadId):
+        advanceNudgeAfterFire(db, nudge)  // skip run, don't retry every 10s
         continue
 
-      // Queue turn.run with nudge message (in transaction with nextFireAt advance)
+      // 2. Check host is online
+      if !hasConnectedHostSession(db, resolveHostIdForThread(thread)):
+        advanceNudgeAfterFire(db, nudge)  // skip run
+        continue
+
+      // 3. CAS-advance + queue command in one transaction
       db.transaction:
         if hasPendingTurnRun(tx, nudge.threadId):
-          return  // re-check inside txn
+          advanceNudgeAfterFire(tx, nudge)  // already has a pending command
+          return
         if !advanceNudgeAfterFire(tx, nudge):
           return  // CAS failed, another sweep got it
         queue turn.run on nudge.threadId with nudge message
@@ -264,9 +277,9 @@ The concern is **code drift**: if automation thread creation diverges from regul
 
 The automation stores a `CreateThreadRequest` (minus `projectId`) in its `action.threadRequest` field. The sweep reconstructs a full `CreateThreadRequest` and calls `createThreadFromRequest()`. The function shouldn't need to know or care that its caller is a sweep rather than an API route.
 
-`createThreadFromRequest()` currently requires a connected host session for some environment types. The sweep may need to call it when no session exists (host offline). If the function's signature doesn't accommodate this (e.g., it throws on missing session), refactor it to handle the disconnected case gracefully — queue the provisioning command and let it execute when the host reconnects. This refactor is in-scope for this plan.
+`createThreadFromRequest()` currently calls `requireConnectedHostSession()` (at `thread-create.ts:250`) which throws when no host session exists. The sweep may need to call it when the host is offline. Refactor to handle the disconnected case gracefully — queue the provisioning command and let it execute when the host reconnects. This refactor is in-scope for this plan.
 
-Additionally, `createThreadFromRequest()` needs to accept an optional `automationId` so the created thread can be linked back for run history and dedup. This should be a minor addition to the function's options, not a separate code path.
+Additionally, `createThreadFromRequest()` needs to accept an optional `automationId` so the created thread can be linked back for run history and dedup. The `ThreadCreateServiceRequest` type (in `thread-create-request.ts`) already discriminates on `type: "standard" | "manager"` — add an optional `automationId` field to the base type or pass it as a second options arg. This should be a minor addition, not a separate code path.
 
 ### Optimistic locking on schedule advancement
 
@@ -294,12 +307,13 @@ If another sweep already advanced it, this updates 0 rows and the fire/run is sk
 
 ### Disconnected host handling
 
-If a nudge fires while the target host is offline:
-- The `turn.run` command sits in the command queue.
-- **Do not accumulate stale nudges.** Before queuing a nudge, check if there's already a pending/fetched `turn.run` for this threadId. If so, skip — the manager will check `ASYNC.md` when it wakes up regardless.
-- For automations: same approach — check if an open automation thread already exists before creating another.
+**Disconnected host handling:**
 
-If a host has been offline for hours and reconnects, it should only see at most one pending nudge per manager, not a backlog.
+If the target host is offline when a schedule is due, advance the CAS to the next scheduled time and skip the run. The run is missed, not deferred — same behavior as a real cron daemon on a powered-off machine. This avoids the sweep retrying every 10 seconds against a host that could be offline for hours.
+
+For nudges: if the host is offline, advance `nextFireAt` and skip. The manager will sync `ASYNC.md` when it next goes idle regardless.
+
+For automations: if the host is offline, advance `nextRunAt` and skip. No thread is created.
 
 ### Sweep interval and precision
 
@@ -315,10 +329,10 @@ The sweeps run on the server's polling interval (likely 10–30 seconds). Schedu
 
 When a turn completes on an automation-created thread (identified by `automationId`) and the thread transitions to idle, the server checks the automation's `autoArchive` flag:
 
-- **`autoArchive: true` (default):** Thread is immediately archived. Only visible through run history queries.
-- **`autoArchive: false`:** Thread remains in the normal thread list after completion. For automations whose output needs manual review.
+- **`autoArchive: false` (default):** Thread remains in the normal thread list after completion. For automations whose output needs manual review.
+- **`autoArchive: true`:** Thread is immediately archived. Only visible through run history queries.
 
-The check lives in `applyTurnCompletedEvent`. It must look up the automation to read the flag — the thread alone doesn't carry it. If the automation has been deleted (`automationId` is NULL from the FK cascade), default to archiving (no config to consult, orphaned threads shouldn't linger).
+The check lives in `applyEventEffects`. It must look up the automation to read the flag — the thread alone doesn't carry it. Only performs the lookup when `automationId IS NOT NULL`. If the automation has been deleted (`automationId` is NULL from the FK cascade), do not archive — no config to consult, and the thread may contain valuable output.
 
 ---
 
@@ -342,12 +356,14 @@ The ASYNC.md sync path already handles this gracefully — invalid entries are s
 
 ## Dependencies
 
-Two small packages:
+Two small packages (added to `apps/server`):
 
 | Package | Purpose | Size |
 |---------|---------|------|
 | `cron-parser` | Parse cron expressions, compute next fire times with timezone support | ~5KB, no transitive deps |
 | `gray-matter` | Parse YAML frontmatter from ASYNC.md | ~15KB |
+
+`gray-matter` is also used in `@bb/templates` but the server needs its own dependency since it's the one parsing `ASYNC.md`.
 
 `cronstrue` (human-readable cron descriptions) is not needed in v1 since there's no UI. Add it when the UI is built.
 
@@ -360,14 +376,14 @@ Two small packages:
 - `ManagerThreadNudge` entity type
 - `ScheduleTriggerConfig` and `ScheduledThreadAction` Zod schemas
 - `CreateAutomationInput` and `UpdateAutomationInput` for the API
-- New `ProjectChangeKind`: `"automations-changed"` and `"nudges-changed"`
+- New `ProjectChangeKind` values in `PROJECT_CHANGE_KINDS` (`packages/domain/src/change-kinds.ts:19`): `"automations-changed"` and `"nudges-changed"`
 
 ### `@bb/db`
-- `automations` table in Drizzle schema
+- `automations` table in Drizzle schema (`packages/db/src/schema.ts`)
 - `manager_thread_nudges` table in Drizzle schema
-- `automationId` nullable column on `threads` table (FK → `automations`, `ON DELETE SET NULL`)
+- `automationId` nullable column on `threads` table (FK → `automations`, `ON DELETE SET NULL`) — added to existing threads definition at schema.ts:118
 - Migration
-- `createAutomationId()` and `createManagerThreadNudgeId()` in `ids.ts`
+- `createAutomationId()` and `createManagerThreadNudgeId()` in `ids.ts` (alongside existing factories at `packages/db/src/ids.ts`)
 - `automations.ts` data functions: CRUD, `listDueAutomations`, `advanceAutomationAfterRun`
 - `nudges.ts` data functions: `upsertNudges`, `listDueNudges`, `advanceNudgeAfterFire`
 
@@ -376,11 +392,11 @@ Two small packages:
 - Manager nudges don't need API routes — driven by the file
 
 ### Server (`apps/server`)
-- `sweepDueAutomations` and `sweepDueNudges` in the sweep loop, with per-task error isolation
-- Manager-idle lifecycle hook in event ingestion path: fetch `ASYNC.md`, sync nudges
+- `sweepDueAutomations` and `sweepDueNudges` added to sweep loop in `apps/server/src/index.ts` (alongside existing sweeps at line 43), with per-task error isolation
+- Manager-idle lifecycle hook in `applyEventEffects` (`apps/server/src/internal/events.ts:140`), alongside the existing `sendNextQueuedDraftIfPresent` call: after `applyTurnCompletedEvent`, check if the thread is a manager that just went idle, then `await` the ASYNC.md sync. Follows the same async side-effect pattern already established for queued drafts.
+- Auto-archive logic also in `applyEventEffects`: after turn completion on a thread with `automationId`, look up the automation's `autoArchive` flag. Only perform the lookup when `automationId IS NOT NULL`.
 - Automation CRUD route handlers
-- Auto-archive logic in `applyTurnCompletedEvent`
-- Thread creation for automations must call the same function as regular thread creation
+- Thread creation for automations must call `createThreadFromRequest()` (`apps/server/src/services/thread-create.ts:202`) — the same function the API route uses
 
 ### Manager instructions (`@bb/templates`)
 - New section on `ASYNC.md`: format, frontmatter schema (including timezone), how to write/update/remove entries
@@ -391,10 +407,12 @@ Two small packages:
 
 ## What Doesn't Change
 
-- Existing sweep functions (`sweepExpiredCommands`, `sweepExpiredLeases`, `sweepManagedEnvironments`) — these are maintenance tasks. They stay as-is.
+- Existing sweep functions (`sweepExpiredCommands`, `sweepExpiredLeases`, `sweepManagedEnvironments`, `sweepDestroyingEnvironments` in `@bb/db/src/data/sweeps.ts`) — maintenance tasks, stay as-is.
+- Sweep loop (`apps/server/src/index.ts:43-50`, 10s interval) — new sweeps are added alongside existing ones.
 - `dispatchCommand` internals — the exhaustive switch stays as-is.
 - Event buffer, WebSocket protocol, notification hub — unchanged.
-- `createThreadFromRequest()` — reused by the automation sweep, not duplicated. May need a minor refactor to accept `automationId` and handle disconnected sessions.
+- `createThreadFromRequest()` (`apps/server/src/services/thread-create.ts:202`) — reused by the automation sweep, not duplicated. Needs minor refactor to accept `automationId` and handle disconnected host sessions (currently throws via `requireConnectedHostSession`).
+- `applyTurnCompletedEvent` (`apps/server/src/internal/turn-completed-events.ts:14`) — this is the hook point for both auto-archive and manager-idle ASYNC.md sync. It already has a `nextStatus === "idle"` branch (line 44) where manager-idle detection slots in.
 - No UI in v1 — automations managed via API, nudges managed via the manager conversation.
 
 ---
@@ -406,7 +424,7 @@ Learnings from three rounds of review on the abandoned `codex/scheduled-tasks` b
 ### Architecture
 1. **Split service files by concern.** Don't put sweep orchestration, ASYNC.md sync, and cron helpers in one file. Separate into: `automation-sweep.ts`, `nudge-sweep.ts`, `manager-schedule-sync.ts`, `schedule-helpers.ts`.
 2. **Log guard clause failures.** Every condition in the nudge sweep that returns false (thread not idle, environment not ready, pending command, etc.) should log at `debug` level with structured fields (reason, thread ID, nudge ID).
-3. **Wrap `JSON.parse` of config columns** with try/catch that includes the record ID for debuggability.
+3. **Validate stored automation configs at sweep time.** Parse `triggerConfig` and `action.threadRequest` through their Zod schemas before acting. If validation fails (e.g., schema evolved and a stored request is missing a new required field), log an error with the automation ID and skip the run. The automation stays enabled — a future UI will badge invalid automations for the user to fix.
 4. **Cron/timezone validation** at API boundaries must produce 400, not 500 (see Cron Validation section above).
 
 ### Testing
@@ -416,7 +434,8 @@ Learnings from three rounds of review on the abandoned `codex/scheduled-tasks` b
 4. Test `autoArchive: true` (default), `autoArchive: false`, and deleted-automation fallback.
 5. Test DST transitions: spring-forward (skipped hour) and fall-back (repeated hour).
 6. Test empty ASYNC.md upsert deletes all nudges for that thread.
-7. All tests use in-memory SQLite via `createConnection(":memory:")` + `migrate(db)`. Never mock the database.
+7. Test disconnected host: automation/nudge is due but host is offline — sweep advances the schedule and skips the run, no thread created, no command queued.
+8. All tests use in-memory SQLite via `createConnection(":memory:")` + `migrate(db)`. Never mock the database.
 
 ---
 
