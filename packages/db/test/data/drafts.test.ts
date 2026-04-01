@@ -39,14 +39,14 @@ describe("drafts", () => {
       model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
-      serviceTier: "flex",
+      serviceTier: "default",
     });
 
     expect(draft.id).toMatch(/^draft_/);
     expect(draft.threadId).toBe(thread.id);
     expect(draft.content).toBe(JSON.stringify(defaultInput));
     expect(draft.model).toBe("gpt-5");
-    expect(draft.serviceTier).toBe("flex");
+    expect(draft.serviceTier).toBe("default");
   });
 
   it("gets a draft by ID", () => {
@@ -57,7 +57,7 @@ describe("drafts", () => {
       model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
-      serviceTier: "flex",
+      serviceTier: "default",
     });
 
     const fetched = getDraft(db, draft.id);
@@ -73,7 +73,7 @@ describe("drafts", () => {
       model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
-      serviceTier: "flex",
+      serviceTier: "default",
     });
     createDraft(db, noopNotifier, {
       threadId: thread.id,
@@ -81,7 +81,7 @@ describe("drafts", () => {
       model: "gpt-5",
       reasoningLevel: "high",
       sandboxMode: "danger-full-access",
-      serviceTier: "flex",
+      serviceTier: "default",
     });
 
     expect(listDrafts(db, thread.id)).toHaveLength(2);
@@ -95,7 +95,7 @@ describe("drafts", () => {
       model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
-      serviceTier: "flex",
+      serviceTier: "default",
     });
 
     expect(deleteDraft(db, noopNotifier, draft.id)).toBe(true);
@@ -111,7 +111,7 @@ describe("drafts", () => {
       model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
-      serviceTier: "flex",
+      serviceTier: "default",
     });
 
     const claimedDraft = claimDraft(db, noopNotifier, draft.id);
@@ -133,7 +133,7 @@ describe("drafts", () => {
         model: "gpt-5",
         reasoningLevel: "medium",
         sandboxMode: "danger-full-access",
-        serviceTier: "flex",
+        serviceTier: "default",
       });
       nowSpy.mockReturnValueOnce(2_000);
       const secondDraft = createDraft(db, noopNotifier, {
@@ -142,7 +142,7 @@ describe("drafts", () => {
         model: "gpt-5",
         reasoningLevel: "high",
         sandboxMode: "danger-full-access",
-        serviceTier: "flex",
+        serviceTier: "default",
       });
 
       const claimedDraft = claimNextDraft(db, noopNotifier, thread.id);

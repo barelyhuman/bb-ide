@@ -23,7 +23,7 @@ import { queueCommandAndWait } from "./command-wait.js";
 import { getLastExecutionOptions } from "./thread-events.js";
 import { requireThreadStoragePath } from "./thread-storage.js";
 
-const DEFAULT_SERVICE_TIER: ServiceTier = "flex";
+const DEFAULT_SERVICE_TIER: ServiceTier = "default";
 const DEFAULT_REASONING_LEVEL: ReasoningLevel = "medium";
 const DEFAULT_SANDBOX_MODE: SandboxMode = "danger-full-access";
 const MANAGER_PREFERENCES_FILE_NAME = "PREFERENCES.md";

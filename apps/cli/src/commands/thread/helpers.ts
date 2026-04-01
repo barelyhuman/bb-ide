@@ -18,7 +18,7 @@ export const THREAD_WAIT_EXIT_CODE_UNREACHABLE = 4;
 export const DEFAULT_THREAD_WAIT_TIMEOUT_SECONDS = 30;
 export const DEFAULT_THREAD_WAIT_POLL_INTERVAL_MS = 250;
 
-const SERVICE_TIERS: ServiceTier[] = ["fast", "flex"];
+const SERVICE_TIERS: ServiceTier[] = ["fast", "default"];
 const SANDBOX_MODES: SandboxMode[] = [
   "read-only",
   "workspace-write",

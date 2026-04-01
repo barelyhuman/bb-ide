@@ -127,7 +127,7 @@ describe("db rebuild schema", () => {
       model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
-      serviceTier: "flex",
+      serviceTier: "default",
       createdAt: now,
       updatedAt: now,
     }).run();
@@ -472,7 +472,7 @@ describe("db rebuild schema", () => {
       model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
-      serviceTier: "flex",
+      serviceTier: "default",
       createdAt: now,
       updatedAt: now,
     }).run();

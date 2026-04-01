@@ -284,7 +284,7 @@ describe("public thread data routes", () => {
             model: "gpt-5",
             reasoningLevel: "medium",
             sandboxMode: "danger-full-access",
-            serviceTier: "flex",
+            serviceTier: "default",
             source: "client/thread/start",
           },
           initiator: "user",
@@ -359,7 +359,7 @@ describe("public thread data routes", () => {
           input: [{ type: "text", text: "Earlier valid request" }],
           execution: {
             model: "gpt-5",
-            serviceTier: "flex",
+            serviceTier: "default",
             reasoningLevel: "medium",
             sandboxMode: "danger-full-access",
             source: "client/turn/requested",
@@ -469,7 +469,7 @@ describe("public thread data routes", () => {
           input: [{ type: "text", text: "Earlier work" }],
           execution: {
             model: "gpt-5",
-            serviceTier: "flex",
+            serviceTier: "default",
             reasoningLevel: "medium",
             sandboxMode: "danger-full-access",
             source: "client/turn/requested",
@@ -536,7 +536,7 @@ describe("public thread data routes", () => {
         model: "gpt-5",
         reasoningLevel: "medium",
         sandboxMode: "danger-full-access",
-        serviceTier: "flex",
+        serviceTier: "default",
       });
       seedDraft(harness.deps, {
         threadId: thread.id,
@@ -558,7 +558,7 @@ describe("public thread data routes", () => {
           model: "gpt-5",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
-          serviceTier: "flex",
+          serviceTier: "default",
         }),
         expect.objectContaining({
           content: [{ type: "text", text: "Second queued draft" }],
@@ -596,7 +596,7 @@ describe("public thread data routes", () => {
           input: [{ type: "text", text: "Earlier work" }],
           execution: {
             model: "gpt-5",
-            serviceTier: "flex",
+            serviceTier: "default",
             reasoningLevel: "medium",
             sandboxMode: "danger-full-access",
             source: "client/turn/requested",
@@ -627,7 +627,7 @@ describe("public thread data routes", () => {
       expect(getDraft(harness.db, draft.id)).toMatchObject({
         id: draft.id,
         model: "gpt-5",
-        serviceTier: "flex",
+        serviceTier: "default",
         reasoningLevel: "medium",
         sandboxMode: "danger-full-access",
       });
@@ -664,7 +664,7 @@ describe("public thread data routes", () => {
           body: JSON.stringify({
             input: [{ type: "text", text: "Draft from test" }],
             model: "gpt-5",
-            serviceTier: "flex",
+            serviceTier: "default",
             reasoningLevel: "high",
             sandboxMode: "danger-full-access",
           }),
@@ -678,7 +678,7 @@ describe("public thread data routes", () => {
       };
       expect(createdDraft).toMatchObject({
         model: "gpt-5",
-        serviceTier: "flex",
+        serviceTier: "default",
       });
 
       const sendResponse = await harness.app.request(
@@ -719,7 +719,7 @@ describe("public thread data routes", () => {
       ).toMatchObject({
         execution: {
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
         },
       });
       expect(
@@ -1095,7 +1095,7 @@ describe("public thread data routes", () => {
           threadId: thread.id,
           content: "not-json",
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
           claimedAt: null,

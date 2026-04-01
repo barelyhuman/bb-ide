@@ -101,7 +101,7 @@ function createStandardRuntimeCommandContext(args: {
       : {}),
     options: {
       model: "gpt-5",
-      serviceTier: "flex" as const,
+      serviceTier: "default" as const,
       reasoningLevel: "medium" as const,
       sandboxMode: "danger-full-access" as const,
     },
@@ -207,7 +207,7 @@ describe("CommandRouter", () => {
           input: [{ type: "text", text: "A" }],
           options: {
             model: "gpt-5",
-            serviceTier: "flex" as const,
+            serviceTier: "default" as const,
             reasoningLevel: "medium" as const,
             sandboxMode: "danger-full-access" as const,
           },
@@ -232,7 +232,7 @@ describe("CommandRouter", () => {
           input: [{ type: "text", text: "B" }],
           options: {
             model: "gpt-5",
-            serviceTier: "flex" as const,
+            serviceTier: "default" as const,
             reasoningLevel: "medium" as const,
             sandboxMode: "danger-full-access" as const,
           },

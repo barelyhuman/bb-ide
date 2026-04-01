@@ -203,7 +203,7 @@ describe("internal session routes", () => {
         input: [{ type: "text", text: "Start when ready" }],
         execution: {
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
           source: "client/thread/start",
@@ -349,7 +349,7 @@ describe("internal session routes", () => {
         input: [{ type: "text", text: "Start" }],
         execution: {
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
           source: "client/thread/start",
@@ -452,7 +452,7 @@ describe("internal session routes", () => {
         input: [{ type: "text", text: "Resume after reprovision" }],
         execution: {
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
           source: "client/turn/requested",
@@ -556,7 +556,7 @@ describe("internal session routes", () => {
           input: [{ type: "text", text: "Valid earlier request" }],
           execution: {
             model: "gpt-5",
-            serviceTier: "flex",
+            serviceTier: "default",
             reasoningLevel: "medium",
             sandboxMode: "danger-full-access",
             source: "client/turn/requested",
@@ -675,7 +675,7 @@ describe("internal session routes", () => {
         input: [{ type: "text", text: "Resume provisioning thread" }],
         execution: {
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
           source: "client/turn/requested",
@@ -691,7 +691,7 @@ describe("internal session routes", () => {
         input: [{ type: "text", text: "Do not restart this sibling" }],
         execution: {
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
           source: "client/turn/requested",

@@ -443,7 +443,7 @@ describe("public thread routes", () => {
         workspaceContext: { workspacePath: source.path, workspaceProvisionType: "unmanaged" },
         options: {
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
           source: "client/thread/start",
@@ -625,7 +625,7 @@ describe("public thread routes", () => {
           input: [{ type: "text", text: "Prior task" }],
           execution: {
             model: "gpt-5",
-            serviceTier: "flex",
+            serviceTier: "default",
             reasoningLevel: "medium",
             sandboxMode: "danger-full-access",
             source: "client/turn/requested",
@@ -658,7 +658,7 @@ describe("public thread routes", () => {
           input: [{ type: "text", text: "Prior task" }],
           execution: {
             model: "gpt-5",
-            serviceTier: "flex",
+            serviceTier: "default",
             reasoningLevel: "medium",
             sandboxMode: "danger-full-access",
             source: "client/turn/requested",
@@ -695,7 +695,7 @@ describe("public thread routes", () => {
         environmentId: environment.id,
         options: {
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
           source: "client/turn/requested",
@@ -733,7 +733,7 @@ describe("public thread routes", () => {
         environmentId: environment.id,
         options: {
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
           source: "client/turn/requested",
@@ -1044,7 +1044,7 @@ describe("public thread routes", () => {
         threadId: thread.id,
         content: [{ type: "text", text: "Draft content" }],
         model: "gpt-5",
-        serviceTier: "flex",
+        serviceTier: "default",
       });
       seedEvent(harness.deps, {
         threadId: thread.id,
@@ -1074,7 +1074,7 @@ describe("public thread routes", () => {
         environmentId: environment.id,
         options: {
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
         },
       });
       expect(getDraft(harness.db, draft.id)).toBeNull();
@@ -1115,7 +1115,7 @@ describe("public thread routes", () => {
       );
       expect(managerStartCommand.command.options).toMatchObject({
         model: "gpt-5",
-        serviceTier: "flex",
+        serviceTier: "default",
         reasoningLevel: "medium",
         sandboxMode: "danger-full-access",
         source: "client/thread/start",

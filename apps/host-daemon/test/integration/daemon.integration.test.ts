@@ -61,7 +61,7 @@ function createStandardThreadStartCommand(args: {
     input: args.input,
     options: {
       model: "gpt-5",
-      serviceTier: "flex" as const,
+      serviceTier: "default" as const,
       reasoningLevel: "medium" as const,
       sandboxMode: "danger-full-access" as const,
     },
@@ -88,7 +88,7 @@ function createTurnRunCommand(args: {
     input: args.input,
     options: {
       model: "gpt-5",
-      serviceTier: "flex" as const,
+      serviceTier: "default" as const,
       reasoningLevel: "medium" as const,
       sandboxMode: "danger-full-access" as const,
     },

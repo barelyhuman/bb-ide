@@ -49,7 +49,7 @@ describe("internal authorization regressions", () => {
         input: [{ type: "text", text: "Start after provisioning" }],
         execution: {
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
           source: "client/thread/start",

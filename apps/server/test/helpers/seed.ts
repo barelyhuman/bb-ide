@@ -168,7 +168,7 @@ export function seedDraft(
     model: args.model ?? "gpt-5",
     reasoningLevel: args.reasoningLevel ?? "medium",
     sandboxMode: args.sandboxMode ?? "danger-full-access",
-    serviceTier: args.serviceTier ?? "flex",
+    serviceTier: args.serviceTier ?? "default",
   });
 }
 

@@ -14,6 +14,7 @@ import type {
   PromptInput,
   ProviderCapabilities,
   SandboxMode,
+  ServiceTier,
   ThreadEvent,
   ThreadEventItem,
   ThreadEventItemStatus,
@@ -44,6 +45,7 @@ import type {
   AdapterOptions,
   JsonRpcMessage,
   ProviderAdapter,
+  ProviderTranslationContext,
 } from "../provider-adapter.js";
 import { codexVisibilityMetadata } from "./visibility.js";
 
@@ -275,7 +277,7 @@ const codexTurnSchema = z.object({
   status: codexTurnStatusSchema,
   error: z.object({
     message: z.string(),
-    additionalDetails: z.string().optional(),
+    additionalDetails: z.string().nullish(),
   }).passthrough().nullable().optional(),
 }).passthrough();
 
@@ -403,7 +405,7 @@ const codexHandledEventSchema = z.discriminatedUnion("method", [
     turnId: z.string().optional(),
     error: z.object({
       message: z.string(),
-      additionalDetails: z.string().optional(),
+      additionalDetails: z.string().nullish(),
     }).passthrough(),
     willRetry: z.boolean().optional(),
   }).passthrough()),
@@ -441,6 +443,10 @@ function toSandboxPolicy(sandboxMode?: SandboxMode): SandboxPolicy {
     default:
       return assertNever(resolved);
   }
+}
+
+function toCodexServiceTier(tier: ServiceTier | undefined): "fast" | undefined {
+  return tier === "fast" ? "fast" : undefined;
 }
 
 function buildUnhandledCodexEvent(
@@ -757,7 +763,7 @@ export function createCodexProviderAdapter(
             sandbox: command.options?.sandboxMode ?? "danger-full-access",
             baseInstructions: command.options?.instructions ?? "",
             model: command.options?.model ?? undefined,
-            serviceTier: command.options?.serviceTier ?? undefined,
+            serviceTier: toCodexServiceTier(command.options?.serviceTier),
             config: buildCodexConfig(command.threadId, command.options) ?? undefined,
             experimentalRawEvents: false,
             persistExtendedHistory: false,
@@ -777,7 +783,7 @@ export function createCodexProviderAdapter(
             sandbox: command.options?.sandboxMode ?? "danger-full-access",
             baseInstructions: command.options?.instructions ?? "",
             model: command.options?.model ?? undefined,
-            serviceTier: command.options?.serviceTier ?? undefined,
+            serviceTier: toCodexServiceTier(command.options?.serviceTier),
             config: buildCodexConfig(command.threadId, command.options) ?? undefined,
             persistExtendedHistory: false,
             ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
@@ -798,7 +804,7 @@ export function createCodexProviderAdapter(
               approvalPolicy: "never",
               sandboxPolicy: toSandboxPolicy(command.options?.sandboxMode),
               model: command.options?.model ?? undefined,
-              serviceTier: command.options?.serviceTier ?? undefined,
+              serviceTier: toCodexServiceTier(command.options?.serviceTier),
             },
           };
         case "turn/steer":
@@ -830,6 +836,7 @@ export function createCodexProviderAdapter(
 
     translateEvent(
       event: unknown,
+      context?: ProviderTranslationContext,
     ): ThreadEvent[] {
       const envelope = codexBridgeEnvelopeSchema.safeParse(event);
       if (!envelope.success) {

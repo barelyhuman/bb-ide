@@ -218,8 +218,8 @@ describe("parseServiceTier", () => {
     expect(parseServiceTier("fast")).toBe("fast");
   });
 
-  it("returns 'flex' for 'flex'", () => {
-    expect(parseServiceTier("flex")).toBe("flex");
+  it("returns 'default' for 'default'", () => {
+    expect(parseServiceTier("default")).toBe("default");
   });
 
   it("throws for invalid tier", () => {

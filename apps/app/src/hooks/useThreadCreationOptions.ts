@@ -96,7 +96,7 @@ function isSandboxMode(value: unknown): value is SandboxMode {
 }
 
 function isServiceTier(value: unknown): value is ServiceTier {
-  return value === "fast" || value === "flex";
+  return value === "fast" || value === "default";
 }
 
 function isStoredServiceTier(value: string): value is StoredServiceTier {

@@ -134,7 +134,7 @@ describe("internal event side effects", () => {
         threadId: thread.id,
         content: [{ type: "text", text: "Queued follow-up" }],
         model: "gpt-5",
-        serviceTier: "flex",
+        serviceTier: "default",
       });
 
       const response = await harness.app.request("/internal/session/events", {
@@ -170,7 +170,7 @@ describe("internal event side effects", () => {
         input: [{ type: "text", text: "Queued follow-up" }],
         options: {
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
         },
         resumeContext: {
           providerThreadId: "provider-auto-send",
@@ -227,13 +227,13 @@ describe("internal event side effects", () => {
         threadId: thread.id,
         content: [{ type: "text", text: "Queued follow-up one" }],
         model: "gpt-5",
-        serviceTier: "flex",
+        serviceTier: "default",
       });
       seedDraft(harness.deps, {
         threadId: thread.id,
         content: [{ type: "text", text: "Queued follow-up two" }],
         model: "gpt-5",
-        serviceTier: "flex",
+        serviceTier: "default",
       });
 
       const requestBody = JSON.stringify({
@@ -342,19 +342,19 @@ describe("internal event side effects", () => {
         threadId: threadA.id,
         content: [{ type: "text", text: "Queued follow-up one" }],
         model: "gpt-5",
-        serviceTier: "flex",
+        serviceTier: "default",
       });
       seedDraft(harness.deps, {
         threadId: threadA.id,
         content: [{ type: "text", text: "Queued follow-up two" }],
         model: "gpt-5",
-        serviceTier: "flex",
+        serviceTier: "default",
       });
       seedDraft(harness.deps, {
         threadId: threadB.id,
         content: [{ type: "text", text: "Queued follow-up three" }],
         model: "gpt-5",
-        serviceTier: "flex",
+        serviceTier: "default",
       });
 
       const firstResponse = await harness.app.request("/internal/session/events", {

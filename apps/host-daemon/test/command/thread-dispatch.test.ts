@@ -27,7 +27,7 @@ describe("thread command dispatch", () => {
         input: [{ type: "text", text: "hello" }],
         options: {
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
         },
@@ -81,7 +81,7 @@ describe("thread command dispatch", () => {
         input: [{ type: "text", text: "hello" }],
         options: {
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
         },
@@ -106,7 +106,7 @@ describe("thread command dispatch", () => {
         input: [{ type: "text", text: "adjust" }],
         options: {
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
         },
@@ -141,7 +141,7 @@ describe("thread command dispatch", () => {
         input: [{ type: "text", text: "hello" }],
         options: {
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
         },
@@ -208,7 +208,7 @@ describe("thread command dispatch", () => {
         input: [{ type: "text", text: "after exit" }],
         options: {
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
         },
@@ -329,7 +329,7 @@ describe("thread command dispatch", () => {
         input: [{ type: "text", text: "hello" }],
         options: {
           model: "claude-opus-4-6",
-          serviceTier: "flex",
+          serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
         },

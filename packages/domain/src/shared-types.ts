@@ -3,7 +3,7 @@ import { z } from "zod";
 export const reasoningLevelSchema = z.enum(["low", "medium", "high", "xhigh"]);
 export type ReasoningLevel = z.infer<typeof reasoningLevelSchema>;
 
-export const serviceTierSchema = z.enum(["fast", "flex"]);
+export const serviceTierSchema = z.enum(["fast", "default"]);
 export type ServiceTier = z.infer<typeof serviceTierSchema>;
 
 export const sandboxModeSchema = z.enum([

@@ -158,7 +158,7 @@ describe("host-daemon command schemas", () => {
         input: [{ type: "text", text: "hello" }],
         options: {
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
         },
@@ -207,7 +207,7 @@ describe("host-daemon command schemas", () => {
         input: [{ type: "text", text: "hello" }],
         options: {
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
         },
@@ -238,7 +238,7 @@ describe("host-daemon command schemas", () => {
         input: [{ type: "text", text: "adjust" }],
         options: {
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
         },
@@ -265,7 +265,7 @@ describe("host-daemon command schemas", () => {
         input: [{ type: "text", text: "hello" }],
         options: {
           model: "gpt-5",
-          serviceTier: "flex",
+          serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
         },

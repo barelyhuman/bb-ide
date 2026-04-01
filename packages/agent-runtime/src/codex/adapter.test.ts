@@ -84,7 +84,7 @@ describe("codex provider adapter", () => {
       input: [{ type: "text", text: "hello" }],
       options: {
         model: "gpt-5.4",
-        serviceTier: "flex",
+        serviceTier: "fast",
         instructions: "Focus on the failing tests first.",
         reasoningLevel: "high",
         envVars: {
@@ -109,7 +109,7 @@ describe("codex provider adapter", () => {
       method: "thread/start",
       params: {
         model: "gpt-5.4",
-        serviceTier: "flex",
+        serviceTier: "fast",
         baseInstructions: expect.stringContaining("Focus on the failing tests first."),
         dynamicTools: [{
           name: "bb_test_ping",
