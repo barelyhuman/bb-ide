@@ -140,6 +140,7 @@ describe("local API server", () => {
       port: 0,
       serverUrl: "http://server.test",
       getConnected: () => true,
+      listActiveThreads: () => [],
       restart: () => undefined,
     });
 

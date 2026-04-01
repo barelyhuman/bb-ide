@@ -29,8 +29,6 @@ describe.sequential("fake provider provider-isolation multi-thread integration",
           createFakeAdapter({
             displayName: providerId,
             id: providerId,
-            modelId: `${providerId}-model`,
-            modelName: `${providerId} model`,
           }),
       },
       async (harness) => {

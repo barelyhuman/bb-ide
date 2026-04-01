@@ -9,6 +9,8 @@ import {
   getEnvironment,
   getHighWaterMarks,
   transitionThreadStatus,
+  updateHost,
+  upsertHost,
 } from "@bb/db";
 import type { Environment } from "@bb/domain";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
@@ -99,9 +101,9 @@ async function createThreadInEnvironment(
       entries: [
         {
           type: "step",
-          key: "environment",
-          text: `environment: ${args.provisioningLabel}`,
-          status: "completed",
+          key: "provision",
+          text: "Waiting for environment...",
+          status: "started",
         },
       ],
     });
@@ -161,23 +163,6 @@ function ensurePublicServerUrl(publicUrl: string): string {
     );
   }
   return publicUrl;
-}
-
-function getWorkspaceProvisioningLabel(
-  workspaceProvisionType: Environment["workspaceProvisionType"],
-): string {
-  switch (workspaceProvisionType) {
-    case "unmanaged":
-      return "Direct";
-    case "managed-worktree":
-      return "Worktree";
-    case "managed-clone":
-      return "Clone";
-    default: {
-      const _exhaustive: never = workspaceProvisionType;
-      throw new Error(`Unsupported workspace provisioning type: ${_exhaustive}`);
-    }
-  }
 }
 
 async function reuseEnvironmentByHostPath(
@@ -309,8 +294,6 @@ async function createSandboxHostThread(
   });
   const thread = await createThreadInEnvironment(deps, {
     environment,
-    mergeBaseBranch: null,
-    provisioningLabel: "Cloud sandbox",
     request: args.request,
     threadStatus: "provisioning",
   });

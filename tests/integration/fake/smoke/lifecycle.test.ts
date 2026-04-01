@@ -90,8 +90,6 @@ describe.sequential("fake provider smoke lifecycle integration", () => {
           const baseAdapter = createFakeAdapter({
             displayName: providerId,
             id: providerId,
-            modelId: `${providerId}-model`,
-            modelName: `${providerId} model`,
           });
           const buildCommand: typeof baseAdapter.buildCommand = (command) => {
             if (command.type === "thread/start" || command.type === "thread/resume") {
