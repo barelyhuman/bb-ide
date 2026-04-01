@@ -3,6 +3,7 @@ import {
   createBufferedEnvironmentChangeReporter,
   createCommandFetchLoop,
 } from "./app.js";
+import { AbortError } from "p-retry";
 
 interface FetchCommandsArgs {
   afterCursor: number;
@@ -138,5 +139,31 @@ describe("createBufferedEnvironmentChangeReporter", () => {
 
     await vi.advanceTimersByTimeAsync(1);
     expect(reportEnvironmentChange).toHaveBeenCalledTimes(2);
+  });
+
+  it("drops permanent environment change failures without retrying", async () => {
+    vi.useFakeTimers();
+    const logger = createLogger();
+    const reportEnvironmentChange = vi
+      .fn<(_: EnvironmentChangeReport) => Promise<void>>()
+      .mockRejectedValueOnce(new AbortError("gone"));
+    const reporter = createBufferedEnvironmentChangeReporter({
+      logger,
+      debounceMs: 100,
+      retryDelayMs: 250,
+      reportEnvironmentChange,
+    });
+
+    reporter.queue({
+      environmentId: "env-1",
+      change: "work-status-changed",
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+    expect(reportEnvironmentChange).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(reportEnvironmentChange).toHaveBeenCalledTimes(1);
   });
 });

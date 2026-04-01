@@ -12,6 +12,7 @@ import {
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import type { HostDaemonEnvironmentChangeRequest } from "@bb/host-daemon-contract";
 import type { HostType, ToolCallRequest, ToolCallResponse } from "@bb/domain";
+import { AbortError } from "p-retry";
 
 interface SessionState {
   value: string | null;
@@ -47,6 +48,10 @@ interface ScheduledEntryArgs {
 
 interface FlushEntryArgs {
   key: string;
+}
+
+function shouldRetryEnvironmentChangeError(error: unknown): boolean {
+  return !(error instanceof AbortError);
 }
 
 export function createBufferedEnvironmentChangeReporter(
@@ -90,6 +95,19 @@ export function createBufferedEnvironmentChangeReporter(
       }
     } catch (error) {
       if (disposed) {
+        return;
+      }
+      if (!shouldRetryEnvironmentChangeError(error)) {
+        args.logger.warn(
+          {
+            change: entry.change,
+            err: error,
+          },
+          "Dropping environment change after permanent failure",
+        );
+        if (entries.get(payload.key) === entry) {
+          entries.delete(payload.key);
+        }
         return;
       }
       args.logger.warn(
