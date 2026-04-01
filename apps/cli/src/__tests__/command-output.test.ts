@@ -1016,7 +1016,7 @@ describe("CLI command output contracts", () => {
 
     await expect(
       runCommand(
-        ["environment", "commit", "env-1", "--thread", "thread-1"],
+        ["environment", "commit", "env-1"],
         (program) => registerEnvironmentCommands(program, () => "http://server"),
       ),
     ).rejects.toThrow("process.exit:1");
@@ -1024,6 +1024,38 @@ describe("CLI command output contracts", () => {
     expect(collectLogLines(vi.mocked(console.error))).toContain(
       "Error: Failed to commit in environment env-1: HTTP 500: boom",
     );
+  });
+
+  it("bb environment commit posts the action without a thread id", async () => {
+    const post = vi.fn(async () => ({
+      ok: true as const,
+      action: "commit" as const,
+      message: "Created commit abc123",
+      commitSha: "abc123",
+      commitSubject: "bb: automated commit",
+    }));
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          environments: {
+            ":id": {
+              actions: {
+                $post: post,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["environment", "commit", "env-commit-1"], (program) =>
+      registerEnvironmentCommands(program, () => "http://server"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      param: { id: "env-commit-1" },
+      json: { action: "commit" },
+    });
   });
 
   it("bb environment update sets the merge base branch", async () => {

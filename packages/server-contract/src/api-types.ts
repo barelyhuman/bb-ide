@@ -328,27 +328,23 @@ export type EnvironmentActionType = z.infer<typeof environmentActionTypeSchema>;
 
 export const squashMergeOptionsSchema = z.object({
   mergeBaseBranch: z.string().min(1),
-});
+}).strict();
 export type SquashMergeOptions = z.infer<typeof squashMergeOptionsSchema>;
 
-const environmentActionTargetSchema = z.object({
-  threadId: z.string().min(1),
-});
-
 export const environmentActionRequestSchema = z.discriminatedUnion("action", [
-  environmentActionTargetSchema.extend({
+  z.object({
     action: z.literal("promote"),
-  }),
-  environmentActionTargetSchema.extend({
+  }).strict(),
+  z.object({
     action: z.literal("demote"),
-  }),
-  environmentActionTargetSchema.extend({
+  }).strict(),
+  z.object({
     action: z.literal("commit"),
-  }),
-  environmentActionTargetSchema.extend({
+  }).strict(),
+  z.object({
     action: z.literal("squash_merge"),
     options: squashMergeOptionsSchema,
-  }),
+  }).strict(),
 ]);
 export type EnvironmentActionRequest = z.infer<typeof environmentActionRequestSchema>;
 

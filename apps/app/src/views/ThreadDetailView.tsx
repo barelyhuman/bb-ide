@@ -115,7 +115,6 @@ function buildAskAgentInputForGitOperation(args: {
           text: buildSquashMergeConflictFollowUpInstruction(
             {
               action: "squash_merge",
-              threadId: "thread",
               options: {
                 mergeBaseBranch,
               },
@@ -134,7 +133,6 @@ function buildAskAgentInputForGitOperation(args: {
           text: buildSquashMergeCommitFailureFollowUpInstruction(
             {
               action: "squash_merge",
-              threadId: "thread",
               options: {
                 mergeBaseBranch,
               },
@@ -808,13 +806,12 @@ export function ThreadDetailView() {
   };
   const handleCommitThread = async () => {
     const attachedEnvironmentId = thread.environmentId;
-    if (!threadId || !attachedEnvironmentId) {
+    if (!attachedEnvironmentId) {
       return;
     }
     try {
       await requestEnvironmentAction.mutateAsync({
         id: attachedEnvironmentId,
-        threadId,
         action: "commit",
       });
     } catch (nextError) {
@@ -827,13 +824,12 @@ export function ThreadDetailView() {
     mergeBaseBranch: string;
   }) => {
     const attachedEnvironmentId = thread.environmentId;
-    if (!threadId || !attachedEnvironmentId) {
+    if (!attachedEnvironmentId) {
       return;
     }
     try {
       await requestEnvironmentAction.mutateAsync({
         id: attachedEnvironmentId,
-        threadId,
         action: "squash_merge",
         options: {
           mergeBaseBranch,

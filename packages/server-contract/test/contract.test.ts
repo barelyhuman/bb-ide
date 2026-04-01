@@ -95,12 +95,17 @@ describe("server-contract canonical schemas", () => {
     expect(
       environmentActionRequestSchema.parse({
         action: "commit",
-        threadId: "thr_123",
       }),
     ).toMatchObject({
       action: "commit",
-      threadId: "thr_123",
     });
+
+    expect(() =>
+      environmentActionRequestSchema.parse({
+        action: "commit",
+        threadId: "thr_123",
+      }),
+    ).toThrow();
 
     expect(
       updateEnvironmentRequestSchema.parse({

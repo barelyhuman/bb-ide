@@ -16,7 +16,6 @@ import { ApiError } from "../errors.js";
 import {
   requireEnvironment,
   requireReadyEnvironment,
-  requireThreadInEnvironment,
 } from "../services/entity-lookup.js";
 import { queueCommandAndWait } from "../services/command-wait.js";
 import { requireSourceForHost } from "../services/thread-create-helpers.js";
@@ -141,11 +140,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
 
   post("/environments/:id/actions", environmentActionRequestSchema, async (context, payload) => {
     const environment = requireReadyEnvironment(deps.db, context.req.param("id"));
-    requireThreadInEnvironment(
-      deps.db,
-      environment.id,
-      payload.threadId,
-    );
 
     switch (payload.action) {
       case "commit": {

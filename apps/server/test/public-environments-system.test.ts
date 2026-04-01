@@ -7,7 +7,6 @@ import {
   seedEnvironment,
   seedHostSession,
   seedProjectWithSource,
-  seedThread,
 } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
 
@@ -261,10 +260,6 @@ describe("public environment and system routes", () => {
         hostId: host.id,
         projectId: project.id,
       });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-      });
 
       const responsePromise = harness.app.request(
         `/api/v1/environments/${environment.id}/actions`,
@@ -275,7 +270,6 @@ describe("public environment and system routes", () => {
           },
           body: JSON.stringify({
             action: "commit",
-            threadId: thread.id,
           }),
         },
       );
@@ -370,10 +364,6 @@ describe("public environment and system routes", () => {
         branchName: "bb/promote-test",
         mergeBaseBranch: "main",
       });
-      const primaryThread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-      });
 
       const promotePromise = harness.app.request(
         `/api/v1/environments/${environment.id}/actions`,
@@ -382,10 +372,7 @@ describe("public environment and system routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({
-            action: "promote",
-            threadId: primaryThread.id,
-          }),
+          body: JSON.stringify({ action: "promote" }),
         },
       );
 
@@ -415,10 +402,7 @@ describe("public environment and system routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({
-            action: "demote",
-            threadId: primaryThread.id,
-          }),
+          body: JSON.stringify({ action: "demote" }),
         },
       );
 
@@ -458,10 +442,6 @@ describe("public environment and system routes", () => {
         managed: true,
         workspaceProvisionType: "managed-worktree",
       });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-      });
 
       const responsePromise = harness.app.request(
         `/api/v1/environments/${environment.id}/actions`,
@@ -472,7 +452,6 @@ describe("public environment and system routes", () => {
           },
           body: JSON.stringify({
             action: "squash_merge",
-            threadId: thread.id,
             options: {
               mergeBaseBranch: "main",
             },
@@ -565,10 +544,6 @@ describe("public environment and system routes", () => {
         managed: true,
         workspaceProvisionType: "managed-worktree",
       });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-      });
 
       const responsePromise = harness.app.request(
         `/api/v1/environments/${environment.id}/actions`,
@@ -577,7 +552,6 @@ describe("public environment and system routes", () => {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             action: "squash_merge",
-            threadId: thread.id,
             options: { mergeBaseBranch: "main" },
           }),
         },
@@ -626,10 +600,6 @@ describe("public environment and system routes", () => {
         hostId: host.id,
         projectId: project.id,
       });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-      });
 
       const responsePromise = harness.app.request(
         `/api/v1/environments/${environment.id}/actions`,
@@ -638,7 +608,6 @@ describe("public environment and system routes", () => {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             action: "commit",
-            threadId: thread.id,
           }),
         },
       );
@@ -705,10 +674,6 @@ describe("public environment and system routes", () => {
         managed: true,
         workspaceProvisionType: "managed-worktree",
       });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-      });
 
       const responsePromise = harness.app.request(
         `/api/v1/environments/${environment.id}/actions`,
@@ -717,7 +682,6 @@ describe("public environment and system routes", () => {
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
             action: "squash_merge",
-            threadId: thread.id,
             options: { mergeBaseBranch: "main" },
           }),
         },
