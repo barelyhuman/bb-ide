@@ -11,6 +11,7 @@ import { useHostDaemon } from "@/hooks/useHostDaemon"
 import * as api from "@/lib/api"
 import { createJsonLocalStorage } from "@/lib/browser-storage"
 import { EmptyState } from "@/components/shared/EmptyState"
+import { ThreadArchiveConfirmationDialog } from "@/components/thread/ThreadArchiveConfirmationDialog"
 import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog"
 import { ThreadRenameDialog } from "@/components/thread/ThreadRenameDialog"
 import {
@@ -24,7 +25,6 @@ import {
 import { ProjectDeleteDialog } from "./project-list/ProjectDeleteDialog"
 import { ProjectRenameDialog } from "./project-list/ProjectRenameDialog"
 import { ProjectRow } from "./project-list/ProjectRow"
-import { ThreadArchiveConfirmationDialog } from "./project-list/ThreadArchiveConfirmationDialog"
 import { useProjectListActions } from "./project-list/useProjectListActions"
 
 interface ProjectListProps {

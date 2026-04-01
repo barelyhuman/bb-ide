@@ -26,6 +26,7 @@ import {
   type ThreadRenameDialogTarget,
 } from "@/components/thread/ThreadRenameDialog";
 import { PageShell } from "@/components/layout/PageShell";
+import { ThreadArchiveConfirmationDialog } from "@/components/thread/ThreadArchiveConfirmationDialog";
 import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import { formatEnvironmentDisplay } from "@bb/core-ui";
@@ -111,6 +112,7 @@ export function ThreadDetailView() {
   const deleteThread = useDeleteThread();
   const updateEnvironment = useUpdateEnvironment();
   const updateThread = useUpdateThread();
+  const threadArchiveConfirmationDialog = useDialogState<Thread>();
   const threadRenameDialog = useDialogState<ThreadRenameDialogTarget>();
   const threadDeleteDialog = useDialogState<Thread>();
   const captureTimelineScrollPositionRef = useRef<() => void>(() => {});
@@ -264,6 +266,24 @@ export function ThreadDetailView() {
       },
     );
   }, [threadRenameDialog, updateThread]);
+  const confirmArchiveThread = useCallback((threadToArchive: Thread) => {
+    const label = threadTypeLabel(threadToArchive.type);
+
+    threadArchiveConfirmationDialog.onClose();
+    archiveThread.mutate(
+      { id: threadToArchive.id, force: true },
+      {
+        onSuccess: () => {
+          navigate(`/projects/${threadToArchive.projectId}`);
+        },
+        onError: (nextError) => {
+          toast.error(
+            nextError instanceof Error ? nextError.message : `Failed to archive ${label}.`,
+          );
+        },
+      },
+    );
+  }, [archiveThread, navigate, threadArchiveConfirmationDialog]);
   const toggleArchiveThread = useCallback(() => {
     if (!thread) return;
     const label = threadTypeLabel(thread.type);
@@ -272,30 +292,8 @@ export function ThreadDetailView() {
       return;
     }
 
-    const archiveWithForce = () => {
-      archiveThread.mutate(
-        { id: thread.id, force: true },
-        {
-          onSuccess: () => {
-            navigate(`/projects/${thread.projectId}`);
-          },
-          onError: (nextError) => {
-            toast.error(
-              nextError instanceof Error ? nextError.message : `Failed to archive ${label}.`,
-            );
-          },
-        },
-      );
-    };
-
     if (requiresArchiveConfirmation(workStatus, environment)) {
-      const confirmed = window.confirm(
-        `This ${label} has uncommitted or unmerged work. Archive anyway?`,
-      );
-      if (!confirmed) {
-        return;
-      }
-      archiveWithForce();
+      threadArchiveConfirmationDialog.onOpen(thread);
       return;
     }
 
@@ -307,12 +305,7 @@ export function ThreadDetailView() {
         },
         onError: (nextError) => {
           if (isArchiveForceRequiredError(nextError)) {
-            const confirmed = window.confirm(
-              `This ${label} has uncommitted or unmerged work. Archive anyway?`,
-            );
-            if (confirmed) {
-              archiveWithForce();
-            }
+            threadArchiveConfirmationDialog.onOpen(thread);
             return;
           }
           toast.error(
@@ -321,7 +314,15 @@ export function ThreadDetailView() {
         },
       },
     );
-  }, [archiveThread, environment, navigate, thread, unarchiveThread, workStatus]);
+  }, [
+    archiveThread,
+    environment,
+    navigate,
+    thread,
+    threadArchiveConfirmationDialog,
+    unarchiveThread,
+    workStatus,
+  ]);
   const parentThreadId = thread?.parentThreadId;
   const parentThreadDisplayName =
     parentThread?.title && parentThread.title.trim().length > 0
@@ -709,6 +710,12 @@ export function ThreadDetailView() {
         pending={updateThread.isPending}
         onOpenChange={threadRenameDialog.onOpenChange}
         onRename={submitThreadRename}
+      />
+      <ThreadArchiveConfirmationDialog
+        target={threadArchiveConfirmationDialog.target}
+        pending={archiveThread.isPending}
+        onOpenChange={threadArchiveConfirmationDialog.onOpenChange}
+        onArchive={confirmArchiveThread}
       />
       <ThreadDeleteDialog
         target={threadDeleteDialog.target}

@@ -1,4 +1,5 @@
 import { useCallback } from "react"
+import { toast } from "sonner"
 import { useCreateProject } from "@/hooks/mutations/project-mutations"
 import { useHostDaemon } from "@/hooks/useHostDaemon"
 import { deriveProjectNameFromPath } from "@/lib/projectPathInput"
@@ -15,7 +16,7 @@ export function useQuickCreateProject() {
 
     const name = deriveProjectNameFromPath(selectedPath).trim()
     if (!name) {
-      window.alert(
+      toast.error(
         "Could not derive a project name from the selected folder."
       )
       return
