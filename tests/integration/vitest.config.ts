@@ -15,7 +15,9 @@ export default defineConfig({
     env: {
       BB_SECRET_TOKEN: "test-integration-token",
     },
-    fileParallelism: false,
+    // Fake integration suites isolate temp roots, ports, and in-memory state,
+    // so we can safely parallelize across files for a large runtime win.
+    fileParallelism: true,
     globalSetup: ["./global-setup.ts"],
     hookTimeout: Math.ceil(60_000 * timeoutScale),
     include: ["fake/**/*.test.ts"],
