@@ -71,13 +71,14 @@ Spawn an unmanaged Codex thread and wait for it to finish:
 SMOKE_THREAD_ID=$(bb thread spawn \
   --project "$BB_PROJECT_ID" \
   --provider codex \
+  --model gpt-5 \
   --reasoning-level low \
   --service-tier fast \
   --prompt "Say hello from the smoke pass" \
   --json | jq -r '.id')
 
 bb thread wait "$SMOKE_THREAD_ID" --status idle --timeout 120
-bb thread show "$SMOKE_THREAD_ID" --recent-events 10
+bb thread show "$SMOKE_THREAD_ID"
 bb thread output "$SMOKE_THREAD_ID"
 bb thread log "$SMOKE_THREAD_ID" --format json | jq '.[-10:]'
 ```
@@ -96,6 +97,7 @@ Create a managed worktree thread and inspect workspace status:
 WORKTREE_THREAD_ID=$(bb thread spawn \
   --project "$BB_PROJECT_ID" \
   --provider codex \
+  --model gpt-5 \
   --reasoning-level low \
   --service-tier fast \
   --new-environment worktree \
@@ -140,6 +142,7 @@ Create thread A and capture its environment:
 THREAD_A_ID=$(bb thread spawn \
   --project "$BB_PROJECT_ID" \
   --provider codex \
+  --model gpt-5 \
   --reasoning-level low \
   --service-tier fast \
   --prompt "Reply only in chat with the exact text THREAD A HELLO. Do not modify any files." \
@@ -156,6 +159,7 @@ Create thread B in the same project source path and let the server reuse the rea
 THREAD_B_ID=$(bb thread spawn \
   --project "$BB_PROJECT_ID" \
   --provider codex \
+  --model gpt-5 \
   --reasoning-level low \
   --service-tier fast \
   --prompt "Reply only in chat with the exact text THREAD B WORLD. Do not modify any files." \
@@ -199,8 +203,8 @@ Run a mixed-provider pass in separate environments:
 CLAUDE_THREAD_ID=$(bb thread spawn \
   --project "$BB_PROJECT_ID" \
   --provider claude-code \
-  --reasoning-level low \
   --model claude-haiku-4-5 \
+  --reasoning-level low \
   --new-environment worktree \
   --prompt "Reply only in chat with CLAUDE THREAD. Do not modify files." \
   --json | jq -r '.id')
@@ -208,8 +212,8 @@ CLAUDE_THREAD_ID=$(bb thread spawn \
 PI_THREAD_ID=$(bb thread spawn \
   --project "$BB_PROJECT_ID" \
   --provider pi \
-  --reasoning-level low \
   --model openai/codex-mini \
+  --reasoning-level low \
   --new-environment worktree \
   --prompt "Reply only in chat with PI THREAD. Do not modify files." \
   --json | jq -r '.id')
@@ -232,6 +236,7 @@ Promotion requires both the managed worktree and the primary checkout to be clea
 PROMOTE_THREAD_ID=$(bb thread spawn \
   --project "$BB_PROJECT_ID" \
   --provider codex \
+  --model gpt-5 \
   --reasoning-level low \
   --service-tier fast \
   --new-environment worktree \
@@ -242,9 +247,9 @@ bb thread wait "$PROMOTE_THREAD_ID" --status idle --timeout 120
 PROMOTE_ENV_ID=$(curl -fsS "$BB_SERVER_URL/api/v1/threads/$PROMOTE_THREAD_ID" | jq -r '.environmentId')
 
 curl -fsS "$BB_SERVER_URL/api/v1/environments/$PROMOTE_ENV_ID/status" | jq
-bb environment commit "$PROMOTE_ENV_ID" --message "Manual QA promote step"
-bb environment promote "$PROMOTE_ENV_ID"
-bb environment demote "$PROMOTE_ENV_ID"
+bb environment commit "$PROMOTE_ENV_ID" --thread "$PROMOTE_THREAD_ID"
+bb environment promote "$PROMOTE_ENV_ID" --thread "$PROMOTE_THREAD_ID"
+bb environment demote "$PROMOTE_ENV_ID" --thread "$PROMOTE_THREAD_ID"
 ```
 
 Expected result:
@@ -280,7 +285,7 @@ bb thread tell "$SMOKE_THREAD_ID" "Write 80 detailed bullet points about the his
 bb thread wait "$SMOKE_THREAD_ID" --status active --timeout 30
 
 kill -TERM "$DAEMON_PID"
-bb thread show "$SMOKE_THREAD_ID" --recent-events 10
+bb thread show "$SMOKE_THREAD_ID"
 
 eval "$RESTART_DAEMON_COMMAND"
 DAEMON_PID=$!
@@ -316,10 +321,17 @@ Expected result:
 
 Repeat this section for `codex`, `claude-code`, and `pi`:
 
+Use an explicit model for each provider:
+
+- `codex`: `--model gpt-5 --service-tier fast`
+- `claude-code`: `--model claude-haiku-4-5`
+- `pi`: `--model openai/codex-mini`
+
 ```bash
 PROVIDER_THREAD_ID=$(bb thread spawn \
   --project "$BB_PROJECT_ID" \
   --provider <provider-id> \
+  --model <provider-model> \
   --reasoning-level low \
   --prompt "Say exactly: hello world" \
   --json | jq -r '.id')
@@ -335,7 +347,8 @@ bb thread tell "$PROVIDER_THREAD_ID" "Write a very long essay about computing hi
 bb thread wait "$PROVIDER_THREAD_ID" --status active --timeout 30
 bb thread stop "$PROVIDER_THREAD_ID"
 bb thread wait "$PROVIDER_THREAD_ID" --status idle --timeout 120
-bb thread show "$PROVIDER_THREAD_ID" --recent-events 10
+bb thread show "$PROVIDER_THREAD_ID"
+bb thread log "$PROVIDER_THREAD_ID" --format json | jq '.[-10:]'
 ```
 
 For workspace interaction, repeat on a worktree thread:
@@ -344,6 +357,7 @@ For workspace interaction, repeat on a worktree thread:
 PROVIDER_WORKTREE_THREAD_ID=$(bb thread spawn \
   --project "$BB_PROJECT_ID" \
   --provider <provider-id> \
+  --model <provider-model> \
   --reasoning-level low \
   --new-environment worktree \
   --prompt "Create hello.txt containing hello world" \

@@ -8,6 +8,7 @@ import {
   createProject,
   createReuseThread,
   getEnvironment,
+  type ThreadExecutionRequestOptions,
 } from "./api.js";
 import {
   waitForEnvironmentStatus,
@@ -25,6 +26,7 @@ export interface ProjectFixture {
 }
 
 export interface ReadyHostThreadOptions {
+  execution?: ThreadExecutionRequestOptions;
   input?: CreateThreadRequest["input"];
   projectId: string;
   providerId?: string;
@@ -37,6 +39,7 @@ export interface ReadyHostThreadOptions {
 }
 
 export interface ReadyReuseThreadOptions {
+  execution?: ThreadExecutionRequestOptions;
   environmentId: string;
   input?: CreateThreadRequest["input"];
   projectId: string;
@@ -72,6 +75,7 @@ export async function createReadyHostThread(
   options: ReadyHostThreadOptions,
 ): Promise<ReadyThreadFixture> {
   const thread = await createHostThread(harness.api, {
+    execution: options.execution,
     hostId: harness.hostId,
     input: options.input,
     projectId: options.projectId,
@@ -101,6 +105,7 @@ export async function createReadyReuseThread(
   options: ReadyReuseThreadOptions,
 ): Promise<ReadyThreadFixture> {
   const thread = await createReuseThread(harness.api, {
+    execution: options.execution,
     environmentId: options.environmentId,
     input: options.input,
     projectId: options.projectId,

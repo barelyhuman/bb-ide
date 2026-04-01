@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Command } from "commander";
-import type { Environment, Thread } from "@bb/domain";
+import { buildThreadEventRow, type Environment, type Thread } from "@bb/domain";
 
 const readlineState = vi.hoisted(() => ({
   question: vi.fn(),
@@ -1509,16 +1509,19 @@ describe("CLI JSON output contracts", () => {
     const waitGet = vi.fn(async () =>
       new Response(
         JSON.stringify({
-          id: "evt-1",
-          threadId: "thread-t0",
-          seq: 3,
-          type: "turn/completed",
-          data: {
-            providerThreadId: "provider-thread-t0",
-            turnId: "turn-1",
-            status: "completed",
-          },
-          createdAt: Date.now(),
+          ...buildThreadEventRow({
+            id: "evt-1",
+            threadId: "thread-t0",
+            seq: 3,
+            createdAt: Date.now(),
+            event: {
+              type: "turn/completed",
+              threadId: "thread-t0",
+              providerThreadId: "provider-thread-t0",
+              turnId: "turn-1",
+              status: "completed",
+            },
+          }),
         }),
         {
           status: 200,

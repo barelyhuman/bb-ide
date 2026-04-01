@@ -212,6 +212,7 @@ async function createRealThread(
     name: `Real Provider ${providerId}`,
   });
   const readyThread = await createReadyHostThread(harness, {
+    execution: getExecutionOptions(providerId),
     projectId: project.id,
     providerId,
     timeoutMs: TURN_TIMEOUT_MS,
@@ -489,12 +490,14 @@ describe.sequential("real provider end-to-end integration", () => {
           name: "Real Concurrent Providers",
         });
         const codexThread = await createReadyHostThread(harness, {
+          execution: getExecutionOptions("codex"),
           projectId: project.id,
           providerId: "codex",
           timeoutMs: TURN_TIMEOUT_MS,
           workspace: { type: "managed-worktree" },
         });
         const claudeThread = await createReadyHostThread(harness, {
+          execution: getExecutionOptions("claude-code"),
           projectId: project.id,
           providerId: "claude-code",
           timeoutMs: TURN_TIMEOUT_MS,
@@ -568,6 +571,7 @@ describe.sequential("real provider end-to-end integration", () => {
 
         for (const providerId of REAL_PROVIDER_IDS) {
           const readyThread = await createReadyHostThread(harness, {
+            execution: getExecutionOptions(providerId),
             projectId: project.id,
             providerId,
             timeoutMs: TURN_TIMEOUT_MS,

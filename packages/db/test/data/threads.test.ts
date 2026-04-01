@@ -216,8 +216,12 @@ describe("transitionThreadStatus", () => {
   });
 
   it("verifies all transitions in ALLOWED_TRANSITIONS map", () => {
-    // Verify the transitions match the architecture doc
-    expect(ALLOWED_TRANSITIONS.created).toEqual(["provisioning", "idle", "error"]);
+    // Verify the transitions match the current state machine
+    expect(ALLOWED_TRANSITIONS.created).toEqual([
+      "provisioning",
+      "idle",
+      "error",
+    ]);
     expect(ALLOWED_TRANSITIONS.provisioning).toEqual(["idle", "error"]);
     expect(ALLOWED_TRANSITIONS.idle).toEqual(["provisioning", "active", "error"]);
     expect(ALLOWED_TRANSITIONS.active).toEqual(["idle", "error"]);

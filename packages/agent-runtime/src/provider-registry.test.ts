@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { JsonRpcMessage } from "./provider-adapter.js";
 import {
@@ -22,6 +23,7 @@ describe("provider registry", () => {
     expect(provider.process.args[0]).toMatch(
       /agent-runtime\/(src|dist)\/claude-code\/bridge\/bridge\.js$/,
     );
+    expect(existsSync(provider.process.args[0])).toBe(true);
   });
 
   it("creates pi provider with expected process config", () => {
@@ -32,6 +34,7 @@ describe("provider registry", () => {
     expect(provider.process.args[0]).toMatch(
       /agent-runtime\/(src|dist)\/pi\/bridge\/bridge\.js$/,
     );
+    expect(existsSync(provider.process.args[0])).toBe(true);
   });
 
   it("rejects unsupported adapters", () => {
