@@ -2,6 +2,7 @@ declare module "proper-lockfile" {
   export interface LockOptions {
     realpath?: boolean;
     retries?: number;
+    lockfilePath?: string;
   }
 
   export type ReleaseFn = () => Promise<void>;

@@ -318,6 +318,59 @@ describe("ServerConnection", () => {
     await connection.shutdown();
   });
 
+  it("rejects start() when the startup timeout expires before connecting", async () => {
+    vi.useFakeTimers();
+    testServer = await createTestServer();
+    const { connection } = createConnection(testServer, {
+      startupTimeoutMs: 5_000,
+      createWebSocket: (urlProvider) => {
+        const socket = new FakeReconnectingWebSocket(urlProvider);
+        // Never open — simulate a server that never accepts the connection.
+        return socket;
+      },
+    });
+
+    const startPromise = connection.start().catch((err: unknown) => err);
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    const error = await startPromise;
+    expect(error).toBeInstanceOf(Error);
+    expect(String(error)).toMatch(/timed out/u);
+  });
+
+  it("logs and retries when the websocket closes before opening", async () => {
+    testServer = await createTestServer();
+    let attempt = 0;
+    const { connection, logger } = createConnection(testServer, {
+      createWebSocket: (urlProvider) => {
+        const socket = new FakeReconnectingWebSocket(urlProvider);
+        queueMicrotask(() => {
+          attempt += 1;
+          if (attempt === 1) {
+            // First attempt: close before open.
+            socket.disconnect();
+            // Simulate partysocket reconnecting on the same instance.
+            queueMicrotask(() => {
+              void socket.open();
+            });
+          } else {
+            void socket.open();
+          }
+        });
+        return socket;
+      },
+    });
+
+    const session = await connection.start();
+    expect(session.sessionId).toBe("session-1");
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({}),
+      "Waiting for server connection...",
+    );
+
+    await connection.shutdown();
+  });
+
   it("polls for commands while the websocket stays down and stops after reconnect", async () => {
     vi.useFakeTimers();
     testServer = await createTestServer();

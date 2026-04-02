@@ -11,6 +11,12 @@
       "persistent": true,
       "passThroughEnv": ["*"]
     },
+    "@bb/host-daemon#dev": {
+      "dependsOn": ["build", "^build"],
+      "cache": false,
+      "persistent": true,
+      "passThroughEnv": ["*"]
+    },
     "start:prod": {
       "dependsOn": ["build", "^build"],
       "cache": false,

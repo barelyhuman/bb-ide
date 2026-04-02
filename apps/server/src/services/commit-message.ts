@@ -1,11 +1,10 @@
-import { complete } from "@mariozechner/pi-ai";
 import { renderTemplate } from "@bb/templates";
-import { z } from "zod";
 import type { AppDeps } from "../types.js";
-import { extractAssistantText, getInferenceModel } from "./inference.js";
+import { Type } from "@mariozechner/pi-ai";
+import { inferenceComplete } from "./inference.js";
 
-const commitMessageResponseSchema = z.object({
-  message: z.string().min(1),
+const commitMessageSchema = Type.Object({
+  message: Type.String({ minLength: 1 }),
 });
 
 interface GenerateCommitMessageArgs {
@@ -22,11 +21,6 @@ export async function generateCommitMessage(
   args: GenerateCommitMessageArgs,
 ): Promise<string | null> {
   try {
-    const model = getInferenceModel(deps);
-    if (!model) {
-      return null;
-    }
-
     const prompt = renderTemplate("generateCommitMessage", {
       diffDescription: args.diffDescription,
       shortstat: args.shortstat,
@@ -34,28 +28,13 @@ export async function generateCommitMessage(
       patch: args.patch,
     });
 
-    const response = await Promise.race([
-      complete(model, {
-        messages: [
-          {
-            role: "user",
-            content: prompt,
-            timestamp: Date.now(),
-          },
-        ],
-      }),
-      new Promise<never>((_, reject) => {
-        const timer = setTimeout(
-          () => reject(new Error("Commit message generation timed out")),
-          COMMIT_MESSAGE_TIMEOUT_MS,
-        );
-        timer.unref();
-      }),
-    ]);
+    const result = await inferenceComplete(deps, {
+      prompt,
+      schema: commitMessageSchema,
+      timeoutMs: COMMIT_MESSAGE_TIMEOUT_MS,
+    });
 
-    const text = extractAssistantText(response);
-    const parsed = commitMessageResponseSchema.parse(JSON.parse(text));
-    return parsed.message;
+    return result?.message ?? null;
   } catch (error) {
     deps.logger.warn({ err: error }, "Failed to generate commit message");
     return null;

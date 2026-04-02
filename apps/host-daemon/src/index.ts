@@ -1,3 +1,4 @@
+import "@bb/config/dotenv";
 import { fileURLToPath } from "node:url";
 export { startHostDaemon } from "./start-host-daemon.js";
 export type { StartHostDaemonOptions } from "./start-host-daemon.js";

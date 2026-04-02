@@ -11,6 +11,7 @@ import {
   DEFAULT_POLL_AFTER_DISCONNECT_MS,
   DEFAULT_POLL_INTERVAL_MS,
   DEFAULT_RECONNECTION_DELAY_GROW_FACTOR,
+  DEFAULT_STARTUP_TIMEOUT_MS,
   OPEN_READY_STATE,
   createDefaultReconnectingWebSocket,
   decodeWebSocketMessageData,
@@ -32,6 +33,7 @@ export class ServerConnection {
   private readonly maxReconnectionDelay: number;
   private readonly reconnectionDelayGrowFactor: number;
   private readonly connectionTimeout: number;
+  private readonly startupTimeoutMs: number;
   private readonly pollAfterDisconnectMs: number;
   private readonly pollIntervalMs: number;
   private readonly setTimeoutFn: typeof setTimeout;
@@ -59,6 +61,8 @@ export class ServerConnection {
       DEFAULT_RECONNECTION_DELAY_GROW_FACTOR;
     this.connectionTimeout =
       options.connectionTimeout ?? DEFAULT_CONNECTION_TIMEOUT_MS;
+    this.startupTimeoutMs =
+      options.startupTimeoutMs ?? DEFAULT_STARTUP_TIMEOUT_MS;
     this.pollAfterDisconnectMs =
       options.pollAfterDisconnectMs ?? DEFAULT_POLL_AFTER_DISCONNECT_MS;
     this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
@@ -139,11 +143,20 @@ export class ServerConnection {
       let settled = false;
       let hasOpened = false;
 
+      const startupTimer = this.setTimeoutFn(() => {
+        fail(
+          new Error(
+            `Server connection timed out after ${this.startupTimeoutMs}ms`,
+          ),
+        );
+      }, this.startupTimeoutMs);
+
       const fail = (error: unknown) => {
         if (settled) {
           return;
         }
         settled = true;
+        this.clearTimeoutFn(startupTimer);
         void this.shutdown();
         reject(error instanceof Error ? error : new Error(String(error)));
       };
@@ -157,8 +170,13 @@ export class ServerConnection {
 
         const handleOpen = async () => {
           hasOpened = true;
+          this.clearTimeoutFn(startupTimer);
           this.stopPollingFallback();
           this.resetHeartbeat();
+          this.options.logger.info(
+            { sessionId: session.sessionId },
+            "Connected to server",
+          );
           await this.options.onSessionOpened?.(session);
           if (!settled) {
             settled = true;
@@ -182,12 +200,19 @@ export class ServerConnection {
         this.handleWebSocketMessage(event.data);
       };
 
-      websocket.onclose = () => {
+      websocket.onclose = (event) => {
         this.clearHeartbeat();
         if (!hasOpened) {
-          fail(new Error("WebSocket closed before opening"));
+          this.options.logger.warn(
+            { code: event.code, reason: event.reason },
+            "Waiting for server connection...",
+          );
           return;
         }
+        this.options.logger.info(
+          { code: event.code, reason: event.reason },
+          "Disconnected from server",
+        );
         if (this.stopped) {
           return;
         }
@@ -195,9 +220,11 @@ export class ServerConnection {
       };
 
       websocket.onerror = (error) => {
-        if (!hasOpened) {
-          fail(error);
+        if (hasOpened) {
+          this.options.logger.warn({ err: error }, "WebSocket error");
         }
+        // Before first open, errors are expected (server not ready yet).
+        // partysocket handles retries.
       };
     });
   }

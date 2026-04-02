@@ -42,14 +42,18 @@ export function validateDaemonWebSocket(
 }
 
 export function onDaemonSocketOpen(
-  deps: Pick<AppDeps, "hub">,
+  deps: Pick<AppDeps, "hub" | "logger">,
   args: { hostId: string; sessionId: string; socket: DaemonSocket },
 ): void {
+  deps.logger.info(
+    { sessionId: args.sessionId, hostId: args.hostId },
+    "Daemon WebSocket opened",
+  );
   deps.hub.registerDaemon(args.sessionId, args.hostId, args.socket);
 }
 
 export function onDaemonSocketMessage(
-  deps: Pick<AppDeps, "db">,
+  deps: Pick<AppDeps, "db" | "logger">,
   args: DaemonSocketMessageArgs,
 ): void {
   let decoded: unknown;
@@ -66,18 +70,27 @@ export function onDaemonSocketMessage(
     return;
   }
 
-  const session = requireActiveSession(deps.db, args.sessionId);
-  heartbeatSession(
-    deps.db,
-    session.id,
-    Date.now() + session.leaseTimeoutMs,
-  );
+  try {
+    const session = requireActiveSession(deps.db, args.sessionId);
+    heartbeatSession(
+      deps.db,
+      session.id,
+      Date.now() + session.leaseTimeoutMs,
+    );
+  } catch (error) {
+    deps.logger.warn(
+      { sessionId: args.sessionId, err: error },
+      "Daemon heartbeat for inactive session, closing socket",
+    );
+    args.socket.close(1008, "inactive-session");
+  }
 }
 
 export function onDaemonSocketClose(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: Pick<AppDeps, "db" | "hub" | "logger">,
   sessionId: string,
 ): void {
+  deps.logger.info({ sessionId }, "Daemon WebSocket closed");
   deps.hub.unregisterDaemon(sessionId);
   deps.hub.scheduleDaemonDisconnect(
     sessionId,

@@ -1,3 +1,4 @@
+import "@bb/config/dotenv";
 import { serve } from "@hono/node-server";
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
@@ -55,4 +56,12 @@ const server = serve({
 });
 injectWebSocket(server);
 
-logger.info({ port: serverConfig.BB_SERVER_PORT }, "Server listening");
+logger.info(
+  {
+    port: serverConfig.BB_SERVER_PORT,
+    dataDir: commonConfig.BB_DATA_DIR,
+    inferenceModel: serverConfig.BB_INFERENCE_MODEL,
+    hasOpenAiApiKey: Boolean(serverConfig.OPENAI_API_KEY),
+  },
+  "Server listening",
+);

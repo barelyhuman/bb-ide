@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import "@bb/config/dotenv";
 import { Command } from "commander";
 import { registerEnvironmentCommands } from "./commands/environment.js";
 import { registerGuideCommand } from "./commands/guide.js";

@@ -61,6 +61,7 @@ export interface ServerConnectionOptions {
   maxReconnectionDelay?: number;
   reconnectionDelayGrowFactor?: number;
   connectionTimeout?: number;
+  startupTimeoutMs?: number;
   pollAfterDisconnectMs?: number;
   pollIntervalMs?: number;
   setTimeoutFn?: typeof setTimeout;
@@ -73,6 +74,7 @@ export const DEFAULT_MIN_RECONNECTION_DELAY = 1_000;
 export const DEFAULT_MAX_RECONNECTION_DELAY = 30_000;
 export const DEFAULT_RECONNECTION_DELAY_GROW_FACTOR = 2;
 export const DEFAULT_CONNECTION_TIMEOUT_MS = 10_000;
+export const DEFAULT_STARTUP_TIMEOUT_MS = 60_000;
 export const DEFAULT_POLL_AFTER_DISCONNECT_MS = 5_000;
 export const DEFAULT_POLL_INTERVAL_MS = 10_000;
 export const OPEN_READY_STATE = 1;

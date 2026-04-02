@@ -235,6 +235,51 @@ describe("internal session correctness", () => {
     }
   });
 
+  it("closes the daemon websocket with 1008 when the session is no longer active", async () => {
+    const server = await startTestServer();
+    try {
+      const daemonClient = createHostDaemonClient(
+        server.baseUrl,
+        server.config.authToken,
+      );
+      const sessionResponse = await daemonClient.session.open.$post({
+        json: {
+          hostId: "host-inactive-session",
+          instanceId: "instance-1",
+          hostName: "Inactive Session Host",
+          hostType: "persistent",
+          dataDir: "/tmp/host-inactive-session-data",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
+        },
+      });
+      expect(sessionResponse.status).toBe(201);
+      const session = await sessionResponse.json();
+
+      const socket = new WebSocket(
+        `${server.baseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(session.sessionId)}&token=${encodeURIComponent(server.config.authToken)}`,
+      );
+      await waitForOpen(socket);
+
+      // Close the session in the DB so the next heartbeat finds it inactive.
+      server.db
+        .update(hostDaemonSessions)
+        .set({ status: "closed", closedAt: Date.now(), closeReason: "replaced" })
+        .where(eq(hostDaemonSessions.id, session.sessionId))
+        .run();
+
+      const closed = waitForCloseDetails(socket);
+      socket.send(JSON.stringify({ type: "heartbeat" }));
+
+      await expect(closed).resolves.toEqual({
+        code: 1008,
+        reason: "inactive-session",
+      });
+    } finally {
+      await server.close();
+    }
+  });
+
   it("keeps the daemon session active during the disconnect grace period", async () => {
     const harness = await createTestAppHarness();
     try {

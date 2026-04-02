@@ -35,6 +35,15 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
       leaseTimeoutMs: LEASE_TIMEOUT_MS,
     });
 
+    deps.logger.info(
+      {
+        sessionId: session.id,
+        hostId: payload.hostId,
+        replacedSessionId: existingSession?.id ?? null,
+      },
+      "Session opened",
+    );
+
     if (existingSession && existingSession.id !== session.id) {
       deps.hub.closeDaemonSession(existingSession.id, "replaced");
     }

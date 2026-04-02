@@ -37,13 +37,13 @@ export const templateDefinitions = [
   },
   {
     "id": "generateCommitMessage",
-    "body": "Write a concise git commit message for {{diffDescription}}.\nRules:\n- Return ONLY JSON: {\"message\":\"...\"}\n- Use conventional commit style (feat|fix|refactor|test|docs|chore|perf|build|ci|style).\n- Prefer specific types like feat/fix/refactor/test/docs/perf over chore.\n- Use chore only for housekeeping (deps, tooling, CI, formatting, repo maintenance).\n- Use imperative mood, max 72 characters.\n- Single line only, no body.\n\nShortstat:\n{{shortstat}}\n\nFiles (name-status):\n{{files}}\n\nPatch excerpt:\n{{patch}}",
+    "body": "Write a concise git commit message for {{diffDescription}}.\nCall the `result` tool with your answer.\nRules:\n- Use conventional commit style (feat|fix|refactor|test|docs|chore|perf|build|ci|style).\n- Prefer specific types like feat/fix/refactor/test/docs/perf over chore.\n- Use chore only for housekeeping (deps, tooling, CI, formatting, repo maintenance).\n- Use imperative mood, max 72 characters.\n- Single line only, no body.\n\nShortstat:\n{{shortstat}}\n\nFiles (name-status):\n{{files}}\n\nPatch excerpt:\n{{patch}}",
     "fileName": "generate-commit-message.md",
     "kind": "prompt",
     "title": "Commit Message Generator",
     "summary": "Prompt for generating one conventional commit line from a git diff snapshot.",
     "intent": "Produce a single concise conventional commit subject and nothing else.",
-    "editingNotes": "The JSON-only return contract is consumed programmatically. Keep the output format strict.",
+    "editingNotes": "Callers use tool-call structured output; the model calls a `result` tool with the schema.",
     "variables": {
       "diffDescription": "Human-readable description of the diff snapshot being summarized.",
       "shortstat": "Git shortstat summary for the diff.",
@@ -53,13 +53,13 @@ export const templateDefinitions = [
   },
   {
     "id": "generateThreadMetadata",
-    "body": "You create concise metadata for a coding task.\nReturn ONLY a JSON object with keys:\n- title: short, clear, 3-7 words, Title Case\n- branchName: lower-case, kebab-case slug prefixed with one of: feat/, fix/, chore/, test/, docs/, refactor/, perf/, build/, ci/, style/.\n\nChoose fix/ when the task is a bug fix, error, regression, crash, or cleanup. Use the closest match for chores/tests/docs/refactors/perf/build/ci/style. Otherwise use feat/.\n\nExamples:\n{\"title\":\"Fix Login Redirect Loop\",\"branchName\":\"fix/login-redirect-loop\"}\n{\"title\":\"Add Workspace Home View\",\"branchName\":\"feat/workspace-home\"}\n{\"title\":\"Update Lint Config\",\"branchName\":\"chore/update-lint-config\"}\n{\"title\":\"Add Coverage Tests\",\"branchName\":\"test/add-coverage-tests\"}\n\nTask:\n{{cleanedPrompt}}",
+    "body": "You create concise titles for coding tasks.\nCall the `result` tool with:\n- title: short, clear, 3-7 words, Title Case\n\nTask:\n{{cleanedPrompt}}",
     "fileName": "generate-thread-metadata.md",
     "kind": "prompt",
     "title": "Thread Metadata Generator",
-    "summary": "Prompt for deriving a short thread title and branch name from the user's task prompt.",
+    "summary": "Prompt for deriving a short thread title from the user's task prompt.",
     "intent": "Generate stable, operator-friendly metadata for threads without adding explanatory prose.",
-    "editingNotes": "Keep the examples concrete and the output contract JSON-only because callers parse the result directly.",
+    "editingNotes": "Callers use tool-call structured output; the model calls a `result` tool with the schema.",
     "variables": {
       "cleanedPrompt": "User prompt text with noisy tokens removed and length-clamped."
     }

@@ -1,4 +1,3 @@
-import { complete } from "@mariozechner/pi-ai";
 import { renderTemplate } from "@bb/templates";
 import {
   getEnvironment,
@@ -7,7 +6,8 @@ import {
 } from "@bb/db";
 import type { PromptInput } from "@bb/domain";
 import type { AppDeps } from "../types.js";
-import { extractAssistantText, getInferenceModel } from "./inference.js";
+import { Type } from "@mariozechner/pi-ai";
+import { inferenceComplete } from "./inference.js";
 import { queueThreadRenameCommand } from "./thread-commands.js";
 import { appendThreadTitleUpdatedEvent } from "./thread-events.js";
 
@@ -24,13 +24,9 @@ export function deriveTitleFallback(input: PromptInput[]): string | null {
   return text.length <= 80 ? text : `${text.slice(0, 77)}...`;
 }
 
-function parseGeneratedTitle(text: string): { branchName?: string; title?: string } {
-  const parsed = JSON.parse(text) as Record<string, unknown>;
-  return {
-    title: typeof parsed.title === "string" ? parsed.title : undefined,
-    branchName: typeof parsed.branchName === "string" ? parsed.branchName : undefined,
-  };
-}
+const titleSchema = Type.Object({
+  title: Type.Optional(Type.String()),
+});
 
 export async function generateThreadTitle(
   deps: Pick<AppDeps, "config" | "db" | "hub" | "logger">,
@@ -50,24 +46,16 @@ export async function generateThreadTitle(
   }
 
   try {
-    const model = getInferenceModel(deps);
-    if (!model) {
-      return;
-    }
     const prompt = renderTemplate("generateThreadMetadata", {
       cleanedPrompt: fallback,
     });
-    const response = await complete(model, {
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-          timestamp: Date.now(),
-        },
-      ],
+
+    const parsed = await inferenceComplete(deps, {
+      prompt,
+      schema: titleSchema,
     });
-    const parsed = parseGeneratedTitle(extractAssistantText(response));
-    if (!parsed.title || parsed.title.trim().length === 0) {
+
+    if (!parsed?.title || parsed.title.trim().length === 0) {
       return;
     }
 

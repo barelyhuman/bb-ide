@@ -1,6 +1,6 @@
-import { envsafe, str } from "envsafe";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { envsafe, str } from "envsafe";
 import { DEFAULTS } from "./defaults.js";
 
 export const commonConfig = envsafe({
