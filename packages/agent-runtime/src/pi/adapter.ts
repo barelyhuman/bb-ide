@@ -616,7 +616,8 @@ export function createPiProviderAdapter(
         type: "error",
         threadId: "",
         providerThreadId: "",
-        message: errorEnvelope.data.params?.message ?? "unknown error",
+        message: "Provider error",
+        detail: errorEnvelope.data.params?.message ?? "unknown error",
       }];
     }
 
@@ -740,6 +741,10 @@ export function createPiProviderAdapter(
         if (!state.currentTurnId) {
           return buildUnexpectedPiSdkEvent(piEvent.data, context);
         }
+        // Close any open assistant message scope so the final assistant
+        // text at agent_end gets a fresh ID and doesn't overwrite
+        // earlier streamed content.
+        resolveCompletedAssistantMessageId(state, context?.parentToolCallId);
         const item = translatePiToolUseItem({
           callId: piEvent.data.toolCallId,
           toolName: piEvent.data.toolName,

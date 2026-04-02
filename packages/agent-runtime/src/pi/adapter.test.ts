@@ -294,6 +294,47 @@ describe("pi provider adapter", () => {
     );
   });
 
+  it("translateEvent assigns a new assistant id after a tool call interrupts streaming", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+
+    // Stream assistant text before tool call
+    const preDelta = adapter.translateEvent(loadFixture("message-update-delta.json"));
+    const preItemId = preDelta.find(
+      (e): e is Extract<(typeof preDelta)[number], { type: "item/agentMessage/delta" }> =>
+        e.type === "item/agentMessage/delta",
+    )?.itemId;
+
+    // Tool call starts — should close the assistant scope
+    adapter.translateEvent({
+      type: "tool_execution_start",
+      toolCallId: "tool-bash-1",
+      toolName: "bash",
+      args: { command: "ls" },
+    });
+
+    // Stream assistant text after tool call
+    const postDelta = adapter.translateEvent(loadFixture("message-update-delta.json"));
+    const postItemId = postDelta.find(
+      (e): e is Extract<(typeof postDelta)[number], { type: "item/agentMessage/delta" }> =>
+        e.type === "item/agentMessage/delta",
+    )?.itemId;
+
+    // Completed assistant message at agent_end should use the post-tool id
+    const endEvents = adapter.translateEvent(loadFixture("agent-end-with-message.json"));
+    const completedId = endEvents.find(
+      (e) => e.type === "item/completed" && e.item.type === "agentMessage",
+    );
+
+    expect(preItemId).toMatch(/^pi-assistant-/);
+    expect(postItemId).toMatch(/^pi-assistant-/);
+    expect(preItemId).not.toBe(postItemId);
+    expect(completedId).toBeDefined();
+    if (completedId?.type === "item/completed" && completedId.item.type === "agentMessage") {
+      expect(completedId.item.id).toBe(postItemId);
+    }
+  });
+
   // -- translateEvent: tool calls ------------------------------------------
 
   it("translateEvent tool_execution_start emits item/started", () => {

@@ -88,39 +88,39 @@ exports[`@bb/provider-audit fixture replay > exports shared React story data for
   },
   {
     "id": "excalidraw/pi/collab-startup-explanation",
-    "latestActivityRowId": "provider-audit-pi-collab-startup-explanation-20260327T081303Z-1549:tool-exploring:toolu_017wsNkrkNZMLKzVguNbnD7S:226",
+    "latestActivityRowId": "turn-2:tool-group:5",
     "timelineRowCount": 6,
-    "viewMessageCount": 6,
+    "viewMessageCount": 8,
   },
   {
     "id": "excalidraw/pi/command-palette-map",
-    "latestActivityRowId": "turn-2:tool-group:6",
+    "latestActivityRowId": "turn-2:tool-group:10",
     "timelineRowCount": 8,
-    "viewMessageCount": 19,
+    "viewMessageCount": 43,
   },
   {
     "id": "excalidraw/pi/eyedropper-preview-bugfix",
     "latestActivityRowId": "turn-1:tool-group:1",
     "timelineRowCount": 5,
-    "viewMessageCount": 12,
+    "viewMessageCount": 18,
   },
   {
     "id": "excalidraw/pi/magicframe-feature",
     "latestActivityRowId": "turn-1:tool-group:1",
     "timelineRowCount": 3,
-    "viewMessageCount": 23,
+    "viewMessageCount": 46,
   },
   {
     "id": "excalidraw/pi/search-bugfix",
     "latestActivityRowId": "turn-1:tool-group:1",
     "timelineRowCount": 5,
-    "viewMessageCount": 9,
+    "viewMessageCount": 14,
   },
   {
     "id": "excalidraw/pi/search-feature",
     "latestActivityRowId": "turn-1:tool-group:1",
     "timelineRowCount": 5,
-    "viewMessageCount": 8,
+    "viewMessageCount": 12,
   },
   {
     "id": "excalidraw/pi/ttd-explanation",
@@ -1539,6 +1539,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelinePreview": [
       "── User ────────────────────────────────────────────────────",
       "I'm trying to understand Excalidraw's collaboration startup flow before changing it. Please trace the path from the collaboration UI into room initialization, socket setup, first scene load, and the state changes that flip the app into collaboration mode. Call out the main files, the key types or state, and any tricky fallback or failure paths. Keep it grounded in the current codebase with specific file references.",
+      "── Worked for 14s ──────────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Now I have a comprehensive picture. Here's the full trace:",
       "---",
@@ -1713,9 +1714,9 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
       "| \`excalidraw-app/share/ShareDialog.tsx\` | UI: start/stop session, copy link, share link. Switches between \`ShareDialogPicker\` and \`ActiveRoomDialog\` based on \`activeRoomLinkAtom\` |",
       "| \`excalidraw-app/app_constants.ts\` | All timing constants, \`WS_EVENTS\`, \`WS_SUBTYPES\` enum, storage keys |",
       "| \`packages/excalidraw/components/live-collaboration/LiveCollaborationTrigger.tsx\` | The Share button component (library-level, app-agnostic) |",
-      "── Explored 7 files, 2 searches ────────────────────────────",
       "── User ────────────────────────────────────────────────────",
       "What's the safest extension point if I want to instrument room startup without changing behavior?",
+      "── Worked for 13s ──────────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Here's the precise recommendation.",
       "---",
@@ -1827,14 +1828,13 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
       "- **Don't wrap or override \`startCollaboration\`** — it's referenced by identity in the \`CollabAPI\` object frozen into the atom at mount time. Replacing it after mount won't propagate.",
       "- **Don't add state to \`Collab\`** — it's a \`PureComponent\`; extra \`setState\` calls change re-render timing and could trigger \`broadcastElements\` at unexpected moments since \`onChange\` checks \`isCollaborating()\`.",
       "- **Don't subscribe inside \`Collab.componentDidMount\`** — the component mounts once and the method is already dense with setup; adding instrumentation there couples your telemetry lifecycle to React's.",
-      "── Explored 2 files, 1 search, 1 list ──────────────────────",
     ],
     "timelineRowCount": 6,
     "translatedThreadEventCount": 329,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 6,
+    "viewMessageCount": 8,
     "viewMessageKinds": {
-      "assistant-text": 2,
+      "assistant-text": 4,
       "tool-exploring": 2,
       "user": 2,
     },
@@ -1916,6 +1916,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
       "5. **Type safety** — adding to the \`ActionName\` union ensures TypeScript catches any misspelling or missing wiring at compile time.",
       "── User ────────────────────────────────────────────────────",
       "Based on that map, add one small discoverability improvement for an existing gated action and include focused coverage.",
+      "── Worked for 3m 0s ────────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Clean typecheck. Here's a summary of the change:",
       "---",
@@ -1938,7 +1939,6 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
       "|---|---|---|",
       "| **keyword discoverability** | 8 parameterized + 1 negative | Builds the same haystack the \`CommandPalette\` builds and runs the same \`fuzzy.filter\` + \`deburr\` pipeline against each keyword, plus a negative control (\`"eraser"\` → no match) |",
       "| **action behaviour** | 2 integration | \`executeAction\` opens the correct sidebar tab; \`perform\` returns \`false\` when a dialog is already open |",
-      "── Worked for 2m 59s ───────────────────────────────────────",
       "── User ────────────────────────────────────────────────────",
       "Summarize the directories you explored, the behavior change, and the validation you ran.",
       "── Assistant ───────────────────────────────────────────────",
@@ -1969,9 +1969,9 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelineRowCount": 8,
     "translatedThreadEventCount": 405,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 19,
+    "viewMessageCount": 43,
     "viewMessageKinds": {
-      "assistant-text": 3,
+      "assistant-text": 27,
       "file-edit": 3,
       "tool-call": 6,
       "tool-exploring": 4,
@@ -2048,9 +2048,9 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelineRowCount": 5,
     "translatedThreadEventCount": 125,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 12,
+    "viewMessageCount": 18,
     "viewMessageKinds": {
-      "assistant-text": 2,
+      "assistant-text": 8,
       "file-edit": 3,
       "tool-call": 2,
       "tool-exploring": 3,
@@ -2071,9 +2071,9 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelineRowCount": 3,
     "translatedThreadEventCount": 273,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 23,
+    "viewMessageCount": 46,
     "viewMessageKinds": {
-      "assistant-text": 1,
+      "assistant-text": 24,
       "file-edit": 6,
       "tool-call": 7,
       "tool-exploring": 7,
@@ -2121,9 +2121,9 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelineRowCount": 5,
     "translatedThreadEventCount": 103,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 9,
+    "viewMessageCount": 14,
     "viewMessageKinds": {
-      "assistant-text": 2,
+      "assistant-text": 7,
       "file-edit": 2,
       "tool-call": 1,
       "tool-exploring": 2,
@@ -2166,9 +2166,9 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
     "timelineRowCount": 5,
     "translatedThreadEventCount": 98,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 8,
+    "viewMessageCount": 12,
     "viewMessageKinds": {
-      "assistant-text": 2,
+      "assistant-text": 6,
       "file-edit": 2,
       "tool-call": 1,
       "tool-exploring": 1,
@@ -10950,6 +10950,14 @@ So: **best answer = use \`TTDDialog\`’s render props first; if that’s not en
     "timeline": "── User ────────────────────────────────────────────────────
 I'm trying to understand Excalidraw's collaboration startup flow before changing it. Please trace the path from the collaboration UI into room initialization, socket setup, first scene load, and the state changes that flip the app into collaboration mode. Call out the main files, the key types or state, and any tricky fallback or failure paths. Keep it grounded in the current codebase with specific file references.
 
+── Worked for 14s ──────────────────────────────────────────
+  ── Assistant ───────────────────────────────────────────────
+  I'll research the collaboration flow across the codebase systematically.
+  ── Explored 7 files, 2 searches ────────────────────────────
+    Search Collab
+    Search node_modules
+    Read $EXCALIDRAW_REPO/excalidraw-app/collab/Collab.tsx, $EXCALIDRAW_REPO/excalidraw-app/collab/Portal.tsx, $EXCALIDRAW_REPO/packages/excalidraw/components/live-collaboration/LiveCollaborationTrigger.tsx, $EXCALIDRAW_REPO/excalidraw-app/share/ShareDialog.tsx, $EXCALIDRAW_REPO/excalidraw-app/App.tsx, $EXCALIDRAW_REPO/excalidraw-app/app_constants.ts, $EXCALIDRAW_REPO/excalidraw-app/data/index.ts
+
 ── Assistant ───────────────────────────────────────────────
 Now I have a comprehensive picture. Here's the full trace:
 
@@ -11175,13 +11183,17 @@ Once collaboration is live:
 | \`excalidraw-app/app_constants.ts\` | All timing constants, \`WS_EVENTS\`, \`WS_SUBTYPES\` enum, storage keys |
 | \`packages/excalidraw/components/live-collaboration/LiveCollaborationTrigger.tsx\` | The Share button component (library-level, app-agnostic) |
 
-── Explored 7 files, 2 searches ────────────────────────────
-  Search Collab
-  Search node_modules
-  Read $EXCALIDRAW_REPO/excalidraw-app/collab/Collab.tsx, $EXCALIDRAW_REPO/excalidraw-app/collab/Portal.tsx, $EXCALIDRAW_REPO/packages/excalidraw/components/live-collaboration/LiveCollaborationTrigger.tsx, $EXCALIDRAW_REPO/excalidraw-app/share/ShareDialog.tsx, $EXCALIDRAW_REPO/excalidraw-app/App.tsx, $EXCALIDRAW_REPO/excalidraw-app/app_constants.ts, $EXCALIDRAW_REPO/excalidraw-app/data/index.ts
-
 ── User ────────────────────────────────────────────────────
 What's the safest extension point if I want to instrument room startup without changing behavior?
+
+── Worked for 13s ──────────────────────────────────────────
+  ── Assistant ───────────────────────────────────────────────
+  Let me check a few specific spots to give you a precise answer.
+  ── Explored 2 files, 1 search, 1 list ──────────────────────
+    Read $EXCALIDRAW_REPO/excalidraw-app/collab/Collab.tsx
+    Search trackEvent in excalidraw-app/share/ShareDialog.tsx
+    List packages/excalidraw
+    Read $EXCALIDRAW_REPO/excalidraw-app/collab/Collab.tsx, $EXCALIDRAW_REPO/excalidraw-app/app-jotai.ts
 
 ── Assistant ───────────────────────────────────────────────
 Here's the precise recommendation.
@@ -11325,13 +11337,7 @@ Socket.IO allows multiple listeners per event, so these don't replace the existi
 
 - **Don't wrap or override \`startCollaboration\`** — it's referenced by identity in the \`CollabAPI\` object frozen into the atom at mount time. Replacing it after mount won't propagate.
 - **Don't add state to \`Collab\`** — it's a \`PureComponent\`; extra \`setState\` calls change re-render timing and could trigger \`broadcastElements\` at unexpected moments since \`onChange\` checks \`isCollaborating()\`.
-- **Don't subscribe inside \`Collab.componentDidMount\`** — the component mounts once and the method is already dense with setup; adding instrumentation there couples your telemetry lifecycle to React's.
-
-── Explored 2 files, 1 search, 1 list ──────────────────────
-  Read $EXCALIDRAW_REPO/excalidraw-app/collab/Collab.tsx
-  Search trackEvent in excalidraw-app/share/ShareDialog.tsx
-  List packages/excalidraw
-  Read $EXCALIDRAW_REPO/excalidraw-app/collab/Collab.tsx, $EXCALIDRAW_REPO/excalidraw-app/app-jotai.ts",
+- **Don't subscribe inside \`Collab.componentDidMount\`** — the component mounts once and the method is already dense with setup; adding instrumentation there couples your telemetry lifecycle to React's.",
   },
   {
     "fixture": "excalidraw/pi/command-palette-map",
@@ -11348,12 +11354,22 @@ Use the available repo_outline helper first for the command and search area. The
     - packages/excalidraw/components/CommandPalette/ contains command palette item shaping, gating, and search UI
     - packages/excalidraw/components/App.tsx wires ActionManager and command palette setup
     - tests around actions and command/search behavior live under packages/excalidraw/tests and adjacent action test files
+  ── Assistant ───────────────────────────────────────────────
+  Good. Now let me inventory the key directories in parallel.
   ── Explored 9 files, 2 searches, 2 lists ───────────────────
     List packages/excalidraw/actions/
     List packages/excalidraw/components/CommandPalette/
     Search actionManager in packages/excalidraw/actions/manager.tsx
     Read packages/excalidraw/actions/types.ts, packages/excalidraw/actions/register.ts, packages/excalidraw/actions/manager.tsx, packages/excalidraw/components/CommandPalette/CommandPalette.tsx, packages/excalidraw/components/CommandPalette/defaultCommandPaletteItems.ts, packages/excalidraw/components/CommandPalette/types.ts, packages/excalidraw/actions/index.ts, packages/excalidraw/actions/actionToggleSearchMenu.ts, packages/excalidraw/actions/actionElementLock.ts
     Search registerAll\\|register.*actions\\|from.*register in packages/excalidraw/components/App.tsx
+  ── Assistant ───────────────────────────────────────────────
+  Now let me look at the CommandPalette files and the action index to see how things are wired together.
+  ── Assistant ───────────────────────────────────────────────
+  Now let me check the actions index file to see how individual action modules are re-exported and registered:
+  ── Assistant ───────────────────────────────────────────────
+  Now let me look at a representative gated action to see the full pattern:
+  ── Assistant ───────────────────────────────────────────────
+  Excellent. I now have a complete picture. Let me verify one more thing — how \`register.ts\`'s \`actions\` array feeds into the \`ActionManager\`:
 
 ── Assistant ───────────────────────────────────────────────
 Now I have the full picture. Here's the complete trace and recommendation:
@@ -11454,39 +11470,11 @@ Adding a new action requires its \`name\` to be added to the **\`ActionName\` un
 ── User ────────────────────────────────────────────────────
 Based on that map, add one small discoverability improvement for an existing gated action and include focused coverage.
 
-── Assistant ───────────────────────────────────────────────
-Clean typecheck. Here's a summary of the change:
+── Worked for 3m 0s ────────────────────────────────────────
+  ── Assistant ───────────────────────────────────────────────
 
----
 
-## Summary
-
-### Problem
-The **"Find on canvas"** search action (\`actionToggleSearchMenu\`) had only two keywords — \`["search", "find"]\` — making it invisible in the command palette when users typed common synonyms like "replace", "filter", "query", etc. Other actions like \`actionToggleTheme\` already set a good example with five keywords covering multiple user mental models.
-
-### Change
-
-**\`packages/excalidraw/actions/actionToggleSearchMenu.ts\`** — expanded keywords:
-\`\`\`
-- keywords: ["search", "find"],
-+ keywords: ["search", "find", "replace", "locate", "lookup", "filter", "text", "query"],
-\`\`\`
-
-This is a purely additive, data-only change. No dispatch paths, gating logic, or registration machinery were modified. The keywords flow through the existing pipeline:
-1. \`register()\` stores them on the \`Action\` object
-2. \`CommandPalette.tsx\` builds the \`haystack\` string as \`deburr(label) + keywords.join(" ")\`
-3. The \`fuzzy\` library matches user input against the haystack
-
-### Test coverage
-
-**\`packages/excalidraw/actions/actionToggleSearchMenu.test.tsx\`** (new, 11 tests):
-
-| Suite | Tests | What it covers |
-|---|---|---|
-| **keyword discoverability** | 8 parameterized + 1 negative | Builds the same haystack the \`CommandPalette\` builds and runs the same \`fuzzy.filter\` + \`deburr\` pipeline against each keyword, plus a negative control (\`"eraser"\` → no match) |
-| **action behaviour** | 2 integration | \`executeAction\` opens the correct sidebar tab; \`perform\` returns \`false\` when a dialog is already open |
-
-── Worked for 2m 59s ───────────────────────────────────────
+  Let me start by understanding the current state of the search action and its discoverability, then find a focused improvement.
   ── Explored 7 files, 10 searches, 2 lists ──────────────────
     Read packages/excalidraw/actions/actionToggleSearchMenu.ts
     Search keywords in packages/excalidraw/actions/action*.tsx
@@ -11505,6 +11493,30 @@ This is a purely additive, data-only change. No dispatch paths, gating logic, or
     Search export in packages/excalidraw/tests/test-utils.ts
     Read packages/excalidraw/deburr.ts
     Search "search" in packages/excalidraw/locales/en.json
+  ── Assistant ───────────────────────────────────────────────
+  Good. Now let me see how the keyword haystack is built and searched — specifically that fuzzy match at line 620:
+  ── Assistant ───────────────────────────────────────────────
+  Now let me find existing tests:
+  ── Assistant ───────────────────────────────────────────────
+  No existing CommandPalette tests. Let me check the test infrastructure so I know how to write one:
+  ── Assistant ───────────────────────────────────────────────
+  Now let me look at a simple action test for patterns:
+  ── Assistant ───────────────────────────────────────────────
+  Now let me check the test-utils to understand render and related utilities:
+  ── Assistant ───────────────────────────────────────────────
+  Now let me also check how the \`ActionManager\` is accessible in tests:
+  ── Assistant ───────────────────────────────────────────────
+  Good. Now I have full context. Let me also check the \`screen\` export to see if \`getByText\` is available, and look at how the command palette is opened in the app:
+  ── Assistant ───────────────────────────────────────────────
+  Good — it re-exports everything from \`@testing-library/react\`, so \`screen\` is available. Now let me understand the improvement I'll make.
+
+  **The improvement**: The \`actionToggleSearchMenu\` action has only \`["search", "find"]\` as keywords. Users commonly type "replace", "lookup", "filter", "text", "query", or "navigate" when looking for search functionality. Compare this to \`actionToggleTheme\` which has \`["toggle", "dark", "light", "mode", "theme"]\` — five keywords covering many mental models.
+
+  I'll expand the keywords and write a focused test that verifies the command palette's fuzzy matcher actually surfaces the search action for each of those synonyms.
+
+  Let me check the \`deburr\` utility quickly since the haystack uses it:
+  ── Assistant ───────────────────────────────────────────────
+  Now let me check what the search.title label resolves to, since the haystack includes the label:
   ── Tool Call: exec_command ─────────────────────────────────
     ✓ python3 -c "
   import json
@@ -11514,16 +11526,28 @@ This is a purely additive, data-only change. No dispatch paths, gating logic, or
   "
     248ms
     Find on canvas
+  ── Assistant ───────────────────────────────────────────────
+  So the haystack for the search action is currently: \`"find on canvas search find"\`. That means "find" and "search" already match. Good synonyms to add would be terms that users type but don't match anything in the current haystack: "replace", "lookup", "locate", "text", "query", "filter", "navigate", "goto".
+
+  Let me keep it focused — add the most useful synonyms that real users would try. Let me now make the change and write the test:
   ── File Edit ───────────────────────────────────────────────
     ✓ packages/excalidraw/actions/actionToggleSearchMenu.ts (update)
     --- a/packages/excalidraw/actions/actionToggleSearchMenu.ts
     +++ b/packages/excalidraw/actions/actionToggleSearchMenu.ts
     -  keywords: ["search", "find"],
     +  keywords: ["search", "find", "replace", "locate", "lookup", "filter", "text", "query"],
+  ── Assistant ───────────────────────────────────────────────
+  Now let me verify the final file:
   ── Explored 2 files, 1 search ──────────────────────────────
     Read packages/excalidraw/actions/actionToggleSearchMenu.ts
     Search commandPalette\\|openDialog.*command in packages/excalidraw/tests/
     Read packages/excalidraw/vitest.config.mts
+  ── Assistant ───────────────────────────────────────────────
+  Now write the focused test. Let me check how the command palette is opened in existing test patterns and how fuzzy matching works:
+  ── Assistant ───────────────────────────────────────────────
+  No existing command palette tests at all. Let me check the vitest config for any relevant setup:
+  ── Assistant ───────────────────────────────────────────────
+  I'll write a unit test that directly tests the keyword-matching behavior at the data layer, without needing to render the full command palette UI. This is more robust and focused:
   ── File Edit ───────────────────────────────────────────────
     ✓ packages/excalidraw/actions/actionToggleSearchMenu.test.tsx (add)
     --- /dev/null
@@ -11639,12 +11663,16 @@ This is a purely additive, data-only change. No dispatch paths, gating logic, or
 
     Command exited with code 1
     exit code 1
+  ── Assistant ───────────────────────────────────────────────
+  The keyboard test needs a proper target element. Let me check how other tests handle keyboard shortcuts:
   ── Explored 1 file, 4 searches ─────────────────────────────
     Search Keyboard.keyDown\\|Keyboard.keyPress in packages/excalidraw/tests/elementLocking.test.tsx
     Search Keyboard.*ctrlKey\\|Keyboard.*Ctrl in packages/excalidraw/tests/elementLocking.test.tsx
     Search Keyboard.keyDown.*ctrl\\|Keyboard.keyDown.*CTRL in packages/excalidraw/tests/
     Search Keyboard\\. in packages/excalidraw/tests/helpers/ui.ts
     Read packages/excalidraw/tests/helpers/ui.ts
+  ── Assistant ───────────────────────────────────────────────
+  I see — \`Keyboard.keyDown\` uses \`fireEvent.keyDown\` which needs a DOM element or \`document\`. But the search shortcut is handled via \`window.addEventListener\` in \`App.tsx\`. The \`Keyboard.withModifierKeys\` + \`Keyboard.keyPress\` pattern targets \`document\` by default. The issue is that the action's \`keyTest\` is checked by \`ActionManager.handleKeyDown\` which is wired to the interactive canvas, not \`document\`. Let me drop the Ctrl+F test since it requires deeper DOM wiring, and keep the test focused on the keyword discoverability (the actual change) plus the direct \`executeAction\` integration:
   ── File Edit ───────────────────────────────────────────────
     ✓ packages/excalidraw/actions/actionToggleSearchMenu.test.tsx (add)
     --- /dev/null
@@ -11722,6 +11750,8 @@ This is a purely additive, data-only change. No dispatch paths, gating logic, or
           Tests  11 passed (11)
        Start at  20:52:48
        Duration  2.18s (transform 1.13s, setup 170ms, collect 1.60s, tests 85ms, environment 135ms, prepare 29ms)
+  ── Assistant ───────────────────────────────────────────────
+  All 11 tests pass. Let me also verify no existing tests are broken:
   ── Tool Call: exec_command ─────────────────────────────────
     ✓ cd $EXCALIDRAW_REPO && npx vitest run packages/excalidraw/actions/ 2>&1
     3.1s
@@ -11738,10 +11768,44 @@ This is a purely additive, data-only change. No dispatch paths, gating logic, or
           Tests  50 passed (50)
        Start at  20:52:54
        Duration  2.72s (transform 1.25s, setup 1.21s, collect 9.84s, tests 1.61s, environment 880ms, prepare 207ms)
+  ── Assistant ───────────────────────────────────────────────
+  All 50 tests pass across all 6 action test files. Let me also quickly run typecheck on the changed files:
   ── Tool Call: exec_command ─────────────────────────────────
     ✓ cd $EXCALIDRAW_REPO && npx tsc --noEmit --project packages/excalidraw/tsconfig.json 2>&1 | tail -5
     4.0s
     (no output)
+
+── Assistant ───────────────────────────────────────────────
+Clean typecheck. Here's a summary of the change:
+
+---
+
+## Summary
+
+### Problem
+The **"Find on canvas"** search action (\`actionToggleSearchMenu\`) had only two keywords — \`["search", "find"]\` — making it invisible in the command palette when users typed common synonyms like "replace", "filter", "query", etc. Other actions like \`actionToggleTheme\` already set a good example with five keywords covering multiple user mental models.
+
+### Change
+
+**\`packages/excalidraw/actions/actionToggleSearchMenu.ts\`** — expanded keywords:
+\`\`\`
+- keywords: ["search", "find"],
++ keywords: ["search", "find", "replace", "locate", "lookup", "filter", "text", "query"],
+\`\`\`
+
+This is a purely additive, data-only change. No dispatch paths, gating logic, or registration machinery were modified. The keywords flow through the existing pipeline:
+1. \`register()\` stores them on the \`Action\` object
+2. \`CommandPalette.tsx\` builds the \`haystack\` string as \`deburr(label) + keywords.join(" ")\`
+3. The \`fuzzy\` library matches user input against the haystack
+
+### Test coverage
+
+**\`packages/excalidraw/actions/actionToggleSearchMenu.test.tsx\`** (new, 11 tests):
+
+| Suite | Tests | What it covers |
+|---|---|---|
+| **keyword discoverability** | 8 parameterized + 1 negative | Builds the same haystack the \`CommandPalette\` builds and runs the same \`fuzzy.filter\` + \`deburr\` pipeline against each keyword, plus a negative control (\`"eraser"\` → no match) |
+| **action behaviour** | 2 integration | \`executeAction\` opens the correct sidebar tab; \`perform\` returns \`false\` when a dialog is already open |
 
 ── User ────────────────────────────────────────────────────
 Summarize the directories you explored, the behavior change, and the validation you ran.
@@ -11795,6 +11859,10 @@ There's a positioning bug in the eyedropper preview: near the viewport edges, th
     Search eyeDropper\\|EyeDropper\\|eyedropper\\|EYEDROPPER
     Search eyeDropper\\|EyeDropper\\|eyedropper\\|EYEDROPPER
     Read $EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.tsx, $EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.scss
+  ── Assistant ───────────────────────────────────────────────
+  Now I can see the bug. The FIXME comment on line ~100 says it all: the preview is always positioned at \`clientX + 20, clientY + 20\` without checking if it goes off-screen. Let me check the preview's size from the SCSS:
+  ── Assistant ───────────────────────────────────────────────
+  The preview is \`3rem × 3rem\` and positioned with \`position: fixed\`. The offset is 20px from the cursor. Now let me extract the positioning logic into a testable function and fix the bug:
   ── File Edit ───────────────────────────────────────────────
     ✓ $EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.tsx (update)
     --- a/$EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.tsx
@@ -11812,6 +11880,9 @@ There's a positioning bug in the eyedropper preview: near the viewport edges, th
     +      );
     +      colorPreviewDiv.style.top = \`\${top}px\`;
     +      colorPreviewDiv.style.left = \`\${left}px\`;
+  ── Assistant ───────────────────────────────────────────────
+  Now add the exported helper function before the component:
+  ── File Edit ───────────────────────────────────────────────
     ✓ $EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.tsx (update)
     --- a/$EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.tsx
     +++ b/$EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.tsx
@@ -11849,6 +11920,8 @@ There's a positioning bug in the eyedropper preview: near the viewport edges, th
     +
     +  return { top, left };
     +};
+  ── Assistant ───────────────────────────────────────────────
+  Now let me write the tests:
   ── Explored 1 search ───────────────────────────────────────
     Search eye
   ── File Edit ───────────────────────────────────────────────
@@ -11918,8 +11991,12 @@ There's a positioning bug in the eyedropper preview: near the viewport edges, th
           Tests  9 passed (9)
        Start at  01:17:28
        Duration  1.87s (transform 1.04s, setup 158ms, collect 1.43s, tests 1ms, environment 123ms, prepare 31ms)
+  ── Assistant ───────────────────────────────────────────────
+  All 9 tests pass. Let me also verify the full file looks correct:
   ── Explored 1 file ─────────────────────────────────────────
     Read $EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.tsx
+  ── Assistant ───────────────────────────────────────────────
+  Now let me run the typecheck to make sure everything compiles:
   ── Tool Call: exec_command ─────────────────────────────────
     ✓ cd $EXCALIDRAW_REPO && npx tsc --noEmit -p packages/excalidraw/tsconfig.json 2>&1 | tail -20
     4s
@@ -12008,646 +12085,7 @@ If someone reverted to the old \`clientX + 20\` / \`clientY + 20\` logic, here's
 
 Five of the nine tests fail on the old code. The boundary pair (just-fits vs. off-by-one) is particularly important — it verifies the flip condition uses \`>\` not \`>=\`, so the preview is allowed to touch the viewport edge but never exceed it. Without those, a future change from \`>\` to \`>=\` (or vice versa) could introduce an unnecessary flip or a 1px overflow, and the test suite would catch it immediately.",
   },
-  {
-    "fixture": "excalidraw/pi/magicframe-feature",
-    "timeline": "── User ────────────────────────────────────────────────────
-Make the Magic Frame AI workflow discoverable from the command or search experience on desktop. It should show up only when the existing AI feature is actually available, behave like the rest of the tool entries, and include focused coverage for the availability gating and action wiring.
-
-── Worked for 9m 33s ───────────────────────────────────────
-  ── Tool Call: exec_command ─────────────────────────────────
-    ✗ cd $EXCALIDRAW_REPO && bb subagent explore "Explore the codebase to understand: 1) How the command palette / search experience works on desktop (look for CommandPalette, command menu, search commands, etc.) 2) How the AI / Magic Frame feature works (look for 'magic', 'ai', 'MagicFrame', 'text to diagram' etc.) 3) How actions are registered and wired into the command palette 4) How feature gating/availability for AI is handled (look for isAI, aiEnabled, app.props.aiEnabled or similar flags). Give me specific file paths and code snippets for each area."
-    7ms
-    /bin/bash: bb: command not found
-
-
-    Command exited with code 127
-    exit code 1
-  ── Explored 9 files, 16 searches, 4 lists ──────────────────
-    Search CommandPalette\\|commandPalette\\|command.palette\\|CommandMenu in tsx
-    Search CommandPalette\\|commandPalette
-    Search magic\\|Magic in ts
-    List .
-    Search magic\\|Magic\\|MagicFrame\\|magicframe
-    Read packages/excalidraw/components/CommandPalette/CommandPalette.tsx
-    Search onMagicframeToolSelect\\|MagicIconThin\\|magicframe\\|MagicFrame in packages/excalidraw/components/App.tsx
-    Search MagicIconThin\\|MagicIcon in packages/excalidraw/components/icons.tsx
-    Search magicframe in packages/excalidraw/locales/en.json
-    Search aiEnabled in packages/excalidraw/types.ts
-    Read packages/excalidraw/components/MagicButton.tsx
-    List .
-    List .
-    Read packages/excalidraw/components/CommandPalette/defaultCommandPaletteItems.ts, packages/excalidraw/components/CommandPalette/types.ts
-    List .
-    Search import.*render\\|from.*test.*helper in packages/excalidraw/components/Sidebar/Sidebar.test.tsx
-    Read packages/excalidraw/tests/helpers/api.ts
-    Search Excalidraw\\|render in packages/excalidraw/tests/test-utils.ts
-    Read packages/excalidraw/tests/test-utils.ts
-    Search aiEnabled
-    Search aiEnabled in packages/excalidraw/components/App.tsx
-    Search aiEnabled in packages/excalidraw/index.tsx
-    Read packages/excalidraw/index.tsx
-    Search Excalidraw in packages/excalidraw/components/Sidebar/Sidebar.test.tsx
-    Read packages/excalidraw/components/Sidebar/Sidebar.test.tsx
-    Search magicframe\\|wireframe\\|magic in packages/excalidraw/locales/en.json
-    Read packages/excalidraw/locales/en.json
-    Search MagicIconThin in packages/excalidraw/components/icons.tsx
-  ── Assistant ───────────────────────────────────────────────
-  Now let me look at the related pieces:Now let me check the MagicButton component for context on how the magicframe tool is used in the UI:Now let me check the existing tests for the command palette:Now let me look at the test setup and how tests are structured:Now I have a clear picture. Let me check how existing tests render \`<Excalidraw>\` with props like \`aiEnabled\`:Now let me check how existing tests use Excalidraw render for a reference:Now I have enough context. Let me now look at the locale entries to make sure I reference the right translation key:Now let me check what icon is used for the magic frame in the toolbar to find the right import:Good. Now I have the full picture. Let me implement the changes:
-
-  1. **Uncomment and enable the Magic Frame command** in \`CommandPalette.tsx\`
-  2. **Write focused tests** for availability gating and action wiringNow let's create the test file:Now let me look at how the command palette is opened in tests, and how \`window.h\` works:Now let me write the test:Now let's verify the code compiles and run the tests:TypeScript compiles cleanly. Now let's run the tests:The command palette dialog isn't opening. The issue might be that we need the \`Ctrl+/\` shortcut to fire on \`window\`, not \`document\`. Let me check how it's registered:The shortcut uses \`Ctrl+Shift+P\` or \`Ctrl+/\`. Let me try an alternative approach — set the app state directly rather than simulating the keyboard shortcut:The dialog still isn't rendering. Let me check how \`window.h.setState\` works and if the dialog class is what I expect:OK so \`h.setState\` is available. The issue might be that when \`withExcalidrawDimensions\` calls \`refreshEditorInterface\`, the state is reset. Let me try opening the command palette after the dimensions setup:The dialog should open. Let me check if \`h\` is actually set up correctly by writing a simpler test:The \`.command-palette-dialog\` selector is not finding the dialog. Let me check what the actual class name is in the DOM. The issue might be that \`Dialog\` wraps with a different class:So it's \`.excalidraw .command-palette-dialog\`. The Dialog component uses a portal and the class \`command-palette-dialog\` is added via className prop. Let me check what \`Dialog\` renders:A portal. So the dialog is rendered outside the \`container\` div. Let me use \`document.body\` or \`document.querySelector\` instead:The dialog still isn't rendering. The setState call might not be triggering a re-render correctly. Let me check how \`useUIAppState\` works - the CommandPalette checks \`uiAppState.openDialog?.name !== "commandPalette"\`:OK the issue is that \`window.h.app.setState\` may not be the right way since the CommandPalette uses context. The state needs to flow through the React tree. Let me check if there's a \`h.setState\` wrapper that might help:
-  ── File Edit ───────────────────────────────────────────────
-    ✓ packages/excalidraw/components/CommandPalette/CommandPalette.tsx (update)
-    --- a/packages/excalidraw/components/CommandPalette/CommandPalette.tsx
-    +++ b/packages/excalidraw/components/CommandPalette/CommandPalette.tsx
-    -  LockedIcon,
-    -  UnlockedIcon,
-    -  searchIcon,
-    -  boltIcon,
-    -  bucketFillIcon,
-    -  ExportImageIcon,
-    -  mermaidLogoIcon,
-    -  brainIconThin,
-    -  LibraryIcon,
-    -  historyCommandIcon,
-    -} from "../icons";
-    +  LockedIcon,
-    +  UnlockedIcon,
-    +  searchIcon,
-    +  boltIcon,
-    +  bucketFillIcon,
-    +  ExportImageIcon,
-    +  mermaidLogoIcon,
-    +  brainIconThin,
-    +  MagicIconThin,
-    +  LibraryIcon,
-    +  historyCommandIcon,
-    +} from "../icons";
-    ✓ packages/excalidraw/components/CommandPalette/CommandPalette.tsx (update)
-    --- a/packages/excalidraw/components/CommandPalette/CommandPalette.tsx
-    +++ b/packages/excalidraw/components/CommandPalette/CommandPalette.tsx
-    -        {
-    -          label: \`\${t("toolBar.mermaidToExcalidraw")}...\`,
-    -          category: DEFAULT_CATEGORIES.tools,
-    -          icon: mermaidLogoIcon,
-    -          viewMode: false,
-    -          predicate: appProps.aiEnabled,
-    -          perform: () => {
-    -            setAppState((state) => ({
-    -              ...state,
-    -              openDialog: {
-    -                name: "ttd",
-    -                tab: "mermaid",
-    -              },
-    -            }));
-    -          },
-    -        },
-    -        // {
-    -        //   label: \`\${t("toolBar.magicframe")}...\`,
-    -        //   category: DEFAULT_CATEGORIES.tools,
-    -        //   icon: MagicIconThin,
-    -        //   viewMode: false,
-    -        //   predicate: appProps.aiEnabled,
-    -        //   perform: () => {
-    -        //     app.onMagicframeToolSelect();
-    -        //   },
-    -        // },
-    +        {
-    +          label: \`\${t("toolBar.mermaidToExcalidraw")}...\`,
-    +          category: DEFAULT_CATEGORIES.tools,
-    +          icon: mermaidLogoIcon,
-    +          viewMode: false,
-    +          predicate: appProps.aiEnabled,
-    +          perform: () => {
-    +            setAppState((state) => ({
-    +              ...state,
-    +              openDialog: {
-    +                name: "ttd",
-    +                tab: "mermaid",
-    +              },
-    +            }));
-    +          },
-    +        },
-    +        {
-    +          label: \`\${t("toolBar.magicframe")}...\`,
-    +          category: DEFAULT_CATEGORIES.tools,
-    +          icon: MagicIconThin,
-    +          viewMode: false,
-    +          predicate: appProps.aiEnabled,
-    +          keywords: ["ai", "wireframe", "code", "generate", "magic"],
-    +          perform: () => {
-    +            app.onMagicframeToolSelect();
-    +          },
-    +        },
-  ── Explored 2 files, 4 searches ────────────────────────────
-    Search commandPalette in packages/excalidraw/locales/en.json
-    Read packages/excalidraw/locales/en.json
-    Search openDialog.*commandPalette\\|commandPalette
-    Search window.h in packages/excalidraw/tests/helpers/ui.ts
-    Search createTestHook\\|window\\.h\\. in packages/excalidraw/components/App.tsx
-    Read packages/excalidraw/components/App.tsx
-  ── File Edit ───────────────────────────────────────────────
-    ✓ packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx (add)
-    --- /dev/null
-    +++ b/packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx
-    +import React from "react";
-    +import { vi } from "vitest";
-    +
-    +import { Excalidraw } from "../../index";
-    +import {
-    +  act,
-    +  fireEvent,
-    +  render,
-    +  waitFor,
-    +  queryByText,
-    +  withExcalidrawDimensions,
-    +} from "../../tests/test-utils";
-    +
-    +const MAGIC_FRAME_LABEL = "Wireframe to code...";
-    +const TEXT_TO_DIAGRAM_LABEL = "Text to diagram...";
-    +const MERMAID_LABEL = "Mermaid to Excalidraw...";
-    +
-    +const openCommandPalette = async () => {
-    +  await act(async () => {
-    +    fireEvent.keyDown(document, {
-    +      key: "/",
-    +      ctrlKey: true,
-    +    });
-    +  });
-    +};
-    +
-    +const queryCommandItem = (
-    +  container: HTMLElement,
-    +  label: string,
-    +): HTMLElement | null => {
-    +  // Command items are rendered inside .command-item > .name
-    +  return queryByText(container, label);
-    +};
-    +
-    +describe("CommandPalette — AI / Magic Frame", () => {
-    +  describe("availability gating", () => {
-    +    it("should show Magic Frame entry when aiEnabled is true", async () => {
-    +      const { container } = await render(
-    +        <Excalidraw aiEnabled={true} />,
-    +      );
-    +
-    +      await withExcalidrawDimensions(
-    +        { width: 1920, height: 1080 },
-    +        async () => {
-    +          await openCommandPalette();
-    +
-    +          await waitFor(() => {
-    +            expect(
-    +              container.querySelector(".command-palette-dialog"),
-    +            ).not.toBeNull();
-    +          });
-    +
-    +          expect(queryCommandItem(container, MAGIC_FRAME_LABEL)).not.toBeNull();
-    +        },
-    +      );
-    +    });
-    +
-    +    it("should NOT show Magic Frame entry when aiEnabled is false", async () => {
-    +      const { container } = await render(
-    +        <Excalidraw aiEnabled={false} />,
-    +      );
-    +
-    +      await withExcalidrawDimensions(
-    +        { width: 1920, height: 1080 },
-    +        async () => {
-    +          await openCommandPalette();
-    +
-    +          await waitFor(() => {
-    +            expect(
-    +              container.querySelector(".command-palette-d...
-  ── Tool Call: exec_command ─────────────────────────────────
-    ✓ cd $EXCALIDRAW_REPO && yarn test:typecheck 2>&1 | tail -20
-    8ms
-    /bin/bash: yarn: command not found
-  ── Explored 1 list ─────────────────────────────────────────
-    List node_modules/.bin/vitest
-  ── Tool Call: exec_command ─────────────────────────────────
-    ✓ cd $EXCALIDRAW_REPO && npx tsc --noEmit --project packages/excalidraw/tsconfig.json 2>&1 | tail -30
-    3.8s
-    (no output)
-  ── Tool Call: exec_command ─────────────────────────────────
-    ✓ cd $EXCALIDRAW_REPO && npx vitest run packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx 2>&1 | tail -60
-    11.7s
-    [33mstyle[39m=[32m"--gap: 4; justify-items: start;"[39m
-                      [36m>[39m
-                        [36m<div[39m
-                          [33mclass[39m=[32m"Stack Stack_horizontal App-toolbar-container"[39m
-                          [33mstyle[39m=[32m"--gap: 1;"[39m
-                        [36m>[39m
-                          [36m<div[39m
-                            [33mclass[39m=[32m"Island App-toolbar"[39m
-                            [33mstyle[39m=[32m"--padding: 1;"[39m
-                          [36m>[39m
-                            [36m<div[39m
-                              [33mclass[39m=[32m"HintViewer"[39m
-                            [36m>[39m
-                              [36m<span>[39m
-                                [0mTo move canvas, hold [0m
-                                [36m<kbd>[39m
-                                  [0mScroll wheel[0m
-                                [36m</kbd>[39m
-                                [0m or [0m
-                                [36m<kbd>[39m
-                                  [0mSpace[0m
-                                [36m</kbd>[39m
-                                [0m while dragging, or use the hand tool[0m
-                              [36m</span>[39m
-                            [36m</div>[39m
-                            [36m<h2[39m
-                              [33mclass[39m=[32m"visually-hidden"[39m
-                              [33mid[39m=[32m"3a0ayxGDefWqnqPNZIwP8-shapes-title"[39m
-                            [36m>[39m
-                              [0mShapes[0m
-                            [36m</h2>[39m
-                            [36m<div[39m
-                              [33mclass[39m=[32m"Stack Stack_horizontal"[39m
-                              [33mstyle[39m=[32m"--gap: 1;"[39m
-                            [36m>[39m
-                              [36m<label[39m
-                                [33mclass[39m=[32m"ToolIcon ToolIcon__lock ToolIcon_size_medium"[39m
-                                [33mtitle[39m=[32m"Keep selected tool active after drawing — Q"[39m
-                              [36m>[39m
-                                [36m<input[39m
-                                  [33maria-label[39m=[32m"Keep s...
-     ❯ packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx:274:19
-        272|             expect(
-        273|               container.querySelector(".command-palette-dialog"),
-        274|             ).not.toBeNull();
-           |                   ^
-        275|           });
-        276|
-     ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/@testing-library/dom/dist/config.js:47:12
-     ❯ checkCallback node_modules/@testing-library/dom/dist/wait-for.js:124:77
-     ❯ Timeout.checkRealTimersCallback node_modules/@testing-library/dom/dist/wait-for.js:118:16
-
-    ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
-
-
-     Test Files  1 failed (1)
-          Tests  9 failed (9)
-       Start at  01:23:14
-       Duration  11.31s (transform 1.08s, setup 159ms, collect 1.53s, tests 9.33s, environment 127ms, prepare 31ms)
-  ── Explored 1 search ───────────────────────────────────────
-    Search commandPaletteShortcut in packages/excalidraw/components/CommandPalette/CommandPalette.tsx
-  ── File Edit ───────────────────────────────────────────────
-    ✓ packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx (add)
-    --- /dev/null
-    +++ b/packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx
-    +import React from "react";
-    +import { vi } from "vitest";
-    +
-    +import { Excalidraw } from "../../index";
-    +import {
-    +  act,
-    +  fireEvent,
-    +  render,
-    +  waitFor,
-    +  queryByText,
-    +  withExcalidrawDimensions,
-    +} from "../../tests/test-utils";
-    +
-    +const MAGIC_FRAME_LABEL = "Wireframe to code...";
-    +const TEXT_TO_DIAGRAM_LABEL = "Text to diagram...";
-    +const MERMAID_LABEL = "Mermaid to Excalidraw...";
-    +
-    +const openCommandPalette = async () => {
-    +  await act(async () => {
-    +    window.h.setState({ openDialog: { name: "commandPalette" } });
-    +  });
-    +};
-    +
-    +const queryCommandItem = (
-    +  container: HTMLElement,
-    +  label: string,
-    +): HTMLElement | null => {
-    +  return queryByText(container, label);
-    +};
-    +
-    +describe("CommandPalette — AI / Magic Frame", () => {
-    +  describe("availability gating", () => {
-    +    it("should show Magic Frame entry when aiEnabled is true", async () => {
-    +      const { container } = await render(<Excalidraw aiEnabled={true} />);
-    +
-    +      await withExcalidrawDimensions(
-    +        { width: 1920, height: 1080 },
-    +        async () => {
-    +          await openCommandPalette();
-    +
-    +          await waitFor(() => {
-    +            expect(
-    +              container.querySelector(".command-palette-dialog"),
-    +            ).not.toBeNull();
-    +          });
-    +
-    +          expect(queryCommandItem(container, MAGIC_FRAME_LABEL)).not.toBeNull();
-    +        },
-    +      );
-    +    });
-    +
-    +    it("should NOT show Magic Frame entry when aiEnabled is false", async () => {
-    +      const { container } = await render(<Excalidraw aiEnabled={false} />);
-    +
-    +      await withExcalidrawDimensions(
-    +        { width: 1920, height: 1080 },
-    +        async () => {
-    +          await openCommandPalette();
-    +
-    +          await waitFor(() => {
-    +            expect(
-    +              container.querySelector(".command-palette-dialog"),
-    +            ).not.toBeNull();
-    +          });
-    +
-    +          expect(queryCommandItem(container, MAGIC_FRAME_...
-  ── Tool Call: exec_command ─────────────────────────────────
-    ✓ cd $EXCALIDRAW_REPO && npx vitest run packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx 2>&1 | tail -40
-    11.7s
-    [0mSpace[0m
-                                [36m</kbd>[39m
-                                [0m while dragging, or use the hand tool[0m
-                              [36m</span>[39m
-                            [36m</div>[39m
-                            [36m<h2[39m
-                              [33mclass[39m=[32m"visually-hidden"[39m
-                              [33mid[39m=[32m"jZO5roYuiNqeFXkXi3Ewi-shapes-title"[39m
-                            [36m>[39m
-                              [0mShapes[0m
-                            [36m</h2>[39m
-                            [36m<div[39m
-                              [33mclass[39m=[32m"Stack Stack_horizontal"[39m
-                              [33mstyle[39m=[32m"--gap: 1;"[39m
-                            [36m>[39m
-                              [36m<label[39m
-                                [33mclass[39m=[32m"ToolIcon ToolIcon__lock ToolIcon_size_medium"[39m
-                                [33mtitle[39m=[32m"Keep selected tool active after drawing — Q"[39m
-                              [36m>[39m
-                                [36m<input[39m
-                                  [33maria-label[39m=[32m"Keep s...
-     ❯ packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx:253:19
-        251|             expect(
-        252|               container.querySelector(".command-palette-dialog"),
-        253|             ).not.toBeNull();
-           |                   ^
-        254|           });
-        255|
-     ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/@testing-library/dom/dist/config.js:47:12
-     ❯ checkCallback node_modules/@testing-library/dom/dist/wait-for.js:124:77
-     ❯ Timeout.checkRealTimersCallback node_modules/@testing-library/dom/dist/wait-for.js:118:16
-
-    ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
-
-
-     Test Files  1 failed (1)
-          Tests  9 failed (9)
-       Start at  01:24:03
-       Duration  11.34s (transform 1.08s, setup 162ms, collect 1.53s, tests 9.37s, environment 127ms, prepare 30ms)
-  ── Explored 3 files, 7 searches ────────────────────────────
-    Search setState in packages/excalidraw/components/App.tsx
-    Search h\\.setState\\|window\\.h in packages/excalidraw/tests/helpers/ui.ts
-    Search declare.*Window\\|interface Window\\|h: in packages/excalidraw/global.d.ts
-    Read packages/excalidraw/global.d.ts, excalidraw-app/global.d.ts
-    Search window.h\\b in packages/excalidraw/tests/helpers/ui.ts
-    Read packages/excalidraw/tests/helpers/ui.ts
-    Search h\\.state\\|h\\.app\\|h\\.setState in packages/excalidraw/tests/helpers/ui.ts
-    Read packages/excalidraw/tests/helpers/ui.ts
-    Search class.*command-palette-dialog\\|className.*command-palette-dialog in packages/excalidraw/components/CommandPalette/CommandPalette.tsx
-    Search formFactor\\|phone\\|desktop in packages/excalidraw/components/CommandPalette/CommandPalette.tsx
-  ── File Edit ───────────────────────────────────────────────
-    ✓ packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx (add)
-    --- /dev/null
-    +++ b/packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx
-    +import React from "react";
-    +import { vi } from "vitest";
-    +
-    +import { Excalidraw } from "../../index";
-    +import {
-    +  act,
-    +  fireEvent,
-    +  render,
-    +  waitFor,
-    +  queryByText,
-    +} from "../../tests/test-utils";
-    +
-    +const MAGIC_FRAME_LABEL = "Wireframe to code...";
-    +const TEXT_TO_DIAGRAM_LABEL = "Text to diagram...";
-    +const MERMAID_LABEL = "Mermaid to Excalidraw...";
-    +
-    +const openCommandPalette = async (container: HTMLElement) => {
-    +  await act(async () => {
-    +    window.h.app.setState({ openDialog: { name: "commandPalette" } });
-    +  });
-    +  await waitFor(() => {
-    +    expect(
-    +      container.querySelector(".command-palette-dialog"),
-    +    ).not.toBeNull();
-    +  });
-    +};
-    +
-    +const queryCommandItem = (
-    +  container: HTMLElement,
-    +  label: string,
-    +): HTMLElement | null => {
-    +  return queryByText(container, label);
-    +};
-    +
-    +describe("CommandPalette — AI / Magic Frame", () => {
-    +  describe("availability gating", () => {
-    +    it("should show Magic Frame entry when aiEnabled is true", async () => {
-    +      const { container } = await render(<Excalidraw aiEnabled={true} />);
-    +
-    +      await openCommandPalette(container);
-    +
-    +      expect(queryCommandItem(container, MAGIC_FRAME_LABEL)).not.toBeNull();
-    +    });
-    +
-    +    it("should NOT show Magic Frame entry when aiEnabled is false", async () => {
-    +      const { container } = await render(<Excalidraw aiEnabled={false} />);
-    +
-    +      await openCommandPalette(container);
-    +
-    +      expect(queryCommandItem(container, MAGIC_FRAME_LABEL)).toBeNull();
-    +    });
-    +
-    +    it("should gate all AI commands consistently (text-to-diagram, mermaid, magic frame)", async () => {
-    +      const { container } = await render(<Excalidraw aiEnabled={false} />);
-    +
-    +      await openCommandPalette(container);
-    +
-    +      expect(queryCommandItem(container, MAGIC_FRAME_LABEL)).toBeNull();
-    +      expect(queryCommandItem(container, TEXT_TO_DIAGRAM_LABEL)).toBeNull();
-    +      expect(queryComma...
-  ── Tool Call: exec_command ─────────────────────────────────
-    ✓ cd $EXCALIDRAW_REPO && npx vitest run packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx 2>&1 | tail -40
-    11.7s
-    [0mSpace[0m
-                                [36m</kbd>[39m
-                                [0m while dragging, or use the hand tool[0m
-                              [36m</span>[39m
-                            [36m</div>[39m
-                            [36m<h2[39m
-                              [33mclass[39m=[32m"visually-hidden"[39m
-                              [33mid[39m=[32m"xMnLMIIVxy_EFZ5jMkqhA-shapes-title"[39m
-                            [36m>[39m
-                              [0mShapes[0m
-                            [36m</h2>[39m
-                            [36m<div[39m
-                              [33mclass[39m=[32m"Stack Stack_horizontal"[39m
-                              [33mstyle[39m=[32m"--gap: 1;"[39m
-                            [36m>[39m
-                              [36m<label[39m
-                                [33mclass[39m=[32m"ToolIcon ToolIcon__lock ToolIcon_size_medium"[39m
-                                [33mtitle[39m=[32m"Keep selected tool active after drawing — Q"[39m
-                              [36m>[39m
-                                [36m<input[39m
-                                  [33maria-label[39m=[32m"Keep s...
-     ❯ packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx:24:11
-         22|     expect(
-         23|       container.querySelector(".command-palette-dialog"),
-         24|     ).not.toBeNull();
-           |           ^
-         25|   });
-         26| };
-     ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/@testing-library/dom/dist/config.js:47:12
-     ❯ checkCallback node_modules/@testing-library/dom/dist/wait-for.js:124:77
-     ❯ Timeout.checkRealTimersCallback node_modules/@testing-library/dom/dist/wait-for.js:118:16
-
-    ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
-
-
-     Test Files  1 failed (1)
-          Tests  9 failed (9)
-       Start at  01:25:43
-       Duration  11.31s (transform 1.08s, setup 158ms, collect 1.53s, tests 9.33s, environment 128ms, prepare 30ms)
-  ── Explored 2 files, 3 searches ────────────────────────────
-    Search className.*command-palette\\|dialog in packages/excalidraw/components/CommandPalette/CommandPalette.scss
-    Read packages/excalidraw/components/CommandPalette/CommandPalette.scss
-    Search className\\|class in packages/excalidraw/components/Dialog.tsx
-    Read packages/excalidraw/components/Dialog.tsx
-    Search Modal\\|portal\\|Portal in packages/excalidraw/components/Modal.tsx
-  ── File Edit ───────────────────────────────────────────────
-    ✓ packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx (add)
-    --- /dev/null
-    +++ b/packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx
-    +import React from "react";
-    +import { vi } from "vitest";
-    +
-    +import { Excalidraw } from "../../index";
-    +import {
-    +  act,
-    +  fireEvent,
-    +  render,
-    +  waitFor,
-    +  queryByText,
-    +} from "../../tests/test-utils";
-    +
-    +const MAGIC_FRAME_LABEL = "Wireframe to code...";
-    +const TEXT_TO_DIAGRAM_LABEL = "Text to diagram...";
-    +const MERMAID_LABEL = "Mermaid to Excalidraw...";
-    +
-    +const openCommandPalette = async () => {
-    +  await act(async () => {
-    +    window.h.app.setState({ openDialog: { name: "commandPalette" } });
-    +  });
-    +  await waitFor(() => {
-    +    expect(
-    +      document.querySelector(".command-palette-dialog"),
-    +    ).not.toBeNull();
-    +  });
-    +};
-    +
-    +const queryCommandItem = (label: string): HTMLElement | null => {
-    +  return queryByText(document.body, label);
-    +};
-    +
-    +describe("CommandPalette — AI / Magic Frame", () => {
-    +  describe("availability gating", () => {
-    +    it("should show Magic Frame entry when aiEnabled is true", async () => {
-    +      await render(<Excalidraw aiEnabled={true} />);
-    +
-    +      await openCommandPalette();
-    +
-    +      expect(queryCommandItem(MAGIC_FRAME_LABEL)).not.toBeNull();
-    +    });
-    +
-    +    it("should NOT show Magic Frame entry when aiEnabled is false", async () => {
-    +      await render(<Excalidraw aiEnabled={false} />);
-    +
-    +      await openCommandPalette();
-    +
-    +      expect(queryCommandItem(MAGIC_FRAME_LABEL)).toBeNull();
-    +    });
-    +
-    +    it("should gate all AI commands consistently (text-to-diagram, mermaid, magic frame)", async () => {
-    +      await render(<Excalidraw aiEnabled={false} />);
-    +
-    +      await openCommandPalette();
-    +
-    +      expect(queryCommandItem(MAGIC_FRAME_LABEL)).toBeNull();
-    +      expect(queryCommandItem(TEXT_TO_DIAGRAM_LABEL)).toBeNull();
-    +      expect(queryCommandItem(MERMAID_LABEL)).toBeNull();
-    +    });
-    +
-    +    it("should show all AI commands when aiEnabled is true", async () => {
-    +      await render(<Excalidraw aiEnabled={true} />);
-    +
-    +      await...
-  ── Tool Call: exec_command ─────────────────────────────────
-    ✓ cd $EXCALIDRAW_REPO && npx vitest run packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx 2>&1 | tail -40
-    11.7s
-    [0mSpace[0m
-                                [36m</kbd>[39m
-                                [0m while dragging, or use the hand tool[0m
-                              [36m</span>[39m
-                            [36m</div>[39m
-                            [36m<h2[39m
-                              [33mclass[39m=[32m"visually-hidden"[39m
-                              [33mid[39m=[32m"8Sq0QMV17myDjPr5QeRlk-shapes-title"[39m
-                            [36m>[39m
-                              [0mShapes[0m
-                            [36m</h2>[39m
-                            [36m<div[39m
-                              [33mclass[39m=[32m"Stack Stack_horizontal"[39m
-                              [33mstyle[39m=[32m"--gap: 1;"[39m
-                            [36m>[39m
-                              [36m<label[39m
-                                [33mclass[39m=[32m"ToolIcon ToolIcon__lock ToolIcon_size_medium"[39m
-                                [33mtitle[39m=[32m"Keep selected tool active after drawing — Q"[39m
-                              [36m>[39m
-                                [36m<input[39m
-                                  [33maria-label[39m=[32m"Keep s...
-     ❯ packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx:24:11
-         22|     expect(
-         23|       document.querySelector(".command-palette-dialog"),
-         24|     ).not.toBeNull();
-           |           ^
-         25|   });
-         26| };
-     ❯ runWithExpensiveErrorDiagnosticsDisabled node_modules/@testing-library/dom/dist/config.js:47:12
-     ❯ checkCallback node_modules/@testing-library/dom/dist/wait-for.js:124:77
-     ❯ Timeout.checkRealTimersCallback node_modules/@testing-library/dom/dist/wait-for.js:118:16
-
-    ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[9/9]⎯
-
-
-     Test Files  1 failed (1)
-          Tests  9 failed (9)
-       Start at  01:27:07
-       Duration  11.30s (transform 1.07s, setup 158ms, collect 1.52s, tests 9.34s, environment 124ms, prepare 31ms)
-  ── Explored 1 file, 4 searches ─────────────────────────────
-    Search useUIAppState in packages/excalidraw/context/ui-appState.ts
-    Read packages/excalidraw/context/ui-appState.ts
-    Search h\\b.*setState\\|setState.*h\\b in packages/excalidraw/tests/helpers/ui.ts
-    Search ^.*h\\s*= in packages/excalidraw/tests/helpers/ui.ts
-    Search ^const.*h in packages/excalidraw/tests/helpers/ui.ts
-
-── User ────────────────────────────────────────────────────
-Summarize the user-visible behavior and the validation you ran.",
-  },
+  [Object],
   [Object],
   [Object],
   [Object],
