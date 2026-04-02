@@ -1,3 +1,7 @@
+import {
+  createEnvironment,
+  hostDaemonCommands,
+} from "@bb/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   reportQueuedCommandSuccess,
@@ -79,6 +83,49 @@ describe("public environment and system routes", () => {
         code: "invalid_request",
         message: "A merge base branch is required",
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns null status for non-git environments without queuing a git probe", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/environment-non-git",
+      });
+      const environment = createEnvironment(harness.db, harness.hub, {
+        projectId: project.id,
+        hostId: host.id,
+        path: "/tmp/environment-non-git/workspace",
+        status: "ready",
+        managed: false,
+        isGitRepo: false,
+        isWorktree: false,
+        workspaceProvisionType: "unmanaged",
+        branchName: null,
+        defaultBranch: null,
+        mergeBaseBranch: null,
+      });
+      const commandCountBefore = harness.db
+        .select({ id: hostDaemonCommands.id })
+        .from(hostDaemonCommands)
+        .all().length;
+
+      const response = await harness.app.request(
+        `/api/v1/environments/${environment.id}/status`,
+      );
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({ workspace: null });
+
+      const commandCountAfter = harness.db
+        .select({ id: hostDaemonCommands.id })
+        .from(hostDaemonCommands)
+        .all().length;
+      expect(commandCountAfter).toBe(commandCountBefore);
     } finally {
       await harness.cleanup();
     }

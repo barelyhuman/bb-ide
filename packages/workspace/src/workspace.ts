@@ -119,20 +119,23 @@ function resolveWorkspaceFileStatusKind(args: {
 function resolveWorkspaceState(args: {
   hasCommittedChanges: boolean;
   hasDeleted: boolean;
-  hasDirtyEntries: boolean;
+  hasTrackedChanges: boolean;
   hasUntracked: boolean;
 }): WorkspaceStatus["workingTree"]["state"] {
-  if (!args.hasDirtyEntries && !args.hasCommittedChanges) {
+  if (!args.hasTrackedChanges && !args.hasUntracked && !args.hasCommittedChanges) {
     return "clean";
   }
   if (args.hasDeleted && !args.hasCommittedChanges) {
     return "deleted";
   }
-  if (args.hasDirtyEntries && args.hasCommittedChanges) {
+  if ((args.hasTrackedChanges || args.hasUntracked) && args.hasCommittedChanges) {
     return "dirty_and_committed_unmerged";
   }
-  if (args.hasDirtyEntries) {
-    return args.hasUntracked ? "untracked" : "dirty_uncommitted";
+  if (args.hasUntracked && !args.hasTrackedChanges) {
+    return "untracked";
+  }
+  if (args.hasTrackedChanges) {
+    return "dirty_uncommitted";
   }
   return "committed_unmerged";
 }
@@ -205,6 +208,7 @@ export class Workspace {
     const entries = parsePorcelainEntries(statusOutput.stdout);
     const workingTreeSummary = summarizeNumstat(diffOutput.stdout);
     const hasUntracked = entries.some((entry) => entry.status === "??");
+    const hasTrackedChanges = entries.some((entry) => entry.status !== "??");
     const hasDeleted = entries.some(
       (entry) => entry.indexStatus === "D" || entry.worktreeStatus === "D",
     );
@@ -216,7 +220,7 @@ export class Workspace {
     const state = resolveWorkspaceState({
       hasCommittedChanges,
       hasDeleted,
-      hasDirtyEntries,
+      hasTrackedChanges,
       hasUntracked,
     });
 

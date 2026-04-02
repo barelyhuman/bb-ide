@@ -126,7 +126,7 @@ export function getGitStatusDisplay(
     case "untracked":
       return {
         label: "Untracked",
-        summary: "Workspace is outside a Git repository.",
+        summary: "Workspace has untracked files.",
       };
     case "deleted":
       return {
@@ -192,7 +192,7 @@ export function workspaceStatusDescription(
       return "No local changes or unmerged commits.";
     }
     case "untracked":
-      return "Workspace is outside a Git repository.";
+      return "Workspace has untracked files that have not been committed yet.";
     case "deleted":
       return "This workspace no longer exists on disk.";
     case "dirty_uncommitted":

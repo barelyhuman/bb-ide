@@ -80,6 +80,9 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
 
   get("/environments/:id/status", environmentStatusQuerySchema, async (context, query) => {
     const environment = requireReadyEnvironment(deps.db, context.req.param("id"));
+    if (!environment.isGitRepo) {
+      return context.json({ workspace: null });
+    }
     const rawResult = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,

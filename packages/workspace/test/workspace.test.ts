@@ -43,7 +43,7 @@ afterEach(async () => {
 });
 
 describe("Workspace", () => {
-  it("reports clean, dirty, and untracked workspace states", async () => {
+  it("reports clean, dirty, untracked-only, and mixed workspace states", async () => {
     const repoPath = await initRepo();
     const workspace = new Workspace(repoPath);
 
@@ -57,6 +57,11 @@ describe("Workspace", () => {
     const untrackedStatus = await workspace.getStatus();
     expect(untrackedStatus.workingTree.state).toBe("untracked");
     expect(untrackedStatus.workingTree.changedFiles).toBe(1);
+
+    await fs.writeFile(path.join(repoPath, "README.md"), "dirty with note\n", "utf8");
+    const mixedStatus = await workspace.getStatus();
+    expect(mixedStatus.workingTree.state).toBe("dirty_uncommitted");
+    expect(mixedStatus.workingTree.changedFiles).toBe(2);
   });
 
   it("returns grouped status details only when merge-base data is requested", async () => {

@@ -59,9 +59,16 @@ describe("workspace-status", () => {
     ).toBe("Clean");
   });
 
-  it("shows untracked label for non-git workspaces", () => {
+  it("shows untracked label and copy for workspaces with only untracked files", () => {
     expect(threadWorktreeCleanLabel(makeStatus("untracked"))).toBe("Untracked");
     expect(workspaceStatusVariant(makeStatus("untracked"))).toBe("outline");
+    expect(workspaceStatusDescription(makeStatus("untracked"))).toBe(
+      "Workspace has untracked files that have not been committed yet.",
+    );
+    expect(getGitStatusDisplay(makeStatus("untracked"))).toEqual({
+      label: "Untracked",
+      summary: "Workspace has untracked files.",
+    });
   });
 
   it("describes dirty workspaces with a short explanation", () => {
