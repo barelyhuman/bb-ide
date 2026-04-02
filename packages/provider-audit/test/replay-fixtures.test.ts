@@ -33,8 +33,7 @@ function countMessageKinds(messages: ViewMessage[]): Record<string, number> {
 function buildTimelinePreview(text: string): string[] {
   return text
     .split("\n")
-    .filter((line) => line.trim().length > 0)
-    .slice(0, 8);
+    .filter((line) => line.trim().length > 0);
 }
 
 function trimTrailingWhitespace(text: string): string {
