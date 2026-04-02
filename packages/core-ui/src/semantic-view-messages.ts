@@ -102,11 +102,7 @@ function finalizeDelegation(
   message: ViewDelegationMessage,
   indexLookup: Map<string, number>,
 ): IndexedMessage {
-  const children = normalizeSemanticViewMessages(message.children).map((child) => ({
-    message: child,
-    index: indexLookup.get(child.id) ?? Number.MAX_SAFE_INTEGER,
-  }));
-  const sortedChildren = sortIndexedMessages(children).map((entry) => entry.message);
+  const sortedChildren = normalizeSemanticViewMessages(message.children);
 
   if (sortedChildren.length === 0) {
     return {

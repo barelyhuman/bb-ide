@@ -97,12 +97,13 @@ function ToolGroupEntry({
             ) : null}
             {messages.map((message, messageIndex) => {
               const isLatestMessage = messageIndex === messages.length - 1;
+              const isSingleItem = messages.length === 1;
               return (
                 <ConversationEntry
                   key={message.id}
                   message={message}
                   projectId={projectId}
-                  initialExpanded={initialExpanded && isLatestMessage}
+                  initialExpanded={isSingleItem || (initialExpanded && isLatestMessage)}
                   preferOngoingLabels={preferOngoingLabels && isLatestMessage}
                   resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
                   themeType={themeType}

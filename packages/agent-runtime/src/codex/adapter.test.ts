@@ -1101,8 +1101,8 @@ describe("codex provider adapter", () => {
       threadId: "t1",
       providerThreadId: "t1",
       turnId: "turn-1",
-      message: "Rate limited",
-      detail: "retry after 30s",
+      message: "Provider error",
+      detail: "Rate limited\nretry after 30s",
       willRetry: true,
     });
   });

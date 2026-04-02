@@ -373,7 +373,6 @@ interface ClaudeTurnState {
   counter: number;
   currentTurnId: string | undefined;
   cumulativeTokens: ThreadEventTokenUsageBreakdown;
-  currentStructuredErrorKey: string | undefined;
   openAssistantMessageIdsByScope: Map<string, string>;
   toolItemsByCallId: Map<string, ThreadEventItem>;
 }
@@ -401,7 +400,7 @@ export function createClaudeCodeProviderAdapter(
         counter: 0,
         currentTurnId: undefined,
         cumulativeTokens: { totalTokens: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 },
-        currentStructuredErrorKey: undefined,
+
         openAssistantMessageIdsByScope: new Map(),
         toolItemsByCallId: new Map(),
       });
@@ -458,7 +457,7 @@ export function createClaudeCodeProviderAdapter(
     if (!state.currentTurnId) {
       state.openAssistantMessageIdsByScope.clear();
       state.toolItemsByCallId.clear();
-      state.currentStructuredErrorKey = undefined;
+
       state.counter += 1;
       state.currentTurnId = `turn-${state.counter}`;
       events.push({
@@ -515,7 +514,8 @@ export function createClaudeCodeProviderAdapter(
         type: "error",
         threadId: "",
         providerThreadId: "",
-        message: errorEnvelope.data.params?.message ?? "unknown error",
+        message: "Provider error",
+        detail: errorEnvelope.data.params?.message ?? "unknown error",
       }];
     }
 
@@ -571,35 +571,22 @@ export function createClaudeCodeProviderAdapter(
 
         const text = extractAssistantText(message);
         if (text) {
-          const structuredError = parseClaudeApiErrorText(text);
-          if (structuredError) {
-            state.currentStructuredErrorKey = structuredError.key;
-            events.push({
-              type: "error",
-              threadId,
-              providerThreadId: "",
-              turnId,
-              message: structuredError.message,
-              ...(structuredError.detail ? { detail: structuredError.detail } : {}),
-            });
-          } else {
-            const itemId = resolveCompletedAssistantMessageId(state, {
-              parentToolCallId,
-              providerMessageId: assistantMessageId,
-            });
-            events.push({
-              type: "item/completed",
-              threadId,
-              providerThreadId: "",
-              turnId,
-              item: {
-                type: "agentMessage",
-                id: itemId,
-                text,
-                ...(parentToolCallId ? { parentToolCallId } : {}),
-              },
-            });
-          }
+          const itemId = resolveCompletedAssistantMessageId(state, {
+            parentToolCallId,
+            providerMessageId: assistantMessageId,
+          });
+          events.push({
+            type: "item/completed",
+            threadId,
+            providerThreadId: "",
+            turnId,
+            item: {
+              type: "agentMessage",
+              id: itemId,
+              text,
+              ...(parentToolCallId ? { parentToolCallId } : {}),
+            },
+          });
         }
 
         const toolUses = extractToolUses(message);
@@ -680,8 +667,8 @@ export function createClaudeCodeProviderAdapter(
         }
         const message = parsedMessage.data;
         if (state.currentTurnId) {
-          const resultError = message.is_error
-            ? parseClaudeApiErrorText("result" in message ? message.result : undefined)
+          const resultErrorText = message.is_error && "result" in message && typeof message.result === "string"
+            ? message.result
             : null;
           const tokenUsage = extractTokenUsage(message, state.cumulativeTokens);
           if (tokenUsage) {
@@ -693,17 +680,14 @@ export function createClaudeCodeProviderAdapter(
               tokenUsage,
             });
           }
-          if (
-            resultError &&
-            resultError.key !== state.currentStructuredErrorKey
-          ) {
+          if (resultErrorText) {
             events.push({
               type: "error",
               threadId,
               providerThreadId: "",
               turnId: state.currentTurnId,
-              message: resultError.message,
-              ...(resultError.detail ? { detail: resultError.detail } : {}),
+              message: "Provider error",
+              detail: resultErrorText,
             });
           }
           events.push({
@@ -718,7 +702,7 @@ export function createClaudeCodeProviderAdapter(
           });
           state.openAssistantMessageIdsByScope.clear();
           state.toolItemsByCallId.clear();
-          state.currentStructuredErrorKey = undefined;
+    
           state.currentTurnId = undefined;
         }
         break;
@@ -908,14 +892,6 @@ const contentBlockStartSchema = z.object({
 }).passthrough();
 
 const streamEventSchema = z.union([contentBlockDeltaSchema, contentBlockStartSchema]);
-const claudeApiErrorPayloadSchema = z.object({
-  type: z.literal("error"),
-  error: z.object({
-    type: z.string().optional(),
-    message: z.string().optional(),
-  }).passthrough(),
-  request_id: z.string().optional(),
-}).passthrough();
 
 const claudeSdkMessageTypeSchema = z.object({
   type: z.enum([
@@ -1028,54 +1004,6 @@ function extractAssistantText(
   return joined.length > 0 ? joined : undefined;
 }
 
-function parseClaudeApiErrorText(
-  value: unknown,
-): { key: string; message: string; detail?: string } | null {
-  if (typeof value !== "string") {
-    return null;
-  }
-  const match = value.match(/^API Error:\s*(\d+)\s+(\{[\s\S]+\})$/);
-  if (!match) {
-    return null;
-  }
-
-  const statusCode = Number.parseInt(match[1] ?? "", 10);
-  if (!Number.isFinite(statusCode)) {
-    return null;
-  }
-
-  let parsedJson: unknown;
-  try {
-    parsedJson = JSON.parse(match[2] ?? "");
-  } catch {
-    return null;
-  }
-
-  const parsedPayload = claudeApiErrorPayloadSchema.safeParse(parsedJson);
-  if (!parsedPayload.success) {
-    return null;
-  }
-
-  const errorType = parsedPayload.data.error.type?.trim();
-  const errorMessage = parsedPayload.data.error.message?.trim();
-  const requestId = parsedPayload.data.request_id?.trim();
-  const message =
-    errorMessage && errorMessage.length > 0
-      ? `Claude API error ${statusCode}: ${errorMessage}`
-      : `Claude API error ${statusCode}`;
-  const detail = [
-    errorType ? `type: ${errorType}` : undefined,
-    requestId ? `request id: ${requestId}` : undefined,
-  ]
-    .filter((part): part is string => Boolean(part))
-    .join(" • ");
-
-  return {
-    key: `${statusCode}:${errorType ?? ""}:${errorMessage ?? ""}:${requestId ?? ""}`,
-    message,
-    ...(detail ? { detail } : {}),
-  };
-}
 
 function extractToolUses(
   message: ClaudeAssistantMessage,

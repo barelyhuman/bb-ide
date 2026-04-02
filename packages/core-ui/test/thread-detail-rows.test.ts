@@ -186,7 +186,7 @@ function getOperationRows(messages: ViewMessage[]): Array<Extract<ViewMessage, {
 }
 
 describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
-  it("does not collapse earlier assistant messages into a tool group", () => {
+  it("collapses earlier assistant messages before the last terminal into a tool group", () => {
     const rows = buildTimelineRows([
       {
         kind: "user",
@@ -222,8 +222,7 @@ describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
       },
     ]);
 
-    expect(rows.map((row) => row.kind)).toEqual(["message", "message", "message"]);
-    expect(rows.filter((row) => row.kind === "tool-group")).toHaveLength(0);
+    expect(rows.map((row) => row.kind)).toEqual(["message", "tool-group", "message"]);
   });
 
   it("collapses delegation and tasks rows into a tool group before the final assistant text", () => {
@@ -419,51 +418,55 @@ describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
     ]);
   });
 
-  it("keeps a Pi-style final assistant message standalone when its source range finishes after tool activity", () => {
+  it("counts intermediate assistant-text messages in summaryCount", () => {
     const rows = buildTimelineRows([
       {
         kind: "assistant-text",
         id: "assistant-1",
         threadId: "thread-1",
-        sourceSeqStart: 2,
-        sourceSeqEnd: 4,
-        createdAt: 4,
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        createdAt: 1,
         turnId: "turn-1",
-        text: "I’m checking the current tests.",
+        text: "Let me check that.",
         status: "completed",
       },
       {
         kind: "tool-call",
         id: "tool-1",
         threadId: "thread-1",
-        sourceSeqStart: 3,
-        sourceSeqEnd: 8,
-        createdAt: 8,
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+        createdAt: 2,
         turnId: "turn-1",
         toolName: "exec_command",
         callId: "call-1",
-        command: "pnpm exec turbo run test --filter=@bb/core-ui",
+        command: "npm test",
         status: "completed",
       },
       {
         kind: "assistant-text",
         id: "assistant-2",
         threadId: "thread-1",
-        sourceSeqStart: 5,
-        sourceSeqEnd: 9,
-        createdAt: 9,
+        sourceSeqStart: 3,
+        sourceSeqEnd: 3,
+        createdAt: 3,
         turnId: "turn-1",
-        text: "The tests pass with the fix.",
+        text: "Tests pass!",
         status: "completed",
       },
     ]);
 
     expect(rows.map((row) => row.kind)).toEqual(["tool-group", "message"]);
-    expect(expectToolGroupRow(rows[0]).messages).toHaveLength(2);
-    expectMessageRow(rows[1]);
+    const toolGroup = expectToolGroupRow(rows[0]);
+    expect(toolGroup.summaryCount).toBe(2);
+    expect(toolGroup.messages.map((m) => m.kind)).toEqual([
+      "assistant-text",
+      "tool-call",
+    ]);
   });
 
-  it("keeps a Pi-style last assistant message inside the group when later tool activity finishes after it", () => {
+  it("groups pre-terminal messages before the last assistant-text, leaving it standalone", () => {
     const rows = buildTimelineRows([
       {
         kind: "assistant-text",
@@ -502,13 +505,14 @@ describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
       },
     ]);
 
-    expect(rows).toHaveLength(1);
+    // Last terminal is assistant-2, so assistant-1 + tool-1 get grouped; assistant-2 stays standalone
+    expect(rows).toHaveLength(2);
     const toolGroup = expectToolGroupRow(rows[0]);
     expect(toolGroup.messages.map((message) => message.kind)).toEqual([
       "assistant-text",
       "tool-call",
-      "assistant-text",
     ]);
+    expectMessageRow(rows[1]);
   });
 
   it("groups delegation, tasks, and errors together before the final answer", () => {
@@ -685,7 +689,7 @@ describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
     expect(toolGroups[1]?.turnId).toBe("turn-2");
   });
 
-  it("does not collapse a turn that has only one tool message", () => {
+  it("does not collapse a turn that has only one tool message and no terminal", () => {
     const rows = buildTimelineRows([
       {
         kind: "user",
@@ -715,7 +719,7 @@ describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
     expect(rows.map((row) => row.kind)).toEqual(["message", "message"]);
   });
 
-  it("collapses all turn activity into a single tool group when no final answer text", () => {
+  it("leaves all turn activity standalone when assistant-text is the only terminal message and nothing precedes it to group", () => {
     const rows = buildTimelineRows([
       {
         kind: "user",
@@ -766,16 +770,16 @@ describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
       },
     ]);
 
-    // No final assistant-text, so intermediate text + tool calls all group
-    expect(rows.map((row) => row.kind)).toEqual(["message", "tool-group"]);
+    // assistant-1 is the last terminal; only user-1 precedes it, but user messages are ungroupable,
+    // so no group forms. Everything after the terminal stays standalone too.
+    expect(rows.map((row) => row.kind)).toEqual(["message", "message", "message", "message"]);
     expect(expectMessageRow(rows[0]).message.kind).toBe("user");
-    const toolGroup = expectToolGroupRow(rows[1]);
-    // summaryCount only counts tool items, not intermediate text
-    expect(toolGroup.summaryCount).toBe(2);
-    expect(toolGroup.messages).toHaveLength(3);
+    expect(expectMessageRow(rows[1]).message.kind).toBe("assistant-text");
+    expect(expectMessageRow(rows[2]).message.kind).toBe("tool-call");
+    expect(expectMessageRow(rows[3]).message.kind).toBe("tool-call");
   });
 
-  it("groups intermediate assistant text with following tool call when no final answer", () => {
+  it("leaves messages standalone when the only terminal is first and nothing non-ungroupable precedes it", () => {
     const rows = buildTimelineRows([
       {
         kind: "user",
@@ -813,9 +817,12 @@ describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
       },
     ]);
 
-    // No final assistant-text → intermediate text + tool call grouped together
-    expect(rows.map((row) => row.kind)).toEqual(["message", "tool-group"]);
-    expect(expectToolGroupRow(rows[1]).messages).toHaveLength(2);
+    // assistant-1 is the last terminal; only user-1 precedes it (ungroupable), so no group forms.
+    // tool-1 is after the terminal and stays standalone.
+    expect(rows.map((row) => row.kind)).toEqual(["message", "message", "message"]);
+    expect(expectMessageRow(rows[0]).message.kind).toBe("user");
+    expect(expectMessageRow(rows[1]).message.kind).toBe("assistant-text");
+    expect(expectMessageRow(rows[2]).message.kind).toBe("tool-call");
   });
 
   it("collapses a promote started/completed pair into a single operation row", () => {
@@ -979,7 +986,7 @@ describe("buildTimelineRows reconnect error collapsing", () => {
     expect(errorMessage.startedAt).toBe(10);
   });
 
-  it("groups reconnect errors with other turn activity into a single tool group", () => {
+  it("groups pre-terminal activity before the last error, leaving it standalone", () => {
     const rows = buildTimelineRows([
       {
         kind: "error",
@@ -1028,9 +1035,10 @@ describe("buildTimelineRows reconnect error collapsing", () => {
       },
     ]);
 
-    // All same turn, no final assistant-text → single tool group
-    expect(rows).toHaveLength(1);
+    // Last terminal is error-3; error-1, tool-1, error-2 are grouped before it; error-3 stays standalone
+    expect(rows).toHaveLength(2);
     expect(rows[0]?.kind).toBe("tool-group");
+    expect(rows[1]?.kind).toBe("message");
   });
 });
 

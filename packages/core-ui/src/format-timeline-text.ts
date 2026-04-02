@@ -304,21 +304,27 @@ function formatDelegation(
     lines.push(durationLine);
   }
 
-  if (msg.output) {
-    const output = verbose ? msg.output.trim() : truncate(msg.output.trim(), 160);
-    if (output) {
-      lines.push(dim(`  ${output.split("\n").join("\n  ")}`, color));
-    }
-  }
-
   if (!verbose) {
+    if (msg.output) {
+      const output = truncate(msg.output.trim(), 160);
+      if (output) {
+        lines.push(dim(`  ${output.split("\n").join("\n  ")}`, color));
+      }
+    }
     return lines.join("\n");
   }
 
-  for (const row of buildTimelineRows(msg.children)) {
+  for (const row of buildTimelineRows(msg.children, { collapseAll: true })) {
     const block = formatTimelineRow(row, true, color);
     if (block) {
       lines.push(indentBlock(block, "  "));
+    }
+  }
+
+  if (msg.output) {
+    const output = msg.output.trim();
+    if (output) {
+      lines.push(dim(`  ${output.split("\n").join("\n  ")}`, color));
     }
   }
 

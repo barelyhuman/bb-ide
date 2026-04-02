@@ -113,7 +113,7 @@ export function DelegationRow({
   renderMessage: (message: ViewMessage, options?: NestedRenderOptions) => ReactNode;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
-  const nestedRows = useMemo(() => buildTimelineRows(message.children), [message.children]);
+  const nestedRows = useMemo(() => buildTimelineRows(message.children, { collapseAll: true }), [message.children]);
   const nestedLatestActivityRowId = useMemo(
     () => findLatestActivityRowId(nestedRows),
     [nestedRows],

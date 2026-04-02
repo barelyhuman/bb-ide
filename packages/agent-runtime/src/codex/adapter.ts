@@ -1048,10 +1048,10 @@ export function createCodexProviderAdapter(
             threadId: handledEvent.params.threadId,
             providerThreadId: handledEvent.params.threadId,
             ...(handledEvent.params.turnId ? { turnId: handledEvent.params.turnId } : {}),
-            message: handledEvent.params.error.message,
-            ...(handledEvent.params.error.additionalDetails
-              ? { detail: handledEvent.params.error.additionalDetails }
-              : {}),
+            message: "Provider error",
+            detail: handledEvent.params.error.additionalDetails
+              ? `${handledEvent.params.error.message}\n${handledEvent.params.error.additionalDetails}`
+              : handledEvent.params.error.message,
             ...(handledEvent.params.willRetry !== undefined
               ? { willRetry: handledEvent.params.willRetry }
               : {}),

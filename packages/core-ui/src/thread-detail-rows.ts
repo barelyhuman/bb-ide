@@ -10,20 +10,6 @@ import {
   mergeThreadOperationMessages,
 } from "./thread-operation-helpers.js";
 
-type CollapsibleTurnMessage = Extract<
-  ViewMessage,
-  {
-    kind:
-      | "tool-exploring"
-      | "tool-call"
-      | "web-search"
-      | "file-edit"
-      | "tasks"
-      | "delegation"
-      | "error";
-  }
->;
-
 /** Messages that are never absorbed into a tool-group (they always stay standalone). */
 function isUngroupableMessage(message: ViewMessage): boolean {
   return message.kind === "user" || message.kind === "debug/raw-event";
@@ -31,18 +17,8 @@ function isUngroupableMessage(message: ViewMessage): boolean {
 
 export interface BuildTimelineRowsOptions {
   includeToolGroupMessages?: boolean;
-}
-
-function isCollapsibleTurnMessage(message: ViewMessage): message is CollapsibleTurnMessage {
-  return (
-    message.kind === "tool-exploring" ||
-    message.kind === "tool-call" ||
-    message.kind === "web-search" ||
-    message.kind === "file-edit" ||
-    message.kind === "tasks" ||
-    message.kind === "delegation" ||
-    message.kind === "error"
-  );
+  /** When true, group all non-ungroupable messages into one group, ignoring terminal detection. */
+  collapseAll?: boolean;
 }
 
 function isToolExploringMessage(
@@ -282,9 +258,6 @@ function getToolGroupSummaryCount(messages: ViewMessage[]): number {
     if (message.kind === "file-edit") {
       return count + Math.max(1, message.changes.length);
     }
-    if (!isCollapsibleTurnMessage(message)) {
-      return count;
-    }
     return count + 1;
   }, 0);
 }
@@ -362,37 +335,18 @@ function collectMessagesByTurn(messages: ViewMessage[]): Map<string, IndexedTurn
   return messagesByTurnId;
 }
 
-function findStandaloneAnswerIndex(turnMessages: IndexedTurnMessage[]): number | null {
-  let answerCandidate: IndexedTurnMessage | undefined;
-  for (let index = turnMessages.length - 1; index >= 0; index -= 1) {
-    const turnMessage = turnMessages[index];
-    if (turnMessage?.message.kind === "assistant-text") {
-      answerCandidate = turnMessage;
-      break;
+function isTerminalMessage(message: ViewMessage): boolean {
+  return message.kind === "assistant-text" || message.kind === "error";
+}
+
+function findLastTerminalIndex(turnMessages: IndexedTurnMessage[]): number | null {
+  for (let i = turnMessages.length - 1; i >= 0; i -= 1) {
+    const turnMessage = turnMessages[i];
+    if (turnMessage && isTerminalMessage(turnMessage.message)) {
+      return turnMessage.index;
     }
   }
-
-  if (!answerCandidate) {
-    return null;
-  }
-
-  const resolvedAnswerCandidate = answerCandidate;
-  const answerEnd = resolvedAnswerCandidate.message.sourceSeqEnd;
-  const hasLaterWork = turnMessages.some(({ index, message }) => {
-    if (index === resolvedAnswerCandidate.index) {
-      return false;
-    }
-    if (
-      message.kind === "assistant-text" ||
-      message.kind === "assistant-reasoning" ||
-      isUngroupableMessage(message)
-    ) {
-      return false;
-    }
-    return message.sourceSeqEnd > answerEnd;
-  });
-
-  return hasLaterWork ? null : answerCandidate.index;
+  return null;
 }
 
 export function buildTimelineRows(
@@ -403,6 +357,7 @@ export function buildTimelineRows(
   // If new lifecycle/outcome events are added, update these collapse passes so thread timelines
   // stay familiar across projections instead of showing near-duplicate status updates.
   const includeToolGroupMessages = options?.includeToolGroupMessages ?? true;
+  const collapseAll = options?.collapseAll ?? false;
   const provisioningMergedMessages = mergeProvisioningOperations(messages);
   const threadOperationMergedMessages = mergeThreadOperationMessages(
     provisioningMergedMessages,
@@ -412,19 +367,22 @@ export function buildTimelineRows(
   );
   const mergedMessages = mergeConsecutiveToolActivityMessages(reconnectMergedMessages);
 
-  // Group messages by turn: everything in a turn before the last assistant-text
-  // gets collapsed into a single tool-group row. User messages and the final
-  // assistant-text stay as standalone rows.
+  // Group messages by turn. In collapseAll mode, group everything
+  // non-ungroupable. Otherwise find the last terminal message (assistant-text
+  // or error) and collapse everything before it into one group.
   const collapsedByFirstIndex = new Map<number, CollapsedTurnGroup>();
   const collapsedMessageIndices = new Set<number>();
 
   for (const [turnId, turnMessages] of collectMessagesByTurn(mergedMessages)) {
-    const answerIndex = findStandaloneAnswerIndex(turnMessages);
-    const groupedTurnMessages = turnMessages.filter(({ index, message }) => (
-      index !== answerIndex && !isUngroupableMessage(message)
-    ));
+    const terminalIndex = collapseAll ? null : findLastTerminalIndex(turnMessages);
+    const groupedTurnMessages = turnMessages.filter(({ index, message }) => {
+      if (isUngroupableMessage(message)) return false;
+      if (collapseAll) return true;
+      if (terminalIndex === null) return false;
+      return index < terminalIndex;
+    });
 
-    if (groupedTurnMessages.length <= 1) {
+    if (groupedTurnMessages.length === 0) {
       continue;
     }
 

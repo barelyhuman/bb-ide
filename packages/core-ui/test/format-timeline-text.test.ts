@@ -253,7 +253,7 @@ describe("formatTimelineAsText", () => {
     expect(verbose).toContain("clean");
   });
 
-  it("keeps grouped error work summaries neutral in minimal mode", () => {
+  it("renders error as standalone terminal message, not grouped with preceding tasks", () => {
     const text = formatTimelineAsText(
       [
         {
@@ -284,8 +284,9 @@ describe("formatTimelineAsText", () => {
       { color: false },
     );
 
-    expect(text).toContain("Worked on 2 items");
-    expect(text).not.toContain("Failed");
+    // Error is terminal — tasks before it gets collapsed into a group.
+    expect(text).toContain("Worked on 1 item");
+    expect(text).toContain("Validation failed");
   });
 
   it("formats grouped duration summaries without item-count suffixes", () => {

@@ -547,38 +547,6 @@ describe("claude-code provider adapter", () => {
     expect(events).toEqual([]);
   });
 
-  it("translateEvent maps synthetic Claude API error assistant text to error events", () => {
-    const adapter = createClaudeCodeProviderAdapter();
-
-    const events = adapter.translateEvent({
-      jsonrpc: "2.0",
-      method: "sdk/message",
-      params: {
-        threadId: "claude-thread-1",
-        message: {
-          type: "assistant",
-          message: {
-            id: "assistant-1",
-            content: [{
-              type: "text",
-              text:
-                "API Error: 529 {\"type\":\"error\",\"error\":{\"type\":\"overloaded_error\",\"message\":\"Overloaded. https://docs.claude.com/en/api/errors\"},\"request_id\":\"req_123\"}",
-            }],
-          },
-        },
-      },
-    });
-
-    expect(events).toContainEqual(
-      expect.objectContaining({
-        type: "error",
-        turnId: "turn-1",
-        message: "Claude API error 529: Overloaded. https://docs.claude.com/en/api/errors",
-        detail: "type: overloaded_error • request id: req_123",
-      }),
-    );
-  });
-
   it("translateEvent maps thread identity envelopes", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
@@ -616,7 +584,8 @@ describe("claude-code provider adapter", () => {
         type: "error",
         threadId: "",
         providerThreadId: "",
-        message: "bridge failed",
+        message: "Provider error",
+        detail: "bridge failed",
       },
     ]);
   });
@@ -667,7 +636,12 @@ describe("claude-code provider adapter", () => {
         status: "failed",
       }),
     );
-    expect(events.filter((event) => event.type === "error")).toHaveLength(0);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "error",
+        message: "Provider error",
+      }),
+    );
   });
 
   it("translateEvent falls back to provider/unhandled for unknown sdk envelopes", () => {
