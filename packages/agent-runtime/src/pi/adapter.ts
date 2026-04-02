@@ -7,7 +7,7 @@
  * and produces `ThreadEvent[]`.
  */
 
-import type { KnownProvider } from "@mariozechner/pi-ai";
+import { getModels, getProviders, type KnownProvider } from "@mariozechner/pi-ai";
 import { AuthStorage } from "@mariozechner/pi-coding-agent";
 import { z } from "zod";
 import type {
@@ -132,6 +132,7 @@ interface PiCatalogModel {
   provider: string;
   reasoning: boolean;
   input: string[];
+  contextWindow?: number;
 }
 
 const piCatalogModelSchema = z.object({
@@ -140,6 +141,7 @@ const piCatalogModelSchema = z.object({
   provider: z.string(),
   reasoning: z.boolean(),
   input: z.array(z.string()),
+  contextWindow: z.number().optional(),
 }).passthrough();
 
 const piCatalogModelsSchema = z.array(piCatalogModelSchema);
@@ -170,12 +172,16 @@ const piAssistantUsageSchema = z.object({
 const piAssistantMessageSchema = z.object({
   role: z.literal("assistant"),
   content: z.array(piMessageContentBlockSchema),
+  provider: z.string().optional(),
+  model: z.string().optional(),
   usage: piAssistantUsageSchema.optional(),
 }).passthrough();
 
 const piConversationMessageSchema = z.object({
   role: z.string(),
   content: z.array(piMessageContentBlockSchema).optional(),
+  provider: z.string().optional(),
+  model: z.string().optional(),
   usage: piAssistantUsageSchema.optional(),
 }).passthrough();
 
@@ -436,20 +442,45 @@ export function buildPiAvailableModels(args: {
 }
 
 async function listPiModels(): Promise<AvailableModel[]> {
-  const [{ getModels, getProviders }, authStorageModule] = await Promise.all([
-    import("@mariozechner/pi-ai"),
-    Promise.resolve(AuthStorage.create()),
-  ]);
+  const authStorage = AuthStorage.create();
   return buildPiAvailableModels({
     providers: getProviders(),
     getModels: (provider) => piCatalogModelsSchema.parse(getModels(provider)),
-    hasAuth: (provider) => authStorageModule.hasAuth(provider),
+    hasAuth: (provider) => authStorage.hasAuth(provider),
   });
 }
 
 function toCanonicalPiModelId(provider: string, modelId: string): string {
   return modelId.includes("/") ? modelId : `${provider}/${modelId}`;
 }
+
+function toPositiveNumber(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return undefined;
+  }
+  return value;
+}
+
+function buildPiModelContextWindowLookup(): ReadonlyMap<string, number> {
+  const lookup = new Map<string, number>();
+  for (const provider of getProviders()) {
+    const models = piCatalogModelsSchema.parse(getModels(provider));
+    for (const model of models) {
+      const contextWindow = toPositiveNumber(model.contextWindow);
+      if (contextWindow === undefined) {
+        continue;
+      }
+      const canonicalId = toCanonicalPiModelId(provider, model.id);
+      lookup.set(canonicalId, contextWindow);
+      if (model.id.includes("/")) {
+        lookup.set(model.id, contextWindow);
+      }
+    }
+  }
+  return lookup;
+}
+
+const PI_MODEL_CONTEXT_WINDOW_LOOKUP = buildPiModelContextWindowLookup();
 
 function getPiReasoningEfforts(model: PiCatalogModel): ModelReasoningEffort[] {
   if (!model.reasoning) return [LOW_REASONING_EFFORT];
@@ -518,6 +549,7 @@ export function createPiProviderAdapter(
     supportsServiceTier: false,
   };
   const models = opts?.listModels ?? listPiModels;
+  const modelContextWindowLookup = PI_MODEL_CONTEXT_WINDOW_LOOKUP;
 
   // Per-thread turn state — Pi SDK doesn't have turn IDs, so the adapter
   // assigns them. Keyed by threadId so multiple threads sharing one adapter
@@ -683,7 +715,11 @@ export function createPiProviderAdapter(
           }
         }
         if (state.currentTurnId) {
-          const tokenUsage = extractPiTokenUsage(lastAssistant, state.cumulativeTokens);
+          const tokenUsage = extractPiTokenUsage(
+            lastAssistant,
+            state.cumulativeTokens,
+            modelContextWindowLookup,
+          );
           if (tokenUsage) {
             events.push({
               type: "thread/tokenUsage/updated",
@@ -980,23 +1016,60 @@ function extractAssistantText(
 function extractPiTokenUsage(
   lastAssistant: PiAssistantMessage | undefined,
   cumulativeTokens: ThreadEventTokenUsageBreakdown,
+  modelContextWindowLookup: ReadonlyMap<string, number>,
 ): ThreadEventTokenUsage | undefined {
   const last = toAssistantUsageBreakdown(lastAssistant);
+  const modelContextWindow = resolvePiModelContextWindow(
+    lastAssistant,
+    modelContextWindowLookup,
+  );
 
-  if (!last) return undefined;
+  if (!last && modelContextWindow === null) {
+    return undefined;
+  }
+
+  const current: ThreadEventTokenUsageBreakdown = last ?? {
+    totalTokens: 0,
+    inputTokens: 0,
+    cachedInputTokens: 0,
+    outputTokens: 0,
+    reasoningOutputTokens: 0,
+  };
 
   // Accumulate into the per-thread cumulative total
-  cumulativeTokens.totalTokens += last.totalTokens;
-  cumulativeTokens.inputTokens += last.inputTokens;
-  cumulativeTokens.cachedInputTokens += last.cachedInputTokens;
-  cumulativeTokens.outputTokens += last.outputTokens;
-  cumulativeTokens.reasoningOutputTokens += last.reasoningOutputTokens;
+  cumulativeTokens.totalTokens += current.totalTokens;
+  cumulativeTokens.inputTokens += current.inputTokens;
+  cumulativeTokens.cachedInputTokens += current.cachedInputTokens;
+  cumulativeTokens.outputTokens += current.outputTokens;
+  cumulativeTokens.reasoningOutputTokens += current.reasoningOutputTokens;
 
   return {
     total: { ...cumulativeTokens },
-    last,
-    modelContextWindow: null,
+    last: current,
+    modelContextWindow,
   };
+}
+
+function resolvePiModelContextWindow(
+  lastAssistant: PiAssistantMessage | undefined,
+  modelContextWindowLookup: ReadonlyMap<string, number>,
+): number | null {
+  const modelId = toOptionalString(lastAssistant?.model);
+  if (!modelId) {
+    return null;
+  }
+
+  if (modelId.includes("/")) {
+    return modelContextWindowLookup.get(modelId) ?? null;
+  }
+
+  const providerId = toOptionalString(lastAssistant?.provider);
+  if (!providerId) {
+    return null;
+  }
+
+  const canonicalId = toCanonicalPiModelId(providerId, modelId);
+  return modelContextWindowLookup.get(canonicalId) ?? null;
 }
 
 function extractPiToolProgressText(

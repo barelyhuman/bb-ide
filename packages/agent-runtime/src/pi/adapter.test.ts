@@ -754,6 +754,7 @@ describe("pi provider adapter", () => {
       cachedInputTokens: 3380,
       outputTokens: 156,
     });
+    expect(firstTokenUsage?.tokenUsage.modelContextWindow).toBe(1_000_000);
     expect(secondTokenUsage?.tokenUsage.total).toMatchObject({
       totalTokens: 15472,
       inputTokens: 8400,
@@ -761,6 +762,7 @@ describe("pi provider adapter", () => {
       outputTokens: 312,
     });
     expect(secondTokenUsage?.tokenUsage.last).toEqual(firstTokenUsage?.tokenUsage.last);
+    expect(secondTokenUsage?.tokenUsage.modelContextWindow).toBe(1_000_000);
   });
 
   it("translateEvent clears stale tool state when a turn ends without tool results", () => {
