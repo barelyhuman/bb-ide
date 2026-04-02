@@ -52,15 +52,16 @@ type TokenUsageTranslatedCapture = Extract<
   { event: { type: "thread/tokenUsage/updated" } }
 >;
 
-interface TokenUsageEventSnapshot {
-  rawCaptureId: string;
-  modelContextWindow: number | null;
+interface TokenUsageSummarySnapshot {
+  tokenUsageEventCount: number;
+  nonNullModelContextWindowCount: number;
+  distinctModelContextWindows: number[];
 }
 
 interface FixtureContextWindowSnapshot {
   fixture: string;
   contextWindowUsage: ReturnType<typeof extractThreadContextWindowUsage>;
-  tokenUsageEvents: TokenUsageEventSnapshot[];
+  tokenUsageSummary: TokenUsageSummarySnapshot;
 }
 
 function isTokenUsageTranslatedCapture(
@@ -73,15 +74,27 @@ function buildFixtureContextWindowSnapshot(
   bundle: ProviderAuditBundle,
   fixtureId: string,
 ): FixtureContextWindowSnapshot {
+  const tokenUsageEvents = bundle.translatedCaptures.filter(
+    isTokenUsageTranslatedCapture,
+  );
+  const distinctModelContextWindows = [
+    ...new Set(
+      tokenUsageEvents
+        .map((entry) => entry.event.tokenUsage.modelContextWindow)
+        .filter((value): value is number => value !== null),
+    ),
+  ].sort((left, right) => left - right);
+
   return {
     fixture: fixtureId,
     contextWindowUsage: extractThreadContextWindowUsage(bundle.threadEventRows),
-    tokenUsageEvents: bundle.translatedCaptures
-      .filter(isTokenUsageTranslatedCapture)
-      .map((entry) => ({
-        rawCaptureId: entry.rawCaptureId,
-        modelContextWindow: entry.event.tokenUsage.modelContextWindow,
-      })),
+    tokenUsageSummary: {
+      tokenUsageEventCount: tokenUsageEvents.length,
+      nonNullModelContextWindowCount: tokenUsageEvents.filter(
+        (entry) => entry.event.tokenUsage.modelContextWindow !== null,
+      ).length,
+      distinctModelContextWindows,
+    },
   };
 }
 
