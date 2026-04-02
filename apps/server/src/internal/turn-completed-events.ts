@@ -1,11 +1,6 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
-import { events, getThread, transitionThreadStatus } from "@bb/db";
+import { getThread, transitionThreadStatus } from "@bb/db";
 import type { ThreadEvent, ThreadStatus } from "@bb/domain";
 import type { AppDeps } from "../types.js";
-import {
-  parseStoredEvent,
-  storedEventRowFields,
-} from "../services/thread-data.js";
 import {
   pruneThreadEventHistoryBestEffort,
   resetActiveThreadEventPruningState,
@@ -46,39 +41,5 @@ export function applyTurnCompletedEvent(
       mode: "idle",
       threadId: payload.threadId,
     });
-  }
-}
-
-export function handleTurnCompletedEvents(
-  deps: Pick<AppDeps, "db" | "hub" | "logger">,
-  threadIds: string[],
-): void {
-  if (threadIds.length === 0) {
-    return;
-  }
-
-  const rows = deps.db
-    .select(storedEventRowFields)
-    .from(events)
-    .where(
-      and(
-        inArray(events.threadId, threadIds),
-        eq(events.type, "turn/completed"),
-      ),
-    )
-    .orderBy(desc(events.sequence))
-    .all();
-
-  const seenThreadIds = new Set<string>();
-  for (const row of rows) {
-    if (seenThreadIds.has(row.threadId)) {
-      continue;
-    }
-    seenThreadIds.add(row.threadId);
-    const payload = parseStoredEvent(row);
-    if (payload.type !== "turn/completed") {
-      continue;
-    }
-    applyTurnCompletedEvent(deps, payload);
   }
 }

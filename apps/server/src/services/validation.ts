@@ -20,29 +20,6 @@ export function parseValue<TSchema extends ZodTypeAny>(
   }
 }
 
-export function parseQueryValue(
-  value: string | undefined,
-  name: string,
-): string {
-  if (!value || value.trim().length === 0) {
-    throw new ApiError(400, "invalid_request", `Missing query parameter: ${name}`);
-  }
-  return value;
-}
-
-export function parseOptionalBoolean(value: string | undefined): boolean | undefined {
-  if (value === undefined) {
-    return undefined;
-  }
-  if (value === "true") {
-    return true;
-  }
-  if (value === "false") {
-    return false;
-  }
-  throw new ApiError(400, "invalid_request", `Invalid boolean value: ${value}`);
-}
-
 export function parseInteger(
   value: string,
   name: string,

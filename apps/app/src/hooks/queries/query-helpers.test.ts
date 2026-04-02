@@ -8,8 +8,6 @@ import type {
   ThreadTimelineResponse,
 } from "@bb/server-contract";
 import {
-  appendOptimisticUserRowToTimeline,
-  buildOptimisticUserThreadRow,
   getEnvironmentActionInvalidationQueryKeys,
   getEnvironmentStateInvalidationQueryKeys,
 } from "./query-cache";
@@ -255,91 +253,3 @@ describe("getEnvironmentActionInvalidationQueryKeys", () => {
   });
 });
 
-describe("buildOptimisticUserThreadRow", () => {
-  it("summarizes prompt text and attachments into a user row", () => {
-    expect(
-      buildOptimisticUserThreadRow(
-        "thread-1",
-        [
-          { type: "text", text: "Investigate this" },
-          { type: "localImage", path: "/tmp/screenshot.png" },
-          { type: "localFile", path: "/tmp/log.txt" },
-        ],
-        123,
-      ),
-    ).toEqual({
-      kind: "message",
-      id: "optimistic-user-123",
-      message: {
-        id: "optimistic-user-123",
-        kind: "user",
-        threadId: "thread-1",
-        text: "Investigate this",
-        attachments: {
-          webImages: 0,
-          localImages: 1,
-          localFiles: 1,
-          localImagePaths: ["/tmp/screenshot.png"],
-          localFilePaths: ["/tmp/log.txt"],
-        },
-        sourceSeqStart: Number.MAX_SAFE_INTEGER,
-        sourceSeqEnd: Number.MAX_SAFE_INTEGER,
-        createdAt: 123,
-      },
-    });
-  });
-});
-
-describe("appendOptimisticUserRowToTimeline", () => {
-  it("appends an optimistic user row while preserving context window usage", () => {
-    const timeline: ThreadTimelineResponse = {
-      rows: [
-        {
-          kind: "message",
-          id: "assistant-1",
-          message: {
-            id: "assistant-1",
-            kind: "assistant-text",
-            threadId: "thread-1",
-            text: "Done",
-            sourceSeqStart: 1,
-            sourceSeqEnd: 1,
-            createdAt: 1,
-            status: "completed",
-          },
-        },
-      ],
-      contextWindowUsage: {
-        totalTokens: 10,
-        modelContextWindow: 100,
-      },
-    };
-
-    expect(
-      appendOptimisticUserRowToTimeline(
-        timeline,
-        "thread-1",
-        [{ type: "text", text: "Follow up" }],
-        456,
-      ),
-    ).toEqual({
-      rows: [
-        timeline.rows[0],
-        {
-          kind: "message",
-          id: "optimistic-user-456",
-          message: {
-            id: "optimistic-user-456",
-            kind: "user",
-            threadId: "thread-1",
-            text: "Follow up",
-            sourceSeqStart: Number.MAX_SAFE_INTEGER,
-            sourceSeqEnd: Number.MAX_SAFE_INTEGER,
-            createdAt: 456,
-          },
-        },
-      ],
-      contextWindowUsage: timeline.contextWindowUsage,
-    });
-  });
-});

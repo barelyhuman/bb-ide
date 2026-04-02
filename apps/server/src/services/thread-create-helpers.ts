@@ -1,7 +1,6 @@
 import path from "node:path";
 import {
   createThread,
-  getDefaultProjectSource,
   getProjectSourceByHost,
   getProject,
   getThread,
@@ -56,24 +55,6 @@ export function requireProjectExists(
     throw new ApiError(404, "project_not_found", "Project not found");
   }
   return project;
-}
-
-export function requireDefaultLocalPathSource(
-  deps: Pick<AppDeps, "db">,
-  projectId: string,
-): LocalPathProjectSource {
-  const source = getDefaultProjectSource(deps.db, projectId);
-  if (!source) {
-    throw new ApiError(409, "invalid_request", "Project has no default source");
-  }
-  if (source.type !== "local_path") {
-    throw new ApiError(
-      409,
-      "unsupported_operation",
-      "Project source path is not available",
-    );
-  }
-  return source;
 }
 
 export const SETUP_SCRIPT_NAME = ".bb-env-setup.sh";

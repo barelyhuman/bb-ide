@@ -267,25 +267,3 @@ export function queueThreadRenameCommand(
   });
 }
 
-export function queueThreadStopCommand(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: {
-    environment: {
-      hostId: string;
-      id: string;
-    };
-    threadId: string;
-  },
-): void {
-  const session = requireConnectedHostSession(deps, args.environment.hostId);
-  queueCommand(deps.db, deps.hub, {
-    hostId: args.environment.hostId,
-    sessionId: session.id,
-    type: "thread.stop",
-    payload: JSON.stringify({
-      type: "thread.stop",
-      environmentId: args.environment.id,
-      threadId: args.threadId,
-    }),
-  });
-}

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   findActiveFileMention,
   insertFileMention,
-  splitMentionPath,
 } from "./file-mention";
 
 describe("file mention helpers", () => {
@@ -54,10 +53,4 @@ describe("file mention helpers", () => {
     );
   });
 
-  it("splits mention path into filename and directory", () => {
-    expect(splitMentionPath("src/components/PromptBox.tsx")).toEqual({
-      filename: "PromptBox.tsx",
-      directory: "src/components",
-    });
-  });
 });

@@ -1,6 +1,5 @@
 import { assertNever } from "@bb/core-ui";
 import type { WorkspaceStatus } from "@bb/domain";
-import type { StatusPillVariant } from "@bb/ui-core";
 import {
   formatWorkspaceChangeSummary,
 } from "@/lib/workspace-change-summary";
@@ -196,26 +195,3 @@ export function workspaceStatusDescription(
   }
 }
 
-export function workspaceStatusVariant(
-  status: WorkspaceStatus | undefined,
-  options?: { isArchivedThread?: boolean },
-): StatusPillVariant {
-  if (!status) return "outline";
-
-  switch (status.workingTree.state) {
-    case "clean":
-      return "outline";
-    case "untracked":
-      return "outline";
-    case "deleted":
-      return options?.isArchivedThread ? "outline" : "destructive";
-    case "dirty_uncommitted":
-      return "secondary";
-    case "committed_unmerged":
-      return "outline";
-    case "dirty_and_committed_unmerged":
-      return "secondary";
-    default:
-      return assertNever(status.workingTree.state);
-  }
-}

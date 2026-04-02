@@ -3,7 +3,6 @@ import type { WorkspaceStatus } from "@bb/domain";
 import {
   getGitStatusDisplay,
   workspaceStatusDescription,
-  workspaceStatusVariant,
 } from "./workspace-status";
 
 function makeStatus(state: WorkspaceStatus["workingTree"]["state"]): WorkspaceStatus {
@@ -32,18 +31,7 @@ function makeStatus(state: WorkspaceStatus["workingTree"]["state"]): WorkspaceSt
 }
 
 describe("workspace-status", () => {
-  it("uses destructive deleted variant for active threads", () => {
-    expect(workspaceStatusVariant(makeStatus("deleted"))).toBe("destructive");
-  });
-
-  it("uses neutral deleted variant for archived threads", () => {
-    expect(
-      workspaceStatusVariant(makeStatus("deleted"), { isArchivedThread: true }),
-    ).toBe("outline");
-  });
-
   it("shows untracked label and copy for workspaces with only untracked files", () => {
-    expect(workspaceStatusVariant(makeStatus("untracked"))).toBe("outline");
     expect(workspaceStatusDescription(makeStatus("untracked"))).toBe(
       "Workspace has untracked files that have not been committed yet.",
     );

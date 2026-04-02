@@ -3,16 +3,6 @@ import { hostDaemonSessions } from "@bb/db";
 import type { DbConnection } from "@bb/db";
 import { ApiError } from "../errors.js";
 
-export function getSessionById(db: DbConnection, sessionId: string) {
-  return (
-    db
-      .select()
-      .from(hostDaemonSessions)
-      .where(eq(hostDaemonSessions.id, sessionId))
-      .get() ?? null
-  );
-}
-
 export function requireActiveSession(db: DbConnection, sessionId: string) {
   const session =
     db

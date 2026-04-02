@@ -47,15 +47,3 @@ export function insertFileMention(
     caretPosition,
   };
 }
-
-export function splitMentionPath(path: string): { filename: string; directory: string } {
-  const normalized = path.replaceAll("\\", "/");
-  const parts = normalized.split("/");
-  const filename = parts.at(-1) ?? normalized;
-  const directory = parts.slice(0, -1).join("/");
-
-  return {
-    filename,
-    directory,
-  };
-}

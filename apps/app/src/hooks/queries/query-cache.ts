@@ -1,11 +1,7 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import type {
-  PromptInput,
   Thread,
-  TimelineRow,
 } from "@bb/domain";
-import type { ThreadTimelineResponse } from "@bb/server-contract";
-import { collectPromptAttachments } from "@/lib/prompt-attachments";
 import {
   environmentGitDiffQueryKeyPrefix,
   environmentMergeBaseBranchesQueryKeyPrefix,
@@ -95,53 +91,6 @@ export function updateCachedThread(
 
     return updater(thread);
   });
-}
-
-function buildOptimisticUserMessageText(input: PromptInput[]): string {
-  return input
-    .filter((entry): entry is Extract<PromptInput, { type: "text" }> => entry.type === "text")
-    .map((entry) => entry.text.trim())
-    .filter((entry) => entry.length > 0)
-    .join("\n\n");
-}
-
-export function buildOptimisticUserThreadRow(
-  threadId: string,
-  input: PromptInput[],
-  createdAt: number,
-): TimelineRow {
-  const id = `optimistic-user-${createdAt}`;
-
-  return {
-    kind: "message",
-    id,
-    message: {
-      id,
-      kind: "user",
-      threadId,
-      text: buildOptimisticUserMessageText(input),
-      attachments: collectPromptAttachments(input),
-      sourceSeqStart: Number.MAX_SAFE_INTEGER,
-      sourceSeqEnd: Number.MAX_SAFE_INTEGER,
-      createdAt,
-    },
-  };
-}
-
-export function appendOptimisticUserRowToTimeline(
-  timeline: ThreadTimelineResponse | undefined,
-  threadId: string,
-  input: PromptInput[],
-  createdAt: number,
-): ThreadTimelineResponse | undefined {
-  if (!timeline) {
-    return timeline;
-  }
-
-  return {
-    ...timeline,
-    rows: [...timeline.rows, buildOptimisticUserThreadRow(threadId, input, createdAt)],
-  };
 }
 
 function threadMatchesListFilters(

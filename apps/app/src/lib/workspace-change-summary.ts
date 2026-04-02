@@ -28,30 +28,12 @@ export function formatChangeSummary(counts: ChangeCounts): string {
   return `${filesLabel}, +${counts.insertions} -${counts.deletions}`;
 }
 
-export function hasWorkspaceLineChanges(counts: WorkspaceChangeCounts): boolean {
-  return hasLineChanges({
-    insertions: counts.insertions,
-    deletions: counts.deletions,
-  });
-}
-
 export function formatWorkspaceChangeSummary(counts: WorkspaceChangeCounts): string {
   return formatChangeSummary({
     changedFiles: counts.changedFiles,
     insertions: counts.insertions,
     deletions: counts.deletions,
   });
-}
-
-export function formatDirtyWorkspaceLabel(counts: WorkspaceChangeCounts): string {
-  if (!hasWorkspaceLineChanges(counts)) {
-    if (counts.changedFiles > 0) {
-      return `Dirty ${formatWorkspaceChangedFilesLabel(counts.changedFiles)}`;
-    }
-    return "Dirty";
-  }
-
-  return `Dirty +${counts.insertions} -${counts.deletions}`;
 }
 
 export function formatWorkspaceFileStatus(status: string): string {
