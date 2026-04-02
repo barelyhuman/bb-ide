@@ -1044,18 +1044,17 @@ function extractPiTokenUsage(
     return undefined;
   }
   const modelContextWindow = resolveModelContextWindow(lastAssistant);
-  const current = last;
 
   // Accumulate into the per-thread cumulative total
-  cumulativeTokens.totalTokens += current.totalTokens;
-  cumulativeTokens.inputTokens += current.inputTokens;
-  cumulativeTokens.cachedInputTokens += current.cachedInputTokens;
-  cumulativeTokens.outputTokens += current.outputTokens;
-  cumulativeTokens.reasoningOutputTokens += current.reasoningOutputTokens;
+  cumulativeTokens.totalTokens += last.totalTokens;
+  cumulativeTokens.inputTokens += last.inputTokens;
+  cumulativeTokens.cachedInputTokens += last.cachedInputTokens;
+  cumulativeTokens.outputTokens += last.outputTokens;
+  cumulativeTokens.reasoningOutputTokens += last.reasoningOutputTokens;
 
   return {
     total: { ...cumulativeTokens },
-    last: current,
+    last,
     modelContextWindow,
   };
 }
