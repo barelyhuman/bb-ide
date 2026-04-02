@@ -2386,6 +2386,300 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
 ]
 `;
 
+exports[`@bb/provider-audit fixture replay > snapshots parsed context-window data for replayed token-usage events 1`] = `
+[
+  {
+    "contextWindowUsage": null,
+    "fixture": "excalidraw/claude-code/collab-startup-explanation",
+    "tokenUsageSummary": {
+      "distinctModelContextWindows": [],
+      "nonNullModelContextWindowCount": 0,
+      "tokenUsageEventCount": 2,
+    },
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 61504,
+    },
+    "fixture": "excalidraw/claude-code/eyedropper-browser-compat",
+    "tokenUsageSummary": {
+      "distinctModelContextWindows": [
+        1000000,
+      ],
+      "nonNullModelContextWindowCount": 3,
+      "tokenUsageEventCount": 3,
+    },
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 338649,
+    },
+    "fixture": "excalidraw/claude-code/eyedropper-preview-bugfix",
+    "tokenUsageSummary": {
+      "distinctModelContextWindows": [
+        1000000,
+      ],
+      "nonNullModelContextWindowCount": 2,
+      "tokenUsageEventCount": 2,
+    },
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 46414,
+    },
+    "fixture": "excalidraw/claude-code/magicframe-feature",
+    "tokenUsageSummary": {
+      "distinctModelContextWindows": [
+        1000000,
+      ],
+      "nonNullModelContextWindowCount": 2,
+      "tokenUsageEventCount": 2,
+    },
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 31924,
+    },
+    "fixture": "excalidraw/claude-code/search-bugfix",
+    "tokenUsageSummary": {
+      "distinctModelContextWindows": [
+        1000000,
+      ],
+      "nonNullModelContextWindowCount": 2,
+      "tokenUsageEventCount": 2,
+    },
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 31011,
+    },
+    "fixture": "excalidraw/claude-code/search-feature",
+    "tokenUsageSummary": {
+      "distinctModelContextWindows": [
+        1000000,
+      ],
+      "nonNullModelContextWindowCount": 2,
+      "tokenUsageEventCount": 2,
+    },
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 89890,
+    },
+    "fixture": "excalidraw/claude-code/ttd-explanation",
+    "tokenUsageSummary": {
+      "distinctModelContextWindows": [
+        1000000,
+      ],
+      "nonNullModelContextWindowCount": 2,
+      "tokenUsageEventCount": 2,
+    },
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 258400,
+      "totalTokens": 91403,
+    },
+    "fixture": "excalidraw/codex/collab-startup-explanation",
+    "tokenUsageSummary": {
+      "distinctModelContextWindows": [
+        258400,
+      ],
+      "nonNullModelContextWindowCount": 34,
+      "tokenUsageEventCount": 34,
+    },
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 258400,
+      "totalTokens": 53122,
+    },
+    "fixture": "excalidraw/codex/eyedropper-preview-bugfix",
+    "tokenUsageSummary": {
+      "distinctModelContextWindows": [
+        258400,
+      ],
+      "nonNullModelContextWindowCount": 22,
+      "tokenUsageEventCount": 22,
+    },
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 258400,
+      "totalTokens": 124919,
+    },
+    "fixture": "excalidraw/codex/magicframe-feature",
+    "tokenUsageSummary": {
+      "distinctModelContextWindows": [
+        258400,
+      ],
+      "nonNullModelContextWindowCount": 41,
+      "tokenUsageEventCount": 41,
+    },
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 258400,
+      "totalTokens": 44973,
+    },
+    "fixture": "excalidraw/codex/search-bugfix",
+    "tokenUsageSummary": {
+      "distinctModelContextWindows": [
+        258400,
+      ],
+      "nonNullModelContextWindowCount": 26,
+      "tokenUsageEventCount": 26,
+    },
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 258400,
+      "totalTokens": 55623,
+    },
+    "fixture": "excalidraw/codex/search-feature",
+    "tokenUsageSummary": {
+      "distinctModelContextWindows": [
+        258400,
+      ],
+      "nonNullModelContextWindowCount": 24,
+      "tokenUsageEventCount": 24,
+    },
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 258400,
+      "totalTokens": 80064,
+    },
+    "fixture": "excalidraw/codex/share-web-compat",
+    "tokenUsageSummary": {
+      "distinctModelContextWindows": [
+        258400,
+      ],
+      "nonNullModelContextWindowCount": 60,
+      "tokenUsageEventCount": 60,
+    },
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 258400,
+      "totalTokens": 78074,
+    },
+    "fixture": "excalidraw/codex/ttd-explanation",
+    "tokenUsageSummary": {
+      "distinctModelContextWindows": [
+        258400,
+      ],
+      "nonNullModelContextWindowCount": 36,
+      "tokenUsageEventCount": 36,
+    },
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 42341,
+    },
+    "fixture": "excalidraw/pi/collab-startup-explanation",
+    "tokenUsageSummary": {
+      "distinctModelContextWindows": [
+        1000000,
+      ],
+      "nonNullModelContextWindowCount": 2,
+      "tokenUsageEventCount": 2,
+    },
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 35859,
+    },
+    "fixture": "excalidraw/pi/command-palette-map",
+    "tokenUsageSummary": {
+      "distinctModelContextWindows": [
+        1000000,
+      ],
+      "nonNullModelContextWindowCount": 3,
+      "tokenUsageEventCount": 3,
+    },
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 12485,
+    },
+    "fixture": "excalidraw/pi/eyedropper-preview-bugfix",
+    "tokenUsageSummary": {
+      "distinctModelContextWindows": [
+        1000000,
+      ],
+      "nonNullModelContextWindowCount": 2,
+      "tokenUsageEventCount": 2,
+    },
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 0,
+    },
+    "fixture": "excalidraw/pi/magicframe-feature",
+    "tokenUsageSummary": {
+      "distinctModelContextWindows": [
+        1000000,
+      ],
+      "nonNullModelContextWindowCount": 2,
+      "tokenUsageEventCount": 2,
+    },
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 57938,
+    },
+    "fixture": "excalidraw/pi/search-bugfix",
+    "tokenUsageSummary": {
+      "distinctModelContextWindows": [
+        1000000,
+      ],
+      "nonNullModelContextWindowCount": 2,
+      "tokenUsageEventCount": 2,
+    },
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 48823,
+    },
+    "fixture": "excalidraw/pi/search-feature",
+    "tokenUsageSummary": {
+      "distinctModelContextWindows": [
+        1000000,
+      ],
+      "nonNullModelContextWindowCount": 2,
+      "tokenUsageEventCount": 2,
+    },
+  },
+  {
+    "contextWindowUsage": {
+      "modelContextWindow": 1000000,
+      "totalTokens": 32867,
+    },
+    "fixture": "excalidraw/pi/ttd-explanation",
+    "tokenUsageSummary": {
+      "distinctModelContextWindows": [
+        1000000,
+      ],
+      "nonNullModelContextWindowCount": 2,
+      "tokenUsageEventCount": 2,
+    },
+  },
+]
+`;
+
 exports[`@bb/provider-audit fixture replay > snapshots verbose CLI timeline output for every fixture 1`] = `
 [
   {

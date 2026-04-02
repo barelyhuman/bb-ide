@@ -8,7 +8,7 @@
  */
 
 import type { KnownProvider } from "@mariozechner/pi-ai";
-import { AuthStorage } from "@mariozechner/pi-coding-agent";
+import { AuthStorage, ModelRegistry } from "@mariozechner/pi-coding-agent";
 import { z } from "zod";
 import type {
   AgentSessionEvent,
@@ -23,6 +23,7 @@ import type {
   ThreadEventTokenUsageBreakdown,
   ToolCallRequest,
 } from "@bb/domain";
+import { toPositiveNumber } from "@bb/domain";
 import {
   decodeProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
@@ -132,6 +133,7 @@ interface PiCatalogModel {
   provider: string;
   reasoning: boolean;
   input: string[];
+  contextWindow?: number;
 }
 
 const piCatalogModelSchema = z.object({
@@ -140,6 +142,7 @@ const piCatalogModelSchema = z.object({
   provider: z.string(),
   reasoning: z.boolean(),
   input: z.array(z.string()),
+  contextWindow: z.number().optional(),
 }).passthrough();
 
 const piCatalogModelsSchema = z.array(piCatalogModelSchema);
@@ -170,12 +173,16 @@ const piAssistantUsageSchema = z.object({
 const piAssistantMessageSchema = z.object({
   role: z.literal("assistant"),
   content: z.array(piMessageContentBlockSchema),
+  provider: z.string().optional(),
+  model: z.string().optional(),
   usage: piAssistantUsageSchema.optional(),
 }).passthrough();
 
 const piConversationMessageSchema = z.object({
   role: z.string(),
   content: z.array(piMessageContentBlockSchema).optional(),
+  provider: z.string().optional(),
+  model: z.string().optional(),
   usage: piAssistantUsageSchema.optional(),
 }).passthrough();
 
@@ -436,19 +443,61 @@ export function buildPiAvailableModels(args: {
 }
 
 async function listPiModels(): Promise<AvailableModel[]> {
-  const [{ getModels, getProviders }, authStorageModule] = await Promise.all([
+  const [{ getModels, getProviders }, authStorage] = await Promise.all([
     import("@mariozechner/pi-ai"),
     Promise.resolve(AuthStorage.create()),
   ]);
   return buildPiAvailableModels({
     providers: getProviders(),
     getModels: (provider) => piCatalogModelsSchema.parse(getModels(provider)),
-    hasAuth: (provider) => authStorageModule.hasAuth(provider),
+    hasAuth: (provider) => authStorage.hasAuth(provider),
   });
 }
 
 function toCanonicalPiModelId(provider: string, modelId: string): string {
   return modelId.includes("/") ? modelId : `${provider}/${modelId}`;
+}
+
+type PiModelContextWindowLookup = ReadonlyMap<string, number>;
+
+type PiModelContextWindowResolver = (
+  lastAssistant: PiAssistantMessage | undefined,
+) => number | null;
+
+function createPiModelRegistry(): ModelRegistry {
+  return new ModelRegistry(AuthStorage.create());
+}
+
+function buildPiModelContextWindowLookup(
+  models: readonly PiCatalogModel[],
+): PiModelContextWindowLookup {
+  const lookup = new Map<string, number>();
+  for (const model of models) {
+    const contextWindow = toPositiveNumber(model.contextWindow);
+    if (contextWindow === undefined) {
+      continue;
+    }
+    const canonicalId = toCanonicalPiModelId(model.provider, model.id);
+    lookup.set(canonicalId, contextWindow);
+    if (model.id.includes("/")) {
+      lookup.set(model.id, contextWindow);
+    }
+  }
+  return lookup;
+}
+
+function createPiModelContextWindowResolver(): PiModelContextWindowResolver {
+  return (lastAssistant) => {
+    if (!toOptionalString(lastAssistant?.model)) {
+      return null;
+    }
+
+    // Resolve against a fresh registry so models.json overrides and custom
+    // model definitions are reflected without module-level cached state.
+    const models = piCatalogModelsSchema.parse(createPiModelRegistry().getAll());
+    const modelContextWindowLookup = buildPiModelContextWindowLookup(models);
+    return resolvePiModelContextWindow(lastAssistant, modelContextWindowLookup);
+  };
 }
 
 function getPiReasoningEfforts(model: PiCatalogModel): ModelReasoningEffort[] {
@@ -499,6 +548,8 @@ export interface CreatePiProviderAdapterOptions {
   launchEnv?: Record<string, string>;
   /** Override model listing. Used by unit tests to avoid real API calls. */
   listModels?: () => Promise<AvailableModel[]>;
+  /** Override context-window resolution. Used by unit tests to avoid real catalogs. */
+  resolveModelContextWindow?: PiModelContextWindowResolver;
 }
 
 interface PiTurnState {
@@ -518,6 +569,8 @@ export function createPiProviderAdapter(
     supportsServiceTier: false,
   };
   const models = opts?.listModels ?? listPiModels;
+  const resolveModelContextWindow = opts?.resolveModelContextWindow
+    ?? createPiModelContextWindowResolver();
 
   // Per-thread turn state — Pi SDK doesn't have turn IDs, so the adapter
   // assigns them. Keyed by threadId so multiple threads sharing one adapter
@@ -683,7 +736,11 @@ export function createPiProviderAdapter(
           }
         }
         if (state.currentTurnId) {
-          const tokenUsage = extractPiTokenUsage(lastAssistant, state.cumulativeTokens);
+          const tokenUsage = extractPiTokenUsage(
+            lastAssistant,
+            state.cumulativeTokens,
+            resolveModelContextWindow,
+          );
           if (tokenUsage) {
             events.push({
               type: "thread/tokenUsage/updated",
@@ -980,10 +1037,13 @@ function extractAssistantText(
 function extractPiTokenUsage(
   lastAssistant: PiAssistantMessage | undefined,
   cumulativeTokens: ThreadEventTokenUsageBreakdown,
+  resolveModelContextWindow: PiModelContextWindowResolver,
 ): ThreadEventTokenUsage | undefined {
   const last = toAssistantUsageBreakdown(lastAssistant);
-
-  if (!last) return undefined;
+  if (!last) {
+    return undefined;
+  }
+  const modelContextWindow = resolveModelContextWindow(lastAssistant);
 
   // Accumulate into the per-thread cumulative total
   cumulativeTokens.totalTokens += last.totalTokens;
@@ -995,8 +1055,30 @@ function extractPiTokenUsage(
   return {
     total: { ...cumulativeTokens },
     last,
-    modelContextWindow: null,
+    modelContextWindow,
   };
+}
+
+function resolvePiModelContextWindow(
+  lastAssistant: PiAssistantMessage | undefined,
+  modelContextWindowLookup: PiModelContextWindowLookup,
+): number | null {
+  const modelId = toOptionalString(lastAssistant?.model);
+  if (!modelId) {
+    return null;
+  }
+
+  if (modelId.includes("/")) {
+    return modelContextWindowLookup.get(modelId) ?? null;
+  }
+
+  const providerId = toOptionalString(lastAssistant?.provider);
+  if (!providerId) {
+    return null;
+  }
+
+  const canonicalId = toCanonicalPiModelId(providerId, modelId);
+  return modelContextWindowLookup.get(canonicalId) ?? null;
 }
 
 function extractPiToolProgressText(

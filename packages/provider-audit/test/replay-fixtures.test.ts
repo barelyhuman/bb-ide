@@ -3,8 +3,12 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { extractThreadContextWindowUsage } from "@bb/core-ui";
 import type { ViewMessage } from "@bb/domain";
-import type { ProviderAuditReplayFixturesResult } from "../src/types.js";
+import type {
+  ProviderAuditBundle,
+  ProviderAuditReplayFixturesResult,
+} from "../src/types.js";
 import {
   collectCoverageIssues,
   replayFixtures,
@@ -41,6 +45,57 @@ function trimTrailingWhitespace(text: string): string {
     .split("\n")
     .map((line) => line.replace(/[ \t]+$/u, ""))
     .join("\n");
+}
+
+type TokenUsageTranslatedCapture = Extract<
+  ProviderAuditBundle["translatedCaptures"][number],
+  { event: { type: "thread/tokenUsage/updated" } }
+>;
+
+interface TokenUsageSummarySnapshot {
+  tokenUsageEventCount: number;
+  nonNullModelContextWindowCount: number;
+  distinctModelContextWindows: number[];
+}
+
+interface FixtureContextWindowSnapshot {
+  fixture: string;
+  contextWindowUsage: ReturnType<typeof extractThreadContextWindowUsage>;
+  tokenUsageSummary: TokenUsageSummarySnapshot;
+}
+
+function isTokenUsageTranslatedCapture(
+  entry: ProviderAuditBundle["translatedCaptures"][number],
+): entry is TokenUsageTranslatedCapture {
+  return entry.event.type === "thread/tokenUsage/updated";
+}
+
+function buildFixtureContextWindowSnapshot(
+  bundle: ProviderAuditBundle,
+  fixtureId: string,
+): FixtureContextWindowSnapshot {
+  const tokenUsageEvents = bundle.translatedCaptures.filter(
+    isTokenUsageTranslatedCapture,
+  );
+  const distinctModelContextWindows = [
+    ...new Set(
+      tokenUsageEvents
+        .map((entry) => entry.event.tokenUsage.modelContextWindow)
+        .filter((value): value is number => value !== null),
+    ),
+  ].sort((left, right) => left - right);
+
+  return {
+    fixture: fixtureId,
+    contextWindowUsage: extractThreadContextWindowUsage(bundle.threadEventRows),
+    tokenUsageSummary: {
+      tokenUsageEventCount: tokenUsageEvents.length,
+      nonNullModelContextWindowCount: tokenUsageEvents.filter(
+        (entry) => entry.event.tokenUsage.modelContextWindow !== null,
+      ).length,
+      distinctModelContextWindows,
+    },
+  };
 }
 
 afterEach(() => {
@@ -98,6 +153,36 @@ describe("@bb/provider-audit fixture replay", () => {
 
   it("summarizes raw-event and tool-call coverage across the checked-in fixtures", () => {
     expect(summarizeFixtureCoverage(checkedInReplay)).toMatchSnapshot();
+  });
+
+  it("snapshots parsed context-window data for replayed token-usage events", () => {
+    const contextWindowSnapshots = checkedInReplay.fixtures.map(
+      ({ fixture, bundle }) =>
+        buildFixtureContextWindowSnapshot(
+          bundle,
+          `${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`,
+        ),
+    );
+
+    expect(contextWindowSnapshots).toMatchSnapshot();
+  });
+
+  it("replayed Pi fixtures expose non-null context-window usage", () => {
+    const piSnapshots = checkedInReplay.fixtures
+      .filter(({ fixture }) => fixture.providerId === "pi")
+      .map(({ fixture, bundle }) =>
+        buildFixtureContextWindowSnapshot(
+          bundle,
+          `${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`,
+        ),
+      );
+
+    expect(piSnapshots.length).toBeGreaterThan(0);
+    for (const snapshot of piSnapshots) {
+      expect(snapshot.contextWindowUsage).not.toBeNull();
+      expect(snapshot.tokenUsageSummary.nonNullModelContextWindowCount).toBeGreaterThan(0);
+      expect(snapshot.tokenUsageSummary.distinctModelContextWindows.length).toBeGreaterThan(0);
+    }
   });
 
   it("has no unresolved coverage issues in the checked-in fixtures", () => {
