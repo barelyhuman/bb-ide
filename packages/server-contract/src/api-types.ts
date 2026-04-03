@@ -83,6 +83,82 @@ export const createThreadRequestSchema = z.object({
 });
 export type CreateThreadRequest = z.infer<typeof createThreadRequestSchema>;
 
+const automationThreadRequestSchema = createThreadRequestSchema.omit({
+  projectId: true,
+});
+
+export const automationScheduleTriggerSchema = z.object({
+  triggerType: z.literal("schedule"),
+  cron: z.string().min(1),
+  timezone: z.string().min(1),
+});
+export type AutomationScheduleTrigger = z.infer<
+  typeof automationScheduleTriggerSchema
+>;
+
+export const scheduledThreadAutomationActionSchema = z.object({
+  actionType: z.literal("scheduled-thread"),
+  threadRequest: automationThreadRequestSchema,
+});
+export type ScheduledThreadAutomationAction = z.infer<
+  typeof scheduledThreadAutomationActionSchema
+>;
+
+export const automationTriggerSchema = z.discriminatedUnion("triggerType", [
+  automationScheduleTriggerSchema,
+]);
+export type AutomationTrigger = z.infer<typeof automationTriggerSchema>;
+
+export const automationActionSchema = z.discriminatedUnion("actionType", [
+  scheduledThreadAutomationActionSchema,
+]);
+export type AutomationAction = z.infer<typeof automationActionSchema>;
+
+export const automationSchema = z.object({
+  id: z.string().min(1),
+  projectId: z.string().min(1),
+  name: z.string().min(1),
+  enabled: z.boolean(),
+  trigger: automationTriggerSchema,
+  action: automationActionSchema,
+  autoArchive: z.boolean(),
+  nextRunAt: z.number().nullable(),
+  lastRunAt: z.number().nullable(),
+  runCount: z.number().int().nonnegative(),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+export type Automation = z.infer<typeof automationSchema>;
+
+export const createAutomationRequestSchema = z.object({
+  name: z.string().min(1),
+  enabled: z.boolean().optional(),
+  trigger: automationTriggerSchema,
+  action: automationActionSchema,
+  autoArchive: z.boolean().optional(),
+});
+export type CreateAutomationRequest = z.infer<typeof createAutomationRequestSchema>;
+
+export const updateAutomationRequestSchema = z
+  .object({
+    name: z.string().min(1),
+    enabled: z.boolean(),
+    trigger: automationTriggerSchema,
+    action: automationActionSchema,
+    autoArchive: z.boolean(),
+  })
+  .partial()
+  .refine(
+    (value) =>
+      value.name !== undefined ||
+      value.enabled !== undefined ||
+      value.trigger !== undefined ||
+      value.action !== undefined ||
+      value.autoArchive !== undefined,
+    "At least one field must be provided",
+  );
+export type UpdateAutomationRequest = z.infer<typeof updateAutomationRequestSchema>;
+
 export const sendMessageRequestSchema = z.object({
   input: z.array(promptInputSchema).min(1),
   model: z.string().optional(),

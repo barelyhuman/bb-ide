@@ -15,11 +15,14 @@ import type {
   EmptyInput,
   Endpoint,
   PathId,
+  PathProjectAutomationId,
   PathProjectId,
   PathThreadAndDraft,
 } from "./common.js";
 import type {
   ArchiveThreadRequest,
+  Automation,
+  CreateAutomationRequest,
   CreateDraftRequest,
   CreateManagerThreadRequest,
   CreateProjectRequest,
@@ -55,6 +58,7 @@ import type {
   ThreadTimelineResponse,
   TimelineToolDetailsQuery,
   TimelineToolDetailsResponse,
+  UpdateAutomationRequest,
   UpdateEnvironmentRequest,
   UpdateProjectRequest,
   UpdateProjectSourceRequest,
@@ -85,6 +89,17 @@ export type PublicApiSchema = {
   "/projects/:id/sources/:sourceId": {
     $patch: Endpoint<PathProjectSourceId & { json: UpdateProjectSourceRequest }, ProjectSource>;
     $delete: Endpoint<PathProjectSourceId, { ok: true }>;
+  };
+  "/projects/:id/automations": {
+    $get: Endpoint<PathProjectId, Automation[]>;
+    $post: Endpoint<PathProjectId & { json: CreateAutomationRequest }, Automation, 201>;
+  };
+  "/projects/:id/automations/:automationId": {
+    $patch: Endpoint<
+      PathProjectAutomationId & { json: UpdateAutomationRequest },
+      Automation
+    >;
+    $delete: Endpoint<PathProjectAutomationId, { ok: true }>;
   };
   "/projects/:id/files": {
     /**

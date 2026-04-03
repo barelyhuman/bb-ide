@@ -5,6 +5,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { AppDeps } from "./types.js";
 import { errorToResponse } from "./errors.js";
+import { registerAutomationRoutes } from "./routes/automations.js";
 import { registerEnvironmentRoutes } from "./routes/environments.js";
 import { registerHostRoutes } from "./routes/hosts.js";
 import { registerProjectRoutes } from "./routes/projects.js";
@@ -63,6 +64,7 @@ export function createApp(deps: AppDeps, options?: CreateAppOptions): ServerApp 
 
   const publicApi = new Hono();
   registerProjectRoutes(publicApi, deps);
+  registerAutomationRoutes(publicApi, deps);
   registerHostRoutes(publicApi, deps);
   registerEnvironmentRoutes(publicApi, deps);
   registerThreadRoutes(publicApi, deps);

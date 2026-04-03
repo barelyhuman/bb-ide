@@ -7,6 +7,8 @@ import * as contract from "../src/index.js";
 import {
   PROJECT_CHANGE_KINDS,
   SYSTEM_CHANGE_KINDS,
+  automationSchema,
+  createAutomationRequestSchema,
   createDraftRequestSchema,
   createManagerThreadRequestSchema,
   createProjectSourceRequestSchema,
@@ -16,14 +18,32 @@ import {
   sendMessageRequestSchema,
   timelineToolDetailsResponseSchema,
   updateEnvironmentRequestSchema,
+  updateAutomationRequestSchema,
 } from "../src/index.js";
 
 const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
   "apiErrorSchema.retryable": "Error payloads may omit retryability when the server has no retry guidance.",
+  "createAutomationRequestSchema.action.threadRequest.parentThreadId": "Automation creation may omit parentThreadId when the scheduled thread stays a root thread.",
+  "createAutomationRequestSchema.action.threadRequest.reasoningLevel": "Automation creation may omit reasoningLevel and inherit the scheduled thread default.",
+  "createAutomationRequestSchema.action.threadRequest.sandboxMode": "Automation creation may omit sandboxMode and inherit the scheduled thread default.",
+  "createAutomationRequestSchema.action.threadRequest.serviceTier": "Automation creation may omit serviceTier and inherit the scheduled thread default.",
+  "createAutomationRequestSchema.action.threadRequest.title": "Automation creation may omit title and use the generated thread title flow.",
+  "createAutomationRequestSchema.autoArchive": "Automation creation may omit autoArchive and use the server default.",
+  "createAutomationRequestSchema.enabled": "Automation creation may omit enabled and use the server default.",
   "createDraftRequestSchema.model": "Queued drafts may inherit the thread's default model.",
   "createDraftRequestSchema.reasoningLevel": "Queued drafts may inherit the thread's default reasoning level.",
   "createDraftRequestSchema.sandboxMode": "Queued drafts may inherit the thread's default sandbox mode.",
   "createDraftRequestSchema.serviceTier": "Queued drafts may inherit the thread's default service tier.",
+  "updateAutomationRequestSchema.action": "Automation PATCH requests omit action when leaving it unchanged.",
+  "updateAutomationRequestSchema.action.threadRequest.parentThreadId": "Automation action updates may omit parentThreadId when the scheduled thread stays a root thread.",
+  "updateAutomationRequestSchema.action.threadRequest.reasoningLevel": "Automation action updates may omit reasoningLevel and inherit the scheduled thread default.",
+  "updateAutomationRequestSchema.action.threadRequest.sandboxMode": "Automation action updates may omit sandboxMode and inherit the scheduled thread default.",
+  "updateAutomationRequestSchema.action.threadRequest.serviceTier": "Automation action updates may omit serviceTier and inherit the scheduled thread default.",
+  "updateAutomationRequestSchema.action.threadRequest.title": "Automation action updates may omit title and use the generated thread title flow.",
+  "updateAutomationRequestSchema.autoArchive": "Automation PATCH requests omit autoArchive when leaving it unchanged.",
+  "updateAutomationRequestSchema.enabled": "Automation PATCH requests omit enabled when leaving it unchanged.",
+  "updateAutomationRequestSchema.name": "Automation PATCH requests omit name when leaving it unchanged.",
+  "updateAutomationRequestSchema.trigger": "Automation PATCH requests omit trigger when leaving it unchanged.",
   "createManagerThreadRequestSchema.name": "Manager creation may omit a custom name and use the server-generated default.",
   "createManagerThreadRequestSchema.reasoningLevel": "Manager creation may omit reasoning level and use the server default.",
   "createThreadRequestSchema.parentThreadId": "Root thread creation omits a parent thread id.",
@@ -67,6 +87,68 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
 
 describe("server-contract canonical schemas", () => {
   it("parses request contracts", () => {
+    expect(
+      createAutomationRequestSchema.parse({
+        name: "Daily summary",
+        trigger: {
+          triggerType: "schedule",
+          cron: "0 8 * * 1-5",
+          timezone: "America/Los_Angeles",
+        },
+        action: {
+          actionType: "scheduled-thread",
+          threadRequest: {
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Summarize yesterday's work" }],
+            environment: {
+              type: "host",
+              hostId: "host_abc",
+              workspace: { type: "managed-clone" },
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      name: "Daily summary",
+    });
+
+    expect(
+      automationSchema.parse({
+        id: "auto_123",
+        projectId: "proj_123",
+        name: "Daily summary",
+        enabled: true,
+        trigger: {
+          triggerType: "schedule",
+          cron: "0 8 * * 1-5",
+          timezone: "America/Los_Angeles",
+        },
+        action: {
+          actionType: "scheduled-thread",
+          threadRequest: {
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Summarize yesterday's work" }],
+            environment: {
+              type: "host",
+              hostId: "host_abc",
+              workspace: { type: "managed-clone" },
+            },
+          },
+        },
+        autoArchive: false,
+        nextRunAt: 123,
+        lastRunAt: null,
+        runCount: 0,
+        createdAt: 1,
+        updatedAt: 2,
+      }),
+    ).toMatchObject({
+      id: "auto_123",
+      projectId: "proj_123",
+    });
+
     expect(
       createThreadRequestSchema.parse({
         projectId: "proj_123",
@@ -235,6 +317,16 @@ describe("server-contract clients", () => {
       }).pathname,
     ).toBe("/api/v1/projects/proj_123/managers");
     expect(
+      publicClient.projects[":id"].automations.$url({
+        param: { id: "proj_123" },
+      }).pathname,
+    ).toBe("/api/v1/projects/proj_123/automations");
+    expect(
+      publicClient.projects[":id"].automations[":automationId"].$url({
+        param: { id: "proj_123", automationId: "auto_123" },
+      }).pathname,
+    ).toBe("/api/v1/projects/proj_123/automations/auto_123");
+    expect(
       publicClient.threads[":id"].timeline["tool-details"].$url({
         param: { id: "thr_123" },
         query: {
@@ -273,6 +365,7 @@ describe("server-contract clients", () => {
       apiErrorSchema: contract.apiErrorSchema,
       commitActionResponseSchema: contract.commitActionResponseSchema,
       createDraftRequestSchema: contract.createDraftRequestSchema,
+      createAutomationRequestSchema: contract.createAutomationRequestSchema,
       createManagerThreadRequestSchema: contract.createManagerThreadRequestSchema,
       createThreadRequestSchema: contract.createThreadRequestSchema,
       environmentActionApiErrorSchema: contract.environmentActionApiErrorSchema,
@@ -290,6 +383,7 @@ describe("server-contract clients", () => {
       threadTimelineResponseSchema: contract.threadTimelineResponseSchema,
       timelineToolDetailsQuerySchema: contract.timelineToolDetailsQuerySchema,
       timelineToolDetailsRequestSchema: contract.timelineToolDetailsRequestSchema,
+      updateAutomationRequestSchema: contract.updateAutomationRequestSchema,
       updateProjectRequestSchema: contract.updateProjectRequestSchema,
       updateProjectSourceRequestSchema: contract.updateProjectSourceRequestSchema,
       updateThreadRequestSchema: contract.updateThreadRequestSchema,
