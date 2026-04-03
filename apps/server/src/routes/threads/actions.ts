@@ -23,7 +23,7 @@ import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
 import { toQueuedMessage } from "../../services/drafts.js";
 import {
-  cleanupEnvironmentAfterThreadRemoval,
+  maybeStartEnvironmentCleanup,
   wouldCleanupEnvironment,
 } from "../../services/environment-cleanup.js";
 import {
@@ -313,7 +313,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       threadId: thread.id,
     });
     if (thread.status !== "active" && shouldEvaluateCleanupAfterArchiveNow) {
-      cleanupEnvironmentAfterThreadRemoval(deps, thread.environmentId);
+      maybeStartEnvironmentCleanup(deps, thread.environmentId);
     }
     return context.json({ ok: true });
   });

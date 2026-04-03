@@ -24,8 +24,8 @@ import {
 } from "../services/thread-events.js";
 import { queueThreadStartCommand } from "../services/thread-commands.js";
 import {
-  cleanupEnvironmentAfterThreadRemoval,
   evaluateManagedEnvironmentArchiveCleanup,
+  maybeStartEnvironmentCleanup,
   queueEnvironmentDestroyCommand,
 } from "../services/environment-cleanup.js";
 import { tryTransition } from "../services/thread-transitions.js";
@@ -249,7 +249,7 @@ async function finalizeStoppedThread(
   if (finalizedThread.deletedAt !== null) {
     const environmentId = finalizedThread.environmentId;
     deleteThread(deps.db, deps.hub, finalizedThread.id);
-    cleanupEnvironmentAfterThreadRemoval(deps, environmentId);
+    maybeStartEnvironmentCleanup(deps, environmentId);
     return;
   }
 

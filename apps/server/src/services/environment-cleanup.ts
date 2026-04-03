@@ -90,7 +90,7 @@ function workspaceHasRiskyChanges(
   );
 }
 
-function authorizeEnvironmentCleanup(
+export function maybeStartEnvironmentCleanup(
   deps: Pick<AppDeps, "db" | "hub">,
   environmentId: string | null | undefined,
 ): void {
@@ -221,7 +221,7 @@ export async function evaluateManagedEnvironmentArchiveCleanup(
   }
 
   if (environment.status !== "ready" || !environment.path) {
-    authorizeEnvironmentCleanup(deps, environment.id);
+    maybeStartEnvironmentCleanup(deps, environment.id);
     return;
   }
 
@@ -261,12 +261,5 @@ export async function evaluateManagedEnvironmentArchiveCleanup(
     return;
   }
 
-  authorizeEnvironmentCleanup(deps, environment.id);
-}
-
-export function cleanupEnvironmentAfterThreadRemoval(
-  deps: Pick<AppDeps, "db" | "hub">,
-  environmentId: string | null | undefined,
-): void {
-  authorizeEnvironmentCleanup(deps, environmentId);
+  maybeStartEnvironmentCleanup(deps, environment.id);
 }

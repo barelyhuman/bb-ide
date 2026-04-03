@@ -7,7 +7,7 @@ import {
 } from "@bb/db";
 import type { HostDaemonActiveThread } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../types.js";
-import { cleanupEnvironmentAfterThreadRemoval } from "../services/environment-cleanup.js";
+import { maybeStartEnvironmentCleanup } from "../services/environment-cleanup.js";
 import { requestThreadStop } from "../services/thread-stop.js";
 import { tryTransition } from "../services/thread-transitions.js";
 
@@ -61,7 +61,7 @@ export function reconcileSessionThreads(
     if (thread.deletedAt !== null && !isActive) {
       const environmentId = thread.environmentId;
       deleteThread(deps.db, deps.hub, thread.id);
-      cleanupEnvironmentAfterThreadRemoval(deps, environmentId);
+      maybeStartEnvironmentCleanup(deps, environmentId);
     }
   }
 
