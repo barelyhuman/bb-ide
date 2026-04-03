@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createDeferredPromise } from "@bb/test-helpers";
 import { Workspace } from "../src/workspace.js";
 import { WorkspaceError } from "../src/git.js";
 import { runGit } from "../src/git.js";
@@ -277,25 +278,6 @@ async function importWatchWorkspaceStatusWithPersistentWorkspaceSubscriptionFail
 function createMockWatcherSubscription(): ParcelWatcherSubscribeResult {
   return {
     unsubscribe: async () => undefined,
-  };
-}
-
-function createDeferredPromise<T>(): {
-  promise: Promise<T>;
-  resolve: (value: T | PromiseLike<T>) => void;
-} {
-  let resolve:
-    | ((value: T | PromiseLike<T>) => void)
-    | null = null;
-  const promise = new Promise<T>((promiseResolve) => {
-    resolve = promiseResolve;
-  });
-  if (!resolve) {
-    throw new Error("Failed to create deferred promise");
-  }
-  return {
-    promise,
-    resolve,
   };
 }
 

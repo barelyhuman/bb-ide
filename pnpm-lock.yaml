@@ -254,6 +254,9 @@ importers:
         specifier: ^8.19.0
         version: 8.19.0
     devDependencies:
+      '@bb/test-helpers':
+        specifier: workspace:*
+        version: link:../../packages/test-helpers
       '@bb/tsconfig':
         specifier: workspace:*
         version: link:../../packages/tsconfig
@@ -722,6 +725,9 @@ importers:
         specifier: 2.5.6
         version: 2.5.6
     devDependencies:
+      '@bb/test-helpers':
+        specifier: workspace:*
+        version: link:../test-helpers
       '@bb/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig

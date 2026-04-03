@@ -1,4 +1,3 @@
-import parcelWatcher from "@parcel/watcher";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { calculateExponentialBackoffDelay } from "@bb/domain";
@@ -25,10 +24,14 @@ export interface WorkspaceStatusWatchArgs {
   onWatchError: WorkspaceStatusWatchErrorCallback;
 }
 
-type ParcelWatcherSubscribe = typeof parcelWatcher.subscribe;
+type ParcelWatcherModule = typeof import("@parcel/watcher");
+type ParcelWatcherSubscribe = ParcelWatcherModule["subscribe"];
+type ParcelWatcherCallback = Parameters<ParcelWatcherSubscribe>[1];
 type ParcelWatcherAsyncSubscription = Awaited<
   ReturnType<ParcelWatcherSubscribe>
 >;
+type ParcelWatcherError = Parameters<ParcelWatcherCallback>[0];
+type ParcelWatcherEventBatch = Parameters<ParcelWatcherCallback>[1];
 type ParcelWatcherOptions = Parameters<ParcelWatcherSubscribe>[2];
 
 interface GitMetadataLayout {
@@ -41,6 +44,8 @@ interface WatchSubscriptionSpec {
   rootPath: string;
 }
 
+let parcelWatcherModulePromise: Promise<ParcelWatcherModule> | null = null;
+
 function trimOutput(value: string): string {
   return value.trim().replace(/\n+$/u, "");
 }
@@ -50,6 +55,13 @@ function toErrorMessage(error: unknown): string {
     return error.message;
   }
   return "Unknown watch error";
+}
+
+function loadParcelWatcher(): Promise<ParcelWatcherModule> {
+  if (parcelWatcherModulePromise === null) {
+    parcelWatcherModulePromise = import("@parcel/watcher");
+  }
+  return parcelWatcherModulePromise;
 }
 
 async function resolveGitDirectory(cwd: string): Promise<string | undefined> {
@@ -270,9 +282,10 @@ export function watchWorkspaceStatus(
         return;
       }
       try {
+        const parcelWatcher = await loadParcelWatcher();
         const subscription = await parcelWatcher.subscribe(
           spec.rootPath,
-          (error, events) => {
+          (error: ParcelWatcherError, events: ParcelWatcherEventBatch) => {
             if (disposed) {
               return;
             }

@@ -44,57 +44,29 @@ interface BufferedEnvironmentChangeEntry {
 
 interface ScheduledEntryArgs {
   delayMs: number;
-  change: HostDaemonEnvironmentChangePayload;
+  key: string;
 }
 
 interface FlushEntryArgs {
-  change: HostDaemonEnvironmentChangePayload;
+  key: string;
 }
 
 function shouldRetryEnvironmentChangeError(error: unknown): boolean {
   return !(error instanceof AbortError);
 }
 
+function toEnvironmentChangeKey(change: HostDaemonEnvironmentChangePayload): string {
+  return `${change.environmentId}:${change.change}`;
+}
+
 export function createBufferedEnvironmentChangeReporter(
   args: BufferedEnvironmentChangeReporterArgs,
 ) {
   let disposed = false;
-  const entries = new Map<
-    string,
-    Map<HostDaemonEnvironmentChangePayload["change"], BufferedEnvironmentChangeEntry>
-  >();
-
-  function getEntry(
-    change: HostDaemonEnvironmentChangePayload,
-  ): BufferedEnvironmentChangeEntry | undefined {
-    return entries.get(change.environmentId)?.get(change.change);
-  }
-
-  function setEntry(
-    change: HostDaemonEnvironmentChangePayload,
-    entry: BufferedEnvironmentChangeEntry,
-  ): void {
-    let environmentEntries = entries.get(change.environmentId);
-    if (!environmentEntries) {
-      environmentEntries = new Map();
-      entries.set(change.environmentId, environmentEntries);
-    }
-    environmentEntries.set(change.change, entry);
-  }
-
-  function deleteEntry(change: HostDaemonEnvironmentChangePayload): void {
-    const environmentEntries = entries.get(change.environmentId);
-    if (!environmentEntries) {
-      return;
-    }
-    environmentEntries.delete(change.change);
-    if (environmentEntries.size === 0) {
-      entries.delete(change.environmentId);
-    }
-  }
+  const entries = new Map<string, BufferedEnvironmentChangeEntry>();
 
   function scheduleEntry(scheduledEntryArgs: ScheduledEntryArgs): void {
-    const entry = getEntry(scheduledEntryArgs.change);
+    const entry = entries.get(scheduledEntryArgs.key);
     if (!entry || disposed) {
       return;
     }
@@ -104,13 +76,13 @@ export function createBufferedEnvironmentChangeReporter(
     entry.timer = setTimeout(() => {
       entry.timer = null;
       void flushEntry({
-        change: scheduledEntryArgs.change,
+        key: scheduledEntryArgs.key,
       });
     }, scheduledEntryArgs.delayMs);
   }
 
   async function flushEntry(payload: FlushEntryArgs): Promise<void> {
-    const entry = getEntry(payload.change);
+    const entry = entries.get(payload.key);
     if (!entry || entry.inflight || disposed) {
       return;
     }
@@ -120,7 +92,7 @@ export function createBufferedEnvironmentChangeReporter(
       if (disposed) {
         return;
       }
-      if (getEntry(payload.change) !== entry) {
+      if (entries.get(payload.key) !== entry) {
         return;
       }
       entry.inflight = false;
@@ -129,16 +101,16 @@ export function createBufferedEnvironmentChangeReporter(
         entry.dirtyWhileInflight = false;
         scheduleEntry({
           delayMs: args.debounceMs ?? ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS,
-          change: payload.change,
+          key: payload.key,
         });
         return;
       }
-      deleteEntry(payload.change);
+      entries.delete(payload.key);
     } catch (error) {
       if (disposed) {
         return;
       }
-      if (getEntry(payload.change) !== entry) {
+      if (entries.get(payload.key) !== entry) {
         return;
       }
       entry.inflight = false;
@@ -150,8 +122,8 @@ export function createBufferedEnvironmentChangeReporter(
           },
           "Dropping environment change after permanent failure",
         );
-        if (getEntry(payload.change) === entry) {
-          deleteEntry(payload.change);
+        if (entries.get(payload.key) === entry) {
+          entries.delete(payload.key);
         }
         return;
       }
@@ -172,7 +144,7 @@ export function createBufferedEnvironmentChangeReporter(
             args.retryMaxDelayMs ??
             ENVIRONMENT_CHANGE_REPORT_MAX_RETRY_DELAY_MS,
         }),
-        change: payload.change,
+        key: payload.key,
       });
     }
   }
@@ -182,14 +154,15 @@ export function createBufferedEnvironmentChangeReporter(
       if (disposed) {
         return;
       }
-      const existingEntry = getEntry(change);
+      const key = toEnvironmentChangeKey(change);
+      const existingEntry = entries.get(key);
       if (existingEntry) {
         if (existingEntry.inflight) {
           existingEntry.dirtyWhileInflight = true;
         }
         return;
       }
-      setEntry(change, {
+      entries.set(key, {
         change,
         dirtyWhileInflight: false,
         inflight: false,
@@ -198,18 +171,16 @@ export function createBufferedEnvironmentChangeReporter(
       });
       scheduleEntry({
         delayMs: args.debounceMs ?? ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS,
-        change,
+        key,
       });
     },
     dispose(): void {
       disposed = true;
-      for (const environmentEntries of entries.values()) {
-        for (const entry of environmentEntries.values()) {
-          if (entry.timer === null) {
-            continue;
-          }
-          clearTimeout(entry.timer);
+      for (const entry of entries.values()) {
+        if (entry.timer === null) {
+          continue;
         }
+        clearTimeout(entry.timer);
       }
       entries.clear();
     },

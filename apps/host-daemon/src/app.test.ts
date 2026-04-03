@@ -3,34 +3,14 @@ import {
   createBufferedEnvironmentChangeReporter,
   createCommandFetchLoop,
 } from "./app.js";
+import {
+  createDeferredPromise,
+} from "@bb/test-helpers";
 import type { HostDaemonEnvironmentChangePayload } from "@bb/host-daemon-contract";
 import { AbortError } from "p-retry";
 
 interface FetchCommandsArgs {
   afterCursor: number;
-}
-
-interface DeferredPromise<T> {
-  promise: Promise<T>;
-  reject: (reason?: unknown) => void;
-  resolve: (value: T | PromiseLike<T>) => void;
-}
-
-function createDeferredPromise<T>(): DeferredPromise<T> {
-  let reject: DeferredPromise<T>["reject"] | null = null;
-  let resolve: DeferredPromise<T>["resolve"] | null = null;
-  const promise = new Promise<T>((promiseResolve, promiseReject) => {
-    resolve = promiseResolve;
-    reject = promiseReject;
-  });
-  if (!resolve || !reject) {
-    throw new Error("Failed to create deferred promise");
-  }
-  return {
-    promise,
-    reject,
-    resolve,
-  };
 }
 
 function createLogger() {
