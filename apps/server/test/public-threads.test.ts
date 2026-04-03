@@ -13,6 +13,7 @@ import {
   getDraft,
   getEnvironment,
   getHost,
+  openSession,
   listHosts,
   getThread,
   hostDaemonCommands,
@@ -651,7 +652,7 @@ describe("public thread routes", () => {
         hostName: expect.stringMatching(/^sandbox-/u),
         sandboxType: "e2b",
         serverUrl: "https://bb.example.test",
-        template: undefined,
+        template: "test-e2b-template",
       });
 
       const environment = getEnvironment(harness.db, createdThread.environmentId);
@@ -743,6 +744,8 @@ describe("public thread routes", () => {
   });
 
   it.each([
+    "https://localhost:3000",
+    "https://127.0.0.1:3000",
     "https://0.0.0.0:3000",
     "https://[::1]:3000",
   ])("rejects unreachable sandbox public URLs: %s", async (publicUrl) => {
@@ -783,6 +786,51 @@ describe("public thread routes", () => {
         code: "invalid_request",
         message:
           "Sandbox provisioning requires BB_PUBLIC_URL to be reachable from the internet",
+      });
+      expect(provisionHostMock).not.toHaveBeenCalled();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects sandbox-host threads when no sandbox template is configured", async () => {
+    const harness = await createTestAppHarness({
+      e2bTemplate: "",
+      githubPat: "test-github-pat",
+    });
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = createProject(harness.db, harness.hub, {
+        name: "Cloud Sandbox Project",
+        source: {
+          repoUrl: "https://github.com/example/repo.git",
+          type: "github_repo",
+        },
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          type: "standard",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Provision a sandbox thread" }],
+          environment: {
+            type: "sandbox-host",
+            sandboxType: "e2b",
+          },
+        }),
+      });
+
+      expect(response.status).toBe(501);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "not_configured",
+        message:
+          "Sandbox provisioning requires E2B_TEMPLATE to be configured or packages/sandbox-image/templates.json to contain a current build",
       });
       expect(provisionHostMock).not.toHaveBeenCalled();
     } finally {

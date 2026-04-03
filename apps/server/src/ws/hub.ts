@@ -26,6 +26,12 @@ interface ThreadEventWaiter {
   timeout: ReturnType<typeof setTimeout>;
 }
 
+interface HostEventWaiter {
+  reject: (reason?: unknown) => void;
+  resolve: (notified: boolean) => void;
+  timeout: ReturnType<typeof setTimeout>;
+}
+
 interface CommandResultWaiter {
   reject: (reason?: unknown) => void;
   resolve: (result: unknown) => void;
@@ -44,6 +50,7 @@ export class NotificationHub implements DbNotifier {
   private readonly commandWaiters = new Map<string, Set<CommandWaiter>>();
   private readonly daemonSessions = new Map<string, { hostId: string; socket: HubSocket }>();
   private readonly daemonSessionIdsByHost = new Map<string, string>();
+  private readonly hostEventWaiters = new Set<HostEventWaiter>();
   private readonly pendingDaemonDisconnects = new Map<
     string,
     ReturnType<typeof setTimeout>
@@ -204,6 +211,20 @@ export class NotificationHub implements DbNotifier {
     return promise;
   }
 
+  async waitForHostEvent(timeoutMs: number): Promise<boolean> {
+    return new Promise<boolean>((resolve, reject) => {
+      const waiter: HostEventWaiter = {
+        reject,
+        resolve: (notified) => resolve(notified),
+        timeout: setTimeout(() => {
+          this.deleteHostEventWaiter(waiter);
+          resolve(false);
+        }, timeoutMs),
+      };
+      this.hostEventWaiters.add(waiter);
+    });
+  }
+
   registerThreadEventWaiter(
     threadId: string,
     timeoutMs: number,
@@ -303,6 +324,12 @@ export class NotificationHub implements DbNotifier {
       entity: "host",
       changes,
     });
+
+    for (const waiter of this.hostEventWaiters) {
+      clearTimeout(waiter.timeout);
+      waiter.resolve(true);
+    }
+    this.hostEventWaiters.clear();
   }
 
   notifySystem(changes: SystemChangeKind[]): void {
@@ -338,6 +365,11 @@ export class NotificationHub implements DbNotifier {
     if (waiters.size === 0) {
       this.threadEventWaiters.delete(threadId);
     }
+  }
+
+  private deleteHostEventWaiter(waiter: HostEventWaiter): void {
+    clearTimeout(waiter.timeout);
+    this.hostEventWaiters.delete(waiter);
   }
 
   private deleteCommandWaiter(hostId: string, waiter: CommandWaiter): void {

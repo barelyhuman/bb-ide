@@ -1,4 +1,3 @@
-import { setTimeout as delay } from "node:timers/promises";
 import {
   getActiveSession,
   getHost,
@@ -13,7 +12,7 @@ import { ApiError } from "../errors.js";
 import { buildSandboxDaemonEnv } from "./sandbox-daemon-env.js";
 
 const DEFAULT_SESSION_WAIT_TIMEOUT_MS = 60_000;
-const SESSION_WAIT_INTERVAL_MS = 2_000;
+const pendingHostDestroys = new Map<string, Promise<void>>();
 
 export interface WaitForHostSessionOptions {
   timeoutMs?: number;
@@ -24,7 +23,7 @@ function toOptionalConfigString(value: string): string | undefined {
 }
 
 export async function waitForHostSession(
-  deps: Pick<AppDeps, "db">,
+  deps: Pick<AppDeps, "db" | "hub">,
   hostId: string,
   options: WaitForHostSessionOptions = {},
 ) {
@@ -36,14 +35,15 @@ export async function waitForHostSession(
     if (session) {
       return session;
     }
-    if (Date.now() >= deadline) {
+    const remainingMs = deadline - Date.now();
+    if (remainingMs <= 0) {
       throw new ApiError(
         504,
         "host_connection_timeout",
         "Sandbox host did not connect back to the server in time",
       );
     }
-    await delay(SESSION_WAIT_INTERVAL_MS);
+    await deps.hub.waitForHostEvent(remainingMs);
   }
 }
 
@@ -52,7 +52,7 @@ async function loadSandboxHost(
   hostId: string,
 ) {
   const host = getHost(deps.db, hostId);
-  if (host?.destroyedAt !== null) {
+  if (!host || host.destroyedAt !== null) {
     deps.sandboxRegistry.remove(hostId);
     return null;
   }
@@ -109,8 +109,26 @@ export async function destroyHost(
   deps: Pick<AppDeps, "config" | "db" | "hub" | "sandboxRegistry">,
   hostId: string,
 ): Promise<void> {
+  const pendingDestroy = pendingHostDestroys.get(hostId);
+  if (pendingDestroy) {
+    return pendingDestroy;
+  }
+
+  const destroyPromise = destroyHostInternal(deps, hostId).finally(() => {
+    if (pendingHostDestroys.get(hostId) === destroyPromise) {
+      pendingHostDestroys.delete(hostId);
+    }
+  });
+  pendingHostDestroys.set(hostId, destroyPromise);
+  return destroyPromise;
+}
+
+async function destroyHostInternal(
+  deps: Pick<AppDeps, "config" | "db" | "hub" | "sandboxRegistry">,
+  hostId: string,
+): Promise<void> {
   const hostRecord = getHost(deps.db, hostId);
-  if (hostRecord?.destroyedAt !== null) {
+  if (!hostRecord || hostRecord.destroyedAt !== null) {
     deps.sandboxRegistry.remove(hostId);
     return;
   }

@@ -13,18 +13,15 @@ import {
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
+import type { HostDaemonLocalApiConfig } from "./local-api-config.js";
 
 const execFileAsync = promisify(execFile);
 
 export interface StartLocalApiServerOptions {
   hostId: string;
-  bindHost?: string;
-  healthPath?: string;
-  healthValue?: string;
-  port: number;
+  localApiConfig: HostDaemonLocalApiConfig;
   serverUrl: string;
   getConnected: () => boolean;
-  mode?: "full" | "health-only";
   openPath?: (path: string) => Promise<void>;
   pickFolder?: () => Promise<string | null>;
   listActiveThreads: () => HostDaemonActiveThread[];
@@ -41,16 +38,14 @@ export interface LocalApiServer {
 export async function startLocalApiServer(
   options: StartLocalApiServerOptions,
 ): Promise<LocalApiServer> {
-  const bindHost = options.bindHost ?? "localhost";
-  const healthPath = options.healthPath ?? "/health";
   const app = new Hono();
   app.use("*", cors());
 
-  app.get(healthPath, (c) =>
-    c.text(healthResponseSchema.parse(options.healthValue ?? "ok")),
+  app.get(options.localApiConfig.healthPath, (c) =>
+    c.text(healthResponseSchema.parse(options.localApiConfig.healthValue)),
   );
   app.use("*", async (c, next) => {
-    if (options.mode === "health-only") {
+    if (options.localApiConfig.mode === "health-only") {
       return c.notFound();
     }
     await next();
@@ -95,14 +90,18 @@ export async function startLocalApiServer(
     port: number;
   }>((resolve, reject) => {
     const s = serve(
-      { fetch: app.fetch, port: options.port, hostname: bindHost },
+      {
+        fetch: app.fetch,
+        port: options.localApiConfig.port,
+        hostname: options.localApiConfig.bindHost,
+      },
       (info) => resolve({ server: s, port: info.port }),
     );
     s.on("error", reject);
   });
 
   return {
-    bindHost,
+    bindHost: options.localApiConfig.bindHost,
     port: boundPort,
     async close(): Promise<void> {
       await new Promise<void>((resolve, reject) => {

@@ -7,17 +7,21 @@ import { createHostDaemonApp } from "./app.js";
 import type { HostDaemon } from "./daemon.js";
 import { loadHostIdentity } from "./identity.js";
 import { acquireDaemonLock } from "./lock.js";
+import {
+  resolveHostDaemonLocalApiConfig,
+  type HostDaemonLocalApiOverrides,
+} from "./local-api-config.js";
 import { restartHostDaemon } from "./restart.js";
-import { prepareRuntimeShellEnv } from "./runtime-shell-env.js";
 import type { CreateReconnectingWebSocket } from "./server-connection.js";
 
 export interface StartHostDaemonOptions {
   dataDir?: string;
   serverUrl?: string;
   authToken?: string;
+  bridgeBundleDir?: string;
   hostType?: HostType;
   enableLocalApi?: boolean;
-  localApiPort?: number;
+  localApi?: HostDaemonLocalApiOverrides;
   createInstanceId?: () => string;
   acquireLock?: typeof acquireDaemonLock;
   loadIdentity?: typeof loadHostIdentity;
@@ -37,36 +41,39 @@ export async function startHostDaemon(
   const serverUrl = options.serverUrl ?? hostDaemonConfig.BB_SERVER_URL;
   const authToken = options.authToken ?? commonConfig.BB_SECRET_TOKEN;
   const hostType = options.hostType ?? "persistent";
-  const enableLocalApi = options.enableLocalApi ?? hostType === "persistent";
-  const localApiPort =
-    options.localApiPort ?? hostDaemonConfig.BB_HOST_DAEMON_PORT;
+  const enableLocalApi = options.enableLocalApi ?? true;
+  const localApiConfig = enableLocalApi
+    ? resolveHostDaemonLocalApiConfig({
+      hostType,
+      localApi: options.localApi,
+    })
+    : null;
   const releaseLock = await (options.acquireLock ?? acquireDaemonLock)(dataDir);
 
   let app: Awaited<ReturnType<typeof createHostDaemonApp>> | undefined;
   try {
     const identity = await (options.loadIdentity ?? loadHostIdentity)({ dataDir });
     const instanceId = (options.createInstanceId ?? randomUUID)();
-    const runtimeShellEnv = await prepareRuntimeShellEnv({
-      serverUrl,
-      localApiPort,
-    });
     app = await createHostDaemonApp({
       dataDir,
       serverUrl,
       authToken,
+      bridgeBundleDir: options.bridgeBundleDir,
       hostType,
       hostId: identity.hostId,
       hostName: identity.hostName,
       instanceId,
-      logger: createLogger({ component: "host-daemon", base: { serverUrl } }),
+      logger: createLogger({
+        component: "host-daemon",
+        base: { serverUrl },
+        transportMode: hostType === "ephemeral" ? "stream" : "worker",
+      }),
       releaseLock,
       restart: () =>
         (options.restartProcess ?? restartHostDaemon)({
           releaseLock,
         }),
-      enableLocalApi,
-      localApiPort,
-      runtimeShellEnv,
+      localApiConfig,
       adapterFactory: options.adapterFactory,
       onToolCall: options.onToolCall,
       openPath: options.openPath,

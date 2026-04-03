@@ -32,11 +32,13 @@ async function main(): Promise<void> {
     daemon = await startHostDaemon({
       enableLocalApi: true,
       hostType: "ephemeral",
-      localApiBindHost: "127.0.0.1",
-      localApiHealthPath: healthConfig.path,
-      localApiHealthValue: healthConfig.value,
-      localApiMode: "health-only",
-      localApiPort: healthConfig.port,
+      localApi: {
+        bindHost: "127.0.0.1",
+        healthPath: healthConfig.path,
+        healthValue: healthConfig.value,
+        mode: "health-only",
+        port: healthConfig.port,
+      },
     });
     await daemon.waitUntilStopped();
   } catch (error) {

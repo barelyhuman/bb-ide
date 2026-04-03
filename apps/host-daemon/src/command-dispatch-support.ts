@@ -1,4 +1,8 @@
-import { createAgentRuntime, listAvailableProviders } from "@bb/agent-runtime";
+import {
+  createAgentRuntime,
+  listAvailableProviders,
+  type AgentRuntime,
+} from "@bb/agent-runtime";
 import type {
   AvailableModel,
   ProviderInfo,
@@ -38,6 +42,32 @@ export class CommandDispatchError extends Error {
   ) {
     super(message);
     this.name = "CommandDispatchError";
+  }
+}
+
+let defaultModelListRuntime: AgentRuntime | null = null;
+
+function getDefaultModelListRuntime(): AgentRuntime {
+  if (defaultModelListRuntime) {
+    return defaultModelListRuntime;
+  }
+
+  defaultModelListRuntime = createAgentRuntime({
+    workspacePath: process.cwd(),
+    onEvent: () => {},
+    onToolCall: async () => ({
+      contentItems: [],
+      success: true,
+    }),
+  });
+  return defaultModelListRuntime;
+}
+
+export async function shutdownDefaultListModelsRuntime(): Promise<void> {
+  const runtime = defaultModelListRuntime;
+  defaultModelListRuntime = null;
+  if (runtime) {
+    await runtime.shutdown();
   }
 }
 
@@ -91,15 +121,7 @@ export function defaultListProviders(): ProviderInfo[] {
 export async function defaultListModels(
   providerId: string,
 ): Promise<AvailableModel[]> {
-  const runtime = createAgentRuntime({
-    workspacePath: process.cwd(),
-    onEvent: () => {},
-    onToolCall: async () => ({
-      contentItems: [],
-      success: true,
-    }),
-  });
-
+  const runtime = getDefaultModelListRuntime();
   try {
     return await runtime.listModels({ providerId });
   } catch (error) {
@@ -107,7 +129,5 @@ export async function defaultListModels(
       throw new CommandDispatchError("unknown_provider", error.message);
     }
     throw error;
-  } finally {
-    await runtime.shutdown();
   }
 }

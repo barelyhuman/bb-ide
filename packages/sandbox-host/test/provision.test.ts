@@ -303,6 +303,29 @@ describe("sandbox host provisioning", () => {
     expect(host.externalId).toBe("sandbox-123");
   });
 
+  it("resumes an existing sandbox without rewriting bundles when the daemon is already healthy", async () => {
+    const sandbox = createMockSandbox();
+    sandbox.commands.run.mockResolvedValueOnce({
+      stdout: `${SANDBOX_DAEMON_HEALTH_RESPONSE}\n`,
+    });
+    sandboxConnectMock.mockResolvedValue(sandbox);
+
+    const host = await resumeHost({
+      authToken: "secret-token",
+      daemonArtifacts: testDaemonArtifacts,
+      daemonEnv: {},
+      externalId: "sandbox-123",
+      hostId: "host-123",
+      hostName: "sandbox-123",
+      serverUrl: "https://bb.example.test",
+    });
+
+    expect(sandbox.commands.run).toHaveBeenCalledTimes(1);
+    expect(sandbox.commands.run).toHaveBeenCalledWith("curl -sf http://127.0.0.1:9111/health", {});
+    expect(sandbox.files.write).not.toHaveBeenCalled();
+    expect(host.externalId).toBe("sandbox-123");
+  });
+
   it("destroys the resumed sandbox if daemon restart never becomes healthy", async () => {
     const sandbox = createMockSandbox();
     sandbox.commands.run

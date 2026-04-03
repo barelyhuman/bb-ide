@@ -60,7 +60,7 @@ export function buildPiAvailableModels<TProvider extends string>(
   );
 }
 
-function toCanonicalPiModelId(provider: string, modelId: string): string {
+export function toCanonicalPiModelId(provider: string, modelId: string): string {
   return modelId.includes("/") ? modelId : `${provider}/${modelId}`;
 }
 

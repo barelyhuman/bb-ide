@@ -191,6 +191,21 @@ describe("host lifecycle", () => {
     }
   });
 
+  it("returns host_not_found when resuming a missing sandbox host", async () => {
+    const harness = await createTestAppHarness({ e2bApiKey: "" });
+    try {
+      await expect(resumeSuspendedHost(harness.deps, "host-missing")).rejects.toMatchObject({
+        body: {
+          code: "host_not_found",
+        },
+        status: 404,
+      });
+      expect(resumeHostMock).not.toHaveBeenCalled();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("deduplicates concurrent sandbox host resumes", async () => {
     const harness = await createTestAppHarness({ e2bApiKey: "" });
     try {
@@ -279,6 +294,62 @@ describe("host lifecycle", () => {
       expect(getHost(harness.db, host.id)).toMatchObject({
         destroyedAt: expect.any(Number),
         externalId: "sandbox-uncached-destroy",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("silently clears missing hosts from the sandbox registry during destroy", async () => {
+    const harness = await createTestAppHarness({ e2bApiKey: "" });
+    try {
+      const cachedHost = createMockSandboxHost("host-missing");
+      harness.deps.sandboxRegistry.set("host-missing", cachedHost);
+
+      await expect(destroyHost(harness.deps, "host-missing")).resolves.toBeUndefined();
+
+      expect(harness.deps.sandboxRegistry.get("host-missing")).toBeUndefined();
+      expect(cachedHost.destroy).not.toHaveBeenCalled();
+      expect(resumeSandboxMock).not.toHaveBeenCalled();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("deduplicates concurrent sandbox host destroys", async () => {
+    const harness = await createTestAppHarness({ e2bApiKey: "" });
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-concurrent-destroy",
+        id: "host-concurrent-destroy",
+        name: "Concurrent Destroy Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      let resolveKill: (() => void) | null = null;
+      const killPromise = new Promise<void>((resolve) => {
+        resolveKill = resolve;
+      });
+      const resumedSandbox = {
+        kill: vi.fn().mockImplementation(async () => killPromise),
+      };
+      resumeSandboxMock.mockResolvedValue(resumedSandbox);
+
+      const firstDestroy = destroyHost(harness.deps, host.id);
+      const secondDestroy = destroyHost(harness.deps, host.id);
+      await Promise.resolve();
+
+      expect(resumeSandboxMock).toHaveBeenCalledTimes(1);
+      expect(resumedSandbox.kill).toHaveBeenCalledTimes(1);
+
+      if (!resolveKill) {
+        throw new Error("Expected destroy to start kill");
+      }
+      resolveKill();
+
+      await Promise.all([firstDestroy, secondDestroy]);
+      expect(getHost(harness.db, host.id)).toMatchObject({
+        destroyedAt: expect.any(Number),
       });
     } finally {
       await harness.cleanup();

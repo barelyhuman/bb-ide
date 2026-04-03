@@ -23,6 +23,7 @@ import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
 import { waitForHostSession } from "./host-lifecycle.js";
 import { buildSandboxDaemonEnv } from "./sandbox-daemon-env.js";
+import { hasConfiguredSandboxTemplate } from "./sandbox-config.js";
 import { appendClientTurnEvent, appendProvisioningEvent, buildCwdBranchEntries } from "./thread-events.js";
 import { buildExecutionOptions, queueThreadStartCommand } from "./thread-commands.js";
 import { generateThreadTitle } from "./title-generation.js";
@@ -242,6 +243,13 @@ async function createSandboxHostThread(
       501,
       "not_configured",
       "Sandbox provisioning requires E2B_API_KEY to be configured",
+    );
+  }
+  if (!hasConfiguredSandboxTemplate(deps.config)) {
+    throw new ApiError(
+      501,
+      "not_configured",
+      "Sandbox provisioning requires E2B_TEMPLATE to be configured or packages/sandbox-image/templates.json to contain a current build",
     );
   }
   if (!deps.config.githubPat) {

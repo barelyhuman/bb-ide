@@ -20,6 +20,8 @@ function resolveHostDaemonDistPath(fileName: string): string {
   return resolve(resolveWorkspaceRoot(), "apps", "host-daemon", "dist", fileName);
 }
 
+let sandboxDaemonArtifactsPromise: Promise<SandboxDaemonArtifacts> | null = null;
+
 async function readBundleArtifact(
   artifact: LocalSandboxDaemonArtifact,
 ): Promise<string> {
@@ -33,22 +35,31 @@ async function readBundleArtifact(
 }
 
 export async function loadSandboxDaemonArtifacts(): Promise<SandboxDaemonArtifacts> {
-  const daemon = await readBundleArtifact({
-    label: "daemon",
-    localPath: resolveHostDaemonDistPath("daemon-bundle.mjs"),
-  });
-  const claudeCodeBridge = await readBundleArtifact({
-    label: "claude-code bridge",
-    localPath: resolveHostDaemonDistPath("bb-claude-code-bridge.mjs"),
-  });
-  const piBridge = await readBundleArtifact({
-    label: "pi bridge",
-    localPath: resolveHostDaemonDistPath("bb-pi-bridge.mjs"),
-  });
+  if (!sandboxDaemonArtifactsPromise) {
+    sandboxDaemonArtifactsPromise = Promise.all([
+      readBundleArtifact({
+        label: "daemon",
+        localPath: resolveHostDaemonDistPath("daemon-bundle.mjs"),
+      }),
+      readBundleArtifact({
+        label: "claude-code bridge",
+        localPath: resolveHostDaemonDistPath("bb-claude-code-bridge.mjs"),
+      }),
+      readBundleArtifact({
+        label: "pi bridge",
+        localPath: resolveHostDaemonDistPath("bb-pi-bridge.mjs"),
+      }),
+    ])
+      .then(([daemon, claudeCodeBridge, piBridge]) => ({
+        claudeCodeBridge,
+        daemon,
+        piBridge,
+      }))
+      .catch((error: unknown) => {
+        sandboxDaemonArtifactsPromise = null;
+        throw error;
+      });
+  }
 
-  return {
-    claudeCodeBridge,
-    daemon,
-    piBridge,
-  };
+  return sandboxDaemonArtifactsPromise;
 }

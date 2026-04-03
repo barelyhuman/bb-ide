@@ -2,7 +2,12 @@ import { CommandRouter } from "./command-router.js";
 import { createDaemon, type HostDaemon } from "./daemon.js";
 import { createEventBuffer, type EventBuffer } from "./event-buffer.js";
 import { createBufferedEnvironmentChangeReporter } from "./environment-change-reporter.js";
+import {
+  defaultListModels,
+  shutdownDefaultListModelsRuntimes,
+} from "./command-dispatch-support.js";
 import { startLocalApiServer, type LocalApiServer } from "./local-api.js";
+import type { HostDaemonLocalApiConfig } from "./local-api-config.js";
 import type { HostDaemonLogger } from "./logger.js";
 import { RuntimeManager } from "./runtime-manager.js";
 import { createServerClient } from "./server-client.js";
@@ -22,12 +27,14 @@ const ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS = 150;
 const ENVIRONMENT_CHANGE_REPORT_RETRY_DELAY_MS = 1_000;
 const ENVIRONMENT_CHANGE_REPORT_MAX_RETRY_DELAY_MS = 30_000;
 
-export function createCommandFetchLoop(args: {
-  logger: HostDaemonLogger;
-  fetchCommands: () => Promise<unknown[]>;
-  handleCommands: (commands: unknown[]) => Promise<void>;
-  retryDelayMs?: number;
-}) {
+export function createCommandFetchLoop<Command>(
+  args: {
+    logger: HostDaemonLogger;
+    fetchCommands: () => Promise<Command[]>;
+    handleCommands: (commands: Command[]) => Promise<void>;
+    retryDelayMs?: number;
+  },
+) {
   let fetchRequested = false;
   let fetchPromise: Promise<void> | null = null;
 
@@ -77,6 +84,7 @@ export interface CreateHostDaemonAppOptions {
   dataDir: string;
   serverUrl: string;
   authToken: string;
+  bridgeBundleDir?: string;
   hostType: HostType;
   hostId: string;
   hostName: string;
@@ -84,13 +92,7 @@ export interface CreateHostDaemonAppOptions {
   logger: HostDaemonLogger;
   releaseLock: () => Promise<void>;
   restart: () => Promise<void>;
-  enableLocalApi: boolean;
-  localApiBindHost?: StartLocalApiServerOptions["bindHost"];
-  localApiHealthPath?: StartLocalApiServerOptions["healthPath"];
-  localApiHealthValue?: StartLocalApiServerOptions["healthValue"];
-  localApiMode?: StartLocalApiServerOptions["mode"];
-  localApiPort: number;
-  runtimeShellEnv?: AgentRuntimeOptions["shellEnv"];
+  localApiConfig: HostDaemonLocalApiConfig | null;
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
   onToolCall?: (request: ToolCallRequest) => Promise<ToolCallResponse>;
   openPath?: (path: string) => Promise<void>;
@@ -143,7 +145,7 @@ export async function createHostDaemonApp(
 
   const runtimeManager = new RuntimeManager({
     adapterFactory: options.adapterFactory,
-    shellEnv: options.runtimeShellEnv,
+    bridgeBundleDir: options.bridgeBundleDir,
     onEvent: ({ environmentId, event }) => {
       eventBuffer.push({
         environmentId,
@@ -172,6 +174,10 @@ export async function createHostDaemonApp(
 
   const router = new CommandRouter({
     runtimeManager,
+    listModels: (providerId) =>
+      defaultListModels(providerId, {
+        bridgeBundleDir: options.bridgeBundleDir,
+      }),
     logger: options.logger,
     seedThreadHighWaterMark: ({ threadId, sequence }) =>
       eventBuffer.seed({ [threadId]: sequence }),
@@ -187,8 +193,7 @@ export async function createHostDaemonApp(
   const commandFetchLoop = createCommandFetchLoop({
     logger: options.logger,
     fetchCommands: () => serverClient.fetchCommands(),
-    handleCommands: (commands) =>
-      router.handleCommands(commands as Parameters<typeof router.handleCommands>[0]),
+    handleCommands: (commands) => router.handleCommands(commands),
   });
 
   const connection = new ServerConnection({
@@ -215,14 +220,10 @@ export async function createHostDaemonApp(
   });
 
   const localApi =
-    options.enableLocalApi
+    options.localApiConfig
       ? await startLocalApiServer({
-          bindHost: options.localApiBindHost,
-          healthPath: options.localApiHealthPath,
-          healthValue: options.localApiHealthValue,
           hostId: options.hostId,
-          mode: options.localApiMode,
-          port: options.localApiPort,
+          localApiConfig: options.localApiConfig,
           serverUrl: options.serverUrl,
           getConnected: () => connection.sessionId != null,
           openPath: options.openPath,
@@ -248,6 +249,7 @@ export async function createHostDaemonApp(
       environmentChangeReporter.dispose();
       await localApi?.close();
       await runtimeManager.shutdownAll();
+      await shutdownDefaultListModelsRuntimes();
       await connection.shutdown();
     },
     restart: options.restart,

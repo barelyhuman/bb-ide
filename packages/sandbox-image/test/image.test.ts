@@ -37,6 +37,11 @@ const sandboxImageToolChecks: SandboxImageToolCheck[] = [
     versionCommand: "sh -lc 'g++ --version | head -n 1'",
   },
   {
+    name: "gh",
+    pathCommand: "which gh",
+    versionCommand: "gh --version",
+  },
+  {
     name: "git",
     pathCommand: "which git",
     versionCommand: "git --version",

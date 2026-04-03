@@ -288,25 +288,12 @@ export async function resumeHost(
     apiKey: options.apiKey,
     timeoutMs: options.timeoutMs,
   });
-  const daemonArtifacts = await resolveDaemonArtifacts(options.daemonArtifacts);
 
   try {
-    await Promise.all([
-      writeSandboxFile(sandbox, SANDBOX_DAEMON_PATH, daemonArtifacts.daemon),
-      writeSandboxFile(
-        sandbox,
-        SANDBOX_CLAUDE_CODE_BRIDGE_PATH,
-        daemonArtifacts.claudeCodeBridge,
-      ),
-      writeSandboxFile(
-        sandbox,
-        SANDBOX_PI_BRIDGE_PATH,
-        daemonArtifacts.piBridge,
-      ),
-    ]);
     try {
       await assertDaemonHealth(sandbox);
     } catch {
+      const daemonArtifacts = await resolveDaemonArtifacts(options.daemonArtifacts);
       await startDaemonProcess(sandbox, daemonArtifacts, daemonEnv);
       await waitForDaemonHealth(sandbox);
     }

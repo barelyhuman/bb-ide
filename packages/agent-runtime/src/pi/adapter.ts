@@ -7,15 +7,12 @@
  * the Pi SDK and produces `ThreadEvent[]`.
  */
 
-import type { KnownProvider } from "@mariozechner/pi-ai";
 import { AuthStorage, ModelRegistry } from "@mariozechner/pi-coding-agent";
 import { z } from "zod";
 import type {
   AgentSessionEvent,
 } from "@mariozechner/pi-coding-agent";
 import type {
-  AvailableModel,
-  ModelReasoningEffort,
   ProviderCapabilities,
   ThreadEvent,
   ThreadEventItem,
@@ -33,13 +30,9 @@ import {
   textBlockSchema,
 } from "../shared/tool-arg-schemas.js";
 import {
-  HIGH_REASONING_EFFORT,
   buildEditDiff,
   buildShellEnvironmentPolicyConfig,
   extractResultText,
-  LOW_REASONING_EFFORT,
-  MEDIUM_REASONING_EFFORT,
-  XHIGH_REASONING_EFFORT,
   toNonNegativeNumber,
   toOptionalRecord,
   toOptionalString,
@@ -63,6 +56,7 @@ import type {
   ProviderTranslationContext,
   ProviderAdapter,
 } from "../provider-adapter.js";
+import { toCanonicalPiModelId } from "./model-list.js";
 import { piVisibilityMetadata } from "./visibility.js";
 
 // ---------------------------------------------------------------------------
@@ -116,37 +110,19 @@ function buildUnexpectedPiSdkEvent(
   ];
 }
 
-
-const PI_DEFAULT_MODEL_PREFERENCES = [
-  "anthropic/claude-sonnet-4-20250514",
-  "anthropic/claude-sonnet-4-6",
-  "anthropic/claude-opus-4-20250514",
-  "openai/codex-mini",
-] as const;
-
-// ---------------------------------------------------------------------------
-// Pi-specific helpers
-// ---------------------------------------------------------------------------
-
-interface PiCatalogModel {
-  id: string;
-  name: string;
-  provider: string;
-  reasoning: boolean;
-  input: string[];
+interface PiContextWindowModel {
   contextWindow?: number;
+  id: string;
+  provider: string;
 }
 
-const piCatalogModelSchema = z.object({
+const piContextWindowModelSchema = z.object({
   id: z.string(),
-  name: z.string(),
   provider: z.string(),
-  reasoning: z.boolean(),
-  input: z.array(z.string()),
   contextWindow: z.number().optional(),
 }).passthrough();
 
-const piCatalogModelsSchema = z.array(piCatalogModelSchema);
+const piContextWindowModelsSchema = z.array(piContextWindowModelSchema);
 
 const piEventTypeSchema = z.object({
   type: z.enum([
@@ -413,52 +389,6 @@ function buildPiConfig(threadId: string, options?: AdapterOptions): Record<strin
   return Object.keys(config).length > 0 ? config : undefined;
 }
 
-// ---------------------------------------------------------------------------
-// Model catalog
-// ---------------------------------------------------------------------------
-
-export function buildPiAvailableModels(args: {
-  providers: KnownProvider[];
-  getModels: (provider: KnownProvider) => PiCatalogModel[];
-  hasAuth: (provider: KnownProvider) => boolean;
-}): AvailableModel[] {
-  const models: AvailableModel[] = [];
-  for (const provider of args.providers) {
-    if (!args.hasAuth(provider)) continue;
-    for (const model of args.getModels(provider)) {
-      const canonicalId = toCanonicalPiModelId(provider, model.id);
-      const supportedReasoningEfforts = getPiReasoningEfforts(model);
-      models.push({
-        id: canonicalId,
-        model: canonicalId,
-        displayName: model.name,
-        description: describePiModel(model),
-        supportedReasoningEfforts,
-        defaultReasoningEffort: model.reasoning ? "medium" : "low",
-        isDefault: false,
-      });
-    }
-  }
-  const defaultId = resolveDefaultPiModelId(models);
-  return models.map((m) => (m.id === defaultId ? { ...m, isDefault: true } : m));
-}
-
-async function listPiModels(): Promise<AvailableModel[]> {
-  const [{ getModels, getProviders }, authStorage] = await Promise.all([
-    import("@mariozechner/pi-ai"),
-    Promise.resolve(AuthStorage.create()),
-  ]);
-  return buildPiAvailableModels({
-    providers: getProviders(),
-    getModels: (provider) => piCatalogModelsSchema.parse(getModels(provider)),
-    hasAuth: (provider) => authStorage.hasAuth(provider),
-  });
-}
-
-function toCanonicalPiModelId(provider: string, modelId: string): string {
-  return modelId.includes("/") ? modelId : `${provider}/${modelId}`;
-}
-
 type PiModelContextWindowLookup = ReadonlyMap<string, number>;
 
 type PiModelContextWindowResolver = (
@@ -470,7 +400,7 @@ function createPiModelRegistry(): ModelRegistry {
 }
 
 function buildPiModelContextWindowLookup(
-  models: readonly PiCatalogModel[],
+  models: readonly PiContextWindowModel[],
 ): PiModelContextWindowLookup {
   const lookup = new Map<string, number>();
   for (const model of models) {
@@ -495,44 +425,10 @@ function createPiModelContextWindowResolver(): PiModelContextWindowResolver {
 
     // Resolve against a fresh registry so models.json overrides and custom
     // model definitions are reflected without module-level cached state.
-    const models = piCatalogModelsSchema.parse(createPiModelRegistry().getAll());
+    const models = piContextWindowModelsSchema.parse(createPiModelRegistry().getAll());
     const modelContextWindowLookup = buildPiModelContextWindowLookup(models);
     return resolvePiModelContextWindow(lastAssistant, modelContextWindowLookup);
   };
-}
-
-function getPiReasoningEfforts(model: PiCatalogModel): ModelReasoningEffort[] {
-  if (!model.reasoning) return [LOW_REASONING_EFFORT];
-  const efforts = [LOW_REASONING_EFFORT, MEDIUM_REASONING_EFFORT, HIGH_REASONING_EFFORT];
-  if (supportsPiXhigh(model)) efforts.push(XHIGH_REASONING_EFFORT);
-  return efforts;
-}
-
-function supportsPiXhigh(model: PiCatalogModel): boolean {
-  return (
-    model.id.includes("gpt-5.2") ||
-    model.id.includes("gpt-5.3") ||
-    model.id.includes("gpt-5.4") ||
-    model.id.includes("opus-4-6") ||
-    model.id.includes("opus-4.6")
-  );
-}
-
-function describePiModel(model: PiCatalogModel): string {
-  const capabilities: string[] = [];
-  capabilities.push(model.reasoning ? "reasoning" : "non-reasoning");
-  if (model.input.includes("image")) capabilities.push("multimodal");
-  const provider = model.provider.length > 0
-    ? model.provider[0].toUpperCase() + model.provider.slice(1)
-    : model.provider;
-  return `${provider} ${capabilities.join(", ")} model via Pi`;
-}
-
-function resolveDefaultPiModelId(models: AvailableModel[]): string | undefined {
-  for (const preferred of PI_DEFAULT_MODEL_PREFERENCES) {
-    if (models.some((m) => m.id === preferred)) return preferred;
-  }
-  return models[0]?.id;
 }
 
 // ---------------------------------------------------------------------------
@@ -547,8 +443,6 @@ export interface CreatePiProviderAdapterOptions {
   processArgs?: string[];
   /** Extra environment variables for the bridge process. */
   launchEnv?: Record<string, string>;
-  /** Override model listing. Used by unit tests to avoid real API calls. */
-  listModels?: () => Promise<AvailableModel[]>;
   /** Override context-window resolution. Used by unit tests to avoid real catalogs. */
   resolveModelContextWindow?: PiModelContextWindowResolver;
 }
@@ -569,7 +463,6 @@ export function createPiProviderAdapter(
     supportsRename: false,
     supportsServiceTier: false,
   };
-  const models = opts?.listModels ?? listPiModels;
   const resolveModelContextWindow = opts?.resolveModelContextWindow
     ?? createPiModelContextWindowResolver();
 

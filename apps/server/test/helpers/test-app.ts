@@ -45,7 +45,7 @@ export async function createTestAppHarness(
     authToken: TEST_AUTH_TOKEN,
     dataDir,
     e2bApiKey: "test-e2b-api-key",
-    e2bTemplate: "",
+    e2bTemplate: "test-e2b-template",
     githubPat: "",
     hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",

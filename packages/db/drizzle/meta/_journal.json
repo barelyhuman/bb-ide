@@ -134,6 +134,13 @@
       "when": 1779997320000,
       "tag": "0017_fine_odin",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1779997380000,
+      "tag": "0018_quiet_makkari",
+      "breakpoints": true
     }
   ]
 }

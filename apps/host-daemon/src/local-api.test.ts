@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHostDaemonLocalClient } from "@bb/host-daemon-contract";
 import { startLocalApiServer, type LocalApiServer } from "./local-api.js";
+import type { HostDaemonLocalApiConfig } from "./local-api-config.js";
 
 async function waitFor(
   predicate: () => boolean,
@@ -18,6 +19,19 @@ async function waitFor(
 describe("local API server", () => {
   let server: LocalApiServer | null = null;
 
+  function createLocalApiConfig(
+    overrides: Partial<HostDaemonLocalApiConfig> = {},
+  ): HostDaemonLocalApiConfig {
+    return {
+      bindHost: "localhost",
+      healthPath: "/health",
+      healthValue: "ok",
+      mode: "full",
+      port: 0,
+      ...overrides,
+    };
+  }
+
   afterEach(async () => {
     await server?.close();
     server = null;
@@ -26,7 +40,7 @@ describe("local API server", () => {
   it("serves host identity and status over localhost", async () => {
     server = await startLocalApiServer({
       hostId: "host-1",
-      port: 0,
+      localApiConfig: createLocalApiConfig(),
       serverUrl: "http://server.test",
       getConnected: () => true,
       restart: () => undefined,
@@ -50,7 +64,7 @@ describe("local API server", () => {
     const pickFolder = vi.fn(async () => "/tmp/project");
     server = await startLocalApiServer({
       hostId: "host-1",
-      port: 0,
+      localApiConfig: createLocalApiConfig(),
       serverUrl: "http://server.test",
       getConnected: () => false,
       openPath,
@@ -72,7 +86,7 @@ describe("local API server", () => {
     const restart = vi.fn(async () => undefined);
     server = await startLocalApiServer({
       hostId: "host-1",
-      port: 0,
+      localApiConfig: createLocalApiConfig(),
       serverUrl: "http://server.test",
       getConnected: () => true,
       restart,
@@ -93,7 +107,7 @@ describe("local API server", () => {
     const restart = vi.fn(async () => undefined);
     server = await startLocalApiServer({
       hostId: "host-1",
-      port: 0,
+      localApiConfig: createLocalApiConfig(),
       serverUrl: "http://server.test",
       getConnected: () => true,
       restart,
@@ -113,7 +127,7 @@ describe("local API server", () => {
     const restart = vi.fn(async () => undefined);
     server = await startLocalApiServer({
       hostId: "host-1",
-      port: 0,
+      localApiConfig: createLocalApiConfig(),
       serverUrl: "http://server.test",
       getConnected: () => true,
       restart,
@@ -132,12 +146,13 @@ describe("local API server", () => {
 
   it("supports health-only mode for sandbox hosts", async () => {
     server = await startLocalApiServer({
-      bindHost: "127.0.0.1",
-      healthPath: "/ready",
-      healthValue: "bb-host-daemon",
       hostId: "host-1",
-      mode: "health-only",
-      port: 0,
+      localApiConfig: createLocalApiConfig({
+        bindHost: "127.0.0.1",
+        healthPath: "/ready",
+        healthValue: "bb-host-daemon",
+        mode: "health-only",
+      }),
       serverUrl: "http://server.test",
       getConnected: () => true,
       listActiveThreads: () => [],

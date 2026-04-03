@@ -1,6 +1,7 @@
 import path from "node:path";
 import {
   createThread,
+  getDefaultProjectSource,
   getProjectSourceByHost,
   getProject,
   getThread,
@@ -100,6 +101,21 @@ export function requireSourceForHost(
       409,
       "invalid_request",
       "No project source configured for this host",
+    );
+  }
+  return source;
+}
+
+export function requireSandboxCloneSource(
+  deps: Pick<AppDeps, "db">,
+  projectId: string,
+): GitHubRepoProjectSource {
+  const source = getDefaultProjectSource(deps.db, projectId);
+  if (!source || source.type !== "github_repo") {
+    throw new ApiError(
+      409,
+      "unsupported_operation",
+      "Sandbox threads require a cloneable project source; local path sources are not supported yet",
     );
   }
   return source;

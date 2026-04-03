@@ -8,6 +8,7 @@ import { createLogger } from "@bb/logger";
 import { initDb } from "./db.js";
 import { createApp } from "./server.js";
 import { runPeriodicSweeps } from "./services/periodic-sweeps.js";
+import { createSandboxHostRegistry } from "./services/sandbox-registry.js";
 import { NotificationHub } from "./ws/hub.js";
 
 const logger = createLogger({ component: "server" });

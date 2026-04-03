@@ -13,6 +13,7 @@ import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
 import { requireEnvironment, requireDefaultConnectedHostId } from "../services/entity-lookup.js";
 import { queueCommandAndWait } from "../services/command-wait.js";
+import { isSandboxProvisioningConfigured } from "../services/sandbox-config.js";
 import { transcribeVoiceInput } from "../services/voice-transcription.js";
 
 type HostLookupQuery = Pick<SystemProvidersQuery, "environmentId" | "hostId">;
@@ -37,7 +38,7 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
 
   get("/system/config", (context) =>
     context.json({
-      e2bConfigured: deps.config.e2bApiKey !== "",
+      e2bConfigured: isSandboxProvisioningConfigured(deps.config),
       githubConnected: deps.config.githubPat !== "",
       hostDaemonPort: deps.config.hostDaemonPort,
       voiceTranscriptionEnabled: !!deps.config.openAiApiKey,
