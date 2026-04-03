@@ -25,13 +25,13 @@ const ENVIRONMENT_CHANGE_REPORT_RETRY_DELAY_MS = 1_000;
 const ENVIRONMENT_CHANGE_REPORT_MAX_RETRY_DELAY_MS = 30_000;
 
 interface BufferedEnvironmentChangeReporterArgs {
-  debounceMs?: number;
+  debounceMs: number;
   logger: HostDaemonLogger;
   reportEnvironmentChange: (
     change: HostDaemonEnvironmentChangePayload,
   ) => Promise<void>;
-  retryMaxDelayMs?: number;
-  retryDelayMs?: number;
+  retryMaxDelayMs: number;
+  retryDelayMs: number;
 }
 
 interface BufferedEnvironmentChangeEntry {
@@ -100,7 +100,7 @@ export function createBufferedEnvironmentChangeReporter(
       if (entry.dirtyWhileInflight) {
         entry.dirtyWhileInflight = false;
         scheduleEntry({
-          delayMs: args.debounceMs ?? ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS,
+          delayMs: args.debounceMs,
           key: payload.key,
         });
         return;
@@ -120,11 +120,9 @@ export function createBufferedEnvironmentChangeReporter(
             change: entry.change,
             err: error,
           },
-          "Dropping environment change after permanent failure",
-        );
-        if (entries.get(payload.key) === entry) {
-          entries.delete(payload.key);
-        }
+        "Dropping environment change after permanent failure",
+      );
+        entries.delete(payload.key);
         return;
       }
       entry.retryAttempt += 1;
@@ -138,11 +136,8 @@ export function createBufferedEnvironmentChangeReporter(
       scheduleEntry({
         delayMs: calculateExponentialBackoffDelay({
           attempt: entry.retryAttempt,
-          baseDelayMs:
-            args.retryDelayMs ?? ENVIRONMENT_CHANGE_REPORT_RETRY_DELAY_MS,
-          maxDelayMs:
-            args.retryMaxDelayMs ??
-            ENVIRONMENT_CHANGE_REPORT_MAX_RETRY_DELAY_MS,
+          baseDelayMs: args.retryDelayMs,
+          maxDelayMs: args.retryMaxDelayMs,
         }),
         key: payload.key,
       });
@@ -170,7 +165,7 @@ export function createBufferedEnvironmentChangeReporter(
         timer: null,
       });
       scheduleEntry({
-        delayMs: args.debounceMs ?? ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS,
+        delayMs: args.debounceMs,
         key,
       });
     },
@@ -289,8 +284,11 @@ export async function createHostDaemonApp(
   });
 
   const environmentChangeReporter = createBufferedEnvironmentChangeReporter({
+    debounceMs: ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS,
     logger: options.logger,
     reportEnvironmentChange: (change) => serverClient.postEnvironmentChange(change),
+    retryDelayMs: ENVIRONMENT_CHANGE_REPORT_RETRY_DELAY_MS,
+    retryMaxDelayMs: ENVIRONMENT_CHANGE_REPORT_MAX_RETRY_DELAY_MS,
   });
 
   const eventBuffer = createEventBuffer({

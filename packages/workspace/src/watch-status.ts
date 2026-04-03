@@ -64,6 +64,16 @@ function loadParcelWatcher(): Promise<ParcelWatcherModule> {
   return parcelWatcherModulePromise;
 }
 
+function createWorkspaceStatusCallbackError(
+  cwd: string,
+  error: unknown,
+): WorkspaceStatusWatchError {
+  return {
+    message: `Workspace status callback failed: ${toErrorMessage(error)}`,
+    rootPath: cwd,
+  };
+}
+
 async function resolveGitDirectory(cwd: string): Promise<string | undefined> {
   const dotGitPath = path.join(cwd, ".git");
   try {
@@ -180,7 +190,11 @@ export function watchWorkspaceStatus(
     if (disposed) {
       return;
     }
-    args.onChange();
+    try {
+      args.onChange();
+    } catch (error) {
+      args.onWatchError(createWorkspaceStatusCallbackError(cwd, error));
+    }
   };
 
   const resetWatchRetryState = (rootPath: string) => {
@@ -369,7 +383,7 @@ export function watchWorkspaceStatus(
       clearTimeout(retryTimer);
     }
     retryTimers.clear();
-    for (const rootPath of subscriptions.keys()) {
+    for (const rootPath of [...subscriptions.keys()]) {
       stopSubscription(rootPath);
     }
   };

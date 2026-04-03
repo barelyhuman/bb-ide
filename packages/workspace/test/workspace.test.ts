@@ -608,6 +608,57 @@ describe("Workspace", () => {
     }
   });
 
+  it("reports change callback failures and continues watching", async () => {
+    vi.useFakeTimers();
+    const repoPath = await initRepo();
+    const {
+      emitWorkspaceRootEvents,
+      ready,
+      watchWorkspaceStatus,
+    } = await importWatchWorkspaceStatusWithManualWorkspaceEvents(repoPath);
+    let callbackCount = 0;
+    const watchErrors: string[] = [];
+    const stopWatching = watchWorkspaceStatus(repoPath, {
+      onChange: () => {
+        callbackCount += 1;
+        if (callbackCount === 1) {
+          throw new Error("boom");
+        }
+      },
+      onWatchError: (error) => {
+        watchErrors.push(`${error.rootPath}:${error.message}`);
+      },
+    });
+
+    try {
+      await ready;
+      emitWorkspaceRootEvents([
+        {
+          path: path.join(repoPath, "README.md"),
+          type: "update",
+        },
+      ]);
+      await vi.advanceTimersByTimeAsync(75);
+      expect(callbackCount).toBe(1);
+      expect(watchErrors).toHaveLength(1);
+      expect(watchErrors[0]).toContain(repoPath);
+      expect(watchErrors[0]).toContain("Workspace status callback failed: boom");
+
+      emitWorkspaceRootEvents([
+        {
+          path: path.join(repoPath, "README.md"),
+          type: "update",
+        },
+      ]);
+      await vi.advanceTimersByTimeAsync(75);
+      expect(callbackCount).toBe(2);
+      expect(watchErrors).toHaveLength(1);
+    } finally {
+      stopWatching();
+      vi.useRealTimers();
+    }
+  });
+
   it("does not emit callbacks when a clean workspace watch starts", async () => {
     const repoPath = await initRepo();
     const { ready, watchWorkspaceStatus } = await importWatchWorkspaceStatusWithReadySignal({

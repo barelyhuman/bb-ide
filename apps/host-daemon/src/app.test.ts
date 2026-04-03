@@ -13,12 +13,34 @@ interface FetchCommandsArgs {
   afterCursor: number;
 }
 
+interface CreateReporterArgs {
+  logger?: ReturnType<typeof createLogger>;
+  reportEnvironmentChange?: (
+    change: HostDaemonEnvironmentChangePayload,
+  ) => Promise<void>;
+}
+
+const TEST_REPORTER_DEBOUNCE_MS = 100;
+const TEST_REPORTER_RETRY_DELAY_MS = 250;
+const TEST_REPORTER_RETRY_MAX_DELAY_MS = 1_000;
+
 function createLogger() {
   return {
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
   };
+}
+
+function createReporter(args: CreateReporterArgs) {
+  return createBufferedEnvironmentChangeReporter({
+    debounceMs: TEST_REPORTER_DEBOUNCE_MS,
+    logger: args.logger ?? createLogger(),
+    reportEnvironmentChange:
+      args.reportEnvironmentChange ?? (async () => undefined),
+    retryDelayMs: TEST_REPORTER_RETRY_DELAY_MS,
+    retryMaxDelayMs: TEST_REPORTER_RETRY_MAX_DELAY_MS,
+  });
 }
 
 describe("createCommandFetchLoop", () => {
@@ -65,9 +87,8 @@ describe("createBufferedEnvironmentChangeReporter", () => {
     vi.useFakeTimers();
     const logger = createLogger();
     const reportEnvironmentChange = vi.fn(async () => undefined);
-    const reporter = createBufferedEnvironmentChangeReporter({
+    const reporter = createReporter({
       logger,
-      debounceMs: 100,
       reportEnvironmentChange,
     });
 
@@ -98,9 +119,8 @@ describe("createBufferedEnvironmentChangeReporter", () => {
       .fn<(_: HostDaemonEnvironmentChangePayload) => Promise<void>>()
       .mockImplementationOnce(() => firstReport.promise)
       .mockResolvedValueOnce(undefined);
-    const reporter = createBufferedEnvironmentChangeReporter({
+    const reporter = createReporter({
       logger,
-      debounceMs: 100,
       reportEnvironmentChange,
     });
 
@@ -134,9 +154,8 @@ describe("createBufferedEnvironmentChangeReporter", () => {
     vi.useFakeTimers();
     const logger = createLogger();
     const reportEnvironmentChange = vi.fn(async () => undefined);
-    const reporter = createBufferedEnvironmentChangeReporter({
+    const reporter = createReporter({
       logger,
-      debounceMs: 100,
       reportEnvironmentChange,
     });
 
@@ -157,10 +176,8 @@ describe("createBufferedEnvironmentChangeReporter", () => {
       .fn<(_: HostDaemonEnvironmentChangePayload) => Promise<void>>()
       .mockRejectedValueOnce(new Error("boom"))
       .mockResolvedValueOnce(undefined);
-    const reporter = createBufferedEnvironmentChangeReporter({
+    const reporter = createReporter({
       logger,
-      debounceMs: 100,
-      retryDelayMs: 250,
       reportEnvironmentChange,
     });
 
@@ -186,10 +203,8 @@ describe("createBufferedEnvironmentChangeReporter", () => {
     const reportEnvironmentChange = vi
       .fn<(_: HostDaemonEnvironmentChangePayload) => Promise<void>>()
       .mockRejectedValueOnce(new AbortError("gone"));
-    const reporter = createBufferedEnvironmentChangeReporter({
+    const reporter = createReporter({
       logger,
-      debounceMs: 100,
-      retryDelayMs: 250,
       reportEnvironmentChange,
     });
 

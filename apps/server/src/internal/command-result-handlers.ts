@@ -332,6 +332,9 @@ function handleWorkspaceMutationResult(
   if (!isWorkspaceMutationCommand(command, report.type)) {
     return;
   }
+  // Keep mutation-triggered invalidation alongside passive file watching so
+  // clients still refresh when the watcher is unavailable or misses a host-local
+  // change burst.
   deps.hub.notifyEnvironment(command.environmentId, ["work-status-changed"]);
 }
 
