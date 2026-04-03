@@ -7,12 +7,14 @@ import { Workspace } from "../src/workspace.js";
 import { WorkspaceError } from "../src/git.js";
 import { runGit } from "../src/git.js";
 
-type GitModule = typeof import("../src/git.js");
-type WatchWorkspaceStatus = GitModule["watchWorkspaceStatus"];
+type WatchStatusModule = typeof import("../src/watch-status.js");
+type WatchWorkspaceStatus = WatchStatusModule["watchWorkspaceStatus"];
 type ParcelWatcherModule = typeof import("@parcel/watcher");
 type ParcelWatcherDefault = ParcelWatcherModule["default"];
+type ParcelWatcherCallback = Parameters<ParcelWatcherDefault["subscribe"]>[1];
 type ParcelWatcherSubscribe = ParcelWatcherDefault["subscribe"];
 type ParcelWatcherSubscribeArgs = Parameters<ParcelWatcherSubscribe>;
+type ParcelWatcherEventBatch = Parameters<ParcelWatcherCallback>[1];
 type ParcelWatcherSubscribeResult = Awaited<ReturnType<ParcelWatcherSubscribe>>;
 
 const tempDirs: string[] = [];
@@ -116,8 +118,8 @@ async function importWatchWorkspaceStatusWithTransientWorkspaceSubscriptionFailu
       },
     };
   });
-  const gitModule = await import("../src/git.js");
-  return gitModule.watchWorkspaceStatus;
+  const watchStatusModule = await import("../src/watch-status.js");
+  return watchStatusModule.watchWorkspaceStatus;
 }
 
 async function importWatchWorkspaceStatusWithPersistentWorkspaceSubscriptionFailure(
@@ -156,14 +158,81 @@ async function importWatchWorkspaceStatusWithPersistentWorkspaceSubscriptionFail
       },
     };
   });
-  const gitModule = await import("../src/git.js");
+  const watchStatusModule = await import("../src/watch-status.js");
   return {
     getWorkspaceSubscriptionAttemptCount: () => workspaceSubscriptionAttemptCount,
-    watchWorkspaceStatus: gitModule.watchWorkspaceStatus,
+    watchWorkspaceStatus: watchStatusModule.watchWorkspaceStatus,
+  };
+}
+
+function createMockWatcherSubscription(): ParcelWatcherSubscribeResult {
+  return {
+    unsubscribe: async () => undefined,
+  };
+}
+
+function createDeferredPromise<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T | PromiseLike<T>) => void;
+} {
+  let resolve:
+    | ((value: T | PromiseLike<T>) => void)
+    | null = null;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  if (!resolve) {
+    throw new Error("Failed to create deferred promise");
+  }
+  return {
+    promise,
+    resolve,
+  };
+}
+
+async function importWatchWorkspaceStatusWithManualWorkspaceEvents(
+  workspaceRootPath: string,
+): Promise<{
+  emitWorkspaceRootEvents: (events: ParcelWatcherEventBatch) => void;
+  ready: Promise<void>;
+  watchWorkspaceStatus: WatchWorkspaceStatus;
+}> {
+  let workspaceRootCallback: ParcelWatcherCallback | null = null;
+  const ready = createDeferredPromise<void>();
+  vi.resetModules();
+  vi.doMock("@parcel/watcher", async () => {
+    const mockSubscribe = async (
+      ...watchArgs: ParcelWatcherSubscribeArgs
+    ): Promise<ParcelWatcherSubscribeResult> => {
+      const [_rootPath, callback] = watchArgs;
+      if (isWorkspaceRootSubscription(watchArgs, workspaceRootPath)) {
+        workspaceRootCallback = callback;
+        ready.resolve(undefined);
+      }
+      return createMockWatcherSubscription();
+    };
+    return {
+      default: {
+        subscribe: mockSubscribe,
+      },
+      subscribe: mockSubscribe,
+    };
+  });
+  const watchStatusModule = await import("../src/watch-status.js");
+  return {
+    emitWorkspaceRootEvents: (events) => {
+      if (!workspaceRootCallback) {
+        throw new Error("Workspace root watcher has not been installed");
+      }
+      workspaceRootCallback(null, events);
+    },
+    ready: ready.promise,
+    watchWorkspaceStatus: watchStatusModule.watchWorkspaceStatus,
   };
 }
 
 afterEach(async () => {
+  vi.useRealTimers();
   vi.doUnmock("@parcel/watcher");
   vi.resetModules();
   await Promise.all(
@@ -403,6 +472,43 @@ describe("Workspace", () => {
       expect(calls).toHaveLength(1);
     } finally {
       stopWatching();
+    }
+  });
+
+  it("flushes sustained workspace event bursts at max wait", async () => {
+    vi.useFakeTimers();
+    const repoPath = await initRepo();
+    const {
+      emitWorkspaceRootEvents,
+      ready,
+      watchWorkspaceStatus,
+    } = await importWatchWorkspaceStatusWithManualWorkspaceEvents(repoPath);
+    const calls: number[] = [];
+    const stopWatching = watchWorkspaceStatus(repoPath, {
+      onChange: () => {
+        calls.push(Date.now());
+      },
+    });
+
+    try {
+      await ready;
+      for (let elapsedMs = 0; elapsedMs < 480; elapsedMs += 60) {
+        emitWorkspaceRootEvents([
+          {
+            path: path.join(repoPath, "README.md"),
+            type: "update",
+          },
+        ]);
+        await vi.advanceTimersByTimeAsync(60);
+      }
+
+      expect(calls).toHaveLength(0);
+
+      await vi.advanceTimersByTimeAsync(20);
+      expect(calls).toHaveLength(1);
+    } finally {
+      stopWatching();
+      vi.useRealTimers();
     }
   });
 

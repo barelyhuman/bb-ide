@@ -20,11 +20,13 @@ import {
   revParse,
   runGit,
   summarizeNumstat,
-  type WorkspaceStatusWatchArgs,
-  watchWorkspaceStatus,
   WorkspaceError,
 } from "./git.js";
 import fs from "node:fs/promises";
+import {
+  type WorkspaceStatusWatchArgs,
+  watchWorkspaceStatus,
+} from "./watch-status.js";
 
 export interface DiffOptions {
   target?: WorkspaceDiffTarget;

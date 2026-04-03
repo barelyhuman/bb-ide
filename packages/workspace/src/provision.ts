@@ -24,9 +24,9 @@ import {
   detectGitRepo,
   pathExists,
   runGit,
-  type WorkspaceStatusWatchArgs,
   WorkspaceError,
 } from "./git.js";
+import type { WorkspaceStatusWatchArgs } from "./watch-status.js";
 
 // ---------------------------------------------------------------------------
 // Options (discriminated union on workspaceProvisionType from @bb/domain)
