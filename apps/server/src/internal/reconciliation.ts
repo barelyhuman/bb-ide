@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, notInArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, notInArray, or } from "drizzle-orm";
 import {
   clearThreadStopRequested,
   deleteThread,
@@ -8,7 +8,7 @@ import {
 import type { HostDaemonActiveThread } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../types.js";
 import { cleanupEnvironmentAfterThreadRemoval } from "../services/environment-cleanup.js";
-import { queueThreadStopCommand } from "../services/thread-commands.js";
+import { requestThreadStop } from "../services/thread-stop.js";
 import { tryTransition } from "../services/thread-transitions.js";
 
 export function reconcileSessionThreads(
@@ -32,25 +32,21 @@ export function reconcileSessionThreads(
       and(
         eq(environments.hostId, hostId),
         inArray(threads.status, ["active", "idle", "error"]),
+        or(isNotNull(threads.deletedAt), isNotNull(threads.stopRequestedAt)),
       ),
     )
-    .all()
-    .filter(
-      (thread) => thread.deletedAt !== null || thread.stopRequestedAt !== null,
-    );
+    .all();
 
   for (const thread of pendingThreads) {
     const isActive = activeThreadIds.includes(thread.id);
 
-    if (thread.stopRequestedAt !== null && isActive && thread.environmentId) {
-      queueThreadStopCommand(deps, {
+    if (isActive && thread.environmentId) {
+      requestThreadStop(deps, {
         environmentId: thread.environmentId,
         hostId,
+        stopRequestedAt: thread.stopRequestedAt,
         threadId: thread.id,
       });
-    }
-
-    if (thread.deletedAt !== null && isActive && thread.environmentId) {
       continue;
     }
 

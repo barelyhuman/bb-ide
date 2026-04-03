@@ -20,11 +20,6 @@ export interface EnvironmentDestroyTarget {
   workspaceProvisionType: WorkspaceProvisionType;
 }
 
-export interface EnvironmentCleanupDecision {
-  requiresConfirmation: boolean;
-  willCleanupEnvironment: boolean;
-}
-
 export interface EvaluateManagedEnvironmentArchiveCleanupArgs {
   environmentId: string | null | undefined;
 }
@@ -170,31 +165,20 @@ export function queueEnvironmentDestroyCommand(
 export function wouldCleanupEnvironment(
   deps: Pick<AppDeps, "db">,
   args: WouldCleanupEnvironmentArgs,
-): EnvironmentCleanupDecision {
+): boolean {
   if (!args.environmentId) {
-    return {
-      requiresConfirmation: false,
-      willCleanupEnvironment: false,
-    };
+    return false;
   }
 
   const environment = getEnvironment(deps.db, args.environmentId);
   if (!environment || !environment.managed) {
-    return {
-      requiresConfirmation: false,
-      willCleanupEnvironment: false,
-    };
+    return false;
   }
 
-  const willCleanupEnvironment = countLiveThreadsInEnvironment(deps.db, {
+  return countLiveThreadsInEnvironment(deps.db, {
     environmentId: environment.id,
     excludeThreadId: args.excludeThreadId,
   }) === 0;
-
-  return {
-    requiresConfirmation: willCleanupEnvironment,
-    willCleanupEnvironment,
-  };
 }
 
 export async function evaluateManagedEnvironmentArchiveCleanup(

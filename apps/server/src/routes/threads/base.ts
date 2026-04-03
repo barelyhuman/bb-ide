@@ -3,7 +3,6 @@ import {
   getActiveSession,
   listThreads,
   markThreadDeleted,
-  markThreadStopRequested,
   updateThread,
 } from "@bb/db";
 import {
@@ -24,8 +23,8 @@ import {
 } from "../../services/entity-lookup.js";
 import {
   queueThreadRenameCommand,
-  queueThreadStopCommand,
 } from "../../services/thread-commands.js";
+import { requestThreadStop } from "../../services/thread-stop.js";
 import { appendThreadOwnershipChangeEvent } from "../../services/thread-events.js";
 import { createThreadFromRequest } from "../../services/thread-create.js";
 export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
@@ -102,16 +101,11 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
       threadId: thread.id,
     });
 
-    if (thread.status === "active" && thread.stopRequestedAt === null) {
-      markThreadStopRequested(deps.db, deps.hub, {
-        threadId: thread.id,
-      });
-    }
-
     if (thread.status === "active") {
-      queueThreadStopCommand(deps, {
+      requestThreadStop(deps, {
         environmentId: environment.id,
         hostId: environment.hostId,
+        stopRequestedAt: thread.stopRequestedAt,
         threadId: thread.id,
       });
     }

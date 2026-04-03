@@ -948,6 +948,56 @@ describe("internal session routes", () => {
     }
   });
 
+  it("requests stop for deleted tombstones that are still active on reconnect", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-reconcile-deleted-active",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      markThreadDeleted(harness.db, harness.hub, { threadId: thread.id });
+
+      const response = await harness.app.request("/internal/session/open", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          hostId: host.id,
+          instanceId: "instance-reconcile-deleted-active",
+          hostName: "Reconcile Deleted Active Host",
+          hostType: "persistent",
+          dataDir: "/tmp/reconcile-deleted-active",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [{ threadId: thread.id }],
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      expect(getThread(harness.db, thread.id)?.deletedAt).toBeTypeOf("number");
+      expect(getThread(harness.db, thread.id)?.stopRequestedAt).toBeTypeOf("number");
+
+      const stopCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.stop" && command.threadId === thread.id,
+      );
+      expect(stopCommand.command).toMatchObject({
+        environmentId: environment.id,
+        threadId: thread.id,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("hard-deletes deleted stop-pending threads and queues cleanup on successful stop results", async () => {
     const harness = await createTestAppHarness();
     try {

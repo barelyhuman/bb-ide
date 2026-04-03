@@ -4,7 +4,6 @@ import {
   deleteDraft,
   getDraft,
   getActiveSession,
-  markThreadStopRequested,
   unarchiveThread,
   updateThread,
 } from "@bb/db";
@@ -44,9 +43,9 @@ import { queueCommandAndWait } from "../../services/command-wait.js";
 import {
   buildExecutionOptions,
   queueReadyThreadTurnCommand,
-  queueThreadStopCommand,
   queueTurnSteerCommand,
 } from "../../services/thread-commands.js";
+import { requestThreadStop } from "../../services/thread-stop.js";
 import {
   appendClientTurnEvent,
   getLastTurnId,
@@ -93,15 +92,10 @@ function requestThreadStopIfNeeded(
     return;
   }
 
-  if (thread.stopRequestedAt === null) {
-    markThreadStopRequested(deps.db, deps.hub, {
-      threadId: thread.id,
-    });
-  }
-
-  queueThreadStopCommand(deps, {
+  requestThreadStop(deps, {
     environmentId: environment.id,
     hostId: environment.hostId,
+    stopRequestedAt: thread.stopRequestedAt,
     threadId: thread.id,
   });
 }
@@ -112,12 +106,12 @@ async function resolveArchiveCleanupTiming(
   environment: Environment,
   force: boolean,
 ): Promise<boolean> {
-  const cleanupDecision = wouldCleanupEnvironment(deps, {
+  const willCleanupEnvironment = wouldCleanupEnvironment(deps, {
     environmentId: thread.environmentId,
     excludeThreadId: thread.id,
   });
 
-  if (!cleanupDecision.willCleanupEnvironment) {
+  if (!willCleanupEnvironment) {
     return false;
   }
 
