@@ -99,6 +99,9 @@ export type AvailableModelsQueryKey = readonly [
   typeof AVAILABLE_MODELS_QUERY_KEY,
   string | null,
 ];
+export type AllAvailableModelsQueryKeyPrefix = readonly [
+  typeof AVAILABLE_MODELS_QUERY_KEY,
+];
 export type SystemProvidersQueryKey = readonly [typeof SYSTEM_PROVIDERS_QUERY_KEY];
 export type StatusQueryKey = readonly [typeof STATUS_QUERY_KEY];
 
@@ -237,6 +240,10 @@ export function availableModelsQueryKey(
   providerId: string | null,
 ): AvailableModelsQueryKey {
   return [AVAILABLE_MODELS_QUERY_KEY, providerId];
+}
+
+export function allAvailableModelsQueryKeyPrefix(): AllAvailableModelsQueryKeyPrefix {
+  return [AVAILABLE_MODELS_QUERY_KEY];
 }
 
 export function systemProvidersQueryKey(): SystemProvidersQueryKey {

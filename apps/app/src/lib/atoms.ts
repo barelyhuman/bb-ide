@@ -1,4 +1,4 @@
-import { atom, getDefaultStore } from "jotai";
+import { atom } from "jotai";
 import type { SystemConfigResponse } from "@bb/server-contract";
 import { apiClient } from "./api-server";
 import { fetchHostId } from "./api-host-daemon";
@@ -25,28 +25,39 @@ export const systemConfigAtom = atom(async () => loadSystemConfig());
 
 // ---------------------------------------------------------------------------
 // Local host ID — probed from the host daemon on startup.
-// Re-probes when a host-connected WS event arrives (daemon may have started
-// after the app). No-daemon is a normal state (e.g., mobile browser).
+// Re-probes on host status changes and websocket reconnects while some UI is
+// subscribed to it. No-daemon is a normal state (e.g., mobile browser).
 // ---------------------------------------------------------------------------
 
-const localHostIdRefreshAtom = atom(0);
+const localHostIdRefreshTickAtom = atom(0);
+localHostIdRefreshTickAtom.onMount = (setRefreshTick) => {
+  const refresh = () => {
+    setRefreshTick((count) => count + 1);
+  };
+
+  const unsubscribeChanged = wsManager.onChanged((message) => {
+    if (message.entity === "host") {
+      refresh();
+    }
+  });
+  const unsubscribeConnected = wsManager.onConnected(({ reconnected }) => {
+    if (reconnected) {
+      refresh();
+    }
+  });
+
+  return () => {
+    unsubscribeChanged();
+    unsubscribeConnected();
+  };
+};
 
 /** The local machine's host ID, or null if no daemon is reachable. */
 export const localHostIdAtom = atom<Promise<string | null>>(async (get) => {
-  get(localHostIdRefreshAtom);
+  get(localHostIdRefreshTickAtom);
   const config = await get(systemConfigAtom);
   if (!config.hostDaemonPort) return null;
   return fetchHostId(config.hostDaemonPort);
-});
-
-// Re-probe the local daemon when a host connects to the server.
-wsManager.onChanged((message) => {
-  if (
-    message.entity === "host" &&
-    message.changes.includes("host-connected")
-  ) {
-    getDefaultStore().set(localHostIdRefreshAtom, (c) => c + 1);
-  }
 });
 
 // ---------------------------------------------------------------------------

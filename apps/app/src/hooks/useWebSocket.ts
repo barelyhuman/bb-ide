@@ -8,12 +8,14 @@ import type { ThreadChangeKind } from "@bb/domain";
 import { wsManager } from "../lib/ws";
 import { getEnvironmentStateInvalidationQueryKeys } from "./queries/query-cache";
 import {
+  allAvailableModelsQueryKeyPrefix,
   allThreadDraftsQueryKeyPrefix,
   allThreadQueryKeyPrefix,
   allThreadTimelineQueryKeyPrefix,
   hostsQueryKey,
   projectsQueryKey,
   statusQueryKey,
+  systemProvidersQueryKey,
   threadDraftsQueryKey,
   threadQueryKey,
   threadTimelineQueryKeyPrefix,
@@ -265,6 +267,10 @@ export function useWebSocket(): void {
           break;
         case "host":
           queryClient.invalidateQueries({ queryKey: hostsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: systemProvidersQueryKey() });
+          queryClient.invalidateQueries({
+            queryKey: allAvailableModelsQueryKeyPrefix(),
+          });
           break;
         case "project":
           queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
