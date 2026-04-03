@@ -75,8 +75,8 @@ export function createBufferedEnvironmentChangeReporter(
     return `${change.environmentId}:${change.change}`;
   }
 
-  function scheduleEntry(args: ScheduledEntryArgs): void {
-    const entry = entries.get(args.key);
+  function scheduleEntry(scheduledEntryArgs: ScheduledEntryArgs): void {
+    const entry = entries.get(scheduledEntryArgs.key);
     if (!entry || disposed) {
       return;
     }
@@ -86,9 +86,9 @@ export function createBufferedEnvironmentChangeReporter(
     entry.timer = setTimeout(() => {
       entry.timer = null;
       void flushEntry({
-        key: args.key,
+        key: scheduledEntryArgs.key,
       });
-    }, args.delayMs);
+    }, scheduledEntryArgs.delayMs);
   }
 
   async function flushEntry(payload: FlushEntryArgs): Promise<void> {

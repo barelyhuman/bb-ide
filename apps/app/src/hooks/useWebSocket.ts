@@ -37,7 +37,6 @@ interface BufferedEnvironmentInvalidatorOptions {
 
 interface BufferedEnvironmentInvalidator {
   cleanup: () => void;
-  flush: () => void;
   markChanged: (environmentId: string) => void;
 }
 
@@ -87,7 +86,6 @@ export function createBufferedEnvironmentInvalidator(
       }
       changedEnvironmentIds.clear();
     },
-    flush,
     markChanged: (environmentId: string) => {
       changedEnvironmentIds.add(environmentId);
       schedule();
