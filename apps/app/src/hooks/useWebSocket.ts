@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   assertNever,
@@ -312,12 +312,4 @@ export function useWebSocket(): void {
       wsManager.disconnect();
     };
   }, [queryClient]);
-}
-
-export function useServerConnectionState() {
-  return useSyncExternalStore(
-    (callback) => wsManager.onConnectionStateChange(callback),
-    () => wsManager.getConnectionState(),
-    () => wsManager.getConnectionState(),
-  )
 }
