@@ -13,7 +13,7 @@ import {
 } from "@bb/db";
 import { initDb } from "./db.js";
 import { createApp } from "./server.js";
-import { maybeCleanupEnvironment } from "./services/environment-cleanup.js";
+import { evaluateManagedEnvironmentArchiveCleanup } from "./services/environment-cleanup.js";
 import { NotificationHub } from "./ws/hub.js";
 
 const logger = createLogger({ component: "server" });
@@ -46,7 +46,9 @@ setInterval(() => {
   sweepExpiredLeases(db, hub);
   sweepDestroyingEnvironments(db, hub);
   for (const environment of sweepManagedEnvironments(db)) {
-    void maybeCleanupEnvironment({ db, hub }, environment.id);
+    void evaluateManagedEnvironmentArchiveCleanup({ db, hub }, {
+      environmentId: environment.id,
+    });
   }
 }, 10_000).unref();
 
