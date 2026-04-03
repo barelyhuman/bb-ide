@@ -165,6 +165,8 @@ describe("server-contract canonical schemas", () => {
       "project-deleted",
       "project-sources-changed",
       "threads-changed",
+      "automations-changed",
+      "nudges-changed",
     ]);
     expect(SYSTEM_CHANGE_KINDS).toEqual([]);
   });

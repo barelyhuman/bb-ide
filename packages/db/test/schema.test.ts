@@ -1,13 +1,16 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
+  automations,
   createConnection,
+  createAutomationId,
   createDraftId,
   createEnvironmentId,
   createEventId,
   createHostDaemonCommandId,
   createHostDaemonSessionId,
   createHostId,
+  createManagerThreadNudgeId,
   createProjectId,
   createProjectSourceId,
   createThreadId,
@@ -16,6 +19,7 @@ import {
   hostDaemonCommands,
   hostDaemonSessions,
   hosts,
+  managerThreadNudges,
   migrate,
   projectSources,
   projects,
@@ -45,7 +49,9 @@ describe("db rebuild schema", () => {
     const projectId = createProjectId();
     const sourceId = createProjectSourceId();
     const environmentId = createEnvironmentId();
+    const automationId = createAutomationId();
     const threadId = createThreadId();
+    const nudgeId = createManagerThreadNudgeId();
     const sessionId = createHostDaemonSessionId();
     const commandId = createHostDaemonCommandId();
     const eventId = createEventId();
@@ -86,13 +92,40 @@ describe("db rebuild schema", () => {
       createdAt: now,
       updatedAt: now,
     }).run();
+    db.insert(automations).values({
+      id: automationId,
+      projectId,
+      name: "Daily sync",
+      enabled: true,
+      triggerType: "schedule",
+      triggerConfig: "{\"triggerType\":\"schedule\",\"cron\":\"0 8 * * 1-5\",\"timezone\":\"UTC\"}",
+      action: "{\"actionType\":\"scheduled-thread\",\"threadRequest\":{\"providerId\":\"codex\",\"model\":\"gpt-5\",\"input\":[{\"type\":\"text\",\"text\":\"Run daily sync\"}],\"environment\":{\"type\":\"host\",\"hostId\":\"host_1\",\"workspace\":{\"type\":\"managed-clone\"}}}}",
+      autoArchive: false,
+      nextRunAt: now + 60_000,
+      runCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    }).run();
     db.insert(threads).values({
       id: threadId,
       projectId,
       environmentId,
+      automationId,
       providerId: "codex",
       type: "standard",
       status: "idle",
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.insert(managerThreadNudges).values({
+      id: nudgeId,
+      projectId,
+      threadId,
+      name: "check-async",
+      cron: "0 * * * *",
+      timezone: "UTC",
+      enabled: true,
+      nextFireAt: now + 30_000,
       createdAt: now,
       updatedAt: now,
     }).run();
@@ -145,9 +178,18 @@ describe("db rebuild schema", () => {
 
     const insertedThread = db.select().from(threads).get();
     expect(insertedThread?.environmentId).toBe(environmentId);
+    expect(insertedThread?.automationId).toBe(automationId);
     expect(db.select().from(events).get()).toMatchObject({
       turnId: "turn_1",
       providerThreadId: "provider-thread-1",
+    });
+    expect(db.select().from(automations).get()).toMatchObject({
+      triggerType: "schedule",
+      autoArchive: false,
+    });
+    expect(db.select().from(managerThreadNudges).get()).toMatchObject({
+      name: "check-async",
+      timezone: "UTC",
     });
     expect(db.select().from(hostDaemonCommands).get()).toMatchObject({
       sessionId,
@@ -248,6 +290,116 @@ describe("db rebuild schema", () => {
 
     expect(db.select().from(environments).all()).toHaveLength(0);
     expect(db.select().from(threads).all()).toHaveLength(0);
+
+    closeConnection(db);
+  });
+
+  it("sets thread automation ids to null when an automation is deleted", () => {
+    const db = createConnection(":memory:");
+    migrate(db);
+
+    const now = Date.now();
+    const hostId = createHostId();
+    const projectId = createProjectId();
+    const automationId = createAutomationId();
+    const threadId = createThreadId();
+
+    db.insert(hosts).values({
+      id: hostId,
+      name: "Local host",
+      type: "persistent",
+      lastSeenAt: now,
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.insert(projects).values({
+      id: projectId,
+      name: "Rebuild",
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.insert(automations).values({
+      id: automationId,
+      projectId,
+      name: "Daily sync",
+      enabled: true,
+      triggerType: "schedule",
+      triggerConfig: "{\"triggerType\":\"schedule\",\"cron\":\"0 8 * * 1-5\",\"timezone\":\"UTC\"}",
+      action: "{\"actionType\":\"scheduled-thread\",\"threadRequest\":{\"providerId\":\"codex\",\"model\":\"gpt-5\",\"input\":[{\"type\":\"text\",\"text\":\"Run daily sync\"}],\"environment\":{\"type\":\"host\",\"hostId\":\"host_1\",\"workspace\":{\"type\":\"managed-clone\"}}}}",
+      autoArchive: false,
+      nextRunAt: now + 60_000,
+      runCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.insert(threads).values({
+      id: threadId,
+      projectId,
+      automationId,
+      providerId: "codex",
+      type: "standard",
+      status: "idle",
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+
+    db.delete(automations).where(eq(automations.id, automationId)).run();
+
+    expect(db.select().from(threads).where(eq(threads.id, threadId)).get()?.automationId)
+      .toBeNull();
+
+    closeConnection(db);
+  });
+
+  it("cascades thread deletion to manager thread nudges", () => {
+    const db = createConnection(":memory:");
+    migrate(db);
+
+    const now = Date.now();
+    const hostId = createHostId();
+    const projectId = createProjectId();
+    const threadId = createThreadId();
+    const nudgeId = createManagerThreadNudgeId();
+
+    db.insert(hosts).values({
+      id: hostId,
+      name: "Local host",
+      type: "persistent",
+      lastSeenAt: now,
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.insert(projects).values({
+      id: projectId,
+      name: "Rebuild",
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.insert(threads).values({
+      id: threadId,
+      projectId,
+      providerId: "codex",
+      type: "manager",
+      status: "idle",
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+    db.insert(managerThreadNudges).values({
+      id: nudgeId,
+      projectId,
+      threadId,
+      name: "morning-check",
+      cron: "0 9 * * *",
+      timezone: "UTC",
+      enabled: true,
+      nextFireAt: now + 60_000,
+      createdAt: now,
+      updatedAt: now,
+    }).run();
+
+    db.delete(threads).where(eq(threads.id, threadId)).run();
+
+    expect(db.select().from(managerThreadNudges).all()).toHaveLength(0);
 
     closeConnection(db);
   });
@@ -545,6 +697,8 @@ describe("db rebuild schema", () => {
     expect(createProjectSourceId()).toMatch(/^src_/u);
     expect(createEnvironmentId()).toMatch(/^env_/u);
     expect(createThreadId()).toMatch(/^thr_/u);
+    expect(createAutomationId()).toMatch(/^auto_/u);
+    expect(createManagerThreadNudgeId()).toMatch(/^mnge_/u);
     expect(createEventId()).toMatch(/^evt_/u);
     expect(createDraftId()).toMatch(/^draft_/u);
     expect(createHostDaemonSessionId()).toMatch(/^hses_/u);

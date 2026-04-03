@@ -18,6 +18,7 @@ export const ALLOWED_TRANSITIONS: Record<ThreadStatus, ThreadStatus[]> = {
 };
 
 export interface CreateThreadInput {
+  automationId?: string | null;
   projectId: string;
   environmentId?: string | null;
   providerId: string;
@@ -40,6 +41,7 @@ export function createThread(
       id,
       projectId: input.projectId,
       environmentId: input.environmentId ?? null,
+      automationId: input.automationId ?? null,
       providerId: input.providerId,
       type: input.type ?? "standard",
       title: input.title ?? null,

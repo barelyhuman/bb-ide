@@ -3,12 +3,14 @@ export type { DbConnection } from "./connection.js";
 
 export * from "./schema.js";
 export {
+  createAutomationId,
   createDraftId,
   createEnvironmentId,
   createEventId,
   createHostDaemonCommandId,
   createHostDaemonSessionId,
   createHostId,
+  createManagerThreadNudgeId,
   createProjectId,
   createProjectSourceId,
   createThreadId,

@@ -22,6 +22,20 @@ export type {
 } from "./project-sources.js";
 
 export {
+  createAutomation,
+  deleteAutomation,
+  getAutomation,
+  hasOpenAutomationThread,
+  listAutomations,
+  listDueAutomations,
+  updateAutomation,
+} from "./automations.js";
+export type {
+  CreateAutomationInput,
+  UpdateAutomationInput,
+} from "./automations.js";
+
+export {
   createThread,
   countLiveThreadsInEnvironment,
   getThread,
@@ -44,6 +58,20 @@ export type {
   MarkThreadStopRequestedArgs,
   UpdateThreadInput,
 } from "./threads.js";
+
+export {
+  createManagerThreadNudge,
+  deleteManagerThreadNudge,
+  deleteManagerThreadNudgesForThread,
+  getManagerThreadNudge,
+  listDueManagerThreadNudges,
+  listManagerThreadNudgesByThread,
+  updateManagerThreadNudge,
+} from "./manager-thread-nudges.js";
+export type {
+  CreateManagerThreadNudgeInput,
+  UpdateManagerThreadNudgeInput,
+} from "./manager-thread-nudges.js";
 
 export {
   applyProvisionedEnvironment,

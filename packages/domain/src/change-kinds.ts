@@ -22,6 +22,8 @@ export const PROJECT_CHANGE_KINDS = [
   "project-deleted",
   "project-sources-changed",
   "threads-changed",
+  "automations-changed",
+  "nudges-changed",
 ] as const;
 export type ProjectChangeKind = (typeof PROJECT_CHANGE_KINDS)[number];
 

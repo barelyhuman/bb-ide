@@ -116,6 +116,31 @@ export const environments = sqliteTable(
   ],
 );
 
+export const automations = sqliteTable(
+  "automations",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    triggerType: text("trigger_type").notNull(),
+    triggerConfig: text("trigger_config").notNull(),
+    action: text("action").notNull(),
+    autoArchive: integer("auto_archive", { mode: "boolean" }).notNull().default(false),
+    nextRunAt: integer("next_run_at"),
+    lastRunAt: integer("last_run_at"),
+    runCount: integer("run_count").notNull().default(0),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    index("automations_project_idx").on(table.projectId),
+    index("automations_due_idx").on(table.enabled, table.triggerType, table.nextRunAt),
+  ],
+);
+
 export const threads = sqliteTable(
   "threads",
   {
@@ -124,6 +149,9 @@ export const threads = sqliteTable(
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     environmentId: text("environment_id").references(() => environments.id, {
+      onDelete: "set null",
+    }),
+    automationId: text("automation_id").references(() => automations.id, {
       onDelete: "set null",
     }),
     providerId: text("provider_id").notNull(),
@@ -145,12 +173,48 @@ export const threads = sqliteTable(
   (table) => [
     index("threads_project_updated_idx").on(table.projectId, table.updatedAt),
     index("threads_environment_idx").on(table.environmentId),
+    index("threads_automation_runtime_idx").on(
+      table.automationId,
+      table.archivedAt,
+      table.deletedAt,
+      table.status,
+    ),
     index("threads_parent_idx").on(table.parentThreadId),
     index("threads_archived_status_idx").on(table.archivedAt, table.status),
     index("threads_environment_archived_deleted_idx").on(
       table.environmentId,
       table.archivedAt,
       table.deletedAt,
+    ),
+  ],
+);
+
+export const managerThreadNudges = sqliteTable(
+  "manager_thread_nudges",
+  {
+    id: text("id").primaryKey(),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => threads.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    cron: text("cron").notNull(),
+    timezone: text("timezone").notNull(),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    nextFireAt: integer("next_fire_at").notNull(),
+    lastFiredAt: integer("last_fired_at"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    index("manager_thread_nudges_due_idx").on(table.enabled, table.nextFireAt),
+    index("manager_thread_nudges_project_idx").on(table.projectId),
+    uniqueIndex("manager_thread_nudges_sync_key_idx").on(
+      table.projectId,
+      table.threadId,
+      table.name,
     ),
   ],
 );

@@ -106,6 +106,7 @@ export const threadSchema = z.object({
   id: z.string(),
   projectId: z.string(),
   environmentId: z.string().nullable(),
+  automationId: z.string().nullable(),
   providerId: z.string(),
   type: threadTypeSchema,
   title: z.string().nullable(),

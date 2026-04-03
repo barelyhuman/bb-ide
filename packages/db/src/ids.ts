@@ -32,6 +32,14 @@ export function createThreadId(): string {
   return createId("thr");
 }
 
+export function createAutomationId(): string {
+  return createId("auto");
+}
+
+export function createManagerThreadNudgeId(): string {
+  return createId("mnge");
+}
+
 export function createEventId(): string {
   return createId("evt");
 }

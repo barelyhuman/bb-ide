@@ -23,6 +23,7 @@ interface ThreadOverrides extends Partial<Thread> {}
 function makeThread(overrides: ThreadOverrides = {}): Thread {
   return {
     archivedAt: null,
+    automationId: null,
     createdAt: 1,
     deletedAt: null,
     environmentId: "environment-1",
