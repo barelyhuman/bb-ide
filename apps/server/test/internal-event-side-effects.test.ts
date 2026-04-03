@@ -401,6 +401,89 @@ describe("internal event side effects", () => {
     }
   });
 
+  it("leaves completed automation threads visible when auto-archive is disabled", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-event-no-auto-archive",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/no-auto-archive-environment",
+      });
+      const automation = createAutomation(harness.db, harness.hub, {
+        projectId: project.id,
+        name: "No auto archive",
+        enabled: true,
+        triggerType: "schedule",
+        triggerConfig: JSON.stringify({
+          triggerType: "schedule",
+          cron: "0 8 * * *",
+          timezone: "UTC",
+        }),
+        action: JSON.stringify({
+          actionType: "scheduled-thread",
+          threadRequest: {
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Keep me visible" }],
+            environment: {
+              type: "reuse",
+              environmentId: environment.id,
+            },
+          },
+        }),
+        autoArchive: false,
+        nextRunAt: Date.now() + 60_000,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      harness.db.update(threads)
+        .set({ automationId: automation.id })
+        .where(eq(threads.id, thread.id))
+        .run();
+
+      const response = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            {
+              environmentId: environment.id,
+              threadId: thread.id,
+              sequence: 1,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/completed",
+                threadId: thread.id,
+                providerThreadId: "provider-no-auto-archive",
+                turnId: "turn-no-auto-archive",
+                status: "completed",
+              },
+            },
+          ],
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(
+        harness.db
+          .select()
+          .from(threads)
+          .where(eq(threads.id, thread.id))
+          .get()?.archivedAt,
+      ).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("does not replay turn/completed side effects for a duplicate batch", async () => {
     const harness = await createTestAppHarness();
     try {
