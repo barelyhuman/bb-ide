@@ -16,7 +16,7 @@ Context variables are set automatically when running inside a thread environment
 - `BB_THREAD_ID` — current thread
 - `BB_ENVIRONMENT_ID` — current environment
 
-Read-only commands (e.g., `show`, `list`, `log`) print which thread or project was resolved from these env vars.
+Read-only commands (e.g., `show`, `list`, `log`) print which thread or project was resolved from these env vars when they infer context from the environment.
 Mutating commands (e.g., `commit`, `stop`, `archive`, `update`) require an explicit thread ID or the `--self` flag to target the current thread from `BB_THREAD_ID`.
 
 ## Threads
@@ -38,10 +38,12 @@ Inspecting:
 bb thread list --project <project-id>                 # List all threads in a project
 bb thread list --project <project-id> --parent-thread <manager-id>  # List managed threads only
 bb thread show <thread-id>                            # Show thread details
+bb thread show --self                                 # Show the current thread
 bb thread show <thread-id> --work-status              # Include git working-tree status
 bb thread show <thread-id> --git-diff                 # Include git diff
 bb thread show <thread-id> --merge-base-branches      # Include available merge-base branches
 bb thread log <thread-id>                             # Show thread event log
+bb thread log --self                                  # Show the current thread log
 bb thread log <thread-id> --format json --limit 50    # Raw events as JSON (paginated)
 bb thread output <thread-id>                          # Get the final output of a thread
 ```

@@ -19,11 +19,12 @@ import { createClient, type Client, unwrap } from "../../client.js";
 import {
   outputJson,
   printContextLabel,
-  requireThreadIdWithLabel,
+  requireThreadIdWithLabelOrSelf,
 } from "../helpers.js";
 import { statusText } from "./helpers.js";
 
 interface ThreadShowCommandOptions {
+  self?: boolean;
   workStatus?: boolean;
   gitDiff?: boolean;
   diffTarget?: string;
@@ -34,6 +35,7 @@ interface ThreadShowCommandOptions {
 }
 
 interface ThreadLogCommandOptions {
+  self?: boolean;
   json?: boolean;
   format?: string;
   limit?: string;
@@ -82,6 +84,7 @@ export function registerShowCommand(
   parent
     .command("show [id]")
     .description("Show thread details (defaults to BB_THREAD_ID)")
+    .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
     .option("--work-status", "Include work status (git state) in output")
     .option("--git-diff", "Include git diff in output")
@@ -100,8 +103,8 @@ export function registerShowCommand(
     )
     .option("--merge-base-branches", "Include available merge-base branches in output")
     .action(action(async (id: string | undefined, opts: ThreadShowCommandOptions) => {
+      const resolved = requireThreadIdWithLabelOrSelf(id, opts);
       const client = createClient(getUrl());
-      const resolved = requireThreadIdWithLabel(id);
       const threadId = resolved.id;
       printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
       const thread = await unwrap<Thread>(
@@ -285,6 +288,7 @@ export function registerShowCommand(
   parent
     .command("log [id]")
     .description("Show thread event log (defaults to BB_THREAD_ID)")
+    .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output (alias for --format json)")
     .option(
       "--format <format>",
@@ -294,8 +298,8 @@ export function registerShowCommand(
     .option("--limit <count>", "Maximum number of events to return; json format only (default 100)")
     .option("--after-seq <seq>", "Return events after this sequence number; json format only")
     .action(action(async (id: string | undefined, opts: ThreadLogCommandOptions) => {
+      const resolved = requireThreadIdWithLabelOrSelf(id, opts);
       const client = createClient(getUrl());
-      const resolved = requireThreadIdWithLabel(id);
       const threadId = resolved.id;
       printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
       const format = resolveTimelineFormat(opts);

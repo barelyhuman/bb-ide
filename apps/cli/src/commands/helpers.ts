@@ -11,8 +11,10 @@ import type { ResolvedId } from "../context-env.js";
 
 export {
   type ResolvedId,
+  type ThreadSelfTargetOptions,
   requireProjectIdWithLabel,
   requireThreadIdWithLabel,
+  requireThreadIdWithLabelOrSelf,
   requireThreadIdOrSelf,
 } from "../context-env.js";
 
@@ -20,10 +22,6 @@ const REASONING_LEVELS: ReasoningLevel[] = ["low", "medium", "high", "xhigh"];
 
 export interface JsonOutputOptions {
   json?: boolean;
-}
-
-export interface SelfTargetOptions {
-  self?: boolean;
 }
 
 /**

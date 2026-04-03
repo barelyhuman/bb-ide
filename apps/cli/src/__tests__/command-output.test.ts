@@ -1170,6 +1170,55 @@ describe("CLI command output contracts", () => {
     expect(lines.some((line) => line.includes("Archived:"))).toBe(true);
   });
 
+  it("bb thread show --self resolves from BB_THREAD_ID", async () => {
+    process.env.BB_THREAD_ID = "thread-show-self";
+    const thread: Thread = makeThread({
+      id: "thread-show-self",
+      projectId: "proj-1",
+      providerId: "codex",
+      type: "standard",
+      status: "idle",
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    const get = vi.fn(async () => thread);
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              $get: get,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["thread", "show", "--self"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(get).toHaveBeenCalledWith({
+      param: { id: "thread-show-self" },
+    });
+    expect(collectLogLines(vi.mocked(console.error))).toEqual([]);
+  });
+
+  it("bb thread show rejects combining a thread id with --self", async () => {
+    process.env.BB_THREAD_ID = "thread-show-self";
+
+    await expect(
+      runCommand(["thread", "show", "thread-explicit", "--self"], (program) =>
+        registerThreadCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+
+    expect(collectLogLines(vi.mocked(console.error))).toContain(
+      "Error: Cannot combine a thread ID argument with --self.",
+    );
+    expect(createClientMock).not.toHaveBeenCalled();
+  });
+
 });
 
 describe("CLI JSON output contracts", () => {
@@ -1788,6 +1837,42 @@ describe("CLI JSON output contracts", () => {
     const output = String(vi.mocked(console.log).mock.calls[0]?.[0]);
     expect(output).toContain("Provisioning ready");
     expect(output).not.toContain("Provisioning interrupted");
+  });
+
+  it("bb thread log --self resolves from BB_THREAD_ID", async () => {
+    process.env.BB_THREAD_ID = "thread-log-self";
+    const getEvents = vi.fn(async () => []);
+    const getTimeline = vi.fn(async () => ({ rows: [] }));
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              events: {
+                $get: getEvents,
+              },
+              timeline: {
+                $get: getTimeline,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["thread", "log", "--self"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(getEvents).toHaveBeenCalledWith({
+      param: { id: "thread-log-self" },
+      query: { limit: "100" },
+    });
+    expect(getTimeline).toHaveBeenCalledWith({
+      param: { id: "thread-log-self" },
+      query: {},
+    });
+    expect(collectLogLines(vi.mocked(console.error))).toEqual([]);
   });
 
   it("bb thread output --json prints the raw output payload", async () => {

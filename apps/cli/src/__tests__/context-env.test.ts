@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   requireProjectId,
   requireThreadId,
+  requireThreadIdWithLabelOrSelf,
   resolveContextSnapshot,
   resolveProjectId,
   resolveThreadId,
@@ -62,5 +63,22 @@ describe("context-env", () => {
     expect(snapshot.projectId).toBe("proj-1");
     expect(snapshot.threadId).toBe("thread-1");
     expect(snapshot.serverUrl).toMatch(/^https?:\/\//);
+  });
+
+  it("resolves --self from BB_THREAD_ID for read-only thread commands", () => {
+    process.env.BB_THREAD_ID = "thread-self";
+
+    expect(requireThreadIdWithLabelOrSelf(undefined, { self: true })).toEqual({
+      id: "thread-self",
+      source: "self",
+    });
+  });
+
+  it("rejects combining a thread id with --self for read-only thread commands", () => {
+    process.env.BB_THREAD_ID = "thread-self";
+
+    expect(() =>
+      requireThreadIdWithLabelOrSelf("thread-explicit", { self: true }),
+    ).toThrow("Cannot combine a thread ID argument with --self.");
   });
 });

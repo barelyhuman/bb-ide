@@ -63,8 +63,12 @@ export function requireThreadId(flagValue?: string): string {
 
 export interface ResolvedId {
   id: string;
-  /** "arg" when provided as a positional/flag, "env" when resolved from the environment variable. */
-  source: "arg" | "env";
+  /** "arg" when provided as a positional/flag, "env" when resolved from the environment variable, "self" when explicitly targeted via --self. */
+  source: "arg" | "env" | "self";
+}
+
+export interface ThreadSelfTargetOptions {
+  self?: boolean;
 }
 
 /**
@@ -107,6 +111,40 @@ export function requireThreadIdWithLabel(positionalId?: string): ResolvedId {
 }
 
 /**
+ * Require a thread ID for read-only commands that support `--self`.
+ *
+ * - Positional `<id>` and `--self` are mutually exclusive.
+ * - `--self` resolves from BB_THREAD_ID.
+ * - If neither is provided, the command still falls back to BB_THREAD_ID and
+ *   can print a context label for that implicit resolution.
+ */
+export function requireThreadIdWithLabelOrSelf(
+  positionalId: string | undefined,
+  opts: ThreadSelfTargetOptions,
+): ResolvedId {
+  if (opts.self && positionalId) {
+    throw new Error("Cannot combine a thread ID argument with --self.");
+  }
+  if (positionalId) {
+    return { id: validateId(positionalId, "<threadId> argument"), source: "arg" };
+  }
+  if (opts.self) {
+    const envThreadId = resolveThreadId();
+    if (!envThreadId) {
+      throw new Error("--self requires BB_THREAD_ID to be set.");
+    }
+    return { id: envThreadId, source: "self" };
+  }
+  const fromEnv = trimToUndefined(process.env.BB_THREAD_ID);
+  if (fromEnv) {
+    return { id: validateId(fromEnv, "BB_THREAD_ID"), source: "env" };
+  }
+  throw new Error(
+    "Missing thread context. Pass <threadId>, use --self, or set BB_THREAD_ID.",
+  );
+}
+
+/**
  * Require a thread ID for mutating commands that support `--self`.
  *
  * - Positional `<id>` and `--self` are mutually exclusive.
@@ -115,7 +153,7 @@ export function requireThreadIdWithLabel(positionalId?: string): ResolvedId {
  */
 export function requireThreadIdOrSelf(
   positionalId: string | undefined,
-  opts: { self?: boolean },
+  opts: ThreadSelfTargetOptions,
 ): string {
   if (opts.self && positionalId) {
     throw new Error("Cannot combine a thread ID argument with --self.");
