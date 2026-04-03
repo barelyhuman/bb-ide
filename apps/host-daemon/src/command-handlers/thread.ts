@@ -12,6 +12,7 @@ export async function startThread(
     workspaceProvisionType: command.workspaceContext.workspaceProvisionType,
   });
   const result = await entry.runtime.startThread({
+    environmentId: command.environmentId,
     threadId: command.threadId,
     projectId: command.projectId,
     providerId: command.providerId,
@@ -52,6 +53,7 @@ export async function ensureThreadRuntime(
       );
     }
     const result = await entry.runtime.resumeThread({
+      environmentId: command.environmentId,
       threadId: command.threadId,
       projectId: resumeContext.projectId,
       providerThreadId: resumeContext.providerThreadId,

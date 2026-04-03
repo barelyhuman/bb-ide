@@ -12,7 +12,11 @@ import type {
   ProviderAdapter,
 } from "./provider-adapter.js";
 import { createProviderForId } from "./provider-registry.js";
-import type { AgentRuntime, AgentRuntimeOptions } from "./types.js";
+import type {
+  AgentRuntime,
+  AgentRuntimeOptions,
+  AgentRuntimeShellEnvironment,
+} from "./types.js";
 
 // ---------------------------------------------------------------------------
 // JSON-RPC helpers
@@ -94,11 +98,31 @@ interface ProviderProcess {
 
 interface ThreadRuntimeConfig {
   dynamicTools?: DynamicTool[];
+  environmentId: string;
   instructions?: string;
   options?: ThreadExecutionOptions;
   projectId?: string;
   providerId: string;
   resumePath?: string;
+}
+
+interface ThreadShellEnvironmentArgs {
+  environmentId: string;
+  projectId?: string;
+  threadId: string;
+}
+
+function buildThreadShellEnvironment(
+  args: ThreadShellEnvironmentArgs & {
+    baseShellEnv: AgentRuntimeShellEnvironment | undefined;
+  },
+): Record<string, string> {
+  return {
+    ...(args.baseShellEnv ?? {}),
+    ...(args.projectId ? { BB_PROJECT_ID: args.projectId } : {}),
+    BB_THREAD_ID: args.threadId,
+    BB_ENVIRONMENT_ID: args.environmentId,
+  };
 }
 
 export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
@@ -194,12 +218,12 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     }
 
     const proc = requireProviderProcess(currentConfig.providerId);
-    const envVars: Record<string, string> = {
-      BB_THREAD_ID: args.threadId,
-      ...(currentConfig.projectId
-        ? { BB_PROJECT_ID: currentConfig.projectId }
-        : {}),
-    };
+    const envVars = buildThreadShellEnvironment({
+      baseShellEnv: options.shellEnv,
+      environmentId: currentConfig.environmentId,
+      projectId: currentConfig.projectId,
+      threadId: args.threadId,
+    });
 
     const command = proc.adapter.buildCommand({
       type: "thread/resume",
@@ -591,6 +615,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     },
 
     async startThread({
+      environmentId,
       threadId,
       projectId,
       providerId,
@@ -608,16 +633,19 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       proc.pendingIdentity.push(threadId);
       setThreadRuntimeConfig(threadId, {
         dynamicTools,
+        environmentId,
         instructions,
         options: execOpts,
         projectId,
         providerId: pid,
       });
 
-      const envVars: Record<string, string> = {
-        BB_PROJECT_ID: projectId,
-        BB_THREAD_ID: threadId,
-      };
+      const envVars = buildThreadShellEnvironment({
+        baseShellEnv: options.shellEnv,
+        environmentId,
+        projectId,
+        threadId,
+      });
 
       const cmd = proc.adapter.buildCommand({
         type: "thread/start",
@@ -674,6 +702,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     },
 
     async resumeThread({
+      environmentId,
       threadId,
       projectId,
       providerThreadId,
@@ -691,6 +720,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       proc.threadIds.add(threadId);
       setThreadRuntimeConfig(threadId, {
         dynamicTools,
+        environmentId,
         instructions,
         options: execOpts,
         projectId,
@@ -704,10 +734,12 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         proc.pendingIdentity.push(threadId);
       }
 
-      const envVars: Record<string, string> = {
-        BB_THREAD_ID: threadId,
-        ...(projectId ? { BB_PROJECT_ID: projectId } : {}),
-      };
+      const envVars = buildThreadShellEnvironment({
+        baseShellEnv: options.shellEnv,
+        environmentId,
+        projectId,
+        threadId,
+      });
 
       const cmd = proc.adapter.buildCommand({
         type: "thread/resume",

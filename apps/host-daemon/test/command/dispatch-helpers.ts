@@ -113,7 +113,9 @@ export function createFakeWorkspace(pathname: string) {
 
 export function createFakeRuntime() {
   const state = {
+    resumedEnvironmentId: undefined as string | undefined,
     startedThreadId: undefined as string | undefined,
+    startedEnvironmentId: undefined as string | undefined,
     startedDynamicTools: undefined as DynamicTool[] | undefined,
     startedOptions: undefined as ThreadExecutionOptions | undefined,
     startedInstructions: undefined as string | undefined,
@@ -137,10 +139,12 @@ export function createFakeRuntime() {
     async ensureProvider() {},
     async startThread(args: {
       dynamicTools?: DynamicTool[];
+      environmentId: string;
       instructions?: string;
       options?: ThreadExecutionOptions;
       threadId: string;
     }) {
+      state.startedEnvironmentId = args.environmentId;
       state.startedThreadId = args.threadId;
       state.startedDynamicTools = args.dynamicTools;
       state.startedOptions = args.options;
@@ -149,11 +153,13 @@ export function createFakeRuntime() {
     },
     async resumeThread(args: {
       dynamicTools?: DynamicTool[];
+      environmentId: string;
       instructions?: string;
       options?: ThreadExecutionOptions;
       providerThreadId?: string;
       threadId: string;
     }) {
+      state.resumedEnvironmentId = args.environmentId;
       state.resumedThreadId = args.threadId;
       state.resumedDynamicTools = args.dynamicTools;
       state.resumedOptions = args.options;

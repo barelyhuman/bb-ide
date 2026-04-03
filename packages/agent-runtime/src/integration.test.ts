@@ -152,6 +152,7 @@ for (const providerId of providers) {
       try {
         const threadId = newThreadId();
         await ctx.runtime.startThread({
+          environmentId: "env-1",
           threadId,
           projectId: "test-project",
           providerId,
@@ -186,6 +187,7 @@ for (const providerId of providers) {
       try {
         const threadId = newThreadId();
         await ctx.runtime.startThread({
+          environmentId: "env-1",
           threadId,
           projectId: "test-project",
           providerId,
@@ -230,6 +232,7 @@ for (const providerId of providers) {
       try {
         const threadId = newThreadId();
         await ctx.runtime.startThread({
+          environmentId: "env-1",
           threadId,
           projectId: "test-project",
           providerId,
@@ -263,6 +266,7 @@ for (const providerId of providers) {
       try {
         const threadId = newThreadId();
         await ctx.runtime.startThread({
+          environmentId: "env-1",
           threadId,
           projectId: "test-project",
           providerId,
@@ -333,6 +337,7 @@ for (const providerId of providers) {
       try {
         const threadId = newThreadId();
         await ctx.runtime.startThread({
+          environmentId: "env-1",
           threadId,
           projectId: "test-project",
           providerId,
@@ -386,6 +391,7 @@ for (const providerId of providers) {
 
       try {
         const startResult = await ctx1.runtime.startThread({
+          environmentId: "env-1",
           threadId: firstThreadId,
           projectId: "test-project",
           providerId,
@@ -435,6 +441,7 @@ for (const providerId of providers) {
 
         // Attempt resume
         await ctx2.runtime.resumeThread({
+          environmentId: "env-1",
           threadId,
           providerThreadId,
           providerId,
@@ -472,6 +479,7 @@ for (const providerId of providers) {
           try {
             const fallbackThreadId = newThreadId();
             await ctx3.runtime.startThread({
+              environmentId: "env-1",
               threadId: fallbackThreadId,
               projectId: "test-project",
               providerId,
@@ -518,6 +526,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
         const threadB = newThreadId();
 
         await ctx.runtime.startThread({
+          environmentId: "env-1",
           threadId: threadA,
           projectId: "test-project",
           providerId: "codex",
@@ -525,6 +534,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
         });
 
         await ctx.runtime.startThread({
+          environmentId: "env-1",
           threadId: threadB,
           projectId: "test-project",
           providerId: "codex",
@@ -567,6 +577,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
         const claudeThread = newThreadId();
 
         await ctx.runtime.startThread({
+          environmentId: "env-1",
           threadId: codexThread,
           projectId: "test-project",
           providerId: "codex",
@@ -574,6 +585,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
         });
 
         await ctx.runtime.startThread({
+          environmentId: "env-1",
           threadId: claudeThread,
           projectId: "test-project",
           providerId: "claude-code",
@@ -645,6 +657,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
 
     try {
       const startResult = await ctx1.runtime.startThread({
+        environmentId: "env-1",
         threadId: firstThreadId,
         projectId: "test-project",
         providerId,
@@ -700,6 +713,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
     try {
       const threadId = newThreadId();
       await ctx2.runtime.resumeThread({
+        environmentId: "env-1",
         threadId,
         providerThreadId,
         providerId,
@@ -734,6 +748,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
 
     try {
       const startResult = await ctx1.runtime.startThread({
+        environmentId: "env-1",
         threadId: firstThreadId,
         projectId: "test-project",
         providerId,
@@ -769,6 +784,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
     try {
       const threadId = newThreadId();
       await ctx2.runtime.resumeThread({
+        environmentId: "env-1",
         threadId,
         providerThreadId,
         providerId,
@@ -828,6 +844,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
 
     try {
       const startResult = await ctx1.runtime.startThread({
+        environmentId: "env-1",
         threadId: firstThreadId,
         projectId: "test-project",
         providerId,
@@ -883,6 +900,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
     try {
       const threadId = newThreadId();
       await ctx2.runtime.resumeThread({
+        environmentId: "env-1",
         threadId,
         providerThreadId,
         providerId,
@@ -925,12 +943,14 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
     try {
       const [codexStart, claudeStart] = await Promise.all([
         ctx1.runtime.startThread({
+          environmentId: "env-1",
           threadId: codexThreadId1,
           projectId: "test-project",
           providerId: "codex",
           options: { sandboxMode: "danger-full-access" },
         }),
         ctx1.runtime.startThread({
+          environmentId: "env-1",
           threadId: claudeThreadId1,
           projectId: "test-project",
           providerId: "claude-code",
@@ -989,11 +1009,13 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
 
       await Promise.all([
         ctx2.runtime.resumeThread({
+          environmentId: "env-1",
           threadId: codexThreadId2,
           providerThreadId: codexProviderThreadId,
           providerId: "codex",
         }),
         ctx2.runtime.resumeThread({
+          environmentId: "env-1",
           threadId: claudeThreadId2,
           providerThreadId: claudeProviderThreadId,
           providerId: "claude-code",

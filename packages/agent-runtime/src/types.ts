@@ -21,6 +21,8 @@ export interface ProviderInfo {
   available: boolean;
 }
 
+export type AgentRuntimeShellEnvironment = Record<string, string>;
+
 // ---------------------------------------------------------------------------
 // Runtime options
 // ---------------------------------------------------------------------------
@@ -31,6 +33,9 @@ export interface AgentRuntimeOptions {
 
   /** Environment variables passed to ALL provider processes. */
   env?: Record<string, string>;
+
+  /** Environment variables injected into agent shell execution via adapters. */
+  shellEnv?: AgentRuntimeShellEnvironment;
 
   /** Called when a provider emits a translated event.
    *  Every event has `threadId` (bb ID) and `providerThreadId` (provider's internal ID). */
@@ -72,6 +77,7 @@ export interface AgentRuntime {
   }): Promise<void>;
 
   startThread(args: {
+    environmentId: string;
     threadId: string;
     projectId: string;
     providerId?: string;
@@ -82,6 +88,7 @@ export interface AgentRuntime {
   }): Promise<{ providerThreadId: string }>;
 
   resumeThread(args: {
+    environmentId: string;
     threadId: string;
     projectId?: string;
     providerThreadId?: string;

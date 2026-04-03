@@ -938,6 +938,7 @@ async function runScenario(args: {
   });
 
   await args.runtime.startThread({
+    environmentId: `${args.threadId}-env`,
     threadId: args.threadId,
     projectId: args.projectId,
     providerId: args.providerId,

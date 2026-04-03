@@ -55,6 +55,7 @@ describe("thread command dispatch", () => {
     );
 
     expect(startResult).toEqual({ providerThreadId: "provider-thread-1" });
+    expect(harness.runtimeState.startedEnvironmentId).toBe("env-1");
     expect(renameResult).toEqual({});
     expect(stopResult).toEqual({});
     expect(harness.runtimeState.startedThreadId).toBe("thread-1");
@@ -164,6 +165,7 @@ describe("thread command dispatch", () => {
         path: "/tmp/env-lazy",
       },
     ]);
+    expect(harness.runtimeState.resumedEnvironmentId).toBe("env-lazy");
     expect(harness.runtimeState.resumedProviderThreadId).toBe("provider-1");
     expect(harness.runtimeState.ranTurnText).toBe("hello");
   });

@@ -144,6 +144,33 @@ describe("RuntimeManager", () => {
     expect(entry.path).toBe("/tmp/env-1");
   });
 
+  it("passes shell env through to created runtimes", async () => {
+    const provisionWorkspace = createProvisionWorkspaceMock("/tmp/env-1");
+    const createRuntime = vi.fn(() => createFakeRuntime());
+    const manager = new RuntimeManager({
+      provisionWorkspace,
+      createRuntime,
+      shellEnv: {
+        PATH: "/tmp/bb-bin:/usr/bin",
+        BB_SERVER_URL: "http://127.0.0.1:3334",
+      },
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+
+    expect(createRuntime).toHaveBeenCalledWith(
+      expect.objectContaining({
+        shellEnv: {
+          PATH: "/tmp/bb-bin:/usr/bin",
+          BB_SERVER_URL: "http://127.0.0.1:3334",
+        },
+      }),
+    );
+  });
+
   it("reuses the existing runtime for subsequent requests", async () => {
     const provisionWorkspace = createProvisionWorkspaceMock("/tmp/env-1");
     const createRuntime = vi.fn(() => createFakeRuntime());

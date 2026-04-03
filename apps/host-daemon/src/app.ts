@@ -86,6 +86,7 @@ export interface CreateHostDaemonAppOptions {
   restart: () => Promise<void>;
   enableLocalApi: boolean;
   localApiPort: number;
+  runtimeShellEnv?: AgentRuntimeOptions["shellEnv"];
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
   onToolCall?: (request: ToolCallRequest) => Promise<ToolCallResponse>;
   openPath?: (path: string) => Promise<void>;
@@ -138,6 +139,7 @@ export async function createHostDaemonApp(
 
   const runtimeManager = new RuntimeManager({
     adapterFactory: options.adapterFactory,
+    shellEnv: options.runtimeShellEnv,
     onEvent: ({ environmentId, event }) => {
       eventBuffer.push({
         environmentId,

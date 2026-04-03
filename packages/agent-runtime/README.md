@@ -27,6 +27,7 @@ const runtime = createAgentRuntime({
 
 // Start a thread, run turns, get events via callbacks
 const { providerThreadId } = await runtime.startThread({
+  environmentId: "env-1",
   threadId: "t1",
   projectId: "p1",
   providerId: "codex",
@@ -40,10 +41,16 @@ await runtime.runTurn({
 });
 
 // Multiple threads on the same runtime, even across providers
-await runtime.startThread({ threadId: "t2", projectId: "p1", providerId: "claude-code" });
+await runtime.startThread({
+  environmentId: "env-1",
+  threadId: "t2",
+  projectId: "p1",
+  providerId: "claude-code",
+});
 
 // Resume across process lifetimes
 await runtime.resumeThread({
+  environmentId: "env-1",
   threadId: "t3",
   providerThreadId, // from previous session
   providerId: "codex",

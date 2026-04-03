@@ -22,6 +22,18 @@ function wait(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function findLastRecordedCommand(
+  commands: AdapterCommand[],
+  type: AdapterCommand["type"],
+): AdapterCommand | undefined {
+  for (let index = commands.length - 1; index >= 0; index -= 1) {
+    if (commands[index]?.type === type) {
+      return commands[index];
+    }
+  }
+  return undefined;
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -32,6 +44,20 @@ describe("createAgentRuntime", () => {
 
   function createFakeAdapter(scriptPath: string): ProviderAdapter {
     return createSharedFakeAdapter({ scriptPath });
+  }
+
+  function createRecordingAdapter(args: {
+    recordedCommands: AdapterCommand[];
+    scriptPath: string;
+  }): ProviderAdapter {
+    const adapter = createFakeAdapter(args.scriptPath);
+    return {
+      ...adapter,
+      buildCommand(command) {
+        args.recordedCommands.push(command);
+        return adapter.buildCommand(command);
+      },
+    };
   }
 
   function createWarningEventAdapter(scriptPath: string): ProviderAdapter {
@@ -239,6 +265,7 @@ describe("createAgentRuntime", () => {
     });
 
     const { providerThreadId } = await runtime.startThread({
+      environmentId: "env-1",
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
@@ -247,6 +274,104 @@ describe("createAgentRuntime", () => {
     expect(providerThreadId).toBe("prov-1");
     await wait(50);
     expect(events.some((e) => e.type === "thread/identity")).toBe(true);
+    await runtime.shutdown();
+  });
+
+  it("merges runtime shell env with per-thread context on start", async () => {
+    const recordedCommands: AdapterCommand[] = [];
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      shellEnv: {
+        PATH: "/tmp/bb-bin:/usr/bin",
+        BB_HOST_DAEMON_PORT: "3002",
+        BB_PROJECT_ID: "wrong-project",
+        BB_SERVER_URL: "http://127.0.0.1:3334",
+        BB_THREAD_ID: "wrong-thread",
+      },
+      onEvent: () => undefined,
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () =>
+        createRecordingAdapter({ recordedCommands, scriptPath }),
+    });
+
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+    });
+
+    const threadStart = recordedCommands.find(
+      (command) => command.type === "thread/start",
+    );
+    expect(threadStart?.type).toBe("thread/start");
+    if (!threadStart || threadStart.type !== "thread/start") {
+      throw new Error("Expected thread/start command");
+    }
+    expect(threadStart.options?.envVars).toEqual({
+      PATH: "/tmp/bb-bin:/usr/bin",
+      BB_HOST_DAEMON_PORT: "3002",
+      BB_PROJECT_ID: "p1",
+      BB_SERVER_URL: "http://127.0.0.1:3334",
+      BB_THREAD_ID: "t1",
+      BB_ENVIRONMENT_ID: "env-1",
+    });
+
+    await runtime.shutdown();
+  });
+
+  it("preserves merged shell env when reconfiguring a thread", async () => {
+    const recordedCommands: AdapterCommand[] = [];
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      shellEnv: {
+        PATH: "/tmp/bb-bin:/usr/bin",
+        BB_HOST_DAEMON_PORT: "3002",
+        BB_SERVER_URL: "http://127.0.0.1:3334",
+      },
+      onEvent: () => undefined,
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () =>
+        createRecordingAdapter({ recordedCommands, scriptPath }),
+    });
+
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+      instructions: "Initial instructions",
+    });
+
+    await runtime.runTurn({
+      threadId: "t1",
+      input: [{ type: "text", text: "follow up" }],
+      instructions: "Updated instructions",
+    });
+
+    const reconfigureCommand = findLastRecordedCommand(
+      recordedCommands,
+      "thread/resume",
+    );
+    expect(reconfigureCommand?.type).toBe("thread/resume");
+    if (!reconfigureCommand || reconfigureCommand.type !== "thread/resume") {
+      throw new Error("Expected thread/resume command");
+    }
+    expect(reconfigureCommand.options?.envVars).toEqual({
+      PATH: "/tmp/bb-bin:/usr/bin",
+      BB_HOST_DAEMON_PORT: "3002",
+      BB_SERVER_URL: "http://127.0.0.1:3334",
+      BB_PROJECT_ID: "p1",
+      BB_THREAD_ID: "t1",
+      BB_ENVIRONMENT_ID: "env-1",
+    });
+
     await runtime.shutdown();
   });
 
@@ -262,7 +387,12 @@ describe("createAgentRuntime", () => {
       adapterFactory: () => createFakeAdapter(scriptPath),
     });
 
-    await runtime.startThread({ threadId: "t1", projectId: "p1", providerId: "fake" });
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+    });
     await runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "hello" }] });
     await wait(100);
 
@@ -284,6 +414,7 @@ describe("createAgentRuntime", () => {
     });
 
     await runtime.startThread({
+      environmentId: "env-1",
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
@@ -310,6 +441,7 @@ describe("createAgentRuntime", () => {
     });
 
     await runtime.startThread({
+      environmentId: "env-1",
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
@@ -344,6 +476,7 @@ describe("createAgentRuntime", () => {
     });
 
     const { providerThreadId } = await runtime.resumeThread({
+      environmentId: "env-1",
       threadId: "t1",
       providerThreadId: "old-prov-123",
       providerId: "fake",
@@ -369,7 +502,12 @@ describe("createAgentRuntime", () => {
       adapterFactory: () => createFakeAdapter(scriptPath),
     });
 
-    await runtime.startThread({ threadId: "t1", projectId: "p1", providerId: "fake" });
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+    });
     await runtime.renameThread({ threadId: "t1", title: "New Title" });
     await runtime.shutdown();
   });
@@ -385,7 +523,12 @@ describe("createAgentRuntime", () => {
       adapterFactory: () => createFakeAdapter(scriptPath),
     });
 
-    await runtime.startThread({ threadId: "t1", projectId: "p1", providerId: "fake" });
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+    });
     await runtime.stopThread({ threadId: "t1" });
     await runtime.shutdown();
   });
@@ -401,7 +544,12 @@ describe("createAgentRuntime", () => {
       adapterFactory: () => createFakeAdapter(scriptPath),
     });
 
-    await runtime.startThread({ threadId: "t1", projectId: "p1", providerId: "fake" });
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+    });
     await runtime.steerTurn({
       threadId: "t1",
       expectedTurnId: "turn-1",
@@ -430,6 +578,7 @@ describe("createAgentRuntime", () => {
     });
 
     await runtime.startThread({
+      environmentId: "env-1",
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
@@ -483,6 +632,7 @@ describe("createAgentRuntime", () => {
     });
 
     await runtime.startThread({
+      environmentId: "env-1",
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
@@ -553,7 +703,12 @@ describe("createAgentRuntime", () => {
       adapterFactory: () => createFakeAdapter(scriptPath),
     });
 
-    await runtime.startThread({ threadId: "t1", projectId: "p1", providerId: "fake" });
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+    });
     await runtime.runTurn({
       threadId: "t1",
       input: [{ type: "text", text: "call_tool:my_test_tool" }],
@@ -576,7 +731,12 @@ describe("createAgentRuntime", () => {
       adapterFactory: () => createFakeAdapter(scriptPath),
     });
 
-    await runtime.startThread({ threadId: "t1", projectId: "p1", providerId: "fake" });
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+    });
     // This should not throw — the error is caught and sent as JSON-RPC error
     await runtime.runTurn({
       threadId: "t1",
@@ -601,6 +761,7 @@ describe("createAgentRuntime", () => {
     });
 
     await runtime.startThread({
+      environmentId: "env-1",
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
@@ -686,7 +847,12 @@ describe("createAgentRuntime", () => {
       adapterFactory: () => createFakeAdapter(scriptPath),
     });
 
-    await runtime.startThread({ threadId: "t1", projectId: "p1", providerId: "fake" });
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+    });
 
     // runTurn on a thread that the fake provider doesn't know about (start creates it,
     // but if we use a different threadId the fake script returns an error)
@@ -714,7 +880,12 @@ describe("createAgentRuntime", () => {
       adapterFactory: () => errorAdapter,
     });
 
-    await runtime2.startThread({ threadId: "t1", projectId: "p1", providerId: "fake" });
+    await runtime2.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+    });
     // This should reject because the provider returns a -32601 error
     await expect(
       runtime2.runTurn({ threadId: "t1", input: [{ type: "text", text: "hi" }] }),
@@ -771,7 +942,12 @@ describe("createAgentRuntime", () => {
       adapterFactory: () => createFakeAdapter(scriptPath),
     });
 
-    await runtime.startThread({ threadId: "t1", projectId: "p1", providerId: "fake" });
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+    });
     await runtime.shutdown();
     // Should not hang
   });
@@ -858,7 +1034,12 @@ describe("createAgentRuntime", () => {
       adapterFactory: () => createFakeAdapter(crashAfterInitScript),
     });
 
-    await runtime.startThread({ threadId: "t1", projectId: "p1", providerId: "fake" });
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+    });
     await wait(200); // let the crash happen
 
     await expect(
@@ -902,7 +1083,12 @@ describe("createAgentRuntime", () => {
       adapterFactory: () => createFakeAdapter(crashDuringTurnScript),
     });
 
-    await runtime.startThread({ threadId: "t1", projectId: "p1", providerId: "fake" });
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+    });
 
     // runTurn sends the request but the provider crashes without responding
     await expect(
@@ -959,8 +1145,18 @@ describe("createAgentRuntime", () => {
       adapterFactory: () => createFakeAdapter(scriptPath),
     });
 
-    const r1 = await runtime.startThread({ threadId: "t1", projectId: "p1", providerId: "fake" });
-    const r2 = await runtime.startThread({ threadId: "t2", projectId: "p1", providerId: "fake" });
+    const r1 = await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+    });
+    const r2 = await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t2",
+      projectId: "p1",
+      providerId: "fake",
+    });
 
     // Each thread gets a unique providerThreadId
     expect(r1.providerThreadId).not.toBe(r2.providerThreadId);
@@ -998,6 +1194,7 @@ describe("createAgentRuntime", () => {
     });
 
     const { providerThreadId } = await runtime.startThread({
+      environmentId: "env-1",
       threadId: "my-thread",
       projectId: "p1",
       providerId: "fake",
@@ -1033,8 +1230,18 @@ describe("createAgentRuntime", () => {
       adapterFactory: () => createFakeAdapter(scriptPath),
     });
 
-    const r1 = await runtime.startThread({ threadId: "t1", projectId: "p1", providerId: "fake" });
-    const r2 = await runtime.startThread({ threadId: "t2", projectId: "p1", providerId: "fake" });
+    const r1 = await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+    });
+    const r2 = await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t2",
+      projectId: "p1",
+      providerId: "fake",
+    });
 
     await Promise.all([
       runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "from t1" }] }),
@@ -1121,11 +1328,13 @@ rl.on("line", (line) => {
     });
 
     await runtime.startThread({
+      environmentId: "env-1",
       threadId: "t1",
       projectId: "p1",
       providerId: "started-fake",
     });
     await runtime.startThread({
+      environmentId: "env-1",
       threadId: "t2",
       projectId: "p1",
       providerId: "started-fake",
@@ -1215,11 +1424,13 @@ rl.on("line", (line) => {
     });
 
     await runtime.startThread({
+      environmentId: "env-1",
       threadId: "t1",
       projectId: "p1",
       providerId: "warning-fake",
     });
     await runtime.startThread({
+      environmentId: "env-1",
       threadId: "t2",
       projectId: "p1",
       providerId: "warning-fake",
@@ -1277,8 +1488,18 @@ rl.on("line", (line) => {
       },
     });
 
-    await runtime.startThread({ threadId: "t1", projectId: "p1", providerId: "provider-a" });
-    await runtime.startThread({ threadId: "t2", projectId: "p1", providerId: "provider-b" });
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "provider-a",
+    });
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t2",
+      projectId: "p1",
+      providerId: "provider-b",
+    });
 
     await Promise.all([
       runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "from a" }] }),
@@ -1308,6 +1529,7 @@ rl.on("line", (line) => {
     });
 
     const { providerThreadId } = await runtime1.startThread({
+      environmentId: "env-1",
       threadId: "t1",
       projectId: "p1",
       providerId: "fake",
@@ -1329,6 +1551,7 @@ rl.on("line", (line) => {
     });
 
     await runtime2.resumeThread({
+      environmentId: "env-1",
       threadId: "t1-resumed",
       providerThreadId,
       providerId: "fake",
