@@ -28,7 +28,7 @@ async function createFakeCliPackage(
 ): Promise<FakeCliPackage> {
   const cliPackageRoot = await makeTempDir("bb-cli-package-");
   const cliPackageManifestPath = path.join(cliPackageRoot, "package.json");
-  const binPath = options.binPath ?? "./dist/index.js";
+  const binPath = options.binPath ?? "./dist/bin/bb";
   const cliEntryPath = path.resolve(cliPackageRoot, binPath);
 
   await fs.writeFile(
@@ -66,74 +66,56 @@ afterEach(async () => {
 });
 
 describe("prepareRuntimeShellEnv", () => {
-  it("creates a daemon-managed shim when the CLI entry is not directly executable", async () => {
-    const dataDir = await makeTempDir("bb-host-daemon-data-");
+  it("prepends the CLI executable directory to PATH", async () => {
     const { cliEntryPath, cliPackageManifestPath } = await createFakeCliPackage({
-      executable: false,
+      executable: true,
     });
 
     const shellEnv = await prepareRuntimeShellEnv({
-      dataDir,
       serverUrl: "http://127.0.0.1:3334",
       localApiPort: 3002,
       inheritedPath: "/usr/bin",
-      nodeExecutablePath: "/usr/local/bin/node",
       cliPackageManifestPath,
     });
 
-    const bbDirectoryPath = path.join(dataDir, "bin");
-    const bbExecutablePath = path.join(bbDirectoryPath, "bb");
-    const bbExecutableStats = await fs.lstat(bbExecutablePath);
-    const bbDirectoryStats = await fs.stat(bbDirectoryPath);
-    const shimContents = await fs.readFile(bbExecutablePath, "utf8");
+    const bbDirectoryPath = path.dirname(cliEntryPath);
 
     expect(shellEnv).toEqual({
       PATH: `${bbDirectoryPath}:/usr/bin`,
       BB_SERVER_URL: "http://127.0.0.1:3334",
       BB_HOST_DAEMON_PORT: "3002",
     });
-    expect(bbExecutableStats.isSymbolicLink()).toBe(false);
-    expect(bbDirectoryStats.mode & 0o777).toBe(0o700);
-    expect(bbExecutableStats.mode & 0o777).toBe(0o755);
-    expect(shimContents).toContain("/usr/local/bin/node");
-    expect(shimContents).toContain(cliEntryPath);
-  });
-
-  it("creates a symlink when the CLI entry is directly executable", async () => {
-    const dataDir = await makeTempDir("bb-host-daemon-data-");
-    const { cliEntryPath, cliPackageManifestPath } = await createFakeCliPackage({
-      executable: true,
-    });
-
-    await prepareRuntimeShellEnv({
-      dataDir,
-      serverUrl: "http://127.0.0.1:3334",
-      localApiPort: 3002,
-      cliPackageManifestPath,
-    });
-
-    const bbExecutablePath = path.join(dataDir, "bin", "bb");
-    const bbExecutableStats = await fs.lstat(bbExecutablePath);
-
-    expect(bbExecutableStats.isSymbolicLink()).toBe(true);
-    expect(await fs.readlink(bbExecutablePath)).toBe(cliEntryPath);
   });
 
   it("fails clearly when the built CLI entry is missing", async () => {
-    const dataDir = await makeTempDir("bb-host-daemon-data-");
     const { cliEntryPath, cliPackageManifestPath } = await createFakeCliPackage({
       writeEntry: false,
     });
 
     await expect(
       prepareRuntimeShellEnv({
-        dataDir,
         serverUrl: "http://127.0.0.1:3334",
         localApiPort: 3002,
         cliPackageManifestPath,
       }),
     ).rejects.toThrow(
       `Missing built bb CLI entry at ${cliEntryPath}. Build @bb/cli before starting the host daemon.`,
+    );
+  });
+
+  it("fails clearly when the built CLI entry is not executable", async () => {
+    const { cliEntryPath, cliPackageManifestPath } = await createFakeCliPackage({
+      executable: false,
+    });
+
+    await expect(
+      prepareRuntimeShellEnv({
+        serverUrl: "http://127.0.0.1:3334",
+        localApiPort: 3002,
+        cliPackageManifestPath,
+      }),
+    ).rejects.toThrow(
+      `Built bb CLI executable is not executable: ${cliEntryPath}. Rebuild @bb/cli before starting the host daemon.`,
     );
   });
 });

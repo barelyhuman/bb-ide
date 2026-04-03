@@ -47,7 +47,6 @@ export async function startHostDaemon(
     const identity = await (options.loadIdentity ?? loadHostIdentity)({ dataDir });
     const instanceId = (options.createInstanceId ?? randomUUID)();
     const runtimeShellEnv = await prepareRuntimeShellEnv({
-      dataDir,
       serverUrl,
       localApiPort,
     });

@@ -1,26 +1,14 @@
 import fs from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 
-const DEFAULT_BB_EXECUTABLE_DIRECTORY_NAME = "bin";
-const DEFAULT_BB_EXECUTABLE_NAME = "bb";
-const BB_EXECUTABLE_DIRECTORY_MODE = 0o700;
-const BB_EXECUTABLE_FILE_MODE = 0o755;
 const EXECUTABLE_PERMISSION_MASK = 0o111;
 
 interface PrepareRuntimeShellEnvOptions {
-  dataDir: string;
   localApiPort: number;
   serverUrl: string;
   inheritedPath?: string;
-  nodeExecutablePath?: string;
-  cliPackageManifestPath?: string;
-}
-
-interface EnsureDaemonManagedBbExecutableOptions {
-  dataDir: string;
-  nodeExecutablePath: string;
   cliPackageManifestPath?: string;
 }
 
@@ -42,10 +30,6 @@ function getErrorCode(error: unknown): string | undefined {
     return error.code;
   }
   return undefined;
-}
-
-function quoteShellArgument(value: string): string {
-  return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
 function getCliBinPathFromManifest(
@@ -101,50 +85,28 @@ async function resolveCliEntryPath(
   return cliEntryPath;
 }
 
-async function isDirectlyExecutable(cliEntryPath: string): Promise<boolean> {
+async function isExecutable(cliEntryPath: string): Promise<boolean> {
   const stats = await fs.stat(cliEntryPath);
   return (
     stats.isFile() && (stats.mode & EXECUTABLE_PERMISSION_MASK) !== 0
   );
 }
 
-async function ensureDaemonManagedBbExecutable(
-  options: EnsureDaemonManagedBbExecutableOptions,
+async function resolveBbExecutable(
+  cliPackageManifestPath?: string,
 ): Promise<DaemonManagedBbExecutable> {
-  const executableDirectoryPath = join(
-    options.dataDir,
-    DEFAULT_BB_EXECUTABLE_DIRECTORY_NAME,
-  );
-  const executablePath = join(
-    executableDirectoryPath,
-    DEFAULT_BB_EXECUTABLE_NAME,
-  );
-  const cliPackageManifestPath =
-    options.cliPackageManifestPath ?? getDefaultCliPackageManifestPath();
-  const cliEntryPath = await resolveCliEntryPath(cliPackageManifestPath);
+  const resolvedCliPackageManifestPath =
+    cliPackageManifestPath ?? getDefaultCliPackageManifestPath();
+  const cliEntryPath = await resolveCliEntryPath(resolvedCliPackageManifestPath);
 
-  await fs.mkdir(executableDirectoryPath, {
-    recursive: true,
-    mode: BB_EXECUTABLE_DIRECTORY_MODE,
-  });
-  await fs.chmod(executableDirectoryPath, BB_EXECUTABLE_DIRECTORY_MODE);
-  await fs.rm(executablePath, { recursive: true, force: true });
-
-  if (await isDirectlyExecutable(cliEntryPath)) {
-    await fs.symlink(cliEntryPath, executablePath);
-  } else {
-    const shimScript = `#!/bin/sh
-exec ${quoteShellArgument(options.nodeExecutablePath)} ${quoteShellArgument(cliEntryPath)} "$@"
-`;
-    await fs.writeFile(executablePath, shimScript, {
-      encoding: "utf8",
-      mode: BB_EXECUTABLE_FILE_MODE,
-    });
-    await fs.chmod(executablePath, BB_EXECUTABLE_FILE_MODE);
+  if (!(await isExecutable(cliEntryPath))) {
+    throw new Error(
+      `Built bb CLI executable is not executable: ${cliEntryPath}. Rebuild @bb/cli before starting the host daemon.`,
+    );
   }
 
   return {
-    executableDirectoryPath,
+    executableDirectoryPath: dirname(cliEntryPath),
   };
 }
 
@@ -160,11 +122,7 @@ function prependPath(
 export async function prepareRuntimeShellEnv(
   options: PrepareRuntimeShellEnvOptions,
 ): Promise<NonNullable<AgentRuntimeOptions["shellEnv"]>> {
-  const bbExecutable = await ensureDaemonManagedBbExecutable({
-    dataDir: options.dataDir,
-    nodeExecutablePath: options.nodeExecutablePath ?? process.execPath,
-    cliPackageManifestPath: options.cliPackageManifestPath,
-  });
+  const bbExecutable = await resolveBbExecutable(options.cliPackageManifestPath);
 
   return {
     PATH: prependPath(
