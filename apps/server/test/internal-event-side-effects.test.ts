@@ -1,8 +1,17 @@
 import { eq } from "drizzle-orm";
-import { getDraft, hostDaemonCommands, listDrafts, threads } from "@bb/db";
+import {
+  createAutomation,
+  deleteAutomation,
+  getDraft,
+  hostDaemonCommands,
+  listDrafts,
+  listManagerThreadNudgesByThread,
+  threads,
+} from "@bb/db";
 import { describe, expect, it, vi } from "vitest";
 import {
   internalAuthHeaders,
+  reportQueuedCommandSuccess,
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
 } from "./helpers/commands.js";
@@ -184,6 +193,209 @@ describe("internal event side effects", () => {
           .where(eq(threads.id, thread.id))
           .get()?.status,
       ).toBe("active");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("syncs ASYNC.md when a manager thread goes idle", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-event-manager-sync",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/manager-sync-environment",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+        type: "manager",
+      });
+
+      const responsePromise = harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            {
+              environmentId: environment.id,
+              threadId: thread.id,
+              sequence: 1,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/completed",
+                threadId: thread.id,
+                providerThreadId: "provider-manager-sync",
+                turnId: "turn-manager-sync",
+                status: "completed",
+              },
+            },
+          ],
+        }),
+      });
+
+      const asyncPath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}/ASYNC.md`;
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file" &&
+          command.path === asyncPath,
+      );
+      const readResponse = await reportQueuedCommandSuccess(
+        harness,
+        queued,
+        {
+          path: asyncPath,
+          content: [
+            "---",
+            "timezone: America/Los_Angeles",
+            "schedules:",
+            '  - cron: "0 8 * * 1-5"',
+            "    name: daily-recap",
+            "---",
+            "",
+            "## daily-recap",
+            "Summarize yesterday's work.",
+          ].join("\n"),
+          contentEncoding: "utf8",
+          mimeType: "text/markdown",
+          sizeBytes: 111,
+        },
+      );
+      expect(readResponse.status).toBe(200);
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      expect(
+        listManagerThreadNudgesByThread(harness.db, thread.id).map((nudge) => nudge.name),
+      ).toEqual(["daily-recap"]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("auto-archives completed automation threads when enabled", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-event-auto-archive",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/auto-archive-environment",
+      });
+      const automation = createAutomation(harness.db, harness.hub, {
+        projectId: project.id,
+        name: "Auto archive",
+        enabled: true,
+        triggerType: "schedule",
+        triggerConfig: JSON.stringify({
+          triggerType: "schedule",
+          cron: "0 8 * * *",
+          timezone: "UTC",
+        }),
+        action: JSON.stringify({
+          actionType: "scheduled-thread",
+          threadRequest: {
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Archive me" }],
+            environment: {
+              type: "reuse",
+              environmentId: environment.id,
+            },
+          },
+        }),
+        autoArchive: true,
+        nextRunAt: Date.now() + 60_000,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      harness.db.update(threads)
+        .set({ automationId: automation.id })
+        .where(eq(threads.id, thread.id))
+        .run();
+
+      const response = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            {
+              environmentId: environment.id,
+              threadId: thread.id,
+              sequence: 1,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/completed",
+                threadId: thread.id,
+                providerThreadId: "provider-auto-archive",
+                turnId: "turn-auto-archive",
+                status: "completed",
+              },
+            },
+          ],
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(
+        harness.db
+          .select()
+          .from(threads)
+          .where(eq(threads.id, thread.id))
+          .get()?.archivedAt,
+      ).toBeTypeOf("number");
+
+      deleteAutomation(harness.db, harness.hub, automation.id);
+      harness.db.update(threads)
+        .set({ archivedAt: null, status: "active" })
+        .where(eq(threads.id, thread.id))
+        .run();
+
+      const secondResponse = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            {
+              environmentId: environment.id,
+              threadId: thread.id,
+              sequence: 2,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/completed",
+                threadId: thread.id,
+                providerThreadId: "provider-auto-archive",
+                turnId: "turn-auto-archive-2",
+                status: "completed",
+              },
+            },
+          ],
+        }),
+      });
+
+      expect(secondResponse.status).toBe(200);
+      expect(
+        harness.db
+          .select()
+          .from(threads)
+          .where(eq(threads.id, thread.id))
+          .get()?.archivedAt,
+      ).toBeNull();
     } finally {
       await harness.cleanup();
     }

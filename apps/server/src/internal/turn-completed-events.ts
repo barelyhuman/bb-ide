@@ -6,13 +6,18 @@ import {
   resetActiveThreadEventPruningState,
 } from "../services/event-pruning.js";
 
+export interface ApplyTurnCompletedEventResult {
+  nextStatus: ThreadStatus | null;
+  thread: ReturnType<typeof getThread>;
+}
+
 export function applyTurnCompletedEvent(
   deps: Pick<AppDeps, "db" | "hub" | "logger">,
   payload: Extract<ThreadEvent, { type: "turn/completed" }>,
-): void {
+): ApplyTurnCompletedEventResult {
   const thread = getThread(deps.db, payload.threadId);
   if (!thread) {
-    return;
+    return { nextStatus: null, thread: null };
   }
 
   let nextStatus: ThreadStatus | null = null;
@@ -42,4 +47,6 @@ export function applyTurnCompletedEvent(
       threadId: payload.threadId,
     });
   }
+
+  return { nextStatus, thread };
 }

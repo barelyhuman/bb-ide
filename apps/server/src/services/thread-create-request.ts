@@ -1,14 +1,19 @@
 import type { ThreadTurnInitiator } from "@bb/domain";
 import type { CreateThreadRequest } from "@bb/server-contract";
 
-export interface PublicThreadCreateServiceRequest extends CreateThreadRequest {
-  type: "standard";
+export interface BaseThreadCreateServiceRequest extends CreateThreadRequest {
+  automationId?: string | null;
   spawnInitiator?: ThreadTurnInitiator;
 }
 
-export interface ManagerThreadCreateServiceRequest extends CreateThreadRequest {
+export interface PublicThreadCreateServiceRequest
+  extends BaseThreadCreateServiceRequest {
+  type: "standard";
+}
+
+export interface ManagerThreadCreateServiceRequest
+  extends BaseThreadCreateServiceRequest {
   type: "manager";
-  spawnInitiator?: ThreadTurnInitiator;
 }
 
 export type ThreadCreateServiceRequest =

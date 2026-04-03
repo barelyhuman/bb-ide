@@ -1,5 +1,5 @@
 import { eq, and, max, inArray } from "drizzle-orm";
-import type { DbConnection } from "../connection.js";
+import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { hostDaemonCommands } from "../schema.js";
 import { createHostDaemonCommandId } from "../ids.js";
@@ -11,6 +11,46 @@ export interface QueueCommandInput {
   payload: string;
 }
 
+type CommandWriteConnection = DbConnection | DbTransaction;
+
+function queueCommandRecord(
+  db: CommandWriteConnection,
+  input: QueueCommandInput,
+) {
+  const now = Date.now();
+  const id = createHostDaemonCommandId();
+
+  const maxRow = db
+    .select({ maxCursor: max(hostDaemonCommands.cursor) })
+    .from(hostDaemonCommands)
+    .where(eq(hostDaemonCommands.hostId, input.hostId))
+    .get();
+
+  const cursor = (maxRow?.maxCursor ?? 0) + 1;
+
+  return db.insert(hostDaemonCommands)
+    .values({
+      id,
+      hostId: input.hostId,
+      sessionId: input.sessionId ?? null,
+      cursor,
+      type: input.type,
+      payload: input.payload,
+      state: "pending",
+      retryCount: 0,
+      createdAt: now,
+    })
+    .returning()
+    .get();
+}
+
+export function queueCommandInTransaction(
+  db: DbTransaction,
+  input: QueueCommandInput,
+) {
+  return queueCommandRecord(db, input);
+}
+
 /**
  * Queue a command with a monotonic per-host cursor.
  * Runs in a transaction to ensure cursor uniqueness.
@@ -20,38 +60,9 @@ export function queueCommand(
   notifier: DbNotifier,
   input: QueueCommandInput,
 ) {
-  const now = Date.now();
-  const id = createHostDaemonCommandId();
-
-  return db.transaction((tx) => {
-    // Get max cursor for this host
-    const maxRow = tx
-      .select({ maxCursor: max(hostDaemonCommands.cursor) })
-      .from(hostDaemonCommands)
-      .where(eq(hostDaemonCommands.hostId, input.hostId))
-      .get();
-
-    const cursor = (maxRow?.maxCursor ?? 0) + 1;
-
-    const command = tx.insert(hostDaemonCommands)
-      .values({
-        id,
-        hostId: input.hostId,
-        sessionId: input.sessionId ?? null,
-        cursor,
-        type: input.type,
-        payload: input.payload,
-        state: "pending",
-        retryCount: 0,
-        createdAt: now,
-      })
-      .returning()
-      .get();
-
-    notifier.notifyCommand(input.hostId);
-
-    return command;
-  });
+  const command = db.transaction((tx) => queueCommandRecord(tx, input));
+  notifier.notifyCommand(input.hostId);
+  return command;
 }
 
 export interface FetchCommandsOptions {

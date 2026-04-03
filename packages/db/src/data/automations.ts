@@ -1,8 +1,9 @@
 import { and, desc, eq, inArray, isNull, lte } from "drizzle-orm";
-import type { DbConnection } from "../connection.js";
+import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { createAutomationId } from "../ids.js";
 import { automations, threads } from "../schema.js";
+import { sql } from "drizzle-orm";
 
 export interface CreateAutomationInput {
   action: string;
@@ -26,6 +27,15 @@ export interface UpdateAutomationInput {
   triggerConfig?: string;
   triggerType?: string;
 }
+
+export interface AdvanceAutomationAfterRunArgs {
+  automationId: string;
+  expectedNextRunAt: number | null;
+  nextRunAt: number | null;
+  now?: number;
+}
+
+type AutomationReadConnection = DbConnection | DbTransaction;
 
 export function createAutomation(
   db: DbConnection,
@@ -145,7 +155,7 @@ export function deleteAutomation(
 }
 
 export function hasOpenAutomationThread(
-  db: DbConnection,
+  db: AutomationReadConnection,
   automationId: string,
 ) {
   const row = db.select({ id: threads.id })
@@ -161,4 +171,44 @@ export function hasOpenAutomationThread(
     .get();
 
   return row !== undefined;
+}
+
+export function advanceAutomationAfterRunInTransaction(
+  db: DbTransaction,
+  args: AdvanceAutomationAfterRunArgs,
+) {
+  const now = args.now ?? Date.now();
+  const result = db.update(automations)
+    .set({
+      nextRunAt: args.nextRunAt,
+      lastRunAt: now,
+      runCount: sql`${automations.runCount} + 1`,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(automations.id, args.automationId),
+        args.expectedNextRunAt === null
+          ? isNull(automations.nextRunAt)
+          : eq(automations.nextRunAt, args.expectedNextRunAt),
+      ),
+    )
+    .run();
+
+  return result.changes > 0;
+}
+
+export function advanceAutomationAfterRun(
+  db: DbConnection,
+  notifier: DbNotifier,
+  args: AdvanceAutomationAfterRunArgs & { projectId: string },
+) {
+  const advanced = db.transaction(
+    (tx) => advanceAutomationAfterRunInTransaction(tx, args),
+    { behavior: "immediate" },
+  );
+  if (advanced) {
+    notifier.notifyProject(args.projectId, ["automations-changed"]);
+  }
+  return advanced;
 }

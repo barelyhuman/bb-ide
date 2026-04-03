@@ -1,10 +1,14 @@
 import {
+  queueCommandInTransaction,
   hostDaemonCommands,
   getActiveSession,
   queueCommand,
   transitionThreadStatus,
 } from "@bb/db";
 import { and, eq, inArray, sql } from "drizzle-orm";
+import type {
+  DbTransaction,
+} from "@bb/db";
 import type {
   PromptInput,
   ResolvedThreadExecutionOptions,
@@ -14,6 +18,7 @@ import type {
 import type {
   CreateThreadRequest,
 } from "@bb/server-contract";
+import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
@@ -21,6 +26,7 @@ import { getLastProviderThreadId } from "./thread-events.js";
 import {
   resolveExecutionOptions,
   resolveThreadRuntimeCommandConfig,
+  type ResolvedThreadRuntimeCommandConfig,
   type ThreadRuntimeCommandEnvironment,
 } from "./thread-runtime-config.js";
 
@@ -34,6 +40,16 @@ export interface ExecutionOptionsRequest {
 export interface QueueThreadStopCommandArgs {
   environmentId: string;
   hostId: string;
+  threadId: string;
+}
+
+export interface TurnRunCommandPayloadArgs {
+  environmentId: string;
+  eventSequence: number;
+  execution: ResolvedThreadExecutionOptions;
+  input: PromptInput[];
+  providerThreadId: string;
+  runtimeContext: ResolvedThreadRuntimeCommandConfig;
   threadId: string;
 }
 
@@ -79,10 +95,10 @@ export async function queueThreadStartCommand(
     environment: args.environment,
     isThreadCreation: true,
   });
-  const session = requireConnectedHostSession(deps, args.environment.hostId);
+  const session = getActiveSession(deps.db, args.environment.hostId);
   queueCommand(deps.db, deps.hub, {
     hostId: args.environment.hostId,
-    sessionId: session.id,
+    sessionId: session?.id ?? null,
     type: "thread.start",
     payload: JSON.stringify({
       type: "thread.start",
@@ -100,6 +116,76 @@ export async function queueThreadStartCommand(
       instructions: runtimeContext.instructions,
       dynamicTools: runtimeContext.dynamicTools,
     }),
+  });
+}
+
+function buildTurnRunCommandPayload(
+  args: TurnRunCommandPayloadArgs,
+): Extract<HostDaemonCommand, { type: "turn.run" }> {
+  return {
+    type: "turn.run",
+    environmentId: args.environmentId,
+    threadId: args.threadId,
+    eventSequence: args.eventSequence,
+    input: args.input,
+    options: args.execution,
+    resumeContext: {
+      workspaceContext: {
+        workspacePath: args.runtimeContext.workspacePath,
+        workspaceProvisionType: args.runtimeContext.workspaceProvisionType,
+      },
+      projectId: args.runtimeContext.projectId,
+      providerId: args.runtimeContext.providerId,
+      providerThreadId: args.providerThreadId,
+      instructions: args.runtimeContext.instructions,
+      dynamicTools: args.runtimeContext.dynamicTools,
+    },
+  };
+}
+
+export async function createTurnRunCommandPayload(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: {
+    environment: ThreadRuntimeCommandEnvironment;
+    eventSequence: number;
+    execution: ResolvedThreadExecutionOptions;
+    input: PromptInput[];
+    providerThreadId?: string;
+    thread: Thread;
+  },
+): Promise<Extract<HostDaemonCommand, { type: "turn.run" }>> {
+  const providerThreadId = requireProviderThreadId(
+    args.providerThreadId ?? getLastProviderThreadId(deps, args.thread.id),
+    args.thread.id,
+  );
+  const runtimeContext = await resolveThreadRuntimeCommandConfig(deps, {
+    thread: args.thread,
+    environment: args.environment,
+  });
+  return buildTurnRunCommandPayload({
+    environmentId: args.environment.id,
+    eventSequence: args.eventSequence,
+    execution: args.execution,
+    input: args.input,
+    providerThreadId,
+    runtimeContext,
+    threadId: args.thread.id,
+  });
+}
+
+export function queueTurnRunCommandInTransaction(
+  db: DbTransaction,
+  args: {
+    command: Extract<HostDaemonCommand, { type: "turn.run" }>;
+    hostId: string;
+    sessionId: string | null;
+  },
+) {
+  return queueCommandInTransaction(db, {
+    hostId: args.hostId,
+    sessionId: args.sessionId,
+    type: "turn.run",
+    payload: JSON.stringify(args.command),
   });
 }
 
@@ -149,37 +235,12 @@ export async function queueTurnRunCommand(
   },
 ): Promise<void> {
   const session = requireConnectedHostSession(deps, args.environment.hostId);
-  const providerThreadId = requireProviderThreadId(
-    args.providerThreadId ?? getLastProviderThreadId(deps, args.thread.id),
-    args.thread.id,
-  );
-  const runtimeContext = await resolveThreadRuntimeCommandConfig(deps, {
-    thread: args.thread,
-    environment: args.environment,
-  });
+  const command = await createTurnRunCommandPayload(deps, args);
   queueCommand(deps.db, deps.hub, {
     hostId: args.environment.hostId,
     sessionId: session.id,
     type: "turn.run",
-    payload: JSON.stringify({
-      type: "turn.run",
-      environmentId: args.environment.id,
-      threadId: args.thread.id,
-      eventSequence: args.eventSequence,
-      input: args.input,
-      options: args.execution,
-      resumeContext: {
-        workspaceContext: {
-          workspacePath: runtimeContext.workspacePath,
-          workspaceProvisionType: runtimeContext.workspaceProvisionType,
-        },
-        projectId: runtimeContext.projectId,
-        providerId: runtimeContext.providerId,
-        providerThreadId,
-        instructions: runtimeContext.instructions,
-        dynamicTools: runtimeContext.dynamicTools,
-      },
-    }),
+    payload: JSON.stringify(command),
   });
 
   if (args.thread.status === "idle") {

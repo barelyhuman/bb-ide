@@ -378,7 +378,6 @@ export async function createThreadFromRequest(
   }
 
   const hostId = request.environment.hostId;
-  requireConnectedHostSession(deps, hostId);
   const workspace = request.environment.workspace;
   const managedSource = workspace.type === "unmanaged"
     ? null

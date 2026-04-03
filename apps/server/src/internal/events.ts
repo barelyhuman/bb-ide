@@ -1,5 +1,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import {
+  archiveThread,
+  getAutomation,
   deriveStoredEventItemFields,
   events as storedEvents,
   environments,
@@ -22,6 +24,7 @@ import {
   isAgePrunableThreadEventType,
   maybePruneActiveThreadEventHistory,
 } from "../services/event-pruning.js";
+import { syncManagerThreadSchedules } from "../services/manager-schedule-sync.js";
 import { sendNextQueuedDraftIfPresent } from "../services/queued-drafts.js";
 import { tryTransition } from "../services/thread-transitions.js";
 import { applyTurnCompletedEvent } from "./turn-completed-events.js";
@@ -156,7 +159,7 @@ async function applyEventEffects(
       }
 
       if (event.type === "turn/completed") {
-        applyTurnCompletedEvent(deps, {
+        const turnCompleted = applyTurnCompletedEvent(deps, {
           ...event,
           threadId: entry.threadId,
         });
@@ -164,6 +167,26 @@ async function applyEventEffects(
           await sendNextQueuedDraftIfPresent(deps, {
             threadId: entry.threadId,
           });
+        }
+        if (turnCompleted.nextStatus === "idle" && turnCompleted.thread) {
+          const latestThread = getThread(deps.db, turnCompleted.thread.id);
+          if (latestThread?.status === "idle") {
+            if (latestThread.type === "manager") {
+              await syncManagerThreadSchedules(deps, {
+                threadId: latestThread.id,
+              });
+            }
+
+            if (
+              event.status === "completed" &&
+              latestThread.automationId
+            ) {
+              const automation = getAutomation(deps.db, latestThread.automationId);
+              if (automation?.autoArchive) {
+                archiveThread(deps.db, deps.hub, latestThread.id);
+              }
+            }
+          }
         }
         continue;
       }

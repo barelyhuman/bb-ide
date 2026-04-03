@@ -3,6 +3,9 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as schema from "./schema.js";
 
 export type DbConnection = ReturnType<typeof createConnection>;
+export type DbTransaction = Parameters<
+  Parameters<DbConnection["transaction"]>[0]
+>[0];
 
 export function createConnection(dbPath: string = "bb.db") {
   const sqlite = new Database(dbPath);

@@ -1,5 +1,5 @@
 export { createConnection } from "./connection.js";
-export type { DbConnection } from "./connection.js";
+export type { DbConnection, DbTransaction } from "./connection.js";
 
 export * from "./schema.js";
 export {

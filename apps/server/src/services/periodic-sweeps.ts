@@ -6,8 +6,10 @@ import {
   sweepManagedEnvironments,
 } from "@bb/db";
 import type { AppDeps } from "../types.js";
+import { sweepDueAutomations } from "./automation-sweep.js";
 import { evaluateManagedEnvironmentArchiveCleanup } from "./environment-cleanup.js";
 import { destroyHost } from "./host-lifecycle.js";
+import { sweepDueNudges } from "./nudge-sweep.js";
 
 export type EvaluateManagedEnvironmentArchiveCleanupFn =
   typeof evaluateManagedEnvironmentArchiveCleanup;
@@ -63,6 +65,8 @@ export async function runPeriodicSweeps(
     sweepExpiredCommands(deps.db, deps.hub);
     sweepExpiredLeases(deps.db, deps.hub);
     sweepDestroyingEnvironments(deps.db, deps.hub);
+    await sweepDueAutomations(deps);
+    await sweepDueNudges(deps);
     await runManagedEnvironmentArchiveCleanupSweep(
       deps,
       evaluateManagedEnvironmentArchiveCleanup,

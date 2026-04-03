@@ -208,6 +208,61 @@ describe("public thread routes", () => {
     }
   });
 
+  it("creates host threads even when the host is offline by queueing provisioning without a session", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = seedHost(harness.deps, {
+        id: "host-thread-offline",
+      });
+      const { project, source } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/offline-thread-project",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Create this thread offline" }],
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: {
+              type: "unmanaged",
+              path: null,
+            },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const createdThread = await readJson(response) as {
+        environmentId: string;
+        id: string;
+        status: string;
+      };
+      expect(createdThread.status).toBe("provisioning");
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "environment.provision",
+      );
+      expect(queued.command).toMatchObject({
+        environmentId: createdThread.environmentId,
+        path: source.path,
+        workspaceProvisionType: "unmanaged",
+      });
+      expect(queued.row.sessionId).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("creates managed-worktree threads and queues managed provisioning", async () => {
     const harness = await createTestAppHarness();
     const repo = await createTestGitRepo();

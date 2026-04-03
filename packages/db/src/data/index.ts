@@ -22,6 +22,8 @@ export type {
 } from "./project-sources.js";
 
 export {
+  advanceAutomationAfterRun,
+  advanceAutomationAfterRunInTransaction,
   createAutomation,
   deleteAutomation,
   getAutomation,
@@ -60,6 +62,8 @@ export type {
 } from "./threads.js";
 
 export {
+  advanceManagerThreadNudgeAfterFire,
+  advanceManagerThreadNudgeAfterFireInTransaction,
   createManagerThreadNudge,
   deleteManagerThreadNudge,
   deleteManagerThreadNudgesForThread,
@@ -122,6 +126,7 @@ export type {
 
 export {
   queueCommand,
+  queueCommandInTransaction,
   fetchCommands,
   reportCommandResult,
 } from "./commands.js";

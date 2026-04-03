@@ -223,7 +223,7 @@ describe("public thread lifecycle regressions", () => {
     }
   });
 
-  it("deletes a reused thread if queueing the initial start fails", async () => {
+  it("queues a reused thread start even when the host is disconnected", async () => {
     const harness = await createTestAppHarness();
     try {
       const host = seedHost(harness.deps, { id: "host-reuse-disconnected" });
@@ -252,11 +252,17 @@ describe("public thread lifecycle regressions", () => {
         }),
       });
 
-      expect(response.status).toBe(502);
-      await expect(readJson(response)).resolves.toMatchObject({
-        code: "host_disconnected",
-      });
-      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(0);
+      expect(response.status).toBe(201);
+      const thread = await readJson(response) as { id: string; status: string };
+      expect(thread.status).toBe("idle");
+      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(1);
+
+      const queuedCommand = harness.db
+        .select()
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.type, "thread.start"))
+        .get();
+      expect(queuedCommand?.sessionId).toBeNull();
     } finally {
       await harness.cleanup();
     }

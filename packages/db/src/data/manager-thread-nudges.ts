@@ -1,5 +1,5 @@
 import { and, asc, eq, lte } from "drizzle-orm";
-import type { DbConnection } from "../connection.js";
+import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { createManagerThreadNudgeId } from "../ids.js";
 import { managerThreadNudges } from "../schema.js";
@@ -21,6 +21,13 @@ export interface UpdateManagerThreadNudgeInput {
   name?: string;
   nextFireAt?: number;
   timezone?: string;
+}
+
+export interface AdvanceManagerThreadNudgeAfterFireArgs {
+  expectedNextFireAt: number;
+  nextFireAt: number;
+  nudgeId: string;
+  now?: number;
 }
 
 export function createManagerThreadNudge(
@@ -150,4 +157,41 @@ export function deleteManagerThreadNudgesForThread(
   db.delete(managerThreadNudges).where(eq(managerThreadNudges.threadId, threadId)).run();
   notifier.notifyProject(existing[0]!.projectId, ["nudges-changed"]);
   return existing.length;
+}
+
+export function advanceManagerThreadNudgeAfterFireInTransaction(
+  db: DbTransaction,
+  args: AdvanceManagerThreadNudgeAfterFireArgs,
+) {
+  const now = args.now ?? Date.now();
+  const result = db.update(managerThreadNudges)
+    .set({
+      nextFireAt: args.nextFireAt,
+      lastFiredAt: now,
+      updatedAt: now,
+    })
+    .where(
+      and(
+        eq(managerThreadNudges.id, args.nudgeId),
+        eq(managerThreadNudges.nextFireAt, args.expectedNextFireAt),
+      ),
+    )
+    .run();
+
+  return result.changes > 0;
+}
+
+export function advanceManagerThreadNudgeAfterFire(
+  db: DbConnection,
+  notifier: DbNotifier,
+  args: AdvanceManagerThreadNudgeAfterFireArgs & { projectId: string },
+) {
+  const advanced = db.transaction(
+    (tx) => advanceManagerThreadNudgeAfterFireInTransaction(tx, args),
+    { behavior: "immediate" },
+  );
+  if (advanced) {
+    notifier.notifyProject(args.projectId, ["nudges-changed"]);
+  }
+  return advanced;
 }

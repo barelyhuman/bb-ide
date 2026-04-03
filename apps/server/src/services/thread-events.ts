@@ -1,5 +1,6 @@
 import { eq, max, sql } from "drizzle-orm";
 import {
+  type DbTransaction,
   createEventId,
   deriveStoredEventItemFieldsFromSource,
   events,
@@ -67,6 +68,44 @@ export interface AppendSystemErrorEventArgs {
   threadId: string;
 }
 
+function insertThreadEventInTransaction(
+  db: DbTransaction,
+  args: AppendThreadEventArgs,
+): number {
+  const now = Date.now();
+  const maxRow = db
+    .select({ maxSeq: max(events.sequence) })
+    .from(events)
+    .where(eq(events.threadId, args.threadId))
+    .get();
+  const sequence = (maxRow?.maxSeq ?? 0) + 1;
+  const itemFields = deriveStoredEventItemFieldsFromSource({
+    type: args.type,
+    item: "item" in args.data ? args.data.item : undefined,
+    itemId: "itemId" in args.data ? args.data.itemId : undefined,
+  });
+
+  db.run(
+    sql`INSERT INTO events
+      (id, thread_id, environment_id, turn_id, provider_thread_id, sequence, type, item_id, item_kind, data, created_at)
+      VALUES (
+        ${createEventId()},
+        ${args.threadId},
+        ${args.environmentId ?? null},
+        ${args.turnId ?? null},
+        ${args.providerThreadId ?? null},
+        ${sequence},
+        ${args.type},
+        ${itemFields.itemId},
+        ${itemFields.itemKind},
+        ${JSON.stringify(args.data)},
+        ${now}
+      )`,
+  );
+
+  return sequence;
+}
+
 export function appendThreadEvent<TType extends ThreadEventType>(
   deps: Pick<AppDeps, "db" | "hub">,
   args: AppendThreadEventArgs<TType>,
@@ -75,41 +114,8 @@ export function appendThreadEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   args: AppendThreadEventArgs,
 ): number {
-  const now = Date.now();
   const nextSequence = deps.db.transaction(
-    (tx) => {
-      const maxRow = tx
-        .select({ maxSeq: max(events.sequence) })
-        .from(events)
-        .where(eq(events.threadId, args.threadId))
-        .get();
-      const sequence = (maxRow?.maxSeq ?? 0) + 1;
-      const itemFields = deriveStoredEventItemFieldsFromSource({
-        type: args.type,
-        item: "item" in args.data ? args.data.item : undefined,
-        itemId: "itemId" in args.data ? args.data.itemId : undefined,
-      });
-
-      tx.run(
-        sql`INSERT INTO events
-          (id, thread_id, environment_id, turn_id, provider_thread_id, sequence, type, item_id, item_kind, data, created_at)
-          VALUES (
-            ${createEventId()},
-            ${args.threadId},
-            ${args.environmentId ?? null},
-            ${args.turnId ?? null},
-            ${args.providerThreadId ?? null},
-            ${sequence},
-            ${args.type},
-            ${itemFields.itemId},
-            ${itemFields.itemKind},
-            ${JSON.stringify(args.data)},
-            ${now}
-          )`,
-      );
-
-      return sequence;
-    },
+    (tx) => insertThreadEventInTransaction(tx, args),
     { behavior: "immediate" },
   );
 
@@ -117,11 +123,44 @@ export function appendThreadEvent(
   return nextSequence;
 }
 
+export function appendThreadEventInTransaction<TType extends ThreadEventType>(
+  db: DbTransaction,
+  args: AppendThreadEventArgs<TType>,
+): number;
+export function appendThreadEventInTransaction(
+  db: DbTransaction,
+  args: AppendThreadEventArgs,
+): number {
+  return insertThreadEventInTransaction(db, args);
+}
+
 export function appendClientTurnEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   args: ClientTurnEventArgs,
 ): number {
   return appendThreadEvent(deps, {
+    threadId: args.threadId,
+    environmentId: args.environmentId,
+    type: args.type,
+    data: {
+      direction: "outbound",
+      source: args.source,
+      initiator: args.initiator,
+      input: args.input,
+      request: {
+        method: args.requestMethod,
+        params: {},
+      },
+      execution: args.execution,
+    },
+  });
+}
+
+export function appendClientTurnEventInTransaction(
+  db: DbTransaction,
+  args: ClientTurnEventArgs,
+): number {
+  return appendThreadEventInTransaction(db, {
     threadId: args.threadId,
     environmentId: args.environmentId,
     type: args.type,
