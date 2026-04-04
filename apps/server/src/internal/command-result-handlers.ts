@@ -111,6 +111,17 @@ async function handleProvisionCommandResult(
     });
 
     for (const thread of boundThreads) {
+      if (thread.deletedAt !== null) {
+        const environmentId = thread.environmentId;
+        deleteThread(deps.db, deps.hub, thread.id);
+        maybeStartEnvironmentCleanup(deps, environmentId);
+        continue;
+      }
+
+      if (thread.archivedAt !== null || thread.stopRequestedAt !== null) {
+        continue;
+      }
+
       const isInitiator = thread.id === command.initiator?.threadId;
       let entries = cwdBranchEntries;
       if (isInitiator && report.result.transcript.length > 0) {

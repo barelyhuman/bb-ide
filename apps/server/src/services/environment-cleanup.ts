@@ -29,6 +29,10 @@ export interface WouldCleanupEnvironmentArgs {
   excludeThreadId: string;
 }
 
+export interface AuthorizeEnvironmentCleanupArgs {
+  environmentId: string | null | undefined;
+}
+
 function hasConnectedHostSession(
   deps: Pick<AppDeps, "db">,
   hostId: string,
@@ -130,6 +134,29 @@ export function maybeStartEnvironmentCleanup(
     id: environment.id,
     path: environment.path,
     workspaceProvisionType: environment.workspaceProvisionType,
+  });
+}
+
+export function authorizeEnvironmentCleanup(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: AuthorizeEnvironmentCleanupArgs,
+): void {
+  if (!args.environmentId) {
+    return;
+  }
+
+  const environment = getEnvironment(deps.db, args.environmentId);
+  if (
+    !environment ||
+    !environment.managed ||
+    environment.status === "destroyed" ||
+    environment.status === "destroying"
+  ) {
+    return;
+  }
+
+  updateEnvironmentStatus(deps.db, deps.hub, environment.id, {
+    status: "destroying",
   });
 }
 

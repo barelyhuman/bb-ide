@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import {
+  createEnvironment,
   events,
   getEnvironment,
   getHost,
@@ -936,6 +937,49 @@ describe("internal session routes", () => {
     }
   });
 
+  it("hard-deletes deleted provisioning tombstones on reconnect", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-reconcile-deleted-provisioning",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: false,
+        status: "provisioning",
+        workspaceProvisionType: "unmanaged",
+        path: "/tmp/reconcile-deleted-provisioning",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+      markThreadDeleted(harness.db, harness.hub, { threadId: thread.id });
+
+      const response = await harness.app.request("/internal/session/open", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          hostId: host.id,
+          instanceId: "instance-reconcile-deleted-provisioning",
+          hostName: "Reconcile Deleted Provisioning Host",
+          hostType: "persistent",
+          dataDir: "/tmp/reconcile-deleted-provisioning",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      expect(getThread(harness.db, thread.id)).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("re-queues stop for stop-pending threads that are still active on reconnect", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -1146,6 +1190,92 @@ describe("internal session routes", () => {
 
       expect(response.status).toBe(200);
       expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroyed");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not revive deleted provisioning threads after provision succeeds", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-provision-deleted-thread",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = createEnvironment(harness.db, harness.hub, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: false,
+        path: null,
+        status: "provisioning",
+        workspaceProvisionType: "unmanaged",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+      markThreadDeleted(harness.db, harness.hub, { threadId: thread.id });
+      appendClientTurnEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        type: "client/thread/start",
+        input: [{ type: "text", text: "Provision then delete" }],
+        execution: {
+          model: "gpt-5",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          serviceTier: "default",
+          source: "client/thread/start",
+        },
+        initiator: "user",
+        requestMethod: "thread/start",
+        source: "spawn",
+      });
+      const provisionCommand = queueCommand(harness.db, harness.hub, {
+        hostId: host.id,
+        sessionId: session.id,
+        type: "environment.provision",
+        payload: JSON.stringify({
+          type: "environment.provision",
+          environmentId: environment.id,
+          workspaceProvisionType: "unmanaged",
+          path: "/tmp/target",
+          initiator: null,
+        }),
+      });
+
+      const response = await harness.app.request("/internal/session/command-result", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          commandId: provisionCommand.id,
+          completedAt: Date.now(),
+          type: "environment.provision",
+          ok: true,
+          result: {
+            path: "/tmp/target",
+            isGitRepo: true,
+            isWorktree: false,
+            branchName: "bb/provision-deleted",
+            defaultBranch: "main",
+            transcript: [],
+          },
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(getThread(harness.db, thread.id)).toBeNull();
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe("ready");
+      const queuedStarts = harness.db
+        .select()
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.type, "thread.start"))
+        .all();
+      expect(queuedStarts).toHaveLength(0);
     } finally {
       await harness.cleanup();
     }

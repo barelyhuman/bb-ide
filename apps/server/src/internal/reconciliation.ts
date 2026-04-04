@@ -31,7 +31,7 @@ export function reconcileSessionThreads(
     .where(
       and(
         eq(environments.hostId, hostId),
-        inArray(threads.status, ["active", "idle", "error"]),
+        inArray(threads.status, ["active", "idle", "error", "provisioning"]),
         or(isNotNull(threads.deletedAt), isNotNull(threads.stopRequestedAt)),
       ),
     )

@@ -12,6 +12,7 @@ import {
   updateHost,
   upsertHost,
 } from "@bb/db";
+import { isIP } from "node:net";
 import type { Environment } from "@bb/domain";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { SandboxHost } from "@bb/sandbox-host";
@@ -149,12 +150,21 @@ async function createThreadInEnvironment(
 
 function ensurePublicServerUrl(publicUrl: string): string {
   const parsedUrl = new URL(publicUrl);
+  const hostname = parsedUrl.hostname;
+  const isIpv4Address = isIP(hostname) === 4;
+  const ipv4Octets = isIpv4Address ? hostname.split(".").map(Number) : null;
+  const hasPrivateIpv4Address = ipv4Octets !== null && (
+    ipv4Octets[0] === 10 ||
+    (ipv4Octets[0] === 172 && ipv4Octets[1] >= 16 && ipv4Octets[1] <= 31) ||
+    (ipv4Octets[0] === 192 && ipv4Octets[1] === 168)
+  );
   if (
-    parsedUrl.hostname === "localhost" ||
-    parsedUrl.hostname === "127.0.0.1" ||
-    parsedUrl.hostname === "0.0.0.0" ||
-    parsedUrl.hostname === "::1" ||
-    parsedUrl.hostname === "[::1]"
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "0.0.0.0" ||
+    hostname === "::1" ||
+    hostname === "[::1]" ||
+    hasPrivateIpv4Address
   ) {
     throw new ApiError(
       409,
