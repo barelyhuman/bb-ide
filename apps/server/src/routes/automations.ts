@@ -174,9 +174,22 @@ export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
   get("/projects/:id/automations", (context) => {
     const projectId = context.req.param("id");
     requireProject(deps.db, projectId);
-    return context.json(
-      listAutomations(deps.db, projectId).map(toAutomationResponse),
-    );
+    const responses = listAutomations(deps.db, projectId).flatMap((automation) => {
+      try {
+        return [toAutomationResponse(automation)];
+      } catch (error) {
+        deps.logger.warn(
+          {
+            automationId: automation.id,
+            err: error,
+            projectId,
+          },
+          "Skipping malformed automation row in list response",
+        );
+        return [];
+      }
+    });
+    return context.json(responses);
   });
 
   post("/projects/:id/automations", createAutomationRequestSchema, (context, payload) => {

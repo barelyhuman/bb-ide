@@ -1,3 +1,4 @@
+import { createAutomation } from "@bb/db";
 import { automationSchema } from "@bb/server-contract";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -326,6 +327,69 @@ describe("public automation routes", () => {
         },
       );
       expect(updateResponse.status).toBe(409);
+    } finally {
+      vi.useRealTimers();
+      await harness.cleanup();
+    }
+  });
+
+  it("skips malformed stored automations while listing valid ones", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-automation-list-malformed",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const validAutomation = createAutomation(harness.db, harness.hub, {
+        projectId: project.id,
+        name: "Valid automation",
+        enabled: true,
+        triggerType: "schedule",
+        triggerConfig: JSON.stringify({
+          triggerType: "schedule",
+          cron: "0 8 * * 1-5",
+          timezone: "UTC",
+        }),
+        action: JSON.stringify({
+          actionType: "scheduled-thread",
+          threadRequest: {
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Run the valid automation" }],
+            environment: {
+              type: "host",
+              hostId: host.id,
+              workspace: { type: "managed-clone" },
+            },
+          },
+        }),
+        autoArchive: false,
+        nextRunAt: Date.now() + 60_000,
+      });
+      createAutomation(harness.db, harness.hub, {
+        projectId: project.id,
+        name: "Malformed automation",
+        enabled: true,
+        triggerType: "schedule",
+        triggerConfig: "{",
+        action: "{",
+        autoArchive: false,
+        nextRunAt: Date.now() + 120_000,
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${project.id}/automations`,
+      );
+
+      expect(response.status).toBe(200);
+      expect(automationSchema.array().parse(await readJson(response))).toEqual([
+        expect.objectContaining({
+          id: validAutomation.id,
+          name: "Valid automation",
+        }),
+      ]);
     } finally {
       vi.useRealTimers();
       await harness.cleanup();

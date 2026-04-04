@@ -1,11 +1,10 @@
 import path from "node:path";
 import matter from "gray-matter";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import {
   createManagerThreadNudgeId,
   getEnvironment,
   getThread,
-  listManagerThreadNudgesByThread,
   managerThreadNudges,
 } from "@bb/db";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
@@ -72,13 +71,18 @@ function replaceManagerThreadNudges(
   deps: Pick<AppDeps, "db" | "hub">,
   args: ReplaceManagerThreadNudgesArgs,
 ): void {
-  const existing = listManagerThreadNudgesByThread(deps.db, args.threadId);
   const desiredByName = new Map(
     args.desiredNudges.map((nudge) => [nudge.name, nudge]),
   );
   let changed = false;
 
   deps.db.transaction((tx) => {
+    const existing = tx.select()
+      .from(managerThreadNudges)
+      .where(eq(managerThreadNudges.threadId, args.threadId))
+      .orderBy(asc(managerThreadNudges.name))
+      .all();
+
     for (const existingNudge of existing) {
       const desired = desiredByName.get(existingNudge.name);
       if (!desired) {

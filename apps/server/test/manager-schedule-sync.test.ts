@@ -5,6 +5,7 @@ import {
 import { describe, expect, it } from "vitest";
 import { syncManagerThreadSchedules } from "../src/services/manager-schedule-sync.js";
 import {
+  reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
 } from "./helpers/commands.js";
@@ -25,9 +26,20 @@ interface SyncWithFileContentArgs {
   threadId: string;
 }
 
-async function syncWithFileContent(
-  args: SyncWithFileContentArgs,
-): Promise<void> {
+interface StartSyncArgs {
+  harness: TestHarness;
+  hostId: string;
+  threadId: string;
+}
+
+interface SyncWithReadFileErrorArgs extends StartSyncArgs {
+  errorCode: string;
+  errorMessage: string;
+}
+
+async function startSync(
+  args: StartSyncArgs,
+) {
   const syncPromise = syncManagerThreadSchedules(args.harness.deps, {
     threadId: args.threadId,
   });
@@ -38,6 +50,17 @@ async function syncWithFileContent(
       command.type === "host.read_file" &&
       command.path === asyncPath,
   );
+  return {
+    asyncPath,
+    queued,
+    syncPromise,
+  };
+}
+
+async function syncWithFileContent(
+  args: SyncWithFileContentArgs,
+): Promise<void> {
+  const { asyncPath, queued, syncPromise } = await startSync(args);
   const response = await reportQueuedCommandSuccess(
     args.harness,
     queued,
@@ -53,7 +76,93 @@ async function syncWithFileContent(
   await syncPromise;
 }
 
+async function syncWithReadFileError(
+  args: SyncWithReadFileErrorArgs,
+): Promise<void> {
+  const { queued, syncPromise } = await startSync(args);
+  const response = await reportQueuedCommandError(args.harness, queued, {
+    errorCode: args.errorCode,
+    errorMessage: args.errorMessage,
+  });
+  expect(response.status).toBe(200);
+  await syncPromise;
+}
+
 describe("manager schedule sync", () => {
+  it("reconciles valid ASYNC.md schedules by updating, removing, and creating nudges", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-manager-sync-valid",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/manager-sync-valid",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+        type: "manager",
+      });
+      createManagerThreadNudge(harness.db, harness.hub, {
+        projectId: project.id,
+        threadId: thread.id,
+        name: "daily-recap",
+        cron: "0 8 * * *",
+        timezone: "UTC",
+        enabled: true,
+        nextFireAt: Date.now() + 60_000,
+      });
+      createManagerThreadNudge(harness.db, harness.hub, {
+        projectId: project.id,
+        threadId: thread.id,
+        name: "obsolete",
+        cron: "0 9 * * *",
+        timezone: "UTC",
+        enabled: true,
+        nextFireAt: Date.now() + 120_000,
+      });
+
+      await syncWithFileContent({
+        content: [
+          "---",
+          "timezone: America/Los_Angeles",
+          "schedules:",
+          '  - cron: "0 10 * * 1-5"',
+          "    name: daily-recap",
+          '  - cron: "30 14 * * 2"',
+          "    name: weekly-plan",
+          "---",
+          "",
+          "# Schedules",
+        ].join("\n"),
+        harness,
+        hostId: host.id,
+        threadId: thread.id,
+      });
+
+      expect(listManagerThreadNudgesByThread(harness.db, thread.id)).toEqual([
+        expect.objectContaining({
+          name: "daily-recap",
+          cron: "0 10 * * 1-5",
+          timezone: "America/Los_Angeles",
+          enabled: true,
+        }),
+        expect.objectContaining({
+          name: "weekly-plan",
+          cron: "30 14 * * 2",
+          timezone: "America/Los_Angeles",
+          enabled: true,
+        }),
+      ]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("deletes existing nudges when ASYNC.md has no frontmatter", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -220,6 +329,91 @@ describe("manager schedule sync", () => {
       expect(
         listManagerThreadNudgesByThread(harness.db, thread.id).map((nudge) => nudge.name),
       ).toEqual(["keep-existing"]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("clears existing nudges when ASYNC.md does not exist", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-manager-sync-missing",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/manager-sync-missing",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+        type: "manager",
+      });
+      createManagerThreadNudge(harness.db, harness.hub, {
+        projectId: project.id,
+        threadId: thread.id,
+        name: "stale-reminder",
+        cron: "0 8 * * *",
+        timezone: "UTC",
+        enabled: true,
+        nextFireAt: Date.now() + 60_000,
+      });
+
+      await syncWithReadFileError({
+        harness,
+        hostId: host.id,
+        threadId: thread.id,
+        errorCode: "ENOENT",
+        errorMessage: "File not found",
+      });
+
+      expect(listManagerThreadNudgesByThread(harness.db, thread.id)).toHaveLength(0);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("skips invalid cron entries while still syncing valid ASYNC.md schedules", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-manager-sync-invalid-cron",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/manager-sync-invalid-cron",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+        type: "manager",
+      });
+
+      await syncWithFileContent({
+        content: [
+          "---",
+          "timezone: UTC",
+          "schedules:",
+          '  - cron: "not-a-cron"',
+          "    name: broken",
+          '  - cron: "0 8 * * 1-5"',
+          "    name: valid-recap",
+          "---",
+        ].join("\n"),
+        harness,
+        hostId: host.id,
+        threadId: thread.id,
+      });
+
+      expect(
+        listManagerThreadNudgesByThread(harness.db, thread.id).map((nudge) => nudge.name),
+      ).toEqual(["valid-recap"]);
     } finally {
       await harness.cleanup();
     }
