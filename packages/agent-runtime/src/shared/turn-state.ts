@@ -1,0 +1,173 @@
+import type {
+  ThreadEvent,
+  ThreadEventItem,
+  ThreadEventTokenUsageBreakdown,
+} from "@bb/domain";
+
+const DEFAULT_PROVIDER_TURN_STATE_MAX_ENTRIES = 256;
+
+export interface ProviderTurnState {
+  assistantMessageCounter: number;
+  counter: number;
+  currentTurnId: string | undefined;
+  cumulativeTokens: ThreadEventTokenUsageBreakdown;
+  openAssistantMessageIdsByScope: Map<string, string>;
+  toolItemsByCallId: Map<string, ThreadEventItem>;
+}
+
+export interface CreateProviderTurnStateRegistryOptions<TState extends ProviderTurnState> {
+  createState: () => TState;
+  maxEntries?: number;
+}
+
+export interface ProviderTurnStateRegistry<TState extends ProviderTurnState> {
+  ensureTurnStarted(args: EnsureProviderTurnStartedArgs<TState>): string;
+  finishTurn(args: FinishProviderTurnArgs<TState>): void;
+  getOrCreate(args: GetProviderTurnStateArgs): TState;
+  getOrCreateAssistantMessageId(args: GetOrCreateAssistantMessageIdArgs<TState>): string;
+  resolveCompletedAssistantMessageId(
+    args: ResolveCompletedAssistantMessageIdArgs<TState>,
+  ): string;
+}
+
+export interface EnsureProviderTurnStartedArgs<TState extends ProviderTurnState> {
+  events: ThreadEvent[];
+  state: TState;
+  threadId: string;
+}
+
+export interface FinishProviderTurnArgs<TState extends ProviderTurnState> {
+  state: TState;
+  threadId: string;
+}
+
+export interface GetProviderTurnStateArgs {
+  threadId: string;
+}
+
+export interface GetOrCreateAssistantMessageIdArgs<TState extends ProviderTurnState> {
+  assistantIdPrefix: string;
+  parentToolCallId?: string;
+  state: TState;
+}
+
+export interface ResolveCompletedAssistantMessageIdArgs<TState extends ProviderTurnState> {
+  assistantIdPrefix: string;
+  parentToolCallId?: string;
+  providerMessageId?: string;
+  state: TState;
+}
+
+interface ProviderTurnStateRegistryEntry<TState extends ProviderTurnState> {
+  state: TState;
+}
+
+export function createProviderTurnStateRegistry<TState extends ProviderTurnState>(
+  options: CreateProviderTurnStateRegistryOptions<TState>,
+): ProviderTurnStateRegistry<TState> {
+  const entries = new Map<string, ProviderTurnStateRegistryEntry<TState>>();
+  const maxEntries =
+    options.maxEntries ?? DEFAULT_PROVIDER_TURN_STATE_MAX_ENTRIES;
+
+  function clearTransientTurnState(state: TState): void {
+    state.openAssistantMessageIdsByScope.clear();
+    state.toolItemsByCallId.clear();
+  }
+
+  function touchEntry(args: GetProviderTurnStateArgs): ProviderTurnStateRegistryEntry<TState> | undefined {
+    const existing = entries.get(args.threadId);
+    if (!existing) {
+      return undefined;
+    }
+    entries.delete(args.threadId);
+    entries.set(args.threadId, existing);
+    return existing;
+  }
+
+  function pruneInactiveEntries(): void {
+    while (entries.size > maxEntries) {
+      let removed = false;
+      for (const [threadId, entry] of entries) {
+        if (entry.state.currentTurnId !== undefined) {
+          continue;
+        }
+        entries.delete(threadId);
+        removed = true;
+        break;
+      }
+      if (!removed) {
+        return;
+      }
+    }
+  }
+
+  function toAssistantScopeKey(parentToolCallId: string | undefined): string {
+    return parentToolCallId ?? "root";
+  }
+
+  function createAssistantMessageId(args: GetOrCreateAssistantMessageIdArgs<TState>): string {
+    args.state.assistantMessageCounter += 1;
+    return `${args.assistantIdPrefix}-${args.state.assistantMessageCounter}`;
+  }
+
+  return {
+    ensureTurnStarted(args) {
+      if (!args.state.currentTurnId) {
+        clearTransientTurnState(args.state);
+        args.state.counter += 1;
+        args.state.currentTurnId = `turn-${args.state.counter}`;
+        args.events.push({
+          type: "turn/started",
+          threadId: args.threadId,
+          providerThreadId: "",
+          turnId: args.state.currentTurnId,
+        });
+      }
+      return args.state.currentTurnId;
+    },
+
+    finishTurn(args) {
+      clearTransientTurnState(args.state);
+      args.state.currentTurnId = undefined;
+      touchEntry({ threadId: args.threadId });
+      pruneInactiveEntries();
+    },
+
+    getOrCreate(args) {
+      const existing = touchEntry(args);
+      if (existing) {
+        return existing.state;
+      }
+
+      const entry: ProviderTurnStateRegistryEntry<TState> = {
+        state: options.createState(),
+      };
+      entries.set(args.threadId, entry);
+      pruneInactiveEntries();
+      return entry.state;
+    },
+
+    getOrCreateAssistantMessageId(args) {
+      const scopeKey = toAssistantScopeKey(args.parentToolCallId);
+      const existing = args.state.openAssistantMessageIdsByScope.get(scopeKey);
+      if (existing) {
+        return existing;
+      }
+
+      const itemId = createAssistantMessageId(args);
+      args.state.openAssistantMessageIdsByScope.set(scopeKey, itemId);
+      return itemId;
+    },
+
+    resolveCompletedAssistantMessageId(args) {
+      const scopeKey = toAssistantScopeKey(args.parentToolCallId);
+      const existing = args.state.openAssistantMessageIdsByScope.get(scopeKey);
+      if (existing) {
+        args.state.openAssistantMessageIdsByScope.delete(scopeKey);
+        return existing;
+      }
+
+      return args.providerMessageId ?? createAssistantMessageId(args);
+    },
+  };
+}

@@ -36,6 +36,9 @@ import {
   withParentToolCallId,
 } from "../shared/adapter-utils.js";
 import {
+  createProviderTurnStateRegistry,
+} from "../shared/turn-state.js";
+import {
   buildUnhandledProviderEvents,
   createUnhandledProviderEvent,
 } from "../shared/provider-unhandled-event.js";
@@ -342,89 +345,16 @@ export function createClaudeCodeProviderAdapter(
     supportsServiceTier: false,
   };
 
-  // Per-thread turn state — the Claude SDK doesn't have turn IDs, so the
-  // adapter assigns them. Keyed by threadId so multiple threads sharing
-  // one adapter instance don't corrupt each other's counters.
-  // TODO: turnState grows unboundedly — needs a removeThread(threadId) method
-  // on the adapter interface to clean up entries when threads are removed.
-  const turnState = new Map<string, ClaudeTurnState>();
-
-  function getTurnState(threadId: string): ClaudeTurnState {
-    if (!turnState.has(threadId)) {
-      turnState.set(threadId, {
+  const turnState = createProviderTurnStateRegistry<ClaudeTurnState>({
+    createState: () => ({
         assistantMessageCounter: 0,
         counter: 0,
         currentTurnId: undefined,
         cumulativeTokens: { totalTokens: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 },
-
         openAssistantMessageIdsByScope: new Map(),
         toolItemsByCallId: new Map(),
-      });
-    }
-    return turnState.get(threadId)!;
-  }
-
-  function toAssistantScopeKey(parentToolCallId: string | undefined): string {
-    return parentToolCallId ?? "root";
-  }
-
-  function createAssistantMessageId(state: ClaudeTurnState): string {
-    state.assistantMessageCounter += 1;
-    return `claude-assistant-${state.assistantMessageCounter}`;
-  }
-
-  function getOrCreateOpenAssistantMessageId(
-    state: ClaudeTurnState,
-    parentToolCallId: string | undefined,
-  ): string {
-    const scopeKey = toAssistantScopeKey(parentToolCallId);
-    const existing = state.openAssistantMessageIdsByScope.get(scopeKey);
-    if (existing) {
-      return existing;
-    }
-
-    const itemId = createAssistantMessageId(state);
-    state.openAssistantMessageIdsByScope.set(scopeKey, itemId);
-    return itemId;
-  }
-
-  function resolveCompletedAssistantMessageId(
-    state: ClaudeTurnState,
-    args: {
-      parentToolCallId: string | undefined;
-      providerMessageId: string | undefined;
-    },
-  ): string {
-    const scopeKey = toAssistantScopeKey(args.parentToolCallId);
-    const existing = state.openAssistantMessageIdsByScope.get(scopeKey);
-    if (existing) {
-      state.openAssistantMessageIdsByScope.delete(scopeKey);
-      return existing;
-    }
-
-    return args.providerMessageId ?? createAssistantMessageId(state);
-  }
-
-  function ensureTurnStarted(
-    events: ThreadEvent[],
-    threadId: string,
-    state: ClaudeTurnState,
-  ): string {
-    if (!state.currentTurnId) {
-      state.openAssistantMessageIdsByScope.clear();
-      state.toolItemsByCallId.clear();
-
-      state.counter += 1;
-      state.currentTurnId = `turn-${state.counter}`;
-      events.push({
-        type: "turn/started",
-        threadId,
-        providerThreadId: "",
-        turnId: state.currentTurnId,
-      });
-    }
-    return state.currentTurnId;
-  }
+      }),
+  });
 
   function translateClaudeEvent(
     event: unknown,
@@ -503,7 +433,7 @@ export function createClaudeCodeProviderAdapter(
 
     // Resolve per-thread turn state using the context threadId.
     const stateKey = context?.threadId ?? "";
-    const state = getTurnState(stateKey);
+    const state = turnState.getOrCreate({ threadId: stateKey });
     const parentToolCallId = context?.parentToolCallId;
 
     switch (messageType.data.type) {
@@ -522,12 +452,18 @@ export function createClaudeCodeProviderAdapter(
           return buildUnexpectedClaudeSdkEvent({ event, context });
         }
         const message = parsedMessage.data;
-        const turnId = ensureTurnStarted(events, threadId, state);
+        const turnId = turnState.ensureTurnStarted({
+          events,
+          state,
+          threadId,
+        });
         const assistantMessageId = getNestedMessageId(message.message);
 
         const text = extractAssistantText(message);
         if (text) {
-          const itemId = resolveCompletedAssistantMessageId(state, {
+          const itemId = turnState.resolveCompletedAssistantMessageId({
+            assistantIdPrefix: "claude-assistant",
+            state,
             parentToolCallId,
             providerMessageId: assistantMessageId,
           });
@@ -573,8 +509,16 @@ export function createClaudeCodeProviderAdapter(
         const message = parsedMessage.data;
         const delta = extractStreamTextDelta(message);
         if (delta) {
-          const turnId = ensureTurnStarted(events, threadId, state);
-          const itemId = getOrCreateOpenAssistantMessageId(state, parentToolCallId);
+          const turnId = turnState.ensureTurnStarted({
+            events,
+            state,
+            threadId,
+          });
+          const itemId = turnState.getOrCreateAssistantMessageId({
+            assistantIdPrefix: "claude-assistant",
+            parentToolCallId,
+            state,
+          });
           events.push({
             type: "item/agentMessage/delta",
             threadId,
@@ -656,10 +600,7 @@ export function createClaudeCodeProviderAdapter(
                 ? "failed"
                 : "completed",
           });
-          state.openAssistantMessageIdsByScope.clear();
-          state.toolItemsByCallId.clear();
-    
-          state.currentTurnId = undefined;
+          turnState.finishTurn({ state, threadId: stateKey });
         }
         break;
       }

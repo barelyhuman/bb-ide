@@ -39,6 +39,9 @@ import {
   withParentToolCallId,
 } from "../shared/adapter-utils.js";
 import {
+  createProviderTurnStateRegistry,
+} from "../shared/turn-state.js";
+import {
   buildUnhandledProviderEvents,
   createUnhandledProviderEvent,
 } from "../shared/provider-unhandled-event.js";
@@ -466,64 +469,16 @@ export function createPiProviderAdapter(
   const resolveModelContextWindow = opts?.resolveModelContextWindow
     ?? createPiModelContextWindowResolver();
 
-  // Per-thread turn state — Pi SDK doesn't have turn IDs, so the adapter
-  // assigns them. Keyed by threadId so multiple threads sharing one adapter
-  // instance don't corrupt each other's counters.
-  // TODO: turnState grows unboundedly — needs a removeThread(threadId) method
-  // on the adapter interface to clean up entries when threads are removed.
-  const turnState = new Map<string, PiTurnState>();
-
-  function getTurnState(threadId: string): PiTurnState {
-    if (!turnState.has(threadId)) {
-      turnState.set(threadId, {
+  const turnState = createProviderTurnStateRegistry<PiTurnState>({
+    createState: () => ({
         assistantMessageCounter: 0,
         counter: 0,
         currentTurnId: undefined,
         cumulativeTokens: { totalTokens: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 },
         openAssistantMessageIdsByScope: new Map(),
         toolItemsByCallId: new Map(),
-      });
-    }
-    return turnState.get(threadId)!;
-  }
-
-  function toAssistantScopeKey(parentToolCallId: string | undefined): string {
-    return parentToolCallId ?? "root";
-  }
-
-  function createAssistantMessageId(state: PiTurnState): string {
-    state.assistantMessageCounter += 1;
-    return `pi-assistant-${state.assistantMessageCounter}`;
-  }
-
-  function getOrCreateOpenAssistantMessageId(
-    state: PiTurnState,
-    parentToolCallId: string | undefined,
-  ): string {
-    const scopeKey = toAssistantScopeKey(parentToolCallId);
-    const existing = state.openAssistantMessageIdsByScope.get(scopeKey);
-    if (existing) {
-      return existing;
-    }
-
-    const itemId = createAssistantMessageId(state);
-    state.openAssistantMessageIdsByScope.set(scopeKey, itemId);
-    return itemId;
-  }
-
-  function resolveCompletedAssistantMessageId(
-    state: PiTurnState,
-    parentToolCallId: string | undefined,
-  ): string {
-    const scopeKey = toAssistantScopeKey(parentToolCallId);
-    const existing = state.openAssistantMessageIdsByScope.get(scopeKey);
-    if (existing) {
-      state.openAssistantMessageIdsByScope.delete(scopeKey);
-      return existing;
-    }
-
-    return createAssistantMessageId(state);
-  }
+      }),
+  });
 
   function translatePiEvent(
     event: unknown,
@@ -589,7 +544,7 @@ export function createPiProviderAdapter(
 
     // Resolve per-thread turn state using the context threadId.
     const stateKey = context?.threadId ?? "";
-    const state = getTurnState(stateKey);
+    const state = turnState.getOrCreate({ threadId: stateKey });
 
     switch (eventType.data.type) {
       case "agent_start": {
@@ -597,13 +552,11 @@ export function createPiProviderAdapter(
         if (!piEvent.success) {
           return buildUnexpectedPiSdkEvent(event, context);
         }
-        if (!state.currentTurnId) {
-          state.openAssistantMessageIdsByScope.clear();
-          state.toolItemsByCallId.clear();
-          state.counter += 1;
-          state.currentTurnId = `turn-${state.counter}`;
-          events.push({ type: "turn/started", threadId, providerThreadId: "", turnId: state.currentTurnId });
-        }
+        turnState.ensureTurnStarted({
+          events,
+          state,
+          threadId,
+        });
         break;
       }
 
@@ -616,10 +569,11 @@ export function createPiProviderAdapter(
         if (lastAssistant) {
           const text = extractAssistantText(lastAssistant);
           if (text) {
-            const itemId = resolveCompletedAssistantMessageId(
+            const itemId = turnState.resolveCompletedAssistantMessageId({
+              assistantIdPrefix: "pi-assistant",
+              parentToolCallId: context?.parentToolCallId,
               state,
-              context?.parentToolCallId,
-            );
+            });
             events.push({
               type: "item/completed",
               threadId,
@@ -651,9 +605,7 @@ export function createPiProviderAdapter(
             turnId: state.currentTurnId,
             status: "completed",
           });
-          state.openAssistantMessageIdsByScope.clear();
-          state.toolItemsByCallId.clear();
-          state.currentTurnId = undefined;
+          turnState.finishTurn({ state, threadId: stateKey });
         }
         break;
       }
@@ -667,10 +619,11 @@ export function createPiProviderAdapter(
         if (assistantEvent.type === "text_delta" && state.currentTurnId) {
           const delta = assistantEvent.delta;
           if (delta) {
-            const itemId = getOrCreateOpenAssistantMessageId(
+            const itemId = turnState.getOrCreateAssistantMessageId({
+              assistantIdPrefix: "pi-assistant",
+              parentToolCallId: context?.parentToolCallId,
               state,
-              context?.parentToolCallId,
-            );
+            });
             events.push({
               type: "item/agentMessage/delta",
               threadId,
@@ -695,7 +648,11 @@ export function createPiProviderAdapter(
         // Close any open assistant message scope so the final assistant
         // text at agent_end gets a fresh ID and doesn't overwrite
         // earlier streamed content.
-        resolveCompletedAssistantMessageId(state, context?.parentToolCallId);
+        turnState.resolveCompletedAssistantMessageId({
+          assistantIdPrefix: "pi-assistant",
+          parentToolCallId: context?.parentToolCallId,
+          state,
+        });
         const item = translatePiToolUseItem({
           callId: piEvent.data.toolCallId,
           toolName: piEvent.data.toolName,
