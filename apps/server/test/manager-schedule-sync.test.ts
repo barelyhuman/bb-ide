@@ -138,6 +138,49 @@ describe("manager schedule sync", () => {
     }
   });
 
+  it("leaves existing nudges unchanged when ASYNC.md uses a language-suffixed delimiter", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-manager-sync-js-delimiter",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/manager-sync-js-delimiter",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+        type: "manager",
+      });
+      createManagerThreadNudge(harness.db, harness.hub, {
+        projectId: project.id,
+        threadId: thread.id,
+        name: "existing-reminder",
+        cron: "0 8 * * *",
+        timezone: "UTC",
+        enabled: true,
+        nextFireAt: Date.now() + 60_000,
+      });
+
+      await syncWithFileContent({
+        content: "---js\n({ schedules: [] })\n---\n",
+        harness,
+        hostId: host.id,
+        threadId: thread.id,
+      });
+
+      expect(
+        listManagerThreadNudgesByThread(harness.db, thread.id).map((nudge) => nudge.name),
+      ).toEqual(["existing-reminder"]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("leaves existing nudges unchanged when ASYNC.md is too large to parse", async () => {
     const harness = await createTestAppHarness();
     try {

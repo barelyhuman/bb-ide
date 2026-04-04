@@ -24,6 +24,7 @@ const ASYNC_FILE_NAME = "ASYNC.md";
 const DEFAULT_ASYNC_TIMEZONE = "UTC";
 const MAX_MANAGER_SCHEDULES = 20;
 const MAX_ASYNC_FILE_BYTES = 256 * 1024;
+const ASYNC_FRONTMATTER_DELIMITER = "---";
 
 const asyncScheduleFrontmatterSchema = z.object({
   schedules: z.array(z.unknown()).optional(),
@@ -53,8 +54,18 @@ interface ReplaceManagerThreadNudgesArgs {
   threadId: string;
 }
 
-function hasFrontmatter(content: string): boolean {
-  return content.trimStart().startsWith("---");
+function hasFrontmatterPrefix(content: string): boolean {
+  return content.trimStart().startsWith(ASYNC_FRONTMATTER_DELIMITER);
+}
+
+function hasSupportedFrontmatterDelimiter(content: string): boolean {
+  const trimmed = content.trimStart();
+  // Only accept a plain YAML opener. gray-matter treats suffixes like
+  // `---js` as engine selectors, and the JavaScript engine evals the block.
+  return (
+    trimmed.startsWith(`${ASYNC_FRONTMATTER_DELIMITER}\n`) ||
+    trimmed.startsWith(`${ASYNC_FRONTMATTER_DELIMITER}\r\n`)
+  );
 }
 
 function replaceManagerThreadNudges(
@@ -297,12 +308,22 @@ export async function syncManagerThreadSchedules(
     return;
   }
 
-  if (!hasFrontmatter(content)) {
+  if (!hasFrontmatterPrefix(content)) {
     replaceManagerThreadNudges(deps, {
       desiredNudges: [],
       projectId: thread.projectId,
       threadId: thread.id,
     });
+    return;
+  }
+
+  if (!hasSupportedFrontmatterDelimiter(content)) {
+    deps.logger.warn(
+      {
+        threadId: thread.id,
+      },
+      "Skipping ASYNC.md sync because frontmatter must start with a plain --- delimiter",
+    );
     return;
   }
 
