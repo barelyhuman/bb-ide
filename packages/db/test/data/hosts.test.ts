@@ -77,6 +77,65 @@ describe("hosts", () => {
     });
   });
 
+  it("notifies when upsertHost updates connection state", () => {
+    const { db } = setup();
+    const notifyHost = vi.fn();
+    const notifier = {
+      notifyCommand() {},
+      notifyEnvironment() {},
+      notifyHost,
+      notifyProject() {},
+      notifySystem() {},
+      notifyThread() {},
+    };
+    const host = upsertHost(db, notifier, {
+      destroyedAt: 123,
+      name: "Sandbox Host",
+      provider: "e2b",
+      type: "ephemeral",
+    });
+    notifyHost.mockClear();
+
+    upsertHost(db, notifier, {
+      destroyedAt: null,
+      externalId: "sandbox-existing",
+      id: host.id,
+      name: "Sandbox Host",
+      provider: "e2b",
+      type: "ephemeral",
+    });
+
+    expect(notifyHost).toHaveBeenCalledWith(host.id, ["host-connected"]);
+  });
+
+  it("does not notify when upsertHost changes metadata without a connection-state change", () => {
+    const { db } = setup();
+    const notifyHost = vi.fn();
+    const notifier = {
+      notifyCommand() {},
+      notifyEnvironment() {},
+      notifyHost,
+      notifyProject() {},
+      notifySystem() {},
+      notifyThread() {},
+    };
+    const host = upsertHost(db, notifier, {
+      externalId: "sandbox-existing",
+      name: "Sandbox Host",
+      provider: "e2b",
+      type: "ephemeral",
+    });
+    notifyHost.mockClear();
+
+    upsertHost(db, notifier, {
+      id: host.id,
+      name: "Sandbox Host Renamed",
+      type: "ephemeral",
+    });
+
+    expect(notifyHost).not.toHaveBeenCalled();
+  });
+
   it("retrieves a host by ID", () => {
     const { db } = setup();
     const host = upsertHost(db, noopNotifier, {
@@ -120,7 +179,7 @@ describe("hosts", () => {
     expect(updated?.updatedAt).toBeGreaterThanOrEqual(host.updatedAt);
   });
 
-  it("notifies when updateHost mutates host metadata", () => {
+  it("notifies when updateHost changes host connection state", () => {
     const { db } = setup();
     const notifyHost = vi.fn();
     const notifier = {
@@ -148,6 +207,32 @@ describe("hosts", () => {
       destroyedAt: 456,
       externalId: "sandbox-old",
     });
+  });
+
+  it("does not notify when updateHost only changes host metadata", () => {
+    const { db } = setup();
+    const notifyHost = vi.fn();
+    const notifier = {
+      notifyCommand() {},
+      notifyEnvironment() {},
+      notifyHost,
+      notifyProject() {},
+      notifySystem() {},
+      notifyThread() {},
+    };
+    const host = upsertHost(db, notifier, {
+      externalId: "sandbox-old",
+      name: "Sandbox Host",
+      provider: "e2b",
+      type: "ephemeral",
+    });
+    notifyHost.mockClear();
+
+    updateHost(db, notifier, host.id, {
+      name: "Sandbox Host Renamed",
+    });
+
+    expect(notifyHost).not.toHaveBeenCalled();
   });
 
   it("deletes an existing host row", () => {

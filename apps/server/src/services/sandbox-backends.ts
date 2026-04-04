@@ -10,20 +10,24 @@ import type {
   ResumeHostOptions,
 } from "@bb/sandbox-host";
 import { ApiError } from "../errors.js";
+import type { ServerRuntimeConfig } from "../types.js";
 import { buildSandboxDaemonEnv } from "./sandbox-daemon-env.js";
 import { hasConfiguredSandboxTemplate } from "./sandbox-config.js";
 
-export interface SandboxBackendInfoResolverConfig {
-  e2bApiKey: string;
-  e2bTemplate: string;
-  githubPat: string;
-}
+export type SandboxBackendInfoResolverConfig = Pick<
+  ServerRuntimeConfig,
+  "e2bApiKey" | "e2bTemplate" | "githubPat"
+>;
 
-export interface SandboxBackendConfig extends SandboxBackendInfoResolverConfig {
-  anthropicApiKey: string;
-  authToken: string;
-  openAiApiKey: string;
-}
+export type SandboxBackendConfig = Pick<
+  ServerRuntimeConfig,
+  | "anthropicApiKey"
+  | "authToken"
+  | "e2bApiKey"
+  | "e2bTemplate"
+  | "githubPat"
+  | "openAiApiKey"
+>;
 
 export interface SandboxBackendProvisionArgs {
   config: SandboxBackendConfig;

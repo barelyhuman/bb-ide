@@ -1,5 +1,5 @@
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
-import type { HostType } from "@bb/domain";
+import type { HostChangeKind, HostType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { environments, hosts } from "../schema.js";
@@ -30,23 +30,33 @@ function notifyHostMutation(
     return;
   }
 
-  const hasMetadataChange =
-    previous.destroyedAt !== next.destroyedAt ||
-    previous.externalId !== next.externalId ||
-    previous.name !== next.name ||
-    previous.provider !== next.provider ||
-    previous.type !== next.type;
-
-  if (!hasMetadataChange) {
+  const hostChange = getHostConnectionChange(previous, next);
+  if (!hostChange) {
     return;
   }
 
-  notifier.notifyHost(next.id, [
+  notifier.notifyHost(next.id, [hostChange]);
+}
+
+function getHostConnectionChange(
+  previous: NonNullable<ReturnType<typeof getHost>>,
+  next: NonNullable<ReturnType<typeof getHost>>,
+): HostChangeKind | null {
+  if (
     (previous.destroyedAt === null && next.destroyedAt !== null) ||
     (previous.externalId !== null && next.externalId === null)
-      ? "host-disconnected"
-      : "host-connected",
-  ]);
+  ) {
+    return "host-disconnected";
+  }
+
+  if (
+    (previous.destroyedAt !== null && next.destroyedAt === null) ||
+    (previous.externalId === null && next.externalId !== null)
+  ) {
+    return "host-connected";
+  }
+
+  return null;
 }
 
 export function upsertHost(
@@ -59,7 +69,7 @@ export function upsertHost(
   const existing = db.select().from(hosts).where(eq(hosts.id, id)).get();
 
   if (existing) {
-    return db.update(hosts)
+    const updated = db.update(hosts)
       .set({
         name: input.name,
         type: input.type,
@@ -79,6 +89,8 @@ export function upsertHost(
       .where(eq(hosts.id, id))
       .returning()
       .get()!;
+    notifyHostMutation(notifier, existing, updated);
+    return updated;
   } else {
     const row = db.insert(hosts)
       .values({
