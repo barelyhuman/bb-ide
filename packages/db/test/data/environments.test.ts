@@ -5,12 +5,14 @@ import { noopNotifier } from "../../src/notifier.js";
 import type { DbNotifier } from "../../src/notifier.js";
 import {
   applyProvisionedEnvironment,
+  claimManagedEnvironmentReprovision,
   createEnvironment,
   updateEnvironmentMetadata,
   updateEnvironmentStatus,
 } from "../../src/data/environments.js";
 import { createProject } from "../../src/data/projects.js";
 import { upsertHost } from "../../src/data/hosts.js";
+import { environments } from "../../src/schema.js";
 
 function setup() {
   const db = createConnection(":memory:");
@@ -126,6 +128,38 @@ describe("environments", () => {
     expect(notifier.notifyEnvironment).toHaveBeenCalledWith(environment.id, [
       "status-changed",
       "metadata-changed",
+    ]);
+  });
+
+  it("claims managed reprovision only once", () => {
+    const { db, host, project } = setup();
+    const notifier = createNotifierSpy();
+    const environment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      workspaceProvisionType: "managed-worktree",
+      managed: true,
+      status: "error",
+    });
+
+    const firstClaim = claimManagedEnvironmentReprovision(db, notifier, {
+      environmentId: environment.id,
+      now: 123,
+    });
+    const secondClaim = claimManagedEnvironmentReprovision(db, notifier, {
+      environmentId: environment.id,
+      now: 124,
+    });
+
+    expect(firstClaim).toBe(true);
+    expect(secondClaim).toBe(false);
+    expect(db.select().from(environments).all()[0]).toMatchObject({
+      id: environment.id,
+      status: "provisioning",
+      updatedAt: 123,
+    });
+    expect(notifier.notifyEnvironment).toHaveBeenCalledWith(environment.id, [
+      "status-changed",
     ]);
   });
 });

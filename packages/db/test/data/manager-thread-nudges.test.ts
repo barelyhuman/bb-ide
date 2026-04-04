@@ -10,6 +10,7 @@ import {
   getManagerThreadNudge,
   listDueManagerThreadNudges,
   listManagerThreadNudgesByThread,
+  replaceManagerThreadNudges,
   updateManagerThreadNudge,
 } from "../../src/data/manager-thread-nudges.js";
 import { createProject } from "../../src/data/projects.js";
@@ -126,5 +127,66 @@ describe("manager thread nudges", () => {
       lastFiredAt: null,
       nextFireAt: nudge.nextFireAt,
     });
+  });
+
+  it("reconciles manager nudges by name inside a single replacement call", () => {
+    const { db, project, thread } = setup();
+    const now = Date.now();
+    const existing = createManagerThreadNudge(db, noopNotifier, {
+      projectId: project.id,
+      threadId: thread.id,
+      name: "keep",
+      cron: "0 * * * *",
+      timezone: "UTC",
+      enabled: false,
+      nextFireAt: now - 1,
+    });
+    createManagerThreadNudge(db, noopNotifier, {
+      projectId: project.id,
+      threadId: thread.id,
+      name: "remove",
+      cron: "15 * * * *",
+      timezone: "UTC",
+      enabled: true,
+      nextFireAt: now + 1_000,
+    });
+
+    const changed = replaceManagerThreadNudges(db, noopNotifier, {
+      projectId: project.id,
+      threadId: thread.id,
+      now,
+      desiredNudges: [
+        {
+          name: "keep",
+          cron: "30 * * * *",
+          timezone: "America/Los_Angeles",
+          nextFireAt: now + 60_000,
+        },
+        {
+          name: "add",
+          cron: "45 * * * *",
+          timezone: "UTC",
+          nextFireAt: now + 120_000,
+        },
+      ],
+    });
+
+    expect(changed).toBe(true);
+    expect(listManagerThreadNudgesByThread(db, thread.id)).toMatchObject([
+      {
+        name: "add",
+        cron: "45 * * * *",
+        timezone: "UTC",
+        enabled: true,
+      },
+      {
+        id: existing.id,
+        name: "keep",
+        cron: "30 * * * *",
+        timezone: "America/Los_Angeles",
+        enabled: true,
+        nextFireAt: now + 60_000,
+      },
+    ]);
   });
 });

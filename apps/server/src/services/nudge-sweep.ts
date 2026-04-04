@@ -1,4 +1,3 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   advanceManagerThreadNudgeAfterFire,
   advanceManagerThreadNudgeAfterFireInTransaction,
@@ -9,7 +8,7 @@ import {
   getActiveSession,
   getEnvironment,
   getThread,
-  hostDaemonCommands,
+  hasPendingHostCommandForThread,
   listDueManagerThreadNudges,
 } from "@bb/db";
 import type { PromptInput, ResolvedThreadExecutionOptions } from "@bb/domain";
@@ -107,19 +106,11 @@ function hasPendingTurnRunCommand(
     return cached;
   }
 
-  const existing = db.select({ id: hostDaemonCommands.id })
-    .from(hostDaemonCommands)
-    .where(
-      and(
-        eq(hostDaemonCommands.hostId, args.hostId),
-        eq(hostDaemonCommands.type, "turn.run"),
-        inArray(hostDaemonCommands.state, ["pending", "fetched"]),
-        sql`json_extract(${hostDaemonCommands.payload}, '$.threadId') = ${args.threadId}`,
-      ),
-    )
-    .get();
-
-  const hasPending = existing !== undefined;
+  const hasPending = hasPendingHostCommandForThread(db, {
+    hostId: args.hostId,
+    threadId: args.threadId,
+    type: "turn.run",
+  });
   cache?.pendingTurnRunByThreadId.set(args.threadId, hasPending);
   return hasPending;
 }

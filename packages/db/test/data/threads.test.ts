@@ -7,6 +7,7 @@ import {
   createThread,
   countLiveThreadsInEnvironment,
   getThread,
+  listThreadEnvironmentAssignmentsOnHost,
   listThreads,
   updateThread,
   deleteThread,
@@ -214,6 +215,48 @@ describe("threads", () => {
         excludeThreadId: liveThread.id,
       }),
     ).toBe(0);
+  });
+
+  it("lists canonical thread environments for a host", () => {
+    const { db, project, host } = setup();
+    const otherHost = upsertHost(db, noopNotifier, {
+      name: "other-host",
+      type: "persistent",
+    });
+    const environment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: host.id,
+      path: "/tmp/thread-host-match",
+      workspaceProvisionType: "unmanaged",
+      status: "ready",
+    });
+    const otherEnvironment = createEnvironment(db, noopNotifier, {
+      projectId: project.id,
+      hostId: otherHost.id,
+      path: "/tmp/thread-host-other",
+      workspaceProvisionType: "unmanaged",
+      status: "ready",
+    });
+    const matchingThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: environment.id,
+      providerId: "codex",
+    });
+    createThread(db, noopNotifier, {
+      projectId: project.id,
+      environmentId: otherEnvironment.id,
+      providerId: "codex",
+    });
+
+    expect(listThreadEnvironmentAssignmentsOnHost(db, {
+      hostId: host.id,
+      threadIds: [matchingThread.id],
+    })).toEqual([
+      {
+        threadId: matchingThread.id,
+        environmentId: environment.id,
+      },
+    ]);
   });
 });
 

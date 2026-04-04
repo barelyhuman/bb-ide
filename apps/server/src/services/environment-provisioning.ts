@@ -1,5 +1,4 @@
-import { environments } from "@bb/db";
-import { eq } from "drizzle-orm";
+import { claimManagedEnvironmentReprovision } from "@bb/db";
 import type {
   Environment,
   Thread,
@@ -72,34 +71,15 @@ export function queueManagedEnvironmentReprovision(
       args.thread.id,
     );
 
-  const now = Date.now();
-  let claimed = false;
-  deps.db.transaction((tx) => {
-    const current = tx
-      .select({
-        status: environments.status,
-      })
-      .from(environments)
-      .where(eq(environments.id, args.environment.id))
-      .get();
-    if (!current || current.status === "provisioning") {
-      return;
-    }
-
-    tx.update(environments)
-      .set({
-        status: "provisioning",
-        updatedAt: now,
-      })
-      .where(eq(environments.id, args.environment.id))
-      .run();
-    claimed = true;
-  });
+  const claimed = claimManagedEnvironmentReprovision(
+    deps.db,
+    deps.hub,
+    { environmentId: args.environment.id },
+  );
   if (!claimed) {
     return MANAGED_REPROVISION_IN_PROGRESS;
   }
 
-  deps.hub.notifyEnvironment(args.environment.id, ["status-changed"]);
   if (args.thread.status === "idle") {
     tryTransition(deps.db, deps.hub, args.thread.id, "provisioning");
   }

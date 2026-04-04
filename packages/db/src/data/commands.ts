@@ -1,4 +1,4 @@
-import { eq, and, max, inArray } from "drizzle-orm";
+import { and, eq, inArray, max, sql } from "drizzle-orm";
 import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { hostDaemonCommands } from "../schema.js";
@@ -12,6 +12,13 @@ export interface QueueCommandInput {
 }
 
 type CommandWriteConnection = DbConnection | DbTransaction;
+type CommandReadConnection = DbConnection | DbTransaction;
+
+export interface HasPendingHostCommandForThreadArgs {
+  hostId: string;
+  threadId: string;
+  type: "thread.stop" | "turn.run";
+}
 
 function queueCommandRecord(
   db: CommandWriteConnection,
@@ -63,6 +70,25 @@ export function queueCommand(
   const command = db.transaction((tx) => queueCommandRecord(tx, input));
   notifier.notifyCommand(input.hostId);
   return command;
+}
+
+export function hasPendingHostCommandForThread(
+  db: CommandReadConnection,
+  args: HasPendingHostCommandForThreadArgs,
+): boolean {
+  const row = db.select({ id: hostDaemonCommands.id })
+    .from(hostDaemonCommands)
+    .where(
+      and(
+        eq(hostDaemonCommands.hostId, args.hostId),
+        eq(hostDaemonCommands.type, args.type),
+        inArray(hostDaemonCommands.state, ["pending", "fetched"]),
+        sql`json_extract(${hostDaemonCommands.payload}, '$.threadId') = ${args.threadId}`,
+      ),
+    )
+    .get();
+
+  return row !== undefined;
 }
 
 export interface FetchCommandsOptions {

@@ -1,11 +1,10 @@
 import {
-  queueCommandInTransaction,
-  hostDaemonCommands,
   getActiveSession,
+  hasPendingHostCommandForThread,
   queueCommand,
+  queueCommandInTransaction,
   transitionThreadStatus,
 } from "@bb/db";
-import { and, eq, inArray, sql } from "drizzle-orm";
 import type {
   DbTransaction,
 } from "@bb/db";
@@ -374,20 +373,11 @@ export function queueThreadStopCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: QueueThreadStopCommandArgs,
 ): void {
-  const existing = deps.db
-    .select({ id: hostDaemonCommands.id })
-    .from(hostDaemonCommands)
-    .where(
-      and(
-        eq(hostDaemonCommands.hostId, args.hostId),
-        eq(hostDaemonCommands.type, "thread.stop"),
-        inArray(hostDaemonCommands.state, ["pending", "fetched"]),
-        sql`json_extract(${hostDaemonCommands.payload}, '$.threadId') = ${args.threadId}`,
-      ),
-    )
-    .get();
-
-  if (existing) {
+  if (hasPendingHostCommandForThread(deps.db, {
+    hostId: args.hostId,
+    threadId: args.threadId,
+    type: "thread.stop",
+  })) {
     return;
   }
 

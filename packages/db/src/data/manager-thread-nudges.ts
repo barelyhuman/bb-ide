@@ -42,6 +42,20 @@ export interface ListDueManagerThreadNudgesArgs {
   now: number;
 }
 
+export interface ReplaceManagerThreadNudgeInput {
+  cron: string;
+  name: string;
+  nextFireAt: number;
+  timezone: string;
+}
+
+export interface ReplaceManagerThreadNudgesArgs {
+  desiredNudges: readonly ReplaceManagerThreadNudgeInput[];
+  now?: number;
+  projectId: string;
+  threadId: string;
+}
+
 export function createManagerThreadNudge(
   db: DbConnection,
   notifier: DbNotifier,
@@ -188,6 +202,85 @@ export function deleteManagerThreadNudgesForThread(
   db.delete(managerThreadNudges).where(eq(managerThreadNudges.threadId, threadId)).run();
   notifier.notifyProject(existing[0]!.projectId, ["nudges-changed"]);
   return existing.length;
+}
+
+export function replaceManagerThreadNudges(
+  db: DbConnection,
+  notifier: DbNotifier,
+  args: ReplaceManagerThreadNudgesArgs,
+): boolean {
+  const desiredByName = new Map(
+    args.desiredNudges.map((nudge) => [nudge.name, nudge]),
+  );
+  const now = args.now ?? Date.now();
+  const changed = db.transaction((tx) => {
+    let didChange = false;
+    const existing = tx.select()
+      .from(managerThreadNudges)
+      .where(eq(managerThreadNudges.threadId, args.threadId))
+      .orderBy(asc(managerThreadNudges.name))
+      .all();
+
+    for (const existingNudge of existing) {
+      const desired = desiredByName.get(existingNudge.name);
+      if (!desired) {
+        tx.delete(managerThreadNudges)
+          .where(eq(managerThreadNudges.id, existingNudge.id))
+          .run();
+        didChange = true;
+        continue;
+      }
+
+      desiredByName.delete(existingNudge.name);
+
+      if (
+        existingNudge.cron === desired.cron &&
+        existingNudge.timezone === desired.timezone &&
+        existingNudge.enabled
+      ) {
+        continue;
+      }
+
+      tx.update(managerThreadNudges)
+        .set({
+          cron: desired.cron,
+          timezone: desired.timezone,
+          enabled: true,
+          nextFireAt: desired.nextFireAt,
+          updatedAt: now,
+        })
+        .where(eq(managerThreadNudges.id, existingNudge.id))
+        .run();
+      didChange = true;
+    }
+
+    for (const desired of desiredByName.values()) {
+      tx.insert(managerThreadNudges)
+        .values({
+          id: createManagerThreadNudgeId(),
+          projectId: args.projectId,
+          threadId: args.threadId,
+          name: desired.name,
+          cron: desired.cron,
+          timezone: desired.timezone,
+          enabled: true,
+          nextFireAt: desired.nextFireAt,
+          lastFiredAt: null,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run();
+      didChange = true;
+    }
+
+    return didChange;
+  }, { behavior: "immediate" });
+
+  if (changed) {
+    notifier.notifyProject(args.projectId, ["nudges-changed"]);
+  }
+
+  return changed;
 }
 
 export function advanceManagerThreadNudgeAfterFireInTransaction(

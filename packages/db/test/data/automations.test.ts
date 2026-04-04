@@ -5,6 +5,7 @@ import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
 import {
   advanceAutomationAfterRunInTransaction,
+  claimAutomationScheduledRun,
   createAutomation,
   deleteAutomation,
   getAutomation,
@@ -204,6 +205,51 @@ describe("automations", () => {
       .where(eq(threads.id, thread.id))
       .run();
     expect(hasOpenAutomationThread(db, automation.id)).toBe(false);
+  });
+
+  it("claims scheduled runs once and skips creating a new thread when one is already open", () => {
+    const { db, project } = setup();
+    const now = Date.now();
+    const automation = createScheduleAutomation({
+      db,
+      projectId: project.id,
+      now: now - 120_000,
+    });
+    createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+      status: "created",
+      automationId: automation.id,
+    });
+
+    const claimed = claimAutomationScheduledRun(db, noopNotifier, {
+      automationId: automation.id,
+      expectedNextRunAt: automation.nextRunAt,
+      hostConnected: true,
+      nextRunAt: now + 60_000,
+    });
+
+    expect(claimed).toEqual({
+      advanced: true,
+      reason: "open-thread",
+      shouldCreateThread: false,
+    });
+    expect(getAutomation(db, automation.id)).toMatchObject({
+      nextRunAt: now + 60_000,
+      runCount: 1,
+    });
+
+    const staleClaim = claimAutomationScheduledRun(db, noopNotifier, {
+      automationId: automation.id,
+      expectedNextRunAt: automation.nextRunAt,
+      hostConnected: true,
+      nextRunAt: now + 120_000,
+    });
+    expect(staleClaim).toEqual({
+      advanced: false,
+      reason: "lost-race",
+      shouldCreateThread: false,
+    });
   });
 
   it("deletes automations", () => {

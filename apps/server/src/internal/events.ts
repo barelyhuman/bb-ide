@@ -1,14 +1,12 @@
-import { and, eq, inArray } from "drizzle-orm";
 import {
   archiveThread,
   getAutomation,
   deriveStoredEventItemFields,
-  events as storedEvents,
-  environments,
   getHighWaterMarks,
   getThread,
   insertEvents,
-  threads,
+  listCompletedTurnsByThreadIds,
+  listThreadEnvironmentAssignmentsOnHost,
   updateThread,
 } from "@bb/db";
 import {
@@ -256,25 +254,8 @@ function listCompletedTurnKeysForStartedEvents(
     return new Set<string>();
   }
 
-  const rows = db
-    .select({
-      threadId: storedEvents.threadId,
-      turnId: storedEvents.turnId,
-    })
-    .from(storedEvents)
-    .where(
-      and(
-        inArray(storedEvents.threadId, [...threadIds]),
-        eq(storedEvents.type, "turn/completed"),
-      ),
-    )
-    .all();
-
   const completedTurnKeys = new Set<string>();
-  for (const row of rows) {
-    if (!row.turnId) {
-      continue;
-    }
+  for (const row of listCompletedTurnsByThreadIds(db, [...threadIds])) {
     const turnKey = toTurnKey({
       threadId: row.threadId,
       turnId: row.turnId,
@@ -368,21 +349,10 @@ function validateAndResolveCanonicalEventBatchEnvironments(
     };
   }
 
-  const ownedThreads = deps.db
-    .select({
-      threadId: threads.id,
-      environmentId: environments.id,
-    })
-    .from(threads)
-    .innerJoin(environments, eq(threads.environmentId, environments.id))
-    .where(
-      and(
-        inArray(threads.id, threadIds),
-        eq(environments.hostId, args.hostId),
-      ),
-    )
-    .all();
-
+  const ownedThreads = listThreadEnvironmentAssignmentsOnHost(deps.db, {
+    hostId: args.hostId,
+    threadIds,
+  });
   if (ownedThreads.length !== threadIds.length) {
     throw new ApiError(
       403,

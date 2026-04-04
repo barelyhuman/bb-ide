@@ -57,6 +57,19 @@ export interface ListDueAutomationsArgs {
   now: number;
 }
 
+export interface ClaimAutomationScheduledRunArgs {
+  automationId: string;
+  expectedNextRunAt: number | null;
+  hostConnected: boolean;
+  nextRunAt: number;
+}
+
+export interface ClaimAutomationScheduledRunResult {
+  advanced: boolean;
+  reason: "host-disconnected" | "lost-race" | "open-thread" | "run";
+  shouldCreateThread: boolean;
+}
+
 type AutomationReadConnection = DbConnection | DbTransaction;
 
 export function createAutomation(
@@ -279,4 +292,79 @@ export function restoreAutomationAfterFailedRun(
     notifier.notifyProject(args.projectId, ["automations-changed"]);
   }
   return restored;
+}
+
+export function claimAutomationScheduledRun(
+  db: DbConnection,
+  notifier: DbNotifier,
+  args: ClaimAutomationScheduledRunArgs,
+): ClaimAutomationScheduledRunResult {
+  const result = db.transaction((tx) => {
+    const current = tx.select()
+      .from(automations)
+      .where(eq(automations.id, args.automationId))
+      .get();
+
+    if (
+      !current ||
+      !current.enabled ||
+      current.triggerType !== "schedule" ||
+      current.nextRunAt !== args.expectedNextRunAt ||
+      current.nextRunAt === null
+    ) {
+      return {
+        advanced: false,
+        reason: "lost-race",
+        shouldCreateThread: false,
+      } satisfies ClaimAutomationScheduledRunResult;
+    }
+
+    const shouldCreateThread =
+      args.hostConnected &&
+      !hasOpenAutomationThread(tx, args.automationId);
+    const advanced = advanceAutomationAfterRunInTransaction(tx, {
+      automationId: args.automationId,
+      expectedNextRunAt: current.nextRunAt,
+      nextRunAt: args.nextRunAt,
+    });
+
+    if (!advanced) {
+      return {
+        advanced: false,
+        reason: "lost-race",
+        shouldCreateThread: false,
+      } satisfies ClaimAutomationScheduledRunResult;
+    }
+
+    if (!args.hostConnected) {
+      return {
+        advanced: true,
+        reason: "host-disconnected",
+        shouldCreateThread: false,
+      } satisfies ClaimAutomationScheduledRunResult;
+    }
+
+    if (!shouldCreateThread) {
+      return {
+        advanced: true,
+        reason: "open-thread",
+        shouldCreateThread: false,
+      } satisfies ClaimAutomationScheduledRunResult;
+    }
+
+    return {
+      advanced: true,
+      reason: "run",
+      shouldCreateThread: true,
+    } satisfies ClaimAutomationScheduledRunResult;
+  }, { behavior: "immediate" });
+
+  if (result.advanced) {
+    const automation = getAutomation(db, args.automationId);
+    if (automation) {
+      notifier.notifyProject(automation.projectId, ["automations-changed"]);
+    }
+  }
+
+  return result;
 }

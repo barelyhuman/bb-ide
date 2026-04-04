@@ -24,6 +24,7 @@ export type {
 export {
   advanceAutomationAfterRun,
   advanceAutomationAfterRunInTransaction,
+  claimAutomationScheduledRun,
   createAutomation,
   deleteAutomation,
   getAutomation,
@@ -34,6 +35,8 @@ export {
   updateAutomation,
 } from "./automations.js";
 export type {
+  ClaimAutomationScheduledRunArgs,
+  ClaimAutomationScheduledRunResult,
   CreateAutomationInput,
   DueAutomationCursor,
   ListDueAutomationsArgs,
@@ -45,6 +48,7 @@ export {
   createThread,
   countLiveThreadsInEnvironment,
   getThread,
+  listThreadEnvironmentAssignmentsOnHost,
   listThreads,
   updateThread,
   deleteThread,
@@ -60,8 +64,10 @@ export type {
   CountLiveThreadsInEnvironmentArgs,
   CreateThreadInput,
   ListThreadsOptions,
+  ListThreadEnvironmentAssignmentsOnHostArgs,
   MarkThreadDeletedArgs,
   MarkThreadStopRequestedArgs,
+  ThreadEnvironmentAssignmentRow,
   UpdateThreadInput,
 } from "./threads.js";
 
@@ -74,17 +80,21 @@ export {
   getManagerThreadNudge,
   listDueManagerThreadNudges,
   listManagerThreadNudgesByThread,
+  replaceManagerThreadNudges,
   updateManagerThreadNudge,
 } from "./manager-thread-nudges.js";
 export type {
   CreateManagerThreadNudgeInput,
   DueManagerThreadNudgeCursor,
   ListDueManagerThreadNudgesArgs,
+  ReplaceManagerThreadNudgeInput,
+  ReplaceManagerThreadNudgesArgs,
   UpdateManagerThreadNudgeInput,
 } from "./manager-thread-nudges.js";
 
 export {
   applyProvisionedEnvironment,
+  claimManagedEnvironmentReprovision,
   createEnvironment,
   getEnvironment,
   findEnvironmentByHostPath,
@@ -95,6 +105,7 @@ export {
 } from "./environments.js";
 export type {
   ApplyProvisionedEnvironmentInput,
+  ClaimManagedEnvironmentReprovisionArgs,
   CreateEnvironmentInput,
   UpdateEnvironmentMetadataInput,
   UpdateEnvironmentStatusInput,
@@ -112,15 +123,23 @@ export {
 export type { UpsertHostInput, UpdateHostInput } from "./hosts.js";
 
 export {
+  appendStoredThreadEvent,
+  appendStoredThreadEventInTransaction,
   getHighWaterMarks,
+  getLastStoredProviderThreadId,
+  getLastStoredTurnId,
+  getLastStoredTurnRequestEvent,
   getLatestThreadSequence,
   insertEvents,
+  listCompletedTurnsByThreadIds,
   listEvents,
   pruneTokenUsageEventsBeforeSequence,
   pruneResolvedAgentMessageDeltas,
   pruneThreadEventsBeforeSequence,
 } from "./events.js";
 export type {
+  AppendStoredThreadEventArgs,
+  CompletedStoredTurnRow,
   GetLatestThreadSequenceArgs,
   InsertEventInput,
   InsertEventsResult,
@@ -128,9 +147,11 @@ export type {
   PruneTokenUsageEventsBeforeSequenceArgs,
   PruneResolvedAgentMessageDeltasArgs,
   PruneThreadEventsBeforeSequenceArgs,
+  StoredTurnRequestEventRow,
 } from "./events.js";
 
 export {
+  hasPendingHostCommandForThread,
   queueCommand,
   queueCommandInTransaction,
   fetchCommands,
@@ -139,6 +160,7 @@ export {
 export type {
   QueueCommandInput,
   FetchCommandsOptions,
+  HasPendingHostCommandForThreadArgs,
   ReportCommandResultInput,
 } from "./commands.js";
 

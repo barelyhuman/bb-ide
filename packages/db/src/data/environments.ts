@@ -107,6 +107,11 @@ export interface UpdateEnvironmentStatusInput {
   status: EnvironmentStatus;
 }
 
+export interface ClaimManagedEnvironmentReprovisionArgs {
+  environmentId: string;
+  now?: number;
+}
+
 function buildEnvironmentUpdateSet(input: EnvironmentUpdateColumns): EnvironmentUpdateColumns {
   const set: EnvironmentUpdateColumns = {};
   if ("path" in input) set.path = input.path;
@@ -219,6 +224,43 @@ export function updateEnvironmentStatus(
   return updateEnvironmentRecord(db, notifier, id, {
     status: input.status,
   });
+}
+
+export function claimManagedEnvironmentReprovision(
+  db: DbConnection,
+  notifier: DbNotifier,
+  args: ClaimManagedEnvironmentReprovisionArgs,
+): boolean {
+  const now = args.now ?? Date.now();
+  const claimed = db.transaction((tx) => {
+    const current = tx
+      .select({
+        status: environments.status,
+      })
+      .from(environments)
+      .where(eq(environments.id, args.environmentId))
+      .get();
+
+    if (!current || current.status === "provisioning") {
+      return false;
+    }
+
+    tx.update(environments)
+      .set({
+        status: "provisioning",
+        updatedAt: now,
+      })
+      .where(eq(environments.id, args.environmentId))
+      .run();
+
+    return true;
+  }, { behavior: "immediate" });
+
+  if (claimed) {
+    notifier.notifyEnvironment(args.environmentId, ["status-changed"]);
+  }
+
+  return claimed;
 }
 
 export function deleteEnvironment(

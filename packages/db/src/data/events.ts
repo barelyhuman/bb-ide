@@ -1,9 +1,14 @@
-import { and, eq, inArray, lte, max, sql } from "drizzle-orm";
-import type { ThreadEventItemType, ThreadEventType } from "@bb/domain";
-import type { DbConnection } from "../connection.js";
+import { and, eq, inArray, isNotNull, lte, max, sql } from "drizzle-orm";
+import type {
+  StoredThreadEventDataForType,
+  ThreadEventItemType,
+  ThreadEventType,
+} from "@bb/domain";
+import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { events } from "../schema.js";
 import { createEventId } from "../ids.js";
+import { deriveStoredEventItemFieldsFromSource } from "../stored-event-item-fields.js";
 
 export interface InsertEventInput {
   threadId: string;
@@ -21,6 +26,29 @@ export interface InsertEventInput {
 export interface InsertEventsResult {
   insertedCount: number;
   insertedInputIndexes: number[];
+}
+
+export type AppendStoredThreadEventArgs<TType extends ThreadEventType = ThreadEventType> = {
+  [TEventType in TType]: {
+    data: StoredThreadEventDataForType<TEventType>;
+    environmentId?: string | null;
+    providerThreadId?: string | null;
+    threadId: string;
+    turnId?: string | null;
+    type: TEventType;
+  };
+}[TType];
+
+export interface StoredTurnRequestEventRow {
+  data: string;
+  sequence: number;
+  threadId: string;
+  type: ThreadEventType;
+}
+
+export interface CompletedStoredTurnRow {
+  threadId: string;
+  turnId: string;
 }
 
 /**
@@ -68,6 +96,66 @@ export function insertEvents(
     insertedCount,
     insertedInputIndexes,
   };
+}
+
+export function appendStoredThreadEventInTransaction<TType extends ThreadEventType>(
+  db: DbTransaction,
+  args: AppendStoredThreadEventArgs<TType>,
+): number;
+export function appendStoredThreadEventInTransaction(
+  db: DbTransaction,
+  args: AppendStoredThreadEventArgs,
+): number {
+  const now = Date.now();
+  const maxRow = db
+    .select({ maxSeq: max(events.sequence) })
+    .from(events)
+    .where(eq(events.threadId, args.threadId))
+    .get();
+  const sequence = (maxRow?.maxSeq ?? 0) + 1;
+  const itemFields = deriveStoredEventItemFieldsFromSource({
+    type: args.type,
+    item: "item" in args.data ? args.data.item : undefined,
+    itemId: "itemId" in args.data ? args.data.itemId : undefined,
+  });
+
+  db.run(
+    sql`INSERT INTO events
+      (id, thread_id, environment_id, turn_id, provider_thread_id, sequence, type, item_id, item_kind, data, created_at)
+      VALUES (
+        ${createEventId()},
+        ${args.threadId},
+        ${args.environmentId ?? null},
+        ${args.turnId ?? null},
+        ${args.providerThreadId ?? null},
+        ${sequence},
+        ${args.type},
+        ${itemFields.itemId},
+        ${itemFields.itemKind},
+        ${JSON.stringify(args.data)},
+        ${now}
+      )`,
+  );
+
+  return sequence;
+}
+
+export function appendStoredThreadEvent<TType extends ThreadEventType>(
+  db: DbConnection,
+  notifier: DbNotifier,
+  args: AppendStoredThreadEventArgs<TType>,
+): number;
+export function appendStoredThreadEvent(
+  db: DbConnection,
+  notifier: DbNotifier,
+  args: AppendStoredThreadEventArgs,
+): number {
+  const sequence = db.transaction(
+    (tx) => appendStoredThreadEventInTransaction(tx, args),
+    { behavior: "immediate" },
+  );
+  notifier.notifyThread(args.threadId, ["events-appended"]);
+  return sequence;
 }
 
 /**
@@ -176,6 +264,92 @@ export function getLatestThreadSequence(
     .get();
 
   return row?.maxSequence ?? 0;
+}
+
+export function getLastStoredTurnId(
+  db: DbConnection,
+  threadId: string,
+): string | null {
+  const row = db
+    .select({ turnId: events.turnId })
+    .from(events)
+    .where(
+      sql`${events.threadId} = ${threadId} AND ${events.turnId} IS NOT NULL`,
+    )
+    .orderBy(sql`${events.sequence} DESC`)
+    .limit(1)
+    .get();
+  return row?.turnId ?? null;
+}
+
+export function getLastStoredProviderThreadId(
+  db: DbConnection,
+  threadId: string,
+): string | null {
+  const row = db
+    .select({ providerThreadId: events.providerThreadId })
+    .from(events)
+    .where(
+      sql`${events.threadId} = ${threadId}
+        AND ${events.providerThreadId} IS NOT NULL`,
+    )
+    .orderBy(sql`${events.sequence} DESC`)
+    .limit(1)
+    .get();
+  return row?.providerThreadId ?? null;
+}
+
+export function getLastStoredTurnRequestEvent(
+  db: DbConnection,
+  threadId: string,
+): StoredTurnRequestEventRow | null {
+  return db
+    .select({
+      data: events.data,
+      sequence: events.sequence,
+      threadId: events.threadId,
+      type: events.type,
+    })
+    .from(events)
+    .where(
+      sql`${events.threadId} = ${threadId}
+        AND ${events.type} IN ('client/thread/start', 'client/turn/requested', 'client/turn/start')`,
+    )
+    .orderBy(sql`${events.sequence} DESC`)
+    .limit(1)
+    .get() ?? null;
+}
+
+export function listCompletedTurnsByThreadIds(
+  db: DbConnection,
+  threadIds: readonly string[],
+): CompletedStoredTurnRow[] {
+  if (threadIds.length === 0) {
+    return [];
+  }
+
+  return db
+    .select({
+      threadId: events.threadId,
+      turnId: events.turnId,
+    })
+    .from(events)
+    .where(
+      and(
+        inArray(events.threadId, [...threadIds]),
+        eq(events.type, "turn/completed"),
+        isNotNull(events.turnId),
+      ),
+    )
+    .all()
+    .flatMap((row) => (
+      row.turnId === null
+        ? []
+        : [{
+            threadId: row.threadId,
+            turnId: row.turnId,
+          }]
+    ));
 }
 
 export function pruneThreadEventsBeforeSequence(

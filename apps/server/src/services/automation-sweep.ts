@@ -1,11 +1,9 @@
-import { eq } from "drizzle-orm";
 import {
-  advanceAutomationAfterRunInTransaction,
-  automations,
+  claimAutomationScheduledRun,
+  type ClaimAutomationScheduledRunResult,
   type DueAutomationCursor,
   getActiveSession,
   getEnvironment,
-  hasOpenAutomationThread,
   listDueAutomations,
   restoreAutomationAfterFailedRun,
 } from "@bb/db";
@@ -25,12 +23,6 @@ const DUE_AUTOMATION_BATCH_SIZE = 100;
 
 interface SweepDueAutomationsArgs {
   now?: number;
-}
-
-interface AdvanceAutomationDecision {
-  advanced: boolean;
-  reason: "host-disconnected" | "lost-race" | "open-thread" | "run";
-  shouldCreateThread: boolean;
 }
 
 interface AutomationExecutionContext {
@@ -92,78 +84,6 @@ function resolveAutomationExecutionContext(
   };
 }
 
-function advanceAutomationForSweep(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: {
-    automation: AutomationRow;
-    hostConnected: boolean;
-    nextRunAt: number;
-  },
-): AdvanceAutomationDecision {
-  const result = deps.db.transaction((tx) => {
-    const current = tx.select()
-      .from(automations)
-      .where(eq(automations.id, args.automation.id))
-      .get();
-    if (
-      !current ||
-      !current.enabled ||
-      current.triggerType !== "schedule" ||
-      current.nextRunAt !== args.automation.nextRunAt
-    ) {
-      return {
-        advanced: false,
-        reason: "lost-race",
-        shouldCreateThread: false,
-      } satisfies AdvanceAutomationDecision;
-    }
-
-    const shouldCreateThread =
-      args.hostConnected &&
-      !hasOpenAutomationThread(tx, args.automation.id);
-    const advanced = advanceAutomationAfterRunInTransaction(tx, {
-      automationId: args.automation.id,
-      expectedNextRunAt: args.automation.nextRunAt,
-      nextRunAt: args.nextRunAt,
-    });
-
-    if (!advanced) {
-      return {
-        advanced: false,
-        reason: "lost-race",
-        shouldCreateThread: false,
-      } satisfies AdvanceAutomationDecision;
-    }
-
-    if (!args.hostConnected) {
-      return {
-        advanced: true,
-        reason: "host-disconnected",
-        shouldCreateThread: false,
-      } satisfies AdvanceAutomationDecision;
-    }
-
-    if (!shouldCreateThread) {
-      return {
-        advanced: true,
-        reason: "open-thread",
-        shouldCreateThread: false,
-      } satisfies AdvanceAutomationDecision;
-    }
-
-    return {
-      advanced: true,
-      reason: "run",
-      shouldCreateThread: true,
-    } satisfies AdvanceAutomationDecision;
-  }, { behavior: "immediate" });
-
-  if (result.advanced) {
-    deps.hub.notifyProject(args.automation.projectId, ["automations-changed"]);
-  }
-  return result;
-}
-
 async function runAutomation(
   deps: Pick<AppDeps, "config" | "db" | "hub" | "logger">,
   automation: AutomationRow,
@@ -186,11 +106,16 @@ async function runAutomation(
   const hostConnected =
     executionContext.hostId === null ||
     getActiveSession(deps.db, executionContext.hostId) !== null;
-  const decision = advanceAutomationForSweep(deps, {
-    automation,
-    hostConnected,
-    nextRunAt: executionContext.nextRunAt,
-  });
+  const decision: ClaimAutomationScheduledRunResult = claimAutomationScheduledRun(
+    deps.db,
+    deps.hub,
+    {
+      automationId: automation.id,
+      expectedNextRunAt: automation.nextRunAt,
+      hostConnected,
+      nextRunAt: executionContext.nextRunAt,
+    },
+  );
 
   if (!decision.advanced) {
     return;

@@ -1,11 +1,10 @@
 import path from "node:path";
 import matter from "gray-matter";
-import { asc, eq } from "drizzle-orm";
 import {
-  createManagerThreadNudgeId,
   getEnvironment,
   getThread,
-  managerThreadNudges,
+  replaceManagerThreadNudges,
+  type ReplaceManagerThreadNudgeInput,
 } from "@bb/db";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import { z } from "zod";
@@ -40,19 +39,6 @@ interface SyncManagerThreadSchedulesArgs {
   threadId: string;
 }
 
-interface DesiredManagerThreadNudge {
-  cron: string;
-  name: string;
-  nextFireAt: number;
-  timezone: string;
-}
-
-interface ReplaceManagerThreadNudgesArgs {
-  desiredNudges: DesiredManagerThreadNudge[];
-  projectId: string;
-  threadId: string;
-}
-
 function hasFrontmatterPrefix(content: string): boolean {
   return content.trimStart().startsWith(ASYNC_FRONTMATTER_DELIMITER);
 }
@@ -67,81 +53,6 @@ function hasSupportedFrontmatterDelimiter(content: string): boolean {
   );
 }
 
-function replaceManagerThreadNudges(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: ReplaceManagerThreadNudgesArgs,
-): void {
-  const desiredByName = new Map(
-    args.desiredNudges.map((nudge) => [nudge.name, nudge]),
-  );
-  let changed = false;
-
-  deps.db.transaction((tx) => {
-    const existing = tx.select()
-      .from(managerThreadNudges)
-      .where(eq(managerThreadNudges.threadId, args.threadId))
-      .orderBy(asc(managerThreadNudges.name))
-      .all();
-
-    for (const existingNudge of existing) {
-      const desired = desiredByName.get(existingNudge.name);
-      if (!desired) {
-        tx.delete(managerThreadNudges)
-          .where(eq(managerThreadNudges.id, existingNudge.id))
-          .run();
-        changed = true;
-        continue;
-      }
-
-      desiredByName.delete(existingNudge.name);
-
-      if (
-        existingNudge.cron === desired.cron &&
-        existingNudge.timezone === desired.timezone &&
-        existingNudge.enabled
-      ) {
-        continue;
-      }
-
-      tx.update(managerThreadNudges)
-        .set({
-          cron: desired.cron,
-          timezone: desired.timezone,
-          enabled: true,
-          nextFireAt: desired.nextFireAt,
-          updatedAt: Date.now(),
-        })
-        .where(eq(managerThreadNudges.id, existingNudge.id))
-        .run();
-      changed = true;
-    }
-
-    for (const desired of desiredByName.values()) {
-      const now = Date.now();
-      tx.insert(managerThreadNudges)
-        .values({
-          id: createManagerThreadNudgeId(),
-          projectId: args.projectId,
-          threadId: args.threadId,
-          name: desired.name,
-          cron: desired.cron,
-          timezone: desired.timezone,
-          enabled: true,
-          nextFireAt: desired.nextFireAt,
-          lastFiredAt: null,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .run();
-      changed = true;
-    }
-  }, { behavior: "immediate" });
-
-  if (changed) {
-    deps.hub.notifyProject(args.projectId, ["nudges-changed"]);
-  }
-}
-
 function toDesiredManagerThreadNudges(
   deps: Pick<AppDeps, "logger">,
   args: {
@@ -149,7 +60,7 @@ function toDesiredManagerThreadNudges(
     now: number;
     threadId: string;
   },
-): DesiredManagerThreadNudge[] | null {
+): ReplaceManagerThreadNudgeInput[] | null {
   const parsed = matter(args.content);
   const frontmatter = asyncScheduleFrontmatterSchema.safeParse(parsed.data);
   if (!frontmatter.success) {
@@ -176,7 +87,7 @@ function toDesiredManagerThreadNudges(
   }
 
   const defaultTimezone = frontmatter.data.timezone ?? DEFAULT_ASYNC_TIMEZONE;
-  const desiredNudges: DesiredManagerThreadNudge[] = [];
+  const desiredNudges: ReplaceManagerThreadNudgeInput[] = [];
   const seenNames = new Set<string>();
 
   for (const rawSchedule of limitedSchedules) {
@@ -291,7 +202,7 @@ export async function syncManagerThreadSchedules(
     content = result.content;
   } catch (error) {
     if (error instanceof ApiError && error.body.code === "ENOENT") {
-      replaceManagerThreadNudges(deps, {
+      replaceManagerThreadNudges(deps.db, deps.hub, {
         desiredNudges: [],
         projectId: thread.projectId,
         threadId: thread.id,
@@ -313,7 +224,7 @@ export async function syncManagerThreadSchedules(
   }
 
   if (!hasFrontmatterPrefix(content)) {
-    replaceManagerThreadNudges(deps, {
+    replaceManagerThreadNudges(deps.db, deps.hub, {
       desiredNudges: [],
       projectId: thread.projectId,
       threadId: thread.id,
@@ -332,7 +243,7 @@ export async function syncManagerThreadSchedules(
   }
 
   const now = Date.now();
-  let desiredNudges: DesiredManagerThreadNudge[] | null;
+  let desiredNudges: ReplaceManagerThreadNudgeInput[] | null;
   try {
     desiredNudges = toDesiredManagerThreadNudges(deps, {
       content,
@@ -354,7 +265,7 @@ export async function syncManagerThreadSchedules(
     return;
   }
 
-  replaceManagerThreadNudges(deps, {
+  replaceManagerThreadNudges(deps.db, deps.hub, {
     desiredNudges,
     projectId: thread.projectId,
     threadId: thread.id,

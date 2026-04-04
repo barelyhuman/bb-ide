@@ -1,8 +1,8 @@
-import { and, count, desc, eq, isNotNull, isNull, ne } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 import type { ThreadChangeKind, ThreadStatus, ThreadType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
-import { threads } from "../schema.js";
+import { environments, threads } from "../schema.js";
 import { createThreadId } from "../ids.js";
 
 /**
@@ -84,6 +84,16 @@ export interface MarkThreadDeletedArgs {
   threadId: string;
 }
 
+export interface ListThreadEnvironmentAssignmentsOnHostArgs {
+  hostId: string;
+  threadIds: readonly string[];
+}
+
+export interface ThreadEnvironmentAssignmentRow {
+  environmentId: string;
+  threadId: string;
+}
+
 export function listThreads(
   db: DbConnection,
   options: ListThreadsOptions,
@@ -130,6 +140,29 @@ export function countLiveThreadsInEnvironment(
     .get();
 
   return liveThreadCount?.count ?? 0;
+}
+
+export function listThreadEnvironmentAssignmentsOnHost(
+  db: DbConnection,
+  args: ListThreadEnvironmentAssignmentsOnHostArgs,
+): ThreadEnvironmentAssignmentRow[] {
+  if (args.threadIds.length === 0) {
+    return [];
+  }
+
+  return db.select({
+    threadId: threads.id,
+    environmentId: environments.id,
+  })
+    .from(threads)
+    .innerJoin(environments, eq(threads.environmentId, environments.id))
+    .where(
+      and(
+        inArray(threads.id, [...args.threadIds]),
+        eq(environments.hostId, args.hostId),
+      ),
+    )
+    .all();
 }
 
 export interface UpdateThreadInput {

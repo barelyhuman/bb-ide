@@ -4,9 +4,15 @@ import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
 import type { DbNotifier } from "../../src/notifier.js";
 import {
+  appendStoredThreadEvent,
+  appendStoredThreadEventInTransaction,
   getHighWaterMarks,
+  getLastStoredProviderThreadId,
+  getLastStoredTurnId,
+  getLastStoredTurnRequestEvent,
   getLatestThreadSequence,
   insertEvents,
+  listCompletedTurnsByThreadIds,
   listEvents,
   pruneTokenUsageEventsBeforeSequence,
   pruneResolvedAgentMessageDeltas,
@@ -179,6 +185,95 @@ describe("events", () => {
 
     const [event] = listEvents(db, { threadId: thread.id });
     expect(event?.createdAt).toBe(createdAt);
+  });
+
+  it("appends stored thread events and exposes the latest thread runtime markers", () => {
+    const { db, thread } = setup();
+
+    const firstSequence = appendStoredThreadEvent(db, noopNotifier, {
+      threadId: thread.id,
+      type: "client/thread/start",
+      data: {
+        direction: "outbound",
+        source: "spawn",
+        initiator: "user",
+        input: [{ type: "text", text: "start" }],
+        request: { method: "thread/start", params: {} },
+        execution: {
+          model: "gpt-5",
+          reasoningLevel: "medium",
+          sandboxMode: "workspace-write",
+          source: "client/thread/start",
+          serviceTier: "auto",
+        },
+      },
+    });
+
+    const secondSequence = db.transaction((tx) =>
+      appendStoredThreadEventInTransaction(tx, {
+        threadId: thread.id,
+        turnId: "turn_1",
+        providerThreadId: "provider_thr_1",
+        type: "turn/started",
+        data: {
+          providerThreadId: "provider_thr_1",
+          turnId: "turn_1",
+        },
+      }), { behavior: "immediate" });
+
+    expect(firstSequence).toBe(1);
+    expect(secondSequence).toBe(2);
+    expect(getLastStoredTurnId(db, thread.id)).toBe("turn_1");
+    expect(getLastStoredProviderThreadId(db, thread.id)).toBe("provider_thr_1");
+    expect(getLastStoredTurnRequestEvent(db, thread.id)).toMatchObject({
+      threadId: thread.id,
+      sequence: 1,
+      type: "client/thread/start",
+    });
+  });
+
+  it("lists completed turns for a specific thread set", () => {
+    const { db, project, thread } = setup();
+    const otherThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        turnId: "turn_a",
+        type: "turn/completed",
+        itemId: null,
+        itemKind: null,
+        data: JSON.stringify({
+          providerThreadId: "provider_a",
+          turnId: "turn_a",
+          status: "completed",
+        }),
+      },
+      {
+        threadId: otherThread.id,
+        sequence: 1,
+        turnId: "turn_b",
+        type: "turn/completed",
+        itemId: null,
+        itemKind: null,
+        data: JSON.stringify({
+          providerThreadId: "provider_b",
+          turnId: "turn_b",
+          status: "completed",
+        }),
+      },
+    ]);
+
+    expect(listCompletedTurnsByThreadIds(db, [thread.id])).toEqual([
+      {
+        threadId: thread.id,
+        turnId: "turn_a",
+      },
+    ]);
   });
 
   it("returns high-water marks per thread", () => {

@@ -3,6 +3,7 @@ import { createConnection } from "../../src/connection.js";
 import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
 import {
+  hasPendingHostCommandForThread,
   queueCommand,
   fetchCommands,
   reportCommandResult,
@@ -117,6 +118,43 @@ describe("commands", () => {
     expect(fetched).toHaveLength(2);
     expect(fetched[0]!.cursor).toBe(1);
     expect(fetched[1]!.cursor).toBe(2);
+  });
+
+  it("finds pending commands for a specific thread and command type", () => {
+    const { db, host } = setup();
+
+    queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "turn.run",
+      payload: JSON.stringify({
+        type: "turn.run",
+        threadId: "thr_target",
+      }),
+    });
+    queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "thread.stop",
+      payload: JSON.stringify({
+        type: "thread.stop",
+        threadId: "thr_other",
+      }),
+    });
+
+    expect(hasPendingHostCommandForThread(db, {
+      hostId: host.id,
+      threadId: "thr_target",
+      type: "turn.run",
+    })).toBe(true);
+    expect(hasPendingHostCommandForThread(db, {
+      hostId: host.id,
+      threadId: "thr_target",
+      type: "thread.stop",
+    })).toBe(false);
+    expect(hasPendingHostCommandForThread(db, {
+      hostId: host.id,
+      threadId: "thr_missing",
+      type: "turn.run",
+    })).toBe(false);
   });
 
   it("reports command result", () => {
