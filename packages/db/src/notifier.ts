@@ -4,7 +4,7 @@ export interface DbNotifier {
   notifyThread(threadId: string, changes: ThreadChangeKind[]): void;
   notifyProject(projectId: string, changes: ProjectChangeKind[]): void;
   notifyEnvironment(environmentId: string, changes: EnvironmentChangeKind[]): void;
-  notifyHost(changes: HostChangeKind[]): void;
+  notifyHost(hostId: string, changes: HostChangeKind[]): void;
   notifyCommand(hostId: string): void;
   notifySystem(changes: SystemChangeKind[]): void;
 }

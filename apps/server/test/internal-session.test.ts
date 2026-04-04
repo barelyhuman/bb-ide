@@ -15,7 +15,7 @@ import {
   HOST_DAEMON_PROTOCOL_VERSION,
   hostDaemonCommandSchema,
 } from "@bb/host-daemon-contract";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { appendClientTurnEvent } from "../src/services/thread-events.js";
 import {
   internalAuthHeaders,
@@ -1146,6 +1146,77 @@ describe("internal session routes", () => {
 
       expect(response.status).toBe(200);
       expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroyed");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("destroys ephemeral sandbox hosts after a successful environment destroy result", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-ephemeral-destroy-result",
+        type: "ephemeral",
+      });
+      const cachedHost = {
+        destroy: vi.fn().mockResolvedValue(undefined),
+        extendTimeout: vi.fn().mockResolvedValue(undefined),
+        externalId: "sandbox-ephemeral-destroy-result",
+        hostId: host.id,
+        resume: vi.fn().mockResolvedValue(undefined),
+        suspend: vi.fn().mockResolvedValue(undefined),
+      };
+      upsertHost(harness.db, harness.hub, {
+        externalId: cachedHost.externalId,
+        id: host.id,
+        name: host.name,
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      harness.deps.sandboxRegistry.set(host.id, cachedHost);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/ephemeral-destroy-result-environment",
+        managed: true,
+        status: "destroying",
+      });
+      const destroyCommand = queueCommand(harness.db, harness.hub, {
+        hostId: host.id,
+        sessionId: session.id,
+        type: "environment.destroy",
+        payload: JSON.stringify({
+          type: "environment.destroy",
+          environmentId: environment.id,
+          workspaceContext: {
+            workspacePath: environment.path,
+            workspaceProvisionType: "managed-worktree",
+          },
+        }),
+      });
+
+      const response = await harness.app.request("/internal/session/command-result", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          commandId: destroyCommand.id,
+          completedAt: Date.now(),
+          type: "environment.destroy",
+          ok: true,
+          result: {},
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(cachedHost.destroy).toHaveBeenCalledTimes(1);
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroyed");
+      expect(getHost(harness.db, host.id)).toMatchObject({
+        destroyedAt: expect.any(Number),
+      });
     } finally {
       await harness.cleanup();
     }

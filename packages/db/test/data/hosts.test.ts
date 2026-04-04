@@ -143,7 +143,7 @@ describe("hosts", () => {
       destroyedAt: 456,
     });
 
-    expect(notifyHost).toHaveBeenCalledWith(["host-disconnected"]);
+    expect(notifyHost).toHaveBeenCalledWith(host.id, ["host-disconnected"]);
     expect(getHost(db, host.id)).toMatchObject({
       destroyedAt: 456,
       externalId: "sandbox-old",
@@ -169,6 +169,6 @@ describe("hosts", () => {
 
     expect(deleteHost(db, notifier, host.id)).toBe(true);
     expect(getHost(db, host.id)).toBeNull();
-    expect(notifyHost).toHaveBeenCalledWith(["host-disconnected"]);
+    expect(notifyHost).toHaveBeenCalledWith(host.id, ["host-disconnected"]);
   });
 });

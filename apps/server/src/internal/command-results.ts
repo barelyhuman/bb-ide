@@ -10,7 +10,7 @@ import {
 } from "./command-result-handlers.js";
 
 export async function handleCommandResult(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
   report: HostDaemonCommandResultReport,
 ): Promise<typeof hostDaemonCommands.$inferSelect | null> {
   const command = deps.db

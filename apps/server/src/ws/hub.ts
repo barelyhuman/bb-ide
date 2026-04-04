@@ -50,7 +50,7 @@ export class NotificationHub implements DbNotifier {
   private readonly commandWaiters = new Map<string, Set<CommandWaiter>>();
   private readonly daemonSessions = new Map<string, { hostId: string; socket: HubSocket }>();
   private readonly daemonSessionIdsByHost = new Map<string, string>();
-  private readonly hostEventWaiters = new Set<HostEventWaiter>();
+  private readonly hostEventWaiters = new Map<string, Set<HostEventWaiter>>();
   private readonly pendingDaemonDisconnects = new Map<
     string,
     ReturnType<typeof setTimeout>
@@ -211,17 +211,19 @@ export class NotificationHub implements DbNotifier {
     return promise;
   }
 
-  async waitForHostEvent(timeoutMs: number): Promise<boolean> {
+  async waitForHostEvent(hostId: string, timeoutMs: number): Promise<boolean> {
     return new Promise<boolean>((resolve, reject) => {
       const waiter: HostEventWaiter = {
         reject,
         resolve: (notified) => resolve(notified),
         timeout: setTimeout(() => {
-          this.deleteHostEventWaiter(waiter);
+          this.deleteHostEventWaiter(hostId, waiter);
           resolve(false);
         }, timeoutMs),
       };
-      this.hostEventWaiters.add(waiter);
+      const waiters = this.hostEventWaiters.get(hostId) ?? new Set<HostEventWaiter>();
+      waiters.add(waiter);
+      this.hostEventWaiters.set(hostId, waiters);
     });
   }
 
@@ -318,18 +320,24 @@ export class NotificationHub implements DbNotifier {
     this.commandWaiters.delete(hostId);
   }
 
-  notifyHost(changes: HostChangeKind[]): void {
+  notifyHost(hostId: string, changes: HostChangeKind[]): void {
     this.notifyClients({
       type: "changed",
       entity: "host",
+      id: hostId,
       changes,
     });
 
-    for (const waiter of this.hostEventWaiters) {
+    const waiters = this.hostEventWaiters.get(hostId);
+    if (!waiters) {
+      return;
+    }
+
+    for (const waiter of waiters) {
       clearTimeout(waiter.timeout);
       waiter.resolve(true);
     }
-    this.hostEventWaiters.clear();
+    this.hostEventWaiters.delete(hostId);
   }
 
   notifySystem(changes: SystemChangeKind[]): void {
@@ -367,9 +375,16 @@ export class NotificationHub implements DbNotifier {
     }
   }
 
-  private deleteHostEventWaiter(waiter: HostEventWaiter): void {
+  private deleteHostEventWaiter(hostId: string, waiter: HostEventWaiter): void {
     clearTimeout(waiter.timeout);
-    this.hostEventWaiters.delete(waiter);
+    const waiters = this.hostEventWaiters.get(hostId);
+    if (!waiters) {
+      return;
+    }
+    waiters.delete(waiter);
+    if (waiters.size === 0) {
+      this.hostEventWaiters.delete(hostId);
+    }
   }
 
   private deleteCommandWaiter(hostId: string, waiter: CommandWaiter): void {

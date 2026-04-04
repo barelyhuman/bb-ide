@@ -1,6 +1,7 @@
 import {
   getActiveSession,
   getHost,
+  isEphemeralHostPendingCleanup,
   updateHost,
 } from "@bb/db";
 import {
@@ -38,7 +39,7 @@ export async function waitForHostSession(
         "Sandbox host did not connect back to the server in time",
       );
     }
-    await deps.hub.waitForHostEvent(remainingMs);
+    await deps.hub.waitForHostEvent(hostId, remainingMs);
   }
 }
 
@@ -147,4 +148,16 @@ async function destroyHostInternal(
   await sandbox.kill();
   deps.sandboxRegistry.remove(hostId);
   updateHost(deps.db, deps.hub, hostId, { destroyedAt });
+}
+
+export async function destroyEphemeralHostIfReady(
+  deps: Pick<AppDeps, "config" | "db" | "hub" | "sandboxRegistry">,
+  hostId: string,
+): Promise<boolean> {
+  if (!isEphemeralHostPendingCleanup(deps.db, hostId)) {
+    return false;
+  }
+
+  await destroyHost(deps, hostId);
+  return true;
 }

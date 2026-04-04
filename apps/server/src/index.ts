@@ -20,21 +20,22 @@ const selfDir = dirname(fileURLToPath(import.meta.url));
 const appDistDir = resolve(selfDir, "../../app/dist");
 const staticDir =
   process.env.NODE_ENV === "production" && existsSync(appDistDir) ? appDistDir : undefined;
+const runtimeConfig = {
+  anthropicApiKey: serverConfig.ANTHROPIC_API_KEY,
+  authToken: commonConfig.BB_SECRET_TOKEN,
+  dataDir: commonConfig.BB_DATA_DIR,
+  e2bApiKey: serverConfig.E2B_API_KEY,
+  e2bTemplate: serverConfig.E2B_TEMPLATE,
+  githubPat: serverConfig.BB_GITHUB_PAT,
+  hostDaemonPort: serverConfig.BB_HOST_DAEMON_PORT,
+  inferenceModel: serverConfig.BB_INFERENCE_MODEL,
+  openAiApiKey: serverConfig.OPENAI_API_KEY,
+  publicUrl: serverConfig.BB_PUBLIC_URL,
+};
 
 const { app, injectWebSocket } = createApp(
   {
-    config: {
-      anthropicApiKey: serverConfig.ANTHROPIC_API_KEY,
-      authToken: commonConfig.BB_SECRET_TOKEN,
-      dataDir: commonConfig.BB_DATA_DIR,
-      e2bApiKey: serverConfig.E2B_API_KEY,
-      e2bTemplate: serverConfig.E2B_TEMPLATE,
-      githubPat: serverConfig.BB_GITHUB_PAT,
-      hostDaemonPort: serverConfig.BB_HOST_DAEMON_PORT,
-      inferenceModel: serverConfig.BB_INFERENCE_MODEL,
-      openAiApiKey: serverConfig.OPENAI_API_KEY,
-      publicUrl: serverConfig.BB_PUBLIC_URL,
-    },
+    config: runtimeConfig,
     db,
     hub,
     logger,
@@ -44,7 +45,13 @@ const { app, injectWebSocket } = createApp(
 );
 
 setInterval(() => {
-  void runPeriodicSweeps({ db, hub, logger });
+  void runPeriodicSweeps({
+    config: runtimeConfig,
+    db,
+    hub,
+    logger,
+    sandboxRegistry,
+  });
 }, 10_000).unref();
 
 const server = serve({

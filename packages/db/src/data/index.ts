@@ -65,6 +65,8 @@ export type {
 export {
   upsertHost,
   getHost,
+  isEphemeralHostPendingCleanup,
+  listEphemeralHostsPendingCleanup,
   listHosts,
   updateHost,
   deleteHost,
@@ -121,6 +123,7 @@ export {
 export type { CreateDraftInput, DraftRow } from "./drafts.js";
 
 export {
+  sweepEphemeralHostsPendingCleanup,
   sweepExpiredCommands,
   sweepExpiredLeases,
   sweepDestroyingEnvironments,

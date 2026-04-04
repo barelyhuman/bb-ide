@@ -2,6 +2,7 @@ import { eq, and, sql, lt, ne, inArray, or } from "drizzle-orm";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import {
+  hosts,
   hostDaemonCommands,
   hostDaemonSessions,
   threads,
@@ -142,7 +143,7 @@ export function sweepExpiredLeases(
       .run();
     sessionsClosed++;
 
-    notifier.notifyHost(["host-disconnected"]);
+    notifier.notifyHost(session.hostId, ["host-disconnected"]);
 
     // Find active/provisioning threads on environments belonging to this host.
     // Idle threads are excluded — they have no in-flight work to interrupt.
@@ -198,6 +199,25 @@ export function sweepManagedEnvironments(db: DbConnection) {
     .all();
 
   return rows;
+}
+
+export function sweepEphemeralHostsPendingCleanup(db: DbConnection) {
+  return db
+    .select()
+    .from(hosts)
+    .where(
+      and(
+        eq(hosts.type, "ephemeral"),
+        sql`${hosts.destroyedAt} IS NULL`,
+        sql`${hosts.externalId} IS NOT NULL`,
+        sql`NOT EXISTS (
+          SELECT 1 FROM ${environments}
+          WHERE ${environments.hostId} = ${hosts.id}
+          AND ${environments.status} != 'destroyed'
+        )`,
+      ),
+    )
+    .all();
 }
 
 export function sweepDestroyingEnvironments(

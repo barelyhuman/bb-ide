@@ -1,8 +1,8 @@
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { HostType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
-import { hosts } from "../schema.js";
+import { environments, hosts } from "../schema.js";
 import { createHostId } from "../ids.js";
 
 export interface UpsertHostInput {
@@ -41,7 +41,7 @@ function notifyHostMutation(
     return;
   }
 
-  notifier.notifyHost([
+  notifier.notifyHost(next.id, [
     (previous.destroyedAt === null && next.destroyedAt !== null) ||
     (previous.externalId !== null && next.externalId === null)
       ? "host-disconnected"
@@ -94,7 +94,7 @@ export function upsertHost(
       })
       .returning()
       .get();
-    notifier.notifyHost(["host-connected"]);
+    notifier.notifyHost(id, ["host-connected"]);
     return row;
   }
 }
@@ -105,6 +105,36 @@ export function getHost(db: DbConnection, id: string) {
 
 export function listHosts(db: DbConnection) {
   return db.select().from(hosts).all();
+}
+
+export function listEphemeralHostsPendingCleanup(
+  db: DbConnection,
+  hostId?: string,
+) {
+  return db
+    .select()
+    .from(hosts)
+    .where(
+      and(
+        eq(hosts.type, "ephemeral"),
+        isNull(hosts.destroyedAt),
+        isNotNull(hosts.externalId),
+        hostId ? eq(hosts.id, hostId) : undefined,
+        sql`NOT EXISTS (
+          SELECT 1 FROM ${environments}
+          WHERE ${environments.hostId} = ${hosts.id}
+          AND ${environments.status} != 'destroyed'
+        )`,
+      ),
+    )
+    .all();
+}
+
+export function isEphemeralHostPendingCleanup(
+  db: DbConnection,
+  hostId: string,
+): boolean {
+  return listEphemeralHostsPendingCleanup(db, hostId).length > 0;
 }
 
 export function updateHost(
@@ -147,6 +177,6 @@ export function deleteHost(
   }
 
   db.delete(hosts).where(eq(hosts.id, hostId)).run();
-  notifier.notifyHost(["host-disconnected"]);
+  notifier.notifyHost(existing.id, ["host-disconnected"]);
   return true;
 }

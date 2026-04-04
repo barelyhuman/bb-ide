@@ -1,4 +1,5 @@
 import {
+  sweepEphemeralHostsPendingCleanup,
   sweepDestroyingEnvironments,
   sweepExpiredCommands,
   sweepExpiredLeases,
@@ -6,9 +7,11 @@ import {
 } from "@bb/db";
 import type { AppDeps } from "../types.js";
 import { evaluateManagedEnvironmentArchiveCleanup } from "./environment-cleanup.js";
+import { destroyHost } from "./host-lifecycle.js";
 
 export type EvaluateManagedEnvironmentArchiveCleanupFn =
   typeof evaluateManagedEnvironmentArchiveCleanup;
+export type DestroyHostFn = typeof destroyHost;
 
 export async function runManagedEnvironmentArchiveCleanupSweep(
   deps: Pick<AppDeps, "db" | "hub" | "logger">,
@@ -34,8 +37,27 @@ export async function runManagedEnvironmentArchiveCleanupSweep(
   }
 }
 
+export async function runEphemeralHostCleanupSweep(
+  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
+  destroySandboxHost: DestroyHostFn,
+): Promise<void> {
+  for (const host of sweepEphemeralHostsPendingCleanup(deps.db)) {
+    try {
+      await destroySandboxHost(deps, host.id);
+    } catch (error) {
+      deps.logger.warn(
+        {
+          err: error,
+          hostId: host.id,
+        },
+        "Ephemeral host cleanup sweep failed",
+      );
+    }
+  }
+}
+
 export async function runPeriodicSweeps(
-  deps: Pick<AppDeps, "db" | "hub" | "logger">,
+  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
 ): Promise<void> {
   try {
     sweepExpiredCommands(deps.db, deps.hub);
@@ -45,6 +67,7 @@ export async function runPeriodicSweeps(
       deps,
       evaluateManagedEnvironmentArchiveCleanup,
     );
+    await runEphemeralHostCleanupSweep(deps, destroyHost);
   } catch (error) {
     deps.logger.error({ err: error }, "Periodic sweep failed");
   }

@@ -273,7 +273,7 @@ describe("sweepExpiredLeases", () => {
       .get();
     expect(updatedThread?.status).toBe("error");
 
-    expect(spy.notifyHost).toHaveBeenCalledWith(["host-disconnected"]);
+    expect(spy.notifyHost).toHaveBeenCalledWith(host.id, ["host-disconnected"]);
     expect(spy.notifyThread).toHaveBeenCalledWith(thread.id, ["status-changed"]);
   });
 

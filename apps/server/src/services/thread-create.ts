@@ -20,7 +20,7 @@ import { ApiError } from "../errors.js";
 import { queueCommandAndWait } from "./command-wait.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
-import { waitForHostSession } from "./host-lifecycle.js";
+import { destroyHost, waitForHostSession } from "./host-lifecycle.js";
 import { createSandboxBackendForId } from "./sandbox-backends.js";
 import { appendClientTurnEvent, appendProvisioningEvent, buildCwdBranchEntries } from "./thread-events.js";
 import { buildExecutionOptions, queueThreadStartCommand } from "./thread-commands.js";
@@ -269,9 +269,17 @@ async function createSandboxHostThread(
   try {
     await waitForHostSession(deps, hostId);
   } catch (error) {
-    deps.sandboxRegistry.remove(hostId);
-    await sandboxHost.destroy().catch(() => {});
-    updateHost(deps.db, deps.hub, hostId, { destroyedAt: Date.now() });
+    try {
+      await destroyHost(deps, hostId);
+    } catch (destroyError) {
+      deps.logger.warn(
+        {
+          err: destroyError,
+          hostId,
+        },
+        "Failed to destroy sandbox host after session wait failure",
+      );
+    }
     throw error;
   }
 

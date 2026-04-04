@@ -73,7 +73,7 @@ export function openSession(
     .returning()
     .get();
 
-  notifier.notifyHost(["host-connected"]);
+  notifier.notifyHost(input.hostId, ["host-connected"]);
 
   return row;
 }
@@ -108,7 +108,7 @@ export function closeSession(
     .returning()
     .get();
 
-  notifier.notifyHost(["host-disconnected"]);
+  notifier.notifyHost(existing.hostId, ["host-disconnected"]);
 
   return updated ?? null;
 }

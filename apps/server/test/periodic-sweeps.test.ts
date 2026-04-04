@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { runManagedEnvironmentArchiveCleanupSweep } from "../src/services/periodic-sweeps.js";
+import { getHost, upsertHost } from "@bb/db";
+import {
+  runEphemeralHostCleanupSweep,
+  runManagedEnvironmentArchiveCleanupSweep,
+} from "../src/services/periodic-sweeps.js";
 import {
   seedEnvironment,
   seedHostSession,
@@ -58,6 +62,74 @@ describe("periodic sweeps", () => {
         }),
         "Managed environment archive cleanup sweep failed",
       );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("retries ephemeral host cleanup on later sweeps after an initial destroy failure", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-periodic-ephemeral",
+        id: "host-periodic-ephemeral",
+        name: "Periodic Ephemeral Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      const cachedHost = {
+        destroy: vi
+          .fn()
+          .mockRejectedValueOnce(new Error("cleanup failed"))
+          .mockResolvedValueOnce(undefined),
+        extendTimeout: vi.fn().mockResolvedValue(undefined),
+        externalId: "sandbox-periodic-ephemeral",
+        hostId: host.id,
+        resume: vi.fn().mockResolvedValue(undefined),
+        suspend: vi.fn().mockResolvedValue(undefined),
+      };
+      harness.deps.sandboxRegistry.set(host.id, cachedHost);
+
+      await runEphemeralHostCleanupSweep(harness.deps, async (deps, hostId) => {
+        const candidate = deps.sandboxRegistry.get(hostId);
+        if (!candidate) {
+          throw new Error("Expected cached ephemeral host");
+        }
+        await candidate.destroy();
+        deps.sandboxRegistry.remove(hostId);
+        upsertHost(deps.db, deps.hub, {
+          destroyedAt: Date.now(),
+          externalId: candidate.externalId,
+          id: hostId,
+          name: "Periodic Ephemeral Host",
+          provider: "e2b",
+          type: "ephemeral",
+        });
+      });
+
+      expect(getHost(harness.db, host.id)?.destroyedAt).toBeNull();
+
+      await runEphemeralHostCleanupSweep(harness.deps, async (deps, hostId) => {
+        const candidate = deps.sandboxRegistry.get(hostId);
+        if (!candidate) {
+          throw new Error("Expected cached ephemeral host");
+        }
+        await candidate.destroy();
+        deps.sandboxRegistry.remove(hostId);
+        upsertHost(deps.db, deps.hub, {
+          destroyedAt: Date.now(),
+          externalId: candidate.externalId,
+          id: hostId,
+          name: "Periodic Ephemeral Host",
+          provider: "e2b",
+          type: "ephemeral",
+        });
+      });
+
+      expect(cachedHost.destroy).toHaveBeenCalledTimes(2);
+      expect(getHost(harness.db, host.id)).toMatchObject({
+        destroyedAt: expect.any(Number),
+      });
     } finally {
       await harness.cleanup();
     }

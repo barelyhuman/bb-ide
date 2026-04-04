@@ -98,6 +98,65 @@ describe("host lifecycle", () => {
     }
   });
 
+  it("ignores unrelated host events while waiting for a session", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const targetHost = upsertHost(harness.db, harness.hub, {
+        id: "host-target-wait",
+        name: "Target Host",
+        type: "ephemeral",
+      });
+      const unrelatedHost = upsertHost(harness.db, harness.hub, {
+        id: "host-unrelated-wait",
+        name: "Unrelated Host",
+        type: "ephemeral",
+      });
+
+      setTimeout(() => {
+        openSession(harness.db, harness.hub, {
+          heartbeatIntervalMs: 5_000,
+          hostId: unrelatedHost.id,
+          hostName: unrelatedHost.name,
+          hostType: unrelatedHost.type,
+          instanceId: "instance-unrelated",
+          leaseTimeoutMs: 30_000,
+          protocolVersion: 2,
+        });
+      }, 500);
+      setTimeout(() => {
+        openSession(harness.db, harness.hub, {
+          heartbeatIntervalMs: 5_000,
+          hostId: targetHost.id,
+          hostName: targetHost.name,
+          hostType: targetHost.type,
+          instanceId: "instance-target",
+          leaseTimeoutMs: 30_000,
+          protocolVersion: 2,
+        });
+      }, 1_000);
+
+      let resolved = false;
+      const waiting = waitForHostSession(harness.deps, targetHost.id, {
+        timeoutMs: 5_000,
+      }).then((session) => {
+        resolved = true;
+        return session;
+      });
+
+      await vi.advanceTimersByTimeAsync(750);
+      await Promise.resolve();
+      expect(resolved).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(500);
+      await expect(waiting).resolves.toMatchObject({
+        hostId: targetHost.id,
+        status: "active",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("times out when a host session never opens", async () => {
     const harness = await createTestAppHarness();
     try {

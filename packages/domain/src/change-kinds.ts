@@ -87,6 +87,7 @@ export interface EnvironmentChangedMessage {
 export interface HostChangedMessage {
   type: "changed";
   entity: "host";
+  id?: string;
   changes: HostChangeKind[];
 }
 

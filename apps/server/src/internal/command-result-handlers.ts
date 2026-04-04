@@ -5,6 +5,7 @@ import {
   deleteThread,
   events,
   getEnvironment,
+  getHost,
   getThread,
   hostDaemonCommands,
   threads,
@@ -28,6 +29,7 @@ import {
   maybeStartEnvironmentCleanup,
   queueEnvironmentDestroyCommand,
 } from "../services/environment-cleanup.js";
+import { destroyEphemeralHostIfReady } from "../services/host-lifecycle.js";
 import { tryTransition } from "../services/thread-transitions.js";
 
 function parseCommand(
@@ -210,11 +212,11 @@ async function handleProvisionCommandResult(
   }
 }
 
-function handleEnvironmentDestroyResult(
-  deps: Pick<AppDeps, "db" | "hub">,
+async function handleEnvironmentDestroyResult(
+  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
   report: Extract<HostDaemonCommandResultReport, { type: "environment.destroy" }>,
   commandRow: typeof hostDaemonCommands.$inferSelect,
-): void {
+): Promise<void> {
   if (!report.ok) {
     return;
   }
@@ -229,6 +231,24 @@ function handleEnvironmentDestroyResult(
   updateEnvironmentStatus(deps.db, deps.hub, command.environmentId, {
     status: "destroyed",
   });
+
+  const host = getHost(deps.db, environment.hostId);
+  if (host?.type !== "ephemeral") {
+    return;
+  }
+
+  try {
+    await destroyEphemeralHostIfReady(deps, host.id);
+  } catch (error) {
+    deps.logger.warn(
+      {
+        environmentId: environment.id,
+        err: error,
+        hostId: host.id,
+      },
+      "Ephemeral sandbox host cleanup failed after environment destroy",
+    );
+  }
 }
 
 function handleThreadStopResult(
@@ -338,7 +358,7 @@ function handleWorkspaceMutationResult(
 }
 
 export async function handleCommandResultSideEffects(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
   report: HostDaemonCommandResultReport,
   commandRow: typeof hostDaemonCommands.$inferSelect,
 ): Promise<void> {
@@ -347,7 +367,7 @@ export async function handleCommandResultSideEffects(
       await handleProvisionCommandResult(deps, report, commandRow);
       return;
     case "environment.destroy":
-      handleEnvironmentDestroyResult(deps, report, commandRow);
+      await handleEnvironmentDestroyResult(deps, report, commandRow);
       return;
     case "thread.stop":
       await handleThreadStopResult(deps, report, commandRow);
