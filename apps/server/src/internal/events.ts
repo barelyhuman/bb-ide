@@ -72,6 +72,16 @@ interface ResolveActivePruneCandidatesArgs {
   insertedEventIndexes: number[];
 }
 
+type CompletedTurnStatus = Extract<
+  HostDaemonEventEnvelope["event"],
+  { type: "turn/completed" }
+>["status"];
+
+interface ArchiveCompletedAutomationThreadIfNeededArgs {
+  latestThread: NonNullable<ReturnType<typeof getThread>>;
+  turnStatus: CompletedTurnStatus;
+}
+
 function resolveProviderIdentifiers(
   event: HostDaemonEventEnvelope["event"],
 ): { providerThreadId: string | null; turnId: string | null } {
@@ -140,6 +150,20 @@ function toStoredEvent(args: ToStoredEventArgs) {
   };
 }
 
+function archiveCompletedAutomationThreadIfNeeded(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: ArchiveCompletedAutomationThreadIfNeededArgs,
+): void {
+  if (args.turnStatus !== "completed" || !args.latestThread.automationId) {
+    return;
+  }
+
+  const automation = getAutomation(deps.db, args.latestThread.automationId);
+  if (automation?.autoArchive) {
+    archiveThread(deps.db, deps.hub, args.latestThread.id);
+  }
+}
+
 async function applyEventEffects(
   deps: Pick<AppDeps, "db" | "hub" | "logger">,
   events: HostDaemonEventEnvelope[],
@@ -176,16 +200,10 @@ async function applyEventEffects(
                 threadId: latestThread.id,
               });
             }
-
-            if (
-              event.status === "completed" &&
-              latestThread.automationId
-            ) {
-              const automation = getAutomation(deps.db, latestThread.automationId);
-              if (automation?.autoArchive) {
-                archiveThread(deps.db, deps.hub, latestThread.id);
-              }
-            }
+            archiveCompletedAutomationThreadIfNeeded(deps, {
+              latestThread,
+              turnStatus: event.status,
+            });
           }
         }
         continue;

@@ -14,11 +14,13 @@ import type {
   CreateThreadRequest,
 } from "@bb/server-contract";
 import type { AppDeps } from "../types.js";
-import { parseAutomationAction, parseAutomationTriggerConfig } from "./automation-config.js";
+import {
+  type AutomationRow,
+  parseAutomationAction,
+  parseAutomationTriggerConfig,
+} from "./automation-config.js";
 import { computeNextScheduledTime } from "./schedule-helpers.js";
 import { createThreadFromRequest } from "./thread-create.js";
-
-type AutomationRow = typeof automations.$inferSelect;
 const DUE_AUTOMATION_BATCH_SIZE = 100;
 
 interface SweepDueAutomationsArgs {

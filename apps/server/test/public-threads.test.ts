@@ -1288,6 +1288,63 @@ describe("public thread routes", () => {
     }
   });
 
+  it("fails managed reprovision send when the host is disconnected", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = seedHost(harness.deps, {
+        id: "host-send-reprovision-offline",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/send-reprovision-offline-project",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/send-reprovision-offline-target",
+        status: "error",
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/send`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            mode: "auto",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Resume after reconnect" }],
+          }),
+        },
+      );
+
+      expect(response.status).toBe(502);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "host_disconnected",
+      });
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe("error");
+      expect(getThread(harness.db, thread.id)?.status).toBe("idle");
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .where(eq(hostDaemonCommands.type, "environment.provision"))
+          .all(),
+      ).toHaveLength(0);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("rejects invalid send mode transitions", async () => {
     const harness = await createTestAppHarness();
     try {

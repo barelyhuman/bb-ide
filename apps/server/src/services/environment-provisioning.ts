@@ -17,6 +17,7 @@ import {
   SETUP_TIMEOUT_MS,
   requireSourceForHost,
 } from "./thread-create-helpers.js";
+import { requireConnectedHostSession } from "./entity-lookup.js";
 import { tryTransition } from "./thread-transitions.js";
 
 function toProvisioningLabel(
@@ -59,6 +60,7 @@ export function queueManagedEnvironmentReprovision(
     args.thread.projectId,
     args.environment.hostId,
   );
+  requireConnectedHostSession(deps, args.environment.hostId);
 
   const targetPath =
     args.environment.path ??

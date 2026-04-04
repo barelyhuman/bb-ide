@@ -7,7 +7,7 @@ import {
   type AutomationScheduleTrigger,
 } from "@bb/server-contract";
 
-type AutomationRow = typeof automations.$inferSelect;
+export type AutomationRow = typeof automations.$inferSelect;
 
 export function parseAutomationTriggerConfig(
   triggerConfig: string,
