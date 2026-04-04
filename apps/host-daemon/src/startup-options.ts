@@ -1,3 +1,4 @@
+import { toOptionalTrimmedString } from "@bb/config/strings";
 import { hostTypeSchema } from "@bb/domain";
 import type { HostType } from "@bb/domain";
 
@@ -8,11 +9,6 @@ export interface HostDaemonEntrypointOptions {
 
 export interface ResolveHostDaemonEntrypointOptionsFromEnvArgs {
   env: NodeJS.ProcessEnv;
-}
-
-function toOptionalEnvString(value: string | undefined): string | undefined {
-  const trimmedValue = value?.trim();
-  return trimmedValue ? trimmedValue : undefined;
 }
 
 function parseHostType(value: string | undefined): HostType | undefined {
@@ -32,7 +28,7 @@ export function resolveHostDaemonEntrypointOptionsFromEnv(
   args: ResolveHostDaemonEntrypointOptionsFromEnvArgs,
 ): HostDaemonEntrypointOptions {
   return {
-    bridgeBundleDir: toOptionalEnvString(args.env.BB_BRIDGE_DIR),
-    hostType: parseHostType(toOptionalEnvString(args.env.BB_HOST_TYPE)),
+    bridgeBundleDir: toOptionalTrimmedString(args.env.BB_BRIDGE_DIR),
+    hostType: parseHostType(toOptionalTrimmedString(args.env.BB_HOST_TYPE)),
   };
 }

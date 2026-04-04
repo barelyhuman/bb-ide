@@ -1,3 +1,4 @@
+import { BlockList, isIP } from "node:net";
 import {
   applyProvisionedEnvironment,
   createEnvironment,
@@ -12,7 +13,6 @@ import {
   updateHost,
   upsertHost,
 } from "@bb/db";
-import { isIP } from "node:net";
 import type { Environment } from "@bb/domain";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { SandboxHost } from "@bb/sandbox-host";
@@ -59,6 +59,18 @@ interface CreateSandboxHostThreadArgs {
   request: ThreadCreateServiceRequest;
   sandboxType: string;
 }
+
+const unreachableSandboxPublicUrlBlockList = new BlockList();
+unreachableSandboxPublicUrlBlockList.addAddress("0.0.0.0", "ipv4");
+unreachableSandboxPublicUrlBlockList.addAddress("127.0.0.1", "ipv4");
+unreachableSandboxPublicUrlBlockList.addAddress("::", "ipv6");
+unreachableSandboxPublicUrlBlockList.addAddress("::1", "ipv6");
+unreachableSandboxPublicUrlBlockList.addSubnet("10.0.0.0", 8, "ipv4");
+unreachableSandboxPublicUrlBlockList.addSubnet("169.254.0.0", 16, "ipv4");
+unreachableSandboxPublicUrlBlockList.addSubnet("172.16.0.0", 12, "ipv4");
+unreachableSandboxPublicUrlBlockList.addSubnet("192.168.0.0", 16, "ipv4");
+unreachableSandboxPublicUrlBlockList.addSubnet("fc00::", 7, "ipv6");
+unreachableSandboxPublicUrlBlockList.addSubnet("fe80::", 10, "ipv6");
 
 async function createThreadInEnvironment(
   deps: Pick<AppDeps, "config" | "db" | "hub" | "logger">,
@@ -151,20 +163,18 @@ async function createThreadInEnvironment(
 function ensurePublicServerUrl(publicUrl: string): string {
   const parsedUrl = new URL(publicUrl);
   const hostname = parsedUrl.hostname;
-  const isIpv4Address = isIP(hostname) === 4;
-  const ipv4Octets = isIpv4Address ? hostname.split(".").map(Number) : null;
-  const hasPrivateIpv4Address = ipv4Octets !== null && (
-    ipv4Octets[0] === 10 ||
-    (ipv4Octets[0] === 172 && ipv4Octets[1] >= 16 && ipv4Octets[1] <= 31) ||
-    (ipv4Octets[0] === 192 && ipv4Octets[1] === 168)
-  );
+  const normalizedHostname =
+    hostname.startsWith("[") && hostname.endsWith("]")
+      ? hostname.slice(1, -1)
+      : hostname;
+  const ipVersion = isIP(normalizedHostname);
+
   if (
-    hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    hostname === "0.0.0.0" ||
-    hostname === "::1" ||
-    hostname === "[::1]" ||
-    hasPrivateIpv4Address
+    normalizedHostname === "localhost" ||
+    (ipVersion === 4 &&
+      unreachableSandboxPublicUrlBlockList.check(normalizedHostname, "ipv4")) ||
+    (ipVersion === 6 &&
+      unreachableSandboxPublicUrlBlockList.check(normalizedHostname, "ipv6"))
   ) {
     throw new ApiError(
       409,

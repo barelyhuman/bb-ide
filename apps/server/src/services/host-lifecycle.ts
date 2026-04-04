@@ -4,9 +4,6 @@ import {
   isEphemeralHostPendingCleanup,
   updateHost,
 } from "@bb/db";
-import {
-  resumeSandbox,
-} from "@bb/sandbox-host";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { createSandboxBackendForId } from "./sandbox-backends.js";
@@ -142,10 +139,11 @@ async function destroyHostInternal(
   }
 
   deps.sandboxRegistry.remove(hostId);
-  const sandbox = await resumeSandbox(hostRecord.externalId, {
-    apiKey: deps.config.e2bApiKey === "" ? undefined : deps.config.e2bApiKey,
+  const sandboxBackend = createSandboxBackendForId(hostRecord.provider ?? "e2b");
+  await sandboxBackend.destroyHost({
+    config: deps.config,
+    externalId: hostRecord.externalId,
   });
-  await sandbox.kill();
   deps.sandboxRegistry.remove(hostId);
   updateHost(deps.db, deps.hub, hostId, { destroyedAt });
 }

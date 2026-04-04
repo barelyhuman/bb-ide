@@ -2,12 +2,12 @@ import { eq, and, sql, lt, ne, inArray, or } from "drizzle-orm";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import {
-  hosts,
   hostDaemonCommands,
   hostDaemonSessions,
   threads,
   environments,
 } from "../schema.js";
+import { listEphemeralHostsPendingCleanup } from "./hosts.js";
 import { getThread, transitionThreadStatus } from "./threads.js";
 
 /** Standard command TTL: 60 seconds */
@@ -202,22 +202,7 @@ export function sweepManagedEnvironments(db: DbConnection) {
 }
 
 export function sweepEphemeralHostsPendingCleanup(db: DbConnection) {
-  return db
-    .select()
-    .from(hosts)
-    .where(
-      and(
-        eq(hosts.type, "ephemeral"),
-        sql`${hosts.destroyedAt} IS NULL`,
-        sql`${hosts.externalId} IS NOT NULL`,
-        sql`NOT EXISTS (
-          SELECT 1 FROM ${environments}
-          WHERE ${environments.hostId} = ${hosts.id}
-          AND ${environments.status} != 'destroyed'
-        )`,
-      ),
-    )
-    .all();
+  return listEphemeralHostsPendingCleanup(db);
 }
 
 export function sweepDestroyingEnvironments(

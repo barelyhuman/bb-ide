@@ -751,9 +751,12 @@ describe("public thread routes", () => {
     "https://127.0.0.1:3000",
     "https://0.0.0.0:3000",
     "https://[::1]:3000",
+    "https://169.254.20.1:3000",
     "https://10.0.0.5:3000",
     "https://172.20.0.10:3000",
     "https://192.168.1.20:3000",
+    "https://[fc00::1]:3000",
+    "https://[fe80::1]:3000",
   ])("rejects unreachable sandbox public URLs: %s", async (publicUrl) => {
     const harness = await createTestAppHarness({
       githubPat: "test-github-pat",

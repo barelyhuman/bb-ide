@@ -27,6 +27,10 @@
       "import": "./dist/defaults.js",
       "types": "./dist/defaults.d.ts"
     },
+    "./strings": {
+      "import": "./dist/strings.js",
+      "types": "./dist/strings.d.ts"
+    },
     "./dotenv": {
       "import": "./dist/dotenv.js",
       "types": "./dist/dotenv.d.ts"

@@ -1,7 +1,9 @@
+import { toOptionalString } from "@bb/config/strings";
 import type { SandboxBackendInfo } from "@bb/domain";
 import {
   provisionHost as provisionSandboxHost,
   resumeHost as resumeSandboxHost,
+  resumeSandbox,
 } from "@bb/sandbox-host";
 import type {
   ProvisionHostOptions,
@@ -38,8 +40,14 @@ export interface SandboxBackendResumeArgs {
   serverUrl: string;
 }
 
+export interface SandboxBackendDestroyArgs {
+  config: SandboxBackendConfig;
+  externalId: string;
+}
+
 export interface SandboxBackend {
   getInfo(config: SandboxBackendInfoResolverConfig): SandboxBackendInfo;
+  destroyHost(args: SandboxBackendDestroyArgs): Promise<void>;
   provisionHost(
     args: SandboxBackendProvisionArgs,
   ): ReturnType<typeof provisionSandboxHost>;
@@ -57,10 +65,6 @@ const E2B_SANDBOX_BACKEND_INFO = {
     supportsSuspend: true,
   },
 } satisfies Omit<SandboxBackendInfo, "available">;
-
-function toOptionalConfigString(value: string): string | undefined {
-  return value === "" ? undefined : value;
-}
 
 function isE2BBackendAvailable(config: SandboxBackendInfoResolverConfig): boolean {
   return (
@@ -112,7 +116,7 @@ function buildResumeHostOptions(
   args: SandboxBackendResumeArgs,
 ): ResumeHostOptions {
   return {
-    apiKey: toOptionalConfigString(args.config.e2bApiKey),
+    apiKey: toOptionalString(args.config.e2bApiKey),
     authToken: args.config.authToken,
     daemonEnv: buildSandboxDaemonEnv(args.config),
     externalId: args.externalId,
@@ -128,6 +132,12 @@ const e2bSandboxBackend: SandboxBackend = {
       ...E2B_SANDBOX_BACKEND_INFO,
       available: isE2BBackendAvailable(config),
     };
+  },
+  async destroyHost(args) {
+    const sandbox = await resumeSandbox(args.externalId, {
+      apiKey: toOptionalString(args.config.e2bApiKey),
+    });
+    await sandbox.kill();
   },
   provisionHost(args) {
     requireE2BProvisioningConfig(args.config);

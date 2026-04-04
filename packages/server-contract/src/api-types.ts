@@ -434,7 +434,7 @@ export { providerInfoSchema as systemProviderInfoSchema } from "@bb/domain";
 export type { ProviderInfo as SystemProviderInfo } from "@bb/domain";
 
 // SystemSandboxBackendInfo is the same shape as SandboxBackendInfo from domain.
-// Re-export with the API-facing name for backward compatibility.
+// Re-export with the API-facing name to match API naming conventions.
 export { sandboxBackendInfoSchema as systemSandboxBackendInfoSchema } from "@bb/domain";
 export type { SandboxBackendInfo as SystemSandboxBackendInfo } from "@bb/domain";
 
