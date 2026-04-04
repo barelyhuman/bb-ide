@@ -647,10 +647,10 @@ describe("public thread routes", () => {
         authToken: harness.config.authToken,
         daemonEnv: {
           GITHUB_TOKEN: "test-github-pat",
+          OPENAI_API_KEY: "test-openai-key",
         },
         hostId: expect.stringMatching(/^host_/u),
         hostName: expect.stringMatching(/^sandbox-/u),
-        sandboxType: "e2b",
         serverUrl: "https://bb.example.test",
         template: "test-e2b-template",
       });

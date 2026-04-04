@@ -14,7 +14,6 @@ import {
 } from "@bb/db";
 import type { Environment } from "@bb/domain";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
-import { provisionHost } from "@bb/sandbox-host";
 import type { SandboxHost } from "@bb/sandbox-host";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
@@ -22,8 +21,7 @@ import { queueCommandAndWait } from "./command-wait.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
 import { waitForHostSession } from "./host-lifecycle.js";
-import { buildSandboxDaemonEnv } from "./sandbox-daemon-env.js";
-import { hasConfiguredSandboxTemplate } from "./sandbox-config.js";
+import { createSandboxBackendForId } from "./sandbox-backends.js";
 import { appendClientTurnEvent, appendProvisioningEvent, buildCwdBranchEntries } from "./thread-events.js";
 import { buildExecutionOptions, queueThreadStartCommand } from "./thread-commands.js";
 import { generateThreadTitle } from "./title-generation.js";
@@ -238,31 +236,10 @@ async function createSandboxHostThread(
   deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
   args: CreateSandboxHostThreadArgs,
 ) {
-  if (!deps.config.e2bApiKey) {
-    throw new ApiError(
-      501,
-      "not_configured",
-      "Sandbox provisioning requires E2B_API_KEY to be configured",
-    );
-  }
-  if (!hasConfiguredSandboxTemplate(deps.config)) {
-    throw new ApiError(
-      501,
-      "not_configured",
-      "Sandbox provisioning requires E2B_TEMPLATE to be configured or packages/sandbox-image/templates.json to contain a current build",
-    );
-  }
-  if (!deps.config.githubPat) {
-    throw new ApiError(
-      501,
-      "not_configured",
-      "Sandbox provisioning requires BB_GITHUB_PAT to be configured",
-    );
-  }
-
   const defaultSource = requireSandboxCloneSource(deps, args.request.projectId);
   const hostId = createHostId();
   const hostName = `sandbox-${hostId.slice(-6)}`;
+  const sandboxBackend = createSandboxBackendForId(args.sandboxType);
 
   upsertHost(deps.db, deps.hub, {
     id: hostId,
@@ -273,15 +250,11 @@ async function createSandboxHostThread(
 
   let sandboxHost: SandboxHost;
   try {
-    sandboxHost = await provisionHost({
-      apiKey: deps.config.e2bApiKey,
-      authToken: deps.config.authToken,
-      daemonEnv: buildSandboxDaemonEnv(deps.config.githubPat),
+    sandboxHost = await sandboxBackend.provisionHost({
+      config: deps.config,
       hostId,
       hostName,
-      sandboxType: args.sandboxType,
       serverUrl: ensurePublicServerUrl(deps.config.publicUrl),
-      template: deps.config.e2bTemplate === "" ? undefined : deps.config.e2bTemplate,
     });
   } catch (error) {
     deleteHost(deps.db, deps.hub, hostId);

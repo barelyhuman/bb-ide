@@ -90,7 +90,6 @@ describe("sandbox host provisioning", () => {
       daemonEnv: {},
       hostId: "host-123",
       hostName: "sandbox-123",
-      sandboxType: "e2b",
       serverUrl: "https://bb.example.test/",
       template: "custom-template",
       timeoutMs: 123_000,
@@ -144,7 +143,6 @@ describe("sandbox host provisioning", () => {
       daemonEnv: {},
       hostId: "host-123",
       hostName: "sandbox-123",
-      sandboxType: "e2b",
       serverUrl: "https://bb.example.test",
       template: testSandboxTemplate,
     });
@@ -171,7 +169,6 @@ describe("sandbox host provisioning", () => {
       daemonEnv: {},
       hostId: "host-123",
       hostName: "sandbox-123",
-      sandboxType: "e2b",
       serverUrl: "https://bb.example.test",
       template: testSandboxTemplate,
     });
@@ -194,7 +191,6 @@ describe("sandbox host provisioning", () => {
         daemonEnv: {},
         hostId: "host-123",
         hostName: "sandbox-123",
-        sandboxType: "e2b",
         serverUrl: "https://bb.example.test",
         template: testSandboxTemplate,
       }),
@@ -216,7 +212,6 @@ describe("sandbox host provisioning", () => {
       daemonEnv: {},
       hostId: "host-123",
       hostName: "sandbox-123",
-      sandboxType: "e2b",
       serverUrl: "https://bb.example.test",
       template: testSandboxTemplate,
     });
@@ -240,7 +235,6 @@ describe("sandbox host provisioning", () => {
       daemonEnv: {},
       hostId: "host-123",
       hostName: "sandbox-123",
-      sandboxType: "e2b",
       serverUrl: "https://bb.example.test",
       template: testSandboxTemplate,
     });
@@ -364,7 +358,6 @@ describe("sandbox host provisioning", () => {
       daemonEnv: { GITHUB_TOKEN: "github-token" },
       hostId: "host-123",
       hostName: "sandbox-123",
-      sandboxType: "e2b",
       serverUrl: "https://bb.example.test",
       template: testSandboxTemplate,
     });
@@ -385,6 +378,38 @@ describe("sandbox host provisioning", () => {
         ...expectedDaemonEnv,
         GITHUB_TOKEN: "github-token",
       },
+    });
+  });
+
+  it("does not implicitly forward provider keys from process.env", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "ambient-openai-key");
+    vi.stubEnv("ANTHROPIC_API_KEY", "ambient-anthropic-key");
+
+    const sandbox = createMockSandbox();
+    sandbox.commands.run
+      .mockResolvedValueOnce({ pid: 321 })
+      .mockResolvedValueOnce({ stdout: `${SANDBOX_DAEMON_HEALTH_RESPONSE}\n` });
+    sandboxCreateMock.mockResolvedValue(sandbox);
+
+    await provisionHost({
+      authToken: "secret-token",
+      daemonArtifacts: testDaemonArtifacts,
+      daemonEnv: {},
+      hostId: "host-123",
+      hostName: "sandbox-123",
+      serverUrl: "https://bb.example.test",
+      template: testSandboxTemplate,
+    });
+
+    expect(sandboxCreateMock).toHaveBeenCalledWith(
+      testSandboxTemplate,
+      expect.objectContaining({
+        envs: expectedDaemonEnv,
+      }),
+    );
+    expect(sandbox.commands.run).toHaveBeenCalledWith(daemonStartCommand, {
+      background: true,
+      envs: expectedDaemonEnv,
     });
   });
 });

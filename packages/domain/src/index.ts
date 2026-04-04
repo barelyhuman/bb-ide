@@ -41,6 +41,15 @@ export type {
 } from "./provider-types.js";
 
 export {
+  sandboxBackendCapabilitiesSchema,
+  sandboxBackendInfoSchema,
+} from "./sandbox-backend.js";
+export type {
+  SandboxBackendCapabilities,
+  SandboxBackendInfo,
+} from "./sandbox-backend.js";
+
+export {
   WORKSPACE_PROVISION_TYPES,
   discoveredWorkspacePropertiesSchema,
   environmentSchema,

@@ -840,6 +840,30 @@ describe("public environment and system routes", () => {
     }
   });
 
+  it("lists sandbox backends and availability from GET /system/sandbox-backends", async () => {
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+    });
+    try {
+      const response = await harness.app.request("/api/v1/system/sandbox-backends");
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual([
+        {
+          available: true,
+          capabilities: {
+            supportsManagedClone: true,
+            supportsManagedWorktree: false,
+            supportsSuspend: true,
+          },
+          displayName: "E2B",
+          id: "e2b",
+        },
+      ]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("returns ok from GET /health", async () => {
     const harness = await createTestAppHarness();
     try {

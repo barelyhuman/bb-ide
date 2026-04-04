@@ -187,6 +187,7 @@ async function startIntegrationServer(
   const hub = new NotificationHub();
   const sandboxRegistry = createSandboxHostRegistry();
   const config: ServerRuntimeConfig = {
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
     authToken,
     dataDir: serverDataDir,
     e2bApiKey: process.env.E2B_API_KEY ?? "test-e2b-api-key",

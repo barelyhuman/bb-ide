@@ -41,26 +41,6 @@ interface DaemonEnvOptions {
   serverUrl: string;
 }
 
-const PASSTHROUGH_DAEMON_ENV_KEYS = [
-  "ANTHROPIC_API_KEY",
-  "OPENAI_API_KEY",
-] as const;
-
-function resolveDaemonPassthroughEnv(): Record<string, string> {
-  const passthroughEnv: Record<string, string> = {};
-
-  for (const key of PASSTHROUGH_DAEMON_ENV_KEYS) {
-    const value = process.env[key]?.trim();
-    if (!value) {
-      continue;
-    }
-
-    passthroughEnv[key] = value;
-  }
-
-  return passthroughEnv;
-}
-
 function buildSandboxOptions(options: CreateSandboxOptions): SandboxOpts {
   return {
     ...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),
@@ -117,7 +97,6 @@ export async function startBackgroundProcess(
 
 function buildDaemonEnv(options: DaemonEnvOptions): Record<string, string> {
   return {
-    ...resolveDaemonPassthroughEnv(),
     ...options.daemonEnv,
     BB_BRIDGE_DIR: SANDBOX_BRIDGE_DIR,
     BB_DATA_DIR: SANDBOX_DATA_DIR,
@@ -235,16 +214,9 @@ async function resolveDaemonArtifacts(
   return daemonArtifacts ?? loadSandboxDaemonArtifacts();
 }
 
-function requireE2BSandboxType(sandboxType: string): void {
-  if (sandboxType !== "e2b") {
-    throw new Error(`Unsupported sandbox type: ${sandboxType}`);
-  }
-}
-
 export async function provisionHost(
   options: ProvisionHostOptions,
 ): Promise<SandboxHost> {
-  requireE2BSandboxType(options.sandboxType);
   const daemonEnv = buildDaemonEnv({
     authToken: options.authToken,
     daemonEnv: options.daemonEnv,

@@ -6,6 +6,7 @@ import type { NotificationHub } from "./ws/hub.js";
 export type ServerLogger = Pick<Logger, "error" | "info" | "warn">;
 
 export interface ServerRuntimeConfig {
+  anthropicApiKey: string;
   authToken: string;
   dataDir: string;
   e2bApiKey: string;

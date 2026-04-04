@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { accessSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { SandboxDaemonArtifacts } from "./types.js";
@@ -13,7 +14,23 @@ function resolveSandboxHostPackageRoot(): string {
 }
 
 function resolveWorkspaceRoot(): string {
-  return resolve(resolveSandboxHostPackageRoot(), "..", "..");
+  let currentPath = resolveSandboxHostPackageRoot();
+
+  for (;;) {
+    const workspaceManifestPath = resolve(currentPath, "pnpm-workspace.yaml");
+    try {
+      accessSync(workspaceManifestPath);
+      return currentPath;
+    } catch {
+      const parentPath = resolve(currentPath, "..");
+      if (parentPath === currentPath) {
+        throw new Error(
+          `Unable to locate pnpm-workspace.yaml from ${resolveSandboxHostPackageRoot()}`,
+        );
+      }
+      currentPath = parentPath;
+    }
+  }
 }
 
 function resolveHostDaemonDistPath(fileName: string): string {

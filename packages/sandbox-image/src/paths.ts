@@ -1,14 +1,9 @@
-import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export function resolveSandboxImagePackageRoot(): string {
-  return resolve(dirname(fileURLToPath(import.meta.url)), "..");
-}
-
 export function resolveSandboxImageTemplateRegistryPath(): string {
-  return resolve(resolveSandboxImagePackageRoot(), "templates.json");
+  return fileURLToPath(new URL("../templates.json", import.meta.url));
 }
 
 export function resolveSandboxImageDockerfilePath(): string {
-  return resolve(resolveSandboxImagePackageRoot(), "Dockerfile");
+  return fileURLToPath(new URL("../Dockerfile", import.meta.url));
 }

@@ -232,7 +232,9 @@ describe("host lifecycle", () => {
       expect(resumeHostMock).toHaveBeenCalledWith({
         apiKey: undefined,
         authToken: harness.config.authToken,
-        daemonEnv: {},
+        daemonEnv: {
+          OPENAI_API_KEY: "test-openai-key",
+        },
         externalId: "sandbox-concurrent",
         hostId: host.id,
         hostName: host.name,

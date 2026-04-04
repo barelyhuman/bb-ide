@@ -24,6 +24,7 @@ const staticDir =
 const { app, injectWebSocket } = createApp(
   {
     config: {
+      anthropicApiKey: serverConfig.ANTHROPIC_API_KEY,
       authToken: commonConfig.BB_SECRET_TOKEN,
       dataDir: commonConfig.BB_DATA_DIR,
       e2bApiKey: serverConfig.E2B_API_KEY,

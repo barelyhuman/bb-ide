@@ -50,6 +50,7 @@ describe("consumer-specific config", () => {
     vi.stubEnv("BB_GITHUB_PAT", undefined);
     vi.stubEnv("BB_INFERENCE_MODEL", undefined);
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
+    vi.stubEnv("ANTHROPIC_API_KEY", "test-anthropic-key");
 
     const { serverConfig } = await importFresh<typeof import("../src/server.js")>(
       "../src/server.js",
@@ -63,11 +64,13 @@ describe("consumer-specific config", () => {
     expect(serverConfig.BB_GITHUB_PAT).toBe("");
     expect(serverConfig.BB_INFERENCE_MODEL).toBe("openai/gpt-4o-mini");
     expect(serverConfig.OPENAI_API_KEY).toBe("test-openai-key");
+    expect(serverConfig.ANTHROPIC_API_KEY).toBe("test-anthropic-key");
   });
 
   it("requires provider/model format for BB_INFERENCE_MODEL", async () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
+    vi.stubEnv("ANTHROPIC_API_KEY", "test-anthropic-key");
     vi.stubEnv("BB_INFERENCE_MODEL", "gpt-4o-mini");
 
     await expect(
@@ -102,6 +105,7 @@ describe("consumer-specific config", () => {
     vi.stubEnv("BB_PUBLIC_URL", undefined);
     vi.stubEnv("BB_SECRET_TOKEN", "test-secret-token");
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
+    vi.stubEnv("ANTHROPIC_API_KEY", "test-anthropic-key");
 
     await expect(
       importFresh<typeof import("../src/server.js")>("../src/server.js"),

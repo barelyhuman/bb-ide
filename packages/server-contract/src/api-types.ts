@@ -4,6 +4,7 @@ import {
   projectSourceSchema,
   promptInputSchema,
   reasoningLevelSchema,
+  sandboxBackendInfoSchema,
   sandboxModeSchema,
   serviceTierSchema,
   timelineRowSchema,
@@ -432,6 +433,11 @@ export type ThreadTimelineResponse = z.infer<typeof threadTimelineResponseSchema
 export { providerInfoSchema as systemProviderInfoSchema } from "@bb/domain";
 export type { ProviderInfo as SystemProviderInfo } from "@bb/domain";
 
+// SystemSandboxBackendInfo is the same shape as SandboxBackendInfo from domain.
+// Re-export with the API-facing name for backward compatibility.
+export { sandboxBackendInfoSchema as systemSandboxBackendInfoSchema } from "@bb/domain";
+export type { SandboxBackendInfo as SystemSandboxBackendInfo } from "@bb/domain";
+
 export const systemVoiceTranscriptionResponseSchema = z.object({
   text: z.string(),
 });
@@ -461,6 +467,13 @@ export const systemConfigResponseSchema = z.object({
   voiceTranscriptionEnabled: z.boolean(),
 });
 export type SystemConfigResponse = z.infer<typeof systemConfigResponseSchema>;
+
+export const systemSandboxBackendsResponseSchema = z.array(
+  sandboxBackendInfoSchema,
+);
+export type SystemSandboxBackendsResponse = z.infer<
+  typeof systemSandboxBackendsResponseSchema
+>;
 
 export const environmentStatusResponseSchema = z.object({
   workspace: workspaceStatusSchema.nullable(),  // null if daemon unreachable or non-git env

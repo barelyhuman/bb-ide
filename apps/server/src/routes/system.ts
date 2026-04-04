@@ -13,6 +13,7 @@ import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
 import { requireEnvironment, requireDefaultConnectedHostId } from "../services/entity-lookup.js";
 import { queueCommandAndWait } from "../services/command-wait.js";
+import { listAvailableSandboxBackends } from "../services/sandbox-backends.js";
 import { isSandboxProvisioningConfigured } from "../services/sandbox-config.js";
 import { transcribeVoiceInput } from "../services/voice-transcription.js";
 
@@ -43,6 +44,10 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
       hostDaemonPort: deps.config.hostDaemonPort,
       voiceTranscriptionEnabled: !!deps.config.openAiApiKey,
     }),
+  );
+
+  get("/system/sandbox-backends", (context) =>
+    context.json(listAvailableSandboxBackends(deps.config)),
   );
 
   get("/system/providers", systemProvidersQuerySchema, async (context, query) => {

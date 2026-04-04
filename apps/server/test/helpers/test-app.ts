@@ -42,6 +42,7 @@ export async function createTestAppHarness(
   const hub = new NotificationHubImpl();
   const sandboxRegistry = createSandboxHostRegistry();
   const config: ServerRuntimeConfig = {
+    anthropicApiKey: "",
     authToken: TEST_AUTH_TOKEN,
     dataDir,
     e2bApiKey: "test-e2b-api-key",

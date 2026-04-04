@@ -4,22 +4,17 @@ import {
   updateHost,
 } from "@bb/db";
 import {
-  resumeHost,
   resumeSandbox,
 } from "@bb/sandbox-host";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
-import { buildSandboxDaemonEnv } from "./sandbox-daemon-env.js";
+import { createSandboxBackendForId } from "./sandbox-backends.js";
 
 const DEFAULT_SESSION_WAIT_TIMEOUT_MS = 60_000;
 const pendingHostDestroys = new Map<string, Promise<void>>();
 
 export interface WaitForHostSessionOptions {
   timeoutMs?: number;
-}
-
-function toOptionalConfigString(value: string): string | undefined {
-  return value === "" ? undefined : value;
 }
 
 export async function waitForHostSession(
@@ -66,12 +61,11 @@ async function loadSandboxHost(
     return null;
   }
   const externalId = host.externalId;
+  const sandboxBackend = createSandboxBackendForId(host.provider ?? "e2b");
 
   return deps.sandboxRegistry.getOrCreate(hostId, async () =>
-    resumeHost({
-      apiKey: toOptionalConfigString(deps.config.e2bApiKey),
-      authToken: deps.config.authToken,
-      daemonEnv: buildSandboxDaemonEnv(deps.config.githubPat),
+    sandboxBackend.resumeHost({
+      config: deps.config,
       externalId,
       hostId: host.id,
       hostName: host.name,
@@ -148,7 +142,7 @@ async function destroyHostInternal(
 
   deps.sandboxRegistry.remove(hostId);
   const sandbox = await resumeSandbox(hostRecord.externalId, {
-    apiKey: toOptionalConfigString(deps.config.e2bApiKey),
+    apiKey: deps.config.e2bApiKey === "" ? undefined : deps.config.e2bApiKey,
   });
   await sandbox.kill();
   deps.sandboxRegistry.remove(hostId);

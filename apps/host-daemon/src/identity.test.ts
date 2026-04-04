@@ -60,4 +60,19 @@ describe("identity", () => {
       code: "ENOENT",
     });
   });
+
+  it("uses BB_HOST_NAME when provided instead of detecting a hostname", async () => {
+    const dataDir = await makeTempDir("bb-host-daemon-identity-host-name-");
+    const execFile = vi.fn();
+    vi.stubEnv("BB_HOST_NAME", "sandbox-abcdef");
+
+    const identity = await loadHostIdentity({
+      dataDir,
+      execFile,
+      fallbackHostName: () => "fallback-host",
+    });
+
+    expect(identity.hostName).toBe("sandbox-abcdef");
+    expect(execFile).not.toHaveBeenCalled();
+  });
 });

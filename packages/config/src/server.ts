@@ -60,6 +60,12 @@ const rawServerConfig = envsafe({
     allowEmpty: true,
     devDefault: "",
   }),
+  ANTHROPIC_API_KEY: str({
+    desc: "Anthropic API key used for Claude-backed sandbox runtimes (optional)",
+    default: "",
+    allowEmpty: true,
+    devDefault: "",
+  }),
 });
 
 export const serverConfig = {

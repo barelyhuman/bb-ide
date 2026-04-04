@@ -42,6 +42,7 @@ import type {
   SendMessageRequest,
   ThreadDraftListResponse,
   SystemConfigResponse,
+  SystemSandboxBackendInfo,
   SystemModelsQuery,
   SystemProviderInfo,
   SystemProvidersQuery,
@@ -292,6 +293,10 @@ export type PublicApiSchema = {
 
   "/system/config": {
     $get: Endpoint<EmptyInput, SystemConfigResponse>;
+  };
+  "/system/sandbox-backends": {
+    /** List sandbox backends supported by the server. */
+    $get: Endpoint<EmptyInput, SystemSandboxBackendInfo[]>;
   };
   "/system/models": {
     /** List available models. Proxies to `provider.list_models`. Can target a specific host or environment. */

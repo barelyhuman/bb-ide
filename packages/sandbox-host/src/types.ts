@@ -52,7 +52,6 @@ export interface ProvisionHostOptions {
   daemonEnv: Record<string, string>;
   hostId: string;
   hostName: string;
-  sandboxType: string;
   authToken: string;
   serverUrl: string;
   template?: string;
