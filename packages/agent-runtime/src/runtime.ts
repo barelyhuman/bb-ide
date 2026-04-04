@@ -149,7 +149,9 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     if (options.adapterFactory) {
       return options.adapterFactory(providerId);
     }
-    return createProviderForId(providerId);
+    return createProviderForId(providerId, {
+      bridgeBundleDir: options.bridgeBundleDir,
+    });
   }
 
   function requireProviderProcess(providerId: string): ProviderProcess {

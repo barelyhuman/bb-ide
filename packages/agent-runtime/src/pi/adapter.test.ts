@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import {
   createPiProviderAdapter,
@@ -16,10 +16,6 @@ function loadFixture(name: string): AgentSessionEvent {
 }
 
 describe("pi provider adapter", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
   // -- Identity & capabilities ---------------------------------------------
 
   it("has correct identity", () => {
@@ -35,9 +31,10 @@ describe("pi provider adapter", () => {
     expect(adapter.process.args[0]).toMatch(/bridge\.js$/);
   });
 
-  it("uses BB_BRIDGE_DIR when present", () => {
-    vi.stubEnv("BB_BRIDGE_DIR", "/tmp");
-    const adapter = createPiProviderAdapter();
+  it("uses the configured bridge bundle directory when present", () => {
+    const adapter = createPiProviderAdapter({
+      bridgeBundleDir: "/tmp",
+    });
     expect(adapter.process.args[0]).toBe("/tmp/bb-pi-bridge.mjs");
   });
 

@@ -54,11 +54,11 @@ export interface EnsureEnvironmentArgs {
 }
 
 export interface RuntimeManagerOptions {
+  bridgeBundleDir?: AgentRuntimeOptions["bridgeBundleDir"];
   createRuntime?: (options: AgentRuntimeOptions) => AgentRuntime;
   provisionWorkspace?: (options: ProvisionWorkspaceOpts) => Promise<IWorkspace>;
   watchWorkspaceStatus?: WatchWorkspaceStatus;
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
-  shellEnv?: AgentRuntimeOptions["shellEnv"];
   onEvent?: (args: { environmentId: string; event: ThreadEvent }) => void;
   onWorkspaceStatusChanged?: (args: { environmentId: string }) => void;
   onWorkspaceStatusWatchError?: (args: {
@@ -250,7 +250,7 @@ export class RuntimeManager {
       runtime = this.createRuntime({
         workspacePath: workspace.path,
         adapterFactory: this.options.adapterFactory,
-        shellEnv: this.options.shellEnv,
+        bridgeBundleDir: this.options.bridgeBundleDir,
         onEvent: (event) => {
           if (event.type === "thread/identity") {
             this.markThreadActive(

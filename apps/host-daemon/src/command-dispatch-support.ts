@@ -2,6 +2,7 @@ import {
   createAgentRuntime,
   listAvailableProviders,
   type AgentRuntime,
+  type AgentRuntimeOptions,
 } from "@bb/agent-runtime";
 import type {
   AvailableModel,
@@ -45,14 +46,23 @@ export class CommandDispatchError extends Error {
   }
 }
 
-let defaultModelListRuntime: AgentRuntime | null = null;
+export interface DefaultListModelsOptions {
+  bridgeBundleDir?: AgentRuntimeOptions["bridgeBundleDir"];
+}
 
-function getDefaultModelListRuntime(): AgentRuntime {
-  if (defaultModelListRuntime) {
-    return defaultModelListRuntime;
+const defaultModelListRuntimes = new Map<string, AgentRuntime>();
+
+function getDefaultModelListRuntime(
+  options: DefaultListModelsOptions = {},
+): AgentRuntime {
+  const runtimeKey = options.bridgeBundleDir ?? "";
+  const existingRuntime = defaultModelListRuntimes.get(runtimeKey);
+  if (existingRuntime) {
+    return existingRuntime;
   }
 
-  defaultModelListRuntime = createAgentRuntime({
+  const runtime = createAgentRuntime({
+    bridgeBundleDir: options.bridgeBundleDir,
     workspacePath: process.cwd(),
     onEvent: () => {},
     onToolCall: async () => ({
@@ -60,14 +70,30 @@ function getDefaultModelListRuntime(): AgentRuntime {
       success: true,
     }),
   });
-  return defaultModelListRuntime;
+  defaultModelListRuntimes.set(runtimeKey, runtime);
+  return runtime;
 }
 
-export async function shutdownDefaultListModelsRuntime(): Promise<void> {
-  const runtime = defaultModelListRuntime;
-  defaultModelListRuntime = null;
-  if (runtime) {
-    await runtime.shutdown();
+export async function shutdownDefaultListModelsRuntimes(): Promise<void> {
+  const runtimes = [...defaultModelListRuntimes.values()];
+  defaultModelListRuntimes.clear();
+  await Promise.all(
+    runtimes.map((runtime) => runtime.shutdown()),
+  );
+}
+
+export async function defaultListModels(
+  providerId: string,
+  options: DefaultListModelsOptions = {},
+): Promise<AvailableModel[]> {
+  const runtime = getDefaultModelListRuntime(options);
+  try {
+    return await runtime.listModels({ providerId });
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("Unsupported provider")) {
+      throw new CommandDispatchError("unknown_provider", error.message);
+    }
+    throw error;
   }
 }
 
@@ -116,18 +142,4 @@ export async function requireWorkspaceEnvironment(
 
 export function defaultListProviders(): ProviderInfo[] {
   return listAvailableProviders();
-}
-
-export async function defaultListModels(
-  providerId: string,
-): Promise<AvailableModel[]> {
-  const runtime = getDefaultModelListRuntime();
-  try {
-    return await runtime.listModels({ providerId });
-  } catch (error) {
-    if (error instanceof Error && error.message.startsWith("Unsupported provider")) {
-      throw new CommandDispatchError("unknown_provider", error.message);
-    }
-    throw error;
-  }
 }

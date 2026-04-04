@@ -324,6 +324,8 @@ export interface CreateClaudeCodeProviderAdapterOptions {
   processCommand?: string;
   /** Override the bridge binary args. */
   processArgs?: string[];
+  /** Override the directory containing bundled bridge files. */
+  bridgeBundleDir?: string;
   /** Extra environment variables for the bridge process. */
   launchEnv?: Record<string, string>;
 }
@@ -624,6 +626,7 @@ export function createClaudeCodeProviderAdapter(
     process: {
       command: opts?.processCommand ?? "node",
       args: opts?.processArgs ?? [resolveBridgePath({
+        bridgeBundleDir: opts?.bridgeBundleDir,
         bundleFileName: "bb-claude-code-bridge.mjs",
         importMetaUrl: import.meta.url,
         bridgeRelativePath: "bridge/bridge.js",

@@ -1,11 +1,15 @@
-import "@bb/config/dotenv";
 import { fileURLToPath } from "node:url";
 export { startHostDaemon } from "./start-host-daemon.js";
 export type { StartHostDaemonOptions } from "./start-host-daemon.js";
 import { startHostDaemon } from "./start-host-daemon.js";
+import { resolveHostDaemonEntrypointOptionsFromEnv } from "./startup-options.js";
 
 async function main(): Promise<void> {
-  const daemon = await startHostDaemon();
+  const daemon = await startHostDaemon(
+    resolveHostDaemonEntrypointOptionsFromEnv({
+      env: process.env,
+    }),
+  );
   await daemon.waitUntilStopped();
 }
 

@@ -444,6 +444,8 @@ export interface CreatePiProviderAdapterOptions {
   processCommand?: string;
   /** Override the bridge binary args. */
   processArgs?: string[];
+  /** Override the directory containing bundled bridge files. */
+  bridgeBundleDir?: string;
   /** Extra environment variables for the bridge process. */
   launchEnv?: Record<string, string>;
   /** Override context-window resolution. Used by unit tests to avoid real catalogs. */
@@ -735,6 +737,7 @@ export function createPiProviderAdapter(
     process: {
       command: opts?.processCommand ?? "node",
       args: opts?.processArgs ?? [resolveBridgePath({
+        bridgeBundleDir: opts?.bridgeBundleDir,
         bundleFileName: "bb-pi-bridge.mjs",
         importMetaUrl: import.meta.url,
         bridgeRelativePath: "bridge/bridge.js",

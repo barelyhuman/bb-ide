@@ -26,6 +26,10 @@ export interface ProviderTranslationContext {
   parentToolCallId?: string;
 }
 
+export interface ProviderAdapterFactoryOptions {
+  bridgeBundleDir?: string;
+}
+
 // ---------------------------------------------------------------------------
 // AdapterCommand — what the runtime asks the adapter to build
 // ---------------------------------------------------------------------------

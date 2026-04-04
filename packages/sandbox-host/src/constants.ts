@@ -1,11 +1,19 @@
+import {
+  DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_HEALTH_VALUE,
+  DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_PORT,
+  DEFAULT_HOST_DAEMON_LOCAL_HEALTH_PATH,
+} from "@bb/host-daemon-contract";
+
 export const DEFAULT_SANDBOX_CREATE_RETRIES = 2;
 export const DEFAULT_SANDBOX_TIMEOUT_MS = 15 * 60 * 1000;
 export const SANDBOX_BRIDGE_DIR = "/tmp";
 export const SANDBOX_CLAUDE_CODE_BRIDGE_PATH = "/tmp/bb-claude-code-bridge.mjs";
 export const SANDBOX_DATA_DIR = "/tmp/bb-data";
-export const SANDBOX_DAEMON_HEALTH_PATH = "/health";
-export const SANDBOX_DAEMON_HEALTH_PORT = 9111;
-export const SANDBOX_DAEMON_HEALTH_RESPONSE = "bb-host-daemon";
+export const SANDBOX_DAEMON_HEALTH_PATH = DEFAULT_HOST_DAEMON_LOCAL_HEALTH_PATH;
+export const SANDBOX_DAEMON_HEALTH_PORT =
+  DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_PORT;
+export const SANDBOX_DAEMON_HEALTH_RESPONSE =
+  DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_HEALTH_VALUE;
 export const SANDBOX_DAEMON_PATH = "/tmp/bb-daemon.mjs";
 export const SANDBOX_DAEMON_STDERR_PATH = "/tmp/bb-daemon.stderr.log";
 export const SANDBOX_DAEMON_STDOUT_PATH = "/tmp/bb-daemon.stdout.log";

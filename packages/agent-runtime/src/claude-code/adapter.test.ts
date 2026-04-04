@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   createClaudeCodeProviderAdapter,
 } from "./adapter.js";
@@ -14,10 +14,6 @@ function loadFixture(name: string): unknown {
 }
 
 describe("claude-code provider adapter", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
   // -- Identity & capabilities ---------------------------------------------
 
   it("has correct identity", () => {
@@ -33,9 +29,10 @@ describe("claude-code provider adapter", () => {
     expect(adapter.process.args[0]).toMatch(/bridge\.js$/);
   });
 
-  it("uses BB_BRIDGE_DIR when present", () => {
-    vi.stubEnv("BB_BRIDGE_DIR", "/tmp");
-    const adapter = createClaudeCodeProviderAdapter();
+  it("uses the configured bridge bundle directory when present", () => {
+    const adapter = createClaudeCodeProviderAdapter({
+      bridgeBundleDir: "/tmp",
+    });
     expect(adapter.process.args[0]).toBe("/tmp/bb-claude-code-bridge.mjs");
   });
 

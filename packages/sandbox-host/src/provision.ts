@@ -100,11 +100,9 @@ function buildDaemonEnv(options: DaemonEnvOptions): Record<string, string> {
     ...options.daemonEnv,
     BB_BRIDGE_DIR: SANDBOX_BRIDGE_DIR,
     BB_DATA_DIR: SANDBOX_DATA_DIR,
-    BB_DAEMON_HEALTH_PATH: SANDBOX_DAEMON_HEALTH_PATH,
-    BB_DAEMON_HEALTH_PORT: String(SANDBOX_DAEMON_HEALTH_PORT),
-    BB_DAEMON_HEALTH_VALUE: SANDBOX_DAEMON_HEALTH_RESPONSE,
     BB_HOST_ID: options.hostId,
     BB_HOST_NAME: options.hostName,
+    BB_HOST_TYPE: "ephemeral",
     BB_SECRET_TOKEN: options.authToken,
     BB_SERVER_URL: options.serverUrl,
   };

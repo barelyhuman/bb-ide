@@ -5,13 +5,13 @@ import { fileURLToPath } from "node:url";
 export interface ResolveBridgePathArgs {
   importMetaUrl: string;
   bridgeRelativePath: string;
+  bridgeBundleDir?: string;
   bundleFileName?: string;
 }
 
 export function resolveBridgePath(args: ResolveBridgePathArgs): string {
-  const bridgeDir = process.env.BB_BRIDGE_DIR?.trim();
-  if (bridgeDir && args.bundleFileName) {
-    return resolve(bridgeDir, args.bundleFileName);
+  if (args.bridgeBundleDir && args.bundleFileName) {
+    return resolve(args.bridgeBundleDir, args.bundleFileName);
   }
 
   const moduleDir = dirname(fileURLToPath(args.importMetaUrl));

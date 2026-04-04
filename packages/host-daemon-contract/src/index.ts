@@ -3,6 +3,11 @@ export { typedRoutes } from "@bb/hono-typed-routes";
 
 export {
   createHostDaemonLocalClient,
+  DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_BIND_HOST,
+  DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_HEALTH_VALUE,
+  DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_PORT,
+  DEFAULT_HOST_DAEMON_LOCAL_HEALTH_PATH,
+  DEFAULT_HOST_DAEMON_LOCAL_HEALTH_VALUE,
   healthResponseSchema,
   openRequestSchema,
   pickFolderResponseSchema,

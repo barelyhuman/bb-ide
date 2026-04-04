@@ -7,6 +7,13 @@ import type { EmptyInput, Endpoint } from "./common.js";
 // Schemas
 // ---------------------------------------------------------------------------
 
+export const DEFAULT_HOST_DAEMON_LOCAL_HEALTH_PATH = "/health";
+export const DEFAULT_HOST_DAEMON_LOCAL_HEALTH_VALUE = "ok";
+export const DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_BIND_HOST = "127.0.0.1";
+export const DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_HEALTH_VALUE =
+  "bb-host-daemon";
+export const DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_PORT = 9111;
+
 export const openRequestSchema = z.object({
   path: z.string().min(1),
 });
@@ -37,7 +44,7 @@ export type HealthResponse = z.infer<typeof healthResponseSchema>;
 // ---------------------------------------------------------------------------
 
 export type HostDaemonLocalSchema = {
-  "/health": {
+  [DEFAULT_HOST_DAEMON_LOCAL_HEALTH_PATH]: {
     $get: Endpoint<EmptyInput, HealthResponse>;
   };
   "/open-path": {

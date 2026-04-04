@@ -16,6 +16,7 @@ const providers = listAvailableProviders();   // [{ id: "codex", ... }, { id: "c
 const runtime = createAgentRuntime({
   workspacePath: "/path/to/workspace",
   env: { OPENAI_API_KEY: "..." },       // passed to all provider processes
+  bridgeBundleDir: "/path/to/bundled-bridges", // optional; used when bridges are packaged outside src/dist
   onEvent: (event) => {
     // Every event has event.threadId (bb ID) and event.providerThreadId (provider's internal ID)
     // See ProviderThreadEvent in @bb/domain for the full type

@@ -7,7 +7,7 @@ const workspaceRoot = resolve(packageRoot, "..", "..");
 
 export const bundleTargets = [
   {
-    entryPoint: resolve(packageRoot, "src", "sandbox-entry.ts"),
+    entryPoint: resolve(packageRoot, "src", "index.ts"),
     label: "daemon",
     outfile: resolve(packageRoot, "dist", "daemon-bundle.mjs"),
   },

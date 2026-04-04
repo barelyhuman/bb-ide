@@ -11,7 +11,10 @@ import { createCodexProviderAdapter } from "./codex/adapter.js";
 import { codexVisibilityMetadata } from "./codex/visibility.js";
 import { createPiProviderAdapter } from "./pi/adapter.js";
 import { piVisibilityMetadata } from "./pi/visibility.js";
-import type { ProviderAdapter } from "./provider-adapter.js";
+import type {
+  ProviderAdapter,
+  ProviderAdapterFactoryOptions,
+} from "./provider-adapter.js";
 import type { ProviderVisibilityMetadata } from "./provider-visibility.js";
 import type { ProviderInfo } from "./types.js";
 
@@ -19,7 +22,9 @@ import type { ProviderInfo } from "./types.js";
 // Registry state
 // ---------------------------------------------------------------------------
 
-type ProviderFactory = () => ProviderAdapter;
+type ProviderFactory = (
+  options?: ProviderAdapterFactoryOptions,
+) => ProviderAdapter;
 interface BuiltInProviderDescriptor {
   createAdapter: ProviderFactory;
   info: ProviderInfo;
@@ -27,7 +32,7 @@ interface BuiltInProviderDescriptor {
 
 const builtInProviders = [
   {
-    createAdapter: createCodexProviderAdapter,
+    createAdapter: () => createCodexProviderAdapter(),
     info: {
       id: "codex",
       displayName: "Codex",
@@ -39,7 +44,7 @@ const builtInProviders = [
     },
   },
   {
-    createAdapter: createClaudeCodeProviderAdapter,
+    createAdapter: (options) => createClaudeCodeProviderAdapter(options),
     info: {
       id: "claude-code",
       displayName: "Claude Code",
@@ -51,7 +56,7 @@ const builtInProviders = [
     },
   },
   {
-    createAdapter: createPiProviderAdapter,
+    createAdapter: (options) => createPiProviderAdapter(options),
     info: {
       id: "pi",
       displayName: "Pi",
@@ -83,7 +88,10 @@ const builtInVisibility = new Map<string, ProviderVisibilityMetadata>([
  *
  * Looks up built-in providers. Throws if the ID is not found.
  */
-export function createProviderForId(providerId: string): ProviderAdapter {
+export function createProviderForId(
+  providerId: string,
+  options?: ProviderAdapterFactoryOptions,
+): ProviderAdapter {
   const descriptor = builtInProvidersById.get(providerId);
 
   if (!descriptor) {
@@ -93,7 +101,7 @@ export function createProviderForId(providerId: string): ProviderAdapter {
     );
   }
 
-  return descriptor.createAdapter();
+  return descriptor.createAdapter(options);
 }
 
 export function getProviderVisibilityMetadata(

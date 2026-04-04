@@ -57,11 +57,9 @@ function createMockSandbox() {
 const expectedDaemonEnv = {
   BB_BRIDGE_DIR: SANDBOX_BRIDGE_DIR,
   BB_DATA_DIR: "/tmp/bb-data",
-  BB_DAEMON_HEALTH_PATH: "/health",
-  BB_DAEMON_HEALTH_PORT: "9111",
-  BB_DAEMON_HEALTH_VALUE: SANDBOX_DAEMON_HEALTH_RESPONSE,
   BB_HOST_ID: "host-123",
   BB_HOST_NAME: "sandbox-123",
+  BB_HOST_TYPE: "ephemeral",
   BB_SECRET_TOKEN: "secret-token",
   BB_SERVER_URL: "https://bb.example.test",
 };
@@ -99,11 +97,9 @@ describe("sandbox host provisioning", () => {
       envs: {
         BB_BRIDGE_DIR: SANDBOX_BRIDGE_DIR,
         BB_DATA_DIR: "/tmp/bb-data",
-        BB_DAEMON_HEALTH_PATH: "/health",
-        BB_DAEMON_HEALTH_PORT: "9111",
-        BB_DAEMON_HEALTH_VALUE: SANDBOX_DAEMON_HEALTH_RESPONSE,
         BB_HOST_ID: "host-123",
         BB_HOST_NAME: "sandbox-123",
+        BB_HOST_TYPE: "ephemeral",
         BB_SECRET_TOKEN: "secret-token",
         BB_SERVER_URL: "https://bb.example.test",
       },

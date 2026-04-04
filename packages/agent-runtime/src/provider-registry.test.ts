@@ -26,6 +26,18 @@ describe("provider registry", () => {
     expect(existsSync(provider.process.args[0])).toBe(true);
   });
 
+  it("passes the configured bridge bundle directory to bundled providers", () => {
+    const claudeProvider = createProviderForId("claude-code", {
+      bridgeBundleDir: "/tmp",
+    });
+    const piProvider = createProviderForId("pi", {
+      bridgeBundleDir: "/tmp",
+    });
+
+    expect(claudeProvider.process.args[0]).toBe("/tmp/bb-claude-code-bridge.mjs");
+    expect(piProvider.process.args[0]).toBe("/tmp/bb-pi-bridge.mjs");
+  });
+
   it("creates pi provider with expected process config", () => {
     const provider = createProviderForId("pi");
     expect(provider.id).toBe("pi");
