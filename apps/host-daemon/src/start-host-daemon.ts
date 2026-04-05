@@ -12,6 +12,7 @@ import {
   type HostDaemonLocalApiOverrides,
 } from "./local-api-config.js";
 import { restartHostDaemon } from "./restart.js";
+import { prepareRuntimeShellEnv } from "./runtime-shell-env.js";
 import type { CreateReconnectingWebSocket } from "./server-connection.js";
 
 export interface StartHostDaemonOptions {
@@ -54,6 +55,11 @@ export async function startHostDaemon(
   try {
     const identity = await (options.loadIdentity ?? loadHostIdentity)({ dataDir });
     const instanceId = (options.createInstanceId ?? randomUUID)();
+    const runtimeShellEnv = await prepareRuntimeShellEnv({
+      serverUrl,
+      localApiPort:
+        localApiConfig?.port ?? hostDaemonConfig.BB_HOST_DAEMON_PORT,
+    });
     app = await createHostDaemonApp({
       dataDir,
       serverUrl,
@@ -74,6 +80,7 @@ export async function startHostDaemon(
           releaseLock,
         }),
       localApiConfig,
+      runtimeShellEnv,
       adapterFactory: options.adapterFactory,
       onToolCall: options.onToolCall,
       openPath: options.openPath,
