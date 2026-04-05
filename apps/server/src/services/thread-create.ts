@@ -7,13 +7,16 @@ import {
   deleteHost,
   deleteThread,
   findEnvironmentByHostPath,
-  getEnvironment,
   getHighWaterMarks,
   transitionThreadStatus,
   updateHost,
   upsertHost,
 } from "@bb/db";
-import type { Environment } from "@bb/domain";
+import type {
+  Environment,
+  GitHubRepoProjectSource,
+  LocalPathProjectSource,
+} from "@bb/domain";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { SandboxHost } from "@bb/sandbox-host";
 import type { AppDeps } from "../types.js";
@@ -35,11 +38,12 @@ import {
   getThreadSafe,
   queueEnvironmentProvision,
   requireProjectExists,
-  requireSandboxCloneSource,
   SETUP_SCRIPT_NAME,
   SETUP_TIMEOUT_MS,
-  requireSourceForHost,
 } from "./thread-create-helpers.js";
+import {
+  resolveStableThreadRequestEnvironment,
+} from "./thread-request-eligibility.js";
 import {
   type ThreadCreateServiceRequest,
 } from "./thread-create-request.js";
@@ -57,6 +61,7 @@ interface ReuseEnvironmentByHostPathArgs {
 }
 
 interface CreateSandboxHostThreadArgs {
+  cloneSource: GitHubRepoProjectSource;
   request: ThreadCreateServiceRequest;
   sandboxType: string;
 }
@@ -250,7 +255,6 @@ async function createSandboxHostThread(
   deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
   args: CreateSandboxHostThreadArgs,
 ) {
-  const defaultSource = requireSandboxCloneSource(deps, args.request.projectId);
   const hostId = createHostId();
   const hostName = `sandbox-${hostId.slice(-6)}`;
   const sandboxBackend = createSandboxBackendForId(args.sandboxType);
@@ -322,7 +326,7 @@ async function createSandboxHostThread(
     environmentId: environment.id,
     hostId,
     initiator: { threadId: thread.id, eventSequence: provisionEventSequence },
-    sourcePath: defaultSource.repoUrl,
+    sourcePath: args.cloneSource.repoUrl,
     targetPath: buildSandboxTargetPath(args.request.projectId, thread.id),
     workspaceProvisionType: "managed-clone",
     setupScript: SETUP_SCRIPT_NAME,
@@ -337,26 +341,21 @@ export async function createThreadFromRequest(
   request: ThreadCreateServiceRequest,
 ) {
   requireProjectExists(deps, request.projectId);
+  const resolvedEnvironment = resolveStableThreadRequestEnvironment(deps, {
+    environment: request.environment,
+    projectId: request.projectId,
+  });
 
-  if (request.environment.type === "sandbox-host") {
+  if (resolvedEnvironment.type === "sandbox-host") {
     return createSandboxHostThread(deps, {
+      cloneSource: resolvedEnvironment.cloneSource,
       request,
-      sandboxType: request.environment.sandboxType,
+      sandboxType: resolvedEnvironment.sandboxType,
     });
   }
 
-  if (request.environment.type === "reuse") {
-    const environment = getEnvironment(deps.db, request.environment.environmentId);
-    if (!environment) {
-      throw new ApiError(404, "invalid_request", "Environment not found");
-    }
-    if (environment.projectId !== request.projectId) {
-      throw new ApiError(
-        409,
-        "invalid_request",
-        "Environment belongs to a different project",
-      );
-    }
+  if (resolvedEnvironment.type === "reuse") {
+    const environment = resolvedEnvironment.environment;
     requireConnectedHostSession(deps, environment.hostId);
     if (environment.status === "ready") {
       if (!environment.path) {
@@ -378,14 +377,11 @@ export async function createThreadFromRequest(
     throw new ApiError(409, "invalid_request", "Environment is not ready");
   }
 
-  const hostId = request.environment.hostId;
-  const workspace = request.environment.workspace;
-  const managedSource = workspace.type === "unmanaged"
-    ? null
-    : requireSourceForHost(deps, request.projectId, hostId);
-  const unmanagedPath = workspace.type === "unmanaged"
-    ? workspace.path ?? requireSourceForHost(deps, request.projectId, hostId).path
-    : null;
+  const hostId = resolvedEnvironment.hostId;
+  const workspace = resolvedEnvironment.workspace;
+  const managedSource: LocalPathProjectSource | null =
+    workspace.type === "unmanaged" ? null : resolvedEnvironment.localSource;
+  const unmanagedPath = resolvedEnvironment.unmanagedPath;
   requireConnectedHostSession(deps, hostId);
 
   if (workspace.type === "unmanaged" && unmanagedPath) {
@@ -463,18 +459,20 @@ export async function createThreadFromRequest(
     }
     case "managed-worktree":
     case "managed-clone": {
-      const source = managedSource ?? requireSourceForHost(
-        deps,
-        request.projectId,
-        hostId,
-      );
+      if (!managedSource) {
+        throw new Error("Validated managed host request is missing a local source");
+      }
       queueEnvironmentProvision(deps, {
         environmentId: environment.id,
         hostId,
         initiator: { threadId: thread.id, eventSequence: provisionEventSequence },
         workspaceProvisionType: workspace.type,
-        sourcePath: source.path,
-        targetPath: buildManagedTargetPath(source.path, request.projectId, thread.id),
+        sourcePath: managedSource.path,
+        targetPath: buildManagedTargetPath(
+          managedSource.path,
+          request.projectId,
+          thread.id,
+        ),
         branchName: buildManagedBranchName(request, thread.id),
         setupScript: SETUP_SCRIPT_NAME,
         setupTimeoutMs: SETUP_TIMEOUT_MS,

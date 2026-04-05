@@ -633,6 +633,82 @@ describe("public thread routes", () => {
     }
   });
 
+  it("creates sandbox-host threads when a non-default cloneable project source exists", async () => {
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+    });
+    try {
+      provisionHostMock.mockImplementation(async (options: SandboxProvisionCall) => {
+        openSession(harness.db, harness.hub, {
+          heartbeatIntervalMs: 10_000,
+          hostId: options.hostId,
+          hostName: options.hostName,
+          hostType: "ephemeral",
+          instanceId: "instance-sandbox-secondary-source",
+          leaseTimeoutMs: 60_000,
+          protocolVersion: 2,
+        });
+        return {
+          destroy: vi.fn().mockResolvedValue(undefined),
+          extendTimeout: vi.fn().mockResolvedValue(undefined),
+          externalId: "sandbox-external-secondary-source",
+          hostId: options.hostId,
+          resume: vi.fn().mockResolvedValue(undefined),
+          suspend: vi.fn().mockResolvedValue(undefined),
+        };
+      });
+
+      const { host } = seedHostSession(harness.deps);
+      const { project } = createProject(harness.db, harness.hub, {
+        name: "Sandbox Secondary Source Project",
+        source: {
+          hostId: host.id,
+          path: "/tmp/sandbox-secondary-default",
+          type: "local_path",
+        },
+      });
+      createProjectSource(harness.db, harness.hub, {
+        isDefault: false,
+        projectId: project.id,
+        repoUrl: "https://github.com/example/secondary.git",
+        type: "github_repo",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Provision from the cloneable source" }],
+          environment: {
+            type: "sandbox-host",
+            sandboxType: "e2b",
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const createdThread = threadSchema.parse(await readJson(response));
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "environment.provision",
+      );
+      expect(queued.command).toMatchObject({
+        environmentId: createdThread.environmentId,
+        sourcePath: "https://github.com/example/secondary.git",
+        targetPath: `/tmp/.bb-worktrees/${project.id}/${createdThread.id}`,
+        workspaceProvisionType: "managed-clone",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("creates sandbox-host threads for cloneable project sources", async () => {
     const harness = await createTestAppHarness({
       githubPat: "test-github-pat",
