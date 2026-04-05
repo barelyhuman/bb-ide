@@ -43,6 +43,7 @@ function makeThread(overrides: Partial<Thread> & { id: string; projectId: string
     status: "idle",
     title: null,
     titleFallback: null,
+    automationId: null,
     environmentId: null,
     parentThreadId: null,
     archivedAt: null,
