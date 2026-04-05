@@ -836,7 +836,7 @@ describe("public thread routes", () => {
       await expect(readJson(response)).resolves.toMatchObject({
         code: "not_configured",
         message:
-          "Sandbox provisioning requires E2B_TEMPLATE to be configured or packages/sandbox-image/templates.json to contain a current build",
+          "Sandbox provisioning requires E2B_TEMPLATE to be configured",
       });
       expect(provisionHostMock).not.toHaveBeenCalled();
     } finally {

@@ -10,7 +10,7 @@
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "files": ["dist", "templates.json", "Dockerfile"],
+  "files": ["dist", "Dockerfile"],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch --preserveWatchOutput",

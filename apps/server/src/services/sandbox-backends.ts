@@ -97,7 +97,7 @@ function requireE2BProvisioningConfig(config: SandboxBackendConfig): void {
     throw new ApiError(
       501,
       "not_configured",
-      "Sandbox provisioning requires E2B_TEMPLATE to be configured or packages/sandbox-image/templates.json to contain a current build",
+      "Sandbox provisioning requires E2B_TEMPLATE to be configured",
     );
   }
   if (config.githubPat === "") {

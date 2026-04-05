@@ -9,12 +9,4 @@ export {
   getSandboxImageDockerfileHash,
   readSandboxImageDockerfile,
 } from "./dockerfile.js";
-export {
-  getCurrentSandboxImageBuild,
-  readSandboxImageTemplateRegistry,
-  resolveSandboxImageTemplate,
-} from "./templates.js";
-export type {
-  SandboxImageBuildRecord,
-  SandboxImageTemplateRegistry,
-} from "./types.js";
+export { resolveSandboxImageTemplate } from "./templates.js";

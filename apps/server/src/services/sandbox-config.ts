@@ -1,5 +1,3 @@
-import { getCurrentSandboxImageBuild } from "@bb/sandbox-image";
-
 export interface SandboxTemplateConfig {
   e2bTemplate: string;
 }
@@ -11,7 +9,7 @@ export interface SandboxProvisioningConfig extends SandboxTemplateConfig {
 export function hasConfiguredSandboxTemplate(
   config: SandboxTemplateConfig,
 ): boolean {
-  return config.e2bTemplate !== "" || getCurrentSandboxImageBuild() !== null;
+  return config.e2bTemplate !== "";
 }
 
 export function isSandboxProvisioningConfigured(

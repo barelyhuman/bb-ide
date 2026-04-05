@@ -501,7 +501,7 @@ Note: `claude-code` and `pi` providers don't need CLI binaries — they use brid
 
 Create `packages/sandbox-image/` (or similar):
 - `Dockerfile` — extends E2B base, installs provider CLIs at pinned versions
-- `templates.json` — tracks template IDs after `e2b template build`
+- `E2B_TEMPLATE` — explicit sandbox image template to use after `e2b template build`
 - Build script that runs `e2b template build` and records the template ID
 - Update `packages/sandbox-host` to use the custom template ID instead of `"base"`
 

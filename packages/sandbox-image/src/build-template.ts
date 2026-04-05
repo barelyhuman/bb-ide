@@ -1,4 +1,3 @@
-import { writeFile } from "node:fs/promises";
 import {
   Template,
   defaultBuildLogger,
@@ -9,10 +8,7 @@ import {
   SANDBOX_IMAGE_BUILD_TAGS,
   SANDBOX_IMAGE_NAME,
 } from "./constants.js";
-import { getSandboxImageDockerfileHash } from "./dockerfile.js";
-import { resolveSandboxImageTemplateRegistryPath } from "./paths.js";
 import { createSandboxImageTemplate } from "./template.js";
-import type { SandboxImageTemplateRegistry } from "./types.js";
 
 async function main(): Promise<void> {
   const buildInfo = await Template.build(
@@ -26,25 +22,8 @@ async function main(): Promise<void> {
     },
   );
 
-  const registry: SandboxImageTemplateRegistry = {
-    current: {
-      buildId: buildInfo.buildId,
-      builtAt: new Date().toISOString(),
-      createTarget: `${buildInfo.name}:${buildInfo.buildId}`,
-      dockerfileHash: getSandboxImageDockerfileHash(),
-      name: buildInfo.name,
-      tags: buildInfo.tags,
-      templateId: buildInfo.templateId,
-    },
-  };
-
-  await writeFile(
-    resolveSandboxImageTemplateRegistryPath(),
-    JSON.stringify(registry, null, 2) + "\n",
-    "utf8",
-  );
-
   console.log(`Built template ${buildInfo.templateId}`);
+  console.log(`Export E2B_TEMPLATE=${buildInfo.name}:${buildInfo.buildId}`);
 }
 
 void main().catch((error) => {

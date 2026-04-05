@@ -1,7 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Sandbox } from "e2b";
 import type { Sandbox as E2BSandbox } from "e2b";
-import { resolveSandboxImageTemplate } from "../src/templates.js";
 
 const timeoutMs = 5 * 60 * 1000;
 const runSandboxImageTests = process.env.SANDBOX_IMAGE_TEST === "1";
@@ -84,10 +83,12 @@ const sandboxImageToolChecks: SandboxImageToolCheck[] = [
 ];
 
 function resolveSandboxImageTestTemplate(): string {
-  const overrideTemplate = process.env.E2B_TEMPLATE?.trim();
-  return overrideTemplate && overrideTemplate.length > 0
-    ? overrideTemplate
-    : resolveSandboxImageTemplate();
+  const template = process.env.E2B_TEMPLATE?.trim();
+  if (template && template.length > 0) {
+    return template;
+  }
+
+  throw new Error("SANDBOX_IMAGE_TEST requires E2B_TEMPLATE to be configured");
 }
 
 async function runCommand(
