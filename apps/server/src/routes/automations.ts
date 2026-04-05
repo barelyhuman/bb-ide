@@ -2,7 +2,6 @@ import {
   createAutomation,
   deleteAutomation,
   getAutomation,
-  getProjectSourceByHost,
   listAutomations,
   updateAutomation,
 } from "@bb/db";
@@ -31,10 +30,9 @@ import {
   validateScheduleDefinition,
 } from "../services/schedule-helpers.js";
 import {
-  requireEnvironment,
-  requireHostWithStatus,
   requireProject,
 } from "../services/entity-lookup.js";
+import { resolveStableThreadRequestEnvironment } from "../services/thread-request-eligibility.js";
 
 interface BuildAutomationUpdateInputArgs {
   current: NonNullable<ReturnType<typeof getAutomation>>;
@@ -139,31 +137,10 @@ function validateAutomationActionProjectScope(
   deps: Pick<AppDeps, "db">,
   args: ValidateAutomationActionProjectScopeArgs,
 ): void {
-  const environment = args.action.threadRequest.environment;
-  if (environment.type === "sandbox-host") {
-    return;
-  }
-
-  if (environment.type === "reuse") {
-    const reusedEnvironment = requireEnvironment(deps.db, environment.environmentId);
-    if (reusedEnvironment.projectId !== args.projectId) {
-      throw new ApiError(
-        409,
-        "invalid_request",
-        "Environment belongs to a different project",
-      );
-    }
-    return;
-  }
-
-  requireHostWithStatus(deps.db, environment.hostId);
-  if (!getProjectSourceByHost(deps.db, args.projectId, environment.hostId)) {
-    throw new ApiError(
-      409,
-      "invalid_request",
-      "Host is not configured for this project",
-    );
-  }
+  resolveStableThreadRequestEnvironment(deps, {
+    environment: args.action.threadRequest.environment,
+    projectId: args.projectId,
+  });
 }
 
 export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
