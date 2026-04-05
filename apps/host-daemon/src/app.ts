@@ -15,6 +15,7 @@ import {
   ServerConnection,
   type CreateReconnectingWebSocket,
 } from "./server-connection.js";
+import type { WatchWorkspaceStatus } from "./workspace-status-watch.js";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import type { HostType, ToolCallRequest, ToolCallResponse } from "@bb/domain";
 
@@ -95,6 +96,7 @@ export interface CreateHostDaemonAppOptions {
   localApiConfig: HostDaemonLocalApiConfig | null;
   runtimeShellEnv?: AgentRuntimeOptions["shellEnv"];
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
+  watchWorkspaceStatus?: WatchWorkspaceStatus;
   onToolCall?: (request: ToolCallRequest) => Promise<ToolCallResponse>;
   openPath?: (path: string) => Promise<void>;
   pickFolder?: () => Promise<string | null>;
@@ -148,6 +150,7 @@ export async function createHostDaemonApp(
     adapterFactory: options.adapterFactory,
     bridgeBundleDir: options.bridgeBundleDir,
     shellEnv: options.runtimeShellEnv,
+    watchWorkspaceStatus: options.watchWorkspaceStatus,
     onEvent: ({ environmentId, event }) => {
       eventBuffer.push({
         environmentId,

@@ -11,6 +11,9 @@ export const SANDBOX_BB_EXECUTABLE_PATH = "/tmp/bb";
 export const SANDBOX_BRIDGE_DIR = "/tmp";
 export const SANDBOX_CLAUDE_CODE_BRIDGE_PATH = "/tmp/bb-claude-code-bridge.mjs";
 export const SANDBOX_DATA_DIR = "/tmp/bb-data";
+export const SANDBOX_PI_PACKAGE_DIR = "/tmp/bb-pi-package";
+export const SANDBOX_PI_PACKAGE_MANIFEST_PATH =
+  "/tmp/bb-pi-package/package.json";
 export const SANDBOX_DAEMON_HEALTH_PATH = DEFAULT_HOST_DAEMON_LOCAL_HEALTH_PATH;
 export const SANDBOX_DAEMON_HEALTH_PORT =
   DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_PORT;

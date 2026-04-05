@@ -12,6 +12,8 @@ import {
   SANDBOX_DAEMON_PATH,
   SANDBOX_DAEMON_STDERR_PATH,
   SANDBOX_DAEMON_STDOUT_PATH,
+  SANDBOX_PI_PACKAGE_DIR,
+  SANDBOX_PI_PACKAGE_MANIFEST_PATH,
   SANDBOX_PI_BRIDGE_PATH,
 } from "../src/constants.js";
 
@@ -19,6 +21,11 @@ const testDaemonArtifacts = {
   bbCli: "#!/usr/bin/env node\nconsole.log('bb');\n",
   claudeCodeBridge: "console.log('claude bridge');",
   daemon: "console.log('daemon');",
+  piPackageManifest: JSON.stringify({
+    name: "@mariozechner/pi-coding-agent",
+    piConfig: { configDir: ".pi", name: "pi" },
+    version: "0.58.3",
+  }),
   piBridge: "console.log('pi bridge');",
 };
 const testSandboxTemplate = "bb-sandbox:test-build";
@@ -64,6 +71,7 @@ const expectedDaemonEnv = {
   BB_HOST_ID: "host-123",
   BB_HOST_NAME: "sandbox-123",
   BB_HOST_TYPE: "ephemeral",
+  PI_PACKAGE_DIR: SANDBOX_PI_PACKAGE_DIR,
   BB_SECRET_TOKEN: "secret-token",
   BB_SERVER_URL: "https://bb.example.test",
 };
@@ -106,6 +114,7 @@ describe("sandbox host provisioning", () => {
         BB_HOST_ID: "host-123",
         BB_HOST_NAME: "sandbox-123",
         BB_HOST_TYPE: "ephemeral",
+        PI_PACKAGE_DIR: SANDBOX_PI_PACKAGE_DIR,
         BB_SECRET_TOKEN: "secret-token",
         BB_SERVER_URL: "https://bb.example.test",
       },
@@ -122,6 +131,24 @@ describe("sandbox host provisioning", () => {
       2,
       SANDBOX_DAEMON_PATH,
       testDaemonArtifacts.daemon,
+      {},
+    );
+    expect(sandbox.files.write).toHaveBeenNthCalledWith(
+      3,
+      SANDBOX_CLAUDE_CODE_BRIDGE_PATH,
+      testDaemonArtifacts.claudeCodeBridge,
+      {},
+    );
+    expect(sandbox.files.write).toHaveBeenNthCalledWith(
+      4,
+      SANDBOX_PI_BRIDGE_PATH,
+      testDaemonArtifacts.piBridge,
+      {},
+    );
+    expect(sandbox.files.write).toHaveBeenNthCalledWith(
+      5,
+      SANDBOX_PI_PACKAGE_MANIFEST_PATH,
+      testDaemonArtifacts.piPackageManifest,
       {},
     );
     expect(sandbox.commands.run).toHaveBeenCalledWith(
@@ -310,6 +337,12 @@ describe("sandbox host provisioning", () => {
       4,
       SANDBOX_PI_BRIDGE_PATH,
       testDaemonArtifacts.piBridge,
+      {},
+    );
+    expect(sandbox.files.write).toHaveBeenNthCalledWith(
+      5,
+      SANDBOX_PI_PACKAGE_MANIFEST_PATH,
+      testDaemonArtifacts.piPackageManifest,
       {},
     );
     expect(sandbox.commands.run).toHaveBeenCalledWith(

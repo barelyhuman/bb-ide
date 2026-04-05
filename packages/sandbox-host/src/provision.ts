@@ -17,6 +17,8 @@ import {
   SANDBOX_DAEMON_PATH,
   SANDBOX_DAEMON_STDERR_PATH,
   SANDBOX_DAEMON_STDOUT_PATH,
+  SANDBOX_PI_PACKAGE_DIR,
+  SANDBOX_PI_PACKAGE_MANIFEST_PATH,
   SANDBOX_DATA_DIR,
   SANDBOX_PI_BRIDGE_PATH,
 } from "./constants.js";
@@ -103,6 +105,7 @@ export function buildSandboxDaemonEnv(
     BB_HOST_ID: options.hostId,
     BB_HOST_NAME: options.hostName,
     BB_HOST_TYPE: "ephemeral",
+    PI_PACKAGE_DIR: SANDBOX_PI_PACKAGE_DIR,
     BB_SECRET_TOKEN: options.authToken,
     BB_SERVER_URL: options.serverUrl,
   };
@@ -206,6 +209,11 @@ async function startDaemonProcess(
       options.sandbox,
       SANDBOX_PI_BRIDGE_PATH,
       options.daemonArtifacts.piBridge,
+    ),
+    writeSandboxFile(
+      options.sandbox,
+      SANDBOX_PI_PACKAGE_MANIFEST_PATH,
+      options.daemonArtifacts.piPackageManifest,
     ),
   ]);
   await runSandboxCommand(

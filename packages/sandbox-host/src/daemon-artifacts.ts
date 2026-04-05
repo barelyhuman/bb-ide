@@ -37,6 +37,18 @@ function resolveHostDaemonDistPath(fileName: string): string {
   return resolve(resolveWorkspaceRoot(), "apps", "host-daemon", "dist", fileName);
 }
 
+function resolvePiPackageManifestPath(): string {
+  return resolve(
+    resolveWorkspaceRoot(),
+    "packages",
+    "agent-runtime",
+    "node_modules",
+    "@mariozechner",
+    "pi-coding-agent",
+    "package.json",
+  );
+}
+
 let sandboxDaemonArtifactsPromise: Promise<SandboxDaemonArtifacts> | null = null;
 
 async function readBundleArtifact(
@@ -70,11 +82,16 @@ export async function loadSandboxDaemonArtifacts(): Promise<SandboxDaemonArtifac
         label: "pi bridge",
         localPath: resolveHostDaemonDistPath("bb-pi-bridge.mjs"),
       }),
+      readBundleArtifact({
+        label: "pi package manifest",
+        localPath: resolvePiPackageManifestPath(),
+      }),
     ])
-      .then(([bbCli, daemon, claudeCodeBridge, piBridge]) => ({
+      .then(([bbCli, daemon, claudeCodeBridge, piBridge, piPackageManifest]) => ({
         bbCli,
         claudeCodeBridge,
         daemon,
+        piPackageManifest,
         piBridge,
       }))
       .catch((error: unknown) => {

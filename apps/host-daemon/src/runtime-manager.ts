@@ -10,12 +10,8 @@ import {
   type IWorkspace,
   type ProvisionWorkspaceOpts,
 } from "@bb/workspace";
-import {
-  watchWorkspaceStatus,
-  type WorkspaceStatusWatchError,
-} from "@bb/workspace/watch-status";
-
-type WatchWorkspaceStatus = typeof watchWorkspaceStatus;
+import type { WorkspaceStatusWatchError } from "@bb/workspace/watch-status";
+import type { WatchWorkspaceStatus } from "./workspace-status-watch.js";
 
 function lazyProvisionOpts(
   workspacePath: string,
@@ -74,15 +70,12 @@ export interface RuntimeManagerOptions {
 export class RuntimeManager {
   private readonly createRuntime;
   private readonly provisionWorkspace;
-  private readonly watchWorkspaceStatus;
   private readonly entries = new Map<string, RuntimeEntry>();
   private readonly pendingEntries = new Map<string, Promise<RuntimeEntry>>();
 
   constructor(private readonly options: RuntimeManagerOptions = {}) {
     this.createRuntime = options.createRuntime ?? createAgentRuntime;
     this.provisionWorkspace = options.provisionWorkspace ?? provisionWorkspace;
-    this.watchWorkspaceStatus =
-      options.watchWorkspaceStatus ?? watchWorkspaceStatus;
   }
 
   get(environmentId: string): RuntimeEntry | undefined {
@@ -226,19 +219,21 @@ export class RuntimeManager {
     }
 
     const workspace = await this.provisionWorkspace(provision);
-    const stopWatchingStatus = this.watchWorkspaceStatus(workspace.path, {
-      onChange: () => {
-        this.options.onWorkspaceStatusChanged?.({
-          environmentId: args.environmentId,
-        });
-      },
-      onWatchError: (error) => {
-        this.options.onWorkspaceStatusWatchError?.({
-          environmentId: args.environmentId,
-          error,
-        });
-      },
-    });
+    const stopWatchingStatus = this.options.watchWorkspaceStatus
+      ? this.options.watchWorkspaceStatus(workspace.path, {
+        onChange: () => {
+          this.options.onWorkspaceStatusChanged?.({
+            environmentId: args.environmentId,
+          });
+        },
+        onWatchError: (error) => {
+          this.options.onWorkspaceStatusWatchError?.({
+            environmentId: args.environmentId,
+            error,
+          });
+        },
+      })
+      : () => undefined;
     const threads = new Map<
       string,
       {

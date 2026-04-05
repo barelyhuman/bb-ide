@@ -17,6 +17,10 @@ import {
   resolveLocalBbExecutableDirectory,
 } from "./runtime-shell-env.js";
 import type { CreateReconnectingWebSocket } from "./server-connection.js";
+import {
+  resolveDefaultWatchWorkspaceStatus,
+  type WatchWorkspaceStatus,
+} from "./workspace-status-watch.js";
 
 export interface StartHostDaemonOptions {
   dataDir?: string;
@@ -32,6 +36,7 @@ export interface StartHostDaemonOptions {
   loadIdentity?: typeof loadHostIdentity;
   restartProcess?: typeof restartHostDaemon;
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
+  watchWorkspaceStatus?: WatchWorkspaceStatus;
   onToolCall?: (request: ToolCallRequest) => Promise<ToolCallResponse>;
   openPath?: (path: string) => Promise<void>;
   pickFolder?: () => Promise<string | null>;
@@ -62,6 +67,11 @@ export async function startHostDaemon(
     const bbExecutableDirectory =
       options.bbExecutableDirectory ??
       (await resolveLocalBbExecutableDirectory());
+    const watchWorkspaceStatus =
+      options.watchWorkspaceStatus ??
+      (await resolveDefaultWatchWorkspaceStatus({
+        hostType,
+      }));
     const runtimeShellEnv = prepareRuntimeShellEnv({
       bbExecutableDirectory,
       serverUrl,
@@ -90,6 +100,7 @@ export async function startHostDaemon(
       localApiConfig,
       runtimeShellEnv,
       adapterFactory: options.adapterFactory,
+      watchWorkspaceStatus,
       onToolCall: options.onToolCall,
       openPath: options.openPath,
       pickFolder: options.pickFolder,

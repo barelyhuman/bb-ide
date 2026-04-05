@@ -44,6 +44,7 @@ export interface SandboxDaemonArtifacts {
   bbCli: string;
   claudeCodeBridge: string;
   daemon: string;
+  piPackageManifest: string;
   piBridge: string;
 }
 
