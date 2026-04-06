@@ -14,6 +14,7 @@ import { waitForServerHealth } from "./lib/wait-for-server-health.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
+const DEV_AUTO_JOIN_DATA_DIR_NAME = `${DEFAULTS.dataDir.dev}-host-daemon`;
 
 function resolveMode() {
   const modeFlagIndex = process.argv.indexOf("--mode");
@@ -29,10 +30,17 @@ function shouldAutoJoin() {
   return process.argv.includes("--auto-join");
 }
 
-function resolveDataDir(mode) {
+export function resolveDefaultDataDirName(mode, autoJoin) {
+  if (mode === "dev" && autoJoin) {
+    return DEV_AUTO_JOIN_DATA_DIR_NAME;
+  }
+  return mode === "dev" ? DEFAULTS.dataDir.dev : DEFAULTS.dataDir.prod;
+}
+
+function resolveDataDir(mode, autoJoin) {
   return (
     process.env.BB_DATA_DIR ??
-    join(homedir(), mode === "dev" ? DEFAULTS.dataDir.dev : DEFAULTS.dataDir.prod)
+    join(homedir(), resolveDefaultDataDirName(mode, autoJoin))
   );
 }
 
@@ -43,10 +51,10 @@ function resolveServerUrl(mode) {
   );
 }
 
-function buildEnv(mode) {
+function buildEnv(mode, autoJoin) {
   return {
     ...process.env,
-    BB_DATA_DIR: resolveDataDir(mode),
+    BB_DATA_DIR: resolveDataDir(mode, autoJoin),
     BB_SERVER_URL: resolveServerUrl(mode),
     NODE_ENV:
       process.env.NODE_ENV ??
@@ -130,7 +138,8 @@ const isDirectExecution =
 
 async function main() {
   const mode = resolveMode();
-  const env = await maybeAddAutoJoinEnv(buildEnv(mode), shouldAutoJoin());
+  const autoJoin = shouldAutoJoin();
+  const env = await maybeAddAutoJoinEnv(buildEnv(mode, autoJoin), autoJoin);
   const child = spawn(process.execPath, ["apps/host-daemon/dist/index.js"], {
     cwd: repoRoot,
     env,

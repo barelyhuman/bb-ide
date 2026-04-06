@@ -5,8 +5,16 @@ declare module "ws" {
 
   export type RawData = string | Buffer | ArrayBuffer | Buffer[];
 
+  export interface ClientOptions {
+    headers?: Record<string, string>;
+  }
+
   export class WebSocket extends EventEmitter {
-    constructor(address: string | URL);
+    constructor(
+      address: string | URL,
+      protocols?: string | string[],
+      options?: ClientOptions,
+    );
     static readonly OPEN: number;
     readonly readyState: number;
     send(data: string | Buffer): void;

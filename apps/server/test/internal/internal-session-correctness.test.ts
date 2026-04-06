@@ -130,6 +130,23 @@ describe("internal session correctness", () => {
     }
   });
 
+  it("rejects daemon websocket upgrades missing the daemon protocol", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      await expect(
+        validateDaemonWebSocket(harness.deps, {
+          authorizationHeader: buildHostDaemonWebSocketAuthorizationHeader(
+            createTestDaemonHostKey(),
+          ),
+          protocolHeader: undefined,
+          sessionId: "session-1",
+        }),
+      ).rejects.toThrowError("Unsupported host daemon websocket protocol");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("returns an empty command batch instead of timing out when the queue is empty", async () => {
     const harness = await createTestAppHarness();
     try {

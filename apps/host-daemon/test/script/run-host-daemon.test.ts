@@ -6,7 +6,10 @@ import {
   HOST_AUTH_FILE_NAME,
   HOST_ID_FILE_NAME,
 } from "@bb/host-daemon-contract";
-import { maybeAddAutoJoinEnv } from "../../../../scripts/run-host-daemon.mjs";
+import {
+  maybeAddAutoJoinEnv,
+  resolveDefaultDataDirName,
+} from "../../../../scripts/run-host-daemon.mjs";
 
 const tempDirs: string[] = [];
 
@@ -31,6 +34,12 @@ afterEach(async () => {
 });
 
 describe("run-host-daemon auto join", () => {
+  it("uses a dedicated default data dir for auto-joined dev hosts", () => {
+    expect(resolveDefaultDataDirName("dev", true)).toBe(".bb-dev-host-daemon");
+    expect(resolveDefaultDataDirName("dev", false)).toBe(".bb-dev");
+    expect(resolveDefaultDataDirName("prod", true)).toBe(".bb");
+  });
+
   it("skips auto join when auth state already exists", async () => {
     const dataDir = await makeTempDir("bb-run-host-daemon-");
     await fs.writeFile(

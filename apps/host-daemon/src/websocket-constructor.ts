@@ -1,4 +1,5 @@
 import { WebSocket as NodeWebSocket } from "ws";
+
 export interface NodeWebSocketConstructor {
   new (address: string | URL, protocols?: string | string[]): object;
 }
@@ -10,9 +11,9 @@ export function createNodeWebSocketConstructor(
     return NodeWebSocket;
   }
 
-  return class HeaderAwareWebSocket {
+  return class HeaderAwareWebSocket extends NodeWebSocket {
     constructor(address: string | URL, protocols?: string | string[]) {
-      return Reflect.construct(NodeWebSocket, [address, protocols, { headers }]);
+      super(address, protocols, { headers });
     }
   };
 }

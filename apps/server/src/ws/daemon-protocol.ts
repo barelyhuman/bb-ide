@@ -45,7 +45,11 @@ export async function validateDaemonWebSocket(
     throw new ApiError(401, "unauthorized", "Unauthorized");
   }
   if (!hasHostDaemonWebSocketProtocol(args.protocolHeader)) {
-    throw new ApiError(401, "unauthorized", "Unauthorized");
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "Unsupported host daemon websocket protocol",
+    );
   }
 
   const verified = await verifyAuthenticatedDaemon(
