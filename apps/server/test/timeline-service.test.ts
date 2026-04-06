@@ -8,7 +8,7 @@ import {
   seedThread,
 } from "./helpers/seed.js";
 import { getTimelineBenchmarkScenarios } from "./helpers/timeline-benchmark.js";
-import { buildThreadTimeline } from "../src/services/timeline.js";
+import { buildThreadTimeline } from "../src/services/threads/timeline.js";
 
 describe("buildThreadTimeline", () => {
   const scenarios = getTimelineBenchmarkScenarios();

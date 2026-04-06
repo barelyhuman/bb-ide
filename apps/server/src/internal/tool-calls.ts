@@ -7,9 +7,9 @@ import type { Hono } from "hono";
 import { messageUserToolArgumentsSchema } from "@bb/domain";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
-import { parseValue } from "../services/validation.js";
-import { appendThreadEvent } from "../services/thread-events.js";
-import { requireThreadEnvironment } from "../services/entity-lookup.js";
+import { parseValue } from "../services/lib/validation.js";
+import { appendThreadEvent } from "../services/threads/thread-events.js";
+import { requireThreadEnvironment } from "../services/lib/entity-lookup.js";
 import { requireActiveSession } from "./session-state.js";
 
 export function registerInternalToolCallRoutes(app: Hono, deps: AppDeps): void {

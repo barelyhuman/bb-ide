@@ -4,8 +4,8 @@ import { applyTurnCompletedEvent } from "../src/internal/turn-completed-events.j
 import {
   pruneThreadEventHistory,
   pruneThreadEventHistoryBestEffort,
-} from "../src/services/event-pruning.js";
-import { buildThreadTimeline } from "../src/services/timeline.js";
+} from "../src/services/system/event-pruning.js";
+import { buildThreadTimeline } from "../src/services/threads/timeline.js";
 import { internalAuthHeaders } from "./helpers/commands.js";
 import {
   seedEnvironment,

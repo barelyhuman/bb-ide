@@ -29,20 +29,20 @@ import { renderTemplate } from "@bb/templates";
 import type { AppDeps } from "../types.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
-import { readAttachment, storeAttachment } from "../services/attachments.js";
+import { readAttachment, storeAttachment } from "../services/projects/attachments.js";
 import {
   requireHostWithStatus,
   requireProject,
   requirePublicProject,
-} from "../services/entity-lookup.js";
-import { ensureProjectSourceEnvironment, createThreadFromRequest } from "../services/thread-create.js";
-import { queueCommandAndWait } from "../services/command-wait.js";
-import { parseOptionalInteger } from "../services/validation.js";
+} from "../services/lib/entity-lookup.js";
+import { ensureProjectSourceEnvironment, createThreadFromRequest } from "../services/threads/thread-create.js";
+import { queueCommandAndWait } from "../services/hosts/command-wait.js";
+import { parseOptionalInteger } from "../services/lib/validation.js";
 import {
   advanceProjectDeletion,
   listProjectsPendingDeletion,
   requestProjectDeletion,
-} from "../services/project-deletion.js";
+} from "../services/projects/project-deletion.js";
 
 function buildProjectResponses(deps: AppDeps, projectId?: string): ProjectResponse[] {
   const deletingProjectIds = new Set(listProjectsPendingDeletion(deps));

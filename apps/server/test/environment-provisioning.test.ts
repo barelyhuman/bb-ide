@@ -9,7 +9,7 @@ import {
   MANAGED_REPROVISION_IN_PROGRESS,
   MANAGED_REPROVISION_QUEUED,
   queueManagedEnvironmentReprovision,
-} from "../src/services/environment-provisioning.js";
+} from "../src/services/environments/environment-provisioning.js";
 import {
   seedEnvironment,
   seedHost,

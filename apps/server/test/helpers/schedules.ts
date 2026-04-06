@@ -1,5 +1,5 @@
 import type { AutomationScheduleTrigger } from "@bb/server-contract";
-import { serializeScheduleDefinitionAsCron } from "../../src/services/schedule-helpers.js";
+import { serializeScheduleDefinitionAsCron } from "../../src/services/scheduling/schedule-helpers.js";
 
 type WeekdayName =
   | "fri"

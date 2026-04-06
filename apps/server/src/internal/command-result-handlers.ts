@@ -19,7 +19,7 @@ import {
   buildCwdBranchEntries,
   parseStoredTurnRequestEvent,
   appendSystemErrorEvent,
-} from "../services/thread-events.js";
+} from "../services/threads/thread-events.js";
 import {
   completeThreadStartForCommand,
   failThreadStartForCommand,
@@ -28,21 +28,21 @@ import {
   hasActiveThreadStartOperationForCommand,
   hasActiveThreadStopOperationForCommand,
   requestThreadStart,
-} from "../services/thread-stop.js";
+} from "../services/threads/thread-lifecycle.js";
 import {
   advanceEnvironmentCleanup,
   completeEnvironmentDestroyForCommand,
   failEnvironmentDestroyForCommand,
   hasActiveEnvironmentDestroyOperationForCommand,
   requestEnvironmentCleanup,
-} from "../services/environment-cleanup.js";
+} from "../services/environments/environment-cleanup.js";
 import {
   completeEnvironmentProvisioningForCommand,
   failEnvironmentProvisioningForCommand,
   hasActiveEnvironmentProvisionOperationForCommand,
-} from "../services/environment-provisioning.js";
-import { destroyEphemeralHostIfReady } from "../services/host-lifecycle.js";
-import { tryTransition } from "../services/thread-transitions.js";
+} from "../services/environments/environment-provisioning.js";
+import { destroyEphemeralHostIfReady } from "../services/hosts/host-lifecycle.js";
+import { tryTransition } from "../services/threads/thread-transitions.js";
 
 function parseCommand(
   commandRow: typeof hostDaemonCommands.$inferSelect,

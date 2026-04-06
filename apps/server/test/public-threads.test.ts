@@ -30,8 +30,8 @@ import {
   waitForQueuedCommandAfter,
 } from "./helpers/commands.js";
 import { readJson } from "./helpers/json.js";
-import { runEphemeralHostCleanupSweep } from "../src/services/periodic-sweeps.js";
-import { destroyHost } from "../src/services/host-lifecycle.js";
+import { runEphemeralHostCleanupSweep } from "../src/services/system/periodic-sweeps.js";
+import { destroyHost } from "../src/services/hosts/host-lifecycle.js";
 import {
   seedDraft,
   seedEnvironment,

@@ -1,6 +1,6 @@
 import type { DbConnection } from "@bb/db";
 import type { Logger } from "@bb/logger";
-import type { SandboxHostRegistry } from "./services/sandbox-registry.js";
+import type { SandboxHostRegistry } from "./services/hosts/sandbox-registry.js";
 import type { NotificationHub } from "./ws/hub.js";
 
 export type ServerLogger = Pick<Logger, "error" | "info" | "warn">;

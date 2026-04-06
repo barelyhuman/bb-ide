@@ -8,7 +8,7 @@ import {
   threads,
 } from "@bb/db";
 import { describe, expect, it } from "vitest";
-import { appendClientTurnEvent } from "../src/services/thread-events.js";
+import { appendClientTurnEvent } from "../src/services/threads/thread-events.js";
 import { internalAuthHeaders } from "./helpers/commands.js";
 import { readJson } from "./helpers/json.js";
 import {

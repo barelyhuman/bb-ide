@@ -9,13 +9,13 @@ import type { AppDeps } from "../types.js";
 import {
   advanceEnvironmentCleanup,
   requestEnvironmentCleanup,
-} from "../services/environment-cleanup.js";
+} from "../services/environments/environment-cleanup.js";
 import {
   completeThreadStart,
   finalizeStoppedThread,
   requestThreadStop,
-} from "../services/thread-stop.js";
-import { tryTransition } from "../services/thread-transitions.js";
+} from "../services/threads/thread-lifecycle.js";
+import { tryTransition } from "../services/threads/thread-transitions.js";
 
 export async function reconcileSessionThreads(
   deps: Pick<AppDeps, "db" | "hub">,

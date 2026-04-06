@@ -30,16 +30,16 @@ import {
   toAutomationResponse,
   toAutomationResponseWithProjectData,
   validateStoredAutomationDefinition,
-} from "../services/automation-config.js";
+} from "../services/scheduling/automation-config.js";
 import {
   ScheduleValidationError,
   computeNextScheduledTime,
   validateScheduleDefinition,
-} from "../services/schedule-helpers.js";
+} from "../services/scheduling/schedule-helpers.js";
 import {
   requirePublicProject,
-} from "../services/entity-lookup.js";
-import { resolveStableThreadRequestEnvironment } from "../services/thread-request-eligibility.js";
+} from "../services/lib/entity-lookup.js";
+import { resolveStableThreadRequestEnvironment } from "../services/threads/thread-request-eligibility.js";
 
 interface BuildAutomationConfigUpdateInputArgs {
   current: NonNullable<ReturnType<typeof getAutomation>>;

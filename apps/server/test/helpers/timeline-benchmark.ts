@@ -24,12 +24,12 @@ import {
   buildThreadTimeline,
   compactSummaryStoredEventRows,
   toThreadEventWithMeta,
-} from "../../src/services/timeline.js";
+} from "../../src/services/threads/timeline.js";
 import {
   type StoredEventRow,
   listRecentStoredEventRows,
   listTokenUsageRowsForContextWindowUsage,
-} from "../../src/services/thread-data.js";
+} from "../../src/services/threads/thread-data.js";
 
 interface TimelineBenchmarkFixture {
   corpusId: string;

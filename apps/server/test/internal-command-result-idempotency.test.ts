@@ -7,15 +7,15 @@ import {
   hostDaemonCommands,
 } from "@bb/db";
 import { describe, expect, it } from "vitest";
-import { appendClientTurnEvent } from "../src/services/thread-events.js";
+import { appendClientTurnEvent } from "../src/services/threads/thread-events.js";
 import {
   advanceEnvironmentProvisioning,
   requestEnvironmentProvision,
-} from "../src/services/environment-provisioning.js";
+} from "../src/services/environments/environment-provisioning.js";
 import {
   requestThreadStart,
-} from "../src/services/thread-stop.js";
-import { buildEnvironmentProvisionCommand } from "../src/services/thread-create-helpers.js";
+} from "../src/services/threads/thread-lifecycle.js";
+import { buildEnvironmentProvisionCommand } from "../src/services/threads/thread-create-helpers.js";
 import {
   reportQueuedCommandSuccess,
   waitForQueuedCommand,

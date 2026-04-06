@@ -7,8 +7,8 @@ import {
   updateManagerThreadNudge,
 } from "@bb/db";
 import { describe, expect, it } from "vitest";
-import { sweepDueNudges } from "../src/services/nudge-sweep.js";
-import { appendClientTurnEvent } from "../src/services/thread-events.js";
+import { sweepDueNudges } from "../src/services/scheduling/nudge-sweep.js";
+import { appendClientTurnEvent } from "../src/services/threads/thread-events.js";
 import {
   reportQueuedCommandError,
   waitForQueuedCommand,

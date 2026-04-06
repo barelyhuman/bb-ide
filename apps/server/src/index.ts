@@ -8,8 +8,8 @@ import { commonConfig, serverConfig } from "@bb/config/server";
 import { createLogger } from "@bb/logger";
 import { initDb } from "./db.js";
 import { createApp } from "./server.js";
-import { runPeriodicSweeps } from "./services/periodic-sweeps.js";
-import { createSandboxHostRegistry } from "./services/sandbox-registry.js";
+import { runPeriodicSweeps } from "./services/system/periodic-sweeps.js";
+import { createSandboxHostRegistry } from "./services/hosts/sandbox-registry.js";
 import type { ServerRuntimeConfig } from "./types.js";
 import { NotificationHub } from "./ws/hub.js";
 

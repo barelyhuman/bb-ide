@@ -11,7 +11,7 @@ import {
 import { hostDaemonDaemonWsMessageSchema } from "@bb/host-daemon-contract";
 import { DAEMON_DISCONNECT_GRACE_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
-import { buildSystemErrorEventData } from "../services/thread-events.js";
+import { buildSystemErrorEventData } from "../services/threads/thread-events.js";
 import type { AppDeps } from "../types.js";
 import { requireActiveSession } from "../internal/session-state.js";
 import { decodeSocketPayload } from "./decode-payload.js";

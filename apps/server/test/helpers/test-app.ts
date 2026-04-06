@@ -6,7 +6,7 @@ import type { AddressInfo } from "node:net";
 import type { DbConnection } from "@bb/db";
 import { initDb } from "../../src/db.js";
 import { createApp } from "../../src/server.js";
-import { createSandboxHostRegistry } from "../../src/services/sandbox-registry.js";
+import { createSandboxHostRegistry } from "../../src/services/hosts/sandbox-registry.js";
 import type { AppDeps, ServerRuntimeConfig } from "../../src/types.js";
 import type { NotificationHub } from "../../src/ws/hub.js";
 import { NotificationHub as NotificationHubImpl } from "../../src/ws/hub.js";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildManagedTargetPath } from "../src/services/thread-create-helpers.js";
+import { buildManagedTargetPath } from "../src/services/threads/thread-create-helpers.js";
 
 describe("buildManagedTargetPath", () => {
   it("keeps managed workspaces next to local sources", () => {

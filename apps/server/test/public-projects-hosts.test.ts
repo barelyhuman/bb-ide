@@ -23,7 +23,7 @@ import {
   seedProjectWithSource,
 } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
-import { runProjectDeletionSweep } from "../src/services/periodic-sweeps.js";
+import { runProjectDeletionSweep } from "../src/services/system/periodic-sweeps.js";
 
 const idOnlyResponseSchema = z.object({
   id: z.string(),

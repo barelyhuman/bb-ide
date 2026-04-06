@@ -21,14 +21,14 @@ import type { AppDeps } from "../types.js";
 import {
   isAgePrunableThreadEventType,
   maybePruneActiveThreadEventHistory,
-} from "../services/event-pruning.js";
+} from "../services/system/event-pruning.js";
 import {
   requestEnvironmentCleanup,
   wouldCleanupEnvironment,
-} from "../services/environment-cleanup.js";
-import { syncManagerThreadSchedules } from "../services/manager-schedule-sync.js";
-import { sendNextQueuedDraftIfPresent } from "../services/queued-drafts.js";
-import { tryTransition } from "../services/thread-transitions.js";
+} from "../services/environments/environment-cleanup.js";
+import { syncManagerThreadSchedules } from "../services/scheduling/manager-schedule-sync.js";
+import { sendNextQueuedDraftIfPresent } from "../services/threads/queued-drafts.js";
+import { tryTransition } from "../services/threads/thread-transitions.js";
 import { applyTurnCompletedEvent } from "./turn-completed-events.js";
 import { requireActiveSession } from "./session-state.js";
 

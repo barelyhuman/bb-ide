@@ -4,7 +4,7 @@ import {
   createSandboxHostRegistry,
   SANDBOX_HOST_REGISTRY_ENTRY_TTL_MS,
   SANDBOX_HOST_REGISTRY_MAX_ENTRIES,
-} from "../src/services/sandbox-registry.js";
+} from "../src/services/hosts/sandbox-registry.js";
 
 function createMockSandboxHost(hostId: string): SandboxHost {
   return {

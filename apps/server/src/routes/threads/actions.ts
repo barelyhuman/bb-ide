@@ -18,39 +18,39 @@ import type { Hono } from "hono";
 import type { Thread } from "@bb/domain";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
-import { toQueuedMessage } from "../../services/drafts.js";
+import { toQueuedMessage } from "../../services/threads/drafts.js";
 import {
   advanceEnvironmentCleanup,
   requestEnvironmentCleanup,
   validateEnvironmentCleanupRequest,
   wouldCleanupEnvironment,
-} from "../../services/environment-cleanup.js";
+} from "../../services/environments/environment-cleanup.js";
 import {
   requirePublicThread,
   requirePublicThreadEnvironment,
-} from "../../services/entity-lookup.js";
-import { sendQueuedDraft } from "../../services/queued-drafts.js";
+} from "../../services/lib/entity-lookup.js";
+import { sendQueuedDraft } from "../../services/threads/queued-drafts.js";
 import {
   queueTurnDuringReprovision,
   requireReadyThreadEnvironment,
-} from "../../services/thread-turn-dispatch.js";
+} from "../../services/threads/thread-turn-dispatch.js";
 import {
   pruneThreadEventHistoryBestEffort,
   resetActiveThreadEventPruningState,
-} from "../../services/event-pruning.js";
+} from "../../services/system/event-pruning.js";
 import {
   buildExecutionOptions,
   queueTurnSteerCommand,
-} from "../../services/thread-commands.js";
+} from "../../services/threads/thread-commands.js";
 import {
   queueReadyThreadTurnCommand,
   requestThreadStop,
-} from "../../services/thread-stop.js";
+} from "../../services/threads/thread-lifecycle.js";
 import {
   appendClientTurnEvent,
   getLastTurnId,
-} from "../../services/thread-events.js";
-import { tryTransition } from "../../services/thread-transitions.js";
+} from "../../services/threads/thread-events.js";
+import { tryTransition } from "../../services/threads/thread-transitions.js";
 
 function ensureThreadIsWritable(thread: Thread): void {
   if (thread.archivedAt) {

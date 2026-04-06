@@ -7,7 +7,7 @@ import {
 } from "@bb/db";
 import { threadSchema } from "@bb/domain";
 import { describe, expect, it } from "vitest";
-import { completeThreadStart } from "../src/services/thread-stop.js";
+import { completeThreadStart } from "../src/services/threads/thread-lifecycle.js";
 import {
   reportQueuedCommandSuccess,
   waitForQueuedCommand,

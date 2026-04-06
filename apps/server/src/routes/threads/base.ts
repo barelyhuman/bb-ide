@@ -18,22 +18,22 @@ import { ApiError } from "../../errors.js";
 import {
   advanceEnvironmentCleanup,
   requestEnvironmentCleanup,
-} from "../../services/environment-cleanup.js";
+} from "../../services/environments/environment-cleanup.js";
 import {
   requireEnvironment,
   requirePublicProject,
   requirePublicThread,
   requirePublicThreadEnvironment,
-} from "../../services/entity-lookup.js";
+} from "../../services/lib/entity-lookup.js";
 import {
   queueThreadRenameCommand,
-} from "../../services/thread-commands.js";
+} from "../../services/threads/thread-commands.js";
 import {
   hasActiveThreadStartOperation,
   requestThreadStop,
-} from "../../services/thread-stop.js";
-import { appendThreadOwnershipChangeEvent } from "../../services/thread-events.js";
-import { createThreadFromRequest } from "../../services/thread-create.js";
+} from "../../services/threads/thread-lifecycle.js";
+import { appendThreadOwnershipChangeEvent } from "../../services/threads/thread-events.js";
+import { createThreadFromRequest } from "../../services/threads/thread-create.js";
 export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
   const { get, post, patch, del } = typedRoutes<PublicApiSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),

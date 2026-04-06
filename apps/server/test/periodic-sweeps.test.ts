@@ -20,9 +20,9 @@ import {
   runManagedEnvironmentArchiveCleanupSweep,
   runPeriodicSweeps,
   runThreadLifecycleSweep,
-} from "../src/services/periodic-sweeps.js";
-import { requestEnvironmentCleanup } from "../src/services/environment-cleanup.js";
-import { requestThreadStop } from "../src/services/thread-stop.js";
+} from "../src/services/system/periodic-sweeps.js";
+import { requestEnvironmentCleanup } from "../src/services/environments/environment-cleanup.js";
+import { requestThreadStop } from "../src/services/threads/thread-lifecycle.js";
 import {
   seedEnvironment,
   seedHostSession,

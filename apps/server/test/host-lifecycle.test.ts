@@ -10,7 +10,7 @@ import {
   resumeSuspendedHost,
   suspendIdleHost,
   waitForHostSession,
-} from "../src/services/host-lifecycle.js";
+} from "../src/services/hosts/host-lifecycle.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
 
 const resumeHostMock = vi.fn();

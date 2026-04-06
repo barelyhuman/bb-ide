@@ -18,7 +18,7 @@ import {
 } from "@bb/host-daemon-contract";
 import { threadSchema } from "@bb/domain";
 import { describe, expect, it, vi } from "vitest";
-import { appendClientTurnEvent } from "../src/services/thread-events.js";
+import { appendClientTurnEvent } from "../src/services/threads/thread-events.js";
 import {
   internalAuthHeaders,
   waitForQueuedCommand,

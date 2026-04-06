@@ -4,7 +4,7 @@ import {
   parseCronScheduleDefinition,
   ScheduleValidationError,
   validateScheduleDefinition,
-} from "../src/services/schedule-helpers.js";
+} from "../src/services/scheduling/schedule-helpers.js";
 import {
   createDailySchedule,
   createMonthlySchedule,

@@ -16,10 +16,10 @@ import { ApiError } from "../errors.js";
 import {
   requireEnvironment,
   requireReadyEnvironment,
-} from "../services/entity-lookup.js";
-import { queueCommandAndWait } from "../services/command-wait.js";
-import { requireSourceForHost } from "../services/thread-create-helpers.js";
-import { generateCommitMessage } from "../services/commit-message.js";
+} from "../services/lib/entity-lookup.js";
+import { queueCommandAndWait } from "../services/hosts/command-wait.js";
+import { requireSourceForHost } from "../services/threads/thread-create-helpers.js";
+import { generateCommitMessage } from "../services/ai/commit-message.js";
 
 const COMMIT_FALLBACK_MESSAGE = "bb: automated commit";
 const SQUASH_MERGE_FALLBACK_MESSAGE = "bb: squash merge";

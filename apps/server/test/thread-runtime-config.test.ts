@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { hostDaemonSessions } from "@bb/db";
 import { describe, expect, it } from "vitest";
-import { resolveThreadRuntimeCommandConfig } from "../src/services/thread-runtime-config.js";
+import { resolveThreadRuntimeCommandConfig } from "../src/services/threads/thread-runtime-config.js";
 import {
   reportQueuedCommandError,
   reportQueuedCommandSuccess,

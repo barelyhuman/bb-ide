@@ -8,7 +8,7 @@ import {
   threads,
 } from "@bb/db";
 import { describe, expect, it } from "vitest";
-import { sweepDueAutomations } from "../src/services/automation-sweep.js";
+import { sweepDueAutomations } from "../src/services/scheduling/automation-sweep.js";
 import { waitForQueuedCommand } from "./helpers/commands.js";
 import {
   createDailySchedule,

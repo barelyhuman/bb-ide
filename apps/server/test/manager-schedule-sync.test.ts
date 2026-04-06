@@ -3,7 +3,7 @@ import {
   listManagerThreadNudgesByThread,
 } from "@bb/db";
 import { describe, expect, it } from "vitest";
-import { syncManagerThreadSchedules } from "../src/services/manager-schedule-sync.js";
+import { syncManagerThreadSchedules } from "../src/services/scheduling/manager-schedule-sync.js";
 import {
   reportQueuedCommandError,
   reportQueuedCommandSuccess,

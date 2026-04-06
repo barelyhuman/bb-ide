@@ -4,7 +4,7 @@ import type { AppDeps } from "../types.js";
 import {
   pruneThreadEventHistoryBestEffort,
   resetActiveThreadEventPruningState,
-} from "../services/event-pruning.js";
+} from "../services/system/event-pruning.js";
 
 export interface ApplyTurnCompletedEventResult {
   nextStatus: ThreadStatus | null;

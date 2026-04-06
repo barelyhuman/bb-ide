@@ -19,22 +19,22 @@ import { ApiError } from "../../errors.js";
 import {
   requireEnvironment,
   requirePublicThread,
-} from "../../services/entity-lookup.js";
-import { queueCommandAndWait } from "../../services/command-wait.js";
+} from "../../services/lib/entity-lookup.js";
+import { queueCommandAndWait } from "../../services/hosts/command-wait.js";
 import {
   createDaemonFileContentResponse,
   remapDaemonFileRouteError,
-} from "../../services/daemon-file-response.js";
-import { requireThreadStoragePath } from "../../services/thread-storage.js";
-import { toQueuedMessage } from "../../services/drafts.js";
-import { buildThreadTimeline, buildTimelineToolDetails } from "../../services/timeline.js";
+} from "../../services/hosts/daemon-file-response.js";
+import { requireThreadStoragePath } from "../../services/threads/thread-storage.js";
+import { toQueuedMessage } from "../../services/threads/drafts.js";
+import { buildThreadTimeline, buildTimelineToolDetails } from "../../services/threads/timeline.js";
 import {
   findThreadEvent,
   getLastThreadOutput,
   listThreadEventRows,
-} from "../../services/thread-data.js";
-import { getLastExecutionOptions } from "../../services/thread-events.js";
-import { parseOptionalInteger } from "../../services/validation.js";
+} from "../../services/threads/thread-data.js";
+import { getLastExecutionOptions } from "../../services/threads/thread-events.js";
+import { parseOptionalInteger } from "../../services/lib/validation.js";
 
 function validateFilePath(filePath: string): void {
   if (

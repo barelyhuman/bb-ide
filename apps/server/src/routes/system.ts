@@ -11,11 +11,11 @@ import { getHost } from "@bb/db";
 import type { AppDeps } from "../types.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
-import { requireEnvironment, requireDefaultConnectedHostId } from "../services/entity-lookup.js";
-import { queueCommandAndWait } from "../services/command-wait.js";
-import { listAvailableSandboxBackends } from "../services/sandbox-backends.js";
-import { isSandboxProvisioningConfigured } from "../services/sandbox-config.js";
-import { transcribeVoiceInput } from "../services/voice-transcription.js";
+import { requireEnvironment, requireDefaultConnectedHostId } from "../services/lib/entity-lookup.js";
+import { queueCommandAndWait } from "../services/hosts/command-wait.js";
+import { listAvailableSandboxBackends } from "../services/hosts/sandbox-backends.js";
+import { isSandboxProvisioningConfigured } from "../services/hosts/sandbox-config.js";
+import { transcribeVoiceInput } from "../services/ai/voice-transcription.js";
 
 type HostLookupQuery = Pick<SystemProvidersQuery, "environmentId" | "hostId">;
 

@@ -8,7 +8,7 @@ import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { HEARTBEAT_INTERVAL_MS, LEASE_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
-import { listHostThreadIds } from "../services/entity-lookup.js";
+import { listHostThreadIds } from "../services/lib/entity-lookup.js";
 import { reconcileSessionThreads } from "./reconciliation.js";
 
 export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {

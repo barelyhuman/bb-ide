@@ -1,6 +1,6 @@
 import { queueCommand } from "@bb/db";
 import { describe, expect, it } from "vitest";
-import { handleExpiredCommands } from "../src/services/expired-commands.js";
+import { handleExpiredCommands } from "../src/services/hosts/expired-commands.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
 import {
   seedEnvironment,

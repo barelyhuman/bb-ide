@@ -7,7 +7,7 @@ import {
 } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
-import { parseInteger } from "../services/validation.js";
+import { parseInteger } from "../services/lib/validation.js";
 import { requireActiveSession } from "./session-state.js";
 
 export function registerInternalCommandRoutes(app: Hono, deps: AppDeps): void {
