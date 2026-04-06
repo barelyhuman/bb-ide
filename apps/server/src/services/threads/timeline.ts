@@ -10,12 +10,13 @@ import type {
   ThreadTimelineResponse,
   TimelineToolDetailsResponse,
 } from "@bb/server-contract";
-import type { DbConnection } from "@bb/db";
 import {
-  type StoredEventRow,
   listRecentStoredEventRows,
   listStoredEventRowsInRange,
   listTokenUsageRowsForContextWindowUsage,
+} from "@bb/db";
+import type { DbConnection, StoredEventRow } from "@bb/db";
+import {
   parseStoredEvent,
   parseStoredEventRow,
 } from "./thread-data.js";

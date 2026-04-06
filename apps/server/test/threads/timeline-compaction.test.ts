@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { ThreadEventItemType, ThreadEventType } from "@bb/domain";
+import type { StoredEventRow } from "@bb/db";
 import {
   compactSummaryStoredEventRows,
 } from "../../src/services/threads/timeline.js";
-import type { StoredEventRow } from "../../src/services/threads/thread-data.js";
 
 interface BuildStoredEventRowArgs {
   itemId?: string | null;

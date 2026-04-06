@@ -21,7 +21,6 @@ export type {
 export {
   createProjectSource,
   countProjectSources,
-  getProjectSource,
   getProjectSourceForProject,
   listProjectSources,
   listProjectSourcesByProjectIds,
@@ -32,9 +31,7 @@ export {
   deleteProjectSource,
 } from "./project-sources.js";
 export type {
-  CountProjectSourcesArgs,
   CreateProjectSourceInput,
-  GetProjectSourceForProjectArgs,
   UpdateProjectSourceInput,
 } from "./project-sources.js";
 
@@ -82,8 +79,6 @@ export {
 export type {
   CountLiveThreadsInEnvironmentArgs,
   CreateThreadInput,
-  HasPendingThreadShutdownInEnvironmentArgs,
-  ListHostThreadIdsArgs,
   ListThreadsOptions,
   StopRequestedThreadRow,
   ListThreadEnvironmentAssignmentsOnHostArgs,
@@ -186,16 +181,10 @@ export {
 export type {
   AppendStoredThreadEventArgs,
   CompletedStoredTurnRow,
-  FindStoredEventRowArgs,
   GetLatestThreadSequenceArgs,
-  GetLatestThreadOutputEventRowArgs,
   InsertEventInput,
   InsertEventsResult,
   ListEventsOptions,
-  ListRecentStoredEventRowsArgs,
-  ListStoredEventRowsArgs,
-  ListStoredEventRowsInRangeArgs,
-  ListTokenUsageRowsForContextWindowUsageArgs,
   PruneTokenUsageEventsBeforeSequenceArgs,
   PruneResolvedAgentMessageDeltasArgs,
   PruneThreadEventsBeforeSequenceArgs,
@@ -216,7 +205,6 @@ export {
 export type {
   QueueCommandInput,
   FetchCommandsOptions,
-  GetPendingEnvironmentCommandArgs,
   HasPendingHostCommandForThreadArgs,
   ReportCommandResultInput,
 } from "./commands.js";
@@ -231,7 +219,6 @@ export {
   listConnectedHostIds,
 } from "./sessions.js";
 export type {
-  GetActiveSessionByIdArgs,
   OpenSessionInput,
 } from "./sessions.js";
 

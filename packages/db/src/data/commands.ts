@@ -109,7 +109,7 @@ export function getPendingEnvironmentCommand(
   args: GetPendingEnvironmentCommandArgs,
 ) {
   return db
-    .select()
+    .select({ id: hostDaemonCommands.id })
     .from(hostDaemonCommands)
     .where(
       and(

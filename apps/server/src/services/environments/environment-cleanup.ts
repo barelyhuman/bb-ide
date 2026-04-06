@@ -65,11 +65,6 @@ export interface WouldCleanupEnvironmentArgs {
   excludeThreadId: string;
 }
 
-interface PendingEnvironmentCommandLookupArgs {
-  environmentId: string;
-  type: "environment.destroy" | "workspace.status";
-}
-
 const destroyOperationPayloadSchema = z.object({
   mode: z.enum(["safe", "force"]),
 });
@@ -81,23 +76,6 @@ function hasConnectedHostSession(
 ): boolean {
   const session = getActiveSession(deps.db, hostId);
   return session !== null && session.leaseExpiresAt > Date.now();
-}
-
-// Soft-deleted active threads still block environment cleanup until stop
-// finalization or reconnect reconciliation confirms the runtime is gone.
-function hasPendingThreadShutdowns(
-  deps: Pick<AppDeps, "db">,
-  environmentId: string,
-): boolean {
-  return hasPendingThreadShutdownInEnvironment(deps.db, { environmentId });
-}
-
-function getPendingCommandForEnvironment(
-  deps: Pick<AppDeps, "db">,
-  args: PendingEnvironmentCommandLookupArgs,
-): { id: string } | null {
-  const command = getPendingEnvironmentCommand(deps.db, args);
-  return command ? { id: command.id } : null;
 }
 
 function workspaceHasRiskyChanges(
@@ -131,7 +109,7 @@ async function assertWorkspaceCanBeSafelyCleaned(
   }
 
   if (
-    getPendingCommandForEnvironment(deps, {
+    getPendingEnvironmentCommand(deps.db, {
       environmentId: environment.id,
       type: "workspace.status",
     })
@@ -329,7 +307,7 @@ function queueEnvironmentDestroyCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   environment: EnvironmentDestroyTarget,
 ) {
-  const pendingCommand = getPendingCommandForEnvironment(deps, {
+  const pendingCommand = getPendingEnvironmentCommand(deps.db, {
     environmentId: environment.id,
     type: "environment.destroy",
   });
@@ -430,7 +408,11 @@ export async function advanceEnvironmentCleanup(
     });
   }
 
-  if (hasPendingThreadShutdowns(deps, environment.id)) {
+  if (
+    hasPendingThreadShutdownInEnvironment(deps.db, {
+      environmentId: environment.id,
+    })
+  ) {
     return;
   }
 
@@ -453,7 +435,7 @@ export async function advanceEnvironmentCleanup(
     destroyOperation
     && (destroyOperation.state === "queued" || destroyOperation.state === "fetched")
     && destroyOperation.commandId
-    && getPendingCommandForEnvironment(deps, {
+    && getPendingEnvironmentCommand(deps.db, {
       environmentId: environment.id,
       type: "environment.destroy",
     })
@@ -484,7 +466,11 @@ export async function advanceEnvironmentCleanup(
       return;
     }
 
-    if (hasPendingThreadShutdowns(deps, refreshedEnvironment.id)) {
+    if (
+      hasPendingThreadShutdownInEnvironment(deps.db, {
+        environmentId: refreshedEnvironment.id,
+      })
+    ) {
       return;
     }
 

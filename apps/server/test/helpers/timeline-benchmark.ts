@@ -7,8 +7,11 @@ import {
   createThread,
   deriveStoredEventItemFields,
   insertEvents,
+  listRecentStoredEventRows,
+  listTokenUsageRowsForContextWindowUsage,
   migrate,
   noopNotifier,
+  type StoredEventRow,
   upsertHost,
 } from "@bb/db";
 import {
@@ -25,11 +28,6 @@ import {
   compactSummaryStoredEventRows,
   toThreadEventWithMeta,
 } from "../../src/services/threads/timeline.js";
-import {
-  type StoredEventRow,
-  listRecentStoredEventRows,
-  listTokenUsageRowsForContextWindowUsage,
-} from "../../src/services/threads/thread-data.js";
 
 interface TimelineBenchmarkFixture {
   corpusId: string;

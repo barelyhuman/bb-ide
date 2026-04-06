@@ -6,7 +6,6 @@ import {
   countProjectSources,
   createProjectSource,
   getDefaultProjectSource,
-  getProjectSource,
   getProjectSourceForProject,
   getProjectSourceByHost,
   listProjectSources,
@@ -152,7 +151,6 @@ describe("project-sources", () => {
       repoUrl: "https://github.com/example/repo",
     });
 
-    expect(getProjectSource(db, source.id)?.id).toBe(source.id);
     expect(getProjectSourceForProject(db, {
       projectId: project.id,
       sourceId: source.id,

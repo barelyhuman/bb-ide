@@ -126,19 +126,6 @@ export function listProjectSourcesByProjectIds(
     .map(toProjectSource);
 }
 
-export function getProjectSource(
-  db: DbConnection,
-  sourceId: string,
-) {
-  const source = db
-    .select()
-    .from(projectSources)
-    .where(eq(projectSources.id, sourceId))
-    .get();
-
-  return source ? toProjectSource(source) : null;
-}
-
 export interface GetProjectSourceForProjectArgs {
   projectId: string;
   sourceId: string;

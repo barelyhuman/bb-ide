@@ -1,10 +1,7 @@
 import {
   findStoredEventRow as findStoredEventRowRecord,
   getLatestThreadOutputEventRow,
-  listRecentStoredEventRows as listRecentStoredEventRowRecords,
   listStoredEventRows as listStoredEventRowRecords,
-  listStoredEventRowsInRange as listStoredEventRowRangeRecords,
-  listTokenUsageRowsForContextWindowUsage as listTokenUsageRowRecords,
 } from "@bb/db";
 import type { DbConnection, StoredEventRow } from "@bb/db";
 import {
@@ -18,8 +15,6 @@ import type {
 } from "@bb/domain";
 import { ApiError } from "../../errors.js";
 
-export type { StoredEventRow } from "@bb/db";
-
 type StoredEventPayloadRow = Pick<
   StoredEventRow,
   "data" | "sequence" | "threadId" | "type"
@@ -28,21 +23,6 @@ type StoredEventPayloadRow = Pick<
 export interface ListThreadEventRowsArgs {
   afterSeq?: number;
   limit?: number;
-  threadId: string;
-}
-
-export interface ListStoredEventRowsInRangeArgs {
-  seqEnd: number;
-  seqStart: number;
-  threadId: string;
-}
-
-export interface ListRecentStoredEventRowsArgs {
-  excludedTypes?: readonly ThreadEventType[];
-  threadId: string;
-}
-
-export interface ListTokenUsageRowsForContextWindowUsageArgs {
   threadId: string;
 }
 
@@ -114,27 +94,6 @@ export function listThreadEventRows(
     threadId: args.threadId,
   });
   return rows.map((row) => parseStoredEventRow(row));
-}
-
-export function listStoredEventRowsInRange(
-  db: DbConnection,
-  args: ListStoredEventRowsInRangeArgs,
-): StoredEventRow[] {
-  return listStoredEventRowRangeRecords(db, args);
-}
-
-export function listRecentStoredEventRows(
-  db: DbConnection,
-  args: ListRecentStoredEventRowsArgs,
-): StoredEventRow[] {
-  return listRecentStoredEventRowRecords(db, args);
-}
-
-export function listTokenUsageRowsForContextWindowUsage(
-  db: DbConnection,
-  args: ListTokenUsageRowsForContextWindowUsageArgs,
-): StoredEventRow[] {
-  return listTokenUsageRowRecords(db, args);
 }
 
 export function findThreadEvent(
