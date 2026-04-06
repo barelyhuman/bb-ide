@@ -72,9 +72,8 @@ function resolveAutomationExecutionContext(
   const trigger = parseAutomationTriggerConfig(automation.triggerConfig);
   const hostId = resolveAutomationHostId(deps, action.threadRequest);
   const nextRunAt = computeNextScheduledTime({
-    cron: trigger.cron,
-    timezone: trigger.timezone,
     now,
+    schedule: trigger.schedule,
   });
   return {
     action,

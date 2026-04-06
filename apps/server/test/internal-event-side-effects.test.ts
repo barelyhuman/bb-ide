@@ -16,6 +16,10 @@ import {
   waitForQueuedCommandAfter,
 } from "./helpers/commands.js";
 import {
+  createDailySchedule,
+  createScheduleTrigger,
+} from "./helpers/schedules.js";
+import {
   seedDraft,
   seedEnvironment,
   seedEvent,
@@ -256,8 +260,10 @@ describe("internal event side effects", () => {
             "---",
             "timezone: America/Los_Angeles",
             "schedules:",
-            '  - cron: "0 8 * * 1-5"',
-            "    name: daily-recap",
+            '  - name: daily-recap',
+            '    kind: weekly',
+            '    weekdays: ["mon", "tue", "wed", "thu", "fri"]',
+            '    times: ["08:00"]',
             "---",
             "",
             "## daily-recap",
@@ -297,11 +303,9 @@ describe("internal event side effects", () => {
         name: "Auto archive",
         enabled: true,
         triggerType: "schedule",
-        triggerConfig: JSON.stringify({
-          triggerType: "schedule",
-          cron: "0 8 * * *",
-          timezone: "UTC",
-        }),
+        triggerConfig: JSON.stringify(
+          createScheduleTrigger(createDailySchedule({ times: ["08:00"] })),
+        ),
         action: JSON.stringify({
           actionType: "scheduled-thread",
           threadRequest: {
@@ -418,11 +422,9 @@ describe("internal event side effects", () => {
         name: "No auto archive",
         enabled: true,
         triggerType: "schedule",
-        triggerConfig: JSON.stringify({
-          triggerType: "schedule",
-          cron: "0 8 * * *",
-          timezone: "UTC",
-        }),
+        triggerConfig: JSON.stringify(
+          createScheduleTrigger(createDailySchedule({ times: ["08:00"] })),
+        ),
         action: JSON.stringify({
           actionType: "scheduled-thread",
           threadRequest: {

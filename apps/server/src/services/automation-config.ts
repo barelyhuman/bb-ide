@@ -1,9 +1,12 @@
 import type { automations } from "@bb/db";
 import { ZodError } from "zod";
+import { z } from "zod";
 import {
   automationActionSchema,
   automationSchema,
   automationScheduleTriggerSchema,
+  scheduleCronSchema,
+  scheduleTimezoneSchema,
   type AutomationAction,
   type AutomationScheduleTrigger,
   type AutomationValidation,
@@ -11,6 +14,7 @@ import {
 import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
 import {
+  parseLegacyCronScheduleDefinition,
   ScheduleValidationError,
   validateScheduleDefinition,
 } from "./schedule-helpers.js";
@@ -36,10 +40,29 @@ export interface StoredAutomationValidationResult {
   validation: AutomationValidation;
 }
 
+const legacyAutomationScheduleTriggerSchema = z.object({
+  triggerType: z.literal("schedule"),
+  cron: scheduleCronSchema,
+  timezone: scheduleTimezoneSchema,
+});
+
 export function parseAutomationTriggerConfig(
   triggerConfig: string,
 ) {
-  return automationScheduleTriggerSchema.parse(JSON.parse(triggerConfig));
+  const parsed = JSON.parse(triggerConfig);
+  const nextTrigger = automationScheduleTriggerSchema.safeParse(parsed);
+  if (nextTrigger.success) {
+    return nextTrigger.data;
+  }
+
+  const legacyTrigger = legacyAutomationScheduleTriggerSchema.parse(parsed);
+  return {
+    triggerType: "schedule",
+    schedule: parseLegacyCronScheduleDefinition({
+      cron: legacyTrigger.cron,
+      timezone: legacyTrigger.timezone,
+    }),
+  } satisfies AutomationScheduleTrigger;
 }
 
 export function parseAutomationAction(
@@ -64,7 +87,7 @@ export function computeAutomationValidation(
   const validationIssues: string[] = [];
 
   try {
-    validateScheduleDefinition(args.trigger);
+    validateScheduleDefinition(args.trigger.schedule);
   } catch (error) {
     if (error instanceof ScheduleValidationError) {
       validationIssues.push(error.message);

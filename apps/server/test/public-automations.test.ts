@@ -2,10 +2,15 @@ import { createAutomation, createProjectSource } from "@bb/db";
 import {
   automationSchema,
   AUTOMATION_NAME_MAX_LENGTH,
-  SCHEDULE_CRON_MAX_LENGTH,
+  SCHEDULE_TIMES_MAX_COUNT,
   SCHEDULE_TIMEZONE_MAX_LENGTH,
 } from "@bb/server-contract";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  createDailySchedule,
+  createScheduleTrigger,
+  createWeeklySchedule,
+} from "./helpers/schedules.js";
 import {
   seedEnvironment,
   seedHostSession,
@@ -16,6 +21,31 @@ import { createTestAppHarness } from "./helpers/test-app.js";
 async function readJson(response: Response): Promise<unknown> {
   return response.json();
 }
+
+const weekdayMorningTrigger = createScheduleTrigger(createWeeklySchedule({
+  times: ["08:00"],
+  weekdays: ["mon", "tue", "wed", "thu", "fri"],
+}));
+const losAngelesWeekdayMorningTrigger = createScheduleTrigger(createWeeklySchedule({
+  times: ["08:00"],
+  timezone: "America/Los_Angeles",
+  weekdays: ["mon", "tue", "wed", "thu", "fri"],
+}));
+const invalidTimezoneTrigger = createScheduleTrigger(createDailySchedule({
+  times: ["08:00"],
+  timezone: "Mars/Olympus",
+}));
+const tooFrequentTrigger = createScheduleTrigger(createDailySchedule({
+  times: ["08:00", "08:03"],
+}));
+const invalidTimeTrigger = {
+  triggerType: "schedule",
+  schedule: {
+    kind: "daily",
+    times: ["not-a-time"],
+    timezone: "UTC",
+  },
+};
 
 describe("public automation routes", () => {
   beforeEach(() => {
@@ -40,11 +70,7 @@ describe("public automation routes", () => {
           },
           body: JSON.stringify({
             name: "Daily summary",
-            trigger: {
-              triggerType: "schedule",
-              cron: "0 8 * * 1-5",
-              timezone: "America/Los_Angeles",
-            },
+            trigger: losAngelesWeekdayMorningTrigger,
             action: {
               actionType: "scheduled-thread",
               threadRequest: {
@@ -67,7 +93,9 @@ describe("public automation routes", () => {
       expect(createdAutomation.isValid).toBe(true);
       expect(createdAutomation.validationIssues).toEqual([]);
       expect(createdAutomation.autoArchive).toBe(false);
-      expect(createdAutomation.trigger.cron).toBe("0 8 * * 1-5");
+      expect(createdAutomation.trigger.schedule).toEqual(
+        losAngelesWeekdayMorningTrigger.schedule,
+      );
       expect(createdAutomation.nextRunAt).toBeTypeOf("number");
 
       const listResponse = await harness.app.request(
@@ -150,7 +178,7 @@ describe("public automation routes", () => {
     }
   });
 
-  it("rejects invalid cron expressions, invalid timezones, and sub-5-minute schedules", async () => {
+  it("rejects invalid schedule shapes, invalid timezones, and sub-5-minute schedules", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, { id: "host-automation-validation" });
@@ -159,21 +187,9 @@ describe("public automation routes", () => {
       });
 
       for (const trigger of [
-        {
-          triggerType: "schedule",
-          cron: "not-a-cron",
-          timezone: "UTC",
-        },
-        {
-          triggerType: "schedule",
-          cron: "0 8 * * 1-5",
-          timezone: "Mars/Olympus",
-        },
-        {
-          triggerType: "schedule",
-          cron: "* * * * *",
-          timezone: "UTC",
-        },
+        invalidTimeTrigger,
+        invalidTimezoneTrigger,
+        tooFrequentTrigger,
       ] as const) {
         const response = await harness.app.request(
           `/api/v1/projects/${project.id}/automations`,
@@ -235,11 +251,7 @@ describe("public automation routes", () => {
         name: "Mixed patch automation",
         nextRunAt: null,
         projectId: project.id,
-        triggerConfig: JSON.stringify({
-          triggerType: "schedule",
-          cron: "0 8 * * 1-5",
-          timezone: "UTC",
-        }),
+        triggerConfig: JSON.stringify(weekdayMorningTrigger),
         triggerType: "schedule",
       });
 
@@ -275,27 +287,23 @@ describe("public automation routes", () => {
       for (const payload of [
         {
           name: "n".repeat(AUTOMATION_NAME_MAX_LENGTH + 1),
-          trigger: {
-            triggerType: "schedule",
-            cron: "0 8 * * 1-5",
-            timezone: "UTC",
-          },
+          trigger: weekdayMorningTrigger,
         },
         {
           name: "Valid name",
-          trigger: {
-            triggerType: "schedule",
-            cron: "0".repeat(SCHEDULE_CRON_MAX_LENGTH + 1),
-            timezone: "UTC",
-          },
+          trigger: createScheduleTrigger(createDailySchedule({
+            times: Array.from(
+              { length: SCHEDULE_TIMES_MAX_COUNT + 1 },
+              (_, index) => `${String(index % 24).padStart(2, "0")}:00`,
+            ),
+          })),
         },
         {
           name: "Valid name",
-          trigger: {
-            triggerType: "schedule",
-            cron: "0 8 * * 1-5",
+          trigger: createScheduleTrigger(createDailySchedule({
+            times: ["08:00"],
             timezone: "T".repeat(SCHEDULE_TIMEZONE_MAX_LENGTH + 1),
-          },
+          })),
         },
       ] as const) {
         const response = await harness.app.request(
@@ -364,11 +372,7 @@ describe("public automation routes", () => {
             },
             enabled: false,
             name: "Disabled invalid automation",
-            trigger: {
-              triggerType: "schedule",
-              cron: "* * * * *",
-              timezone: "UTC",
-            },
+            trigger: tooFrequentTrigger,
           }),
         },
       );
@@ -394,11 +398,7 @@ describe("public automation routes", () => {
         name: "Disabled automation",
         nextRunAt: null,
         projectId: project.id,
-        triggerConfig: JSON.stringify({
-          triggerType: "schedule",
-          cron: "0 8 * * 1-5",
-          timezone: "UTC",
-        }),
+        triggerConfig: JSON.stringify(weekdayMorningTrigger),
         triggerType: "schedule",
       });
 
@@ -410,11 +410,7 @@ describe("public automation routes", () => {
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            trigger: {
-              triggerType: "schedule",
-              cron: "* * * * *",
-              timezone: "UTC",
-            },
+            trigger: tooFrequentTrigger,
           }),
         },
       );
@@ -456,11 +452,7 @@ describe("public automation routes", () => {
           },
           body: JSON.stringify({
             name: "Foreign reuse environment",
-            trigger: {
-              triggerType: "schedule",
-              cron: "0 8 * * 1-5",
-              timezone: "UTC",
-            },
+            trigger: weekdayMorningTrigger,
             action: {
               actionType: "scheduled-thread",
               threadRequest: {
@@ -487,11 +479,7 @@ describe("public automation routes", () => {
           },
           body: JSON.stringify({
             name: "Foreign host",
-            trigger: {
-              triggerType: "schedule",
-              cron: "0 8 * * 1-5",
-              timezone: "UTC",
-            },
+            trigger: weekdayMorningTrigger,
             action: {
               actionType: "scheduled-thread",
               threadRequest: {
@@ -519,11 +507,7 @@ describe("public automation routes", () => {
           },
           body: JSON.stringify({
             name: "Scoped automation",
-            trigger: {
-              triggerType: "schedule",
-              cron: "0 8 * * 1-5",
-              timezone: "UTC",
-            },
+            trigger: weekdayMorningTrigger,
             action: {
               actionType: "scheduled-thread",
               threadRequest: {
@@ -592,11 +576,7 @@ describe("public automation routes", () => {
           },
           body: JSON.stringify({
             name: "Sandbox automation",
-            trigger: {
-              triggerType: "schedule",
-              cron: "0 8 * * 1-5",
-              timezone: "UTC",
-            },
+            trigger: weekdayMorningTrigger,
             action: {
               actionType: "scheduled-thread",
               threadRequest: {
@@ -624,11 +604,7 @@ describe("public automation routes", () => {
         name: "Valid automation",
         enabled: true,
         triggerType: "schedule",
-        triggerConfig: JSON.stringify({
-          triggerType: "schedule",
-          cron: "0 8 * * 1-5",
-          timezone: "UTC",
-        }),
+        triggerConfig: JSON.stringify(weekdayMorningTrigger),
         action: JSON.stringify({
           actionType: "scheduled-thread",
           threadRequest: {
@@ -706,11 +682,7 @@ describe("public automation routes", () => {
           },
           body: JSON.stringify({
             name: "Sandbox automation",
-            trigger: {
-              triggerType: "schedule",
-              cron: "0 8 * * 1-5",
-              timezone: "UTC",
-            },
+            trigger: weekdayMorningTrigger,
             action: {
               actionType: "scheduled-thread",
               threadRequest: {
@@ -766,11 +738,7 @@ describe("public automation routes", () => {
           },
           body: JSON.stringify({
             name: "Explicit unmanaged host automation",
-            trigger: {
-              triggerType: "schedule",
-              cron: "0 8 * * 1-5",
-              timezone: "UTC",
-            },
+            trigger: weekdayMorningTrigger,
             action: {
               actionType: "scheduled-thread",
               threadRequest: {
@@ -841,11 +809,7 @@ describe("public automation routes", () => {
         name: "Invalid disabled automation",
         nextRunAt: null,
         projectId: project.id,
-        triggerConfig: JSON.stringify({
-          triggerType: "schedule",
-          cron: "* * * * *",
-          timezone: "UTC",
-        }),
+        triggerConfig: JSON.stringify(tooFrequentTrigger),
         triggerType: "schedule",
       });
 
@@ -892,11 +856,7 @@ describe("public automation routes", () => {
         name: "Valid automation",
         enabled: true,
         triggerType: "schedule",
-        triggerConfig: JSON.stringify({
-          triggerType: "schedule",
-          cron: "0 8 * * 1-5",
-          timezone: "UTC",
-        }),
+        triggerConfig: JSON.stringify(weekdayMorningTrigger),
         action: JSON.stringify({
           actionType: "scheduled-thread",
           threadRequest: {

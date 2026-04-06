@@ -24,7 +24,10 @@ import {
   type PreparedTurnRunCommandPayload,
   queueTurnRunCommandInTransaction,
 } from "./thread-commands.js";
-import { computeNextScheduledTime } from "./schedule-helpers.js";
+import {
+  computeNextScheduledTimeForExpressionSet,
+  ScheduleValidationError,
+} from "./schedule-helpers.js";
 import { tryTransition } from "./thread-transitions.js";
 
 const SCHEDULED_NUDGE_PREFIX = "[bb system] Scheduled nudge:";
@@ -107,11 +110,28 @@ function advanceSkippedNudge(
     reason: string;
   },
 ): void {
-  const nextFireAt = computeNextScheduledTime({
-    cron: args.nudge.cron,
-    timezone: args.nudge.timezone,
-    now: args.now,
-  });
+  let nextFireAt: number;
+  try {
+    nextFireAt = computeNextScheduledTimeForExpressionSet({
+      expressionSet: args.nudge.cron,
+      now: args.now,
+      timezone: args.nudge.timezone,
+    });
+  } catch (error) {
+    if (error instanceof ScheduleValidationError) {
+      deleteManagerThreadNudge(deps.db, deps.hub, args.nudge.id);
+      deps.logger.warn(
+        {
+          nudgeId: args.nudge.id,
+          reason: error.message,
+          threadId: args.nudge.threadId,
+        },
+        "Deleted manager nudge with invalid stored schedule",
+      );
+      return;
+    }
+    throw error;
+  }
   const advanced = advanceManagerThreadNudgeAfterFire(deps.db, deps.hub, {
     nudgeId: args.nudge.id,
     expectedNextFireAt: args.nudge.nextFireAt,
@@ -130,6 +150,17 @@ function advanceSkippedNudge(
       "Skipped due manager nudge",
     );
   }
+}
+
+function computeNextFireAt(
+  nudge: DueManagerThreadNudgeRow,
+  now: number,
+): number {
+  return computeNextScheduledTimeForExpressionSet({
+    expressionSet: nudge.cron,
+    now,
+    timezone: nudge.timezone,
+  });
 }
 
 function createNudgeSweepCache(): NudgeSweepCache {
@@ -305,22 +336,17 @@ function queueDueNudgeInTransaction(
   args: {
     nudge: DueManagerThreadNudgeRow;
     now: number;
+    nextFireAt: number;
     preparation: QueueDueNudgePreparation;
   },
 ): QueueDueNudgeResult {
-  const nextFireAt = computeNextScheduledTime({
-    cron: args.nudge.cron,
-    timezone: args.nudge.timezone,
-    now: args.now,
-  });
-
   if (hasPendingTurnRunCommand(tx, {
     hostId: args.preparation.environment.hostId,
     threadId: args.preparation.thread.id,
   })) {
     const advanced = advanceManagerThreadNudgeAfterFireInTransaction(tx, {
       expectedNextFireAt: args.nudge.nextFireAt,
-      nextFireAt,
+      nextFireAt: args.nextFireAt,
       nudgeId: args.nudge.id,
       now: args.now,
     });
@@ -333,7 +359,7 @@ function queueDueNudgeInTransaction(
   if (
     !advanceManagerThreadNudgeAfterFireInTransaction(tx, {
       expectedNextFireAt: args.nudge.nextFireAt,
-      nextFireAt,
+      nextFireAt: args.nextFireAt,
       nudgeId: args.nudge.id,
       now: args.now,
     })
@@ -385,10 +411,30 @@ async function runNudge(
     return;
   }
 
+  let nextFireAt: number;
+  try {
+    nextFireAt = computeNextFireAt(nudge, now);
+  } catch (error) {
+    if (error instanceof ScheduleValidationError) {
+      deleteManagerThreadNudge(deps.db, deps.hub, nudge.id);
+      deps.logger.warn(
+        {
+          nudgeId: nudge.id,
+          reason: error.message,
+          threadId: nudge.threadId,
+        },
+        "Deleted manager nudge with invalid stored schedule",
+      );
+      return;
+    }
+    throw error;
+  }
+
   const transactionResult = deps.db.transaction((tx) =>
     queueDueNudgeInTransaction(tx, {
       nudge,
       now,
+      nextFireAt,
       preparation,
     }), { behavior: "immediate" });
 

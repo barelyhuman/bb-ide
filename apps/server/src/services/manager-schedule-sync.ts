@@ -8,9 +8,13 @@ import {
 } from "@bb/db";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import {
-  scheduleCronSchema,
+  dailyScheduleDefinitionSchema,
+  hourlyScheduleDefinitionSchema,
+  monthlyScheduleDefinitionSchema,
   scheduleNameSchema,
   scheduleTimezoneSchema,
+  type ScheduleDefinition,
+  weeklyScheduleDefinitionSchema,
 } from "@bb/server-contract";
 import { z } from "zod";
 import { ApiError } from "../errors.js";
@@ -18,7 +22,9 @@ import type { AppDeps } from "../types.js";
 import { queueCommandAndWait } from "./command-wait.js";
 import {
   computeNextScheduledTime,
+  parseLegacyCronScheduleDefinition,
   ScheduleValidationError,
+  serializeScheduleExpressionSet,
   validateScheduleDefinition,
 } from "./schedule-helpers.js";
 import { requireThreadStoragePath } from "./thread-storage.js";
@@ -30,15 +36,40 @@ const MAX_ASYNC_FILE_BYTES = 256 * 1024;
 const ASYNC_FRONTMATTER_DELIMITER = "---";
 
 const asyncScheduleFrontmatterSchema = z.object({
+  // Parse entries individually so one malformed schedule does not poison the
+  // rest of the file.
   schedules: z.array(z.unknown()).optional(),
   timezone: scheduleTimezoneSchema.optional(),
 });
 
-const asyncScheduleEntrySchema = z.object({
-  cron: scheduleCronSchema,
+const asyncHourlyScheduleEntrySchema = hourlyScheduleDefinitionSchema.extend({
   name: scheduleNameSchema,
   timezone: scheduleTimezoneSchema.optional(),
 });
+const asyncDailyScheduleEntrySchema = dailyScheduleDefinitionSchema.extend({
+  name: scheduleNameSchema,
+  timezone: scheduleTimezoneSchema.optional(),
+});
+const asyncWeeklyScheduleEntrySchema = weeklyScheduleDefinitionSchema.extend({
+  name: scheduleNameSchema,
+  timezone: scheduleTimezoneSchema.optional(),
+});
+const asyncMonthlyScheduleEntrySchema = monthlyScheduleDefinitionSchema.extend({
+  name: scheduleNameSchema,
+  timezone: scheduleTimezoneSchema.optional(),
+});
+const asyncLegacyCronScheduleEntrySchema = z.object({
+  cron: z.string().min(1),
+  name: scheduleNameSchema,
+  timezone: scheduleTimezoneSchema.optional(),
+});
+const asyncScheduleEntrySchema = z.union([
+  asyncHourlyScheduleEntrySchema,
+  asyncDailyScheduleEntrySchema,
+  asyncWeeklyScheduleEntrySchema,
+  asyncMonthlyScheduleEntrySchema,
+  asyncLegacyCronScheduleEntrySchema,
+]);
 
 interface SyncManagerThreadSchedulesArgs {
   threadId: string;
@@ -95,8 +126,8 @@ function toDesiredManagerThreadNudges(
   const desiredNudges: ReplaceManagerThreadNudgeInput[] = [];
   const seenNames = new Set<string>();
 
-  for (const rawSchedule of limitedSchedules) {
-    const parsedSchedule = asyncScheduleEntrySchema.safeParse(rawSchedule);
+  for (const rawEntry of limitedSchedules) {
+    const parsedSchedule = asyncScheduleEntrySchema.safeParse(rawEntry);
     if (!parsedSchedule.success) {
       deps.logger.warn(
         {
@@ -108,11 +139,11 @@ function toDesiredManagerThreadNudges(
       continue;
     }
 
-    const schedule = parsedSchedule.data;
-    if (seenNames.has(schedule.name)) {
+    const rawSchedule = parsedSchedule.data;
+    if (seenNames.has(rawSchedule.name)) {
       deps.logger.warn(
         {
-          name: schedule.name,
+          name: rawSchedule.name,
           threadId: args.threadId,
         },
         "Skipping duplicate ASYNC.md schedule name",
@@ -120,17 +151,43 @@ function toDesiredManagerThreadNudges(
       continue;
     }
 
-    const timezone = schedule.timezone ?? defaultTimezone;
-    try {
-      validateScheduleDefinition({
-        cron: schedule.cron,
+    let schedule: ScheduleDefinition;
+    if ("cron" in rawSchedule) {
+      const timezone = rawSchedule.timezone ?? defaultTimezone;
+      try {
+        schedule = parseLegacyCronScheduleDefinition({
+          cron: rawSchedule.cron,
+          timezone,
+        });
+      } catch (error) {
+        if (error instanceof ScheduleValidationError) {
+          deps.logger.warn(
+            {
+              name: rawSchedule.name,
+              reason: error.message,
+              threadId: args.threadId,
+            },
+            "Skipping invalid ASYNC.md schedule",
+          );
+          continue;
+        }
+        throw error;
+      }
+    } else {
+      const timezone = rawSchedule.timezone ?? defaultTimezone;
+      schedule = {
+        ...rawSchedule,
         timezone,
-      });
+      };
+    }
+
+    try {
+      validateScheduleDefinition(schedule);
     } catch (error) {
       if (error instanceof ScheduleValidationError) {
         deps.logger.warn(
           {
-            name: schedule.name,
+            name: rawSchedule.name,
             reason: error.message,
             threadId: args.threadId,
           },
@@ -142,16 +199,15 @@ function toDesiredManagerThreadNudges(
     }
 
     desiredNudges.push({
-      cron: schedule.cron,
-      name: schedule.name,
+      cron: serializeScheduleExpressionSet(schedule),
+      name: rawSchedule.name,
       nextFireAt: computeNextScheduledTime({
-        cron: schedule.cron,
-        timezone,
         now: args.now,
+        schedule,
       }),
-      timezone,
+      timezone: schedule.timezone,
     });
-    seenNames.add(schedule.name);
+    seenNames.add(rawSchedule.name);
   }
 
   return desiredNudges;

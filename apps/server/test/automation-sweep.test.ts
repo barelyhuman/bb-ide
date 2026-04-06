@@ -11,6 +11,10 @@ import { describe, expect, it } from "vitest";
 import { sweepDueAutomations } from "../src/services/automation-sweep.js";
 import { waitForQueuedCommand } from "./helpers/commands.js";
 import {
+  createDailySchedule,
+  createScheduleTrigger,
+} from "./helpers/schedules.js";
+import {
   seedEnvironment,
   seedHost,
   seedHostSession,
@@ -38,11 +42,9 @@ describe("automation sweep", () => {
         name: "Daily automation",
         enabled: true,
         triggerType: "schedule",
-        triggerConfig: JSON.stringify({
-          triggerType: "schedule",
-          cron: "0 8 * * *",
-          timezone: "UTC",
-        }),
+        triggerConfig: JSON.stringify(
+          createScheduleTrigger(createDailySchedule({ times: ["08:00"] })),
+        ),
         action: JSON.stringify({
           actionType: "scheduled-thread",
           threadRequest: {
@@ -112,11 +114,12 @@ describe("automation sweep", () => {
         name: "Broken automation",
         enabled: true,
         triggerType: "schedule",
-        triggerConfig: JSON.stringify({
-          triggerType: "schedule",
-          cron: "0 8 * * *",
-          timezone: "Mars/Olympus",
-        }),
+        triggerConfig: JSON.stringify(
+          createScheduleTrigger(createDailySchedule({
+            times: ["08:00"],
+            timezone: "Mars/Olympus",
+          })),
+        ),
         action: JSON.stringify({
           actionType: "scheduled-thread",
           threadRequest: {
@@ -137,11 +140,9 @@ describe("automation sweep", () => {
         name: "Runnable automation",
         enabled: true,
         triggerType: "schedule",
-        triggerConfig: JSON.stringify({
-          triggerType: "schedule",
-          cron: "0 8 * * *",
-          timezone: "UTC",
-        }),
+        triggerConfig: JSON.stringify(
+          createScheduleTrigger(createDailySchedule({ times: ["08:00"] })),
+        ),
         action: JSON.stringify({
           actionType: "scheduled-thread",
           threadRequest: {
@@ -191,11 +192,9 @@ describe("automation sweep", () => {
         name: "Offline automation",
         enabled: true,
         triggerType: "schedule",
-        triggerConfig: JSON.stringify({
-          triggerType: "schedule",
-          cron: "0 8 * * *",
-          timezone: "UTC",
-        }),
+        triggerConfig: JSON.stringify(
+          createScheduleTrigger(createDailySchedule({ times: ["08:00"] })),
+        ),
         action: JSON.stringify({
           actionType: "scheduled-thread",
           threadRequest: {
@@ -250,11 +249,9 @@ describe("automation sweep", () => {
         name: "Deduped automation",
         enabled: true,
         triggerType: "schedule",
-        triggerConfig: JSON.stringify({
-          triggerType: "schedule",
-          cron: "0 8 * * *",
-          timezone: "UTC",
-        }),
+        triggerConfig: JSON.stringify(
+          createScheduleTrigger(createDailySchedule({ times: ["08:00"] })),
+        ),
         action: JSON.stringify({
           actionType: "scheduled-thread",
           threadRequest: {
@@ -318,11 +315,9 @@ describe("automation sweep", () => {
         name: "Archived automation",
         enabled: true,
         triggerType: "schedule",
-        triggerConfig: JSON.stringify({
-          triggerType: "schedule",
-          cron: "0 8 * * *",
-          timezone: "UTC",
-        }),
+        triggerConfig: JSON.stringify(
+          createScheduleTrigger(createDailySchedule({ times: ["08:00"] })),
+        ),
         action: JSON.stringify({
           actionType: "scheduled-thread",
           threadRequest: {
@@ -379,11 +374,9 @@ describe("automation sweep", () => {
         name: "Rollback automation",
         enabled: true,
         triggerType: "schedule",
-        triggerConfig: JSON.stringify({
-          triggerType: "schedule",
-          cron: "0 8 * * *",
-          timezone: "UTC",
-        }),
+        triggerConfig: JSON.stringify(
+          createScheduleTrigger(createDailySchedule({ times: ["08:00"] })),
+        ),
         action: JSON.stringify({
           actionType: "scheduled-thread",
           threadRequest: {
