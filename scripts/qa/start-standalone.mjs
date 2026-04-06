@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import {
+  buildShellExports,
   buildDaemonRestartCommand,
   cleanupStandaloneOrphans,
   createProject,
@@ -20,7 +21,31 @@ import {
 
 const token = "standalone-qa-token";
 
+function parseArgs() {
+  let format = "json";
+
+  for (let index = 2; index < process.argv.length; index += 1) {
+    const arg = process.argv[index];
+    if (arg === "--format") {
+      const nextArg = process.argv[index + 1];
+      if (nextArg !== "env" && nextArg !== "json") {
+        throw new Error(
+          "Usage: node scripts/qa/start-standalone.mjs [--format json|env]",
+        );
+      }
+      format = nextArg;
+      index += 1;
+      continue;
+    }
+
+    throw new Error("Usage: node scripts/qa/start-standalone.mjs [--format json|env]");
+  }
+
+  return { format };
+}
+
 async function main() {
+  const { format } = parseArgs();
   await cleanupStandaloneOrphans();
   const envFile = await loadDotEnv();
   const instanceId = randomUUID();
@@ -101,36 +126,67 @@ async function main() {
       serverUrl,
     });
 
+    const cliEnv = {
+      BB_HOST_DAEMON_PORT: String(daemonPort),
+      BB_PROJECT_ID: project.id,
+      BB_SERVER_URL: serverUrl,
+    };
+
+    const setupEnv = {
+      ...cliEnv,
+      CLEANUP_COMMAND: cleanupCommand,
+      DAEMON_PID: String(daemonProcess.pid),
+      HOST_ID: host.id,
+      LOGS_DIR: logsDir,
+      PROJECT_ROOT: projectRoot,
+      RESTART_DAEMON_COMMAND: restartDaemonCommand,
+      SERVER_PID: String(serverProcess.pid),
+      STATE_PATH: statePath,
+    };
+
     const state = {
-      bbRoot,
-      cliEnv: {
-        BB_HOST_DAEMON_PORT: String(daemonPort),
-        BB_PROJECT_ID: project.id,
-        BB_SERVER_URL: serverUrl,
+      cliEnv,
+      commands: {
+        cleanup: cleanupCommand,
+        restartDaemon: restartDaemonCommand,
       },
-      cleanupCommand,
-      daemonLogPath,
-      daemonPort,
-      daemonPid: daemonProcess.pid,
-      daemonUrl: `http://127.0.0.1:${daemonPort}`,
-      envFilePath: envFile.path,
-      hostId: host.id,
+      daemon: {
+        dataDir: bbRoot,
+        logPath: daemonLogPath,
+        pid: daemonProcess.pid,
+        port: daemonPort,
+        url: `http://127.0.0.1:${daemonPort}`,
+      },
       instanceId,
-      logsDir,
       parentPid,
-      projectId: project.id,
-      projectRoot,
-      restartDaemonCommand,
-      serverDataDir,
-      serverLogPath,
-      serverPid: serverProcess.pid,
-      serverUrl,
-      statePath,
-      tmpRoot,
+      paths: {
+        bbRoot,
+        envFilePath: envFile.path,
+        logsDir,
+        projectRoot,
+        serverDataDir,
+        statePath,
+        tmpRoot,
+      },
+      project: {
+        hostId: host.id,
+        id: project.id,
+      },
+      server: {
+        dataDir: serverDataDir,
+        logPath: serverLogPath,
+        pid: serverProcess.pid,
+        port: serverPort,
+        url: serverUrl,
+      },
     };
 
     await fs.writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
-    process.stdout.write(`${JSON.stringify(state, null, 2)}\n`);
+    const output =
+      format === "env"
+        ? buildShellExports(setupEnv)
+        : JSON.stringify(state, null, 2);
+    process.stdout.write(`${output}\n`);
   } catch (error) {
     await killProcess(daemonProcess?.pid).catch(() => undefined);
     await killProcess(serverProcess?.pid).catch(() => undefined);

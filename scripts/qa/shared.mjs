@@ -27,6 +27,22 @@ function shellQuote(value) {
   return `'${String(value).replaceAll("'", `'\\''`)}'`;
 }
 
+export function buildShellExports(env) {
+  return Object.entries(env)
+    .map(([key, value]) => `export ${key}=${shellQuote(String(value))}`)
+    .join("\n");
+}
+
+export function readStandaloneStateRuntime(state) {
+  return {
+    daemonPid: state?.daemon?.pid ?? state?.daemonPid ?? null,
+    instanceId: state?.instanceId ?? null,
+    parentPid: state?.parentPid ?? null,
+    serverPid: state?.server?.pid ?? state?.serverPid ?? null,
+    tmpRoot: state?.paths?.tmpRoot ?? state?.tmpRoot ?? null,
+  };
+}
+
 async function resolveProjectEnvCandidates() {
   const candidates = new Set([path.join(repoRoot, ".env")]);
   const gitMetadataPath = path.join(repoRoot, ".git");
@@ -278,12 +294,13 @@ async function listStandaloneProcesses() {
 }
 
 export async function cleanupStandaloneInstance(state) {
+  const runtime = readStandaloneStateRuntime(state);
   const killedPids = new Set();
   const pidsToKill = new Set([
-    state?.daemonPid,
-    state?.serverPid,
-    ...(state?.instanceId ? await listProcessesByInstance(state.instanceId) : []),
-    ...(state?.tmpRoot ? await listOpenFilePids(state.tmpRoot) : []),
+    runtime.daemonPid,
+    runtime.serverPid,
+    ...(runtime.instanceId ? await listProcessesByInstance(runtime.instanceId) : []),
+    ...(runtime.tmpRoot ? await listOpenFilePids(runtime.tmpRoot) : []),
   ]);
 
   for (const pid of pidsToKill) {
@@ -294,14 +311,14 @@ export async function cleanupStandaloneInstance(state) {
     killedPids.add(pid);
   }
 
-  if (state?.tmpRoot) {
-    await fs.rm(state.tmpRoot, { recursive: true, force: true });
+  if (runtime.tmpRoot) {
+    await fs.rm(runtime.tmpRoot, { recursive: true, force: true });
   }
 
   return {
-    instanceId: state?.instanceId ?? null,
+    instanceId: runtime.instanceId,
     killedPids: [...killedPids].sort((left, right) => left - right),
-    removedRoot: state?.tmpRoot ?? null,
+    removedRoot: runtime.tmpRoot,
   };
 }
 
@@ -312,7 +329,8 @@ export async function cleanupStandaloneOrphans() {
 
   for (const tmpRoot of roots) {
     const state = await readJsonIfExists(path.join(tmpRoot, "standalone-state.json"));
-    if (!state?.parentPid || (await isProcessRunning(state.parentPid))) {
+    const runtime = readStandaloneStateRuntime(state);
+    if (!runtime.parentPid || (await isProcessRunning(runtime.parentPid))) {
       continue;
     }
     const cleanupResult = await cleanupStandaloneInstance({

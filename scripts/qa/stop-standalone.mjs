@@ -1,5 +1,9 @@
 import fs from "node:fs/promises";
-import { cleanupStandaloneInstance, killProcess } from "./shared.mjs";
+import {
+  cleanupStandaloneInstance,
+  killProcess,
+  readStandaloneStateRuntime,
+} from "./shared.mjs";
 
 function parseStatePath() {
   const stateFlagIndex = process.argv.indexOf("--state");
@@ -13,9 +17,10 @@ async function main() {
   const statePath = parseStatePath();
   const rawState = await fs.readFile(statePath, "utf8");
   const state = JSON.parse(rawState);
+  const runtime = readStandaloneStateRuntime(state);
 
-  await killProcess(state.daemonPid).catch(() => undefined);
-  await killProcess(state.serverPid).catch(() => undefined);
+  await killProcess(runtime.daemonPid).catch(() => undefined);
+  await killProcess(runtime.serverPid).catch(() => undefined);
   const cleanupResult = await cleanupStandaloneInstance(state);
 
   process.stdout.write(

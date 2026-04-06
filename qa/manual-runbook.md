@@ -27,25 +27,17 @@ Before starting, clear any leftover standalone QA processes or temp roots from a
 node scripts/qa/cleanup-standalone.mjs
 ```
 
-Start an isolated server + daemon pair and capture the returned state:
+Start an isolated server + daemon pair and load the exported QA environment:
 
 ```bash
-START_JSON=$(node scripts/qa/start-standalone.mjs)
-printf '%s\n' "$START_JSON" | jq
-
-export BB_SERVER_URL=$(printf '%s' "$START_JSON" | jq -r '.serverUrl')
-export BB_HOST_DAEMON_PORT=$(printf '%s' "$START_JSON" | jq -r '.daemonPort')
-export BB_PROJECT_ID=$(printf '%s' "$START_JSON" | jq -r '.projectId')
-
-STATE_PATH=$(printf '%s' "$START_JSON" | jq -r '.statePath')
-HOST_ID=$(printf '%s' "$START_JSON" | jq -r '.hostId')
-DAEMON_PID=$(printf '%s' "$START_JSON" | jq -r '.daemonPid')
-SERVER_PID=$(printf '%s' "$START_JSON" | jq -r '.serverPid')
-LOGS_DIR=$(printf '%s' "$START_JSON" | jq -r '.logsDir')
-RESTART_DAEMON_COMMAND=$(printf '%s' "$START_JSON" | jq -r '.restartDaemonCommand')
+eval "$(node scripts/qa/start-standalone.mjs --format env)"
+jq . "$STATE_PATH"
 
 alias bb="node apps/cli/dist/index.js"
 ```
+
+The machine-facing contract is the exported env block. The state file at `$STATE_PATH`
+is the diagnostics contract for humans and debugging.
 
 Basic health checks:
 
