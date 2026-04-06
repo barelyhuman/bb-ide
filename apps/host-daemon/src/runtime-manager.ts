@@ -1,4 +1,3 @@
-import path from "node:path";
 import {
   createAgentRuntime,
   type AgentRuntime,
@@ -6,17 +5,16 @@ import {
 } from "@bb/agent-runtime";
 import type { ThreadEvent, WorkspaceProvisionType } from "@bb/domain";
 import type { HostDaemonActiveThread } from "@bb/host-daemon-contract";
+import type {
+  HostWatcher,
+  ThreadStorageWatchError,
+  WorkspaceWatchError,
+} from "@bb/host-watcher";
 import {
   provisionWorkspace,
   type HostWorkspace,
   type ProvisionWorkspaceArgs,
 } from "@bb/host-workspace";
-import type { WorkspaceStatusWatchError } from "@bb/workspace/watch-status";
-import type { PathChangeWatchError } from "@bb/workspace/watch-path";
-import type {
-  WatchPathChanges,
-  WatchWorkspaceStatus,
-} from "./workspace-status-watch.js";
 
 const STOP_WATCHING = () => undefined;
 
@@ -28,16 +26,6 @@ interface RuntimeThreadState {
 interface ThreadStorageTarget {
   environmentId: string;
   threadId: string;
-}
-
-interface ThreadStorageRootChangeArgs {
-  changedPaths: string[];
-  threadStorageRootPath: string;
-}
-
-interface ThreadStoragePathArgs {
-  changedPath: string;
-  threadStorageRootPath: string;
 }
 
 function lazyProvisionOpts(
@@ -73,11 +61,10 @@ export interface EnsureEnvironmentArgs {
 export interface RuntimeManagerOptions {
   bridgeBundleDir?: AgentRuntimeOptions["bridgeBundleDir"];
   createRuntime?: (options: AgentRuntimeOptions) => AgentRuntime;
+  hostWatcher?: HostWatcher;
   provisionWorkspace?: (
     options: ProvisionWorkspaceArgs,
   ) => Promise<HostWorkspace>;
-  watchWorkspaceStatus?: WatchWorkspaceStatus;
-  watchPathChanges?: WatchPathChanges;
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
   shellEnv?: AgentRuntimeOptions["shellEnv"];
   onEvent?: (args: { environmentId: string; event: ThreadEvent }) => void;
@@ -87,12 +74,11 @@ export interface RuntimeManagerOptions {
     threadId: string;
   }) => void;
   onThreadStorageWatchError?: (args: {
-    error: PathChangeWatchError;
+    error: ThreadStorageWatchError;
   }) => void;
   onWorkspaceStatusChanged?: (args: { environmentId: string }) => void;
   onWorkspaceStatusWatchError?: (args: {
-    environmentId: string;
-    error: WorkspaceStatusWatchError;
+    error: WorkspaceWatchError;
   }) => void;
   onToolCall?: AgentRuntimeOptions["onToolCall"];
   onStderr?: AgentRuntimeOptions["onStderr"];
@@ -101,18 +87,16 @@ export interface RuntimeManagerOptions {
 
 export class RuntimeManager {
   private readonly createRuntime;
+  private readonly hostWatcher;
   private readonly provisionWorkspace;
-  private readonly watchPathChanges;
-  private readonly watchWorkspaceStatus;
   private readonly entries = new Map<string, RuntimeEntry>();
   private readonly pendingEntries = new Map<string, Promise<RuntimeEntry>>();
   private stopWatchingThreadStorageRoot: () => void = STOP_WATCHING;
 
   constructor(private readonly options: RuntimeManagerOptions = {}) {
     this.createRuntime = options.createRuntime ?? createAgentRuntime;
+    this.hostWatcher = options.hostWatcher;
     this.provisionWorkspace = options.provisionWorkspace ?? provisionWorkspace;
-    this.watchPathChanges = options.watchPathChanges;
-    this.watchWorkspaceStatus = options.watchWorkspaceStatus;
   }
 
   get(environmentId: string): RuntimeEntry | undefined {
@@ -260,8 +244,10 @@ export class RuntimeManager {
     }
 
     const workspace = await this.provisionWorkspace(provision);
-    const stopWatchingStatus = this.watchWorkspaceStatus
-      ? this.watchWorkspaceStatus(workspace.path, {
+    const stopWatchingStatus = this.hostWatcher
+      ? this.hostWatcher.watchWorkspace({
+          environmentId: args.environmentId,
+          workspacePath: workspace.path,
           onChange: () => {
             this.options.onWorkspaceStatusChanged?.({
               environmentId: args.environmentId,
@@ -269,7 +255,6 @@ export class RuntimeManager {
           },
           onWatchError: (error) => {
             this.options.onWorkspaceStatusWatchError?.({
-              environmentId: args.environmentId,
               error,
             });
           },
@@ -344,7 +329,7 @@ export class RuntimeManager {
 
   private ensureThreadStorageWatcher(): void {
     if (
-      !this.watchPathChanges ||
+      !this.hostWatcher ||
       this.stopWatchingThreadStorageRoot !== STOP_WATCHING
     ) {
       return;
@@ -355,11 +340,16 @@ export class RuntimeManager {
       return;
     }
 
-    this.stopWatchingThreadStorageRoot = this.watchPathChanges(threadStorageRootPath, {
-      onChange: ({ changedPaths }) => {
-        this.handleThreadStorageRootChange({
-          changedPaths,
-          threadStorageRootPath,
+    this.stopWatchingThreadStorageRoot = this.hostWatcher.watchThreadStorageRoot({
+      threadStorageRootPath,
+      resolveThreadTarget: (threadId) => this.findTrackedThreadTarget(threadId),
+      onChange: (event) => {
+        if (event.kind !== "thread-storage-changed") {
+          return;
+        }
+        this.options.onThreadStorageChanged?.({
+          environmentId: event.environmentId,
+          threadId: event.threadId,
         });
       },
       onWatchError: (error) => {
@@ -368,43 +358,6 @@ export class RuntimeManager {
         });
       },
     });
-  }
-
-  private handleThreadStorageRootChange(args: ThreadStorageRootChangeArgs): void {
-    const threadIds = new Set<string>();
-    for (const changedPath of args.changedPaths) {
-      const threadId = this.toThreadIdFromStoragePath({
-        changedPath,
-        threadStorageRootPath: args.threadStorageRootPath,
-      });
-      if (threadId) {
-        threadIds.add(threadId);
-      }
-    }
-
-    for (const threadId of threadIds) {
-      const target = this.findTrackedThreadTarget(threadId);
-      if (!target) {
-        continue;
-      }
-      this.options.onThreadStorageChanged?.(target);
-    }
-  }
-
-  private toThreadIdFromStoragePath(args: ThreadStoragePathArgs): string | null {
-    const relativePath = path.relative(
-      args.threadStorageRootPath,
-      args.changedPath,
-    );
-    if (
-      relativePath.length === 0 ||
-      relativePath.startsWith("..") ||
-      path.isAbsolute(relativePath)
-    ) {
-      return null;
-    }
-    const [threadId] = relativePath.split(path.sep).filter(Boolean);
-    return threadId ?? null;
   }
 
   private findTrackedThreadTarget(threadId: string): ThreadStorageTarget | null {

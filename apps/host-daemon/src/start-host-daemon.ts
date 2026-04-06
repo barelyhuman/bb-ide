@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { commonConfig, hostDaemonConfig } from "@bb/config/host-daemon";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import type { HostType, ToolCallRequest, ToolCallResponse } from "@bb/domain";
+import { createHostWatcher, type HostWatcher } from "@bb/host-watcher";
 import { createLogger } from "@bb/logger";
 import { createHostDaemonApp } from "./app.js";
 import {
@@ -23,12 +24,6 @@ import {
   resolveLocalBbExecutableDirectory,
 } from "./runtime-shell-env.js";
 import type { CreateReconnectingWebSocket } from "./server-connection.js";
-import {
-  resolveDefaultWatchPathChanges,
-  resolveDefaultWatchWorkspaceStatus,
-  type WatchPathChanges,
-  type WatchWorkspaceStatus,
-} from "./workspace-status-watch.js";
 
 export interface StartHostDaemonOptions {
   dataDir?: string;
@@ -44,8 +39,7 @@ export interface StartHostDaemonOptions {
   loadIdentity?: typeof loadHostIdentity;
   restartProcess?: typeof restartHostDaemon;
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
-  watchPathChanges?: WatchPathChanges;
-  watchWorkspaceStatus?: WatchWorkspaceStatus;
+  hostWatcher?: HostWatcher;
   onToolCall?: (request: ToolCallRequest) => Promise<ToolCallResponse>;
   openPath?: (path: string) => Promise<void>;
   pickFolder?: () => Promise<string | null>;
@@ -128,14 +122,9 @@ export async function startHostDaemon(
     const bbExecutableDirectory =
       options.bbExecutableDirectory ??
       (await resolveLocalBbExecutableDirectory());
-    const watchWorkspaceStatus =
-      options.watchWorkspaceStatus ??
-      (await resolveDefaultWatchWorkspaceStatus({
-        hostType,
-      }));
-    const watchPathChanges =
-      options.watchPathChanges ??
-      (await resolveDefaultWatchPathChanges({
+    const hostWatcher =
+      options.hostWatcher ??
+      (await createHostWatcher({
         hostType,
       }));
     const runtimeShellEnv = prepareRuntimeShellEnv({
@@ -166,8 +155,7 @@ export async function startHostDaemon(
       localApiConfig,
       runtimeShellEnv,
       adapterFactory: options.adapterFactory,
-      watchPathChanges,
-      watchWorkspaceStatus,
+      hostWatcher,
       onToolCall: options.onToolCall,
       openPath: options.openPath,
       pickFolder: options.pickFolder,

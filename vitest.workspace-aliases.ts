@@ -35,6 +35,10 @@ export const workspaceTestAliases = {
     repoRoot,
     "packages/host-workspace/src/index.ts",
   ),
+  "@bb/host-watcher": path.resolve(
+    repoRoot,
+    "packages/host-watcher/src/index.ts",
+  ),
   "@bb/host-daemon/test": path.resolve(
     repoRoot,
     "apps/host-daemon/src/test/index.ts",
@@ -47,14 +51,6 @@ export const workspaceTestAliases = {
     "packages/provider-audit/src/index.ts",
   ),
   "@bb/ui-core": path.resolve(repoRoot, "packages/ui-core/src/index.ts"),
-  "@bb/workspace/watch-status": path.resolve(
-    repoRoot,
-    "packages/workspace/src/watch-status.ts",
-  ),
-  "@bb/workspace/watch-path": path.resolve(
-    repoRoot,
-    "packages/workspace/src/watch-path.ts",
-  ),
   "@bb/workspace": path.resolve(repoRoot, "packages/workspace/src/index.ts"),
   "@bb/sandbox-host": path.resolve(
     repoRoot,

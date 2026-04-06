@@ -15,13 +15,10 @@ import {
   ServerConnection,
   type CreateReconnectingWebSocket,
 } from "./server-connection.js";
-import type {
-  WatchPathChanges,
-  WatchWorkspaceStatus,
-} from "./workspace-status-watch.js";
 import { ensureThreadStorageRoot } from "./thread-storage-root.js";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import type { HostType, ToolCallRequest, ToolCallResponse } from "@bb/domain";
+import type { HostWatcher } from "@bb/host-watcher";
 
 interface SessionState {
   value: string | null;
@@ -100,8 +97,7 @@ export interface CreateHostDaemonAppOptions {
   localApiConfig: HostDaemonLocalApiConfig | null;
   runtimeShellEnv?: AgentRuntimeOptions["shellEnv"];
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
-  watchPathChanges?: WatchPathChanges;
-  watchWorkspaceStatus?: WatchWorkspaceStatus;
+  hostWatcher?: HostWatcher;
   onToolCall?: (request: ToolCallRequest) => Promise<ToolCallResponse>;
   openPath?: (path: string) => Promise<void>;
   pickFolder?: () => Promise<string | null>;
@@ -155,9 +151,8 @@ export async function createHostDaemonApp(
   const runtimeManager = new RuntimeManager({
     adapterFactory: options.adapterFactory,
     bridgeBundleDir: options.bridgeBundleDir,
+    hostWatcher: options.hostWatcher,
     shellEnv: options.runtimeShellEnv,
-    watchPathChanges: options.watchPathChanges,
-    watchWorkspaceStatus: options.watchWorkspaceStatus,
     onEvent: ({ environmentId, event }) => {
       eventBuffer.push({
         environmentId,
@@ -186,10 +181,10 @@ export async function createHostDaemonApp(
         change: "work-status-changed",
       });
     },
-    onWorkspaceStatusWatchError: ({ environmentId, error }) => {
+    onWorkspaceStatusWatchError: ({ error }) => {
       options.logger.warn(
         {
-          environmentId,
+          environmentId: error.environmentId,
           rootPath: error.rootPath,
           watchError: error.message,
         },
