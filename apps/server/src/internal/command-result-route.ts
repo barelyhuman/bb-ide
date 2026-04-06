@@ -1,5 +1,4 @@
-import { eq } from "drizzle-orm";
-import { hostDaemonCommands } from "@bb/db";
+import { getCommand } from "@bb/db";
 import {
   hostDaemonCommandResultReportSchema,
   typedRoutes,
@@ -26,11 +25,7 @@ export function registerInternalCommandResultRoutes(
       hostId: daemon.hostId,
       sessionId: payload.sessionId,
     });
-    const command = deps.db
-      .select()
-      .from(hostDaemonCommands)
-      .where(eq(hostDaemonCommands.id, payload.commandId))
-      .get();
+    const command = getCommand(deps.db, payload.commandId);
     if (!command || command.hostId !== session.hostId) {
       throw new ApiError(404, "command_not_found", "Command not found");
     }

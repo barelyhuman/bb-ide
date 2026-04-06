@@ -1,4 +1,3 @@
-import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import type {
   EnvironmentCleanupMode,
   EnvironmentOperationKind,
@@ -11,9 +10,9 @@ import {
   getEnvironmentOperation,
   getEnvironmentOperationByCommandId,
   getActiveSession,
-  hostDaemonCommands,
+  getPendingEnvironmentCommand,
+  hasPendingThreadShutdownInEnvironment,
   queueCommand,
-  threads,
 } from "@bb/db";
 import {
   markEnvironmentOperationRecordCompleted,
@@ -66,6 +65,11 @@ export interface WouldCleanupEnvironmentArgs {
   excludeThreadId: string;
 }
 
+interface PendingEnvironmentCommandLookupArgs {
+  environmentId: string;
+  type: "environment.destroy" | "workspace.status";
+}
+
 const destroyOperationPayloadSchema = z.object({
   mode: z.enum(["safe", "force"]),
 });
@@ -85,38 +89,15 @@ function hasPendingThreadShutdowns(
   deps: Pick<AppDeps, "db">,
   environmentId: string,
 ): boolean {
-  const pendingStopThread = deps.db
-    .select({ id: threads.id })
-    .from(threads)
-    .where(
-      and(
-        eq(threads.environmentId, environmentId),
-        isNotNull(threads.stopRequestedAt),
-      ),
-    )
-    .get();
-
-  return pendingStopThread !== undefined;
+  return hasPendingThreadShutdownInEnvironment(deps.db, { environmentId });
 }
 
 function getPendingCommandForEnvironment(
   deps: Pick<AppDeps, "db">,
-  args: {
-    environmentId: string;
-    type: "environment.destroy" | "workspace.status";
-  },
+  args: PendingEnvironmentCommandLookupArgs,
 ): { id: string } | null {
-  return deps.db
-    .select({ id: hostDaemonCommands.id })
-    .from(hostDaemonCommands)
-    .where(
-      and(
-        eq(hostDaemonCommands.type, args.type),
-        inArray(hostDaemonCommands.state, ["pending", "fetched"]),
-        sql`json_extract(${hostDaemonCommands.payload}, '$.environmentId') = ${args.environmentId}`,
-      ),
-    )
-    .get() ?? null;
+  const command = getPendingEnvironmentCommand(deps.db, args);
+  return command ? { id: command.id } : null;
 }
 
 function workspaceHasRiskyChanges(

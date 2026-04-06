@@ -1,6 +1,5 @@
-import { eq } from "drizzle-orm";
 import {
-  hostDaemonCommands,
+  getCommand,
   reportCommandResult,
 } from "@bb/db";
 import type { HostDaemonCommandResultReport } from "@bb/host-daemon-contract";
@@ -12,12 +11,8 @@ import {
 export async function handleCommandResult(
   deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
   report: HostDaemonCommandResultReport,
-): Promise<typeof hostDaemonCommands.$inferSelect | null> {
-  const command = deps.db
-    .select()
-    .from(hostDaemonCommands)
-    .where(eq(hostDaemonCommands.id, report.commandId))
-    .get();
+): Promise<ReturnType<typeof getCommand>> {
+  const command = getCommand(deps.db, report.commandId);
 
   if (!command) {
     return null;

@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, inArray, isNotNull, lte, max, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, isNotNull, lte, max, notInArray, sql } from "drizzle-orm";
 import type {
   StoredThreadEventDataForType,
   ThreadEventItemType,
@@ -238,6 +238,21 @@ export interface FindStoredEventRowArgs {
   type: ThreadEventType;
 }
 
+export interface ListStoredEventRowsInRangeArgs {
+  seqEnd: number;
+  seqStart: number;
+  threadId: string;
+}
+
+export interface ListRecentStoredEventRowsArgs {
+  excludedTypes?: readonly ThreadEventType[];
+  threadId: string;
+}
+
+export interface ListTokenUsageRowsForContextWindowUsageArgs {
+  threadId: string;
+}
+
 export interface GetLatestThreadOutputEventRowArgs {
   threadId: string;
 }
@@ -321,6 +336,86 @@ export function findStoredEventRow(
     .orderBy(events.sequence)
     .limit(1)
     .get() ?? null;
+}
+
+export function listStoredEventRowsInRange(
+  db: DbConnection,
+  args: ListStoredEventRowsInRangeArgs,
+): StoredEventRow[] {
+  return db
+    .select(storedEventRowFields)
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, args.threadId),
+        gte(events.sequence, args.seqStart),
+        lte(events.sequence, args.seqEnd),
+      ),
+    )
+    .orderBy(events.sequence)
+    .all();
+}
+
+export function listRecentStoredEventRows(
+  db: DbConnection,
+  args: ListRecentStoredEventRowsArgs,
+): StoredEventRow[] {
+  const condition =
+    args.excludedTypes && args.excludedTypes.length > 0
+      ? and(
+          eq(events.threadId, args.threadId),
+          notInArray(events.type, [...args.excludedTypes]),
+        )
+      : eq(events.threadId, args.threadId);
+
+  return db
+    .select(storedEventRowFields)
+    .from(events)
+    .where(condition)
+    .orderBy(events.sequence)
+    .all();
+}
+
+export function listTokenUsageRowsForContextWindowUsage(
+  db: DbConnection,
+  args: ListTokenUsageRowsForContextWindowUsageArgs,
+): StoredEventRow[] {
+  const latestRow = db
+    .select(storedEventRowFields)
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, args.threadId),
+        eq(events.type, "thread/tokenUsage/updated"),
+      ),
+    )
+    .orderBy(desc(events.sequence))
+    .limit(1)
+    .get();
+
+  if (!latestRow) {
+    return [];
+  }
+
+  const latestContextRow = db
+    .select(storedEventRowFields)
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, args.threadId),
+        eq(events.type, "thread/tokenUsage/updated"),
+        sql`json_extract(${events.data}, '$.tokenUsage.modelContextWindow') IS NOT NULL`,
+      ),
+    )
+    .orderBy(desc(events.sequence))
+    .limit(1)
+    .get();
+
+  if (!latestContextRow || latestContextRow.id === latestRow.id) {
+    return [latestRow];
+  }
+
+  return [latestContextRow, latestRow];
 }
 
 export function getLatestThreadOutputEventRow(

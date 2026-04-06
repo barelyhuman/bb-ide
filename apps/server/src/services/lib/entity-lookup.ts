@@ -1,32 +1,21 @@
-import { and, desc, eq, gt } from "drizzle-orm";
 import {
-  environments,
   getActiveSession,
   getEnvironment,
   getHost,
+  getMostRecentlyUpdatedConnectedHostId,
   getProject,
   getProjectOperation,
   getThread,
-  hostDaemonSessions,
+  listConnectedHostIds,
+  listHostThreadIds as listHostThreadIdsFromDb,
   listHosts,
-  threads,
 } from "@bb/db";
 import type { Environment, Host, Project, Thread } from "@bb/domain";
 import type { DbConnection } from "@bb/db";
 import { ApiError } from "../../errors.js";
 
 function toHostStatus(db: DbConnection, hostId: string): Host["status"] {
-  const session = db
-    .select({ id: hostDaemonSessions.id })
-    .from(hostDaemonSessions)
-    .where(
-      and(
-        eq(hostDaemonSessions.hostId, hostId),
-        eq(hostDaemonSessions.status, "active"),
-        gt(hostDaemonSessions.leaseExpiresAt, Date.now()),
-      ),
-    )
-    .get();
+  const session = getActiveSession(db, hostId);
   return session ? "connected" : "disconnected";
 }
 
@@ -49,19 +38,7 @@ function toHostRecord(
 
 export function listHostsWithStatus(db: DbConnection): Host[] {
   const rows = listHosts(db);
-  const connectedHostIds = new Set(
-    db
-      .select({ hostId: hostDaemonSessions.hostId })
-      .from(hostDaemonSessions)
-      .where(
-        and(
-          eq(hostDaemonSessions.status, "active"),
-          gt(hostDaemonSessions.leaseExpiresAt, Date.now()),
-        ),
-      )
-      .all()
-      .map((row) => row.hostId),
-  );
+  const connectedHostIds = new Set(listConnectedHostIds(db));
 
   return rows.map((row) =>
     toHostRecord(
@@ -84,7 +61,7 @@ export function requireConnectedHostSession(
   hostId: string,
 ) {
   const session = getActiveSession(deps.db, hostId);
-  if (!session || session.leaseExpiresAt <= Date.now()) {
+  if (!session) {
     throw new ApiError(502, "host_disconnected", "Host is not connected");
   }
   return session;
@@ -188,33 +165,16 @@ export function requirePublicThreadEnvironment(
 }
 
 export function requireDefaultConnectedHostId(db: DbConnection): string {
-  const session = db
-    .select({ hostId: hostDaemonSessions.hostId })
-    .from(hostDaemonSessions)
-    .where(
-      and(
-        eq(hostDaemonSessions.status, "active"),
-        gt(hostDaemonSessions.leaseExpiresAt, Date.now()),
-      ),
-    )
-    .orderBy(desc(hostDaemonSessions.updatedAt))
-    .limit(1)
-    .get();
-  if (!session) {
+  const hostId = getMostRecentlyUpdatedConnectedHostId(db);
+  if (!hostId) {
     throw new ApiError(502, "host_disconnected", "Host is not connected");
   }
-  return session.hostId;
+  return hostId;
 }
 
 export function listHostThreadIds(
   db: DbConnection,
   hostId: string,
 ): string[] {
-  return db
-    .select({ id: threads.id })
-    .from(threads)
-    .innerJoin(environments, eq(threads.environmentId, environments.id))
-    .where(eq(environments.hostId, hostId))
-    .all()
-    .map((row) => row.id);
+  return listHostThreadIdsFromDb(db, { hostId });
 }

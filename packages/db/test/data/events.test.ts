@@ -16,7 +16,10 @@ import {
   insertEvents,
   listCompletedTurnsByThreadIds,
   listEvents,
+  listRecentStoredEventRows,
   listStoredEventRows,
+  listStoredEventRowsInRange,
+  listTokenUsageRowsForContextWindowUsage,
   pruneTokenUsageEventsBeforeSequence,
   pruneResolvedAgentMessageDeltas,
   pruneThreadEventsBeforeSequence,
@@ -279,6 +282,55 @@ describe("events", () => {
       itemKind: "agentMessage",
       type: "item/completed",
     });
+  });
+
+  it("lists stored event rows by range and exclusion filters", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "system/error",
+        ...emptyItemFields,
+        data: JSON.stringify({ message: "first" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        type: "thread/tokenUsage/updated",
+        ...emptyItemFields,
+        data: createTokenUsageData({
+          modelContextWindow: 16_000,
+          totalTokens: 100,
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 3,
+        type: "thread/tokenUsage/updated",
+        ...emptyItemFields,
+        data: createTokenUsageData({
+          modelContextWindow: null,
+          totalTokens: 200,
+        }),
+      },
+    ]);
+
+    expect(listStoredEventRowsInRange(db, {
+      seqEnd: 2,
+      seqStart: 1,
+      threadId: thread.id,
+    })).toHaveLength(2);
+
+    expect(listRecentStoredEventRows(db, {
+      excludedTypes: ["system/error"],
+      threadId: thread.id,
+    }).map((row) => row.sequence)).toEqual([2, 3]);
+
+    expect(listTokenUsageRowsForContextWindowUsage(db, {
+      threadId: thread.id,
+    }).map((row) => row.sequence)).toEqual([2, 3]);
   });
 
   it("appends stored thread events and exposes the latest thread runtime markers", () => {

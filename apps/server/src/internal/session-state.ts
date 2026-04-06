@@ -1,21 +1,14 @@
-import { and, eq, gt } from "drizzle-orm";
-import { hostDaemonSessions } from "@bb/db";
+import { getActiveSessionById } from "@bb/db";
 import type { DbConnection } from "@bb/db";
 import { ApiError } from "../errors.js";
 
+export interface RequireAuthorizedActiveSessionArgs {
+  hostId: string;
+  sessionId: string;
+}
+
 export function requireActiveSession(db: DbConnection, sessionId: string) {
-  const session =
-    db
-      .select()
-      .from(hostDaemonSessions)
-      .where(
-        and(
-          eq(hostDaemonSessions.id, sessionId),
-          eq(hostDaemonSessions.status, "active"),
-          gt(hostDaemonSessions.leaseExpiresAt, Date.now()),
-        ),
-      )
-      .get() ?? null;
+  const session = getActiveSessionById(db, { sessionId });
 
   if (!session) {
     throw new ApiError(401, "inactive_session", "Session is not active");
@@ -26,7 +19,7 @@ export function requireActiveSession(db: DbConnection, sessionId: string) {
 
 export function requireAuthorizedActiveSession(
   db: DbConnection,
-  args: { hostId: string; sessionId: string },
+  args: RequireAuthorizedActiveSessionArgs,
 ) {
   const session = requireActiveSession(db, args.sessionId);
   if (session.hostId !== args.hostId) {

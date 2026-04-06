@@ -1,13 +1,13 @@
-import { eq, inArray } from "drizzle-orm";
 import {
+  countProjectSources,
   createProject,
   createProjectSource,
   deleteProjectSource,
   getDefaultProjectSource,
+  getProjectSourceForProject,
   listProjects,
+  listProjectSourcesByProjectIds,
   listThreads,
-  projectSources,
-  toProjectSource,
   updateProject,
   updateProjectSource,
 } from "@bb/db";
@@ -52,33 +52,36 @@ function buildProjectResponses(deps: AppDeps, projectId?: string): ProjectRespon
   if (projects.length === 0) {
     return [];
   }
-  const sources = deps.db
-    .select()
-    .from(projectSources)
-    .where(inArray(projectSources.projectId, projects.map((project) => project.id)))
-    .all();
+  const sourcesByProjectId = new Map<string, ProjectResponse["sources"]>();
+  for (const source of listProjectSourcesByProjectIds(
+    deps.db,
+    projects.map((project) => project.id),
+  )) {
+    const projectSources = sourcesByProjectId.get(source.projectId);
+    if (projectSources) {
+      projectSources.push(source);
+      continue;
+    }
+    sourcesByProjectId.set(source.projectId, [source]);
+  }
 
   return projects.map((project) => ({
     ...project,
-    sources: sources
-      .filter((source) => source.projectId === project.id)
-      .map(toProjectSource),
+    sources: sourcesByProjectId.get(project.id) ?? [],
   }));
+}
+
+interface RequireProjectSourceArgs {
+  projectId: string;
+  sourceId: string;
 }
 
 function requireProjectSource(
   deps: Pick<AppDeps, "db">,
-  args: {
-    projectId: string;
-    sourceId: string;
-  },
+  args: RequireProjectSourceArgs,
 ) {
-  const source = deps.db
-    .select()
-    .from(projectSources)
-    .where(eq(projectSources.id, args.sourceId))
-    .get();
-  if (!source || source.projectId !== args.projectId) {
+  const source = getProjectSourceForProject(deps.db, args);
+  if (!source) {
     throw new ApiError(404, "invalid_request", "Project source not found");
   }
   return source;
@@ -172,11 +175,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
       projectId,
       sourceId: context.req.param("sourceId"),
     });
-    const sourceCount = deps.db
-      .select()
-      .from(projectSources)
-      .where(eq(projectSources.projectId, projectId))
-      .all().length;
+    const sourceCount = countProjectSources(deps.db, { projectId });
     if (sourceCount <= 1) {
       throw new ApiError(409, "invalid_request", "Cannot delete the last source of a project");
     }
