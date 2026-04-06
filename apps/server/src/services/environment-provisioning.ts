@@ -32,6 +32,7 @@ import {
   requireSourceForHost,
 } from "./thread-create-helpers.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
+import { parseJsonWithSchema } from "./json-parsing.js";
 import { tryTransition } from "./thread-transitions.js";
 
 type EnvironmentProvisionOperationKind = Extract<
@@ -148,8 +149,9 @@ export function advanceEnvironmentProvisioning(
     return null;
   }
 
-  const command = environmentProvisionCommandSchema.parse(
-    JSON.parse(operation.payload),
+  const command = parseJsonWithSchema(
+    operation.payload,
+    environmentProvisionCommandSchema,
   );
   const queuedCommand = queueCommand(deps.db, deps.hub, {
     hostId: environment.hostId,

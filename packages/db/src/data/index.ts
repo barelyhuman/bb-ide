@@ -156,6 +156,7 @@ export {
   getEnvironment,
   findEnvironmentByHostPath,
   listEnvironments,
+  listEnvironmentsByIds,
   markEnvironmentDestroyed,
   requestEnvironmentCleanup,
   updateEnvironmentMetadata,
@@ -177,6 +178,7 @@ export {
   isEphemeralHostPendingCleanup,
   listEphemeralHostsPendingCleanup,
   listHosts,
+  listHostsByIds,
   updateHost,
   deleteHost,
 } from "./hosts.js";

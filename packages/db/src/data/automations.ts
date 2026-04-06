@@ -1,10 +1,11 @@
-import { and, desc, eq, gt, inArray, isNull, lte, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lte } from "drizzle-orm";
 import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { createAutomationId } from "../ids.js";
 import { automations, threads } from "../schema.js";
 import { sql } from "drizzle-orm";
 import { getActiveSession } from "./sessions.js";
+import { buildOrderedNumberCursorFilter } from "./cursor-pagination.js";
 
 export interface CreateAutomationInput {
   action: string;
@@ -126,20 +127,18 @@ export function listDueAutomations(
   db: DbConnection,
   args: ListDueAutomationsArgs,
 ) {
-  const afterFilter = args.after
-    ? or(
-        gt(automations.nextRunAt, args.after.nextRunAt),
-        and(
-          eq(automations.nextRunAt, args.after.nextRunAt),
-          gt(automations.createdAt, args.after.createdAt),
-        ),
-        and(
-          eq(automations.nextRunAt, args.after.nextRunAt),
-          eq(automations.createdAt, args.after.createdAt),
-          gt(automations.id, args.after.id),
-        ),
-      )
-    : undefined;
+  const afterFilter = buildOrderedNumberCursorFilter({
+    after: args.after
+      ? {
+          value: args.after.nextRunAt,
+          createdAt: args.after.createdAt,
+          id: args.after.id,
+        }
+      : undefined,
+    valueColumn: automations.nextRunAt,
+    createdAtColumn: automations.createdAt,
+    idColumn: automations.id,
+  });
   const query = db.select()
     .from(automations)
     .where(

@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type {
   DiscoveredWorkspaceProperties,
   EnvironmentChangeKind,
@@ -88,6 +88,20 @@ export function listEnvironments(db: DbConnection, projectId?: string) {
       .all();
   }
   return db.select().from(environments).all();
+}
+
+export function listEnvironmentsByIds(
+  db: DbConnection,
+  environmentIds: readonly string[],
+) {
+  if (environmentIds.length === 0) {
+    return [];
+  }
+
+  return db.select()
+    .from(environments)
+    .where(inArray(environments.id, [...environmentIds]))
+    .all();
 }
 
 interface EnvironmentMetadataUpdateColumns {

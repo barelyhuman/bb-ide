@@ -24,6 +24,7 @@ import { z } from "zod";
 import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
 import { queueCommandAndWait } from "./command-wait.js";
+import { parseJsonWithSchema } from "./json-parsing.js";
 
 export interface EnvironmentDestroyTarget {
   hostId: string;
@@ -200,7 +201,7 @@ function getDestroyOperationPayload(
   });
 
   if (operation) {
-    return destroyOperationPayloadSchema.parse(JSON.parse(operation.payload));
+    return parseJsonWithSchema(operation.payload, destroyOperationPayloadSchema);
   }
 
   const environment = getEnvironment(deps.db, environmentId);

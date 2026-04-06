@@ -21,11 +21,14 @@ import type { Hono } from "hono";
 import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
 import {
+  buildStableThreadRequestProjectData,
   parseAutomationAction,
   parseAutomationTriggerConfig,
+  safeParseAutomationDefinition,
   serializeAutomationAction,
   serializeAutomationTrigger,
   toAutomationResponse,
+  toAutomationResponseWithProjectData,
   validateStoredAutomationDefinition,
 } from "../services/automation-config.js";
 import {
@@ -193,9 +196,62 @@ export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
   get("/projects/:id/automations", (context) => {
     const projectId = context.req.param("id");
     requirePublicProject(deps.db, projectId);
-    const responses = listAutomations(deps.db, projectId).flatMap((automation) => {
+    const automations = listAutomations(deps.db, projectId);
+    const parsedAutomations = automations.map((automation) => ({
+      automation,
+      ...safeParseAutomationDefinition(automation),
+    }));
+    const hostIds = new Set<string>();
+    const environmentIds = new Set<string>();
+
+    for (const parsed of parsedAutomations) {
+      const action = parsed.parsedDefinition?.action;
+      if (!action) {
+        continue;
+      }
+
+      switch (action.threadRequest.environment.type) {
+        case "host":
+          hostIds.add(action.threadRequest.environment.hostId);
+          break;
+        case "reuse":
+          environmentIds.add(action.threadRequest.environment.environmentId);
+          break;
+        case "sandbox-host":
+          break;
+        default: {
+          const exhaustiveCheck: never = action.threadRequest.environment;
+          throw new Error(
+            `Unsupported automation thread environment: ${exhaustiveCheck}`,
+          );
+        }
+      }
+    }
+
+    const projectData = buildStableThreadRequestProjectData(deps, {
+      projectId,
+      hostIds: [...hostIds],
+      environmentIds: [...environmentIds],
+    });
+    const responses = parsedAutomations.flatMap(({ automation, parsedDefinition }) => {
       try {
-        return [toAutomationResponse(deps, automation)];
+        if (parsedDefinition === null) {
+          deps.logger.warn(
+            {
+              automationId: automation.id,
+              projectId,
+            },
+            "Skipping malformed automation row in list response",
+          );
+          return [];
+        }
+        return [
+          toAutomationResponseWithProjectData(
+            automation,
+            parsedDefinition,
+            projectData,
+          ),
+        ];
       } catch (error) {
         deps.logger.warn(
           {

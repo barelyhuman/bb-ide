@@ -231,6 +231,64 @@ describe("automation sweep", () => {
     }
   });
 
+  it("ignores disabled automations even if nextRunAt is in the past", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-automation-disabled",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/automation-disabled-environment",
+      });
+      const now = Date.now();
+      const automation = createAutomation(harness.db, harness.hub, {
+        projectId: project.id,
+        name: "Disabled automation",
+        enabled: false,
+        triggerType: "schedule",
+        triggerConfig: JSON.stringify(
+          createScheduleTrigger(createDailySchedule({ times: ["08:00"] })),
+        ),
+        action: JSON.stringify({
+          actionType: "scheduled-thread",
+          threadRequest: {
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Should not run" }],
+            environment: {
+              type: "reuse",
+              environmentId: environment.id,
+            },
+          },
+        }),
+        autoArchive: false,
+        nextRunAt: now - 1,
+      });
+
+      await sweepDueAutomations(harness.deps, { now });
+
+      expect(
+        harness.db
+          .select()
+          .from(threads)
+          .where(eq(threads.automationId, automation.id))
+          .all(),
+      ).toHaveLength(0);
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(0);
+      expect(getAutomation(harness.db, automation.id)).toMatchObject({
+        enabled: false,
+        lastRunAt: null,
+        nextRunAt: now - 1,
+        runCount: 0,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("skips creating a new thread when the automation already has an open thread", async () => {
     const harness = await createTestAppHarness();
     try {

@@ -28,6 +28,7 @@ import {
   type QueueThreadStopCommandArgs,
 } from "./thread-commands.js";
 import { requireConnectedHostSession } from "./entity-lookup.js";
+import { parseJsonWithSchema } from "./json-parsing.js";
 
 type QueueReadyThreadTurnCommandResult = "thread.start" | "turn.run";
 
@@ -116,7 +117,10 @@ export async function advanceThreadStart(
     return null;
   }
 
-  const command = threadStartCommandSchema.parse(JSON.parse(operation.payload));
+  const command = parseJsonWithSchema(
+    operation.payload,
+    threadStartCommandSchema,
+  );
   const queuedCommand = queueCommand(deps.db, deps.hub, {
     hostId: args.hostId,
     sessionId: session.id,
@@ -211,7 +215,10 @@ export function advanceThreadStop(
   }
 
   const session = getActiveSession(deps.db, args.hostId);
-  const command = threadStopCommandSchema.parse(JSON.parse(operation.payload));
+  const command = parseJsonWithSchema(
+    operation.payload,
+    threadStopCommandSchema,
+  );
   const queuedCommand = queueCommand(deps.db, deps.hub, {
     hostId: args.hostId,
     sessionId: session?.id ?? null,

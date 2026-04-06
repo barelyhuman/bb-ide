@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import type { HostChangeKind, HostType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
@@ -117,6 +117,20 @@ export function getHost(db: DbConnection, id: string) {
 
 export function listHosts(db: DbConnection) {
   return db.select().from(hosts).all();
+}
+
+export function listHostsByIds(
+  db: DbConnection,
+  hostIds: readonly string[],
+) {
+  if (hostIds.length === 0) {
+    return [];
+  }
+
+  return db.select()
+    .from(hosts)
+    .where(inArray(hosts.id, [...hostIds]))
+    .all();
 }
 
 export function listEphemeralHostsPendingCleanup(

@@ -214,6 +214,47 @@ describe("nudge sweep", () => {
     }
   });
 
+  it("ignores disabled nudges even if nextFireAt is in the past", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-nudge-disabled",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/nudge-disabled-environment",
+      });
+      const thread = seedRunnableManagerThread({
+        harness,
+        environmentId: environment.id,
+        projectId: project.id,
+      });
+      const now = Date.now();
+      const nudge = createManagerThreadNudge(harness.db, harness.hub, {
+        projectId: project.id,
+        threadId: thread.id,
+        name: "disabled-check",
+        cron: "0 8 * * *",
+        timezone: "UTC",
+        enabled: false,
+        nextFireAt: now - 1,
+      });
+
+      await sweepDueNudges(harness.deps, { now });
+
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(0);
+      expect(getManagerThreadNudge(harness.db, nudge.id)).toMatchObject({
+        enabled: false,
+        lastFiredAt: null,
+        nextFireAt: now - 1,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("deletes due nudges for archived threads", async () => {
     const harness = await createTestAppHarness();
     try {

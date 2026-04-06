@@ -1,8 +1,9 @@
-import { and, asc, eq, gt, lte, or } from "drizzle-orm";
+import { and, asc, eq, lte } from "drizzle-orm";
 import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { createManagerThreadNudgeId } from "../ids.js";
 import { managerThreadNudges } from "../schema.js";
+import { buildOrderedNumberCursorFilter } from "./cursor-pagination.js";
 
 export interface CreateManagerThreadNudgeInput {
   cron: string;
@@ -110,20 +111,18 @@ export function listDueManagerThreadNudges(
   db: DbConnection,
   args: ListDueManagerThreadNudgesArgs,
 ) {
-  const afterFilter = args.after
-    ? or(
-        gt(managerThreadNudges.nextFireAt, args.after.nextFireAt),
-        and(
-          eq(managerThreadNudges.nextFireAt, args.after.nextFireAt),
-          gt(managerThreadNudges.createdAt, args.after.createdAt),
-        ),
-        and(
-          eq(managerThreadNudges.nextFireAt, args.after.nextFireAt),
-          eq(managerThreadNudges.createdAt, args.after.createdAt),
-          gt(managerThreadNudges.id, args.after.id),
-        ),
-      )
-    : undefined;
+  const afterFilter = buildOrderedNumberCursorFilter({
+    after: args.after
+      ? {
+          value: args.after.nextFireAt,
+          createdAt: args.after.createdAt,
+          id: args.after.id,
+        }
+      : undefined,
+    valueColumn: managerThreadNudges.nextFireAt,
+    createdAtColumn: managerThreadNudges.createdAt,
+    idColumn: managerThreadNudges.id,
+  });
   const query = db.select()
     .from(managerThreadNudges)
     .where(

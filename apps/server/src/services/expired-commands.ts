@@ -5,6 +5,7 @@ import {
 } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../types.js";
 import { handleCommandResultSideEffects } from "../internal/command-result-handlers.js";
+import { parseJsonWithSchema } from "./json-parsing.js";
 
 const EXPIRED_COMMAND_ERROR_CODE = "command_expired";
 const EXPIRED_COMMAND_ERROR_MESSAGE = "Command expired after retry";
@@ -44,7 +45,10 @@ export async function handleExpiredCommands(
       continue;
     }
 
-    const command = hostDaemonCommandSchema.parse(JSON.parse(commandRow.payload));
+    const command = parseJsonWithSchema(
+      commandRow.payload,
+      hostDaemonCommandSchema,
+    );
     const completedAt = commandRow.completedAt ?? Date.now();
 
     switch (command.type) {

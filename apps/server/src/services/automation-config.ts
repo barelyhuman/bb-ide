@@ -1,4 +1,9 @@
-import type { automations } from "@bb/db";
+import {
+  listEnvironmentsByIds,
+  listHostsByIds,
+  listProjectSources,
+  type automations,
+} from "@bb/db";
 import { ZodError } from "zod";
 import { z } from "zod";
 import {
@@ -13,12 +18,17 @@ import {
 } from "@bb/server-contract";
 import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
+import { parseJsonValue, parseJsonWithSchema } from "./json-parsing.js";
 import {
   parseLegacyCronScheduleDefinition,
   ScheduleValidationError,
   validateScheduleDefinition,
 } from "./schedule-helpers.js";
-import { resolveStableThreadRequestEnvironment } from "./thread-request-eligibility.js";
+import {
+  resolveStableThreadRequestEnvironment,
+  resolveStableThreadRequestEnvironmentFromProjectData,
+  type StableThreadRequestProjectData,
+} from "./thread-request-eligibility.js";
 
 export type AutomationRow = typeof automations.$inferSelect;
 export const MALFORMED_AUTOMATION_CONFIGURATION_MESSAGE =
@@ -40,6 +50,10 @@ export interface StoredAutomationValidationResult {
   validation: AutomationValidation;
 }
 
+export interface SafeParsedAutomationDefinitionResult {
+  parsedDefinition: ParsedAutomationDefinition | null;
+}
+
 const legacyAutomationScheduleTriggerSchema = z.object({
   triggerType: z.literal("schedule"),
   cron: scheduleCronSchema,
@@ -49,7 +63,7 @@ const legacyAutomationScheduleTriggerSchema = z.object({
 export function parseAutomationTriggerConfig(
   triggerConfig: string,
 ) {
-  const parsed = JSON.parse(triggerConfig);
+  const parsed = parseJsonValue(triggerConfig);
   const nextTrigger = automationScheduleTriggerSchema.safeParse(parsed);
   if (nextTrigger.success) {
     return nextTrigger.data;
@@ -68,7 +82,7 @@ export function parseAutomationTriggerConfig(
 export function parseAutomationAction(
   action: string,
 ) {
-  return automationActionSchema.parse(JSON.parse(action));
+  return parseJsonWithSchema(action, automationActionSchema);
 }
 
 export function parseAutomationDefinition(
@@ -113,6 +127,82 @@ export function computeAutomationValidation(
     isValid: validationIssues.length === 0,
     validationIssues,
   };
+}
+
+export function buildStableThreadRequestProjectData(
+  deps: Pick<AppDeps, "db">,
+  args: {
+    environmentIds: readonly string[];
+    hostIds: readonly string[];
+    projectId: string;
+  },
+): StableThreadRequestProjectData {
+  return {
+    environmentsById: new Map(
+      listEnvironmentsByIds(deps.db, args.environmentIds).map((environment) => [
+        environment.id,
+        environment,
+      ]),
+    ),
+    existingHostIds: new Set(
+      listHostsByIds(deps.db, args.hostIds).map((host) => host.id),
+    ),
+    projectId: args.projectId,
+    projectSources: listProjectSources(deps.db, args.projectId),
+  };
+}
+
+export function computeAutomationValidationWithProjectData(
+  args: ComputeAutomationValidationArgs & {
+    projectData: StableThreadRequestProjectData;
+  },
+): AutomationValidation {
+  const validationIssues: string[] = [];
+
+  try {
+    validateScheduleDefinition(args.trigger.schedule);
+  } catch (error) {
+    if (error instanceof ScheduleValidationError) {
+      validationIssues.push(error.message);
+    } else {
+      throw error;
+    }
+  }
+
+  try {
+    resolveStableThreadRequestEnvironmentFromProjectData(
+      args.projectData,
+      args.action.threadRequest.environment,
+    );
+  } catch (error) {
+    if (error instanceof ApiError) {
+      validationIssues.push(error.message);
+    } else {
+      throw error;
+    }
+  }
+
+  return {
+    isValid: validationIssues.length === 0,
+    validationIssues,
+  };
+}
+
+export function safeParseAutomationDefinition(
+  row: Pick<AutomationRow, "action" | "triggerConfig">,
+): SafeParsedAutomationDefinitionResult {
+  try {
+    return {
+      parsedDefinition: parseAutomationDefinition(row),
+    };
+  } catch (error) {
+    if (error instanceof SyntaxError || error instanceof ZodError) {
+      return {
+        parsedDefinition: null,
+      };
+    }
+    throw error;
+  }
 }
 
 export function validateStoredAutomationDefinition(
@@ -161,6 +251,36 @@ export function toAutomationResponse(
     enabled: row.enabled,
     trigger,
     action,
+    autoArchive: row.autoArchive,
+    nextRunAt: row.nextRunAt,
+    lastRunAt: row.lastRunAt,
+    runCount: row.runCount,
+    isValid: validation.isValid,
+    validationIssues: validation.validationIssues,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  });
+}
+
+export function toAutomationResponseWithProjectData(
+  row: AutomationRow,
+  parsedDefinition: ParsedAutomationDefinition,
+  projectData: StableThreadRequestProjectData,
+) {
+  const validation = computeAutomationValidationWithProjectData({
+    action: parsedDefinition.action,
+    projectId: row.projectId,
+    trigger: parsedDefinition.trigger,
+    projectData,
+  });
+
+  return automationSchema.parse({
+    id: row.id,
+    projectId: row.projectId,
+    name: row.name,
+    enabled: row.enabled,
+    trigger: parsedDefinition.trigger,
+    action: parsedDefinition.action,
     autoArchive: row.autoArchive,
     nextRunAt: row.nextRunAt,
     lastRunAt: row.lastRunAt,
