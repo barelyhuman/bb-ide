@@ -17,7 +17,16 @@ type ParcelWatcherSubscribeResult = Awaited<ReturnType<ParcelWatcherSubscribe>>;
 interface MockWatchPathImport {
   callbacks: ParcelWatcherCallback[];
   rootPaths: string[];
+  subscribeCallCount: () => number;
+  unsubscribe: ReturnType<typeof vi.fn>;
   watchPathChanges: WatchPathChanges;
+}
+
+interface ImportWatchPathOptions {
+  pathExistsImplementation?: (targetPath: string) => Promise<boolean>;
+  subscribeImplementation?: (
+    args: ParcelWatcherSubscribeArgs,
+  ) => Promise<ParcelWatcherSubscribeResult>;
 }
 
 const tempDirs: string[] = [];
@@ -44,22 +53,43 @@ async function waitFor<T>(
   throw new Error("Timed out waiting for watcher state");
 }
 
-async function importWatchPathWithMockedWatcher(): Promise<MockWatchPathImport> {
+function createDeferredPromise<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve;
+    reject = innerReject;
+  });
+  return { promise, reject, resolve };
+}
+
+async function importWatchPathWithMockedWatcher(
+  options: ImportWatchPathOptions = {},
+): Promise<MockWatchPathImport> {
   const callbacks: ParcelWatcherCallback[] = [];
   const rootPaths: string[] = [];
+  let subscribeCallCount = 0;
+  const unsubscribe = vi.fn(async () => undefined);
 
   vi.resetModules();
+  if (options.pathExistsImplementation) {
+    vi.doMock("../src/path-exists.js", () => ({
+      pathExists: options.pathExistsImplementation,
+    }));
+  }
   vi.doMock("@parcel/watcher", async () => {
     const actualWatcher =
       await vi.importActual<ParcelWatcherModule>("@parcel/watcher");
     const subscribe = async (
       ...args: ParcelWatcherSubscribeArgs
     ): Promise<ParcelWatcherSubscribeResult> => {
+      subscribeCallCount += 1;
       rootPaths.push(args[0]);
       callbacks.push(args[1]);
-      return {
-        unsubscribe: async () => undefined,
-      };
+      if (options.subscribeImplementation) {
+        return options.subscribeImplementation(args);
+      }
+      return { unsubscribe };
     };
     return {
       ...actualWatcher,
@@ -75,6 +105,8 @@ async function importWatchPathWithMockedWatcher(): Promise<MockWatchPathImport> 
   return {
     callbacks,
     rootPaths,
+    subscribeCallCount: () => subscribeCallCount,
+    unsubscribe,
     watchPathChanges: watchPathModule.watchPathChanges,
   };
 }
@@ -89,6 +121,7 @@ function createEventBatch(paths: string[]): ParcelWatcherEventBatch {
 afterEach(async () => {
   vi.resetModules();
   vi.doUnmock("@parcel/watcher");
+  vi.doUnmock("../src/path-exists.js");
   await Promise.all(
     tempDirs.splice(0).map(async (dir) => {
       await fs.rm(dir, { force: true, recursive: true });
@@ -123,7 +156,7 @@ describe("watchPathChanges", () => {
       createEventBatch([
         path.join(threadStorageRoot, "thread-2", "notes.md"),
         path.join(threadStorageRoot, "thread-1"),
-        path.join(dataDir, "outside-root.txt"),
+        "../outside-root.txt",
       ]),
     );
 
@@ -141,6 +174,119 @@ describe("watchPathChanges", () => {
     expect(onWatchError).not.toHaveBeenCalled();
 
     stopWatching();
+  });
+
+  it("reports a missing watched path once and retries until it appears", async () => {
+    vi.useFakeTimers();
+    const threadStorageRoot = path.join("/tmp", "bb-watch-path-missing");
+    let pathExistsCallCount = 0;
+    const onWatchError = vi.fn();
+    const { rootPaths, watchPathChanges } = await importWatchPathWithMockedWatcher({
+      pathExistsImplementation: async () => {
+        pathExistsCallCount += 1;
+        return pathExistsCallCount >= 2;
+      },
+    });
+
+    const stopWatching = watchPathChanges(threadStorageRoot, {
+      onChange: () => undefined,
+      onWatchError,
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(rootPaths).toEqual([]);
+    expect(onWatchError).toHaveBeenCalledTimes(1);
+    expect(onWatchError).toHaveBeenCalledWith({
+      message: `Watched path does not exist yet: ${threadStorageRoot}`,
+      rootPath: threadStorageRoot,
+    });
+
+    await vi.advanceTimersByTimeAsync(300);
+    await waitFor(
+      () => rootPaths.length,
+      (count) => count === 1,
+    );
+
+    expect(rootPaths).toEqual([threadStorageRoot]);
+    expect(onWatchError).toHaveBeenCalledTimes(1);
+
+    stopWatching();
+    vi.useRealTimers();
+  });
+
+  it("retries path subscriptions after a startup failure", async () => {
+    vi.useFakeTimers();
+    const threadStorageRoot = path.join("/tmp", "bb-watch-path-retry");
+    const onWatchError = vi.fn();
+    let shouldFail = true;
+    const { rootPaths, subscribeCallCount, watchPathChanges } =
+      await importWatchPathWithMockedWatcher({
+        pathExistsImplementation: async () => true,
+        subscribeImplementation: async () => {
+          if (shouldFail) {
+            shouldFail = false;
+            throw new Error("path subscription unavailable");
+          }
+          return {
+            unsubscribe: async () => undefined,
+          };
+        },
+      });
+
+    const stopWatching = watchPathChanges(threadStorageRoot, {
+      onChange: () => undefined,
+      onWatchError,
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(subscribeCallCount()).toBe(1);
+    expect(onWatchError).toHaveBeenCalledWith({
+      message: "path subscription unavailable",
+      rootPath: threadStorageRoot,
+    });
+
+    await vi.advanceTimersByTimeAsync(300);
+    await waitFor(
+      subscribeCallCount,
+      (count) => count === 2,
+    );
+
+    expect(rootPaths).toEqual([threadStorageRoot, threadStorageRoot]);
+
+    stopWatching();
+    vi.useRealTimers();
+  });
+
+  it("unsubscribes a late subscription if disposed during startup", async () => {
+    const threadStorageRoot = path.join("/tmp", "bb-watch-path-late");
+    const subscriptionDeferred =
+      createDeferredPromise<ParcelWatcherSubscribeResult>();
+    const { rootPaths, unsubscribe, watchPathChanges } =
+      await importWatchPathWithMockedWatcher({
+        pathExistsImplementation: async () => true,
+        subscribeImplementation: async () => subscriptionDeferred.promise,
+      });
+
+    const stopWatching = watchPathChanges(threadStorageRoot, {
+      onChange: () => undefined,
+      onWatchError: () => undefined,
+    });
+
+    await waitFor(
+      () => rootPaths.length,
+      (count) => count === 1,
+    );
+    stopWatching();
+    subscriptionDeferred.resolve({ unsubscribe });
+
+    await waitFor(
+      () => unsubscribe.mock.calls.length,
+      (callCount) => callCount === 1,
+    );
+
+    expect(unsubscribe).toHaveBeenCalledTimes(1);
   });
 
   it("coalesces repeated batches before flushing", async () => {

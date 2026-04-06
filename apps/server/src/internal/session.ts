@@ -1,4 +1,10 @@
-import { getHighWaterMarks, getActiveSession, openSession, upsertHost } from "@bb/db";
+import {
+  getActiveSession,
+  getHighWaterMarks,
+  listThreadEnvironmentAssignmentsOnHost,
+  openSession,
+  upsertHost,
+} from "@bb/db";
 import {
   hostDaemonSessionOpenRequestSchema,
   typedRoutes,
@@ -60,14 +66,20 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
       payload.activeThreads,
     );
 
+    const hostThreadIds = listHostThreadIds(deps.db, daemon.hostId);
+
     return context.json(
       {
         sessionId: session.id,
         heartbeatIntervalMs: HEARTBEAT_INTERVAL_MS,
         leaseTimeoutMs: LEASE_TIMEOUT_MS,
+        trackedThreadTargets: listThreadEnvironmentAssignmentsOnHost(deps.db, {
+          hostId: daemon.hostId,
+          threadIds: hostThreadIds,
+        }),
         threadHighWaterMarks: getHighWaterMarks(
           deps.db,
-          listHostThreadIds(deps.db, daemon.hostId),
+          hostThreadIds,
         ),
       },
       201,

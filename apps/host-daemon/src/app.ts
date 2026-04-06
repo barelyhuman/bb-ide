@@ -234,6 +234,9 @@ export async function createHostDaemonApp(
     onCommandsAvailable: () => commandFetchLoop.request(),
     onSessionOpened: (session) => {
       sessionState.value = session.sessionId;
+      runtimeManager.replaceTrackedThreadStorageTargets(
+        session.trackedThreadTargets,
+      );
       eventBuffer.seed(session.threadHighWaterMarks);
       void commandFetchLoop.request();
     },

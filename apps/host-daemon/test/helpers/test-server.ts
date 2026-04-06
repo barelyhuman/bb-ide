@@ -20,6 +20,7 @@ import {
   type HostDaemonEventEnvelope,
   type HostDaemonServerWsMessage,
   type HostDaemonSessionOpenRequest,
+  type HostDaemonTrackedThreadTarget,
 } from "@bb/host-daemon-contract";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
 
@@ -81,6 +82,7 @@ export interface CreateTestServerOptions {
   commandResultFailureStatus?: number;
   heartbeatIntervalMs?: number;
   leaseTimeoutMs?: number;
+  trackedThreadTargets?: HostDaemonTrackedThreadTarget[];
   threadHighWaterMarks?: Record<string, number>;
 }
 
@@ -170,6 +172,7 @@ export async function createTestServer(
         sessionId: `session-${nextSessionId++}`,
         heartbeatIntervalMs: options.heartbeatIntervalMs ?? 25,
         leaseTimeoutMs: options.leaseTimeoutMs ?? 1_000,
+        trackedThreadTargets: options.trackedThreadTargets ?? [],
         threadHighWaterMarks,
       },
       201,

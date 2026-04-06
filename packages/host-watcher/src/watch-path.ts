@@ -83,6 +83,7 @@ function collectTouchedTargetPaths(
 class PathChangeWatcher {
   private disposed = false;
   private readonly changedPaths = new Set<string>();
+  private missingTargetWarningReported = false;
   private retryAttempt = 0;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private subscription: ParcelWatcherAsyncSubscription | null = null;
@@ -157,6 +158,13 @@ class PathChangeWatcher {
     }
 
     if (!(await pathExists(this.targetPath))) {
+      if (!this.missingTargetWarningReported) {
+        this.missingTargetWarningReported = true;
+        this.args.onWatchError({
+          message: `Watched path does not exist yet: ${this.targetPath}`,
+          rootPath: this.targetPath,
+        });
+      }
       this.scheduleRetry();
       return;
     }
@@ -198,6 +206,7 @@ class PathChangeWatcher {
         });
         return;
       }
+      this.missingTargetWarningReported = false;
       this.retryAttempt = 0;
       this.subscription = subscription;
     } catch (error) {

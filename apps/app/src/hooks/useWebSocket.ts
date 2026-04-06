@@ -34,6 +34,25 @@ const INVALIDATION_MAX_WAIT_MS = 500;
 const TIMELINE_EVENT_REFETCH_INTERVAL_MS = 500;
 const ENVIRONMENT_INVALIDATION_DEBOUNCE_MS = 250;
 const ENVIRONMENT_INVALIDATION_MAX_WAIT_MS = 500;
+const PERSISTED_ENVIRONMENT_CHANGE_KINDS: readonly EnvironmentChangeKind[] = [
+  "environment-created",
+  "environment-deleted",
+  "metadata-changed",
+  "status-changed",
+];
+const WORKSPACE_STATE_CHANGE_KINDS: readonly EnvironmentChangeKind[] = [
+  "environment-created",
+  "environment-deleted",
+  "metadata-changed",
+  "status-changed",
+  "work-status-changed",
+];
+const BRANCH_LIST_CHANGE_KINDS: readonly EnvironmentChangeKind[] = [
+  "environment-created",
+  "environment-deleted",
+  "metadata-changed",
+  "status-changed",
+];
 
 interface ThreadChangeFlags {
   listChanged: boolean;
@@ -146,28 +165,24 @@ function environmentChangeKindsIncludeThreadStorage(
 function environmentChangeKindsIncludePersistedEnvironment(
   changeKinds: readonly EnvironmentChangeKind[],
 ): boolean {
-  return changeKinds.some(
-    (changeKind) =>
-      changeKind !== "work-status-changed" &&
-      changeKind !== "thread-storage-changed",
+  return changeKinds.some((changeKind) =>
+    PERSISTED_ENVIRONMENT_CHANGE_KINDS.includes(changeKind)
   );
 }
 
 function environmentChangeKindsIncludeWorkspaceState(
   changeKinds: readonly EnvironmentChangeKind[],
 ): boolean {
-  return changeKinds.some(
-    (changeKind) => changeKind !== "thread-storage-changed",
+  return changeKinds.some((changeKind) =>
+    WORKSPACE_STATE_CHANGE_KINDS.includes(changeKind)
   );
 }
 
 function environmentChangeKindsIncludeBranchList(
   changeKinds: readonly EnvironmentChangeKind[],
 ): boolean {
-  return changeKinds.some(
-    (changeKind) =>
-      changeKind !== "work-status-changed" &&
-      changeKind !== "thread-storage-changed",
+  return changeKinds.some((changeKind) =>
+    BRANCH_LIST_CHANGE_KINDS.includes(changeKind)
   );
 }
 

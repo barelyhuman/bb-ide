@@ -92,6 +92,7 @@ export {
   hostDaemonServerWsMessageSchema,
   hostDaemonSessionOpenRequestSchema,
   hostDaemonSessionOpenResponseSchema,
+  hostDaemonTrackedThreadTargetSchema,
   hostDaemonToolCallRequestSchema,
   hostDaemonToolCallResponseSchema,
   HOST_DAEMON_WEBSOCKET_PROTOCOL,
@@ -114,6 +115,7 @@ export type {
   HostDaemonServerWsMessage,
   HostDaemonSessionOpenRequest,
   HostDaemonSessionOpenResponse,
+  HostDaemonTrackedThreadTarget,
   HostDaemonToolCallRequest,
   HostDaemonToolCallResponse,
 } from "./session.js";

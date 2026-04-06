@@ -252,6 +252,68 @@ describe("useWebSocket", () => {
     });
   });
 
+  it("invalidates persisted environment, workspace, and branch queries for metadata changes", () => {
+    vi.useFakeTimers();
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+
+    renderHook(() => useWebSocket(), { wrapper });
+
+    act(() => {
+      changedCallbacks[0]?.({
+        changes: ["metadata-changed"],
+        entity: "environment",
+        id: "env-1",
+        type: "changed",
+      });
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: environmentQueryKey("env-1"),
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: environmentWorkStatusQueryKeyPrefix("env-1"),
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: environmentGitDiffQueryKeyPrefix("env-1"),
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: environmentMergeBaseBranchesQueryKeyPrefix("env-1"),
+    });
+  });
+
+  it("invalidates persisted environment, workspace, and branch queries for status changes", () => {
+    vi.useFakeTimers();
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+
+    renderHook(() => useWebSocket(), { wrapper });
+
+    act(() => {
+      changedCallbacks[0]?.({
+        changes: ["status-changed"],
+        entity: "environment",
+        id: "env-1",
+        type: "changed",
+      });
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: environmentQueryKey("env-1"),
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: environmentWorkStatusQueryKeyPrefix("env-1"),
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: environmentGitDiffQueryKeyPrefix("env-1"),
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: environmentMergeBaseBranchesQueryKeyPrefix("env-1"),
+    });
+  });
+
   it("invalidates both environment and thread storage queries when both change kinds are present", () => {
     vi.useFakeTimers();
     const { queryClient, wrapper } = createQueryClientTestHarness();

@@ -80,6 +80,14 @@ async function addDetachedWorktree(repoPath: string): Promise<string> {
   return worktreePath;
 }
 
+async function replaceDotGitWithSymlink(repoPath: string): Promise<void> {
+  const originalDotGitPath = path.join(repoPath, ".git");
+  const gitDirParent = await makeTempDir("bb-workspace-gitdir-");
+  const movedGitDirPath = path.join(gitDirParent, "gitdir");
+  await fs.rename(originalDotGitPath, movedGitDirPath);
+  await fs.symlink(movedGitDirPath, originalDotGitPath, "dir");
+}
+
 async function waitForCallCount(
   getCallCount: () => number,
   expectedCount: number,
@@ -485,6 +493,30 @@ describe("watchWorkspaceStatus", () => {
     try {
       await ready;
       await ensureCallCountStays(() => calls.length, 0);
+    } finally {
+      stopWatching();
+    }
+  });
+
+  it("keeps workspace root watching when git metadata watch resolution fails", async () => {
+    const repoPath = await initRepo();
+    await replaceDotGitWithSymlink(repoPath);
+    const { ready, watchWorkspaceStatus } = await importWatchWorkspaceStatusWithReadySignal({
+      expectedRootPaths: [repoPath],
+      workspaceRootPath: repoPath,
+    });
+    const calls: number[] = [];
+    const stopWatching = watchWorkspaceStatus(repoPath, {
+      onChange: () => {
+        calls.push(Date.now());
+      },
+      onWatchError: ignoreWatchError,
+    });
+
+    try {
+      await ready;
+      await fs.writeFile(path.join(repoPath, "README.md"), "symlink edit\n", "utf8");
+      await waitForCallCount(() => calls.length, 1, WATCH_TEST_TIMEOUT_MS);
     } finally {
       stopWatching();
     }

@@ -442,6 +442,43 @@ describe("RuntimeManager", () => {
     expect(stopWatchingPathChanges).toHaveBeenCalledTimes(1);
   });
 
+  it("watches tracked thread storage targets restored from session state", async () => {
+    let watchThreadStorageRootArgs: WatchThreadStorageRootArgs | undefined;
+    const { hostWatcher, watchThreadStorageRoot } = createFakeHostWatcher({
+      watchThreadStorageRootImplementation: (args) => {
+        watchThreadStorageRootArgs = args;
+        return () => undefined;
+      },
+    });
+    const onThreadStorageChanged = vi.fn();
+    const manager = new RuntimeManager({
+      hostWatcher,
+      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-storage"),
+      createRuntime: vi.fn(() => createFakeRuntime()),
+      onThreadStorageChanged,
+      threadStorageRootPath: "/tmp/bb-data/thread-storage",
+    });
+
+    manager.replaceTrackedThreadStorageTargets([
+      {
+        environmentId: "env-storage",
+        threadId: "thread-1",
+      },
+    ]);
+
+    expect(watchThreadStorageRoot).toHaveBeenCalledTimes(1);
+    watchThreadStorageRootArgs?.onChange({
+      kind: "thread-storage-changed",
+      environmentId: "env-storage",
+      threadId: "thread-1",
+    });
+
+    expect(onThreadStorageChanged).toHaveBeenCalledWith({
+      environmentId: "env-storage",
+      threadId: "thread-1",
+    });
+  });
+
   it("forwards thread storage watch failures for the shared root watcher", async () => {
     let watchThreadStorageRootArgs: WatchThreadStorageRootArgs | undefined;
     const { hostWatcher } = createFakeHostWatcher({
@@ -478,6 +515,41 @@ describe("RuntimeManager", () => {
         rootPath: "/tmp/bb-data/thread-storage",
       },
     });
+  });
+
+  it("keeps the shared thread storage watcher running while other environments still have tracked threads", async () => {
+    const stopWatchingPathChanges = vi.fn(() => undefined);
+    const { hostWatcher } = createFakeHostWatcher({
+      watchThreadStorageRootImplementation: (_args) => stopWatchingPathChanges,
+    });
+    const provisionWorkspace = createProvisionWorkspaceMock("/tmp/env-a");
+    provisionWorkspace
+      .mockResolvedValueOnce(createFakeWorkspace("/tmp/env-a"))
+      .mockResolvedValueOnce(createFakeWorkspace("/tmp/env-b"));
+    const manager = new RuntimeManager({
+      hostWatcher,
+      provisionWorkspace,
+      createRuntime: vi.fn(() => createFakeRuntime()),
+      threadStorageRootPath: "/tmp/bb-data/thread-storage",
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-a",
+      workspacePath: "/tmp/env-a",
+    });
+    await manager.ensureEnvironment({
+      environmentId: "env-b",
+      workspacePath: "/tmp/env-b",
+    });
+
+    manager.markThreadActive("env-a", "thread-a", "provider-a");
+    manager.markThreadActive("env-b", "thread-b", "provider-b");
+
+    await manager.destroyEnvironment("env-a");
+    expect(stopWatchingPathChanges).not.toHaveBeenCalled();
+
+    await manager.destroyEnvironment("env-b");
+    expect(stopWatchingPathChanges).toHaveBeenCalledTimes(1);
   });
 
   it("removes stale entries when the provider process exits", async () => {

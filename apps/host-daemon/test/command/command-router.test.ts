@@ -422,11 +422,15 @@ describe("CommandRouter", () => {
     ]);
   });
 
-  it("cleans up environment lanes after environment.destroy", async () => {
-    const workspace = createFakeWorkspace("/tmp/env-1");
+  it("allows subsequent commands after environment.destroy", async () => {
+    const destroyedWorkspace = createFakeWorkspace("/tmp/env-1");
+    const recreatedWorkspace = createFakeWorkspace("/tmp/env-1");
     const runtime = createFakeRuntime();
     const manager = new RuntimeManager({
-      provisionWorkspace: vi.fn(async () => workspace),
+      provisionWorkspace: vi
+        .fn()
+        .mockResolvedValueOnce(destroyedWorkspace)
+        .mockResolvedValueOnce(recreatedWorkspace),
       createRuntime: vi.fn(() => runtime),
     });
     await manager.ensureEnvironment({
@@ -451,11 +455,29 @@ describe("CommandRouter", () => {
       },
     ]);
 
-    const environmentLanes = Reflect.get(router, "environmentLanes");
-    expect(environmentLanes).toBeInstanceOf(Map);
-    expect(
-      environmentLanes instanceof Map && environmentLanes.has("env-1"),
-    ).toBe(false);
+    expect(manager.get("env-1")).toBeUndefined();
+
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+    await router.handleCommands([
+      {
+        id: "status",
+        cursor: 2,
+        command: {
+          type: "workspace.status",
+          environmentId: "env-1",
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged" as const,
+          },
+          mergeBaseBranch: "main",
+        },
+      },
+    ]);
+
+    expect(recreatedWorkspace.getStatus).toHaveBeenCalledTimes(1);
   });
 
   it("recovers result reporting after a transient report failure", async () => {

@@ -505,10 +505,22 @@ describe("host-daemon session schemas", () => {
         sessionId: "session_123",
         heartbeatIntervalMs: 5_000,
         leaseTimeoutMs: 30_000,
+        trackedThreadTargets: [
+          {
+            environmentId: "env_123",
+            threadId: "thr_123",
+          },
+        ],
         threadHighWaterMarks: { thr_123: 10 },
       }),
     ).toMatchObject({
       sessionId: "session_123",
+      trackedThreadTargets: [
+        {
+          environmentId: "env_123",
+          threadId: "thr_123",
+        },
+      ],
       threadHighWaterMarks: { thr_123: 10 },
     });
 

@@ -23,6 +23,14 @@ export const hostDaemonActiveThreadSchema = z.object({
 });
 export type HostDaemonActiveThread = z.infer<typeof hostDaemonActiveThreadSchema>;
 
+export const hostDaemonTrackedThreadTargetSchema = z.object({
+  environmentId: z.string().min(1),
+  threadId: z.string().min(1),
+});
+export type HostDaemonTrackedThreadTarget = z.infer<
+  typeof hostDaemonTrackedThreadTargetSchema
+>;
+
 export const hostDaemonSessionOpenRequestSchema = z.object({
   hostId: z.string().min(1),
   instanceId: z.string().min(1),
@@ -57,6 +65,7 @@ export const hostDaemonSessionOpenResponseSchema = z.object({
   sessionId: z.string().min(1),
   heartbeatIntervalMs: z.number().int().positive(),
   leaseTimeoutMs: z.number().int().positive(),
+  trackedThreadTargets: z.array(hostDaemonTrackedThreadTargetSchema),
   threadHighWaterMarks: z.record(z.string(), z.number().int().nonnegative()),
 });
 export type HostDaemonSessionOpenResponse = z.infer<

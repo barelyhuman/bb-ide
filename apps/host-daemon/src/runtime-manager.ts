@@ -4,7 +4,10 @@ import {
   type AgentRuntimeOptions,
 } from "@bb/agent-runtime";
 import type { ThreadEvent, WorkspaceProvisionType } from "@bb/domain";
-import type { HostDaemonActiveThread } from "@bb/host-daemon-contract";
+import type {
+  HostDaemonActiveThread,
+  HostDaemonTrackedThreadTarget,
+} from "@bb/host-daemon-contract";
 import type {
   HostWatcher,
   ThreadStorageWatchError,
@@ -91,6 +94,7 @@ export class RuntimeManager {
   private readonly provisionWorkspace;
   private readonly entries = new Map<string, RuntimeEntry>();
   private readonly pendingEntries = new Map<string, Promise<RuntimeEntry>>();
+  private readonly trackedThreadStorageTargets = new Map<string, ThreadStorageTarget>();
   private stopWatchingThreadStorageRoot: () => void = STOP_WATCHING;
 
   constructor(private readonly options: RuntimeManagerOptions = {}) {
@@ -135,6 +139,10 @@ export class RuntimeManager {
       providerThreadId,
       status: "active",
     });
+    this.trackedThreadStorageTargets.set(threadId, {
+      environmentId,
+      threadId,
+    });
     this.ensureThreadStorageWatcher();
   }
 
@@ -163,6 +171,23 @@ export class RuntimeManager {
       }
     }
     return activeThreads;
+  }
+
+  replaceTrackedThreadStorageTargets(
+    targets: readonly HostDaemonTrackedThreadTarget[],
+  ): void {
+    this.trackedThreadStorageTargets.clear();
+    for (const target of targets) {
+      this.trackedThreadStorageTargets.set(target.threadId, {
+        environmentId: target.environmentId,
+        threadId: target.threadId,
+      });
+    }
+    if (this.trackedThreadStorageTargets.size > 0) {
+      this.ensureThreadStorageWatcher();
+      return;
+    }
+    this.stopWatchingThreadStorageIfNoTrackedThreads();
   }
 
   async openWorkspace(path: string): Promise<HostWorkspace> {
@@ -203,8 +228,9 @@ export class RuntimeManager {
     }
 
     this.entries.delete(environmentId);
+    this.removeTrackedThreadStorageTargetsForEnvironment(environmentId);
     this.stopWatchingStatus(entry);
-    this.stopWatchingThreadStorageIfUnused();
+    this.stopWatchingThreadStorageIfNoTrackedThreads();
     await entry.runtime.shutdown();
     await entry.workspace.destroy();
   }
@@ -220,6 +246,7 @@ export class RuntimeManager {
     }
     this.entries.clear();
     this.pendingEntries.clear();
+    this.trackedThreadStorageTargets.clear();
 
     for (const entry of entries) {
       this.stopWatchingStatus(entry);
@@ -301,7 +328,7 @@ export class RuntimeManager {
           ) {
             this.stopWatchingStatus(current);
             this.entries.delete(args.environmentId);
-            this.stopWatchingThreadStorageIfUnused();
+            this.stopWatchingThreadStorageIfNoTrackedThreads();
           }
           this.options.onProcessExit?.(info);
         },
@@ -361,22 +388,22 @@ export class RuntimeManager {
   }
 
   private findTrackedThreadTarget(threadId: string): ThreadStorageTarget | null {
-    for (const [environmentId, entry] of this.entries) {
-      if (entry.threads.has(threadId)) {
-        return {
-          environmentId,
-          threadId,
-        };
-      }
-    }
-    return null;
+    return this.trackedThreadStorageTargets.get(threadId) ?? null;
   }
 
-  private stopWatchingThreadStorageIfUnused(): void {
-    for (const entry of this.entries.values()) {
-      if (entry.threads.size > 0) {
-        return;
+  private removeTrackedThreadStorageTargetsForEnvironment(
+    environmentId: string,
+  ): void {
+    for (const [threadId, target] of this.trackedThreadStorageTargets) {
+      if (target.environmentId === environmentId) {
+        this.trackedThreadStorageTargets.delete(threadId);
       }
+    }
+  }
+
+  private stopWatchingThreadStorageIfNoTrackedThreads(): void {
+    if (this.trackedThreadStorageTargets.size > 0) {
+      return;
     }
     const stopWatchingThreadStorageRoot = this.stopWatchingThreadStorageRoot;
     this.stopWatchingThreadStorageRoot = STOP_WATCHING;

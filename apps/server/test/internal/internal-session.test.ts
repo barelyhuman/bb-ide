@@ -89,11 +89,21 @@ describe("internal session routes", () => {
         heartbeatIntervalMs: number;
         leaseTimeoutMs: number;
         sessionId: string;
+        trackedThreadTargets: Array<{
+          environmentId: string;
+          threadId: string;
+        }>;
         threadHighWaterMarks: Record<string, number>;
       };
       expect(body).toMatchObject({
         heartbeatIntervalMs: 5_000,
         leaseTimeoutMs: 30_000,
+        trackedThreadTargets: [
+          {
+            environmentId: environment.id,
+            threadId: thread.id,
+          },
+        ],
         threadHighWaterMarks: {
           [thread.id]: 4,
         },

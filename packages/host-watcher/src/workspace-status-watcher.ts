@@ -1,3 +1,4 @@
+import path from "node:path";
 import parcelWatcher from "@parcel/watcher";
 import { calculateExponentialBackoffDelay } from "@bb/domain";
 import { createDebouncedCallbackScheduler } from "./watch-callback-scheduler.js";
@@ -108,12 +109,14 @@ export class WorkspaceStatusWatcher {
   }
 
   private async startAsync(): Promise<void> {
-    const metadataSpecs = await resolveMetadataWatchSpecs(this.args.cwd);
-    if (!metadataSpecs || this.disposed) {
+    if (!(await pathExists(path.join(this.args.cwd, ".git")))) {
+      return;
+    }
+    if (this.disposed) {
       return;
     }
     this.startWatchSubscription(createWorkspaceRootWatchSpec(this.args.cwd));
-    this.startMetadataWatchSubscriptions(metadataSpecs);
+    this.startMetadataWatchSubscriptions();
   }
 
   private stopSubscription(rootPath: string): void {
@@ -264,6 +267,7 @@ export class WorkspaceStatusWatcher {
         return;
       }
       if (!resolvedMetadataSpecs) {
+        this.scheduleMetadataWatchRetry();
         return;
       }
       this.metadataRetryAttempt = 0;
