@@ -1745,6 +1745,80 @@ describe("public thread routes", () => {
     }
   });
 
+  it("tombstones created threads that already have thread.start queued", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-delete-created-started",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/delete-created-started",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/delete-created-started",
+      });
+
+      const createResponse = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Start then delete me" }],
+          environment: {
+            type: "reuse",
+            environmentId: environment.id,
+          },
+        }),
+      });
+
+      expect(createResponse.status).toBe(201);
+      const createdThread = threadSchema.parse(await readJson(createResponse));
+      expect(createdThread.status).toBe("created");
+
+      const queuedStart = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start"
+          && command.threadId === createdThread.id,
+      );
+
+      const deleteResponse = await harness.app.request(
+        `/api/v1/threads/${createdThread.id}`,
+        {
+          method: "DELETE",
+        },
+      );
+
+      expect(deleteResponse.status).toBe(200);
+      expect(getThread(harness.db, createdThread.id)).toMatchObject({
+        deletedAt: expect.any(Number),
+        stopRequestedAt: expect.any(Number),
+      });
+      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(0);
+
+      const queuedStop = await waitForQueuedCommandAfter(
+        harness,
+        queuedStart.row.cursor,
+        ({ command }) =>
+          command.type === "thread.stop"
+          && command.threadId === createdThread.id,
+      );
+      expect(queuedStop.command).toMatchObject({
+        environmentId: environment.id,
+        threadId: createdThread.id,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("archives shared managed environments without prompting or queueing cleanup", async () => {
     const harness = await createTestAppHarness();
     try {

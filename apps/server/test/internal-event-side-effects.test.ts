@@ -3,6 +3,7 @@ import {
   createAutomation,
   deleteAutomation,
   getDraft,
+  getEnvironment,
   hostDaemonCommands,
   listDrafts,
   listManagerThreadNudgesByThread,
@@ -293,8 +294,10 @@ describe("internal event side effects", () => {
       const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
+        managed: true,
         projectId: project.id,
         path: "/tmp/auto-archive-environment",
+        workspaceProvisionType: "managed-worktree",
       });
       const automation = createAutomation(harness.db, harness.hub, {
         projectId: project.id,
@@ -360,6 +363,7 @@ describe("internal event side effects", () => {
           .where(eq(threads.id, thread.id))
           .get()?.archivedAt,
       ).toBeTypeOf("number");
+      expect(getEnvironment(harness.db, environment.id)?.cleanupRequestedAt).toBeTypeOf("number");
 
       deleteAutomation(harness.db, harness.hub, automation.id);
       harness.db.update(threads)

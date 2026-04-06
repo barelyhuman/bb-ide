@@ -149,6 +149,12 @@ export interface ReportCommandResultInput {
   resultPayload?: string | null;
 }
 
+export interface CancelCommandArgs {
+  commandId: string;
+  completedAt?: number;
+  resultPayload?: string | null;
+}
+
 /**
  * Report the result of a command execution.
  */
@@ -164,6 +170,26 @@ export function reportCommandResult(
       completedAt: input.completedAt,
     })
     .where(eq(hostDaemonCommands.id, input.commandId))
+    .returning()
+    .get() ?? null;
+}
+
+export function cancelCommand(
+  db: DbConnection,
+  args: CancelCommandArgs,
+) {
+  return db.update(hostDaemonCommands)
+    .set({
+      state: "error",
+      completedAt: args.completedAt ?? Date.now(),
+      resultPayload: args.resultPayload ?? null,
+    })
+    .where(
+      and(
+        eq(hostDaemonCommands.id, args.commandId),
+        inArray(hostDaemonCommands.state, ["pending", "fetched"]),
+      ),
+    )
     .returning()
     .get() ?? null;
 }

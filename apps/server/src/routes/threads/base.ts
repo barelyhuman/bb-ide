@@ -28,7 +28,10 @@ import {
 import {
   queueThreadRenameCommand,
 } from "../../services/thread-commands.js";
-import { requestThreadStop } from "../../services/thread-stop.js";
+import {
+  hasActiveThreadStartOperation,
+  requestThreadStop,
+} from "../../services/thread-stop.js";
 import { appendThreadOwnershipChangeEvent } from "../../services/thread-events.js";
 import { createThreadFromRequest } from "../../services/thread-create.js";
 export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
@@ -103,7 +106,8 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
   del("/threads/:id", async (context) => {
     const { environment, thread } = requirePublicThreadEnvironment(deps.db, context.req.param("id"));
     const connectedSession = getActiveSession(deps.db, environment.hostId);
-    if (thread.status !== "active" && connectedSession) {
+    const startRequested = hasActiveThreadStartOperation(deps, thread.id);
+    if (thread.status !== "active" && connectedSession && !startRequested) {
       deleteThread(deps.db, deps.hub, thread.id);
       requestEnvironmentCleanup(deps, {
         environmentId: thread.environmentId,
@@ -119,7 +123,7 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
       threadId: thread.id,
     });
 
-    if (thread.status === "active") {
+    if (thread.status === "active" || startRequested) {
       requestThreadStop(deps, {
         environmentId: environment.id,
         hostId: environment.hostId,

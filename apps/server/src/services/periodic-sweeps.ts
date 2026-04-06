@@ -26,6 +26,7 @@ import {
 } from "./project-deletion.js";
 import {
   advanceThreadStart,
+  finalizeStoppedThread,
   requestThreadStop,
 } from "./thread-stop.js";
 
@@ -194,20 +195,9 @@ export async function runThreadLifecycleSweep(
         continue;
       }
 
-      const stopOperation = listThreadOperations(deps.db, {
-        kinds: ["stop"],
-        states: [...activeLifecycleOperationStates],
-        threadIds: [thread.threadId],
-      })[0];
-      if (thread.stopRequestedAt === null || !stopOperation) {
-        continue;
-      }
-      if (thread.status !== "active") {
-        markThreadOperationCompleted(deps.db, {
-          threadId: thread.threadId,
-          kind: stopOperation.kind,
-        });
-      }
+      await finalizeStoppedThread(deps, {
+        threadId: thread.threadId,
+      });
     } catch (error) {
       deps.logger.warn(
         {

@@ -1,6 +1,5 @@
 import { and, desc, eq, or } from "drizzle-orm";
 import {
-  clearThreadStopRequested,
   applyProvisionedEnvironment,
   deleteThread,
   events,
@@ -8,7 +7,6 @@ import {
   getEnvironmentOperationByCommandId,
   getHost,
   getThread,
-  getThreadOperation,
   getThreadOperationByCommandId,
   hostDaemonCommands,
   markEnvironmentOperationCompleted,
@@ -30,9 +28,8 @@ import {
   buildCwdBranchEntries,
   parseStoredTurnRequestEvent,
   appendSystemErrorEvent,
-  appendThreadInterruptedEvent,
 } from "../services/thread-events.js";
-import { requestThreadStart } from "../services/thread-stop.js";
+import { finalizeStoppedThread, requestThreadStart } from "../services/thread-stop.js";
 import {
   advanceEnvironmentCleanup,
 } from "../services/environment-cleanup.js";
@@ -376,66 +373,10 @@ function handleThreadStopResult(
   if (operation?.state === "completed") {
     return Promise.resolve();
   }
-  return finalizeStoppedThread(deps, command.threadId);
-}
-
-async function finalizeStoppedThread(
-  deps: Pick<AppDeps, "db" | "hub">,
-  threadId: string,
-): Promise<void> {
-  const currentThread = getThread(deps.db, threadId);
-  if (!currentThread) {
-    return;
-  }
-
-  if (currentThread.status === "active") {
-    tryTransition(deps.db, deps.hub, currentThread.id, "idle");
-  }
-
-  const operation = getThreadOperation(deps.db, {
-    threadId,
-    kind: "stop",
-  });
-  if (operation) {
-    markThreadOperationCompleted(deps.db, {
-      threadId,
-      kind: operation.kind,
-    });
-  }
-
-  if (currentThread.stopRequestedAt !== null) {
-    clearThreadStopRequested(deps.db, deps.hub, currentThread.id);
-  }
-
-  const finalizedThread = getThread(deps.db, threadId);
-  if (!finalizedThread) {
-    return;
-  }
-
-  if (finalizedThread.deletedAt === null) {
-    appendThreadInterruptedEvent(deps, {
-      threadId: finalizedThread.id,
-      message: "Thread stopped by user request",
-    });
-  }
-
-  if (finalizedThread.deletedAt !== null) {
-    const environmentId = finalizedThread.environmentId;
-    deleteThread(deps.db, deps.hub, finalizedThread.id);
-    if (environmentId !== null) {
-      requestEnvironmentCleanup(deps.db, deps.hub, environmentId, {
-        cleanupMode: "force",
-      });
-    }
-    await advanceEnvironmentCleanup(deps, { environmentId });
-    return;
-  }
-
-  if (finalizedThread.archivedAt !== null) {
-    await advanceEnvironmentCleanup(deps, {
-      environmentId: finalizedThread.environmentId,
-    });
-  }
+  return finalizeStoppedThread(deps, {
+    threadId: command.threadId,
+    cancelPendingCommand: false,
+  }).then(() => undefined);
 }
 
 function handleThreadCommandFailure(

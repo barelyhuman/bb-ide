@@ -48,7 +48,7 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
       deps.hub.closeDaemonSession(existingSession.id, "replaced");
     }
 
-    reconcileSessionThreads(
+    await reconcileSessionThreads(
       deps,
       payload.hostId,
       payload.activeThreads,

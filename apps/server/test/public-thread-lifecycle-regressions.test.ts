@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import {
   createProjectSource,
+  markThreadOperationCompleted,
   hostDaemonCommands,
   listThreads,
   transitionThreadStatus,
@@ -316,8 +317,22 @@ describe("public thread lifecycle regressions", () => {
       const firstThreadBody = threadSchema.parse(await readJson(firstThread));
       const secondThreadBody = threadSchema.parse(await readJson(secondThread));
 
+      if (firstThreadBody.status === "created") {
+        markThreadOperationCompleted(harness.db, {
+          threadId: firstThreadBody.id,
+          kind: "start",
+        });
+        transitionThreadStatus(harness.db, harness.deps.hub, firstThreadBody.id, "idle");
+      }
       if (firstThreadBody.status === "active") {
         transitionThreadStatus(harness.db, harness.deps.hub, firstThreadBody.id, "idle");
+      }
+      if (secondThreadBody.status === "created") {
+        markThreadOperationCompleted(harness.db, {
+          threadId: secondThreadBody.id,
+          kind: "start",
+        });
+        transitionThreadStatus(harness.db, harness.deps.hub, secondThreadBody.id, "idle");
       }
       if (secondThreadBody.status === "active") {
         transitionThreadStatus(harness.db, harness.deps.hub, secondThreadBody.id, "idle");

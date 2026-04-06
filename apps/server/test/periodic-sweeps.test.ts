@@ -1,12 +1,14 @@
 import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import {
+  archiveThread,
   fetchCommands,
   getEnvironment,
   getHost,
   getThread,
   hostDaemonCommands,
   requestEnvironmentCleanup,
+  transitionThreadStatus,
   upsertEnvironmentOperation,
   upsertHost,
   upsertThreadOperation,
@@ -429,6 +431,77 @@ describe("periodic sweeps", () => {
       expect(retriedStop.command).toMatchObject({
         environmentId: environment.id,
         threadId: thread.id,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("finalizes archived stop-requested threads once they are no longer active", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-periodic-thread-stop-finalize",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/periodic-thread-stop-finalize",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        managed: true,
+        path: "/tmp/periodic-thread-stop-finalize",
+        projectId: project.id,
+        workspaceProvisionType: "managed-worktree",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      archiveThread(harness.db, harness.hub, thread.id);
+      requestEnvironmentCleanup(harness.db, harness.hub, environment.id, {
+        cleanupMode: "force",
+      });
+      requestThreadStop(harness.deps, {
+        environmentId: environment.id,
+        hostId: host.id,
+        stopRequestedAt: null,
+        threadId: thread.id,
+      });
+      const queuedStop = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.stop"
+          && command.threadId === thread.id,
+      );
+      transitionThreadStatus(harness.db, harness.hub, thread.id, "idle");
+
+      await runThreadLifecycleSweep(harness.deps);
+
+      expect(getThread(harness.db, thread.id)).toMatchObject({
+        archivedAt: expect.any(Number),
+        stopRequestedAt: null,
+      });
+      expect(
+        harness.db
+          .select({ state: hostDaemonCommands.state })
+          .from(hostDaemonCommands)
+          .where(eq(hostDaemonCommands.id, queuedStop.row.id))
+          .get(),
+      ).toEqual({ state: "error" });
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroying");
+
+      const destroyCommand = await waitForQueuedCommandAfter(
+        harness,
+        queuedStop.row.cursor,
+        ({ command }) =>
+          command.type === "environment.destroy"
+          && command.environmentId === environment.id,
+      );
+      expect(destroyCommand.command).toMatchObject({
+        environmentId: environment.id,
       });
     } finally {
       await harness.cleanup();

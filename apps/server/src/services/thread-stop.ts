@@ -1,8 +1,13 @@
 import {
+  cancelCommand,
+  clearThreadStopRequested,
+  deleteThread,
   getActiveSession,
   getCommand,
+  getThread,
   getThreadOperation,
   markThreadOperationQueued,
+  markThreadOperationCompleted,
   markThreadStopRequested,
   queueCommand,
   upsertThreadOperation,
@@ -19,6 +24,9 @@ import {
   threadStopCommandSchema,
 } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../types.js";
+import { advanceEnvironmentCleanup, requestEnvironmentCleanup } from "./environment-cleanup.js";
+import { appendThreadInterruptedEvent } from "./thread-events.js";
+import { tryTransition } from "./thread-transitions.js";
 import { getLastProviderThreadId } from "./thread-events.js";
 import {
   buildThreadStartCommand,
@@ -54,6 +62,11 @@ export interface RequestThreadStopArgs extends QueueThreadStopCommandArgs {
   stopRequestedAt: number | null;
 }
 
+export interface FinalizeStoppedThreadArgs {
+  cancelPendingCommand?: boolean;
+  threadId: string;
+}
+
 function hasQueuedThreadOperationCommand(
   deps: Pick<AppDeps, "db">,
   commandId: string | null,
@@ -65,6 +78,50 @@ function hasQueuedThreadOperationCommand(
   const command = getCommand(deps.db, commandId);
   return command !== null
     && (command.state === "pending" || command.state === "fetched");
+}
+
+function getActiveThreadOperation(
+  deps: Pick<AppDeps, "db">,
+  args: {
+    kind: "start" | "stop";
+    threadId: string;
+  },
+) {
+  const operation = getThreadOperation(deps.db, args);
+  if (!operation || !isActiveLifecycleOperationState(operation.state)) {
+    return null;
+  }
+
+  return operation;
+}
+
+function getThreadOperationCommandState(
+  deps: Pick<AppDeps, "db">,
+  commandId: string | null,
+): "pending" | "fetched" | "settled" | null {
+  if (!commandId) {
+    return null;
+  }
+
+  const command = getCommand(deps.db, commandId);
+  if (!command) {
+    return null;
+  }
+  if (command.state === "pending" || command.state === "fetched") {
+    return command.state;
+  }
+
+  return "settled";
+}
+
+export function hasActiveThreadStartOperation(
+  deps: Pick<AppDeps, "db">,
+  threadId: string,
+): boolean {
+  return getActiveThreadOperation(deps, {
+    threadId,
+    kind: "start",
+  }) !== null;
 }
 
 export async function requestThreadStart(
@@ -231,4 +288,89 @@ export function advanceThreadStop(
     commandId: queuedCommand.id,
   });
   return queuedCommand.id;
+}
+
+export async function finalizeStoppedThread(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: FinalizeStoppedThreadArgs,
+): Promise<boolean> {
+  const currentThread = getThread(deps.db, args.threadId);
+  if (!currentThread) {
+    return true;
+  }
+
+  const startOperation = getActiveThreadOperation(deps, {
+    threadId: args.threadId,
+    kind: "start",
+  });
+  if (startOperation) {
+    return false;
+  }
+
+  const stopOperation = getActiveThreadOperation(deps, {
+    threadId: args.threadId,
+    kind: "stop",
+  });
+  const stopCommandState = getThreadOperationCommandState(
+    deps,
+    stopOperation?.commandId ?? null,
+  );
+  if (stopCommandState === "fetched") {
+    return false;
+  }
+  if (
+    args.cancelPendingCommand !== false
+    && stopCommandState === "pending"
+    && stopOperation?.commandId
+  ) {
+    cancelCommand(deps.db, {
+      commandId: stopOperation.commandId,
+    });
+  }
+
+  if (currentThread.status === "active") {
+    tryTransition(deps.db, deps.hub, currentThread.id, "idle");
+  }
+
+  if (stopOperation) {
+    markThreadOperationCompleted(deps.db, {
+      threadId: args.threadId,
+      kind: stopOperation.kind,
+    });
+  }
+
+  if (currentThread.stopRequestedAt !== null) {
+    clearThreadStopRequested(deps.db, deps.hub, currentThread.id);
+  }
+
+  const finalizedThread = getThread(deps.db, args.threadId);
+  if (!finalizedThread) {
+    return true;
+  }
+
+  if (finalizedThread.deletedAt === null) {
+    appendThreadInterruptedEvent(deps, {
+      threadId: finalizedThread.id,
+      message: "Thread stopped by user request",
+    });
+  }
+
+  if (finalizedThread.deletedAt !== null) {
+    const environmentId = finalizedThread.environmentId;
+    deleteThread(deps.db, deps.hub, finalizedThread.id);
+    requestEnvironmentCleanup(deps, {
+      environmentId,
+      mode: "force",
+    });
+    await advanceEnvironmentCleanup(deps, { environmentId });
+    return true;
+  }
+
+  if (finalizedThread.archivedAt !== null) {
+    await advanceEnvironmentCleanup(deps, {
+      environmentId: finalizedThread.environmentId,
+    });
+  }
+
+  return true;
 }

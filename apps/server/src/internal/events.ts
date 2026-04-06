@@ -22,6 +22,10 @@ import {
   isAgePrunableThreadEventType,
   maybePruneActiveThreadEventHistory,
 } from "../services/event-pruning.js";
+import {
+  requestEnvironmentCleanup,
+  wouldCleanupEnvironment,
+} from "../services/environment-cleanup.js";
 import { syncManagerThreadSchedules } from "../services/manager-schedule-sync.js";
 import { sendNextQueuedDraftIfPresent } from "../services/queued-drafts.js";
 import { tryTransition } from "../services/thread-transitions.js";
@@ -148,17 +152,27 @@ function toStoredEvent(args: ToStoredEventArgs) {
   };
 }
 
-function archiveCompletedAutomationThreadIfNeeded(
+async function archiveCompletedAutomationThreadIfNeeded(
   deps: Pick<AppDeps, "db" | "hub">,
   args: ArchiveCompletedAutomationThreadIfNeededArgs,
-): void {
+): Promise<void> {
   if (args.turnStatus !== "completed" || !args.latestThread.automationId) {
     return;
   }
 
   const automation = getAutomation(deps.db, args.latestThread.automationId);
   if (automation?.autoArchive) {
+    const shouldRequestCleanup = wouldCleanupEnvironment(deps, {
+      environmentId: args.latestThread.environmentId,
+      excludeThreadId: args.latestThread.id,
+    });
     archiveThread(deps.db, deps.hub, args.latestThread.id);
+    if (shouldRequestCleanup) {
+      requestEnvironmentCleanup(deps, {
+        environmentId: args.latestThread.environmentId,
+        mode: "safe",
+      });
+    }
   }
 }
 
@@ -203,7 +217,7 @@ async function applyEventEffects(
                 threadId: latestThread.id,
               });
             }
-            archiveCompletedAutomationThreadIfNeeded(deps, {
+            await archiveCompletedAutomationThreadIfNeeded(deps, {
               latestThread,
               turnStatus: event.status,
             });

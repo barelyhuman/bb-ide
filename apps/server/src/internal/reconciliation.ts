@@ -1,6 +1,5 @@
 import { and, eq, inArray, isNotNull, isNull, notInArray, or } from "drizzle-orm";
 import {
-  clearThreadStopRequested,
   deleteThread,
   environments,
   getThreadOperation,
@@ -11,14 +10,14 @@ import {
 import type { HostDaemonActiveThread } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../types.js";
 import { advanceEnvironmentCleanup } from "../services/environment-cleanup.js";
-import { requestThreadStop } from "../services/thread-stop.js";
+import { finalizeStoppedThread, requestThreadStop } from "../services/thread-stop.js";
 import { tryTransition } from "../services/thread-transitions.js";
 
-export function reconcileSessionThreads(
+export async function reconcileSessionThreads(
   deps: Pick<AppDeps, "db" | "hub">,
   hostId: string,
   activeThreads: HostDaemonActiveThread[],
-): void {
+): Promise<void> {
   const activeThreadIds = activeThreads.map((thread) => thread.threadId);
 
   const pendingThreads = deps.db
@@ -35,7 +34,7 @@ export function reconcileSessionThreads(
     .where(
       and(
         eq(environments.hostId, hostId),
-        inArray(threads.status, ["active", "idle", "error", "provisioning"]),
+        inArray(threads.status, ["active", "created", "idle", "error", "provisioning"]),
         or(isNotNull(threads.deletedAt), isNotNull(threads.stopRequestedAt)),
       ),
     )
@@ -55,26 +54,11 @@ export function reconcileSessionThreads(
     }
 
     if (thread.stopRequestedAt !== null && !isActive) {
-      if (thread.status === "active") {
-        tryTransition(deps.db, deps.hub, thread.id, "idle");
-      }
-
-      const stopOperation = getThreadOperation(deps.db, {
+      const finalized = await finalizeStoppedThread(deps, {
         threadId: thread.id,
-        kind: "stop",
       });
-      if (stopOperation) {
-        markThreadOperationCompleted(deps.db, {
-          threadId: thread.id,
-          kind: stopOperation.kind,
-        });
-      }
-      clearThreadStopRequested(deps.db, deps.hub, thread.id);
-
-      if (thread.archivedAt !== null) {
-        void advanceEnvironmentCleanup(deps, {
-          environmentId: thread.environmentId,
-        });
+      if (finalized) {
+        continue;
       }
     }
 
