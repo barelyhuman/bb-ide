@@ -60,15 +60,6 @@ export interface AdvanceEnvironmentProvisioningArgs {
   environmentId: string | null | undefined;
 }
 
-export interface EnvironmentProvisioningMutationArgs {
-  environmentId: string;
-}
-
-export interface FailEnvironmentProvisioningArgs
-  extends EnvironmentProvisioningMutationArgs {
-  failureReason: string;
-}
-
 export interface EnvironmentProvisioningCommandMutationArgs {
   commandId: string;
 }
@@ -145,7 +136,7 @@ function hasQueuedProvisionCommand(
 
 export function completeEnvironmentProvisioning(
   deps: Pick<AppDeps, "db">,
-  args: EnvironmentProvisioningMutationArgs,
+  args: { environmentId: string },
 ): boolean {
   const operation = getActiveProvisionOperation(deps, args.environmentId);
   if (!operation) {
@@ -180,33 +171,6 @@ export function completeEnvironmentProvisioningForCommand(
     kind: operation.kind,
   });
   return true;
-}
-
-export function failEnvironmentProvisioning(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: FailEnvironmentProvisioningArgs,
-): boolean {
-  const operation = getActiveProvisionOperation(deps, args.environmentId);
-  if (operation) {
-    markEnvironmentOperationRecordFailed(deps.db, {
-      environmentId: args.environmentId,
-      kind: operation.kind,
-      failureReason: args.failureReason,
-    });
-  }
-
-  const environment = getEnvironment(deps.db, args.environmentId);
-  if (
-    environment
-    && environment.status !== "destroyed"
-    && environment.status !== "error"
-  ) {
-    setEnvironmentStatus(deps.db, deps.hub, args.environmentId, {
-      status: "error",
-    });
-  }
-
-  return operation !== null || environment !== null;
 }
 
 export function failEnvironmentProvisioningForCommand(

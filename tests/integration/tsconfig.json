@@ -7,8 +7,7 @@
     "declarationMap": false,
     "outDir": "dist",
     "paths": {
-      "@bb/host-daemon/test": ["apps/host-daemon/src/test/index.ts"],
-      "@bb/server/test": ["apps/server/src/test/index.ts"]
+      "@bb/host-daemon/test": ["apps/host-daemon/src/test/index.ts"]
     },
     "rootDir": "../..",
     "sourceMap": false,

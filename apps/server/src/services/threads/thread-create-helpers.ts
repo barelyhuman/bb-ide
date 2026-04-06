@@ -4,7 +4,6 @@ import {
   getProjectSourceByHost,
   getProject,
   getThread,
-  queueCommand,
 } from "@bb/db";
 import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import type {
@@ -12,7 +11,6 @@ import type {
 } from "@bb/domain";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
-import { requireConnectedHostSession } from "../lib/entity-lookup.js";
 import type { ThreadCreateServiceRequest } from "./thread-create-request.js";
 import { deriveTitleFallback } from "./title-generation.js";
 
@@ -149,20 +147,6 @@ export function buildEnvironmentProvisionCommand(
           setupTimeoutMs: args.setupTimeoutMs,
         }
   );
-}
-
-export function queueEnvironmentProvision(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: EnvironmentProvisionCommandArgs,
-): void {
-  const session = requireConnectedHostSession(deps, args.hostId);
-  const payload = buildEnvironmentProvisionCommand(args);
-  queueCommand(deps.db, deps.hub, {
-    hostId: args.hostId,
-    sessionId: session.id,
-    type: "environment.provision",
-    payload: JSON.stringify(payload),
-  });
 }
 
 export function createThreadRecord(

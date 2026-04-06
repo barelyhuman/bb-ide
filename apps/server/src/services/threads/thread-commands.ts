@@ -1,6 +1,5 @@
 import {
   getActiveSession,
-  hasPendingHostCommandForThread,
   queueCommand,
   queueCommandInTransaction,
   transitionThreadStatus,
@@ -135,20 +134,6 @@ export async function buildThreadStartCommand(
     instructions: runtimeContext.instructions,
     dynamicTools: runtimeContext.dynamicTools,
   };
-}
-
-export async function queueThreadStartCommand(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: QueueThreadStartCommandArgs,
-): Promise<void> {
-  const session = requireConnectedHostSession(deps, args.environment.hostId);
-  const command = await buildThreadStartCommand(deps, args);
-  queueCommand(deps.db, deps.hub, {
-    hostId: args.environment.hostId,
-    sessionId: session.id,
-    type: command.type,
-    payload: JSON.stringify(command),
-  });
 }
 
 function buildPreparedTurnRunCommandPayload(
@@ -342,28 +327,6 @@ export function queueThreadRenameCommand(
       threadId: args.threadId,
       title: args.title,
     }),
-  });
-}
-
-export function queueThreadStopCommand(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: QueueThreadStopCommandArgs,
-): void {
-  if (hasPendingHostCommandForThread(deps.db, {
-    hostId: args.hostId,
-    threadId: args.threadId,
-    type: "thread.stop",
-  })) {
-    return;
-  }
-
-  const session = getActiveSession(deps.db, args.hostId);
-  const command = buildThreadStopCommand(args);
-  queueCommand(deps.db, deps.hub, {
-    hostId: args.hostId,
-    sessionId: session?.id ?? null,
-    type: command.type,
-    payload: JSON.stringify(command),
   });
 }
 

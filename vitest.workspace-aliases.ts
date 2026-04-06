@@ -35,10 +35,6 @@ export const workspaceTestAliases = {
     repoRoot,
     "apps/host-daemon/src/test/index.ts",
   ),
-  "@bb/server/test": path.resolve(
-    repoRoot,
-    "apps/server/src/test/index.ts",
-  ),
   "@bb/server": path.resolve(repoRoot, "apps/server/src/index.ts"),
   "@bb/cli": path.resolve(repoRoot, "apps/cli/src/index.ts"),
   "@bb/logger": path.resolve(repoRoot, "packages/logger/src/index.ts"),

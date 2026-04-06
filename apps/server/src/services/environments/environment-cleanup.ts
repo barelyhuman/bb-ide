@@ -47,15 +47,6 @@ export interface RequestEnvironmentCleanupArgs {
   mode: EnvironmentCleanupMode;
 }
 
-export interface EnvironmentCleanupMutationArgs {
-  environmentId: string;
-}
-
-export interface FailEnvironmentCleanupArgs
-  extends EnvironmentCleanupMutationArgs {
-  failureReason: string;
-}
-
 export interface EnvironmentCleanupCommandMutationArgs {
   commandId: string;
 }
@@ -258,23 +249,6 @@ export function hasActiveEnvironmentDestroyOperationForCommand(
   return getActiveDestroyOperationByCommandId(deps, args.commandId) !== null;
 }
 
-export function completeEnvironmentDestroy(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: EnvironmentCleanupMutationArgs,
-): boolean {
-  const environment = getEnvironment(deps.db, args.environmentId);
-  if (!environment || environment.status !== "destroying") {
-    return false;
-  }
-
-  setEnvironmentRecordDestroyed(deps.db, deps.hub, args.environmentId);
-  markEnvironmentOperationRecordCompleted(deps.db, {
-    environmentId: args.environmentId,
-    kind: "destroy",
-  });
-  return true;
-}
-
 export function completeEnvironmentDestroyForCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: EnvironmentCleanupCommandMutationArgs,
@@ -293,26 +267,6 @@ export function completeEnvironmentDestroyForCommand(
   markEnvironmentOperationRecordCompleted(deps.db, {
     environmentId: operation.environmentId,
     kind: operation.kind,
-  });
-  return true;
-}
-
-export function failEnvironmentDestroy(
-  deps: Pick<AppDeps, "db" | "hub">,
-  args: FailEnvironmentCleanupArgs,
-): boolean {
-  const environment = getEnvironment(deps.db, args.environmentId);
-  if (!environment || environment.status !== "destroying") {
-    return false;
-  }
-
-  markEnvironmentOperationRecordFailed(deps.db, {
-    environmentId: args.environmentId,
-    kind: "destroy",
-    failureReason: args.failureReason,
-  });
-  setEnvironmentStatus(deps.db, deps.hub, args.environmentId, {
-    status: environment.path ? "ready" : "error",
   });
   return true;
 }
@@ -390,7 +344,7 @@ export function requestEnvironmentCleanup(
   });
 }
 
-export function queueEnvironmentDestroyCommand(
+function queueEnvironmentDestroyCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   environment: EnvironmentDestroyTarget,
 ) {

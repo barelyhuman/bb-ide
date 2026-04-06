@@ -16,12 +16,20 @@ import {
 } from "@bb/host-daemon/test";
 import { createHostDaemonClient } from "@bb/host-daemon-contract";
 import {
-  createApp,
   createSandboxHostRegistry,
+} from "../../../apps/server/src/services/hosts/sandbox-registry.js";
+import {
   initDb,
+} from "../../../apps/server/src/db.js";
+import {
+  createApp,
+} from "../../../apps/server/src/server.js";
+import type {
+  ServerRuntimeConfig,
+} from "../../../apps/server/src/types.js";
+import {
   NotificationHub,
-  type ServerRuntimeConfig,
-} from "@bb/server/test";
+} from "../../../apps/server/src/ws/hub.js";
 import { createPublicApiClient } from "@bb/server-contract";
 import { waitForHostConnected } from "./assertions.js";
 import { removePathWithRetry } from "./remove-path.js";

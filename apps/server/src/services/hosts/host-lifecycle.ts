@@ -6,13 +6,9 @@ import {
 } from "@bb/db";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
-import { requireReachablePublicServerUrl } from "./public-server-url.js";
 import { requireSandboxBackendForHost } from "./sandbox-backends.js";
 
 const DEFAULT_SESSION_WAIT_TIMEOUT_MS = 60_000;
-
-type HostRecord = NonNullable<ReturnType<typeof getHost>>;
-type ResumableSandboxHostRecord = HostRecord & { externalId: string };
 
 interface HostDestroyDeduper {
   run(hostId: string, destroy: () => Promise<void>): Promise<void>;
@@ -22,11 +18,7 @@ export interface WaitForHostSessionOptions {
   timeoutMs?: number;
 }
 
-function hasExternalId(host: HostRecord): host is ResumableSandboxHostRecord {
-  return host.externalId !== null;
-}
-
-export function createHostDestroyDeduper(): HostDestroyDeduper {
+function createHostDestroyDeduper(): HostDestroyDeduper {
   const pendingHostDestroys = new Map<string, Promise<void>>();
 
   return {
@@ -72,73 +64,6 @@ export async function waitForHostSession(
     }
     await deps.hub.waitForHostEvent(hostId, remainingMs);
   }
-}
-
-async function loadSandboxHost(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "sandboxRegistry">,
-  hostId: string,
-) {
-  const host = getHost(deps.db, hostId);
-  if (!host || host.destroyedAt !== null) {
-    deps.sandboxRegistry.remove(hostId);
-    return null;
-  }
-
-  const cached = deps.sandboxRegistry.get(hostId);
-  if (cached) {
-    return cached;
-  }
-
-  if (!hasExternalId(host)) {
-    return null;
-  }
-  return loadSandboxHostFromBackend(deps, host, "getOrCreate");
-}
-
-function loadSandboxHostFromBackend(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "sandboxRegistry">,
-  host: ResumableSandboxHostRecord,
-  mode: "getOrCreate" | "refresh",
-) {
-  const sandboxBackend = requireSandboxBackendForHost(host);
-  const loadHost = async () =>
-    sandboxBackend.resumeHost({
-      config: deps.config,
-      externalId: host.externalId,
-      hostId: host.id,
-      hostName: host.name,
-      serverUrl: requireReachablePublicServerUrl(deps.config),
-    });
-
-  if (mode === "refresh") {
-    return deps.sandboxRegistry.refresh(host.id, loadHost);
-  }
-  return deps.sandboxRegistry.getOrCreate(host.id, loadHost);
-}
-
-export async function suspendIdleHost(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "sandboxRegistry">,
-  hostId: string,
-): Promise<void> {
-  const host = await loadSandboxHost(deps, hostId);
-  if (host) {
-    await host.suspend();
-    // Force the next resume through the canonical backend readiness path.
-    deps.sandboxRegistry.remove(hostId);
-  }
-}
-
-export async function resumeSuspendedHost(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "sandboxRegistry">,
-  hostId: string,
-) {
-  const hostRecord = getHost(deps.db, hostId);
-  if (!hostRecord || hostRecord.destroyedAt !== null || !hasExternalId(hostRecord)) {
-    deps.sandboxRegistry.remove(hostId);
-    throw new ApiError(404, "host_not_found", "Host not found");
-  }
-
-  return loadSandboxHostFromBackend(deps, hostRecord, "refresh");
 }
 
 export async function destroyHost(

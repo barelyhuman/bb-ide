@@ -3,12 +3,6 @@
   "version": "0.0.1",
   "type": "module",
   "private": true,
-  "exports": {
-    "./test": {
-      "import": "./dist/test/index.js",
-      "types": "./dist/test/index.d.ts"
-    }
-  },
   "scripts": {
     "build": "tsc",
     "bench": "vitest bench --config vitest.config.ts",

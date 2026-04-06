@@ -77,10 +77,6 @@ export interface ThreadOperationMutationArgs {
   threadId: string;
 }
 
-export interface FailThreadOperationArgs extends ThreadOperationMutationArgs {
-  failureReason: string;
-}
-
 export interface ThreadOperationCommandMutationArgs {
   commandId: string;
 }
@@ -236,27 +232,6 @@ function completeThreadOperationForCommand(
   return true;
 }
 
-function failThreadOperation(
-  deps: Pick<AppDeps, "db">,
-  args: {
-    failureReason: string;
-    kind: "start" | "stop";
-    threadId: string;
-  },
-): boolean {
-  const operation = getActiveThreadOperation(deps, args);
-  if (!operation) {
-    return false;
-  }
-
-  markThreadOperationRecordFailed(deps.db, {
-    threadId: args.threadId,
-    kind: operation.kind,
-    failureReason: args.failureReason,
-  });
-  return true;
-}
-
 function failThreadOperationForCommand(
   deps: Pick<AppDeps, "db">,
   args: {
@@ -298,17 +273,6 @@ export function completeThreadStartForCommand(
   });
 }
 
-export function failThreadStart(
-  deps: Pick<AppDeps, "db">,
-  args: FailThreadOperationArgs,
-): boolean {
-  return failThreadOperation(deps, {
-    threadId: args.threadId,
-    kind: "start",
-    failureReason: args.failureReason,
-  });
-}
-
 export function failThreadStartForCommand(
   deps: Pick<AppDeps, "db">,
   args: FailThreadOperationForCommandArgs,
@@ -316,17 +280,6 @@ export function failThreadStartForCommand(
   return failThreadOperationForCommand(deps, {
     commandId: args.commandId,
     kind: "start",
-    failureReason: args.failureReason,
-  });
-}
-
-export function failThreadStop(
-  deps: Pick<AppDeps, "db">,
-  args: FailThreadOperationArgs,
-): boolean {
-  return failThreadOperation(deps, {
-    threadId: args.threadId,
-    kind: "stop",
     failureReason: args.failureReason,
   });
 }

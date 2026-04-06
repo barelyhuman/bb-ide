@@ -1,4 +1,3 @@
-import { setTimeout as delay } from "node:timers/promises";
 import {
   getHost,
   openSession,
@@ -7,12 +6,11 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   destroyHost,
-  resumeSuspendedHost,
-  suspendIdleHost,
   waitForHostSession,
 } from "../../src/services/hosts/host-lifecycle.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
+const provisionHostMock = vi.fn();
 const resumeHostMock = vi.fn();
 const resumeSandboxMock = vi.fn();
 type SandboxHostMockArgs = Array<object | string | undefined>;
@@ -21,6 +19,7 @@ type SandboxHostMockArgs = Array<object | string | undefined>;
 // Package-level tests cover the E2B mechanics directly; these tests focus on
 // server lifecycle policy and orchestration.
 vi.mock("@bb/sandbox-host", () => ({
+  provisionHost: (...args: SandboxHostMockArgs) => provisionHostMock(...args),
   resumeHost: (...args: SandboxHostMockArgs) => resumeHostMock(...args),
   resumeSandbox: (...args: SandboxHostMockArgs) => resumeSandboxMock(...args),
 }));
@@ -34,11 +33,10 @@ interface MockSandboxHost {
   suspend: ReturnType<typeof vi.fn>;
 }
 
-interface MockResumedSandbox {
-  kill: ReturnType<typeof vi.fn>;
-}
-
-function createMockSandboxHost(hostId: string, externalId = "sandbox-123"): MockSandboxHost {
+function createMockSandboxHost(
+  hostId: string,
+  externalId = "sandbox-123",
+): MockSandboxHost {
   return {
     destroy: vi.fn().mockResolvedValue(undefined),
     extendTimeout: vi.fn().mockResolvedValue(undefined),
@@ -49,15 +47,10 @@ function createMockSandboxHost(hostId: string, externalId = "sandbox-123"): Mock
   };
 }
 
-function createMockResumedSandbox(): MockResumedSandbox {
-  return {
-    kill: vi.fn().mockResolvedValue(undefined),
-  };
-}
-
 describe("host lifecycle", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    provisionHostMock.mockReset();
     resumeHostMock.mockReset();
     resumeSandboxMock.mockReset();
   });
@@ -186,145 +179,6 @@ describe("host lifecycle", () => {
     }
   });
 
-  it("suspends a cached sandbox host", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const hostRow = upsertHost(harness.db, harness.hub, {
-        externalId: "sandbox-cached-suspend",
-        id: "host-cached-suspend",
-        name: "Cached Suspend Host",
-        provider: "e2b",
-        type: "ephemeral",
-      });
-      const host = createMockSandboxHost(hostRow.id, hostRow.externalId ?? undefined);
-      harness.deps.sandboxRegistry.set(hostRow.id, host);
-
-      await suspendIdleHost(harness.deps, hostRow.id);
-
-      expect(host.suspend).toHaveBeenCalledTimes(1);
-      expect(harness.deps.sandboxRegistry.get(hostRow.id)).toBeUndefined();
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("resumes a sandbox host through the backend path even when cached", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const hostRow = upsertHost(harness.db, harness.hub, {
-        externalId: "sandbox-cached-resume",
-        id: "host-cached-resume",
-        name: "Cached Resume Host",
-        provider: "e2b",
-        type: "ephemeral",
-      });
-      const cachedHost = createMockSandboxHost(hostRow.id, hostRow.externalId ?? undefined);
-      const resumedHost = createMockSandboxHost(hostRow.id, hostRow.externalId ?? undefined);
-      harness.deps.sandboxRegistry.set(hostRow.id, cachedHost);
-      resumeHostMock.mockResolvedValue(resumedHost);
-
-      const resumed = await resumeSuspendedHost(harness.deps, hostRow.id);
-
-      expect(cachedHost.resume).not.toHaveBeenCalled();
-      expect(resumeHostMock).toHaveBeenCalledWith({
-        apiKey: "test-e2b-api-key",
-        authToken: harness.config.authToken,
-        daemonEnv: {
-          OPENAI_API_KEY: "test-openai-key",
-        },
-        externalId: "sandbox-cached-resume",
-        hostId: hostRow.id,
-        hostName: hostRow.name,
-        serverUrl: harness.config.publicUrl,
-      });
-      expect(resumed).toBe(resumedHost);
-      expect(harness.deps.sandboxRegistry.get(hostRow.id)).toBe(resumedHost);
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("does not resume a destroyed sandbox host", async () => {
-    const harness = await createTestAppHarness({ e2bApiKey: "" });
-    try {
-      const host = upsertHost(harness.db, harness.hub, {
-        destroyedAt: Date.now(),
-        externalId: "sandbox-destroyed",
-        id: "host-destroyed",
-        name: "Destroyed Host",
-        provider: "e2b",
-        type: "ephemeral",
-      });
-
-      await expect(resumeSuspendedHost(harness.deps, host.id)).rejects.toMatchObject({
-        body: {
-          code: "host_not_found",
-        },
-        status: 404,
-      });
-      expect(resumeHostMock).not.toHaveBeenCalled();
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("returns host_not_found when resuming a missing sandbox host", async () => {
-    const harness = await createTestAppHarness({ e2bApiKey: "" });
-    try {
-      await expect(resumeSuspendedHost(harness.deps, "host-missing")).rejects.toMatchObject({
-        body: {
-          code: "host_not_found",
-        },
-        status: 404,
-      });
-      expect(resumeHostMock).not.toHaveBeenCalled();
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("deduplicates concurrent sandbox host resumes", async () => {
-    const harness = await createTestAppHarness({ e2bApiKey: "" });
-    try {
-      const host = upsertHost(harness.db, harness.hub, {
-        externalId: "sandbox-concurrent",
-        id: "host-concurrent",
-        name: "Concurrent Host",
-        provider: "e2b",
-        type: "ephemeral",
-      });
-      const resumedHost = createMockSandboxHost(host.id, host.externalId ?? undefined);
-      resumeHostMock.mockImplementation(async () => {
-        await delay(1_000);
-        return resumedHost;
-      });
-
-      const firstResume = resumeSuspendedHost(harness.deps, host.id);
-      const secondResume = resumeSuspendedHost(harness.deps, host.id);
-
-      await vi.advanceTimersByTimeAsync(1_000);
-      const [firstHost, secondHost] = await Promise.all([firstResume, secondResume]);
-
-      expect(resumeHostMock).toHaveBeenCalledTimes(1);
-      expect(resumeHostMock).toHaveBeenCalledWith({
-        apiKey: undefined,
-        authToken: harness.config.authToken,
-        daemonEnv: {
-          OPENAI_API_KEY: "test-openai-key",
-        },
-        externalId: "sandbox-concurrent",
-        hostId: host.id,
-        hostName: host.name,
-        serverUrl: harness.config.publicUrl,
-      });
-      expect(firstHost).toBe(resumedHost);
-      expect(secondHost).toBe(resumedHost);
-      expect(harness.deps.sandboxRegistry.get(host.id)).toBe(resumedHost);
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
   it("destroys a cached sandbox host and marks it destroyed", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -361,7 +215,9 @@ describe("host lifecycle", () => {
         provider: "e2b",
         type: "ephemeral",
       });
-      const resumedSandbox = createMockResumedSandbox();
+      const resumedSandbox = {
+        kill: vi.fn().mockResolvedValue(undefined),
+      };
       resumeSandboxMock.mockResolvedValue(resumedSandbox);
 
       await destroyHost(harness.deps, host.id);
@@ -401,7 +257,7 @@ describe("host lifecycle", () => {
     }
   });
 
-  it("throws when an ephemeral sandbox host is missing a backend provider", async () => {
+  it("throws when a sandbox host is missing a backend provider during destroy", async () => {
     const harness = await createTestAppHarness({ e2bApiKey: "" });
     try {
       const host = upsertHost(harness.db, harness.hub, {
@@ -411,14 +267,14 @@ describe("host lifecycle", () => {
         type: "ephemeral",
       });
 
-      await expect(resumeSuspendedHost(harness.deps, host.id)).rejects.toMatchObject({
+      await expect(destroyHost(harness.deps, host.id)).rejects.toMatchObject({
         body: {
           code: "internal_error",
           message: `Sandbox host ${host.id} is missing a backend provider`,
         },
         status: 500,
       });
-      expect(resumeHostMock).not.toHaveBeenCalled();
+      expect(resumeSandboxMock).not.toHaveBeenCalled();
     } finally {
       await harness.cleanup();
     }
@@ -474,51 +330,6 @@ describe("host lifecycle", () => {
       await Promise.all([firstDestroy, secondDestroy]);
       expect(getHost(harness.db, host.id)).toMatchObject({
         destroyedAt: expect.any(Number),
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("clears a concurrently cached host after uncached destroy completes", async () => {
-    const harness = await createTestAppHarness({ e2bApiKey: "" });
-    try {
-      const host = upsertHost(harness.db, harness.hub, {
-        externalId: "sandbox-racy-destroy",
-        id: "host-racy-destroy",
-        name: "Destroy Host",
-        provider: "e2b",
-        type: "ephemeral",
-      });
-      let resolveKill: (() => void) | null = null;
-      const killPromise = new Promise<void>((resolve) => {
-        resolveKill = resolve;
-      });
-      const resumedSandbox = {
-        kill: vi.fn().mockImplementation(async () => killPromise),
-      };
-      const resumedHost = createMockSandboxHost(host.id, host.externalId ?? undefined);
-      resumeSandboxMock.mockResolvedValue(resumedSandbox);
-      resumeHostMock.mockResolvedValue(resumedHost);
-
-      const destroying = destroyHost(harness.deps, host.id);
-      await Promise.resolve();
-
-      const loading = resumeSuspendedHost(harness.deps, host.id);
-      await Promise.resolve();
-      await loading;
-      expect(harness.deps.sandboxRegistry.get(host.id)).toBe(resumedHost);
-
-      if (!resolveKill) {
-        throw new Error("Expected destroy to start kill");
-      }
-      resolveKill();
-      await destroying;
-
-      expect(harness.deps.sandboxRegistry.get(host.id)).toBeUndefined();
-      expect(getHost(harness.db, host.id)).toMatchObject({
-        destroyedAt: expect.any(Number),
-        externalId: "sandbox-racy-destroy",
       });
     } finally {
       await harness.cleanup();
