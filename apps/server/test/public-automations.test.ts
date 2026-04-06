@@ -1,4 +1,4 @@
-import { createAutomation, createProjectSource } from "@bb/db";
+import { createAutomation, createProjectSource, getAutomation } from "@bb/db";
 import {
   automationSchema,
   AUTOMATION_NAME_MAX_LENGTH,
@@ -828,6 +828,84 @@ describe("public automation routes", () => {
         validationIssues: [
           "Schedule must not run more frequently than every 5 minutes",
         ],
+      });
+    } finally {
+      vi.useRealTimers();
+      await harness.cleanup();
+    }
+  });
+
+  it("reschedules enabled invalid automations when a config edit makes them valid", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-automation-revalidate-on-patch",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const automation = createAutomation(harness.db, harness.hub, {
+        action: JSON.stringify({
+          actionType: "scheduled-thread",
+          threadRequest: {
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Repair me" }],
+            environment: {
+              type: "reuse",
+              environmentId: "env_missing",
+            },
+          },
+        }),
+        autoArchive: false,
+        enabled: true,
+        name: "Enabled invalid automation",
+        nextRunAt: null,
+        projectId: project.id,
+        triggerConfig: JSON.stringify(weekdayMorningTrigger),
+        triggerType: "schedule",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/automation-revalidate-on-patch",
+      });
+
+      const updateResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}/automations/${automation.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            action: {
+              actionType: "scheduled-thread",
+              threadRequest: {
+                providerId: "codex",
+                model: "gpt-5",
+                input: [{ type: "text", text: "Repair me" }],
+                environment: {
+                  type: "reuse",
+                  environmentId: environment.id,
+                },
+              },
+            },
+          }),
+        },
+      );
+
+      expect(updateResponse.status).toBe(200);
+      expect(automationSchema.parse(await readJson(updateResponse))).toMatchObject({
+        enabled: true,
+        id: automation.id,
+        isValid: true,
+        nextRunAt: expect.any(Number),
+        validationIssues: [],
+      });
+      expect(getAutomation(harness.db, automation.id)).toMatchObject({
+        enabled: true,
+        nextRunAt: expect.any(Number),
       });
     } finally {
       vi.useRealTimers();

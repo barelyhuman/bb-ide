@@ -593,6 +593,97 @@ describe("public thread routes", () => {
     }
   });
 
+  it("rejects follow-up sends while a created thread is still starting", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-created-thread-send-rejected",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/created-thread-send-rejected",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/created-thread-send-rejected",
+      });
+
+      const createResponse = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Initial start request" }],
+          environment: {
+            type: "reuse",
+            environmentId: environment.id,
+          },
+        }),
+      });
+
+      expect(createResponse.status).toBe(201);
+      const createdThread = threadSchema.parse(await readJson(createResponse));
+      expect(createdThread.status).toBe("created");
+
+      const queuedStart = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start"
+          && command.threadId === createdThread.id,
+      );
+
+      const sendResponse = await harness.app.request(
+        `/api/v1/threads/${createdThread.id}/send`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            input: [{ type: "text", text: "Follow up before start completes" }],
+            mode: "auto",
+          }),
+        },
+      );
+
+      expect(sendResponse.status).toBe(409);
+      await expect(readJson(sendResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: "Thread is still starting",
+      });
+
+      const requestedEvents = harness.db
+        .select({ type: events.type })
+        .from(events)
+        .where(
+          eq(events.threadId, createdThread.id),
+        )
+        .all()
+        .filter((event) => event.type === "client/turn/requested");
+      expect(requestedEvents).toHaveLength(0);
+
+      expect(getThread(harness.db, createdThread.id)).toMatchObject({
+        status: "created",
+      });
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .where(eq(hostDaemonCommands.id, queuedStart.row.id))
+          .get(),
+      ).toMatchObject({
+        state: "pending",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("rejects sandbox-host threads for local-path project sources", async () => {
     const harness = await createTestAppHarness({
       githubPat: "test-github-pat",
@@ -1814,6 +1905,96 @@ describe("public thread routes", () => {
         environmentId: environment.id,
         threadId: createdThread.id,
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("queues thread.stop before cleanup when archiving a created thread with pending start", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-archive-created-start",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/archive-created-start",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        managed: true,
+        path: "/tmp/archive-created-start",
+        projectId: project.id,
+        workspaceProvisionType: "managed-worktree",
+      });
+
+      const createResponse = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Start then archive me" }],
+          environment: {
+            type: "reuse",
+            environmentId: environment.id,
+          },
+        }),
+      });
+
+      expect(createResponse.status).toBe(201);
+      const createdThread = threadSchema.parse(await readJson(createResponse));
+      expect(createdThread.status).toBe("created");
+
+      const queuedStart = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start"
+          && command.threadId === createdThread.id,
+      );
+
+      const archiveResponse = await harness.app.request(
+        `/api/v1/threads/${createdThread.id}/archive`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ force: true }),
+        },
+      );
+
+      expect(archiveResponse.status).toBe(200);
+      expect(getThread(harness.db, createdThread.id)).toMatchObject({
+        archivedAt: expect.any(Number),
+        stopRequestedAt: expect.any(Number),
+      });
+
+      const queuedStop = await waitForQueuedCommandAfter(
+        harness,
+        queuedStart.row.cursor,
+        ({ command }) =>
+          command.type === "thread.stop"
+          && command.threadId === createdThread.id,
+      );
+      expect(queuedStop.command).toMatchObject({
+        environmentId: environment.id,
+        threadId: createdThread.id,
+      });
+
+      await expect(
+        waitForQueuedCommandAfter(
+          harness,
+          queuedStop.row.cursor,
+          ({ command }) =>
+            command.type === "environment.destroy"
+            && command.environmentId === environment.id,
+          100,
+        ),
+      ).rejects.toThrow("Timed out waiting for queued command");
     } finally {
       await harness.cleanup();
     }

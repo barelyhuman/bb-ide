@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { createDraftId, environments, events, getDraft, getThread, queuedThreadMessages } from "@bb/db";
+import { threadSchema } from "@bb/domain";
 import { threadDraftListResponseSchema } from "@bb/server-contract";
 import { z } from "zod";
 import { describe, expect, it } from "vitest";
@@ -743,6 +744,96 @@ describe("public thread data routes", () => {
               eq(events.type, "client/turn/requested"),
             ),
           )
+          .all(),
+      ).toHaveLength(1);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("keeps drafts when send is attempted while a created thread is still starting", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-draft-created-thread-send",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/draft-created-thread-send",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/draft-created-thread-send",
+      });
+
+      const createThreadResponse = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Initial start request" }],
+          environment: {
+            type: "reuse",
+            environmentId: environment.id,
+          },
+        }),
+      });
+
+      expect(createThreadResponse.status).toBe(201);
+      const createdThread = threadSchema.parse(await readJson(createThreadResponse));
+      expect(createdThread.status).toBe("created");
+
+      const createDraftResponse = await harness.app.request(
+        `/api/v1/threads/${createdThread.id}/drafts`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            input: [{ type: "text", text: "Draft follow-up while starting" }],
+          }),
+        },
+      );
+      expect(createDraftResponse.status).toBe(201);
+      const createdDraft = draftIdResponseSchema.parse(await readJson(createDraftResponse));
+
+      const sendResponse = await harness.app.request(
+        `/api/v1/threads/${createdThread.id}/drafts/${createdDraft.id}/send`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({}),
+        },
+      );
+
+      expect(sendResponse.status).toBe(409);
+      await expect(readJson(sendResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: "Thread is still starting",
+      });
+      expect(getDraft(harness.db, createdDraft.id)).toMatchObject({
+        id: createdDraft.id,
+      });
+      const requestedEvents = harness.db
+        .select({ type: events.type })
+        .from(events)
+        .where(eq(events.threadId, createdThread.id))
+        .all()
+        .filter((event) => event.type === "client/turn/requested");
+      expect(requestedEvents).toHaveLength(0);
+      expect(
+        harness.db
+          .select({ id: queuedThreadMessages.id })
+          .from(queuedThreadMessages)
+          .where(eq(queuedThreadMessages.threadId, createdThread.id))
           .all(),
       ).toHaveLength(1);
     } finally {

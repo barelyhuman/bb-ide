@@ -15,7 +15,10 @@ import {
   buildExecutionOptions,
   queueTurnSteerCommand,
 } from "./thread-commands.js";
-import { queueReadyThreadTurnCommand } from "./thread-lifecycle.js";
+import {
+  ensureThreadCanQueueStartRequest,
+  queueReadyThreadTurnCommand,
+} from "./thread-lifecycle.js";
 import {
   queueTurnDuringReprovision,
   requireReadyThreadEnvironment,
@@ -74,6 +77,9 @@ async function sendClaimedDraft(
   const draft = args.draft;
   const queuedMessage = toQueuedMessage(draft);
   const { environment, thread } = requireThreadEnvironment(deps.db, args.threadId);
+  if (resolveQueuedDraftSendMode(thread.status) === "start") {
+    ensureThreadCanQueueStartRequest(deps, thread);
+  }
   const execution = await buildExecutionOptions(
     deps,
     queuedMessage,

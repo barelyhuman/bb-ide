@@ -118,10 +118,11 @@ function buildAutomationConfigUpdateInput(
   if (args.payload.trigger !== undefined) {
     validateScheduleDefinition(args.payload.trigger);
   }
-  const nextRunAt = args.payload.trigger !== undefined
-    ? (args.current.enabled
-        ? computeScheduledNextRunAt(nextTrigger)
-        : null)
+  const shouldRecomputeNextRunAt =
+    args.current.enabled
+    && (args.payload.trigger !== undefined || args.current.nextRunAt === null);
+  const nextRunAt = shouldRecomputeNextRunAt
+    ? computeScheduledNextRunAt(nextTrigger)
     : undefined;
 
   return {

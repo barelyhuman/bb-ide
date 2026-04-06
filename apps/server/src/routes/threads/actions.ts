@@ -43,6 +43,8 @@ import {
   queueTurnSteerCommand,
 } from "../../services/threads/thread-commands.js";
 import {
+  ensureThreadCanQueueStartRequest,
+  hasActiveThreadStartOperation,
   queueReadyThreadTurnCommand,
   requestThreadStop,
 } from "../../services/threads/thread-lifecycle.js";
@@ -88,7 +90,8 @@ function requestThreadStopIfNeeded(
     id: string;
   },
 ): void {
-  if (thread.status !== "active") {
+  const startRequested = hasActiveThreadStartOperation(deps, thread.id);
+  if (thread.status !== "active" && !startRequested) {
     return;
   }
 
@@ -128,6 +131,9 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     const { environment, thread } = requirePublicThreadEnvironment(deps.db, context.req.param("id"));
     ensureThreadIsWritable(thread);
     const mode = resolveSendMode(thread.status, payload.mode);
+    if (mode === "start") {
+      ensureThreadCanQueueStartRequest(deps, thread);
+    }
     const execution = await buildExecutionOptions(
       deps,
       payload,

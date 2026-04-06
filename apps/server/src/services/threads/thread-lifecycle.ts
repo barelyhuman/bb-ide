@@ -28,6 +28,7 @@ import {
   threadStopCommandSchema,
 } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../../types.js";
+import { ApiError } from "../../errors.js";
 import { advanceEnvironmentCleanup, requestEnvironmentCleanup } from "../environments/environment-cleanup.js";
 import { appendThreadInterruptedEvent } from "./thread-events.js";
 import { tryTransition } from "./thread-transitions.js";
@@ -163,6 +164,18 @@ export function hasActiveThreadStartOperation(
     threadId,
     kind: "start",
   }) !== null;
+}
+
+export function ensureThreadCanQueueStartRequest(
+  deps: Pick<AppDeps, "db">,
+  thread: Pick<Thread, "id" | "status">,
+): void {
+  if (
+    thread.status === "created"
+    && hasActiveThreadStartOperation(deps, thread.id)
+  ) {
+    throw new ApiError(409, "invalid_request", "Thread is still starting");
+  }
 }
 
 export function hasActiveThreadStartOperationForCommand(
