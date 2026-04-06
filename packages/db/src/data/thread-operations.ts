@@ -3,12 +3,22 @@ import type {
   LifecycleOperationState,
   ThreadOperationKind,
 } from "@bb/domain";
-import type { DbConnection, DbTransaction } from "../connection.js";
 import { createThreadOperationId } from "../ids.js";
 import { threadOperations } from "../schema.js";
+import {
+  cancelLifecycleOperationRecord,
+  type LifecycleOperationReadConnection,
+  type LifecycleOperationStore,
+  type LifecycleOperationWriteConnection,
+  markLifecycleOperationCompleted,
+  markLifecycleOperationFailed,
+  markLifecycleOperationFetched,
+  markLifecycleOperationQueued,
+  upsertLifecycleOperationRecord,
+} from "./lifecycle-operation-helpers.js";
 
-type ThreadOperationWriteConnection = DbConnection | DbTransaction;
-type ThreadOperationReadConnection = DbConnection | DbTransaction;
+type ThreadOperationWriteConnection = LifecycleOperationWriteConnection;
+type ThreadOperationReadConnection = LifecycleOperationReadConnection;
 
 export type ThreadOperationRow = typeof threadOperations.$inferSelect;
 
@@ -25,6 +35,7 @@ export interface UpsertThreadOperationInput {
 }
 
 export interface UpdateThreadOperationStateArgs {
+  allowedCurrentStates?: readonly LifecycleOperationState[];
   commandId?: string | null;
   completedAt?: number | null;
   failureReason?: string | null;
@@ -78,11 +89,58 @@ function updateThreadOperationStateRecord(
       and(
         eq(threadOperations.threadId, args.threadId),
         eq(threadOperations.kind, args.kind),
+        args.allowedCurrentStates
+          ? inArray(threadOperations.state, [...args.allowedCurrentStates])
+          : undefined,
       ),
     )
     .returning()
     .get() ?? null;
 }
+
+const threadOperationStore: LifecycleOperationStore<
+  ThreadOperationRow,
+  GetThreadOperationArgs,
+  ThreadOperationKind,
+  UpsertThreadOperationInput
+> = {
+  get: getThreadOperationRecord,
+  getIdentity: (input) => ({
+    threadId: input.threadId,
+    kind: input.kind,
+  }),
+  insertRequested: (db, args) =>
+    db
+      .insert(threadOperations)
+      .values({
+        id: createThreadOperationId(),
+        threadId: args.input.threadId,
+        kind: args.input.kind,
+        state: "requested",
+        payload: args.input.payload,
+        commandId: null,
+        requestedAt: args.requestedAt,
+        queuedAt: null,
+        completedAt: null,
+        failureReason: null,
+        createdAt: args.now,
+        updatedAt: args.now,
+      })
+      .returning()
+      .get(),
+  updateState: (db, args) =>
+    updateThreadOperationStateRecord(db, {
+      threadId: args.identity.threadId,
+      kind: args.identity.kind,
+      allowedCurrentStates: args.allowedCurrentStates,
+      payload: args.payload,
+      state: args.state,
+      commandId: args.commandId,
+      queuedAt: args.queuedAt,
+      completedAt: args.completedAt,
+      failureReason: args.failureReason,
+    }),
+};
 
 export function getThreadOperation(
   db: ThreadOperationReadConnection,
@@ -129,44 +187,7 @@ export function upsertThreadOperation(
   db: ThreadOperationWriteConnection,
   input: UpsertThreadOperationInput,
 ): ThreadOperationRow {
-  const now = Date.now();
-  const requestedAt = input.requestedAt ?? now;
-  const existing = getThreadOperationRecord(db, {
-    threadId: input.threadId,
-    kind: input.kind,
-  });
-
-  if (existing) {
-    return updateThreadOperationStateRecord(db, {
-      threadId: input.threadId,
-      kind: input.kind,
-      payload: input.payload,
-      state: "requested",
-      commandId: null,
-      queuedAt: null,
-      completedAt: null,
-      failureReason: null,
-    }) ?? existing;
-  }
-
-  return db
-    .insert(threadOperations)
-    .values({
-      id: createThreadOperationId(),
-      threadId: input.threadId,
-      kind: input.kind,
-      state: "requested",
-      payload: input.payload,
-      commandId: null,
-      requestedAt,
-      queuedAt: null,
-      completedAt: null,
-      failureReason: null,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning()
-    .get();
+  return upsertLifecycleOperationRecord(db, threadOperationStore, input);
 }
 
 export function markThreadOperationQueued(
@@ -178,14 +199,13 @@ export function markThreadOperationQueued(
     threadId: string;
   },
 ): ThreadOperationRow | null {
-  return updateThreadOperationStateRecord(db, {
-    threadId: args.threadId,
-    kind: args.kind,
-    state: "queued",
+  return markLifecycleOperationQueued(db, threadOperationStore, {
+    identity: {
+      threadId: args.threadId,
+      kind: args.kind,
+    },
     commandId: args.commandId,
-    queuedAt: args.queuedAt ?? Date.now(),
-    completedAt: null,
-    failureReason: null,
+    queuedAt: args.queuedAt,
   });
 }
 
@@ -193,39 +213,19 @@ export function markThreadOperationFetched(
   db: ThreadOperationWriteConnection,
   args: GetThreadOperationArgs,
 ): ThreadOperationRow | null {
-  const existing = getThreadOperationRecord(db, args);
-  if (!existing) {
-    return null;
-  }
-  return updateThreadOperationStateRecord(db, {
-    threadId: args.threadId,
-    kind: args.kind,
-    payload: existing.payload,
-    state: "fetched",
-    commandId: existing.commandId,
-    queuedAt: existing.queuedAt,
-    completedAt: null,
-    failureReason: null,
-  });
+  return markLifecycleOperationFetched(db, threadOperationStore, args);
 }
 
 export function markThreadOperationCompleted(
   db: ThreadOperationWriteConnection,
   args: GetThreadOperationArgs & { completedAt?: number },
 ): ThreadOperationRow | null {
-  const existing = getThreadOperationRecord(db, args);
-  if (!existing) {
-    return null;
-  }
-  return updateThreadOperationStateRecord(db, {
-    threadId: args.threadId,
-    kind: args.kind,
-    payload: existing.payload,
-    state: "completed",
-    commandId: existing.commandId,
-    queuedAt: existing.queuedAt,
-    completedAt: args.completedAt ?? Date.now(),
-    failureReason: null,
+  return markLifecycleOperationCompleted(db, threadOperationStore, {
+    identity: {
+      threadId: args.threadId,
+      kind: args.kind,
+    },
+    completedAt: args.completedAt,
   });
 }
 
@@ -236,18 +236,12 @@ export function markThreadOperationFailed(
     failureReason: string;
   },
 ): ThreadOperationRow | null {
-  const existing = getThreadOperationRecord(db, args);
-  if (!existing) {
-    return null;
-  }
-  return updateThreadOperationStateRecord(db, {
-    threadId: args.threadId,
-    kind: args.kind,
-    payload: existing.payload,
-    state: "failed",
-    commandId: existing.commandId,
-    queuedAt: existing.queuedAt,
-    completedAt: args.completedAt ?? Date.now(),
+  return markLifecycleOperationFailed(db, threadOperationStore, {
+    identity: {
+      threadId: args.threadId,
+      kind: args.kind,
+    },
+    completedAt: args.completedAt,
     failureReason: args.failureReason,
   });
 }
@@ -256,18 +250,11 @@ export function cancelThreadOperation(
   db: ThreadOperationWriteConnection,
   args: GetThreadOperationArgs & { completedAt?: number },
 ): ThreadOperationRow | null {
-  const existing = getThreadOperationRecord(db, args);
-  if (!existing) {
-    return null;
-  }
-  return updateThreadOperationStateRecord(db, {
-    threadId: args.threadId,
-    kind: args.kind,
-    payload: existing.payload,
-    state: "cancelled",
-    commandId: existing.commandId,
-    queuedAt: existing.queuedAt,
-    completedAt: args.completedAt ?? Date.now(),
-    failureReason: null,
+  return cancelLifecycleOperationRecord(db, threadOperationStore, {
+    identity: {
+      threadId: args.threadId,
+      kind: args.kind,
+    },
+    completedAt: args.completedAt,
   });
 }

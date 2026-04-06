@@ -6,13 +6,13 @@ import {
   markThreadStopRequested,
   queueCommand,
   upsertThreadOperation,
-  type ThreadOperationRow,
 } from "@bb/db";
-import type {
-  PromptInput,
-  ResolvedThreadExecutionOptions,
-  Thread,
-  WorkspaceProvisionType,
+import {
+  isActiveLifecycleOperationState,
+  type PromptInput,
+  type ResolvedThreadExecutionOptions,
+  type Thread,
+  type WorkspaceProvisionType,
 } from "@bb/domain";
 import {
   threadStartCommandSchema,
@@ -53,12 +53,6 @@ export interface RequestThreadStopArgs extends QueueThreadStopCommandArgs {
   stopRequestedAt: number | null;
 }
 
-function isActiveThreadOperationState(
-  state: ThreadOperationRow["state"],
-): boolean {
-  return state === "requested" || state === "queued" || state === "fetched";
-}
-
 function hasQueuedThreadOperationCommand(
   deps: Pick<AppDeps, "db">,
   commandId: string | null,
@@ -83,7 +77,7 @@ export async function requestThreadStart(
   });
   if (
     existingOperation
-    && isActiveThreadOperationState(existingOperation.state)
+    && isActiveLifecycleOperationState(existingOperation.state)
     && hasQueuedThreadOperationCommand(deps, existingOperation.commandId)
   ) {
     return;
@@ -109,7 +103,7 @@ export async function advanceThreadStart(
     threadId: args.threadId,
     kind: "start",
   });
-  if (!operation || !isActiveThreadOperationState(operation.state)) {
+  if (!operation || !isActiveLifecycleOperationState(operation.state)) {
     return null;
   }
 
@@ -182,7 +176,7 @@ export function requestThreadStop(
   });
   if (
     existingOperation
-    && isActiveThreadOperationState(existingOperation.state)
+    && isActiveLifecycleOperationState(existingOperation.state)
     && hasQueuedThreadOperationCommand(deps, existingOperation.commandId)
   ) {
     return;
@@ -208,7 +202,7 @@ export function advanceThreadStop(
     threadId: args.threadId,
     kind: "stop",
   });
-  if (!operation || !isActiveThreadOperationState(operation.state)) {
+  if (!operation || !isActiveLifecycleOperationState(operation.state)) {
     return null;
   }
 

@@ -94,6 +94,14 @@ export interface ThreadEnvironmentAssignmentRow {
   threadId: string;
 }
 
+export interface StopRequestedThreadRow {
+  environmentId: string | null;
+  hostId: string;
+  status: ThreadStatus;
+  stopRequestedAt: number | null;
+  threadId: string;
+}
+
 export function listThreads(
   db: DbConnection,
   options: ListThreadsOptions,
@@ -162,6 +170,22 @@ export function listThreadEnvironmentAssignmentsOnHost(
         eq(environments.hostId, args.hostId),
       ),
     )
+    .all();
+}
+
+export function listStopRequestedThreads(
+  db: DbConnection,
+): StopRequestedThreadRow[] {
+  return db.select({
+    environmentId: threads.environmentId,
+    hostId: environments.hostId,
+    status: threads.status,
+    stopRequestedAt: threads.stopRequestedAt,
+    threadId: threads.id,
+  })
+    .from(threads)
+    .innerJoin(environments, eq(threads.environmentId, environments.id))
+    .where(isNotNull(threads.stopRequestedAt))
     .all();
 }
 

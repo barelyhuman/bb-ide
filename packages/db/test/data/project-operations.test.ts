@@ -7,6 +7,7 @@ import {
   getProjectOperation,
   getProjectOperationByCommandId,
   listProjectOperations,
+  markProjectOperationCompleted,
   markProjectOperationFailed,
   markProjectOperationQueued,
   upsertProjectOperation,
@@ -137,5 +138,65 @@ describe("project operations", () => {
         states: ["failed"],
       }),
     ).toHaveLength(0);
+  });
+
+  it("does not move terminal project operations back to queued", () => {
+    const { db, host, project } = setup();
+    const firstCommand = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "environment.destroy",
+      payload: JSON.stringify({
+        type: "environment.destroy",
+        environmentId: "env_placeholder",
+        workspaceContext: {
+          workspacePath: "/tmp/test",
+          workspaceProvisionType: "managed-worktree",
+        },
+      }),
+    });
+    const secondCommand = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "environment.destroy",
+      payload: JSON.stringify({
+        type: "environment.destroy",
+        environmentId: "env_placeholder",
+        workspaceContext: {
+          workspacePath: "/tmp/test",
+          workspaceProvisionType: "managed-worktree",
+        },
+      }),
+    });
+
+    upsertProjectOperation(db, {
+      projectId: project.id,
+      kind: "delete",
+      payload: JSON.stringify({ stage: "requested" }),
+    });
+    markProjectOperationQueued(db, {
+      projectId: project.id,
+      kind: "delete",
+      commandId: firstCommand.id,
+    });
+    markProjectOperationCompleted(db, {
+      projectId: project.id,
+      kind: "delete",
+    });
+
+    const regressed = markProjectOperationQueued(db, {
+      projectId: project.id,
+      kind: "delete",
+      commandId: secondCommand.id,
+    });
+
+    expect(regressed).toBeNull();
+    expect(
+      getProjectOperation(db, {
+        projectId: project.id,
+        kind: "delete",
+      }),
+    ).toMatchObject({
+      commandId: firstCommand.id,
+      state: "completed",
+    });
   });
 });

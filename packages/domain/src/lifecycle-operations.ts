@@ -15,6 +15,18 @@ export type LifecycleOperationState = z.infer<
   typeof lifecycleOperationStateSchema
 >;
 
+export const activeLifecycleOperationStates = [
+  "requested",
+  "queued",
+  "fetched",
+] as const satisfies readonly LifecycleOperationState[];
+
+export function isActiveLifecycleOperationState(
+  state: LifecycleOperationState,
+): boolean {
+  return state === "requested" || state === "queued" || state === "fetched";
+}
+
 export const environmentOperationKindValues = [
   "provision",
   "reprovision",

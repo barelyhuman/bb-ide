@@ -1,7 +1,7 @@
 import {
-  environments,
   getEnvironment,
   getThread,
+  listStopRequestedThreads,
   listEnvironmentOperations,
   listThreadOperations,
   markEnvironmentOperationCompleted,
@@ -11,9 +11,8 @@ import {
   sweepExpiredCommands,
   sweepExpiredLeases,
   sweepManagedEnvironments,
-  threads,
 } from "@bb/db";
-import { eq, isNotNull } from "drizzle-orm";
+import { activeLifecycleOperationStates } from "@bb/domain";
 import type { AppDeps } from "../types.js";
 import { sweepDueAutomations } from "./automation-sweep.js";
 import { advanceEnvironmentCleanup } from "./environment-cleanup.js";
@@ -33,11 +32,6 @@ import {
 export type EvaluateManagedEnvironmentArchiveCleanupFn =
   typeof advanceEnvironmentCleanup;
 export type DestroyHostFn = typeof destroyHost;
-const activeLifecycleOperationStates = [
-  "requested",
-  "queued",
-  "fetched",
-] as const;
 
 export async function runManagedEnvironmentArchiveCleanupSweep(
   deps: Pick<AppDeps, "db" | "hub" | "logger">,
@@ -186,18 +180,7 @@ export async function runThreadLifecycleSweep(
     }
   }
 
-  const stopRequestedThreads = deps.db
-    .select({
-      environmentId: threads.environmentId,
-      hostId: environments.hostId,
-      status: threads.status,
-      stopRequestedAt: threads.stopRequestedAt,
-      threadId: threads.id,
-    })
-    .from(threads)
-    .innerJoin(environments, eq(threads.environmentId, environments.id))
-    .where(isNotNull(threads.stopRequestedAt))
-    .all();
+  const stopRequestedThreads = listStopRequestedThreads(deps.db);
 
   for (const thread of stopRequestedThreads) {
     try {

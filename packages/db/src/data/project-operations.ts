@@ -3,12 +3,22 @@ import type {
   LifecycleOperationState,
   ProjectOperationKind,
 } from "@bb/domain";
-import type { DbConnection, DbTransaction } from "../connection.js";
 import { createProjectOperationId } from "../ids.js";
 import { projectOperations } from "../schema.js";
+import {
+  cancelLifecycleOperationRecord,
+  type LifecycleOperationReadConnection,
+  type LifecycleOperationStore,
+  type LifecycleOperationWriteConnection,
+  markLifecycleOperationCompleted,
+  markLifecycleOperationFailed,
+  markLifecycleOperationFetched,
+  markLifecycleOperationQueued,
+  upsertLifecycleOperationRecord,
+} from "./lifecycle-operation-helpers.js";
 
-type ProjectOperationWriteConnection = DbConnection | DbTransaction;
-type ProjectOperationReadConnection = DbConnection | DbTransaction;
+type ProjectOperationWriteConnection = LifecycleOperationWriteConnection;
+type ProjectOperationReadConnection = LifecycleOperationReadConnection;
 
 export type ProjectOperationRow = typeof projectOperations.$inferSelect;
 
@@ -25,6 +35,7 @@ export interface UpsertProjectOperationInput {
 }
 
 export interface UpdateProjectOperationStateArgs {
+  allowedCurrentStates?: readonly LifecycleOperationState[];
   commandId?: string | null;
   completedAt?: number | null;
   failureReason?: string | null;
@@ -78,11 +89,58 @@ function updateProjectOperationStateRecord(
       and(
         eq(projectOperations.projectId, args.projectId),
         eq(projectOperations.kind, args.kind),
+        args.allowedCurrentStates
+          ? inArray(projectOperations.state, [...args.allowedCurrentStates])
+          : undefined,
       ),
     )
     .returning()
     .get() ?? null;
 }
+
+const projectOperationStore: LifecycleOperationStore<
+  ProjectOperationRow,
+  GetProjectOperationArgs,
+  ProjectOperationKind,
+  UpsertProjectOperationInput
+> = {
+  get: getProjectOperationRecord,
+  getIdentity: (input) => ({
+    projectId: input.projectId,
+    kind: input.kind,
+  }),
+  insertRequested: (db, args) =>
+    db
+      .insert(projectOperations)
+      .values({
+        id: createProjectOperationId(),
+        projectId: args.input.projectId,
+        kind: args.input.kind,
+        state: "requested",
+        payload: args.input.payload,
+        commandId: null,
+        requestedAt: args.requestedAt,
+        queuedAt: null,
+        completedAt: null,
+        failureReason: null,
+        createdAt: args.now,
+        updatedAt: args.now,
+      })
+      .returning()
+      .get(),
+  updateState: (db, args) =>
+    updateProjectOperationStateRecord(db, {
+      projectId: args.identity.projectId,
+      kind: args.identity.kind,
+      allowedCurrentStates: args.allowedCurrentStates,
+      payload: args.payload,
+      state: args.state,
+      commandId: args.commandId,
+      queuedAt: args.queuedAt,
+      completedAt: args.completedAt,
+      failureReason: args.failureReason,
+    }),
+};
 
 export function getProjectOperation(
   db: ProjectOperationReadConnection,
@@ -127,44 +185,7 @@ export function upsertProjectOperation(
   db: ProjectOperationWriteConnection,
   input: UpsertProjectOperationInput,
 ): ProjectOperationRow {
-  const now = Date.now();
-  const requestedAt = input.requestedAt ?? now;
-  const existing = getProjectOperationRecord(db, {
-    projectId: input.projectId,
-    kind: input.kind,
-  });
-
-  if (existing) {
-    return updateProjectOperationStateRecord(db, {
-      projectId: input.projectId,
-      kind: input.kind,
-      payload: input.payload,
-      state: "requested",
-      commandId: null,
-      queuedAt: null,
-      completedAt: null,
-      failureReason: null,
-    }) ?? existing;
-  }
-
-  return db
-    .insert(projectOperations)
-    .values({
-      id: createProjectOperationId(),
-      projectId: input.projectId,
-      kind: input.kind,
-      state: "requested",
-      payload: input.payload,
-      commandId: null,
-      requestedAt,
-      queuedAt: null,
-      completedAt: null,
-      failureReason: null,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning()
-    .get();
+  return upsertLifecycleOperationRecord(db, projectOperationStore, input);
 }
 
 export function markProjectOperationQueued(
@@ -176,14 +197,13 @@ export function markProjectOperationQueued(
     queuedAt?: number;
   },
 ): ProjectOperationRow | null {
-  return updateProjectOperationStateRecord(db, {
-    projectId: args.projectId,
-    kind: args.kind,
-    state: "queued",
+  return markLifecycleOperationQueued(db, projectOperationStore, {
+    identity: {
+      projectId: args.projectId,
+      kind: args.kind,
+    },
     commandId: args.commandId,
-    queuedAt: args.queuedAt ?? Date.now(),
-    completedAt: null,
-    failureReason: null,
+    queuedAt: args.queuedAt,
   });
 }
 
@@ -191,39 +211,19 @@ export function markProjectOperationFetched(
   db: ProjectOperationWriteConnection,
   args: GetProjectOperationArgs,
 ): ProjectOperationRow | null {
-  const existing = getProjectOperationRecord(db, args);
-  if (!existing) {
-    return null;
-  }
-  return updateProjectOperationStateRecord(db, {
-    projectId: args.projectId,
-    kind: args.kind,
-    payload: existing.payload,
-    state: "fetched",
-    commandId: existing.commandId,
-    queuedAt: existing.queuedAt,
-    completedAt: null,
-    failureReason: null,
-  });
+  return markLifecycleOperationFetched(db, projectOperationStore, args);
 }
 
 export function markProjectOperationCompleted(
   db: ProjectOperationWriteConnection,
   args: GetProjectOperationArgs & { completedAt?: number },
 ): ProjectOperationRow | null {
-  const existing = getProjectOperationRecord(db, args);
-  if (!existing) {
-    return null;
-  }
-  return updateProjectOperationStateRecord(db, {
-    projectId: args.projectId,
-    kind: args.kind,
-    payload: existing.payload,
-    state: "completed",
-    commandId: existing.commandId,
-    queuedAt: existing.queuedAt,
-    completedAt: args.completedAt ?? Date.now(),
-    failureReason: null,
+  return markLifecycleOperationCompleted(db, projectOperationStore, {
+    identity: {
+      projectId: args.projectId,
+      kind: args.kind,
+    },
+    completedAt: args.completedAt,
   });
 }
 
@@ -234,18 +234,12 @@ export function markProjectOperationFailed(
     failureReason: string;
   },
 ): ProjectOperationRow | null {
-  const existing = getProjectOperationRecord(db, args);
-  if (!existing) {
-    return null;
-  }
-  return updateProjectOperationStateRecord(db, {
-    projectId: args.projectId,
-    kind: args.kind,
-    payload: existing.payload,
-    state: "failed",
-    commandId: existing.commandId,
-    queuedAt: existing.queuedAt,
-    completedAt: args.completedAt ?? Date.now(),
+  return markLifecycleOperationFailed(db, projectOperationStore, {
+    identity: {
+      projectId: args.projectId,
+      kind: args.kind,
+    },
+    completedAt: args.completedAt,
     failureReason: args.failureReason,
   });
 }
@@ -254,18 +248,11 @@ export function cancelProjectOperation(
   db: ProjectOperationWriteConnection,
   args: GetProjectOperationArgs & { completedAt?: number },
 ): ProjectOperationRow | null {
-  const existing = getProjectOperationRecord(db, args);
-  if (!existing) {
-    return null;
-  }
-  return updateProjectOperationStateRecord(db, {
-    projectId: args.projectId,
-    kind: args.kind,
-    payload: existing.payload,
-    state: "cancelled",
-    commandId: existing.commandId,
-    queuedAt: existing.queuedAt,
-    completedAt: args.completedAt ?? Date.now(),
-    failureReason: null,
+  return cancelLifecycleOperationRecord(db, projectOperationStore, {
+    identity: {
+      projectId: args.projectId,
+      kind: args.kind,
+    },
+    completedAt: args.completedAt,
   });
 }

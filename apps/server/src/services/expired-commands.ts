@@ -22,44 +22,14 @@ function buildExpiredLifecycleFailureReport(
     type: LifecycleFailureReport["type"];
   },
 ): LifecycleFailureReport {
-  switch (args.type) {
-    case "environment.destroy":
-      return {
-        commandId: args.commandId,
-        completedAt: args.completedAt,
-        errorCode: EXPIRED_COMMAND_ERROR_CODE,
-        errorMessage: EXPIRED_COMMAND_ERROR_MESSAGE,
-        ok: false,
-        type: "environment.destroy",
-      };
-    case "environment.provision":
-      return {
-        commandId: args.commandId,
-        completedAt: args.completedAt,
-        errorCode: EXPIRED_COMMAND_ERROR_CODE,
-        errorMessage: EXPIRED_COMMAND_ERROR_MESSAGE,
-        ok: false,
-        type: "environment.provision",
-      };
-    case "thread.start":
-      return {
-        commandId: args.commandId,
-        completedAt: args.completedAt,
-        errorCode: EXPIRED_COMMAND_ERROR_CODE,
-        errorMessage: EXPIRED_COMMAND_ERROR_MESSAGE,
-        ok: false,
-        type: "thread.start",
-      };
-    case "thread.stop":
-      return {
-        commandId: args.commandId,
-        completedAt: args.completedAt,
-        errorCode: EXPIRED_COMMAND_ERROR_CODE,
-        errorMessage: EXPIRED_COMMAND_ERROR_MESSAGE,
-        ok: false,
-        type: "thread.stop",
-      };
-  }
+  return {
+    commandId: args.commandId,
+    completedAt: args.completedAt,
+    errorCode: EXPIRED_COMMAND_ERROR_CODE,
+    errorMessage: EXPIRED_COMMAND_ERROR_MESSAGE,
+    ok: false,
+    type: args.type,
+  };
 }
 
 export async function handleExpiredCommands(

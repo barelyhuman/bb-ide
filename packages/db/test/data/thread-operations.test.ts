@@ -124,4 +124,58 @@ describe("thread operations", () => {
       commandId: command.id,
     });
   });
+
+  it("does not move terminal thread operations back to queued", () => {
+    const { db, host, thread } = setup();
+    const firstCommand = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "thread.stop",
+      payload: JSON.stringify({
+        type: "thread.stop",
+        threadId: thread.id,
+        environmentId: thread.environmentId,
+      }),
+    });
+    const secondCommand = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "thread.stop",
+      payload: JSON.stringify({
+        type: "thread.stop",
+        threadId: thread.id,
+        environmentId: thread.environmentId,
+      }),
+    });
+
+    upsertThreadOperation(db, {
+      threadId: thread.id,
+      kind: "stop",
+      payload: JSON.stringify({ type: "thread.stop" }),
+    });
+    markThreadOperationQueued(db, {
+      threadId: thread.id,
+      kind: "stop",
+      commandId: firstCommand.id,
+    });
+    markThreadOperationCompleted(db, {
+      threadId: thread.id,
+      kind: "stop",
+    });
+
+    const regressed = markThreadOperationQueued(db, {
+      threadId: thread.id,
+      kind: "stop",
+      commandId: secondCommand.id,
+    });
+
+    expect(regressed).toBeNull();
+    expect(
+      getThreadOperation(db, {
+        threadId: thread.id,
+        kind: "stop",
+      }),
+    ).toMatchObject({
+      commandId: firstCommand.id,
+      state: "completed",
+    });
+  });
 });

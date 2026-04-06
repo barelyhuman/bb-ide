@@ -67,8 +67,10 @@ export type {
 } from "./environment.js";
 
 export {
+  activeLifecycleOperationStates,
   environmentOperationKindSchema,
   environmentOperationKindValues,
+  isActiveLifecycleOperationState,
   lifecycleOperationStateSchema,
   lifecycleOperationStateValues,
   projectOperationKindSchema,

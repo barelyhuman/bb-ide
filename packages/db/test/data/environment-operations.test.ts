@@ -70,7 +70,7 @@ describe("environment operations", () => {
     });
   });
 
-  it("tracks queued, fetched, failed, and completed environment operations", () => {
+  it("tracks queued, fetched, completed, and failed environment operations", () => {
     const { db, environment, host } = setup();
     const command = queueCommand(db, noopNotifier, {
       hostId: host.id,
@@ -103,16 +103,27 @@ describe("environment operations", () => {
       environmentId: environment.id,
       kind: "provision",
     });
-    const failed = markEnvironmentOperationFailed(db, {
-      environmentId: environment.id,
-      kind: "provision",
-      failureReason: "provision timed out",
-      completedAt: 654,
-    });
     const completed = markEnvironmentOperationCompleted(db, {
       environmentId: environment.id,
       kind: "provision",
       completedAt: 777,
+    });
+    upsertEnvironmentOperation(db, {
+      environmentId: environment.id,
+      kind: "provision",
+      payload: JSON.stringify({ type: "environment.provision", retry: true }),
+    });
+    markEnvironmentOperationQueued(db, {
+      environmentId: environment.id,
+      kind: "provision",
+      commandId: command.id,
+      queuedAt: 888,
+    });
+    const failed = markEnvironmentOperationFailed(db, {
+      environmentId: environment.id,
+      kind: "provision",
+      failureReason: "provision timed out",
+      completedAt: 999,
     });
 
     expect(queued).toMatchObject({
@@ -124,15 +135,15 @@ describe("environment operations", () => {
     expect(getEnvironmentOperationByCommandId(db, command.id)?.id).toBe(
       queued?.id,
     );
-    expect(failed).toMatchObject({
-      state: "failed",
-      failureReason: "provision timed out",
-      completedAt: 654,
-    });
     expect(completed).toMatchObject({
       state: "completed",
       completedAt: 777,
       failureReason: null,
+    });
+    expect(failed).toMatchObject({
+      state: "failed",
+      failureReason: "provision timed out",
+      completedAt: 999,
     });
     expect(
       getEnvironmentOperation(db, {
@@ -140,8 +151,74 @@ describe("environment operations", () => {
         kind: "provision",
       }),
     ).toMatchObject({
-      state: "completed",
+      state: "failed",
       commandId: command.id,
+    });
+  });
+
+  it("does not move terminal environment operations back to queued", () => {
+    const { db, environment, host } = setup();
+    const firstCommand = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "environment.provision",
+      payload: JSON.stringify({
+        type: "environment.provision",
+        environmentId: environment.id,
+        initiator: null,
+        workspaceProvisionType: "managed-worktree",
+        sourcePath: "/tmp/source",
+        targetPath: "/tmp/target",
+        branchName: "main",
+        setupScript: "setup.sh",
+        setupTimeoutMs: 1000,
+      }),
+    });
+    const secondCommand = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "environment.provision",
+      payload: JSON.stringify({
+        type: "environment.provision",
+        environmentId: environment.id,
+        initiator: null,
+        workspaceProvisionType: "managed-worktree",
+        sourcePath: "/tmp/source",
+        targetPath: "/tmp/target",
+        branchName: "main",
+        setupScript: "setup.sh",
+        setupTimeoutMs: 1000,
+      }),
+    });
+
+    upsertEnvironmentOperation(db, {
+      environmentId: environment.id,
+      kind: "provision",
+      payload: JSON.stringify({ type: "environment.provision" }),
+    });
+    markEnvironmentOperationQueued(db, {
+      environmentId: environment.id,
+      kind: "provision",
+      commandId: firstCommand.id,
+    });
+    markEnvironmentOperationCompleted(db, {
+      environmentId: environment.id,
+      kind: "provision",
+    });
+
+    const regressed = markEnvironmentOperationQueued(db, {
+      environmentId: environment.id,
+      kind: "provision",
+      commandId: secondCommand.id,
+    });
+
+    expect(regressed).toBeNull();
+    expect(
+      getEnvironmentOperation(db, {
+        environmentId: environment.id,
+        kind: "provision",
+      }),
+    ).toMatchObject({
+      commandId: firstCommand.id,
+      state: "completed",
     });
   });
 });
