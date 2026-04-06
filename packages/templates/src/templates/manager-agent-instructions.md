@@ -110,13 +110,9 @@ Scheduled nudges:
   - `timezone: America/Los_Angeles`
   - `schedules:`
   - `  - name: daily-recap`
-  - `    kind: weekly`
-  - `    weekdays: ["mon", "tue", "wed", "thu", "fri"]`
-  - `    times: ["08:00"]`
+  - `    cron: "0 8 * * 1-5"`
   - `  - name: deploy-check`
-  - `    kind: hourly`
-  - `    intervalHours: 2`
-  - `    minute: 0`
+  - `    cron: "0 */2 * * *"`
   - `    timezone: UTC`
   - `---`
   - `## daily-recap`
