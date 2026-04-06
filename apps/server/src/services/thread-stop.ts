@@ -6,6 +6,7 @@ import {
   getCommand,
   getThread,
   getThreadOperation,
+  getThreadOperationByCommandId,
   markThreadStopRequested,
   queueCommand,
 } from "@bb/db";
@@ -67,6 +68,7 @@ export interface RequestThreadStopArgs extends QueueThreadStopCommandArgs {
 
 export interface FinalizeStoppedThreadArgs {
   cancelPendingCommand?: boolean;
+  expectedCommandId?: string;
   threadId: string;
 }
 
@@ -75,6 +77,15 @@ export interface ThreadOperationMutationArgs {
 }
 
 export interface FailThreadOperationArgs extends ThreadOperationMutationArgs {
+  failureReason: string;
+}
+
+export interface ThreadOperationCommandMutationArgs {
+  commandId: string;
+}
+
+export interface FailThreadOperationForCommandArgs
+  extends ThreadOperationCommandMutationArgs {
   failureReason: string;
 }
 
@@ -100,6 +111,25 @@ function getActiveThreadOperation(
 ) {
   const operation = getThreadOperation(deps.db, args);
   if (!operation || !isActiveLifecycleOperationState(operation.state)) {
+    return null;
+  }
+
+  return operation;
+}
+
+function getActiveThreadOperationByCommandId(
+  deps: Pick<AppDeps, "db">,
+  args: {
+    commandId: string;
+    kind: "start" | "stop";
+  },
+) {
+  const operation = getThreadOperationByCommandId(deps.db, args.commandId);
+  if (
+    !operation
+    || operation.kind !== args.kind
+    || !isActiveLifecycleOperationState(operation.state)
+  ) {
     return null;
   }
 
@@ -135,6 +165,26 @@ export function hasActiveThreadStartOperation(
   }) !== null;
 }
 
+export function hasActiveThreadStartOperationForCommand(
+  deps: Pick<AppDeps, "db">,
+  args: ThreadOperationCommandMutationArgs,
+): boolean {
+  return getActiveThreadOperationByCommandId(deps, {
+    commandId: args.commandId,
+    kind: "start",
+  }) !== null;
+}
+
+export function hasActiveThreadStopOperationForCommand(
+  deps: Pick<AppDeps, "db">,
+  args: ThreadOperationCommandMutationArgs,
+): boolean {
+  return getActiveThreadOperationByCommandId(deps, {
+    commandId: args.commandId,
+    kind: "stop",
+  }) !== null;
+}
+
 function completeThreadOperation(
   deps: Pick<AppDeps, "db">,
   args: {
@@ -149,6 +199,25 @@ function completeThreadOperation(
 
   markThreadOperationRecordCompleted(deps.db, {
     threadId: args.threadId,
+    kind: operation.kind,
+  });
+  return true;
+}
+
+function completeThreadOperationForCommand(
+  deps: Pick<AppDeps, "db">,
+  args: {
+    commandId: string;
+    kind: "start" | "stop";
+  },
+): boolean {
+  const operation = getActiveThreadOperationByCommandId(deps, args);
+  if (!operation) {
+    return false;
+  }
+
+  markThreadOperationRecordCompleted(deps.db, {
+    threadId: operation.threadId,
     kind: operation.kind,
   });
   return true;
@@ -175,12 +244,43 @@ function failThreadOperation(
   return true;
 }
 
+function failThreadOperationForCommand(
+  deps: Pick<AppDeps, "db">,
+  args: {
+    commandId: string;
+    failureReason: string;
+    kind: "start" | "stop";
+  },
+): boolean {
+  const operation = getActiveThreadOperationByCommandId(deps, args);
+  if (!operation) {
+    return false;
+  }
+
+  markThreadOperationRecordFailed(deps.db, {
+    threadId: operation.threadId,
+    kind: operation.kind,
+    failureReason: args.failureReason,
+  });
+  return true;
+}
+
 export function completeThreadStart(
   deps: Pick<AppDeps, "db">,
   args: ThreadOperationMutationArgs,
 ): boolean {
   return completeThreadOperation(deps, {
     threadId: args.threadId,
+    kind: "start",
+  });
+}
+
+export function completeThreadStartForCommand(
+  deps: Pick<AppDeps, "db">,
+  args: ThreadOperationCommandMutationArgs,
+): boolean {
+  return completeThreadOperationForCommand(deps, {
+    commandId: args.commandId,
     kind: "start",
   });
 }
@@ -196,12 +296,34 @@ export function failThreadStart(
   });
 }
 
+export function failThreadStartForCommand(
+  deps: Pick<AppDeps, "db">,
+  args: FailThreadOperationForCommandArgs,
+): boolean {
+  return failThreadOperationForCommand(deps, {
+    commandId: args.commandId,
+    kind: "start",
+    failureReason: args.failureReason,
+  });
+}
+
 export function failThreadStop(
   deps: Pick<AppDeps, "db">,
   args: FailThreadOperationArgs,
 ): boolean {
   return failThreadOperation(deps, {
     threadId: args.threadId,
+    kind: "stop",
+    failureReason: args.failureReason,
+  });
+}
+
+export function failThreadStopForCommand(
+  deps: Pick<AppDeps, "db">,
+  args: FailThreadOperationForCommandArgs,
+): boolean {
+  return failThreadOperationForCommand(deps, {
+    commandId: args.commandId,
     kind: "stop",
     failureReason: args.failureReason,
   });
@@ -394,6 +516,13 @@ export async function finalizeStoppedThread(
     threadId: args.threadId,
     kind: "stop",
   });
+  if (
+    args.expectedCommandId
+    && stopOperation
+    && stopOperation.commandId !== args.expectedCommandId
+  ) {
+    return false;
+  }
   const stopCommandState = getThreadOperationCommandState(
     deps,
     stopOperation?.commandId ?? null,

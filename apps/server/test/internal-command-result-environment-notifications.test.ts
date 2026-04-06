@@ -6,6 +6,7 @@ import type {
 } from "@bb/host-daemon-contract";
 import { describe, expect, it, vi } from "vitest";
 import { internalAuthHeaders } from "./helpers/commands.js";
+import { queueEnvironmentProvisionLifecycleCommand } from "./helpers/lifecycle-commands.js";
 import {
   seedEnvironment,
   seedHostSession,
@@ -184,17 +185,17 @@ describe("internal command result environment notifications", () => {
         status: "provisioning",
       });
       const notifyEnvironmentSpy = vi.spyOn(harness.hub, "notifyEnvironment");
-      const command = queueCommand(harness.db, harness.hub, {
+      const command = queueEnvironmentProvisionLifecycleCommand(harness, {
         hostId: host.id,
-        payload: JSON.stringify({
+        sessionId: session.id,
+        environmentId: environment.id,
+        command: {
           type: "environment.provision",
           environmentId: environment.id,
           initiator: null,
           path: "/tmp/provision-notify",
           workspaceProvisionType: "unmanaged",
-        }),
-        sessionId: session.id,
-        type: "environment.provision",
+        },
       });
       const result: HostDaemonCommandResultByType["environment.provision"] = {
         branchName: "bb/test",

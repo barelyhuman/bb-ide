@@ -4,6 +4,7 @@ import {
   getCommand,
   getEnvironment,
   getEnvironmentOperation,
+  getEnvironmentOperationByCommandId,
   queueCommand,
 } from "@bb/db";
 import {
@@ -68,6 +69,15 @@ export interface FailEnvironmentProvisioningArgs
   failureReason: string;
 }
 
+export interface EnvironmentProvisioningCommandMutationArgs {
+  commandId: string;
+}
+
+export interface FailEnvironmentProvisioningForCommandArgs
+  extends EnvironmentProvisioningCommandMutationArgs {
+  failureReason: string;
+}
+
 function isActiveProvisionOperationState(
   state: EnvironmentOperationRow["state"],
 ): boolean {
@@ -104,6 +114,22 @@ function getActiveProvisionOperation(
   return null;
 }
 
+function getActiveProvisionOperationByCommandId(
+  deps: Pick<AppDeps, "db">,
+  commandId: string,
+) {
+  const operation = getEnvironmentOperationByCommandId(deps.db, commandId);
+  if (
+    !operation
+    || (operation.kind !== "provision" && operation.kind !== "reprovision")
+    || !isActiveProvisionOperationState(operation.state)
+  ) {
+    return null;
+  }
+
+  return operation;
+}
+
 function hasQueuedProvisionCommand(
   deps: Pick<AppDeps, "db">,
   commandId: string | null,
@@ -128,6 +154,29 @@ export function completeEnvironmentProvisioning(
 
   markEnvironmentOperationRecordCompleted(deps.db, {
     environmentId: args.environmentId,
+    kind: operation.kind,
+  });
+  return true;
+}
+
+export function hasActiveEnvironmentProvisionOperationForCommand(
+  deps: Pick<AppDeps, "db">,
+  args: EnvironmentProvisioningCommandMutationArgs,
+): boolean {
+  return getActiveProvisionOperationByCommandId(deps, args.commandId) !== null;
+}
+
+export function completeEnvironmentProvisioningForCommand(
+  deps: Pick<AppDeps, "db">,
+  args: EnvironmentProvisioningCommandMutationArgs,
+): boolean {
+  const operation = getActiveProvisionOperationByCommandId(deps, args.commandId);
+  if (!operation) {
+    return false;
+  }
+
+  markEnvironmentOperationRecordCompleted(deps.db, {
+    environmentId: operation.environmentId,
     kind: operation.kind,
   });
   return true;
@@ -158,6 +207,35 @@ export function failEnvironmentProvisioning(
   }
 
   return operation !== null || environment !== null;
+}
+
+export function failEnvironmentProvisioningForCommand(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: FailEnvironmentProvisioningForCommandArgs,
+): boolean {
+  const operation = getActiveProvisionOperationByCommandId(deps, args.commandId);
+  if (!operation) {
+    return false;
+  }
+
+  markEnvironmentOperationRecordFailed(deps.db, {
+    environmentId: operation.environmentId,
+    kind: operation.kind,
+    failureReason: args.failureReason,
+  });
+
+  const environment = getEnvironment(deps.db, operation.environmentId);
+  if (
+    environment
+    && environment.status !== "destroyed"
+    && environment.status !== "error"
+  ) {
+    setEnvironmentStatus(deps.db, deps.hub, operation.environmentId, {
+      status: "error",
+    });
+  }
+
+  return true;
 }
 
 export function requestEnvironmentProvision(

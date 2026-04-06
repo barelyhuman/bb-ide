@@ -26,6 +26,11 @@ import {
 } from "./helpers/commands.js";
 import { readJson } from "./helpers/json.js";
 import {
+  queueEnvironmentDestroyLifecycleCommand,
+  queueEnvironmentProvisionLifecycleCommand,
+  queueThreadStopLifecycleCommand,
+} from "./helpers/lifecycle-commands.js";
+import {
   seedEnvironment,
   seedEvent,
   seedHostSession,
@@ -253,17 +258,17 @@ describe("internal session routes", () => {
         requestMethod: "thread/start",
         source: "spawn",
       });
-      const successCommand = queueCommand(harness.db, harness.hub, {
+      const successCommand = queueEnvironmentProvisionLifecycleCommand(harness, {
         hostId: host.id,
         sessionId: session.id,
-        type: "environment.provision",
-        payload: JSON.stringify({
+        environmentId: successEnvironment.id,
+        command: {
           type: "environment.provision",
           environmentId: successEnvironment.id,
           initiator: { threadId: successThread.id, eventSequence: 0 },
           workspaceProvisionType: "unmanaged",
           path: "/tmp/provision-success",
-        }),
+        },
       });
 
       const successResponse = await harness.app.request("/internal/session/command-result", {
@@ -318,17 +323,17 @@ describe("internal session routes", () => {
         environmentId: failureEnvironment.id,
         status: "provisioning",
       });
-      const failureCommand = queueCommand(harness.db, harness.hub, {
+      const failureCommand = queueEnvironmentProvisionLifecycleCommand(harness, {
         hostId: host.id,
         sessionId: session.id,
-        type: "environment.provision",
-        payload: JSON.stringify({
+        environmentId: failureEnvironment.id,
+        command: {
           type: "environment.provision",
           environmentId: failureEnvironment.id,
           initiator: { threadId: failureThread.id, eventSequence: 0 },
           workspaceProvisionType: "unmanaged",
           path: "/tmp/provision-failure",
-        }),
+        },
       });
 
       const failureResponse = await harness.app.request("/internal/session/command-result", {
@@ -399,11 +404,11 @@ describe("internal session routes", () => {
         requestMethod: "thread/start",
         source: "spawn",
       });
-      const command = queueCommand(harness.db, harness.hub, {
+      const command = queueEnvironmentProvisionLifecycleCommand(harness, {
         hostId: host.id,
         sessionId: session.id,
-        type: "environment.provision",
-        payload: JSON.stringify({
+        environmentId: environment.id,
+        command: {
           type: "environment.provision",
           environmentId: environment.id,
           initiator: { threadId: thread.id, eventSequence: 0 },
@@ -413,7 +418,7 @@ describe("internal session routes", () => {
           branchName: "bb/transcript",
           setupScript: ".bb-env-setup.sh",
           setupTimeoutMs: 900000,
-        }),
+        },
       });
 
       const transcriptEntries = [
@@ -502,11 +507,11 @@ describe("internal session routes", () => {
         requestMethod: "turn/start",
         source: "tell",
       });
-      const provisionCommand = queueCommand(harness.db, harness.hub, {
+      const provisionCommand = queueEnvironmentProvisionLifecycleCommand(harness, {
         hostId: host.id,
         sessionId: session.id,
-        type: "environment.provision",
-        payload: JSON.stringify({
+        environmentId: environment.id,
+        command: {
           type: "environment.provision",
           environmentId: environment.id,
           initiator: { threadId: thread.id, eventSequence: 0 },
@@ -516,7 +521,7 @@ describe("internal session routes", () => {
           branchName: "bb/reprovision-start",
           setupScript: ".bb-env-setup.sh",
           setupTimeoutMs: 900000,
-        }),
+        },
       });
 
       const response = await harness.app.request("/internal/session/command-result", {
@@ -626,11 +631,11 @@ describe("internal session routes", () => {
           source: "tell",
         },
       });
-      const provisionCommand = queueCommand(harness.db, harness.hub, {
+      const provisionCommand = queueEnvironmentProvisionLifecycleCommand(harness, {
         hostId: host.id,
         sessionId: session.id,
-        type: "environment.provision",
-        payload: JSON.stringify({
+        environmentId: environment.id,
+        command: {
           type: "environment.provision",
           environmentId: environment.id,
           initiator: { threadId: thread.id, eventSequence: 0 },
@@ -640,7 +645,7 @@ describe("internal session routes", () => {
           branchName: "bb/reprovision-malformed",
           setupScript: ".bb-env-setup.sh",
           setupTimeoutMs: 900000,
-        }),
+        },
       });
 
       const response = await harness.app.request("/internal/session/command-result", {
@@ -741,11 +746,11 @@ describe("internal session routes", () => {
         requestMethod: "turn/start",
         source: "tell",
       });
-      const provisionCommand = queueCommand(harness.db, harness.hub, {
+      const provisionCommand = queueEnvironmentProvisionLifecycleCommand(harness, {
         hostId: host.id,
         sessionId: session.id,
-        type: "environment.provision",
-        payload: JSON.stringify({
+        environmentId: environment.id,
+        command: {
           type: "environment.provision",
           environmentId: environment.id,
           initiator: { threadId: provisioningThread.id, eventSequence: 0 },
@@ -755,7 +760,7 @@ describe("internal session routes", () => {
           branchName: "bb/reprovision-filter",
           setupScript: ".bb-env-setup.sh",
           setupTimeoutMs: 900000,
-        }),
+        },
       });
 
       const response = await harness.app.request("/internal/session/command-result", {
@@ -1278,15 +1283,15 @@ describe("internal session routes", () => {
         threadId: thread.id,
         requestedAt: 123,
       });
-      const stopCommand = queueCommand(harness.db, harness.hub, {
+      const stopCommand = queueThreadStopLifecycleCommand(harness, {
         hostId: host.id,
         sessionId: session.id,
-        type: "thread.stop",
-        payload: JSON.stringify({
+        threadId: thread.id,
+        command: {
           type: "thread.stop",
           environmentId: environment.id,
           threadId: thread.id,
-        }),
+        },
       });
 
       const response = await harness.app.request("/internal/session/command-result", {
@@ -1334,18 +1339,18 @@ describe("internal session routes", () => {
         managed: true,
         status: "destroying",
       });
-      const destroyCommand = queueCommand(harness.db, harness.hub, {
+      const destroyCommand = queueEnvironmentDestroyLifecycleCommand(harness, {
         hostId: host.id,
         sessionId: session.id,
-        type: "environment.destroy",
-        payload: JSON.stringify({
+        environmentId: environment.id,
+        command: {
           type: "environment.destroy",
           environmentId: environment.id,
           workspaceContext: {
             workspacePath: environment.path,
             workspaceProvisionType: "managed-worktree",
           },
-        }),
+        },
       });
 
       const response = await harness.app.request("/internal/session/command-result", {
@@ -1407,17 +1412,17 @@ describe("internal session routes", () => {
         requestMethod: "thread/start",
         source: "spawn",
       });
-      const provisionCommand = queueCommand(harness.db, harness.hub, {
+      const provisionCommand = queueEnvironmentProvisionLifecycleCommand(harness, {
         hostId: host.id,
         sessionId: session.id,
-        type: "environment.provision",
-        payload: JSON.stringify({
+        environmentId: environment.id,
+        command: {
           type: "environment.provision",
           environmentId: environment.id,
           workspaceProvisionType: "unmanaged",
           path: "/tmp/target",
           initiator: null,
-        }),
+        },
       });
 
       const response = await harness.app.request("/internal/session/command-result", {
@@ -1487,18 +1492,18 @@ describe("internal session routes", () => {
         managed: true,
         status: "destroying",
       });
-      const destroyCommand = queueCommand(harness.db, harness.hub, {
+      const destroyCommand = queueEnvironmentDestroyLifecycleCommand(harness, {
         hostId: host.id,
         sessionId: session.id,
-        type: "environment.destroy",
-        payload: JSON.stringify({
+        environmentId: environment.id,
+        command: {
           type: "environment.destroy",
           environmentId: environment.id,
           workspaceContext: {
             workspacePath: environment.path,
             workspaceProvisionType: "managed-worktree",
           },
-        }),
+        },
       });
 
       const response = await harness.app.request("/internal/session/command-result", {

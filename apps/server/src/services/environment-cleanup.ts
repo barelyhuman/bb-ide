@@ -4,10 +4,12 @@ import type {
   EnvironmentOperationKind,
   WorkspaceProvisionType,
 } from "@bb/domain";
+import { isActiveLifecycleOperationState } from "@bb/domain";
 import {
   countLiveThreadsInEnvironment,
   getEnvironment,
   getEnvironmentOperation,
+  getEnvironmentOperationByCommandId,
   getActiveSession,
   hostDaemonCommands,
   queueCommand,
@@ -51,6 +53,15 @@ export interface EnvironmentCleanupMutationArgs {
 
 export interface FailEnvironmentCleanupArgs
   extends EnvironmentCleanupMutationArgs {
+  failureReason: string;
+}
+
+export interface EnvironmentCleanupCommandMutationArgs {
+  commandId: string;
+}
+
+export interface FailEnvironmentCleanupForCommandArgs
+  extends EnvironmentCleanupCommandMutationArgs {
   failureReason: string;
 }
 
@@ -224,6 +235,29 @@ function getDestroyOperationPayload(
   return { mode: environment.cleanupMode };
 }
 
+function getActiveDestroyOperationByCommandId(
+  deps: Pick<AppDeps, "db">,
+  commandId: string,
+) {
+  const operation = getEnvironmentOperationByCommandId(deps.db, commandId);
+  if (
+    !operation
+    || operation.kind !== "destroy"
+    || !isActiveLifecycleOperationState(operation.state)
+  ) {
+    return null;
+  }
+
+  return operation;
+}
+
+export function hasActiveEnvironmentDestroyOperationForCommand(
+  deps: Pick<AppDeps, "db">,
+  args: EnvironmentCleanupCommandMutationArgs,
+): boolean {
+  return getActiveDestroyOperationByCommandId(deps, args.commandId) !== null;
+}
+
 export function completeEnvironmentDestroy(
   deps: Pick<AppDeps, "db" | "hub">,
   args: EnvironmentCleanupMutationArgs,
@@ -237,6 +271,28 @@ export function completeEnvironmentDestroy(
   markEnvironmentOperationRecordCompleted(deps.db, {
     environmentId: args.environmentId,
     kind: "destroy",
+  });
+  return true;
+}
+
+export function completeEnvironmentDestroyForCommand(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: EnvironmentCleanupCommandMutationArgs,
+): boolean {
+  const operation = getActiveDestroyOperationByCommandId(deps, args.commandId);
+  if (!operation) {
+    return false;
+  }
+
+  const environment = getEnvironment(deps.db, operation.environmentId);
+  if (!environment || environment.status !== "destroying") {
+    return false;
+  }
+
+  setEnvironmentRecordDestroyed(deps.db, deps.hub, operation.environmentId);
+  markEnvironmentOperationRecordCompleted(deps.db, {
+    environmentId: operation.environmentId,
+    kind: operation.kind,
   });
   return true;
 }
@@ -258,6 +314,34 @@ export function failEnvironmentDestroy(
   setEnvironmentStatus(deps.db, deps.hub, args.environmentId, {
     status: environment.path ? "ready" : "error",
   });
+  return true;
+}
+
+export function failEnvironmentDestroyForCommand(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: FailEnvironmentCleanupForCommandArgs,
+): boolean {
+  const operation = getActiveDestroyOperationByCommandId(deps, args.commandId);
+  if (!operation) {
+    return false;
+  }
+
+  markEnvironmentOperationRecordFailed(deps.db, {
+    environmentId: operation.environmentId,
+    kind: operation.kind,
+    failureReason: args.failureReason,
+  });
+
+  const environment = getEnvironment(deps.db, operation.environmentId);
+  if (
+    environment
+    && environment.status === "destroying"
+  ) {
+    setEnvironmentStatus(deps.db, deps.hub, operation.environmentId, {
+      status: environment.path ? "ready" : "error",
+    });
+  }
+
   return true;
 }
 

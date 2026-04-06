@@ -3,10 +3,8 @@ import {
   deleteThread,
   events,
   getEnvironment,
-  getEnvironmentOperationByCommandId,
   getHost,
   getThread,
-  getThreadOperationByCommandId,
   hostDaemonCommands,
   threads,
 } from "@bb/db";
@@ -23,21 +21,25 @@ import {
   appendSystemErrorEvent,
 } from "../services/thread-events.js";
 import {
-  completeThreadStart,
-  failThreadStart,
-  failThreadStop,
+  completeThreadStartForCommand,
+  failThreadStartForCommand,
+  failThreadStopForCommand,
   finalizeStoppedThread,
+  hasActiveThreadStartOperationForCommand,
+  hasActiveThreadStopOperationForCommand,
   requestThreadStart,
 } from "../services/thread-stop.js";
 import {
   advanceEnvironmentCleanup,
-  completeEnvironmentDestroy,
-  failEnvironmentDestroy,
+  completeEnvironmentDestroyForCommand,
+  failEnvironmentDestroyForCommand,
+  hasActiveEnvironmentDestroyOperationForCommand,
   requestEnvironmentCleanup,
 } from "../services/environment-cleanup.js";
 import {
-  completeEnvironmentProvisioning,
-  failEnvironmentProvisioning,
+  completeEnvironmentProvisioningForCommand,
+  failEnvironmentProvisioningForCommand,
+  hasActiveEnvironmentProvisionOperationForCommand,
 } from "../services/environment-provisioning.js";
 import { destroyEphemeralHostIfReady } from "../services/host-lifecycle.js";
 import { tryTransition } from "../services/thread-transitions.js";
@@ -86,7 +88,11 @@ async function handleProvisionCommandResult(
     return;
   }
 
-  const operation = getEnvironmentOperationByCommandId(deps.db, commandRow.id);
+  if (!hasActiveEnvironmentProvisionOperationForCommand(deps, {
+    commandId: commandRow.id,
+  })) {
+    return;
+  }
   const boundThreads = deps.db
     .select()
     .from(threads)
@@ -94,10 +100,6 @@ async function handleProvisionCommandResult(
     .all();
 
   if (report.ok) {
-    if (operation?.state === "completed") {
-      return;
-    }
-
     applyProvisionedEnvironmentRecord(deps.db, deps.hub, command.environmentId, {
       path: report.result.path,
       status: "ready",
@@ -196,8 +198,8 @@ async function handleProvisionCommandResult(
       });
     }
 
-    completeEnvironmentProvisioning(deps, {
-      environmentId: command.environmentId,
+    completeEnvironmentProvisioningForCommand(deps, {
+      commandId: commandRow.id,
     });
 
     await advanceEnvironmentCleanup(deps, {
@@ -207,12 +209,8 @@ async function handleProvisionCommandResult(
     return;
   }
 
-  if (operation?.state === "failed") {
-    return;
-  }
-
-  failEnvironmentProvisioning(deps, {
-    environmentId: command.environmentId,
+  failEnvironmentProvisioningForCommand(deps, {
+    commandId: commandRow.id,
     failureReason: report.errorMessage,
   });
 
@@ -254,26 +252,27 @@ async function handleEnvironmentDestroyResult(
   if (command.type !== "environment.destroy") {
     return;
   }
-  const operation = getEnvironmentOperationByCommandId(deps.db, commandRow.id);
+
+  if (!hasActiveEnvironmentDestroyOperationForCommand(deps, {
+    commandId: commandRow.id,
+  })) {
+    return;
+  }
   const environment = getEnvironment(deps.db, command.environmentId);
 
   if (!report.ok) {
-    failEnvironmentDestroy(deps, {
-      environmentId: command.environmentId,
+    failEnvironmentDestroyForCommand(deps, {
+      commandId: commandRow.id,
       failureReason: report.errorMessage,
     });
-    return;
-  }
-
-  if (operation?.state === "completed") {
     return;
   }
 
   if (!environment || environment.status !== "destroying") {
     return;
   }
-  if (!completeEnvironmentDestroy(deps, {
-    environmentId: command.environmentId,
+  if (!completeEnvironmentDestroyForCommand(deps, {
+    commandId: commandRow.id,
   })) {
     return;
   }
@@ -307,16 +306,16 @@ function handleThreadStartResult(
     return;
   }
 
-  const operation = getThreadOperationByCommandId(deps.db, commandRow.id);
-  if (!report.ok) {
-    failThreadStart(deps, {
-      threadId: command.threadId,
-      failureReason: report.errorMessage,
-    });
+  if (!hasActiveThreadStartOperationForCommand(deps, {
+    commandId: commandRow.id,
+  })) {
     return;
   }
-
-  if (operation?.state === "completed") {
+  if (!report.ok) {
+    failThreadStartForCommand(deps, {
+      commandId: commandRow.id,
+      failureReason: report.errorMessage,
+    });
     return;
   }
 
@@ -325,8 +324,8 @@ function handleThreadStartResult(
     return;
   }
 
-  completeThreadStart(deps, {
-    threadId: thread.id,
+  completeThreadStartForCommand(deps, {
+    commandId: commandRow.id,
   });
 }
 
@@ -339,22 +338,24 @@ function handleThreadStopResult(
   if (command.type !== "thread.stop") {
     return Promise.resolve();
   }
-  const operation = getThreadOperationByCommandId(deps.db, commandRow.id);
 
-  if (!report.ok) {
-    failThreadStop(deps, {
-      threadId: command.threadId,
-      failureReason: report.errorMessage,
-    });
+  if (!hasActiveThreadStopOperationForCommand(deps, {
+    commandId: commandRow.id,
+  })) {
     return Promise.resolve();
   }
 
-  if (operation?.state === "completed") {
+  if (!report.ok) {
+    failThreadStopForCommand(deps, {
+      commandId: commandRow.id,
+      failureReason: report.errorMessage,
+    });
     return Promise.resolve();
   }
   return finalizeStoppedThread(deps, {
     threadId: command.threadId,
     cancelPendingCommand: false,
+    expectedCommandId: commandRow.id,
   }).then(() => undefined);
 }
 
