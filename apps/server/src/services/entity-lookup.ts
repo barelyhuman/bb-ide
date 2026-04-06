@@ -5,6 +5,7 @@ import {
   getEnvironment,
   getHost,
   getProject,
+  getProjectOperation,
   getThread,
   hostDaemonSessions,
   listHosts,
@@ -92,6 +93,22 @@ export function requireConnectedHostSession(
 export function requireProject(db: DbConnection, projectId: string): Project {
   const project = getProject(db, projectId);
   if (!project) {
+    throw new ApiError(404, "project_not_found", "Project not found");
+  }
+  return project;
+}
+
+export function requirePublicProject(
+  db: DbConnection,
+  projectId: string,
+): Project {
+  const project = requireProject(db, projectId);
+  if (
+    getProjectOperation(db, {
+      projectId,
+      kind: "delete",
+    }) !== null
+  ) {
     throw new ApiError(404, "project_not_found", "Project not found");
   }
   return project;

@@ -2,10 +2,8 @@ import { eq, inArray } from "drizzle-orm";
 import {
   createProject,
   createProjectSource,
-  deleteProject,
   deleteProjectSource,
   getDefaultProjectSource,
-  listEnvironments,
   listProjects,
   listThreads,
   projectSources,
@@ -31,15 +29,26 @@ import { renderTemplate } from "@bb/templates";
 import type { AppDeps } from "../types.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
-import { deleteProjectAttachments, readAttachment, storeAttachment } from "../services/attachments.js";
-import { queueEnvironmentDestroyCommand } from "../services/environment-cleanup.js";
-import { requireHostWithStatus, requireProject } from "../services/entity-lookup.js";
+import { readAttachment, storeAttachment } from "../services/attachments.js";
+import {
+  requireHostWithStatus,
+  requireProject,
+  requirePublicProject,
+} from "../services/entity-lookup.js";
 import { ensureProjectSourceEnvironment, createThreadFromRequest } from "../services/thread-create.js";
 import { queueCommandAndWait } from "../services/command-wait.js";
 import { parseOptionalInteger } from "../services/validation.js";
+import {
+  advanceProjectDeletion,
+  listProjectsPendingDeletion,
+  requestProjectDeletion,
+} from "../services/project-deletion.js";
 
 function buildProjectResponses(deps: AppDeps, projectId?: string): ProjectResponse[] {
-  const projects = projectId ? [requireProject(deps.db, projectId)] : listProjects(deps.db);
+  const deletingProjectIds = new Set(listProjectsPendingDeletion(deps));
+  const projects = projectId
+    ? [requirePublicProject(deps.db, projectId)]
+    : listProjects(deps.db).filter((project) => !deletingProjectIds.has(project.id));
   if (projects.length === 0) {
     return [];
   }
@@ -99,6 +108,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   );
 
   patch("/projects/:id", updateProjectRequestSchema, async (context, payload) => {
+    requirePublicProject(deps.db, context.req.param("id"));
     const project = updateProject(deps.db, deps.hub, context.req.param("id"), payload);
     if (!project) {
       throw new ApiError(404, "project_not_found", "Project not found");
@@ -109,30 +119,13 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   del("/projects/:id", async (context) => {
     const id = context.req.param("id");
     requireProject(deps.db, id);
-
-    // Queue host-daemon destroy commands for managed environments before the
-    // cascade delete removes the environment rows.
-    const environments = listEnvironments(deps.db, id);
-    for (const env of environments) {
-      if (env.managed && env.path && env.status !== "destroying" && env.status !== "destroyed") {
-        queueEnvironmentDestroyCommand(deps, {
-          hostId: env.hostId,
-          id: env.id,
-          path: env.path,
-          workspaceProvisionType: env.workspaceProvisionType,
-        });
-      }
-    }
-
-    // DB delete first (cascades to environments, threads, events, sources),
-    // then filesystem cleanup — avoids losing attachments if the delete throws.
-    deleteProject(deps.db, deps.hub, id);
-    await deleteProjectAttachments(deps.config.dataDir, id);
+    requestProjectDeletion(deps, { projectId: id });
+    await advanceProjectDeletion(deps, { projectId: id });
     return context.json({ ok: true });
   });
 
   post("/projects/:id/sources", createProjectSourceRequestSchema, async (context, payload) => {
-    requireProject(deps.db, context.req.param("id"));
+    requirePublicProject(deps.db, context.req.param("id"));
     if (payload.type === "local_path") {
       requireHostWithStatus(deps.db, payload.hostId);
     }
@@ -144,7 +137,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   });
 
   patch("/projects/:id/sources/:sourceId", updateProjectSourceRequestSchema, async (context, payload) => {
-    requireProject(deps.db, context.req.param("id"));
+    requirePublicProject(deps.db, context.req.param("id"));
     const existing = requireProjectSource(deps, {
       projectId: context.req.param("id"),
       sourceId: context.req.param("sourceId"),
@@ -174,7 +167,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
 
   del("/projects/:id/sources/:sourceId", (context) => {
     const projectId = context.req.param("id");
-    requireProject(deps.db, projectId);
+    requirePublicProject(deps.db, projectId);
     requireProjectSource(deps, {
       projectId,
       sourceId: context.req.param("sourceId"),
@@ -195,7 +188,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   });
 
   get("/projects/:id/files", projectFilesQuerySchema, async (context, query) => {
-    requireProject(deps.db, context.req.param("id"));
+    requirePublicProject(deps.db, context.req.param("id"));
     const source = getDefaultProjectSource(deps.db, context.req.param("id"));
     if (!source || source.type !== "local_path") {
       throw new ApiError(409, "invalid_request", "Project has no default source");
@@ -229,7 +222,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   });
 
   post("/projects/:id/attachments", async (context) => {
-    requireProject(deps.db, context.req.param("id"));
+    requirePublicProject(deps.db, context.req.param("id"));
     const formData = await context.req.formData();
     const file = formData.get("file");
     if (!(file instanceof File)) {
@@ -242,7 +235,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   });
 
   get("/projects/:id/attachments/content", projectAttachmentContentQuerySchema, async (context, query) => {
-    requireProject(deps.db, context.req.param("id"));
+    requirePublicProject(deps.db, context.req.param("id"));
     const attachment = await readAttachment(deps.config.dataDir, context.req.param("id"), query.path);
     return new Response(new Uint8Array(attachment.content), {
       status: 200,
@@ -254,7 +247,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
 
   post("/projects/:id/managers", createManagerThreadRequestSchema, async (context, payload) => {
     const projectId = context.req.param("id");
-    requireProject(deps.db, projectId);
+    requirePublicProject(deps.db, projectId);
     const source = getDefaultProjectSource(deps.db, projectId);
     if (!source) {
       throw new ApiError(409, "invalid_request", "Project has no default source");

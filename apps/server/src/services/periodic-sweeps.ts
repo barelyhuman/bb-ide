@@ -10,6 +10,10 @@ import { sweepDueAutomations } from "./automation-sweep.js";
 import { advanceEnvironmentCleanup } from "./environment-cleanup.js";
 import { destroyHost } from "./host-lifecycle.js";
 import { sweepDueNudges } from "./nudge-sweep.js";
+import {
+  advanceProjectDeletion,
+  listProjectsPendingDeletion,
+} from "./project-deletion.js";
 
 export type EvaluateManagedEnvironmentArchiveCleanupFn =
   typeof advanceEnvironmentCleanup;
@@ -58,6 +62,24 @@ export async function runEphemeralHostCleanupSweep(
   }
 }
 
+export async function runProjectDeletionSweep(
+  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger">,
+): Promise<void> {
+  for (const projectId of listProjectsPendingDeletion(deps)) {
+    try {
+      await advanceProjectDeletion(deps, { projectId });
+    } catch (error) {
+      deps.logger.warn(
+        {
+          err: error,
+          projectId,
+        },
+        "Project deletion sweep failed",
+      );
+    }
+  }
+}
+
 export async function runPeriodicSweeps(
   deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
 ): Promise<void> {
@@ -71,6 +93,7 @@ export async function runPeriodicSweeps(
         deps,
         advanceEnvironmentCleanup,
       );
+    await runProjectDeletionSweep(deps);
     await runEphemeralHostCleanupSweep(deps, destroyHost);
   } catch (error) {
     deps.logger.error({ err: error }, "Periodic sweep failed");

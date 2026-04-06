@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type {
   LifecycleOperationState,
   ProjectOperationKind,
@@ -33,6 +33,12 @@ export interface UpdateProjectOperationStateArgs {
   projectId: string;
   queuedAt?: number | null;
   state: LifecycleOperationState;
+}
+
+export interface ListProjectOperationsArgs {
+  kind?: ProjectOperationKind;
+  projectIds?: string[];
+  states?: LifecycleOperationState[];
 }
 
 function getProjectOperationRecord(
@@ -83,6 +89,27 @@ export function getProjectOperation(
   args: GetProjectOperationArgs,
 ): ProjectOperationRow | null {
   return getProjectOperationRecord(db, args);
+}
+
+export function listProjectOperations(
+  db: ProjectOperationReadConnection,
+  args: ListProjectOperationsArgs = {},
+): ProjectOperationRow[] {
+  const filters = [
+    args.kind ? eq(projectOperations.kind, args.kind) : undefined,
+    args.projectIds && args.projectIds.length > 0
+      ? inArray(projectOperations.projectId, args.projectIds)
+      : undefined,
+    args.states && args.states.length > 0
+      ? inArray(projectOperations.state, args.states)
+      : undefined,
+  ].filter((value) => value !== undefined);
+
+  return db
+    .select()
+    .from(projectOperations)
+    .where(filters.length > 0 ? and(...filters) : undefined)
+    .all();
 }
 
 export function getProjectOperationByCommandId(

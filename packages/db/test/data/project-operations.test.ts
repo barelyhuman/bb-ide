@@ -6,6 +6,7 @@ import { queueCommand } from "../../src/data/commands.js";
 import {
   getProjectOperation,
   getProjectOperationByCommandId,
+  listProjectOperations,
   markProjectOperationFailed,
   markProjectOperationQueued,
   upsertProjectOperation,
@@ -113,5 +114,28 @@ describe("project operations", () => {
       state: "failed",
       commandId: command.id,
     });
+  });
+
+  it("lists project operations by kind and state", () => {
+    const { db, project } = setup();
+
+    upsertProjectOperation(db, {
+      projectId: project.id,
+      kind: "delete",
+      payload: JSON.stringify({ stage: "requested" }),
+    });
+
+    expect(
+      listProjectOperations(db, {
+        kind: "delete",
+        states: ["requested"],
+      }),
+    ).toHaveLength(1);
+    expect(
+      listProjectOperations(db, {
+        kind: "delete",
+        states: ["failed"],
+      }),
+    ).toHaveLength(0);
   });
 });

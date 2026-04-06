@@ -34,7 +34,7 @@ import {
   validateScheduleDefinition,
 } from "../services/schedule-helpers.js";
 import {
-  requireProject,
+  requirePublicProject,
 } from "../services/entity-lookup.js";
 import { resolveStableThreadRequestEnvironment } from "../services/thread-request-eligibility.js";
 
@@ -188,7 +188,7 @@ export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
 
   get("/projects/:id/automations", (context) => {
     const projectId = context.req.param("id");
-    requireProject(deps.db, projectId);
+    requirePublicProject(deps.db, projectId);
     const responses = listAutomations(deps.db, projectId).flatMap((automation) => {
       try {
         return [toAutomationResponse(deps, automation)];
@@ -209,7 +209,7 @@ export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
 
   post("/projects/:id/automations", createAutomationRequestSchema, (context, payload) => {
     const projectId = context.req.param("id");
-    requireProject(deps.db, projectId);
+    requirePublicProject(deps.db, projectId);
 
     try {
       const values = resolveCreateAutomationValues(payload);
@@ -241,7 +241,7 @@ export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
     updateAutomationRequestSchema,
     (context, payload) => {
       const projectId = context.req.param("id");
-      requireProject(deps.db, projectId);
+      requirePublicProject(deps.db, projectId);
       const current = requireProjectAutomation(deps, {
         projectId,
         automationId: context.req.param("automationId"),
@@ -285,7 +285,7 @@ export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
 
   del("/projects/:id/automations/:automationId", (context) => {
     const projectId = context.req.param("id");
-    requireProject(deps.db, projectId);
+    requirePublicProject(deps.db, projectId);
     requireProjectAutomation(deps, {
       projectId,
       automationId: context.req.param("automationId"),

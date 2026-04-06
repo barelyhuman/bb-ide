@@ -1,11 +1,17 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { hostDaemonCommands, hostDaemonSessions } from "@bb/db";
+import {
+  getProject,
+  hostDaemonCommands,
+  hostDaemonSessions,
+} from "@bb/db";
 import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
 import { describe, expect, it } from "vitest";
 import {
+  reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
+  waitForQueuedCommandAfter,
 } from "./helpers/commands.js";
 import { readJson } from "./helpers/json.js";
 import {
@@ -15,9 +21,32 @@ import {
   seedProjectWithSource,
 } from "./helpers/seed.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
+import { runProjectDeletionSweep } from "../src/services/periodic-sweeps.js";
 
 const idOnlyResponseSchema = z.object({
   id: z.string(),
+});
+
+const projectResponseSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  sources: z.array(
+    z.object({
+      id: z.string(),
+      isDefault: z.boolean(),
+      type: z.string(),
+      hostId: z.string().nullable().optional(),
+      path: z.string().nullable().optional(),
+      repoUrl: z.string().nullable().optional(),
+    }),
+  ),
+});
+
+const attachmentResponseSchema = z.object({
+  mimeType: z.string().optional(),
+  name: z.string(),
+  path: z.string(),
+  type: z.string(),
 });
 
 const hostStatusListResponseSchema = z.array(
@@ -44,11 +73,7 @@ describe("public project and host routes", () => {
         }),
       });
       expect(createResponse.status).toBe(201);
-      const createdProject = await readJson(createResponse) as {
-        id: string;
-        name: string;
-        sources: Array<{ id: string; isDefault: boolean }>;
-      };
+      const createdProject = projectResponseSchema.parse(await readJson(createResponse));
       expect(createdProject.name).toBe("Project One");
       expect(createdProject.sources).toHaveLength(1);
       expect(createdProject.sources[0]?.isDefault).toBe(true);
@@ -114,10 +139,7 @@ describe("public project and host routes", () => {
       });
 
       expect(response.status).toBe(201);
-      const project = await readJson(response) as {
-        name: string;
-        sources: Array<Record<string, unknown>>;
-      };
+      const project = projectResponseSchema.parse(await readJson(response));
       expect(project.name).toBe("GitHub Project");
       expect(project.sources).toEqual([
         expect.objectContaining({
@@ -149,10 +171,7 @@ describe("public project and host routes", () => {
           source: { type: "local_path", hostId: host.id, path: "/tmp/project-sources" },
         }),
       });
-      const project = await readJson(projectResponse) as {
-        id: string;
-        sources: Array<{ id: string; isDefault: boolean }>;
-      };
+      const project = projectResponseSchema.parse(await readJson(projectResponse));
       const defaultSourceId = project.sources[0]?.id;
       expect(defaultSourceId).toBeTruthy();
 
@@ -204,10 +223,10 @@ describe("public project and host routes", () => {
         },
       );
       expect(createGitHubSourceResponse.status).toBe(201);
-      const githubSource = await readJson(createGitHubSourceResponse) as {
-        repoUrl: string;
-        type: string;
-      };
+      const githubSource = z.object({
+        repoUrl: z.string(),
+        type: z.string(),
+      }).parse(await readJson(createGitHubSourceResponse));
       expect(githubSource).toMatchObject({
         type: "github_repo",
         repoUrl: "https://github.com/example/project-sources",
@@ -260,9 +279,9 @@ describe("public project and host routes", () => {
       const projectAfterDeleteResponse = await harness.app.request(
         `/api/v1/projects/${project.id}`,
       );
-      const projectAfterDelete = await readJson(projectAfterDeleteResponse) as {
-        sources: Array<{ id: string; isDefault: boolean; repoUrl?: string; type: string }>;
-      };
+      const projectAfterDelete = projectResponseSchema.parse(
+        await readJson(projectAfterDeleteResponse),
+      );
       expect(projectAfterDelete.sources).toEqual([
         expect.objectContaining({
           id: secondSource.id,
@@ -405,12 +424,7 @@ describe("public project and host routes", () => {
         },
       );
       expect(uploadResponse.status).toBe(201);
-      const uploaded = await readJson(uploadResponse) as {
-        mimeType?: string;
-        name: string;
-        path: string;
-        type: string;
-      };
+      const uploaded = attachmentResponseSchema.parse(await readJson(uploadResponse));
       expect(uploaded).toMatchObject({
         type: "localFile",
         name: "notes.txt",
@@ -494,7 +508,87 @@ describe("public project and host routes", () => {
         },
       });
 
-      // Project should be gone.
+      // Project is hidden from public reads immediately, but remains internally
+      // until managed teardown completes.
+      const listResponse = await harness.app.request("/api/v1/projects");
+      expect(listResponse.status).toBe(200);
+      await expect(readJson(listResponse)).resolves.toEqual([]);
+      expect(getProject(harness.db, project.id)).not.toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("retries managed project teardown after a partial destroy failure", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-delete-project-retry",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-delete-retry",
+      });
+      const firstEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        managed: true,
+        path: "/tmp/project-delete-retry/one",
+        projectId: project.id,
+        status: "ready",
+        workspaceProvisionType: "managed-worktree",
+      });
+      const secondEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        managed: true,
+        path: "/tmp/project-delete-retry/two",
+        projectId: project.id,
+        status: "ready",
+        workspaceProvisionType: "managed-worktree",
+      });
+
+      const deleteResponse = await harness.app.request(
+        `/api/v1/projects/${project.id}`,
+        { method: "DELETE" },
+      );
+      expect(deleteResponse.status).toBe(200);
+      await expect(readJson(deleteResponse)).resolves.toEqual({ ok: true });
+
+      const firstDestroy = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "environment.destroy"
+          && command.environmentId === firstEnvironment.id,
+      );
+      const secondDestroy = await waitForQueuedCommandAfter(
+        harness,
+        firstDestroy.row.cursor,
+        ({ command }) =>
+          command.type === "environment.destroy"
+          && command.environmentId === secondEnvironment.id,
+      );
+
+      await reportQueuedCommandSuccess(harness, firstDestroy, { ok: true });
+      await reportQueuedCommandError(harness, secondDestroy, {
+        errorCode: "provider_error",
+        errorMessage: "Destroy failed",
+      });
+
+      expect(getProject(harness.db, project.id)).not.toBeNull();
+
+      await runProjectDeletionSweep(harness.deps);
+
+      const retriedDestroy = await waitForQueuedCommandAfter(
+        harness,
+        secondDestroy.row.cursor,
+        ({ command }) =>
+          command.type === "environment.destroy"
+          && command.environmentId === secondEnvironment.id,
+      );
+      await reportQueuedCommandSuccess(harness, retriedDestroy, { ok: true });
+
+      await runProjectDeletionSweep(harness.deps);
+
+      expect(getProject(harness.db, project.id)).toBeNull();
       const listResponse = await harness.app.request("/api/v1/projects");
       expect(listResponse.status).toBe(200);
       await expect(readJson(listResponse)).resolves.toEqual([]);

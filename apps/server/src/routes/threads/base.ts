@@ -21,6 +21,7 @@ import {
 } from "../../services/environment-cleanup.js";
 import {
   requireEnvironment,
+  requirePublicProject,
   requirePublicThread,
   requirePublicThreadEnvironment,
 } from "../../services/entity-lookup.js";
@@ -46,16 +47,17 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
     );
   });
 
-  post("/threads", createThreadRequestSchema, async (context, payload) =>
-    context.json(
+  post("/threads", createThreadRequestSchema, async (context, payload) => {
+    requirePublicProject(deps.db, payload.projectId);
+    return context.json(
       await createThreadFromRequest(deps, {
         ...payload,
         automationId: null,
         type: "standard",
       }),
       201,
-    ),
-  );
+    );
+  });
 
   get("/threads/:id", (context) =>
     context.json(requirePublicThread(deps.db, context.req.param("id"))),

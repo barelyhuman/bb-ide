@@ -11,6 +11,7 @@ export {
   cancelProjectOperation,
   getProjectOperation,
   getProjectOperationByCommandId,
+  listProjectOperations,
   markProjectOperationCompleted,
   markProjectOperationFailed,
   markProjectOperationFetched,
@@ -19,6 +20,7 @@ export {
 } from "./project-operations.js";
 export type {
   GetProjectOperationArgs,
+  ListProjectOperationsArgs,
   ProjectOperationRow,
   UpsertProjectOperationInput,
 } from "./project-operations.js";
