@@ -81,10 +81,10 @@ That starts the Vite app on `http://localhost:5173` and proxies API and WebSocke
 To test an additional host against that dev server, use:
 
 ```bash
-pnpm dev:host-daemon
+BB_HOST_ENROLL_KEY=<join-code> pnpm dev:host-daemon
 ```
 
-That runs a second host daemon against the dev server and stores its state under `~/.bb-dev-host` by default.
+That runs a second host daemon against the dev server and stores its state under `~/.bb-dev-host-daemon` by default. Provide the join code from the server-side host join flow on first run; after enrollment, the daemon persists its auth state locally.
 
 ```bash
 pnpm bb:dev --help        # CLI during development
