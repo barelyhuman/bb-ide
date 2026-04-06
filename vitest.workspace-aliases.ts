@@ -51,7 +51,6 @@ export const workspaceTestAliases = {
     "packages/provider-audit/src/index.ts",
   ),
   "@bb/ui-core": path.resolve(repoRoot, "packages/ui-core/src/index.ts"),
-  "@bb/workspace": path.resolve(repoRoot, "packages/workspace/src/index.ts"),
   "@bb/sandbox-host": path.resolve(
     repoRoot,
     "packages/sandbox-host/src/index.ts",

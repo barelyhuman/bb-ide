@@ -38,11 +38,6 @@ const serverNoWorkspaceAccessRules = {
     {
       paths: [
         {
-          name: "@bb/workspace",
-          message:
-            "Server must not access workspaces directly. Use daemon commands instead.",
-        },
-        {
           name: "@bb/host-workspace",
           message:
             "Server must not access workspaces directly. Use daemon commands instead.",
