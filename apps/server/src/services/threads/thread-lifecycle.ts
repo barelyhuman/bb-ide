@@ -426,7 +426,7 @@ export function requestThreadStop(
   });
 }
 
-export function advanceThreadStop(
+function advanceThreadStop(
   deps: Pick<AppDeps, "db" | "hub">,
   args: AdvanceThreadOperationArgs,
 ): string | null {

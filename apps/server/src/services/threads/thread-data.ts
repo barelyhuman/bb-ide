@@ -12,7 +12,7 @@ import type {
 import type { DbConnection } from "@bb/db";
 import { ApiError } from "../../errors.js";
 
-export const storedEventRowFields = {
+const storedEventRowFields = {
   createdAt: events.createdAt,
   data: events.data,
   id: events.id,

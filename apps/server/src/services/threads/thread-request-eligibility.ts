@@ -90,7 +90,7 @@ function selectSandboxCloneSource(
   return cloneSources[0] ?? null;
 }
 
-export function resolveSandboxCloneSourceForProject(
+function resolveSandboxCloneSourceForProject(
   deps: Pick<AppDeps, "db">,
   args: { projectId: string },
 ): GitHubRepoProjectSource {

@@ -190,7 +190,7 @@ export async function prepareTurnRunCommandPayload(
   });
 }
 
-export async function createTurnRunCommandPayload(
+async function createTurnRunCommandPayload(
   deps: Pick<AppDeps, "db" | "hub">,
   args: CreateTurnRunCommandPayloadArgs,
 ): Promise<Extract<HostDaemonCommand, { type: "turn.run" }>> {

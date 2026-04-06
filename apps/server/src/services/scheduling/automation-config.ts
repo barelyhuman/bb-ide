@@ -30,7 +30,7 @@ import {
 } from "../threads/thread-request-eligibility.js";
 
 export type AutomationRow = typeof automations.$inferSelect;
-export const MALFORMED_AUTOMATION_CONFIGURATION_MESSAGE =
+const MALFORMED_AUTOMATION_CONFIGURATION_MESSAGE =
   "Automation configuration is malformed and must be edited before it can run.";
 
 export interface ComputeAutomationValidationArgs {
@@ -120,7 +120,7 @@ export function parseAutomationAction(
   return parseJsonWithSchema(action, automationActionSchema);
 }
 
-export function parseAutomationDefinition(
+function parseAutomationDefinition(
   row: Pick<AutomationRow, "action" | "triggerConfig">,
 ): ParsedAutomationDefinition {
   return {
@@ -129,7 +129,7 @@ export function parseAutomationDefinition(
   };
 }
 
-export function computeAutomationValidation(
+function computeAutomationValidation(
   deps: Pick<AppDeps, "db">,
   args: ComputeAutomationValidationArgs,
 ): AutomationValidation {
@@ -190,7 +190,7 @@ export function buildStableThreadRequestProjectData(
   };
 }
 
-export function computeAutomationValidationWithProjectData(
+function computeAutomationValidationWithProjectData(
   args: ComputeAutomationValidationArgs & {
     projectData: StableThreadRequestProjectData;
   },

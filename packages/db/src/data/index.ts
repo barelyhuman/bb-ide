@@ -33,7 +33,6 @@ export type {
 } from "./project-sources.js";
 
 export {
-  advanceAutomationAfterRun,
   advanceAutomationAfterRunInTransaction,
   claimAutomationScheduledRun,
   createAutomation,

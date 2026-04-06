@@ -114,7 +114,7 @@ export function requirePublicProject(
   return project;
 }
 
-export function requireThread(db: DbConnection, threadId: string): Thread {
+function requireThread(db: DbConnection, threadId: string): Thread {
   const thread = getThread(db, threadId);
   if (!thread) {
     throw new ApiError(404, "thread_not_found", "Thread not found");

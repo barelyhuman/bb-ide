@@ -7,7 +7,7 @@ export interface InferenceModelInfo {
   modelId: string;
 }
 
-export function parseInferenceModel(model: string): InferenceModelInfo {
+function parseInferenceModel(model: string): InferenceModelInfo {
   const slashIndex = model.indexOf("/");
   if (slashIndex === -1) {
     throw new Error(`Invalid inference model: ${model}`);
@@ -18,7 +18,7 @@ export function parseInferenceModel(model: string): InferenceModelInfo {
   };
 }
 
-export function getInferenceModel(
+function getInferenceModel(
   deps: Pick<AppDeps, "config" | "logger">,
 ): ReturnType<typeof getModel> | null {
   const modelInfo = parseInferenceModel(deps.config.inferenceModel);

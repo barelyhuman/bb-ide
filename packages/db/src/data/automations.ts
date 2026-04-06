@@ -248,21 +248,6 @@ export function advanceAutomationAfterRunInTransaction(
   return result.changes > 0;
 }
 
-export function advanceAutomationAfterRun(
-  db: DbConnection,
-  notifier: DbNotifier,
-  args: AdvanceAutomationAfterRunArgs & { projectId: string },
-) {
-  const advanced = db.transaction(
-    (tx) => advanceAutomationAfterRunInTransaction(tx, args),
-    { behavior: "immediate" },
-  );
-  if (advanced) {
-    notifier.notifyProject(args.projectId, ["automations-changed"]);
-  }
-  return advanced;
-}
-
 export function restoreAutomationAfterFailedRun(
   db: DbConnection,
   notifier: DbNotifier,

@@ -23,7 +23,7 @@ function normalizeHostname(hostname: string): string {
     : hostname;
 }
 
-export function isReachablePublicServerUrl(publicUrl: string): boolean {
+function isReachablePublicServerUrl(publicUrl: string): boolean {
   const parsedUrl = new URL(publicUrl);
   const normalizedHostname = normalizeHostname(parsedUrl.hostname);
   const ipVersion = isIP(normalizedHostname);

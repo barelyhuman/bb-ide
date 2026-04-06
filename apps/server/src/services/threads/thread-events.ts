@@ -79,11 +79,11 @@ export function appendThreadEvent(
   return appendStoredThreadEvent(deps.db, deps.hub, args);
 }
 
-export function appendThreadEventInTransaction<TType extends ThreadEventType>(
+function appendThreadEventInTransaction<TType extends ThreadEventType>(
   db: DbTransaction,
   args: AppendThreadEventArgs<TType>,
 ): number;
-export function appendThreadEventInTransaction(
+function appendThreadEventInTransaction(
   db: DbTransaction,
   args: AppendThreadEventArgs,
 ): number {
