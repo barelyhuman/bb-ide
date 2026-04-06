@@ -8,12 +8,10 @@ import * as api from "@/lib/api";
 import type { RequestEnvironmentActionMutationRequest } from "./mutation-request-types";
 import {
   getEnvironmentActionInvalidationQueryKeys,
-  getEnvironmentStateInvalidationQueryKeys,
+  getEnvironmentWorkspaceStateInvalidationQueryKeys,
 } from "../queries/query-cache";
 import {
-  ENVIRONMENT_QUERY_KEY,
   environmentQueryKey,
-  statusQueryKey,
 } from "../queries/query-keys";
 type UpdateEnvironmentMutationRequest = { id: string } & UpdateEnvironmentRequest;
 
@@ -47,15 +45,11 @@ export function useUpdateEnvironment() {
         environmentQueryKey(environment.id),
         environment,
       );
-      for (const queryKey of getEnvironmentStateInvalidationQueryKeys({
+      for (const queryKey of getEnvironmentWorkspaceStateInvalidationQueryKeys({
         environmentId: environment.id,
       })) {
-        if (queryKey[0] === ENVIRONMENT_QUERY_KEY) {
-          continue;
-        }
         queryClient.invalidateQueries({ queryKey });
       }
-      queryClient.invalidateQueries({ queryKey: statusQueryKey() });
     },
   });
 }

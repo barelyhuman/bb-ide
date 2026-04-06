@@ -4,6 +4,10 @@ import type {
   WorkspaceStatusWatchArgs,
   WorkspaceStatusWatchError,
 } from "@bb/workspace/watch-status";
+import type {
+  PathChangeWatchArgs,
+  PathChangeWatchError,
+} from "@bb/workspace/watch-path";
 import { describe, expect, it, vi } from "vitest";
 import { RuntimeManager } from "./runtime-manager.js";
 
@@ -29,6 +33,9 @@ type ListModelsArgs = Parameters<AgentRuntime["listModels"]>[0];
 type WatchWorkspaceStatusArgs = [string, WorkspaceStatusWatchArgs];
 type StopWatchingStatus = () => void;
 type WatchWorkspaceStatus = (...args: WatchWorkspaceStatusArgs) => StopWatchingStatus;
+type WatchPathChangesArgs = [string, PathChangeWatchArgs];
+type StopWatchingPathChanges = () => void;
+type WatchPathChanges = (...args: WatchPathChangesArgs) => StopWatchingPathChanges;
 
 function createFakeWorkspace(
   path: string,
@@ -97,6 +104,15 @@ function createFakeWatchWorkspaceStatus(args: {
   return vi.fn<WatchWorkspaceStatus>(
     args.implementation ??
       ((_cwd, _watchArgs) => () => undefined),
+  );
+}
+
+function createFakeWatchPathChanges(args: {
+  implementation?: WatchPathChanges;
+} = {}) {
+  return vi.fn<WatchPathChanges>(
+    args.implementation ??
+      ((_path, _watchArgs) => () => undefined),
   );
 }
 
@@ -343,6 +359,96 @@ describe("RuntimeManager", () => {
         threadId: "thread-1",
       },
     ]);
+  });
+
+  it("installs one shared thread storage root watcher for tracked threads", async () => {
+    const stopWatchingPathChanges = vi.fn(() => undefined);
+    let watchPathArgs: PathChangeWatchArgs | undefined;
+    const watchPathChanges = createFakeWatchPathChanges({
+      implementation: (_watchedPath, args) => {
+        watchPathArgs = args;
+        return stopWatchingPathChanges;
+      },
+    });
+    const onThreadStorageChanged = vi.fn();
+    const manager = new RuntimeManager({
+      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-storage"),
+      createRuntime: vi.fn(() => createFakeRuntime()),
+      onThreadStorageChanged,
+      threadStorageRootPath: "/tmp/bb-data/thread-storage",
+      watchPathChanges,
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-storage",
+      workspacePath: "/tmp/env-storage",
+    });
+
+    manager.markThreadActive("env-storage", "thread-1", "provider-1");
+    manager.markThreadActive("env-storage", "thread-2", "provider-2");
+    watchPathArgs?.onChange({
+      changedPaths: [
+        "/tmp/bb-data/thread-storage/thread-1/notes/todo.md",
+        "/tmp/bb-data/thread-storage/thread-2/notes/plan.md",
+        "/tmp/bb-data/thread-storage/thread-3/ignored.md",
+      ],
+    });
+
+    expect(watchPathChanges).toHaveBeenCalledTimes(1);
+    expect(watchPathChanges).toHaveBeenCalledWith(
+      "/tmp/bb-data/thread-storage",
+      expect.any(Object),
+    );
+    expect(onThreadStorageChanged).toHaveBeenNthCalledWith(1, {
+      environmentId: "env-storage",
+      threadId: "thread-1",
+    });
+    expect(onThreadStorageChanged).toHaveBeenNthCalledWith(2, {
+      environmentId: "env-storage",
+      threadId: "thread-2",
+    });
+    expect(onThreadStorageChanged).toHaveBeenCalledTimes(2);
+    expect(stopWatchingPathChanges).not.toHaveBeenCalled();
+
+    await manager.destroyEnvironment("env-storage");
+
+    expect(stopWatchingPathChanges).toHaveBeenCalledTimes(1);
+  });
+
+  it("forwards thread storage watch failures for the shared root watcher", async () => {
+    let watchPathArgs: PathChangeWatchArgs | undefined;
+    const watchPathChanges = createFakeWatchPathChanges({
+      implementation: (_watchedPath, args) => {
+        watchPathArgs = args;
+        return () => undefined;
+      },
+    });
+    const onThreadStorageWatchError = vi.fn();
+    const manager = new RuntimeManager({
+      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-storage"),
+      createRuntime: vi.fn(() => createFakeRuntime()),
+      onThreadStorageWatchError,
+      threadStorageRootPath: "/tmp/bb-data/thread-storage",
+      watchPathChanges,
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-storage",
+      workspacePath: "/tmp/env-storage",
+    });
+
+    manager.markThreadActive("env-storage", "thread-1", "provider-1");
+    watchPathArgs?.onWatchError({
+      message: "watch failed",
+      rootPath: "/tmp/bb-data/thread-storage",
+    } satisfies PathChangeWatchError);
+
+    expect(onThreadStorageWatchError).toHaveBeenCalledWith({
+      error: {
+        message: "watch failed",
+        rootPath: "/tmp/bb-data/thread-storage",
+      },
+    });
   });
 
   it("removes stale entries when the provider process exits", async () => {

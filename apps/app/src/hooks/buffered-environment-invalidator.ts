@@ -1,18 +1,28 @@
+import type { EnvironmentChangeKind } from "@bb/domain";
+
 interface BufferedEnvironmentInvalidatorOptions {
   debounceMs: number;
-  flushChangedEnvironmentIds: (environmentIds: string[]) => void;
+  flushChangedEnvironmentIds: (
+    changedEnvironments: Array<{
+      changeKinds: EnvironmentChangeKind[];
+      environmentId: string;
+    }>,
+  ) => void;
   maxWaitMs: number;
 }
 
 interface BufferedEnvironmentInvalidator {
   dispose: () => void;
-  markChanged: (environmentId: string) => void;
+  markChanged: (
+    environmentId: string,
+    changeKinds: readonly EnvironmentChangeKind[],
+  ) => void;
 }
 
 export function createBufferedEnvironmentInvalidator(
   options: BufferedEnvironmentInvalidatorOptions,
 ): BufferedEnvironmentInvalidator {
-  const changedEnvironmentIds = new Set<string>();
+  const changedEnvironmentKindsById = new Map<string, Set<EnvironmentChangeKind>>();
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let maxWaitTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -25,11 +35,18 @@ export function createBufferedEnvironmentInvalidator(
       clearTimeout(maxWaitTimer);
       maxWaitTimer = null;
     }
-    if (changedEnvironmentIds.size === 0) {
+    if (changedEnvironmentKindsById.size === 0) {
       return;
     }
-    options.flushChangedEnvironmentIds(Array.from(changedEnvironmentIds));
-    changedEnvironmentIds.clear();
+    options.flushChangedEnvironmentIds(
+      Array.from(changedEnvironmentKindsById.entries()).map(
+        ([environmentId, changeKinds]) => ({
+          changeKinds: Array.from(changeKinds),
+          environmentId,
+        }),
+      ),
+    );
+    changedEnvironmentKindsById.clear();
   };
 
   const schedule = () => {
@@ -53,10 +70,20 @@ export function createBufferedEnvironmentInvalidator(
         clearTimeout(maxWaitTimer);
         maxWaitTimer = null;
       }
-      changedEnvironmentIds.clear();
+      changedEnvironmentKindsById.clear();
     },
-    markChanged: (environmentId: string) => {
-      changedEnvironmentIds.add(environmentId);
+    markChanged: (
+      environmentId: string,
+      changeKinds: readonly EnvironmentChangeKind[],
+    ) => {
+      let entry = changedEnvironmentKindsById.get(environmentId);
+      if (!entry) {
+        entry = new Set<EnvironmentChangeKind>();
+        changedEnvironmentKindsById.set(environmentId, entry);
+      }
+      for (const changeKind of changeKinds) {
+        entry.add(changeKind);
+      }
       schedule();
     },
   };

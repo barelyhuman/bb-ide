@@ -15,9 +15,9 @@ describe("createBufferedEnvironmentInvalidator", () => {
       maxWaitMs: 300,
     });
 
-    invalidator.markChanged("env-1");
+    invalidator.markChanged("env-1", ["work-status-changed"]);
     vi.advanceTimersByTime(50);
-    invalidator.markChanged("env-1");
+    invalidator.markChanged("env-1", ["thread-storage-changed"]);
     vi.advanceTimersByTime(99);
 
     expect(flushChangedEnvironmentIds).not.toHaveBeenCalled();
@@ -25,7 +25,12 @@ describe("createBufferedEnvironmentInvalidator", () => {
     vi.advanceTimersByTime(1);
 
     expect(flushChangedEnvironmentIds).toHaveBeenCalledTimes(1);
-    expect(flushChangedEnvironmentIds).toHaveBeenCalledWith(["env-1"]);
+    expect(flushChangedEnvironmentIds).toHaveBeenCalledWith([
+      {
+        changeKinds: ["work-status-changed", "thread-storage-changed"],
+        environmentId: "env-1",
+      },
+    ]);
   });
 
   it("flushes multiple changed environments together at max wait", () => {
@@ -37,11 +42,11 @@ describe("createBufferedEnvironmentInvalidator", () => {
       maxWaitMs: 250,
     });
 
-    invalidator.markChanged("env-1");
+    invalidator.markChanged("env-1", ["work-status-changed"]);
     vi.advanceTimersByTime(90);
-    invalidator.markChanged("env-2");
+    invalidator.markChanged("env-2", ["thread-storage-changed"]);
     vi.advanceTimersByTime(90);
-    invalidator.markChanged("env-1");
+    invalidator.markChanged("env-1", ["work-status-changed"]);
     vi.advanceTimersByTime(69);
 
     expect(flushChangedEnvironmentIds).not.toHaveBeenCalled();
@@ -49,7 +54,16 @@ describe("createBufferedEnvironmentInvalidator", () => {
     vi.advanceTimersByTime(1);
 
     expect(flushChangedEnvironmentIds).toHaveBeenCalledTimes(1);
-    expect(flushChangedEnvironmentIds).toHaveBeenCalledWith(["env-1", "env-2"]);
+    expect(flushChangedEnvironmentIds).toHaveBeenCalledWith([
+      {
+        changeKinds: ["work-status-changed"],
+        environmentId: "env-1",
+      },
+      {
+        changeKinds: ["thread-storage-changed"],
+        environmentId: "env-2",
+      },
+    ]);
   });
 
   it("cancels pending flushes during dispose", () => {
@@ -61,7 +75,7 @@ describe("createBufferedEnvironmentInvalidator", () => {
       maxWaitMs: 250,
     });
 
-    invalidator.markChanged("env-1");
+    invalidator.markChanged("env-1", ["work-status-changed"]);
     invalidator.dispose();
     vi.runAllTimers();
 

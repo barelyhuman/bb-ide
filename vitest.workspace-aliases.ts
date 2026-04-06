@@ -47,6 +47,10 @@ export const workspaceTestAliases = {
     repoRoot,
     "packages/workspace/src/watch-status.ts",
   ),
+  "@bb/workspace/watch-path": path.resolve(
+    repoRoot,
+    "packages/workspace/src/watch-path.ts",
+  ),
   "@bb/workspace": path.resolve(repoRoot, "packages/workspace/src/index.ts"),
   "@bb/sandbox-host": path.resolve(
     repoRoot,

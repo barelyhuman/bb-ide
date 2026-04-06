@@ -1,3 +1,4 @@
+import path from "node:path";
 import {
   createAgentRuntime,
   type AgentRuntime,
@@ -11,7 +12,33 @@ import {
   type ProvisionWorkspaceOpts,
 } from "@bb/workspace";
 import type { WorkspaceStatusWatchError } from "@bb/workspace/watch-status";
-import type { WatchWorkspaceStatus } from "./workspace-status-watch.js";
+import type { PathChangeWatchError } from "@bb/workspace/watch-path";
+import type {
+  WatchPathChanges,
+  WatchWorkspaceStatus,
+} from "./workspace-status-watch.js";
+
+const STOP_WATCHING = () => undefined;
+
+interface RuntimeThreadState {
+  providerThreadId: string;
+  status: "active" | "idle";
+}
+
+interface ThreadStorageTarget {
+  environmentId: string;
+  threadId: string;
+}
+
+interface ThreadStorageRootChangeArgs {
+  changedPaths: string[];
+  threadStorageRootPath: string;
+}
+
+interface ThreadStoragePathArgs {
+  changedPath: string;
+  threadStorageRootPath: string;
+}
 
 function lazyProvisionOpts(
   workspacePath: string,
@@ -33,13 +60,7 @@ export interface RuntimeEntry {
   stopWatchingStatus: () => void;
   workspace: IWorkspace;
   path: string;
-  threads: Map<
-    string,
-    {
-      providerThreadId: string;
-      status: "active" | "idle";
-    }
-  >;
+  threads: Map<string, RuntimeThreadState>;
 }
 
 export interface EnsureEnvironmentArgs {
@@ -54,9 +75,18 @@ export interface RuntimeManagerOptions {
   createRuntime?: (options: AgentRuntimeOptions) => AgentRuntime;
   provisionWorkspace?: (options: ProvisionWorkspaceOpts) => Promise<IWorkspace>;
   watchWorkspaceStatus?: WatchWorkspaceStatus;
+  watchPathChanges?: WatchPathChanges;
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
   shellEnv?: AgentRuntimeOptions["shellEnv"];
   onEvent?: (args: { environmentId: string; event: ThreadEvent }) => void;
+  threadStorageRootPath?: string | null;
+  onThreadStorageChanged?: (args: {
+    environmentId: string;
+    threadId: string;
+  }) => void;
+  onThreadStorageWatchError?: (args: {
+    error: PathChangeWatchError;
+  }) => void;
   onWorkspaceStatusChanged?: (args: { environmentId: string }) => void;
   onWorkspaceStatusWatchError?: (args: {
     environmentId: string;
@@ -70,12 +100,17 @@ export interface RuntimeManagerOptions {
 export class RuntimeManager {
   private readonly createRuntime;
   private readonly provisionWorkspace;
+  private readonly watchPathChanges;
+  private readonly watchWorkspaceStatus;
   private readonly entries = new Map<string, RuntimeEntry>();
   private readonly pendingEntries = new Map<string, Promise<RuntimeEntry>>();
+  private stopWatchingThreadStorageRoot: () => void = STOP_WATCHING;
 
   constructor(private readonly options: RuntimeManagerOptions = {}) {
     this.createRuntime = options.createRuntime ?? createAgentRuntime;
     this.provisionWorkspace = options.provisionWorkspace ?? provisionWorkspace;
+    this.watchPathChanges = options.watchPathChanges;
+    this.watchWorkspaceStatus = options.watchWorkspaceStatus;
   }
 
   get(environmentId: string): RuntimeEntry | undefined {
@@ -114,6 +149,7 @@ export class RuntimeManager {
       providerThreadId,
       status: "active",
     });
+    this.ensureThreadStorageWatcher();
   }
 
   markThreadInactive(environmentId: string, threadId: string): void {
@@ -182,6 +218,7 @@ export class RuntimeManager {
 
     this.entries.delete(environmentId);
     this.stopWatchingStatus(entry);
+    this.stopWatchingThreadStorageIfUnused();
     await entry.runtime.shutdown();
     await entry.workspace.destroy();
   }
@@ -205,6 +242,8 @@ export class RuntimeManager {
       // lifecycle via explicit environment.destroy commands. Daemon shutdown
       // should only release in-memory state and stop provider processes.
     }
+    this.stopWatchingThreadStorageRoot();
+    this.stopWatchingThreadStorageRoot = STOP_WATCHING;
   }
 
   private async createEntry(args: EnsureEnvironmentArgs): Promise<RuntimeEntry> {
@@ -219,28 +258,22 @@ export class RuntimeManager {
     }
 
     const workspace = await this.provisionWorkspace(provision);
-    const stopWatchingStatus = this.options.watchWorkspaceStatus
-      ? this.options.watchWorkspaceStatus(workspace.path, {
-        onChange: () => {
-          this.options.onWorkspaceStatusChanged?.({
-            environmentId: args.environmentId,
-          });
-        },
-        onWatchError: (error) => {
-          this.options.onWorkspaceStatusWatchError?.({
-            environmentId: args.environmentId,
-            error,
-          });
-        },
-      })
+    const stopWatchingStatus = this.watchWorkspaceStatus
+      ? this.watchWorkspaceStatus(workspace.path, {
+          onChange: () => {
+            this.options.onWorkspaceStatusChanged?.({
+              environmentId: args.environmentId,
+            });
+          },
+          onWatchError: (error) => {
+            this.options.onWorkspaceStatusWatchError?.({
+              environmentId: args.environmentId,
+              error,
+            });
+          },
+        })
       : () => undefined;
-    const threads = new Map<
-      string,
-      {
-        providerThreadId: string;
-        status: "active" | "idle";
-      }
-    >();
+    const threads = new Map<string, RuntimeThreadState>();
     let runtime: AgentRuntime | null = null;
     try {
       runtime = this.createRuntime({
@@ -281,6 +314,7 @@ export class RuntimeManager {
           ) {
             this.stopWatchingStatus(current);
             this.entries.delete(args.environmentId);
+            this.stopWatchingThreadStorageIfUnused();
           }
           this.options.onProcessExit?.(info);
         },
@@ -302,7 +336,95 @@ export class RuntimeManager {
 
   private stopWatchingStatus(entry: RuntimeEntry): void {
     const stopWatchingStatus = entry.stopWatchingStatus;
-    entry.stopWatchingStatus = () => undefined;
+    entry.stopWatchingStatus = STOP_WATCHING;
     stopWatchingStatus();
+  }
+
+  private ensureThreadStorageWatcher(): void {
+    if (
+      !this.watchPathChanges ||
+      this.stopWatchingThreadStorageRoot !== STOP_WATCHING
+    ) {
+      return;
+    }
+
+    const threadStorageRootPath = this.options.threadStorageRootPath;
+    if (!threadStorageRootPath) {
+      return;
+    }
+
+    this.stopWatchingThreadStorageRoot = this.watchPathChanges(threadStorageRootPath, {
+      onChange: ({ changedPaths }) => {
+        this.handleThreadStorageRootChange({
+          changedPaths,
+          threadStorageRootPath,
+        });
+      },
+      onWatchError: (error) => {
+        this.options.onThreadStorageWatchError?.({
+          error,
+        });
+      },
+    });
+  }
+
+  private handleThreadStorageRootChange(args: ThreadStorageRootChangeArgs): void {
+    const threadIds = new Set<string>();
+    for (const changedPath of args.changedPaths) {
+      const threadId = this.toThreadIdFromStoragePath({
+        changedPath,
+        threadStorageRootPath: args.threadStorageRootPath,
+      });
+      if (threadId) {
+        threadIds.add(threadId);
+      }
+    }
+
+    for (const threadId of threadIds) {
+      const target = this.findTrackedThreadTarget(threadId);
+      if (!target) {
+        continue;
+      }
+      this.options.onThreadStorageChanged?.(target);
+    }
+  }
+
+  private toThreadIdFromStoragePath(args: ThreadStoragePathArgs): string | null {
+    const relativePath = path.relative(
+      args.threadStorageRootPath,
+      args.changedPath,
+    );
+    if (
+      relativePath.length === 0 ||
+      relativePath.startsWith("..") ||
+      path.isAbsolute(relativePath)
+    ) {
+      return null;
+    }
+    const [threadId] = relativePath.split(path.sep).filter(Boolean);
+    return threadId ?? null;
+  }
+
+  private findTrackedThreadTarget(threadId: string): ThreadStorageTarget | null {
+    for (const [environmentId, entry] of this.entries) {
+      if (entry.threads.has(threadId)) {
+        return {
+          environmentId,
+          threadId,
+        };
+      }
+    }
+    return null;
+  }
+
+  private stopWatchingThreadStorageIfUnused(): void {
+    for (const entry of this.entries.values()) {
+      if (entry.threads.size > 0) {
+        return;
+      }
+    }
+    const stopWatchingThreadStorageRoot = this.stopWatchingThreadStorageRoot;
+    this.stopWatchingThreadStorageRoot = STOP_WATCHING;
+    stopWatchingThreadStorageRoot();
   }
 }

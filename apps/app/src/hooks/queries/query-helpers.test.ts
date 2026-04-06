@@ -9,7 +9,9 @@ import type {
 } from "@bb/server-contract";
 import {
   getEnvironmentActionInvalidationQueryKeys,
-  getEnvironmentStateInvalidationQueryKeys,
+  getEnvironmentBranchListInvalidationQueryKeys,
+  getEnvironmentRecordInvalidationQueryKeys,
+  getEnvironmentWorkspaceStateInvalidationQueryKeys,
 } from "./query-cache";
 import {
   resolveEnvironmentGitDiffPlaceholder,
@@ -227,16 +229,38 @@ describe("resolveEnvironmentGitDiffPlaceholder", () => {
   });
 });
 
-describe("getEnvironmentStateInvalidationQueryKeys", () => {
-  it("targets environment state queries", () => {
+describe("getEnvironmentRecordInvalidationQueryKeys", () => {
+  it("targets persisted environment queries", () => {
     expect(
-      getEnvironmentStateInvalidationQueryKeys({
+      getEnvironmentRecordInvalidationQueryKeys({
         environmentId: "env-1",
       }),
     ).toEqual([
       ["environment", "env-1"],
+    ]);
+  });
+});
+
+describe("getEnvironmentWorkspaceStateInvalidationQueryKeys", () => {
+  it("targets workspace-derived status and diff queries", () => {
+    expect(
+      getEnvironmentWorkspaceStateInvalidationQueryKeys({
+        environmentId: "env-1",
+      }),
+    ).toEqual([
       ["environmentWorkStatus", "env-1"],
       ["environmentGitDiff", "env-1"],
+    ]);
+  });
+});
+
+describe("getEnvironmentBranchListInvalidationQueryKeys", () => {
+  it("targets environment branch list queries", () => {
+    expect(
+      getEnvironmentBranchListInvalidationQueryKeys({
+        environmentId: "env-1",
+      }),
+    ).toEqual([
       ["environmentMergeBaseBranches", "env-1"],
     ]);
   });
@@ -249,12 +273,10 @@ describe("getEnvironmentActionInvalidationQueryKeys", () => {
         environmentId: "env-1",
       }),
     ).toEqual([
-      ["environment", "env-1"],
       ["environmentWorkStatus", "env-1"],
       ["environmentGitDiff", "env-1"],
       ["environmentMergeBaseBranches", "env-1"],
       ["threads"],
-      ["status"],
     ]);
   });
 });

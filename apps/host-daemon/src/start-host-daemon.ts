@@ -24,7 +24,9 @@ import {
 } from "./runtime-shell-env.js";
 import type { CreateReconnectingWebSocket } from "./server-connection.js";
 import {
+  resolveDefaultWatchPathChanges,
   resolveDefaultWatchWorkspaceStatus,
+  type WatchPathChanges,
   type WatchWorkspaceStatus,
 } from "./workspace-status-watch.js";
 
@@ -42,6 +44,7 @@ export interface StartHostDaemonOptions {
   loadIdentity?: typeof loadHostIdentity;
   restartProcess?: typeof restartHostDaemon;
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
+  watchPathChanges?: WatchPathChanges;
   watchWorkspaceStatus?: WatchWorkspaceStatus;
   onToolCall?: (request: ToolCallRequest) => Promise<ToolCallResponse>;
   openPath?: (path: string) => Promise<void>;
@@ -130,6 +133,11 @@ export async function startHostDaemon(
       (await resolveDefaultWatchWorkspaceStatus({
         hostType,
       }));
+    const watchPathChanges =
+      options.watchPathChanges ??
+      (await resolveDefaultWatchPathChanges({
+        hostType,
+      }));
     const runtimeShellEnv = prepareRuntimeShellEnv({
       bbExecutableDirectory,
       serverUrl,
@@ -158,6 +166,7 @@ export async function startHostDaemon(
       localApiConfig,
       runtimeShellEnv,
       adapterFactory: options.adapterFactory,
+      watchPathChanges,
       watchWorkspaceStatus,
       onToolCall: options.onToolCall,
       openPath: options.openPath,

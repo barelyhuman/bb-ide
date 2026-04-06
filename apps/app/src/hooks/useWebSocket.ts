@@ -1,13 +1,16 @@
 import { useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import {
   assertNever,
 } from "@bb/core-ui";
-import type { Thread } from "@bb/domain";
-import type { ThreadChangeKind } from "@bb/domain";
+import type { EnvironmentChangeKind, Thread, ThreadChangeKind } from "@bb/domain";
 import { createBufferedEnvironmentInvalidator } from "./buffered-environment-invalidator";
 import { wsManager } from "../lib/ws";
-import { getEnvironmentStateInvalidationQueryKeys } from "./queries/query-cache";
+import {
+  getEnvironmentBranchListInvalidationQueryKeys,
+  getEnvironmentRecordInvalidationQueryKeys,
+  getEnvironmentWorkspaceStateInvalidationQueryKeys,
+} from "./queries/query-cache";
 import {
   allAvailableModelsQueryKeyPrefix,
   allThreadDraftsQueryKeyPrefix,
@@ -17,6 +20,8 @@ import {
   projectsQueryKey,
   statusQueryKey,
   systemProvidersQueryKey,
+  threadStorageFilesQueryKey,
+  threadStorageFilePreviewQueryKeyPrefix,
   threadDraftsQueryKey,
   threadQueryKey,
   threadTimelineQueryKeyPrefix,
@@ -108,6 +113,64 @@ export function shouldFlushThreadChangesImmediately(
   return toThreadChangeFlags(changes).statusChanged;
 }
 
+function collectCachedThreadIdsForEnvironment(
+  queryClient: QueryClient,
+  environmentId: string,
+): string[] {
+  const threadIds = new Set<string>();
+  for (const [, thread] of queryClient.getQueriesData<Thread>({
+    queryKey: allThreadQueryKeyPrefix(),
+  })) {
+    if (thread?.environmentId === environmentId) {
+      threadIds.add(thread.id);
+    }
+  }
+  for (const [, threads] of queryClient.getQueriesData<Thread[]>({
+    queryKey: threadsQueryKey(),
+  })) {
+    for (const thread of threads ?? []) {
+      if (thread.environmentId === environmentId) {
+        threadIds.add(thread.id);
+      }
+    }
+  }
+  return Array.from(threadIds);
+}
+
+function environmentChangeKindsIncludeThreadStorage(
+  changeKinds: readonly EnvironmentChangeKind[],
+): boolean {
+  return changeKinds.includes("thread-storage-changed");
+}
+
+function environmentChangeKindsIncludePersistedEnvironment(
+  changeKinds: readonly EnvironmentChangeKind[],
+): boolean {
+  return changeKinds.some(
+    (changeKind) =>
+      changeKind !== "work-status-changed" &&
+      changeKind !== "thread-storage-changed",
+  );
+}
+
+function environmentChangeKindsIncludeWorkspaceState(
+  changeKinds: readonly EnvironmentChangeKind[],
+): boolean {
+  return changeKinds.some(
+    (changeKind) => changeKind !== "thread-storage-changed",
+  );
+}
+
+function environmentChangeKindsIncludeBranchList(
+  changeKinds: readonly EnvironmentChangeKind[],
+): boolean {
+  return changeKinds.some(
+    (changeKind) =>
+      changeKind !== "work-status-changed" &&
+      changeKind !== "thread-storage-changed",
+  );
+}
+
 export function useWebSocket(): void {
   const queryClient = useQueryClient();
 
@@ -123,12 +186,42 @@ export function useWebSocket(): void {
     const lastTimelineRefetchAtByThread = new Map<string, number>();
     const environmentInvalidator = createBufferedEnvironmentInvalidator({
       debounceMs: ENVIRONMENT_INVALIDATION_DEBOUNCE_MS,
-      flushChangedEnvironmentIds: (environmentIds) => {
-        for (const environmentId of environmentIds) {
-          for (const queryKey of getEnvironmentStateInvalidationQueryKeys({
+      flushChangedEnvironmentIds: (changedEnvironments) => {
+        for (const { changeKinds, environmentId } of changedEnvironments) {
+          if (environmentChangeKindsIncludePersistedEnvironment(changeKinds)) {
+            for (const queryKey of getEnvironmentRecordInvalidationQueryKeys({
+              environmentId,
+            })) {
+              queryClient.invalidateQueries({ queryKey });
+            }
+          }
+          if (environmentChangeKindsIncludeWorkspaceState(changeKinds)) {
+            for (const queryKey of getEnvironmentWorkspaceStateInvalidationQueryKeys({
+              environmentId,
+            })) {
+              queryClient.invalidateQueries({ queryKey });
+            }
+          }
+          if (environmentChangeKindsIncludeBranchList(changeKinds)) {
+            for (const queryKey of getEnvironmentBranchListInvalidationQueryKeys({
+              environmentId,
+            })) {
+              queryClient.invalidateQueries({ queryKey });
+            }
+          }
+          if (!environmentChangeKindsIncludeThreadStorage(changeKinds)) {
+            continue;
+          }
+          for (const threadId of collectCachedThreadIdsForEnvironment(
+            queryClient,
             environmentId,
-          })) {
-            queryClient.invalidateQueries({ queryKey });
+          )) {
+            queryClient.invalidateQueries({
+              queryKey: threadStorageFilesQueryKey(threadId),
+            });
+            queryClient.invalidateQueries({
+              queryKey: threadStorageFilePreviewQueryKeyPrefix(threadId),
+            });
           }
         }
       },
@@ -274,7 +367,7 @@ export function useWebSocket(): void {
           break;
         case "environment":
           if (message.id) {
-            environmentInvalidator.markChanged(message.id);
+            environmentInvalidator.markChanged(message.id, message.changes);
           }
           break;
         case "host":

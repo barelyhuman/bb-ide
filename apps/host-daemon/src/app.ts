@@ -15,7 +15,11 @@ import {
   ServerConnection,
   type CreateReconnectingWebSocket,
 } from "./server-connection.js";
-import type { WatchWorkspaceStatus } from "./workspace-status-watch.js";
+import type {
+  WatchPathChanges,
+  WatchWorkspaceStatus,
+} from "./workspace-status-watch.js";
+import { ensureThreadStorageRoot } from "./thread-storage-root.js";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import type { HostType, ToolCallRequest, ToolCallResponse } from "@bb/domain";
 
@@ -96,6 +100,7 @@ export interface CreateHostDaemonAppOptions {
   localApiConfig: HostDaemonLocalApiConfig | null;
   runtimeShellEnv?: AgentRuntimeOptions["shellEnv"];
   adapterFactory?: AgentRuntimeOptions["adapterFactory"];
+  watchPathChanges?: WatchPathChanges;
   watchWorkspaceStatus?: WatchWorkspaceStatus;
   onToolCall?: (request: ToolCallRequest) => Promise<ToolCallResponse>;
   openPath?: (path: string) => Promise<void>;
@@ -116,6 +121,7 @@ export interface HostDaemonApp {
 export async function createHostDaemonApp(
   options: CreateHostDaemonAppOptions,
 ): Promise<HostDaemonApp> {
+  const threadStorageRootPath = await ensureThreadStorageRoot(options.dataDir);
   const sessionState: SessionState = {
     value: null,
   };
@@ -150,6 +156,7 @@ export async function createHostDaemonApp(
     adapterFactory: options.adapterFactory,
     bridgeBundleDir: options.bridgeBundleDir,
     shellEnv: options.runtimeShellEnv,
+    watchPathChanges: options.watchPathChanges,
     watchWorkspaceStatus: options.watchWorkspaceStatus,
     onEvent: ({ environmentId, event }) => {
       eventBuffer.push({
@@ -157,6 +164,21 @@ export async function createHostDaemonApp(
         threadId: event.threadId,
         event,
       });
+    },
+    onThreadStorageChanged: ({ environmentId }) => {
+      environmentChangeReporter.queue({
+        environmentId,
+        change: "thread-storage-changed",
+      });
+    },
+    onThreadStorageWatchError: ({ error }) => {
+      options.logger.warn(
+        {
+          rootPath: error.rootPath,
+          watchError: error.message,
+        },
+        "Thread storage watch unavailable; retrying in background",
+      );
     },
     onWorkspaceStatusChanged: ({ environmentId }) => {
       environmentChangeReporter.queue({
@@ -175,6 +197,7 @@ export async function createHostDaemonApp(
       );
     },
     onToolCall: options.onToolCall ?? ((request) => serverClient.callTool(request)),
+    threadStorageRootPath,
   });
 
   const router = new CommandRouter({

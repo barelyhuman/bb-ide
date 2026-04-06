@@ -2,11 +2,20 @@
 
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Thread } from "@bb/domain";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import {
   allAvailableModelsQueryKeyPrefix,
+  environmentGitDiffQueryKeyPrefix,
+  environmentMergeBaseBranchesQueryKeyPrefix,
+  environmentQueryKey,
+  environmentWorkStatusQueryKeyPrefix,
   hostsQueryKey,
   systemProvidersQueryKey,
+  threadQueryKey,
+  threadStorageFilesQueryKey,
+  threadStorageFilePreviewQueryKeyPrefix,
+  threadsQueryKey,
 } from "./queries/query-keys";
 import {
   shouldFlushThreadChangesImmediately,
@@ -100,8 +109,33 @@ afterEach(() => {
   changedCallbacks.length = 0;
   connectedCallbacks.length = 0;
   connectionStateCallbacks.length = 0;
+  vi.useRealTimers();
   vi.clearAllMocks();
 });
+
+function createThread(args: {
+  environmentId: string | null;
+  id: string;
+}): Thread {
+  return {
+    id: args.id,
+    projectId: "proj-1",
+    environmentId: args.environmentId,
+    providerId: "codex",
+    type: "manager",
+    title: "Manager",
+    titleFallback: "Manager",
+    status: "idle",
+    automationId: null,
+    parentThreadId: null,
+    archivedAt: null,
+    stopRequestedAt: null,
+    deletedAt: null,
+    lastReadAt: null,
+    createdAt: 1,
+    updatedAt: 1,
+  };
+}
 
 describe("shouldFlushThreadChangesImmediately", () => {
   it("flushes status changes immediately", () => {
@@ -141,6 +175,117 @@ describe("useWebSocket", () => {
     });
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: allAvailableModelsQueryKeyPrefix(),
+    });
+  });
+
+  it("invalidates thread storage queries for cached environment threads", () => {
+    vi.useFakeTimers();
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+    const thread = createThread({
+      environmentId: "env-1",
+      id: "thread-1",
+    });
+    queryClient.setQueryData(threadQueryKey(thread.id), thread);
+    queryClient.setQueryData(threadsQueryKey(), [thread]);
+
+    renderHook(() => useWebSocket(), { wrapper });
+
+    act(() => {
+      changedCallbacks[0]?.({
+        changes: ["thread-storage-changed"],
+        entity: "environment",
+        id: "env-1",
+        type: "changed",
+      });
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: threadStorageFilesQueryKey("thread-1"),
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: threadStorageFilePreviewQueryKeyPrefix("thread-1"),
+    });
+    expect(invalidateQueries).not.toHaveBeenCalledWith({
+      queryKey: environmentQueryKey("env-1"),
+    });
+    expect(invalidateQueries).not.toHaveBeenCalledWith({
+      queryKey: environmentWorkStatusQueryKeyPrefix("env-1"),
+    });
+    expect(invalidateQueries).not.toHaveBeenCalledWith({
+      queryKey: environmentGitDiffQueryKeyPrefix("env-1"),
+    });
+    expect(invalidateQueries).not.toHaveBeenCalledWith({
+      queryKey: environmentMergeBaseBranchesQueryKeyPrefix("env-1"),
+    });
+  });
+
+  it("invalidates workspace-derived queries but not the persisted environment record for work-status changes", () => {
+    vi.useFakeTimers();
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+
+    renderHook(() => useWebSocket(), { wrapper });
+
+    act(() => {
+      changedCallbacks[0]?.({
+        changes: ["work-status-changed"],
+        entity: "environment",
+        id: "env-1",
+        type: "changed",
+      });
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: environmentWorkStatusQueryKeyPrefix("env-1"),
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: environmentGitDiffQueryKeyPrefix("env-1"),
+    });
+    expect(invalidateQueries).not.toHaveBeenCalledWith({
+      queryKey: environmentQueryKey("env-1"),
+    });
+    expect(invalidateQueries).not.toHaveBeenCalledWith({
+      queryKey: environmentMergeBaseBranchesQueryKeyPrefix("env-1"),
+    });
+  });
+
+  it("invalidates both environment and thread storage queries when both change kinds are present", () => {
+    vi.useFakeTimers();
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+    const thread = createThread({
+      environmentId: "env-1",
+      id: "thread-1",
+    });
+    queryClient.setQueryData(threadQueryKey(thread.id), thread);
+    queryClient.setQueryData(threadsQueryKey(), [thread]);
+
+    renderHook(() => useWebSocket(), { wrapper });
+
+    act(() => {
+      changedCallbacks[0]?.({
+        changes: ["work-status-changed", "thread-storage-changed"],
+        entity: "environment",
+        id: "env-1",
+        type: "changed",
+      });
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: environmentWorkStatusQueryKeyPrefix("env-1"),
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: environmentGitDiffQueryKeyPrefix("env-1"),
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: threadStorageFilesQueryKey("thread-1"),
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: threadStorageFilePreviewQueryKeyPrefix("thread-1"),
     });
   });
 });

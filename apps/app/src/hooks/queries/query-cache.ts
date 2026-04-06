@@ -7,14 +7,13 @@ import {
   environmentMergeBaseBranchesQueryKeyPrefix,
   environmentQueryKey,
   environmentWorkStatusQueryKeyPrefix,
-  statusQueryKey,
   THREADS_QUERY_KEY,
   threadQueryKey,
   threadsQueryKey,
   type ThreadListQueryFilters,
 } from "./query-keys";
 
-export interface EnvironmentActionInvalidationParams {
+export interface EnvironmentInvalidationParams {
   environmentId: string;
 }
 
@@ -37,24 +36,36 @@ function getThreadListFiltersFromQueryKey(
   return candidate;
 }
 
-export function getEnvironmentStateInvalidationQueryKeys({
+export function getEnvironmentRecordInvalidationQueryKeys({
   environmentId,
-}: EnvironmentActionInvalidationParams): QueryKey[] {
+}: EnvironmentInvalidationParams): QueryKey[] {
+  return [environmentQueryKey(environmentId)];
+}
+
+export function getEnvironmentWorkspaceStateInvalidationQueryKeys({
+  environmentId,
+}: EnvironmentInvalidationParams): QueryKey[] {
   return [
-    environmentQueryKey(environmentId),
     environmentWorkStatusQueryKeyPrefix(environmentId),
     environmentGitDiffQueryKeyPrefix(environmentId),
+  ];
+}
+
+export function getEnvironmentBranchListInvalidationQueryKeys({
+  environmentId,
+}: EnvironmentInvalidationParams): QueryKey[] {
+  return [
     environmentMergeBaseBranchesQueryKeyPrefix(environmentId),
   ];
 }
 
 export function getEnvironmentActionInvalidationQueryKeys({
   environmentId,
-}: EnvironmentActionInvalidationParams): QueryKey[] {
+}: EnvironmentInvalidationParams): QueryKey[] {
   return [
-    ...getEnvironmentStateInvalidationQueryKeys({ environmentId }),
+    ...getEnvironmentWorkspaceStateInvalidationQueryKeys({ environmentId }),
+    ...getEnvironmentBranchListInvalidationQueryKeys({ environmentId }),
     threadsQueryKey(),
-    statusQueryKey(),
   ];
 }
 
