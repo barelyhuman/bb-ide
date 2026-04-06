@@ -20,19 +20,8 @@ all operate through. Use it to run work in threads, inspect progress, steer
 execution, and keep humans and agents working in the same loop.
 
 > [!NOTE]
-> bb is still pre-alpha. Core ideas are in place, but workflows, internal
-> boundaries, and route surfaces are still evolving quickly.
-
-## Table of Contents
-
-- [Quick Start](#quick-start)
-- [Core Concepts](#core-concepts)
-  - [Data Model](#data-model)
-  - [Runtime Components](#runtime-components)
-  - [System Surfaces](#system-surfaces)
-- [Configuration](#configuration)
-- [Further Reading](#further-reading)
-- [Contributing](#contributing)
+> bb is in active development. Core architecture is stable, but workflows
+> and surfaces are still evolving.
 
 ## Quick Start
 
@@ -59,11 +48,11 @@ Then open: `http://localhost:3333`
 
 bb uses whichever providers you have configured. If you need to set one up:
 
-| Provider      | Setup                                                                                                                                                                                                                                                                            |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `codex`       | Install the [Codex CLI](https://developers.openai.com/codex/cli). Then run `codex login` or configure credentials per the Codex docs.                                                                                                                                            |
-| `claude-code` | Install [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and authenticate per its docs.                                                                                                                                                                             |
-| `pi`          | See the [Pi coding agent docs](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent). Run `pi` and then `/login` for interactive setup.                                                                                                                          |
+| Provider      | Setup                                                                                                                                                  |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `codex`       | Install the [Codex CLI](https://developers.openai.com/codex/cli). Then run `codex login` or configure credentials per the Codex docs.                  |
+| `claude-code` | Install [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and authenticate per its docs.                                                   |
+| `pi`          | See the [Pi coding agent docs](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent). Run `pi` and then `/login` for interactive setup. |
 
 Server configuration (ports, data directory, inference model, etc.) is defined in [`packages/config/src/`](./packages/config/src/) with validated defaults for dev and production.
 
@@ -97,49 +86,57 @@ These reset commands prompt for confirmation before deleting anything.
 
 </details>
 
-## Core Concepts
+## How It Works
 
-### Data Model
+### The runtime pieces
 
-| Concept        | What it means                                                                                                                                                                |
-| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Project        | The top-level container for related work, usually mapped to a repository plus its bb-managed state.                                                                          |
-| Thread         | The core unit of work. A thread has durable history, lifecycle state, execution settings, and usually a dedicated environment context.                                      |
-| Standard thread | A coding thread that does the work directly in an environment and exposes git, diff, and workspace-oriented behavior.                                                       |
-| Manager thread | A coordinator thread for a project. It can plan, delegate, and publish user-facing output, and it uses a separate BB-managed workspace instead of a coding worktree flow.   |
-| Thread ownership | Threads can be user-created or managed by another thread. Delegation and handoff are first-class parts of the model.                                                     |
-| Environment    | The execution context a thread runs in — a workspace on a specific host.                                                                                                     |
-| Agent provider | The model/runtime behind a thread, such as `codex`, `claude-code`, or `pi`.                                                                                                  |
+| Component       | Role                                                                                                                                                                                                                                                                                                                      |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Server**      | Central hub. Stores all state in a SQLite database, exposes an HTTP API, and pushes change notifications over WebSocket. Stateless itself — the DB is the source of truth. Routes work to hosts by queuing commands.                                                                                                      |
+| **Host daemon** | Runs on each machine (your laptop, a cloud sandbox, a remote server). Connects to the server, picks up commands, provisions workspaces, runs agent provider processes, and streams events back. Exposes a local HTTP API for the app and CLI to do machine-local things (open editor, pick folders, check daemon status). |
+| **App**         | Web UI for inspecting projects and threads, following progress, and steering work.                                                                                                                                                                                                                                        |
+| **CLI** (`bb`)  | First-class interface for both users and agents. Same capabilities as the app, scriptable.                                                                                                                                                                                                                                |
 
-### Runtime Components
+### WebSocket is notification-only
 
-> TODO: rebuild in progress — see `plans/architecture.md` for the current architecture.
+WebSocket connections never carry data payloads. They send lightweight change hints (e.g. "thread X changed") so clients know to refetch via HTTP. This keeps the protocol simple and means WS disconnects don't lose data — the DB is always current.
 
-### System Surfaces
+### Data model
 
-| Surface  | What it does                                                                                                       |
-| -------- | ------------------------------------------------------------------------------------------------------------------ |
-| Web app  | The visual surface for inspecting projects and threads, following progress, and steering active work.              |
-| `bb` CLI | A first-class interface for both users and agents. It can inspect and operate the same bb system programmatically. |
+The core entities and how they relate:
 
-Several of these boundaries are intentional extension points, but they should
-be read as current architecture, not as a frozen public platform surface.
+**Project** — the top-level container, usually mapped to a repository. A project has one or more **sources** that say where its code lives — either a local path on a specific host, or a GitHub repository URL.
+
+**Thread** — the unit of work. Each thread tracks a conversation with an agent provider, has lifecycle state, and produces an append-only stream of **events** (messages, tool calls, file changes, etc.). Threads can be **standard** (does work directly) or **manager** (coordinates other threads). Threads can own child threads for delegation.
+
+**Environment** — the execution context for a thread. It binds a workspace (a directory on disk) to a host. An environment can be **unmanaged** (point at an existing directory), or **managed**. Environments managed by bb will be cleaned up when there are no longer any unarchived threads using it. Multiple threads can share an environment.
+
+**Host** — a machine that runs a daemon. **Persistent** hosts are long-lived (your laptop, remote server etc). **Ephemeral** hosts are cloud sandboxes (eg. E2B / Daytona etc) that the server provisions on demand and can suspend/resume/destroy.
+
+**Commands and events** — the server talks to daemons by queuing commands (provision an environment, start a thread, stop a thread). Daemons report back by posting events. This is an asynchronous command/event protocol — the server queues work, the daemon picks it up, results flow back as events.
+
+### Contracts and boundaries
+
+Two contract packages define the boundaries between components:
+
+**`@bb/server-contract`** — the HTTP + WebSocket API between clients (app, CLI) and the server. Route schemas, request/response types, WebSocket notification types.
+
+**`@bb/host-daemon-contract`** — the protocol between the server and host daemons. Command types, event types, session lifecycle, the local API for app/CLI.
+
+Implementation packages never import across these boundaries. The server doesn't know how workspaces are provisioned. The daemon doesn't know about threads or projects beyond what commands tell it.
 
 ## Configuration
 
-Runtime configuration is defined in [`packages/config/src/`](./packages/config/src/) with validated defaults. Environment variables can be overridden in a `.env` file at the repo root (gitignored).
+All configuration is via environment variables, validated at startup with sensible defaults. Override them in a `.env` file at the repo root (gitignored). See [`packages/config/src/`](./packages/config/src/) for the full set.
 
-Local state defaults to `~/.bb/`. `pnpm dev` uses `~/.bb-dev/` by default so it can run alongside the production-style server. Thread execution context also exposes `BB_PROJECT_ID`, `BB_THREAD_ID`, and `BB_ENVIRONMENT_ID`.
+`BB_DATA_DIR` is the most important one — it's the root directory for all bb-managed state: the SQLite database, logs, host identity, and thread storage. Defaults to `~/.bb/` (or `~/.bb-dev/` when using `pnpm dev`). Pointing two instances at different data directories gives you fully isolated environments — this is how dev and production run side by side, and how tests get clean state.
 
-For a production-style separate host, use `pnpm start:host-daemon` on the target machine after generating join material from the server.
-
-`pnpm reset`, `pnpm reset:dev`, and `pnpm reset:all` remove bb-managed local state only. They do not remove provider credentials or config owned by other tools.
+Use `pnpm reset` or `pnpm reset:dev` to clear a data directory. These only remove bb-managed state, not provider credentials.
 
 ## Further Reading
 
-- [Architecture](plans/architecture.md)
 - [Vision](docs/VISION.md)
 
 ## Contributing
 
-While bb is still pre-alpha, the most useful contributions are feature requests and bug reports. If you run into something broken, confusing, or missing, open an issue with the workflow you were trying to accomplish and what happened instead.
+The most useful contributions are feature requests and bug reports. If you run into something broken, confusing, or missing, open an issue with the workflow you were trying to accomplish and what happened instead.

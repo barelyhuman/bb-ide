@@ -1,4 +1,4 @@
-// Phase 7e: Real provider end-to-end coverage (plans/rebuild.md)
+// Real provider end-to-end coverage
 import { execFile as execFileCb } from "node:child_process";
 import fs from "node:fs/promises";
 import { tmpdir } from "node:os";
