@@ -1,14 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { decodeProviderToolCallRequest } from "./provider-tool-call-contract.js";
+import {
+  decodeNativeProviderToolCallRequest,
+  decodeNormalizedProviderToolCallRequest,
+} from "./provider-tool-call-contract.js";
 
 describe("provider-tool-call-contract", () => {
-  it("preserves both ids for already-normalized bridge tool calls", () => {
-    expect(decodeProviderToolCallRequest(
+  it("preserves optional BB thread hints on normalized bridge tool calls", () => {
+    expect(decodeNormalizedProviderToolCallRequest(
       "req-1",
       "item/tool/call",
       {
-        threadId: "thr_123",
         providerThreadId: "provider-abc",
+        threadId: "thr_123",
         turnId: "turn-1",
         callId: "call-1",
         tool: "message_user",
@@ -25,8 +28,29 @@ describe("provider-tool-call-contract", () => {
     });
   });
 
-  it("treats single-id provider tool calls as provider-native requests", () => {
-    expect(decodeProviderToolCallRequest(
+  it("allows normalized bridge tool calls to omit a BB thread hint", () => {
+    expect(decodeNormalizedProviderToolCallRequest(
+      "req-2",
+      "item/tool/call",
+      {
+        providerThreadId: "provider-abc",
+        turnId: "turn-1",
+        callId: "call-1",
+        tool: "message_user",
+        arguments: { text: "hello" },
+      },
+    )).toEqual({
+      requestId: "req-2",
+      providerThreadId: "provider-abc",
+      turnId: "turn-1",
+      callId: "call-1",
+      tool: "message_user",
+      arguments: { text: "hello" },
+    });
+  });
+
+  it("treats native provider tool calls as provider-scoped requests", () => {
+    expect(decodeNativeProviderToolCallRequest(
       "req-2",
       "item/tool/call",
       {

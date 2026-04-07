@@ -12,6 +12,7 @@ import {
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 import type {
   AdapterCommand,
+  DecodedToolCallRequest,
   ProviderAdapter,
 } from "./provider-adapter.js";
 import { createAgentRuntime } from "./runtime.js";
@@ -59,6 +60,23 @@ describe("createAgentRuntime", () => {
       buildCommand(command) {
         args.recordedCommands.push(command);
         return adapter.buildCommand(command);
+      },
+    };
+  }
+
+  function createThreadHintMismatchAdapter(scriptPath: string): ProviderAdapter {
+    const adapter = createFakeAdapter(scriptPath);
+    return {
+      ...adapter,
+      decodeToolCallRequest(request): DecodedToolCallRequest | null {
+        const decoded = adapter.decodeToolCallRequest(request);
+        if (!decoded) {
+          return null;
+        }
+        return {
+          ...decoded,
+          threadId: "thr_wrong",
+        };
       },
     };
   }
@@ -688,7 +706,7 @@ describe("createAgentRuntime", () => {
 
   // ---- Tool calls ----
 
-  it("routes tool calls through onToolCall and sends response back", async () => {
+  it("routes provider-scoped tool calls through onToolCall and sends response back", async () => {
     const toolCalls: Array<{ threadId: string; providerThreadId: string; tool: string }> = [];
     const runtime = createAgentRuntime({
       workspacePath: tmpDir,
@@ -728,23 +746,19 @@ describe("createAgentRuntime", () => {
     await runtime.shutdown();
   });
 
-  it("maps provider-native tool calls back to BB thread ids while preserving provider ids", async () => {
-    const toolCalls: Array<{ threadId: string; providerThreadId: string; tool: string }> = [];
+  it("rejects tool calls whose BB thread hint disagrees with the provider-thread mapping", async () => {
+    const toolCalls: string[] = [];
     const runtime = createAgentRuntime({
       workspacePath: tmpDir,
       onEvent: () => {},
       onToolCall: async (req) => {
-        toolCalls.push({
-          threadId: req.threadId,
-          providerThreadId: req.providerThreadId,
-          tool: req.tool,
-        });
+        toolCalls.push(req.tool);
         return {
           contentItems: [{ type: "inputText", text: "tool result" }],
           success: true,
         };
       },
-      adapterFactory: () => createFakeAdapter(scriptPath),
+      adapterFactory: () => createThreadHintMismatchAdapter(scriptPath),
     });
 
     await runtime.startThread({
@@ -755,13 +769,11 @@ describe("createAgentRuntime", () => {
     });
     await runtime.runTurn({
       threadId: "t1",
-      input: [{ type: "text", text: "call_tool_provider_thread:my_test_tool" }],
+      input: [{ type: "text", text: "call_tool:my_test_tool" }],
     });
     await wait(200);
 
-    expect(toolCalls).toEqual([
-      { threadId: "t1", providerThreadId: "prov-1", tool: "my_test_tool" },
-    ]);
+    expect(toolCalls).toEqual([]);
     await runtime.shutdown();
   });
 

@@ -21,7 +21,7 @@ import type {
 } from "@bb/domain";
 import { toPositiveNumber } from "@bb/domain";
 import {
-  decodeProviderToolCallRequest,
+  decodeNormalizedProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
 import { resolveBridgePath } from "../shared/bridge-path.js";
 import {
@@ -856,7 +856,11 @@ export function createPiProviderAdapter(
       if (typeof request.id !== "string" && typeof request.id !== "number") {
         return null;
       }
-      return decodeProviderToolCallRequest(request.id, request.method, request.params);
+      return decodeNormalizedProviderToolCallRequest(
+        request.id,
+        request.method,
+        request.params,
+      );
     },
 
   };

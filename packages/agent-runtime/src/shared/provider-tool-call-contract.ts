@@ -1,9 +1,17 @@
 import { z } from "zod";
 import type { DecodedToolCallRequest } from "../provider-adapter.js";
 
-const providerToolCallRequestSchema = z.object({
+const normalizedToolCallRequestSchema = z.object({
+  providerThreadId: z.string(),
+  threadId: z.string().optional(),
+  turnId: z.string(),
+  callId: z.string().min(1),
+  tool: z.string().min(1),
+  arguments: z.unknown(),
+});
+
+const providerNativeToolCallRequestSchema = z.object({
   threadId: z.string(),
-  providerThreadId: z.string().optional(),
   turnId: z.string(),
   callId: z.string().min(1),
   tool: z.string().min(1),
@@ -26,7 +34,7 @@ export const providerToolCallResponseSchema = z.object({
   ),
 });
 
-export function decodeProviderToolCallRequest(
+export function decodeNormalizedProviderToolCallRequest(
   requestId: string | number,
   method: string,
   params: unknown,
@@ -35,19 +43,42 @@ export function decodeProviderToolCallRequest(
     return null;
   }
 
-  const parsed = providerToolCallRequestSchema.safeParse(params);
+  const parsed = normalizedToolCallRequestSchema.safeParse(params);
   if (!parsed.success) {
     return null;
   }
 
-  const providerThreadId = parsed.data.providerThreadId ?? parsed.data.threadId;
   return {
     requestId,
-    providerThreadId,
+    providerThreadId: parsed.data.providerThreadId,
     turnId: parsed.data.turnId,
     callId: parsed.data.callId,
     tool: parsed.data.tool,
     ...(parsed.data.arguments !== undefined ? { arguments: parsed.data.arguments } : {}),
-    ...(parsed.data.providerThreadId ? { threadId: parsed.data.threadId } : {}),
+    ...(parsed.data.threadId ? { threadId: parsed.data.threadId } : {}),
+  };
+}
+
+export function decodeNativeProviderToolCallRequest(
+  requestId: string | number,
+  method: string,
+  params: unknown,
+): DecodedToolCallRequest | null {
+  if (method !== "item/tool/call") {
+    return null;
+  }
+
+  const parsed = providerNativeToolCallRequestSchema.safeParse(params);
+  if (!parsed.success) {
+    return null;
+  }
+
+  return {
+    requestId,
+    providerThreadId: parsed.data.threadId,
+    turnId: parsed.data.turnId,
+    callId: parsed.data.callId,
+    tool: parsed.data.tool,
+    ...(parsed.data.arguments !== undefined ? { arguments: parsed.data.arguments } : {}),
   };
 }

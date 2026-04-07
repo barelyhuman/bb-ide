@@ -11,7 +11,7 @@ import type {
   ProviderAdapter,
 } from "../provider-adapter.js";
 import { parseAvailableModelList } from "../shared/available-models.js";
-import { decodeProviderToolCallRequest } from "../shared/provider-tool-call-contract.js";
+import { decodeNormalizedProviderToolCallRequest } from "../shared/provider-tool-call-contract.js";
 
 export interface CreateFakeAdapterOptions {
   displayName?: string;
@@ -183,7 +183,11 @@ function decodeToolCallRequest(request: JsonRpcMessage): DecodedToolCallRequest 
   if (typeof request.id !== "string" && typeof request.id !== "number") {
     return null;
   }
-  return decodeProviderToolCallRequest(request.id, request.method, request.params);
+  return decodeNormalizedProviderToolCallRequest(
+    request.id,
+    request.method,
+    request.params,
+  );
 }
 
 function parseModelListResult(result: unknown): AvailableModel[] {
@@ -196,12 +200,8 @@ export function createFakeAdapter(
   /*
    * Fake provider input control tokens:
    * - `delay:<ms>` delays turn completion by the requested duration.
-   * - `call_tool:<name>` emits a normalized tool call with both `threadId`
-   *   and `providerThreadId`, matching bridge-backed providers.
-   * - `call_tool_provider_thread:<name>` emits a provider-native tool call
-   *   whose `threadId` is the provider thread id and omits a separate
-   *   `providerThreadId`, matching native provider protocols before runtime
-   *   normalization.
+   * - `call_tool:<name>` emits a provider-scoped tool call with required
+   *   `providerThreadId` and no BB `threadId` hint.
    * - remaining text is echoed back as `Response to: ...`.
    */
   return {

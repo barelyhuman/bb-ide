@@ -34,7 +34,7 @@ import {
   toOptionalRecord,
 } from "../shared/adapter-utils.js";
 import {
-  decodeProviderToolCallRequest,
+  decodeNativeProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
 import { createUnhandledProviderEvent } from "../shared/provider-unhandled-event.js";
 import { jsonRpcEnvelopeSchema } from "../shared/json-rpc-envelope.js";
@@ -1086,7 +1086,11 @@ export function createCodexProviderAdapter(
       if (typeof request.id !== "string" && typeof request.id !== "number") {
         return null;
       }
-      return decodeProviderToolCallRequest(request.id, request.method, request.params);
+      return decodeNativeProviderToolCallRequest(
+        request.id,
+        request.method,
+        request.params,
+      );
     },
 
     parseModelListResult(result: unknown) {

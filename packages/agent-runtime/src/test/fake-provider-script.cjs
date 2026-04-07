@@ -46,15 +46,9 @@ function parseInputText(input) {
 function parseTurnPlan(inputText) {
   const delayMatch = /(?:^|\s)delay:(\d+)(?:\s|$)/.exec(inputText);
   const toolMatch = /(?:^|\s)call_tool:([^\s]+)(?:\s|$)/.exec(inputText);
-  const providerThreadToolMatch =
-    /(?:^|\s)call_tool_provider_thread:([^\s]+)(?:\s|$)/.exec(inputText);
 
   let delayMs = delayMatch ? Number(delayMatch[1]) : 0;
-  let toolName = providerThreadToolMatch
-    ? providerThreadToolMatch[1]
-    : toolMatch
-      ? toolMatch[1]
-      : null;
+  let toolName = toolMatch ? toolMatch[1] : null;
 
   if (toolName && /^delay:\d+$/u.test(toolName)) {
     delayMs = Number(toolName.slice("delay:".length));
@@ -65,7 +59,6 @@ function parseTurnPlan(inputText) {
     delayMs,
     responseText: inputText ? `Response to: ${inputText}` : "Response complete",
     toolName,
-    toolCallMode: providerThreadToolMatch !== null ? "provider-native" : "normalized",
   };
 }
 
@@ -166,23 +159,13 @@ function beginTurn(threadId, input) {
       jsonrpc: "2.0",
       id: toolCallId,
       method: "item/tool/call",
-      params:
-        plan.toolCallMode === "provider-native"
-          ? {
-              threadId: thread.providerThreadId,
-              turnId,
-              callId: "call-" + toolCallId,
-              tool: plan.toolName,
-              arguments: {},
-            }
-          : {
-              threadId,
-              providerThreadId: thread.providerThreadId,
-              turnId,
-              callId: "call-" + toolCallId,
-              tool: plan.toolName,
-              arguments: {},
-            },
+      params: {
+        providerThreadId: thread.providerThreadId,
+        turnId,
+        callId: "call-" + toolCallId,
+        tool: plan.toolName,
+        arguments: {},
+      },
     });
     return;
   }

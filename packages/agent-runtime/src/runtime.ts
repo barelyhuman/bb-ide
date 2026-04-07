@@ -179,25 +179,17 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
 
   function resolveBbThreadIdForProcess(
     proc: ProviderProcess,
-    candidateThreadId: string | undefined,
+    providerThreadId: string | undefined,
   ): string | undefined {
-    if (candidateThreadId && proc.threadIds.has(candidateThreadId)) {
-      return candidateThreadId;
-    }
-
-    if (candidateThreadId) {
-      for (const [bbThreadId, providerThreadId] of threadToProviderThread) {
+    if (providerThreadId) {
+      for (const [bbThreadId, mappedProviderThreadId] of threadToProviderThread) {
         if (
-          providerThreadId === candidateThreadId
+          mappedProviderThreadId === providerThreadId
           && proc.threadIds.has(bbThreadId)
         ) {
           return bbThreadId;
         }
       }
-    }
-
-    if (proc.threadIds.size === 1) {
-      return [...proc.threadIds][0];
     }
 
     return undefined;
@@ -325,11 +317,10 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         rawRequest,
       );
       if (toolCallReq) {
-        const resolvedThreadId = toolCallReq.threadId
-          ?? resolveBbThreadIdForProcess(
-            proc,
-            toolCallReq.providerThreadId,
-          );
+        const resolvedThreadId = resolveBbThreadIdForProcess(
+          proc,
+          toolCallReq.providerThreadId,
+        );
         if (!resolvedThreadId) {
           const rpcError = {
             jsonrpc: "2.0",
@@ -337,6 +328,22 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
             error: {
               code: -32000,
               message: `Unable to resolve BB thread id for tool call on provider thread "${toolCallReq.providerThreadId}"`,
+            },
+          };
+          proc.child.stdin?.write(JSON.stringify(rpcError) + "\n");
+          return;
+        }
+        if (
+          toolCallReq.threadId
+          && toolCallReq.threadId !== resolvedThreadId
+        ) {
+          const rpcError = {
+            jsonrpc: "2.0",
+            id: parsed.id,
+            error: {
+              code: -32000,
+              message:
+                `Tool call thread hint "${toolCallReq.threadId}" did not match resolved BB thread "${resolvedThreadId}" for provider thread "${toolCallReq.providerThreadId}"`,
             },
           };
           proc.child.stdin?.write(JSON.stringify(rpcError) + "\n");

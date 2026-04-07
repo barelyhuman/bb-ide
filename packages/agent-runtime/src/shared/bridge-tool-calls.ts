@@ -20,8 +20,8 @@ export interface BridgeToolCallRequest {
   id: string | number;
   method: "item/tool/call";
   params: {
-    threadId: string;
     providerThreadId: string;
+    threadId?: string;
     turnId: string;
     callId: string;
     tool: string;
