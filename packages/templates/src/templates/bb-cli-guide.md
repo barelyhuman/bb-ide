@@ -24,13 +24,14 @@ Mutating commands (e.g., `commit`, `stop`, `archive`, `update`) require an expli
 Spawning:
 
 ```
-bb thread spawn --project <project-id> --provider codex --model gpt-5.3-codex --reasoning-level medium --title "Implement API" --prompt "Implement feature X"
-bb thread spawn --project <project-id> --parent-thread <manager-id> --provider codex --model gpt-5.3-codex --reasoning-level medium --title "Backend fix" --prompt "Fix bug Y"
-bb thread spawn --project <project-id> --environment <environment-id> --parent-thread <manager-id> --provider claude-code --model claude-sonnet-4-6 --reasoning-level medium --title "Review backend fix" --prompt "Review the changes"
+bb thread spawn --project <project-id> --provider <provider-id> --model <model-id> --reasoning-level <level> --title "Implement API" --prompt "Implement feature X"
+bb thread spawn --project <project-id> --parent-thread <manager-id> --provider <provider-id> --model <model-id> --reasoning-level <level> --title "Backend fix" --prompt "Fix bug Y"
+bb thread spawn --project <project-id> --environment <environment-id> --parent-thread <manager-id> --provider <provider-id> --model <model-id> --reasoning-level <level> --title "Review backend fix" --prompt "Review the changes"
 ```
 
 The `--parent-thread` flag makes the new thread a managed child of the specified manager.
 The `--environment` flag attaches the new thread to an existing environment (e.g., another thread's worktree). This is useful for pipeline workflows where a review thread needs to see a coding thread's files.
+Use `bb provider models <provider-id>` to discover valid model IDs before spawning if you are unsure.
 
 Inspecting:
 
@@ -90,8 +91,7 @@ bb environment promote-status --project <project-id>  # Show the active primary-
 ## Managers
 
 ```
-bb manager hire <project-id> --provider codex --model gpt-5.4 --reasoning-level medium
-bb manager hire <project-id> --provider pi --model anthropic/claude-opus-4-6 --reasoning-level medium
+bb manager hire <project-id> --provider <provider-id> --model <model-id> --reasoning-level <level>
 bb manager list [projectId]            # List managers for a project
 bb manager status <manager-id>         # Show manager status and managed threads
 bb manager delete <manager-id>         # Delete a manager permanently
