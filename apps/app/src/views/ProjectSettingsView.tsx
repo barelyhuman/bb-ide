@@ -2,7 +2,11 @@ import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Github, Monitor, MoreHorizontal } from "lucide-react";
-import { isLocalPathProjectSource, type ProjectSource } from "@bb/domain";
+import {
+  findLocalPathProjectSourceForHost,
+  isLocalPathProjectSource,
+  type ProjectSource,
+} from "@bb/domain";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,6 +24,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { PageShell } from "@/components/layout/PageShell";
 import { SettingsSection } from "@/components/settings/SettingsSection";
+import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useProjects } from "@/hooks/queries/project-queries";
 import { projectsQueryKey } from "@/hooks/queries/query-keys";
 import { useHosts } from "@/hooks/queries/system-queries";
@@ -37,6 +42,7 @@ export function ProjectSettingsView() {
   const { data: projects, isLoading } = useProjects();
   const { data: hosts = [] } = useHosts();
   const queryClient = useQueryClient();
+  const { localHostId, pickFolder } = useHostDaemon();
 
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
 
@@ -49,9 +55,30 @@ export function ProjectSettingsView() {
     },
   });
 
+  const addSource = useMutation({
+    mutationFn: async () => {
+      if (!pickFolder || !localHostId || !projectId) return;
+      const selectedPath = await pickFolder();
+      if (!selectedPath) return;
+      await api.addProjectSource(projectId, {
+        type: "local_path",
+        hostId: localHostId,
+        path: selectedPath,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
+    },
+  });
+
   const project = projects?.find((p) => p.id === projectId);
   const sources = project?.sources ?? [];
   const hostNameById = new Map(hosts.map((h) => [h.id, h.name]));
+
+  const canAddLocalSource =
+    localHostId != null &&
+    pickFolder != null &&
+    !findLocalPathProjectSourceForHost(sources, localHostId);
 
   return (
     <PageShell contentClassName="pt-8 md:pt-10">
@@ -60,61 +87,85 @@ export function ProjectSettingsView() {
           {isLoading ? (
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : sources.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No sources configured.
-            </p>
-          ) : (
-            <div className="divide-y divide-border">
-              {sources.map((source) => (
-                <div
-                  key={source.id}
-                  className="flex items-center gap-3 py-2 text-sm first:pt-0 last:pb-0"
+            <div>
+              <p className="text-sm text-muted-foreground">
+                No sources configured.
+              </p>
+              {canAddLocalSource && (
+                <Button
+                  size="sm"
+                  className="mt-2"
+                  disabled={addSource.isPending}
+                  onClick={() => addSource.mutate()}
                 >
-                  {isLocalPathProjectSource(source) ? (
-                    <Monitor className="size-4 shrink-0 text-muted-foreground" />
-                  ) : (
-                    <Github className="size-4 shrink-0 text-muted-foreground" />
-                  )}
-                  <span className="min-w-0 flex-1 truncate">
+                  Add local path
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div>
+              <div className="divide-y divide-border">
+                {sources.map((source) => (
+                  <div
+                    key={source.id}
+                    className="flex items-center gap-3 py-2 text-sm first:pt-0 last:pb-0"
+                  >
                     {isLocalPathProjectSource(source) ? (
-                      <>
-                        {source.path}
-                        <span className="ml-1.5 text-xs text-muted-foreground">
-                          {hostNameById.get(source.hostId) ?? source.hostId}
-                        </span>
-                      </>
+                      <Monitor className="size-4 shrink-0 text-muted-foreground" />
                     ) : (
-                      source.repoUrl
+                      <Github className="size-4 shrink-0 text-muted-foreground" />
                     )}
-                  </span>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 shrink-0"
-                        aria-label="Source actions"
-                      >
-                        <MoreHorizontal className="size-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-40">
-                      <DropdownMenuItem
-                        className="text-destructive focus:text-destructive"
-                        disabled={sources.length <= 1}
-                        onSelect={() =>
-                          setDeleteTarget({
-                            id: source.id,
-                            label: sourceLabel(source, hostNameById),
-                          })
-                        }
-                      >
-                        Remove
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              ))}
+                    <span className="min-w-0 flex-1 truncate">
+                      {isLocalPathProjectSource(source) ? (
+                        <>
+                          {source.path}
+                          <span className="ml-1.5 text-xs text-muted-foreground">
+                            {hostNameById.get(source.hostId) ?? source.hostId}
+                          </span>
+                        </>
+                      ) : (
+                        source.repoUrl
+                      )}
+                    </span>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0"
+                          aria-label="Source actions"
+                        >
+                          <MoreHorizontal className="size-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-40">
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          disabled={sources.length <= 1}
+                          onSelect={() =>
+                            setDeleteTarget({
+                              id: source.id,
+                              label: sourceLabel(source, hostNameById),
+                            })
+                          }
+                        >
+                          Remove
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                ))}
+              </div>
+              {canAddLocalSource && (
+                <Button
+                  size="sm"
+                  className="mt-2"
+                  disabled={addSource.isPending}
+                  onClick={() => addSource.mutate()}
+                >
+                  Add local path
+                </Button>
+              )}
             </div>
           )}
         </SettingsSection>
