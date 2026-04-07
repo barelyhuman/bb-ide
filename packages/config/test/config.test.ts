@@ -88,6 +88,19 @@ describe("consumer-specific config", () => {
     ).rejects.toThrow(/BB_SERVER_URL/u);
   });
 
+  it("uses production defaults for the CLI even in development mode", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("BB_SERVER_URL", undefined);
+    vi.stubEnv("BB_HOST_DAEMON_PORT", undefined);
+
+    const { cliConfig } = await importFresh<typeof import("../src/cli.js")>(
+      "../src/cli.js",
+    );
+
+    expect(cliConfig.BB_SERVER_URL).toBe("http://localhost:3000");
+    expect(cliConfig.BB_HOST_DAEMON_PORT).toBe(3001);
+  });
+
   it("allows BB_PUBLIC_URL to be omitted in production server config", async () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("BB_PUBLIC_URL", undefined);

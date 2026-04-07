@@ -67,6 +67,22 @@ pnpm dev
 
 That starts the Vite app on `http://localhost:5173` and proxies API and WebSocket traffic to a separate dev server on `:3334`, using `~/.bb-dev` by default so it can run alongside `pnpm start`.
 
+Development behavior is intentionally split:
+
+- the app hot reloads itself
+- the server does not hot reload
+- the host daemon does not hot reload
+
+When you want the server and host daemon to pick up the latest build output, use:
+
+```bash
+pnpm dev:restart
+pnpm dev:restart-server
+pnpm dev:restart-host-daemon
+```
+
+These rebuild first, then restart only the targeted stateful services.
+
 To test an additional host against that dev server, use:
 
 ```bash
@@ -76,10 +92,13 @@ BB_HOST_ENROLL_KEY=<join-code> pnpm dev:host-daemon
 That runs a second host daemon against the dev server and stores its state under `~/.bb-dev-host-daemon` by default. Provide the join code from the server-side host join flow on first run; after enrollment, the daemon persists its auth state locally.
 
 ```bash
-pnpm bb:dev --help        # CLI during development
-pnpm reset:dev            # clear dev state
+pnpm bb --help            # built CLI, targets the default/prod instance
 pnpm reset                # clear production state
-pnpm reset:all            # clear both
+
+pnpm bb:dev --help        # source CLI, targets the dev instance
+pnpm reset:dev            # clear dev state
+
+pnpm reset:all            # clear both production and dev states
 ```
 
 These reset commands prompt for confirmation before deleting anything.
