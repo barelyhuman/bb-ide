@@ -37,7 +37,6 @@ import { useDialogState } from "@/hooks/useDialogState";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useHosts } from "@/hooks/queries/system-queries";
 import { usePreferredTheme } from "@/hooks/useTheme";
-import { HttpError } from "@/lib/api";
 import { useStoredShowAllEvents } from "@/lib/show-all-events-preference";
 import { getGitStatusDisplay } from "@/lib/workspace-status";
 import {
@@ -386,20 +385,11 @@ export function ThreadDetailView() {
       </PageShell>
     );
   }
-  const isTransientThreadLoadError =
-    Boolean(thread) &&
-    Boolean(error) &&
-    (!(error instanceof HttpError) || error.status >= 500);
-  if (
-    (!thread && Boolean(error)) ||
-    !thread ||
-    (!isTransientThreadLoadError && Boolean(error)) ||
-    thread.projectId !== projectId
-  ) {
+  if (!thread || thread.projectId !== projectId) {
     return (
       <PageShell contentClassName="min-h-full items-center justify-center">
         <p className="py-12 text-center text-sm text-destructive">
-          {error ? error.message : "Not found"}
+          {error ? "Failed to load thread." : "Not found"}
         </p>
       </PageShell>
     );
@@ -706,7 +696,6 @@ export function ThreadDetailView() {
           bottomSentinelRef,
           isReasoningBlockActive,
           isThreadTimelinePending,
-          isTransientThreadLoadError,
           latestActivityRowId,
           loadingToolGroupIds,
           onLoadToolGroupMessages: handleLoadToolGroupMessages,

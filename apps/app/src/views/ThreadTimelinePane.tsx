@@ -16,7 +16,6 @@ interface ThreadTimelinePaneProps {
   header: ReactNode;
   isReasoningBlockActive: boolean;
   isThreadTimelinePending: boolean;
-  isTransientThreadLoadError: boolean;
   latestActivityRowId: string | null;
   loadingToolGroupIds: ReadonlySet<string>;
   onLoadToolGroupMessages: (entry: TimelineToolGroupRow) => void;
@@ -36,7 +35,6 @@ export function ThreadTimelinePane({
   header,
   isReasoningBlockActive,
   isThreadTimelinePending,
-  isTransientThreadLoadError,
   latestActivityRowId,
   loadingToolGroupIds,
   onLoadToolGroupMessages,
@@ -63,11 +61,6 @@ export function ThreadTimelinePane({
         footerUsesPromptPadding
         footer={footer}
       >
-        {isTransientThreadLoadError ? (
-          <div className="mb-2 rounded-md border border-border/80 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-            Server temporarily unavailable. Showing cached thread state while reconnecting.
-          </div>
-        ) : null}
         <ConversationTimeline>
           {isThreadTimelinePending ? (
             <ConversationWorkingIndicator label="Loading thread..." className="mt-6" />
