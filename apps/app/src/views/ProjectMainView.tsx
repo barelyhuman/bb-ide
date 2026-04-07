@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { PromptBox } from "@/components/promptbox/PromptBox";
 import { PromptExecutionControls } from "@/components/promptbox/PromptExecutionControls";
+import { EnvironmentPicker, parseEnvironmentValue } from "@/components/promptbox/EnvironmentPicker";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { PageShell } from "@/components/layout/PageShell";
 import { useUploadPromptAttachment } from "@/hooks/mutations/project-mutations";
@@ -60,15 +61,56 @@ export function ProjectMainView() {
     modelOptions,
     reasoningOptions,
     sandboxOptions,
-    environmentOptions,
     supportsServiceTier,
   } = useThreadCreationOptions({ scope: "new-thread", projectId });
-  const environmentSelectorOptions = useMemo(
-    () => environmentOptions.map((option) => ({
-      ...option,
-    })),
-    [environmentOptions],
+
+  const currentProject = useMemo(
+    () => projects?.find((p) => p.id === projectId),
+    [projects, projectId],
   );
+  const projectSources = currentProject?.sources ?? [];
+
+  // Fall back to local host direct if no value is stored yet
+  const effectiveEnvironmentValue = useMemo(() => {
+    if (environmentSelectionValue && parseEnvironmentValue(environmentSelectionValue)) {
+      return environmentSelectionValue;
+    }
+    if (localHostId) {
+      return `host:${localHostId}:local`;
+    }
+    return "";
+  }, [environmentSelectionValue, localHostId]);
+
+  const selectedEnvironment = useMemo((): CreateThreadRequest["environment"] | null => {
+    if (!projectId) return null;
+    const parsed = parseEnvironmentValue(effectiveEnvironmentValue);
+    if (!parsed) return null;
+
+    if (parsed.type === "host") {
+      if (parsed.mode === "worktree") {
+        return {
+          type: "host",
+          hostId: parsed.hostId,
+          workspace: { type: "managed-worktree" },
+        };
+      }
+      return {
+        type: "host",
+        hostId: parsed.hostId,
+        workspace: { type: "unmanaged", path: null },
+      };
+    }
+
+    if (parsed.type === "sandbox") {
+      return {
+        type: "sandbox-host",
+        sandboxType: parsed.backendId,
+      };
+    }
+
+    return null;
+  }, [effectiveEnvironmentValue, projectId]);
+
   const projectOptions = useMemo(() => {
     const knownOptions =
       projects?.map((project) => ({
@@ -85,24 +127,7 @@ export function ProjectMainView() {
 
     return knownOptions;
   }, [projectId, projects, projectsLoading]);
-  const selectedEnvironment = useMemo((): CreateThreadRequest["environment"] | null => {
-    if (!projectId || !localHostId) {
-      return null;
-    }
-    if (environmentSelectionValue === "worktree") {
-      return {
-        type: "host",
-        hostId: localHostId,
-        workspace: { type: "managed-worktree" },
-      };
-    }
-    // Default: unmanaged workspace on local host (project source path)
-    return {
-      type: "host",
-      hostId: localHostId,
-      workspace: { type: "unmanaged", path: null },
-    };
-  }, [environmentSelectionValue, localHostId, projectId]);
+
   const selectedThreadModel = activeModel?.model ?? selectedModel;
   const handleProjectChange = useCallback((nextProjectId: string) => {
     if (nextProjectId === projectId) return;
@@ -278,14 +303,11 @@ export function ProjectMainView() {
         />
         <div className="flex items-center px-3.5">
           <div className="flex flex-wrap items-center gap-2">
-            {environmentSelectorOptions.length > 0 ? (
-              <PromptOptionPicker
-                label="Environment"
-                value={environmentSelectionValue}
-                options={environmentSelectorOptions}
-                onChange={setEnvironmentSelectionValue}
-              />
-            ) : null}
+            <EnvironmentPicker
+              value={effectiveEnvironmentValue}
+              onChange={setEnvironmentSelectionValue}
+              sources={projectSources}
+            />
           </div>
         </div>
       </div>

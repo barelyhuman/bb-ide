@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import type { Host, AvailableModel } from "@bb/domain";
+import type { AvailableModel, Host, SandboxBackendInfo } from "@bb/domain";
 import type { SystemProviderInfo } from "@bb/server-contract";
 import * as api from "@/lib/api";
-import { availableModelsQueryKey, hostsQueryKey, systemProvidersQueryKey } from "./query-keys";
+import { availableModelsQueryKey, hostsQueryKey, sandboxBackendsQueryKey, systemProvidersQueryKey } from "./query-keys";
 
 export function useHosts() {
   return useQuery<Host[]>({
@@ -24,6 +24,15 @@ export function useSystemProviders() {
   return useQuery<SystemProviderInfo[]>({
     queryKey: systemProvidersQueryKey(),
     queryFn: () => api.listSystemProviders(),
+    staleTime: 60_000,
+  });
+}
+
+export function useSandboxBackends(enabled: boolean) {
+  return useQuery<SandboxBackendInfo[]>({
+    queryKey: sandboxBackendsQueryKey(),
+    queryFn: () => api.listSandboxBackends(),
+    enabled,
     staleTime: 60_000,
   });
 }

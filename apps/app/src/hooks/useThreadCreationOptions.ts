@@ -402,19 +402,7 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
     return activeModel?.defaultReasoningEffort ?? reasoningOptions[0].value;
   }, [activeModel, rawReasoningLevel, reasoningOptions]);
 
-  const environmentOptions = useMemo(
-    (): PromptOption<string>[] => [
-      { value: "local", label: "Direct" },
-      { value: "worktree", label: "Worktree" },
-    ],
-    [],
-  );
-  const environmentSelectionValue = useMemo(() => {
-    if (environmentOptions.some((option) => option.value === rawEnvironmentSelectionValue)) {
-      return rawEnvironmentSelectionValue;
-    }
-    return environmentOptions[0]?.value ?? "";
-  }, [environmentOptions, rawEnvironmentSelectionValue]);
+  const environmentSelectionValue = rawEnvironmentSelectionValue;
   const sandboxMode = rawSandboxMode;
 
   useEffect(() => {
@@ -542,7 +530,6 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
     modelOptions,
     reasoningOptions,
     sandboxOptions: SANDBOX_OPTIONS,
-    environmentOptions,
     supportsServiceTier,
   };
 }
