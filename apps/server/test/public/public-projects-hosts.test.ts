@@ -650,6 +650,54 @@ describe("public project and host routes", () => {
     }
   });
 
+  it("deletes a host that has pending commands", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, { id: "host-delete-cmds" });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/host-delete-cmds",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/host-delete-cmds",
+      });
+
+      // Create a thread to generate queued commands for this host
+      const createThreadResponse = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [{ type: "text", text: "test" }],
+          environment: { type: "reuse", environmentId: environment.id },
+        }),
+      });
+      expect(createThreadResponse.status).toBe(201);
+
+      // Wait for the command to be queued
+      await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "thread.start",
+      );
+
+      const deleteResponse = await harness.app.request(
+        `/api/v1/hosts/${host.id}`,
+        { method: "DELETE" },
+      );
+      expect(deleteResponse.status).toBe(200);
+      await expect(readJson(deleteResponse)).resolves.toEqual({ ok: true });
+
+      const getResponse = await harness.app.request(`/api/v1/hosts/${host.id}`);
+      expect(getResponse.status).toBe(404);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("returns 404 when deleting a nonexistent host", async () => {
     const harness = await createTestAppHarness();
     try {
