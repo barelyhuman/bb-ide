@@ -329,34 +329,14 @@ export function parseOperationMessage(
     });
   }
 
+  // Title-update events are hidden from the timeline — the title is already
+  // visible in the thread header, so surfacing it inline is just noise.
   if (decoded.type === "system/thread-title/updated") {
-    // Avoid duplicate rows when the underlying provider thread/name/updated
-    // event is also present in the timeline.
-    if ((decoded.providerMethod ?? "") === "thread/name/updated") {
-      return null;
-    }
-    const { title } = decoded;
-    if (!title) return null;
-    const { previousTitle } = decoded;
-    return op(decoded, meta, "thread-title-updated", {
-      turnId: eventTurnId,
-      opType: "thread-title-updated",
-      title: "Title updated",
-      detail: previousTitle ? `${previousTitle} → ${title}` : title,
-      status: "completed",
-    });
+    return null;
   }
 
   if (decoded.type === "thread/name/updated") {
-    const { threadName } = decoded;
-    if (!threadName) return null;
-    return op(decoded, meta, "thread-title-updated", {
-      turnId: eventTurnId,
-      opType: "thread-title-updated",
-      title: "Title updated",
-      detail: threadName,
-      status: "completed",
-    });
+    return null;
   }
 
   if (decoded.type === "system/operation") {

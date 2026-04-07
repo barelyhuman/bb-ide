@@ -2064,7 +2064,7 @@ describe("toViewMessages replay coverage", () => {
     expect(op?.detail).toBe("status: allowed • limit: five_hour");
   });
 
-  it("projects system thread title updates as operations", () => {
+  it("hides system thread title updates from the timeline", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-1",
@@ -2084,18 +2084,15 @@ describe("toViewMessages replay coverage", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "active",
     });
-    const op = projected.find(
+    const ops = projected.filter(
       (message): message is Extract<ViewMessage, { kind: "operation" }> =>
         message.kind === "operation",
     );
 
-    expect(op).toBeDefined();
-    expect(op?.opType).toBe("thread-title-updated");
-    expect(op?.title).toBe("Title updated");
-    expect(op?.detail).toBe("Investigate slowness → Fix collapsed groups");
+    expect(ops).toHaveLength(0);
   });
 
-  it("projects provider thread name updates as operations", () => {
+  it("hides provider thread name updates from the timeline", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-1",
@@ -2114,18 +2111,15 @@ describe("toViewMessages replay coverage", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "active",
     });
-    const op = projected.find(
+    const ops = projected.filter(
       (message): message is Extract<ViewMessage, { kind: "operation" }> =>
         message.kind === "operation",
     );
 
-    expect(op).toBeDefined();
-    expect(op?.opType).toBe("thread-title-updated");
-    expect(op?.title).toBe("Title updated");
-    expect(op?.detail).toBe("Compaction summary title");
+    expect(ops).toHaveLength(0);
   });
 
-  it("deduplicates provider + system title update pairs", () => {
+  it("hides both provider + system title update pairs from the timeline", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-1",
@@ -2162,9 +2156,7 @@ describe("toViewMessages replay coverage", () => {
         message.kind === "operation",
     );
 
-    expect(ops).toHaveLength(1);
-    expect(ops[0]?.opType).toBe("thread-title-updated");
-    expect(ops[0]?.detail).toBe("Server-assigned title");
+    expect(ops).toHaveLength(0);
   });
 
   it("keeps in-progress compaction items pending for active threads", () => {
