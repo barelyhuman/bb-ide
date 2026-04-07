@@ -615,6 +615,10 @@ export async function listHosts(): Promise<Host[]> {
   return request<Host[]>(apiClient.hosts.$get());
 }
 
+export async function getHost(id: string): Promise<Host> {
+  return request<Host>(apiClient.hosts[":id"].$get({ param: { id } }));
+}
+
 export async function updateHost(
   id: string,
   req: { name: string },

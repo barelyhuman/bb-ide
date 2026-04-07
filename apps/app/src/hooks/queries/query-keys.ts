@@ -1,6 +1,7 @@
 import type { ThreadListFilters } from "@/lib/api";
 
 export const HOSTS_QUERY_KEY = "hosts";
+export const HOST_QUERY_KEY = "host";
 export const PROJECTS_QUERY_KEY = "projects";
 export const PROJECT_FILES_QUERY_KEY = "projectFiles";
 export const THREADS_QUERY_KEY = "threads";
@@ -27,6 +28,9 @@ export interface ThreadListQueryFilters {
 }
 
 export type HostsQueryKey = readonly [typeof HOSTS_QUERY_KEY];
+export type HostQueryId = string | null | undefined;
+export type HostQueryKey = readonly [typeof HOST_QUERY_KEY, HostQueryId];
+export type AllHostQueryKeyPrefix = readonly [typeof HOST_QUERY_KEY];
 export type ProjectsQueryKey = readonly [typeof PROJECTS_QUERY_KEY];
 export type ProjectFilesQueryKey = readonly [
   typeof PROJECT_FILES_QUERY_KEY,
@@ -109,6 +113,16 @@ export type StatusQueryKey = readonly [typeof STATUS_QUERY_KEY];
 
 export function hostsQueryKey(): HostsQueryKey {
   return [HOSTS_QUERY_KEY];
+}
+
+export function hostQueryKey(
+  hostId: HostQueryId,
+): HostQueryKey {
+  return [HOST_QUERY_KEY, hostId];
+}
+
+export function allHostQueryKeyPrefix(): AllHostQueryKeyPrefix {
+  return [HOST_QUERY_KEY];
 }
 
 export function projectsQueryKey(): ProjectsQueryKey {
