@@ -79,7 +79,9 @@ function createFakeWorkspace(
     files: "",
   };
   let localStateFingerprint: GetLocalStateFingerprintResult = `local:${path}:initial`;
+  let localStateFingerprintError: Error | null = null;
   let sharedGitRefsFingerprint: GetSharedGitRefsFingerprintResult = `refs:${path}:initial`;
+  let sharedGitRefsFingerprintError: Error | null = null;
   const workspace = {
     path,
     managed: false,
@@ -89,8 +91,18 @@ function createFakeWorkspace(
       async (..._args: GetCurrentBranchArgs) => "main",
     ),
     getHeadSha: vi.fn(async () => "commit-1"),
-    getLocalStateFingerprint: vi.fn(async () => localStateFingerprint),
-    getSharedGitRefsFingerprint: vi.fn(async () => sharedGitRefsFingerprint),
+    getLocalStateFingerprint: vi.fn(async () => {
+      if (localStateFingerprintError) {
+        throw localStateFingerprintError;
+      }
+      return localStateFingerprint;
+    }),
+    getSharedGitRefsFingerprint: vi.fn(async () => {
+      if (sharedGitRefsFingerprintError) {
+        throw sharedGitRefsFingerprintError;
+      }
+      return sharedGitRefsFingerprint;
+    }),
     getStatus: vi.fn(async () => status),
     getDiff: vi.fn(async () => diff),
     listBranches: vi.fn(async () => ["main"]),
@@ -109,17 +121,25 @@ function createFakeWorkspace(
     setLocalStateFingerprint(value: GetLocalStateFingerprintResult) {
       localStateFingerprint = value;
     },
+    setLocalStateFingerprintError(value: Error | null) {
+      localStateFingerprintError = value;
+    },
     setSharedGitRefsFingerprint(value: GetSharedGitRefsFingerprintResult) {
       sharedGitRefsFingerprint = value;
+    },
+    setSharedGitRefsFingerprintError(value: Error | null) {
+      sharedGitRefsFingerprintError = value;
     },
     promote: vi.fn(async (..._args: PromoteArgs) => undefined),
     demote: vi.fn(async (..._args: DemoteArgs) => undefined),
     destroy: vi.fn(async () => undefined),
   } satisfies HostWorkspace & {
     setLocalStateFingerprint: (value: GetLocalStateFingerprintResult) => void;
+    setLocalStateFingerprintError: (value: Error | null) => void;
     setSharedGitRefsFingerprint: (
       value: GetSharedGitRefsFingerprintResult,
     ) => void;
+    setSharedGitRefsFingerprintError: (value: Error | null) => void;
   };
 
   return workspace;
@@ -386,6 +406,175 @@ describe("RuntimeManager", () => {
 
     watchWorkspaceArgs?.onChange({
       changedPaths: ["/tmp/shared/.git/refs/heads/main"],
+      changeKinds: ["shared-git-refs-changed"],
+      kind: "workspace-status-changed",
+      environmentId: "env-watch",
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onWorkspaceStatusChanged).toHaveBeenCalledWith({
+      changeKinds: ["git-refs-changed"],
+      environmentId: "env-watch",
+    });
+  });
+
+  it("reports shared git ref changes from single-dir git watcher events", async () => {
+    const stopWatchingStatus = vi.fn(() => undefined);
+    let watchWorkspaceArgs: WatchWorkspaceArgs | undefined;
+    const workspace = createFakeWorkspace("/tmp/env-watch");
+    const { hostWatcher } = createFakeHostWatcher({
+      watchWorkspaceImplementation: (args) => {
+        watchWorkspaceArgs = args;
+        return stopWatchingStatus;
+      },
+    });
+    const onWorkspaceStatusChanged = vi.fn();
+    const manager = new RuntimeManager({
+      hostWatcher,
+      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-watch").mockResolvedValue(
+        workspace,
+      ),
+      createRuntime: vi.fn(() => createFakeRuntime()),
+      onWorkspaceStatusChanged,
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-watch",
+      workspacePath: "/tmp/env-watch",
+    });
+    workspace.setSharedGitRefsFingerprint("refs:/tmp/env-watch:changed");
+
+    watchWorkspaceArgs?.onChange({
+      changedPaths: ["/tmp/env-watch/.git/refs/heads/feature"],
+      changeKinds: ["workspace-git-changed", "shared-git-refs-changed"],
+      kind: "workspace-status-changed",
+      environmentId: "env-watch",
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onWorkspaceStatusChanged).toHaveBeenCalledWith({
+      changeKinds: ["git-refs-changed"],
+      environmentId: "env-watch",
+    });
+  });
+
+  it("reports local fingerprint recomputation failures and recovers on the next change", async () => {
+    const stopWatchingStatus = vi.fn(() => undefined);
+    let watchWorkspaceArgs: WatchWorkspaceArgs | undefined;
+    const workspace = createFakeWorkspace("/tmp/env-watch");
+    const { hostWatcher } = createFakeHostWatcher({
+      watchWorkspaceImplementation: (args) => {
+        watchWorkspaceArgs = args;
+        return stopWatchingStatus;
+      },
+    });
+    const onWorkspaceStatusChanged = vi.fn();
+    const onWorkspaceStatusWatchError = vi.fn();
+    const manager = new RuntimeManager({
+      hostWatcher,
+      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-watch").mockResolvedValue(
+        workspace,
+      ),
+      createRuntime: vi.fn(() => createFakeRuntime()),
+      onWorkspaceStatusChanged,
+      onWorkspaceStatusWatchError,
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-watch",
+      workspacePath: "/tmp/env-watch",
+    });
+
+    workspace.setLocalStateFingerprintError(new Error("workspace vanished"));
+    watchWorkspaceArgs?.onChange({
+      changedPaths: ["/tmp/env-watch/README.md"],
+      changeKinds: ["workspace-content-changed"],
+      kind: "workspace-status-changed",
+      environmentId: "env-watch",
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onWorkspaceStatusChanged).not.toHaveBeenCalled();
+    expect(onWorkspaceStatusWatchError).toHaveBeenCalledWith({
+      error: {
+        environmentId: "env-watch",
+        kind: "workspace-watch-error",
+        message: "workspace vanished",
+        rootPath: "/tmp/env-watch",
+      },
+    });
+
+    workspace.setLocalStateFingerprintError(null);
+    workspace.setLocalStateFingerprint("local:/tmp/env-watch:changed");
+    watchWorkspaceArgs?.onChange({
+      changedPaths: ["/tmp/env-watch/src/index.ts"],
+      changeKinds: ["workspace-content-changed"],
+      kind: "workspace-status-changed",
+      environmentId: "env-watch",
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onWorkspaceStatusChanged).toHaveBeenCalledWith({
+      changeKinds: ["work-status-changed"],
+      environmentId: "env-watch",
+    });
+  });
+
+  it("reports shared git ref fingerprint recomputation failures and recovers on the next change", async () => {
+    const stopWatchingStatus = vi.fn(() => undefined);
+    let watchWorkspaceArgs: WatchWorkspaceArgs | undefined;
+    const workspace = createFakeWorkspace("/tmp/env-watch");
+    const { hostWatcher } = createFakeHostWatcher({
+      watchWorkspaceImplementation: (args) => {
+        watchWorkspaceArgs = args;
+        return stopWatchingStatus;
+      },
+    });
+    const onWorkspaceStatusChanged = vi.fn();
+    const onWorkspaceStatusWatchError = vi.fn();
+    const manager = new RuntimeManager({
+      hostWatcher,
+      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-watch").mockResolvedValue(
+        workspace,
+      ),
+      createRuntime: vi.fn(() => createFakeRuntime()),
+      onWorkspaceStatusChanged,
+      onWorkspaceStatusWatchError,
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-watch",
+      workspacePath: "/tmp/env-watch",
+    });
+
+    workspace.setSharedGitRefsFingerprintError(new Error("refs unavailable"));
+    watchWorkspaceArgs?.onChange({
+      changedPaths: ["/tmp/shared/.git/refs/heads/main"],
+      changeKinds: ["shared-git-refs-changed"],
+      kind: "workspace-status-changed",
+      environmentId: "env-watch",
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onWorkspaceStatusChanged).not.toHaveBeenCalled();
+    expect(onWorkspaceStatusWatchError).toHaveBeenCalledWith({
+      error: {
+        environmentId: "env-watch",
+        kind: "workspace-watch-error",
+        message: "refs unavailable",
+        rootPath: "/tmp/env-watch",
+      },
+    });
+
+    workspace.setSharedGitRefsFingerprintError(null);
+    workspace.setSharedGitRefsFingerprint("refs:/tmp/env-watch:changed");
+    watchWorkspaceArgs?.onChange({
+      changedPaths: ["/tmp/shared/.git/refs/heads/feature"],
       changeKinds: ["shared-git-refs-changed"],
       kind: "workspace-status-changed",
       environmentId: "env-watch",

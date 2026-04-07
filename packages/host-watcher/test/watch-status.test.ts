@@ -855,6 +855,57 @@ describe("watchWorkspaceStatus", () => {
     }
   });
 
+  it("classifies direct checkout ref updates as shared git ref changes", async () => {
+    const repoPath = await initRepo();
+    const gitDirPath = normalizeWatchPath(
+      path.resolve(
+        repoPath,
+        trimOutput(
+          (
+            await runGit({
+              args: ["rev-parse", "--git-dir"],
+              cwd: repoPath,
+            })
+          ).stdout,
+        ),
+      ),
+    );
+    const {
+      emitEvents,
+      ready,
+      watchWorkspaceStatus,
+    } = await importWatchWorkspaceStatusWithManualRootEvents({
+      expectedRootPaths: await resolveExpectedWatchRootPaths(repoPath),
+      workspaceRootPath: repoPath,
+    });
+    const calls: Array<{ changeKinds: string[]; changedPaths: string[] }> = [];
+    const stopWatching = watchWorkspaceStatus(repoPath, {
+      onChange: (event) => {
+        calls.push(event);
+      },
+      onWatchError: ignoreWatchError,
+    });
+
+    try {
+      await ready;
+      emitEvents(gitDirPath, [
+        {
+          path: path.join(gitDirPath, "refs/heads/feature"),
+          type: "update",
+        },
+      ]);
+      await waitForCallCount(() => calls.length, 1, WATCH_TEST_TIMEOUT_MS);
+      expect(calls[0]?.changeKinds).toEqual(
+        expect.arrayContaining([
+          "shared-git-refs-changed",
+          "workspace-git-changed",
+        ]),
+      );
+    } finally {
+      stopWatching();
+    }
+  });
+
   it("stops emitting callbacks after watch teardown", async () => {
     const repoPath = await initRepo();
     const { ready, watchWorkspaceStatus } =

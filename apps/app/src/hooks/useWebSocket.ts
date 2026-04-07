@@ -7,6 +7,7 @@ import type { EnvironmentChangeKind, Thread, ThreadChangeKind } from "@bb/domain
 import { createBufferedEnvironmentInvalidator } from "./buffered-environment-invalidator";
 import { wsManager } from "../lib/ws";
 import {
+  getCachedEnvironmentRefWorkspaceStateInvalidationQueryKeys,
   getEnvironmentBranchListInvalidationQueryKeys,
   getEnvironmentRecordInvalidationQueryKeys,
   getEnvironmentWorkspaceStateInvalidationQueryKeys,
@@ -46,6 +47,8 @@ const WORKSPACE_STATE_CHANGE_KINDS: readonly EnvironmentChangeKind[] = [
   "metadata-changed",
   "status-changed",
   "work-status-changed",
+];
+const REF_DERIVED_WORKSPACE_STATE_CHANGE_KINDS: readonly EnvironmentChangeKind[] = [
   "git-refs-changed",
 ];
 const BRANCH_LIST_CHANGE_KINDS: readonly EnvironmentChangeKind[] = [
@@ -180,6 +183,14 @@ function environmentChangeKindsIncludeWorkspaceState(
   );
 }
 
+function environmentChangeKindsIncludeRefDerivedWorkspaceState(
+  changeKinds: readonly EnvironmentChangeKind[],
+): boolean {
+  return changeKinds.some((changeKind) =>
+    REF_DERIVED_WORKSPACE_STATE_CHANGE_KINDS.includes(changeKind)
+  );
+}
+
 function environmentChangeKindsIncludeBranchList(
   changeKinds: readonly EnvironmentChangeKind[],
 ): boolean {
@@ -205,6 +216,8 @@ export function useWebSocket(): void {
       debounceMs: ENVIRONMENT_INVALIDATION_DEBOUNCE_MS,
       flushChangedEnvironmentIds: (changedEnvironments) => {
         for (const { changeKinds, environmentId } of changedEnvironments) {
+          const includeWorkspaceState = environmentChangeKindsIncludeWorkspaceState(changeKinds);
+
           if (environmentChangeKindsIncludePersistedEnvironment(changeKinds)) {
             for (const queryKey of getEnvironmentRecordInvalidationQueryKeys({
               environmentId,
@@ -212,11 +225,24 @@ export function useWebSocket(): void {
               queryClient.invalidateQueries({ queryKey });
             }
           }
-          if (environmentChangeKindsIncludeWorkspaceState(changeKinds)) {
+          if (includeWorkspaceState) {
             for (const queryKey of getEnvironmentWorkspaceStateInvalidationQueryKeys({
               environmentId,
             })) {
               queryClient.invalidateQueries({ queryKey });
+            }
+          }
+          if (
+            !includeWorkspaceState &&
+            environmentChangeKindsIncludeRefDerivedWorkspaceState(changeKinds)
+          ) {
+            for (
+              const queryKey of getCachedEnvironmentRefWorkspaceStateInvalidationQueryKeys(
+                queryClient,
+                { environmentId },
+              )
+            ) {
+              queryClient.invalidateQueries({ exact: true, queryKey });
             }
           }
           if (environmentChangeKindsIncludeBranchList(changeKinds)) {

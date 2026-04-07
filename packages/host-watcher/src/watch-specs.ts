@@ -8,6 +8,7 @@ type ParcelWatcherCallback = Parameters<ParcelWatcherSubscribe>[1];
 type ParcelWatcherEventBatch = Parameters<ParcelWatcherCallback>[1];
 
 export interface WatchSubscriptionSpec {
+  includeSharedGitRefs?: boolean;
   kind: "common-dir" | "git-dir" | "workspace-root";
   options?: ParcelWatcherOptions;
   rootPath: string;
@@ -113,6 +114,21 @@ function normalizeRelativePath(rootPath: string, candidatePath: string): string 
   return path.relative(rootPath, candidatePath).split(path.sep).join("/");
 }
 
+function isSharedGitRefPath(
+  relativePath: string,
+): boolean {
+  if (relativePath.length === 0 || relativePath.endsWith(".lock")) {
+    return false;
+  }
+  if (relativePath === "packed-refs") {
+    return true;
+  }
+  return (
+    relativePath.startsWith("refs/heads/") ||
+    relativePath.startsWith("refs/remotes/")
+  );
+}
+
 function classifyGitDirPath(
   relativePath: string,
 ): WorkspaceStatusChangeEvent["changeKinds"][number] | null {
@@ -130,19 +146,7 @@ function classifyGitDirPath(
 function classifyCommonDirPath(
   relativePath: string,
 ): WorkspaceStatusChangeEvent["changeKinds"][number] | null {
-  if (relativePath.length === 0 || relativePath.endsWith(".lock")) {
-    return null;
-  }
-  if (relativePath === "packed-refs") {
-    return "shared-git-refs-changed";
-  }
-  if (
-    relativePath.startsWith("refs/heads/") ||
-    relativePath.startsWith("refs/remotes/")
-  ) {
-    return "shared-git-refs-changed";
-  }
-  return null;
+  return isSharedGitRefPath(relativePath) ? "shared-git-refs-changed" : null;
 }
 
 export function collectWorkspaceStatusChanges(args: {
@@ -159,17 +163,33 @@ export function collectWorkspaceStatusChanges(args: {
     }
 
     const relativePath = normalizeRelativePath(args.spec.rootPath, candidatePath);
-    const changeKind =
-      args.spec.kind === "workspace-root"
-        ? "workspace-content-changed"
-        : args.spec.kind === "git-dir"
-          ? classifyGitDirPath(relativePath)
-          : classifyCommonDirPath(relativePath);
-    if (!changeKind) {
+    const eventChangeKinds: WorkspaceStatusChangeEvent["changeKinds"][number][] = [];
+    if (args.spec.kind === "workspace-root") {
+      eventChangeKinds.push("workspace-content-changed");
+    } else if (args.spec.kind === "git-dir") {
+      const gitDirChangeKind = classifyGitDirPath(relativePath);
+      if (gitDirChangeKind) {
+        eventChangeKinds.push(gitDirChangeKind);
+      }
+      if (
+        args.spec.includeSharedGitRefs === true &&
+        isSharedGitRefPath(relativePath)
+      ) {
+        eventChangeKinds.push("shared-git-refs-changed");
+      }
+    } else {
+      const commonDirChangeKind = classifyCommonDirPath(relativePath);
+      if (commonDirChangeKind) {
+        eventChangeKinds.push(commonDirChangeKind);
+      }
+    }
+    if (eventChangeKinds.length === 0) {
       continue;
     }
     changedPaths.add(candidatePath);
-    changeKinds.add(changeKind);
+    for (const changeKind of eventChangeKinds) {
+      changeKinds.add(changeKind);
+    }
   }
 
   if (changedPaths.size === 0 || changeKinds.size === 0) {
@@ -190,6 +210,7 @@ export async function resolveMetadataWatchSpecs(
     return null;
   }
   const commonDirSpec: WatchSubscriptionSpec = {
+    includeSharedGitRefs: true,
     kind: layout.gitDirPath === layout.commonDirPath ? "git-dir" : "common-dir",
     options: createCommonDirWatchOptions(),
     rootPath: layout.commonDirPath,
