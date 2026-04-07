@@ -3,13 +3,19 @@ import type {
   Thread,
 } from "@bb/domain";
 import {
+  ENVIRONMENT_GIT_DIFF_QUERY_KEY,
+  ENVIRONMENT_WORK_STATUS_QUERY_KEY,
+  environmentGitDiffQueryKey,
   environmentGitDiffQueryKeyPrefix,
   environmentMergeBaseBranchesQueryKeyPrefix,
   environmentQueryKey,
+  environmentWorkStatusQueryKey,
   environmentWorkStatusQueryKeyPrefix,
   THREADS_QUERY_KEY,
   threadQueryKey,
   threadsQueryKey,
+  type EnvironmentGitDiffQueryKey,
+  type EnvironmentWorkStatusQueryKey,
   type ThreadListQueryFilters,
 } from "./query-keys";
 
@@ -57,6 +63,74 @@ export function getEnvironmentBranchListInvalidationQueryKeys({
   return [
     environmentMergeBaseBranchesQueryKeyPrefix(environmentId),
   ];
+}
+
+function isEnvironmentWorkStatusQueryKeyForEnvironment(
+  queryKey: QueryKey,
+  environmentId: string,
+): queryKey is EnvironmentWorkStatusQueryKey {
+  return (
+    queryKey[0] === ENVIRONMENT_WORK_STATUS_QUERY_KEY &&
+    queryKey[1] === environmentId &&
+    (typeof queryKey[2] === "string" || queryKey[2] === null)
+  );
+}
+
+function isMergeBaseEnvironmentWorkStatusQueryKey(
+  queryKey: QueryKey,
+  environmentId: string,
+): queryKey is EnvironmentWorkStatusQueryKey {
+  return (
+    isEnvironmentWorkStatusQueryKeyForEnvironment(queryKey, environmentId) &&
+    typeof queryKey[2] === "string"
+  );
+}
+
+function isEnvironmentGitDiffQueryKeyForEnvironment(
+  queryKey: QueryKey,
+  environmentId: string,
+): queryKey is EnvironmentGitDiffQueryKey {
+  return (
+    queryKey[0] === ENVIRONMENT_GIT_DIFF_QUERY_KEY &&
+    queryKey[1] === environmentId &&
+    (typeof queryKey[2] === "string" || queryKey[2] === null) &&
+    (typeof queryKey[3] === "string" || queryKey[3] === null)
+  );
+}
+
+function isRefDerivedEnvironmentGitDiffQueryKey(
+  queryKey: QueryKey,
+  environmentId: string,
+): queryKey is EnvironmentGitDiffQueryKey {
+  return (
+    isEnvironmentGitDiffQueryKeyForEnvironment(queryKey, environmentId) &&
+    (queryKey[2] === "all" || queryKey[2] === "branch_committed")
+  );
+}
+
+export function getCachedEnvironmentRefWorkspaceStateInvalidationQueryKeys(
+  queryClient: QueryClient,
+  { environmentId }: EnvironmentInvalidationParams,
+): QueryKey[] {
+  const queryKeys: QueryKey[] = [];
+
+  for (const [queryKey] of queryClient.getQueriesData({
+    queryKey: environmentWorkStatusQueryKeyPrefix(environmentId),
+  })) {
+    if (isMergeBaseEnvironmentWorkStatusQueryKey(queryKey, environmentId)) {
+      queryKeys.push(environmentWorkStatusQueryKey(environmentId, queryKey[2]));
+    }
+  }
+
+  for (const [queryKey] of queryClient.getQueriesData({
+    queryKey: environmentGitDiffQueryKeyPrefix(environmentId),
+  })) {
+    if (isRefDerivedEnvironmentGitDiffQueryKey(queryKey, environmentId)) {
+      queryKeys.push(environmentGitDiffQueryKey(environmentId, queryKey[2], queryKey[3]));
+    }
+  }
+
+  return queryKeys;
 }
 
 export function getEnvironmentActionInvalidationQueryKeys({
