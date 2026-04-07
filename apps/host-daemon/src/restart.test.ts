@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { acquireDaemonLock } from "./lock.js";
-import { restartHostDaemon } from "./restart.js";
+import { restartHostDaemon, type RestartSpawnProcess } from "./restart.js";
 
 const tempDirs: string[] = [];
 
@@ -25,7 +25,7 @@ describe("restartHostDaemon", () => {
     const unref = vi.fn(() => {
       steps.push("unref");
     });
-    const spawnProcess = vi.fn(() => {
+    const spawnProcess: RestartSpawnProcess = vi.fn(() => {
       steps.push("spawn");
       return { unref };
     });
@@ -40,7 +40,7 @@ describe("restartHostDaemon", () => {
       argv: ["/bin/node", "/tmp/daemon.js", "--watch"],
       cwd: "/tmp",
       env: { TEST_ENV: "1" },
-      spawnProcess: spawnProcess as never,
+      spawnProcess,
       releaseLock,
       exit,
     });
@@ -60,16 +60,43 @@ describe("restartHostDaemon", () => {
   it("releases the daemon lock before a replacement process acquires it", async () => {
     const dataDir = await makeTempDir("bb-host-daemon-restart-");
     const releaseLock = await acquireDaemonLock(dataDir);
-    const spawnProcess = vi.fn(() => ({ unref: vi.fn() }));
+    const spawnProcess: RestartSpawnProcess = vi.fn(() => ({ unref: vi.fn() }));
 
     await restartHostDaemon({
       argv: ["/bin/node", "/tmp/daemon.js"],
-      spawnProcess: spawnProcess as never,
+      spawnProcess,
       releaseLock,
       exit: () => undefined,
     });
 
     const replacementReleaseLock = await acquireDaemonLock(dataDir);
     await replacementReleaseLock();
+  });
+
+  it("hands restart control back to the dev supervisor when supervised", async () => {
+    const steps: string[] = [];
+    const spawnProcess: RestartSpawnProcess = vi.fn(() => {
+      steps.push("spawn");
+      return { unref: vi.fn() };
+    });
+    const releaseLock = vi.fn(async () => {
+      steps.push("release");
+    });
+    const exit = vi.fn((code: number) => {
+      steps.push(`exit:${code}`);
+    });
+
+    await restartHostDaemon({
+      env: {
+        BB_DEV_SUPERVISOR_RESTART: "1",
+      },
+      exit,
+      releaseLock,
+      spawnProcess,
+    });
+
+    expect(spawnProcess).not.toHaveBeenCalled();
+    expect(exit).toHaveBeenCalledWith(75);
+    expect(steps).toEqual(["release", "exit:75"]);
   });
 });

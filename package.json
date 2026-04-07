@@ -3,7 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "dotenv -c development -- turbo watch build dev --ui tui --concurrency 20",
+    "dev": "dotenv -c development -- turbo run dev --ui tui --concurrency 20 --no-update-notifier",
+    "dev:restart": "dotenv -c development -- node scripts/request-dev-restart.mjs both",
+    "dev:restart-server": "dotenv -c development -- node scripts/request-dev-restart.mjs server",
+    "dev:restart-host-daemon": "dotenv -c development -- node scripts/request-dev-restart.mjs host-daemon",
     "dev:host-daemon": "pnpm exec turbo run build --filter=@bb/host-daemon --filter=@bb/cli && BB_DATA_DIR=${BB_DATA_DIR:-$HOME/.bb-dev-host-daemon} node scripts/run-host-daemon.mjs --mode dev",
     "build": "turbo run build",
     "start": "pnpm exec turbo run build --filter=@bb/app --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/cli && dotenv -c production -- node scripts/start-bb.mjs",

@@ -1,11 +1,27 @@
 import { spawn, type ChildProcess } from "node:child_process";
 
+const DEV_SUPERVISOR_RESTART_ENV = "BB_DEV_SUPERVISOR_RESTART";
+const DEV_SUPERVISOR_RESTART_EXIT_CODE = 75;
+
+export interface RestartSpawnOptions {
+  cwd: string;
+  detached: true;
+  env: NodeJS.ProcessEnv;
+  stdio: "ignore";
+}
+
+export type RestartSpawnProcess = (
+  command: string,
+  args: string[],
+  options: RestartSpawnOptions,
+) => RestartedChildProcess;
+
 export interface RestartHostDaemonOptions {
   releaseLock: () => Promise<void>;
   argv?: string[];
   cwd?: string;
   env?: NodeJS.ProcessEnv;
-  spawnProcess?: typeof spawn;
+  spawnProcess?: RestartSpawnProcess;
   exit?: (code: number) => never | void;
 }
 
@@ -19,16 +35,25 @@ export async function restartHostDaemon(
 
   await options.releaseLock();
 
-  const spawnProcess = options.spawnProcess ?? spawn;
+  const env = options.env ?? process.env;
+  const exit = options.exit ?? process.exit;
+  if (env[DEV_SUPERVISOR_RESTART_ENV] === "1") {
+    exit(DEV_SUPERVISOR_RESTART_EXIT_CODE);
+    return;
+  }
+
+  const spawnProcess =
+    options.spawnProcess ??
+    ((command, args, spawnOptions) => spawn(command, args, spawnOptions));
   const child = spawnProcess(argv[0], argv.slice(1), {
     cwd: options.cwd ?? process.cwd(),
-    env: options.env ?? process.env,
+    env,
     detached: true,
     stdio: "ignore",
   });
 
   child.unref();
-  (options.exit ?? process.exit)(0);
+  exit(0);
 }
 
 export type RestartedChildProcess = Pick<ChildProcess, "unref">;
