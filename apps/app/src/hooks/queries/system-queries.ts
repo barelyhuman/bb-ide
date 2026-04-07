@@ -2,12 +2,39 @@ import { useQuery } from "@tanstack/react-query";
 import type { AvailableModel, Host, SandboxBackendInfo } from "@bb/domain";
 import type { SystemProviderInfo } from "@bb/server-contract";
 import * as api from "@/lib/api";
-import { availableModelsQueryKey, hostsQueryKey, sandboxBackendsQueryKey, systemProvidersQueryKey } from "./query-keys";
+import {
+  availableModelsQueryKey,
+  type HostQueryId,
+  hostQueryKey,
+  hostsQueryKey,
+  sandboxBackendsQueryKey,
+  systemProvidersQueryKey,
+} from "./query-keys";
+
+function requireHostId(
+  hostId: HostQueryId,
+  hookName: string,
+): string {
+  if (!hostId) {
+    throw new Error(`${hookName}: hostId is required when query is enabled`);
+  }
+
+  return hostId;
+}
 
 export function useHosts() {
   return useQuery<Host[]>({
     queryKey: hostsQueryKey(),
     queryFn: () => api.listHosts(),
+    staleTime: 30_000,
+  });
+}
+
+export function useHost(hostId: HostQueryId) {
+  return useQuery<Host>({
+    queryKey: hostQueryKey(hostId),
+    queryFn: () => api.getHost(requireHostId(hostId, "useHost")),
+    enabled: Boolean(hostId),
     staleTime: 30_000,
   });
 }

@@ -20,6 +20,7 @@ import {
   listEnvironments,
   listThreads,
   threads,
+  updateHost,
 } from "@bb/db";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import { systemOperationEventDataSchema, threadSchema } from "@bb/domain";
@@ -254,6 +255,55 @@ describe("public thread routes", () => {
           .where(eq(hostDaemonCommands.type, "environment.provision"))
           .all(),
       ).toHaveLength(0);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("fails host thread creation when the host is destroyed", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host: projectHost } = seedHostSession(harness.deps, {
+        id: "host-thread-project",
+      });
+      const { host: destroyedHost } = seedHostSession(harness.deps, {
+        id: "host-thread-destroyed",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: projectHost.id,
+        path: "/tmp/destroyed-thread-project",
+      });
+      updateHost(harness.db, harness.hub, destroyedHost.id, {
+        destroyedAt: Date.now(),
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Create this thread on a destroyed host" }],
+          environment: {
+            type: "host",
+            hostId: destroyedHost.id,
+            workspace: {
+              type: "unmanaged",
+              path: "/tmp/destroyed-thread-project",
+            },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(404);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "host_not_found",
+      });
+      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(0);
+      expect(listEnvironments(harness.db, project.id)).toHaveLength(0);
     } finally {
       await harness.cleanup();
     }

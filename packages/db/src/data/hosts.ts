@@ -115,8 +115,22 @@ export function getHost(db: DbConnection, id: string) {
   return db.select().from(hosts).where(eq(hosts.id, id)).get() ?? null;
 }
 
+export function getNonDestroyedHost(db: DbConnection, id: string) {
+  return db.select()
+    .from(hosts)
+    .where(and(eq(hosts.id, id), isNull(hosts.destroyedAt)))
+    .get() ?? null;
+}
+
 export function listHosts(db: DbConnection) {
   return db.select().from(hosts).all();
+}
+
+export function listPublicHosts(db: DbConnection) {
+  return db.select()
+    .from(hosts)
+    .where(and(eq(hosts.type, "persistent"), isNull(hosts.destroyedAt)))
+    .all();
 }
 
 export function listHostsByIds(
@@ -130,6 +144,20 @@ export function listHostsByIds(
   return db.select()
     .from(hosts)
     .where(inArray(hosts.id, [...hostIds]))
+    .all();
+}
+
+export function listNonDestroyedHostsByIds(
+  db: DbConnection,
+  hostIds: readonly string[],
+) {
+  if (hostIds.length === 0) {
+    return [];
+  }
+
+  return db.select()
+    .from(hosts)
+    .where(and(inArray(hosts.id, [...hostIds]), isNull(hosts.destroyedAt)))
     .all();
 }
 

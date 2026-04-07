@@ -14,6 +14,7 @@ import {
 } from "./queries/query-cache";
 import {
   allAvailableModelsQueryKeyPrefix,
+  allHostQueryKeyPrefix,
   allThreadDraftsQueryKeyPrefix,
   allThreadQueryKeyPrefix,
   allThreadTimelineQueryKeyPrefix,
@@ -210,6 +211,7 @@ export function useWebSocket(): void {
         // On initial connect, refetch host-related queries that may have
         // resolved before the daemon connected to the server.
         queryClient.invalidateQueries({ queryKey: hostsQueryKey() });
+        queryClient.invalidateQueries({ queryKey: allHostQueryKeyPrefix() });
       }
     });
 
@@ -419,6 +421,7 @@ export function useWebSocket(): void {
           break;
         case "host":
           queryClient.invalidateQueries({ queryKey: hostsQueryKey() });
+          queryClient.invalidateQueries({ queryKey: allHostQueryKeyPrefix() });
           queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
           queryClient.invalidateQueries({ queryKey: systemProvidersQueryKey() });
           queryClient.invalidateQueries({

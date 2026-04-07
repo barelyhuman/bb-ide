@@ -9,7 +9,10 @@ import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { assertMatchingExistingHostType } from "../services/hosts/host-type-guard.js";
-import { listHostsWithStatus, requireHostWithStatus } from "../services/lib/entity-lookup.js";
+import {
+  listPublicHostsWithStatus,
+  requireNonDestroyedHostWithStatus,
+} from "../services/lib/entity-lookup.js";
 
 function resolveJoinServerUrl(
   deps: Pick<AppDeps, "config">,
@@ -27,7 +30,7 @@ export function registerHostRoutes(app: Hono, deps: AppDeps): void {
     onValidationError: (message) => new ApiError(400, "invalid_request", message),
   });
 
-  get("/hosts", (context) => context.json(listHostsWithStatus(deps.db)));
+  get("/hosts", (context) => context.json(listPublicHostsWithStatus(deps.db)));
 
   post("/hosts/join", createHostJoinRequestSchema, async (context, payload) => {
     const hostId = payload.hostId ?? createHostId();
@@ -67,22 +70,22 @@ export function registerHostRoutes(app: Hono, deps: AppDeps): void {
   });
 
   get("/hosts/:id", (context) =>
-    context.json(requireHostWithStatus(deps.db, context.req.param("id"))),
+    context.json(requireNonDestroyedHostWithStatus(deps.db, context.req.param("id"))),
   );
 
   patch("/hosts/:id", updateHostRequestSchema, (context, payload) => {
     const id = context.req.param("id");
-    requireHostWithStatus(deps.db, id);
+    requireNonDestroyedHostWithStatus(deps.db, id);
     const updated = updateHost(deps.db, deps.hub, id, payload);
     if (!updated) {
       throw new ApiError(404, "host_not_found", "Host not found");
     }
-    return context.json(requireHostWithStatus(deps.db, id));
+    return context.json(requireNonDestroyedHostWithStatus(deps.db, id));
   });
 
   del("/hosts/:id", (context) => {
     const id = context.req.param("id");
-    requireHostWithStatus(deps.db, id);
+    requireNonDestroyedHostWithStatus(deps.db, id);
     const deleted = deleteHost(deps.db, deps.hub, id);
     if (!deleted) {
       throw new ApiError(404, "host_not_found", "Host not found");

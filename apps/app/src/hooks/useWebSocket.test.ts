@@ -6,6 +6,7 @@ import type { Thread } from "@bb/domain";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import {
   allAvailableModelsQueryKeyPrefix,
+  allHostQueryKeyPrefix,
   environmentGitDiffQueryKey,
   environmentGitDiffQueryKeyPrefix,
   environmentMergeBaseBranchesQueryKey,
@@ -172,6 +173,9 @@ describe("useWebSocket", () => {
 
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: hostsQueryKey(),
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: allHostQueryKeyPrefix(),
     });
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: systemProvidersQueryKey(),

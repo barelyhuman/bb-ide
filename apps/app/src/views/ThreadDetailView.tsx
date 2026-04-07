@@ -35,7 +35,7 @@ import { findLatestActivityRowId } from "@bb/ui-core";
 import type { Thread } from "@bb/domain";
 import { useDialogState } from "@/hooks/useDialogState";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
-import { useHosts } from "@/hooks/queries/system-queries";
+import { useHost } from "@/hooks/queries/system-queries";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { useStoredShowAllEvents } from "@/lib/show-all-events-preference";
 import { getGitStatusDisplay } from "@/lib/workspace-status";
@@ -192,7 +192,7 @@ export function ThreadDetailView() {
   const workspaceWorkingTree = workspaceStatus?.workingTree;
   const workspaceBranch = workspaceStatus?.branch;
   const { isLocalHost, openPath } = useHostDaemon();
-  const { data: hosts = [] } = useHosts();
+  const { data: environmentHost } = useHost(environment?.hostId);
   const isReasoningBlockActive = false;
   const isThreadTimelinePending = timelineLoading && threadDetailRows.length === 0;
   const {
@@ -403,9 +403,6 @@ export function ThreadDetailView() {
     !managerThreads.some((manager) => manager.id === thread.id);
   const canTakeOverThread =
     thread.type === "standard" && Boolean(thread.parentThreadId);
-  const environmentHost = environment
-    ? hosts.find((h) => h.id === environment.hostId)
-    : undefined;
   const threadEnvironmentDisplay = environment
     ? formatEnvironmentDisplay({
         environment,

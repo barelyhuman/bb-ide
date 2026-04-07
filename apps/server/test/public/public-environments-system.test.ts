@@ -1,6 +1,7 @@
 import {
   createEnvironment,
   hostDaemonCommands,
+  updateHost,
 } from "@bb/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -991,6 +992,29 @@ describe("public environment and system routes", () => {
           available: true,
         },
       ]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects destroyed hosts for system host lookups", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-system-destroyed",
+      });
+      updateHost(harness.db, harness.hub, host.id, {
+        destroyedAt: Date.now(),
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/system/providers?hostId=${host.id}`,
+      );
+
+      expect(response.status).toBe(404);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "host_not_found",
+      });
     } finally {
       await harness.cleanup();
     }

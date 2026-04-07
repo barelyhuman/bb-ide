@@ -5,7 +5,10 @@ import { noopNotifier } from "../../src/notifier.js";
 import {
   deleteHost,
   getHost,
+  getNonDestroyedHost,
   listHosts,
+  listNonDestroyedHostsByIds,
+  listPublicHosts,
   updateHost,
   upsertHost,
 } from "../../src/data/hosts.js";
@@ -155,6 +158,53 @@ describe("hosts", () => {
 
     const all = listHosts(db);
     expect(all).toHaveLength(2);
+  });
+
+  it("lists only persistent non-destroyed hosts for the public inventory", () => {
+    const { db } = setup();
+    const visibleHost = upsertHost(db, noopNotifier, {
+      id: "host-visible",
+      name: "Visible Host",
+      type: "persistent",
+    });
+    const destroyedHost = upsertHost(db, noopNotifier, {
+      id: "host-destroyed",
+      name: "Destroyed Host",
+      type: "persistent",
+    });
+    upsertHost(db, noopNotifier, {
+      id: "host-ephemeral",
+      name: "Ephemeral Host",
+      type: "ephemeral",
+    });
+
+    updateHost(db, noopNotifier, destroyedHost.id, { destroyedAt: 123 });
+
+    expect(listPublicHosts(db).map((host) => host.id)).toEqual([visibleHost.id]);
+  });
+
+  it("filters destroyed hosts from non-destroyed lookups", () => {
+    const { db } = setup();
+    const visibleHost = upsertHost(db, noopNotifier, {
+      id: "host-visible",
+      name: "Visible Host",
+      type: "persistent",
+    });
+    const destroyedHost = upsertHost(db, noopNotifier, {
+      id: "host-destroyed",
+      name: "Destroyed Host",
+      type: "persistent",
+    });
+
+    updateHost(db, noopNotifier, destroyedHost.id, { destroyedAt: 123 });
+
+    expect(getNonDestroyedHost(db, visibleHost.id)?.id).toBe(visibleHost.id);
+    expect(getNonDestroyedHost(db, destroyedHost.id)).toBeNull();
+    expect(
+      listNonDestroyedHostsByIds(db, [visibleHost.id, destroyedHost.id]).map(
+        (host) => host.id,
+      ),
+    ).toEqual([visibleHost.id]);
   });
 
   it("updates only the provided host fields", () => {

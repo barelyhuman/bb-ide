@@ -1,14 +1,14 @@
 import {
   getActiveSession,
   getEnvironment,
-  getHost,
+  getNonDestroyedHost,
   getMostRecentlyUpdatedConnectedHostId,
   getProject,
   getProjectOperation,
   getThread,
   listConnectedHostIds,
   listHostThreadIds as listHostThreadIdsFromDb,
-  listHosts,
+  listPublicHosts,
 } from "@bb/db";
 import type { Environment, Host, Project, Thread } from "@bb/domain";
 import type { DbConnection } from "@bb/db";
@@ -20,7 +20,7 @@ function toHostStatus(db: DbConnection, hostId: string): Host["status"] {
 }
 
 function toHostRecord(
-  row: NonNullable<ReturnType<typeof getHost>>,
+  row: NonNullable<ReturnType<typeof getNonDestroyedHost>>,
   status: Host["status"],
 ): Host {
   return {
@@ -36,8 +36,12 @@ function toHostRecord(
   };
 }
 
-export function listHostsWithStatus(db: DbConnection): Host[] {
-  const rows = listHosts(db);
+function throwHostNotFound(): never {
+  throw new ApiError(404, "host_not_found", "Host not found");
+}
+
+export function listPublicHostsWithStatus(db: DbConnection): Host[] {
+  const rows = listPublicHosts(db);
   const connectedHostIds = new Set(listConnectedHostIds(db));
 
   return rows.map((row) =>
@@ -48,10 +52,13 @@ export function listHostsWithStatus(db: DbConnection): Host[] {
   );
 }
 
-export function requireHostWithStatus(db: DbConnection, hostId: string): Host {
-  const host = getHost(db, hostId);
+export function requireNonDestroyedHostWithStatus(
+  db: DbConnection,
+  hostId: string,
+): Host {
+  const host = getNonDestroyedHost(db, hostId);
   if (!host) {
-    throw new ApiError(404, "host_not_found", "Host not found");
+    throwHostNotFound();
   }
   return toHostRecord(host, toHostStatus(db, host.id));
 }

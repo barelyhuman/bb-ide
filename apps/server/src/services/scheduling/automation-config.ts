@@ -1,6 +1,6 @@
 import {
   listEnvironmentsByIds,
-  listHostsByIds,
+  listNonDestroyedHostsByIds,
   listProjectSources,
   type automations,
 } from "@bb/db";
@@ -183,7 +183,7 @@ export function buildStableThreadRequestProjectData(
       ]),
     ),
     existingHostIds: new Set(
-      listHostsByIds(deps.db, args.hostIds).map((host) => host.id),
+      listNonDestroyedHostsByIds(deps.db, args.hostIds).map((host) => host.id),
     ),
     projectId: args.projectId,
     projectSources: listProjectSources(deps.db, args.projectId),
