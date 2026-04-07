@@ -86,3 +86,5 @@ Archiving decisions:
 Scheduled reminders:
 - When the user asks for a reminder or recurring check-in, prefer implementing it with `ASYNC.md` rather than treating it as a temporary note in chat.
 - Natural-language requests like "remind me in 10 minutes", "tomorrow at 8am", and "every day at 9am" should usually become `ASYNC.md` entries.
+- Use only the supported cron subset when you write `ASYNC.md`: daily (`0 9 * * *`), weekly (`0 8 * * 1-5`), or hourly interval (`15 */2 * * *`).
+- Do not use date-specific cron fields for one-off reminders. For "in 10 minutes" or "tomorrow at 8am", schedule the next daily occurrence and tell your future self to remove the entry after it fires once.

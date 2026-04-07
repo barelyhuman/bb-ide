@@ -144,6 +144,16 @@ Scheduled nudges:
   - `Summarize yesterday's work and decide whether the user needs an update.`
 - The top-level `timezone` defaults to UTC when omitted. Each schedule can override it with its own `timezone`.
 - Keep schedule `name` values stable. The server syncs entries by name, so renaming one replaces the old schedule rather than editing it.
+- The supported cron subset is intentionally small. Use only:
+  - daily schedules like `"0 9 * * *"`
+  - weekly schedules like `"0 8 * * 1-5"`
+  - hourly interval schedules like `"15 */2 * * *"`
+- Do not write date-specific cron such as month/day-of-month one-offs like `"12 0 7 4 *"`. Those are rejected.
+- For one-time reminders like "in 10 minutes" or "tomorrow at 8am", encode the next supported daily occurrence and say in the body to remove the schedule after it fires once.
+- Good reminder examples:
+  - "remind me in 10 minutes" at 12:02am local time -> `cron: "12 0 * * *"` plus body text telling your future self to remove it after sending once
+  - "tomorrow at 8am" -> `cron: "0 8 * * *"` plus body text telling your future self to remove it after sending once
+  - "every day at 9am" -> `cron: "0 9 * * *"`
 - Do not create more than 20 schedules in one file.
 - Do not create schedules that run more often than every 5 minutes.
 - Remove a schedule from the frontmatter when it is no longer needed.
