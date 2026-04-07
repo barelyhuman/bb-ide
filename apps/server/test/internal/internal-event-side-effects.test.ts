@@ -4,14 +4,17 @@ import {
   deleteAutomation,
   getDraft,
   getEnvironment,
+  getThread,
   hostDaemonCommands,
   listDrafts,
   listManagerThreadNudgesByThread,
   threads,
 } from "@bb/db";
+import { renderTemplate } from "@bb/templates";
 import { describe, expect, it, vi } from "vitest";
 import {
   internalAuthHeaders,
+  reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
@@ -26,6 +29,7 @@ import {
   seedEvent,
   seedHostSession,
   seedProjectWithSource,
+  seedThreadRuntimeState,
   seedThread,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
@@ -198,6 +202,123 @@ describe("internal event side effects", () => {
           .where(eq(threads.id, thread.id))
           .get()?.status,
       ).toBe("active");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("queues a manager follow-up turn when a managed thread completes", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-event-manager-follow-up",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/manager-follow-up-environment",
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+        type: "manager",
+        title: "Manager thread",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: managerThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-manager-follow-up",
+        inputText: "Initial manager task",
+        model: "gpt-5.4",
+      });
+      const childThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+        parentThreadId: managerThread.id,
+        title: "Backend port validation cleanup",
+      });
+
+      const responsePromise = harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            {
+              environmentId: environment.id,
+              threadId: childThread.id,
+              sequence: 1,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/completed",
+                threadId: childThread.id,
+                providerThreadId: "provider-child-follow-up",
+                turnId: "turn-child-follow-up",
+                status: "completed",
+              },
+            },
+          ],
+        }),
+      });
+
+      const managerPreferencesPath = `/tmp/bb-host-data/${host.id}/thread-storage/${managerThread.id}/PREFERENCES.md`;
+      const preferencesReadCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file"
+          && command.path === managerPreferencesPath,
+      );
+      const readResponse = await reportQueuedCommandError(
+        harness,
+        preferencesReadCommand,
+        {
+          errorCode: "ENOENT",
+          errorMessage: "File not found",
+        },
+      );
+      expect(readResponse.status).toBe(200);
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      const queuedCommand = await waitForQueuedCommandAfter(
+        harness,
+        preferencesReadCommand.row.cursor,
+        ({ command }) =>
+          command.type === "turn.run" && command.threadId === managerThread.id,
+      );
+      expect(queuedCommand.command).toMatchObject({
+        environmentId: environment.id,
+        input: [
+          {
+            type: "text",
+            text: renderTemplate("systemMessageManagedThreadComplete", {
+              threadId: childThread.id,
+              titleSuffix: " (Backend port validation cleanup)",
+            }),
+          },
+        ],
+        options: {
+          model: "gpt-5.4",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          source: "client/turn/requested",
+        },
+        resumeContext: {
+          providerId: managerThread.providerId,
+          providerThreadId: "provider-manager-follow-up",
+          projectId: project.id,
+          workspaceContext: {
+            workspacePath: environment.path,
+            workspaceProvisionType: "unmanaged",
+          },
+        },
+      });
+      expect(getThread(harness.db, managerThread.id)?.status).toBe("active");
+      expect(getThread(harness.db, childThread.id)?.status).toBe("idle");
     } finally {
       await harness.cleanup();
     }

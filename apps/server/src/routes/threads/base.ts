@@ -12,6 +12,7 @@ import {
   typedRoutes,
   type PublicApiSchema,
 } from "@bb/server-contract";
+import { renderTemplate } from "@bb/templates";
 import type { Hono } from "hono";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
@@ -34,6 +35,15 @@ import {
 } from "../../services/threads/thread-lifecycle.js";
 import { appendThreadOwnershipChangeEvent } from "../../services/threads/thread-events.js";
 import { createThreadFromRequest } from "../../services/threads/thread-create.js";
+import { queueManagerSystemMessage } from "../../services/threads/manager-system-messages.js";
+
+function formatThreadLabelForManager(thread: {
+  id: string;
+  title: string | null;
+}): string {
+  return thread.title ? `${thread.id}: ${thread.title}` : thread.id;
+}
+
 export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
   const { get, post, patch, del } = typedRoutes<PublicApiSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
@@ -98,6 +108,24 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
         previousParentThreadId: thread.parentThreadId,
         nextParentThreadId: updated.parentThreadId,
       });
+
+      const threadLabel = formatThreadLabelForManager(updated);
+      if (updated.parentThreadId) {
+        await queueManagerSystemMessage(deps, {
+          managerThreadId: updated.parentThreadId,
+          messageText: renderTemplate("systemMessageThreadOwnershipAssigned", {
+            threadLabel,
+          }),
+        });
+      }
+      if (thread.parentThreadId) {
+        await queueManagerSystemMessage(deps, {
+          managerThreadId: thread.parentThreadId,
+          messageText: renderTemplate("systemMessageThreadOwnershipRemoved", {
+            threadLabel,
+          }),
+        });
+      }
     }
 
     return context.json(updated);

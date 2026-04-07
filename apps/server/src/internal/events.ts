@@ -15,6 +15,7 @@ import {
   type HostDaemonEventEnvelope,
   type HostDaemonInternalSchema,
 } from "@bb/host-daemon-contract";
+import { renderTemplate } from "@bb/templates";
 import type { Hono } from "hono";
 import { ApiError } from "../errors.js";
 import type { AppDeps } from "../types.js";
@@ -27,6 +28,7 @@ import {
   wouldCleanupEnvironment,
 } from "../services/environments/environment-cleanup.js";
 import { syncManagerThreadSchedules } from "../services/scheduling/manager-schedule-sync.js";
+import { queueManagerSystemMessage } from "../services/threads/manager-system-messages.js";
 import { sendNextQueuedDraftIfPresent } from "../services/threads/queued-drafts.js";
 import { tryTransition } from "../services/threads/thread-transitions.js";
 import { getAuthenticatedDaemon } from "./auth.js";
@@ -83,6 +85,10 @@ type CompletedTurnStatus = Extract<
 interface ArchiveCompletedAutomationThreadIfNeededArgs {
   latestThread: NonNullable<ReturnType<typeof getThread>>;
   turnStatus: CompletedTurnStatus;
+}
+
+function formatManagedThreadTitleSuffix(title: string | null): string {
+  return title ? ` (${title})` : "";
 }
 
 function resolveProviderIdentifiers(
@@ -205,13 +211,25 @@ async function applyEventEffects(
           ...event,
           threadId: entry.threadId,
         });
+        const latestThread = turnCompleted.thread
+          ? getThread(deps.db, turnCompleted.thread.id)
+          : null;
+
+        if (latestThread?.parentThreadId) {
+          await queueManagerSystemMessage(deps, {
+            managerThreadId: latestThread.parentThreadId,
+            messageText: renderTemplate("systemMessageManagedThreadComplete", {
+              threadId: latestThread.id,
+              titleSuffix: formatManagedThreadTitleSuffix(latestThread.title),
+            }),
+          });
+        }
         if (event.status === "completed") {
           await sendNextQueuedDraftIfPresent(deps, {
             threadId: entry.threadId,
           });
         }
-        if (turnCompleted.nextStatus === "idle" && turnCompleted.thread) {
-          const latestThread = getThread(deps.db, turnCompleted.thread.id);
+        if (turnCompleted.nextStatus === "idle" && latestThread) {
           if (latestThread?.status === "idle") {
             if (latestThread.type === "manager") {
               await syncManagerThreadSchedules(deps, {
