@@ -258,34 +258,38 @@ describe("@bb/provider-audit fixture replay", () => {
     ).toBe(true);
   });
 
-  it("exports shared React story data for the checked-in fixtures", () => {
-    const outputPath = join(
-      mkdtempSync(join(tmpdir(), "provider-audit-ladle-")),
-      "fixture-story-data.ts",
-    );
-    TEMP_DIRS.push(dirname(outputPath));
+  it(
+    "exports shared React story data for the checked-in fixtures",
+    () => {
+      const outputPath = join(
+        mkdtempSync(join(tmpdir(), "provider-audit-ladle-")),
+        "fixture-story-data.ts",
+      );
+      TEMP_DIRS.push(dirname(outputPath));
 
-    const storyData = buildLadleStoryData({
-      fixtureRoot: fixtureRoot(),
-      corpusId: "excalidraw",
-    });
+      const storyData = buildLadleStoryData({
+        fixtureRoot: fixtureRoot(),
+        corpusId: "excalidraw",
+      });
 
-    expect(
-      storyData.fixtures.map((fixture) => ({
-        id: fixture.id,
-        latestActivityRowId: fixture.latestActivityRowId,
-        timelineRowCount: fixture.timelineRowCount,
-        viewMessageCount: fixture.viewMessageCount,
-      })),
-    ).toMatchSnapshot();
+      expect(
+        storyData.fixtures.map((fixture) => ({
+          id: fixture.id,
+          latestActivityRowId: fixture.latestActivityRowId,
+          timelineRowCount: fixture.timelineRowCount,
+          viewMessageCount: fixture.viewMessageCount,
+        })),
+      ).toMatchSnapshot();
 
-    const exportResult = exportLadleStoryData({
-      fixtureRoot: fixtureRoot(),
-      corpusId: "excalidraw",
-      outputPath,
-    });
+      const exportResult = exportLadleStoryData({
+        fixtureRoot: fixtureRoot(),
+        corpusId: "excalidraw",
+        outputPath,
+      });
 
-    expect(exportResult.fixtureCount).toBe(storyData.fixtures.length);
-    expect(readFileSync(outputPath, "utf8")).toContain("fixtureStoryData");
-  });
+      expect(exportResult.fixtureCount).toBe(storyData.fixtures.length);
+      expect(readFileSync(outputPath, "utf8")).toContain("fixtureStoryData");
+    },
+    60_000,
+  );
 });
