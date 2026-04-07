@@ -121,6 +121,7 @@ export async function queueManagerSystemMessage(
       deps,
       environment,
       execution,
+      initiator: "system",
       input,
       thread: managerThread,
     })

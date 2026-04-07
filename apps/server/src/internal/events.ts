@@ -87,8 +87,65 @@ interface ArchiveCompletedAutomationThreadIfNeededArgs {
   turnStatus: CompletedTurnStatus;
 }
 
+interface QueueManagedThreadTurnNotificationArgs {
+  managedThreadId: string;
+  managerThreadId: string;
+  turnStatus: CompletedTurnStatus;
+  title: string | null;
+}
+
+interface RenderManagedThreadTurnStatusMessageArgs {
+  managedThreadId: string;
+  title: string | null;
+  turnStatus: CompletedTurnStatus;
+}
+
 function formatManagedThreadTitleSuffix(title: string | null): string {
   return title ? ` (${title})` : "";
+}
+
+function renderManagedThreadTurnStatusMessage(
+  args: RenderManagedThreadTurnStatusMessageArgs,
+): string {
+  const variables = {
+    threadId: args.managedThreadId,
+    titleSuffix: formatManagedThreadTitleSuffix(args.title),
+  };
+
+  switch (args.turnStatus) {
+    case "completed":
+      return renderTemplate("systemMessageManagedThreadComplete", variables);
+    case "failed":
+      return renderTemplate("systemMessageManagedThreadFailed", variables);
+    case "interrupted":
+      return renderTemplate("systemMessageManagedThreadInterrupted", variables);
+    default: {
+      const exhaustiveCheck: never = args.turnStatus;
+      return exhaustiveCheck;
+    }
+  }
+}
+
+async function queueManagedThreadTurnNotificationBestEffort(
+  deps: Pick<AppDeps, "db" | "hub" | "logger">,
+  args: QueueManagedThreadTurnNotificationArgs,
+): Promise<void> {
+  try {
+    await queueManagerSystemMessage(deps, {
+      managerThreadId: args.managerThreadId,
+      messageText: renderManagedThreadTurnStatusMessage(args),
+    });
+  } catch (error) {
+    deps.logger.error(
+      {
+        err: error,
+        managedThreadId: args.managedThreadId,
+        managerThreadId: args.managerThreadId,
+        turnStatus: args.turnStatus,
+      },
+      "Failed to queue manager turn notification",
+    );
+  }
 }
 
 function resolveProviderIdentifiers(
@@ -211,17 +268,12 @@ async function applyEventEffects(
           ...event,
           threadId: entry.threadId,
         });
-        const latestThread = turnCompleted.thread
-          ? getThread(deps.db, turnCompleted.thread.id)
-          : null;
-
-        if (latestThread?.parentThreadId) {
-          await queueManagerSystemMessage(deps, {
-            managerThreadId: latestThread.parentThreadId,
-            messageText: renderTemplate("systemMessageManagedThreadComplete", {
-              threadId: latestThread.id,
-              titleSuffix: formatManagedThreadTitleSuffix(latestThread.title),
-            }),
+        if (turnCompleted.thread?.parentThreadId) {
+          await queueManagedThreadTurnNotificationBestEffort(deps, {
+            managedThreadId: turnCompleted.thread.id,
+            managerThreadId: turnCompleted.thread.parentThreadId,
+            turnStatus: event.status,
+            title: turnCompleted.thread.title,
           });
         }
         if (event.status === "completed") {
@@ -229,7 +281,8 @@ async function applyEventEffects(
             threadId: entry.threadId,
           });
         }
-        if (turnCompleted.nextStatus === "idle" && latestThread) {
+        if (turnCompleted.nextStatus === "idle" && turnCompleted.thread) {
+          const latestThread = getThread(deps.db, turnCompleted.thread.id);
           if (latestThread?.status === "idle") {
             if (latestThread.type === "manager") {
               await syncManagerThreadSchedules(deps, {
