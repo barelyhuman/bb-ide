@@ -76,8 +76,6 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
             model: opts.model,
             environment: { type: "host", hostId },
             ...(reasoningLevel ? { reasoningLevel } : {}),
-            ...(reasoningLevel ? { reasoningLevel } : {}),
-            environment: { type: "host", hostId },
           },
         }),
       );
