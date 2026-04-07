@@ -17,6 +17,7 @@ import {
   getMergeBaseBranchCandidates,
   MergeBaseBranchPicker,
 } from "@/components/thread/MergeBaseBranchPicker";
+import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { threadTypeLabel } from "@/lib/thread-title";
 
 export type ThreadGitActionDialogTarget =
@@ -227,9 +228,10 @@ function ThreadGitActionDialogContent({
           ? error.askAgentInput
           : null,
       );
-      setErrorMessage(
-        error instanceof Error ? error.message : "Failed to start git action",
-      );
+      setErrorMessage(getMutationErrorMessage({
+        error,
+        fallbackMessage: "Failed to start git action.",
+      }));
     }
   };
 

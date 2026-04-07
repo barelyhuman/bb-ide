@@ -26,6 +26,7 @@ export function createAppQueryClient(
           return;
         }
 
+        // Set `showErrorToast: false` when the call site handles mutation errors itself.
         const meta = getMutationErrorMeta(mutation.meta);
         if (meta.showErrorToast === false) {
           return;

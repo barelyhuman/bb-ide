@@ -19,6 +19,8 @@ export interface MutationErrorMeta {
   showErrorToast?: boolean;
 }
 
+type MutationErrorMetaInput = Readonly<Record<string, unknown>> | undefined;
+
 function normalizeMessage(message: string): string {
   return message.replace(/\s+/g, " ").trim();
 }
@@ -64,19 +66,18 @@ function getHttpErrorMessage(error: HttpError): string | null {
   return strippedMessage.length > 0 ? strippedMessage : null;
 }
 
-export function getMutationErrorMeta(value: unknown): MutationErrorMeta {
-  const record = toRecord(value);
-  if (!record) {
+export function getMutationErrorMeta(value: MutationErrorMetaInput): MutationErrorMeta {
+  if (!value) {
     return {};
   }
 
   const errorMessage =
-    typeof record.errorMessage === "string"
-      ? normalizeMessage(record.errorMessage)
+    typeof value.errorMessage === "string"
+      ? normalizeMessage(value.errorMessage)
       : undefined;
   const showErrorToast =
-    typeof record.showErrorToast === "boolean"
-      ? record.showErrorToast
+    typeof value.showErrorToast === "boolean"
+      ? value.showErrorToast
       : undefined;
 
   return {
