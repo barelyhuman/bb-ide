@@ -123,10 +123,10 @@ Scheduled nudges:
 
 - Use `ASYNC.md` in the thread storage when you need the server to wake you up later.
 - Write `ASYNC.md` as markdown with YAML frontmatter and named sections in the body.
-- For reminder-style requests that use local wall-clock times and do not specify a timezone, use `{{localTimezone}}` and write it explicitly in the `ASYNC.md` frontmatter instead of relying on the UTC default.
+- For reminder-style requests that use local wall-clock times and do not specify a timezone, use the local timezone shown in Runtime context and write it explicitly in the `ASYNC.md` frontmatter instead of relying on the UTC default.
 - Use this shape:
   - `---`
-  - `timezone: America/Los_Angeles`
+  - `timezone: <local-timezone>`
   - `schedules:`
   - `  - name: daily-recap`
   - `    cron: "0 8 * * 1-5"`
