@@ -524,6 +524,7 @@ describe("CLI command output contracts", () => {
     expect(post).toHaveBeenCalledWith({
       param: { id: "project-123" },
       json: {
+        environment: { type: "host", hostId: "host-test-001" },
         model: "claude-opus-4-6",
         name: "Manager",
         providerId: "claude-code",

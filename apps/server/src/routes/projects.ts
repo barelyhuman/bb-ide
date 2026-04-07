@@ -250,7 +250,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     requirePublicProject(deps.db, projectId);
 
     const { hostId } = payload.environment;
-    requireHostWithStatus(deps.db, hostId);
+    requireNonDestroyedHostWithStatus(deps.db, hostId);
     const source = getProjectSourceByHost(deps.db, projectId, hostId);
     if (!source) {
       throw new ApiError(409, "invalid_request", "No project source found for the selected host");

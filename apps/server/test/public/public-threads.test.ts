@@ -2500,10 +2500,14 @@ describe("public thread routes", () => {
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            title: "Project manager",
+            name: "Project manager",
             providerId: "codex",
             model: "gpt-5",
             reasoningLevel: "medium",
+            environment: {
+              type: "host",
+              hostId: host.id,
+            },
           }),
         },
       );
