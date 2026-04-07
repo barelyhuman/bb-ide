@@ -29,6 +29,7 @@ vi.mock("../daemon.js", () => ({
 
 import { createClient, unwrap } from "../client.js";
 import { registerEnvironmentCommands } from "../commands/environment.js";
+import { registerHostCommands } from "../commands/host.js";
 import { registerManagerCommands } from "../commands/manager.js";
 import { registerProjectCommands } from "../commands/project.js";
 import { registerProviderCommands } from "../commands/provider.js";
@@ -812,6 +813,71 @@ describe("CLI command output contracts", () => {
     expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
       "",
       "ID      Name  \n------  ------\nopenai  OpenAI",
+      "",
+    ]);
+  });
+
+  it("bb host list --json prints raw hosts", async () => {
+    const hosts = [
+      {
+        id: "host-1",
+        name: "Workstation",
+        type: "persistent",
+        status: "connected",
+        createdAt: 1,
+        updatedAt: 2,
+        lastSeenAt: 3,
+      },
+    ];
+    const get = vi.fn(async () => hosts);
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          hosts: {
+            $get: get,
+          },
+        },
+      },
+    }));
+
+    await runCommand(["host", "list", "--json"], (program) =>
+      registerHostCommands(program, () => "http://server"),
+    );
+
+    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
+      hosts,
+    );
+  });
+
+  it("bb host list renders the shared borderless table", async () => {
+    const get = vi.fn(async () => [
+      {
+        id: "host-1",
+        name: "Workstation",
+        type: "persistent",
+        status: "connected",
+        createdAt: 1,
+        updatedAt: 2,
+        lastSeenAt: 3,
+      },
+    ]);
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          hosts: {
+            $get: get,
+          },
+        },
+      },
+    }));
+
+    await runCommand(["host", "list"], (program) =>
+      registerHostCommands(program, () => "http://server"),
+    );
+
+    expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
+      "",
+      "ID      Name         Status\n------  -----------  ---------\nhost-1  Workstation  connected",
       "",
     ]);
   });

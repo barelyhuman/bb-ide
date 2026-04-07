@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import { registerEnvironmentCommands } from "./commands/environment.js";
 import { registerGuideCommand } from "./commands/guide.js";
+import { registerHostCommands } from "./commands/host.js";
 import { registerManagerCommands } from "./commands/manager.js";
 import { registerProjectCommands } from "./commands/project.js";
 import { registerProviderCommands } from "./commands/provider.js";
@@ -44,6 +45,7 @@ function getUrl(): string {
 // Register all command groups
 registerStatusCommand(program, getUrl);
 registerProjectCommands(program, getUrl);
+registerHostCommands(program, getUrl);
 registerProviderCommands(program, getUrl);
 registerManagerCommands(program, getUrl);
 registerThreadCommands(program, getUrl);
