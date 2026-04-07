@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactNode, type RefObject } from "react";
+import { useCallback, useMemo, useState, type ComponentType, type ReactNode, type RefObject } from "react";
 import type {
   PromptInput,
   ReasoningLevel,
@@ -39,6 +39,7 @@ interface ThreadDetailPromptAreaProps {
   canExpandPromptChangeList: boolean;
   canUseGitUi: boolean;
   contextWindowUsage?: ThreadTimelineResponse["contextWindowUsage"];
+  environmentIcon?: ComponentType<{ className?: string }>;
   environmentLabel?: ReactNode;
   isDiffPanelActive: boolean;
   isEnvironmentActionPending: boolean;
@@ -66,6 +67,7 @@ export function ThreadDetailPromptArea({
   canExpandPromptChangeList,
   canUseGitUi,
   contextWindowUsage,
+  environmentIcon,
   environmentLabel,
   isDiffPanelActive,
   isEnvironmentActionPending,
@@ -427,7 +429,7 @@ export function ThreadDetailPromptArea({
       }}
       environment={{
         contextWindowUsage,
-        environmentIcon: undefined,
+        environmentIcon,
         environmentLabel,
       }}
       execution={{

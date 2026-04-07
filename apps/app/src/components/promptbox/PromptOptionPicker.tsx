@@ -66,7 +66,7 @@ export function PromptOptionDisplay({
       )}
     >
       <span className={PROMPT_OPTION_CONTENT_CLASS_NAME}>
-        {Icon ? <Icon className="size-3.5 shrink-0" /> : null}
+        {Icon ? <Icon className="size-4 shrink-0" /> : null}
         <span className="sr-only">{label}: </span>
         <span className="truncate">{value}</span>
       </span>

@@ -30,10 +30,12 @@ import { ThreadArchiveConfirmationDialog } from "@/components/thread/ThreadArchi
 import { ThreadDeleteDialog } from "@/components/thread/ThreadDeleteDialog";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import { formatEnvironmentDisplay } from "@bb/core-ui";
+import { Cloud, Monitor } from "lucide-react";
 import { findLatestActivityRowId } from "@bb/ui-core";
 import type { Thread } from "@bb/domain";
 import { useDialogState } from "@/hooks/useDialogState";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
+import { useHosts } from "@/hooks/queries/system-queries";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { HttpError } from "@/lib/api";
 import { useStoredShowAllEvents } from "@/lib/show-all-events-preference";
@@ -191,6 +193,7 @@ export function ThreadDetailView() {
   const workspaceWorkingTree = workspaceStatus?.workingTree;
   const workspaceBranch = workspaceStatus?.branch;
   const { isLocalHost, openPath } = useHostDaemon();
+  const { data: hosts = [] } = useHosts();
   const isReasoningBlockActive = false;
   const isThreadTimelinePending = timelineLoading && threadDetailRows.length === 0;
   const {
@@ -410,9 +413,18 @@ export function ThreadDetailView() {
     !managerThreads.some((manager) => manager.id === thread.id);
   const canTakeOverThread =
     thread.type === "standard" && Boolean(thread.parentThreadId);
-  const threadEnvironmentLabel = environment
-    ? formatEnvironmentDisplay(environment, isLocalHost(environment.hostId)).label
+  const environmentHost = environment
+    ? hosts.find((h) => h.id === environment.hostId)
     : undefined;
+  const threadEnvironmentDisplay = environment
+    ? formatEnvironmentDisplay({
+        environment,
+        isLocalHost: isLocalHost(environment.hostId),
+        hostName: environmentHost?.name,
+        hostType: environmentHost?.type,
+      })
+    : undefined;
+  const threadEnvironmentIcon = threadEnvironmentDisplay?.location === "cloud" ? Cloud : Monitor;
   const promptBannerSummary = workspaceStatus
     ? showBranchComparisonUi
       ? formatChangeSummary(workspaceStatus.workingTree)
@@ -429,9 +441,19 @@ export function ThreadDetailView() {
   );
   const promptBannerMergeBaseBranch = effectiveMergeBaseBranch;
   const threadEnvironmentType =
-    threadEnvironmentLabel ??
+    threadEnvironmentDisplay?.modeLabel ??
     (environment ? "environment" : undefined);
-  const threadEnvironmentValue: ReactNode | undefined = threadEnvironmentLabel ?? undefined;
+  const threadEnvironmentValue: ReactNode | undefined = threadEnvironmentDisplay
+    ? threadEnvironmentDisplay.hostLabel && threadEnvironmentDisplay.location === "remote"
+      ? (
+          <>
+            {threadEnvironmentDisplay.modeLabel}
+            <span className="text-muted-foreground/60"> · {threadEnvironmentDisplay.hostLabel}</span>
+          </>
+        )
+      : threadEnvironmentDisplay.modeLabel
+    : undefined;
+  const threadEnvironmentModeLabel = threadEnvironmentDisplay?.modeLabel;
   const threadBranchName = workspaceBranch?.currentBranch ?? undefined;
   const showWorkspaceStatus =
     canUseGitUi &&
@@ -542,6 +564,7 @@ export function ThreadDetailView() {
       canExpandPromptChangeList={canExpandPromptChangeList}
       canUseGitUi={canUseGitUi}
       contextWindowUsage={contextWindowUsage}
+      environmentIcon={threadEnvironmentDisplay ? threadEnvironmentIcon : undefined}
       environmentLabel={threadEnvironmentValue}
       isDiffPanelActive={isDiffPanelActive}
       isEnvironmentActionPending={requestEnvironmentAction.isPending}
@@ -617,8 +640,11 @@ export function ThreadDetailView() {
           showWorkspaceStatus,
           thread,
           threadBranchName,
+          threadEnvironmentModeLabel,
           threadEnvironmentType,
           threadEnvironmentValue,
+          threadHostIsLocal: environment ? isLocalHost(environment.hostId) : undefined,
+          threadHostName: environmentHost?.name,
           threadGitStatusDisplay,
           threadGitStatusLabelClass,
           mergeBaseBranch,

@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import type { Environment, Thread } from "@bb/domain";
+import type { Environment, Host, Thread } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import {
   type EnvironmentDisplayInfo,
@@ -11,6 +11,13 @@ import { type Client, createClient, unwrap } from "../client.js";
 import { fetchLocalHostId } from "../daemon.js";
 import { outputJson } from "./helpers.js";
 
+interface ThreadEnvironmentInfo {
+  display: EnvironmentDisplayInfo;
+  hostId: string;
+  hostName: string | null;
+  isLocalHost: boolean;
+}
+
 interface StatusPayload {
   project: { id: string; name: string } | null;
   thread: {
@@ -19,7 +26,7 @@ interface StatusPayload {
     status: string;
     title: string | null;
     parentThreadId: string | null;
-    environment: EnvironmentDisplayInfo | null;
+    environment: ThreadEnvironmentInfo | null;
   } | null;
   managedThreads: Array<{
     id: string;
@@ -66,20 +73,33 @@ function fetchThread(args: {
   );
 }
 
-async function fetchEnvironmentDisplay(args: {
+async function fetchEnvironmentInfo(args: {
   client: Client;
   environmentId: string;
-}): Promise<EnvironmentDisplayInfo | null> {
+}): Promise<ThreadEnvironmentInfo | null> {
   return fetchSilent(async () => {
-    const [env, localHostId] = await Promise.all([
+    const [env, localHostId, hosts] = await Promise.all([
       unwrap<Environment>(
         args.client.api.v1.environments[":id"].$get({
           param: { id: args.environmentId },
         }),
       ),
       fetchLocalHostId(),
+      unwrap<Host[]>(args.client.api.v1.hosts.$get()),
     ]);
-    return formatEnvironmentDisplay(env, env.hostId === localHostId);
+    const host = hosts.find((h) => h.id === env.hostId);
+    const isLocal = env.hostId === localHostId;
+    return {
+      display: formatEnvironmentDisplay({
+        environment: env,
+        isLocalHost: isLocal,
+        hostName: host?.name,
+        hostType: host?.type,
+      }),
+      hostId: env.hostId,
+      hostName: host?.name ?? null,
+      isLocalHost: isLocal,
+    };
   });
 }
 
@@ -138,9 +158,9 @@ export function registerStatusCommand(
         }
 
         if (threadResult) {
-          let environmentDisplay: EnvironmentDisplayInfo | null = null;
+          let environmentInfo: ThreadEnvironmentInfo | null = null;
           if (threadResult.environmentId) {
-            environmentDisplay = await fetchEnvironmentDisplay({
+            environmentInfo = await fetchEnvironmentInfo({
               client,
               environmentId: threadResult.environmentId,
             });
@@ -152,7 +172,7 @@ export function registerStatusCommand(
             status: threadResult.status,
             title: threadResult.title ?? null,
             parentThreadId: threadResult.parentThreadId ?? null,
-            environment: environmentDisplay,
+            environment: environmentInfo,
           };
           serverAvailable = true;
 
@@ -199,7 +219,12 @@ export function registerStatusCommand(
           console.log(`  Parent: ${payload.thread.parentThreadId}`);
         }
         if (payload.thread.environment) {
-          console.log(`  Environment: ${payload.thread.environment.label} (${payload.thread.environment.id})`);
+          const env = payload.thread.environment;
+          const hostLabel = env.hostName ?? env.hostId;
+          const hostSuffix = env.isLocalHost ? " (localhost)" : "";
+          console.log(`  Host: ${hostLabel}${hostSuffix} (${env.hostId})`);
+
+          console.log(`  Environment: ${env.display.modeLabel} (${env.display.id})`);
         }
 
         if (payload.managedThreads && payload.managedThreads.length > 0) {

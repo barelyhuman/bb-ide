@@ -433,14 +433,14 @@ export function ThreadFollowUpComposer({
           }
         />
         {environment.environmentLabel || environment.contextWindowUsage ? (
-          <div className="mt-1 flex items-center justify-between gap-2 px-3.5">
+          <div className="mt-1 flex items-center justify-between gap-2 pl-[15px] pr-3.5">
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
               {environment.environmentLabel ? (
                 <PromptOptionDisplay
                   label="Environment"
                   value={environment.environmentLabel}
                   icon={environment.environmentIcon}
-                  className="h-6 px-0"
+                  className="h-6"
                 />
               ) : null}
             </div>

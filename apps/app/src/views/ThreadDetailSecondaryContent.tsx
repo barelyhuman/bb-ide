@@ -62,8 +62,11 @@ interface ThreadDetailMetadataProps {
   showWorkspaceStatus: boolean;
   thread: Thread;
   threadBranchName?: string;
+  threadEnvironmentModeLabel?: string;
   threadEnvironmentType?: string;
   threadEnvironmentValue?: ReactNode;
+  threadHostIsLocal?: boolean;
+  threadHostName?: string;
   threadGitStatusDisplay: ThreadGitStatusDisplay;
   threadGitStatusLabelClass: string;
   mergeBaseBranch?: string;
@@ -214,8 +217,11 @@ function ThreadMetadataContent({
   showWorkspaceStatus,
   thread,
   threadBranchName,
+  threadEnvironmentModeLabel,
   threadEnvironmentType,
   threadEnvironmentValue,
+  threadHostIsLocal,
+  threadHostName,
   threadGitStatusDisplay,
   threadGitStatusLabelClass,
   mergeBaseBranch,
@@ -247,12 +253,27 @@ function ThreadMetadataContent({
           updateThreadPending={updateThreadPending}
         />
       ) : null}
-      {!isManagerThread && threadEnvironmentType ? (
+      {threadHostName ? (
+        <DetailRow
+          label="Host"
+          valueClassName="min-w-0 truncate"
+        >
+          <span className="flex items-center gap-1.5">
+            <span className="truncate">{threadHostName}</span>
+            {threadHostIsLocal ? (
+              <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary">
+                localhost
+              </span>
+            ) : null}
+          </span>
+        </DetailRow>
+      ) : null}
+      {!isManagerThread && (threadEnvironmentModeLabel ?? threadEnvironmentType) ? (
         <DetailRow
           label="Environment"
           valueClassName="min-w-0 truncate"
         >
-          {threadEnvironmentValue ?? threadEnvironmentType}
+          {threadEnvironmentModeLabel ?? threadEnvironmentValue ?? threadEnvironmentType}
         </DetailRow>
       ) : null}
       {!isManagerThread && threadBranchName ? (
