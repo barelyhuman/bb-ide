@@ -148,10 +148,13 @@ export type {
 export {
   upsertHost,
   getHost,
+  getNonDestroyedHost,
   isEphemeralHostPendingCleanup,
   listEphemeralHostsPendingCleanup,
   listHosts,
   listHostsByIds,
+  listNonDestroyedHostsByIds,
+  listPublicHosts,
   updateHost,
   deleteHost,
 } from "./hosts.js";

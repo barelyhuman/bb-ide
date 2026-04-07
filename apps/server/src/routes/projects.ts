@@ -31,7 +31,7 @@ import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
 import { readAttachment, storeAttachment } from "../services/projects/attachments.js";
 import {
-  requireHostWithStatus,
+  requireNonDestroyedHostWithStatus,
   requireProject,
   requirePublicProject,
 } from "../services/lib/entity-lookup.js";
@@ -97,7 +97,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   post("/projects", createProjectRequestSchema, async (context, payload) => {
     const { source } = payload;
     if (source.type === "local_path") {
-      requireHostWithStatus(deps.db, source.hostId);
+      requireNonDestroyedHostWithStatus(deps.db, source.hostId);
     }
     const { project } = createProject(deps.db, deps.hub, {
       name: payload.name,
@@ -130,7 +130,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   post("/projects/:id/sources", createProjectSourceRequestSchema, async (context, payload) => {
     requirePublicProject(deps.db, context.req.param("id"));
     if (payload.type === "local_path") {
-      requireHostWithStatus(deps.db, payload.hostId);
+      requireNonDestroyedHostWithStatus(deps.db, payload.hostId);
     }
     const source = createProjectSource(deps.db, deps.hub, {
       projectId: context.req.param("id"),

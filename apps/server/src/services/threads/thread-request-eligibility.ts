@@ -14,7 +14,7 @@ import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
 import {
   requireEnvironment,
-  requireHostWithStatus,
+  requireNonDestroyedHostWithStatus,
 } from "../lib/entity-lookup.js";
 
 type ThreadRequestEnvironment = CreateThreadRequest["environment"];
@@ -223,7 +223,7 @@ function resolveHostThreadRequestEnvironment(
   environment: HostThreadRequestEnvironment,
   projectId: string,
 ): ResolvedHostThreadRequestEnvironment {
-  requireHostWithStatus(deps.db, environment.hostId);
+  requireNonDestroyedHostWithStatus(deps.db, environment.hostId);
 
   if (
     environment.workspace.type === "unmanaged" &&

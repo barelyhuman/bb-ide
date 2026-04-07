@@ -7,11 +7,14 @@ import {
   type SystemProvidersQuery,
 } from "@bb/server-contract";
 import type { Hono } from "hono";
-import { getHost } from "@bb/db";
 import type { AppDeps } from "../types.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
-import { requireEnvironment, requireDefaultConnectedHostId } from "../services/lib/entity-lookup.js";
+import {
+  requireEnvironment,
+  requireDefaultConnectedHostId,
+  requireNonDestroyedHostWithStatus,
+} from "../services/lib/entity-lookup.js";
 import { queueCommandAndWait } from "../services/hosts/command-wait.js";
 import { listAvailableSandboxBackends } from "../services/hosts/sandbox-backends.js";
 import { isSandboxProvisioningConfigured } from "../services/hosts/sandbox-config.js";
@@ -24,9 +27,7 @@ function resolveHostId(deps: AppDeps, query: HostLookupQuery): string {
     return requireEnvironment(deps.db, query.environmentId).hostId;
   }
   if (query.hostId) {
-    if (!getHost(deps.db, query.hostId)) {
-      throw new ApiError(404, "not_found", "Host not found");
-    }
+    requireNonDestroyedHostWithStatus(deps.db, query.hostId);
     return query.hostId;
   }
   return requireDefaultConnectedHostId(deps.db);

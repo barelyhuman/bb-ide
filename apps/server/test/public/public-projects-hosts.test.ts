@@ -5,6 +5,7 @@ import {
   getThread,
   hostDaemonCommands,
   hostDaemonSessions,
+  updateHost,
 } from "@bb/db";
 import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
 import { threadSchema } from "@bb/domain";
@@ -386,6 +387,11 @@ describe("public project and host routes", () => {
       const connected = seedHostSession(harness.deps, { id: "host-connected" });
       const disconnected = seedHost(harness.deps, { id: "host-disconnected" });
       const expired = seedHostSession(harness.deps, { id: "host-expired" });
+      const ephemeral = seedHostSession(harness.deps, {
+        id: "host-ephemeral",
+        type: "ephemeral",
+      });
+      const destroyed = seedHostSession(harness.deps, { id: "host-destroyed" });
 
       harness.db
         .update(hostDaemonSessions)
@@ -394,6 +400,9 @@ describe("public project and host routes", () => {
         })
         .where(eq(hostDaemonSessions.id, expired.session.id))
         .run();
+      updateHost(harness.db, harness.hub, destroyed.host.id, {
+        destroyedAt: Date.now(),
+      });
 
       const listResponse = await harness.app.request("/api/v1/hosts");
       expect(listResponse.status).toBe(200);
@@ -414,6 +423,12 @@ describe("public project and host routes", () => {
           }),
         ]),
       );
+      expect(hosts).not.toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: ephemeral.host.id }),
+          expect.objectContaining({ id: destroyed.host.id }),
+        ]),
+      );
 
       const getResponse = await harness.app.request(
         `/api/v1/hosts/${connected.host.id}`,
@@ -422,6 +437,56 @@ describe("public project and host routes", () => {
       await expect(readJson(getResponse)).resolves.toMatchObject({
         id: connected.host.id,
         status: "connected",
+      });
+
+      const ephemeralResponse = await harness.app.request(
+        `/api/v1/hosts/${ephemeral.host.id}`,
+      );
+      expect(ephemeralResponse.status).toBe(200);
+      await expect(readJson(ephemeralResponse)).resolves.toMatchObject({
+        id: ephemeral.host.id,
+        type: "ephemeral",
+        status: "connected",
+      });
+
+      const destroyedResponse = await harness.app.request(
+        `/api/v1/hosts/${destroyed.host.id}`,
+      );
+      expect(destroyedResponse.status).toBe(404);
+      await expect(readJson(destroyedResponse)).resolves.toMatchObject({
+        code: "host_not_found",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects destroyed hosts for project sources", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = seedHost(harness.deps, { id: "host-destroyed-source" });
+      updateHost(harness.db, harness.hub, host.id, {
+        destroyedAt: Date.now(),
+      });
+
+      const response = await harness.app.request("/api/v1/projects", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "Destroyed Host Project",
+          source: {
+            type: "local_path",
+            hostId: host.id,
+            path: "/tmp/destroyed-host-project",
+          },
+        }),
+      });
+
+      expect(response.status).toBe(404);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "host_not_found",
       });
     } finally {
       await harness.cleanup();
