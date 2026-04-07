@@ -51,6 +51,10 @@ const MANAGER_DYNAMIC_TOOLS: DynamicTool[] = [
   },
 ];
 
+function resolveLocalTimezone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}
+
 export interface ThreadRuntimeCommandEnvironment {
   hostId: string;
   id: string;
@@ -201,6 +205,7 @@ export async function resolveThreadRuntimeCommandConfig(
   return {
     dynamicTools: MANAGER_DYNAMIC_TOOLS,
     instructions: renderTemplate("managerAgentInstructions", {
+      localTimezone: resolveLocalTimezone(),
       managerPreferencesContent,
       managerThreadId: args.thread.id,
       threadStoragePath,

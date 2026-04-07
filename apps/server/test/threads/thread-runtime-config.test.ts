@@ -15,6 +15,10 @@ import {
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
+function resolveLocalTimezone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}
+
 describe("thread runtime config", () => {
   it("uses the project root as cwd and a host data-dir workspace for managers", async () => {
     const harness = await createTestAppHarness();
@@ -52,6 +56,9 @@ describe("thread runtime config", () => {
       );
       expect(runtimeConfig.instructions).toContain(
         `Thread storage: \`/tmp/bb-host-data/${hostId}/thread-storage/${managerThread.id}\``,
+      );
+      expect(runtimeConfig.instructions).toContain(
+        `Local timezone for reminder-style work: \`${resolveLocalTimezone()}\``,
       );
     } finally {
       await harness.cleanup();
@@ -120,6 +127,9 @@ describe("thread runtime config", () => {
       );
       expect(runtimeConfig.instructions).toContain(
         `Thread storage: \`${threadStoragePath}\``,
+      );
+      expect(runtimeConfig.instructions).toContain(
+        `Local timezone for reminder-style work: \`${resolveLocalTimezone()}\``,
       );
       expect(runtimeConfig.instructions).toContain("# Preferences");
       expect(runtimeConfig.instructions).toContain("terse updates");

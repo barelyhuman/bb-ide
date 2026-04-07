@@ -42,6 +42,7 @@ describe("@bb/templates", () => {
 
   it("renders managerAgentInstructions with partial resolution", () => {
     const rendered = renderTemplate("managerAgentInstructions", {
+      localTimezone: "America/Los_Angeles",
       managerPreferencesContent: "No preferences yet.",
       managerThreadId: "test-thread-123",
       threadStoragePath: "/tmp/test-thread-storage",
@@ -54,6 +55,10 @@ describe("@bb/templates", () => {
     // bbCliGuide partial content
     expect(rendered).toContain("The `bb` CLI is the primary interface");
     expect(rendered).toContain("bb thread spawn");
+    expect(rendered).toContain("gpt-5.3-codex");
+    expect(rendered).toContain("claude-sonnet-4-6");
+    expect(rendered).toContain("anthropic/claude-sonnet-4-6");
+    expect(rendered).toContain("America/Los_Angeles");
     // bbSystemOverview partial content
     expect(rendered).toContain("agent orchestration tool");
     expect(rendered).toContain("Core concepts");

@@ -24,9 +24,9 @@ Mutating commands (e.g., `commit`, `stop`, `archive`, `update`) require an expli
 Spawning:
 
 ```
-bb thread spawn --project <project-id> --prompt "Implement feature X"
-bb thread spawn --project <project-id> --prompt "Fix bug Y" --parent-thread <manager-id>
-bb thread spawn --project <project-id> --prompt "Review the changes" --environment <environment-id>
+bb thread spawn --project <project-id> --provider codex --model gpt-5.3-codex --reasoning-level medium --title "Implement API" --prompt "Implement feature X"
+bb thread spawn --project <project-id> --parent-thread <manager-id> --provider codex --model gpt-5.3-codex --reasoning-level medium --title "Backend fix" --prompt "Fix bug Y"
+bb thread spawn --project <project-id> --environment <environment-id> --parent-thread <manager-id> --provider claude-code --model claude-sonnet-4-6 --reasoning-level medium --title "Review backend fix" --prompt "Review the changes"
 ```
 
 The `--parent-thread` flag makes the new thread a managed child of the specified manager.
@@ -53,6 +53,7 @@ Interacting:
 ```
 bb thread tell <thread-id> "Please also add tests"           # Send a follow-up message
 bb thread tell <thread-id> "Focus on the API first" --mode steer  # Steer an active thread
+bb thread tell <manager-id> "Use codex for backend-heavy tasks and claude-code for frontend-heavy tasks."  # Set a routing preference
 bb thread stop <thread-id>                                   # Stop an active thread
 bb thread stop --self                                        # Stop the current thread
 ```
@@ -89,7 +90,8 @@ bb environment promote-status --project <project-id>  # Show the active primary-
 ## Managers
 
 ```
-bb manager hire [projectId]            # Hire a new manager for a project
+bb manager hire <project-id> --provider codex --model gpt-5.4 --reasoning-level medium
+bb manager hire <project-id> --provider pi --model anthropic/claude-opus-4-6 --reasoning-level medium
 bb manager list [projectId]            # List managers for a project
 bb manager status <manager-id>         # Show manager status and managed threads
 bb manager delete <manager-id>         # Delete a manager permanently
@@ -101,6 +103,14 @@ Use `bb thread` commands for other manager interactions:
 bb thread list --parent-thread <manager-id>  # List managed threads
 bb thread tell <manager-id> "message"        # Message a manager
 bb thread log <manager-id>                   # Show manager log
+```
+
+Common manager workflows:
+
+```
+bb thread tell <manager-id> "Implement the backend endpoint, then review it in the same environment with a different agent."
+bb thread tell <manager-id> "Use codex for backend-heavy tasks and claude-code for frontend-heavy tasks."
+bb thread update <thread-id> --parent-thread <manager-id>   # Ask a manager to take over an existing thread
 ```
 
 ## Projects

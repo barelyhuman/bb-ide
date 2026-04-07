@@ -9,3 +9,4 @@ variables:
 ---
 [bb system]: The following thread is no longer assigned to you:
 {{threadLabel}}
+Stop treating it as one of your active managed threads unless it is assigned back later.
