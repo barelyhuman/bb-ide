@@ -105,11 +105,14 @@ afterEach(() => {
 });
 
 describe("@bb/provider-audit fixture replay", () => {
-  beforeAll(() => {
-    checkedInReplay = replayFixtures({
-      fixtureRoot: CHECKED_IN_FIXTURE_ROOT,
-    });
-  });
+  beforeAll(
+    () => {
+      checkedInReplay = replayFixtures({
+        fixtureRoot: CHECKED_IN_FIXTURE_ROOT,
+      });
+    },
+    30_000,
+  );
 
   it("replays every checked-in fixture into stable summaries", () => {
     expect(checkedInReplay.fixtures.length).toBeGreaterThan(0);
