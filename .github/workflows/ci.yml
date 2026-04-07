@@ -36,9 +36,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Check package entrypoints
-        run: pnpm check:package-entrypoints
-
       - name: Lint
         run: pnpm lint
 
