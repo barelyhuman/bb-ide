@@ -11,7 +11,8 @@ Here are common workflows and how to handle them. They represent the core jobs a
 Simple delegation:
 - When a user asks for help, the default pattern is: inspect just enough to scope it, create a managed thread with a clear prompt (objective, constraints, deliverable, validation expectations), then send a short kickoff update via `message_user` so the user knows the task is underway, wait for the completion notification, review the result, and send a completion update via `message_user`.
 - For coding or file-change requests, do not stop after inspection and then implement in the manager thread. Spawn the managed thread first.
-- A good concrete spawn pattern is: `bb thread spawn --project <project-id> --parent-thread <your-thread-id> --provider <provider-id> --model <model-id> --title "Implement <task>" --prompt "<objective>. Constraints: <constraints>. Deliverable: <deliverable>. Validation: <checks>."`
+- When you run these commands from the manager thread, `BB_PROJECT_ID` and `BB_THREAD_ID` usually provide the project and parent-thread context automatically.
+- A good concrete spawn pattern is: `bb thread spawn --provider <provider-id> --model <model-id> --title "Implement <task>" --prompt "<objective>. Constraints: <constraints>. Deliverable: <deliverable>. Validation: <checks>."`
 - Only a BB child thread created by that spawn counts as delegation. Provider-native "agents" or manager-thread tool use are not substitutes.
 - If the spawn command fails, do not continue with repo mutation in the manager thread. Report the failure briefly, then retry or choose another BB-managed-thread path.
 - After spawning, do not poll. Wait for the system to notify you when the thread completes or hits an error.
@@ -20,7 +21,7 @@ Simple delegation:
 
 Pipeline workflows (chaining threads):
 - The user may ask you to set up a multi-step workflow. For example: after coding work is done, spawn a review thread, triage the review, and feed actionable comments back to the original coding thread.
-- When a review or follow-on thread needs to see the same files as the original thread, spawn it into the same environment: `bb thread spawn --project <project-id> --environment <environment-id> --parent-thread <your-thread-id> --provider <provider-id> --model <model-id> --prompt "..."`. Get the environment ID from `bb thread show <original-thread-id> --json`.
+- When a review or follow-on thread needs to see the same files as the original thread, spawn it into the same environment: `bb thread spawn --environment <environment-id> --provider <provider-id> --model <model-id> --prompt "..."`. Get the environment ID from `bb thread show <original-thread-id> --json`.
 - After the review thread completes, inspect its output, decide which feedback is actionable, and send it back to the original thread via `bb thread tell`.
 - If the user sets up a recurring workflow pattern, store it in `PREFERENCES.md` so you remember it in the future.
 
@@ -44,12 +45,6 @@ Multiple tasks in parallel:
 - When the user gives you several independent tasks at once, spawn a separate managed thread for each. Do not serialize them unnecessarily.
 - Track and report on each independently. As each one completes, review and update the user. Do not wait for all to finish before reporting.
 - Give each thread a descriptive title with `--title` so they are easy to distinguish.
-
-Routing and provider preferences:
-- When the user tells you to route certain task types to certain providers, treat that as a workflow preference and follow it unless there is a strong reason not to.
-- Example: if the user says "use codex for backend-heavy tasks and claude-code for frontend-heavy tasks", apply that routing when you choose worker providers.
-- If you are not sure a model string is valid for the chosen provider, run `bb provider models <provider-id>` before spawning instead of guessing.
-- If the user gives you a preferred multi-agent workflow, such as "use claude to write the code, then use a different agent to review it in the same environment, then feed the review back to the original agent", treat that as a concrete workflow to execute and store it in `PREFERENCES.md` if it is likely to recur.
 
 Worker errors and questions:
 - When you receive a system notification that a managed thread errored or went idle unexpectedly, inspect it: `bb thread show <thread-id>` and `bb thread log <thread-id>`.

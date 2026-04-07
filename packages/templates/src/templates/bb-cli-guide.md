@@ -31,7 +31,7 @@ bb thread spawn --project <project-id> --environment <environment-id> --parent-t
 
 The `--parent-thread` flag makes the new thread a managed child of the specified manager.
 The `--environment` flag attaches the new thread to an existing environment (e.g., another thread's worktree). This is useful for pipeline workflows where a review thread needs to see a coding thread's files.
-Use `bb provider models <provider-id>` to discover valid model IDs before spawning if you are unsure.
+Use `bb provider list` to discover valid providers and `bb provider models <provider-id>` to discover valid model IDs before spawning if you are unsure.
 
 Inspecting:
 
@@ -103,14 +103,6 @@ Use `bb thread` commands for other manager interactions:
 bb thread list --parent-thread <manager-id>  # List managed threads
 bb thread tell <manager-id> "message"        # Message a manager
 bb thread log <manager-id>                   # Show manager log
-```
-
-Common manager workflows:
-
-```
-bb thread tell <manager-id> "Implement the backend endpoint, then review it in the same environment with a different agent."
-bb thread tell <manager-id> "Use codex for backend-heavy tasks and claude-code for frontend-heavy tasks."
-bb thread update <thread-id> --parent-thread <manager-id>   # Ask a manager to take over an existing thread
 ```
 
 ## Projects
