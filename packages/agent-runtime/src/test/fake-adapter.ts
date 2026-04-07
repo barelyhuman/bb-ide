@@ -3,15 +3,15 @@ import {
   threadEventItemSchema,
   type AvailableModel,
   type ThreadEvent,
-  type ToolCallRequest,
 } from "@bb/domain";
-import { z } from "zod";
 import type {
   AdapterCommand,
+  DecodedToolCallRequest,
   JsonRpcMessage,
   ProviderAdapter,
 } from "../provider-adapter.js";
 import { parseAvailableModelList } from "../shared/available-models.js";
+import { decodeNormalizedProviderToolCallRequest } from "../shared/provider-tool-call-contract.js";
 
 export interface CreateFakeAdapterOptions {
   displayName?: string;
@@ -23,15 +23,6 @@ interface FakeEventMessage {
   method?: string;
   params?: Record<string, unknown>;
 }
-
-const toolCallParamsSchema = z.object({
-  arguments: z.unknown().optional(),
-  callId: z.string().optional(),
-  threadId: z.string().optional(),
-  tool: z.string().optional(),
-  turnId: z.string().optional(),
-});
-type ToolCallParams = z.infer<typeof toolCallParamsSchema>;
 
 const DEFAULT_ADAPTER_ID = "fake";
 const DEFAULT_DISPLAY_NAME = "Fake Provider";
@@ -188,28 +179,15 @@ function translateEventMessage(event: FakeEventMessage): ThreadEvent[] {
   }
 }
 
-function decodeToolCallRequest(request: JsonRpcMessage): ToolCallRequest | null {
-  if (request.method !== "item/tool/call") {
+function decodeToolCallRequest(request: JsonRpcMessage): DecodedToolCallRequest | null {
+  if (typeof request.id !== "string" && typeof request.id !== "number") {
     return null;
   }
-  if (!request.params || typeof request.params !== "object") {
-    return null;
-  }
-
-  const parsedParams = toolCallParamsSchema.safeParse(request.params);
-  if (!parsedParams.success) {
-    return null;
-  }
-
-  const params: ToolCallParams = parsedParams.data;
-  return {
-    arguments: params.arguments,
-    callId: typeof params.callId === "string" ? params.callId : "",
-    requestId: request.id ?? 0,
-    threadId: typeof params.threadId === "string" ? params.threadId : "",
-    tool: typeof params.tool === "string" ? params.tool : "",
-    turnId: typeof params.turnId === "string" ? params.turnId : "",
-  };
+  return decodeNormalizedProviderToolCallRequest(
+    request.id,
+    request.method,
+    request.params,
+  );
 }
 
 function parseModelListResult(result: unknown): AvailableModel[] {
@@ -222,7 +200,8 @@ export function createFakeAdapter(
   /*
    * Fake provider input control tokens:
    * - `delay:<ms>` delays turn completion by the requested duration.
-   * - `call_tool:<name>` emits a tool call before the turn completes.
+   * - `call_tool:<name>` emits a provider-scoped tool call with required
+   *   `providerThreadId` and no BB `threadId` hint.
    * - remaining text is echoed back as `Response to: ...`.
    */
   return {

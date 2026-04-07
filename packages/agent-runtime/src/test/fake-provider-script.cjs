@@ -160,7 +160,7 @@ function beginTurn(threadId, input) {
       id: toolCallId,
       method: "item/tool/call",
       params: {
-        threadId,
+        providerThreadId: thread.providerThreadId,
         turnId,
         callId: "call-" + toolCallId,
         tool: plan.toolName,

@@ -19,7 +19,6 @@ import type {
   ThreadEventItemStatus,
   ThreadEventTurnStatus,
   ThreadEventUserContent,
-  ToolCallRequest,
 } from "@bb/domain";
 import type { ClientRequest as CodexClientRequest } from "./generated/codex-app-server/schema/ClientRequest.js";
 import type { JsonValue } from "./generated/codex-app-server/schema/serde_json/JsonValue.js";
@@ -35,13 +34,14 @@ import {
   toOptionalRecord,
 } from "../shared/adapter-utils.js";
 import {
-  decodeProviderToolCallRequest,
+  decodeNativeProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
 import { createUnhandledProviderEvent } from "../shared/provider-unhandled-event.js";
 import { jsonRpcEnvelopeSchema } from "../shared/json-rpc-envelope.js";
 import type {
   AdapterCommand,
   AdapterOptions,
+  DecodedToolCallRequest,
   JsonRpcMessage,
   ProviderAdapter,
   ProviderTranslationContext,
@@ -1082,11 +1082,15 @@ export function createCodexProviderAdapter(
       }
     },
 
-    decodeToolCallRequest(request: JsonRpcMessage): ToolCallRequest | null {
+    decodeToolCallRequest(request: JsonRpcMessage): DecodedToolCallRequest | null {
       if (typeof request.id !== "string" && typeof request.id !== "number") {
         return null;
       }
-      return decodeProviderToolCallRequest(request.id, request.method, request.params);
+      return decodeNativeProviderToolCallRequest(
+        request.id,
+        request.method,
+        request.params,
+      );
     },
 
     parseModelListResult(result: unknown) {
