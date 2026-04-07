@@ -13,7 +13,6 @@
   "files": ["dist", "Dockerfile"],
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch --preserveWatchOutput",
     "clean": "rm -rf dist tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit",
     "template:build": "tsx src/build-template.ts",

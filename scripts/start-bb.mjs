@@ -1,4 +1,3 @@
-import "../packages/config/dist/dotenv.js";
 import { spawn } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";

@@ -127,7 +127,7 @@ Implementation packages never import across these boundaries. The server doesn't
 
 ## Configuration
 
-All configuration is via environment variables, validated at startup with sensible defaults. Override them in a `.env` file at the repo root (gitignored). See [`packages/config/src/`](./packages/config/src/) for the full set.
+All configuration is via environment variables, validated at startup with sensible defaults. Override them in `.env` files at the repo root (gitignored) and they will be loaded automatically by `pnpm dev` and `pnpm start`. The standard [dotenv-cli](https://github.com/entropitor/dotenv-cli) cascade applies: `.env`, `.env.local`, `.env.<environment>`, `.env.<environment>.local` — where environment is `development` for `pnpm dev` and `production` for `pnpm start`. See [`packages/config/src/`](./packages/config/src/) for the full set of variables.
 
 `BB_DATA_DIR` is the most important one — it's the root directory for all bb-managed state: the SQLite database, logs, host identity, and thread storage. Defaults to `~/.bb/` (or `~/.bb-dev/` when using `pnpm dev`). Pointing two instances at different data directories gives you fully isolated environments — this is how dev and production run side by side, and how tests get clean state.
 

@@ -139,6 +139,10 @@ export function createApp(deps: AppDeps, options?: CreateAppOptions): ServerApp 
     }),
   );
 
+  if (!options?.staticDir) {
+    app.get("/", (context) => context.text("bb server"));
+  }
+
   if (options?.staticDir) {
     const root = resolve(options.staticDir);
     const MIME: Record<string, string> = {

@@ -1,4 +1,3 @@
-import "@bb/config/dotenv";
 import { serve } from "@hono/node-server";
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";

@@ -1,4 +1,3 @@
-import "../packages/config/dist/dotenv.js";
 import { access, readFile } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";

@@ -30,10 +30,6 @@
     "./strings": {
       "import": "./dist/strings.js",
       "types": "./dist/strings.d.ts"
-    },
-    "./dotenv": {
-      "import": "./dist/dotenv.js",
-      "types": "./dist/dotenv.d.ts"
     }
   },
   "files": [
@@ -46,7 +42,6 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
-    "dotenv-flow": "^4.1.0",
     "envsafe": "^2.0.3"
   },
   "devDependencies": {

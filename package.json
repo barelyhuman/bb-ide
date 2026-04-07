@@ -3,10 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "turbo watch build dev --ui tui --concurrency 20",
+    "dev": "dotenv -c development -- turbo watch build dev --ui tui --concurrency 20",
     "dev:host-daemon": "pnpm exec turbo run build --filter=@bb/host-daemon --filter=@bb/cli && BB_DATA_DIR=${BB_DATA_DIR:-$HOME/.bb-dev-host-daemon} node scripts/run-host-daemon.mjs --mode dev",
     "build": "turbo run build",
-    "start": "pnpm exec turbo run build --filter=@bb/app --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/cli && node scripts/start-bb.mjs",
+    "start": "pnpm exec turbo run build --filter=@bb/app --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/cli && dotenv -c production -- node scripts/start-bb.mjs",
     "start:host-daemon": "pnpm exec turbo run build --filter=@bb/host-daemon --filter=@bb/cli && node scripts/run-host-daemon.mjs --mode prod",
     "reset": "BB_DATA_DIR=${BB_DATA_DIR:-$HOME/.bb} node scripts/reset-bb-data.mjs",
     "reset:dev": "BB_DATA_DIR=${BB_DATA_DIR:-$HOME/.bb-dev} node scripts/reset-bb-data.mjs",
@@ -23,6 +23,7 @@
     "drizzle-studio": "pnpm --filter @bb/db db:studio"
   },
   "devDependencies": {
+    "dotenv-cli": "^11.0.0",
     "turbo": "^2.4.0",
     "typescript": "^5.7.0",
     "vitest": "^4.0.18"
