@@ -105,13 +105,16 @@ afterEach(() => {
 });
 
 describe("@bb/provider-audit fixture replay", () => {
+  // CI runs this fixture corpus replay alongside many other package tests, and
+  // the shared-machine contention can make the one-time replay setup much
+  // slower than it is locally.
   beforeAll(
     () => {
       checkedInReplay = replayFixtures({
         fixtureRoot: CHECKED_IN_FIXTURE_ROOT,
       });
     },
-    30_000,
+    120_000,
   );
 
   it("replays every checked-in fixture into stable summaries", () => {
