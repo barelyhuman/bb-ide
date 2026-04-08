@@ -137,7 +137,12 @@ export function ThreadTimelineRows({
           isActive &&
           isLastRow &&
           shouldPreferOngoingLabelsForRow(entry, latestActivityRowId);
-        const shouldAutoExpand = isLastRow && isActive;
+        const isLastError =
+          isLastRow &&
+          threadStatus === "error" &&
+          entry.kind === "message" &&
+          entry.message.kind === "error";
+        const shouldAutoExpand = (isLastRow && isActive) || isLastError;
 
         return (
           <div key={entry.id} data-thread-row-id={entry.id} className="pt-2">

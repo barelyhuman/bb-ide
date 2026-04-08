@@ -157,6 +157,24 @@ function OperationDetailLines({
   );
 }
 
+function ProvisioningDetailLines({
+  lines,
+  maxHeightClassName = EVENT_DETAIL_MAX_HEIGHT_CLASS,
+}: {
+  lines: string[];
+  maxHeightClassName?: string;
+}) {
+  return (
+    <ExpandableDetailScrollArea className="mt-0.5 space-y-0.5" maxHeightClassName={maxHeightClassName}>
+      {lines.map((line, index) => (
+        <div key={`${line}:${index}`} className="truncate font-mono ui-text-sm text-foreground/80">
+          {line}
+        </div>
+      ))}
+    </ExpandableDetailScrollArea>
+  );
+}
+
 function buildProvisioningSummary(
   message: ViewOperationMessage,
   tone: "default" | "destructive",
@@ -398,7 +416,7 @@ export function OperationRow({
         tone={tone}
       >
         <div className="mt-0.5 space-y-2">
-          <OperationDetailLines lines={lines} />
+          <ProvisioningDetailLines lines={lines} />
           {additionalDetailLines.length > 0 ? (
             <OperationDetailLines lines={additionalDetailLines} />
           ) : null}
