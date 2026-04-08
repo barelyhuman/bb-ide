@@ -18,7 +18,7 @@ interface ManagerHireCommandOptions {
   name?: string;
   host?: string;
   provider: string;
-  model: string;
+  model?: string;
   reasoningLevel?: string;
 }
 
@@ -41,11 +41,16 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
 
   manager
     .command("hire [projectId]")
-    .description("Hire a new manager for a project")
+    .description(
+      "Hire a new manager for a project; omitted execution flags inherit remembered manager defaults",
+    )
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
     .option("--name <name>", "Manager name")
     .requiredOption("--provider <id>", "Provider ID for the manager (e.g. claude-code, codex)")
-    .requiredOption("--model <model>", "Model ID for the manager")
+    .option(
+      "--model <model>",
+      "Model ID for the manager. Omit to use the project's remembered manager default for the selected provider",
+    )
     .option("--reasoning-level <level>", "Reasoning level (low, medium, high, xhigh)")
     .option("--host <id>", "Host ID (defaults to local host)")
     .option("--json", "Print machine-readable JSON output")
@@ -71,9 +76,10 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
         client.api.v1.projects[":id"].managers.$post({
           param: { id: projectId },
           json: {
+            origin: "cli",
             ...(opts.name ? { name: opts.name } : {}),
             providerId: opts.provider,
-            model: opts.model,
+            ...(opts.model ? { model: opts.model } : {}),
             environment: { type: "host", hostId },
             ...(reasoningLevel ? { reasoningLevel } : {}),
           },

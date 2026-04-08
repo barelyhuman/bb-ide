@@ -250,7 +250,10 @@ export async function hireProjectManager(
   return request<Thread>(
     apiClient.projects[":id"].managers.$post({
       param: { id: projectId },
-      json: options,
+      json: {
+        ...options,
+        origin: "app",
+      },
     }),
   );
 }
@@ -344,7 +347,12 @@ export async function transcribeVoiceInput(
 
 
 export async function createThread(req: CreateThreadRequest): Promise<Thread> {
-  return request<Thread>(apiClient.threads.$post({ json: req }));
+  return request<Thread>(apiClient.threads.$post({
+    json: {
+      ...req,
+      origin: "app",
+    },
+  }));
 }
 
 export interface ThreadListFilters {

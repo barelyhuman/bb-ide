@@ -93,11 +93,13 @@ bb environment promote-status --project <project-id>  # Show the active primary-
 ## Managers
 
 ```
-bb manager hire <project-id> --provider <provider-id> --model <model-id>
+bb manager hire <project-id> --provider <provider-id> [--model <model-id>]
 bb manager list [projectId]            # List managers for a project
 bb manager status <manager-id>         # Show manager status and managed threads
 bb manager delete <manager-id>         # Delete a manager permanently
 ```
+
+The `--model` flag is optional. When omitted, the server uses the project's remembered manager defaults for the selected provider.
 
 Use `bb thread` commands for other manager interactions:
 

@@ -525,6 +525,7 @@ describe("CLI command output contracts", () => {
       param: { id: "project-123" },
       json: {
         environment: { type: "host", hostId: "host-test-001" },
+        origin: "cli",
         model: "claude-opus-4-6",
         name: "Manager",
         providerId: "claude-code",
@@ -578,12 +579,63 @@ describe("CLI command output contracts", () => {
       param: { id: "project-123" },
       json: {
         environment: { type: "host", hostId: "host-test-001" },
+        origin: "cli",
         model: "claude-opus-4-6",
         name: "Manager",
         providerId: "claude-code",
       },
     });
     expect(collectLogLines(vi.mocked(console.log))).toContain("Manager hired: thread-manager-2");
+  });
+
+  it("bb manager hire omits model when the user relies on remembered manager defaults", async () => {
+    const post = vi.fn(async () => ({
+      id: "thread-manager-3",
+      projectId: "project-123",
+      title: "Manager",
+      type: "manager",
+      status: "active",
+      createdAt: 1,
+      updatedAt: 2,
+    }));
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          projects: {
+            ":id": {
+              managers: {
+                $post: post,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      [
+        "manager",
+        "hire",
+        "project-123",
+        "--name",
+        "Manager",
+        "--provider",
+        "claude-code",
+      ],
+      (program) =>
+        registerManagerCommands(program, () => "http://server"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      param: { id: "project-123" },
+      json: {
+        environment: { type: "host", hostId: "host-test-001" },
+        name: "Manager",
+        origin: "cli",
+        providerId: "claude-code",
+      },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain("Manager hired: thread-manager-3");
   });
 
   it("bb manager list reports when no managers are hired", async () => {
@@ -845,6 +897,7 @@ describe("CLI command output contracts", () => {
 
     expect(post).toHaveBeenCalledWith({
       json: {
+        origin: "cli",
         projectId: "proj-1",
         providerId: "codex",
         input: [{ type: "text", text: "hello" }],
@@ -897,6 +950,7 @@ describe("CLI command output contracts", () => {
 
     expect(post).toHaveBeenCalledWith({
       json: {
+        origin: "cli",
         projectId: "proj-1",
         providerId: "codex",
         model: "gpt-5",
@@ -1124,7 +1178,7 @@ describe("CLI command output contracts", () => {
     process.env.BB_PROJECT_ID = "proj-1";
     const post = vi.fn(async () => {
       throw new Error(
-        "HTTP 400: Model is required when project proj-1 has no stored execution defaults for provider codex",
+        "HTTP 400: Model is required when project proj-1 has no stored execution defaults for provider codex and thread type standard",
       );
     });
     createClientMock.mockReturnValue(asServerClient({
@@ -1144,7 +1198,7 @@ describe("CLI command output contracts", () => {
     ).rejects.toThrow("process.exit:1");
 
     expect(collectLogLines(vi.mocked(console.error))).toContain(
-      "Error: Failed to create thread: HTTP 400: Model is required when project proj-1 has no stored execution defaults for provider codex",
+      "Error: Failed to create thread: HTTP 400: Model is required when project proj-1 has no stored execution defaults for provider codex and thread type standard",
     );
   });
 
@@ -1178,6 +1232,7 @@ describe("CLI command output contracts", () => {
 
     expect(post).toHaveBeenCalledWith({
       json: {
+        origin: "cli",
         projectId: "proj-1",
         providerId: "codex",
         model: "gpt-5",
@@ -1217,6 +1272,7 @@ describe("CLI command output contracts", () => {
 
     expect(post).toHaveBeenCalledWith({
       json: {
+        origin: "cli",
         projectId: "proj-1",
         providerId: "codex",
         model: "gpt-5",
@@ -1256,6 +1312,7 @@ describe("CLI command output contracts", () => {
 
     expect(post).toHaveBeenCalledWith({
       json: {
+        origin: "cli",
         projectId: "proj-1",
         providerId: "codex",
         model: "gpt-5",

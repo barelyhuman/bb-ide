@@ -167,6 +167,7 @@ export function registerSpawnCommand(
         thread = await unwrap<Thread>(
           client.api.v1.threads.$post({
             json: {
+              origin: "cli",
               projectId,
               providerId: opts.provider,
               ...(opts.model ? { model: opts.model } : {}),
