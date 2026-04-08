@@ -451,10 +451,30 @@ This aligns with current ownership boundaries:
 Extend the runtime material service to build the full typed bundle containing:
 
 - merged env vars
-- provider auth files to write
+- managed auth/config files to write
 - metadata/version for change detection
 
-Recommended first-class outputs:
+Recommended authoritative material shape:
+
+- `version`
+- `env`
+- `files`
+
+Recommended `files` item shape:
+
+- `path`
+- `mode`
+- `contents`
+- `managedBy`
+
+Milestone 2 should keep this command authoritative, not patch-based:
+
+- the server sends the full managed file set for the host
+- the daemon replaces the managed file set with exactly that set
+- any previously managed file omitted from the new snapshot is deleted
+- unmanaged user-created files remain untouched
+
+Recommended first-class managed outputs:
 
 - environment variables for provider processes and shell tools
 - `~/.codex/auth.json`
@@ -463,6 +483,30 @@ Recommended first-class outputs:
 For providers that use raw API keys, inject env vars only.
 
 For providers that use OAuth/subscription credentials, refresh on the server and write sandbox files without refresh tokens.
+
+### Refresh ownership and failure behavior
+
+Refresh remains server-owned only.
+
+Required rules:
+
+- the daemon never receives a refresh-capable credential
+- the daemon never runs a refresh flow on its own
+- the server refresh path must be deduplicated/locked per credential so concurrent syncs cannot corrupt stored state
+- reconnect and resumed-work sync should reuse last-known-good material unless the server has already refreshed newer material
+- if refresh fails, the server should keep the last-known-good sandbox material in place and surface the failure through lifecycle state/UI instead of writing a partial or empty auth file
+- if refresh succeeds, the next runtime-material sync must carry the refreshed access material and strip refresh fields again before delivery
+
+### Project and account binding model
+
+Define the account-binding model before building the settings UI.
+
+Recommended Milestone 2 model:
+
+- one default connection per provider per user
+- optional per-project override when the user has multiple connections for a provider
+- project bindings point to a saved server-owned credential record; they do not duplicate secrets
+- disconnecting a credential clears bindings or marks them invalid, and the next sync removes the corresponding managed auth material from affected sandboxes
 
 ### Non-negotiable auth rule
 
@@ -473,6 +517,7 @@ Examples:
 - Codex auth file must have `refresh_token: ""`
 - Claude credentials file must have `refreshToken: ""`
 - `last_refresh` / equivalent metadata should be written so the CLI does not immediately try to refresh
+- if a provider format supports multiple token-like fields, every refresh-capable field must be blanked before delivery, not just the primary one
 
 ## Phase 5: Add Encrypted Secret Storage
 
@@ -498,6 +543,9 @@ Security requirements:
 - never return plaintext secret values after creation except when explicitly editing
 - return masked values plus metadata for the UI
 - redact secret-bearing fields from logs and errors
+- deleting a secret or credential must remove it from future runtime-material snapshots; the next sync deletes any managed file/env derived from it
+- no stale managed auth file should survive an unbind, disconnect, or credential replacement
+- runtime-material lifecycle state should avoid persisting plaintext secrets where a version hash or server-side re-derivation is sufficient
 
 Merge order:
 
@@ -525,6 +573,12 @@ Add sections to `apps/app/src/views/AppSettingsView.tsx`:
 - Claude/Anthropic connection
 - any initial API-key-only providers we decide to support
 
+The app-level UI should make the binding model explicit:
+
+- show the current default connection per provider
+- allow replacing or disconnecting that default
+- show whether any project override depends on the credential being removed
+
 ### Project settings
 
 Add sections to `apps/app/src/views/ProjectSettingsView.tsx`:
@@ -536,6 +590,13 @@ The project page should let the user:
 
 - add/edit/remove project-scoped env vars
 - select which saved provider connection is exposed to the project, if more than one exists
+- clear a project override so the project falls back to the user default connection
+
+UI behavior requirements:
+
+- masked values stay masked after save
+- deleting an env var or credential makes it clear that the next sandbox sync will remove it from cloud sandboxes
+- invalid/missing bindings are shown explicitly instead of silently falling back to no auth
 
 ## Phase 7A: Expand Isolated Live E2B QA For Milestone 1
 
@@ -565,6 +626,9 @@ Add coverage for:
 1. provider auth file generation with refresh tokens stripped
 2. user/project env merge behavior
 3. reconnect re-sync of auth/runtime material after sandbox resume
+4. deletion of managed auth files after credential disconnect or project unbind
+5. replacement of managed auth files after switching a provider connection
+6. reconnect after server-side refresh uses the refreshed access material without delivering a refresh token
 
 ## Rollout Strategy
 
@@ -614,7 +678,9 @@ Milestone 1 should merge only after steps 1 through 4 are complete and validated
 - Codex and Claude cloud auth files are generated without refresh tokens.
 - Runtime material is refreshed only by the server.
 - User/project runtime material is stored encrypted at rest.
-- Live QA covers auth file generation and user/project runtime material merge behavior.
+- Runtime material file sync is authoritative and deletes removed managed files.
+- Credential disconnect/unbind removes the corresponding managed sandbox material on the next sync.
+- Live QA covers auth file generation, user/project runtime material merge behavior, reconnect-after-refresh, and stale-file removal.
 
 ## Validation
 
@@ -647,7 +713,11 @@ Database-backed lifecycle tests must use in-memory SQLite via `createConnection(
 For Milestone 2, also add:
 
 - env var merge order
+- authoritative managed-file replacement and deletion
 - runtime material builders stripping refresh tokens
+- server-side refresh locking/deduplication
+- disconnect/unbind cleanup behavior
+- default vs project-override credential binding resolution
 - user/project credential binding and auth-file generation behavior
 
 ### Live E2B For Milestone 1
@@ -680,6 +750,8 @@ Using the same isolated real-server harness:
 2. Run the smoke flow.
 3. Verify auth files are materialized without refresh tokens.
 4. Verify user/project env merge behavior and reconnect re-sync after pause/resume.
+5. Remove a bound credential or project override, rerun sync, and verify the managed auth file is deleted from the sandbox.
+6. Refresh a credential server-side, resume/reconnect the sandbox, and verify the updated access material appears without any refresh-capable fields.
 
 ## Notes For Implementation
 
