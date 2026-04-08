@@ -9,11 +9,17 @@ import {
   hostDaemonEventBatchRequestSchema,
   hostDaemonEventBatchResponseSchema,
   hostDaemonRuntimeMaterialQuerySchema,
+  hostDaemonInteractiveInterruptRequestSchema,
+  hostDaemonInteractiveInterruptResponseSchema,
+  hostDaemonInteractiveRequestResponseSchema,
+  hostDaemonInteractiveRequestSchema,
   hostDaemonSessionOpenRequestSchema,
   hostDaemonSessionOpenResponseSchema,
   hostDaemonToolCallRequestSchema,
   hostDaemonToolCallResponseSchema,
   hostRuntimeMaterialSnapshotSchema,
+  type HostDaemonInteractiveInterruptResponse,
+  type HostDaemonInteractiveRequestResponse,
   type HostDaemonActiveThread,
   type HostDaemonCommandEnvelope,
   type HostDaemonCommandResultReport,
@@ -24,7 +30,7 @@ import {
   type HostDaemonSessionOpenResponse,
   type HostDaemonToolCallResponse,
 } from "@bb/host-daemon-contract";
-import type { ToolCallRequest } from "@bb/domain";
+import type { PendingInteractionCreate, ToolCallRequest } from "@bb/domain";
 import type { HostDaemonLogger } from "./logger.js";
 
 const knownCommandTypes = new Set<string>(HOST_DAEMON_COMMAND_TYPES);
@@ -90,6 +96,14 @@ export interface ServerClient {
   postEnvironmentChange(args: HostDaemonEnvironmentChangePayload): Promise<void>;
   postEvents(events: HostDaemonEventEnvelope[]): Promise<Record<string, number>>;
   callTool(request: ToolCallRequest): Promise<HostDaemonToolCallResponse>;
+  requestInteractiveResolution(
+    request: PendingInteractionCreate,
+  ): Promise<HostDaemonInteractiveRequestResponse>;
+  interruptInteractiveRequests(args: {
+    providerId: string;
+    reason: string;
+    threadIds: readonly string[];
+  }): Promise<HostDaemonInteractiveInterruptResponse>;
 }
 
 const COMMAND_RESULT_RETRIES = 5;
@@ -407,6 +421,60 @@ export function createServerClient(
       }
 
       return hostDaemonToolCallResponseSchema.parse(await response.json());
+    },
+
+    async requestInteractiveResolution(
+      request: PendingInteractionCreate,
+    ): Promise<HostDaemonInteractiveRequestResponse> {
+      const payload = hostDaemonInteractiveRequestSchema.parse({
+        sessionId: requireSessionId(),
+        interaction: request,
+      });
+      const response = await fetchFn(
+        buildInternalUrl("/session/interactive-request"),
+        {
+          method: "POST",
+          headers: headers(),
+          body: JSON.stringify(payload),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to request interactive resolution: ${response.status} ${response.statusText}`,
+        );
+      }
+
+      return hostDaemonInteractiveRequestResponseSchema.parse(
+        await response.json(),
+      );
+    },
+
+    async interruptInteractiveRequests(args): Promise<HostDaemonInteractiveInterruptResponse> {
+      const payload = hostDaemonInteractiveInterruptRequestSchema.parse({
+        sessionId: requireSessionId(),
+        providerId: args.providerId,
+        threadIds: args.threadIds,
+        reason: args.reason,
+      });
+      const response = await fetchFn(
+        buildInternalUrl("/session/interactive-request/interrupt"),
+        {
+          method: "POST",
+          headers: headers(),
+          body: JSON.stringify(payload),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to interrupt interactive requests: ${response.status} ${response.statusText}`,
+        );
+      }
+
+      return hostDaemonInteractiveInterruptResponseSchema.parse(
+        await response.json(),
+      );
     },
   };
 }

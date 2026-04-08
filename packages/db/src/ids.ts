@@ -64,6 +64,10 @@ export function createDraftId(): string {
   return createId("draft");
 }
 
+export function createPendingInteractionId(): string {
+  return createId("pint");
+}
+
 export function createHostDaemonSessionId(): string {
   return createId("hses");
 }

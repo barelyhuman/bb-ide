@@ -16,6 +16,7 @@ import { registerInternalCommandResultRoutes } from "./internal/command-result-r
 import { registerInternalEnvironmentChangeRoutes } from "./internal/environment-changes.js";
 import { registerInternalEventRoutes } from "./internal/events.js";
 import { registerInternalHostRoutes } from "./internal/hosts.js";
+import { registerInternalInteractiveRequestRoutes } from "./internal/interactive-requests.js";
 import { registerInternalSessionRoutes } from "./internal/session.js";
 import { registerInternalToolCallRoutes } from "./internal/tool-calls.js";
 import {
@@ -165,6 +166,7 @@ export function createApp(deps: AppDeps, options?: CreateAppOptions): ServerApp 
   registerInternalEnvironmentChangeRoutes(internalApi, deps);
   registerInternalEventRoutes(internalApi, deps);
   registerInternalToolCallRoutes(internalApi, deps);
+  registerInternalInteractiveRequestRoutes(internalApi, deps);
   app.route("/internal", internalApi);
 
   app.get(

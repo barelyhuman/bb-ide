@@ -2,6 +2,7 @@ import type { DbConnection } from "@bb/db";
 import type { Logger } from "@bb/logger";
 import type { CloudAuthService } from "./services/cloud-auth/types.js";
 import type { HostLifecycleService } from "./services/hosts/host-lifecycle-service.js";
+import type { PendingInteractionLifecycle } from "./services/interactions/pending-interactions.js";
 import type { SandboxHostRegistry } from "./services/hosts/sandbox-registry.js";
 import type { MachineAuthService } from "./services/machine-auth.js";
 import type { SandboxEnvService } from "./services/sandbox-env/types.js";
@@ -32,6 +33,7 @@ export interface AppDeps {
   logger: ServerLogger;
   machineAuth: MachineAuthService;
   sandboxEnv: SandboxEnvService;
+  pendingInteractions: PendingInteractionLifecycle;
   sandboxRegistry: SandboxHostRegistry;
 }
 

@@ -10,6 +10,7 @@ import { createApp } from "./server.js";
 import { createCloudAuthService } from "./services/cloud-auth/service.js";
 import { createHostLifecycleService } from "./services/hosts/host-lifecycle-service.js";
 import { createSandboxHostRegistry } from "./services/hosts/sandbox-registry.js";
+import { PendingInteractionLifecycle } from "./services/interactions/pending-interactions.js";
 import { createMachineAuthService } from "./services/machine-auth.js";
 import { createSandboxEnvService } from "./services/sandbox-env/service.js";
 import { runPeriodicSweeps } from "./services/system/periodic-sweeps.js";
@@ -21,6 +22,7 @@ async function main(): Promise<void> {
   const db = initDb(serverConfig.BB_DATABASE_URL);
   const hub = new NotificationHub();
   const hostLifecycle = createHostLifecycleService();
+  const pendingInteractions = new PendingInteractionLifecycle({ db, hub });
   const sandboxRegistry = createSandboxHostRegistry();
   const publicUrl = toOptionalString(serverConfig.BB_PUBLIC_URL);
 
@@ -73,6 +75,7 @@ async function main(): Promise<void> {
       logger,
       machineAuth,
       sandboxEnv,
+      pendingInteractions,
       sandboxRegistry,
     },
     { staticDir },
@@ -101,6 +104,7 @@ async function main(): Promise<void> {
       hub,
       logger,
       machineAuth,
+      pendingInteractions,
       sandboxEnv,
       sandboxRegistry,
     });

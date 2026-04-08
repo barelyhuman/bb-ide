@@ -3,7 +3,12 @@ import {
   type AgentRuntime,
   type AgentRuntimeOptions,
 } from "@bb/agent-runtime";
-import type { ThreadEvent, WorkspaceProvisionType } from "@bb/domain";
+import type {
+  PendingInteractionCreate,
+  PendingInteractionResolution,
+  ThreadEvent,
+  WorkspaceProvisionType,
+} from "@bb/domain";
 import type {
   HostDaemonActiveThread,
   HostDaemonEnvironmentChange,
@@ -120,6 +125,9 @@ export interface RuntimeManagerOptions {
   onWorkspaceStatusWatchError?: (args: {
     error: WorkspaceWatchError;
   }) => void;
+  onInteractiveRequest?: (
+    request: PendingInteractionCreate,
+  ) => Promise<PendingInteractionResolution>;
   onToolCall?: AgentRuntimeOptions["onToolCall"];
   onStderr?: AgentRuntimeOptions["onStderr"];
   onProcessExit?: AgentRuntimeOptions["onProcessExit"];
@@ -517,6 +525,7 @@ export class RuntimeManager {
             contentItems: [],
             success: true,
           })),
+        onInteractiveRequest: this.options.onInteractiveRequest,
         onStderr: this.options.onStderr,
         onProcessExit: (info) => {
           for (const threadId of info.threadIds) {

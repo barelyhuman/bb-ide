@@ -278,6 +278,24 @@ export type {
 } from "./commands.js";
 
 export {
+  createPendingInteraction,
+  getActivePendingInteractionForThread,
+  getPendingInteraction,
+  getPendingInteractionByProviderRequest,
+  interruptPendingInteractionsForThreads,
+  listPendingInteractionsByThread,
+  setPendingInteractionInterrupted,
+  setPendingInteractionResolved,
+} from "./pending-interactions.js";
+export type {
+  CreatePendingInteractionInput,
+  InterruptPendingInteractionsForThreadsArgs,
+  ListPendingInteractionsArgs,
+  PendingInteractionProviderRequestIdentity,
+  PendingInteractionRow,
+} from "./pending-interactions.js";
+
+export {
   openSession,
   closeSession,
   getActiveSession,

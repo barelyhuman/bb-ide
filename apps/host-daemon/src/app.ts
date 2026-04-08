@@ -217,6 +217,52 @@ export async function createHostDaemonApp(
           throw error;
         }
       }),
+    onInteractiveRequest: async (request) => {
+      try {
+        const response = await serverClient.requestInteractiveResolution(request);
+        switch (response.outcome) {
+          case "resolved":
+            return response.resolution;
+          case "rejected":
+          case "interrupted":
+          case "expired":
+            throw new Error(response.reason);
+        }
+      } catch (error) {
+        options.logger.error(
+          {
+            err: error,
+            threadId: request.threadId,
+            providerThreadId: request.providerThreadId,
+            turnId: request.turnId,
+            providerRequestId: request.providerRequestId,
+            kind: request.payload.kind,
+          },
+          "Failed to forward interactive provider request to server",
+        );
+        throw error;
+      }
+    },
+    onProcessExit: (info) => {
+      if (info.threadIds.length === 0) {
+        return;
+      }
+
+      void serverClient.interruptInteractiveRequests({
+        providerId: info.providerId,
+        threadIds: info.threadIds,
+        reason: `Provider "${info.providerId}" exited while awaiting user interaction`,
+      }).catch((error) => {
+        options.logger.warn(
+          {
+            err: error,
+            providerId: info.providerId,
+            threadIds: info.threadIds,
+          },
+          "Failed to interrupt pending interactions after provider exit",
+        );
+      });
+    },
     threadStorageRootPath,
   });
 

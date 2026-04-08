@@ -229,6 +229,24 @@ export type HostDaemonInteractiveRequestResponse = z.infer<
   typeof hostDaemonInteractiveRequestResponseSchema
 >;
 
+export const hostDaemonInteractiveInterruptRequestSchema = z.object({
+  sessionId: z.string().min(1),
+  providerId: z.string().min(1),
+  threadIds: z.array(z.string().min(1)).min(1),
+  reason: z.string().min(1),
+});
+export type HostDaemonInteractiveInterruptRequest = z.infer<
+  typeof hostDaemonInteractiveInterruptRequestSchema
+>;
+
+export const hostDaemonInteractiveInterruptResponseSchema = z.object({
+  ok: z.literal(true),
+  interactionIds: z.array(z.string().min(1)),
+});
+export type HostDaemonInteractiveInterruptResponse = z.infer<
+  typeof hostDaemonInteractiveInterruptResponseSchema
+>;
+
 export type HostDaemonInternalSchema = {
   "/hosts/enroll": {
     /** Used by the daemon to exchange bootstrap material for its long-lived host credential. */
@@ -290,6 +308,13 @@ export type HostDaemonInternalSchema = {
     $post: Endpoint<
       { json: HostDaemonInteractiveRequest },
       HostDaemonInteractiveRequestResponse
+    >;
+  };
+  "/session/interactive-request/interrupt": {
+    /** Used by the daemon to mark blocked interactive requests interrupted when the provider or session dies. */
+    $post: Endpoint<
+      { json: HostDaemonInteractiveInterruptRequest },
+      HostDaemonInteractiveInterruptResponse
     >;
   };
 };

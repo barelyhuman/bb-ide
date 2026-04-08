@@ -14,6 +14,8 @@ import {
   hostDaemonEnvironmentChangeRequestSchema,
   hostDaemonEventBatchRequestSchema,
   hostDaemonEventBatchResponseSchema,
+  hostDaemonInteractiveInterruptRequestSchema,
+  hostDaemonInteractiveInterruptResponseSchema,
   hostDaemonInteractiveRequestResponseSchema,
   hostDaemonInteractiveRequestSchema,
   hostDaemonServerWsMessageSchema,
@@ -764,6 +766,30 @@ describe("host-daemon session schemas", () => {
       resolution: {
         decision: "accept_for_session",
       },
+    });
+
+    expect(
+      hostDaemonInteractiveInterruptRequestSchema.parse({
+        sessionId: "session_123",
+        providerId: "codex",
+        threadIds: ["thr_123"],
+        reason: "Provider exited",
+      }),
+    ).toEqual({
+      sessionId: "session_123",
+      providerId: "codex",
+      threadIds: ["thr_123"],
+      reason: "Provider exited",
+    });
+
+    expect(
+      hostDaemonInteractiveInterruptResponseSchema.parse({
+        ok: true,
+        interactionIds: ["pint_123"],
+      }),
+    ).toEqual({
+      ok: true,
+      interactionIds: ["pint_123"],
     });
   });
 

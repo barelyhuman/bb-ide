@@ -15,6 +15,8 @@ import type {
   EnvironmentStatus,
   HostOperationKind,
   HostType,
+  PendingInteractionKind,
+  PendingInteractionStatus,
   LifecycleOperationState,
   ProjectOperationKind,
   ProjectSourceType,
@@ -459,6 +461,49 @@ export const hostDaemonCommands = sqliteTable(
     index("host_daemon_commands_host_state_idx").on(
       table.hostId,
       table.state,
+    ),
+  ],
+);
+
+export const pendingInteractions = sqliteTable(
+  "pending_interactions",
+  {
+    id: text("id").primaryKey(),
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => threads.id, { onDelete: "cascade" }),
+    turnId: text("turn_id").notNull(),
+    providerId: text("provider_id").notNull(),
+    providerThreadId: text("provider_thread_id").notNull(),
+    providerRequestId: text("provider_request_id").notNull(),
+    providerRequestMethod: text("provider_request_method").notNull(),
+    kind: text("kind").$type<PendingInteractionKind>().notNull(),
+    status: text("status").$type<PendingInteractionStatus>().notNull(),
+    payload: text("payload").notNull(),
+    resolution: text("resolution"),
+    statusReason: text("status_reason"),
+    createdAt: integer("created_at").notNull(),
+    resolvedAt: integer("resolved_at"),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("pending_interactions_provider_request_idx").on(
+      table.providerId,
+      table.providerThreadId,
+      table.providerRequestId,
+    ),
+    index("pending_interactions_thread_created_idx").on(
+      table.threadId,
+      table.createdAt,
+    ),
+    index("pending_interactions_thread_status_created_idx").on(
+      table.threadId,
+      table.status,
+      table.createdAt,
+    ),
+    index("pending_interactions_status_created_idx").on(
+      table.status,
+      table.createdAt,
     ),
   ],
 );

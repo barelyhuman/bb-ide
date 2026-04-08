@@ -13,6 +13,7 @@ export {
   createHostId,
   createHostOperationId,
   createManagerThreadNudgeId,
+  createPendingInteractionId,
   createProjectId,
   createProjectSourceId,
   createSandboxProviderCredentialId,
