@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 import type { PromptDraftAttachment, PromptDraftState } from "@/lib/prompt-draft";
 import {
+  arePromptDraftStatesEqual,
   emptyPromptDraftState,
   isPromptDraftEmpty,
   parsePromptDraftStorage,
@@ -237,6 +238,15 @@ export function usePromptDraftStorage(scope: PromptDraftScope) {
     setDraftAndPersist(EMPTY_PROMPT_DRAFT);
   }, [setDraftAndPersist]);
 
+  const clearIfCurrentMatches = useCallback((expectedDraft: PromptDraftState): boolean => {
+    if (!arePromptDraftStatesEqual(readPromptDraft(storageKey), expectedDraft)) {
+      return false;
+    }
+
+    setDraftAndPersist(EMPTY_PROMPT_DRAFT);
+    return true;
+  }, [setDraftAndPersist, storageKey]);
+
   const setAttachments = useCallback((attachments: PromptDraftAttachment[]) => {
     writePromptDraft(storageKey, {
       ...readPromptDraft(storageKey),
@@ -261,6 +271,7 @@ export function usePromptDraftStorage(scope: PromptDraftScope) {
     addAttachment,
     removeAttachment,
     clear,
+    clearIfCurrentMatches,
     restoreIfEmpty,
   };
 }

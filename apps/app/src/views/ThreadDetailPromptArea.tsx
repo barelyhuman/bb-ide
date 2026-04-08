@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ComponentType, type ReactNode, type RefObject } from "react";
+import { useCallback, useState, type ComponentType, type ReactNode, type RefObject } from "react";
 import type {
   PromptInput,
   ReasoningLevel,
@@ -16,7 +16,7 @@ import { useUploadPromptAttachment } from "@/hooks/mutations/project-mutations";
 import { useCreateThreadDraft, useDeleteThreadDraft, useSendThreadDraft, useStopThread } from "@/hooks/mutations/thread-runtime-mutations";
 import { useThreadDefaultExecutionOptions, useThreadDrafts } from "@/hooks/queries/thread-queries";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
-import { promptDraftToInput } from "@/lib/prompt-draft";
+import { promptDraftToInput, type PromptDraftState } from "@/lib/prompt-draft";
 import { toast } from "sonner";
 import { ThreadFollowUpComposer } from "./ThreadFollowUpComposer";
 import { queuedInputToDraft } from "./threadQueuedMessages";
@@ -112,14 +112,6 @@ export function ThreadDetailPromptArea({
   const [isChangeListExpanded, setIsChangeListExpanded] = useState(false);
   const [processingQueuedMessageId, setProcessingQueuedMessageId] =
     useState<string | null>(null);
-  const promptInput = useMemo(
-    () =>
-      promptDraftToInput({
-        text: promptDraft.text,
-        attachments: promptDraft.attachments,
-      }),
-    [promptDraft.attachments, promptDraft.text],
-  );
   const {
     selectedProviderId,
     providerOptions,
@@ -148,8 +140,8 @@ export function ThreadDetailPromptArea({
     initialSandboxMode: defaultExecutionOptions?.sandboxMode,
     initialEnvironmentSelectionValue: thread.environmentId ?? undefined,
   });
-  const handleFollowUpAcknowledged = useCallback(() => {
-    promptDraft.clear();
+  const handleFollowUpAcknowledged = useCallback((submittedDraft: PromptDraftState) => {
+    promptDraft.clearIfCurrentMatches(submittedDraft);
   }, [promptDraft]);
   const {
     beginPendingFollowUp,
@@ -245,7 +237,12 @@ export function ThreadDetailPromptArea({
   }, [projectId, promptDraft, uploadPromptAttachment]);
 
   const handleSend = useCallback(async () => {
-    if (promptInput.length === 0) {
+    const submittedDraft = {
+      text: promptDraft.text,
+      attachments: promptDraft.attachments,
+    };
+    const submittedInput = promptDraftToInput(submittedDraft);
+    if (submittedInput.length === 0) {
       return;
     }
 
@@ -253,13 +250,13 @@ export function ThreadDetailPromptArea({
       try {
         await createDraft.mutateAsync({
           id: thread.id,
-          input: promptInput,
+          input: submittedInput,
           model: activeModel?.model ?? selectedModel,
           ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
           reasoningLevel,
           sandboxMode,
         });
-        promptDraft.clear();
+        promptDraft.clearIfCurrentMatches(submittedDraft);
         setAttachmentError(null);
       } catch (nextError) {
         toast.error(getMutationErrorMessage({
@@ -270,12 +267,15 @@ export function ThreadDetailPromptArea({
       return;
     }
 
-    beginPendingFollowUp(promptInput);
+    beginPendingFollowUp({
+      draft: submittedDraft,
+      input: submittedInput,
+    });
     setAttachmentError(null);
 
     try {
       await sendFollowUpInput({
-        input: promptInput,
+        input: submittedInput,
         model: activeModel?.model ?? selectedModel,
         ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
         reasoningLevel,
@@ -294,7 +294,6 @@ export function ThreadDetailPromptArea({
     clearPendingFollowUp,
     createDraft,
     promptDraft,
-    promptInput,
     reasoningLevel,
     sandboxMode,
     selectedModel,

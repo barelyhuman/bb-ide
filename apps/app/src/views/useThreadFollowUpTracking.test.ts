@@ -3,6 +3,7 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { PromptInput, TimelineRow } from "@bb/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { PromptDraftState } from "@/lib/prompt-draft";
 import { useThreadFollowUpTracking } from "./useThreadFollowUpTracking";
 
 interface UserRowOptions {
@@ -37,6 +38,10 @@ describe("useThreadFollowUpTracking", () => {
     vi.spyOn(Date, "now").mockReturnValue(1_500);
     const onAcknowledged = vi.fn();
     const input: PromptInput[] = [{ type: "text", text: "Please make this tweak" }];
+    const draft: PromptDraftState = {
+      attachments: [],
+      text: "Please make this tweak",
+    };
     const initialProps: { threadDetailRows: TimelineRow[]; threadId: string } = {
       threadDetailRows: [],
       threadId: "thread-1",
@@ -54,7 +59,7 @@ describe("useThreadFollowUpTracking", () => {
     );
 
     act(() => {
-      result.current.beginPendingFollowUp(input);
+      result.current.beginPendingFollowUp({ draft, input });
     });
 
     expect(result.current.pendingSubmittedFollowUp).not.toBeNull();
@@ -67,6 +72,7 @@ describe("useThreadFollowUpTracking", () => {
     await waitFor(() => {
       expect(onAcknowledged).toHaveBeenCalledTimes(1);
     });
+    expect(onAcknowledged).toHaveBeenCalledWith(draft);
     expect(result.current.pendingSubmittedFollowUp).toBeNull();
   });
 
@@ -74,6 +80,10 @@ describe("useThreadFollowUpTracking", () => {
     vi.spyOn(Date, "now").mockReturnValue(2_000);
     const onAcknowledged = vi.fn();
     const input: PromptInput[] = [{ type: "text", text: "Follow up on this" }];
+    const draft: PromptDraftState = {
+      attachments: [],
+      text: "Follow up on this",
+    };
     const initialProps: { threadDetailRows: TimelineRow[]; threadId: string } = {
       threadDetailRows: [],
       threadId: "thread-1",
@@ -91,7 +101,7 @@ describe("useThreadFollowUpTracking", () => {
     );
 
     act(() => {
-      result.current.beginPendingFollowUp(input);
+      result.current.beginPendingFollowUp({ draft, input });
     });
 
     rerender({
@@ -115,6 +125,10 @@ describe("useThreadFollowUpTracking", () => {
     vi.spyOn(Date, "now").mockReturnValue(10_000);
     const onAcknowledged = vi.fn();
     const input: PromptInput[] = [{ type: "text", text: "Check the stale row" }];
+    const draft: PromptDraftState = {
+      attachments: [],
+      text: "Check the stale row",
+    };
     const initialProps: { threadDetailRows: TimelineRow[] } = {
       threadDetailRows: [],
     };
@@ -131,7 +145,7 @@ describe("useThreadFollowUpTracking", () => {
     );
 
     act(() => {
-      result.current.beginPendingFollowUp(input);
+      result.current.beginPendingFollowUp({ draft, input });
     });
 
     rerender({
@@ -146,5 +160,45 @@ describe("useThreadFollowUpTracking", () => {
     });
 
     expect(result.current.pendingSubmittedFollowUp).toBeNull();
+  });
+
+  it("acknowledges with the originally submitted draft snapshot", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(5_000);
+    const onAcknowledged = vi.fn();
+    const input: PromptInput[] = [{ type: "text", text: "Ship the fix" }];
+    const submittedDraft: PromptDraftState = {
+      attachments: [],
+      text: "Ship the fix",
+    };
+    const initialProps: { threadDetailRows: TimelineRow[] } = {
+      threadDetailRows: [],
+    };
+    const { result, rerender } = renderHook(
+      ({ threadDetailRows }: { threadDetailRows: TimelineRow[] }) =>
+        useThreadFollowUpTracking({
+          onAcknowledged,
+          threadDetailRows,
+          threadId: "thread-1",
+        }),
+      {
+        initialProps,
+      },
+    );
+
+    act(() => {
+      result.current.beginPendingFollowUp({
+        draft: submittedDraft,
+        input,
+      });
+    });
+
+    rerender({
+      threadDetailRows: [makeUserRow({ createdAt: 4_000, text: "Ship the fix" })],
+    });
+
+    await waitFor(() => {
+      expect(onAcknowledged).toHaveBeenCalledTimes(1);
+    });
+    expect(onAcknowledged).toHaveBeenLastCalledWith(submittedDraft);
   });
 });

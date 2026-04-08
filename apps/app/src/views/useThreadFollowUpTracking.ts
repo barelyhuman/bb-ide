@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import type { PromptInput, TimelineRow } from "@bb/domain";
+import type { PromptDraftState } from "@/lib/prompt-draft";
 import {
   buildFollowUpSignatureFromInput,
   buildFollowUpSignatureFromRow,
 } from "@/lib/thread-follow-up-signature";
 
 interface PendingSubmittedFollowUp {
+  draft: PromptDraftState;
   signature: string;
   submittedAt: number;
 }
@@ -13,10 +15,15 @@ interface PendingSubmittedFollowUp {
 interface UseThreadFollowUpTrackingParams {
   threadDetailRows: TimelineRow[];
   threadId?: string;
-  onAcknowledged: () => void;
+  onAcknowledged: (draft: PromptDraftState) => void;
 }
 
-type BeginPendingFollowUp = (input: PromptInput[]) => void;
+interface BeginPendingFollowUpParams {
+  draft: PromptDraftState;
+  input: PromptInput[];
+}
+
+type BeginPendingFollowUp = (params: BeginPendingFollowUpParams) => void;
 type ClearPendingFollowUp = () => void;
 
 export function useThreadFollowUpTracking({
@@ -52,12 +59,13 @@ export function useThreadFollowUpTracking({
       return;
     }
 
-    onAcknowledged();
+    onAcknowledged(pendingSubmittedFollowUp.draft);
     setPendingSubmittedFollowUp(null);
   }, [onAcknowledged, pendingSubmittedFollowUp, threadDetailRows]);
 
-  const beginPendingFollowUp: BeginPendingFollowUp = useCallback((input) => {
+  const beginPendingFollowUp: BeginPendingFollowUp = useCallback(({ draft, input }) => {
     setPendingSubmittedFollowUp({
+      draft,
       signature: buildFollowUpSignatureFromInput(input),
       submittedAt: Date.now(),
     });

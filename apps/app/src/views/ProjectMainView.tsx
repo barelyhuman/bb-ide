@@ -14,10 +14,7 @@ import { usePromptMentions } from "@/hooks/usePromptMentions";
 import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
-import {
-  arePromptDraftStatesEqual,
-  promptDraftToInput,
-} from "@/lib/prompt-draft";
+import { promptDraftToInput } from "@/lib/prompt-draft";
 import type { CreateThreadRequest } from "@bb/server-contract";
 
 const PROJECT_MAIN_ZEN_MODE_STORAGE_KEY = "bb.promptbox.zen-mode.project-main";
@@ -216,9 +213,7 @@ export function ProjectMainView() {
         sandboxMode,
         environment: selectedEnvironment,
       });
-      if (arePromptDraftStatesEqual(promptDraft.getCurrent(), submittedDraft)) {
-        promptDraft.clear();
-      }
+      promptDraft.clearIfCurrentMatches(submittedDraft);
     } catch {
       // Global mutation error handling already surfaced the failure.
     }
