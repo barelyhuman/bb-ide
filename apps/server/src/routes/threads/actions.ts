@@ -52,7 +52,6 @@ import {
   appendClientTurnEvent,
   getLastTurnId,
 } from "../../services/threads/thread-events.js";
-import { rememberProjectExecutionDefaultsForThread } from "../../services/threads/project-execution-defaults.js";
 import { tryTransition } from "../../services/threads/thread-transitions.js";
 
 function ensureThreadIsWritable(thread: Thread): void {
@@ -154,10 +153,6 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         thread,
       })
     ) {
-      rememberProjectExecutionDefaultsForThread(deps, {
-        execution,
-        thread,
-      });
       return context.json({ ok: true });
     }
     const readyEnvironment = requireReadyThreadEnvironment(environment);
@@ -208,10 +203,6 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         },
       });
     }
-    rememberProjectExecutionDefaultsForThread(deps, {
-      execution,
-      thread,
-    });
 
     return context.json({ ok: true });
   });

@@ -1682,7 +1682,7 @@ describe("public thread routes", () => {
     }
   });
 
-  it("updates project execution defaults after a standard thread send", async () => {
+  it("does not overwrite project execution defaults after a standard thread send", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -1705,6 +1705,15 @@ describe("public thread routes", () => {
         environmentId: environment.id,
         providerThreadId: "provider-send-defaults",
         model: "gpt-5",
+      });
+      upsertProjectExecutionDefaults(harness.db, {
+        projectId: project.id,
+        providerId: thread.providerId,
+        model: "gpt-5",
+        serviceTier: "default",
+        reasoningLevel: "medium",
+        sandboxMode: "danger-full-access",
+        source: "client/thread/start",
       });
 
       const response = await harness.app.request(
@@ -1747,11 +1756,11 @@ describe("public thread routes", () => {
           providerId: thread.providerId,
         }),
       ).toEqual({
-        model: "gpt-5-mini",
-        serviceTier: "fast",
-        reasoningLevel: "high",
-        sandboxMode: "workspace-write",
-        source: "client/turn/requested",
+        model: "gpt-5",
+        serviceTier: "default",
+        reasoningLevel: "medium",
+        sandboxMode: "danger-full-access",
+        source: "client/thread/start",
       });
     } finally {
       await harness.cleanup();
