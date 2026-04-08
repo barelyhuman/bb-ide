@@ -8,6 +8,15 @@ export {
 export type { CreateProjectInput, UpdateProjectInput } from "./projects.js";
 
 export {
+  getProjectExecutionDefaults,
+  upsertProjectExecutionDefaults,
+} from "./project-execution-defaults.js";
+export type {
+  GetProjectExecutionDefaultsArgs,
+  UpsertProjectExecutionDefaultsArgs,
+} from "./project-execution-defaults.js";
+
+export {
   getProjectOperation,
   getProjectOperationByCommandId,
   listProjectOperations,

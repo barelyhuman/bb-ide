@@ -39,6 +39,7 @@ import type {
   ThreadStorageContentQuery,
   ThreadStorageFilesQuery,
   ProjectAttachmentContentQuery,
+  ProjectDefaultExecutionOptionsQuery,
   ProjectAttachmentUploadForm,
   ProjectFilesQuery,
   ProjectResponse,
@@ -87,6 +88,13 @@ export type PublicApiSchema = {
     $patch: Endpoint<PathProjectId & { json: UpdateProjectRequest }, ProjectResponse>;
     /** Also cleans up attachment files for the project. */
     $delete: Endpoint<PathProjectId, { ok: true }>;
+  };
+  "/projects/:id/default-execution-options": {
+    /** Returns the last used options for the project and provider for use as defaults in clients. */
+    $get: Endpoint<
+      PathProjectId & { query: ProjectDefaultExecutionOptionsQuery },
+      ResolvedThreadExecutionOptions | null
+    >;
   };
   "/projects/:id/sources": {
     $post: Endpoint<PathProjectId & { json: CreateProjectSourceRequest }, ProjectSource, 201>;

@@ -1,6 +1,7 @@
 import {
   countProjectSources,
   createProject,
+  getProjectExecutionDefaults,
   createProjectSource,
   deleteProjectSource,
   getDefaultProjectSource,
@@ -17,6 +18,7 @@ import {
   createProjectRequestSchema,
   createProjectSourceRequestSchema,
   projectAttachmentContentQuerySchema,
+  projectDefaultExecutionOptionsQuerySchema,
   projectFilesQuerySchema,
   typedRoutes,
   updateProjectRequestSchema,
@@ -110,6 +112,17 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
   get("/projects/:id", (context) =>
     context.json(buildProjectResponses(deps, context.req.param("id"))[0]),
   );
+
+  get("/projects/:id/default-execution-options", projectDefaultExecutionOptionsQuerySchema, (context, query) => {
+    const projectId = context.req.param("id");
+    requirePublicProject(deps.db, projectId);
+    return context.json(
+      getProjectExecutionDefaults(deps.db, {
+        projectId,
+        providerId: query.providerId,
+      }),
+    );
+  });
 
   patch("/projects/:id", updateProjectRequestSchema, async (context, payload) => {
     requirePublicProject(deps.db, context.req.param("id"));

@@ -329,6 +329,13 @@ export type ProjectAttachmentContentQuery = z.infer<
   typeof projectAttachmentContentQuerySchema
 >;
 
+export const projectDefaultExecutionOptionsQuerySchema = z.object({
+  providerId: z.string().min(1),
+});
+export type ProjectDefaultExecutionOptionsQuery = z.infer<
+  typeof projectDefaultExecutionOptionsQuerySchema
+>;
+
 const mergeBaseBranchQuerySchema = z
   .string({ required_error: "A merge base branch is required" })
   .min(1, "A merge base branch is required");

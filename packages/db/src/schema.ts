@@ -17,9 +17,13 @@ import type {
   LifecycleOperationState,
   ProjectOperationKind,
   ProjectSourceType,
+  ReasoningLevel,
+  SandboxMode,
+  ServiceTier,
   ThreadOperationKind,
   ThreadEventItemType,
   ThreadEventType,
+  ThreadExecutionSource,
   ThreadType,
   WorkspaceProvisionType,
 } from "@bb/domain";
@@ -100,6 +104,29 @@ export const projects = sqliteTable(
     updatedAt: integer("updated_at").notNull(),
   },
   (table) => [index("projects_updated_idx").on(table.updatedAt)],
+);
+
+export const projectExecutionDefaults = sqliteTable(
+  "project_execution_defaults",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    providerId: text("provider_id").notNull(),
+    model: text("model").notNull(),
+    serviceTier: text("service_tier").$type<ServiceTier>().notNull(),
+    reasoningLevel: text("reasoning_level").$type<ReasoningLevel>().notNull(),
+    sandboxMode: text("sandbox_mode").$type<SandboxMode>().notNull(),
+    source: text("source").$type<ThreadExecutionSource>().notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("project_execution_defaults_project_provider_idx").on(
+      table.projectId,
+      table.providerId,
+    ),
+    index("project_execution_defaults_project_idx").on(table.projectId),
+  ],
 );
 
 export const projectSources = sqliteTable(

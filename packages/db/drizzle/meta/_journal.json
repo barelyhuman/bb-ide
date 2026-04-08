@@ -176,6 +176,13 @@
       "when": 1775535753067,
       "tag": "0024_cute_dragon_man",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "6",
+      "when": 1775616060570,
+      "tag": "0025_project_execution_defaults",
+      "breakpoints": true
     }
   ]
 }

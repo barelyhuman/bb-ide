@@ -5,6 +5,7 @@ import {
   getThread,
   hostDaemonCommands,
   hostDaemonSessions,
+  upsertProjectExecutionDefaults,
   updateHost,
 } from "@bb/db";
 import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
@@ -119,6 +120,62 @@ describe("public project and host routes", () => {
 
       const finalListResponse = await harness.app.request("/api/v1/projects");
       await expect(readJson(finalListResponse)).resolves.toEqual([]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns null when a project has no stored default execution options for a provider", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, { id: "host-project-defaults-none" });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-defaults-none",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${project.id}/default-execution-options?providerId=codex`,
+      );
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns provider-matched stored default execution options for a project", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, { id: "host-project-defaults" });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-defaults",
+      });
+
+      upsertProjectExecutionDefaults(harness.db, {
+        projectId: project.id,
+        providerId: "codex",
+        model: "gpt-5",
+        reasoningLevel: "high",
+        sandboxMode: "workspace-write",
+        serviceTier: "fast",
+        source: "client/turn/requested",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${project.id}/default-execution-options?providerId=codex`,
+      );
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        model: "gpt-5",
+        reasoningLevel: "high",
+        sandboxMode: "workspace-write",
+        serviceTier: "fast",
+        source: "client/turn/requested",
+      });
     } finally {
       await harness.cleanup();
     }
