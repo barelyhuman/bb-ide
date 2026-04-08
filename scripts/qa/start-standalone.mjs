@@ -13,11 +13,11 @@ import {
   loadDotEnv,
   repoRoot,
   reservePort,
+  startQaServer,
   STANDALONE_INSTANCE_ENV,
   STANDALONE_PARENT_PID_ENV,
   spawnLoggedProcess,
   waitForConnectedHost,
-  waitForServerReady,
 } from "./shared.mjs";
 
 function parseArgs() {
@@ -69,22 +69,19 @@ async function main() {
   let daemonProcess;
 
   try {
-    serverProcess = spawnLoggedProcess({
-      command: "node",
-      args: ["apps/server/dist/index.js"],
-      cwd: repoRoot,
+    const qaServer = await startQaServer({
+      dataDir: serverDataDir,
       env: {
         ...process.env,
-        BB_DATA_DIR: serverDataDir,
-        BB_SERVER_PORT: String(serverPort),
         [STANDALONE_INSTANCE_ENV]: instanceId,
         [STANDALONE_PARENT_PID_ENV]: String(parentPid),
         OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "test-openai-key",
       },
       logPath: serverLogPath,
+      port: serverPort,
     });
+    serverProcess = qaServer.process;
 
-    await waitForServerReady(serverUrl);
     const join = await createHostJoin(serverUrl, {
       hostType: "persistent",
     });

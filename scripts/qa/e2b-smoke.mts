@@ -1,14 +1,22 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { tmpdir } from "node:os";
 import { setTimeout as delay } from "node:timers/promises";
+import {
+  HOST_AUTH_FILE_NAME,
+  hostAuthStateSchema,
+  normalizeServerUrl,
+} from "../../packages/host-daemon-contract/src/index.ts";
 import {
   createSandbox,
   resumeSandbox,
   runSandboxCommand,
-  startBackgroundProcess,
   writeSandboxFile,
 } from "../../packages/sandbox-host/src/index.ts";
 import { loadSandboxDaemonArtifacts } from "../../packages/sandbox-host/src/daemon-artifacts.ts";
 import {
   SANDBOX_BB_EXECUTABLE_PATH,
+  SANDBOX_DATA_DIR,
   SANDBOX_DAEMON_HEALTH_PATH,
   SANDBOX_DAEMON_HEALTH_PORT,
   SANDBOX_DAEMON_HEALTH_RESPONSE,
@@ -18,16 +26,42 @@ import {
   startSandboxDaemon,
 } from "../../packages/sandbox-host/src/provision.ts";
 import { resolveSandboxImageTemplate } from "../../packages/sandbox-image/src/index.ts";
+import {
+  createHostJoin,
+  killProcess,
+  loadDotEnv,
+  reservePort,
+  startQuickTunnel,
+  startQaServer,
+  waitFor,
+} from "./shared.mjs";
 
-const FAKE_SERVER_AUTH_TOKEN = "bb-smoke-token";
-const FAKE_SERVER_HEALTH_PATH = "/health";
-const FAKE_SERVER_PATH = "/tmp/bb-smoke-server.mjs";
-const SMOKE_DAEMON_HOST_ID = "bb-smoke-host";
-const SMOKE_DAEMON_HOST_NAME = "bb-smoke-host";
-const SMOKE_SERVER_PORT = 9999;
-const SMOKE_SERVER_URL = `http://127.0.0.1:${SMOKE_SERVER_PORT}`;
 const SMOKE_TIMEOUT_MS = 5 * 60 * 1000;
+const SANDBOX_HOST_AUTH_PATH = `${SANDBOX_DATA_DIR}/${HOST_AUTH_FILE_NAME}`;
+
 type SmokeSandbox = Awaited<ReturnType<typeof createSandbox>>;
+
+interface SmokeHostIdentity {
+  hostId: string;
+  hostName: string;
+}
+
+interface SmokeHostJoin {
+  hostId: string;
+  joinCode: string;
+}
+
+interface PersistedHostAuthExpectation {
+  hostId: string;
+  serverUrl: string;
+}
+
+interface StartRealDaemonOptions {
+  enrollKey?: string;
+  hostId: string;
+  hostName: string;
+  serverUrl: string;
+}
 
 function formatError(error: unknown): string {
   if (error instanceof Error) {
@@ -36,113 +70,15 @@ function formatError(error: unknown): string {
   return String(error);
 }
 
-function isReachablePublicUrl(value: string): boolean {
-  try {
-    const parsed = new URL(value);
-    return parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1";
-  } catch {
-    return false;
-  }
-}
-
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\"'\"'`)}'`;
 }
 
-function buildFakeServerSource(authToken: string): string {
-  return [
-    'import { createHash } from "node:crypto";',
-    'import { createServer } from "node:http";',
-    "",
-    `const authToken = ${JSON.stringify(authToken)};`,
-    `const sessionId = ${JSON.stringify("session-smoke")};`,
-    `const serverPort = ${SMOKE_SERVER_PORT};`,
-    "",
-    "function unauthorized(res) {",
-    '  res.writeHead(401, { "content-type": "text/plain" });',
-    '  res.end("unauthorized");',
-    "}",
-    "",
-    "function notFound(res) {",
-    '  res.writeHead(404, { "content-type": "text/plain" });',
-    '  res.end("not found");',
-    "}",
-    "",
-    "function isAuthorized(req) {",
-    '  return req.headers.authorization === `Bearer ${authToken}`;',
-    "}",
-    "",
-    "const server = createServer((req, res) => {",
-    '  const url = new URL(req.url ?? "/", `http://127.0.0.1:${serverPort}`);',
-    `  if (url.pathname === ${JSON.stringify(FAKE_SERVER_HEALTH_PATH)}) {`,
-    '    res.writeHead(200, { "content-type": "text/plain" });',
-    '    res.end("ok");',
-    "    return;",
-    "  }",
-    "",
-    "  if (!isAuthorized(req)) {",
-    "    unauthorized(res);",
-    "    return;",
-    "  }",
-    "",
-    '  if (req.method === "POST" && url.pathname === "/internal/session/open") {',
-    '    req.resume();',
-    '    req.on("end", () => {',
-    '      const payload = JSON.stringify({',
-    "        sessionId,",
-    "        heartbeatIntervalMs: 5_000,",
-    "        leaseTimeoutMs: 20_000,",
-    "        threadHighWaterMarks: {},",
-    "      });",
-    '      res.writeHead(201, { "content-type": "application/json" });',
-    "      res.end(payload);",
-    "    });",
-    "    return;",
-    "  }",
-    "",
-    '  if (req.method === "GET" && url.pathname === "/internal/session/commands") {',
-    "    res.writeHead(204);",
-    "    res.end();",
-    "    return;",
-    "  }",
-    "",
-    "  notFound(res);",
-    "});",
-    "",
-    'server.on("upgrade", (req, socket) => {',
-    '  const url = new URL(req.url ?? "/", `http://127.0.0.1:${serverPort}`);',
-    '  const token = url.searchParams.get("token");',
-    '  const requestedSessionId = url.searchParams.get("sessionId");',
-    '  if (url.pathname !== "/internal/ws" || token !== authToken || requestedSessionId !== sessionId) {',
-    '    socket.write("HTTP/1.1 401 Unauthorized\\r\\n\\r\\n");',
-    "    socket.destroy();",
-    "    return;",
-    "  }",
-    "",
-    '  const websocketKey = req.headers["sec-websocket-key"];',
-    '  if (typeof websocketKey !== "string" || websocketKey.length === 0) {',
-    '    socket.write("HTTP/1.1 400 Bad Request\\r\\n\\r\\n");',
-    "    socket.destroy();",
-    "    return;",
-    "  }",
-    "",
-    "  const accept = createHash(\"sha1\")",
-    '    .update(`${websocketKey}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)',
-    '    .digest("base64");',
-    '  socket.write(',
-    '    "HTTP/1.1 101 Switching Protocols\\r\\n" +',
-    '      "Upgrade: websocket\\r\\n" +',
-    '      "Connection: Upgrade\\r\\n" +',
-    '      `Sec-WebSocket-Accept: ${accept}\\r\\n\\r\\n`,',
-    "  );",
-    '  socket.on("data", () => {});',
-    '  socket.on("error", () => {});',
-    "});",
-    "",
-    'server.listen(serverPort, "127.0.0.1", () => {',
-    '  console.log("ready");',
-    "});",
-  ].join("\n");
+function createSmokeHostIdentity(): SmokeHostIdentity {
+  return {
+    hostId: "host_e2b_smoke",
+    hostName: "e2b-smoke",
+  };
 }
 
 async function waitForCommandSuccess(
@@ -164,20 +100,22 @@ async function waitForCommandSuccess(
   throw new Error(`${label} never became ready: ${formatError(lastError)}`);
 }
 
-async function waitForFakeServerHealth(
+async function waitForPublicServerHealth(
   sandbox: SmokeSandbox,
+  publicUrl: string,
 ): Promise<void> {
+  const healthUrl = new URL("/health", publicUrl).toString();
   await waitForCommandSuccess(
     async () => {
       const result = await runSandboxCommand(
         sandbox,
-        `curl -sf ${SMOKE_SERVER_URL}${FAKE_SERVER_HEALTH_PATH}`,
+        `curl -sf ${shellQuote(healthUrl)}`,
       );
-      if (result.stdout.trim() !== "ok") {
-        throw new Error(`Unexpected fake server health response: ${result.stdout}`);
+      if (!result.stdout.includes('"ok"')) {
+        throw new Error(`Unexpected public server health response: ${result.stdout}`);
       }
     },
-    "fake BB server health check",
+    "sandbox to real server connectivity",
   );
 }
 
@@ -194,7 +132,34 @@ async function waitForDaemonHealth(
         throw new Error(`Unexpected daemon health response: ${result.stdout}`);
       }
     },
-    "real daemon health check",
+    "bundled daemon health check",
+  );
+}
+
+async function waitForPersistedHostAuth(
+  sandbox: SmokeSandbox,
+  expectation: PersistedHostAuthExpectation,
+): Promise<void> {
+  const expectedServerUrl = normalizeServerUrl(expectation.serverUrl);
+
+  await waitForCommandSuccess(
+    async () => {
+      const result = await runSandboxCommand(
+        sandbox,
+        `cat ${shellQuote(SANDBOX_HOST_AUTH_PATH)}`,
+      );
+      const persistedAuth = hostAuthStateSchema.parse(JSON.parse(result.stdout));
+      if (persistedAuth.hostId !== expectation.hostId) {
+        throw new Error(`Unexpected persisted host ID: ${persistedAuth.hostId}`);
+      }
+      if (persistedAuth.hostType !== "ephemeral") {
+        throw new Error(`Unexpected persisted host type: ${persistedAuth.hostType}`);
+      }
+      if (persistedAuth.serverUrl !== expectedServerUrl) {
+        throw new Error(`Unexpected persisted server URL: ${persistedAuth.serverUrl}`);
+      }
+    },
+    "persisted host auth",
   );
 }
 
@@ -210,32 +175,70 @@ async function assertBundledBbCli(
   }
 }
 
-async function writeAndStartFakeServer(
-  sandbox: SmokeSandbox,
+async function createEphemeralHostJoin(
+  localServerUrl: string,
+  hostId: string,
+): Promise<SmokeHostJoin> {
+  const response = await createHostJoin(localServerUrl, {
+    hostId,
+    hostType: "ephemeral",
+  });
+
+  if (response == null || typeof response !== "object") {
+    throw new Error("Host join response was not an object");
+  }
+
+  const joinCode = Reflect.get(response, "joinCode");
+  const responseHostId = Reflect.get(response, "hostId");
+  if (typeof joinCode !== "string" || joinCode.trim().length === 0) {
+    throw new Error("Host join response was missing joinCode");
+  }
+  if (responseHostId !== hostId) {
+    throw new Error(`Host join response host ID did not match ${hostId}`);
+  }
+
+  return {
+    hostId,
+    joinCode,
+  };
+}
+
+async function waitForConnectedSmokeHost(
+  localServerUrl: string,
+  hostId: string,
 ): Promise<void> {
-  await writeSandboxFile(
-    sandbox,
-    FAKE_SERVER_PATH,
-    buildFakeServerSource(FAKE_SERVER_AUTH_TOKEN),
+  await waitFor(
+    async () => {
+      try {
+        const response = await fetch(`${localServerUrl}/api/v1/hosts/${hostId}`);
+        if (!response.ok) {
+          return null;
+        }
+
+        const host = await response.json();
+        return host?.status === "connected" ? host : null;
+      } catch {
+        return null;
+      }
+    },
+    {
+      timeoutMs: 15_000,
+      description: `host ${hostId} connection`,
+    },
   );
-  await startBackgroundProcess(
-    sandbox,
-    `node ${shellQuote(FAKE_SERVER_PATH)}`,
-    { onStdout: (data) => process.stdout.write(data) },
-  );
-  await waitForFakeServerHealth(sandbox);
 }
 
 async function startRealDaemon(
   sandbox: SmokeSandbox,
+  options: StartRealDaemonOptions,
 ): Promise<void> {
   const daemonArtifacts = await loadSandboxDaemonArtifacts();
   const daemonEnv = buildSandboxDaemonEnv({
-    authToken: FAKE_SERVER_AUTH_TOKEN,
     daemonEnv: {},
-    hostId: SMOKE_DAEMON_HOST_ID,
-    hostName: SMOKE_DAEMON_HOST_NAME,
-    serverUrl: SMOKE_SERVER_URL,
+    ...(options.enrollKey ? { enrollKey: options.enrollKey } : {}),
+    hostId: options.hostId,
+    hostName: options.hostName,
+    serverUrl: normalizeServerUrl(options.serverUrl),
   });
 
   await startSandboxDaemon({
@@ -246,17 +249,49 @@ async function startRealDaemon(
 }
 
 async function main(): Promise<void> {
+  await loadDotEnv();
+
   if (!process.env.E2B_API_KEY) {
     throw new Error("E2B_API_KEY is required");
   }
 
-  console.log("Creating sandbox");
-  const sandbox = await createSandbox({
-    timeoutMs: SMOKE_TIMEOUT_MS,
+  const smokeHost = createSmokeHostIdentity();
+  const serverPort = await reservePort();
+  const tmpRoot = await fs.mkdtemp(path.join(tmpdir(), "bb-e2b-smoke-"));
+  const logsDir = path.join(tmpRoot, "logs");
+  const serverDataDir = path.join(tmpRoot, "server-data");
+  const serverLogPath = path.join(logsDir, "server.log");
+  const tunnelLogPath = path.join(logsDir, "tunnel.log");
+
+  await fs.mkdir(logsDir, { recursive: true });
+
+  const tunnel = await startQuickTunnel({
+    logPath: tunnelLogPath,
+    port: serverPort,
   });
-  let activeSandbox = sandbox;
+  const publicUrl = tunnel.publicUrl;
+  const qaServer = await startQaServer({
+    dataDir: serverDataDir,
+    env: {
+      OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? "test-openai-key",
+    },
+    logPath: serverLogPath,
+    port: serverPort,
+    publicUrl,
+  });
+  const localServerUrl = qaServer.serverUrl;
+  let activeSandbox: SmokeSandbox | null = null;
 
   try {
+    console.log(`Started quick tunnel at ${publicUrl}`);
+    console.log(`Started real server at ${localServerUrl}`);
+
+    console.log("Creating sandbox");
+    const sandbox = await createSandbox({
+      timeoutMs: SMOKE_TIMEOUT_MS,
+    });
+    activeSandbox = sandbox;
+
     console.log(`Created sandbox ${sandbox.sandboxId}`);
 
     console.log("Writing /tmp/hello.txt");
@@ -280,12 +315,29 @@ async function main(): Promise<void> {
     await runSandboxCommand(sandbox, "git --version");
     await runSandboxCommand(sandbox, "gh --version");
 
-    console.log("Starting fake BB server");
-    await writeAndStartFakeServer(sandbox);
+    console.log(`Checking sandbox to server connectivity via ${publicUrl}`);
+    await waitForPublicServerHealth(sandbox, publicUrl);
+
+    console.log("Requesting real ephemeral host join material");
+    const join = await createEphemeralHostJoin(localServerUrl, smokeHost.hostId);
 
     console.log("Starting real bundled daemon");
-    await startRealDaemon(sandbox);
+    await startRealDaemon(sandbox, {
+      enrollKey: join.joinCode,
+      hostId: smokeHost.hostId,
+      hostName: smokeHost.hostName,
+      serverUrl: publicUrl,
+    });
     await waitForDaemonHealth(sandbox);
+
+    console.log("Waiting for real server to mark the host connected");
+    await waitForConnectedSmokeHost(localServerUrl, smokeHost.hostId);
+
+    console.log("Checking persisted daemon auth");
+    await waitForPersistedHostAuth(sandbox, {
+      hostId: smokeHost.hostId,
+      serverUrl: publicUrl,
+    });
 
     console.log("Checking bundled bb CLI");
     await assertBundledBbCli(sandbox);
@@ -299,45 +351,35 @@ async function main(): Promise<void> {
     });
     activeSandbox = resumedSandbox;
 
-    console.log("Checking fake BB server after resume");
-    try {
-      await waitForFakeServerHealth(resumedSandbox);
-    } catch {
-      console.log("Fake BB server did not survive pause, restarting it");
-      await startBackgroundProcess(
-        resumedSandbox,
-        `node ${shellQuote(FAKE_SERVER_PATH)}`,
-      );
-      await waitForFakeServerHealth(resumedSandbox);
-    }
-
     console.log("Checking real daemon after resume");
     try {
       await waitForDaemonHealth(resumedSandbox);
     } catch {
       console.log("Real daemon did not survive pause, restarting it");
-      await startRealDaemon(resumedSandbox);
+      await startRealDaemon(resumedSandbox, {
+        hostId: smokeHost.hostId,
+        hostName: smokeHost.hostName,
+        serverUrl: publicUrl,
+      });
       await waitForDaemonHealth(resumedSandbox);
     }
 
     console.log("Checking bundled bb CLI after resume");
     await assertBundledBbCli(resumedSandbox);
-
-    const publicUrl = process.env.BB_PUBLIC_URL ?? "";
-    if (isReachablePublicUrl(publicUrl)) {
-      const healthUrl = new URL("/health", publicUrl).toString();
-      console.log(`Checking sandbox to server connectivity via ${publicUrl}`);
-      await runSandboxCommand(
-        resumedSandbox,
-        `curl -sf ${shellQuote(healthUrl)}`,
-      );
-    } else {
-      console.log("Skipping sandbox to server connectivity check");
-    }
   } finally {
     console.log("Destroying sandbox");
-    await activeSandbox.kill().catch((error) => {
+    await activeSandbox?.kill().catch((error) => {
       console.error(`Failed to destroy sandbox: ${formatError(error)}`);
+    });
+
+    await killProcess(tunnel.process?.pid).catch((error) => {
+      console.error(`Failed to stop smoke tunnel: ${formatError(error)}`);
+    });
+    await killProcess(qaServer.process?.pid).catch((error) => {
+      console.error(`Failed to stop QA server: ${formatError(error)}`);
+    });
+    await fs.rm(tmpRoot, { recursive: true, force: true }).catch((error) => {
+      console.error(`Failed to remove smoke temp dir: ${formatError(error)}`);
     });
   }
 }
