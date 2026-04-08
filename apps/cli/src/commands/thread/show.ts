@@ -388,6 +388,8 @@ function printThreadStatus(
   }
   if (environmentInfo) {
     printEnvironmentInfo(environmentInfo);
+  } else if (thread.environmentId) {
+    console.log(`  Environment: ${thread.environmentId}`);
   }
   console.log(`  Created: ${new Date(thread.createdAt).toLocaleString()}`);
   console.log(`  Updated: ${new Date(thread.updatedAt).toLocaleString()}`);
