@@ -295,6 +295,24 @@ describe("server-contract canonical schemas", () => {
     });
 
     expect(
+      resolvePendingInteractionRequestSchema.parse({
+        kind: "command_approval",
+        decision: {
+          kind: "apply_network_policy_amendment",
+          networkPolicyAmendment: {
+            host: "api.openai.com",
+            action: "allow",
+          },
+        },
+      }),
+    ).toMatchObject({
+      kind: "command_approval",
+      decision: {
+        kind: "apply_network_policy_amendment",
+      },
+    });
+
+    expect(
       environmentActionRequestSchema.parse({
         action: "commit",
       }),

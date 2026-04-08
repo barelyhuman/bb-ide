@@ -2752,6 +2752,116 @@ describe("CLI JSON output contracts", () => {
     ]);
   });
 
+  it("bb thread interactions approve uses amendment approvals when plain acceptance is unavailable", async () => {
+    const getInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-approve-amendment",
+        providerId: "codex",
+        providerRequestId: "request-approve-amendment",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        providerThreadId: "provider-thread-approve-amendment",
+        threadId: "thread-approve-amendment",
+        turnId: "turn-approve-amendment",
+        payload: {
+          kind: "command_approval",
+          itemId: "item-approve-amendment",
+          approvalId: null,
+          reason: "Approve command",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: [
+            {
+              kind: "accept_with_exec_policy_amendment",
+              execPolicyAmendment: ["allow", "git", "push"],
+            },
+            "decline",
+            "cancel",
+          ],
+        },
+      }),
+    );
+    const resolveInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-approve-amendment",
+        providerId: "codex",
+        providerRequestId: "request-approve-amendment",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        providerThreadId: "provider-thread-approve-amendment",
+        threadId: "thread-approve-amendment",
+        turnId: "turn-approve-amendment",
+        payload: {
+          kind: "command_approval",
+          itemId: "item-approve-amendment",
+          approvalId: null,
+          reason: "Approve command",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: [
+            {
+              kind: "accept_with_exec_policy_amendment",
+              execPolicyAmendment: ["allow", "git", "push"],
+            },
+            "decline",
+            "cancel",
+          ],
+        },
+        status: "resolved",
+        resolvedAt: Date.now(),
+        resolution: {
+          kind: "command_approval",
+          decision: {
+            kind: "accept_with_exec_policy_amendment",
+            execPolicyAmendment: ["allow", "git", "push"],
+          },
+        },
+      }),
+    );
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              interactions: {
+                ":interactionId": {
+                  $get: getInteraction,
+                  resolve: {
+                    $post: resolveInteraction,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["thread", "interactions", "approve", "int-approve-amendment", "thread-approve-amendment"],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(resolveInteraction).toHaveBeenCalledWith({
+      param: {
+        id: "thread-approve-amendment",
+        interactionId: "int-approve-amendment",
+      },
+      json: {
+        kind: "command_approval",
+        decision: {
+          kind: "accept_with_exec_policy_amendment",
+          execPolicyAmendment: ["allow", "git", "push"],
+        },
+      },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toEqual([
+      "Interaction int-approve-amendment approved with exec policy amendment",
+    ]);
+  });
+
   it("bb thread interactions approve resolves file-change approvals for the session", async () => {
     const getInteraction = vi.fn(async () =>
       makePendingInteraction({

@@ -293,6 +293,87 @@ describe("public thread interaction routes", () => {
     }
   });
 
+  it("accepts command approval amendment resolutions that were offered by the provider", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-public-thread-amendment-resolution",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const commandApproval = harness.deps.pendingInteractions.registerPendingInteraction({
+        threadId: thread.id,
+        turnId: "turn-amendment-resolution",
+        providerId: "codex",
+        providerThreadId: "provider-thread-amendment-resolution",
+        providerRequestId: "request-amendment-resolution",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        payload: {
+          kind: "command_approval",
+          itemId: "item-amendment-resolution",
+          approvalId: null,
+          reason: "Approve command",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: [
+            {
+              kind: "accept_with_exec_policy_amendment",
+              execPolicyAmendment: ["allow", "git", "push"],
+            },
+            "decline",
+            "cancel",
+          ],
+        },
+      });
+      if (commandApproval.outcome === "rejected") {
+        throw new Error(`Expected command interaction registration to succeed: ${commandApproval.reason}`);
+      }
+
+      const resolveResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/interactions/${commandApproval.interaction.id}/resolve`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            kind: "command_approval",
+            decision: {
+              kind: "accept_with_exec_policy_amendment",
+              execPolicyAmendment: ["allow", "git", "push"],
+            },
+          }),
+        },
+      );
+      expect(resolveResponse.status).toBe(200);
+      await expect(readJson(resolveResponse)).resolves.toMatchObject({
+        id: commandApproval.interaction.id,
+        status: "resolved",
+        resolution: {
+          kind: "command_approval",
+          decision: {
+            kind: "accept_with_exec_policy_amendment",
+            execPolicyAmendment: ["allow", "git", "push"],
+          },
+        },
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("rejects send and draft-send while a thread awaits user interaction", async () => {
     const harness = await createTestAppHarness();
     try {

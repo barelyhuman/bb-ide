@@ -1337,6 +1337,79 @@ describe("codex provider adapter", () => {
     });
   });
 
+  it("decodeInteractiveRequest keeps amendment approval decisions in command approvals", () => {
+    const adapter = createCodexProviderAdapter();
+    expect(
+      adapter.decodeInteractiveRequest?.({
+        jsonrpc: "2.0",
+        id: 9,
+        method: "item/commandExecution/requestApproval",
+        params: {
+          threadId: "t1",
+          turnId: "turn-2",
+          itemId: "item-2",
+          approvalId: null,
+          reason: "Needs approval",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          additionalPermissions: null,
+          proposedExecpolicyAmendment: ["allow", "git", "push"],
+          proposedNetworkPolicyAmendments: [
+            { host: "api.openai.com", action: "allow" },
+          ],
+          availableDecisions: [
+            {
+              acceptWithExecpolicyAmendment: {
+                execpolicy_amendment: ["allow", "git", "push"],
+              },
+            },
+            {
+              applyNetworkPolicyAmendment: {
+                network_policy_amendment: {
+                  host: "api.openai.com",
+                  action: "allow",
+                },
+              },
+            },
+            "decline",
+            "cancel",
+          ],
+        },
+      }),
+    ).toEqual({
+      requestId: 9,
+      method: "item/commandExecution/requestApproval",
+      providerThreadId: "t1",
+      turnId: "turn-2",
+      payload: {
+        kind: "command_approval",
+        itemId: "item-2",
+        approvalId: null,
+        reason: "Needs approval",
+        command: "git push",
+        cwd: "/tmp/project",
+        commandActions: [],
+        requestedPermissions: null,
+        availableDecisions: [
+          {
+            kind: "accept_with_exec_policy_amendment",
+            execPolicyAmendment: ["allow", "git", "push"],
+          },
+          {
+            kind: "apply_network_policy_amendment",
+            networkPolicyAmendment: {
+              host: "api.openai.com",
+              action: "allow",
+            },
+          },
+          "decline",
+          "cancel",
+        ],
+      },
+    });
+  });
+
   it("buildInteractiveResponse maps bb command approvals back to Codex responses", () => {
     const adapter = createCodexProviderAdapter();
     expect(
@@ -1365,6 +1438,51 @@ describe("codex provider adapter", () => {
       }),
     ).toEqual({
       decision: "acceptForSession",
+    });
+  });
+
+  it("buildInteractiveResponse maps amended command approvals back to Codex responses", () => {
+    const adapter = createCodexProviderAdapter();
+    expect(
+      adapter.buildInteractiveResponse?.({
+        request: {
+          requestId: 10,
+          method: "item/commandExecution/requestApproval",
+          providerThreadId: "t1",
+          turnId: "turn-3",
+          payload: {
+            kind: "command_approval",
+            itemId: "item-3",
+            approvalId: null,
+            reason: null,
+            command: "git push",
+            cwd: "/tmp/project",
+            commandActions: [],
+            requestedPermissions: null,
+            availableDecisions: [
+              {
+                kind: "accept_with_exec_policy_amendment",
+                execPolicyAmendment: ["allow", "git", "push"],
+              },
+              "decline",
+              "cancel",
+            ],
+          },
+        },
+        resolution: {
+          kind: "command_approval",
+          decision: {
+            kind: "accept_with_exec_policy_amendment",
+            execPolicyAmendment: ["allow", "git", "push"],
+          },
+        },
+      }),
+    ).toEqual({
+      decision: {
+        acceptWithExecpolicyAmendment: {
+          execpolicy_amendment: ["allow", "git", "push"],
+        },
+      },
     });
   });
 

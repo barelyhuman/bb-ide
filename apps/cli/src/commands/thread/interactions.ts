@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import type {
   PendingInteraction,
+  PendingInteractionCommandApprovalDecision,
   PendingInteractionResolution,
 } from "@bb/domain";
 import { action } from "../../action.js";
@@ -52,6 +53,31 @@ function formatInteractionSummary(interaction: PendingInteraction): string {
   }
 }
 
+function formatCommandApprovalDecision(
+  decision: PendingInteractionCommandApprovalDecision,
+): string {
+  if (typeof decision === "string") {
+    return decision;
+  }
+
+  switch (decision.kind) {
+    case "accept_with_exec_policy_amendment":
+      return `accept_with_exec_policy_amendment(${decision.execPolicyAmendment.join(", ")})`;
+    case "apply_network_policy_amendment":
+      return `apply_network_policy_amendment(${decision.networkPolicyAmendment.action} ${decision.networkPolicyAmendment.host})`;
+  }
+}
+
+function isApprovalDecision(
+  decision: PendingInteractionCommandApprovalDecision,
+): boolean {
+  if (typeof decision === "string") {
+    return decision === "accept" || decision === "accept_for_session";
+  }
+
+  return true;
+}
+
 function printInteraction(interaction: PendingInteraction): void {
   console.log(`Interaction: ${interaction.id}`);
   console.log(`  Thread: ${interaction.threadId}`);
@@ -77,7 +103,7 @@ function printInteraction(interaction: PendingInteraction): void {
         console.log(`  Prompt: ${interaction.payload.reason}`);
       }
       console.log(
-        `  Decisions: ${interaction.payload.availableDecisions.join(", ")}`,
+        `  Decisions: ${interaction.payload.availableDecisions.map(formatCommandApprovalDecision).join(", ")}`,
       );
       break;
     case "file_change_approval":
@@ -111,7 +137,7 @@ function printInteraction(interaction: PendingInteraction): void {
     console.log("Resolution:");
     switch (interaction.resolution.kind) {
       case "command_approval":
-        console.log(`  Decision: ${interaction.resolution.decision}`);
+        console.log(`  Decision: ${formatCommandApprovalDecision(interaction.resolution.decision)}`);
         break;
       case "file_change_approval":
         console.log(`  Decision: ${interaction.resolution.decision}`);
@@ -150,11 +176,23 @@ function buildApprovalResolution(
     case "command_approval": {
       const decision = (() => {
         if (action === "approve") {
-          if (interaction.payload.availableDecisions.includes("accept_for_session")) {
-            return "accept_for_session";
+          const sessionApproval = interaction.payload.availableDecisions.find(
+            (availableDecision) => availableDecision === "accept_for_session",
+          );
+          if (sessionApproval) {
+            return sessionApproval;
           }
-          if (interaction.payload.availableDecisions.includes("accept")) {
-            return "accept";
+          const turnApproval = interaction.payload.availableDecisions.find(
+            (availableDecision) => availableDecision === "accept",
+          );
+          if (turnApproval) {
+            return turnApproval;
+          }
+          const amendedApproval = interaction.payload.availableDecisions.find(
+            (availableDecision) => isApprovalDecision(availableDecision),
+          );
+          if (amendedApproval) {
+            return amendedApproval;
           }
           throw new Error(
             `Interaction ${interaction.id} does not offer an approval decision.`,
@@ -194,6 +232,24 @@ function formatApprovalDecisionMessage(
 ): string {
   switch (resolution.kind) {
     case "command_approval":
+      if (typeof resolution.decision === "string") {
+        switch (resolution.decision) {
+          case "accept":
+            return "approved";
+          case "accept_for_session":
+            return "approved for this session";
+          case "decline":
+            return "denied";
+          case "cancel":
+            return "cancelled";
+        }
+      }
+      switch (resolution.decision.kind) {
+        case "accept_with_exec_policy_amendment":
+          return "approved with exec policy amendment";
+        case "apply_network_policy_amendment":
+          return "approved with network policy amendment";
+      }
     case "file_change_approval":
       switch (resolution.decision) {
         case "accept":

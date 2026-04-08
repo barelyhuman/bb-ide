@@ -46,6 +46,56 @@ describe("pending interaction schemas", () => {
     });
   });
 
+  it("parses command approvals with amendment decisions", () => {
+    expect(
+      pendingInteractionSchema.parse({
+        id: "pi_124",
+        threadId: "thr_124",
+        turnId: "turn_124",
+        providerId: "codex",
+        providerThreadId: "provider-thread-124",
+        providerRequestId: "request-126",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        status: "resolved",
+        payload: {
+          kind: "command_approval",
+          itemId: "item_126",
+          approvalId: null,
+          reason: "Needs approval",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: [
+            {
+              kind: "accept_with_exec_policy_amendment",
+              execPolicyAmendment: ["allow", "git", "push"],
+            },
+            "decline",
+            "cancel",
+          ],
+        },
+        resolution: {
+          kind: "command_approval",
+          decision: {
+            kind: "accept_with_exec_policy_amendment",
+            execPolicyAmendment: ["allow", "git", "push"],
+          },
+        },
+        statusReason: null,
+        createdAt: 1,
+        resolvedAt: 2,
+      }),
+    ).toMatchObject({
+      resolution: {
+        kind: "command_approval",
+        decision: {
+          kind: "accept_with_exec_policy_amendment",
+        },
+      },
+    });
+  });
+
   it("parses resolved user input interactions", () => {
     expect(
       pendingInteractionSchema.parse({

@@ -82,11 +82,57 @@ export type PendingInteractionGrantedPermissionProfile = z.infer<
   typeof pendingInteractionGrantedPermissionProfileSchema
 >;
 
-export const pendingInteractionCommandApprovalDecisionSchema = z.enum([
+export const pendingInteractionCommandApprovalSimpleDecisionSchema = z.enum([
   "accept",
   "accept_for_session",
   "decline",
   "cancel",
+]);
+export type PendingInteractionCommandApprovalSimpleDecision = z.infer<
+  typeof pendingInteractionCommandApprovalSimpleDecisionSchema
+>;
+
+export const pendingInteractionNetworkPolicyRuleActionSchema = z.enum([
+  "allow",
+  "deny",
+]);
+export type PendingInteractionNetworkPolicyRuleAction = z.infer<
+  typeof pendingInteractionNetworkPolicyRuleActionSchema
+>;
+
+export const pendingInteractionExecPolicyAmendmentSchema = z.array(z.string());
+export type PendingInteractionExecPolicyAmendment = z.infer<
+  typeof pendingInteractionExecPolicyAmendmentSchema
+>;
+
+export const pendingInteractionNetworkPolicyAmendmentSchema = z.object({
+  host: z.string(),
+  action: pendingInteractionNetworkPolicyRuleActionSchema,
+});
+export type PendingInteractionNetworkPolicyAmendment = z.infer<
+  typeof pendingInteractionNetworkPolicyAmendmentSchema
+>;
+
+export const pendingInteractionExecPolicyAmendmentDecisionSchema = z.object({
+  kind: z.literal("accept_with_exec_policy_amendment"),
+  execPolicyAmendment: pendingInteractionExecPolicyAmendmentSchema,
+});
+export type PendingInteractionExecPolicyAmendmentDecision = z.infer<
+  typeof pendingInteractionExecPolicyAmendmentDecisionSchema
+>;
+
+export const pendingInteractionNetworkPolicyAmendmentDecisionSchema = z.object({
+  kind: z.literal("apply_network_policy_amendment"),
+  networkPolicyAmendment: pendingInteractionNetworkPolicyAmendmentSchema,
+});
+export type PendingInteractionNetworkPolicyAmendmentDecision = z.infer<
+  typeof pendingInteractionNetworkPolicyAmendmentDecisionSchema
+>;
+
+export const pendingInteractionCommandApprovalDecisionSchema = z.union([
+  pendingInteractionCommandApprovalSimpleDecisionSchema,
+  pendingInteractionExecPolicyAmendmentDecisionSchema,
+  pendingInteractionNetworkPolicyAmendmentDecisionSchema,
 ]);
 export type PendingInteractionCommandApprovalDecision = z.infer<
   typeof pendingInteractionCommandApprovalDecisionSchema

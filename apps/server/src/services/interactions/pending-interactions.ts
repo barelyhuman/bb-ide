@@ -15,6 +15,7 @@ import {
   pendingInteractionResolutionSchema,
   pendingInteractionSchema,
   type PendingInteraction,
+  type PendingInteractionCommandApprovalDecision,
   type PendingInteractionCreate,
   type PendingInteractionResolution,
 } from "@bb/domain";
@@ -141,6 +142,82 @@ function notifyInteractionChanged(
   deps.hub.notifyThread(threadId, ["interactions-changed"]);
 }
 
+function commandApprovalDecisionEquals(
+  left: PendingInteractionCommandApprovalDecision,
+  right: PendingInteractionCommandApprovalDecision,
+): boolean {
+  if (typeof left === "string" || typeof right === "string") {
+    return left === right;
+  }
+
+  if (left.kind !== right.kind) {
+    return false;
+  }
+
+  if (
+    left.kind === "accept_with_exec_policy_amendment"
+    && right.kind === "accept_with_exec_policy_amendment"
+  ) {
+    return (
+      left.execPolicyAmendment.length === right.execPolicyAmendment.length
+      && left.execPolicyAmendment.every(
+        (entry, index) => entry === right.execPolicyAmendment[index],
+      )
+    );
+  }
+
+  if (
+    left.kind === "apply_network_policy_amendment"
+    && right.kind === "apply_network_policy_amendment"
+  ) {
+    return (
+      left.networkPolicyAmendment.host === right.networkPolicyAmendment.host
+      && left.networkPolicyAmendment.action === right.networkPolicyAmendment.action
+    );
+  }
+
+  return false;
+}
+
+function formatCommandApprovalDecisionLabel(
+  decision: PendingInteractionCommandApprovalDecision,
+): string {
+  if (typeof decision === "string") {
+    return decision;
+  }
+
+  switch (decision.kind) {
+    case "accept_with_exec_policy_amendment":
+      return decision.kind;
+    case "apply_network_policy_amendment":
+      return decision.kind;
+  }
+}
+
+function formatCommandApprovalResolutionMessage(
+  decision: PendingInteractionCommandApprovalDecision,
+): string {
+  if (typeof decision === "string") {
+    switch (decision) {
+      case "accept":
+        return "Command approved";
+      case "accept_for_session":
+        return "Command approved for this session";
+      case "decline":
+        return "Command declined";
+      case "cancel":
+        return "Command request cancelled";
+    }
+  }
+
+  switch (decision.kind) {
+    case "accept_with_exec_policy_amendment":
+      return "Command approved with exec policy amendment";
+    case "apply_network_policy_amendment":
+      return "Command approved with network policy amendment";
+  }
+}
+
 function formatPendingInteractionLifecycleMessage(
   interaction: PendingInteraction,
 ): string {
@@ -164,16 +241,7 @@ function formatPendingInteractionLifecycleMessage(
       }
       switch (interaction.resolution.kind) {
         case "command_approval":
-          switch (interaction.resolution.decision) {
-            case "accept":
-              return "Command approved";
-            case "accept_for_session":
-              return "Command approved for this session";
-            case "decline":
-              return "Command declined";
-            case "cancel":
-              return "Command request cancelled";
-          }
+          return formatCommandApprovalResolutionMessage(interaction.resolution.decision);
         case "file_change_approval":
           switch (interaction.resolution.decision) {
             case "accept":
@@ -249,14 +317,18 @@ function validateCommandApprovalResolution(
     return;
   }
 
-  if (interaction.payload.availableDecisions.includes(resolution.decision)) {
+  if (
+    interaction.payload.availableDecisions.some((decision) =>
+      commandApprovalDecisionEquals(decision, resolution.decision),
+    )
+  ) {
     return;
   }
 
   throw new ApiError(
     400,
     "invalid_request",
-    `Command approval decision '${resolution.decision}' is not available for interaction ${interaction.id}`,
+    `Command approval decision '${formatCommandApprovalDecisionLabel(resolution.decision)}' is not available for interaction ${interaction.id}`,
   );
 }
 

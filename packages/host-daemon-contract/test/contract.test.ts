@@ -769,6 +769,26 @@ describe("host-daemon session schemas", () => {
     });
 
     expect(
+      hostDaemonInteractiveRequestResponseSchema.parse({
+        outcome: "resolved",
+        resolution: {
+          kind: "command_approval",
+          decision: {
+            kind: "accept_with_exec_policy_amendment",
+            execPolicyAmendment: ["allow", "git", "push"],
+          },
+        },
+      }),
+    ).toMatchObject({
+      outcome: "resolved",
+      resolution: {
+        decision: {
+          kind: "accept_with_exec_policy_amendment",
+        },
+      },
+    });
+
+    expect(
       hostDaemonInteractiveInterruptRequestSchema.parse({
         sessionId: "session_123",
         providerId: "codex",

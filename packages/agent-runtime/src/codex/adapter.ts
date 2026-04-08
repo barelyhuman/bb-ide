@@ -11,6 +11,7 @@
 import { getBuiltInAgentProviderInfo } from "@bb/agent-providers";
 import { z } from "zod";
 import type {
+  PendingInteractionCommandApprovalDecision,
   PromptInput,
   ProviderCapabilities,
   SandboxMode,
@@ -220,6 +221,27 @@ const codexSimpleCommandApprovalDecisionSchema = z.enum([
   "acceptForSession",
   "decline",
   "cancel",
+]);
+
+const codexExecPolicyAmendmentDecisionSchema = z.object({
+  acceptWithExecpolicyAmendment: z.object({
+    execpolicy_amendment: z.array(z.string()),
+  }),
+});
+
+const codexNetworkPolicyAmendmentDecisionSchema = z.object({
+  applyNetworkPolicyAmendment: z.object({
+    network_policy_amendment: z.object({
+      host: z.string(),
+      action: z.enum(["allow", "deny"]),
+    }),
+  }),
+});
+
+const codexCommandApprovalDecisionSchema = z.union([
+  codexSimpleCommandApprovalDecisionSchema,
+  codexExecPolicyAmendmentDecisionSchema,
+  codexNetworkPolicyAmendmentDecisionSchema,
 ]);
 
 const codexFileSystemPermissionsSchema = z.object({
@@ -896,31 +918,53 @@ function toCodexGrantedPermissionProfile(args: {
 
 function parseCodexAvailableDecisions(
   decisions: unknown[] | null | undefined,
-): Array<"accept" | "accept_for_session" | "decline" | "cancel"> | null {
+): PendingInteractionCommandApprovalDecision[] | null {
   if (!decisions) {
     return ["accept", "decline", "cancel"];
   }
 
-  const normalized: Array<"accept" | "accept_for_session" | "decline" | "cancel"> = [];
+  const normalized: PendingInteractionCommandApprovalDecision[] = [];
   for (const decision of decisions) {
-    const parsed = codexSimpleCommandApprovalDecisionSchema.safeParse(decision);
+    const parsed = codexCommandApprovalDecisionSchema.safeParse(decision);
     if (!parsed.success) {
       return null;
     }
 
-    switch (parsed.data) {
-      case "accept":
-        normalized.push("accept");
-        break;
-      case "acceptForSession":
-        normalized.push("accept_for_session");
-        break;
-      case "decline":
-        normalized.push("decline");
-        break;
-      case "cancel":
-        normalized.push("cancel");
-        break;
+    if (typeof parsed.data === "string") {
+      switch (parsed.data) {
+        case "accept":
+          normalized.push("accept");
+          break;
+        case "acceptForSession":
+          normalized.push("accept_for_session");
+          break;
+        case "decline":
+          normalized.push("decline");
+          break;
+        case "cancel":
+          normalized.push("cancel");
+          break;
+      }
+      continue;
+    }
+
+    if ("acceptWithExecpolicyAmendment" in parsed.data) {
+      normalized.push({
+        kind: "accept_with_exec_policy_amendment",
+        execPolicyAmendment:
+          parsed.data.acceptWithExecpolicyAmendment.execpolicy_amendment,
+      });
+      continue;
+    }
+
+    if ("applyNetworkPolicyAmendment" in parsed.data) {
+      normalized.push({
+        kind: "apply_network_policy_amendment",
+        networkPolicyAmendment: {
+          host: parsed.data.applyNetworkPolicyAmendment.network_policy_amendment.host,
+          action: parsed.data.applyNetworkPolicyAmendment.network_policy_amendment.action,
+        },
+      });
     }
   }
 
@@ -1333,7 +1377,10 @@ export function createCodexProviderAdapter(
           if (!parsed.success) {
             return null;
           }
-          if (parsed.data.additionalPermissions?.macos !== null) {
+          if (
+            parsed.data.additionalPermissions
+            && parsed.data.additionalPermissions.macos !== null
+          ) {
             return null;
           }
           const availableDecisions = parseCodexAvailableDecisions(
@@ -1441,18 +1488,41 @@ export function createCodexProviderAdapter(
           }
           const response: CommandExecutionRequestApprovalResponse = {
             decision: (() => {
-              switch (args.resolution.decision) {
-                case "accept":
-                  return "accept";
-                case "accept_for_session":
-                  return "acceptForSession";
-                case "decline":
-                  return "decline";
-                case "cancel":
-                  return "cancel";
-                default:
-                  return assertNever(args.resolution.decision);
+              const decision = args.resolution.decision;
+              if (typeof decision === "string") {
+                switch (decision) {
+                  case "accept":
+                    return "accept";
+                  case "accept_for_session":
+                    return "acceptForSession";
+                  case "decline":
+                    return "decline";
+                  case "cancel":
+                    return "cancel";
+                }
+                const exhaustiveDecision: never = decision;
+                return exhaustiveDecision;
               }
+
+              switch (decision.kind) {
+                case "accept_with_exec_policy_amendment":
+                  return {
+                    acceptWithExecpolicyAmendment: {
+                      execpolicy_amendment: decision.execPolicyAmendment,
+                    },
+                  };
+                case "apply_network_policy_amendment":
+                  return {
+                    applyNetworkPolicyAmendment: {
+                      network_policy_amendment: {
+                        host: decision.networkPolicyAmendment.host,
+                        action: decision.networkPolicyAmendment.action,
+                      },
+                    },
+                  };
+              }
+              const exhaustiveDecision: never = decision;
+              return exhaustiveDecision;
             })(),
           };
           return response;
@@ -1463,7 +1533,8 @@ export function createCodexProviderAdapter(
           }
           const response: FileChangeRequestApprovalResponse = {
             decision: (() => {
-              switch (args.resolution.decision) {
+              const decision = args.resolution.decision;
+              switch (decision) {
                 case "accept":
                   return "accept";
                 case "accept_for_session":
@@ -1472,9 +1543,9 @@ export function createCodexProviderAdapter(
                   return "decline";
                 case "cancel":
                   return "cancel";
-                default:
-                  return assertNever(args.resolution.decision);
               }
+              const exhaustiveDecision: never = decision;
+              return exhaustiveDecision;
             })(),
           };
           return response;
