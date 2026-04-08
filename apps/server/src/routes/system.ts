@@ -1,5 +1,6 @@
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import {
+  githubReposQuerySchema,
   systemModelsQuerySchema,
   systemProvidersQuerySchema,
   typedRoutes,
@@ -19,6 +20,7 @@ import { queueCommandAndWait } from "../services/hosts/command-wait.js";
 import { listAvailableSandboxBackends } from "../services/hosts/sandbox-backends.js";
 import { isSandboxProvisioningConfigured } from "../services/hosts/sandbox-config.js";
 import { transcribeVoiceInput } from "../services/ai/voice-transcription.js";
+import { fetchGithubRepos } from "../services/github/repos.js";
 
 type HostLookupQuery = Pick<SystemProvidersQuery, "environmentId" | "hostId">;
 
@@ -50,6 +52,13 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
   get("/system/sandbox-backends", (context) =>
     context.json(listAvailableSandboxBackends(deps.config)),
   );
+
+  get("/system/github-repos", githubReposQuerySchema, async (context, query) => {
+    if (!deps.config.githubPat) {
+      throw new ApiError(501, "not_configured", "GitHub PAT is not configured");
+    }
+    return context.json(await fetchGithubRepos(deps.config.githubPat, query.q));
+  });
 
   get("/system/providers", systemProvidersQuerySchema, async (context, query) => {
     const hostId = resolveHostId(deps, query);

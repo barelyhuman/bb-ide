@@ -620,6 +620,19 @@ export type SystemSandboxBackendsResponse = z.infer<
   typeof systemSandboxBackendsResponseSchema
 >;
 
+export const githubRepoInfoSchema = z.object({
+  fullName: z.string(),
+  htmlUrl: z.string(),
+  defaultBranch: z.string(),
+  private: z.boolean(),
+});
+export type GithubRepoInfo = z.infer<typeof githubRepoInfoSchema>;
+
+export const githubReposQuerySchema = z.object({
+  q: z.string().max(256).optional(),
+});
+export type GithubReposQuery = z.infer<typeof githubReposQuerySchema>;
+
 export const environmentStatusResponseSchema = z.object({
   workspace: workspaceStatusSchema.nullable(),  // null if daemon unreachable or non-git env
 });

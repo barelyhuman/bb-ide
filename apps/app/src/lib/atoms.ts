@@ -80,6 +80,12 @@ export const hostDaemonPortAtom = atom<Promise<number | null>>(async (get) => {
   return config.hostDaemonPort;
 });
 
+/** Whether the server has a GitHub PAT configured. */
+export const githubConnectedAtom = atom<Promise<boolean>>(async (get) => {
+  const config = await get(systemConfigAtom);
+  return config.githubConnected;
+});
+
 /** Whether the server supports sandbox host provisioning. */
 export const sandboxHostSupportedAtom = atom<Promise<boolean>>(async (get) => {
   const config = await get(systemConfigAtom);

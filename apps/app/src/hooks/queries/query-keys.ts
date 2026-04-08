@@ -18,6 +18,7 @@ export const THREAD_TIMELINE_QUERY_KEY = "threadTimeline";
 export const AVAILABLE_MODELS_QUERY_KEY = "availableModels";
 export const SYSTEM_PROVIDERS_QUERY_KEY = "systemProviders";
 export const SANDBOX_BACKENDS_QUERY_KEY = "sandboxBackends";
+export const GITHUB_REPOS_QUERY_KEY = "githubRepos";
 export const STATUS_QUERY_KEY = "status";
 
 export interface ThreadListQueryFilters {
@@ -109,6 +110,7 @@ export type AllAvailableModelsQueryKeyPrefix = readonly [
 ];
 export type SystemProvidersQueryKey = readonly [typeof SYSTEM_PROVIDERS_QUERY_KEY];
 export type SandboxBackendsQueryKey = readonly [typeof SANDBOX_BACKENDS_QUERY_KEY];
+export type GithubReposQueryKey = readonly [typeof GITHUB_REPOS_QUERY_KEY, string];
 export type StatusQueryKey = readonly [typeof STATUS_QUERY_KEY];
 
 export function hostsQueryKey(): HostsQueryKey {
@@ -268,6 +270,10 @@ export function systemProvidersQueryKey(): SystemProvidersQueryKey {
 
 export function sandboxBackendsQueryKey(): SandboxBackendsQueryKey {
   return [SANDBOX_BACKENDS_QUERY_KEY];
+}
+
+export function githubReposQueryKey(q: string): GithubReposQueryKey {
+  return [GITHUB_REPOS_QUERY_KEY, q];
 }
 
 export function statusQueryKey(): StatusQueryKey {

@@ -306,6 +306,7 @@ export function ProjectMainView() {
             <EnvironmentPicker
               value={effectiveEnvironmentValue}
               onChange={setEnvironmentSelectionValue}
+              projectId={projectId}
               sources={projectSources}
             />
           </div>

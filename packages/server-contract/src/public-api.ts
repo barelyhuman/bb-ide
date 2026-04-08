@@ -46,6 +46,8 @@ import type {
   SendDraftResponse,
   SendMessageRequest,
   ThreadDraftListResponse,
+  GithubRepoInfo,
+  GithubReposQuery,
   SystemConfigResponse,
   SystemSandboxBackendInfo,
   SystemModelsQuery,
@@ -320,6 +322,10 @@ export type PublicApiSchema = {
   "/system/sandbox-backends": {
     /** List sandbox backends supported by the server. */
     $get: Endpoint<EmptyInput, SystemSandboxBackendInfo[]>;
+  };
+  "/system/github-repos": {
+    /** List GitHub repositories accessible via the configured PAT. */
+    $get: Endpoint<{ query?: GithubReposQuery }, GithubRepoInfo[]>;
   };
   "/system/models": {
     /** List available models. Proxies to `provider.list_models`. Can target a specific host or environment. */

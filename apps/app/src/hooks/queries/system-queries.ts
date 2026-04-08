@@ -1,12 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import type { AvailableModel, Host, SandboxBackendInfo } from "@bb/domain";
-import type { SystemProviderInfo } from "@bb/server-contract";
+import type { GithubRepoInfo, SystemProviderInfo } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import {
   availableModelsQueryKey,
   type HostQueryId,
   hostQueryKey,
   hostsQueryKey,
+  githubReposQueryKey,
   sandboxBackendsQueryKey,
   systemProvidersQueryKey,
 } from "./query-keys";
@@ -60,6 +61,16 @@ export function useSandboxBackends(enabled: boolean) {
     queryKey: sandboxBackendsQueryKey(),
     queryFn: () => api.listSandboxBackends(),
     enabled,
+    staleTime: 60_000,
+  });
+}
+
+export function useGithubRepos(enabled: boolean, q: string) {
+  return useQuery<GithubRepoInfo[]>({
+    queryKey: githubReposQueryKey(q),
+    queryFn: () => api.listGithubRepos(q || undefined),
+    enabled,
+    placeholderData: keepPreviousData,
     staleTime: 60_000,
   });
 }

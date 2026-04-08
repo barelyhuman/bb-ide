@@ -1,8 +1,9 @@
 import { useAtomValue } from "jotai";
 import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Check, ChevronDown, Cloud, Monitor } from "lucide-react";
 import type { Host, ProjectSource, SandboxBackendInfo } from "@bb/domain";
-import { findLocalPathProjectSourceForHost } from "@bb/domain";
+import { findLocalPathProjectSourceForHost, isGitHubRepoProjectSource } from "@bb/domain";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -117,12 +118,14 @@ interface SelectedEnvironment {
 interface EnvironmentPickerProps {
   value: string;
   onChange: (value: string) => void;
+  projectId: string | null;
   sources: readonly ProjectSource[];
 }
 
 export function EnvironmentPicker({
   value,
   onChange,
+  projectId,
   sources,
 }: EnvironmentPickerProps) {
   const { isLocalHost } = useHostDaemon();
@@ -197,6 +200,8 @@ export function EnvironmentPicker({
         {sandboxHostSupported && sandboxBackends.some((b) => b.available) ? (
           <SandboxSection
             backends={sandboxBackends}
+            hasGitHubSource={sources.some(isGitHubRepoProjectSource)}
+            projectId={projectId}
             value={value}
             onChange={onChange}
           />
@@ -269,27 +274,47 @@ function HostSectionGroup({
 
 interface SandboxSectionProps {
   backends: SandboxBackendInfo[];
+  hasGitHubSource: boolean;
+  projectId: string | null;
   value: string;
   onChange: (value: string) => void;
 }
 
-function SandboxSection({ backends, value, onChange }: SandboxSectionProps) {
+function SandboxSection({ backends, hasGitHubSource, projectId, value, onChange }: SandboxSectionProps) {
+  const navigate = useNavigate();
+
   return (
     <DropdownMenuGroup>
       <DropdownMenuLabel className="text-[11px] text-muted-foreground">
         Cloud
       </DropdownMenuLabel>
-      {backends
-        .filter((backend) => backend.available)
-        .map((backend) => (
-          <EnvironmentMenuItem
-            key={backend.id}
-            label={backend.displayName}
-            itemValue={encodeSandboxValue(backend.id)}
-            selectedValue={value}
-            onSelect={onChange}
-          />
-        ))}
+      {hasGitHubSource ? (
+        backends
+          .filter((backend) => backend.available)
+          .map((backend) => (
+            <EnvironmentMenuItem
+              key={backend.id}
+              label={backend.displayName}
+              itemValue={encodeSandboxValue(backend.id)}
+              selectedValue={value}
+              onSelect={onChange}
+            />
+          ))
+      ) : (
+        <div className="px-2 pb-1.5">
+          <button
+            type="button"
+            className="text-xs text-muted-foreground underline"
+            onClick={() => {
+              if (projectId) {
+                navigate(`/projects/${projectId}/settings`);
+              }
+            }}
+          >
+            Connect project to GitHub
+          </button>
+        </div>
+      )}
     </DropdownMenuGroup>
   );
 }

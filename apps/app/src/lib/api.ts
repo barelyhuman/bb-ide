@@ -19,6 +19,7 @@ import type {
 } from "@bb/domain";
 import type {
   CreateManagerThreadRequest,
+  GithubRepoInfo,
   CreateProjectSourceRequest,
   CreateProjectRequest,
   CreateDraftRequest,
@@ -632,4 +633,10 @@ export async function deleteHost(id: string): Promise<void> {
 
 export async function listSandboxBackends(): Promise<SandboxBackendInfo[]> {
   return request<SandboxBackendInfo[]>(apiClient.system["sandbox-backends"].$get());
+}
+
+export async function listGithubRepos(q?: string): Promise<GithubRepoInfo[]> {
+  return request<GithubRepoInfo[]>(
+    apiClient.system["github-repos"].$get({ query: q ? { q } : undefined }),
+  );
 }
