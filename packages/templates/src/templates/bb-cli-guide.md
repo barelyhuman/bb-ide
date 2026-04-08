@@ -24,13 +24,15 @@ Mutating commands (e.g., `commit`, `stop`, `archive`, `update`) require an expli
 Spawning:
 
 ```
-bb thread spawn --project <project-id> --provider <provider-id> --model <model-id> --title "Implement API" --prompt "Implement feature X"
-bb thread spawn --project <project-id> --parent-thread <manager-id> --provider <provider-id> --model <model-id> --title "Backend fix" --prompt "Fix bug Y"
-bb thread spawn --project <project-id> --environment <environment-id> --parent-thread <manager-id> --provider <provider-id> --model <model-id> --title "Review backend fix" --prompt "Review the changes"
+bb thread spawn --project <project-id> --provider <provider-id> --title "Implement API" --prompt "Implement feature X"
+bb thread spawn --project <project-id> --provider <provider-id> --model <model-id> --title "Pin a specific model" --prompt "Implement feature X with a fixed model"
+bb thread spawn --project <project-id> --parent-thread <manager-id> --provider <provider-id> --title "Backend fix" --prompt "Fix bug Y"
+bb thread spawn --project <project-id> --environment <environment-id> --parent-thread <manager-id> --provider <provider-id> --title "Review backend fix" --prompt "Review the changes"
 ```
 
 The `--parent-thread` flag makes the new thread a managed child of the specified manager.
 The `--environment` flag attaches the new thread to an existing environment (e.g., another thread's worktree). This is useful for pipeline workflows where a review thread needs to see a coding thread's files.
+The `--model` flag is optional. When omitted, the server uses the project's remembered execution defaults for the selected provider. Run `bb status` to inspect remembered defaults.
 Use `bb provider list` to discover valid providers and `bb provider models <provider-id>` to discover valid model IDs before spawning if you are unsure.
 
 Inspecting:
@@ -126,7 +128,7 @@ bb provider models [providerId]        # List available models (optionally filte
 ## Other
 
 ```
-bb status                              # Show current context (resolved project and thread IDs)
+bb status                              # Show current context and remembered project defaults
 bb guide                               # Show the BB system overview and CLI guide
 bb server health                       # Show server health and storage usage
 bb server restart                      # Restart the server

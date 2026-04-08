@@ -28,7 +28,7 @@ interface ThreadSpawnCommandOptions {
   newEnvironment?: string;
   parentThread?: string;
   provider: string;
-  model: string;
+  model?: string;
   reasoningLevel?: string;
   title?: string;
   serviceTier?: string;
@@ -99,7 +99,9 @@ export function registerSpawnCommand(
 ): void {
   parent
     .command("spawn")
-    .description("Spawn a new thread for a project")
+    .description(
+      "Spawn a new thread for a project; omitted execution flags inherit project defaults",
+    )
     .requiredOption("--prompt <prompt>", "Initial prompt for the thread")
     .option("--json", "Print machine-readable JSON output")
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
@@ -119,7 +121,10 @@ export function registerSpawnCommand(
       "--provider <id>",
       "Provider ID for the thread (e.g. codex, claude-code, pi)",
     )
-    .requiredOption("--model <model>", "Model ID for the thread")
+    .option(
+      "--model <model>",
+      "Model ID for the thread. Omit to use the project's remembered default for the selected provider",
+    )
     .option(
       "--reasoning-level <level>",
       "Reasoning level: low, medium, high, xhigh",
@@ -164,7 +169,7 @@ export function registerSpawnCommand(
             json: {
               projectId,
               providerId: opts.provider,
-              model: opts.model,
+              ...(opts.model ? { model: opts.model } : {}),
               input: [{ type: "text", text: opts.prompt }],
               ...(reasoningLevel ? { reasoningLevel } : {}),
               ...(opts.title ? { title: opts.title } : {}),

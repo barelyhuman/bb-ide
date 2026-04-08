@@ -38,6 +38,12 @@ import { registerThreadCommands } from "../commands/thread/index.js";
 
 type ServerClient = ReturnType<typeof createClient>;
 
+interface ProjectDefaultsQueryArgs {
+  query: {
+    providerId: string;
+  };
+}
+
 function makeThread(overrides: Partial<Thread> & { id: string; projectId: string; providerId: string }): Thread {
   return {
     type: "standard",
@@ -817,7 +823,128 @@ describe("CLI command output contracts", () => {
     );
   });
 
-  it("bb thread spawn sends project and prompt", async () => {
+  it("bb status prints remembered project defaults by provider", async () => {
+    process.env.BB_PROJECT_ID = "proj-1";
+
+    const getProject = vi.fn(async () => ({
+      id: "proj-1",
+      name: "Alpha",
+    }));
+    const getProviders = vi.fn(async () => [
+      { id: "codex", displayName: "Codex" },
+      { id: "claude-code", displayName: "Claude Code" },
+    ]);
+    const getProjectDefaults = vi.fn(async ({ query }: ProjectDefaultsQueryArgs) =>
+      query.providerId === "codex"
+        ? {
+            model: "gpt-5",
+            reasoningLevel: "high",
+            sandboxMode: "workspace-write",
+            serviceTier: "fast",
+            source: "client/thread/start",
+          }
+        : null
+    );
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          projects: {
+            ":id": {
+              $get: getProject,
+              "default-execution-options": {
+                $get: getProjectDefaults,
+              },
+            },
+          },
+          system: {
+            providers: {
+              $get: getProviders,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["status"], (program) =>
+      registerStatusCommand(program, () => "http://server"),
+    );
+
+    expect(getProjectDefaults).toHaveBeenNthCalledWith(1, {
+      param: { id: "proj-1" },
+      query: { providerId: "codex" },
+    });
+    expect(getProjectDefaults).toHaveBeenNthCalledWith(2, {
+      param: { id: "proj-1" },
+      query: { providerId: "claude-code" },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain("Project defaults:");
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "  codex: gpt-5, high, workspace-write, fast",
+    );
+  });
+
+  it("bb status --json includes remembered project defaults", async () => {
+    process.env.BB_PROJECT_ID = "proj-1";
+
+    const getProject = vi.fn(async () => ({
+      id: "proj-1",
+      name: "Alpha",
+    }));
+    const getProviders = vi.fn(async () => [
+      { id: "codex", displayName: "Codex" },
+    ]);
+    const getProjectDefaults = vi.fn(async () => ({
+      model: "gpt-5-mini",
+      reasoningLevel: "medium",
+      sandboxMode: "danger-full-access",
+      serviceTier: "default",
+      source: "client/turn/requested",
+    }));
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          projects: {
+            ":id": {
+              $get: getProject,
+              "default-execution-options": {
+                $get: getProjectDefaults,
+              },
+            },
+          },
+          system: {
+            providers: {
+              $get: getProviders,
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["status", "--json"], (program) =>
+      registerStatusCommand(program, () => "http://server"),
+    );
+
+    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual({
+      managedThreads: null,
+      project: {
+        defaults: [
+          {
+            model: "gpt-5-mini",
+            providerId: "codex",
+            reasoningLevel: "medium",
+            sandboxMode: "danger-full-access",
+            serviceTier: "default",
+            source: "client/turn/requested",
+          },
+        ],
+        id: "proj-1",
+        name: "Alpha",
+      },
+      thread: null,
+    });
+  });
+
+  it("bb thread spawn omits model when the user relies on project defaults", async () => {
     process.env.BB_PROJECT_ID = "proj-1";
     const thread: Thread = makeThread({
       id: "thread-1",
@@ -839,7 +966,7 @@ describe("CLI command output contracts", () => {
       },
     }));
 
-    await runCommand(["thread", "spawn", "--prompt", "hello", "--provider", "codex", "--model", "gpt-5"], (program) =>
+    await runCommand(["thread", "spawn", "--prompt", "hello", "--provider", "codex"], (program) =>
       registerThreadCommands(program, () => "http://server"),
     );
 
@@ -847,7 +974,62 @@ describe("CLI command output contracts", () => {
       json: {
         projectId: "proj-1",
         providerId: "codex",
+        input: [{ type: "text", text: "hello" }],
+        environment: { type: "host", hostId: "host-test-001", workspace: { type: "unmanaged", path: null } },
+      },
+    });
+  });
+
+  it("bb thread spawn forwards explicit execution overrides", async () => {
+    process.env.BB_PROJECT_ID = "proj-1";
+    const thread: Thread = makeThread({
+      id: "thread-overrides",
+      projectId: "proj-1",
+      providerId: "codex",
+      type: "standard",
+      status: "created",
+      createdAt: 1,
+      updatedAt: 1,
+    });
+    const post = vi.fn(async () => thread);
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            $post: post,
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      [
+        "thread",
+        "spawn",
+        "--prompt",
+        "hello",
+        "--provider",
+        "codex",
+        "--model",
+        "gpt-5",
+        "--reasoning-level",
+        "high",
+        "--service-tier",
+        "fast",
+        "--sandbox-mode",
+        "workspace-write",
+      ],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      json: {
+        projectId: "proj-1",
+        providerId: "codex",
         model: "gpt-5",
+        reasoningLevel: "high",
+        sandboxMode: "workspace-write",
+        serviceTier: "fast",
         input: [{ type: "text", text: "hello" }],
         environment: { type: "host", hostId: "host-test-001", workspace: { type: "unmanaged", path: null } },
       },
@@ -1065,10 +1247,12 @@ describe("CLI command output contracts", () => {
     );
   });
 
-  it("bb thread spawn prefixes create failures with context", async () => {
+  it("bb thread spawn prefixes missing-project-default failures with context", async () => {
     process.env.BB_PROJECT_ID = "proj-1";
     const post = vi.fn(async () => {
-      throw new Error("HTTP 500: boom");
+      throw new Error(
+        "HTTP 400: Model is required when project proj-1 has no stored execution defaults for provider codex",
+      );
     });
     createClientMock.mockReturnValue(asServerClient({
       api: {
@@ -1081,13 +1265,13 @@ describe("CLI command output contracts", () => {
     }));
 
     await expect(
-      runCommand(["thread", "spawn", "--prompt", "hello", "--provider", "codex", "--model", "gpt-5"], (program) =>
+      runCommand(["thread", "spawn", "--prompt", "hello", "--provider", "codex"], (program) =>
         registerThreadCommands(program, () => "http://server"),
       ),
     ).rejects.toThrow("process.exit:1");
 
     expect(collectLogLines(vi.mocked(console.error))).toContain(
-      "Error: Failed to create thread: HTTP 500: boom",
+      "Error: Failed to create thread: HTTP 400: Model is required when project proj-1 has no stored execution defaults for provider codex",
     );
   });
 

@@ -33,7 +33,7 @@ Quick start:
   bb status
   bb project list
   bb thread show
-  bb thread spawn --prompt "..."
+  bb thread spawn --provider codex --prompt "..."
 `;
 });
 
