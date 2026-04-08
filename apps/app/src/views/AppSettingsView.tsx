@@ -89,8 +89,8 @@ export function AppSettingsView() {
   });
 
   return (
-    <PageShell contentClassName="pt-8 md:pt-10">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-8 pt-2">
+    <PageShell contentClassName="pt-4 md:pt-5">
+      <div className="mx-auto w-full max-w-3xl space-y-6">
         <SettingsSection title="Appearance">
           <SettingsWithControl
             label="Theme"

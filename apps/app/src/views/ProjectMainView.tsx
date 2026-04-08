@@ -228,7 +228,7 @@ export function ProjectMainView() {
     !selectedThreadModel;
 
   return (
-    <PageShell contentClassName="pt-8 md:pt-10">
+    <PageShell contentClassName="pt-4 md:pt-5">
       <div className="space-y-1">
         <div className="flex items-center px-3.5">
           {projectId ? (

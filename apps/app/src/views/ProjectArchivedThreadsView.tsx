@@ -27,7 +27,7 @@ export function ProjectArchivedThreadsView() {
       .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0)) ?? [];
 
   return (
-    <PageShell contentClassName="pt-8 md:pt-10">
+    <PageShell contentClassName="pt-4 md:pt-5">
       <div className="mx-auto w-full max-w-3xl space-y-2">
         {isLoading ? (
           <p className="text-sm text-muted-foreground">Loading archived threads…</p>

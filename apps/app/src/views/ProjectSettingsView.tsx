@@ -157,7 +157,7 @@ export function ProjectSettingsView() {
   ) : null;
 
   return (
-    <PageShell contentClassName="pt-8 md:pt-10">
+    <PageShell contentClassName="pt-4 md:pt-5">
       <div className="mx-auto w-full max-w-3xl space-y-6">
         <SettingsSection title="Project Sources">
           {isLoading ? (
