@@ -1,4 +1,10 @@
-import type { ThreadEvent, ToolCallRequest, ToolCallResponse } from "@bb/domain";
+import type {
+  PendingInteractionCreate,
+  PendingInteractionResolution,
+  ThreadEvent,
+  ToolCallRequest,
+  ToolCallResponse,
+} from "@bb/domain";
 import type { JsonRpcMessage } from "./provider-adapter.js";
 
 interface AgentRuntimeCaptureEntryBase {
@@ -42,6 +48,25 @@ export interface AgentRuntimeToolCallResultCaptureEntry
   errorMessage?: string;
 }
 
+export interface AgentRuntimeInteractiveRequestCaptureEntry
+  extends AgentRuntimeCaptureEntryBase {
+  kind: "interactive-request";
+  captureId: string;
+  rawLine: string;
+  rawRequest: JsonRpcMessage;
+  request: PendingInteractionCreate;
+}
+
+export interface AgentRuntimeInteractiveResultCaptureEntry
+  extends AgentRuntimeCaptureEntryBase {
+  kind: "interactive-result";
+  requestCaptureId?: string;
+  requestId: string;
+  success: boolean;
+  resolution?: PendingInteractionResolution;
+  errorMessage?: string;
+}
+
 export interface AgentRuntimeProviderStderrCaptureEntry
   extends AgentRuntimeCaptureEntryBase {
   kind: "provider-stderr";
@@ -69,6 +94,8 @@ export type AgentRuntimeCaptureEntry =
   | AgentRuntimeTranslatedThreadEventCaptureEntry
   | AgentRuntimeToolCallRequestCaptureEntry
   | AgentRuntimeToolCallResultCaptureEntry
+  | AgentRuntimeInteractiveRequestCaptureEntry
+  | AgentRuntimeInteractiveResultCaptureEntry
   | AgentRuntimeProviderStderrCaptureEntry
   | AgentRuntimeProviderProcessErrorCaptureEntry
   | AgentRuntimeProviderProcessExitCaptureEntry;

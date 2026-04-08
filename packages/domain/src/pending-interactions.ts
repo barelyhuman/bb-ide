@@ -132,6 +132,7 @@ export type PendingInteractionUserInputQuestion = z.infer<
 
 export const commandApprovalPendingInteractionPayloadSchema = z.object({
   kind: z.literal("command_approval"),
+  itemId: z.string().min(1),
   approvalId: z.string().nullable(),
   reason: z.string().nullable(),
   command: z.string().nullable(),
@@ -146,6 +147,7 @@ export type CommandApprovalPendingInteractionPayload = z.infer<
 
 export const fileChangeApprovalPendingInteractionPayloadSchema = z.object({
   kind: z.literal("file_change_approval"),
+  itemId: z.string().min(1),
   reason: z.string().nullable(),
   grantRoot: z.string().nullable(),
 });
@@ -155,6 +157,7 @@ export type FileChangeApprovalPendingInteractionPayload = z.infer<
 
 export const permissionRequestPendingInteractionPayloadSchema = z.object({
   kind: z.literal("permission_request"),
+  itemId: z.string().min(1),
   reason: z.string().nullable(),
   permissions: pendingInteractionRequestedPermissionProfileSchema,
 });
@@ -164,6 +167,7 @@ export type PermissionRequestPendingInteractionPayload = z.infer<
 
 export const userInputRequestPendingInteractionPayloadSchema = z.object({
   kind: z.literal("user_input_request"),
+  itemId: z.string().min(1),
   questions: z.array(pendingInteractionUserInputQuestionSchema),
 });
 export type UserInputRequestPendingInteractionPayload = z.infer<

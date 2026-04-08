@@ -17,6 +17,7 @@ describe("pending interaction schemas", () => {
         providerRequestMethod: "item/commandExecution/requestApproval",
         payload: {
           kind: "command_approval",
+          itemId: "item_123",
           approvalId: null,
           reason: "Needs network access",
           command: "npm install",
@@ -58,6 +59,7 @@ describe("pending interaction schemas", () => {
         status: "resolved",
         payload: {
           kind: "user_input_request",
+          itemId: "item_124",
           questions: [
             {
               id: "environment",
@@ -105,6 +107,7 @@ describe("pending interaction schemas", () => {
         status: "resolved",
         payload: {
           kind: "user_input_request",
+          itemId: "item_125",
           questions: [],
         },
         resolution: pendingInteractionResolutionSchema.parse({

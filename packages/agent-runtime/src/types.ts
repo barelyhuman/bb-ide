@@ -2,6 +2,8 @@ import type {
   AvailableModel,
   DynamicTool,
   InstructionMode,
+  PendingInteractionCreate,
+  PendingInteractionResolution,
   PromptInput,
   ProviderInfo as DomainProviderInfo,
   ThreadEvent,
@@ -42,6 +44,12 @@ export interface AgentRuntimeOptions {
   /** Called when a provider needs to execute a tool.
    *  `threadId` is always the BB thread id and `providerThreadId` is always present. */
   onToolCall: (request: ToolCallRequest) => Promise<ToolCallResponse>;
+
+  /** Called when a provider pauses for user interaction such as approvals or questions.
+   *  The runtime converts provider-native requests into bb's shared pending-interaction contract. */
+  onInteractiveRequest?: (
+    request: PendingInteractionCreate,
+  ) => Promise<PendingInteractionResolution>;
 
   /** Called on provider stderr lines. */
   onStderr?: (line: string, threadId?: string) => void;

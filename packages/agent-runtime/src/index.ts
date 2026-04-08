@@ -6,6 +6,8 @@ export {
 } from "./provider-registry.js";
 export type {
   AgentRuntimeCaptureEntry,
+  AgentRuntimeInteractiveRequestCaptureEntry,
+  AgentRuntimeInteractiveResultCaptureEntry,
   AgentRuntimeProviderProcessErrorCaptureEntry,
   AgentRuntimeProviderProcessExitCaptureEntry,
   AgentRuntimeProviderStderrCaptureEntry,

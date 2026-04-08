@@ -12,6 +12,7 @@ import {
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 import type {
   AdapterCommand,
+  DecodedInteractiveRequest,
   DecodedToolCallRequest,
   ProviderAdapter,
 } from "./provider-adapter.js";
@@ -24,6 +25,10 @@ import { parseAvailableModelList } from "./shared/available-models.js";
 
 function wait(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function findLastRecordedCommand(
@@ -77,6 +82,88 @@ describe("createAgentRuntime", () => {
           ...decoded,
           threadId: "thr_wrong",
         };
+      },
+    };
+  }
+
+  function createInteractiveRequestAdapter(scriptPath: string): ProviderAdapter {
+    const adapter = createFakeAdapter(scriptPath);
+    return {
+      ...adapter,
+      decodeInteractiveRequest(request): DecodedInteractiveRequest | null {
+        if (request.method !== "request_interaction") {
+          return null;
+        }
+        if (typeof request.id !== "string" && typeof request.id !== "number") {
+          return null;
+        }
+        if (!isRecord(request.params)) {
+          return null;
+        }
+
+        const params = request.params;
+        if (
+          typeof params.threadId !== "string"
+          || typeof params.turnId !== "string"
+          || typeof params.itemId !== "string"
+          || typeof params.kind !== "string"
+        ) {
+          return null;
+        }
+
+        if (params.kind === "command_approval") {
+          return {
+            requestId: request.id,
+            method: request.method,
+            providerThreadId: params.threadId,
+            turnId: params.turnId,
+            payload: {
+              kind: "command_approval",
+              itemId: params.itemId,
+              approvalId: null,
+              reason: typeof params.reason === "string" ? params.reason : null,
+              command: typeof params.command === "string" ? params.command : null,
+              cwd: typeof params.cwd === "string" ? params.cwd : null,
+              commandActions: [],
+              requestedPermissions: null,
+              availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+            },
+          };
+        }
+
+        if (params.kind === "user_input_request") {
+          return {
+            requestId: request.id,
+            method: request.method,
+            providerThreadId: params.threadId,
+            turnId: params.turnId,
+            payload: {
+              kind: "user_input_request",
+              itemId: params.itemId,
+              questions: [],
+            },
+          };
+        }
+
+        if (params.kind === "file_change_approval") {
+          return {
+            requestId: request.id,
+            method: request.method,
+            providerThreadId: params.threadId,
+            turnId: params.turnId,
+            payload: {
+              kind: "file_change_approval",
+              itemId: params.itemId,
+              reason: null,
+              grantRoot: null,
+            },
+          };
+        }
+
+        return null;
+      },
+      buildInteractiveResponse({ resolution }) {
+        return { resolution };
       },
     };
   }
@@ -851,6 +938,303 @@ describe("createAgentRuntime", () => {
     await wait(200);
     await runtime.shutdown();
     // The test passes if no unhandled promise rejection occurs
+  });
+
+  it("routes interactive requests through onInteractiveRequest and sends the encoded response back", async () => {
+    const interactiveScriptPath = join(tmpDir, "interactive-provider.cjs");
+    writeFileSync(
+      interactiveScriptPath,
+      `
+const readline = require("node:readline");
+const threads = new Map();
+const pendingInteractive = new Map();
+let nextThreadId = 1;
+let nextRequestId = 1;
+
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + "\\n");
+}
+
+function completeTurn(providerThreadId, turnId, text) {
+  send({
+    jsonrpc: "2.0",
+    method: "item/completed",
+    params: {
+      threadId: providerThreadId,
+      turnId,
+      item: {
+        type: "agentMessage",
+        id: "msg-" + turnId,
+        text,
+      },
+    },
+  });
+  send({
+    jsonrpc: "2.0",
+    method: "turn/completed",
+    params: {
+      threadId: providerThreadId,
+      turnId,
+      status: "completed",
+      providerThreadId,
+    },
+  });
+}
+
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+
+  if (message.id !== undefined && !message.method) {
+    const pending = pendingInteractive.get(message.id);
+    if (!pending) {
+      return;
+    }
+    pendingInteractive.delete(message.id);
+    const decision =
+      message.result && message.result.resolution
+      && message.result.resolution.kind === "command_approval"
+        ? message.result.resolution.decision
+        : "unknown";
+    completeTurn(pending.providerThreadId, pending.turnId, "interactive:" + decision);
+    return;
+  }
+
+  if (message.method === "initialize" || message.method === "model/list") {
+    send({ jsonrpc: "2.0", id: message.id, result: message.method === "model/list" ? [] : {} });
+    return;
+  }
+
+  if (message.method === "thread/start") {
+    const threadId = message.params.threadId;
+    const providerThreadId = "prov-" + String(nextThreadId++);
+    threads.set(threadId, { providerThreadId, turnCount: 0 });
+    send({ jsonrpc: "2.0", id: message.id, result: { providerThreadId } });
+    send({ jsonrpc: "2.0", method: "thread/identity", params: { threadId, providerThreadId } });
+    return;
+  }
+
+  if (message.method === "turn/start") {
+    const threadId = message.params.threadId;
+    const providerThreadId = message.params.providerThreadId || threadId;
+    const thread = threads.get(threadId);
+    thread.turnCount += 1;
+    const turnId = "turn-" + String(thread.turnCount);
+    send({
+      jsonrpc: "2.0",
+      method: "turn/started",
+      params: { threadId: providerThreadId, turnId, providerThreadId },
+    });
+    send({ jsonrpc: "2.0", id: message.id, result: { ok: true } });
+    const requestId = nextRequestId++;
+    pendingInteractive.set(requestId, { providerThreadId, turnId });
+    send({
+      jsonrpc: "2.0",
+      id: requestId,
+      method: "request_interaction",
+      params: {
+        threadId: providerThreadId,
+        turnId,
+        itemId: "item-1",
+        kind: "command_approval",
+        command: "git push",
+        cwd: "/tmp/project",
+        reason: "Needs approval",
+      },
+    });
+  }
+});
+`,
+      "utf8",
+    );
+
+    const requests: Array<{ threadId: string; providerThreadId: string; kind: string }> = [];
+    const events: ThreadEvent[] = [];
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: (event) => events.push(event),
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      onInteractiveRequest: async (request) => {
+        requests.push({
+          threadId: request.threadId,
+          providerThreadId: request.providerThreadId,
+          kind: request.payload.kind,
+        });
+        return {
+          kind: "command_approval",
+          decision: "accept_for_session",
+        };
+      },
+      adapterFactory: () => createInteractiveRequestAdapter(interactiveScriptPath),
+    });
+
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+    });
+    await runtime.runTurn({
+      threadId: "t1",
+      input: [{ type: "text", text: "trigger interactive request" }],
+    });
+    await wait(200);
+
+    expect(requests).toEqual([
+      {
+        threadId: "t1",
+        providerThreadId: "prov-1",
+        kind: "command_approval",
+      },
+    ]);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "agentMessage",
+          text: "interactive:accept_for_session",
+        }),
+      }),
+    );
+    await runtime.shutdown();
+  });
+
+  it("responds to unsupported interactive requests with a JSON-RPC error instead of dropping them", async () => {
+    const unsupportedScriptPath = join(tmpDir, "unsupported-interactive-provider.cjs");
+    writeFileSync(
+      unsupportedScriptPath,
+      `
+const readline = require("node:readline");
+const threads = new Map();
+const pendingInteractive = new Map();
+let nextThreadId = 1;
+let nextRequestId = 1;
+
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + "\\n");
+}
+
+function completeTurn(providerThreadId, turnId, text) {
+  send({
+    jsonrpc: "2.0",
+    method: "item/completed",
+    params: {
+      threadId: providerThreadId,
+      turnId,
+      item: {
+        type: "agentMessage",
+        id: "msg-" + turnId,
+        text,
+      },
+    },
+  });
+  send({
+    jsonrpc: "2.0",
+    method: "turn/completed",
+    params: {
+      threadId: providerThreadId,
+      turnId,
+      status: "completed",
+      providerThreadId,
+    },
+  });
+}
+
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+
+  if (message.id !== undefined && !message.method) {
+    const pending = pendingInteractive.get(message.id);
+    if (!pending) {
+      return;
+    }
+    pendingInteractive.delete(message.id);
+    const errorMessage = message.error ? message.error.message : "missing error";
+    completeTurn(pending.providerThreadId, pending.turnId, errorMessage);
+    return;
+  }
+
+  if (message.method === "initialize" || message.method === "model/list") {
+    send({ jsonrpc: "2.0", id: message.id, result: message.method === "model/list" ? [] : {} });
+    return;
+  }
+
+  if (message.method === "thread/start") {
+    const threadId = message.params.threadId;
+    const providerThreadId = "prov-" + String(nextThreadId++);
+    threads.set(threadId, { providerThreadId, turnCount: 0 });
+    send({ jsonrpc: "2.0", id: message.id, result: { providerThreadId } });
+    send({ jsonrpc: "2.0", method: "thread/identity", params: { threadId, providerThreadId } });
+    return;
+  }
+
+  if (message.method === "turn/start") {
+    const threadId = message.params.threadId;
+    const providerThreadId = message.params.providerThreadId || threadId;
+    const thread = threads.get(threadId);
+    thread.turnCount += 1;
+    const turnId = "turn-" + String(thread.turnCount);
+    send({
+      jsonrpc: "2.0",
+      method: "turn/started",
+      params: { threadId: providerThreadId, turnId, providerThreadId },
+    });
+    send({ jsonrpc: "2.0", id: message.id, result: { ok: true } });
+    const requestId = nextRequestId++;
+    pendingInteractive.set(requestId, { providerThreadId, turnId });
+    send({
+      jsonrpc: "2.0",
+      id: requestId,
+      method: "request_unsupported",
+      params: {
+        threadId: providerThreadId,
+        turnId,
+        itemId: "item-unsupported",
+      },
+    });
+  }
+});
+`,
+      "utf8",
+    );
+
+    const events: ThreadEvent[] = [];
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: (event) => events.push(event),
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () => createInteractiveRequestAdapter(unsupportedScriptPath),
+    });
+
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+    });
+    await runtime.runTurn({
+      threadId: "t1",
+      input: [{ type: "text", text: "trigger unsupported interactive request" }],
+    });
+    await wait(200);
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "agentMessage",
+          text: 'Unsupported provider request "request_unsupported"',
+        }),
+      }),
+    );
+    await runtime.shutdown();
   });
 
   it("captures correlated raw provider events, translated events, and tool call results", async () => {

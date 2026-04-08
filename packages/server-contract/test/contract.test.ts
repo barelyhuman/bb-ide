@@ -267,6 +267,7 @@ describe("server-contract canonical schemas", () => {
           status: "pending",
           payload: {
             kind: "command_approval",
+            itemId: "item_123",
             approvalId: null,
             reason: "Needs approval",
             command: "git push",

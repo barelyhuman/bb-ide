@@ -1242,6 +1242,124 @@ describe("codex provider adapter", () => {
     ).toBeNull();
   });
 
+  it("decodeInteractiveRequest maps command approval requests into pending interaction payloads", () => {
+    const adapter = createCodexProviderAdapter();
+    expect(
+      adapter.decodeInteractiveRequest?.({
+        jsonrpc: "2.0",
+        id: 8,
+        method: "item/commandExecution/requestApproval",
+        params: {
+          threadId: "t1",
+          turnId: "turn-1",
+          itemId: "item-1",
+          approvalId: null,
+          reason: "Needs approval",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [
+            {
+              type: "unknown",
+              command: "git push",
+            },
+          ],
+          additionalPermissions: {
+            network: { enabled: true },
+            fileSystem: null,
+            macos: null,
+          },
+          availableDecisions: ["accept", "acceptForSession", "decline", "cancel"],
+        },
+      }),
+    ).toEqual({
+      requestId: 8,
+      method: "item/commandExecution/requestApproval",
+      providerThreadId: "t1",
+      turnId: "turn-1",
+      payload: {
+        kind: "command_approval",
+        itemId: "item-1",
+        approvalId: null,
+        reason: "Needs approval",
+        command: "git push",
+        cwd: "/tmp/project",
+        commandActions: [
+          {
+            type: "unknown",
+            command: "git push",
+          },
+        ],
+        requestedPermissions: {
+          network: { enabled: true },
+          fileSystem: null,
+        },
+        availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+      },
+    });
+  });
+
+  it("buildInteractiveResponse maps bb command approvals back to Codex responses", () => {
+    const adapter = createCodexProviderAdapter();
+    expect(
+      adapter.buildInteractiveResponse?.({
+        request: {
+          requestId: 8,
+          method: "item/commandExecution/requestApproval",
+          providerThreadId: "t1",
+          turnId: "turn-1",
+          payload: {
+            kind: "command_approval",
+            itemId: "item-1",
+            approvalId: null,
+            reason: null,
+            command: "git push",
+            cwd: "/tmp/project",
+            commandActions: [],
+            requestedPermissions: null,
+            availableDecisions: ["accept", "decline", "cancel"],
+          },
+        },
+        resolution: {
+          kind: "command_approval",
+          decision: "accept_for_session",
+        },
+      }),
+    ).toEqual({
+      decision: "acceptForSession",
+    });
+  });
+
+  it("buildInteractiveResponse maps user input answers back to Codex responses", () => {
+    const adapter = createCodexProviderAdapter();
+    expect(
+      adapter.buildInteractiveResponse?.({
+        request: {
+          requestId: 9,
+          method: "item/tool/requestUserInput",
+          providerThreadId: "t1",
+          turnId: "turn-1",
+          payload: {
+            kind: "user_input_request",
+            itemId: "item-2",
+            questions: [],
+          },
+        },
+        resolution: {
+          kind: "user_input_request",
+          answers: {
+            target: ["prod"],
+          },
+        },
+      }),
+    ).toEqual({
+      answers: {
+        target: {
+          answers: ["prod"],
+        },
+      },
+    });
+  });
+
   // -- listModels ----------------------------------------------------------
 
   it("parseModelListResult validates model/list payloads", () => {

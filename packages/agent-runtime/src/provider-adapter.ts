@@ -2,6 +2,8 @@ import type {
   AvailableModel,
   DynamicTool,
   InstructionMode,
+  PendingInteractionPayload,
+  PendingInteractionResolution,
   PromptInput,
   ProviderCapabilities,
   ReasoningLevel,
@@ -38,6 +40,15 @@ export interface DecodedToolCallRequest {
   callId: string;
   tool: string;
   arguments?: unknown;
+  threadId?: string;
+}
+
+export interface DecodedInteractiveRequest {
+  requestId: string | number;
+  method: string;
+  providerThreadId: string;
+  turnId: string;
+  payload: PendingInteractionPayload;
   threadId?: string;
 }
 
@@ -116,4 +127,9 @@ export interface ProviderAdapter {
     context?: ProviderTranslationContext,
   ): ThreadEvent[];
   decodeToolCallRequest(request: JsonRpcMessage): DecodedToolCallRequest | null;
+  decodeInteractiveRequest?(request: JsonRpcMessage): DecodedInteractiveRequest | null;
+  buildInteractiveResponse?(args: {
+    request: DecodedInteractiveRequest;
+    resolution: PendingInteractionResolution;
+  }): unknown;
 }

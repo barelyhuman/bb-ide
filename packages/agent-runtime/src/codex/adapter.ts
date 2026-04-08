@@ -27,6 +27,10 @@ import type { JsonValue } from "./generated/codex-app-server/schema/serde_json/J
 import type { ServerNotification as CodexServerNotification } from "./generated/codex-app-server/schema/ServerNotification.js";
 import type { SandboxPolicy } from "./generated/codex-app-server/schema/v2/SandboxPolicy.js";
 import type { DynamicToolSpec } from "./generated/codex-app-server/schema/v2/DynamicToolSpec.js";
+import type { CommandExecutionRequestApprovalResponse } from "./generated/codex-app-server/schema/v2/CommandExecutionRequestApprovalResponse.js";
+import type { FileChangeRequestApprovalResponse } from "./generated/codex-app-server/schema/v2/FileChangeRequestApprovalResponse.js";
+import type { PermissionsRequestApprovalResponse } from "./generated/codex-app-server/schema/v2/PermissionsRequestApprovalResponse.js";
+import type { ToolRequestUserInputResponse } from "./generated/codex-app-server/schema/v2/ToolRequestUserInputResponse.js";
 import type { ThreadResumeParams } from "./generated/codex-app-server/schema/v2/ThreadResumeParams.js";
 import type { ThreadStartParams } from "./generated/codex-app-server/schema/v2/ThreadStartParams.js";
 import type { UserInput as CodexUserInput } from "./generated/codex-app-server/schema/v2/UserInput.js";
@@ -43,6 +47,7 @@ import { jsonRpcEnvelopeSchema } from "../shared/json-rpc-envelope.js";
 import type {
   AdapterCommand,
   AdapterOptions,
+  DecodedInteractiveRequest,
   DecodedToolCallRequest,
   JsonRpcMessage,
   ProviderAdapter,
@@ -192,6 +197,107 @@ const codexWebSearchActionSchema = z.discriminatedUnion("type", [
     type: z.literal("other"),
   }).passthrough(),
 ]);
+
+const codexSimpleCommandApprovalDecisionSchema = z.enum([
+  "accept",
+  "acceptForSession",
+  "decline",
+  "cancel",
+]);
+
+const codexFileSystemPermissionsSchema = z.object({
+  read: z.array(z.string()).nullable(),
+  write: z.array(z.string()).nullable(),
+});
+
+const codexNetworkPermissionsSchema = z.object({
+  enabled: z.boolean().nullable(),
+});
+
+const codexAdditionalPermissionsSchema = z.object({
+  network: codexNetworkPermissionsSchema.nullable(),
+  fileSystem: codexFileSystemPermissionsSchema.nullable(),
+  macos: z.null(),
+});
+
+const codexRequestPermissionsSchema = z.object({
+  network: codexNetworkPermissionsSchema.nullable(),
+  fileSystem: codexFileSystemPermissionsSchema.nullable(),
+});
+
+const codexCommandActionSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("read"),
+    command: z.string(),
+    name: z.string(),
+    path: z.string(),
+  }),
+  z.object({
+    type: z.literal("listFiles"),
+    command: z.string(),
+    path: z.string().nullable(),
+  }),
+  z.object({
+    type: z.literal("search"),
+    command: z.string(),
+    query: z.string().nullable(),
+    path: z.string().nullable(),
+  }),
+  z.object({
+    type: z.literal("unknown"),
+    command: z.string(),
+  }),
+]);
+
+const codexCommandExecutionRequestApprovalParamsSchema = z.object({
+  threadId: z.string(),
+  turnId: z.string(),
+  itemId: z.string(),
+  approvalId: z.string().nullable().optional(),
+  reason: z.string().nullable().optional(),
+  command: z.string().nullable().optional(),
+  cwd: z.string().nullable().optional(),
+  commandActions: z.array(codexCommandActionSchema).nullable().optional(),
+  additionalPermissions: codexAdditionalPermissionsSchema.nullable().optional(),
+  availableDecisions: z.array(z.unknown()).nullable().optional(),
+}).passthrough();
+
+const codexFileChangeRequestApprovalParamsSchema = z.object({
+  threadId: z.string(),
+  turnId: z.string(),
+  itemId: z.string(),
+  reason: z.string().nullable().optional(),
+  grantRoot: z.string().nullable().optional(),
+}).passthrough();
+
+const codexToolRequestUserInputOptionSchema = z.object({
+  label: z.string(),
+  description: z.string(),
+});
+
+const codexToolRequestUserInputQuestionSchema = z.object({
+  id: z.string(),
+  header: z.string(),
+  question: z.string(),
+  isOther: z.boolean(),
+  isSecret: z.boolean(),
+  options: z.array(codexToolRequestUserInputOptionSchema).nullable(),
+});
+
+const codexToolRequestUserInputParamsSchema = z.object({
+  threadId: z.string(),
+  turnId: z.string(),
+  itemId: z.string(),
+  questions: z.array(codexToolRequestUserInputQuestionSchema),
+}).passthrough();
+
+const codexPermissionsRequestApprovalParamsSchema = z.object({
+  threadId: z.string(),
+  turnId: z.string(),
+  itemId: z.string(),
+  reason: z.string().nullable(),
+  permissions: codexRequestPermissionsSchema,
+}).passthrough();
 
 const codexThreadItemEnvelopeSchema = z.object({
   type: z.string(),
@@ -732,6 +838,78 @@ function translateCodexItem(item: unknown): ThreadEventItem | null {
   }
 }
 
+function toPendingInteractionPermissionProfile(
+  permissions: z.infer<typeof codexRequestPermissionsSchema>,
+): {
+  network: { enabled: boolean | null } | null;
+  fileSystem: { read: string[]; write: string[] } | null;
+} {
+  return {
+    network: permissions.network
+      ? { enabled: permissions.network.enabled }
+      : null,
+    fileSystem: permissions.fileSystem
+      ? {
+          read: permissions.fileSystem.read ?? [],
+          write: permissions.fileSystem.write ?? [],
+        }
+      : null,
+  };
+}
+
+function toCodexGrantedPermissionProfile(args: {
+  network: { enabled: boolean | null } | null;
+  fileSystem: { read: string[]; write: string[] } | null;
+}): {
+  network?: { enabled: boolean | null };
+  fileSystem?: { read: string[] | null; write: string[] | null };
+} {
+  return {
+    ...(args.network ? { network: { enabled: args.network.enabled } } : {}),
+    ...(args.fileSystem
+      ? {
+          fileSystem: {
+            read: args.fileSystem.read.length > 0 ? args.fileSystem.read : null,
+            write: args.fileSystem.write.length > 0 ? args.fileSystem.write : null,
+          },
+        }
+      : {}),
+  };
+}
+
+function parseCodexAvailableDecisions(
+  decisions: unknown[] | null | undefined,
+): Array<"accept" | "accept_for_session" | "decline" | "cancel"> | null {
+  if (!decisions) {
+    return ["accept", "decline", "cancel"];
+  }
+
+  const normalized: Array<"accept" | "accept_for_session" | "decline" | "cancel"> = [];
+  for (const decision of decisions) {
+    const parsed = codexSimpleCommandApprovalDecisionSchema.safeParse(decision);
+    if (!parsed.success) {
+      return null;
+    }
+
+    switch (parsed.data) {
+      case "accept":
+        normalized.push("accept");
+        break;
+      case "acceptForSession":
+        normalized.push("accept_for_session");
+        break;
+      case "decline":
+        normalized.push("decline");
+        break;
+      case "cancel":
+        normalized.push("cancel");
+        break;
+    }
+  }
+
+  return normalized;
+}
+
 // ---------------------------------------------------------------------------
 // Adapter factory
 // ---------------------------------------------------------------------------
@@ -1120,6 +1298,194 @@ export function createCodexProviderAdapter(
         request.method,
         request.params,
       );
+    },
+
+    decodeInteractiveRequest(request: JsonRpcMessage): DecodedInteractiveRequest | null {
+      if (typeof request.id !== "string" && typeof request.id !== "number") {
+        return null;
+      }
+
+      switch (request.method) {
+        case "item/commandExecution/requestApproval": {
+          const parsed = codexCommandExecutionRequestApprovalParamsSchema.safeParse(
+            request.params,
+          );
+          if (!parsed.success) {
+            return null;
+          }
+          if (parsed.data.additionalPermissions?.macos !== null) {
+            return null;
+          }
+          const availableDecisions = parseCodexAvailableDecisions(
+            parsed.data.availableDecisions,
+          );
+          if (!availableDecisions) {
+            return null;
+          }
+          return {
+            requestId: request.id,
+            method: request.method,
+            providerThreadId: parsed.data.threadId,
+            turnId: parsed.data.turnId,
+            payload: {
+              kind: "command_approval",
+              itemId: parsed.data.itemId,
+              approvalId: parsed.data.approvalId ?? null,
+              reason: parsed.data.reason ?? null,
+              command: parsed.data.command ?? null,
+              cwd: parsed.data.cwd ?? null,
+              commandActions: parsed.data.commandActions ?? [],
+              requestedPermissions: parsed.data.additionalPermissions
+                ? toPendingInteractionPermissionProfile(parsed.data.additionalPermissions)
+                : null,
+              availableDecisions,
+            },
+          };
+        }
+        case "item/fileChange/requestApproval": {
+          const parsed = codexFileChangeRequestApprovalParamsSchema.safeParse(
+            request.params,
+          );
+          if (!parsed.success) {
+            return null;
+          }
+          return {
+            requestId: request.id,
+            method: request.method,
+            providerThreadId: parsed.data.threadId,
+            turnId: parsed.data.turnId,
+            payload: {
+              kind: "file_change_approval",
+              itemId: parsed.data.itemId,
+              reason: parsed.data.reason ?? null,
+              grantRoot: parsed.data.grantRoot ?? null,
+            },
+          };
+        }
+        case "item/tool/requestUserInput": {
+          const parsed = codexToolRequestUserInputParamsSchema.safeParse(
+            request.params,
+          );
+          if (!parsed.success) {
+            return null;
+          }
+          return {
+            requestId: request.id,
+            method: request.method,
+            providerThreadId: parsed.data.threadId,
+            turnId: parsed.data.turnId,
+            payload: {
+              kind: "user_input_request",
+              itemId: parsed.data.itemId,
+              questions: parsed.data.questions.map((question) => ({
+                id: question.id,
+                header: question.header,
+                question: question.question,
+                allowsOther: question.isOther,
+                isSecret: question.isSecret,
+                options: question.options ?? [],
+              })),
+            },
+          };
+        }
+        case "item/permissions/requestApproval": {
+          const parsed = codexPermissionsRequestApprovalParamsSchema.safeParse(
+            request.params,
+          );
+          if (!parsed.success) {
+            return null;
+          }
+          return {
+            requestId: request.id,
+            method: request.method,
+            providerThreadId: parsed.data.threadId,
+            turnId: parsed.data.turnId,
+            payload: {
+              kind: "permission_request",
+              itemId: parsed.data.itemId,
+              reason: parsed.data.reason,
+              permissions: toPendingInteractionPermissionProfile(parsed.data.permissions),
+            },
+          };
+        }
+        default:
+          return null;
+      }
+    },
+
+    buildInteractiveResponse(args): unknown {
+      switch (args.request.payload.kind) {
+        case "command_approval": {
+          if (args.resolution.kind !== "command_approval") {
+            throw new Error("Interactive response kind mismatch for command approval");
+          }
+          const response: CommandExecutionRequestApprovalResponse = {
+            decision: (() => {
+              switch (args.resolution.decision) {
+                case "accept":
+                  return "accept";
+                case "accept_for_session":
+                  return "acceptForSession";
+                case "decline":
+                  return "decline";
+                case "cancel":
+                  return "cancel";
+                default:
+                  return assertNever(args.resolution.decision);
+              }
+            })(),
+          };
+          return response;
+        }
+        case "file_change_approval": {
+          if (args.resolution.kind !== "file_change_approval") {
+            throw new Error("Interactive response kind mismatch for file change approval");
+          }
+          const response: FileChangeRequestApprovalResponse = {
+            decision: (() => {
+              switch (args.resolution.decision) {
+                case "accept":
+                  return "accept";
+                case "accept_for_session":
+                  return "acceptForSession";
+                case "decline":
+                  return "decline";
+                case "cancel":
+                  return "cancel";
+                default:
+                  return assertNever(args.resolution.decision);
+              }
+            })(),
+          };
+          return response;
+        }
+        case "user_input_request": {
+          if (args.resolution.kind !== "user_input_request") {
+            throw new Error("Interactive response kind mismatch for user input request");
+          }
+          const response: ToolRequestUserInputResponse = {
+            answers: Object.fromEntries(
+              Object.entries(args.resolution.answers).map(([questionId, answers]) => [
+                questionId,
+                { answers },
+              ]),
+            ),
+          };
+          return response;
+        }
+        case "permission_request": {
+          if (args.resolution.kind !== "permission_request") {
+            throw new Error("Interactive response kind mismatch for permission request");
+          }
+          const response: PermissionsRequestApprovalResponse = {
+            permissions: toCodexGrantedPermissionProfile(args.resolution.permissions),
+            scope: args.resolution.scope,
+          };
+          return response;
+        }
+        default:
+          return assertNever(args.request.payload);
+      }
     },
 
     parseModelListResult(result: unknown) {
