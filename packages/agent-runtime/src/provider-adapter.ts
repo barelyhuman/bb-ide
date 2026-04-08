@@ -1,4 +1,5 @@
 import type {
+  ApprovalPolicy,
   AvailableModel,
   DynamicTool,
   InstructionMode,
@@ -61,7 +62,7 @@ export interface AdapterOptions {
   serviceTier?: ServiceTier;
   reasoningLevel?: ReasoningLevel;
   sandboxMode?: SandboxMode;
-  approvalPolicy?: string;
+  approvalPolicy?: ApprovalPolicy;
   instructions?: string;
   envVars?: Record<string, string>;
 }

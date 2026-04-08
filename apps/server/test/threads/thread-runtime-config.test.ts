@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { resolveThreadRuntimeCommandConfig } from "../../src/services/threads/thread-runtime-config.js";
+import {
+  resolveExecutionOptions,
+  resolveThreadRuntimeCommandConfig,
+} from "../../src/services/threads/thread-runtime-config.js";
 import {
   reportQueuedCommandError,
   reportQueuedCommandSuccess,
@@ -18,6 +21,39 @@ function resolveLocalTimezone(): string {
 }
 
 describe("thread runtime config", () => {
+  it("defaults Codex execution approval policy to on-request", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-runtime-approval-policy",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        providerId: "codex",
+      });
+
+      const execution = await resolveExecutionOptions(harness.deps, {
+        threadId: thread.id,
+        requestedExecution: {
+          model: "gpt-5",
+          source: "client/turn/requested",
+        },
+      });
+
+      expect(execution.approvalPolicy).toBe("on-request");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("uses the project root as cwd and a host data-dir workspace for managers", async () => {
     const harness = await createTestAppHarness();
     try {

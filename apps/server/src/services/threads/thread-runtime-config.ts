@@ -5,6 +5,7 @@ import {
   getThread,
 } from "@bb/db";
 import type {
+  ApprovalPolicy,
   DynamicTool,
   InstructionMode,
   ProjectExecutionDefaults,
@@ -98,6 +99,17 @@ export interface ResolvedThreadRuntimeCommandConfig {
   workspaceProvisionType: WorkspaceProvisionType;
 }
 
+function getDefaultApprovalPolicyForProvider(
+  providerId: string | null | undefined,
+): ApprovalPolicy | undefined {
+  switch (providerId) {
+    case "codex":
+      return "on-request";
+    default:
+      return undefined;
+  }
+}
+
 function requireWorkspacePath(environment: ThreadRuntimeCommandEnvironment): string {
   if (!environment.path) {
     throw new ApiError(409, "invalid_request", "Environment is not ready");
@@ -162,7 +174,7 @@ export async function resolveExecutionOptions(
   const approvalPolicy =
     args.requestedExecution.approvalPolicy ??
     lastExecution?.approvalPolicy ??
-    (thread?.providerId === "codex" ? "on-request" : undefined);
+    getDefaultApprovalPolicyForProvider(thread?.providerId);
 
   return {
     model,
@@ -181,7 +193,7 @@ export async function resolveExecutionOptions(
       lastExecution?.sandboxMode ??
       projectExecution?.sandboxMode ??
       DEFAULT_SANDBOX_MODE,
-    ...(approvalPolicy ? { approvalPolicy } : {}),
+    ...(approvalPolicy === undefined ? {} : { approvalPolicy }),
     source: args.requestedExecution.source,
   };
 }

@@ -529,6 +529,66 @@ describe("createAgentRuntime", () => {
     await runtime.shutdown();
   });
 
+  it("passes approval policy through to adapter commands", async () => {
+    const recordedCommands: AdapterCommand[] = [];
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: () => undefined,
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () =>
+        createRecordingAdapter({ recordedCommands, scriptPath }),
+    });
+
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+      options: {
+        approvalPolicy: "on-request",
+      },
+    });
+
+    await runtime.runTurn({
+      threadId: "t1",
+      input: [{ type: "text", text: "follow up" }],
+      options: {
+        approvalPolicy: "on-failure",
+      },
+    });
+
+    const threadStart = recordedCommands.find(
+      (command) => command.type === "thread/start",
+    );
+    expect(threadStart?.type).toBe("thread/start");
+    if (!threadStart || threadStart.type !== "thread/start") {
+      throw new Error("Expected thread/start command");
+    }
+    expect(threadStart.options?.approvalPolicy).toBe("on-request");
+
+    const reconfigureCommand = findLastRecordedCommand(
+      recordedCommands,
+      "thread/resume",
+    );
+    expect(reconfigureCommand?.type).toBe("thread/resume");
+    if (!reconfigureCommand || reconfigureCommand.type !== "thread/resume") {
+      throw new Error("Expected thread/resume command");
+    }
+    expect(reconfigureCommand.options?.approvalPolicy).toBe("on-failure");
+
+    const turnStart = findLastRecordedCommand(recordedCommands, "turn/start");
+    expect(turnStart?.type).toBe("turn/start");
+    if (!turnStart || turnStart.type !== "turn/start") {
+      throw new Error("Expected turn/start command");
+    }
+    expect(turnStart.options?.approvalPolicy).toBe("on-failure");
+
+    await runtime.shutdown();
+  });
+
   it("runs a turn and receives turn/started + turn/completed events", async () => {
     const events: ThreadEvent[] = [];
     const runtime = createAgentRuntime({

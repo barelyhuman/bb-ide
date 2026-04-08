@@ -24,6 +24,14 @@ export const sandboxModeSchema = z.enum([
 ]);
 export type SandboxMode = z.infer<typeof sandboxModeSchema>;
 
+export const approvalPolicySchema = z.enum([
+  "never",
+  "on-request",
+  "on-failure",
+  "untrusted",
+]);
+export type ApprovalPolicy = z.infer<typeof approvalPolicySchema>;
+
 export const promptInputSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("text"),
@@ -59,7 +67,7 @@ export const threadExecutionOptionsSchema = z.object({
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
   sandboxMode: sandboxModeSchema.optional(),
-  approvalPolicy: z.string().optional(),
+  approvalPolicy: approvalPolicySchema.optional(),
   source: threadExecutionSourceSchema.optional(),
   seq: z.number().int().optional(),
 });

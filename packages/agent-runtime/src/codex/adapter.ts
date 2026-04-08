@@ -11,6 +11,7 @@
 import { getBuiltInAgentProviderInfo } from "@bb/agent-providers";
 import { z } from "zod";
 import type {
+  ApprovalPolicy,
   PendingInteractionCommandApprovalDecision,
   PromptInput,
   ProviderCapabilities,
@@ -77,7 +78,7 @@ function toCodexContextWindowUsage(
 }
 
 function toCodexApprovalPolicy(
-  policy: string | undefined,
+  policy: ApprovalPolicy | undefined,
 ): AskForApproval | undefined {
   switch (policy) {
     case undefined:

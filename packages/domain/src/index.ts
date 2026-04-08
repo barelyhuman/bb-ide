@@ -1,6 +1,7 @@
 export {
   instructionModeValues,
   instructionModeSchema,
+  approvalPolicySchema,
   reasoningLevelSchema,
   sandboxModeSchema,
   serviceTierSchema,
@@ -12,6 +13,7 @@ export {
 } from "./shared-types.js";
 export type {
   InstructionMode,
+  ApprovalPolicy,
   ProjectExecutionDefaults,
   PromptInput,
   ReasoningLevel,
