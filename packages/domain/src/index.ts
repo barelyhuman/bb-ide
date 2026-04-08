@@ -76,6 +76,8 @@ export {
   activeLifecycleOperationStates,
   environmentOperationKindSchema,
   environmentOperationKindValues,
+  hostOperationKindSchema,
+  hostOperationKindValues,
   isActiveLifecycleOperationState,
   lifecycleOperationStateSchema,
   lifecycleOperationStateValues,
@@ -86,6 +88,7 @@ export {
 } from "./lifecycle-operations.js";
 export type {
   EnvironmentOperationKind,
+  HostOperationKind,
   LifecycleOperationState,
   ProjectOperationKind,
   ThreadOperationKind,

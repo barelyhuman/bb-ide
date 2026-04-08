@@ -51,3 +51,9 @@ export const projectOperationKindValues = [
 ] as const;
 export const projectOperationKindSchema = z.enum(projectOperationKindValues);
 export type ProjectOperationKind = z.infer<typeof projectOperationKindSchema>;
+
+export const hostOperationKindValues = [
+  "sync_runtime_material",
+] as const;
+export const hostOperationKindSchema = z.enum(hostOperationKindValues);
+export type HostOperationKind = z.infer<typeof hostOperationKindSchema>;

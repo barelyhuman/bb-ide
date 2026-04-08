@@ -13,6 +13,7 @@ import type {
   EnvironmentOperationKind,
   EnvironmentCleanupMode,
   EnvironmentStatus,
+  HostOperationKind,
   HostType,
   LifecycleOperationState,
   ProjectOperationKind,
@@ -84,13 +85,17 @@ export const hosts = sqliteTable(
     type: text("type").$type<HostType>().notNull(),
     provider: text("provider"),
     externalId: text("external_id"),
+    lastActivityAt: integer("last_activity_at"),
+    suspendedAt: integer("suspended_at"),
     destroyedAt: integer("destroyed_at"),
     lastSeenAt: integer("last_seen_at").notNull(),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
   (table) => [
+    index("hosts_last_activity_idx").on(table.lastActivityAt),
     index("hosts_last_seen_idx").on(table.lastSeenAt),
+    index("hosts_suspended_idx").on(table.suspendedAt),
   ],
 );
 
@@ -482,6 +487,37 @@ export const environmentOperations = sqliteTable(
     uniqueIndex("environment_operations_command_idx").on(table.commandId),
     index("environment_operations_state_idx").on(table.state),
     index("environment_operations_environment_idx").on(table.environmentId),
+  ],
+);
+
+export const hostOperations = sqliteTable(
+  "host_operations",
+  {
+    id: text("id").primaryKey(),
+    hostId: text("host_id")
+      .notNull()
+      .references(() => hosts.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<HostOperationKind>().notNull(),
+    state: text("state").$type<LifecycleOperationState>().notNull(),
+    payload: text("payload").notNull(),
+    commandId: text("command_id").references(() => hostDaemonCommands.id, {
+      onDelete: "set null",
+    }),
+    requestedAt: integer("requested_at").notNull(),
+    queuedAt: integer("queued_at"),
+    completedAt: integer("completed_at"),
+    failureReason: text("failure_reason"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("host_operations_host_kind_idx").on(
+      table.hostId,
+      table.kind,
+    ),
+    uniqueIndex("host_operations_command_idx").on(table.commandId),
+    index("host_operations_state_idx").on(table.state),
+    index("host_operations_host_idx").on(table.hostId),
   ],
 );
 

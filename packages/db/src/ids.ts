@@ -32,6 +32,10 @@ export function createEnvironmentOperationId(): string {
   return createId("eop");
 }
 
+export function createHostOperationId(): string {
+  return createId("hop");
+}
+
 export function createThreadId(): string {
   return createId("thr");
 }

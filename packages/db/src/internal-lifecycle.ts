@@ -15,6 +15,17 @@ export {
   upsertEnvironmentOperationRecord,
 } from "./data/environment-operations.js";
 export {
+  cancelHostOperationRecord,
+  markHostOperationRecordCompleted,
+  markHostOperationRecordFailed,
+  markHostOperationRecordFetched,
+  markHostOperationRecordQueued,
+  upsertHostOperationRecord,
+} from "./data/host-operations.js";
+export {
+  updateHostLifecycleState,
+} from "./data/host-lifecycle-state.js";
+export {
   cancelProjectOperationRecord,
   markProjectOperationRecordCompleted,
   markProjectOperationRecordFailed,

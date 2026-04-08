@@ -183,6 +183,13 @@
       "when": 1775616060570,
       "tag": "0025_project_execution_defaults",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "6",
+      "when": 1775702400000,
+      "tag": "0026_sandbox_host_lifecycle",
+      "breakpoints": true
     }
   ]
 }

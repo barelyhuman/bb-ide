@@ -15,8 +15,17 @@ import type { DbConnection } from "@bb/db";
 import { ApiError } from "../../errors.js";
 
 function toHostStatus(db: DbConnection, hostId: string): Host["status"] {
+  const host = getNonDestroyedHost(db, hostId);
+  if (!host) {
+    return "disconnected";
+  }
+
   const session = getActiveSession(db, hostId);
-  return session ? "connected" : "disconnected";
+  if (session) {
+    return "connected";
+  }
+
+  return host.suspendedAt !== null ? "suspended" : "disconnected";
 }
 
 function toHostRecord(
@@ -47,7 +56,11 @@ export function listPublicHostsWithStatus(db: DbConnection): Host[] {
   return rows.map((row) =>
     toHostRecord(
       row,
-      connectedHostIds.has(row.id) ? "connected" : "disconnected",
+      connectedHostIds.has(row.id)
+        ? "connected"
+        : row.suspendedAt !== null
+          ? "suspended"
+          : "disconnected",
     ),
   );
 }

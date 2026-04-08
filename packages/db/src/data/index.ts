@@ -155,6 +155,30 @@ export type {
 } from "./environments.js";
 
 export {
+  getHostOperation,
+  getHostOperationByCommandId,
+  listHostOperations,
+  markHostOperationRecordCompleted,
+  markHostOperationRecordFailed,
+  markHostOperationRecordFetched,
+  markHostOperationRecordQueued,
+  upsertHostOperationRecord,
+} from "./host-operations.js";
+export type {
+  GetHostOperationArgs,
+  HostOperationRow,
+  ListHostOperationsArgs,
+  UpsertHostOperationInput,
+} from "./host-operations.js";
+
+export {
+  updateHostLifecycleState,
+} from "./host-lifecycle-state.js";
+export type {
+  UpdateHostLifecycleStateInput,
+} from "./host-lifecycle-state.js";
+
+export {
   upsertHost,
   getHost,
   getNonDestroyedHost,

@@ -10,6 +10,7 @@ export {
   createHostDaemonCommandId,
   createHostDaemonSessionId,
   createHostId,
+  createHostOperationId,
   createManagerThreadNudgeId,
   createProjectId,
   createProjectSourceId,

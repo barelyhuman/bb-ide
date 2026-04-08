@@ -7,6 +7,7 @@ import {
   hostDaemonCommands,
   hostDaemonSessions,
   upsertProjectExecutionDefaults,
+  updateHostLifecycleState,
   updateHost,
 } from "@bb/db";
 import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
@@ -706,8 +707,13 @@ describe("public project and host routes", () => {
       const connected = seedHostSession(harness.deps, { id: "host-connected" });
       const disconnected = seedHost(harness.deps, { id: "host-disconnected" });
       const expired = seedHostSession(harness.deps, { id: "host-expired" });
+      const suspended = seedHost(harness.deps, { id: "host-suspended" });
       const ephemeral = seedHostSession(harness.deps, {
         id: "host-ephemeral",
+        type: "ephemeral",
+      });
+      const suspendedEphemeral = seedHost(harness.deps, {
+        id: "host-ephemeral-suspended",
         type: "ephemeral",
       });
       const destroyed = seedHostSession(harness.deps, { id: "host-destroyed" });
@@ -719,6 +725,14 @@ describe("public project and host routes", () => {
         })
         .where(eq(hostDaemonSessions.id, expired.session.id))
         .run();
+      updateHostLifecycleState(harness.db, {
+        hostId: suspended.id,
+        suspendedAt: Date.now(),
+      });
+      updateHostLifecycleState(harness.db, {
+        hostId: suspendedEphemeral.id,
+        suspendedAt: Date.now(),
+      });
       updateHost(harness.db, harness.hub, destroyed.host.id, {
         destroyedAt: Date.now(),
       });
@@ -739,6 +753,10 @@ describe("public project and host routes", () => {
           expect.objectContaining({
             id: expired.host.id,
             status: "disconnected",
+          }),
+          expect.objectContaining({
+            id: suspended.id,
+            status: "suspended",
           }),
         ]),
       );
@@ -766,6 +784,16 @@ describe("public project and host routes", () => {
         id: ephemeral.host.id,
         type: "ephemeral",
         status: "connected",
+      });
+
+      const suspendedEphemeralResponse = await harness.app.request(
+        `/api/v1/hosts/${suspendedEphemeral.id}`,
+      );
+      expect(suspendedEphemeralResponse.status).toBe(200);
+      await expect(readJson(suspendedEphemeralResponse)).resolves.toMatchObject({
+        id: suspendedEphemeral.id,
+        type: "ephemeral",
+        status: "suspended",
       });
 
       const destroyedResponse = await harness.app.request(

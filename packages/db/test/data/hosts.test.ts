@@ -12,6 +12,7 @@ import {
   updateHost,
   upsertHost,
 } from "../../src/data/hosts.js";
+import { updateHostLifecycleState } from "../../src/data/host-lifecycle-state.js";
 
 function setup() {
   const db = createConnection(":memory:");
@@ -227,6 +228,29 @@ describe("hosts", () => {
       externalId: "sandbox-new",
     });
     expect(updated?.updatedAt).toBeGreaterThanOrEqual(host.updatedAt);
+  });
+
+  it("updates lifecycle state without changing lastSeenAt", () => {
+    const { db } = setup();
+    const host = upsertHost(db, noopNotifier, {
+      externalId: "sandbox-old",
+      name: "Sandbox Host",
+      provider: "e2b",
+      type: "ephemeral",
+    });
+
+    const updated = updateHostLifecycleState(db, {
+      hostId: host.id,
+      lastActivityAt: 123,
+      suspendedAt: 456,
+    });
+
+    expect(updated).toMatchObject({
+      id: host.id,
+      lastActivityAt: 123,
+      suspendedAt: 456,
+    });
+    expect(updated?.lastSeenAt).toBe(host.lastSeenAt);
   });
 
   it("notifies when updateHost changes host connection state", () => {

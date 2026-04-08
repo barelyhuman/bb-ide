@@ -83,7 +83,9 @@ export function upsertHost(
           input.externalId !== undefined
             ? input.externalId
             : existing.externalId,
+        lastActivityAt: existing.lastActivityAt,
         lastSeenAt: now,
+        suspendedAt: existing.suspendedAt,
         updatedAt: now,
       })
       .where(eq(hosts.id, id))
@@ -100,7 +102,9 @@ export function upsertHost(
         provider: input.provider ?? null,
         destroyedAt: input.destroyedAt ?? null,
         externalId: input.externalId ?? null,
+        lastActivityAt: null,
         lastSeenAt: now,
+        suspendedAt: null,
         createdAt: now,
         updatedAt: now,
       })
