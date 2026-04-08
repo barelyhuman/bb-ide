@@ -35,3 +35,7 @@ export type SandboxLifecycleDeps = Pick<
 export type SandboxWorkSessionDeps =
   & Pick<AppDeps, "db" | "hub">
   & Partial<Pick<AppDeps, "config" | "machineAuth" | "sandboxRegistry">>;
+
+export type LoggedSandboxWorkSessionDeps =
+  & SandboxWorkSessionDeps
+  & Pick<AppDeps, "logger">;

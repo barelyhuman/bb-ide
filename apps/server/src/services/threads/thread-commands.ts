@@ -113,7 +113,7 @@ export async function buildExecutionOptions(
 }
 
 export async function buildThreadStartCommand(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: SandboxWorkSessionDeps,
   args: QueueThreadStartCommandArgs,
 ): Promise<Extract<HostDaemonCommand, { type: "thread.start" }>> {
   const runtimeContext = await resolveThreadRuntimeCommandConfig(deps, {
@@ -173,7 +173,7 @@ export function addEventSequenceToTurnRunCommandPayload(
 }
 
 export async function prepareTurnRunCommandPayload(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: SandboxWorkSessionDeps,
   args: PrepareTurnRunCommandPayloadArgs,
 ): Promise<PreparedTurnRunCommandPayload> {
   const providerThreadId = requireProviderThreadId(
@@ -195,7 +195,7 @@ export async function prepareTurnRunCommandPayload(
 }
 
 async function createTurnRunCommandPayload(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: SandboxWorkSessionDeps,
   args: CreateTurnRunCommandPayloadArgs,
 ): Promise<Extract<HostDaemonCommand, { type: "turn.run" }>> {
   const preparedCommand = await prepareTurnRunCommandPayload(deps, args);

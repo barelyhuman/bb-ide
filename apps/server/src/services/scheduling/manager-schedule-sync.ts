@@ -14,7 +14,7 @@ import {
 } from "@bb/server-contract";
 import { z } from "zod";
 import { ApiError } from "../../errors.js";
-import type { AppDeps } from "../../types.js";
+import type { AppDeps, LoggedSandboxWorkSessionDeps } from "../../types.js";
 import { queueCommandAndWait } from "../hosts/command-wait.js";
 import {
   computeNextScheduledTime,
@@ -162,7 +162,7 @@ function toDesiredManagerThreadNudges(
 }
 
 export async function syncManagerThreadSchedules(
-  deps: Pick<AppDeps, "db" | "hub" | "logger">,
+  deps: LoggedSandboxWorkSessionDeps,
   args: SyncManagerThreadSchedulesArgs,
 ): Promise<void> {
   const thread = getThread(deps.db, args.threadId);
@@ -182,7 +182,7 @@ export async function syncManagerThreadSchedules(
     return;
   }
 
-  const threadStoragePath = requireThreadStoragePath(deps, {
+  const threadStoragePath = await requireThreadStoragePath(deps, {
     hostId: environment.hostId,
     threadId: thread.id,
   });

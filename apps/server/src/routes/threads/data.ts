@@ -13,7 +13,7 @@ import {
   typedRoutes,
   type PublicApiSchema,
 } from "@bb/server-contract";
-import type { AppDeps } from "../../types.js";
+import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
 import {
@@ -63,10 +63,10 @@ function parseThreadStorageFileListLimit(rawLimit: string | undefined): number {
   return limit;
 }
 
-function requireThreadStorageTarget(
-  deps: Pick<AppDeps, "db">,
+async function requireThreadStorageTarget(
+  deps: SandboxWorkSessionDeps,
   args: RequireThreadStorageTargetArgs,
-): ThreadStorageTarget {
+): Promise<ThreadStorageTarget> {
   const thread = requirePublicThread(deps.db, args.threadId);
   if (!thread.environmentId) {
     throw new ApiError(409, "invalid_request", "Thread has no environment");
@@ -74,7 +74,7 @@ function requireThreadStorageTarget(
   const environment = requireEnvironment(deps.db, thread.environmentId);
   return {
     hostId: environment.hostId,
-    storagePath: requireThreadStoragePath(deps, {
+    storagePath: await requireThreadStoragePath(deps, {
       hostId: environment.hostId,
       threadId: thread.id,
     }),
@@ -176,7 +176,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     "/threads/:id/thread-storage/files",
     threadStorageFilesQuerySchema,
     async (context, query) => {
-      const target = requireThreadStorageTarget(deps, {
+      const target = await requireThreadStorageTarget(deps, {
         threadId: context.req.param("id"),
       });
       const limit = parseThreadStorageFileListLimit(query.limit);
@@ -208,7 +208,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     threadStorageContentQuerySchema,
     async (context, query) => {
       validateFilePath(query.path);
-      const target = requireThreadStorageTarget(deps, {
+      const target = await requireThreadStorageTarget(deps, {
         threadId: context.req.param("id"),
       });
 

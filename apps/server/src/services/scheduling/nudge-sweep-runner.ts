@@ -5,14 +5,13 @@ import {
   type DbTransaction,
   deleteManagerThreadNudge,
   type DueManagerThreadNudgeCursor,
-  getActiveSession,
   getEnvironment,
   getThread,
   hasPendingHostCommandForThread,
   listDueManagerThreadNudges,
 } from "@bb/db";
 import type { PromptInput, ResolvedThreadExecutionOptions } from "@bb/domain";
-import type { AppDeps } from "../../types.js";
+import type { AppDeps, LoggedSandboxWorkSessionDeps } from "../../types.js";
 import {
   appendClientTurnEventInTransaction,
   getLastProviderThreadId,
@@ -24,6 +23,7 @@ import {
   type PreparedTurnRunCommandPayload,
   queueTurnRunCommandInTransaction,
 } from "../threads/thread-commands.js";
+import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import {
   computeNextScheduledTimeForExpressionSet,
   ScheduleValidationError,
@@ -229,7 +229,7 @@ export function toDueManagerThreadNudgeCursor(
 }
 
 async function prepareDueNudge(
-  deps: Pick<AppDeps, "db" | "hub" | "logger">,
+  deps: LoggedSandboxWorkSessionDeps,
   cache: NudgeSweepCache,
   nudge: DueManagerThreadNudgeRow,
   now: number,
@@ -261,14 +261,6 @@ async function prepareDueNudge(
     };
   }
 
-  const session = getActiveSession(deps.db, environment.hostId);
-  if (!session) {
-    return {
-      kind: "skip",
-      reason: "host-disconnected",
-    };
-  }
-
   const input = buildScheduledNudgeInput(nudge.name);
   const providerThreadId = getCachedProviderThreadId(deps, cache, thread.id);
   if (!providerThreadId) {
@@ -289,6 +281,9 @@ async function prepareDueNudge(
   }
 
   try {
+    const session = await ensureHostSessionReadyForWork(deps, {
+      hostId: environment.hostId,
+    });
     const execution = await buildExecutionOptions(
       deps,
       {},
@@ -393,7 +388,7 @@ function queueDueNudgeInTransaction(
 }
 
 export async function runDueNudge(
-  deps: Pick<AppDeps, "db" | "hub" | "logger">,
+  deps: LoggedSandboxWorkSessionDeps,
   cache: NudgeSweepCache,
   nudge: DueManagerThreadNudgeRow,
   now: number,

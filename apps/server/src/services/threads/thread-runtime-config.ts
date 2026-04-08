@@ -19,7 +19,7 @@ import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import { renderTemplate } from "@bb/templates";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
-import type { AppDeps } from "../../types.js";
+import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { queueCommandAndWait } from "../hosts/command-wait.js";
 import { getLastExecutionOptions } from "./thread-events.js";
 import { requireThreadStoragePath } from "./thread-storage.js";
@@ -177,7 +177,7 @@ export async function resolveExecutionOptions(
 }
 
 export async function resolveThreadRuntimeCommandConfig(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: SandboxWorkSessionDeps,
   args: ResolveThreadRuntimeCommandConfigArgs,
 ): Promise<ResolvedThreadRuntimeCommandConfig> {
   const workspacePath = requireWorkspacePath(args.environment);
@@ -201,7 +201,7 @@ export async function resolveThreadRuntimeCommandConfig(
       workspaceProvisionType,
     };
   }
-  const threadStoragePath = requireThreadStoragePath(
+  const threadStoragePath = await requireThreadStoragePath(
     deps,
     { hostId: args.environment.hostId, threadId: args.thread.id },
   );

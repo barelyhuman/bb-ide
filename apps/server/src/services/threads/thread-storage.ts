@@ -1,18 +1,20 @@
 import path from "node:path";
 import { ApiError } from "../../errors.js";
-import type { AppDeps } from "../../types.js";
-import { requireConnectedHostSession } from "../lib/entity-lookup.js";
+import type { SandboxWorkSessionDeps } from "../../types.js";
+import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 
 export interface RequireThreadStoragePathArgs {
   hostId: string;
   threadId: string;
 }
 
-export function requireThreadStoragePath(
-  deps: Pick<AppDeps, "db">,
+export async function requireThreadStoragePath(
+  deps: SandboxWorkSessionDeps,
   args: RequireThreadStoragePathArgs,
-): string {
-  const session = requireConnectedHostSession(deps, args.hostId);
+): Promise<string> {
+  const session = await ensureHostSessionReadyForWork(deps, {
+    hostId: args.hostId,
+  });
   if (!session.dataDir) {
     throw new ApiError(
       502,

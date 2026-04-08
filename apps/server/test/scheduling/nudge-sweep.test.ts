@@ -3,13 +3,17 @@ import {
   createManagerThreadNudge,
   getManagerThreadNudge,
   hostDaemonCommands,
+  openSession,
   threads,
+  upsertHost,
   updateManagerThreadNudge,
 } from "@bb/db";
-import { describe, expect, it } from "vitest";
+import { updateHostLifecycleState } from "@bb/db/internal-lifecycle";
+import { describe, expect, it, vi } from "vitest";
 import { sweepDueNudges } from "../../src/services/scheduling/nudge-sweep.js";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
 import {
+  reportNextRuntimeMaterialSyncSuccess,
   reportQueuedCommandError,
   waitForQueuedCommand,
 } from "../helpers/commands.js";
@@ -24,6 +28,29 @@ import {
 import { createTestAppHarness } from "../helpers/test-app.js";
 
 type TestHarness = Awaited<ReturnType<typeof createTestAppHarness>>;
+
+interface MockSandboxHost {
+  destroy: ReturnType<typeof vi.fn>;
+  extendTimeout: ReturnType<typeof vi.fn>;
+  externalId: string;
+  hostId: string;
+  resume: ReturnType<typeof vi.fn>;
+  suspend: ReturnType<typeof vi.fn>;
+}
+
+function createMockSandboxHost(
+  hostId: string,
+  externalId = "sandbox-123",
+): MockSandboxHost {
+  return {
+    destroy: vi.fn().mockResolvedValue(undefined),
+    extendTimeout: vi.fn().mockResolvedValue(undefined),
+    externalId,
+    hostId,
+    resume: vi.fn().mockResolvedValue(undefined),
+    suspend: vi.fn().mockResolvedValue(undefined),
+  };
+}
 
 function seedRunnableManagerThread(args: {
   environmentId: string;
@@ -132,6 +159,96 @@ describe("nudge sweep", () => {
       const updatedNudge = getManagerThreadNudge(harness.db, nudge.id);
       expect(updatedNudge?.lastFiredAt).toBe(now);
       expect(updatedNudge?.nextFireAt).toBeGreaterThan(now);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("resumes suspended sandbox hosts before queueing due manager nudges", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-nudge-resume",
+        id: "host-nudge-resume",
+        name: "Nudge Resume Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      const sandboxHost = createMockSandboxHost(host.id, host.externalId ?? undefined);
+      harness.deps.sandboxRegistry.set(host.id, sandboxHost);
+      updateHostLifecycleState(harness.db, {
+        hostId: host.id,
+        suspendedAt: 1_000,
+      });
+
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/nudge-resume-environment",
+      });
+      const thread = seedRunnableManagerThread({
+        harness,
+        environmentId: environment.id,
+        projectId: project.id,
+      });
+      const now = Date.now();
+      createManagerThreadNudge(harness.db, harness.hub, {
+        projectId: project.id,
+        threadId: thread.id,
+        name: "resume-recap",
+        cron: "0 8 * * *",
+        timezone: "UTC",
+        enabled: true,
+        nextFireAt: now - 1,
+      });
+
+      setTimeout(() => {
+        openSession(harness.db, harness.hub, {
+          heartbeatIntervalMs: 5_000,
+          hostId: host.id,
+          hostName: host.name,
+          hostType: host.type,
+          instanceId: "instance-nudge-resume",
+          leaseTimeoutMs: 30_000,
+          protocolVersion: 2,
+          dataDir: `/tmp/bb-host-data/${host.id}`,
+        });
+      }, 10);
+
+      const sweepPromise = sweepDueNudges(harness.deps, { now });
+      await reportNextRuntimeMaterialSyncSuccess(harness, {
+        hostId: host.id,
+      });
+
+      const preferencesPath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}/PREFERENCES.md`;
+      const readPreferences = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file"
+          && command.path === preferencesPath,
+      );
+      const preferencesResponse = await reportQueuedCommandError(harness, readPreferences, {
+        errorCode: "ENOENT",
+        errorMessage: "File not found",
+      });
+      expect(preferencesResponse.status).toBe(200);
+
+      await sweepPromise;
+
+      expect(sandboxHost.resume).toHaveBeenCalledTimes(1);
+      const queuedTurnRun = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "turn.run"
+          && command.threadId === thread.id,
+      );
+      expect(queuedTurnRun.command.input).toEqual([
+        {
+          type: "text",
+          text: "[bb system] Scheduled nudge: resume-recap. Check ASYNC.md.",
+        },
+      ]);
     } finally {
       await harness.cleanup();
     }
