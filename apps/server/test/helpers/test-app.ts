@@ -10,7 +10,10 @@ import { createApp } from "../../src/server.js";
 import { createCloudAuthService } from "../../src/services/cloud-auth/service.js";
 import { createHostLifecycleService } from "../../src/services/hosts/host-lifecycle-service.js";
 import { createSandboxHostRegistry } from "../../src/services/hosts/sandbox-registry.js";
-import { PendingInteractionLifecycle } from "../../src/services/interactions/pending-interactions.js";
+import {
+  DEFAULT_PENDING_INTERACTION_EXPIRY_MS,
+  PendingInteractionLifecycle,
+} from "../../src/services/interactions/pending-interactions.js";
 import { createMachineAuthService } from "../../src/services/machine-auth.js";
 import { createSandboxEnvService } from "../../src/services/sandbox-env/service.js";
 import type { AppDeps, ServerRuntimeConfig } from "../../src/types.js";
@@ -84,7 +87,11 @@ export async function createTestAppHarness(
   const db = initDb(":memory:");
   const hub = new NotificationHubImpl();
   const hostLifecycle = createHostLifecycleService();
-  const pendingInteractions = new PendingInteractionLifecycle({ db, hub });
+  const pendingInteractions = new PendingInteractionLifecycle({
+    db,
+    hub,
+    interactionExpiryMs: DEFAULT_PENDING_INTERACTION_EXPIRY_MS,
+  });
   const sandboxRegistry = createSandboxHostRegistry();
   const machineAuth = await createMachineAuthService({
     dataDir,

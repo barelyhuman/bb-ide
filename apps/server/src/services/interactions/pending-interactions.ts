@@ -6,11 +6,16 @@ import {
   getThread,
   interruptPendingInteractionsForThreads,
   listPendingInteractionsByThread,
+  listPendingInteractionsByStatus,
+  setPendingInteractionExpired,
   setPendingInteractionInterrupted,
   setPendingInteractionResolved,
   type PendingInteractionRow,
 } from "@bb/db";
 import {
+  formatPendingInteractionCommandApprovalDecision,
+  formatPendingInteractionCommandApprovalResolutionMessage,
+  formatPendingInteractionFileChangeApprovalResolutionMessage,
   pendingInteractionPayloadSchema,
   pendingInteractionResolutionSchema,
   pendingInteractionSchema,
@@ -61,6 +66,11 @@ interface ResolvePendingInteractionArgs {
   threadId: string;
 }
 
+interface GetThreadInteractionArgs {
+  interactionId: string;
+  threadId: string;
+}
+
 interface InterruptPendingInteractionArgs {
   interactionId: string;
   reason: string;
@@ -75,6 +85,28 @@ interface InterruptPendingInteractionsForThreadsLifecycleArgs {
 interface CreateLifecycleDeps {
   db: AppDeps["db"];
   hub: AppDeps["hub"];
+}
+
+export const DEFAULT_PENDING_INTERACTION_EXPIRY_MS = 30 * 60 * 1000;
+
+type PendingInteractionTimeoutHandle = ReturnType<typeof setTimeout>;
+
+interface PendingInteractionExpiryTimer {
+  timeout: PendingInteractionTimeoutHandle;
+}
+
+interface PendingInteractionTimeoutHandleWithUnref {
+  unref(): void;
+}
+
+interface PendingInteractionLifecycleArgs extends CreateLifecycleDeps {
+  interactionExpiryMs: number;
+  now?: () => number;
+}
+
+interface ExpirePendingInteractionArgs {
+  interactionId: string;
+  reason: string;
 }
 
 function parseStoredPendingInteractionJson(value: string): unknown {
@@ -152,6 +184,23 @@ function notifyInteractionChanged(
   deps.hub.notifyThread(threadId, ["interactions-changed"]);
 }
 
+function timeoutHandleHasUnref(
+  timeout: PendingInteractionTimeoutHandle,
+): timeout is PendingInteractionTimeoutHandle & PendingInteractionTimeoutHandleWithUnref {
+  return (
+    typeof timeout === "object"
+    && timeout !== null
+    && "unref" in timeout
+    && typeof timeout.unref === "function"
+  );
+}
+
+function unrefTimeoutHandle(timeout: PendingInteractionTimeoutHandle): void {
+  if (timeoutHandleHasUnref(timeout)) {
+    timeout.unref();
+  }
+}
+
 function commandApprovalDecisionEquals(
   left: PendingInteractionCommandApprovalDecision,
   right: PendingInteractionCommandApprovalDecision,
@@ -189,45 +238,6 @@ function commandApprovalDecisionEquals(
   return false;
 }
 
-function formatCommandApprovalDecisionLabel(
-  decision: PendingInteractionCommandApprovalDecision,
-): string {
-  if (typeof decision === "string") {
-    return decision;
-  }
-
-  switch (decision.kind) {
-    case "accept_with_exec_policy_amendment":
-      return decision.kind;
-    case "apply_network_policy_amendment":
-      return decision.kind;
-  }
-}
-
-function formatCommandApprovalResolutionMessage(
-  decision: PendingInteractionCommandApprovalDecision,
-): string {
-  if (typeof decision === "string") {
-    switch (decision) {
-      case "accept":
-        return "Command approved";
-      case "accept_for_session":
-        return "Command approved for this session";
-      case "decline":
-        return "Command declined";
-      case "cancel":
-        return "Command request cancelled";
-    }
-  }
-
-  switch (decision.kind) {
-    case "accept_with_exec_policy_amendment":
-      return "Command approved with exec policy amendment";
-    case "apply_network_policy_amendment":
-      return "Command approved with network policy amendment";
-  }
-}
-
 function formatPendingInteractionLifecycleMessage(
   interaction: PendingInteraction,
 ): string {
@@ -254,18 +264,13 @@ function formatPendingInteractionLifecycleMessage(
       }
       switch (interaction.resolution.kind) {
         case "command_approval":
-          return formatCommandApprovalResolutionMessage(interaction.resolution.decision);
+          return formatPendingInteractionCommandApprovalResolutionMessage(
+            interaction.resolution.decision,
+          );
         case "file_change_approval":
-          switch (interaction.resolution.decision) {
-            case "accept":
-              return "File changes approved";
-            case "accept_for_session":
-              return "File changes approved for this session";
-            case "decline":
-              return "File changes declined";
-            case "cancel":
-              return "File-change request cancelled";
-          }
+          return formatPendingInteractionFileChangeApprovalResolutionMessage(
+            interaction.resolution.decision,
+          );
         case "permission_request":
           return `Permissions granted for ${interaction.resolution.scope}`;
         case "user_input_request":
@@ -348,7 +353,7 @@ function validateCommandApprovalResolution(
   throw new ApiError(
     400,
     "invalid_request",
-    `Command approval decision '${formatCommandApprovalDecisionLabel(resolution.decision)}' is not available for interaction ${interaction.id}`,
+    `Command approval decision '${formatPendingInteractionCommandApprovalDecision(resolution.decision)}' is not available for interaction ${interaction.id}`,
   );
 }
 
@@ -417,9 +422,26 @@ function validatePendingInteractionResolution(
 }
 
 export class PendingInteractionLifecycle {
+  private readonly deps: CreateLifecycleDeps;
+  private readonly interactionExpiryMs: number;
+  private readonly now: () => number;
+  private readonly expiryTimers = new Map<string, PendingInteractionExpiryTimer>();
   private readonly waiters = new Map<string, Set<PendingInteractionWaiter>>();
 
-  constructor(private readonly deps: CreateLifecycleDeps) {}
+  constructor(args: PendingInteractionLifecycleArgs) {
+    if (args.interactionExpiryMs <= 0) {
+      throw new Error("Pending interaction expiry must be positive");
+    }
+
+    this.deps = {
+      db: args.db,
+      hub: args.hub,
+    };
+    this.interactionExpiryMs = args.interactionExpiryMs;
+    this.now = args.now ?? Date.now;
+
+    this.hydratePendingInteractions();
+  }
 
   listThreadInteractions(threadId: string): PendingInteraction[] {
     return listPendingInteractionsByThread(this.deps.db, { threadId }).map(toPendingInteraction);
@@ -432,10 +454,7 @@ export class PendingInteractionLifecycle {
     }).map(toPendingInteraction);
   }
 
-  getThreadInteraction(args: {
-    interactionId: string;
-    threadId: string;
-  }): PendingInteraction {
+  getThreadInteraction(args: GetThreadInteractionArgs): PendingInteraction {
     const interaction = this.requireInteraction(args.interactionId);
     if (interaction.threadId !== args.threadId) {
       throw new ApiError(404, "invalid_request", "Pending interaction not found");
@@ -477,6 +496,14 @@ export class PendingInteractionLifecycle {
         providerRequestId: interaction.providerRequestId,
       });
       if (existing) {
+        if (existing.status !== "pending") {
+          return {
+            outcome: "rejected" as const,
+            reason:
+              `Provider request ${interaction.providerRequestId} was already handled and cannot be reused`,
+          };
+        }
+
         return {
           outcome: "existing" as const,
           row: existing,
@@ -514,6 +541,8 @@ export class PendingInteractionLifecycle {
     }
 
     const pendingInteraction = toPendingInteraction(registered.row);
+    this.scheduleInteractionExpiry(pendingInteraction);
+
     if (registered.outcome === "created") {
       appendPendingInteractionTimelineEvent(this.deps, pendingInteraction);
       notifyInteractionChanged(this.deps, pendingInteraction.threadId);
@@ -535,8 +564,12 @@ export class PendingInteractionLifecycle {
     }
 
     return new Promise<PendingInteractionWaitOutcome>((resolve) => {
+      let abortHandler: (() => void) | null = null;
       const waiter: PendingInteractionWaiter = {
         resolve: (outcome) => {
+          if (args.signal && abortHandler) {
+            args.signal.removeEventListener("abort", abortHandler);
+          }
           this.removeWaiter(args.interactionId, waiter);
           resolve(outcome);
         },
@@ -551,7 +584,7 @@ export class PendingInteractionLifecycle {
         waiter.resolve(currentOutcome);
       };
 
-      const onAbort = (): void => {
+      abortHandler = (): void => {
         const interrupted = this.interruptPendingInteraction({
           interactionId: args.interactionId,
           reason:
@@ -570,11 +603,11 @@ export class PendingInteractionLifecycle {
       this.waiters.set(args.interactionId, waiters);
 
       if (args.signal) {
-        args.signal.addEventListener("abort", onAbort, { once: true });
+        args.signal.addEventListener("abort", abortHandler, { once: true });
       }
 
       if (args.signal?.aborted) {
-        onAbort();
+        abortHandler();
         return;
       }
 
@@ -664,7 +697,75 @@ export class PendingInteractionLifecycle {
     }
   }
 
+  private hydratePendingInteractions(): void {
+    const pendingInteractions = listPendingInteractionsByStatus(this.deps.db, {
+      statuses: ["pending"],
+    }).map(toPendingInteraction);
+
+    for (const interaction of pendingInteractions) {
+      this.scheduleInteractionExpiry(interaction);
+    }
+  }
+
+  private scheduleInteractionExpiry(interaction: PendingInteraction): void {
+    this.clearExpiryTimer(interaction.id);
+
+    if (interaction.status !== "pending") {
+      return;
+    }
+
+    const expiresAt = interaction.createdAt + this.interactionExpiryMs;
+    const delayMs = expiresAt - this.now();
+    if (delayMs <= 0) {
+      this.expirePendingInteraction({
+        interactionId: interaction.id,
+        reason: "Pending interaction expired while waiting for a user response",
+      });
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      this.expiryTimers.delete(interaction.id);
+      this.expirePendingInteraction({
+        interactionId: interaction.id,
+        reason: "Pending interaction expired while waiting for a user response",
+      });
+    }, delayMs);
+    unrefTimeoutHandle(timeout);
+
+    this.expiryTimers.set(interaction.id, {
+      timeout,
+    });
+  }
+
+  private clearExpiryTimer(interactionId: string): void {
+    const timer = this.expiryTimers.get(interactionId);
+    if (!timer) {
+      return;
+    }
+
+    clearTimeout(timer.timeout);
+    this.expiryTimers.delete(interactionId);
+  }
+
+  private expirePendingInteraction(
+    args: ExpirePendingInteractionArgs,
+  ): PendingInteraction | null {
+    const updated = setPendingInteractionExpired(this.deps.db, {
+      id: args.interactionId,
+      statusReason: args.reason,
+    });
+    if (!updated) {
+      return null;
+    }
+
+    const interaction = toPendingInteraction(updated);
+    this.finishInteraction(interaction);
+    return interaction;
+  }
+
   private finishInteraction(interaction: PendingInteraction): void {
+    this.clearExpiryTimer(interaction.id);
     appendPendingInteractionTimelineEvent(this.deps, interaction);
     notifyInteractionChanged(this.deps, interaction.threadId);
     const outcome = requireWaitableOutcome(interaction);

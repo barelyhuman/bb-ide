@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatPendingInteractionCommandApprovalResolutionMessage,
+  formatPendingInteractionCommandApprovalResolutionOutcome,
+  formatPendingInteractionFileChangeApprovalResolutionMessage,
+  formatPendingInteractionFileChangeApprovalResolutionOutcome,
   pendingInteractionCreateSchema,
   pendingInteractionResolutionSchema,
   pendingInteractionSchema,
@@ -169,5 +173,26 @@ describe("pending interaction schemas", () => {
         resolvedAt: 2,
       }),
     ).toThrow();
+  });
+
+  it("formats approval outcomes and timeline messages consistently", () => {
+    expect(formatPendingInteractionCommandApprovalResolutionOutcome("accept_for_session")).toBe(
+      "approved for this session",
+    );
+    expect(
+      formatPendingInteractionCommandApprovalResolutionOutcome({
+        kind: "accept_with_exec_policy_amendment",
+        execPolicyAmendment: ["allow", "git", "push"],
+      }),
+    ).toBe("approved with exec policy amendment");
+    expect(formatPendingInteractionCommandApprovalResolutionMessage("cancel")).toBe(
+      "Command request cancelled",
+    );
+    expect(formatPendingInteractionFileChangeApprovalResolutionOutcome("decline")).toBe(
+      "denied",
+    );
+    expect(formatPendingInteractionFileChangeApprovalResolutionMessage("accept")).toBe(
+      "File changes approved",
+    );
   });
 });

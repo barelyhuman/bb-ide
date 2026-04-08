@@ -12,7 +12,10 @@ import { getBuiltInAgentProviderInfo } from "@bb/agent-providers";
 import { z } from "zod";
 import type {
   ApprovalPolicy,
+  PendingInteractionGrantedPermissionProfile,
+  PendingInteractionRequestedPermissionProfile,
   PendingInteractionCommandApprovalDecision,
+  PendingInteractionCommandApprovalSimpleDecision,
   PromptInput,
   ProviderCapabilities,
   SandboxMode,
@@ -244,6 +247,30 @@ const codexCommandApprovalDecisionSchema = z.union([
   codexExecPolicyAmendmentDecisionSchema,
   codexNetworkPolicyAmendmentDecisionSchema,
 ]);
+type CodexSimpleCommandApprovalDecision = z.infer<
+  typeof codexSimpleCommandApprovalDecisionSchema
+>;
+type CodexCommandApprovalDecision = z.infer<typeof codexCommandApprovalDecisionSchema>;
+
+const codexToPendingInteractionSimpleCommandApprovalDecision = {
+  accept: "accept",
+  acceptForSession: "accept_for_session",
+  decline: "decline",
+  cancel: "cancel",
+} satisfies Record<
+  CodexSimpleCommandApprovalDecision,
+  PendingInteractionCommandApprovalSimpleDecision
+>;
+
+const pendingInteractionToCodexSimpleCommandApprovalDecision = {
+  accept: "accept",
+  accept_for_session: "acceptForSession",
+  decline: "decline",
+  cancel: "cancel",
+} satisfies Record<
+  PendingInteractionCommandApprovalSimpleDecision,
+  CodexSimpleCommandApprovalDecision
+>;
 
 const codexFileSystemPermissionsSchema = z.object({
   read: z.array(z.string()).nullable(),
@@ -257,13 +284,21 @@ const codexNetworkPermissionsSchema = z.object({
 const codexAdditionalPermissionsSchema = z.object({
   network: codexNetworkPermissionsSchema.nullable(),
   fileSystem: codexFileSystemPermissionsSchema.nullable(),
-  macos: z.null(),
+  macos: z.unknown().nullable().optional(),
 });
+type CodexAdditionalPermissions = z.infer<typeof codexAdditionalPermissionsSchema>;
 
 const codexRequestPermissionsSchema = z.object({
   network: codexNetworkPermissionsSchema.nullable(),
   fileSystem: codexFileSystemPermissionsSchema.nullable(),
 });
+type CodexRequestedPermissionProfile = z.infer<typeof codexRequestPermissionsSchema>;
+type CodexGrantedPermissionProfile = PermissionsRequestApprovalResponse["permissions"];
+type CodexInteractiveResponse =
+  | CommandExecutionRequestApprovalResponse
+  | FileChangeRequestApprovalResponse
+  | PermissionsRequestApprovalResponse
+  | ToolRequestUserInputResponse;
 
 const codexCommandActionSchema = z.discriminatedUnion("type", [
   z.object({
@@ -299,7 +334,7 @@ const codexCommandExecutionRequestApprovalParamsSchema = z.object({
   cwd: z.string().nullable().optional(),
   commandActions: z.array(codexCommandActionSchema).nullable().optional(),
   additionalPermissions: codexAdditionalPermissionsSchema.nullable().optional(),
-  availableDecisions: z.array(z.unknown()).nullable().optional(),
+  availableDecisions: z.array(codexCommandApprovalDecisionSchema).nullable().optional(),
 }).passthrough();
 
 const codexFileChangeRequestApprovalParamsSchema = z.object({
@@ -879,11 +914,8 @@ function translateCodexItem(item: unknown): ThreadEventItem | null {
 }
 
 function toPendingInteractionPermissionProfile(
-  permissions: z.infer<typeof codexRequestPermissionsSchema>,
-): {
-  network: { enabled: boolean | null } | null;
-  fileSystem: { read: string[]; write: string[] } | null;
-} {
+  permissions: CodexAdditionalPermissions | CodexRequestedPermissionProfile,
+): PendingInteractionRequestedPermissionProfile {
   return {
     network: permissions.network
       ? { enabled: permissions.network.enabled }
@@ -897,13 +929,9 @@ function toPendingInteractionPermissionProfile(
   };
 }
 
-function toCodexGrantedPermissionProfile(args: {
-  network: { enabled: boolean | null } | null;
-  fileSystem: { read: string[]; write: string[] } | null;
-}): {
-  network?: { enabled: boolean | null };
-  fileSystem?: { read: string[] | null; write: string[] | null };
-} {
+function toCodexGrantedPermissionProfile(
+  args: PendingInteractionGrantedPermissionProfile,
+): CodexGrantedPermissionProfile {
   return {
     ...(args.network ? { network: { enabled: args.network.enabled } } : {}),
     ...(args.fileSystem
@@ -917,59 +945,63 @@ function toCodexGrantedPermissionProfile(args: {
   };
 }
 
+function fromCodexCommandApprovalDecision(
+  decision: CodexCommandApprovalDecision,
+): PendingInteractionCommandApprovalDecision {
+  if (typeof decision === "string") {
+    return codexToPendingInteractionSimpleCommandApprovalDecision[decision];
+  }
+
+  if ("acceptWithExecpolicyAmendment" in decision) {
+    return {
+      kind: "accept_with_exec_policy_amendment",
+      execPolicyAmendment: decision.acceptWithExecpolicyAmendment.execpolicy_amendment,
+    };
+  }
+
+  return {
+    kind: "apply_network_policy_amendment",
+    networkPolicyAmendment: {
+      host: decision.applyNetworkPolicyAmendment.network_policy_amendment.host,
+      action: decision.applyNetworkPolicyAmendment.network_policy_amendment.action,
+    },
+  };
+}
+
+function toCodexCommandApprovalDecision(
+  decision: PendingInteractionCommandApprovalDecision,
+): CommandExecutionRequestApprovalResponse["decision"] {
+  if (typeof decision === "string") {
+    return pendingInteractionToCodexSimpleCommandApprovalDecision[decision];
+  }
+
+  switch (decision.kind) {
+    case "accept_with_exec_policy_amendment":
+      return {
+        acceptWithExecpolicyAmendment: {
+          execpolicy_amendment: decision.execPolicyAmendment,
+        },
+      };
+    case "apply_network_policy_amendment":
+      return {
+        applyNetworkPolicyAmendment: {
+          network_policy_amendment: {
+            host: decision.networkPolicyAmendment.host,
+            action: decision.networkPolicyAmendment.action,
+          },
+        },
+      };
+  }
+}
+
 function parseCodexAvailableDecisions(
-  decisions: unknown[] | null | undefined,
+  decisions: CodexCommandApprovalDecision[] | null | undefined,
 ): PendingInteractionCommandApprovalDecision[] | null {
   if (!decisions) {
     return ["accept", "decline", "cancel"];
   }
 
-  const normalized: PendingInteractionCommandApprovalDecision[] = [];
-  for (const decision of decisions) {
-    const parsed = codexCommandApprovalDecisionSchema.safeParse(decision);
-    if (!parsed.success) {
-      return null;
-    }
-
-    if (typeof parsed.data === "string") {
-      switch (parsed.data) {
-        case "accept":
-          normalized.push("accept");
-          break;
-        case "acceptForSession":
-          normalized.push("accept_for_session");
-          break;
-        case "decline":
-          normalized.push("decline");
-          break;
-        case "cancel":
-          normalized.push("cancel");
-          break;
-      }
-      continue;
-    }
-
-    if ("acceptWithExecpolicyAmendment" in parsed.data) {
-      normalized.push({
-        kind: "accept_with_exec_policy_amendment",
-        execPolicyAmendment:
-          parsed.data.acceptWithExecpolicyAmendment.execpolicy_amendment,
-      });
-      continue;
-    }
-
-    if ("applyNetworkPolicyAmendment" in parsed.data) {
-      normalized.push({
-        kind: "apply_network_policy_amendment",
-        networkPolicyAmendment: {
-          host: parsed.data.applyNetworkPolicyAmendment.network_policy_amendment.host,
-          action: parsed.data.applyNetworkPolicyAmendment.network_policy_amendment.action,
-        },
-      });
-    }
-  }
-
-  return normalized;
+  return decisions.map(fromCodexCommandApprovalDecision);
 }
 
 // ---------------------------------------------------------------------------
@@ -1481,50 +1513,14 @@ export function createCodexProviderAdapter(
       }
     },
 
-    buildInteractiveResponse(args): unknown {
+    buildInteractiveResponse(args): CodexInteractiveResponse {
       switch (args.request.payload.kind) {
         case "command_approval": {
           if (args.resolution.kind !== "command_approval") {
             throw new Error("Interactive response kind mismatch for command approval");
           }
           const response: CommandExecutionRequestApprovalResponse = {
-            decision: (() => {
-              const decision = args.resolution.decision;
-              if (typeof decision === "string") {
-                switch (decision) {
-                  case "accept":
-                    return "accept";
-                  case "accept_for_session":
-                    return "acceptForSession";
-                  case "decline":
-                    return "decline";
-                  case "cancel":
-                    return "cancel";
-                }
-                const exhaustiveDecision: never = decision;
-                return exhaustiveDecision;
-              }
-
-              switch (decision.kind) {
-                case "accept_with_exec_policy_amendment":
-                  return {
-                    acceptWithExecpolicyAmendment: {
-                      execpolicy_amendment: decision.execPolicyAmendment,
-                    },
-                  };
-                case "apply_network_policy_amendment":
-                  return {
-                    applyNetworkPolicyAmendment: {
-                      network_policy_amendment: {
-                        host: decision.networkPolicyAmendment.host,
-                        action: decision.networkPolicyAmendment.action,
-                      },
-                    },
-                  };
-              }
-              const exhaustiveDecision: never = decision;
-              return exhaustiveDecision;
-            })(),
+            decision: toCodexCommandApprovalDecision(args.resolution.decision),
           };
           return response;
         }

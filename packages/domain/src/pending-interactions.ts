@@ -138,6 +138,81 @@ export type PendingInteractionCommandApprovalDecision = z.infer<
   typeof pendingInteractionCommandApprovalDecisionSchema
 >;
 
+export type PendingInteractionCommandApprovalDecisionKind =
+  | PendingInteractionCommandApprovalSimpleDecision
+  | PendingInteractionExecPolicyAmendmentDecision["kind"]
+  | PendingInteractionNetworkPolicyAmendmentDecision["kind"];
+
+export function getPendingInteractionCommandApprovalDecisionKind(
+  decision: PendingInteractionCommandApprovalDecision,
+): PendingInteractionCommandApprovalDecisionKind {
+  return typeof decision === "string" ? decision : decision.kind;
+}
+
+export function formatPendingInteractionCommandApprovalDecision(
+  decision: PendingInteractionCommandApprovalDecision,
+): string {
+  if (typeof decision === "string") {
+    return decision;
+  }
+
+  switch (decision.kind) {
+    case "accept_with_exec_policy_amendment":
+      return `accept_with_exec_policy_amendment(${decision.execPolicyAmendment.join(", ")})`;
+    case "apply_network_policy_amendment":
+      return `apply_network_policy_amendment(${decision.networkPolicyAmendment.action} ${decision.networkPolicyAmendment.host})`;
+  }
+}
+
+export function formatPendingInteractionCommandApprovalResolutionOutcome(
+  decision: PendingInteractionCommandApprovalDecision,
+): string {
+  if (typeof decision === "string") {
+    switch (decision) {
+      case "accept":
+        return "approved";
+      case "accept_for_session":
+        return "approved for this session";
+      case "decline":
+        return "denied";
+      case "cancel":
+        return "cancelled";
+    }
+  }
+
+  switch (decision.kind) {
+    case "accept_with_exec_policy_amendment":
+      return "approved with exec policy amendment";
+    case "apply_network_policy_amendment":
+      return "approved with network policy amendment";
+  }
+}
+
+export function formatPendingInteractionCommandApprovalResolutionMessage(
+  decision: PendingInteractionCommandApprovalDecision,
+): string {
+  if (typeof decision === "string" && decision === "cancel") {
+    return "Command request cancelled";
+  }
+
+  return `Command ${formatPendingInteractionCommandApprovalResolutionOutcome(decision)}`;
+}
+
+export function isPendingInteractionCommandApprovalPositiveDecision(
+  decision: PendingInteractionCommandApprovalDecision,
+): boolean {
+  switch (getPendingInteractionCommandApprovalDecisionKind(decision)) {
+    case "accept":
+    case "accept_for_session":
+    case "accept_with_exec_policy_amendment":
+    case "apply_network_policy_amendment":
+      return true;
+    case "decline":
+    case "cancel":
+      return false;
+  }
+}
+
 export const pendingInteractionFileChangeApprovalDecisionSchema = z.enum([
   "accept",
   "accept_for_session",
@@ -147,6 +222,31 @@ export const pendingInteractionFileChangeApprovalDecisionSchema = z.enum([
 export type PendingInteractionFileChangeApprovalDecision = z.infer<
   typeof pendingInteractionFileChangeApprovalDecisionSchema
 >;
+
+export function formatPendingInteractionFileChangeApprovalResolutionOutcome(
+  decision: PendingInteractionFileChangeApprovalDecision,
+): string {
+  switch (decision) {
+    case "accept":
+      return "approved";
+    case "accept_for_session":
+      return "approved for this session";
+    case "decline":
+      return "denied";
+    case "cancel":
+      return "cancelled";
+  }
+}
+
+export function formatPendingInteractionFileChangeApprovalResolutionMessage(
+  decision: PendingInteractionFileChangeApprovalDecision,
+): string {
+  if (decision === "cancel") {
+    return "File-change request cancelled";
+  }
+
+  return `File changes ${formatPendingInteractionFileChangeApprovalResolutionOutcome(decision)}`;
+}
 
 export const pendingInteractionPermissionGrantScopeSchema = z.enum([
   "turn",

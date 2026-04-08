@@ -30,8 +30,13 @@ export interface PendingInteractionProviderRequestIdentity {
 }
 
 export interface ListPendingInteractionsArgs {
+  limit?: number;
   statuses?: readonly PendingInteractionStatus[];
   threadId: string;
+}
+
+export interface ListPendingInteractionsByStatusArgs {
+  statuses: readonly PendingInteractionStatus[];
 }
 
 export interface SetPendingInteractionTerminalStateArgs {
@@ -162,7 +167,7 @@ export function listPendingInteractionsByThread(
   db: PendingInteractionReadConnection,
   args: ListPendingInteractionsArgs,
 ): PendingInteractionRow[] {
-  return db
+  const query = db
     .select()
     .from(pendingInteractions)
     .where(
@@ -173,6 +178,19 @@ export function listPendingInteractionsByThread(
           : undefined,
       ),
     )
+    .orderBy(desc(pendingInteractions.createdAt));
+
+  return args.limit ? query.limit(args.limit).all() : query.all();
+}
+
+export function listPendingInteractionsByStatus(
+  db: PendingInteractionReadConnection,
+  args: ListPendingInteractionsByStatusArgs,
+): PendingInteractionRow[] {
+  return db
+    .select()
+    .from(pendingInteractions)
+    .where(inArray(pendingInteractions.status, [...args.statuses]))
     .orderBy(desc(pendingInteractions.createdAt))
     .all();
 }
@@ -205,6 +223,22 @@ export function setPendingInteractionInterrupted(
     allowedCurrentStatuses: ["pending"],
     resolution: null,
     status: "interrupted",
+    statusReason: args.statusReason,
+  });
+}
+
+export function setPendingInteractionExpired(
+  db: PendingInteractionWriteConnection,
+  args: {
+    id: string;
+    statusReason: string;
+  },
+): PendingInteractionRow | null {
+  return updatePendingInteractionTerminalState(db, {
+    id: args.id,
+    allowedCurrentStatuses: ["pending"],
+    resolution: null,
+    status: "expired",
     statusReason: args.statusReason,
   });
 }

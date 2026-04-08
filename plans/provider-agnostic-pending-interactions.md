@@ -181,7 +181,10 @@ phases improve them:
   - pending interactions remain queryable and resolvable from persisted state
 - duplicate request creation:
   - duplicate create attempts for the same provider callback identity resolve to
-    the existing pending interaction instead of creating a second row
+    the existing pending interaction only while that interaction is still
+    `pending`
+  - reusing a provider callback identity after it already reached a terminal
+    state is rejected and requires the provider to send a new request id
 - duplicate resolution:
   - resolution is idempotent and first terminal resolution wins
 - daemon restart or provider-process exit in phase 1:

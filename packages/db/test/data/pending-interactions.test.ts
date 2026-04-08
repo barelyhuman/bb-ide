@@ -10,7 +10,9 @@ import {
   getActivePendingInteractionForThread,
   getPendingInteractionByProviderRequest,
   interruptPendingInteractionsForThreads,
+  listPendingInteractionsByStatus,
   listPendingInteractionsByThread,
+  setPendingInteractionExpired,
   setPendingInteractionResolved,
 } from "../../src/data/pending-interactions.js";
 import { createThread } from "../../src/data/threads.js";
@@ -200,5 +202,46 @@ describe("pending interactions", () => {
       statusReason: "Provider exited",
     });
     expect(getActivePendingInteractionForThread(db, siblingThread.id)?.status).toBe("pending");
+  });
+
+  it("lists pending interactions by status and expires them", () => {
+    const { db, thread } = setup();
+
+    const created = createPendingInteraction(db, {
+      threadId: thread.id,
+      turnId: "turn-expire-1",
+      providerId: "codex",
+      providerThreadId: "provider-thread-expire-1",
+      providerRequestId: "request-expire-1",
+      providerRequestMethod: "item/commandExecution/requestApproval",
+      kind: "command_approval",
+      payload: JSON.stringify({
+        kind: "command_approval",
+        itemId: "item-expire-1",
+        approvalId: null,
+        reason: null,
+        command: "git push",
+        cwd: "/tmp/project",
+        commandActions: [],
+        requestedPermissions: null,
+        availableDecisions: ["accept", "decline", "cancel"],
+      }),
+    });
+
+    expect(
+      listPendingInteractionsByStatus(db, { statuses: ["pending"] }).map((row) => row.id),
+    ).toEqual([created.id]);
+
+    const expired = setPendingInteractionExpired(db, {
+      id: created.id,
+      statusReason: "Timed out",
+    });
+
+    expect(expired).toMatchObject({
+      id: created.id,
+      status: "expired",
+      statusReason: "Timed out",
+    });
+    expect(listPendingInteractionsByStatus(db, { statuses: ["pending"] })).toHaveLength(0);
   });
 });
