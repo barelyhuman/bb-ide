@@ -238,6 +238,92 @@ function appendPendingInteractionTimelineEvent(
   });
 }
 
+function validateCommandApprovalResolution(
+  interaction: PendingInteraction,
+  resolution: PendingInteractionResolution,
+): void {
+  if (
+    interaction.payload.kind !== "command_approval"
+    || resolution.kind !== "command_approval"
+  ) {
+    return;
+  }
+
+  if (interaction.payload.availableDecisions.includes(resolution.decision)) {
+    return;
+  }
+
+  throw new ApiError(
+    400,
+    "invalid_request",
+    `Command approval decision '${resolution.decision}' is not available for interaction ${interaction.id}`,
+  );
+}
+
+function validateUserInputResolution(
+  interaction: PendingInteraction,
+  resolution: PendingInteractionResolution,
+): void {
+  if (
+    interaction.payload.kind !== "user_input_request"
+    || resolution.kind !== "user_input_request"
+  ) {
+    return;
+  }
+
+  const questions = new Map(
+    interaction.payload.questions.map((question) => [question.id, question]),
+  );
+  const unknownQuestionIds = Object.keys(resolution.answers).filter(
+    (questionId) => !questions.has(questionId),
+  );
+  if (unknownQuestionIds.length > 0) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      `Unknown question ids: ${unknownQuestionIds.join(", ")}`,
+    );
+  }
+
+  const missingQuestionIds = interaction.payload.questions
+    .map((question) => question.id)
+    .filter((questionId) => !(questionId in resolution.answers));
+  if (missingQuestionIds.length > 0) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      `Missing answers for question ids: ${missingQuestionIds.join(", ")}`,
+    );
+  }
+
+  for (const [questionId, answers] of Object.entries(resolution.answers)) {
+    if (answers.length > 0) {
+      continue;
+    }
+    throw new ApiError(
+      400,
+      "invalid_request",
+      `Question '${questionId}' requires at least one answer`,
+    );
+  }
+}
+
+function validatePendingInteractionResolution(
+  interaction: PendingInteraction,
+  resolution: PendingInteractionResolution,
+): void {
+  if (interaction.payload.kind !== resolution.kind) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "Pending interaction resolution kind does not match the interaction payload",
+    );
+  }
+
+  validateCommandApprovalResolution(interaction, resolution);
+  validateUserInputResolution(interaction, resolution);
+}
+
 export class PendingInteractionLifecycle {
   private readonly waiters = new Map<string, Set<PendingInteractionWaiter>>();
 
@@ -371,16 +457,10 @@ export class PendingInteractionLifecycle {
       threadId: args.threadId,
       interactionId: args.interactionId,
     });
-    if (current.payload.kind !== args.resolution.kind) {
-      throw new ApiError(
-        400,
-        "invalid_request",
-        "Pending interaction resolution kind does not match the interaction payload",
-      );
-    }
     if (current.status !== "pending") {
       return current;
     }
+    validatePendingInteractionResolution(current, args.resolution);
 
     const updated = setPendingInteractionResolved(this.deps.db, {
       id: args.interactionId,

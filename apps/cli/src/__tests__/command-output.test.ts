@@ -2662,6 +2662,96 @@ describe("CLI JSON output contracts", () => {
     ]);
   });
 
+  it("bb thread interactions approve falls back to accept when session approval is unavailable", async () => {
+    const getInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-approve-no-session",
+        providerId: "codex",
+        providerRequestId: "request-approve-no-session",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        providerThreadId: "provider-thread-approve-no-session",
+        threadId: "thread-approve-no-session",
+        turnId: "turn-approve-no-session",
+        payload: {
+          kind: "command_approval",
+          itemId: "item-approve-no-session",
+          approvalId: null,
+          reason: "Approve command",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: ["accept", "decline", "cancel"],
+        },
+      }),
+    );
+    const resolveInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-approve-no-session",
+        providerId: "codex",
+        providerRequestId: "request-approve-no-session",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        providerThreadId: "provider-thread-approve-no-session",
+        threadId: "thread-approve-no-session",
+        turnId: "turn-approve-no-session",
+        payload: {
+          kind: "command_approval",
+          itemId: "item-approve-no-session",
+          approvalId: null,
+          reason: "Approve command",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: ["accept", "decline", "cancel"],
+        },
+        status: "resolved",
+        resolvedAt: Date.now(),
+        resolution: {
+          kind: "command_approval",
+          decision: "accept",
+        },
+      }),
+    );
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              interactions: {
+                ":interactionId": {
+                  $get: getInteraction,
+                  resolve: {
+                    $post: resolveInteraction,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["thread", "interactions", "approve", "int-approve-no-session", "thread-approve-no-session"],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(resolveInteraction).toHaveBeenCalledWith({
+      param: {
+        id: "thread-approve-no-session",
+        interactionId: "int-approve-no-session",
+      },
+      json: {
+        kind: "command_approval",
+        decision: "accept",
+      },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toEqual([
+      "Interaction int-approve-no-session approved",
+    ]);
+  });
+
   it("bb thread interactions approve resolves file-change approvals for the session", async () => {
     const getInteraction = vi.fn(async () =>
       makePendingInteraction({

@@ -1349,4 +1349,92 @@ describe("internal event side effects", () => {
       await harness.cleanup();
     }
   });
+
+  it("skips manager system messages while the manager thread awaits interaction", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-event-manager-pending-interaction",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        status: "ready",
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+        type: "manager",
+      });
+      seedThreadRuntimeState(harness.deps, {
+        threadId: managerThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-manager-awaiting-interaction",
+        inputText: "Initial manager task",
+        model: "gpt-5.4",
+      });
+      const pending = harness.deps.pendingInteractions.registerPendingInteraction({
+        threadId: managerThread.id,
+        turnId: "turn-manager-awaiting-interaction",
+        providerId: "codex",
+        providerThreadId: "provider-manager-awaiting-interaction",
+        providerRequestId: "request-manager-awaiting-interaction",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        payload: {
+          kind: "command_approval",
+          itemId: "item-manager-awaiting-interaction",
+          approvalId: null,
+          reason: "Approve command",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+        },
+      });
+      if (pending.outcome === "rejected") {
+        throw new Error(`Expected pending interaction registration to succeed: ${pending.reason}`);
+      }
+      const existingManagerTurnRequestCount = harness.db
+        .select({ data: events.data, type: events.type })
+        .from(events)
+        .where(eq(events.threadId, managerThread.id))
+        .orderBy(events.sequence)
+        .all()
+        .filter((row) => row.type === "client/turn/requested")
+        .length;
+      const existingQueuedCommandCount = harness.db
+        .select()
+        .from(hostDaemonCommands)
+        .all()
+        .length;
+
+      const queued = await queueManagerSystemMessage(harness.deps, {
+        managerThreadId: managerThread.id,
+        messageText: "Manager follow-up while blocked",
+      });
+
+      expect(queued).toBe(false);
+      const managerTurnRequests = harness.db
+        .select({ data: events.data, type: events.type })
+        .from(events)
+        .where(eq(events.threadId, managerThread.id))
+        .orderBy(events.sequence)
+        .all()
+        .filter((row) => row.type === "client/turn/requested");
+      expect(managerTurnRequests).toHaveLength(existingManagerTurnRequestCount);
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .all(),
+      ).toHaveLength(existingQueuedCommandCount);
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });

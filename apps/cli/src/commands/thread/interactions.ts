@@ -144,23 +144,71 @@ async function fetchInteraction(args: {
 
 function buildApprovalResolution(
   interaction: PendingInteraction,
-  decision: "accept_for_session" | "decline",
+  action: "approve" | "deny",
 ): PendingInteractionResolution {
   switch (interaction.payload.kind) {
-    case "command_approval":
+    case "command_approval": {
+      const decision = (() => {
+        if (action === "approve") {
+          if (interaction.payload.availableDecisions.includes("accept_for_session")) {
+            return "accept_for_session";
+          }
+          if (interaction.payload.availableDecisions.includes("accept")) {
+            return "accept";
+          }
+          throw new Error(
+            `Interaction ${interaction.id} does not offer an approval decision.`,
+          );
+        }
+
+        if (interaction.payload.availableDecisions.includes("decline")) {
+          return "decline";
+        }
+        if (interaction.payload.availableDecisions.includes("cancel")) {
+          return "cancel";
+        }
+        throw new Error(
+          `Interaction ${interaction.id} does not offer a deny decision.`,
+        );
+      })();
       return {
         kind: "command_approval",
         decision,
       };
+    }
     case "file_change_approval":
       return {
         kind: "file_change_approval",
-        decision,
+        decision: action === "approve" ? "accept_for_session" : "decline",
       };
     case "permission_request":
     case "user_input_request":
       throw new Error(
         `Interaction ${interaction.id} is ${formatInteractionKind(interaction.payload.kind)} and cannot be resolved with approve/deny.`,
+      );
+  }
+}
+
+function formatApprovalDecisionMessage(
+  resolution: PendingInteractionResolution,
+): string {
+  switch (resolution.kind) {
+    case "command_approval":
+    case "file_change_approval":
+      switch (resolution.decision) {
+        case "accept":
+          return "approved";
+        case "accept_for_session":
+          return "approved for this session";
+        case "decline":
+          return "denied";
+        case "cancel":
+          return "cancelled";
+      }
+    case "permission_request":
+    case "user_input_request":
+      throw new Error(
+        `Resolution ${resolution.kind} does not support approval messaging.`,
       );
   }
 }
@@ -327,7 +375,7 @@ export function registerInteractionCommands(
             id: resolved.id,
             interactionId,
           },
-          json: buildApprovalResolution(interaction, "accept_for_session"),
+          json: buildApprovalResolution(interaction, "approve"),
         }),
       ).catch((error: unknown) => {
         throw prependErrorContext(`Failed to approve interaction ${interactionId}`, error);
@@ -336,7 +384,9 @@ export function registerInteractionCommands(
       if (outputJson(opts, updated)) {
         return;
       }
-      console.log(`Interaction ${interactionId} approved for this session`);
+      console.log(
+        `Interaction ${interactionId} ${formatApprovalDecisionMessage(updated.resolution ?? buildApprovalResolution(interaction, "approve"))}`,
+      );
     }));
 
   interactions
@@ -364,7 +414,7 @@ export function registerInteractionCommands(
             id: resolved.id,
             interactionId,
           },
-          json: buildApprovalResolution(interaction, "decline"),
+          json: buildApprovalResolution(interaction, "deny"),
         }),
       ).catch((error: unknown) => {
         throw prependErrorContext(`Failed to deny interaction ${interactionId}`, error);
@@ -373,7 +423,9 @@ export function registerInteractionCommands(
       if (outputJson(opts, updated)) {
         return;
       }
-      console.log(`Interaction ${interactionId} denied`);
+      console.log(
+        `Interaction ${interactionId} ${formatApprovalDecisionMessage(updated.resolution ?? buildApprovalResolution(interaction, "deny"))}`,
+      );
     }));
 
   interactions

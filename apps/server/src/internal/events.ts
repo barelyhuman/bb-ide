@@ -243,7 +243,11 @@ async function archiveCompletedAutomationThreadIfNeeded(
 }
 
 async function applyEventEffects(
+<<<<<<< HEAD
   deps: LoggedSandboxWorkSessionDeps,
+=======
+  deps: Pick<AppDeps, "db" | "hub" | "logger" | "pendingInteractions">,
+>>>>>>> 903f1f78 (Validate interaction resolutions and guard manager turns)
   events: HostDaemonEventEnvelope[],
 ): Promise<void> {
   for (const entry of events) {

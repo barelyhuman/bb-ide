@@ -105,6 +105,9 @@ export async function queueManagerSystemMessage(
   ) {
     return false;
   }
+  if (deps.pendingInteractions.hasPendingThreadInteraction(managerThread.id)) {
+    return false;
+  }
 
   const { environment } = requireThreadEnvironment(deps.db, args.managerThreadId);
   const input = buildSystemInput(args.messageText);

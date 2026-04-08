@@ -144,6 +144,155 @@ describe("public thread interaction routes", () => {
     }
   });
 
+  it("rejects unavailable command decisions and invalid user-input answers", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-public-thread-invalid-resolution",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      const secondThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const commandApproval = harness.deps.pendingInteractions.registerPendingInteraction({
+        threadId: thread.id,
+        turnId: "turn-invalid-command-resolution",
+        providerId: "codex",
+        providerThreadId: "provider-thread-invalid-command-resolution",
+        providerRequestId: "request-invalid-command-resolution",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        payload: {
+          kind: "command_approval",
+          itemId: "item-invalid-command-resolution",
+          approvalId: null,
+          reason: "Approve command",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: ["accept", "decline", "cancel"],
+        },
+      });
+      if (commandApproval.outcome === "rejected") {
+        throw new Error(`Expected command interaction registration to succeed: ${commandApproval.reason}`);
+      }
+
+      const invalidCommandResolution = await harness.app.request(
+        `/api/v1/threads/${thread.id}/interactions/${commandApproval.interaction.id}/resolve`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            kind: "command_approval",
+            decision: "accept_for_session",
+          }),
+        },
+      );
+      expect(invalidCommandResolution.status).toBe(400);
+      await expect(readJson(invalidCommandResolution)).resolves.toEqual({
+        code: "invalid_request",
+        message: `Command approval decision 'accept_for_session' is not available for interaction ${commandApproval.interaction.id}`,
+      });
+
+      const userInput = harness.deps.pendingInteractions.registerPendingInteraction({
+        threadId: secondThread.id,
+        turnId: "turn-invalid-user-input-resolution",
+        providerId: "codex",
+        providerThreadId: "provider-thread-invalid-user-input-resolution",
+        providerRequestId: "request-invalid-user-input-resolution",
+        providerRequestMethod: "item/tool/requestUserInput",
+        payload: {
+          kind: "user_input_request",
+          itemId: "item-invalid-user-input-resolution",
+          questions: [
+            {
+              id: "environment",
+              header: "Env",
+              question: "Which environment?",
+              allowsOther: false,
+              isSecret: false,
+              options: [
+                { label: "staging", description: "Use staging" },
+                { label: "prod", description: "Use production" },
+              ],
+            },
+            {
+              id: "ticket",
+              header: "Ticket",
+              question: "Which ticket?",
+              allowsOther: true,
+              isSecret: false,
+              options: [],
+            },
+          ],
+        },
+      });
+      if (userInput.outcome === "rejected") {
+        throw new Error(`Expected user-input interaction registration to succeed: ${userInput.reason}`);
+      }
+
+      const missingAnswerResponse = await harness.app.request(
+        `/api/v1/threads/${secondThread.id}/interactions/${userInput.interaction.id}/resolve`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            kind: "user_input_request",
+            answers: {
+              environment: ["staging"],
+            },
+          }),
+        },
+      );
+      expect(missingAnswerResponse.status).toBe(400);
+      await expect(readJson(missingAnswerResponse)).resolves.toEqual({
+        code: "invalid_request",
+        message: "Missing answers for question ids: ticket",
+      });
+
+      const unknownQuestionResponse = await harness.app.request(
+        `/api/v1/threads/${secondThread.id}/interactions/${userInput.interaction.id}/resolve`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            kind: "user_input_request",
+            answers: {
+              environment: ["staging"],
+              ticket: ["OPS-123"],
+              extra: ["unexpected"],
+            },
+          }),
+        },
+      );
+      expect(unknownQuestionResponse.status).toBe(400);
+      await expect(readJson(unknownQuestionResponse)).resolves.toEqual({
+        code: "invalid_request",
+        message: "Unknown question ids: extra",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("rejects send and draft-send while a thread awaits user interaction", async () => {
     const harness = await createTestAppHarness();
     try {
