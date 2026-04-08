@@ -103,19 +103,30 @@ export class ServerConnection {
   }
 
   private async openSession(): Promise<HostDaemonSessionOpenResponse> {
-    const session = await this.options.serverClient.openSession({
-      hostId: this.options.hostId,
-      instanceId: this.options.instanceId,
-      hostName: this.options.hostName,
-      hostType: this.options.hostType,
-      dataDir: this.options.dataDir,
-      protocolVersion:
-        this.options.protocolVersion ?? HOST_DAEMON_PROTOCOL_VERSION,
-      activeThreads: this.options.getActiveThreads?.() ?? [],
-    });
-    this.session = session;
-    this.options.setSession?.(session);
-    return session;
+    try {
+      const session = await this.options.serverClient.openSession({
+        hostId: this.options.hostId,
+        instanceId: this.options.instanceId,
+        hostName: this.options.hostName,
+        hostType: this.options.hostType,
+        dataDir: this.options.dataDir,
+        protocolVersion:
+          this.options.protocolVersion ?? HOST_DAEMON_PROTOCOL_VERSION,
+        activeThreads: this.options.getActiveThreads?.() ?? [],
+      });
+      this.session = session;
+      this.options.setSession?.(session);
+      return session;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes("401") || message.includes("403")) {
+        this.options.logger.error(
+          { hostId: this.options.hostId, serverUrl: this.options.serverUrl },
+          "Server rejected host credentials — this host is not registered with the server.",
+        );
+      }
+      throw error;
+    }
   }
 
   private async connectWebSocket(

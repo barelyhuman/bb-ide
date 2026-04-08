@@ -301,6 +301,10 @@ export async function createHostDaemonApp(
     },
     restart: options.restart,
     onStart: async () => {
+      options.logger.info(
+        { dataDir: options.dataDir, serverUrl: options.serverUrl },
+        "Host daemon connecting",
+      );
       await connection.start();
       await commandFetchLoop.request();
     },

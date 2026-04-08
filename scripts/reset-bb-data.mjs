@@ -10,6 +10,7 @@ import {
 
 const defaultDataDir = resolve(homedir(), DEFAULTS.dataDir.prod);
 const defaultDevDataDir = resolve(homedir(), DEFAULTS.dataDir.dev);
+const defaultDevDaemonDataDir = resolve(homedir(), `${DEFAULTS.dataDir.dev}-host-daemon`);
 
 function resolveDataDir() {
   const preferred = process.env.BB_DATA_DIR?.trim();
@@ -74,11 +75,11 @@ async function main() {
     node scripts/reset-bb-data.mjs [--all] [--yes]
 
   ${dim("Options")}
-    --all   Remove both prod and dev data directories
+    --all   Remove prod, dev, and dev daemon data directories
     --yes   Skip the interactive confirmation prompt
 
   ${dim("Notes")}
-    Removes bb-managed state directories (${dim("~/.bb")}, ${dim("~/.bb-dev")}).
+    Removes bb-managed state directories (${dim("~/.bb")}, ${dim("~/.bb-dev")}, ${dim("~/.bb-dev-host-daemon")}).
     Does not touch provider auth/config managed by other tools.
     Respects BB_DATA_DIR for single-directory resets.
 \n`);
@@ -88,7 +89,7 @@ async function main() {
   process.stdout.write(`\n  ${bold("bb reset")}\n`);
 
   const targets = args.has("--all")
-    ? uniquePaths([defaultDataDir, defaultDevDataDir, resolveDataDir()])
+    ? uniquePaths([defaultDataDir, defaultDevDataDir, defaultDevDaemonDataDir, resolveDataDir()])
     : [resolveDataDir()];
 
   ensureSafeTargets(targets);

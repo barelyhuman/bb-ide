@@ -118,7 +118,7 @@ export function AppSettingsView() {
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : hosts.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No hosts connected.
+              No registered hosts.
             </p>
           ) : (
             <div className="divide-y divide-border">

@@ -24,7 +24,8 @@ export async function fetchHostId(port: number): Promise<string | null> {
     const daemon = getHostDaemonClient(port);
     const res = await daemon.status.$get();
     if (!res.ok) return null;
-    const body = (await res.json()) as { hostId: string };
+    const body = await res.json();
+    if (!body.connected) return null;
     return body.hostId;
   } catch {
     return null;
