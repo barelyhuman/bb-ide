@@ -13,10 +13,11 @@ Make ephemeral sandbox hosts safe and durable enough for real thread reuse by fi
 
 ## Current Findings
 
-### 1. Lifecycle support exists, but the server does not use it
+### 1. Lifecycle support exists, but lifecycle ownership is still incomplete
 
 - `packages/sandbox-host/src/lifecycle.ts` already exposes `suspend()`, `resume()`, and `extendTimeout()`.
 - `packages/sandbox-host/src/provision.ts` already provisions E2B sandboxes with `lifecycle: { onTimeout: "pause" }`.
+- The server now provisions and resumes ephemeral sandbox hosts asynchronously through `apps/server/src/services/hosts/host-lifecycle.ts`, specifically `ensureSandboxHostSessionReady(...)`, and `apps/server/src/services/environments/environment-provisioning.ts` calls that owner during sandbox-host environment bootstrap.
 - The server currently never calls `suspend()` or `extendTimeout()` in response to thread idleness or runtime activity.
 - `apps/server/src/services/lib/entity-lookup.ts` only derives host status as `connected` or `disconnected`, even though `packages/domain/src/host.ts` already includes `suspended`.
 
@@ -31,13 +32,14 @@ These are the server-owned points where real host activity arrives and where tim
 
 Heartbeats in `apps/server/src/ws/daemon-protocol.ts` should not count as activity. They prove connectivity, not useful work.
 
-### 3. Resume is not part of the normal ephemeral-host command path
+### 3. Resume support exists, but it is not part of the normal ephemeral-host command path
 
 - Thread start and turn dispatch currently require an already-connected host session via `requireConnectedHostSession(...)`.
-- There is no general `ensure sandbox host session` path that resumes a paused sandbox and waits for the daemon to reconnect before queueing work.
+- `ensureSandboxHostSessionReady(...)` exists, but it is currently scoped to sandbox-host environment bootstrap rather than all ephemeral-host work paths.
+- There is still no general `ensure sandbox host session` path that resumes a paused sandbox, waits for the daemon to reconnect, ensures runtime material is current, and only then queues arbitrary host work.
 - Suspending sandboxes before fixing resume would strand idle threads.
 
-### 4. Runtime material is server-wide only today
+### 4. Runtime material is still bootstrap-coupled and server-wide only today
 
 - `apps/server/src/services/hosts/sandbox-daemon-env.ts` only injects server-level `GITHUB_TOKEN`, `OPENAI_API_KEY`, and `ANTHROPIC_API_KEY`.
 - There is no per-user or per-project secret store.
@@ -89,7 +91,7 @@ Remaining QA gap: the smoke does not yet validate runtime material sync or cloud
 
 ## Recommended Architecture
 
-Milestone 1 should establish one durable server-owned path for ephemeral sandbox lifecycle and one durable server-to-daemon path for runtime material. Milestone 2 should layer user/project material and auth onto those shipped paths rather than introducing parallel bootstrap, sync, or lifecycle mechanisms.
+Milestone 1 should establish one durable server-owned path for ephemeral sandbox lifecycle and one durable server-to-daemon path for runtime material. Latest `main` already moved sandbox bootstrap into the async environment provisioning lifecycle, so Milestone 1 should build on that shipped baseline rather than introducing a second provisioning owner. Milestone 2 should layer user/project material and auth onto those shipped paths rather than introducing parallel bootstrap, sync, or lifecycle mechanisms.
 
 ## AGENTS.md Verification
 
@@ -127,6 +129,7 @@ Milestone 1 merge bar:
 - no direct sandbox backend calls remain in thread/environment workflow code for ephemeral-host provision/resume/destroy paths
 - no runtime secrets remain coupled to bootstrap env for cloud sandboxes
 - runtime sync is durable and idempotent across reconnects
+- existing async sandbox bootstrap dedupe and progress fanout behavior from `main` is preserved
 - validation is strong enough that Milestone 1 can merge to `main` without Milestone 2
 
 Explicitly out of scope for Milestone 1:
@@ -148,9 +151,12 @@ Scope:
 
 ## Phase 1: Fix Lifecycle Ownership First
 
-Create a dedicated server-owned sandbox lifecycle service:
+Use a single dedicated server-owned sandbox lifecycle owner:
 
-- File: `apps/server/src/services/hosts/sandbox-lifecycle.ts`
+- Starting point: `apps/server/src/services/hosts/host-lifecycle.ts`
+- End state: either expand `host-lifecycle.ts` in place or rename it to `apps/server/src/services/hosts/sandbox-lifecycle.ts`
+
+Do not introduce a second competing lifecycle owner alongside the current `host-lifecycle.ts`.
 
 Responsibilities:
 
@@ -179,11 +185,12 @@ Thread, environment, and cleanup services should still own product workflow poli
 
 Those callers should delegate into `sandbox-lifecycle` instead of calling sandbox backends directly.
 
-Expected call-site changes:
+Expected call-site changes from the current `main` baseline:
 
-- `thread-create` should call `provisionSandboxHost(...)` instead of invoking `sandboxBackend.provisionHost(...)` and `waitForHostSession(...)` itself
+- keep `thread-create` responsible for creating host/environment/thread records and requesting sandbox-host environment provisioning, not for direct sandbox backend calls
+- keep `environment-provisioning.ts` as the async bootstrap entrypoint for sandbox-host environment startup, but have it call the single lifecycle owner
+- extend the current lifecycle owner with activity, suspend, and runtime-sync gating instead of re-implementing provision/resume/destroy elsewhere
 - cleanup/result handlers should call `destroySandboxHostIfReady(...)`
-- existing helpers in `host-lifecycle.ts` should either move into `sandbox-lifecycle.ts` or become thin wrappers over it
 
 Concurrency and idempotency requirements:
 
@@ -292,6 +299,12 @@ Concrete call sites to replace or wrap:
 - `apps/server/src/services/hosts/command-wait.ts`
 - `apps/server/src/services/threads/thread-storage.ts`
 - `apps/server/src/services/threads/thread-commands.ts`
+
+Notes on current ownership:
+
+- `thread-create.ts` no longer does direct sandbox provisioning; it creates a sandbox-host environment provisioning request and kicks `advanceEnvironmentProvisioning(...)`
+- `environment-provisioning.ts` already owns async sandbox bootstrap for sandbox-host requests and currently calls `ensureSandboxHostSessionReady(...)`
+- Milestone 1 should preserve that async startup shape and generalize it for resumed work, runtime sync, suspend, and idle handling
 
 Behavior:
 
@@ -622,6 +635,7 @@ Add coverage for:
 - use of runtime material sync for existing server-scoped env material
 - runtime sync reconciliation after reconnect and expired command handling
 - runtime sync deduplication when multiple callers request sync for the same host
+- sandbox bootstrap dedupe and provisioning progress fanout regressions
 
 Database-backed lifecycle tests must use in-memory SQLite via `createConnection(":memory:")` plus `migrate(db)`. Do not mock the database for Milestone 1 lifecycle or runtime-sync state tests.
 
