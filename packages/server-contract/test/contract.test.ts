@@ -17,7 +17,9 @@ import {
   createPublicApiClient,
   createThreadRequestSchema,
   environmentActionRequestSchema,
+  resolvePendingInteractionRequestSchema,
   sendMessageRequestSchema,
+  threadPendingInteractionsResponseSchema,
   timelineToolDetailsResponseSchema,
   updateEnvironmentRequestSchema,
   updateAutomationRequestSchema,
@@ -253,6 +255,45 @@ describe("server-contract canonical schemas", () => {
     });
 
     expect(
+      threadPendingInteractionsResponseSchema.parse([
+        {
+          id: "pi_123",
+          threadId: "thr_123",
+          turnId: "turn_123",
+          providerId: "codex",
+          providerThreadId: "provider-thread-123",
+          providerRequestId: "request-123",
+          providerRequestMethod: "item/commandExecution/requestApproval",
+          status: "pending",
+          payload: {
+            kind: "command_approval",
+            approvalId: null,
+            reason: "Needs approval",
+            command: "git push",
+            cwd: "/tmp/project",
+            commandActions: [],
+            requestedPermissions: null,
+            availableDecisions: ["accept", "decline", "cancel"],
+          },
+          resolution: null,
+          statusReason: null,
+          createdAt: 1,
+          resolvedAt: null,
+        },
+      ]),
+    ).toHaveLength(1);
+
+    expect(
+      resolvePendingInteractionRequestSchema.parse({
+        kind: "command_approval",
+        decision: "accept_for_session",
+      }),
+    ).toMatchObject({
+      kind: "command_approval",
+      decision: "accept_for_session",
+    });
+
+    expect(
       environmentActionRequestSchema.parse({
         action: "commit",
       }),
@@ -452,6 +493,16 @@ describe("server-contract clients", () => {
         query: { path: "notes/plan.md" },
       }).pathname,
     ).toBe("/api/v1/threads/thr_123/thread-storage/content");
+    expect(
+      publicClient.threads[":id"].interactions.$url({
+        param: { id: "thr_123" },
+      }).pathname,
+    ).toBe("/api/v1/threads/thr_123/interactions");
+    expect(
+      publicClient.threads[":id"].interactions[":interactionId"].resolve.$url({
+        param: { id: "thr_123", interactionId: "pi_123" },
+      }).pathname,
+    ).toBe("/api/v1/threads/thr_123/interactions/pi_123/resolve");
   });
 
   it("keeps route inputs in shared named types instead of inline objects", () => {
@@ -486,10 +537,14 @@ describe("server-contract clients", () => {
       systemProvidersQuerySchema: contract.systemProvidersQuerySchema,
       threadEventsQuerySchema: contract.threadEventsQuerySchema,
       threadListQuerySchema: contract.threadListQuerySchema,
+      threadPendingInteractionsResponseSchema:
+        contract.threadPendingInteractionsResponseSchema,
       threadTimelineQuerySchema: contract.threadTimelineQuerySchema,
       threadTimelineResponseSchema: contract.threadTimelineResponseSchema,
       timelineToolDetailsQuerySchema: contract.timelineToolDetailsQuerySchema,
       timelineToolDetailsRequestSchema: contract.timelineToolDetailsRequestSchema,
+      resolvePendingInteractionRequestSchema:
+        contract.resolvePendingInteractionRequestSchema,
       updateAutomationRequestSchema: contract.updateAutomationRequestSchema,
       updateProjectRequestSchema: contract.updateProjectRequestSchema,
       updateProjectSourceRequestSchema: contract.updateProjectSourceRequestSchema,

@@ -3,6 +3,8 @@ import { cloudAuthProviderIdSchema } from "@bb/agent-providers";
 import {
   getProjectPathValidationMessage,
   normalizeProjectPathInput,
+  pendingInteractionResolutionSchema,
+  pendingInteractionSchema,
   projectSchema,
   projectSourceSchema,
   promptInputSchema,
@@ -238,6 +240,19 @@ export const sendDraftResponseSchema = z.object({
   queuedMessage: threadQueuedMessageSchema,
 });
 export type SendDraftResponse = z.infer<typeof sendDraftResponseSchema>;
+
+export const threadPendingInteractionsResponseSchema = z.array(
+  pendingInteractionSchema,
+);
+export type ThreadPendingInteractionsResponse = z.infer<
+  typeof threadPendingInteractionsResponseSchema
+>;
+
+export const resolvePendingInteractionRequestSchema =
+  pendingInteractionResolutionSchema;
+export type ResolvePendingInteractionRequest = z.infer<
+  typeof resolvePendingInteractionRequestSchema
+>;
 
 export const threadDraftListResponseSchema = z.array(threadQueuedMessageSchema);
 export type ThreadDraftListResponse = z.infer<typeof threadDraftListResponseSchema>;

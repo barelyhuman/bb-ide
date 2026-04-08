@@ -14,6 +14,8 @@ import {
   hostDaemonEnvironmentChangeRequestSchema,
   hostDaemonEventBatchRequestSchema,
   hostDaemonEventBatchResponseSchema,
+  hostDaemonInteractiveRequestResponseSchema,
+  hostDaemonInteractiveRequestSchema,
   hostDaemonServerWsMessageSchema,
   hostDaemonSessionOpenRequestSchema,
   hostDaemonSessionOpenResponseSchema,
@@ -370,6 +372,10 @@ describe("host-daemon command schemas", () => {
     const optionalFieldPaths = collectOptionalFieldPaths({
       hostDaemonActiveThreadSchema: contract.hostDaemonActiveThreadSchema,
       hostDaemonCommandSchema: contract.hostDaemonCommandSchema,
+      hostDaemonInteractiveRequestSchema:
+        contract.hostDaemonInteractiveRequestSchema,
+      hostDaemonInteractiveRequestResponseSchema:
+        contract.hostDaemonInteractiveRequestResponseSchema,
       workspaceCommitResultSchema:
         contract.hostDaemonCommandResultSchemaByType["workspace.commit"],
       workspaceSquashMergeResultSchema:
@@ -713,6 +719,50 @@ describe("host-daemon session schemas", () => {
       sessionId: "session_123",
       environmentId: "env_123",
       change: "thread-storage-changed",
+    });
+
+    expect(
+      hostDaemonInteractiveRequestSchema.parse({
+        sessionId: "session_123",
+        interaction: {
+          threadId: "thr_123",
+          turnId: "turn_123",
+          providerId: "codex",
+          providerThreadId: "provider-thread-123",
+          providerRequestId: "request-123",
+          providerRequestMethod: "item/commandExecution/requestApproval",
+          payload: {
+            kind: "command_approval",
+            approvalId: null,
+            reason: "Needs approval",
+            command: "git push",
+            cwd: "/tmp/project",
+            commandActions: [],
+            requestedPermissions: null,
+            availableDecisions: ["accept", "decline", "cancel"],
+          },
+        },
+      }),
+    ).toMatchObject({
+      sessionId: "session_123",
+      interaction: {
+        providerId: "codex",
+      },
+    });
+
+    expect(
+      hostDaemonInteractiveRequestResponseSchema.parse({
+        outcome: "resolved",
+        resolution: {
+          kind: "command_approval",
+          decision: "accept_for_session",
+        },
+      }),
+    ).toMatchObject({
+      outcome: "resolved",
+      resolution: {
+        decision: "accept_for_session",
+      },
     });
   });
 

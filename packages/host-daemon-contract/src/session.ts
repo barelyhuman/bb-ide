@@ -3,6 +3,8 @@ import { hc } from "hono/client";
 import {
   ENVIRONMENT_CHANGE_KINDS,
   hostTypeSchema,
+  pendingInteractionCreateSchema,
+  pendingInteractionResolutionSchema,
   threadEventSchema,
   toolCallRequestSchema,
   toolCallResponseSchema,
@@ -196,6 +198,37 @@ export type HostDaemonToolCallResponse = z.infer<
   typeof hostDaemonToolCallResponseSchema
 >;
 
+export const hostDaemonInteractiveRequestSchema = z.object({
+  sessionId: z.string().min(1),
+  interaction: pendingInteractionCreateSchema,
+});
+export type HostDaemonInteractiveRequest = z.infer<
+  typeof hostDaemonInteractiveRequestSchema
+>;
+
+export const hostDaemonInteractiveRequestResponseSchema =
+  z.discriminatedUnion("outcome", [
+    z.object({
+      outcome: z.literal("resolved"),
+      resolution: pendingInteractionResolutionSchema,
+    }),
+    z.object({
+      outcome: z.literal("rejected"),
+      reason: z.string().min(1),
+    }),
+    z.object({
+      outcome: z.literal("interrupted"),
+      reason: z.string().min(1),
+    }),
+    z.object({
+      outcome: z.literal("expired"),
+      reason: z.string().min(1),
+    }),
+  ]);
+export type HostDaemonInteractiveRequestResponse = z.infer<
+  typeof hostDaemonInteractiveRequestResponseSchema
+>;
+
 export type HostDaemonInternalSchema = {
   "/hosts/enroll": {
     /** Used by the daemon to exchange bootstrap material for its long-lived host credential. */
@@ -250,6 +283,13 @@ export type HostDaemonInternalSchema = {
     $post: Endpoint<
       { json: HostDaemonToolCallRequest },
       HostDaemonToolCallResponse
+    >;
+  };
+  "/session/interactive-request": {
+    /** Used by the daemon to persist an interactive provider request and await a later server-side resolution. */
+    $post: Endpoint<
+      { json: HostDaemonInteractiveRequest },
+      HostDaemonInteractiveRequestResponse
     >;
   };
 };

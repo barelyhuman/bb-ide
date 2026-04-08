@@ -4,6 +4,7 @@ import type {
   AvailableModel,
   Environment,
   Host,
+  PendingInteraction,
   ProjectExecutionDefaults,
   ResolvedThreadExecutionOptions,
   Thread,
@@ -53,6 +54,7 @@ import type {
   SendDraftRequest,
   SendDraftResponse,
   SendMessageRequest,
+  ResolvePendingInteractionRequest,
   ThreadDraftListResponse,
   GithubRepoInfo,
   GithubReposQuery,
@@ -69,6 +71,7 @@ import type {
   ThreadEventWaitQuery,
   ThreadEventsQuery,
   ThreadListQuery,
+  ThreadPendingInteractionsResponse,
   ThreadTimelineQuery,
   ThreadTimelineResponse,
   TimelineToolDetailsQuery,
@@ -266,6 +269,24 @@ export type PublicApiSchema = {
   };
   "/threads/:id/stop": {
     $post: Endpoint<PathId, { ok: true }>;
+  };
+  "/threads/:id/interactions": {
+    /** List pending interactions owned by a thread. */
+    $get: Endpoint<PathId, ThreadPendingInteractionsResponse>;
+  };
+  "/threads/:id/interactions/:interactionId": {
+    /** Get a single pending interaction owned by a thread. */
+    $get: Endpoint<
+      { param: { id: string; interactionId: string } },
+      PendingInteraction
+    >;
+  };
+  "/threads/:id/interactions/:interactionId/resolve": {
+    /** Resolve a pending interaction and return its updated lifecycle record. */
+    $post: Endpoint<
+      { param: { id: string; interactionId: string }; json: ResolvePendingInteractionRequest },
+      PendingInteraction
+    >;
   };
   "/threads/:id/archive": {
     /**
