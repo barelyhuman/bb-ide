@@ -80,7 +80,7 @@ export type ThreadCreateOrigin = z.infer<typeof threadCreateOriginSchema>;
 
 export const createThreadRequestSchema = z.object({
   projectId: z.string().min(1),
-  providerId: z.string().min(1),
+  providerId: z.string().min(1).optional(),
   origin: threadCreateOriginSchema.optional(),
   title: z.string().min(1).optional(),
   input: z.array(promptInputSchema).min(1),
@@ -94,6 +94,7 @@ export const createThreadRequestSchema = z.object({
 export type CreateThreadRequest = z.infer<typeof createThreadRequestSchema>;
 
 const automationThreadRequestSchema = z.object({
+  // Automations stay self-contained instead of inheriting project defaults.
   providerId: z.string().min(1),
   title: z.string().min(1).optional(),
   input: z.array(promptInputSchema).min(1),
@@ -322,7 +323,7 @@ export type ManagerEnvironmentArgs = z.infer<typeof managerEnvironmentArgsSchema
 
 export const createManagerThreadRequestSchema = z.object({
   name: z.string().min(1).optional(),
-  providerId: z.string().min(1),
+  providerId: z.string().min(1).optional(),
   origin: threadCreateOriginSchema.optional(),
   model: z.string().min(1).optional(),
   serviceTier: serviceTierSchema.optional(),
@@ -348,7 +349,6 @@ export type ProjectAttachmentContentQuery = z.infer<
 >;
 
 export const projectDefaultExecutionOptionsQuerySchema = z.object({
-  providerId: z.string().min(1),
   threadType: threadTypeSchema,
 });
 export type ProjectDefaultExecutionOptionsQuery = z.infer<

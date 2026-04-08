@@ -69,6 +69,7 @@ export type ResolvedThreadExecutionOptions = z.infer<
 >;
 
 export const projectExecutionDefaultsSchema = z.object({
+  providerId: z.string().min(1),
   model: z.string().min(1),
   serviceTier: serviceTierSchema,
   reasoningLevel: reasoningLevelSchema,

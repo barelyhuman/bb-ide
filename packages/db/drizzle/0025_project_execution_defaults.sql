@@ -10,5 +10,5 @@ CREATE TABLE `project_execution_defaults` (
 	FOREIGN KEY (`project_id`) REFERENCES `projects`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX `project_execution_defaults_project_provider_type_idx` ON `project_execution_defaults` (`project_id`,`provider_id`,`thread_type`);--> statement-breakpoint
+CREATE UNIQUE INDEX `project_execution_defaults_project_thread_type_idx` ON `project_execution_defaults` (`project_id`,`thread_type`);--> statement-breakpoint
 CREATE INDEX `project_execution_defaults_project_idx` ON `project_execution_defaults` (`project_id`);

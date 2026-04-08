@@ -49,12 +49,14 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
   "createManagerThreadRequestSchema.model": "Manager creation may omit model and inherit the project/provider manager default.",
   "createManagerThreadRequestSchema.name": "Manager creation may omit a custom name and use the server-generated default.",
   "createManagerThreadRequestSchema.origin": "Legacy manager creation callers may omit origin when the server should treat the create surface as unknown.",
+  "createManagerThreadRequestSchema.providerId": "Manager creation may omit providerId and use the project's remembered manager provider choice.",
   "createManagerThreadRequestSchema.reasoningLevel": "Manager creation may omit reasoning level and use the server default.",
   "createManagerThreadRequestSchema.sandboxMode": "Manager creation may omit sandbox mode and use the server default.",
   "createManagerThreadRequestSchema.serviceTier": "Manager creation may omit service tier and use the server default.",
   "createThreadRequestSchema.origin": "Legacy thread creation callers may omit origin when the server should treat the create surface as unknown.",
   "createThreadRequestSchema.model": "Thread creation may omit model and inherit the project/provider default.",
   "createThreadRequestSchema.parentThreadId": "Root thread creation omits a parent thread id.",
+  "createThreadRequestSchema.providerId": "Thread creation may omit providerId and use the project's remembered provider choice.",
   "createThreadRequestSchema.reasoningLevel": "Thread creation may omit reasoning level and use the server default.",
   "createThreadRequestSchema.sandboxMode": "Thread creation may omit sandbox mode and use the server default.",
   "createThreadRequestSchema.serviceTier": "Thread creation may omit service tier and use the server default.",
@@ -346,14 +348,12 @@ describe("server-contract canonical schemas", () => {
 
     expect(
       createManagerThreadRequestSchema.parse({
-        providerId: "claude-code",
         origin: "cli",
         reasoningLevel: "high",
         name: "Missing model",
         environment: { type: "host", hostId: "host_123" },
       }),
     ).toMatchObject({
-      providerId: "claude-code",
       origin: "cli",
     });
   });

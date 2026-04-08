@@ -5,7 +5,7 @@ import type {
   ThreadCreateOrigin,
 } from "@bb/server-contract";
 
-export interface ThreadCreateServiceRequest {
+export interface ThreadCreateServiceRequestInput {
   automationId: string | null;
   environment: EnvironmentArgs;
   input: PromptInput[];
@@ -13,10 +13,15 @@ export interface ThreadCreateServiceRequest {
   origin: ThreadCreateOrigin | null;
   parentThreadId?: string;
   projectId: string;
-  providerId: string;
+  providerId?: CreateThreadRequest["providerId"];
   reasoningLevel?: CreateThreadRequest["reasoningLevel"];
   sandboxMode?: CreateThreadRequest["sandboxMode"];
   serviceTier?: CreateThreadRequest["serviceTier"];
   title?: string;
   type: ThreadType;
+}
+
+export interface ThreadCreateServiceRequest
+  extends Omit<ThreadCreateServiceRequestInput, "providerId"> {
+  providerId: string;
 }

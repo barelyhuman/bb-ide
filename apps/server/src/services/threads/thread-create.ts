@@ -30,7 +30,10 @@ import { requireReachablePublicServerUrl } from "../hosts/public-server-url.js";
 import { createSandboxBackendForId } from "../hosts/sandbox-backends.js";
 import { appendClientTurnEvent, appendProvisioningEvent, buildCwdBranchEntries } from "./thread-events.js";
 import { buildExecutionOptions } from "./thread-commands.js";
-import { rememberProjectExecutionDefaultsForCreate } from "./project-execution-defaults.js";
+import {
+  rememberProjectExecutionDefaultsForCreate,
+  resolveProjectExecutionDefaultsForCreate,
+} from "./project-execution-defaults.js";
 import { generateThreadTitle } from "./title-generation.js";
 import {
   buildManagedBranchName,
@@ -52,11 +55,13 @@ import {
   resolveStableThreadRequestEnvironment,
 } from "./thread-request-eligibility.js";
 import {
+  type ThreadCreateServiceRequestInput,
   type ThreadCreateServiceRequest,
 } from "./thread-create-request.js";
 
 interface CreateThreadInEnvironmentArgs {
   environment: Environment;
+  projectDefaults: Parameters<typeof buildExecutionOptions>[2]["projectDefaults"];
   request: ThreadCreateServiceRequest;
   threadStatus: "created" | "provisioning";
 }
@@ -64,11 +69,13 @@ interface CreateThreadInEnvironmentArgs {
 interface ReuseEnvironmentByHostPathArgs {
   hostId: string;
   path: string;
+  projectDefaults: Parameters<typeof buildExecutionOptions>[2]["projectDefaults"];
   request: ThreadCreateServiceRequest;
 }
 
 interface CreateSandboxHostThreadArgs {
   cloneSource: GitHubRepoProjectSource;
+  projectDefaults: Parameters<typeof buildExecutionOptions>[2]["projectDefaults"];
   request: ThreadCreateServiceRequest;
   sandboxType: string;
 }
@@ -98,15 +105,7 @@ async function createThreadInEnvironment(
       deps,
       args.request,
       {
-        ...(args.request.origin
-          ? {
-              projectDefaults: {
-                projectId: args.request.projectId,
-                providerId: args.request.providerId,
-                threadType: args.request.type,
-              },
-            }
-          : {}),
+        ...(args.projectDefaults ? { projectDefaults: args.projectDefaults } : {}),
         threadId: thread.id,
       },
       "client/thread/start",
@@ -226,6 +225,7 @@ async function reuseEnvironmentByHostPath(
   if (existing.status === "ready") {
     return createThreadInEnvironment(deps, {
       environment: existing,
+      projectDefaults: args.projectDefaults,
       request: args.request,
       threadStatus: "created",
     });
@@ -234,6 +234,7 @@ async function reuseEnvironmentByHostPath(
   if (existing.status === "provisioning") {
     return createThreadInEnvironment(deps, {
       environment: existing,
+      projectDefaults: args.projectDefaults,
       request: args.request,
       threadStatus: "provisioning",
     });
@@ -322,6 +323,7 @@ async function createSandboxHostThread(
   try {
     thread = await createThreadInEnvironment(deps, {
       environment,
+      projectDefaults: args.projectDefaults,
       request: args.request,
       threadStatus: "provisioning",
     });
@@ -372,9 +374,23 @@ async function createSandboxHostThread(
 
 export async function createThreadFromRequest(
   deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "machineAuth" | "sandboxRegistry">,
-  request: ThreadCreateServiceRequest,
+  requestInput: ThreadCreateServiceRequestInput,
 ) {
-  requireProjectExists(deps, request.projectId);
+  requireProjectExists(deps, requestInput.projectId);
+  const { executionDefaults, providerId } = resolveProjectExecutionDefaultsForCreate(
+    deps,
+    {
+      model: requestInput.model,
+      origin: requestInput.origin,
+      projectId: requestInput.projectId,
+      providerId: requestInput.providerId,
+      threadType: requestInput.type,
+    },
+  );
+  const request: ThreadCreateServiceRequest = {
+    ...requestInput,
+    providerId,
+  };
   const resolvedEnvironment = resolveStableThreadRequestEnvironment(deps, {
     environment: request.environment,
     projectId: request.projectId,
@@ -383,6 +399,7 @@ export async function createThreadFromRequest(
   if (resolvedEnvironment.type === "sandbox-host") {
     return createSandboxHostThread(deps, {
       cloneSource: resolvedEnvironment.cloneSource,
+      projectDefaults: executionDefaults,
       request,
       sandboxType: resolvedEnvironment.sandboxType,
     });
@@ -397,6 +414,7 @@ export async function createThreadFromRequest(
       }
       return createThreadInEnvironment(deps, {
         environment,
+        projectDefaults: executionDefaults,
         request,
         threadStatus: "created",
       });
@@ -404,6 +422,7 @@ export async function createThreadFromRequest(
     if (environment.status === "provisioning") {
       return createThreadInEnvironment(deps, {
         environment,
+        projectDefaults: executionDefaults,
         request,
         threadStatus: "provisioning",
       });
@@ -427,6 +446,7 @@ export async function createThreadFromRequest(
     const reusedThread = await reuseEnvironmentByHostPath(deps, {
       hostId,
       path: unmanagedPath,
+      projectDefaults: executionDefaults,
       request,
     });
     if (reusedThread) {
@@ -453,15 +473,7 @@ export async function createThreadFromRequest(
     deps,
     request,
     {
-      ...(request.origin
-        ? {
-            projectDefaults: {
-              projectId: request.projectId,
-              providerId: request.providerId,
-              threadType: request.type,
-            },
-          }
-        : {}),
+      ...(executionDefaults ? { projectDefaults: executionDefaults } : {}),
       threadId: thread.id,
     },
     "client/thread/start",

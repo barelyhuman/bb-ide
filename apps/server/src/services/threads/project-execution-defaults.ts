@@ -1,11 +1,34 @@
-import { upsertProjectExecutionDefaults } from "@bb/db";
-import type { ResolvedThreadExecutionOptions } from "@bb/domain";
+import {
+  getProjectExecutionDefaults,
+  upsertProjectExecutionDefaults,
+} from "@bb/db";
+import type {
+  ProjectExecutionDefaults,
+  ResolvedThreadExecutionOptions,
+} from "@bb/domain";
+import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
-import type { ThreadCreateServiceRequest } from "./thread-create-request.js";
+import type {
+  ThreadCreateServiceRequest,
+  ThreadCreateServiceRequestInput,
+} from "./thread-create-request.js";
 
 export interface RememberProjectExecutionDefaultsForCreateArgs {
   execution: ResolvedThreadExecutionOptions;
   request: ThreadCreateServiceRequest;
+}
+
+export interface ResolveProjectExecutionDefaultsForCreateArgs {
+  model?: ThreadCreateServiceRequestInput["model"];
+  origin: ThreadCreateServiceRequestInput["origin"];
+  projectId: string;
+  providerId?: ThreadCreateServiceRequestInput["providerId"];
+  threadType: ThreadCreateServiceRequestInput["type"];
+}
+
+export interface ResolvedProjectExecutionDefaultsForCreate {
+  executionDefaults: ProjectExecutionDefaults | null;
+  providerId: string;
 }
 
 function shouldRememberProjectExecutionDefaults(args: {
@@ -13,6 +36,52 @@ function shouldRememberProjectExecutionDefaults(args: {
   origin: ThreadCreateServiceRequest["origin"];
 }): boolean {
   return args.origin === "app" && args.automationId === null;
+}
+
+export function resolveProjectExecutionDefaultsForCreate(
+  deps: Pick<AppDeps, "db">,
+  args: ResolveProjectExecutionDefaultsForCreateArgs,
+): ResolvedProjectExecutionDefaultsForCreate {
+  if (!args.origin) {
+    if (!args.providerId) {
+      throw new ApiError(400, "invalid_request", "Provider is required");
+    }
+    if (!args.model) {
+      throw new ApiError(400, "invalid_request", "Model is required");
+    }
+    return {
+      executionDefaults: null,
+      providerId: args.providerId,
+    };
+  }
+
+  const storedDefaults = getProjectExecutionDefaults(deps.db, {
+    projectId: args.projectId,
+    threadType: args.threadType,
+  });
+  const providerId = args.providerId ?? storedDefaults?.providerId;
+  if (!providerId) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      `Provider is required when project ${args.projectId} has no stored execution defaults for thread type ${args.threadType}`,
+    );
+  }
+
+  const executionDefaults =
+    storedDefaults?.providerId === providerId ? storedDefaults : null;
+  if (!args.model && !executionDefaults) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      `Model is required when project ${args.projectId} has no stored execution defaults for provider ${providerId} and thread type ${args.threadType}`,
+    );
+  }
+
+  return {
+    executionDefaults,
+    providerId,
+  };
 }
 
 export function rememberProjectExecutionDefaultsForCreate(

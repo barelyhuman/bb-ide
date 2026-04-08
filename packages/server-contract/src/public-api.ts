@@ -91,7 +91,7 @@ export type PublicApiSchema = {
     $delete: Endpoint<PathProjectId, { ok: true }>;
   };
   "/projects/:id/default-execution-options": {
-    /** Returns the last used options for the project, provider, and thread type for use as defaults in clients. */
+    /** Returns the last remembered provider and execution options for the project and thread type. */
     $get: Endpoint<
       PathProjectId & { query: ProjectDefaultExecutionOptionsQuery },
       ProjectExecutionDefaults | null

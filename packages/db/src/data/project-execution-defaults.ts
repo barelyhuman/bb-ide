@@ -11,12 +11,11 @@ import { projectExecutionDefaults } from "../schema.js";
 
 export interface GetProjectExecutionDefaultsArgs {
   projectId: string;
-  providerId: string;
   threadType: ThreadType;
 }
 
-export interface UpsertProjectExecutionDefaultsArgs
-  extends GetProjectExecutionDefaultsArgs {
+export interface UpsertProjectExecutionDefaultsArgs extends GetProjectExecutionDefaultsArgs {
+  providerId: string;
   model: string;
   reasoningLevel: ReasoningLevel;
   sandboxMode: SandboxMode;
@@ -30,6 +29,7 @@ export function getProjectExecutionDefaults(
 ): ProjectExecutionDefaults | null {
   const row = db
     .select({
+      providerId: projectExecutionDefaults.providerId,
       model: projectExecutionDefaults.model,
       reasoningLevel: projectExecutionDefaults.reasoningLevel,
       sandboxMode: projectExecutionDefaults.sandboxMode,
@@ -39,7 +39,6 @@ export function getProjectExecutionDefaults(
     .where(
       and(
         eq(projectExecutionDefaults.projectId, args.projectId),
-        eq(projectExecutionDefaults.providerId, args.providerId),
         eq(projectExecutionDefaults.threadType, args.threadType),
       ),
     )
@@ -68,10 +67,10 @@ export function upsertProjectExecutionDefaults(
     .onConflictDoUpdate({
       target: [
         projectExecutionDefaults.projectId,
-        projectExecutionDefaults.providerId,
         projectExecutionDefaults.threadType,
       ],
       set: {
+        providerId: args.providerId,
         model: args.model,
         reasoningLevel: args.reasoningLevel,
         sandboxMode: args.sandboxMode,
@@ -80,6 +79,7 @@ export function upsertProjectExecutionDefaults(
       },
     })
     .returning({
+      providerId: projectExecutionDefaults.providerId,
       model: projectExecutionDefaults.model,
       reasoningLevel: projectExecutionDefaults.reasoningLevel,
       sandboxMode: projectExecutionDefaults.sandboxMode,

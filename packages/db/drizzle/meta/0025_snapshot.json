@@ -1456,11 +1456,10 @@
         }
       },
       "indexes": {
-        "project_execution_defaults_project_provider_type_idx": {
-          "name": "project_execution_defaults_project_provider_type_idx",
+        "project_execution_defaults_project_thread_type_idx": {
+          "name": "project_execution_defaults_project_thread_type_idx",
           "columns": [
             "project_id",
-            "provider_id",
             "thread_type"
           ],
           "isUnique": true

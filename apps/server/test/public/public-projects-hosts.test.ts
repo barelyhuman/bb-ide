@@ -136,7 +136,7 @@ describe("public project and host routes", () => {
       });
 
       const response = await harness.app.request(
-        `/api/v1/projects/${project.id}/default-execution-options?providerId=codex&threadType=standard`,
+        `/api/v1/projects/${project.id}/default-execution-options?threadType=standard`,
       );
 
       expect(response.status).toBe(200);
@@ -146,7 +146,7 @@ describe("public project and host routes", () => {
     }
   });
 
-  it("returns provider-matched stored default execution options for a project", async () => {
+  it("returns the remembered provider and execution options for a project thread type", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, { id: "host-project-defaults" });
@@ -166,11 +166,12 @@ describe("public project and host routes", () => {
       });
 
       const response = await harness.app.request(
-        `/api/v1/projects/${project.id}/default-execution-options?providerId=codex&threadType=standard`,
+        `/api/v1/projects/${project.id}/default-execution-options?threadType=standard`,
       );
 
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toEqual({
+        providerId: "codex",
         model: "gpt-5",
         reasoningLevel: "high",
         sandboxMode: "workspace-write",
@@ -210,11 +211,12 @@ describe("public project and host routes", () => {
       });
 
       const response = await harness.app.request(
-        `/api/v1/projects/${project.id}/default-execution-options?providerId=codex&threadType=manager`,
+        `/api/v1/projects/${project.id}/default-execution-options?threadType=manager`,
       );
 
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toEqual({
+        providerId: "codex",
         model: "gpt-5-mini",
         reasoningLevel: "high",
         sandboxMode: "workspace-write",
@@ -265,10 +267,10 @@ describe("public project and host routes", () => {
       expect(
         getProjectExecutionDefaults(harness.db, {
           projectId: project.id,
-          providerId: "codex",
           threadType: "standard",
         }),
       ).toEqual({
+        providerId: "codex",
         model: "gpt-5-mini",
         reasoningLevel: "medium",
         sandboxMode: "danger-full-access",
@@ -277,10 +279,10 @@ describe("public project and host routes", () => {
       expect(
         getProjectExecutionDefaults(harness.db, {
           projectId: project.id,
-          providerId: "codex",
           threadType: "manager",
         }),
       ).toEqual({
+        providerId: "codex",
         model: "gpt-5",
         reasoningLevel: "high",
         sandboxMode: "danger-full-access",
@@ -319,7 +321,6 @@ describe("public project and host routes", () => {
           },
           body: JSON.stringify({
             origin: "cli",
-            providerId: "codex",
             environment: { type: "host", hostId: host.id },
           }),
         },
@@ -329,10 +330,10 @@ describe("public project and host routes", () => {
       expect(
         getProjectExecutionDefaults(harness.db, {
           projectId: project.id,
-          providerId: "codex",
           threadType: "manager",
         }),
       ).toEqual({
+        providerId: "codex",
         model: "gpt-5",
         reasoningLevel: "high",
         sandboxMode: "workspace-write",

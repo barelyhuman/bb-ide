@@ -120,9 +120,8 @@ export const projectExecutionDefaults = sqliteTable(
     updatedAt: integer("updated_at").notNull(),
   },
   (table) => [
-    uniqueIndex("project_execution_defaults_project_provider_type_idx").on(
+    uniqueIndex("project_execution_defaults_project_thread_type_idx").on(
       table.projectId,
-      table.providerId,
       table.threadType,
     ),
     index("project_execution_defaults_project_idx").on(table.projectId),

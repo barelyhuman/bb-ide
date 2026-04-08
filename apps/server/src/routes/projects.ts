@@ -119,7 +119,6 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     return context.json(
       getProjectExecutionDefaults(deps.db, {
         projectId,
-        providerId: query.providerId,
         threadType: query.threadType,
       }),
     );

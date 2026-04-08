@@ -267,10 +267,10 @@ describe("public thread routes", () => {
       expect(
         getProjectExecutionDefaults(harness.db, {
           projectId: project.id,
-          providerId: "codex",
           threadType: "standard",
         }),
       ).toEqual({
+        providerId: "codex",
         model: "gpt-5-mini",
         serviceTier: "fast",
         reasoningLevel: "high",
@@ -320,7 +320,6 @@ describe("public thread routes", () => {
       expect(
         getProjectExecutionDefaults(harness.db, {
           projectId: project.id,
-          providerId: "codex",
           threadType: "standard",
         }),
       ).toBeNull();
@@ -329,7 +328,7 @@ describe("public thread routes", () => {
     }
   });
 
-  it("inherits project defaults for matching providers when thread creation omits execution options", async () => {
+  it("inherits the remembered provider and execution defaults when thread creation omits them", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -361,7 +360,6 @@ describe("public thread routes", () => {
         body: JSON.stringify({
           origin: "app",
           projectId: project.id,
-          providerId: "codex",
           input: [{ type: "text", text: "Create with inherited defaults" }],
           environment: {
             type: "reuse",
@@ -386,6 +384,57 @@ describe("public thread routes", () => {
           sandboxMode: "workspace-write",
           source: "client/thread/start",
         },
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("fails thread creation without a model when the explicit provider does not match the remembered provider", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-defaults-provider-mismatch",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/thread-defaults-provider-mismatch",
+      });
+
+      upsertProjectExecutionDefaults(harness.db, {
+        projectId: project.id,
+        providerId: "codex",
+        threadType: "standard",
+        model: "gpt-5",
+        serviceTier: "fast",
+        reasoningLevel: "high",
+        sandboxMode: "workspace-write",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          origin: "app",
+          projectId: project.id,
+          providerId: "claude-code",
+          input: [{ type: "text", text: "Create with mismatched provider defaults" }],
+          environment: {
+            type: "reuse",
+            environmentId: environment.id,
+          },
+        }),
+      });
+
+      expect(response.status).toBe(400);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: expect.stringContaining("provider claude-code"),
       });
     } finally {
       await harness.cleanup();
@@ -1804,10 +1853,10 @@ describe("public thread routes", () => {
       expect(
         getProjectExecutionDefaults(harness.db, {
           projectId: project.id,
-          providerId: thread.providerId,
           threadType: "standard",
         }),
       ).toEqual({
+        providerId: "codex",
         model: "gpt-5",
         serviceTier: "default",
         reasoningLevel: "medium",

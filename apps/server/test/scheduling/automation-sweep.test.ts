@@ -151,10 +151,10 @@ describe("automation sweep", () => {
       expect(
         getProjectExecutionDefaults(harness.db, {
           projectId: project.id,
-          providerId: "codex",
           threadType: "standard",
         }),
       ).toEqual({
+        providerId: "codex",
         model: "gpt-5-mini",
         reasoningLevel: "medium",
         sandboxMode: "danger-full-access",

@@ -9,9 +9,9 @@ import type {
 } from "@bb/db";
 import type {
   PromptInput,
+  ProjectExecutionDefaults,
   ResolvedThreadExecutionOptions,
   Thread,
-  ThreadType,
   WorkspaceProvisionType,
 } from "@bb/domain";
 import type {
@@ -94,11 +94,7 @@ export async function buildExecutionOptions(
   deps: Pick<AppDeps, "db" | "hub">,
   request: ExecutionOptionsRequest,
   args: {
-    projectDefaults?: {
-      projectId: string;
-      providerId: string;
-      threadType: ThreadType;
-    };
+    projectDefaults?: ProjectExecutionDefaults | null;
     threadId: string;
   },
   source: "client/thread/start" | "client/turn/requested" | "client/turn/start",

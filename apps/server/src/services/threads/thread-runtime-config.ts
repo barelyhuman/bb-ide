@@ -1,11 +1,11 @@
 import path from "node:path";
 import {
   getDefaultProjectSource,
-  getProjectExecutionDefaults,
   getProject,
 } from "@bb/db";
 import type {
   DynamicTool,
+  ProjectExecutionDefaults,
   ReasoningLevel,
   ResolvedThreadExecutionOptions,
   SandboxMode,
@@ -13,7 +13,6 @@ import type {
   Thread,
   ThreadExecutionOptions,
   ThreadExecutionSource,
-  ThreadType,
   WorkspaceProvisionType,
 } from "@bb/domain";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
@@ -65,11 +64,7 @@ export interface ThreadRuntimeCommandEnvironment {
 }
 
 export interface ResolveExecutionOptionsArgs {
-  projectDefaults?: {
-    projectId: string;
-    providerId: string;
-    threadType: ThreadType;
-  };
+  projectDefaults?: ProjectExecutionDefaults | null;
   requestedExecution: RequestedExecutionOptions;
   threadId: string;
 }
@@ -145,21 +140,12 @@ export async function resolveExecutionOptions(
   args: ResolveExecutionOptionsArgs,
 ): Promise<ResolvedThreadExecutionOptions> {
   const lastExecution = getLastExecutionOptions(deps, args.threadId);
-  const projectExecution = args.projectDefaults
-    ? getProjectExecutionDefaults(deps.db, args.projectDefaults)
-    : null;
+  const projectExecution = args.projectDefaults ?? null;
   const model =
     args.requestedExecution.model ??
     lastExecution?.model ??
     projectExecution?.model;
   if (!model) {
-    if (args.projectDefaults) {
-      throw new ApiError(
-        400,
-        "invalid_request",
-        `Model is required when project ${args.projectDefaults.projectId} has no stored execution defaults for provider ${args.projectDefaults.providerId} and thread type ${args.projectDefaults.threadType}`,
-      );
-    }
     throw new ApiError(
       500,
       "internal_error",

@@ -34,7 +34,6 @@ describe("project-execution-defaults", () => {
     expect(
       getProjectExecutionDefaults(db, {
         projectId: project.id,
-        providerId: "codex",
         threadType: "standard",
       }),
     ).toBeNull();
@@ -56,10 +55,10 @@ describe("project-execution-defaults", () => {
     expect(
       getProjectExecutionDefaults(db, {
         projectId: project.id,
-        providerId: "codex",
         threadType: "standard",
       }),
     ).toEqual({
+      providerId: "codex",
       model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
@@ -92,10 +91,10 @@ describe("project-execution-defaults", () => {
     expect(
       getProjectExecutionDefaults(db, {
         projectId: project.id,
-        providerId: "codex",
         threadType: "standard",
       }),
     ).toEqual({
+      providerId: "codex",
       model: "gpt-5-mini",
       reasoningLevel: "high",
       sandboxMode: "workspace-write",
@@ -103,7 +102,7 @@ describe("project-execution-defaults", () => {
     });
   });
 
-  it("keeps defaults isolated by provider and thread type", () => {
+  it("keeps defaults isolated by thread type and replaces the remembered provider choice", () => {
     const { db, project } = setup();
 
     upsertProjectExecutionDefaults(db, {
@@ -137,29 +136,20 @@ describe("project-execution-defaults", () => {
     expect(
       getProjectExecutionDefaults(db, {
         projectId: project.id,
-        providerId: "codex",
         threadType: "standard",
       }),
     ).toMatchObject({
-      model: "gpt-5",
+      providerId: "claude-code",
+      model: "claude-opus-4-1",
     });
     expect(
       getProjectExecutionDefaults(db, {
         projectId: project.id,
-        providerId: "codex",
         threadType: "manager",
       }),
     ).toMatchObject({
+      providerId: "codex",
       model: "gpt-5-mini",
-    });
-    expect(
-      getProjectExecutionDefaults(db, {
-        projectId: project.id,
-        providerId: "claude-code",
-        threadType: "standard",
-      }),
-    ).toMatchObject({
-      model: "claude-opus-4-1",
     });
   });
 
@@ -180,7 +170,6 @@ describe("project-execution-defaults", () => {
     expect(
       getProjectExecutionDefaults(db, {
         projectId: project.id,
-        providerId: "codex",
         threadType: "standard",
       }),
     ).toBeNull();
