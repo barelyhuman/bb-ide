@@ -11,31 +11,6 @@ import { requireThreadEnvironment } from "../services/lib/entity-lookup.js";
 import { getAuthenticatedDaemon } from "./auth.js";
 import { requireAuthorizedActiveSession } from "./session-state.js";
 
-function registerAbortInterrupt(
-  deps: Pick<AppDeps, "pendingInteractions">,
-  args: {
-    interactionId: string;
-    signal: AbortSignal;
-  },
-): () => void {
-  const onAbort = () => {
-    deps.pendingInteractions.interruptPendingInteraction({
-      interactionId: args.interactionId,
-      reason: "Daemon request ended while awaiting user interaction",
-    });
-  };
-
-  if (args.signal.aborted) {
-    onAbort();
-    return () => undefined;
-  }
-
-  args.signal.addEventListener("abort", onAbort, { once: true });
-  return () => {
-    args.signal.removeEventListener("abort", onAbort);
-  };
-}
-
 export function registerInternalInteractiveRequestRoutes(
   app: Hono,
   deps: AppDeps,
@@ -76,31 +51,25 @@ export function registerInternalInteractiveRequestRoutes(
         });
       }
 
-      const unregisterAbort = registerAbortInterrupt(deps, {
+      const outcome = await deps.pendingInteractions.waitForTerminalState({
         interactionId: registered.interaction.id,
         signal: context.req.raw.signal,
+        abortReason: "Daemon request ended while awaiting user interaction",
       });
-      try {
-        const outcome = await deps.pendingInteractions.waitForTerminalState(
-          registered.interaction.id,
-        );
 
-        switch (outcome.outcome) {
-          case "resolved":
-            return context.json({
-              outcome: "resolved",
-              resolution: outcome.resolution,
-            });
-          case "rejected":
-          case "interrupted":
-          case "expired":
-            return context.json({
-              outcome: outcome.outcome,
-              reason: outcome.reason,
-            });
-        }
-      } finally {
-        unregisterAbort();
+      switch (outcome.outcome) {
+        case "resolved":
+          return context.json({
+            outcome: "resolved",
+            resolution: outcome.resolution,
+          });
+        case "rejected":
+        case "interrupted":
+        case "expired":
+          return context.json({
+            outcome: outcome.outcome,
+            reason: outcome.reason,
+          });
       }
     },
   );

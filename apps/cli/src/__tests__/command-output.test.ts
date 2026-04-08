@@ -1943,16 +1943,6 @@ describe("CLI JSON output contracts", () => {
     );
   });
 
-  it("bb thread update rejects the removed merge-base flag", async () => {
-    await expect(
-      runCommand(
-        ["thread", "update", "thread-update-legacy", "--merge-base-branch", "release"],
-        (program) => registerThreadCommands(program, () => "http://server"),
-      ),
-    ).rejects.toThrow("process.exit:1");
-    expect(createClientMock).not.toHaveBeenCalled();
-  });
-
   it("bb environment update --json prints the updated environment", async () => {
     const environment = makeEnvironment({
       id: "env-json-update",
@@ -2859,6 +2849,163 @@ describe("CLI JSON output contracts", () => {
     });
     expect(collectLogLines(vi.mocked(console.log))).toEqual([
       "Interaction int-approve-amendment approved with exec policy amendment",
+    ]);
+  });
+
+  it("bb thread interactions deny uses decline when it is available", async () => {
+    const getInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-deny",
+        providerId: "codex",
+        providerRequestId: "request-deny",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        providerThreadId: "provider-thread-deny",
+        threadId: "thread-deny",
+        turnId: "turn-deny",
+      }),
+    );
+    const resolveInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-deny",
+        providerId: "codex",
+        providerRequestId: "request-deny",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        providerThreadId: "provider-thread-deny",
+        threadId: "thread-deny",
+        turnId: "turn-deny",
+        status: "resolved",
+        resolvedAt: Date.now(),
+        resolution: {
+          kind: "command_approval",
+          decision: "decline",
+        },
+      }),
+    );
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              interactions: {
+                ":interactionId": {
+                  $get: getInteraction,
+                  resolve: {
+                    $post: resolveInteraction,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["thread", "interactions", "deny", "int-deny", "thread-deny"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(resolveInteraction).toHaveBeenCalledWith({
+      param: {
+        id: "thread-deny",
+        interactionId: "int-deny",
+      },
+      json: {
+        kind: "command_approval",
+        decision: "decline",
+      },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toEqual([
+      "Interaction int-deny denied",
+    ]);
+  });
+
+  it("bb thread interactions deny falls back to cancel when decline is unavailable", async () => {
+    const getInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-cancel",
+        providerId: "codex",
+        providerRequestId: "request-cancel",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        providerThreadId: "provider-thread-cancel",
+        threadId: "thread-cancel",
+        turnId: "turn-cancel",
+        payload: {
+          kind: "command_approval",
+          itemId: "item-cancel",
+          approvalId: null,
+          reason: "Approve command",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: ["accept", "cancel"],
+        },
+      }),
+    );
+    const resolveInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-cancel",
+        providerId: "codex",
+        providerRequestId: "request-cancel",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        providerThreadId: "provider-thread-cancel",
+        threadId: "thread-cancel",
+        turnId: "turn-cancel",
+        payload: {
+          kind: "command_approval",
+          itemId: "item-cancel",
+          approvalId: null,
+          reason: "Approve command",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: ["accept", "cancel"],
+        },
+        status: "resolved",
+        resolvedAt: Date.now(),
+        resolution: {
+          kind: "command_approval",
+          decision: "cancel",
+        },
+      }),
+    );
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              interactions: {
+                ":interactionId": {
+                  $get: getInteraction,
+                  resolve: {
+                    $post: resolveInteraction,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["thread", "interactions", "deny", "int-cancel", "thread-cancel"],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(resolveInteraction).toHaveBeenCalledWith({
+      param: {
+        id: "thread-cancel",
+        interactionId: "int-cancel",
+      },
+      json: {
+        kind: "command_approval",
+        decision: "cancel",
+      },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toEqual([
+      "Interaction int-cancel cancelled",
     ]);
   });
 

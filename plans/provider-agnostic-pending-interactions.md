@@ -50,7 +50,8 @@ real provider:
 - CLI resolver only
 - exactly one active pending interaction per thread
 - Codex only
-- command approval only
+- command approval only, including provider-offered amendment-style approval
+  decisions when the provider advertises them as part of command approval
 - approvals granted through this flow are session-scoped only
 - resolution happens through `bb thread interactions` commands rather than app
   UI
@@ -294,7 +295,9 @@ Exit condition:
 
 1. Stop hardcoding `approvalPolicy: "never"` for the Codex path needed by the
    command-approval slice.
-2. Map Codex command-approval requests into `PendingInteraction`.
+2. Map Codex command-approval requests into `PendingInteraction`, including
+   provider-offered amendment decisions carried by the command-approval
+   payload.
 3. Add thread-scoped server routes for:
    - list pending interactions
    - get a pending interaction

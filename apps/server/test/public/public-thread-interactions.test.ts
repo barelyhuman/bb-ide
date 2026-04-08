@@ -208,6 +208,27 @@ describe("public thread interaction routes", () => {
         message: `Command approval decision 'accept_for_session' is not available for interaction ${commandApproval.interaction.id}`,
       });
 
+      const mismatchedKindResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/interactions/${commandApproval.interaction.id}/resolve`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            kind: "user_input_request",
+            answers: {
+              environment: ["staging"],
+            },
+          }),
+        },
+      );
+      expect(mismatchedKindResponse.status).toBe(400);
+      await expect(readJson(mismatchedKindResponse)).resolves.toEqual({
+        code: "invalid_request",
+        message: "Pending interaction resolution kind does not match the interaction payload",
+      });
+
       const userInput = harness.deps.pendingInteractions.registerPendingInteraction({
         threadId: secondThread.id,
         turnId: "turn-invalid-user-input-resolution",
@@ -287,6 +308,28 @@ describe("public thread interaction routes", () => {
       await expect(readJson(unknownQuestionResponse)).resolves.toEqual({
         code: "invalid_request",
         message: "Unknown question ids: extra",
+      });
+
+      const emptyAnswerResponse = await harness.app.request(
+        `/api/v1/threads/${secondThread.id}/interactions/${userInput.interaction.id}/resolve`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            kind: "user_input_request",
+            answers: {
+              environment: ["staging"],
+              ticket: [],
+            },
+          }),
+        },
+      );
+      expect(emptyAnswerResponse.status).toBe(400);
+      await expect(readJson(emptyAnswerResponse)).resolves.toEqual({
+        code: "invalid_request",
+        message: "Question 'ticket' requires at least one answer",
       });
     } finally {
       await harness.cleanup();

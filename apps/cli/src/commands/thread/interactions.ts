@@ -250,6 +250,10 @@ function formatApprovalDecisionMessage(
         case "apply_network_policy_amendment":
           return "approved with network policy amendment";
       }
+      const exhaustiveCommandDecision: never = resolution.decision;
+      throw new Error(
+        `Unsupported command approval decision: ${String(exhaustiveCommandDecision)}`,
+      );
     case "file_change_approval":
       switch (resolution.decision) {
         case "accept":
@@ -267,6 +271,11 @@ function formatApprovalDecisionMessage(
         `Resolution ${resolution.kind} does not support approval messaging.`,
       );
   }
+
+  const exhaustiveResolution: never = resolution;
+  throw new Error(
+    `Unsupported interaction resolution: ${String(exhaustiveResolution)}`,
+  );
 }
 
 function parseAnswerEntries(values: readonly string[]): Record<string, string[]> {

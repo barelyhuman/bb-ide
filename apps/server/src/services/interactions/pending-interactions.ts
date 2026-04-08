@@ -27,6 +27,12 @@ interface PendingInteractionWaiter {
   resolve: (outcome: PendingInteractionWaitOutcome) => void;
 }
 
+interface WaitForTerminalStateArgs {
+  abortReason?: string;
+  interactionId: string;
+  signal?: AbortSignal;
+}
+
 export type PendingInteractionWaitOutcome =
   | {
       outcome: "expired" | "interrupted" | "rejected";
@@ -71,20 +77,24 @@ interface CreateLifecycleDeps {
   hub: AppDeps["hub"];
 }
 
-function parseJsonString(value: string): string {
+function parseStoredPendingInteractionJson(value: string): unknown {
   try {
-    return value;
+    return JSON.parse(value);
   } catch {
     throw new ApiError(500, "internal_error", "Stored pending interaction JSON is invalid");
   }
 }
 
 function toPendingInteraction(row: PendingInteractionRow): PendingInteraction {
-  const payload = pendingInteractionPayloadSchema.parse(JSON.parse(parseJsonString(row.payload)));
+  const payload = pendingInteractionPayloadSchema.parse(
+    parseStoredPendingInteractionJson(row.payload),
+  );
   const resolution =
     row.resolution === null
       ? null
-      : pendingInteractionResolutionSchema.parse(JSON.parse(parseJsonString(row.resolution)));
+      : pendingInteractionResolutionSchema.parse(
+          parseStoredPendingInteractionJson(row.resolution),
+        );
 
   return pendingInteractionSchema.parse({
     id: row.id,
@@ -222,7 +232,7 @@ function formatPendingInteractionLifecycleMessage(
   interaction: PendingInteraction,
 ): string {
   switch (interaction.status) {
-    case "pending":
+    case "pending": {
       switch (interaction.payload.kind) {
         case "command_approval":
           return interaction.payload.command
@@ -235,6 +245,9 @@ function formatPendingInteractionLifecycleMessage(
         case "user_input_request":
           return `Awaiting answers to ${interaction.payload.questions.length} question(s)`;
       }
+      const exhaustivePayload: never = interaction.payload;
+      throw new Error(`Unsupported pending interaction payload: ${String(exhaustivePayload)}`);
+    }
     case "resolved":
       if (interaction.resolution === null) {
         return "Interaction resolved";
@@ -258,6 +271,10 @@ function formatPendingInteractionLifecycleMessage(
         case "user_input_request":
           return `Answered ${Object.keys(interaction.resolution.answers).length} question(s)`;
       }
+      const exhaustiveResolution: never = interaction.resolution;
+      throw new Error(
+        `Unsupported pending interaction resolution: ${String(exhaustiveResolution)}`,
+      );
     case "rejected":
       return interaction.statusReason ?? "Interaction rejected";
     case "interrupted":
@@ -265,6 +282,9 @@ function formatPendingInteractionLifecycleMessage(
     case "expired":
       return interaction.statusReason ?? "Interaction expired";
   }
+
+  const exhaustiveStatus: never = interaction.status;
+  throw new Error(`Unsupported pending interaction status: ${String(exhaustiveStatus)}`);
 }
 
 function toPendingInteractionOperationStatus(
@@ -506,19 +526,59 @@ export class PendingInteractionLifecycle {
   }
 
   async waitForTerminalState(
-    interactionId: string,
+    args: WaitForTerminalStateArgs,
   ): Promise<PendingInteractionWaitOutcome> {
-    const interaction = this.requireInteraction(interactionId);
+    const interaction = this.requireInteraction(args.interactionId);
     const terminalOutcome = requireWaitableOutcome(interaction);
     if (terminalOutcome) {
       return terminalOutcome;
     }
 
     return new Promise<PendingInteractionWaitOutcome>((resolve) => {
-      const waiter: PendingInteractionWaiter = { resolve };
-      const waiters = this.waiters.get(interactionId) ?? new Set<PendingInteractionWaiter>();
+      const waiter: PendingInteractionWaiter = {
+        resolve: (outcome) => {
+          this.removeWaiter(args.interactionId, waiter);
+          resolve(outcome);
+        },
+      };
+
+      const resolveCurrentTerminalOutcome = (): void => {
+        const current = this.requireInteraction(args.interactionId);
+        const currentOutcome = requireWaitableOutcome(current);
+        if (!currentOutcome) {
+          return;
+        }
+        waiter.resolve(currentOutcome);
+      };
+
+      const onAbort = (): void => {
+        const interrupted = this.interruptPendingInteraction({
+          interactionId: args.interactionId,
+          reason:
+            args.abortReason
+            ?? "Daemon request ended while awaiting user interaction",
+        });
+        if (interrupted) {
+          return;
+        }
+        resolveCurrentTerminalOutcome();
+      };
+
+      const waiters =
+        this.waiters.get(args.interactionId) ?? new Set<PendingInteractionWaiter>();
       waiters.add(waiter);
-      this.waiters.set(interactionId, waiters);
+      this.waiters.set(args.interactionId, waiters);
+
+      if (args.signal) {
+        args.signal.addEventListener("abort", onAbort, { once: true });
+      }
+
+      if (args.signal?.aborted) {
+        onAbort();
+        return;
+      }
+
+      resolveCurrentTerminalOutcome();
     });
   }
 
@@ -587,6 +647,21 @@ export class PendingInteractionLifecycle {
     }
 
     return toPendingInteraction(interaction);
+  }
+
+  private removeWaiter(
+    interactionId: string,
+    waiter: PendingInteractionWaiter,
+  ): void {
+    const waiters = this.waiters.get(interactionId);
+    if (!waiters) {
+      return;
+    }
+
+    waiters.delete(waiter);
+    if (waiters.size === 0) {
+      this.waiters.delete(interactionId);
+    }
   }
 
   private finishInteraction(interaction: PendingInteraction): void {
