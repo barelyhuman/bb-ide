@@ -7,7 +7,12 @@ export const HOST_ID_FILE_NAME = "host-id";
 const nonEmptyTrimmedStringSchema = z.string().trim().min(1);
 
 export function normalizeServerUrl(serverUrl: string): string {
-  return serverUrl.replace(/\/$/u, "");
+  const url = new URL(serverUrl);
+  if (url.hostname === "localhost") {
+    url.hostname = "127.0.0.1";
+  }
+  // Remove trailing slash added by URL constructor
+  return url.href.replace(/\/$/u, "");
 }
 
 export const hostAuthStateSchema = z.object({

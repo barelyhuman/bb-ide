@@ -68,8 +68,10 @@ export function createLogger(options: CreateLoggerOptions): Logger {
       target: "pino-pretty",
       options: {
         colorize: true,
-        ignore: "pid,hostname",
-        translateTime: "HH:MM:ss.l",
+        ignore: "pid,hostname,component",
+        messageFormat: "[{component}] {msg}",
+        singleLine: true,
+        translateTime: "HH:mm:ss",
       },
       level: commonConfig.BB_LOG_LEVEL,
     });

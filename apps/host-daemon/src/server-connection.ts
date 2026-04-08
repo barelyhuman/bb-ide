@@ -230,9 +230,12 @@ export class ServerConnection {
       websocket.onerror = (error) => {
         if (hasOpened) {
           this.options.logger.warn({ err: error }, "WebSocket error");
+        } else {
+          this.options.logger.info(
+            { serverUrl: this.options.serverUrl },
+            "Waiting for server...",
+          );
         }
-        // Before first open, errors are expected (server not ready yet).
-        // partysocket handles retries.
       };
     });
   }

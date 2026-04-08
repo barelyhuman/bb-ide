@@ -51,6 +51,15 @@ describe("auth state", () => {
     ).toBeNull();
   });
 
+  it("treats localhost and 127.0.0.1 as equivalent", () => {
+    expect(
+      resolveServerUrl({
+        persistedServerUrl: "http://127.0.0.1:3000",
+        providedServerUrl: "http://localhost:3000",
+      }),
+    ).toBe("http://127.0.0.1:3000");
+  });
+
   it("throws when persisted and provided server URLs disagree", () => {
     expect(() =>
       resolveServerUrl({

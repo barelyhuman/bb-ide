@@ -1,31 +1,68 @@
 import { spawn } from "node:child_process";
-import { dirname, resolve } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { serverConfig } from "../packages/config/dist/server.js";
-import { waitForServerHealth } from "./lib/wait-for-server-health.mjs";
+import { serverConfig, commonConfig } from "../packages/config/dist/server.js";
+import {
+  bold, cyan, dim, green, red, yellow,
+  log, beginStep, endStep,
+  waitForHealth, build, createOutputBuffer,
+} from "./lib/start-helpers.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
 
-function buildLocalServerUrl() {
-  return `http://127.0.0.1:${serverConfig.BB_SERVER_PORT}`;
-}
+const dataDir = commonConfig.BB_DATA_DIR;
+const serverPort = serverConfig.BB_SERVER_PORT;
+const daemonLockFile = join(dataDir, "daemon.lock");
+const daemonLockDir = `${daemonLockFile}.lock`;
+const logDir = join(dataDir, "logs");
+const dbPath = join(dataDir, "bb.db");
+
+const outputBuffer = createOutputBuffer();
 
 function spawnManagedProcess(args) {
-  return spawn(args.command, args.args, {
+  const child = spawn(args.command, args.args, {
     cwd: repoRoot,
     env: args.env,
-    stdio: "inherit",
+    stdio: ["ignore", "pipe", "inherit"],
   });
+  child.stdout.on("data", outputBuffer.handler);
+  return child;
 }
 
 async function main() {
-  const serverUrl = buildLocalServerUrl();
+  process.stdout.write(`\n  ${bold("bb")}\n\n`);
+
+  // ---- Build --------------------------------------------------------------
+  if (!build({
+    repoRoot,
+    dataDir,
+    turboFilter: "--filter=@bb/app --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/cli",
+  })) {
+    return;
+  }
+
+  // ---- Pre-flight checks --------------------------------------------------
+  if (existsSync(daemonLockDir)) {
+    log(
+      yellow("!"),
+      `Daemon lock is held — another instance may be running`,
+    );
+    log(" ", dim(`lock: ${daemonLockDir}`));
+    log(" ", dim(`Remove it manually if the previous process exited uncleanly.`));
+    process.stdout.write("\n");
+  }
+
+  // ---- Server -------------------------------------------------------------
+  const serverUrl = `http://127.0.0.1:${serverPort}`;
   const sharedEnv = {
     ...process.env,
     NODE_ENV: "production",
+    BB_LOG_FORMAT: "pretty",
   };
-  let daemonProcess = null;
+
+  beginStep("Starting server");
 
   const serverProcess = spawnManagedProcess({
     command: process.execPath,
@@ -34,12 +71,15 @@ async function main() {
   });
 
   let shuttingDown = false;
+  let daemonProcess = null;
 
   const shutdown = (signal) => {
     if (shuttingDown) {
       return;
     }
     shuttingDown = true;
+    process.stdout.write("\n");
+    log(dim("●"), "Shutting down");
     if (daemonProcess && !daemonProcess.killed) {
       daemonProcess.kill(signal);
     }
@@ -50,11 +90,19 @@ async function main() {
   process.on("SIGTERM", () => shutdown("SIGTERM"));
 
   try {
-    await waitForServerHealth(serverUrl);
-  } catch (error) {
+    await waitForHealth(`${serverUrl}/health`, serverProcess);
+  } catch {
+    endStep(red("✗"), "Server failed to start (health check timed out)");
+    log(" ", dim(`Check logs: ${logDir}/`));
+    outputBuffer.flush();
     shutdown("SIGTERM");
-    throw error;
+    return;
   }
+
+  endStep(green("✓"), `Server listening on ${cyan(serverUrl)}`);
+
+  // ---- Host daemon --------------------------------------------------------
+  beginStep("Starting host daemon");
 
   daemonProcess = spawnManagedProcess({
     command: process.execPath,
@@ -65,9 +113,39 @@ async function main() {
     },
   });
 
+  const daemonUrl = `http://localhost:${sharedEnv.BB_HOST_DAEMON_PORT ?? 3001}`;
+
+  try {
+    await waitForHealth(`${daemonUrl}/health`, daemonProcess);
+  } catch {
+    endStep(red("✗"), "Host daemon failed to start");
+    log(" ", dim(`lock: ${daemonLockDir}`));
+    log(" ", dim(`logs: ${logDir}/`));
+    outputBuffer.flush();
+    shutdown("SIGTERM");
+    return;
+  }
+
+  endStep(green("✓"), "Host daemon running");
+
+  // ---- Ready --------------------------------------------------------------
+  process.stdout.write("\n");
+  log(green("●"), bold(`bb is ready`));
+  process.stdout.write("\n");
+  log(" ", `${dim("app")}     ${cyan(serverUrl)}`);
+  log(" ", `${dim("data")}    ${dataDir}`);
+  log(" ", `${dim("db")}      ${dbPath}`);
+  log(" ", `${dim("logs")}    ${logDir}/`);
+  log(" ", `${dim("lock")}    ${daemonLockFile}`);
+  process.stdout.write("\n");
+  log(" ", dim("Press Ctrl+C to stop"));
+
+  outputBuffer.flush();
+
+  // ---- Wait for exit ------------------------------------------------------
   const exitCode = await new Promise((resolvePromise) => {
     serverProcess.once("exit", (code, signal) => {
-      if (!daemonProcess.killed) {
+      if (daemonProcess && !daemonProcess.killed) {
         daemonProcess.kill(signal ?? "SIGTERM");
       }
       resolvePromise(code ?? 1);
@@ -84,7 +162,8 @@ async function main() {
 }
 
 void main().catch((error) => {
-  const message = error instanceof Error ? error.stack ?? error.message : String(error);
+  const message =
+    error instanceof Error ? (error.stack ?? error.message) : String(error);
   process.stderr.write(`${message}\n`);
   process.exitCode = 1;
 });
