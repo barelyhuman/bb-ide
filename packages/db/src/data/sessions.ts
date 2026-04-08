@@ -11,6 +11,10 @@ export interface GetActiveSessionByIdArgs {
   sessionId: string;
 }
 
+export interface GetCurrentSessionArgs {
+  hostId: string;
+}
+
 export interface OpenSessionInput {
   hostId: string;
   instanceId: string;
@@ -131,6 +135,26 @@ export function getActiveSession(db: SessionReadConnection, hostId: string) {
           gt(hostDaemonSessions.leaseExpiresAt, Date.now()),
         ),
       )
+      .get() ?? null
+  );
+}
+
+export function getCurrentSession(
+  db: SessionReadConnection,
+  args: GetCurrentSessionArgs,
+) {
+  return (
+    db
+      .select()
+      .from(hostDaemonSessions)
+      .where(
+        and(
+          eq(hostDaemonSessions.hostId, args.hostId),
+          eq(hostDaemonSessions.status, "active"),
+        ),
+      )
+      .orderBy(desc(hostDaemonSessions.updatedAt))
+      .limit(1)
       .get() ?? null
   );
 }

@@ -18,7 +18,7 @@ import {
 import { renderTemplate } from "@bb/templates";
 import type { Hono } from "hono";
 import { ApiError } from "../errors.js";
-import type { AppDeps } from "../types.js";
+import type { AppDeps, LoggedSandboxWorkSessionDeps } from "../types.js";
 import {
   isAgePrunableThreadEventType,
   maybePruneActiveThreadEventHistory,
@@ -128,7 +128,7 @@ function renderManagedThreadTurnStatusMessage(
 }
 
 async function queueManagedThreadTurnNotificationBestEffort(
-  deps: Pick<AppDeps, "db" | "hub" | "logger">,
+  deps: LoggedSandboxWorkSessionDeps,
   args: QueueManagedThreadTurnNotificationArgs,
 ): Promise<void> {
   try {
@@ -242,7 +242,7 @@ async function archiveCompletedAutomationThreadIfNeeded(
 }
 
 async function applyEventEffects(
-  deps: Pick<AppDeps, "db" | "hub" | "logger">,
+  deps: LoggedSandboxWorkSessionDeps,
   events: HostDaemonEventEnvelope[],
 ): Promise<void> {
   for (const entry of events) {
@@ -500,7 +500,7 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
       events: payload.events,
     });
     if (payload.events.length > 0) {
-      await markSandboxActivity(deps, {
+      void markSandboxActivity(deps, {
         hostId: session.hostId,
         source: "events",
       });

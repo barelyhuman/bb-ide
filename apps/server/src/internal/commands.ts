@@ -41,7 +41,7 @@ export function registerInternalCommandRoutes(app: Hono, deps: AppDeps): void {
       return context.json({ commands: [] });
     }
 
-    await markSandboxActivity(deps, {
+    void markSandboxActivity(deps, {
       hostId: session.hostId,
       source: "commands",
     });

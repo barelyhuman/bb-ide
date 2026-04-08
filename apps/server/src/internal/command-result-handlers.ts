@@ -82,7 +82,7 @@ function isWorkspaceMutationCommand(
   return "environmentId" in command && command.type === expectedType;
 }
 async function handleProvisionCommandResult(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: AppDeps,
   report: Extract<HostDaemonCommandResultReport, { type: "environment.provision" }>,
   commandRow: typeof hostDaemonCommands.$inferSelect,
 ): Promise<void> {
@@ -326,7 +326,7 @@ function handleThreadStartResult(
 }
 
 function handleThreadStopResult(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: AppDeps,
   report: Extract<HostDaemonCommandResultReport, { type: "thread.stop" }>,
   commandRow: typeof hostDaemonCommands.$inferSelect,
 ): Promise<void> {
@@ -434,7 +434,7 @@ function handleSandboxRuntimeMaterialResult(
 }
 
 export async function handleCommandResultSideEffects(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
+  deps: AppDeps,
   report: HostDaemonCommandResultReport,
   commandRow: typeof hostDaemonCommands.$inferSelect,
 ): Promise<void> {

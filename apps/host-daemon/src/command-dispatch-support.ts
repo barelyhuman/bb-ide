@@ -27,6 +27,9 @@ export interface EventSink {
 }
 
 export interface CommandDispatchOptions {
+  fetchRuntimeMaterial: (
+    version: string,
+  ) => Promise<HostRuntimeMaterialSnapshot>;
   persistRuntimeMaterial: (
     snapshot: HostRuntimeMaterialSnapshot,
   ) => Promise<void>;

@@ -13,6 +13,7 @@ import {
   ensureSandboxHostSessionReady,
   markSandboxActivity,
   maybeSuspendIdleSandbox,
+  resetHostLifecycleStateForTests,
   waitForHostSession,
 } from "../../src/services/hosts/host-lifecycle.js";
 import {
@@ -73,6 +74,7 @@ describe("host lifecycle", () => {
   });
 
   afterEach(() => {
+    resetHostLifecycleStateForTests();
     vi.useRealTimers();
   });
 
@@ -334,10 +336,10 @@ describe("host lifecycle", () => {
 
       const firstDestroy = destroyHost(harness.deps, host.id);
       const secondDestroy = destroyHost(harness.deps, host.id);
-      await Promise.resolve();
-
-      expect(resumeSandboxMock).toHaveBeenCalledTimes(1);
-      expect(resumedSandbox.kill).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => {
+        expect(resumeSandboxMock).toHaveBeenCalledTimes(1);
+        expect(resumedSandbox.kill).toHaveBeenCalledTimes(1);
+      });
 
       if (!resolveKill) {
         throw new Error("Expected destroy to start kill");
@@ -503,6 +505,35 @@ describe("host lifecycle", () => {
       expect(sandboxHost.extendTimeout).toHaveBeenCalledTimes(2);
       expect(sandboxHost.extendTimeout).toHaveBeenNthCalledWith(1, 15 * 60 * 1000);
       expect(sandboxHost.extendTimeout).toHaveBeenNthCalledWith(2, 15 * 60 * 1000);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("persists activity even when timeout extension fails", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-activity-failure",
+        id: "host-activity-failure",
+        name: "Activity Failure Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      const sandboxHost = createMockSandboxHost(host.id, host.externalId ?? undefined);
+      sandboxHost.extendTimeout.mockRejectedValueOnce(new Error("extend failed"));
+      harness.deps.sandboxRegistry.set(host.id, sandboxHost);
+
+      await expect(markSandboxActivity(harness.deps, {
+        at: 10_000,
+        hostId: host.id,
+        source: "events",
+      })).resolves.toBeUndefined();
+
+      expect(getHost(harness.db, host.id)).toMatchObject({
+        lastActivityAt: 10_000,
+      });
+      expect(sandboxHost.extendTimeout).toHaveBeenCalledTimes(1);
     } finally {
       await harness.cleanup();
     }
@@ -730,12 +761,8 @@ describe("host lifecycle", () => {
       );
 
       expect(queuedRuntimeSync.command).toMatchObject({
-        env: {
-          ANTHROPIC_API_KEY: "test-anthropic-key",
-          GITHUB_TOKEN: "test-github-pat",
-          OPENAI_API_KEY: "test-openai-key",
-        },
         type: "host.sync_runtime_material",
+        version: expect.any(String),
       });
       expect(readyResolved).toBe(false);
 

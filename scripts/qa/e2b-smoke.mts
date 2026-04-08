@@ -10,6 +10,11 @@ import {
   normalizeServerUrl,
 } from "../../packages/host-daemon-contract/src/index.ts";
 import {
+  createHostJoinResponseSchema,
+  projectResponseSchema,
+} from "../../packages/server-contract/src/index.ts";
+import { threadSchema } from "../../packages/domain/src/index.ts";
+import {
   createSandbox,
   resumeSandbox,
   runSandboxCommand,
@@ -64,10 +69,6 @@ interface PersistedHostAuthExpectation {
   serverUrl: string;
 }
 
-interface ProjectResponse {
-  id: string;
-}
-
 interface StartRealDaemonOptions {
   enrollKey?: string;
   hostId: string;
@@ -75,10 +76,10 @@ interface StartRealDaemonOptions {
   serverUrl: string;
 }
 
-interface ThreadCreateResponse {
-  id: string;
-  status: string;
-}
+const smokeThreadResponseSchema = threadSchema.pick({
+  id: true,
+  status: true,
+});
 
 function formatError(error: unknown): string {
   if (error instanceof Error) {
@@ -199,29 +200,19 @@ async function createEphemeralHostJoin(
     hostId: string;
   },
 ): Promise<SmokeHostJoin> {
-  const response = await createHostJoin(localServerUrl, {
+  const response = createHostJoinResponseSchema.parse(await createHostJoin(localServerUrl, {
     externalId: args.externalId,
     hostId: args.hostId,
     hostType: "ephemeral",
     provider: "e2b",
-  });
-
-  if (response == null || typeof response !== "object") {
-    throw new Error("Host join response was not an object");
-  }
-
-  const joinCode = Reflect.get(response, "joinCode");
-  const responseHostId = Reflect.get(response, "hostId");
-  if (typeof joinCode !== "string" || joinCode.trim().length === 0) {
-    throw new Error("Host join response was missing joinCode");
-  }
-  if (responseHostId !== args.hostId) {
+  }));
+  if (response.hostId !== args.hostId) {
     throw new Error(`Host join response host ID did not match ${args.hostId}`);
   }
 
   return {
     hostId: args.hostId,
-    joinCode,
+    joinCode: response.joinCode,
   };
 }
 
@@ -308,7 +299,10 @@ async function createSmokeThread(
     hostId: string;
     projectId: string;
   },
-): Promise<ThreadCreateResponse> {
+): Promise<{
+  id: string;
+  status: string;
+}> {
   const response = await fetch(`${localServerUrl}/api/v1/threads`, {
     method: "POST",
     headers: {
@@ -334,7 +328,7 @@ async function createSmokeThread(
       `Failed to create smoke thread: ${response.status} ${await response.text()}`,
     );
   }
-  return await response.json() as ThreadCreateResponse;
+  return smokeThreadResponseSchema.parse(await response.json());
 }
 
 async function startRealDaemon(
@@ -481,14 +475,14 @@ async function main(): Promise<void> {
     await assertBundledBbCli(sandbox);
 
     console.log("Creating project for resume smoke coverage");
-    const project = await createProject(localServerUrl, {
+    const project = projectResponseSchema.parse(await createProject(localServerUrl, {
       name: "E2B Smoke Project",
       source: {
         type: "local_path",
         hostId: smokeHost.hostId,
         path: "/tmp",
       },
-    }) as ProjectResponse;
+    }));
 
     console.log("Waiting for server-driven idle suspension");
     await waitForHostStatus(localServerUrl, smokeHost.hostId, "suspended", 120_000);

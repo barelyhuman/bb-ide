@@ -26,7 +26,7 @@ import {
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import { z } from "zod";
 import { ApiError } from "../../errors.js";
-import type { AppDeps } from "../../types.js";
+import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { queueCommandAndWait } from "../hosts/command-wait.js";
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
 
@@ -90,7 +90,7 @@ function workspaceHasRiskyChanges(
 }
 
 async function assertWorkspaceCanBeSafelyCleaned(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: SandboxWorkSessionDeps,
   environmentId: string,
 ): Promise<boolean> {
   const environment = getEnvironment(deps.db, environmentId);
@@ -259,7 +259,7 @@ export function failEnvironmentDestroyForCommand(
 }
 
 export async function validateEnvironmentCleanupRequest(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: SandboxWorkSessionDeps,
   args: ValidateEnvironmentCleanupRequestArgs,
 ): Promise<void> {
   if (!args.environmentId || args.mode === "force") {
@@ -373,7 +373,7 @@ export function wouldCleanupEnvironment(
 }
 
 export async function advanceEnvironmentCleanup(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: SandboxWorkSessionDeps,
   args: AdvanceEnvironmentCleanupArgs,
 ): Promise<void> {
   if (!args.environmentId) {

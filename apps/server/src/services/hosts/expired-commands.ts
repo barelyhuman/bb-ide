@@ -38,7 +38,7 @@ function buildExpiredLifecycleFailureReport(
 }
 
 export async function handleExpiredCommands(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
+  deps: AppDeps,
   args: {
     commandIds: string[];
   },

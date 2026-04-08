@@ -481,7 +481,7 @@ function advanceThreadStop(
 }
 
 export async function finalizeStoppedThread(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: SandboxWorkSessionDeps,
   args: FinalizeStoppedThreadArgs,
 ): Promise<boolean> {
   const currentThread = getThread(deps.db, args.threadId);

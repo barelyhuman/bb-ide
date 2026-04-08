@@ -13,7 +13,7 @@ import {
   sweepManagedEnvironments,
 } from "@bb/db";
 import { activeLifecycleOperationStates } from "@bb/domain";
-import type { AppDeps } from "../../types.js";
+import type { AppDeps, LoggedSandboxWorkSessionDeps } from "../../types.js";
 import { sweepDueAutomations } from "../scheduling/automation-sweep.js";
 import { advanceEnvironmentCleanup } from "../environments/environment-cleanup.js";
 import {
@@ -42,13 +42,13 @@ export type EvaluateManagedEnvironmentArchiveCleanupFn =
 export type DestroyHostFn = typeof destroyHost;
 
 export async function runManagedEnvironmentArchiveCleanupSweep(
-  deps: Pick<AppDeps, "db" | "hub" | "logger">,
+  deps: LoggedSandboxWorkSessionDeps,
   evaluateCleanup: EvaluateManagedEnvironmentArchiveCleanupFn,
 ): Promise<void> {
   for (const environment of sweepManagedEnvironments(deps.db)) {
     try {
       await evaluateCleanup(
-        { db: deps.db, hub: deps.hub },
+        deps,
         {
           environmentId: environment.id,
         },
@@ -92,7 +92,10 @@ export async function runEphemeralHostCleanupSweep(
 }
 
 export async function runProjectDeletionSweep(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger">,
+  deps: Pick<
+    AppDeps,
+    "config" | "db" | "hub" | "logger" | "machineAuth" | "sandboxRegistry"
+  >,
 ): Promise<void> {
   for (const projectId of listProjectsPendingDeletion(deps)) {
     try {
@@ -176,7 +179,7 @@ export async function runIdleSandboxSuspendSweep(
 }
 
 export async function runThreadLifecycleSweep(
-  deps: Pick<AppDeps, "db" | "hub" | "logger">,
+  deps: LoggedSandboxWorkSessionDeps,
 ): Promise<void> {
   for (const operation of listThreadOperations(deps.db, {
     kinds: ["start"],

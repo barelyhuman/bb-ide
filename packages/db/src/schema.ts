@@ -517,7 +517,6 @@ export const hostOperations = sqliteTable(
     ),
     uniqueIndex("host_operations_command_idx").on(table.commandId),
     index("host_operations_state_idx").on(table.state),
-    index("host_operations_host_idx").on(table.hostId),
   ],
 );
 

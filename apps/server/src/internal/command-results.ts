@@ -9,7 +9,7 @@ import {
 } from "./command-result-handlers.js";
 
 export async function handleCommandResult(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
+  deps: AppDeps,
   report: HostDaemonCommandResultReport,
 ): Promise<ReturnType<typeof getCommand>> {
   const command = getCommand(deps.db, report.commandId);

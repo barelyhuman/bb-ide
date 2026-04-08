@@ -17,6 +17,8 @@ import {
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
   hostDaemonCommandSchema,
+  hostDaemonSessionOpenResponseSchema,
+  hostRuntimeMaterialSnapshotSchema,
 } from "@bb/host-daemon-contract";
 import { threadSchema } from "@bb/domain";
 import { describe, expect, it, vi } from "vitest";
@@ -24,6 +26,7 @@ import { appendClientTurnEvent } from "../../src/services/threads/thread-events.
 import { finalizeStoppedThread } from "../../src/services/threads/thread-lifecycle.js";
 import {
   advanceSandboxRuntimeMaterialSync,
+  buildSandboxRuntimeMaterialSnapshot,
   completeSandboxRuntimeMaterialSyncForCommand,
   requestSandboxRuntimeMaterialSync,
 } from "../../src/services/hosts/sandbox-runtime-material.js";
@@ -94,16 +97,9 @@ describe("internal session routes", () => {
       });
 
       expect(response.status).toBe(201);
-      const body = await readJson(response) as {
-        heartbeatIntervalMs: number;
-        leaseTimeoutMs: number;
-        sessionId: string;
-        trackedThreadTargets: Array<{
-          environmentId: string;
-          threadId: string;
-        }>;
-        threadHighWaterMarks: Record<string, number>;
-      };
+      const body = hostDaemonSessionOpenResponseSchema.parse(
+        await readJson(response),
+      );
       expect(body).toMatchObject({
         heartbeatIntervalMs: 5_000,
         leaseTimeoutMs: 30_000,
@@ -308,7 +304,7 @@ describe("internal session routes", () => {
     }
   });
 
-  it("clears suspended state and requeues runtime sync when an ephemeral host session reconnects", async () => {
+  it("clears suspended state without requeueing runtime sync when an ephemeral host session reconnects with the current version already applied", async () => {
     const harness = await createTestAppHarness({
       githubPat: "test-github-pat",
       openAiApiKey: "test-openai-key",
@@ -377,8 +373,71 @@ describe("internal session routes", () => {
         kind: "sync_runtime_material",
       });
       expect(runtimeSyncOperation).toMatchObject({
-        state: "queued",
+        commandId: initialRuntimeSync,
+        state: "completed",
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("requeues a fetched runtime material command when an ephemeral host session reconnects", async () => {
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+    });
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-runtime-reconnect-fetched",
+        id: "host-runtime-reconnect-fetched",
+        name: "Sandbox Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      openSession(harness.db, harness.hub, {
+        heartbeatIntervalMs: 5_000,
+        hostId: host.id,
+        hostName: host.name,
+        hostType: host.type,
+        instanceId: "instance-before-reconnect-fetched",
+        leaseTimeoutMs: 30_000,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+      });
+      const initialSnapshot = requestSandboxRuntimeMaterialSync(harness.deps, {
+        hostId: host.id,
+      });
+      const initialRuntimeSync = advanceSandboxRuntimeMaterialSync(harness.deps, {
+        hostId: host.id,
+      });
+      if (!initialRuntimeSync) {
+        throw new Error("Expected initial runtime sync command to be queued");
+      }
+      harness.db
+        .update(hostDaemonCommands)
+        .set({
+          fetchedAt: 1_700_000_000_000,
+          state: "fetched",
+        })
+        .where(eq(hostDaemonCommands.id, initialRuntimeSync))
+        .run();
+
+      const response = await harness.app.request("/internal/session/open", {
+        method: "POST",
+        headers: internalAuthHeaders(harness, {
+          hostId: host.id,
+          hostType: "ephemeral",
+        }),
+        body: JSON.stringify({
+          activeThreads: [],
+          dataDir: "/tmp/host-runtime-reconnect-fetched",
+          hostId: host.id,
+          instanceId: "instance-reconnected-fetched",
+          hostName: host.name,
+          hostType: "ephemeral",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        }),
+      });
+
+      expect(response.status).toBe(201);
 
       const requeuedRuntimeSync = await waitForQueuedCommandAfter(
         harness,
@@ -393,11 +452,16 @@ describe("internal session routes", () => {
           row.hostId === host.id && command.type === "host.sync_runtime_material",
       );
       expect(requeuedRuntimeSync.command).toMatchObject({
-        env: initialSnapshot.env,
         type: "host.sync_runtime_material",
         version: initialSnapshot.version,
       });
-      expect(runtimeSyncOperation?.commandId).toBe(requeuedRuntimeSync.row.id);
+      expect(getHostOperation(harness.db, {
+        hostId: host.id,
+        kind: "sync_runtime_material",
+      })).toMatchObject({
+        commandId: requeuedRuntimeSync.row.id,
+        state: "queued",
+      });
     } finally {
       await harness.cleanup();
     }
@@ -597,12 +661,66 @@ describe("internal session routes", () => {
           row.hostId === host.id && command.type === "host.sync_runtime_material",
       );
       expect(queuedRuntimeSync.command).toMatchObject({
-        env: {
-          OPENAI_API_KEY: "test-openai-key",
-        },
         type: "host.sync_runtime_material",
+        version: buildSandboxRuntimeMaterialSnapshot(harness.config).version,
       });
       expect(runtimeSyncOperation?.commandId).toBe(queuedRuntimeSync.row.id);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("serves runtime material only for the current requested version", async () => {
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+    });
+
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-runtime-material-route",
+        id: "host-runtime-material-route",
+        name: "Runtime Material Route Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      const session = openSession(harness.db, harness.hub, {
+        heartbeatIntervalMs: 5_000,
+        hostId: host.id,
+        hostName: host.name,
+        hostType: host.type,
+        instanceId: "instance-runtime-material-route",
+        leaseTimeoutMs: 30_000,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+      });
+      const desiredSnapshot = buildSandboxRuntimeMaterialSnapshot(harness.config);
+
+      const response = await harness.app.request(
+        `/internal/session/runtime-material?sessionId=${session.id}&version=${desiredSnapshot.version}`,
+        {
+          headers: internalAuthHeaders(harness, {
+            hostId: host.id,
+            hostType: "ephemeral",
+          }),
+        },
+      );
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual(
+        hostRuntimeMaterialSnapshotSchema.parse(desiredSnapshot),
+      );
+
+      const staleResponse = await harness.app.request(
+        `/internal/session/runtime-material?sessionId=${session.id}&version=runtime-version-stale`,
+        {
+          headers: internalAuthHeaders(harness, {
+            hostId: host.id,
+            hostType: "ephemeral",
+          }),
+        },
+      );
+      expect(staleResponse.status).toBe(409);
+      await expect(readJson(staleResponse)).resolves.toMatchObject({
+        code: "stale_runtime_material_version",
+      });
     } finally {
       await harness.cleanup();
     }

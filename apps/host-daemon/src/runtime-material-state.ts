@@ -34,10 +34,16 @@ export async function writeRuntimeMaterialState(
 ): Promise<void> {
   await fs.mkdir(dataDir, { recursive: true });
   const runtimeMaterialStatePath = getRuntimeMaterialStatePath(dataDir);
+  const temporaryStatePath = `${runtimeMaterialStatePath}.${process.pid}.${Date.now()}.tmp`;
   const payload = JSON.stringify(snapshot, null, 2);
-
-  await fs.writeFile(runtimeMaterialStatePath, `${payload}\n`, {
-    encoding: "utf8",
-    mode: 0o600,
-  });
+  try {
+    await fs.writeFile(temporaryStatePath, `${payload}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    await fs.rename(temporaryStatePath, runtimeMaterialStatePath);
+  } catch (error) {
+    await fs.rm(temporaryStatePath, { force: true }).catch(() => undefined);
+    throw error;
+  }
 }

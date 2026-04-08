@@ -31,7 +31,7 @@ export function registerInternalCommandResultRoutes(
       throw new ApiError(404, "command_not_found", "Command not found");
     }
 
-    await markSandboxActivity(deps, {
+    void markSandboxActivity(deps, {
       hostId: session.hostId,
       source: "command-result",
     });

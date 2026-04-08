@@ -1,174 +1,50 @@
-import { createHash } from "node:crypto";
 import {
   getActiveSession,
-  getCommand,
+  getCurrentSession,
   getHost,
-  getHostOperation,
-  getHostOperationByCommandId,
   queueCommand,
 } from "@bb/db";
 import {
-  markHostOperationRecordFailed,
   markHostOperationRecordQueued,
-  updateHostOperationRecord,
   upsertHostOperationRecord,
 } from "@bb/db/internal-lifecycle";
-import {
-  activeLifecycleOperationStates,
-  isActiveLifecycleOperationState,
-} from "@bb/domain";
+import { isActiveLifecycleOperationState } from "@bb/domain";
 import {
   hostDaemonCommandResultSchemaByType,
-  hostRuntimeMaterialSnapshotSchema,
   type HostRuntimeMaterialSnapshot,
 } from "@bb/host-daemon-contract";
-import { z } from "zod";
 import { ApiError } from "../../errors.js";
-import type { AppDeps, ServerRuntimeConfig } from "../../types.js";
-import { parseJsonWithSchema } from "../lib/json-parsing.js";
+import type { AppDeps } from "../../types.js";
 import { waitForQueuedCommandResult } from "./command-wait.js";
+import {
+  buildDesiredRuntimeMaterialOperationPayload,
+  getRuntimeMaterialOperation,
+  hasDesiredRuntimeMaterialApplied,
+  hasQueuedRuntimeMaterialCommand,
+  parseRuntimeMaterialOperationPayload,
+  resetRuntimeMaterialOperationToRequested,
+} from "./sandbox-runtime-material-operation.js";
+import {
+  buildSandboxRuntimeMaterialSnapshot,
+  isEmptySandboxRuntimeMaterialSnapshot,
+} from "./sandbox-runtime-material-snapshot.js";
+
+export {
+  buildSandboxRuntimeMaterialSnapshot,
+  readSandboxRuntimeMaterialSnapshotForVersion,
+} from "./sandbox-runtime-material-snapshot.js";
+export {
+  completeSandboxRuntimeMaterialSyncForCommand,
+  failSandboxRuntimeMaterialSyncForCommand,
+  hasActiveSandboxRuntimeMaterialSyncOperationForCommand,
+  reconcileSandboxRuntimeMaterialAfterSessionOpen,
+} from "./sandbox-runtime-material-operation.js";
 
 const DEFAULT_RUNTIME_MATERIAL_SYNC_TIMEOUT_MS = 60_000;
-const SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND = "sync_runtime_material";
-
-const sandboxRuntimeMaterialOperationPayloadSchema = z.object({
-  appliedVersion: z.string().min(1).nullable(),
-  desiredSnapshot: hostRuntimeMaterialSnapshotSchema,
-}).strict();
-type SandboxRuntimeMaterialOperationPayload = z.infer<
-  typeof sandboxRuntimeMaterialOperationPayloadSchema
->;
 
 interface EnsureSandboxRuntimeMaterialSyncedArgs {
   hostId: string;
   timeoutMs?: number;
-}
-
-function buildManagedRuntimeEnv(
-  config: Pick<
-    ServerRuntimeConfig,
-    "anthropicApiKey" | "githubPat" | "openAiApiKey"
-  >,
-): Record<string, string> {
-  const env: Record<string, string> = {};
-
-  if (config.githubPat !== "") {
-    env.GITHUB_TOKEN = config.githubPat;
-  }
-  if (config.openAiApiKey !== "") {
-    env.OPENAI_API_KEY = config.openAiApiKey;
-  }
-  if (config.anthropicApiKey !== "") {
-    env.ANTHROPIC_API_KEY = config.anthropicApiKey;
-  }
-
-  return env;
-}
-
-function toStableEnvEntries(
-  env: Record<string, string>,
-): Array<readonly [string, string]> {
-  return Object.entries(env).sort(([left], [right]) => left.localeCompare(right));
-}
-
-function buildSnapshotVersion(env: Record<string, string>): string {
-  const stableEntries = JSON.stringify(toStableEnvEntries(env));
-  return createHash("sha256").update(stableEntries).digest("hex");
-}
-
-function parseRuntimeMaterialOperationPayload(
-  payload: string,
-): SandboxRuntimeMaterialOperationPayload {
-  return parseJsonWithSchema(
-    payload,
-    sandboxRuntimeMaterialOperationPayloadSchema,
-  );
-}
-
-function buildDesiredOperationPayload(
-  desiredSnapshot: HostRuntimeMaterialSnapshot,
-  existingPayload: SandboxRuntimeMaterialOperationPayload | null,
-): SandboxRuntimeMaterialOperationPayload {
-  return {
-    appliedVersion: existingPayload?.appliedVersion ?? null,
-    desiredSnapshot,
-  };
-}
-
-function getRuntimeMaterialOperation(
-  deps: Pick<AppDeps, "db">,
-  hostId: string,
-) {
-  return getHostOperation(deps.db, {
-    hostId,
-    kind: SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND,
-  });
-}
-
-function getRuntimeMaterialOperationByCommandId(
-  deps: Pick<AppDeps, "db">,
-  commandId: string,
-) {
-  const operation = getHostOperationByCommandId(deps.db, commandId);
-  if (
-    !operation
-    || operation.kind !== SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND
-  ) {
-    return null;
-  }
-
-  return operation;
-}
-
-function hasDesiredRuntimeMaterialApplied(
-  payload: SandboxRuntimeMaterialOperationPayload,
-): boolean {
-  return payload.appliedVersion === payload.desiredSnapshot.version;
-}
-
-function hasQueuedRuntimeMaterialCommand(
-  deps: Pick<AppDeps, "db">,
-  commandId: string | null,
-): boolean {
-  if (!commandId) {
-    return false;
-  }
-
-  const command = getCommand(deps.db, commandId);
-  return command !== null
-    && (command.state === "pending" || command.state === "fetched");
-}
-
-function resetRuntimeMaterialOperationToRequested(
-  deps: Pick<AppDeps, "db">,
-  args: {
-    hostId: string;
-    payload: SandboxRuntimeMaterialOperationPayload;
-  },
-): void {
-  updateHostOperationRecord(deps.db, {
-    hostId: args.hostId,
-    kind: SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND,
-    commandId: null,
-    completedAt: null,
-    failureReason: null,
-    payload: JSON.stringify(args.payload),
-    queuedAt: null,
-    state: "requested",
-  });
-}
-
-export function buildSandboxRuntimeMaterialSnapshot(
-  config: Pick<
-    ServerRuntimeConfig,
-    "anthropicApiKey" | "githubPat" | "openAiApiKey"
-  >,
-): HostRuntimeMaterialSnapshot {
-  const env = buildManagedRuntimeEnv(config);
-  return {
-    env,
-    version: buildSnapshotVersion(env),
-  };
 }
 
 export function requestSandboxRuntimeMaterialSync(
@@ -191,7 +67,7 @@ export function requestSandboxRuntimeMaterialSync(
     existingOperation
     && existingOperation.state === "completed"
     && existingPayload
-    && existingPayload.desiredSnapshot.version === desiredSnapshot.version
+    && existingPayload.desiredVersion === desiredSnapshot.version
     && hasDesiredRuntimeMaterialApplied(existingPayload)
   ) {
     return desiredSnapshot;
@@ -199,7 +75,7 @@ export function requestSandboxRuntimeMaterialSync(
 
   if (
     existingOperation === null
-    && desiredSnapshot.version === buildSnapshotVersion({})
+    && isEmptySandboxRuntimeMaterialSnapshot(desiredSnapshot)
   ) {
     return desiredSnapshot;
   }
@@ -207,16 +83,19 @@ export function requestSandboxRuntimeMaterialSync(
   if (
     existingOperation
     && existingPayload
-    && existingPayload.desiredSnapshot.version === desiredSnapshot.version
+    && existingPayload.desiredVersion === desiredSnapshot.version
   ) {
     return desiredSnapshot;
   }
 
   upsertHostOperationRecord(deps.db, {
     hostId: args.hostId,
-    kind: SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND,
+    kind: "sync_runtime_material",
     payload: JSON.stringify(
-      buildDesiredOperationPayload(desiredSnapshot, existingPayload),
+      buildDesiredRuntimeMaterialOperationPayload(
+        desiredSnapshot,
+        existingPayload,
+      ),
     ),
   });
 
@@ -265,13 +144,12 @@ export function advanceSandboxRuntimeMaterialSync(
     type: "host.sync_runtime_material",
     payload: JSON.stringify({
       type: "host.sync_runtime_material",
-      version: payload.desiredSnapshot.version,
-      env: payload.desiredSnapshot.env,
+      version: payload.desiredVersion,
     }),
   });
   markHostOperationRecordQueued(deps.db, {
     hostId: args.hostId,
-    kind: SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND,
+    kind: "sync_runtime_material",
     commandId: queuedCommand.id,
   });
   return queuedCommand.id;
@@ -295,14 +173,31 @@ export async function ensureSandboxRuntimeMaterialSynced(
     operation.state === "completed"
     && hasDesiredRuntimeMaterialApplied(payload)
   ) {
-    return payload.desiredSnapshot;
+    return desiredSnapshot;
   }
 
   const commandId = advanceSandboxRuntimeMaterialSync(deps, {
     hostId: args.hostId,
   });
   if (!commandId) {
-    throw new ApiError(502, "host_disconnected", "Host is not connected");
+    const session = getCurrentSession(deps.db, {
+      hostId: args.hostId,
+    });
+    if (!session) {
+      throw new ApiError(502, "host_disconnected", "Host is not connected");
+    }
+    if (session.leaseExpiresAt <= Date.now()) {
+      throw new ApiError(
+        502,
+        "host_session_expired",
+        "Host session expired before runtime material sync could be queued",
+      );
+    }
+    throw new ApiError(
+      502,
+      "runtime_material_sync_unavailable",
+      "Runtime material sync could not be queued for the active host session",
+    );
   }
 
   const rawResult = await waitForQueuedCommandResult(deps, {
@@ -322,87 +217,4 @@ export async function ensureSandboxRuntimeMaterialSynced(
   }
 
   return desiredSnapshot;
-}
-
-export function hasActiveSandboxRuntimeMaterialSyncOperationForCommand(
-  deps: Pick<AppDeps, "db">,
-  args: { commandId: string },
-): boolean {
-  const operation = getRuntimeMaterialOperationByCommandId(deps, args.commandId);
-  return operation !== null
-    && isActiveLifecycleOperationState(operation.state);
-}
-
-export function completeSandboxRuntimeMaterialSyncForCommand(
-  deps: Pick<AppDeps, "db">,
-  args: { appliedVersion: string; commandId: string; completedAt?: number },
-): boolean {
-  const operation = getRuntimeMaterialOperationByCommandId(deps, args.commandId);
-  if (
-    !operation
-    || !isActiveLifecycleOperationState(operation.state)
-  ) {
-    return false;
-  }
-
-  const payload = parseRuntimeMaterialOperationPayload(operation.payload);
-  return updateHostOperationRecord(deps.db, {
-    hostId: operation.hostId,
-    kind: SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND,
-    allowedCurrentStates: activeLifecycleOperationStates,
-    commandId: operation.commandId,
-    completedAt: args.completedAt ?? Date.now(),
-    failureReason: null,
-    payload: JSON.stringify({
-      ...payload,
-      appliedVersion: args.appliedVersion,
-    }),
-    queuedAt: operation.queuedAt,
-    state: "completed",
-  }) !== null;
-}
-
-export function failSandboxRuntimeMaterialSyncForCommand(
-  deps: Pick<AppDeps, "db">,
-  args: { commandId: string; completedAt?: number; failureReason: string },
-): boolean {
-  const operation = getRuntimeMaterialOperationByCommandId(deps, args.commandId);
-  if (
-    !operation
-    || !isActiveLifecycleOperationState(operation.state)
-  ) {
-    return false;
-  }
-
-  return markHostOperationRecordFailed(deps.db, {
-    hostId: operation.hostId,
-    kind: SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND,
-    completedAt: args.completedAt,
-    failureReason: args.failureReason,
-  }) !== null;
-}
-
-export function invalidateSandboxRuntimeMaterialAfterSessionOpen(
-  deps: Pick<AppDeps, "db">,
-  args: { hostId: string },
-): boolean {
-  const operation = getRuntimeMaterialOperation(deps, args.hostId);
-  if (!operation) {
-    return false;
-  }
-
-  const payload = parseRuntimeMaterialOperationPayload(operation.payload);
-  return updateHostOperationRecord(deps.db, {
-    hostId: args.hostId,
-    kind: SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND,
-    commandId: null,
-    completedAt: null,
-    failureReason: null,
-    payload: JSON.stringify({
-      ...payload,
-      appliedVersion: null,
-    }),
-    queuedAt: null,
-    state: "requested",
-  }) !== null;
 }

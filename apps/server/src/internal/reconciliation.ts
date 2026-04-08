@@ -13,7 +13,7 @@ import {
 import { tryTransition } from "../services/threads/thread-transitions.js";
 
 export async function reconcileSessionThreads(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: AppDeps,
   hostId: string,
   activeThreads: HostDaemonActiveThread[],
 ): Promise<void> {

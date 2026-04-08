@@ -133,13 +133,13 @@ export const threadDeletedCommandSchema = hostDaemonThreadTargetSchema.extend({
 });
 
 /**
- * Replace the daemon's managed runtime material snapshot with the exact
- * authoritative snapshot from the server before new work is queued.
+ * Request that the daemon replace its managed runtime material with the
+ * server's authoritative snapshot for this version.
  */
-export const hostSyncRuntimeMaterialCommandSchema =
-  hostRuntimeMaterialSnapshotSchema.extend({
-    type: z.literal("host.sync_runtime_material"),
-  });
+export const hostSyncRuntimeMaterialCommandSchema = z.object({
+  type: z.literal("host.sync_runtime_material"),
+  version: hostRuntimeMaterialSnapshotSchema.shape.version,
+});
 
 /**
  * Read a file from an absolute host path while enforcing that the resolved file

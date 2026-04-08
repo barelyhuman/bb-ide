@@ -12,7 +12,6 @@ import type {
 } from "@bb/sandbox-host";
 import { ApiError } from "../../errors.js";
 import type { ServerRuntimeConfig } from "../../types.js";
-import { buildSandboxDaemonEnv } from "./sandbox-daemon-env.js";
 import { hasConfiguredReachablePublicServerUrl } from "./public-server-url.js";
 import { hasConfiguredSandboxTemplate } from "./sandbox-config.js";
 
@@ -23,11 +22,9 @@ export type SandboxBackendInfoResolverConfig = Pick<
 
 export type SandboxBackendConfig = Pick<
   ServerRuntimeConfig,
-  | "anthropicApiKey"
   | "e2bApiKey"
   | "e2bTemplate"
   | "githubPat"
-  | "openAiApiKey"
 >;
 
 export interface SandboxBackendProvisionArgs {
@@ -49,6 +46,11 @@ export interface SandboxBackendResumeArgs {
 }
 
 export interface SandboxBackendDestroyArgs {
+  config: SandboxBackendConfig;
+  externalId: string;
+}
+
+export interface SandboxBackendSuspendArgs {
   config: SandboxBackendConfig;
   externalId: string;
 }
@@ -76,7 +78,7 @@ export interface SandboxBackend {
   resumeHost(
     args: SandboxBackendResumeArgs,
   ): ReturnType<typeof resumeSandboxHost>;
-  suspendHost(args: SandboxBackendDestroyArgs): Promise<void>;
+  suspendHost(args: SandboxBackendSuspendArgs): Promise<void>;
 }
 
 const E2B_SANDBOX_BACKEND_INFO = {
@@ -140,7 +142,7 @@ function buildProvisionHostOptions(
 ): ProvisionHostOptions {
   return {
     apiKey: args.config.e2bApiKey,
-    daemonEnv: buildSandboxDaemonEnv(args.config),
+    daemonEnv: {},
     enrollKey: args.enrollKey,
     hostId: args.hostId,
     hostName: args.hostName,
@@ -155,7 +157,7 @@ function buildResumeHostOptions(
 ): ResumeHostOptions {
   return {
     apiKey: toOptionalString(args.config.e2bApiKey),
-    daemonEnv: buildSandboxDaemonEnv(args.config),
+    daemonEnv: {},
     externalId: args.externalId,
     hostId: args.hostId,
     hostName: args.hostName,

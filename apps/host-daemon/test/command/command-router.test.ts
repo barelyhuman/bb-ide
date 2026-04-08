@@ -128,6 +128,57 @@ describe("CommandRouter", () => {
     vi.restoreAllMocks();
   });
 
+  it("fetches and persists runtime material before reporting success", async () => {
+    const manager = new RuntimeManager({
+      provisionWorkspace: vi.fn(async () => createFakeWorkspace("/tmp/env-1")),
+      createRuntime: vi.fn(() => createFakeRuntime()),
+    });
+    const fetchRuntimeMaterial = vi.fn(async () => ({
+      env: {
+        OPENAI_API_KEY: "test-openai-key",
+      },
+      version: "runtime-version-1",
+    }));
+    const persistRuntimeMaterial = vi.fn(async () => undefined);
+    const reportResult = vi.fn(async () => undefined);
+    const router = new CommandRouter({
+      fetchRuntimeMaterial,
+      persistRuntimeMaterial,
+      reportResult,
+      runtimeManager: manager,
+      logger: createLogger(),
+    });
+
+    await router.handleCommands([
+      {
+        id: "runtime-sync",
+        cursor: 1,
+        command: {
+          type: "host.sync_runtime_material",
+          version: "runtime-version-1",
+        },
+      },
+    ]);
+
+    expect(fetchRuntimeMaterial).toHaveBeenCalledWith("runtime-version-1");
+    expect(persistRuntimeMaterial).toHaveBeenCalledWith({
+      env: {
+        OPENAI_API_KEY: "test-openai-key",
+      },
+      version: "runtime-version-1",
+    });
+    expect(reportResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commandId: "runtime-sync",
+        ok: true,
+        result: {
+          appliedVersion: "runtime-version-1",
+        },
+        type: "host.sync_runtime_material",
+      }),
+    );
+  });
+
   it("serializes workspace commands per environment", async () => {
     const workspace = createFakeWorkspace("/tmp/env-1");
     const commitDeferred = createDeferred<{ commitSha: string; commitSubject: string }>();
@@ -143,6 +194,7 @@ describe("CommandRouter", () => {
     });
 
     const router = new CommandRouter({
+      fetchRuntimeMaterial: vi.fn(),
       runtimeManager: manager,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
@@ -204,6 +256,7 @@ describe("CommandRouter", () => {
     manager.markThreadActive("env-1", "thread-b", "provider-b");
 
     const router = new CommandRouter({
+      fetchRuntimeMaterial: vi.fn(),
       runtimeManager: manager,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
@@ -286,6 +339,7 @@ describe("CommandRouter", () => {
     });
     const reported: string[] = [];
     const router = new CommandRouter({
+      fetchRuntimeMaterial: vi.fn(),
       runtimeManager: manager,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
@@ -372,6 +426,7 @@ describe("CommandRouter", () => {
     let nowValue = 100;
     const results: Array<{ commandId: string; completedAt: number; ok: boolean }> = [];
     const router = new CommandRouter({
+      fetchRuntimeMaterial: vi.fn(),
       runtimeManager: manager,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
@@ -449,6 +504,7 @@ describe("CommandRouter", () => {
     });
 
     const router = new CommandRouter({
+      fetchRuntimeMaterial: vi.fn(),
       runtimeManager: manager,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
@@ -500,6 +556,7 @@ describe("CommandRouter", () => {
     let shouldFail = true;
     const reported: string[] = [];
     const router = new CommandRouter({
+      fetchRuntimeMaterial: vi.fn(),
       runtimeManager: manager,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger,

@@ -5,13 +5,11 @@ export async function syncRuntimeMaterial(
   command: CommandOf<"host.sync_runtime_material">,
   options: CommandDispatchOptions,
 ): Promise<HostDaemonCommandResult<"host.sync_runtime_material">> {
-  options.runtimeManager.replaceManagedShellEnv(command.env);
+  const snapshot = await options.fetchRuntimeMaterial(command.version);
+  options.runtimeManager.replaceManagedShellEnv(snapshot.env);
   await options.runtimeManager.evictIdleEnvironments();
-  await options.persistRuntimeMaterial({
-    env: command.env,
-    version: command.version,
-  });
+  await options.persistRuntimeMaterial(snapshot);
   return {
-    appliedVersion: command.version,
+    appliedVersion: snapshot.version,
   };
 }

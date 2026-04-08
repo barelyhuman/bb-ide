@@ -104,7 +104,7 @@ function requireWorkspacePath(environment: ThreadRuntimeCommandEnvironment): str
 }
 
 async function readManagerPreferences(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: SandboxWorkSessionDeps,
   args: {
     hostId: string;
     threadStoragePath: string;

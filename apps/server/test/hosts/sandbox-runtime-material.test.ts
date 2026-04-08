@@ -1,9 +1,11 @@
 import {
   getCommand,
   getHostOperation,
+  hostDaemonSessions,
   openSession,
   upsertHost,
 } from "@bb/db";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   advanceSandboxRuntimeMaterialSync,
@@ -91,6 +93,10 @@ describe("sandbox runtime material", () => {
         hostId: host.id,
         type: "host.sync_runtime_material",
       });
+      expect(secondCommand?.payload).not.toContain("test-github-pat");
+      expect(secondCommand?.payload).not.toContain("test-openai-key");
+      expect(firstOperation?.payload).not.toContain("test-github-pat");
+      expect(firstOperation?.payload).not.toContain("test-openai-key");
     } finally {
       await harness.cleanup();
     }
@@ -194,9 +200,11 @@ describe("sandbox runtime material", () => {
           row.hostId === host.id && command.type === "host.sync_runtime_material",
       );
       expect(queuedRuntimeSync.command).toMatchObject({
-        env: buildSandboxRuntimeMaterialSnapshot(harness.config).env,
         type: "host.sync_runtime_material",
+        version: buildSandboxRuntimeMaterialSnapshot(harness.config).version,
       });
+      expect(queuedRuntimeSync.row.payload).not.toContain("test-github-pat");
+      expect(queuedRuntimeSync.row.payload).not.toContain("test-openai-key");
 
       const reportResponse = await reportQueuedCommandSuccess(
         harness,
@@ -214,6 +222,105 @@ describe("sandbox runtime material", () => {
       await expect(ensurePromise).resolves.toEqual(
         buildSandboxRuntimeMaterialSnapshot(harness.config),
       );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("reports a stale session lease instead of host_disconnected when sync cannot be queued", async () => {
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+    });
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        id: "host-runtime-expired-session",
+        name: "Runtime Expired Session Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      const session = openSession(harness.db, harness.hub, {
+        heartbeatIntervalMs: 5_000,
+        hostId: host.id,
+        hostName: host.name,
+        hostType: host.type,
+        instanceId: "instance-runtime-expired-session",
+        leaseTimeoutMs: 30_000,
+        protocolVersion: 2,
+      });
+      harness.db
+        .update(hostDaemonSessions)
+        .set({
+          leaseExpiresAt: Date.now() - 1,
+        })
+        .where(eq(hostDaemonSessions.id, session.id))
+        .run();
+
+      await expect(
+        ensureSandboxRuntimeMaterialSynced(harness.deps, {
+          hostId: host.id,
+        }),
+      ).rejects.toMatchObject({
+        body: {
+          code: "host_session_expired",
+        },
+        status: 502,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("fails when the daemon reports a mismatched runtime material version", async () => {
+    const harness = await createTestAppHarness({
+      githubPat: "test-github-pat",
+      openAiApiKey: "test-openai-key",
+    });
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        id: "host-runtime-version-mismatch",
+        name: "Runtime Version Mismatch Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      openSession(harness.db, harness.hub, {
+        heartbeatIntervalMs: 5_000,
+        hostId: host.id,
+        hostName: host.name,
+        hostType: host.type,
+        instanceId: "instance-runtime-version-mismatch",
+        leaseTimeoutMs: 30_000,
+        protocolVersion: 2,
+      });
+
+      const ensurePromise = ensureSandboxRuntimeMaterialSynced(harness.deps, {
+        hostId: host.id,
+      });
+      const queuedRuntimeSync = await waitForQueuedCommand(
+        harness,
+        ({ command, row }) =>
+          row.hostId === host.id && command.type === "host.sync_runtime_material",
+      );
+
+      const reportResponse = await reportQueuedCommandSuccess(
+        harness,
+        queuedRuntimeSync,
+        {
+          appliedVersion: "runtime-version-other",
+        },
+        {
+          hostId: host.id,
+          hostType: "ephemeral",
+        },
+      );
+      expect(reportResponse.status).toBe(200);
+
+      await expect(ensurePromise).rejects.toMatchObject({
+        body: {
+          code: "internal_error",
+          message: "Daemon reported a mismatched runtime material version",
+        },
+        status: 500,
+      });
     } finally {
       await harness.cleanup();
     }

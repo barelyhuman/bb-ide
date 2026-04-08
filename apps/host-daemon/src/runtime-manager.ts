@@ -395,6 +395,13 @@ export class RuntimeManager {
   }
 
   async evictIdleEnvironments(): Promise<string[]> {
+    // A pending environment creation is still active work. If we evict around
+    // it, the creation can resolve immediately after this sweep and resurrect
+    // an idle runtime entry that missed the eviction pass.
+    if (this.pendingEntries.size > 0) {
+      return [];
+    }
+
     const evictedEnvironmentIds: string[] = [];
 
     for (const entry of [...this.entries.values()]) {

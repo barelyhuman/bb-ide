@@ -110,7 +110,7 @@ export function requestProjectDeletion(
 }
 
 export async function advanceProjectDeletion(
-  deps: Pick<AppDeps, "config" | "db" | "hub">,
+  deps: Pick<AppDeps, "config" | "db" | "hub" | "machineAuth" | "sandboxRegistry">,
   args: ProjectDeletionArgs,
 ): Promise<boolean> {
   if (!isProjectDeletionActive(deps, args.projectId)) {

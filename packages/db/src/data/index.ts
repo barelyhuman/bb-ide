@@ -174,9 +174,11 @@ export type {
 } from "./host-operations.js";
 
 export {
+  markEphemeralHostActivity,
   updateHostLifecycleState,
 } from "./host-lifecycle-state.js";
 export type {
+  MarkEphemeralHostActivityInput,
   UpdateHostLifecycleStateInput,
 } from "./host-lifecycle-state.js";
 
@@ -252,11 +254,13 @@ export {
   closeSession,
   getActiveSession,
   getActiveSessionById,
+  getCurrentSession,
   getMostRecentlyUpdatedConnectedHostId,
   heartbeatSession,
   listConnectedHostIds,
 } from "./sessions.js";
 export type {
+  GetCurrentSessionArgs,
   OpenSessionInput,
 } from "./sessions.js";
 

@@ -12,7 +12,7 @@ import {
 } from "@bb/server-contract";
 import { renderTemplate } from "@bb/templates";
 import type { Hono } from "hono";
-import type { AppDeps } from "../../types.js";
+import type { AppDeps, LoggedSandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import {
   advanceEnvironmentCleanup,
@@ -43,7 +43,7 @@ function formatThreadLabelForManager(thread: {
 }
 
 async function queueManagerSystemMessageBestEffort(
-  deps: Pick<AppDeps, "db" | "hub" | "logger">,
+  deps: LoggedSandboxWorkSessionDeps,
   args: {
     managedThreadId: string;
     managerThreadId: string;

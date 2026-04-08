@@ -13,6 +13,7 @@ import { RuntimeManager } from "./runtime-manager.js";
 type CommandResultReport = Omit<HostDaemonCommandResultReport, "sessionId">;
 
 export interface CommandRouterOptions {
+  fetchRuntimeMaterial: CommandDispatchOptions["fetchRuntimeMaterial"];
   persistRuntimeMaterial: CommandDispatchOptions["persistRuntimeMaterial"];
   runtimeManager: RuntimeManager;
   reportResult?: (result: CommandResultReport) => Promise<void>;
@@ -122,6 +123,7 @@ export class CommandRouter {
 
     try {
       const result = await dispatchCommand(envelope.command, {
+        fetchRuntimeMaterial: this.options.fetchRuntimeMaterial,
         persistRuntimeMaterial: this.options.persistRuntimeMaterial,
         runtimeManager: this.options.runtimeManager,
         seedThreadHighWaterMark: this.options.seedThreadHighWaterMark,

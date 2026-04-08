@@ -34,7 +34,7 @@ export function registerInternalToolCallRoutes(app: Hono, deps: AppDeps): void {
       );
     }
 
-    await markSandboxActivity(deps, {
+    void markSandboxActivity(deps, {
       hostId: session.hostId,
       source: "tool-call",
     });

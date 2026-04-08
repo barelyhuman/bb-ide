@@ -7,7 +7,9 @@ import {
   updateHostLifecycleState,
 } from "@bb/db";
 import {
+  hostDaemonRuntimeMaterialQuerySchema,
   hostDaemonSessionOpenRequestSchema,
+  hostRuntimeMaterialSnapshotSchema,
   typedRoutes,
   type HostDaemonInternalSchema,
 } from "@bb/host-daemon-contract";
@@ -20,12 +22,14 @@ import { assertAuthenticatedHostMatches, getAuthenticatedDaemon } from "./auth.j
 import { reconcileSessionThreads } from "./reconciliation.js";
 import {
   advanceSandboxRuntimeMaterialSync,
-  invalidateSandboxRuntimeMaterialAfterSessionOpen,
+  readSandboxRuntimeMaterialSnapshotForVersion,
+  reconcileSandboxRuntimeMaterialAfterSessionOpen,
   requestSandboxRuntimeMaterialSync,
 } from "../services/hosts/sandbox-runtime-material.js";
+import { requireAuthorizedActiveSession } from "./session-state.js";
 
 export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
-  const { post } = typedRoutes<HostDaemonInternalSchema>(app, {
+  const { get, post } = typedRoutes<HostDaemonInternalSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
   });
 
@@ -57,10 +61,13 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
       suspendedAt: null,
     });
     if (daemon.hostType === "ephemeral") {
+      // A replaced session can strand a fetched runtime-sync command on the
+      // old daemon session. Refresh the desired version first, then requeue
+      // only if the existing operation is no longer reusable.
       requestSandboxRuntimeMaterialSync(deps, {
         hostId: daemon.hostId,
       });
-      invalidateSandboxRuntimeMaterialAfterSessionOpen(deps, {
+      reconcileSandboxRuntimeMaterialAfterSessionOpen(deps, {
         hostId: daemon.hostId,
       });
       advanceSandboxRuntimeMaterialSync(deps, {
@@ -106,4 +113,24 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
       201,
     );
   });
+
+  get(
+    "/session/runtime-material",
+    hostDaemonRuntimeMaterialQuerySchema,
+    async (context, query) => {
+      const daemon = getAuthenticatedDaemon(context);
+      requireAuthorizedActiveSession(deps.db, {
+        hostId: daemon.hostId,
+        sessionId: query.sessionId,
+      });
+
+      return context.json(
+        hostRuntimeMaterialSnapshotSchema.parse(
+          readSandboxRuntimeMaterialSnapshotForVersion(deps, {
+            version: query.version,
+          }),
+        ),
+      );
+    },
+  );
 }

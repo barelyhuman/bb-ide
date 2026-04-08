@@ -8,15 +8,18 @@ import {
   hostDaemonEnvironmentChangeRequestSchema,
   hostDaemonEventBatchRequestSchema,
   hostDaemonEventBatchResponseSchema,
+  hostDaemonRuntimeMaterialQuerySchema,
   hostDaemonSessionOpenRequestSchema,
   hostDaemonSessionOpenResponseSchema,
   hostDaemonToolCallRequestSchema,
   hostDaemonToolCallResponseSchema,
+  hostRuntimeMaterialSnapshotSchema,
   type HostDaemonActiveThread,
   type HostDaemonCommandEnvelope,
   type HostDaemonCommandResultReport,
   type HostDaemonEventEnvelope,
   type HostDaemonEnvironmentChangePayload,
+  type HostRuntimeMaterialSnapshot,
   type HostDaemonSessionOpenRequest,
   type HostDaemonSessionOpenResponse,
   type HostDaemonToolCallResponse,
@@ -78,6 +81,9 @@ export interface ServerClient {
     limit?: number;
     waitMs?: number;
   }): Promise<HostDaemonCommandEnvelope[]>;
+  fetchRuntimeMaterial(args: {
+    version: string;
+  }): Promise<HostRuntimeMaterialSnapshot>;
   reportCommandResult(
     report: Omit<HostDaemonCommandResultReport, "sessionId">,
   ): Promise<void>;
@@ -87,6 +93,17 @@ export interface ServerClient {
 }
 
 const COMMAND_RESULT_RETRIES = 5;
+
+function usesSecureRuntimeMaterialTransport(serverUrl: string): boolean {
+  const parsed = new URL(serverUrl);
+  if (parsed.protocol === "https:") {
+    return true;
+  }
+
+  return parsed.hostname === "127.0.0.1"
+    || parsed.hostname === "localhost"
+    || parsed.hostname === "::1";
+}
 
 export function createServerClient(
   options: CreateServerClientOptions,
@@ -258,6 +275,32 @@ export function createServerClient(
       await Promise.all(reportPromises);
 
       return accepted;
+    },
+
+    async fetchRuntimeMaterial(args): Promise<HostRuntimeMaterialSnapshot> {
+      if (!usesSecureRuntimeMaterialTransport(options.serverUrl)) {
+        throw new AbortError(
+          `Refusing to fetch runtime material over insecure server URL: ${options.serverUrl}`,
+        );
+      }
+
+      const query = hostDaemonRuntimeMaterialQuerySchema.parse({
+        sessionId: requireSessionId(),
+        version: args.version,
+      });
+      const response = await fetchFn(
+        buildInternalUrl("/session/runtime-material", query),
+        {
+          method: "GET",
+          headers: headers(),
+        },
+      );
+
+      if (!response.ok) {
+        throw createResponseError("fetch runtime material", response);
+      }
+
+      return hostRuntimeMaterialSnapshotSchema.parse(await response.json());
     },
 
     async reportCommandResult(

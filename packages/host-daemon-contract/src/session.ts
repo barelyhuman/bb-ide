@@ -14,6 +14,7 @@ import {
   hostDaemonCommandEnvelopeSchema,
   hostDaemonCommandResultReportSchema,
 } from "./commands.js";
+import { hostRuntimeMaterialSnapshotSchema } from "./local-state.js";
 
 const nonNegativeIntegerStringSchema = z.string().regex(/^\d+$/);
 export const HOST_DAEMON_WEBSOCKET_PROTOCOL = "bb-host-daemon.v1";
@@ -79,6 +80,14 @@ export const hostDaemonCommandsQuerySchema = z.object({
 });
 export type HostDaemonCommandsQuery = z.infer<
   typeof hostDaemonCommandsQuerySchema
+>;
+
+export const hostDaemonRuntimeMaterialQuerySchema = z.object({
+  sessionId: z.string().min(1),
+  version: hostRuntimeMaterialSnapshotSchema.shape.version,
+});
+export type HostDaemonRuntimeMaterialQuery = z.infer<
+  typeof hostDaemonRuntimeMaterialQuerySchema
 >;
 
 export const hostDaemonCommandBatchSchema = z.object({
@@ -209,6 +218,14 @@ export type HostDaemonInternalSchema = {
     $get:
       | Endpoint<{ query: HostDaemonCommandsQuery }, HostDaemonCommandBatch, 200>
       | Endpoint<{ query: HostDaemonCommandsQuery }, undefined, 204>;
+  };
+  "/session/runtime-material": {
+    /** Used by the daemon to fetch the current authoritative runtime material snapshot for an expected version. */
+    $get: Endpoint<
+      { query: HostDaemonRuntimeMaterialQuery },
+      z.infer<typeof hostRuntimeMaterialSnapshotSchema>,
+      200
+    >;
   };
   "/session/command-result": {
     /** Used by the daemon to report that a command has completed (success or error). */

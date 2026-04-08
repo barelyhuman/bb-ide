@@ -86,7 +86,7 @@ interface CreateSandboxHostThreadArgs {
 }
 
 async function createThreadInEnvironment(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger">,
+  deps: AppDeps,
   args: CreateThreadInEnvironmentArgs,
 ) {
   const thread = createThreadRecord(
@@ -181,7 +181,7 @@ async function createThreadInEnvironment(
 }
 
 async function reuseEnvironmentByHostPath(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger">,
+  deps: AppDeps,
   args: ReuseEnvironmentByHostPathArgs,
 ): Promise<ReturnType<typeof getThreadSafe> | null> {
   const existing = findEnvironmentByHostPath(deps.db, args.hostId, args.path);
@@ -223,7 +223,7 @@ async function reuseEnvironmentByHostPath(
 }
 
 async function startQueuedThreadIfNeeded(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: AppDeps,
   args: {
     environment: Environment;
     execution: Awaited<ReturnType<typeof buildExecutionOptions>>;

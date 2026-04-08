@@ -190,6 +190,27 @@
       "when": 1775702400000,
       "tag": "0026_sandbox_host_lifecycle",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "6",
+      "when": 1775713200000,
+      "tag": "0027_trim_host_operations_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "6",
+      "when": 1775716800000,
+      "tag": "0028_scrub_runtime_material_payloads",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "6",
+      "when": 1775717400000,
+      "tag": "0029_scrub_runtime_material_commands",
+      "breakpoints": true
     }
   ]
 }

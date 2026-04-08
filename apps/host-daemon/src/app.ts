@@ -218,6 +218,8 @@ export async function createHostDaemonApp(
   });
 
   const router = new CommandRouter({
+    fetchRuntimeMaterial: (version) =>
+      serverClient.fetchRuntimeMaterial({ version }),
     runtimeManager,
     listModels: (providerId) =>
       defaultListModels(providerId, {

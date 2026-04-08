@@ -224,18 +224,20 @@ async function startDaemonProcess(
     },
   ];
 
-  for (const daemonFile of daemonFiles) {
-    await pRetry(
-      async () =>
-        writeSandboxFile(options.sandbox, daemonFile.path, daemonFile.content),
-      {
-        factor: 1,
-        maxTimeout: SANDBOX_DAEMON_FILE_WRITE_RETRY_MS,
-        minTimeout: SANDBOX_DAEMON_FILE_WRITE_RETRY_MS,
-        retries: SANDBOX_DAEMON_FILE_WRITE_RETRIES,
-      },
-    );
-  }
+  await Promise.all(
+    daemonFiles.map((daemonFile) =>
+      pRetry(
+        async () =>
+          writeSandboxFile(options.sandbox, daemonFile.path, daemonFile.content),
+        {
+          factor: 1,
+          maxTimeout: SANDBOX_DAEMON_FILE_WRITE_RETRY_MS,
+          minTimeout: SANDBOX_DAEMON_FILE_WRITE_RETRY_MS,
+          retries: SANDBOX_DAEMON_FILE_WRITE_RETRIES,
+        },
+      ),
+    ),
+  );
 
   await runSandboxCommand(
     options.sandbox,
