@@ -21,6 +21,11 @@ import {
   printContextLabel,
   requireThreadIdWithLabelOrSelf,
 } from "../helpers.js";
+import {
+  type ThreadEnvironmentInfo,
+  fetchEnvironmentInfo,
+  printEnvironmentInfo,
+} from "../environment-helpers.js";
 import { statusText } from "./helpers.js";
 
 interface ThreadShowCommandOptions {
@@ -205,6 +210,10 @@ export function registerShowCommand(
         );
       }
 
+      const environmentInfo = thread.environmentId
+        ? await fetchEnvironmentInfo({ client, environmentId: thread.environmentId })
+        : null;
+
       if (opts.json) {
         const jsonPayload: ThreadShowJsonPayload = { ...statusPayload };
         if (fetchedWorkStatus !== undefined) {
@@ -222,7 +231,7 @@ export function registerShowCommand(
         return;
       }
 
-      printThreadStatus(statusPayload);
+      printThreadStatus(statusPayload, environmentInfo);
 
       if (fetchedWorkStatus !== undefined) {
         if (fetchedWorkStatus.available) {
@@ -359,22 +368,29 @@ export function registerShowCommand(
     }));
 }
 
-function printThreadStatus(payload: ThreadStatusPayload): void {
+function printThreadStatus(
+  payload: ThreadStatusPayload,
+  environmentInfo: ThreadEnvironmentInfo | null,
+): void {
   const { thread } = payload;
-  console.log(`Thread ${thread.id}`);
-  console.log(`Status ${statusText(thread.status)}`);
-  console.log(`Project ${thread.projectId}`);
+  console.log(`Thread: ${thread.id}`);
+  console.log(`  Type: ${thread.type}`);
+  console.log(`  Status: ${statusText(thread.status)}`);
+  if (thread.title) {
+    console.log(`  Title: ${thread.title}`);
+  }
+  console.log(`  Project: ${thread.projectId}`);
   if (thread.parentThreadId) {
-    console.log(`Parent ${thread.parentThreadId}`);
+    console.log(`  Parent: ${thread.parentThreadId}`);
   }
   if (thread.archivedAt !== null) {
-    console.log(`Archived: ${new Date(thread.archivedAt).toLocaleString()}`);
+    console.log(`  Archived: ${new Date(thread.archivedAt).toLocaleString()}`);
   }
-  if (thread.environmentId) {
-    console.log(`Environment ${thread.environmentId}`);
+  if (environmentInfo) {
+    printEnvironmentInfo(environmentInfo);
   }
-  console.log(`Created ${new Date(thread.createdAt).toLocaleString()}`);
-  console.log(`Updated ${new Date(thread.updatedAt).toLocaleString()}`);
+  console.log(`  Created: ${new Date(thread.createdAt).toLocaleString()}`);
+  console.log(`  Updated: ${new Date(thread.updatedAt).toLocaleString()}`);
 }
 
 function resolveTimelineFormat(opts: ThreadLogCommandOptions): TimelineFormat {

@@ -141,33 +141,20 @@ function ExpandableOperationRow({
 
 function OperationDetailLines({
   lines,
+  truncateLines = false,
   maxHeightClassName = EVENT_DETAIL_MAX_HEIGHT_CLASS,
 }: {
   lines: string[];
+  truncateLines?: boolean;
   maxHeightClassName?: string;
 }) {
+  const lineClassName = truncateLines
+    ? "truncate font-mono ui-text-sm text-foreground/80"
+    : "font-mono ui-text-sm text-foreground/80";
   return (
     <ExpandableDetailScrollArea className="mt-0.5 space-y-0.5" maxHeightClassName={maxHeightClassName}>
       {lines.map((line, index) => (
-        <div key={`${line}:${index}`} className="font-mono ui-text-sm text-foreground/80">
-          {line}
-        </div>
-      ))}
-    </ExpandableDetailScrollArea>
-  );
-}
-
-function ProvisioningDetailLines({
-  lines,
-  maxHeightClassName = EVENT_DETAIL_MAX_HEIGHT_CLASS,
-}: {
-  lines: string[];
-  maxHeightClassName?: string;
-}) {
-  return (
-    <ExpandableDetailScrollArea className="mt-0.5 space-y-0.5" maxHeightClassName={maxHeightClassName}>
-      {lines.map((line, index) => (
-        <div key={`${line}:${index}`} className="truncate font-mono ui-text-sm text-foreground/80">
+        <div key={`${line}:${index}`} className={lineClassName}>
           {line}
         </div>
       ))}
@@ -416,7 +403,7 @@ export function OperationRow({
         tone={tone}
       >
         <div className="mt-0.5 space-y-2">
-          <ProvisioningDetailLines lines={lines} />
+          <OperationDetailLines lines={lines} truncateLines />
           {additionalDetailLines.length > 0 ? (
             <OperationDetailLines lines={additionalDetailLines} />
           ) : null}
