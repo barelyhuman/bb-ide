@@ -63,6 +63,7 @@ export function ProjectMainView() {
     reasoningOptions,
     sandboxOptions,
     supportsServiceTier,
+    serviceTierSupportByProvider,
   } = useThreadCreationOptions({ scope: "new-thread", projectId });
 
   const currentProject = useMemo(
@@ -288,6 +289,7 @@ export function ProjectMainView() {
                 value: serviceTier,
                 onChange: setServiceTier,
                 supported: supportsServiceTier,
+                supportByProvider: serviceTierSupportByProvider,
               }}
               reasoning={{
                 value: reasoningLevel,

@@ -23,6 +23,7 @@ export interface PromptExecutionServiceTierConfig {
   value?: ServiceTier;
   onChange: (value: ServiceTier | undefined) => void;
   supported: boolean;
+  supportByProvider?: Record<string, boolean>;
 }
 
 export interface PromptExecutionReasoningConfig {
@@ -89,6 +90,7 @@ export function PromptExecutionControls({
           fastModeEnabled={serviceTier?.value === "fast"}
           onFastModeChange={(enabled) => handleServiceTierChange(enabled ? "fast" : undefined)}
           showFastModeToggle={serviceTier?.supported ?? false}
+          serviceTierSupportByProvider={serviceTier?.supportByProvider}
         />
       ) : null}
       {reasoning.options.length > 0 ? (

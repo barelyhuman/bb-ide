@@ -329,6 +329,14 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
   const supportsServiceTier =
     activeProviderCapabilities?.supportsServiceTier ?? false;
 
+  const serviceTierSupportByProvider = useMemo(
+    () =>
+      Object.fromEntries(
+        providers.map((p) => [p.id, p.capabilities.supportsServiceTier]),
+      ) as Record<string, boolean>,
+    [providers],
+  );
+
   const availableModels = useMemo(
     () =>
       availableModelsQuery.data &&
@@ -531,5 +539,6 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
     reasoningOptions,
     sandboxOptions: SANDBOX_OPTIONS,
     supportsServiceTier,
+    serviceTierSupportByProvider,
   };
 }

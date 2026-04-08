@@ -130,6 +130,7 @@ export function ThreadDetailPromptArea({
     reasoningOptions,
     sandboxOptions,
     supportsServiceTier,
+    serviceTierSupportByProvider,
   } = useThreadCreationOptions({
     scope: "thread",
     resetKey: thread.id,
@@ -458,6 +459,7 @@ export function ThreadDetailPromptArea({
         selectedProviderId,
         serviceTier,
         supportsServiceTier,
+        serviceTierSupportByProvider,
       }}
       mentions={{
         mentionError: promptMentions.isError,

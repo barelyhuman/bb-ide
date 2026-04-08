@@ -28,6 +28,7 @@ interface PromptProviderModelPickerProps {
   fastModeEnabled: boolean
   onFastModeChange: (enabled: boolean) => void
   showFastModeToggle: boolean
+  serviceTierSupportByProvider?: Record<string, boolean>
   className?: string
 }
 
@@ -44,6 +45,7 @@ export function PromptProviderModelPicker({
   fastModeEnabled,
   onFastModeChange,
   showFastModeToggle,
+  serviceTierSupportByProvider,
   className,
 }: PromptProviderModelPickerProps) {
   const [open, setOpen] = useState(false)
@@ -53,6 +55,12 @@ export function PromptProviderModelPicker({
   const [previewProviderId, setPreviewProviderId] = useState<string | null>(null)
 
   const activeProviderId = previewProviderId ?? selectedProviderId
+
+  // When previewing a different provider, resolve fast-mode toggle from that
+  // provider's capabilities instead of the committed provider's.
+  const effectiveShowFastModeToggle = serviceTierSupportByProvider
+    ? (serviceTierSupportByProvider[activeProviderId] ?? false)
+    : showFastModeToggle
 
   const selectedProvider = providerOptions.find(
     (p) => p.value === selectedProviderId,
@@ -213,7 +221,7 @@ export function PromptProviderModelPicker({
         </div>
 
         {/* Fast mode toggle */}
-        {showFastModeToggle ? (
+        {effectiveShowFastModeToggle ? (
           <>
             <div className="border-t border-border" />
             <div className="p-1">

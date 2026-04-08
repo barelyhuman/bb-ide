@@ -207,6 +207,7 @@ export interface ComposerExecutionProps {
   selectedProviderId?: string;
   serviceTier?: ServiceTier;
   supportsServiceTier: boolean;
+  serviceTierSupportByProvider?: Record<string, boolean>;
 }
 
 export interface ComposerMentionsProps {
@@ -420,6 +421,7 @@ export function ThreadFollowUpComposer({
                 value: execution.serviceTier,
                 onChange: execution.onServiceTierChange,
                 supported: execution.supportsServiceTier,
+                supportByProvider: execution.serviceTierSupportByProvider,
               }}
               reasoning={{
                 value: execution.reasoningLevel,
