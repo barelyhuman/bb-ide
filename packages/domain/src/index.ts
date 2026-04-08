@@ -3,11 +3,13 @@ export {
   sandboxModeSchema,
   serviceTierSchema,
   promptInputSchema,
+  projectExecutionDefaultsSchema,
   threadExecutionSourceSchema,
   threadExecutionOptionsSchema,
   resolvedThreadExecutionOptionsSchema,
 } from "./shared-types.js";
 export type {
+  ProjectExecutionDefaults,
   PromptInput,
   ReasoningLevel,
   ResolvedThreadExecutionOptions,

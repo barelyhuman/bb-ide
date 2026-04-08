@@ -115,11 +115,11 @@ describe("automation sweep", () => {
       upsertProjectExecutionDefaults(harness.db, {
         projectId: project.id,
         providerId: "codex",
+        threadType: "standard",
         model: "gpt-5-mini",
         reasoningLevel: "medium",
         sandboxMode: "danger-full-access",
         serviceTier: "default",
-        source: "client/thread/start",
       });
 
       createAutomation(harness.db, harness.hub, {
@@ -152,13 +152,13 @@ describe("automation sweep", () => {
         getProjectExecutionDefaults(harness.db, {
           projectId: project.id,
           providerId: "codex",
+          threadType: "standard",
         }),
       ).toEqual({
         model: "gpt-5-mini",
         reasoningLevel: "medium",
         sandboxMode: "danger-full-access",
         serviceTier: "default",
-        source: "client/thread/start",
       });
     } finally {
       await harness.cleanup();

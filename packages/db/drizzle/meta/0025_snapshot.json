@@ -1412,6 +1412,13 @@
           "notNull": true,
           "autoincrement": false
         },
+        "thread_type": {
+          "name": "thread_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
         "model": {
           "name": "model",
           "type": "text",
@@ -1440,13 +1447,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "source": {
-          "name": "source",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true,
-          "autoincrement": false
-        },
         "updated_at": {
           "name": "updated_at",
           "type": "integer",
@@ -1456,11 +1456,12 @@
         }
       },
       "indexes": {
-        "project_execution_defaults_project_provider_idx": {
-          "name": "project_execution_defaults_project_provider_idx",
+        "project_execution_defaults_project_provider_type_idx": {
+          "name": "project_execution_defaults_project_provider_type_idx",
           "columns": [
             "project_id",
-            "provider_id"
+            "provider_id",
+            "thread_type"
           ],
           "isUnique": true
         },

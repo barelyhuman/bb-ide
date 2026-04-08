@@ -120,6 +120,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
       getProjectExecutionDefaults(deps.db, {
         projectId,
         providerId: query.providerId,
+        threadType: query.threadType,
       }),
     );
   });
@@ -284,13 +285,16 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
 
     const thread = await createThreadFromRequest(deps, {
       automationId: null,
+      origin: payload.origin ?? null,
       projectId,
       providerId: payload.providerId,
       type: "manager",
       title,
       input: [{ type: "text", text: welcomeMessage }],
-      model: payload.model,
-      reasoningLevel: payload.reasoningLevel,
+      ...(payload.model ? { model: payload.model } : {}),
+      ...(payload.serviceTier ? { serviceTier: payload.serviceTier } : {}),
+      ...(payload.reasoningLevel ? { reasoningLevel: payload.reasoningLevel } : {}),
+      ...(payload.sandboxMode ? { sandboxMode: payload.sandboxMode } : {}),
       environment: {
         type: "host",
         hostId,

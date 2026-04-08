@@ -232,6 +232,7 @@ describe("public thread routes", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           model: "gpt-5-mini",
@@ -267,14 +268,62 @@ describe("public thread routes", () => {
         getProjectExecutionDefaults(harness.db, {
           projectId: project.id,
           providerId: "codex",
+          threadType: "standard",
         }),
       ).toEqual({
         model: "gpt-5-mini",
         serviceTier: "fast",
         reasoningLevel: "high",
         sandboxMode: "workspace-write",
-        source: "client/thread/start",
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not remember project defaults after CLI-origin thread creation", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-defaults-cli-origin",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/thread-defaults-cli-origin",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          origin: "cli",
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5-mini",
+          serviceTier: "fast",
+          reasoningLevel: "high",
+          sandboxMode: "workspace-write",
+          input: [{ type: "text", text: "Create without mutating project defaults" }],
+          environment: {
+            type: "reuse",
+            environmentId: environment.id,
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      expect(
+        getProjectExecutionDefaults(harness.db, {
+          projectId: project.id,
+          providerId: "codex",
+          threadType: "standard",
+        }),
+      ).toBeNull();
     } finally {
       await harness.cleanup();
     }
@@ -297,11 +346,11 @@ describe("public thread routes", () => {
       upsertProjectExecutionDefaults(harness.db, {
         projectId: project.id,
         providerId: "codex",
+        threadType: "standard",
         model: "gpt-5",
         serviceTier: "fast",
         reasoningLevel: "high",
         sandboxMode: "workspace-write",
-        source: "client/turn/requested",
       });
 
       const response = await harness.app.request("/api/v1/threads", {
@@ -310,6 +359,7 @@ describe("public thread routes", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           input: [{ type: "text", text: "Create with inherited defaults" }],
@@ -362,6 +412,7 @@ describe("public thread routes", () => {
           "content-type": "application/json",
         },
         body: JSON.stringify({
+          origin: "app",
           projectId: project.id,
           providerId: "codex",
           input: [{ type: "text", text: "Create without defaults" }],
@@ -1709,11 +1760,11 @@ describe("public thread routes", () => {
       upsertProjectExecutionDefaults(harness.db, {
         projectId: project.id,
         providerId: thread.providerId,
+        threadType: "standard",
         model: "gpt-5",
         serviceTier: "default",
         reasoningLevel: "medium",
         sandboxMode: "danger-full-access",
-        source: "client/thread/start",
       });
 
       const response = await harness.app.request(
@@ -1754,13 +1805,13 @@ describe("public thread routes", () => {
         getProjectExecutionDefaults(harness.db, {
           projectId: project.id,
           providerId: thread.providerId,
+          threadType: "standard",
         }),
       ).toEqual({
         model: "gpt-5",
         serviceTier: "default",
         reasoningLevel: "medium",
         sandboxMode: "danger-full-access",
-        source: "client/thread/start",
       });
     } finally {
       await harness.cleanup();

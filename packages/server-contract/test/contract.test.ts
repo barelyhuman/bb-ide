@@ -46,8 +46,13 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
   "updateAutomationRequestSchema.autoArchive": "Automation PATCH requests omit autoArchive when leaving it unchanged.",
   "updateAutomationRequestSchema.name": "Automation PATCH requests omit name when leaving it unchanged.",
   "updateAutomationRequestSchema.trigger": "Automation PATCH requests omit trigger when leaving it unchanged.",
+  "createManagerThreadRequestSchema.model": "Manager creation may omit model and inherit the project/provider manager default.",
   "createManagerThreadRequestSchema.name": "Manager creation may omit a custom name and use the server-generated default.",
+  "createManagerThreadRequestSchema.origin": "Legacy manager creation callers may omit origin when the server should treat the create surface as unknown.",
   "createManagerThreadRequestSchema.reasoningLevel": "Manager creation may omit reasoning level and use the server default.",
+  "createManagerThreadRequestSchema.sandboxMode": "Manager creation may omit sandbox mode and use the server default.",
+  "createManagerThreadRequestSchema.serviceTier": "Manager creation may omit service tier and use the server default.",
+  "createThreadRequestSchema.origin": "Legacy thread creation callers may omit origin when the server should treat the create surface as unknown.",
   "createThreadRequestSchema.model": "Thread creation may omit model and inherit the project/provider default.",
   "createThreadRequestSchema.parentThreadId": "Root thread creation omits a parent thread id.",
   "createThreadRequestSchema.reasoningLevel": "Thread creation may omit reasoning level and use the server default.",
@@ -177,6 +182,7 @@ describe("server-contract canonical schemas", () => {
       createThreadRequestSchema.parse({
         projectId: "proj_123",
         providerId: "codex",
+        origin: "app",
         input: [{ type: "text", text: "Ship it" }],
         environment: {
           type: "host",
@@ -247,6 +253,7 @@ describe("server-contract canonical schemas", () => {
       createManagerThreadRequestSchema.parse({
         model: "claude-opus-4-6",
         providerId: "codex",
+        origin: "app",
         reasoningLevel: "high",
         name: "Manager",
         environment: { type: "host", hostId: "host_123" },
@@ -306,6 +313,7 @@ describe("server-contract canonical schemas", () => {
       createThreadRequestSchema.parse({
         projectId: "proj_123",
         providerId: "codex",
+        origin: "app",
         input: [{ type: "text", text: "Ship it" }],
         environment: {
           type: "host",
@@ -336,14 +344,18 @@ describe("server-contract canonical schemas", () => {
       input: [{ type: "text", text: "Queue this with inherited defaults" }],
     });
 
-    expect(() =>
+    expect(
       createManagerThreadRequestSchema.parse({
         providerId: "claude-code",
+        origin: "cli",
         reasoningLevel: "high",
         name: "Missing model",
         environment: { type: "host", hostId: "host_123" },
       }),
-    ).toThrow();
+    ).toMatchObject({
+      providerId: "claude-code",
+      origin: "cli",
+    });
   });
 });
 

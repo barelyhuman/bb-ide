@@ -98,8 +98,15 @@ async function createThreadInEnvironment(
       deps,
       args.request,
       {
-        projectId: args.request.projectId,
-        providerId: args.request.providerId,
+        ...(args.request.origin
+          ? {
+              projectDefaults: {
+                projectId: args.request.projectId,
+                providerId: args.request.providerId,
+                threadType: args.request.type,
+              },
+            }
+          : {}),
         threadId: thread.id,
       },
       "client/thread/start",
@@ -113,7 +120,7 @@ async function createThreadInEnvironment(
         type: "client/thread/start",
         input: args.request.input,
         execution,
-        initiator: args.request.spawnInitiator ?? "user",
+        initiator: "user",
         requestMethod: "thread/start",
         source: "spawn",
       },
@@ -446,8 +453,15 @@ export async function createThreadFromRequest(
     deps,
     request,
     {
-      projectId: request.projectId,
-      providerId: request.providerId,
+      ...(request.origin
+        ? {
+            projectDefaults: {
+              projectId: request.projectId,
+              providerId: request.providerId,
+              threadType: request.type,
+            },
+          }
+        : {}),
       threadId: thread.id,
     },
     "client/thread/start",
@@ -458,7 +472,7 @@ export async function createThreadFromRequest(
     type: "client/thread/start",
     input: request.input,
     execution,
-    initiator: request.spawnInitiator ?? "user",
+    initiator: "user",
     requestMethod: "thread/start",
     source: "spawn",
   });

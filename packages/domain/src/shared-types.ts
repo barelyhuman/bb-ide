@@ -67,3 +67,13 @@ export const resolvedThreadExecutionOptionsSchema =
 export type ResolvedThreadExecutionOptions = z.infer<
   typeof resolvedThreadExecutionOptionsSchema
 >;
+
+export const projectExecutionDefaultsSchema = z.object({
+  model: z.string().min(1),
+  serviceTier: serviceTierSchema,
+  reasoningLevel: reasoningLevelSchema,
+  sandboxMode: sandboxModeSchema,
+});
+export type ProjectExecutionDefaults = z.infer<
+  typeof projectExecutionDefaultsSchema
+>;

@@ -10,9 +10,9 @@ export interface RememberProjectExecutionDefaultsForCreateArgs {
 
 function shouldRememberProjectExecutionDefaults(args: {
   automationId: string | null;
-  type: "manager" | "standard";
+  origin: ThreadCreateServiceRequest["origin"];
 }): boolean {
-  return args.type === "standard" && args.automationId === null;
+  return args.origin === "app" && args.automationId === null;
 }
 
 export function rememberProjectExecutionDefaultsForCreate(
@@ -26,6 +26,10 @@ export function rememberProjectExecutionDefaultsForCreate(
   upsertProjectExecutionDefaults(deps.db, {
     projectId: args.request.projectId,
     providerId: args.request.providerId,
-    ...args.execution,
+    threadType: args.request.type,
+    model: args.execution.model,
+    reasoningLevel: args.execution.reasoningLevel,
+    sandboxMode: args.execution.sandboxMode,
+    serviceTier: args.execution.serviceTier,
   });
 }

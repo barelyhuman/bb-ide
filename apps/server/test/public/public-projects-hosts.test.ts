@@ -136,7 +136,7 @@ describe("public project and host routes", () => {
       });
 
       const response = await harness.app.request(
-        `/api/v1/projects/${project.id}/default-execution-options?providerId=codex`,
+        `/api/v1/projects/${project.id}/default-execution-options?providerId=codex&threadType=standard`,
       );
 
       expect(response.status).toBe(200);
@@ -158,15 +158,15 @@ describe("public project and host routes", () => {
       upsertProjectExecutionDefaults(harness.db, {
         projectId: project.id,
         providerId: "codex",
+        threadType: "standard",
         model: "gpt-5",
         reasoningLevel: "high",
         sandboxMode: "workspace-write",
         serviceTier: "fast",
-        source: "client/turn/requested",
       });
 
       const response = await harness.app.request(
-        `/api/v1/projects/${project.id}/default-execution-options?providerId=codex`,
+        `/api/v1/projects/${project.id}/default-execution-options?providerId=codex&threadType=standard`,
       );
 
       expect(response.status).toBe(200);
@@ -175,14 +175,57 @@ describe("public project and host routes", () => {
         reasoningLevel: "high",
         sandboxMode: "workspace-write",
         serviceTier: "fast",
-        source: "client/turn/requested",
       });
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("does not overwrite project execution defaults when hiring a manager", async () => {
+  it("returns thread-type-matched stored default execution options for a project", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, { id: "host-project-manager-defaults" });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-manager-defaults",
+      });
+
+      upsertProjectExecutionDefaults(harness.db, {
+        projectId: project.id,
+        providerId: "codex",
+        threadType: "standard",
+        model: "gpt-5",
+        reasoningLevel: "medium",
+        sandboxMode: "danger-full-access",
+        serviceTier: "default",
+      });
+      upsertProjectExecutionDefaults(harness.db, {
+        projectId: project.id,
+        providerId: "codex",
+        threadType: "manager",
+        model: "gpt-5-mini",
+        reasoningLevel: "high",
+        sandboxMode: "workspace-write",
+        serviceTier: "fast",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${project.id}/default-execution-options?providerId=codex&threadType=manager`,
+      );
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        model: "gpt-5-mini",
+        reasoningLevel: "high",
+        sandboxMode: "workspace-write",
+        serviceTier: "fast",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("stores manager defaults separately from standard thread defaults when hiring a manager from the app", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, { id: "host-manager-defaults" });
@@ -194,11 +237,11 @@ describe("public project and host routes", () => {
       upsertProjectExecutionDefaults(harness.db, {
         projectId: project.id,
         providerId: "codex",
+        threadType: "standard",
         model: "gpt-5-mini",
         reasoningLevel: "medium",
         sandboxMode: "danger-full-access",
         serviceTier: "default",
-        source: "client/thread/start",
       });
 
       const response = await harness.app.request(
@@ -209,6 +252,7 @@ describe("public project and host routes", () => {
             "content-type": "application/json",
           },
           body: JSON.stringify({
+            origin: "app",
             providerId: "codex",
             model: "gpt-5",
             reasoningLevel: "high",
@@ -222,13 +266,77 @@ describe("public project and host routes", () => {
         getProjectExecutionDefaults(harness.db, {
           projectId: project.id,
           providerId: "codex",
+          threadType: "standard",
         }),
       ).toEqual({
         model: "gpt-5-mini",
         reasoningLevel: "medium",
         sandboxMode: "danger-full-access",
         serviceTier: "default",
-        source: "client/thread/start",
+      });
+      expect(
+        getProjectExecutionDefaults(harness.db, {
+          projectId: project.id,
+          providerId: "codex",
+          threadType: "manager",
+        }),
+      ).toEqual({
+        model: "gpt-5",
+        reasoningLevel: "high",
+        sandboxMode: "danger-full-access",
+        serviceTier: "default",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("inherits remembered manager defaults for CLI-origin manager creation without overwriting them", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, { id: "host-manager-defaults-cli" });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/manager-defaults-cli",
+      });
+
+      upsertProjectExecutionDefaults(harness.db, {
+        projectId: project.id,
+        providerId: "codex",
+        threadType: "manager",
+        model: "gpt-5",
+        reasoningLevel: "high",
+        sandboxMode: "workspace-write",
+        serviceTier: "fast",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${project.id}/managers`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            origin: "cli",
+            providerId: "codex",
+            environment: { type: "host", hostId: host.id },
+          }),
+        },
+      );
+
+      expect(response.status).toBe(201);
+      expect(
+        getProjectExecutionDefaults(harness.db, {
+          projectId: project.id,
+          providerId: "codex",
+          threadType: "manager",
+        }),
+      ).toEqual({
+        model: "gpt-5",
+        reasoningLevel: "high",
+        sandboxMode: "workspace-write",
+        serviceTier: "fast",
       });
     } finally {
       await harness.cleanup();

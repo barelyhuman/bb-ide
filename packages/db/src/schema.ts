@@ -21,10 +21,9 @@ import type {
   SandboxMode,
   ServiceTier,
   ThreadOperationKind,
+  ThreadType,
   ThreadEventItemType,
   ThreadEventType,
-  ThreadExecutionSource,
-  ThreadType,
   WorkspaceProvisionType,
 } from "@bb/domain";
 
@@ -113,17 +112,18 @@ export const projectExecutionDefaults = sqliteTable(
       .notNull()
       .references(() => projects.id, { onDelete: "cascade" }),
     providerId: text("provider_id").notNull(),
+    threadType: text("thread_type").$type<ThreadType>().notNull(),
     model: text("model").notNull(),
     serviceTier: text("service_tier").$type<ServiceTier>().notNull(),
     reasoningLevel: text("reasoning_level").$type<ReasoningLevel>().notNull(),
     sandboxMode: text("sandbox_mode").$type<SandboxMode>().notNull(),
-    source: text("source").$type<ThreadExecutionSource>().notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
   (table) => [
-    uniqueIndex("project_execution_defaults_project_provider_idx").on(
+    uniqueIndex("project_execution_defaults_project_provider_type_idx").on(
       table.projectId,
       table.providerId,
+      table.threadType,
     ),
     index("project_execution_defaults_project_idx").on(table.projectId),
   ],

@@ -4,6 +4,7 @@ import type {
   AvailableModel,
   Environment,
   Host,
+  ProjectExecutionDefaults,
   ResolvedThreadExecutionOptions,
   Thread,
   ThreadEventRow,
@@ -90,10 +91,10 @@ export type PublicApiSchema = {
     $delete: Endpoint<PathProjectId, { ok: true }>;
   };
   "/projects/:id/default-execution-options": {
-    /** Returns the last used options for the project and provider for use as defaults in clients. */
+    /** Returns the last used options for the project, provider, and thread type for use as defaults in clients. */
     $get: Endpoint<
       PathProjectId & { query: ProjectDefaultExecutionOptionsQuery },
-      ResolvedThreadExecutionOptions | null
+      ProjectExecutionDefaults | null
     >;
   };
   "/projects/:id/sources": {

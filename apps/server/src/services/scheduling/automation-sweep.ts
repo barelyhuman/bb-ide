@@ -135,6 +135,7 @@ async function runAutomation(
     await createThreadFromRequest(deps, {
       ...executionContext.action.threadRequest,
       automationId: automation.id,
+      origin: null,
       projectId: automation.projectId,
       type: "standard",
     });

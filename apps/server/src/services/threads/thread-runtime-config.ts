@@ -13,6 +13,7 @@ import type {
   Thread,
   ThreadExecutionOptions,
   ThreadExecutionSource,
+  ThreadType,
   WorkspaceProvisionType,
 } from "@bb/domain";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
@@ -64,8 +65,11 @@ export interface ThreadRuntimeCommandEnvironment {
 }
 
 export interface ResolveExecutionOptionsArgs {
-  projectId?: string;
-  providerId?: string;
+  projectDefaults?: {
+    projectId: string;
+    providerId: string;
+    threadType: ThreadType;
+  };
   requestedExecution: RequestedExecutionOptions;
   threadId: string;
 }
@@ -141,23 +145,19 @@ export async function resolveExecutionOptions(
   args: ResolveExecutionOptionsArgs,
 ): Promise<ResolvedThreadExecutionOptions> {
   const lastExecution = getLastExecutionOptions(deps, args.threadId);
-  const projectExecution =
-    args.projectId && args.providerId
-      ? getProjectExecutionDefaults(deps.db, {
-          projectId: args.projectId,
-          providerId: args.providerId,
-        })
-      : null;
+  const projectExecution = args.projectDefaults
+    ? getProjectExecutionDefaults(deps.db, args.projectDefaults)
+    : null;
   const model =
     args.requestedExecution.model ??
     lastExecution?.model ??
     projectExecution?.model;
   if (!model) {
-    if (args.projectId && args.providerId) {
+    if (args.projectDefaults) {
       throw new ApiError(
         400,
         "invalid_request",
-        `Model is required when project ${args.projectId} has no stored execution defaults for provider ${args.providerId}`,
+        `Model is required when project ${args.projectDefaults.projectId} has no stored execution defaults for provider ${args.projectDefaults.providerId} and thread type ${args.projectDefaults.threadType}`,
       );
     }
     throw new ApiError(

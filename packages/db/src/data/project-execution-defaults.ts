@@ -1,10 +1,10 @@
 import { and, eq } from "drizzle-orm";
 import type {
+  ProjectExecutionDefaults,
   ReasoningLevel,
-  ResolvedThreadExecutionOptions,
   SandboxMode,
   ServiceTier,
-  ThreadExecutionSource,
+  ThreadType,
 } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import { projectExecutionDefaults } from "../schema.js";
@@ -12,6 +12,7 @@ import { projectExecutionDefaults } from "../schema.js";
 export interface GetProjectExecutionDefaultsArgs {
   projectId: string;
   providerId: string;
+  threadType: ThreadType;
 }
 
 export interface UpsertProjectExecutionDefaultsArgs
@@ -20,27 +21,26 @@ export interface UpsertProjectExecutionDefaultsArgs
   reasoningLevel: ReasoningLevel;
   sandboxMode: SandboxMode;
   serviceTier: ServiceTier;
-  source: ThreadExecutionSource;
   updatedAt?: number;
 }
 
 export function getProjectExecutionDefaults(
   db: DbConnection,
   args: GetProjectExecutionDefaultsArgs,
-): ResolvedThreadExecutionOptions | null {
+): ProjectExecutionDefaults | null {
   const row = db
     .select({
       model: projectExecutionDefaults.model,
       reasoningLevel: projectExecutionDefaults.reasoningLevel,
       sandboxMode: projectExecutionDefaults.sandboxMode,
       serviceTier: projectExecutionDefaults.serviceTier,
-      source: projectExecutionDefaults.source,
     })
     .from(projectExecutionDefaults)
     .where(
       and(
         eq(projectExecutionDefaults.projectId, args.projectId),
         eq(projectExecutionDefaults.providerId, args.providerId),
+        eq(projectExecutionDefaults.threadType, args.threadType),
       ),
     )
     .get();
@@ -51,31 +51,31 @@ export function getProjectExecutionDefaults(
 export function upsertProjectExecutionDefaults(
   db: DbConnection,
   args: UpsertProjectExecutionDefaultsArgs,
-): ResolvedThreadExecutionOptions {
+): ProjectExecutionDefaults {
   const updatedAt = args.updatedAt ?? Date.now();
   const row = db
     .insert(projectExecutionDefaults)
     .values({
       projectId: args.projectId,
       providerId: args.providerId,
+      threadType: args.threadType,
       model: args.model,
       reasoningLevel: args.reasoningLevel,
       sandboxMode: args.sandboxMode,
       serviceTier: args.serviceTier,
-      source: args.source,
       updatedAt,
     })
     .onConflictDoUpdate({
       target: [
         projectExecutionDefaults.projectId,
         projectExecutionDefaults.providerId,
+        projectExecutionDefaults.threadType,
       ],
       set: {
         model: args.model,
         reasoningLevel: args.reasoningLevel,
         sandboxMode: args.sandboxMode,
         serviceTier: args.serviceTier,
-        source: args.source,
         updatedAt,
       },
     })
@@ -84,7 +84,6 @@ export function upsertProjectExecutionDefaults(
       reasoningLevel: projectExecutionDefaults.reasoningLevel,
       sandboxMode: projectExecutionDefaults.sandboxMode,
       serviceTier: projectExecutionDefaults.serviceTier,
-      source: projectExecutionDefaults.source,
     })
     .get();
 

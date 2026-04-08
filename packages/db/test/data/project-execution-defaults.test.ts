@@ -35,6 +35,7 @@ describe("project-execution-defaults", () => {
       getProjectExecutionDefaults(db, {
         projectId: project.id,
         providerId: "codex",
+        threadType: "standard",
       }),
     ).toBeNull();
   });
@@ -45,24 +46,24 @@ describe("project-execution-defaults", () => {
     upsertProjectExecutionDefaults(db, {
       projectId: project.id,
       providerId: "codex",
+      threadType: "standard",
       model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
       serviceTier: "default",
-      source: "client/thread/start",
     });
 
     expect(
       getProjectExecutionDefaults(db, {
         projectId: project.id,
         providerId: "codex",
+        threadType: "standard",
       }),
     ).toEqual({
       model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
       serviceTier: "default",
-      source: "client/thread/start",
     });
   });
 
@@ -72,75 +73,93 @@ describe("project-execution-defaults", () => {
     upsertProjectExecutionDefaults(db, {
       projectId: project.id,
       providerId: "codex",
+      threadType: "standard",
       model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
       serviceTier: "default",
-      source: "client/thread/start",
     });
     upsertProjectExecutionDefaults(db, {
       projectId: project.id,
       providerId: "codex",
+      threadType: "standard",
       model: "gpt-5-mini",
       reasoningLevel: "high",
       sandboxMode: "workspace-write",
       serviceTier: "fast",
-      source: "client/turn/requested",
     });
 
     expect(
       getProjectExecutionDefaults(db, {
         projectId: project.id,
         providerId: "codex",
+        threadType: "standard",
       }),
     ).toEqual({
       model: "gpt-5-mini",
       reasoningLevel: "high",
       sandboxMode: "workspace-write",
       serviceTier: "fast",
-      source: "client/turn/requested",
     });
   });
 
-  it("keeps defaults isolated by provider", () => {
+  it("keeps defaults isolated by provider and thread type", () => {
     const { db, project } = setup();
 
     upsertProjectExecutionDefaults(db, {
       projectId: project.id,
       providerId: "codex",
+      threadType: "standard",
       model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
       serviceTier: "default",
-      source: "client/thread/start",
+    });
+    upsertProjectExecutionDefaults(db, {
+      projectId: project.id,
+      providerId: "codex",
+      threadType: "manager",
+      model: "gpt-5-mini",
+      reasoningLevel: "high",
+      sandboxMode: "workspace-write",
+      serviceTier: "fast",
     });
     upsertProjectExecutionDefaults(db, {
       projectId: project.id,
       providerId: "claude-code",
+      threadType: "standard",
       model: "claude-opus-4-1",
       reasoningLevel: "high",
       sandboxMode: "workspace-write",
       serviceTier: "fast",
-      source: "client/turn/requested",
     });
 
     expect(
       getProjectExecutionDefaults(db, {
         projectId: project.id,
         providerId: "codex",
+        threadType: "standard",
       }),
     ).toMatchObject({
       model: "gpt-5",
-      source: "client/thread/start",
+    });
+    expect(
+      getProjectExecutionDefaults(db, {
+        projectId: project.id,
+        providerId: "codex",
+        threadType: "manager",
+      }),
+    ).toMatchObject({
+      model: "gpt-5-mini",
     });
     expect(
       getProjectExecutionDefaults(db, {
         projectId: project.id,
         providerId: "claude-code",
+        threadType: "standard",
       }),
     ).toMatchObject({
       model: "claude-opus-4-1",
-      source: "client/turn/requested",
     });
   });
 
@@ -150,11 +169,11 @@ describe("project-execution-defaults", () => {
     upsertProjectExecutionDefaults(db, {
       projectId: project.id,
       providerId: "codex",
+      threadType: "standard",
       model: "gpt-5",
       reasoningLevel: "medium",
       sandboxMode: "danger-full-access",
       serviceTier: "default",
-      source: "client/thread/start",
     });
 
     expect(deleteProject(db, noopNotifier, project.id)).toBe(true);
@@ -162,6 +181,7 @@ describe("project-execution-defaults", () => {
       getProjectExecutionDefaults(db, {
         projectId: project.id,
         providerId: "codex",
+        threadType: "standard",
       }),
     ).toBeNull();
   });

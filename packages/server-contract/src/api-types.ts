@@ -8,9 +8,9 @@ import {
   sandboxBackendInfoSchema,
   sandboxModeSchema,
   serviceTierSchema,
+  threadTypeSchema,
   timelineRowSchema,
   threadQueuedMessageSchema,
-  threadTypeSchema,
   viewMessageSchema,
   workspaceStatusSchema,
 } from "@bb/domain";
@@ -75,9 +75,13 @@ export const environmentArgsSchema = z.discriminatedUnion("type", [
 ]);
 export type EnvironmentArgs = z.infer<typeof environmentArgsSchema>;
 
+export const threadCreateOriginSchema = z.enum(["app", "cli"]);
+export type ThreadCreateOrigin = z.infer<typeof threadCreateOriginSchema>;
+
 export const createThreadRequestSchema = z.object({
   projectId: z.string().min(1),
   providerId: z.string().min(1),
+  origin: threadCreateOriginSchema.optional(),
   title: z.string().min(1).optional(),
   input: z.array(promptInputSchema).min(1),
   model: z.string().min(1).optional(),
@@ -319,8 +323,11 @@ export type ManagerEnvironmentArgs = z.infer<typeof managerEnvironmentArgsSchema
 export const createManagerThreadRequestSchema = z.object({
   name: z.string().min(1).optional(),
   providerId: z.string().min(1),
-  model: z.string().min(1),
+  origin: threadCreateOriginSchema.optional(),
+  model: z.string().min(1).optional(),
+  serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
+  sandboxMode: sandboxModeSchema.optional(),
   environment: managerEnvironmentArgsSchema,
 });
 export type CreateManagerThreadRequest = z.infer<
@@ -342,6 +349,7 @@ export type ProjectAttachmentContentQuery = z.infer<
 
 export const projectDefaultExecutionOptionsQuerySchema = z.object({
   providerId: z.string().min(1),
+  threadType: threadTypeSchema,
 });
 export type ProjectDefaultExecutionOptionsQuery = z.infer<
   typeof projectDefaultExecutionOptionsQuerySchema

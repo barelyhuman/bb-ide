@@ -93,6 +93,7 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
       await createThreadFromRequest(deps, {
         ...payload,
         automationId: null,
+        origin: payload.origin ?? null,
         type: "standard",
       }),
       201,

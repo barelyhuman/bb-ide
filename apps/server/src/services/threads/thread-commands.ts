@@ -11,6 +11,7 @@ import type {
   PromptInput,
   ResolvedThreadExecutionOptions,
   Thread,
+  ThreadType,
   WorkspaceProvisionType,
 } from "@bb/domain";
 import type {
@@ -93,15 +94,17 @@ export async function buildExecutionOptions(
   deps: Pick<AppDeps, "db" | "hub">,
   request: ExecutionOptionsRequest,
   args: {
-    projectId?: string;
-    providerId?: string;
+    projectDefaults?: {
+      projectId: string;
+      providerId: string;
+      threadType: ThreadType;
+    };
     threadId: string;
   },
   source: "client/thread/start" | "client/turn/requested" | "client/turn/start",
 ): Promise<ResolvedThreadExecutionOptions> {
   return resolveExecutionOptions(deps, {
-    ...(args.projectId ? { projectId: args.projectId } : {}),
-    ...(args.providerId ? { providerId: args.providerId } : {}),
+    ...(args.projectDefaults ? { projectDefaults: args.projectDefaults } : {}),
     requestedExecution: {
       ...(request.model ? { model: request.model } : {}),
       ...(request.serviceTier ? { serviceTier: request.serviceTier } : {}),

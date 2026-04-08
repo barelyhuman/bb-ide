@@ -1,21 +1,22 @@
-import type { ThreadTurnInitiator } from "@bb/domain";
-import type { CreateThreadRequest } from "@bb/server-contract";
+import type { PromptInput, ThreadType } from "@bb/domain";
+import type {
+  CreateThreadRequest,
+  EnvironmentArgs,
+  ThreadCreateOrigin,
+} from "@bb/server-contract";
 
-export interface BaseThreadCreateServiceRequest extends CreateThreadRequest {
+export interface ThreadCreateServiceRequest {
   automationId: string | null;
-  spawnInitiator?: ThreadTurnInitiator;
+  environment: EnvironmentArgs;
+  input: PromptInput[];
+  model?: CreateThreadRequest["model"];
+  origin: ThreadCreateOrigin | null;
+  parentThreadId?: string;
+  projectId: string;
+  providerId: string;
+  reasoningLevel?: CreateThreadRequest["reasoningLevel"];
+  sandboxMode?: CreateThreadRequest["sandboxMode"];
+  serviceTier?: CreateThreadRequest["serviceTier"];
+  title?: string;
+  type: ThreadType;
 }
-
-export interface PublicThreadCreateServiceRequest
-  extends BaseThreadCreateServiceRequest {
-  type: "standard";
-}
-
-export interface ManagerThreadCreateServiceRequest
-  extends BaseThreadCreateServiceRequest {
-  type: "manager";
-}
-
-export type ThreadCreateServiceRequest =
-  | PublicThreadCreateServiceRequest
-  | ManagerThreadCreateServiceRequest;
