@@ -82,23 +82,32 @@ const CODEX_CLOUD_AUTH_PROVIDER = {
 } satisfies CloudAuthProviderCatalogEntry<"codex">;
 
 const CLOUD_AUTH_PROVIDER_CATALOG = [
-  CLAUDE_CLOUD_AUTH_PROVIDER,
   CODEX_CLOUD_AUTH_PROVIDER,
+  CLAUDE_CLOUD_AUTH_PROVIDER,
 ] as const;
 
-export type CloudAuthProviderId = (typeof CLOUD_AUTH_PROVIDER_CATALOG)[number]["id"];
+const CLOUD_AUTH_PROVIDER_ID_VALUES = [
+  CODEX_CLOUD_AUTH_PROVIDER.id,
+  CLAUDE_CLOUD_AUTH_PROVIDER.id,
+] as const;
 
-function isCloudAuthProviderId(value: string): value is CloudAuthProviderId {
-  return CLOUD_AUTH_PROVIDER_CATALOG.some((provider) => provider.id === value);
+export const cloudAuthProviderIdSchema = z.enum(CLOUD_AUTH_PROVIDER_ID_VALUES);
+export type CloudAuthProviderId = z.infer<typeof cloudAuthProviderIdSchema>;
+
+function assertCloudAuthProviderCatalogConsistency(): void {
+  const catalogIds = CLOUD_AUTH_PROVIDER_CATALOG.map((provider) => provider.id);
+  const schemaIds = [...CLOUD_AUTH_PROVIDER_ID_VALUES];
+  if (
+    catalogIds.length !== schemaIds.length
+    || catalogIds.some((id, index) => id !== schemaIds[index])
+  ) {
+    throw new Error(
+      "Cloud auth provider catalog and provider id schema must stay in sync.",
+    );
+  }
 }
 
-export const cloudAuthProviderIdSchema = z.custom<CloudAuthProviderId>(
-  (value): value is CloudAuthProviderId =>
-    typeof value === "string" && isCloudAuthProviderId(value),
-  {
-    message: "Unsupported cloud auth provider id",
-  },
-);
+assertCloudAuthProviderCatalogConsistency();
 
 const BUILT_IN_AGENT_PROVIDER_CATALOG: BuiltInAgentProviderCatalogEntry[] = [
   {
