@@ -11,8 +11,6 @@ interface DelegationSummaryInput {
   toolName: string;
 }
 
-type ExploringCall = ViewToolExploringMessage["calls"][number];
-
 export interface ExploringCounts {
   filesRead: number;
   searches: number;
@@ -26,16 +24,6 @@ export interface ExploringRenderOptions {
 const DEFAULT_EXPLORING_RENDER_OPTIONS: ExploringRenderOptions = {
   readPathStyle: "full",
 };
-
-function isReadIntent(
-  intent: ViewToolParsedIntent,
-): intent is Extract<ViewToolParsedIntent, { type: "read" }> {
-  return intent.type === "read";
-}
-
-function isReadOnlyCall(call: ExploringCall): boolean {
-  return call.parsedCmd.length > 0 && call.parsedCmd.every((intent) => isReadIntent(intent));
-}
 
 function formatSearchDetail(
   intent: Extract<ViewToolParsedIntent, { type: "search" }>,
@@ -96,6 +84,18 @@ export function formatExploringIntentLine(
   }
 }
 
+function isReadIntent(
+  intent: ViewToolParsedIntent,
+): intent is Extract<ViewToolParsedIntent, { type: "read" }> {
+  return intent.type === "read";
+}
+
+function isReadOnlyCall(
+  call: ViewToolExploringMessage["calls"][number],
+): boolean {
+  return call.parsedCmd.length > 0 && call.parsedCmd.every(isReadIntent);
+}
+
 export function buildExploringDetailLines(
   calls: ViewToolExploringMessage["calls"],
   options: ExploringRenderOptions = DEFAULT_EXPLORING_RENDER_OPTIONS,
@@ -108,7 +108,6 @@ export function buildExploringDetailLines(
     if (!call) break;
 
     if (isReadOnlyCall(call)) {
-      const readLabels: string[] = [];
       const seen = new Set<string>();
       while (index < calls.length && calls[index] && isReadOnlyCall(calls[index])) {
         const current = calls[index];
@@ -118,13 +117,9 @@ export function buildExploringDetailLines(
           const label = getReadDisplayName(intent, options);
           if (seen.has(label)) continue;
           seen.add(label);
-          readLabels.push(label);
+          detailLines.push(`Read ${label}`);
         }
         index += 1;
-      }
-
-      if (readLabels.length > 0) {
-        detailLines.push(`Read ${readLabels.join(", ")}`);
       }
       continue;
     }

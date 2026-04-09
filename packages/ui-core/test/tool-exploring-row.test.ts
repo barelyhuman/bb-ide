@@ -50,7 +50,7 @@ describe("ToolExploringRow helpers", () => {
     ).toBe("List packages/excalidraw/components");
   });
 
-  it("collapses consecutive reads into a single detail line", () => {
+  it("dedupes consecutive reads into separate lines per unique file", () => {
     expect(
       buildExploringDetailLines([
         buildCall("read-1", [
@@ -69,9 +69,18 @@ describe("ToolExploringRow helpers", () => {
             path: "packages/excalidraw/tests/search.test.tsx",
           },
         ]),
+        buildCall("read-3", [
+          {
+            type: "read",
+            cmd: "Read packages/excalidraw/components/SearchMenu.tsx",
+            name: "Read",
+            path: "packages/excalidraw/components/SearchMenu.tsx",
+          },
+        ]),
       ]),
     ).toEqual([
-      "Read packages/excalidraw/components/SearchMenu.tsx, packages/excalidraw/tests/search.test.tsx",
+      "Read packages/excalidraw/components/SearchMenu.tsx",
+      "Read packages/excalidraw/tests/search.test.tsx",
     ]);
   });
 
@@ -101,7 +110,7 @@ describe("ToolExploringRow helpers", () => {
     ]);
   });
 
-  it("does not dedupe reads that share a basename but have different paths", () => {
+  it("does not dedupe reads with different full paths", () => {
     expect(
       buildExploringDetailLines([
         buildCall("read-1", [
@@ -122,7 +131,8 @@ describe("ToolExploringRow helpers", () => {
         ]),
       ]),
     ).toEqual([
-      "Read packages/excalidraw/src/index.ts, packages/excalidraw/tests/index.ts",
+      "Read packages/excalidraw/src/index.ts",
+      "Read packages/excalidraw/tests/index.ts",
     ]);
   });
 
