@@ -3088,6 +3088,212 @@ describe("CLI JSON output contracts", () => {
     ]);
   });
 
+  it("bb thread interactions grant resolves permission requests", async () => {
+    const getInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-permission-grant",
+        providerId: "codex",
+        providerRequestId: "request-permission-grant",
+        providerRequestMethod: "item/permissions/requestApproval",
+        providerThreadId: "provider-thread-permission-grant",
+        threadId: "thread-permission-grant",
+        turnId: "turn-permission-grant",
+        payload: {
+          kind: "permission_request",
+          itemId: "item-permission-grant",
+          reason: "Grant workspace access",
+          permissions: {
+            network: { enabled: true },
+            fileSystem: {
+              read: ["/tmp/project/README.md"],
+              write: ["/tmp/project/notes.md"],
+            },
+          },
+        },
+      }),
+    );
+    const resolveInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-permission-grant",
+        providerId: "codex",
+        providerRequestId: "request-permission-grant",
+        providerRequestMethod: "item/permissions/requestApproval",
+        providerThreadId: "provider-thread-permission-grant",
+        threadId: "thread-permission-grant",
+        turnId: "turn-permission-grant",
+        payload: {
+          kind: "permission_request",
+          itemId: "item-permission-grant",
+          reason: "Grant workspace access",
+          permissions: {
+            network: { enabled: true },
+            fileSystem: {
+              read: ["/tmp/project/README.md"],
+              write: ["/tmp/project/notes.md"],
+            },
+          },
+        },
+        status: "resolved",
+        resolvedAt: Date.now(),
+        resolution: {
+          kind: "permission_request",
+          permissions: {
+            network: { enabled: true },
+            fileSystem: {
+              read: ["/tmp/project/README.md"],
+              write: ["/tmp/project/notes.md"],
+            },
+          },
+          scope: "session",
+        },
+      }),
+    );
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              interactions: {
+                ":interactionId": {
+                  $get: getInteraction,
+                  resolve: {
+                    $post: resolveInteraction,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      [
+        "thread",
+        "interactions",
+        "grant",
+        "int-permission-grant",
+        "thread-permission-grant",
+      ],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(resolveInteraction).toHaveBeenCalledWith({
+      param: {
+        id: "thread-permission-grant",
+        interactionId: "int-permission-grant",
+      },
+      json: {
+        kind: "permission_request",
+        permissions: {
+          network: { enabled: true },
+          fileSystem: {
+            read: ["/tmp/project/README.md"],
+            write: ["/tmp/project/notes.md"],
+          },
+        },
+        scope: "session",
+      },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toEqual([
+      "Interaction int-permission-grant granted for this session",
+    ]);
+  });
+
+  it("bb thread interactions deny resolves permission requests as denied", async () => {
+    const getInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-permission-deny",
+        providerId: "codex",
+        providerRequestId: "request-permission-deny",
+        providerRequestMethod: "item/permissions/requestApproval",
+        providerThreadId: "provider-thread-permission-deny",
+        threadId: "thread-permission-deny",
+        turnId: "turn-permission-deny",
+        payload: {
+          kind: "permission_request",
+          itemId: "item-permission-deny",
+          reason: "Grant network access",
+          permissions: {
+            network: { enabled: true },
+            fileSystem: null,
+          },
+        },
+      }),
+    );
+    const resolveInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-permission-deny",
+        providerId: "codex",
+        providerRequestId: "request-permission-deny",
+        providerRequestMethod: "item/permissions/requestApproval",
+        providerThreadId: "provider-thread-permission-deny",
+        threadId: "thread-permission-deny",
+        turnId: "turn-permission-deny",
+        payload: {
+          kind: "permission_request",
+          itemId: "item-permission-deny",
+          reason: "Grant network access",
+          permissions: {
+            network: { enabled: true },
+            fileSystem: null,
+          },
+        },
+        status: "resolved",
+        resolvedAt: Date.now(),
+        resolution: {
+          kind: "permission_request",
+          permissions: {
+            network: null,
+            fileSystem: null,
+          },
+          scope: "turn",
+        },
+      }),
+    );
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              interactions: {
+                ":interactionId": {
+                  $get: getInteraction,
+                  resolve: {
+                    $post: resolveInteraction,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      ["thread", "interactions", "deny", "int-permission-deny", "thread-permission-deny"],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(resolveInteraction).toHaveBeenCalledWith({
+      param: {
+        id: "thread-permission-deny",
+        interactionId: "int-permission-deny",
+      },
+      json: {
+        kind: "permission_request",
+        permissions: {
+          network: null,
+          fileSystem: null,
+        },
+        scope: "turn",
+      },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toEqual([
+      "Interaction int-permission-deny denied",
+    ]);
+  });
+
   it("bb thread interactions answer resolves user-input requests", async () => {
     const getInteraction = vi.fn(async () =>
       makePendingInteraction({

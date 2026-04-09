@@ -256,6 +256,46 @@ export type PendingInteractionPermissionGrantScope = z.infer<
   typeof pendingInteractionPermissionGrantScopeSchema
 >;
 
+export interface PendingInteractionPermissionResolutionSummaryArgs {
+  permissions: PendingInteractionGrantedPermissionProfile;
+  scope: PendingInteractionPermissionGrantScope;
+}
+
+export function hasPendingInteractionGrantedPermissions(
+  permissions: PendingInteractionGrantedPermissionProfile,
+): boolean {
+  return (
+    permissions.network?.enabled === true ||
+    (permissions.fileSystem !== null &&
+      (permissions.fileSystem.read.length > 0 || permissions.fileSystem.write.length > 0))
+  );
+}
+
+export function formatPendingInteractionPermissionResolutionOutcome(
+  args: PendingInteractionPermissionResolutionSummaryArgs,
+): string {
+  if (!hasPendingInteractionGrantedPermissions(args.permissions)) {
+    return "denied";
+  }
+
+  switch (args.scope) {
+    case "turn":
+      return "granted for this turn";
+    case "session":
+      return "granted for this session";
+  }
+}
+
+export function formatPendingInteractionPermissionResolutionMessage(
+  args: PendingInteractionPermissionResolutionSummaryArgs,
+): string {
+  if (!hasPendingInteractionGrantedPermissions(args.permissions)) {
+    return "Permission request denied";
+  }
+
+  return `Permissions ${formatPendingInteractionPermissionResolutionOutcome(args)}`;
+}
+
 export const pendingInteractionQuestionOptionSchema = z.object({
   label: z.string(),
   description: z.string(),

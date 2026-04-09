@@ -336,6 +336,191 @@ describe("public thread interaction routes", () => {
     }
   });
 
+  it("resolves permission requests and rejects grants outside the requested scope", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-public-thread-permission-resolution",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const permissionRequest = harness.deps.pendingInteractions.registerPendingInteraction({
+        threadId: thread.id,
+        turnId: "turn-permission-resolution",
+        providerId: "codex",
+        providerThreadId: "provider-thread-permission-resolution",
+        providerRequestId: "request-permission-resolution",
+        providerRequestMethod: "item/permissions/requestApproval",
+        payload: {
+          kind: "permission_request",
+          itemId: "item-permission-resolution",
+          reason: "Grant workspace access",
+          permissions: {
+            network: { enabled: true },
+            fileSystem: {
+              read: ["/tmp/project/README.md"],
+              write: ["/tmp/project/notes.md"],
+            },
+          },
+        },
+      });
+      if (permissionRequest.outcome === "rejected") {
+        throw new Error(`Expected permission interaction registration to succeed: ${permissionRequest.reason}`);
+      }
+
+      const grantResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/interactions/${permissionRequest.interaction.id}/resolve`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            kind: "permission_request",
+            permissions: {
+              network: { enabled: true },
+              fileSystem: {
+                read: ["/tmp/project/README.md"],
+                write: [],
+              },
+            },
+            scope: "session",
+          }),
+        },
+      );
+      expect(grantResponse.status).toBe(200);
+      await expect(readJson(grantResponse)).resolves.toMatchObject({
+        id: permissionRequest.interaction.id,
+        status: "resolved",
+        resolution: {
+          kind: "permission_request",
+          permissions: {
+            network: { enabled: true },
+            fileSystem: {
+              read: ["/tmp/project/README.md"],
+              write: [],
+            },
+          },
+          scope: "session",
+        },
+      });
+
+      const deniedPermissionRequest = harness.deps.pendingInteractions.registerPendingInteraction({
+        threadId: thread.id,
+        turnId: "turn-permission-resolution-denied",
+        providerId: "codex",
+        providerThreadId: "provider-thread-permission-resolution",
+        providerRequestId: "request-permission-resolution-denied",
+        providerRequestMethod: "item/permissions/requestApproval",
+        payload: {
+          kind: "permission_request",
+          itemId: "item-permission-resolution-denied",
+          reason: "Grant network access",
+          permissions: {
+            network: { enabled: true },
+            fileSystem: null,
+          },
+        },
+      });
+      if (deniedPermissionRequest.outcome === "rejected") {
+        throw new Error(`Expected permission interaction registration to succeed: ${deniedPermissionRequest.reason}`);
+      }
+
+      const denyResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/interactions/${deniedPermissionRequest.interaction.id}/resolve`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            kind: "permission_request",
+            permissions: {
+              network: null,
+              fileSystem: null,
+            },
+            scope: "turn",
+          }),
+        },
+      );
+      expect(denyResponse.status).toBe(200);
+      await expect(readJson(denyResponse)).resolves.toMatchObject({
+        id: deniedPermissionRequest.interaction.id,
+        status: "resolved",
+        resolution: {
+          kind: "permission_request",
+          permissions: {
+            network: null,
+            fileSystem: null,
+          },
+          scope: "turn",
+        },
+      });
+
+      const invalidPermissionRequest = harness.deps.pendingInteractions.registerPendingInteraction({
+        threadId: thread.id,
+        turnId: "turn-permission-resolution-invalid",
+        providerId: "codex",
+        providerThreadId: "provider-thread-permission-resolution",
+        providerRequestId: "request-permission-resolution-invalid",
+        providerRequestMethod: "item/permissions/requestApproval",
+        payload: {
+          kind: "permission_request",
+          itemId: "item-permission-resolution-invalid",
+          reason: "Grant workspace access",
+          permissions: {
+            network: null,
+            fileSystem: {
+              read: ["/tmp/project/README.md"],
+              write: [],
+            },
+          },
+        },
+      });
+      if (invalidPermissionRequest.outcome === "rejected") {
+        throw new Error(`Expected permission interaction registration to succeed: ${invalidPermissionRequest.reason}`);
+      }
+
+      const invalidGrantResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/interactions/${invalidPermissionRequest.interaction.id}/resolve`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            kind: "permission_request",
+            permissions: {
+              network: { enabled: true },
+              fileSystem: {
+                read: ["/tmp/project/README.md"],
+                write: [],
+              },
+            },
+            scope: "turn",
+          }),
+        },
+      );
+      expect(invalidGrantResponse.status).toBe(400);
+      await expect(readJson(invalidGrantResponse)).resolves.toEqual({
+        code: "invalid_request",
+        message: "Granted network permissions must be a subset of the requested permissions",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("accepts command approval amendment resolutions that were offered by the provider", async () => {
     const harness = await createTestAppHarness();
     try {

@@ -4,6 +4,9 @@ import {
   formatPendingInteractionCommandApprovalResolutionOutcome,
   formatPendingInteractionFileChangeApprovalResolutionMessage,
   formatPendingInteractionFileChangeApprovalResolutionOutcome,
+  formatPendingInteractionPermissionResolutionMessage,
+  formatPendingInteractionPermissionResolutionOutcome,
+  hasPendingInteractionGrantedPermissions,
   pendingInteractionCreateSchema,
   pendingInteractionResolutionSchema,
   pendingInteractionSchema,
@@ -194,5 +197,29 @@ describe("pending interaction schemas", () => {
     expect(formatPendingInteractionFileChangeApprovalResolutionMessage("accept")).toBe(
       "File changes approved",
     );
+    expect(
+      hasPendingInteractionGrantedPermissions({
+        network: { enabled: true },
+        fileSystem: null,
+      }),
+    ).toBe(true);
+    expect(
+      formatPendingInteractionPermissionResolutionOutcome({
+        permissions: {
+          network: null,
+          fileSystem: null,
+        },
+        scope: "turn",
+      }),
+    ).toBe("denied");
+    expect(
+      formatPendingInteractionPermissionResolutionMessage({
+        permissions: {
+          network: { enabled: true },
+          fileSystem: null,
+        },
+        scope: "session",
+      }),
+    ).toBe("Permissions granted for this session");
   });
 });

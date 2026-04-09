@@ -7,8 +7,8 @@ import {
   type StoredTurnRequestEventRow,
 } from "@bb/db";
 import {
+  parseStoredThreadEvent,
   systemErrorEventDataSchema,
-  turnRequestEventDataSchema,
 } from "@bb/domain";
 import type {
   PromptInput,
@@ -50,6 +50,10 @@ export interface AppendSystemErrorEventArgs {
   environmentId?: string | null;
   message: string;
   threadId: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function buildClientTurnEventData(
@@ -128,8 +132,7 @@ export function parseStoredTurnRequestEvent(
     );
   }
 
-  const parsed = turnRequestEventDataSchema.safeParse(eventData);
-  if (!parsed.success) {
+  if (!isRecord(eventData)) {
     throw new ApiError(
       500,
       "internal_error",
@@ -137,7 +140,33 @@ export function parseStoredTurnRequestEvent(
     );
   }
 
-  return parsed.data;
+  const event = parseStoredThreadEvent({
+    data: eventData,
+    threadId: row.threadId,
+    type: row.type,
+  });
+
+  switch (event.type) {
+    case "client/thread/start":
+    case "client/turn/requested":
+    case "client/turn/start":
+      return event.execution
+        ? {
+            direction: event.direction,
+            source: event.source,
+            ...(event.initiator ? { initiator: event.initiator } : {}),
+            ...(event.input ? { input: event.input } : {}),
+            request: event.request,
+            execution: event.execution,
+          }
+        : event;
+    default:
+      throw new ApiError(
+        500,
+        "internal_error",
+        `Stored ${row.type} event #${row.sequence} for thread ${row.threadId} is malformed`,
+      );
+  }
 }
 
 export function appendProvisioningEvent(

@@ -3,8 +3,10 @@ import {
   formatPendingInteractionCommandApprovalDecision,
   formatPendingInteractionCommandApprovalResolutionOutcome,
   formatPendingInteractionFileChangeApprovalResolutionOutcome,
+  formatPendingInteractionPermissionResolutionOutcome,
   isPendingInteractionCommandApprovalPositiveDecision,
   PendingInteraction,
+  pendingInteractionPermissionGrantScopeSchema,
   PendingInteractionResolution,
 } from "@bb/domain";
 import { action } from "../../action.js";
@@ -26,8 +28,27 @@ interface ThreadInteractionAnswerOptions extends ThreadInteractionTargetOptions 
   answer?: string[];
 }
 
+interface ThreadInteractionGrantOptions extends ThreadInteractionTargetOptions {
+  scope?: string;
+}
+
 function collectAnswers(value: string, previous: string[]): string[] {
   return [...previous, value];
+}
+
+function parsePermissionGrantScope(
+  value: string | undefined,
+): "session" | "turn" {
+  if (value === undefined) {
+    return "session";
+  }
+
+  const parsed = pendingInteractionPermissionGrantScopeSchema.safeParse(value);
+  if (parsed.success) {
+    return parsed.data;
+  }
+
+  throw new Error("Invalid --scope. Expected 'turn' or 'session'.");
 }
 
 function formatInteractionKind(kind: PendingInteraction["payload"]["kind"]): string {
@@ -150,7 +171,7 @@ async function fetchInteraction(args: {
   );
 }
 
-function buildApprovalResolution(
+function buildBinaryResolution(
   interaction: PendingInteraction,
   action: "approve" | "deny",
 ): PendingInteractionResolution {
@@ -204,6 +225,19 @@ function buildApprovalResolution(
         decision: action === "approve" ? "accept_for_session" : "decline",
       };
     case "permission_request":
+      if (action === "approve") {
+        throw new Error(
+          `Interaction ${interaction.id} is permission and must be resolved with the grant command.`,
+        );
+      }
+      return {
+        kind: "permission_request",
+        permissions: {
+          network: null,
+          fileSystem: null,
+        },
+        scope: "turn",
+      };
     case "user_input_request":
       throw new Error(
         `Interaction ${interaction.id} is ${formatInteractionKind(interaction.payload.kind)} and cannot be resolved with approve/deny.`,
@@ -211,7 +245,24 @@ function buildApprovalResolution(
   }
 }
 
-function formatApprovalDecisionMessage(
+function buildPermissionGrantResolution(
+  interaction: PendingInteraction,
+  scope: "session" | "turn",
+): PendingInteractionResolution {
+  if (interaction.payload.kind !== "permission_request") {
+    throw new Error(
+      `Interaction ${interaction.id} is ${formatInteractionKind(interaction.payload.kind)} and cannot be granted with this command.`,
+    );
+  }
+
+  return {
+    kind: "permission_request",
+    permissions: interaction.payload.permissions,
+    scope,
+  };
+}
+
+function formatBinaryResolutionMessage(
   resolution: PendingInteractionResolution,
 ): string {
   switch (resolution.kind) {
@@ -224,6 +275,10 @@ function formatApprovalDecisionMessage(
         resolution.decision,
       );
     case "permission_request":
+      return formatPendingInteractionPermissionResolutionOutcome({
+        permissions: resolution.permissions,
+        scope: resolution.scope,
+      });
     case "user_input_request":
       throw new Error(
         `Resolution ${resolution.kind} does not support approval messaging.`,
@@ -398,7 +453,7 @@ export function registerInteractionCommands(
             id: resolved.id,
             interactionId,
           },
-          json: buildApprovalResolution(interaction, "approve"),
+          json: buildBinaryResolution(interaction, "approve"),
         }),
       ).catch((error: unknown) => {
         throw prependErrorContext(`Failed to approve interaction ${interactionId}`, error);
@@ -408,13 +463,61 @@ export function registerInteractionCommands(
         return;
       }
       console.log(
-        `Interaction ${interactionId} ${formatApprovalDecisionMessage(updated.resolution ?? buildApprovalResolution(interaction, "approve"))}`,
+        `Interaction ${interactionId} ${formatBinaryResolutionMessage(updated.resolution ?? buildBinaryResolution(interaction, "approve"))}`,
+      );
+    }));
+
+  interactions
+    .command("grant <interactionId> [id]")
+    .description("Grant a permission interaction")
+    .option("--self", "Target the current thread (from BB_THREAD_ID)")
+    .option("--json", "Print machine-readable JSON output")
+    .option("--scope <scope>", "Grant scope: turn or session")
+    .action(action(async (
+      interactionId: string,
+      id: string | undefined,
+      opts: ThreadInteractionGrantOptions,
+    ) => {
+      const resolved = requireThreadIdWithLabelOrSelf(id, opts);
+      printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
+      const interaction = await fetchInteraction({
+        getUrl,
+        interactionId,
+        threadId: resolved.id,
+      });
+
+      const client = createClient(getUrl());
+      const updated = await unwrap<PendingInteraction>(
+        client.api.v1.threads[":id"].interactions[":interactionId"].resolve.$post({
+          param: {
+            id: resolved.id,
+            interactionId,
+          },
+          json: buildPermissionGrantResolution(
+            interaction,
+            parsePermissionGrantScope(opts.scope),
+          ),
+        }),
+      ).catch((error: unknown) => {
+        throw prependErrorContext(`Failed to grant interaction ${interactionId}`, error);
+      });
+
+      if (outputJson(opts, updated)) {
+        return;
+      }
+      const resolution = updated.resolution
+        ?? buildPermissionGrantResolution(
+          interaction,
+          parsePermissionGrantScope(opts.scope),
+        );
+      console.log(
+        `Interaction ${interactionId} ${formatBinaryResolutionMessage(resolution)}`,
       );
     }));
 
   interactions
     .command("deny <interactionId> [id]")
-    .description("Deny a command or file-change interaction")
+    .description("Deny a command, file-change, or permission interaction")
     .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
     .action(action(async (
@@ -437,7 +540,7 @@ export function registerInteractionCommands(
             id: resolved.id,
             interactionId,
           },
-          json: buildApprovalResolution(interaction, "deny"),
+          json: buildBinaryResolution(interaction, "deny"),
         }),
       ).catch((error: unknown) => {
         throw prependErrorContext(`Failed to deny interaction ${interactionId}`, error);
@@ -447,7 +550,7 @@ export function registerInteractionCommands(
         return;
       }
       console.log(
-        `Interaction ${interactionId} ${formatApprovalDecisionMessage(updated.resolution ?? buildApprovalResolution(interaction, "deny"))}`,
+        `Interaction ${interactionId} ${formatBinaryResolutionMessage(updated.resolution ?? buildBinaryResolution(interaction, "deny"))}`,
       );
     }));
 

@@ -4,6 +4,7 @@ import {
   threadEventTypeSchema,
 } from "./provider-event.js";
 import type { ThreadEvent, ThreadEventType } from "./provider-event.js";
+import { questionPolicySchema } from "./shared-types.js";
 
 type ThreadEventByType = {
   [TType in ThreadEventType]: Extract<ThreadEvent, { type: TType }>;
@@ -71,6 +72,47 @@ const threadEventRowInputSchema = z.object({
   createdAt: z.number(),
 });
 
+const storedTurnRequestTypeSet = new Set<ThreadEventType>([
+  "client/thread/start",
+  "client/turn/requested",
+  "client/turn/start",
+]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeStoredThreadEventArgs(
+  args: StoredThreadEventParseArgs,
+): StoredThreadEventParseArgs {
+  if (!storedTurnRequestTypeSet.has(args.type)) {
+    return args;
+  }
+
+  const execution = args.data.execution;
+  if (!isRecord(execution)) {
+    return args;
+  }
+
+  const parsedQuestionPolicy = questionPolicySchema.safeParse(
+    execution.questionPolicy,
+  );
+  if (parsedQuestionPolicy.success) {
+    return args;
+  }
+
+  return {
+    ...args,
+    data: {
+      ...args.data,
+      execution: {
+        ...execution,
+        questionPolicy: "allow",
+      },
+    },
+  };
+}
+
 function toStoredThreadEventData<TEvent extends ThreadEvent>(
   event: TEvent,
 ): StoredThreadEventDataFromEvent<TEvent> {
@@ -81,12 +123,15 @@ function toStoredThreadEventData<TEvent extends ThreadEvent>(
 export function parseStoredThreadEvent(
   args: StoredThreadEventParseArgs,
 ): ThreadEvent {
+  const normalizedArgs = normalizeStoredThreadEventArgs(args);
   return threadEventSchema.parse({
-    ...args.data,
-    ...(args.providerThreadId != null ? { providerThreadId: args.providerThreadId } : {}),
-    ...(args.turnId != null ? { turnId: args.turnId } : {}),
-    threadId: args.threadId,
-    type: args.type,
+    ...normalizedArgs.data,
+    ...(normalizedArgs.providerThreadId != null
+      ? { providerThreadId: normalizedArgs.providerThreadId }
+      : {}),
+    ...(normalizedArgs.turnId != null ? { turnId: normalizedArgs.turnId } : {}),
+    threadId: normalizedArgs.threadId,
+    type: normalizedArgs.type,
   });
 }
 

@@ -18,6 +18,7 @@ import {
   formatPendingInteractionCommandApprovalDecision,
   formatPendingInteractionCommandApprovalResolutionMessage,
   formatPendingInteractionFileChangeApprovalResolutionMessage,
+  formatPendingInteractionPermissionResolutionMessage,
   pendingInteractionPayloadSchema,
   pendingInteractionResolutionSchema,
   pendingInteractionSchema,
@@ -274,7 +275,10 @@ function formatPendingInteractionLifecycleMessage(
             interaction.resolution.decision,
           );
         case "permission_request":
-          return `Permissions granted for ${interaction.resolution.scope}`;
+          return formatPendingInteractionPermissionResolutionMessage({
+            permissions: interaction.resolution.permissions,
+            scope: interaction.resolution.scope,
+          });
         case "user_input_request":
           return `Answered ${Object.keys(interaction.resolution.answers).length} question(s)`;
       }
@@ -407,6 +411,56 @@ function validateUserInputResolution(
   }
 }
 
+function validatePermissionRequestResolution(
+  interaction: PendingInteraction,
+  resolution: PendingInteractionResolution,
+): void {
+  if (
+    interaction.payload.kind !== "permission_request"
+    || resolution.kind !== "permission_request"
+  ) {
+    return;
+  }
+
+  if (resolution.permissions.network !== null) {
+    if (
+      interaction.payload.permissions.network?.enabled !== true
+      || resolution.permissions.network.enabled !== true
+    ) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        "Granted network permissions must be a subset of the requested permissions",
+      );
+    }
+  }
+
+  if (resolution.permissions.fileSystem !== null) {
+    const requestedFileSystem = interaction.payload.permissions.fileSystem;
+    if (requestedFileSystem === null) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        "Granted file-system permissions must be a subset of the requested permissions",
+      );
+    }
+
+    const unknownReadPaths = resolution.permissions.fileSystem.read.filter(
+      (path) => !requestedFileSystem.read.includes(path),
+    );
+    const unknownWritePaths = resolution.permissions.fileSystem.write.filter(
+      (path) => !requestedFileSystem.write.includes(path),
+    );
+    if (unknownReadPaths.length > 0 || unknownWritePaths.length > 0) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        "Granted file-system permissions must be a subset of the requested permissions",
+      );
+    }
+  }
+}
+
 function validatePendingInteractionResolution(
   interaction: PendingInteraction,
   resolution: PendingInteractionResolution,
@@ -420,6 +474,7 @@ function validatePendingInteractionResolution(
   }
 
   validateCommandApprovalResolution(interaction, resolution);
+  validatePermissionRequestResolution(interaction, resolution);
   validateUserInputResolution(interaction, resolution);
 }
 
@@ -482,12 +537,6 @@ export class PendingInteractionLifecycle {
       return {
         outcome: "rejected",
         reason: "Pending interactions are only supported on root threads",
-      };
-    }
-    if (interaction.payload.kind === "permission_request") {
-      return {
-        outcome: "rejected",
-        reason: "Permission requests are not supported yet",
       };
     }
 
