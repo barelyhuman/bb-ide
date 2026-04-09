@@ -1,6 +1,6 @@
 import { type ReactNode, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { MoreHorizontal } from "lucide-react";
+import { Check, ChevronDown, MoreHorizontal } from "lucide-react";
 import { timeAgo } from "@bb/core-ui";
 import { Button } from "@/components/ui/button";
 import {
@@ -96,20 +96,29 @@ export function AppSettingsView() {
             label="Theme"
             description="Choose your interface theme."
           >
-            <select
-              aria-label="Theme"
-              value={theme}
-              onChange={(event) => {
-                const value = event.target.value;
-                if (value === "light" || value === "dark") {
-                  setPreferredTheme(value);
-                }
-              }}
-              className="w-full rounded-md border border-input bg-background px-2.5 py-1.5 text-sm outline-none ring-ring focus-visible:ring-2 sm:w-48"
-            >
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-between sm:w-48"
+                  aria-label="Theme"
+                >
+                  {theme === "dark" ? "Dark" : "Light"}
+                  <ChevronDown className="size-3.5 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onSelect={() => setPreferredTheme("light")}>
+                  Light
+                  <Check className={theme === "light" ? "ml-auto size-4" : "ml-auto size-4 opacity-0"} />
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setPreferredTheme("dark")}>
+                  Dark
+                  <Check className={theme === "dark" ? "ml-auto size-4" : "ml-auto size-4 opacity-0"} />
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </SettingsWithControl>
         </SettingsSection>
 

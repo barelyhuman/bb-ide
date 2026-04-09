@@ -5,6 +5,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { useAvailableModels } from "@/hooks/queries/system-queries"
+import { useIsMobile } from "@/hooks/useMobile"
 import {
   PROMPT_OPTION_BASE_CLASS_NAME,
   PROMPT_OPTION_INTERACTIVE_CLASS_NAME,
@@ -48,6 +49,7 @@ export function PromptProviderModelPicker({
   serviceTierSupportByProvider,
   className,
 }: PromptProviderModelPickerProps) {
+  const isMobile = useIsMobile()
   const [open, setOpen] = useState(false)
   // While the popover is open, the user can browse other providers without
   // committing. previewProviderId tracks which provider tab is active.
@@ -150,7 +152,10 @@ export function PromptProviderModelPicker({
       >
         {/* Provider icon tabs */}
         {showProviderTabs ? (
-          <div className="flex items-center gap-0.5 border-b border-border bg-muted/40 px-1.5 pt-1">
+          <div className={cn(
+            "flex items-center gap-0.5 border-b border-border px-2.5 pt-1",
+            isMobile ? "sticky top-0 z-10 bg-background" : "bg-muted/40",
+          )}>
             {providerOptions.map((provider) => {
               const Icon = provider.icon
               const isActive = provider.value === activeProviderId
@@ -187,9 +192,15 @@ export function PromptProviderModelPicker({
         ) : null}
 
         {/* Model list */}
-        <div className="max-h-[min(300px,var(--radix-popover-content-available-height,300px)-80px)] overflow-y-auto p-1">
+        <div className={cn(
+          "overflow-y-auto p-1",
+          !isMobile && "max-h-[min(300px,var(--radix-popover-content-available-height,300px)-80px)]",
+        )}>
           {isPreviewing && previewModelsQuery.isLoading ? (
-            <div className="px-2 py-[0.3125rem] text-xs text-muted-foreground">
+            <div className={cn(
+              "px-2 text-xs text-muted-foreground",
+              isMobile ? "py-2" : "py-[0.3125rem]",
+            )}>
               Loading models...
             </div>
           ) : previewModelOptions.length > 0 ? (
@@ -198,7 +209,10 @@ export function PromptProviderModelPicker({
                 key={option.value}
                 type="button"
                 onClick={() => handleModelSelect(option.value)}
-                className="relative flex w-full cursor-default select-none items-center justify-between gap-3 rounded-sm px-2 py-[0.3125rem] text-xs outline-none transition-colors hover:bg-accent hover:text-accent-foreground"
+                className={cn(
+                  "relative flex w-full cursor-default select-none items-center justify-between gap-3 rounded-sm px-2 text-xs outline-none transition-colors hover:bg-accent hover:text-accent-foreground",
+                  isMobile ? "py-2" : "py-[0.3125rem]",
+                )}
               >
                 <span className="truncate" title={option.label}>
                   {option.label}
@@ -214,7 +228,10 @@ export function PromptProviderModelPicker({
               </button>
             ))
           ) : (
-            <div className="px-2 py-[0.3125rem] text-xs text-muted-foreground">
+            <div className={cn(
+              "px-2 text-xs text-muted-foreground",
+              isMobile ? "py-2" : "py-[0.3125rem]",
+            )}>
               No models available
             </div>
           )}
