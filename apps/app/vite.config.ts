@@ -2,10 +2,10 @@ import path from "path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { DEFAULTS } from "../../packages/config/src/defaults.js";
 import { serverConfig } from "../../packages/config/src/server.js";
 
-const appPort = Number.parseInt(process.env.BB_APP_PORT ?? String(DEFAULTS.appPort.dev), 10);
+const DEFAULT_APP_PORT = 5173;
+const appPort = Number.parseInt(process.env.BB_APP_PORT ?? String(DEFAULT_APP_PORT), 10);
 const serverPort = serverConfig.BB_SERVER_PORT;
 const serverHttpOrigin = `http://localhost:${serverPort}`;
 const serverWsOrigin = `ws://localhost:${serverPort}`;
