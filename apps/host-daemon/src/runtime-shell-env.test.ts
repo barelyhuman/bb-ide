@@ -25,6 +25,27 @@ interface FakeCliPackage {
   cliEntryPath: string;
 }
 
+async function withPlatform<T>(
+  platform: NodeJS.Platform,
+  action: () => Promise<T>,
+): Promise<T> {
+  const originalDescriptor = Object.getOwnPropertyDescriptor(process, "platform");
+  if (!originalDescriptor) {
+    throw new Error("Expected process.platform descriptor");
+  }
+
+  Object.defineProperty(process, "platform", {
+    configurable: true,
+    value: platform,
+  });
+
+  try {
+    return await action();
+  } finally {
+    Object.defineProperty(process, "platform", originalDescriptor);
+  }
+}
+
 async function createFakeCliPackage(
   options: FakeCliPackageOptions = {},
 ): Promise<FakeCliPackage> {
@@ -95,6 +116,17 @@ describe("resolveLocalBbExecutableDirectory", () => {
     ).rejects.toThrow(
       `Resolved bb CLI entry is not executable: ${cliEntryPath}. Build @bb/cli before starting the host daemon.`,
     );
+  });
+
+  it("skips the execute-bit check on win32", async () => {
+    const { cliEntryPath } = await createFakeCliPackage({
+      executable: false,
+    });
+
+    await expect(withPlatform("win32", () =>
+      resolveLocalBbExecutableDirectory({
+        cliExecutablePath: cliEntryPath,
+      }))).resolves.toBe(path.dirname(cliEntryPath));
   });
 });
 
