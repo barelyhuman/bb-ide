@@ -1,4 +1,5 @@
 import type { HostRuntimeMaterialSnapshot } from "@bb/host-daemon-contract";
+import { listCloudAuthProviders } from "@bb/agent-providers";
 import {
   buildCloudAuthRuntimeMaterial,
   type CloudAuthResolvedCredential,
@@ -45,10 +46,11 @@ export async function buildSandboxRuntimeMaterialSnapshot(
   const baseEnv = buildManagedRuntimeEnv(deps.config);
   const customEnv = await deps.sandboxEnv.resolveRuntimeEnv();
   const credentials = (
-    await Promise.all([
-      deps.cloudAuth.getValidCredential({ providerId: "claude-code" }),
-      deps.cloudAuth.getValidCredential({ providerId: "codex" }),
-    ])
+    await Promise.all(
+      listCloudAuthProviders().map((provider) =>
+        deps.cloudAuth.getValidCredential({ providerId: provider.id })
+      ),
+    )
   ).filter(isResolvedCloudAuthCredential);
   const cloudAuthRuntimeMaterial = buildCloudAuthRuntimeMaterial({
     credentials,

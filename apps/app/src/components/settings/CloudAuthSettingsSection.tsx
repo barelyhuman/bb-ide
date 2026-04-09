@@ -1,7 +1,7 @@
 import { timeAgo } from "@bb/core-ui";
+import type { CloudAuthProviderId } from "@bb/agent-providers";
 import type {
   CloudAuthConnection,
-  CloudAuthProviderId,
 } from "@bb/server-contract";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

@@ -1,6 +1,6 @@
+import { cloudAuthProviderIdSchema } from "@bb/agent-providers";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import {
-  cloudAuthProviderIdSchema,
   githubReposQuerySchema,
   sandboxEnvVarNameSchema,
   upsertSandboxEnvVarRequestSchema,

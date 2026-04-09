@@ -5,6 +5,7 @@ import {
 } from "@bb/agent-provider-auth";
 import {
   getSandboxProviderCredentialByProviderId,
+  deleteSandboxProviderCredentialByProviderId,
   upsertSandboxProviderCredential,
 } from "@bb/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -214,6 +215,108 @@ describe("cloud auth service refresh behavior", () => {
           status: "invalid",
         }),
       );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("sanitizes decrypt failures without leaking plaintext into connection errors", async () => {
+    const harness = await createTestAppHarness();
+
+    try {
+      const crypto = await createCloudAuthCrypto({
+        dataDir: harness.config.dataDir,
+      });
+      const leakedValue = "codex-refresh-token-should-not-leak";
+      upsertSandboxProviderCredential(harness.db, {
+        encryptedAccessToken: crypto.encryptJson({
+          plaintext: JSON.stringify(createCodexAccessToken("acct_decrypt_failure")),
+        }),
+        encryptedRefreshToken: crypto.encryptJson({
+          plaintext: JSON.stringify(leakedValue),
+        }),
+        encryptedIdToken: null,
+        encryptedMetadata: crypto.encryptJson({
+          plaintext: JSON.stringify({
+            accountId: 123,
+            leakedValue,
+          }),
+        }),
+        expiresAt: Date.now() + 15 * 60_000,
+        label: "codex@example.test",
+        lastErrorMessage: null,
+        lastRefreshedAt: null,
+        providerId: "codex",
+        updatedAt: Date.now(),
+      });
+
+      await expect(
+        harness.deps.cloudAuth.getValidCredential({
+          providerId: "codex",
+        }),
+      ).resolves.toBeNull();
+
+      const record = getSandboxProviderCredentialByProviderId(harness.db, "codex");
+      expect(record?.lastErrorMessage).toBe("Failed to decrypt stored credential");
+      expect(record?.lastErrorMessage).not.toContain(leakedValue);
+
+      const connections = await harness.deps.cloudAuth.listConnections();
+      expect(connections).toContainEqual(
+        expect.objectContaining({
+          errorMessage: "Failed to decrypt stored credential",
+          providerId: "codex",
+          status: "invalid",
+        }),
+      );
+      expect(JSON.stringify(connections)).not.toContain(leakedValue);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns null when a credential is deleted during refresh", async () => {
+    const harness = await createTestAppHarness();
+
+    try {
+      await seedCodexCredential({
+        accessToken: createCodexAccessToken("acct_refresh_delete"),
+        accountId: "acct_refresh_delete",
+        expiresAt: Date.now() - 1_000,
+        harness,
+        idToken: createCodexIdToken("deleted@example.test"),
+        lastErrorMessage: null,
+        lastRefreshedAt: Date.now() - 60_000,
+        refreshToken: "refresh-token-delete",
+      });
+
+      vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input) => {
+        const url = typeof input === "string" ? input : input.toString();
+        if (url !== "https://auth.openai.com/oauth/token") {
+          throw new Error(`Unexpected fetch URL: ${url}`);
+        }
+        deleteSandboxProviderCredentialByProviderId(harness.db, "codex");
+        return new Response(
+          JSON.stringify({
+            access_token: createCodexAccessToken("acct_refresh_after_delete"),
+            expires_in: 3600,
+            id_token: createCodexIdToken("after-delete@example.test"),
+            refresh_token: "refresh-token-after-delete",
+          }),
+          {
+            headers: {
+              "content-type": "application/json",
+            },
+            status: 200,
+          },
+        );
+      }));
+
+      await expect(
+        harness.deps.cloudAuth.getValidCredential({
+          providerId: "codex",
+        }),
+      ).resolves.toBeNull();
+      expect(getSandboxProviderCredentialByProviderId(harness.db, "codex")).toBeNull();
     } finally {
       await harness.cleanup();
     }

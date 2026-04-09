@@ -3,9 +3,7 @@ import { useAtomValue } from "jotai";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown, MoreHorizontal } from "lucide-react";
 import { timeAgo } from "@bb/core-ui";
-import type {
-  CloudAuthProviderId,
-} from "@bb/server-contract";
+import type { CloudAuthProviderId } from "@bb/agent-providers";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,

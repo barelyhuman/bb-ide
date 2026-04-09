@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import {
   getCloudAuthProvider,
+  listCloudAuthProviders,
   type CloudAuthProviderId,
 } from "@bb/agent-providers";
 
@@ -544,7 +545,9 @@ export function getCloudAuthProviderDefinition<TProviderId extends CloudAuthProv
 }
 
 export function listCloudAuthProviderDefinitions() {
-  return Object.values(cloudAuthProviderDefinitions);
+  return listCloudAuthProviders().map((provider) =>
+    cloudAuthProviderDefinitions[provider.id]
+  );
 }
 
 export function getCloudAuthConnectionLabel(

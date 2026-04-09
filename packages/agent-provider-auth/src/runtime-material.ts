@@ -1,3 +1,7 @@
+import {
+  getCloudAuthProvider,
+  type CloudAuthRuntimeConsumer,
+} from "@bb/agent-providers";
 import type { HostRuntimeMaterialManagedFile } from "@bb/host-daemon-contract";
 import type {
   ClaudeStoredCredential,
@@ -55,6 +59,19 @@ type PiAuthFile = Record<string, PiOAuthCredential>;
 
 type ClaudeResolvedCredential = CloudAuthResolvedCredential<ClaudeStoredCredential>;
 type CodexResolvedCredential = CloudAuthResolvedCredential<CodexStoredCredential>;
+
+interface RuntimeMaterialAccumulator {
+  env: Record<string, string>;
+  files: HostRuntimeMaterialManagedFile[];
+  piAuthFile: PiAuthFile;
+}
+
+interface RuntimeConsumerDispatchArgs {
+  accumulator: RuntimeMaterialAccumulator;
+  authConsumerId: CloudAuthRuntimeConsumer["authConsumerId"];
+  credential: CloudAuthResolvedCredential;
+  runtimeProviderId: CloudAuthRuntimeConsumer["runtimeProviderId"];
+}
 
 function stringifyJsonFile(value: object): string {
   return `${JSON.stringify(value, null, 2)}\n`;
@@ -131,70 +148,122 @@ function buildCodexAuthFile(
 }
 
 function buildPiAuthFile(args: {
-  claudeCredential: ClaudeResolvedCredential | null;
-  codexCredential: CodexResolvedCredential | null;
+  contents: PiAuthFile;
 }): HostRuntimeMaterialManagedFile | null {
-  const contents: PiAuthFile = {};
-
-  if (args.claudeCredential) {
-    contents.anthropic = {
-      access: args.claudeCredential.credential.accessToken,
-      expires: args.claudeCredential.credential.expiresAt,
-      refresh: "",
-      type: "oauth",
-    };
-  }
-
-  if (args.codexCredential) {
-    contents["openai-codex"] = {
-      access: args.codexCredential.credential.accessToken,
-      ...(args.codexCredential.credential.accountId
-        ? { accountId: args.codexCredential.credential.accountId }
-        : {}),
-      expires: args.codexCredential.credential.expiresAt,
-      refresh: "",
-      type: "oauth",
-    };
-  }
-
-  if (Object.keys(contents).length === 0) {
+  if (Object.keys(args.contents).length === 0) {
     return null;
   }
 
   return buildManagedFile({
-    contents: stringifyJsonFile(contents),
+    contents: stringifyJsonFile(args.contents),
     path: PI_AUTH_PATH,
   });
+}
+
+function appendClaudePiCredential(
+  accumulator: RuntimeMaterialAccumulator,
+  credential: ClaudeResolvedCredential,
+): void {
+  accumulator.env.PI_CODING_AGENT_DIR = PI_AGENT_DIR;
+  accumulator.piAuthFile.anthropic = {
+    access: credential.credential.accessToken,
+    expires: credential.credential.expiresAt,
+    refresh: "",
+    type: "oauth",
+  };
+}
+
+function appendCodexPiCredential(
+  accumulator: RuntimeMaterialAccumulator,
+  credential: CodexResolvedCredential,
+): void {
+  accumulator.env.PI_CODING_AGENT_DIR = PI_AGENT_DIR;
+  accumulator.piAuthFile["openai-codex"] = {
+    access: credential.credential.accessToken,
+    ...(credential.credential.accountId
+      ? { accountId: credential.credential.accountId }
+      : {}),
+    expires: credential.credential.expiresAt,
+    refresh: "",
+    type: "oauth",
+  };
+}
+
+function appendRuntimeConsumerMaterial(
+  args: RuntimeConsumerDispatchArgs,
+): void {
+  switch (args.runtimeProviderId) {
+    case "claude-code":
+      if (args.authConsumerId !== "claude-code" || !isClaudeResolvedCredential(args.credential)) {
+        throw new Error(
+          `Runtime consumer ${args.runtimeProviderId}/${args.authConsumerId} requires a Claude credential`,
+        );
+      }
+      args.accumulator.files.push(buildClaudeCredentialsFile(args.credential));
+      return;
+    case "codex":
+      if (args.authConsumerId !== "codex" || !isCodexResolvedCredential(args.credential)) {
+        throw new Error(
+          `Runtime consumer ${args.runtimeProviderId}/${args.authConsumerId} requires a Codex credential`,
+        );
+      }
+      args.accumulator.files.push(buildCodexAuthFile(args.credential));
+      return;
+    case "pi":
+      switch (args.authConsumerId) {
+        case "anthropic":
+          if (!isClaudeResolvedCredential(args.credential)) {
+            throw new Error(
+              `Runtime consumer ${args.runtimeProviderId}/${args.authConsumerId} requires a Claude credential`,
+            );
+          }
+          appendClaudePiCredential(args.accumulator, args.credential);
+          return;
+        case "openai-codex":
+          if (!isCodexResolvedCredential(args.credential)) {
+            throw new Error(
+              `Runtime consumer ${args.runtimeProviderId}/${args.authConsumerId} requires a Codex credential`,
+            );
+          }
+          appendCodexPiCredential(args.accumulator, args.credential);
+          return;
+        default:
+          throw new Error(
+            `Unsupported cloud auth runtime consumer ${args.runtimeProviderId}/${args.authConsumerId}`,
+          );
+      }
+  }
 }
 
 export function buildCloudAuthRuntimeMaterial(
   args: BuildCloudAuthRuntimeMaterialArgs,
 ): BuildCloudAuthRuntimeMaterialResult {
-  const claudeCredential = args.credentials.find(isClaudeResolvedCredential) ?? null;
-  const codexCredential = args.credentials.find(isCodexResolvedCredential) ?? null;
+  const accumulator: RuntimeMaterialAccumulator = {
+    env: {},
+    files: [],
+    piAuthFile: {},
+  };
 
-  const files: HostRuntimeMaterialManagedFile[] = [];
-  const env: Record<string, string> = {};
-
-  if (claudeCredential) {
-    files.push(buildClaudeCredentialsFile(claudeCredential));
-  }
-
-  if (codexCredential) {
-    files.push(buildCodexAuthFile(codexCredential));
+  for (const credential of args.credentials) {
+    for (const consumer of getCloudAuthProvider(credential.providerId).runtimeConsumers) {
+      appendRuntimeConsumerMaterial({
+        accumulator,
+        authConsumerId: consumer.authConsumerId,
+        credential,
+        runtimeProviderId: consumer.runtimeProviderId,
+      });
+    }
   }
 
   const piAuthFile = buildPiAuthFile({
-    claudeCredential,
-    codexCredential,
+    contents: accumulator.piAuthFile,
   });
   if (piAuthFile) {
-    env.PI_CODING_AGENT_DIR = PI_AGENT_DIR;
-    files.push(piAuthFile);
+    accumulator.files.push(piAuthFile);
   }
 
   return {
-    env,
-    files,
+    env: accumulator.env,
+    files: accumulator.files,
   };
 }

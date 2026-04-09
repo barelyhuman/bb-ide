@@ -388,4 +388,67 @@ describe("sandbox runtime material", () => {
       await harness.cleanup();
     }
   });
+
+  it("builds managed auth files from encrypted stored credentials", async () => {
+    const harness = await createTestAppHarness();
+
+    try {
+      await seedSandboxCredential({
+        credential: {
+          accessToken: "claude-access-token",
+          accountEmail: "claude@example.test",
+          accountId: "acct_claude_test",
+          expiresAt: 1_900_000_000_000,
+          providerId: "claude-code",
+          refreshToken: "claude-refresh-token",
+          scopes: ["user:profile", "user:sessions:claude_code"],
+          subscriptionType: "max",
+        },
+        harness,
+        lastRefreshedAt: 1_800_000_000_000,
+        updatedAt: 1_800_000_000_100,
+      });
+      await seedSandboxCredential({
+        credential: {
+          accessToken: "codex-access-token",
+          accountId: "acct_codex_test",
+          expiresAt: 1_900_000_100_000,
+          idToken: "codex-id-token",
+          providerId: "codex",
+          refreshToken: "codex-refresh-token",
+        },
+        harness,
+        lastRefreshedAt: 1_800_000_100_000,
+        updatedAt: 1_800_000_100_100,
+      });
+
+      const snapshot = await buildSandboxRuntimeMaterialSnapshot(harness.deps);
+      expect(snapshot.env).toEqual({
+        OPENAI_API_KEY: "test-openai-key",
+        PI_CODING_AGENT_DIR: "~/.pi/agent",
+      });
+
+      const claudeFile = snapshot.files.find(
+        (file) => file.path === "~/.claude/.credentials.json",
+      );
+      expect(claudeFile?.contents).toContain("\"accessToken\": \"claude-access-token\"");
+      expect(claudeFile?.contents).toContain("\"refreshToken\": \"\"");
+
+      const codexFile = snapshot.files.find(
+        (file) => file.path === "~/.codex/auth.json",
+      );
+      expect(codexFile?.contents).toContain("\"access_token\": \"codex-access-token\"");
+      expect(codexFile?.contents).toContain("\"refresh_token\": \"\"");
+      expect(codexFile?.contents).toContain("\"id_token\": \"codex-id-token\"");
+
+      const piFile = snapshot.files.find(
+        (file) => file.path === "~/.pi/agent/auth.json",
+      );
+      expect(piFile?.contents).toContain("\"anthropic\"");
+      expect(piFile?.contents).toContain("\"openai-codex\"");
+      expect(piFile?.contents).toContain("\"refresh\": \"\"");
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });

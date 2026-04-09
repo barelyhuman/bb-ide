@@ -37,6 +37,7 @@ export async function createEncryptedJsonCrypto(
   const encodedSecret = await readOrCreateSecretFile({
     bytes: 32,
     dataDir: args.dataDir,
+    encoding: "base64",
     fileName: args.fileName,
   });
   const secret = Buffer.from(encodedSecret, "base64");

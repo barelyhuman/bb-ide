@@ -2,6 +2,7 @@ import {
   extractErrorMessage,
   toRecord,
 } from "@bb/core-ui";
+import type { CloudAuthProviderId } from "@bb/agent-providers";
 import type {
   AvailableModel,
   Environment,
@@ -21,7 +22,6 @@ import type {
   CreateManagerThreadRequest,
   CloudAuthAttemptResponse,
   CloudAuthConnectResponse,
-  CloudAuthProviderId,
   CloudAuthSettingsResponse,
   GithubRepoInfo,
   CreateProjectSourceRequest,

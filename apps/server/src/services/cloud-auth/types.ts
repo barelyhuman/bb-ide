@@ -1,3 +1,4 @@
+import type { CloudAuthProviderId } from "@bb/agent-providers";
 import type {
   CloudAuthResolvedCredential,
 } from "@bb/agent-provider-auth";
@@ -5,7 +6,6 @@ import type {
   CloudAuthAttemptResponse,
   CloudAuthConnectResponse,
   CloudAuthConnection,
-  CloudAuthProviderId,
 } from "@bb/server-contract";
 
 export interface GetCloudAuthAttemptArgs {

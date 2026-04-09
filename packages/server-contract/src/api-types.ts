@@ -479,9 +479,6 @@ export const systemProvidersQuerySchema = z.object({
 }).partial();
 export type SystemProvidersQuery = z.infer<typeof systemProvidersQuerySchema>;
 
-export { cloudAuthProviderIdSchema };
-export type CloudAuthProviderId = z.infer<typeof cloudAuthProviderIdSchema>;
-
 export const cloudAuthConnectionStatusSchema = z.enum([
   "connected",
   "invalid",

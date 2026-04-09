@@ -18,6 +18,7 @@
     "test": "vitest run --config vitest.config.ts"
   },
   "dependencies": {
+    "@bb/db": "workspace:*",
     "@bb/agent-providers": "workspace:*",
     "@bb/host-daemon-contract": "workspace:*",
     "@bb/secret-storage": "workspace:*",

@@ -2,7 +2,6 @@ import { stdin, stdout } from "node:process";
 import { createInterface } from "node:readline/promises";
 import {
   getCloudAuthProviderDefinition,
-  type CloudAuthAuthorizationFlow,
 } from "../../../packages/agent-provider-auth/src/index.ts";
 import {
   startOAuthCallbackServer,
@@ -24,6 +23,12 @@ interface AuthConnectCliArgs {
 
 interface ParseCliArgsResult {
   args: AuthConnectCliArgs | null;
+}
+
+interface ProviderAuthorizationFlow {
+  authorizationUrl: string;
+  state: string;
+  verifier: string;
 }
 
 interface WaitForCallbackArgs {
@@ -276,7 +281,7 @@ async function waitForCallbackPayload(
 function printFlowInstructions(
   args: {
     fixturePath: string;
-    flow: CloudAuthAuthorizationFlow;
+    flow: ProviderAuthorizationFlow;
     providerDisplayName: string;
   },
 ): void {

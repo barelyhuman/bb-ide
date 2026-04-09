@@ -27,11 +27,13 @@ describe("secret file", () => {
     const first = await readOrCreateSecretFile({
       bytes: 32,
       dataDir,
+      encoding: "base64",
       fileName: "secret",
     });
     const second = await readOrCreateSecretFile({
       bytes: 32,
       dataDir,
+      encoding: "base64",
       fileName: "secret",
     });
 
@@ -47,6 +49,7 @@ describe("secret file", () => {
         readOrCreateSecretFile({
           bytes: 32,
           dataDir,
+          encoding: "base64",
           fileName: "secret",
         })
       ),
@@ -63,6 +66,7 @@ describe("secret file", () => {
       readOrCreateSecretFile({
         bytes: 32,
         dataDir,
+        encoding: "base64",
         fileName: "secret",
       }),
     ).rejects.toThrow("Failed to initialize secret");

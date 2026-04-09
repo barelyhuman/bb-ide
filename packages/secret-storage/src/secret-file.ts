@@ -5,15 +5,13 @@ import { join } from "node:path";
 export interface ReadOrCreateSecretFileArgs {
   bytes: number;
   dataDir: string;
+  encoding: BufferEncoding;
   fileName: string;
-  encoding?: BufferEncoding;
 }
 
 export async function readOrCreateSecretFile(
   args: ReadOrCreateSecretFileArgs,
 ): Promise<string> {
-  const encoding = args.encoding ?? "base64";
-
   await mkdir(args.dataDir, { recursive: true });
   const secretPath = join(args.dataDir, args.fileName);
 
@@ -30,7 +28,7 @@ export async function readOrCreateSecretFile(
     }
   }
 
-  const generatedSecret = randomBytes(args.bytes).toString(encoding);
+  const generatedSecret = randomBytes(args.bytes).toString(args.encoding);
   try {
     await writeFile(secretPath, `${generatedSecret}\n`, {
       encoding: "utf8",

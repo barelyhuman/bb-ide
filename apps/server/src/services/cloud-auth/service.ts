@@ -7,11 +7,11 @@ import {
   type DbConnection,
   type SandboxProviderCredentialRecord,
 } from "@bb/db";
+import type { CloudAuthProviderId } from "@bb/agent-providers";
 import type {
   CloudAuthAttemptResponse,
   CloudAuthConnectResponse,
   CloudAuthConnection,
-  CloudAuthProviderId,
 } from "@bb/server-contract";
 import { createAsyncDeduper } from "../lib/async-deduper.js";
 import { startOAuthCallbackServer, type OAuthCallbackServer } from "./callback-server.js";
@@ -50,9 +50,20 @@ interface CloudAuthAttemptState {
 
 interface PersistCredentialArgs {
   credential: StoredCloudAuthCredential;
-  lastErrorMessage: string | null;
   lastRefreshedAt: number | null;
   updatedAt: number;
+}
+
+interface ResolveCredentialRecordArgs {
+  providerId: CloudAuthProviderId;
+  record: SandboxProviderCredentialRecord;
+}
+
+interface UpdateCredentialErrorStateArgs {
+  errorMessage: string;
+  providerId: CloudAuthProviderId;
+  updatedAt: number;
+  whenRecordUpdatedAt: number;
 }
 
 function buildResolvedCredential(
@@ -69,43 +80,6 @@ function buildResolvedCredential(
   };
 }
 
-function getProviderDefinition<TProviderId extends CloudAuthProviderId>(
-  providerId: TProviderId,
-) {
-  return getCloudAuthProviderDefinition(providerId);
-}
-
-async function createAuthorizationFlow(
-  providerId: CloudAuthProviderId,
-): Promise<{
-  authorizationUrl: string;
-  state: string;
-  verifier: string;
-}> {
-  return getProviderDefinition(providerId).createAuthorizationFlow();
-}
-
-function getCallbackConfig(providerId: CloudAuthProviderId): {
-  errorTitle: string;
-  listenHost: string;
-  path: string;
-  port: number;
-  successTitle: string;
-} {
-  return getProviderDefinition(providerId).callback;
-}
-
-async function exchangeCode(
-  providerId: CloudAuthProviderId,
-  args: {
-    code: string;
-    state: string;
-    verifier: string;
-  },
-): Promise<StoredCloudAuthCredential> {
-  return getProviderDefinition(providerId).exchangeCode(args);
-}
-
 export async function createCloudAuthService(
   args: CreateCloudAuthServiceArgs,
 ): Promise<CloudAuthService> {
@@ -113,7 +87,7 @@ export async function createCloudAuthService(
   const crypto = await createCloudAuthCrypto({ dataDir });
   const refreshDeduper = createAsyncDeduper<
     CloudAuthProviderId,
-    CloudAuthResolvedCredential
+    CloudAuthResolvedCredential | null
   >();
   const attemptsById = new Map<string, CloudAuthAttemptState>();
   const pendingAttemptIdsByProvider = new Map<CloudAuthProviderId, string>();
@@ -189,7 +163,7 @@ export async function createCloudAuthService(
       credential: persistArgs.credential,
       crypto,
       label: getCloudAuthConnectionLabel(persistArgs.credential),
-      lastErrorMessage: persistArgs.lastErrorMessage,
+      lastErrorMessage: null,
       lastRefreshedAt: persistArgs.lastRefreshedAt,
       updatedAt: persistArgs.updatedAt,
     }));
@@ -223,59 +197,139 @@ export async function createCloudAuthService(
     });
   }
 
-  async function getCredentialRecord(
+  function getCredentialRecord(
     providerId: CloudAuthProviderId,
-  ): Promise<SandboxProviderCredentialRecord | null> {
+  ): SandboxProviderCredentialRecord | null {
     return getSandboxProviderCredentialByProviderId(db, providerId);
+  }
+
+  function logDecryptFailure(
+    providerId: CloudAuthProviderId,
+    error: unknown,
+  ): void {
+    logger.warn(
+      {
+        err: error,
+        providerId,
+      },
+      "Failed to decrypt sandbox provider credential",
+    );
+  }
+
+  function updateCredentialErrorState(
+    updateArgs: UpdateCredentialErrorStateArgs,
+  ): SandboxProviderCredentialRecord | null {
+    const currentRecord = getCredentialRecord(updateArgs.providerId);
+    if (!currentRecord) {
+      return null;
+    }
+    if (currentRecord.updatedAt !== updateArgs.whenRecordUpdatedAt) {
+      return currentRecord;
+    }
+
+    markCredentialErrored({
+      errorMessage: updateArgs.errorMessage,
+      record: currentRecord,
+      updatedAt: updateArgs.updatedAt,
+    });
+    return getCredentialRecord(updateArgs.providerId);
+  }
+
+  function resolveCredentialRecord(
+    resolveArgs: ResolveCredentialRecordArgs,
+  ): CloudAuthResolvedCredential | null {
+    try {
+      const credential = readCredential(resolveArgs.record);
+      return buildResolvedCredential(resolveArgs.record, credential);
+    } catch (error) {
+      logDecryptFailure(resolveArgs.providerId, error);
+      updateCredentialErrorState({
+        errorMessage: "Failed to decrypt stored credential",
+        providerId: resolveArgs.providerId,
+        updatedAt: Date.now(),
+        whenRecordUpdatedAt: resolveArgs.record.updatedAt,
+      });
+      return null;
+    }
+  }
+
+  async function persistCredentialIfCurrent(argsPersist: {
+    credential: StoredCloudAuthCredential;
+    lastRefreshedAt: number | null;
+    providerId: CloudAuthProviderId;
+    updatedAt: number;
+    whenRecordUpdatedAt: number;
+  }): Promise<CloudAuthResolvedCredential | null> {
+    const currentRecord = getCredentialRecord(argsPersist.providerId);
+    if (!currentRecord) {
+      return null;
+    }
+    if (currentRecord.updatedAt !== argsPersist.whenRecordUpdatedAt) {
+      return resolveCredentialRecord({
+        providerId: argsPersist.providerId,
+        record: currentRecord,
+      });
+    }
+
+    await persistCredential({
+      credential: argsPersist.credential,
+      lastRefreshedAt: argsPersist.lastRefreshedAt,
+      updatedAt: argsPersist.updatedAt,
+    });
+    const persistedRecord = getCredentialRecord(argsPersist.providerId);
+    if (!persistedRecord) {
+      return null;
+    }
+    return buildResolvedCredential(persistedRecord, argsPersist.credential);
   }
 
   async function getValidCredential(
     providerId: CloudAuthProviderId,
   ): Promise<CloudAuthResolvedCredential | null> {
-    const record = await getCredentialRecord(providerId);
+    const record = getCredentialRecord(providerId);
     if (!record) {
       return null;
     }
 
-    let credential: StoredCloudAuthCredential;
-    try {
-      credential = readCredential(record);
-    } catch (error) {
-      markCredentialErrored({
-        errorMessage:
-          error instanceof Error ? error.message : "Failed to decrypt credential",
-        record,
-        updatedAt: Date.now(),
-      });
+    const resolvedCredential = resolveCredentialRecord({
+      providerId,
+      record,
+    });
+    if (!resolvedCredential) {
       return null;
     }
+    const credential = resolvedCredential.credential;
 
     if (credential.expiresAt > Date.now() + REFRESH_SKEW_MS) {
       if (record.lastErrorMessage) {
         const updatedAt = Date.now();
-        await persistCredential({
+        return persistCredentialIfCurrent({
           credential,
-          lastErrorMessage: null,
           lastRefreshedAt: record.lastRefreshedAt,
+          providerId,
           updatedAt,
+          whenRecordUpdatedAt: record.updatedAt,
         });
-        const refreshedRecord = await getCredentialRecord(providerId);
-        if (refreshedRecord) {
-          return buildResolvedCredential(refreshedRecord, credential);
-        }
       }
-      return buildResolvedCredential(record, credential);
+      return resolvedCredential;
     }
 
     return refreshDeduper.run(providerId, async () => {
-      const currentRecord = await getCredentialRecord(providerId);
+      const currentRecord = getCredentialRecord(providerId);
       if (!currentRecord) {
-        throw new Error(`Missing credential for ${providerId}`);
+        return null;
       }
 
-      const currentCredential = readCredential(currentRecord);
+      const currentResolvedCredential = resolveCredentialRecord({
+        providerId,
+        record: currentRecord,
+      });
+      if (!currentResolvedCredential) {
+        return null;
+      }
+      const currentCredential = currentResolvedCredential.credential;
       if (currentCredential.expiresAt > Date.now() + REFRESH_SKEW_MS) {
-        return buildResolvedCredential(currentRecord, currentCredential);
+        return currentResolvedCredential;
       }
 
       try {
@@ -283,23 +337,23 @@ export async function createCloudAuthService(
           credential: currentCredential,
         });
         const updatedAt = Date.now();
-        await persistCredential({
+        const persistedCredential = await persistCredentialIfCurrent({
           credential: refreshedCredential,
-          lastErrorMessage: null,
           lastRefreshedAt: updatedAt,
+          providerId,
           updatedAt,
+          whenRecordUpdatedAt: currentRecord.updatedAt,
         });
-        const refreshedRecord = await getCredentialRecord(providerId);
-        if (!refreshedRecord) {
-          throw new Error(`Missing credential for ${providerId} after refresh`);
+        if (!persistedCredential) {
+          return null;
         }
-        return buildResolvedCredential(refreshedRecord, refreshedCredential);
+        return persistedCredential;
       } catch (error) {
-        markCredentialErrored({
-          errorMessage:
-            error instanceof Error ? error.message : "Credential refresh failed",
-          record: currentRecord,
+        updateCredentialErrorState({
+          errorMessage: error instanceof Error ? error.message : "Credential refresh failed",
+          providerId,
           updatedAt: Date.now(),
+          whenRecordUpdatedAt: currentRecord.updatedAt,
         });
         logger.warn(
           {
@@ -308,7 +362,14 @@ export async function createCloudAuthService(
           },
           "Failed to refresh sandbox provider credential",
         );
-        return buildResolvedCredential(currentRecord, currentCredential);
+        const refreshedRecord = getCredentialRecord(providerId);
+        if (!refreshedRecord) {
+          return null;
+        }
+        return resolveCredentialRecord({
+          providerId,
+          record: refreshedRecord,
+        });
       }
     });
   }
@@ -326,8 +387,9 @@ export async function createCloudAuthService(
       await closeAttemptCallbackServer(previousAttemptId);
     }
 
-    const flow = await createAuthorizationFlow(providerId);
-    const callback = getCallbackConfig(providerId);
+    const providerDefinition = getCloudAuthProviderDefinition(providerId);
+    const flow = await providerDefinition.createAuthorizationFlow();
+    const callback = providerDefinition.callback;
     const callbackServer = await startOAuthCallbackServer({
       errorTitle: callback.errorTitle,
       expectedState: flow.state,
@@ -376,7 +438,7 @@ export async function createCloudAuthService(
           return;
         }
 
-        const credential = await exchangeCode(providerId, {
+        const credential = await providerDefinition.exchangeCode({
           code: callbackPayload.code,
           state: callbackPayload.state,
           verifier: flow.verifier,
@@ -384,7 +446,6 @@ export async function createCloudAuthService(
         const updatedAt = Date.now();
         await persistCredential({
           credential,
-          lastErrorMessage: null,
           lastRefreshedAt: updatedAt,
           updatedAt,
         });
@@ -395,6 +456,13 @@ export async function createCloudAuthService(
         });
       })
       .catch((error) => {
+        logger.warn(
+          {
+            err: error,
+            providerId,
+          },
+          "Failed to exchange sandbox provider credential",
+        );
         finalizeAttempt({
           attemptId,
           errorMessage:
@@ -462,6 +530,7 @@ export async function createCloudAuthService(
         await closeAttemptCallbackServer(attemptId);
         attemptsById.delete(attemptId);
       }
+      pendingAttemptIdsByProvider.clear();
     },
     getAttempt({ attemptId }) {
       return attemptsById.get(attemptId)?.attempt ?? null;
