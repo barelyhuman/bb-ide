@@ -8,10 +8,6 @@ const AGENT_PROVIDER_ID_VALUES = ["codex", "claude-code", "pi"] as const;
 export const agentProviderIdSchema = z.enum(AGENT_PROVIDER_ID_VALUES);
 export type AgentProviderId = z.infer<typeof agentProviderIdSchema>;
 
-const CLOUD_AUTH_PROVIDER_ID_VALUES = ["claude-code", "codex"] as const;
-export const cloudAuthProviderIdSchema = z.enum(CLOUD_AUTH_PROVIDER_ID_VALUES);
-export type CloudAuthProviderId = z.infer<typeof cloudAuthProviderIdSchema>;
-
 const CLOUD_AUTH_CONSUMER_ID_VALUES = [
   "anthropic",
   "claude-code",
@@ -29,10 +25,10 @@ export interface CloudAuthRuntimeConsumer {
   runtimeProviderId: AgentProviderId;
 }
 
-export interface CloudAuthProviderCatalogEntry {
+export interface CloudAuthProviderCatalogEntry<TId extends string = string> {
   authMode: "subscription-oauth";
   displayName: string;
-  id: CloudAuthProviderId;
+  id: TId;
   runtimeConsumers: CloudAuthRuntimeConsumer[];
 }
 
@@ -53,23 +49,60 @@ const DEFAULT_CAPABILITIES: ProviderCapabilities = {
   supportsServiceTier: false,
 };
 
+const CLAUDE_CLOUD_AUTH_PROVIDER = {
+  authMode: "subscription-oauth",
+  displayName: "Claude Code",
+  id: "claude-code",
+  runtimeConsumers: [
+    {
+      authConsumerId: "claude-code",
+      runtimeProviderId: "claude-code",
+    },
+    {
+      authConsumerId: "anthropic",
+      runtimeProviderId: "pi",
+    },
+  ],
+} satisfies CloudAuthProviderCatalogEntry<"claude-code">;
+
+const CODEX_CLOUD_AUTH_PROVIDER = {
+  authMode: "subscription-oauth",
+  displayName: "Codex",
+  id: "codex",
+  runtimeConsumers: [
+    {
+      authConsumerId: "codex",
+      runtimeProviderId: "codex",
+    },
+    {
+      authConsumerId: "openai-codex",
+      runtimeProviderId: "pi",
+    },
+  ],
+} satisfies CloudAuthProviderCatalogEntry<"codex">;
+
+const CLOUD_AUTH_PROVIDER_CATALOG = [
+  CLAUDE_CLOUD_AUTH_PROVIDER,
+  CODEX_CLOUD_AUTH_PROVIDER,
+] as const;
+
+export type CloudAuthProviderId = (typeof CLOUD_AUTH_PROVIDER_CATALOG)[number]["id"];
+
+function isCloudAuthProviderId(value: string): value is CloudAuthProviderId {
+  return CLOUD_AUTH_PROVIDER_CATALOG.some((provider) => provider.id === value);
+}
+
+export const cloudAuthProviderIdSchema = z.custom<CloudAuthProviderId>(
+  (value): value is CloudAuthProviderId =>
+    typeof value === "string" && isCloudAuthProviderId(value),
+  {
+    message: "Unsupported cloud auth provider id",
+  },
+);
+
 const BUILT_IN_AGENT_PROVIDER_CATALOG: BuiltInAgentProviderCatalogEntry[] = [
   {
-    cloudAuth: {
-      authMode: "subscription-oauth",
-      displayName: "Codex",
-      id: "codex",
-      runtimeConsumers: [
-        {
-          authConsumerId: "codex",
-          runtimeProviderId: "codex",
-        },
-        {
-          authConsumerId: "openai-codex",
-          runtimeProviderId: "pi",
-        },
-      ],
-    },
+    cloudAuth: CODEX_CLOUD_AUTH_PROVIDER,
     info: {
       available: true,
       capabilities: CODEX_CAPABILITIES,
@@ -78,21 +111,7 @@ const BUILT_IN_AGENT_PROVIDER_CATALOG: BuiltInAgentProviderCatalogEntry[] = [
     },
   },
   {
-    cloudAuth: {
-      authMode: "subscription-oauth",
-      displayName: "Claude Code",
-      id: "claude-code",
-      runtimeConsumers: [
-        {
-          authConsumerId: "claude-code",
-          runtimeProviderId: "claude-code",
-        },
-        {
-          authConsumerId: "anthropic",
-          runtimeProviderId: "pi",
-        },
-      ],
-    },
+    cloudAuth: CLAUDE_CLOUD_AUTH_PROVIDER,
     info: {
       available: true,
       capabilities: DEFAULT_CAPABILITIES,
@@ -116,9 +135,7 @@ const builtInAgentProviderById = new Map(
 );
 
 const cloudAuthProviderById = new Map(
-  BUILT_IN_AGENT_PROVIDER_CATALOG.flatMap((provider) =>
-    provider.cloudAuth ? [[provider.cloudAuth.id, provider.cloudAuth] as const] : [],
-  ),
+  CLOUD_AUTH_PROVIDER_CATALOG.map((provider) => [provider.id, provider] as const),
 );
 
 /**
@@ -166,9 +183,9 @@ function cloneCloudAuthRuntimeConsumer(
   };
 }
 
-function cloneCloudAuthProviderCatalogEntry(
-  entry: CloudAuthProviderCatalogEntry,
-): CloudAuthProviderCatalogEntry {
+function cloneCloudAuthProviderCatalogEntry<TId extends string>(
+  entry: CloudAuthProviderCatalogEntry<TId>,
+): CloudAuthProviderCatalogEntry<TId> {
   return {
     authMode: entry.authMode,
     displayName: entry.displayName,
@@ -197,15 +214,15 @@ export function getBuiltInAgentProviderInfo(
   return cloneBuiltInAgentProviderInfo(provider.info);
 }
 
-export function listCloudAuthProviders(): CloudAuthProviderCatalogEntry[] {
-  return BUILT_IN_AGENT_PROVIDER_CATALOG.flatMap((provider) =>
-    provider.cloudAuth ? [cloneCloudAuthProviderCatalogEntry(provider.cloudAuth)] : []
+export function listCloudAuthProviders(): CloudAuthProviderCatalogEntry<CloudAuthProviderId>[] {
+  return CLOUD_AUTH_PROVIDER_CATALOG.map((provider) =>
+    cloneCloudAuthProviderCatalogEntry(provider)
   );
 }
 
 export function getCloudAuthProvider(
   providerId: CloudAuthProviderId,
-): CloudAuthProviderCatalogEntry {
+): CloudAuthProviderCatalogEntry<CloudAuthProviderId> {
   const provider = cloudAuthProviderById.get(providerId);
   if (!provider) {
     throw new Error(`Unsupported cloud auth provider "${providerId}".`);

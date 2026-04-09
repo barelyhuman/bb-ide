@@ -44,21 +44,6 @@ describe("agent provider catalog", () => {
   it("declares cloud auth runtime consumers", () => {
     expect(listCloudAuthProviders()).toEqual([
       {
-        id: "codex",
-        displayName: "Codex",
-        authMode: "subscription-oauth",
-        runtimeConsumers: [
-          {
-            authConsumerId: "codex",
-            runtimeProviderId: "codex",
-          },
-          {
-            authConsumerId: "openai-codex",
-            runtimeProviderId: "pi",
-          },
-        ],
-      },
-      {
         id: "claude-code",
         displayName: "Claude Code",
         authMode: "subscription-oauth",
@@ -69,6 +54,21 @@ describe("agent provider catalog", () => {
           },
           {
             authConsumerId: "anthropic",
+            runtimeProviderId: "pi",
+          },
+        ],
+      },
+      {
+        id: "codex",
+        displayName: "Codex",
+        authMode: "subscription-oauth",
+        runtimeConsumers: [
+          {
+            authConsumerId: "codex",
+            runtimeProviderId: "codex",
+          },
+          {
+            authConsumerId: "openai-codex",
             runtimeProviderId: "pi",
           },
         ],

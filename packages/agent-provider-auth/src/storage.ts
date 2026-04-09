@@ -125,7 +125,7 @@ function assertStoredCredentialShape(
   return storedCloudAuthCredentialSchema.parse(credential);
 }
 
-export function serializeCloudAuthCredential(
+function serializeCloudAuthCredential(
   args: SerializeCloudAuthCredentialArgs,
 ): SerializedCloudAuthCredential {
   switch (args.credential.providerId) {

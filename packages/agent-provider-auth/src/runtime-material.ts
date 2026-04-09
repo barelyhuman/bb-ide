@@ -232,6 +232,11 @@ function appendRuntimeConsumerMaterial(
             `Unsupported cloud auth runtime consumer ${args.runtimeProviderId}/${args.authConsumerId}`,
           );
       }
+    default:
+      args.runtimeProviderId satisfies never;
+      throw new Error(
+        `Unsupported cloud auth runtime provider ${args.runtimeProviderId}`,
+      );
   }
 }
 
