@@ -81,6 +81,27 @@ describe("cloud auth system queries", () => {
     expect(api.getCloudAuthSettings).toHaveBeenCalledTimes(1);
   });
 
+  it("reuses the cloud auth settings cache for repeated subscribers", async () => {
+    vi.mocked(api.getCloudAuthSettings).mockResolvedValue({
+      connections: [],
+    });
+
+    const { wrapper } = createQueryClientTestHarness();
+    const first = renderHook(() => useCloudAuthSettings(true), { wrapper });
+
+    await waitFor(() => {
+      expect(first.result.current.data).toEqual({ connections: [] });
+    });
+
+    const second = renderHook(() => useCloudAuthSettings(true), { wrapper });
+
+    await waitFor(() => {
+      expect(second.result.current.data).toEqual({ connections: [] });
+    });
+
+    expect(api.getCloudAuthSettings).toHaveBeenCalledTimes(1);
+  });
+
   it("fetches cloud auth attempt status only when an attempt id is present", async () => {
     vi.mocked(api.getCloudAuthAttempt).mockResolvedValue({
       attemptId: "attempt-1",
@@ -131,6 +152,27 @@ describe("cloud auth system queries", () => {
       expect(result.current.data?.envVars).toHaveLength(1);
     });
 
+    expect(api.listSandboxEnvVars).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps sandbox env var queries distinct from cloud auth queries", async () => {
+    vi.mocked(api.getCloudAuthSettings).mockResolvedValue({
+      connections: [],
+    });
+    vi.mocked(api.listSandboxEnvVars).mockResolvedValue({
+      envVars: [],
+    });
+
+    const { wrapper } = createQueryClientTestHarness();
+    const cloudAuth = renderHook(() => useCloudAuthSettings(true), { wrapper });
+    const sandboxEnv = renderHook(() => useSandboxEnvVars(true), { wrapper });
+
+    await waitFor(() => {
+      expect(cloudAuth.result.current.data).toEqual({ connections: [] });
+      expect(sandboxEnv.result.current.data).toEqual({ envVars: [] });
+    });
+
+    expect(api.getCloudAuthSettings).toHaveBeenCalledTimes(1);
     expect(api.listSandboxEnvVars).toHaveBeenCalledTimes(1);
   });
 });

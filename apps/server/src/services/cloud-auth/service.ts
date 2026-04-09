@@ -69,19 +69,20 @@ function buildResolvedCredential(
   };
 }
 
+function getProviderDefinition<TProviderId extends CloudAuthProviderId>(
+  providerId: TProviderId,
+) {
+  return getCloudAuthProviderDefinition(providerId);
+}
+
 function getConnectionLabel(
   credential: StoredCloudAuthCredential,
 ): string | null {
-  switch (credential.providerId) {
-    case "claude-code":
-      return getCloudAuthProviderDefinition("claude-code").getConnectionLabel(
-        credential,
-      );
-    case "codex":
-      return getCloudAuthProviderDefinition("codex").getConnectionLabel(
-        credential,
-      );
+  if (credential.providerId === "claude-code") {
+    return getProviderDefinition("claude-code").getConnectionLabel(credential);
   }
+
+  return getProviderDefinition("codex").getConnectionLabel(credential);
 }
 
 function getStoredConnectionLabel(args: {
@@ -100,16 +101,15 @@ function getStoredConnectionLabel(args: {
 async function refreshCredential(
   credential: StoredCloudAuthCredential,
 ): Promise<StoredCloudAuthCredential> {
-  switch (credential.providerId) {
-    case "claude-code":
-      return getCloudAuthProviderDefinition("claude-code").refreshCredential({
-        credential,
-      });
-    case "codex":
-      return getCloudAuthProviderDefinition("codex").refreshCredential({
-        credential,
-      });
+  if (credential.providerId === "claude-code") {
+    return getProviderDefinition("claude-code").refreshCredential({
+      credential,
+    });
   }
+
+  return getProviderDefinition("codex").refreshCredential({
+    credential,
+  });
 }
 
 async function createAuthorizationFlow(
@@ -119,12 +119,7 @@ async function createAuthorizationFlow(
   state: string;
   verifier: string;
 }> {
-  switch (providerId) {
-    case "claude-code":
-      return getCloudAuthProviderDefinition("claude-code").createAuthorizationFlow();
-    case "codex":
-      return getCloudAuthProviderDefinition("codex").createAuthorizationFlow();
-  }
+  return getProviderDefinition(providerId).createAuthorizationFlow();
 }
 
 function getCallbackConfig(providerId: CloudAuthProviderId): {
@@ -134,12 +129,7 @@ function getCallbackConfig(providerId: CloudAuthProviderId): {
   port: number;
   successTitle: string;
 } {
-  switch (providerId) {
-    case "claude-code":
-      return getCloudAuthProviderDefinition("claude-code").callback;
-    case "codex":
-      return getCloudAuthProviderDefinition("codex").callback;
-  }
+  return getProviderDefinition(providerId).callback;
 }
 
 async function exchangeCode(
@@ -150,12 +140,7 @@ async function exchangeCode(
     verifier: string;
   },
 ): Promise<StoredCloudAuthCredential> {
-  switch (providerId) {
-    case "claude-code":
-      return getCloudAuthProviderDefinition("claude-code").exchangeCode(args);
-    case "codex":
-      return getCloudAuthProviderDefinition("codex").exchangeCode(args);
-  }
+  return getProviderDefinition(providerId).exchangeCode(args);
 }
 
 export async function createCloudAuthService(

@@ -3,13 +3,13 @@ import {
   reportCommandResult,
 } from "@bb/db";
 import type { HostDaemonCommandResultReport } from "@bb/host-daemon-contract";
-import type { AppDeps } from "../types.js";
 import {
   handleCommandResultSideEffects,
+  type CommandResultSideEffectsDeps,
 } from "./command-result-handlers.js";
 
 export async function handleCommandResult(
-  deps: AppDeps,
+  deps: CommandResultSideEffectsDeps,
   report: HostDaemonCommandResultReport,
 ): Promise<ReturnType<typeof getCommand>> {
   const command = getCommand(deps.db, report.commandId);

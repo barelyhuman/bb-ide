@@ -142,7 +142,6 @@ function buildProvisionHostOptions(
 ): ProvisionHostOptions {
   return {
     apiKey: args.config.e2bApiKey,
-    daemonEnv: {},
     enrollKey: args.enrollKey,
     hostId: args.hostId,
     hostName: args.hostName,
@@ -157,7 +156,6 @@ function buildResumeHostOptions(
 ): ResumeHostOptions {
   return {
     apiKey: toOptionalString(args.config.e2bApiKey),
-    daemonEnv: {},
     externalId: args.externalId,
     hostId: args.hostId,
     hostName: args.hostName,

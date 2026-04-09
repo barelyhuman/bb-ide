@@ -4,6 +4,23 @@ import type { CloudAuthProviderId } from "@bb/server-contract";
 
 const HTTP_TIMEOUT_MS = 30_000;
 const OPENAI_JWT_CLAIM_PATH = "https://api.openai.com/auth";
+const SAFE_PROVIDER_ERROR_CODE_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/u;
+const CLAUDE_CALLBACK_CONFIG = {
+  errorTitle: "Claude authentication failed",
+  listenHost: "127.0.0.1",
+  path: "/callback",
+  port: 53_692,
+  redirectUri: "http://localhost:53692/callback",
+  successTitle: "Claude authentication completed",
+} as const;
+const CODEX_CALLBACK_CONFIG = {
+  errorTitle: "Codex authentication failed",
+  listenHost: "127.0.0.1",
+  path: "/auth/callback",
+  port: 1_455,
+  redirectUri: "http://localhost:1455/auth/callback",
+  successTitle: "Codex authentication completed",
+} as const;
 
 const claudeTokenResponseSchema = z
   .object({
@@ -141,8 +158,53 @@ function createPkceVerifier(): string {
   return randomBytes(32).toString("base64url");
 }
 
+function createOAuthState(): string {
+  return randomBytes(16).toString("hex");
+}
+
 function createPkceChallenge(verifier: string): string {
   return createHash("sha256").update(verifier).digest("base64url");
+}
+
+function readStringField(value: unknown, key: string): string | null {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+  const candidate = Reflect.get(value, key);
+  return typeof candidate === "string" ? candidate : null;
+}
+
+function readObjectField(value: unknown, key: string): object | null {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+  const candidate = Reflect.get(value, key);
+  return typeof candidate === "object" && candidate !== null ? candidate : null;
+}
+
+function extractProviderErrorCode(raw: string): string | null {
+  try {
+    const parsed = JSON.parse(raw);
+    const directError = readStringField(parsed, "error");
+    if (directError && SAFE_PROVIDER_ERROR_CODE_PATTERN.test(directError)) {
+      return directError;
+    }
+
+    const nestedError = readObjectField(parsed, "error");
+    const nestedCode = readStringField(nestedError, "code");
+    if (nestedCode && SAFE_PROVIDER_ERROR_CODE_PATTERN.test(nestedCode)) {
+      return nestedCode;
+    }
+
+    const nestedType = readStringField(nestedError, "type");
+    if (nestedType && SAFE_PROVIDER_ERROR_CODE_PATTERN.test(nestedType)) {
+      return nestedType;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 }
 
 async function readJsonResponse<TValue>(
@@ -152,7 +214,12 @@ async function readJsonResponse<TValue>(
 ): Promise<TValue> {
   const raw = await response.text();
   if (!response.ok) {
-    throw new Error(`${action} failed with ${response.status}: ${raw}`);
+    const code = extractProviderErrorCode(raw);
+    throw new Error(
+      code
+        ? `${action} failed with ${response.status} (${code})`
+        : `${action} failed with ${response.status}`,
+    );
   }
 
   const parsedJson = JSON.parse(raw);
@@ -231,17 +298,11 @@ async function fetchClaudeProfile(
 }
 
 const claudeProviderDefinition: CloudAuthProviderDefinition<ClaudeStoredCredential> = {
-  callback: {
-    errorTitle: "Claude authentication failed",
-    listenHost: "127.0.0.1",
-    path: "/callback",
-    port: 53_692,
-    redirectUri: "http://localhost:53692/callback",
-    successTitle: "Claude authentication completed",
-  },
+  callback: CLAUDE_CALLBACK_CONFIG,
   async createAuthorizationFlow() {
     const verifier = createPkceVerifier();
     const challenge = createPkceChallenge(verifier);
+    const state = createOAuthState();
     const url = new URL("https://claude.ai/oauth/authorize");
     url.searchParams.set("code", "true");
     url.searchParams.set(
@@ -249,7 +310,7 @@ const claudeProviderDefinition: CloudAuthProviderDefinition<ClaudeStoredCredenti
       "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
     );
     url.searchParams.set("response_type", "code");
-    url.searchParams.set("redirect_uri", this.callback.redirectUri);
+    url.searchParams.set("redirect_uri", CLAUDE_CALLBACK_CONFIG.redirectUri);
     url.searchParams.set(
       "scope",
       [
@@ -263,11 +324,11 @@ const claudeProviderDefinition: CloudAuthProviderDefinition<ClaudeStoredCredenti
     );
     url.searchParams.set("code_challenge", challenge);
     url.searchParams.set("code_challenge_method", "S256");
-    url.searchParams.set("state", verifier);
+    url.searchParams.set("state", state);
 
     return {
       authorizationUrl: url.toString(),
-      state: verifier,
+      state,
       verifier,
     };
   },
@@ -279,7 +340,7 @@ const claudeProviderDefinition: CloudAuthProviderDefinition<ClaudeStoredCredenti
         code: args.code,
         code_verifier: args.verifier,
         grant_type: "authorization_code",
-        redirect_uri: this.callback.redirectUri,
+        redirect_uri: CLAUDE_CALLBACK_CONFIG.redirectUri,
         state: args.state,
       }),
       headers: {
@@ -353,22 +414,15 @@ const claudeProviderDefinition: CloudAuthProviderDefinition<ClaudeStoredCredenti
 };
 
 const codexProviderDefinition: CloudAuthProviderDefinition<CodexStoredCredential> = {
-  callback: {
-    errorTitle: "Codex authentication failed",
-    listenHost: "127.0.0.1",
-    path: "/auth/callback",
-    port: 1_455,
-    redirectUri: "http://localhost:1455/auth/callback",
-    successTitle: "Codex authentication completed",
-  },
+  callback: CODEX_CALLBACK_CONFIG,
   async createAuthorizationFlow() {
     const verifier = createPkceVerifier();
     const challenge = createPkceChallenge(verifier);
-    const state = randomBytes(16).toString("hex");
+    const state = createOAuthState();
     const url = new URL("https://auth.openai.com/oauth/authorize");
     url.searchParams.set("response_type", "code");
     url.searchParams.set("client_id", "app_EMoamEEZ73f0CkXaXp7hrann");
-    url.searchParams.set("redirect_uri", this.callback.redirectUri);
+    url.searchParams.set("redirect_uri", CODEX_CALLBACK_CONFIG.redirectUri);
     url.searchParams.set("scope", "openid profile email offline_access");
     url.searchParams.set("code_challenge", challenge);
     url.searchParams.set("code_challenge_method", "S256");
@@ -393,7 +447,7 @@ const codexProviderDefinition: CloudAuthProviderDefinition<CodexStoredCredential
         code: args.code,
         code_verifier: args.verifier,
         grant_type: "authorization_code",
-        redirect_uri: this.callback.redirectUri,
+        redirect_uri: CODEX_CALLBACK_CONFIG.redirectUri,
       }),
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
@@ -452,23 +506,20 @@ const codexProviderDefinition: CloudAuthProviderDefinition<CodexStoredCredential
   },
 };
 
-export function getCloudAuthProviderDefinition(
-  providerId: "claude-code",
-): typeof claudeProviderDefinition;
-export function getCloudAuthProviderDefinition(
-  providerId: "codex",
-): typeof codexProviderDefinition;
-export function getCloudAuthProviderDefinition(
-  providerId: CloudAuthProviderId,
-) {
-  switch (providerId) {
-    case "claude-code":
-      return claudeProviderDefinition;
-    case "codex":
-      return codexProviderDefinition;
-  }
+const cloudAuthProviderDefinitions = {
+  "claude-code": claudeProviderDefinition,
+  codex: codexProviderDefinition,
+} satisfies Record<
+  CloudAuthProviderId,
+  CloudAuthProviderDefinition<StoredCloudAuthCredential>
+>;
+
+export function getCloudAuthProviderDefinition<TProviderId extends CloudAuthProviderId>(
+  providerId: TProviderId,
+): (typeof cloudAuthProviderDefinitions)[TProviderId] {
+  return cloudAuthProviderDefinitions[providerId];
 }
 
 export function listCloudAuthProviderDefinitions() {
-  return [claudeProviderDefinition, codexProviderDefinition];
+  return Object.values(cloudAuthProviderDefinitions);
 }

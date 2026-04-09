@@ -6,6 +6,7 @@ export const HOST_ID_FILE_NAME = "host-id";
 export const HOST_RUNTIME_MATERIAL_FILE_NAME = "runtime-material.json";
 
 const nonEmptyTrimmedStringSchema = z.string().trim().min(1);
+const homeRelativePathSchema = z.string().trim().regex(/^~\/.+/u);
 export const hostRuntimeMaterialEnvSchema = z.record(
   z.string().min(1),
   z.string(),
@@ -13,8 +14,8 @@ export const hostRuntimeMaterialEnvSchema = z.record(
 export const hostRuntimeMaterialManagedFileSchema = z.object({
   contents: z.string(),
   managedBy: nonEmptyTrimmedStringSchema,
-  mode: z.number().int().positive(),
-  path: nonEmptyTrimmedStringSchema,
+  mode: z.number().int().positive().max(0o7777),
+  path: homeRelativePathSchema,
 }).strict();
 export const hostRuntimeMaterialSnapshotSchema = z.object({
   env: hostRuntimeMaterialEnvSchema,

@@ -25,8 +25,9 @@ afterEach(async () => {
 describe("runtime material files", () => {
   it("writes managed files and deletes removed files", async () => {
     const rootDir = await makeTempDir("bb-runtime-material-files-");
-    const previousPath = path.join(rootDir, "claude", "credentials.json");
-    const nextPath = path.join(rootDir, "codex", "auth.json");
+    vi.spyOn(os, "homedir").mockReturnValue(rootDir);
+    const previousPath = path.join(rootDir, ".claude", "credentials.json");
+    const nextPath = path.join(rootDir, ".codex", "auth.json");
 
     await replaceManagedRuntimeFiles({
       previousSnapshot: {
@@ -36,7 +37,7 @@ describe("runtime material files", () => {
             contents: "{\"old\":true}\n",
             managedBy: "bb-runtime-material",
             mode: 0o600,
-            path: previousPath,
+            path: "~/.claude/credentials.json",
           },
         ],
         version: "previous",
@@ -48,7 +49,7 @@ describe("runtime material files", () => {
             contents: "{\"new\":true}\n",
             managedBy: "bb-runtime-material",
             mode: 0o600,
-            path: nextPath,
+            path: "~/.codex/auth.json",
           },
         ],
         version: "next",
@@ -56,9 +57,34 @@ describe("runtime material files", () => {
     });
 
     await expect(fs.readFile(nextPath, "utf8")).resolves.toBe("{\"new\":true}\n");
+    const stats = await fs.stat(nextPath);
+    expect(stats.mode & 0o777).toBe(0o600);
     await expect(fs.access(previousPath)).rejects.toMatchObject({
       code: "ENOENT",
     });
+  });
+
+  it("rejects managed file paths that escape the home directory", async () => {
+    const rootDir = await makeTempDir("bb-runtime-material-files-");
+    vi.spyOn(os, "homedir").mockReturnValue(rootDir);
+
+    await expect(
+      replaceManagedRuntimeFiles({
+        previousSnapshot: null,
+        nextSnapshot: {
+          env: {},
+          files: [
+            {
+              contents: "leak\n",
+              managedBy: "bb-runtime-material",
+              mode: 0o600,
+              path: "~/../../etc/passwd",
+            },
+          ],
+          version: "next",
+        },
+      }),
+    ).rejects.toThrow("escapes the home directory");
   });
 
   it("expands home-relative env paths", () => {

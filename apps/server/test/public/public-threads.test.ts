@@ -1223,16 +1223,15 @@ describe("public thread routes", () => {
       };
       expect(createdThread.status).toBe("provisioning");
       await waitForAssertion(() => {
-        expect(provisionHostMock).toHaveBeenCalledWith({
+        expect(provisionHostMock).toHaveBeenCalledWith(expect.objectContaining({
           apiKey: "test-e2b-api-key",
-          daemonEnv: {},
           enrollKey: expect.stringMatching(/^bbde_/u),
           hostId: expect.stringMatching(/^host_/u),
           hostName: expect.stringMatching(/^sandbox-/u),
           progressCallbacks: expect.any(Object),
           serverUrl: "https://bb.example.test",
           template: "test-e2b-template",
-        });
+        }));
       });
 
       const environment = getEnvironment(harness.db, createdThread.environmentId);

@@ -20,12 +20,22 @@ export interface OAuthCallbackServer {
   waitForCode(): Promise<OAuthCallbackPayload | null>;
 }
 
+function escapeHtml(value: string): string {
+  return value.replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 function renderHtml(args: { body: string; title: string }): string {
+  const body = escapeHtml(args.body);
+  const title = escapeHtml(args.title);
   return [
     "<!doctype html>",
     "<html>",
     "<head>",
-    `  <title>${args.title}</title>`,
+    `  <title>${title}</title>`,
     '  <meta charset="utf-8" />',
     '  <meta name="viewport" content="width=device-width, initial-scale=1" />',
     "  <style>",
@@ -37,8 +47,8 @@ function renderHtml(args: { body: string; title: string }): string {
     "</head>",
     "<body>",
     "  <main>",
-    `    <h1>${args.title}</h1>`,
-    `    <p>${args.body}</p>`,
+    `    <h1>${title}</h1>`,
+    `    <p>${body}</p>`,
     "  </main>",
     "</body>",
     "</html>",

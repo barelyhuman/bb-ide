@@ -685,6 +685,42 @@ describe("periodic sweeps", () => {
     }
   });
 
+  it("does not suspend active ephemeral sandboxes during the idle suspend sweep", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-periodic-active",
+        id: "host-periodic-active",
+        name: "Periodic Active Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      const sandboxHost = createMockSandboxHost(host.id, host.externalId ?? undefined);
+      harness.deps.sandboxRegistry.set(host.id, sandboxHost);
+      openSession(harness.db, harness.hub, {
+        heartbeatIntervalMs: 5_000,
+        hostId: host.id,
+        hostName: host.name,
+        hostType: host.type,
+        instanceId: "instance-periodic-active",
+        leaseTimeoutMs: 30_000,
+        protocolVersion: 2,
+      });
+      updateHostLifecycleState(harness.db, {
+        hostId: host.id,
+        lastActivityAt: Date.now(),
+      });
+
+      await runIdleSandboxSuspendSweep(harness.deps);
+
+      expect(sandboxHost.suspend).not.toHaveBeenCalled();
+      expect(getActiveSession(harness.db, host.id)).not.toBeNull();
+      expect(getHost(harness.db, host.id)?.suspendedAt).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("finalizes archived stop-requested threads once they are no longer active", async () => {
     const harness = await createTestAppHarness();
     try {

@@ -1,8 +1,23 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import type { AgentRuntime } from "@bb/agent-runtime";
 import type { HostWorkspace } from "@bb/host-workspace";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CommandRouter } from "../../src/command-router.js";
 import { RuntimeManager } from "../../src/runtime-manager.js";
+import {
+  readRuntimeMaterialState,
+  writeRuntimeMaterialState,
+} from "../../src/runtime-material-state.js";
+
+const tempDirs: string[] = [];
+
+async function makeTempDir(prefix: string): Promise<string> {
+  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
+  tempDirs.push(tempDir);
+  return tempDir;
+}
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -124,8 +139,13 @@ function createStandardRuntimeCommandContext(args: {
 }
 
 describe("CommandRouter", () => {
-  afterEach(() => {
+  afterEach(async () => {
     vi.restoreAllMocks();
+    await Promise.all(
+      tempDirs.splice(0).map((tempDir) =>
+        fs.rm(tempDir, { force: true, recursive: true })
+      ),
+    );
   });
 
   it("fetches and persists runtime material before reporting success", async () => {
@@ -142,7 +162,7 @@ describe("CommandRouter", () => {
           contents: "{}\n",
           managedBy: "bb-runtime-material",
           mode: 0o600,
-          path: "/tmp/runtime-material/auth.json",
+          path: "~/.codex/auth.json",
         },
       ],
       version: "runtime-version-1",
@@ -181,7 +201,7 @@ describe("CommandRouter", () => {
           contents: "{}\n",
           managedBy: "bb-runtime-material",
           mode: 0o600,
-          path: "/tmp/runtime-material/auth.json",
+          path: "~/.codex/auth.json",
         },
       ],
       version: "runtime-version-1",
@@ -194,6 +214,74 @@ describe("CommandRouter", () => {
           appliedVersion: "runtime-version-1",
         },
         type: "host.sync_runtime_material",
+      }),
+    );
+  });
+
+  it("applies runtime material with real state persistence and evicts idle environments", async () => {
+    const dataDir = await makeTempDir("bb-command-router-state-");
+    const homeDir = await makeTempDir("bb-command-router-home-");
+    vi.spyOn(os, "homedir").mockReturnValue(homeDir);
+
+    const workspace = createFakeWorkspace("/tmp/env-1");
+    const runtime = createFakeRuntime();
+    const manager = new RuntimeManager({
+      provisionWorkspace: vi.fn(async () => workspace),
+      createRuntime: vi.fn(() => runtime),
+    });
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+
+    const snapshot = {
+      env: {
+        PI_CODING_AGENT_DIR: "~/.pi/agent",
+      },
+      files: [
+        {
+          contents: "{}\n",
+          managedBy: "bb-runtime-material",
+          mode: 0o600,
+          path: "~/.codex/auth.json",
+        },
+      ],
+      version: "runtime-version-1",
+    } as const;
+    const reportResult = vi.fn(async () => undefined);
+    const router = new CommandRouter({
+      fetchRuntimeMaterial: vi.fn(async () => snapshot),
+      readPersistedRuntimeMaterial: async () => readRuntimeMaterialState(dataDir),
+      persistRuntimeMaterial: async (nextSnapshot) =>
+        writeRuntimeMaterialState(dataDir, nextSnapshot),
+      reportResult,
+      runtimeManager: manager,
+      logger: createLogger(),
+    });
+
+    expect(manager.get("env-1")).toBeDefined();
+
+    await router.handleCommands([
+      {
+        id: "runtime-sync",
+        cursor: 1,
+        command: {
+          type: "host.sync_runtime_material",
+          version: "runtime-version-1",
+        },
+      },
+    ]);
+
+    expect(manager.get("env-1")).toBeUndefined();
+    expect(runtime.shutdown).toHaveBeenCalledTimes(1);
+    await expect(readRuntimeMaterialState(dataDir)).resolves.toEqual(snapshot);
+    await expect(
+      fs.readFile(path.join(homeDir, ".codex", "auth.json"), "utf8"),
+    ).resolves.toBe("{}\n");
+    expect(reportResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commandId: "runtime-sync",
+        ok: true,
       }),
     );
   });

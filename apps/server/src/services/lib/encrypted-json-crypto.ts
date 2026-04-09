@@ -3,6 +3,7 @@ import { z } from "zod";
 import { readOrCreateSecretFile } from "./secret-file.js";
 
 const CIPHER_ALGORITHM = "aes-256-gcm";
+const AUTH_TAG_LENGTH_BYTES = 16;
 
 const encryptedPayloadEnvelopeSchema = z.object({
   ciphertext: z.string().min(1),
@@ -51,6 +52,7 @@ export async function createEncryptedJsonCrypto(
         CIPHER_ALGORITHM,
         secret,
         Buffer.from(envelope.iv, "base64"),
+        { authTagLength: AUTH_TAG_LENGTH_BYTES },
       );
       decipher.setAuthTag(Buffer.from(envelope.tag, "base64"));
       const plaintext = Buffer.concat([
@@ -61,7 +63,9 @@ export async function createEncryptedJsonCrypto(
     },
     encryptJson({ plaintext }) {
       const iv = randomBytes(12);
-      const cipher = createCipheriv(CIPHER_ALGORITHM, secret, iv);
+      const cipher = createCipheriv(CIPHER_ALGORITHM, secret, iv, {
+        authTagLength: AUTH_TAG_LENGTH_BYTES,
+      });
       const ciphertext = Buffer.concat([
         cipher.update(plaintext, "utf8"),
         cipher.final(),

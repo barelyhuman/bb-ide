@@ -75,7 +75,7 @@ export interface SandboxDaemonArtifacts {
 }
 
 export interface BuildSandboxDaemonEnvOptions {
-  daemonEnv: Record<string, string>;
+  daemonEnv?: Record<string, string>;
   /** Present only during first boot, before the daemon has persisted auth.json. */
   enrollKey?: string;
   hostId: string;
@@ -86,7 +86,7 @@ export interface BuildSandboxDaemonEnvOptions {
 export interface StartSandboxDaemonOptions {
   sandbox: Sandbox;
   daemonArtifacts?: SandboxDaemonArtifacts;
-  daemonEnv: Record<string, string>;
+  daemonEnv?: Record<string, string>;
 }
 
 export interface ResolvedStartSandboxDaemonOptions {
@@ -98,7 +98,7 @@ export interface ResolvedStartSandboxDaemonOptions {
 export interface ProvisionHostOptions {
   apiKey?: string;
   daemonArtifacts?: SandboxDaemonArtifacts;
-  daemonEnv: Record<string, string>;
+  daemonEnv?: Record<string, string>;
   enrollKey: string;
   hostId: string;
   hostName: string;
@@ -111,7 +111,7 @@ export interface ProvisionHostOptions {
 export interface ResumeHostOptions {
   apiKey?: string;
   daemonArtifacts?: SandboxDaemonArtifacts;
-  daemonEnv: Record<string, string>;
+  daemonEnv?: Record<string, string>;
   externalId: string;
   hostId: string;
   hostName: string;

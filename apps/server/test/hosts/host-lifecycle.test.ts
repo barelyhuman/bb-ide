@@ -599,15 +599,14 @@ describe("host lifecycle", () => {
 
       await readyPromise;
 
-      expect(resumeHostMock).toHaveBeenCalledWith({
+      expect(resumeHostMock).toHaveBeenCalledWith(expect.objectContaining({
         apiKey: "test-e2b-api-key",
-        daemonEnv: {},
         externalId: "sandbox-suspended-cached",
         hostId: host.id,
         hostName: host.name,
         progressCallbacks: expect.any(Object),
         serverUrl: harness.deps.config.publicUrl!,
-      });
+      }));
       expect(harness.deps.sandboxRegistry.get(host.id)).toBe(resumedSandboxHost);
       expect(sandboxHost.resume).not.toHaveBeenCalled();
       expect(getHost(harness.db, host.id)).toMatchObject({

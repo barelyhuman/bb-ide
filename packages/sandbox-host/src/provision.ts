@@ -113,7 +113,7 @@ export function buildSandboxDaemonEnv(
   options: BuildSandboxDaemonEnvOptions,
 ): Record<string, string> {
   return {
-    ...options.daemonEnv,
+    ...(options.daemonEnv ?? {}),
     BB_CLI_DIR: SANDBOX_BB_EXECUTABLE_DIR,
     BB_BRIDGE_DIR: SANDBOX_BRIDGE_DIR,
     BB_DATA_DIR: SANDBOX_DATA_DIR,
@@ -249,7 +249,7 @@ async function startDaemonProcess(
     `chmod +x ${SANDBOX_BB_EXECUTABLE_PATH}`,
   );
   await startBackgroundProcess(options.sandbox, buildDaemonStartCommand(), {
-    envs: options.daemonEnv,
+    envs: options.daemonEnv ?? {},
   });
 }
 
@@ -265,6 +265,7 @@ export async function startSandboxDaemon(
   const daemonArtifacts = await resolveDaemonArtifacts(options.daemonArtifacts);
   await startDaemonProcess({
     ...options,
+    daemonEnv: options.daemonEnv ?? {},
     daemonArtifacts,
   });
   await waitForDaemonHealth(options.sandbox);
@@ -274,7 +275,7 @@ export async function provisionHost(
   options: ProvisionHostOptions,
 ): Promise<SandboxHost> {
   const daemonEnv = buildSandboxDaemonEnv({
-    daemonEnv: options.daemonEnv,
+    daemonEnv: options.daemonEnv ?? {},
     enrollKey: options.enrollKey,
     hostId: options.hostId,
     hostName: options.hostName,
@@ -327,7 +328,7 @@ export async function resumeHost(
   options: ResumeHostOptions,
 ): Promise<SandboxHost> {
   const daemonEnv = buildSandboxDaemonEnv({
-    daemonEnv: options.daemonEnv,
+    daemonEnv: options.daemonEnv ?? {},
     hostId: options.hostId,
     hostName: options.hostName,
     serverUrl: normalizeServerUrl(options.serverUrl),

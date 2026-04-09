@@ -49,7 +49,7 @@ import {
   tryTransition,
 } from "../services/threads/thread-transitions.js";
 
-type CommandResultSideEffectsDeps = Pick<
+export type CommandResultSideEffectsDeps = Pick<
   AppDeps,
   | "cloudAuth"
   | "config"

@@ -8,10 +8,24 @@ import type {
 
 function expandRuntimeMaterialPath(rawPath: string): string {
   if (!rawPath.startsWith("~/")) {
-    return rawPath;
+    throw new Error(
+      `Managed runtime material file paths must be home-relative: ${rawPath}`,
+    );
   }
 
-  return path.join(os.homedir(), rawPath.slice(2));
+  const homeDir = path.resolve(os.homedir());
+  const resolvedPath = path.resolve(homeDir, rawPath.slice(2));
+  const relativeToHome = path.relative(homeDir, resolvedPath);
+  if (
+    relativeToHome.startsWith("..")
+    || path.isAbsolute(relativeToHome)
+  ) {
+    throw new Error(
+      `Managed runtime material file path escapes the home directory: ${rawPath}`,
+    );
+  }
+
+  return resolvedPath;
 }
 
 function resolveManagedFiles(

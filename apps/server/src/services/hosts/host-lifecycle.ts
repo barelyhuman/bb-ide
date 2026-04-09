@@ -44,6 +44,14 @@ export function resetHostLifecycleStateForTests(): void {
   pendingReadyProgressCallbacks.clear();
 }
 
+function pruneExpiredSandboxTimeoutExtensionEntries(now: number): void {
+  for (const [hostId, nextAllowedAt] of nextSandboxTimeoutExtensionAt) {
+    if (nextAllowedAt <= now) {
+      nextSandboxTimeoutExtensionAt.delete(hostId);
+    }
+  }
+}
+
 export interface WaitForHostSessionOptions {
   timeoutMs?: number;
 }
@@ -353,6 +361,7 @@ export async function extendSandboxLifeIfNeeded(
   args: ExtendSandboxLifeIfNeededArgs,
 ): Promise<boolean> {
   const at = args.at ?? Date.now();
+  pruneExpiredSandboxTimeoutExtensionEntries(at);
   const debounceWindowMs =
     args.debounceWindowMs ?? deps.config.sandboxActivityExtensionDebounceMs;
   const nextAllowedAt = nextSandboxTimeoutExtensionAt.get(args.hostId) ?? 0;

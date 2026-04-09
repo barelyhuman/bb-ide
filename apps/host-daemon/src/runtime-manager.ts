@@ -402,23 +402,33 @@ export class RuntimeManager {
       return [];
     }
 
-    const evictedEnvironmentIds: string[] = [];
-
-    for (const entry of [...this.entries.values()]) {
+    const idleEntries = [...this.entries.values()].filter((entry) => {
       const hasActiveThread = [...entry.threads.values()].some((thread) =>
         thread.status === "active"
       );
-      if (hasActiveThread) {
-        continue;
-      }
+      return !hasActiveThread;
+    });
 
+    for (const entry of idleEntries) {
       this.stopWatchingStatus(entry);
       this.entries.delete(entry.environmentId);
-      await entry.runtime.shutdown();
-      evictedEnvironmentIds.push(entry.environmentId);
     }
 
-    return evictedEnvironmentIds;
+    const shutdownResults = await Promise.allSettled(
+      idleEntries.map(async (entry) => {
+        await entry.runtime.shutdown();
+        return entry.environmentId;
+      }),
+    );
+    const firstRejected = shutdownResults.find((result) => result.status === "rejected");
+    if (firstRejected && firstRejected.status === "rejected") {
+      throw firstRejected.reason;
+    }
+
+    return shutdownResults
+      .flatMap((result) =>
+        result.status === "fulfilled" ? [result.value] : []
+      );
   }
 
   async shutdownAll(): Promise<void> {

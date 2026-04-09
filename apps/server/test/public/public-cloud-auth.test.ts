@@ -167,6 +167,72 @@ describe("public cloud auth routes", () => {
     }
   });
 
+  it("sanitizes codex exchange errors before returning attempt status", async () => {
+    const nativeFetch = globalThis.fetch;
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input, init) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.startsWith("http://127.0.0.1:1455/")) {
+        return nativeFetch(input, init);
+      }
+      if (url === "https://auth.openai.com/oauth/token") {
+        return new Response(
+          JSON.stringify({
+            error: {
+              message: "Provider-specific failure detail that should not leak",
+              type: "invalid_request_error",
+            },
+          }),
+          {
+            headers: {
+              "content-type": "application/json",
+            },
+            status: 401,
+          },
+        );
+      }
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    }));
+
+    const harness = await createTestAppHarness();
+
+    try {
+      const startResponse = await harness.app.request(
+        "/api/v1/system/cloud-auth/codex/connect",
+        {
+          method: "POST",
+        },
+      );
+
+      expect(startResponse.status).toBe(201);
+      const startBody = cloudAuthConnectResponseSchema.parse(
+        await readJson(startResponse),
+      );
+      const authUrl = new URL(startBody.authorizationUrl);
+
+      await nativeFetch(
+        `http://127.0.0.1:1455/auth/callback?code=test-code&state=${encodeURIComponent(authUrl.searchParams.get("state") ?? "")}`,
+      );
+
+      await vi.waitFor(async () => {
+        const attemptResponse = await harness.app.request(
+          `/api/v1/system/cloud-auth/attempts/${startBody.attemptId}`,
+        );
+        expect(attemptResponse.status).toBe(200);
+        const attemptBody = cloudAuthAttemptResponseSchema.parse(
+          await readJson(attemptResponse),
+        );
+        expect(attemptBody).toEqual({
+          attemptId: startBody.attemptId,
+          errorMessage: "Codex OAuth token exchange failed with 401 (invalid_request_error)",
+          providerId: "codex",
+          status: "failed",
+        });
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("starts and completes a claude OAuth connection", async () => {
     const nativeFetch = globalThis.fetch;
     vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input, init) => {

@@ -4,7 +4,7 @@ import {
   threads,
 } from "@bb/db";
 import type { HostDaemonActiveThread } from "@bb/host-daemon-contract";
-import type { AppDeps } from "../types.js";
+import type { SandboxWorkSessionDeps } from "../types.js";
 import {
   completeThreadStart,
   finalizeStoppedThread,
@@ -13,7 +13,7 @@ import {
 import { tryTransition } from "../services/threads/thread-transitions.js";
 
 export async function reconcileSessionThreads(
-  deps: AppDeps,
+  deps: SandboxWorkSessionDeps,
   hostId: string,
   activeThreads: HostDaemonActiveThread[],
 ): Promise<void> {
