@@ -332,6 +332,9 @@ importers:
       '@bb/logger':
         specifier: workspace:*
         version: link:../../packages/logger
+      '@bb/process-utils':
+        specifier: workspace:*
+        version: link:../../packages/process-utils
       '@bb/sandbox-host':
         specifier: workspace:*
         version: link:../../packages/sandbox-host
@@ -801,6 +804,9 @@ importers:
       '@bb/host-daemon-contract':
         specifier: workspace:*
         version: link:../host-daemon-contract
+      '@bb/process-utils':
+        specifier: workspace:*
+        version: link:../process-utils
       '@bb/server-contract':
         specifier: workspace:*
         version: link:../server-contract

@@ -51,6 +51,7 @@
   "dependencies": {
     "@bb/config": "workspace:*",
     "@bb/host-daemon-contract": "workspace:*",
+    "@bb/process-utils": "workspace:*",
     "@bb/server-contract": "workspace:*",
     "cross-spawn": "^7.0.6"
   },

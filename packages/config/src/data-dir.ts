@@ -19,7 +19,13 @@ function expandHomeDirectory(pathValue: string): string {
   return resolve(pathValue);
 }
 
-export const dataDir = makeValidator((input: string) => expandHomeDirectory(input.trim()));
+export const dataDir = makeValidator((input: string) => {
+  const trimmedInput = input.trim();
+  if (trimmedInput.length === 0) {
+    throw new Error("BB_DATA_DIR must not be empty");
+  }
+  return expandHomeDirectory(trimmedInput);
+});
 
 export function resolveConfiguredDataDir(args: ResolveConfiguredDataDirArgs): string {
   return envsafe({

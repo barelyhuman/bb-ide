@@ -1,6 +1,7 @@
 import { existsSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, resolve } from "node:path";
+import { resolveContainedPath } from "@bb/process-utils";
 import readline from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import {
@@ -65,7 +66,12 @@ export function ensureSafeTargets(targets: string[]): void {
     if (!isAbsolute(target)) {
       throw new Error(`Refusing to remove non-absolute path: ${target}`);
     }
-    if (target === "/" || target === home || target.length < home.length + 2) {
+    const resolvedTarget = resolve(target);
+    const containedTarget = resolveContainedPath({
+      rootPath: home,
+      candidatePath: resolvedTarget,
+    });
+    if (!containedTarget) {
       throw new Error(`Refusing to remove unsafe path: ${target}`);
     }
   }

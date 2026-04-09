@@ -343,11 +343,14 @@ export function queueThreadDeletedCommand(
     };
     threadId: string;
   },
-): void {
+): boolean {
   const session = getActiveSession(deps.db, args.environment.hostId);
+  if (!session) {
+    return false;
+  }
   queueCommand(deps.db, deps.hub, {
     hostId: args.environment.hostId,
-    sessionId: session?.id ?? null,
+    sessionId: session.id,
     type: "thread.deleted",
     payload: JSON.stringify({
       type: "thread.deleted",
@@ -355,6 +358,7 @@ export function queueThreadDeletedCommand(
       threadId: args.threadId,
     }),
   });
+  return true;
 }
 
 export function buildThreadStopCommand(

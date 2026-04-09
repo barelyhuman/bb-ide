@@ -19,6 +19,7 @@ import {
 import { threadSchema } from "@bb/domain";
 import { describe, expect, it, vi } from "vitest";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
+import { finalizeStoppedThread } from "../../src/services/threads/thread-lifecycle.js";
 import {
   internalAuthHeaders,
   waitForQueuedCommand,
@@ -940,6 +941,46 @@ describe("internal session routes", () => {
           command.environmentId === environment.id,
       );
       expect(destroyCommand.row.sessionId).not.toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("keeps deleted tombstones retryable when no active session exists", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        id: "host-reconcile-deleted-no-session",
+        name: "Test Host",
+        type: "persistent",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        path: "/tmp/reconcile-deleted-no-session",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      markThreadDeleted(harness.db, harness.hub, { threadId: thread.id });
+
+      const finalized = await finalizeStoppedThread(harness.deps, {
+        threadId: thread.id,
+      });
+
+      expect(finalized).toBe(false);
+      expect(getThread(harness.db, thread.id)?.deletedAt).toBeTypeOf("number");
+      const queuedDeleteCommands = harness.db
+        .select()
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.type, "thread.deleted"))
+        .all();
+      expect(queuedDeleteCommands).toHaveLength(0);
     } finally {
       await harness.cleanup();
     }

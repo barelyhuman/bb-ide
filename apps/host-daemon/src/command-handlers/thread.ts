@@ -1,13 +1,16 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
+import { resolveContainedPath } from "@bb/process-utils";
 import type { RuntimeEntry } from "../runtime-manager.js";
 import { CommandDispatchError, type CommandDispatchOptions, type CommandOf } from "../command-dispatch-support.js";
 
 function requireConfinedPath(rootPath: string, candidatePath: string): string {
-  const resolvedRoot = path.resolve(rootPath);
-  const resolved = path.resolve(candidatePath);
-  if (!resolved.startsWith(resolvedRoot + path.sep)) {
+  const resolved = resolveContainedPath({
+    rootPath,
+    candidatePath,
+  });
+  if (!resolved) {
     throw new CommandDispatchError(
       "invalid_path",
       "Thread storage path escapes the storage root",

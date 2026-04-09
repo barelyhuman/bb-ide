@@ -1,4 +1,5 @@
 import type { ChildProcess, StdioOptions } from "node:child_process";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import type { Readable, Writable } from "node:stream";
 import crossSpawn from "cross-spawn";
 
@@ -31,6 +32,12 @@ export interface PortableOutputChildProcess extends PortableChildProcess {
   stdin: null;
   stdout: Readable;
   stderr: Readable;
+}
+
+export interface ResolveContainedPathArgs {
+  rootPath: string;
+  candidatePath: string;
+  allowRoot?: boolean;
 }
 
 export function spawnPortableProcess(
@@ -80,4 +87,26 @@ export function spawnPortableOutputProcess(
   });
   assertPortableOutputProcess(child);
   return child;
+}
+
+export function resolveContainedPath(
+  args: ResolveContainedPathArgs,
+): string | null {
+  const resolvedRootPath = resolve(args.rootPath);
+  const resolvedCandidatePath = resolve(args.candidatePath);
+  const relativePath = relative(resolvedRootPath, resolvedCandidatePath);
+
+  if (relativePath === "") {
+    return args.allowRoot === true ? resolvedCandidatePath : null;
+  }
+
+  if (
+    relativePath === ".." ||
+    relativePath.startsWith(`..${sep}`) ||
+    isAbsolute(relativePath)
+  ) {
+    return null;
+  }
+
+  return resolvedCandidatePath;
 }

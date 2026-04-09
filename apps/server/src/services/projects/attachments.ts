@@ -2,7 +2,8 @@
 // We might move this to something like R2 or S3 in the future.
 // eslint-disable-next-line no-restricted-imports
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { basename, extname, isAbsolute, join, normalize, relative, resolve } from "node:path";
+import { basename, extname, join, normalize, resolve } from "node:path";
+import { resolveContainedPath } from "@bb/process-utils";
 import type { UploadedPromptAttachment } from "@bb/server-contract";
 import mimeTypes from "mime-types";
 import { ApiError } from "../../errors.js";
@@ -34,10 +35,9 @@ function resolveAttachmentPath(
 ): string {
   const normalizedRelativePath = normalize(relativePath.replaceAll("\\", "/"));
   const resolvedAttachmentDir = resolve(attachmentDir);
-  const resolvedPath = resolve(resolvedAttachmentDir, normalizedRelativePath);
-  const relativePathFromDir = relative(resolvedAttachmentDir, resolvedPath);
+  const resolvedCandidatePath = resolve(resolvedAttachmentDir, normalizedRelativePath);
 
-  if (relativePathFromDir === "") {
+  if (resolvedCandidatePath === resolvedAttachmentDir) {
     throw new ApiError(
       400,
       "invalid_request",
@@ -45,10 +45,12 @@ function resolveAttachmentPath(
     );
   }
 
-  if (
-    !relativePathFromDir.startsWith("..") &&
-    !isAbsolute(relativePathFromDir)
-  ) {
+  const resolvedPath = resolveContainedPath({
+    rootPath: resolvedAttachmentDir,
+    candidatePath: resolvedCandidatePath,
+  });
+
+  if (resolvedPath) {
     return resolvedPath;
   }
 

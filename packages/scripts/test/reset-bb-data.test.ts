@@ -45,4 +45,10 @@ describe("reset-bb-data", () => {
       `Refusing to remove unsafe path: ${path.resolve(os.homedir())}`,
     );
   });
+
+  it("rejects targets outside the home directory", () => {
+    expect(() => ensureSafeTargets(["/var/log/journal/extra"])).toThrow(
+      "Refusing to remove unsafe path: /var/log/journal/extra",
+    );
+  });
 });

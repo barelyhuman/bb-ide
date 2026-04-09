@@ -2480,7 +2480,10 @@ describe("public thread routes", () => {
       });
 
       expect(response.status).toBe(200);
-      expect(getThread(harness.db, thread.id)).toBeNull();
+      expect(getThread(harness.db, thread.id)).toMatchObject({
+        id: thread.id,
+        deletedAt: expect.any(Number),
+      });
       expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(0);
       await expect(
         waitForQueuedCommand(
@@ -2490,12 +2493,20 @@ describe("public thread routes", () => {
           100,
         ),
       ).rejects.toThrow("Timed out waiting for queued command");
+      await expect(
+        waitForQueuedCommand(
+          harness,
+          ({ command }) =>
+            command.type === "thread.deleted" && command.threadId === thread.id,
+          100,
+        ),
+      ).rejects.toThrow("Timed out waiting for queued command");
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("deletes idle managed threads while disconnected and queues cleanup immediately", async () => {
+  it("deletes idle managed threads while disconnected and defers cleanup until reconnect", async () => {
     const harness = await createTestAppHarness();
     try {
       const host = seedHost(harness.deps, { id: "host-delete-idle-managed-offline" });
@@ -2518,9 +2529,15 @@ describe("public thread routes", () => {
       });
 
       expect(response.status).toBe(200);
-      expect(getThread(harness.db, thread.id)).toBeNull();
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroying");
-
+      expect(getThread(harness.db, thread.id)).toMatchObject({
+        id: thread.id,
+        deletedAt: expect.any(Number),
+      });
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        cleanupMode: "force",
+        cleanupRequestedAt: expect.any(Number),
+        status: "destroying",
+      });
       const destroyCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
@@ -2529,11 +2546,10 @@ describe("public thread routes", () => {
       );
       expect(destroyCommand.row.sessionId).toBeNull();
       await expect(
-        waitForQueuedCommandAfter(
+        waitForQueuedCommand(
           harness,
-          destroyCommand.row.cursor,
           ({ command }) =>
-            command.type === "thread.stop" && command.threadId === thread.id,
+            command.type === "thread.deleted" && command.threadId === thread.id,
           100,
         ),
       ).rejects.toThrow("Timed out waiting for queued command");

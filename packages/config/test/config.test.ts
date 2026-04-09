@@ -35,6 +35,15 @@ describe("commonConfig", () => {
 
     expect(commonConfig.BB_DATA_DIR).toBe(path.join(os.homedir(), "custom-bb"));
   });
+
+  it("rejects whitespace-only BB_DATA_DIR overrides", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("BB_DATA_DIR", "   ");
+
+    await expect(
+      importFresh<typeof import("../src/common.js")>("../src/common.js"),
+    ).rejects.toThrow("BB_DATA_DIR must not be empty");
+  });
 });
 
 describe("data-dir helpers", () => {
@@ -49,6 +58,19 @@ describe("data-dir helpers", () => {
         BB_DATA_DIR: "~",
       },
     })).toBe(os.homedir());
+  });
+
+  it("rejects whitespace-only data dir overrides", async () => {
+    const { resolveConfiguredDataDir } = await importFresh<typeof import("../src/data-dir.js")>(
+      "../src/data-dir.js",
+    );
+
+    expect(() => resolveConfiguredDataDir({
+      defaultDirName: ".bb",
+      env: {
+        BB_DATA_DIR: " ",
+      },
+    })).toThrow("BB_DATA_DIR must not be empty");
   });
 });
 

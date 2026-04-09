@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertPortableOutputProcess,
   assertPortablePipedProcess,
+  resolveContainedPath,
   spawnPortableOutputProcess,
   spawnPortablePipedProcess,
   spawnPortableProcess,
@@ -79,5 +80,23 @@ describe("process utils", () => {
     expect(() => assertPortableOutputProcess(child)).toThrow(
       "Portable child process did not attach output-only stdio",
     );
+  });
+
+  it("resolves paths that stay within the configured root", () => {
+    expect(resolveContainedPath({
+      rootPath: "/tmp/root",
+      candidatePath: "/tmp/root/child/file.txt",
+    })).toBe("/tmp/root/child/file.txt");
+  });
+
+  it("rejects root and escaped paths", () => {
+    expect(resolveContainedPath({
+      rootPath: "/tmp/root",
+      candidatePath: "/tmp/root",
+    })).toBeNull();
+    expect(resolveContainedPath({
+      rootPath: "/tmp/root",
+      candidatePath: "/tmp/root/../escape",
+    })).toBeNull();
   });
 });

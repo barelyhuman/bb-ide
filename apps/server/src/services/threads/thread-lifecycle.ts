@@ -555,10 +555,13 @@ export async function finalizeStoppedThread(
     const environmentId = finalizedThread.environmentId;
     const environment = environmentId ? getEnvironment(deps.db, environmentId) : null;
     if (environment) {
-      queueThreadDeletedCommand(deps, {
+      const queuedDelete = queueThreadDeletedCommand(deps, {
         environment: { hostId: environment.hostId, id: environment.id },
         threadId: finalizedThread.id,
       });
+      if (!queuedDelete) {
+        return false;
+      }
     }
     deleteThread(deps.db, deps.hub, finalizedThread.id);
     requestEnvironmentCleanup(deps, {
