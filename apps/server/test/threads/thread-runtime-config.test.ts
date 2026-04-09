@@ -144,6 +144,45 @@ describe("thread runtime config", () => {
     }
   });
 
+  it("defaults approval policy to never for child threads", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-runtime-child-approval-policy",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const parentThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        providerId: "codex",
+      });
+      const childThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        providerId: "codex",
+        parentThreadId: parentThread.id,
+      });
+
+      const execution = await resolveExecutionOptions(harness.deps, {
+        threadId: childThread.id,
+        requestedExecution: {
+          model: "gpt-5",
+          source: "client/turn/requested",
+        },
+      });
+
+      expect(execution.approvalPolicy).toBe("never");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("uses the project root as cwd and a host data-dir workspace for managers", async () => {
     const harness = await createTestAppHarness();
     try {

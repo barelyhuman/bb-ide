@@ -112,9 +112,14 @@ export interface ResolvedThreadRuntimeCommandConfig {
   workspaceProvisionType: WorkspaceProvisionType;
 }
 
-function getDefaultApprovalPolicyForProvider(
-  providerId: string | null | undefined,
+function resolveDefaultApprovalPolicy(
+  thread: Thread | null,
 ): ApprovalPolicy {
+  if (thread?.parentThreadId !== null) {
+    return "never";
+  }
+
+  const providerId = thread?.providerId;
   switch (providerId) {
     case "codex":
     case "claude-code":
@@ -229,7 +234,7 @@ export async function resolveExecutionOptions(
   const approvalPolicy =
     args.requestedExecution.approvalPolicy ??
     lastExecution?.approvalPolicy ??
-    getDefaultApprovalPolicyForProvider(thread?.providerId);
+    resolveDefaultApprovalPolicy(thread);
   const questionPolicy =
     args.requestedExecution.questionPolicy ??
     lastExecution?.questionPolicy ??

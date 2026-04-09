@@ -542,7 +542,7 @@ function buildExecutionOptions(
   args: BuildExecutionOptionsArgs,
 ): ProviderAuditResolvedExecutionOptions {
   return {
-    approvalPolicy: args.execution?.approvalPolicy ?? "on-request",
+    approvalPolicy: args.execution?.approvalPolicy ?? "never",
     model: args.model ?? "provider-default",
     questionPolicy: args.execution?.questionPolicy ?? "allow",
     serviceTier: args.execution?.serviceTier ?? "fast",
