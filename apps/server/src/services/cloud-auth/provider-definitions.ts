@@ -42,6 +42,12 @@ const codexJwtPayloadSchema = z
   })
   .passthrough();
 
+const codexIdTokenPayloadSchema = z
+  .object({
+    email: z.string().email().optional(),
+  })
+  .passthrough();
+
 const codexTokenResponseSchema = z
   .object({
     access_token: z.string().min(1),
@@ -180,6 +186,25 @@ function decodeCodexAccountId(accessToken: string): string | null {
     const rawPayload = Buffer.from(parts[1] ?? "", "base64url").toString("utf8");
     const payload = codexJwtPayloadSchema.parse(JSON.parse(rawPayload));
     return payload[OPENAI_JWT_CLAIM_PATH]?.chatgpt_account_id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function decodeCodexAccountEmail(idToken: string | null): string | null {
+  if (!idToken) {
+    return null;
+  }
+
+  const parts = idToken.split(".");
+  if (parts.length !== 3) {
+    return null;
+  }
+
+  try {
+    const rawPayload = Buffer.from(parts[1] ?? "", "base64url").toString("utf8");
+    const payload = codexIdTokenPayloadSchema.parse(JSON.parse(rawPayload));
+    return payload.email ?? null;
   } catch {
     return null;
   }
@@ -392,7 +417,7 @@ const codexProviderDefinition: CloudAuthProviderDefinition<CodexStoredCredential
     };
   },
   getConnectionLabel(credential) {
-    return credential.accountId;
+    return decodeCodexAccountEmail(credential.idToken) ?? credential.accountId;
   },
   id: "codex",
   async refreshCredential(args) {

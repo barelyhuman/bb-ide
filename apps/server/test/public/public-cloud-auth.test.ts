@@ -10,6 +10,7 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readJson } from "../helpers/json.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
+import { createCloudAuthCrypto } from "../../src/services/cloud-auth/crypto.js";
 
 function createCodexAccessToken(accountId: string): string {
   const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString(
@@ -20,6 +21,18 @@ function createCodexAccessToken(accountId: string): string {
       "https://api.openai.com/auth": {
         chatgpt_account_id: accountId,
       },
+    }),
+  ).toString("base64url");
+  return `${header}.${body}.signature`;
+}
+
+function createCodexIdToken(email: string): string {
+  const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString(
+    "base64url",
+  );
+  const body = Buffer.from(
+    JSON.stringify({
+      email,
     }),
   ).toString("base64url");
   return `${header}.${body}.signature`;
@@ -79,7 +92,7 @@ describe("public cloud auth routes", () => {
           JSON.stringify({
             access_token: createCodexAccessToken("acct_codex_test"),
             expires_in: 3600,
-            id_token: "id-token-1",
+            id_token: createCodexIdToken("codex@example.test"),
             refresh_token: "refresh-token-1",
           }),
           {
@@ -143,7 +156,7 @@ describe("public cloud auth routes", () => {
         displayName: "Codex",
         errorMessage: null,
         expiresAt: expect.any(Number),
-        label: "acct_codex_test",
+        label: "codex@example.test",
         lastRefreshedAt: expect.any(Number),
         providerId: "codex",
         status: "connected",
@@ -304,6 +317,52 @@ describe("public cloud auth routes", () => {
       expect(disconnectResponse.status).toBe(200);
       await expect(readJson(disconnectResponse)).resolves.toEqual({ ok: true });
       expect(getSandboxProviderCredentialByProviderId(harness.db, "codex")).toBeNull();
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("derives the displayed codex label from a saved id token", async () => {
+    const harness = await createTestAppHarness();
+
+    try {
+      const crypto = await createCloudAuthCrypto({
+        dataDir: harness.config.dataDir,
+      });
+      upsertSandboxProviderCredential(harness.db, {
+        encryptedPayload: crypto.encryptJson({
+          plaintext: JSON.stringify({
+            accessToken: createCodexAccessToken("acct_codex_old"),
+            accountId: "acct_codex_old",
+            expiresAt: 1_900_000_000_000,
+            idToken: createCodexIdToken("saved-codex@example.test"),
+            providerId: "codex",
+            refreshToken: "refresh-token-existing",
+          }),
+        }),
+        expiresAt: 1_900_000_000_000,
+        label: "acct_codex_old",
+        lastErrorMessage: null,
+        lastRefreshedAt: 1_800_000_000_000,
+        providerId: "codex",
+        updatedAt: 1_800_000_000_000,
+      });
+
+      const settingsResponse = await harness.app.request("/api/v1/system/cloud-auth");
+      expect(settingsResponse.status).toBe(200);
+      const settingsBody = cloudAuthSettingsResponseSchema.parse(
+        await readJson(settingsResponse),
+      );
+      expect(settingsBody.connections).toContainEqual({
+        connectedAt: 1_800_000_000_000,
+        displayName: "Codex",
+        errorMessage: null,
+        expiresAt: 1_900_000_000_000,
+        label: "saved-codex@example.test",
+        lastRefreshedAt: 1_800_000_000_000,
+        providerId: "codex",
+        status: "connected",
+      });
     } finally {
       await harness.cleanup();
     }

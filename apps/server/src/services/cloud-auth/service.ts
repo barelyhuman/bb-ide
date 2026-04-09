@@ -81,6 +81,19 @@ function getConnectionLabel(
   }
 }
 
+function getStoredConnectionLabel(args: {
+  readCredential: (
+    record: SandboxProviderCredentialRecord,
+  ) => StoredCloudAuthCredential;
+  record: SandboxProviderCredentialRecord;
+}): string | null {
+  try {
+    return getConnectionLabel(args.readCredential(args.record)) ?? args.record.label;
+  } catch {
+    return args.record.label;
+  }
+}
+
 async function refreshCredential(
   credential: StoredCloudAuthCredential,
 ): Promise<StoredCloudAuthCredential> {
@@ -461,7 +474,10 @@ export async function createCloudAuthService(
         displayName: provider.displayName,
         errorMessage: record.lastErrorMessage,
         expiresAt: record.expiresAt,
-        label: record.label,
+        label: getStoredConnectionLabel({
+          readCredential,
+          record,
+        }),
         lastRefreshedAt: record.lastRefreshedAt,
         providerId: provider.id,
         status: record.lastErrorMessage ? "invalid" : "connected",
