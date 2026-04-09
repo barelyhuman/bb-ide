@@ -11,6 +11,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { readJson } from "../helpers/json.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 import { createCloudAuthCrypto } from "../../src/services/cloud-auth/crypto.js";
+import { buildSandboxProviderCredentialUpsert } from "../../src/services/cloud-auth/storage.js";
 
 function createCodexAccessToken(accountId: string): string {
   const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString(
@@ -278,19 +279,28 @@ describe("public cloud auth routes", () => {
     const harness = await createTestAppHarness();
 
     try {
-      upsertSandboxProviderCredential(harness.db, {
-        encryptedPayload: JSON.stringify({
-          ciphertext: "invalid",
-          iv: "invalid",
-          tag: "invalid",
-          version: 1,
-        }),
-        expiresAt: 1_700_000_000_000,
-        label: "bad-credential",
-        lastErrorMessage: "Token refresh failed",
-        lastRefreshedAt: 1_700_000_000_100,
-        providerId: "codex",
+      const crypto = await createCloudAuthCrypto({
+        dataDir: harness.config.dataDir,
       });
+      upsertSandboxProviderCredential(
+        harness.db,
+        buildSandboxProviderCredentialUpsert({
+          credential: {
+            accessToken: createCodexAccessToken("bad-credential"),
+            accountId: "bad-credential",
+            expiresAt: 1_700_000_000_000,
+            idToken: null,
+            providerId: "codex",
+            refreshToken: "refresh-token-invalid",
+          },
+          crypto,
+          expiresAt: 1_700_000_000_000,
+          label: "bad-credential",
+          lastErrorMessage: "Token refresh failed",
+          lastRefreshedAt: 1_700_000_000_100,
+          providerId: "codex",
+        }),
+      );
 
       const settingsResponse = await harness.app.request("/api/v1/system/cloud-auth");
       expect(settingsResponse.status).toBe(200);
@@ -329,24 +339,26 @@ describe("public cloud auth routes", () => {
       const crypto = await createCloudAuthCrypto({
         dataDir: harness.config.dataDir,
       });
-      upsertSandboxProviderCredential(harness.db, {
-        encryptedPayload: crypto.encryptJson({
-          plaintext: JSON.stringify({
+      upsertSandboxProviderCredential(
+        harness.db,
+        buildSandboxProviderCredentialUpsert({
+          credential: {
             accessToken: createCodexAccessToken("acct_codex_old"),
             accountId: "acct_codex_old",
             expiresAt: 1_900_000_000_000,
             idToken: createCodexIdToken("saved-codex@example.test"),
             providerId: "codex",
             refreshToken: "refresh-token-existing",
-          }),
+          },
+          crypto,
+          expiresAt: 1_900_000_000_000,
+          label: "acct_codex_old",
+          lastErrorMessage: null,
+          lastRefreshedAt: 1_800_000_000_000,
+          providerId: "codex",
+          updatedAt: 1_800_000_000_000,
         }),
-        expiresAt: 1_900_000_000_000,
-        label: "acct_codex_old",
-        lastErrorMessage: null,
-        lastRefreshedAt: 1_800_000_000_000,
-        providerId: "codex",
-        updatedAt: 1_800_000_000_000,
-      });
+      );
 
       const settingsResponse = await harness.app.request("/api/v1/system/cloud-auth");
       expect(settingsResponse.status).toBe(200);

@@ -82,7 +82,10 @@ export const sandboxProviderCredentials = sqliteTable(
   {
     id: text("id").primaryKey(),
     providerId: text("provider_id").notNull(),
-    encryptedPayload: text("encrypted_payload").notNull(),
+    encryptedAccessToken: text("encrypted_access_token").notNull(),
+    encryptedRefreshToken: text("encrypted_refresh_token").notNull(),
+    encryptedIdToken: text("encrypted_id_token"),
+    encryptedMetadata: text("encrypted_metadata").notNull(),
     label: text("label"),
     expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
     lastRefreshedAt: integer("last_refreshed_at", { mode: "timestamp_ms" }),

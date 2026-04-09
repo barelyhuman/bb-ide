@@ -20,7 +20,10 @@ describe("sandbox provider credentials", () => {
 
     const first = upsertSandboxProviderCredential(db, {
       providerId: "codex",
-      encryptedPayload: "ciphertext-1",
+      encryptedAccessToken: "access-1",
+      encryptedRefreshToken: "refresh-1",
+      encryptedIdToken: "id-1",
+      encryptedMetadata: "metadata-1",
       label: "first",
       expiresAt: 1_700_000_000_000,
       lastRefreshedAt: 1_700_000_000_100,
@@ -29,7 +32,10 @@ describe("sandbox provider credentials", () => {
     });
     const second = upsertSandboxProviderCredential(db, {
       providerId: "codex",
-      encryptedPayload: "ciphertext-2",
+      encryptedAccessToken: "access-2",
+      encryptedRefreshToken: "refresh-2",
+      encryptedIdToken: null,
+      encryptedMetadata: "metadata-2",
       label: "second",
       expiresAt: 1_700_000_100_000,
       lastRefreshedAt: 1_700_000_100_100,
@@ -38,7 +44,10 @@ describe("sandbox provider credentials", () => {
     });
 
     expect(second.id).toBe(first.id);
-    expect(second.encryptedPayload).toBe("ciphertext-2");
+    expect(second.encryptedAccessToken).toBe("access-2");
+    expect(second.encryptedRefreshToken).toBe("refresh-2");
+    expect(second.encryptedIdToken).toBeNull();
+    expect(second.encryptedMetadata).toBe("metadata-2");
     expect(second.label).toBe("second");
     expect(second.lastErrorMessage).toBe("refresh failed");
     expect(second.createdAt).toBe(first.createdAt);
@@ -51,7 +60,10 @@ describe("sandbox provider credentials", () => {
 
     upsertSandboxProviderCredential(db, {
       providerId: "claude-code",
-      encryptedPayload: "ciphertext-claude",
+      encryptedAccessToken: "access-claude",
+      encryptedRefreshToken: "refresh-claude",
+      encryptedIdToken: null,
+      encryptedMetadata: "metadata-claude",
       label: "Claude",
       expiresAt: null,
       lastRefreshedAt: null,
@@ -59,7 +71,10 @@ describe("sandbox provider credentials", () => {
     });
 
     expect(getSandboxProviderCredentialByProviderId(db, "claude-code")).toMatchObject({
-      encryptedPayload: "ciphertext-claude",
+      encryptedAccessToken: "access-claude",
+      encryptedRefreshToken: "refresh-claude",
+      encryptedIdToken: null,
+      encryptedMetadata: "metadata-claude",
       providerId: "claude-code",
     });
     expect(deleteSandboxProviderCredentialByProviderId(db, "claude-code")).toBe(true);

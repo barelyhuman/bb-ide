@@ -19,9 +19,12 @@ import { createCloudAuthCrypto } from "./crypto.js";
 import {
   getCloudAuthProviderDefinition,
   listCloudAuthProviderDefinitions,
-  storedCloudAuthCredentialSchema,
   type StoredCloudAuthCredential,
 } from "./provider-definitions.js";
+import {
+  buildSandboxProviderCredentialUpsert,
+  deserializeCloudAuthCredential,
+} from "./storage.js";
 import type {
   CloudAuthResolvedCredential,
   CloudAuthService,
@@ -233,11 +236,9 @@ export async function createCloudAuthService(
   }
 
   async function persistCredential(argsPersist: PersistCredentialArgs): Promise<void> {
-    const encryptedPayload = crypto.encryptJson({
-      plaintext: JSON.stringify(argsPersist.credential),
-    });
-    upsertSandboxProviderCredential(args.db, {
-      encryptedPayload,
+    upsertSandboxProviderCredential(args.db, buildSandboxProviderCredentialUpsert({
+      credential: argsPersist.credential,
+      crypto,
       expiresAt: argsPersist.credential.expiresAt,
       label: getConnectionLabel(argsPersist.credential),
       lastErrorMessage: argsPersist.lastErrorMessage,
@@ -247,15 +248,15 @@ export async function createCloudAuthService(
           : argsPersist.lastRefreshedAt,
       providerId: argsPersist.credential.providerId,
       updatedAt: argsPersist.updatedAt,
-    });
+    }));
   }
 
   function readCredential(
     record: SandboxProviderCredentialRecord,
   ): StoredCloudAuthCredential {
-    return crypto.decryptJson({
-      payload: record.encryptedPayload,
-      schema: storedCloudAuthCredentialSchema,
+    return deserializeCloudAuthCredential({
+      crypto,
+      record,
     });
   }
 
@@ -278,7 +279,10 @@ export async function createCloudAuthService(
       credential = readCredential(record);
     } catch (error) {
       upsertSandboxProviderCredential(args.db, {
-        encryptedPayload: record.encryptedPayload,
+        encryptedAccessToken: record.encryptedAccessToken,
+        encryptedRefreshToken: record.encryptedRefreshToken,
+        encryptedIdToken: record.encryptedIdToken,
+        encryptedMetadata: record.encryptedMetadata,
         expiresAt: record.expiresAt,
         label: record.label,
         lastErrorMessage:
@@ -333,7 +337,10 @@ export async function createCloudAuthService(
         return buildResolvedCredential(refreshedRecord, refreshedCredential);
       } catch (error) {
         upsertSandboxProviderCredential(args.db, {
-          encryptedPayload: currentRecord.encryptedPayload,
+          encryptedAccessToken: currentRecord.encryptedAccessToken,
+          encryptedRefreshToken: currentRecord.encryptedRefreshToken,
+          encryptedIdToken: currentRecord.encryptedIdToken,
+          encryptedMetadata: currentRecord.encryptedMetadata,
           expiresAt: currentRecord.expiresAt,
           label: currentRecord.label,
           lastErrorMessage:

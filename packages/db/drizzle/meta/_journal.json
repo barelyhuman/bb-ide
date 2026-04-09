@@ -225,6 +225,13 @@
       "when": 1775720400000,
       "tag": "0031_app_sandbox_env_vars",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1775722200000,
+      "tag": "0032_cloud_auth_token_columns",
+      "breakpoints": true
     }
   ]
 }

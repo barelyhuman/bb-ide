@@ -20,6 +20,7 @@ import type {
   CodexStoredCredential,
   StoredCloudAuthCredential,
 } from "../../src/services/cloud-auth/provider-definitions.js";
+import { buildSandboxProviderCredentialUpsert } from "../../src/services/cloud-auth/storage.js";
 import {
   completeSandboxRuntimeMaterialSyncForCommand,
   failSandboxRuntimeMaterialSyncForCommand,
@@ -44,17 +45,19 @@ async function seedSandboxCredential(
   const crypto = await createCloudAuthCrypto({
     dataDir: args.harness.config.dataDir,
   });
-  upsertSandboxProviderCredential(args.harness.db, {
-    encryptedPayload: crypto.encryptJson({
-      plaintext: JSON.stringify(args.credential),
+  upsertSandboxProviderCredential(
+    args.harness.db,
+    buildSandboxProviderCredentialUpsert({
+      credential: args.credential,
+      crypto,
+      expiresAt: args.credential.expiresAt,
+      label: null,
+      lastErrorMessage: null,
+      lastRefreshedAt: args.lastRefreshedAt,
+      providerId: args.credential.providerId,
+      updatedAt: args.updatedAt,
     }),
-    expiresAt: args.credential.expiresAt,
-    label: null,
-    lastErrorMessage: null,
-    lastRefreshedAt: args.lastRefreshedAt,
-    providerId: args.credential.providerId,
-    updatedAt: args.updatedAt,
-  });
+  );
 }
 
 describe("sandbox runtime material", () => {

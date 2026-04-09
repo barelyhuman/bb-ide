@@ -14,6 +14,7 @@ import type {
 import { getCloudAuthProviderDefinition } from "../../apps/server/src/services/cloud-auth/provider-definitions.ts";
 import { createCloudAuthCrypto } from "../../apps/server/src/services/cloud-auth/crypto.ts";
 import { createCloudAuthService } from "../../apps/server/src/services/cloud-auth/service.ts";
+import { buildSandboxProviderCredentialUpsert } from "../../apps/server/src/services/cloud-auth/storage.ts";
 import { createSandboxEnvService } from "../../apps/server/src/services/sandbox-env/service.ts";
 import type { ServerRuntimeConfig } from "../../apps/server/src/types.ts";
 import { initDb } from "../../apps/server/src/db.ts";
@@ -754,16 +755,18 @@ async function seedSmokeCloudAuthFixture(
       scopes: CLAUDE_SCOPES,
       subscriptionType: null,
     };
-    upsertSandboxProviderCredential(context.db, {
-      encryptedPayload: context.cloudAuthCrypto.encryptJson({
-        plaintext: JSON.stringify(credential),
+    upsertSandboxProviderCredential(
+      context.db,
+      buildSandboxProviderCredentialUpsert({
+        credential,
+        crypto: context.cloudAuthCrypto,
+        expiresAt: credential.expiresAt,
+        label: null,
+        lastErrorMessage: null,
+        lastRefreshedAt: Date.now(),
+        providerId: credential.providerId,
       }),
-      expiresAt: credential.expiresAt,
-      label: null,
-      lastErrorMessage: null,
-      lastRefreshedAt: Date.now(),
-      providerId: credential.providerId,
-    });
+    );
   }
 
   if (fixture?.["openai-codex"]) {
@@ -775,16 +778,18 @@ async function seedSmokeCloudAuthFixture(
       providerId: "codex",
       refreshToken: fixture["openai-codex"].refresh,
     };
-    upsertSandboxProviderCredential(context.db, {
-      encryptedPayload: context.cloudAuthCrypto.encryptJson({
-        plaintext: JSON.stringify(credential),
+    upsertSandboxProviderCredential(
+      context.db,
+      buildSandboxProviderCredentialUpsert({
+        credential,
+        crypto: context.cloudAuthCrypto,
+        expiresAt: credential.expiresAt,
+        label: credential.accountId,
+        lastErrorMessage: null,
+        lastRefreshedAt: Date.now(),
+        providerId: credential.providerId,
       }),
-      expiresAt: credential.expiresAt,
-      label: credential.accountId,
-      lastErrorMessage: null,
-      lastRefreshedAt: Date.now(),
-      providerId: credential.providerId,
-    });
+    );
   }
 }
 
@@ -805,16 +810,18 @@ async function expireSmokeCodexCredential(
     providerId: "codex",
     refreshToken: codexFixture.refresh,
   };
-  upsertSandboxProviderCredential(context.db, {
-    encryptedPayload: context.cloudAuthCrypto.encryptJson({
-      plaintext: JSON.stringify(expiredCredential),
+  upsertSandboxProviderCredential(
+    context.db,
+    buildSandboxProviderCredentialUpsert({
+      credential: expiredCredential,
+      crypto: context.cloudAuthCrypto,
+      expiresAt: expiredCredential.expiresAt,
+      label: expiredCredential.accountId,
+      lastErrorMessage: null,
+      lastRefreshedAt: Date.now() - 60_000,
+      providerId: expiredCredential.providerId,
     }),
-    expiresAt: expiredCredential.expiresAt,
-    label: expiredCredential.accountId,
-    lastErrorMessage: null,
-    lastRefreshedAt: Date.now() - 60_000,
-    providerId: expiredCredential.providerId,
-  });
+  );
 }
 
 async function waitForExtendedSandboxTimeout(

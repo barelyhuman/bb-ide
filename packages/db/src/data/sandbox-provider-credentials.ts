@@ -5,7 +5,10 @@ import { sandboxProviderCredentials } from "../schema.js";
 
 export interface UpsertSandboxProviderCredentialArgs {
   providerId: string;
-  encryptedPayload: string;
+  encryptedAccessToken: string;
+  encryptedRefreshToken: string;
+  encryptedIdToken: string | null;
+  encryptedMetadata: string;
   label: string | null;
   expiresAt: number | null;
   lastRefreshedAt: number | null;
@@ -16,7 +19,10 @@ export interface UpsertSandboxProviderCredentialArgs {
 export interface SandboxProviderCredentialRecord {
   id: string;
   providerId: string;
-  encryptedPayload: string;
+  encryptedAccessToken: string;
+  encryptedRefreshToken: string;
+  encryptedIdToken: string | null;
+  encryptedMetadata: string;
   label: string | null;
   expiresAt: number | null;
   lastRefreshedAt: number | null;
@@ -31,7 +37,10 @@ function toRecord(
   return {
     id: row.id,
     providerId: row.providerId,
-    encryptedPayload: row.encryptedPayload,
+    encryptedAccessToken: row.encryptedAccessToken,
+    encryptedRefreshToken: row.encryptedRefreshToken,
+    encryptedIdToken: row.encryptedIdToken,
+    encryptedMetadata: row.encryptedMetadata,
     label: row.label,
     expiresAt: row.expiresAt ? row.expiresAt.getTime() : null,
     lastRefreshedAt: row.lastRefreshedAt ? row.lastRefreshedAt.getTime() : null,
@@ -78,7 +87,10 @@ export function upsertSandboxProviderCredential(
     .values({
       id: credentialId,
       providerId: args.providerId,
-      encryptedPayload: args.encryptedPayload,
+      encryptedAccessToken: args.encryptedAccessToken,
+      encryptedRefreshToken: args.encryptedRefreshToken,
+      encryptedIdToken: args.encryptedIdToken,
+      encryptedMetadata: args.encryptedMetadata,
       label: args.label,
       expiresAt: args.expiresAt === null ? null : new Date(args.expiresAt),
       lastRefreshedAt:
@@ -90,7 +102,10 @@ export function upsertSandboxProviderCredential(
     .onConflictDoUpdate({
       target: sandboxProviderCredentials.providerId,
       set: {
-        encryptedPayload: args.encryptedPayload,
+        encryptedAccessToken: args.encryptedAccessToken,
+        encryptedRefreshToken: args.encryptedRefreshToken,
+        encryptedIdToken: args.encryptedIdToken,
+        encryptedMetadata: args.encryptedMetadata,
         label: args.label,
         expiresAt: args.expiresAt === null ? null : new Date(args.expiresAt),
         lastRefreshedAt:
