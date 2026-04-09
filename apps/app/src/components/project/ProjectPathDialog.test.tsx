@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { describe, expect, it, vi } from "vitest"
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { ProjectPathDialog } from "./ProjectPathDialog"
+
+afterEach(() => {
+  cleanup()
+})
 
 describe("ProjectPathDialog", () => {
   it("keeps validation errors visible until the path changes", async () => {
@@ -20,11 +24,9 @@ describe("ProjectPathDialog", () => {
     })
     fireEvent.click(screen.getByRole("button", { name: "Create project" }))
 
-    screen.getByText("Project path must be an absolute Linux or WSL path.")
-
-    await waitFor(() => {
-      screen.getByText("Project path must be an absolute Linux or WSL path.")
-    })
+    expect(
+      screen.getByText("Project path must be an absolute Linux or WSL path."),
+    ).toBeTruthy()
 
     fireEvent.change(screen.getByLabelText("Project path"), {
       target: { value: "/srv/repos/demo" },
@@ -79,5 +81,57 @@ describe("ProjectPathDialog", () => {
       screen.getByDisplayValue("/srv/repos/demo")
     })
     expect(pickFolder).toHaveBeenCalledTimes(1)
+  })
+
+  it("shows the filesystem root validation message for create mode", () => {
+    render(
+      <ProjectPathDialog
+        target={{ kind: "create" }}
+        pickFolder={null}
+        onOpenChange={() => {}}
+        onSubmit={() => {}}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText("Project path"), {
+      target: { value: "/" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Create project" }))
+
+    expect(
+      screen.getByText("Project path must point to a project directory, not the filesystem root."),
+    ).toBeTruthy()
+  })
+
+  it("submits the normalized path in update mode", async () => {
+    const onSubmit = vi.fn()
+
+    render(
+      <ProjectPathDialog
+        target={{
+          currentPath: "/srv/repos/demo",
+          kind: "update",
+          projectId: "proj-1",
+          projectName: "Demo",
+        }}
+        pickFolder={null}
+        onOpenChange={() => {}}
+        onSubmit={onSubmit}
+      />,
+    )
+
+    fireEvent.change(screen.getByLabelText("Project path"), {
+      target: { value: "/srv/repos/demo-updated/" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Save path" }))
+
+    await waitFor(() => {
+      expect(onSubmit).toHaveBeenCalledWith({
+        currentPath: "/srv/repos/demo",
+        kind: "update",
+        projectId: "proj-1",
+        projectName: "Demo",
+      }, "/srv/repos/demo-updated")
+    })
   })
 })

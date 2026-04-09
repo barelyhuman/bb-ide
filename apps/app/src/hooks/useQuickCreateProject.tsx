@@ -1,6 +1,5 @@
 import {
   createContext,
-  createElement,
   useCallback,
   useContext,
   type ReactNode,
@@ -87,10 +86,10 @@ export function QuickCreateProjectProvider({
 }: QuickCreateProjectProviderProps) {
   const quickCreateProject = useQuickCreateProject()
 
-  return createElement(
-    quickCreateProjectContext.Provider,
-    { value: quickCreateProject },
-    children,
+  return (
+    <quickCreateProjectContext.Provider value={quickCreateProject}>
+      {children}
+    </quickCreateProjectContext.Provider>
   )
 }
 

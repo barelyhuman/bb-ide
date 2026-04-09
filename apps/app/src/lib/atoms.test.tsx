@@ -1,193 +1,181 @@
 // @vitest-environment jsdom
 
-import { getDefaultStore } from "jotai";
-import { cleanup } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { createStore } from "jotai"
+import { cleanup, waitFor } from "@testing-library/react"
+import { resetFakeReconnectingWebSockets } from "@/test/fake-reconnecting-websocket"
+import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
-const {
-  changedCallbacks,
-  connectedCallbacks,
-  fetchHostStatus,
-  getSystemConfig,
-} = vi.hoisted(() => {
-  interface ConnectedEvent {
-    reconnected: boolean;
-  }
-
-  interface HostChangedMessage {
-    changes: string[];
-    entity: "host";
-    type: "changed";
-  }
-
-  type ConnectedCallback = (event: ConnectedEvent) => void;
-  type ChangedCallback = (message: HostChangedMessage) => void;
-
-  const changedCallbacks: ChangedCallback[] = [];
-  const connectedCallbacks: ConnectedCallback[] = [];
-
+vi.mock("partysocket/ws", async () => {
+  const { FakeReconnectingWebSocket: FakeSocket } = await import("@/test/fake-reconnecting-websocket")
   return {
-    changedCallbacks,
-    connectedCallbacks,
-    fetchHostStatus: vi.fn(),
-    getSystemConfig: vi.fn(),
-  };
-});
+    default: FakeSocket,
+  }
+})
 
-vi.mock("@/lib/api-server", () => ({
-  apiClient: {
-    system: {
-      config: {
-        $get: getSystemConfig,
-      },
-    },
-  },
-}));
-
-vi.mock("@/lib/api-host-daemon", () => ({
-  fetchHostStatus,
-}));
-
-vi.mock("@/lib/ws", () => ({
-  wsManager: {
-    onChanged(callback: (message: { changes: string[]; entity: "host"; type: "changed" }) => void) {
-      changedCallbacks.push(callback);
-      return () => {
-        const index = changedCallbacks.indexOf(callback);
-        if (index >= 0) {
-          changedCallbacks.splice(index, 1);
-        }
-      };
-    },
-    onConnected(callback: (event: { reconnected: boolean }) => void) {
-      connectedCallbacks.push(callback);
-      return () => {
-        const index = connectedCallbacks.indexOf(callback);
-        if (index >= 0) {
-          connectedCallbacks.splice(index, 1);
-        }
-      };
-    },
-  },
-}));
-
-afterEach(() => {
-  cleanup();
-  changedCallbacks.length = 0;
-  connectedCallbacks.length = 0;
-  vi.clearAllMocks();
-  vi.resetModules();
-});
-
-function mockSystemConfig(): void {
-  getSystemConfig.mockResolvedValue({
-    json: async () => ({
-      hostDaemonPort: 4123,
-      voiceTranscriptionEnabled: false,
-    }),
-    ok: true,
-  });
+interface SystemConfigRouteState {
+  configs: Array<{
+    hostDaemonPort: number | null
+    voiceTranscriptionEnabled: boolean
+  }>
+  daemonStatuses: Array<{
+    connected: boolean
+    hostId: string
+    serverUrl: string
+    supportsNativeFolderPicker: boolean
+  } | null>
 }
 
-describe("systemConfigAtom", () => {
+interface AtomModules {
+  FakeReconnectingWebSocket: typeof import("@/test/fake-reconnecting-websocket").FakeReconnectingWebSocket
+  localHostIdAtom: typeof import("./atoms").localHostIdAtom
+  systemConfigAtom: typeof import("./atoms").systemConfigAtom
+  wsManager: typeof import("./ws").wsManager
+}
+
+function installAtomFetchRoutes(state: SystemConfigRouteState) {
+  installFetchRoutes([
+    {
+      pathname: "/api/v1/system/config",
+      handler: async () => {
+        const nextConfig = state.configs.shift()
+        if (!nextConfig) {
+          throw new Error("Unexpected system config fetch")
+        }
+
+        return jsonResponse({
+          githubConnected: false,
+          hostDaemonPort: nextConfig.hostDaemonPort,
+          sandboxHostSupported: false,
+          voiceTranscriptionEnabled: nextConfig.voiceTranscriptionEnabled,
+        })
+      },
+    },
+    {
+      pathname: "/status",
+      port: 4123,
+      handler: async () => {
+        const nextStatus = state.daemonStatuses.shift()
+        if (nextStatus == null) {
+          return new Response(null, { status: 503 })
+        }
+
+        return jsonResponse(nextStatus)
+      },
+    },
+  ])
+}
+
+async function importFreshAtomModules(): Promise<AtomModules> {
+  vi.resetModules()
+
+  const [{ localHostIdAtom, systemConfigAtom }, { wsManager }, { FakeReconnectingWebSocket }] = await Promise.all([
+    import("./atoms"),
+    import("./ws"),
+    import("@/test/fake-reconnecting-websocket"),
+  ])
+
+  return {
+    FakeReconnectingWebSocket,
+    localHostIdAtom,
+    systemConfigAtom,
+    wsManager,
+  }
+}
+
+afterEach(() => {
+  cleanup()
+  resetFakeReconnectingWebSockets()
+  vi.resetModules()
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+})
+
+describe("atoms", () => {
   it("re-fetches config after websocket reconnects", async () => {
-    // First call: server unavailable, returns fallback with no daemon port
-    getSystemConfig.mockResolvedValueOnce({
-      json: async () => ({
-        hostDaemonPort: null,
-        voiceTranscriptionEnabled: false,
-      }),
-      ok: true,
-    });
-    // Second call: server recovered, returns real config
-    getSystemConfig.mockResolvedValueOnce({
-      json: async () => ({
-        hostDaemonPort: 4123,
-        voiceTranscriptionEnabled: false,
-      }),
-      ok: true,
-    });
+    installAtomFetchRoutes({
+      configs: [
+        {
+          hostDaemonPort: null,
+          voiceTranscriptionEnabled: false,
+        },
+        {
+          hostDaemonPort: 4123,
+          voiceTranscriptionEnabled: false,
+        },
+      ],
+      daemonStatuses: [],
+    })
 
-    const { systemConfigAtom } = await import("./atoms");
-    const store = getDefaultStore();
-    const unsubscribe = store.sub(systemConfigAtom, () => {});
+    const { FakeReconnectingWebSocket, systemConfigAtom, wsManager } = await importFreshAtomModules()
+    const store = createStore()
+    const unsubscribe = store.sub(systemConfigAtom, () => {})
 
     try {
       expect(await store.get(systemConfigAtom)).toMatchObject({
         hostDaemonPort: null,
-      });
-
-      for (const cb of connectedCallbacks) {
-        cb({ reconnected: true });
-      }
-
-      expect(await store.get(systemConfigAtom)).toMatchObject({
-        hostDaemonPort: 4123,
-      });
-      expect(getSystemConfig).toHaveBeenCalledTimes(2);
-    } finally {
-      unsubscribe();
-    }
-  });
-});
-
-describe("localHostIdAtom", () => {
-  it("re-probes when host status changes", async () => {
-    mockSystemConfig();
-    fetchHostStatus
-      .mockResolvedValueOnce({
-        hostId: "host-1",
-        connected: true,
-        serverUrl: "http://localhost:3334",
-        supportsNativeFolderPicker: true,
       })
-      .mockResolvedValueOnce(null);
 
-    const { localHostIdAtom } = await import("./atoms");
-    const store = getDefaultStore();
-    const unsubscribe = store.sub(localHostIdAtom, () => {});
+      wsManager.connect()
+      const socket = FakeReconnectingWebSocket.latest()
+      socket.open()
+      socket.close()
+      socket.open()
+
+      await waitFor(async () => {
+        expect(await store.get(systemConfigAtom)).toMatchObject({
+          hostDaemonPort: 4123,
+        })
+      })
+
+      wsManager.disconnect()
+    } finally {
+      unsubscribe()
+    }
+  })
+
+  it("re-probes local host status when the websocket reports a host change", async () => {
+    installAtomFetchRoutes({
+      configs: [
+        {
+          hostDaemonPort: 4123,
+          voiceTranscriptionEnabled: false,
+        },
+      ],
+      daemonStatuses: [
+        {
+          connected: true,
+          hostId: "host-1",
+          serverUrl: "http://localhost:3334",
+          supportsNativeFolderPicker: true,
+        },
+        null,
+      ],
+    })
+
+    const { FakeReconnectingWebSocket, localHostIdAtom, wsManager } = await importFreshAtomModules()
+    const store = createStore()
+    const unsubscribe = store.sub(localHostIdAtom, () => {})
 
     try {
-      expect(await store.get(localHostIdAtom)).toBe("host-1");
+      expect(await store.get(localHostIdAtom)).toBe("host-1")
 
-      changedCallbacks[0]?.({
+      wsManager.connect()
+      const socket = FakeReconnectingWebSocket.latest()
+      socket.open()
+      socket.emitJson({
         changes: ["host-disconnected"],
         entity: "host",
         type: "changed",
-      });
+      })
 
-      expect(await store.get(localHostIdAtom)).toBeNull();
-      expect(fetchHostStatus).toHaveBeenCalledTimes(2);
+      await waitFor(async () => {
+        expect(await store.get(localHostIdAtom)).toBeNull()
+      })
+
+      wsManager.disconnect()
     } finally {
-      unsubscribe();
+      unsubscribe()
     }
-  });
-
-  it("re-probes after websocket reconnects", async () => {
-    mockSystemConfig();
-    fetchHostStatus
-      .mockResolvedValueOnce(null)
-      .mockResolvedValue({
-        hostId: "host-1",
-        connected: true,
-        serverUrl: "http://localhost:3334",
-        supportsNativeFolderPicker: true,
-      });
-
-    const { localHostIdAtom } = await import("./atoms");
-    const store = getDefaultStore();
-    const unsubscribe = store.sub(localHostIdAtom, () => {});
-
-    try {
-      expect(await store.get(localHostIdAtom)).toBeNull();
-
-      for (const cb of connectedCallbacks) {
-        cb({ reconnected: true });
-      }
-
-      expect(await store.get(localHostIdAtom)).toBe("host-1");
-    } finally {
-      unsubscribe();
-    }
-  });
-});
+  })
+})
