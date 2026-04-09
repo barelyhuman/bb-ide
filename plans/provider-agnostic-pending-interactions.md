@@ -89,6 +89,8 @@ surface to:
 - app interaction UI should reuse existing app primitives and styling so it
   looks consistent with the rest of bb rather than introducing a separate
   visual language
+- the primary in-thread interaction surface should visually anchor to the same
+  area above the prompt box that already hosts the git diff stats banner
 
 ## Design Principles
 
@@ -443,6 +445,65 @@ Exit condition:
    already proven through the CLI.
 6. Reuse existing app shell, detail, status, and action primitives so the
    interaction UI is stylistically aligned with the rest of the application.
+7. Prefer extracting shared UI building blocks from existing thread surfaces
+   instead of introducing pending-interaction-only component styling.
+
+Phase 6 styling and component reuse guidance:
+
+- place the primary pending-interaction surface in the thread detail view above
+  the prompt box, reusing the same visual role as the existing git diff stats
+  banner in
+  [apps/app/src/views/ThreadFollowUpComposer.tsx](/Users/michael/.codex/worktrees/250d/bb/apps/app/src/views/ThreadFollowUpComposer.tsx)
+- keep the outer spacing and composer adjacency consistent by reusing
+  `PromptComposerShell` from
+  [packages/ui-core/src/prompt-composer.tsx](/Users/michael/.codex/worktrees/250d/bb/packages/ui-core/src/prompt-composer.tsx)
+  and the surrounding thread prompt layout in
+  [apps/app/src/views/ThreadDetailPromptArea.tsx](/Users/michael/.codex/worktrees/250d/bb/apps/app/src/views/ThreadDetailPromptArea.tsx)
+- reuse the banner chrome from the git diff stats surface:
+  - rounded `border border-border/60`
+  - muted background treatment
+  - compact `text-xs` summary line
+  - clickable whole-banner affordance only when there is a secondary action
+  - expandable body with the same border-top and animated reveal treatment when
+    details are present
+- present compact metadata with `DetailCard` and `DetailRow` from
+  [packages/ui-core/src/detail-card.tsx](/Users/michael/.codex/worktrees/250d/bb/packages/ui-core/src/detail-card.tsx),
+  matching the existing thread and git action surfaces in
+  [apps/app/src/views/ThreadDetailSecondaryContent.tsx](/Users/michael/.codex/worktrees/250d/bb/apps/app/src/views/ThreadDetailSecondaryContent.tsx)
+  and
+  [apps/app/src/components/thread/ThreadGitActionDialog.tsx](/Users/michael/.codex/worktrees/250d/bb/apps/app/src/components/thread/ThreadGitActionDialog.tsx)
+- use `StatusPill` from
+  [packages/ui-core/src/status-pill.tsx](/Users/michael/.codex/worktrees/250d/bb/packages/ui-core/src/status-pill.tsx)
+  for interaction state labels such as pending, denied, expired, or interrupted
+  rather than inventing custom badges
+- use `CollapsibleHeader` or `ExpandablePanel` from
+  [packages/ui-core/src/disclosure.tsx](/Users/michael/.codex/worktrees/250d/bb/packages/ui-core/src/disclosure.tsx)
+  for expandable sections like command details, changed files, or multi-question
+  forms, so expansion behavior matches other disclosure UI in the app
+- reuse `WorkspaceChangesList` from
+  [apps/app/src/components/shared/WorkspaceChangesList.tsx](/Users/michael/.codex/worktrees/250d/bb/apps/app/src/components/shared/WorkspaceChangesList.tsx)
+  for file-change approval payloads instead of adding a second changed-files
+  renderer
+- reuse `EmptyState` from
+  [apps/app/src/components/shared/EmptyState.tsx](/Users/michael/.codex/worktrees/250d/bb/apps/app/src/components/shared/EmptyState.tsx)
+  when an interaction has no optional details, no changed files, or no expanded
+  content to show
+- keep provisioning or “waiting” text aligned with existing thread messaging by
+  reusing `ConversationStatusIndicator` from
+  [apps/app/src/components/messages/ConversationStatusIndicator.tsx](/Users/michael/.codex/worktrees/250d/bb/apps/app/src/components/messages/ConversationStatusIndicator.tsx)
+  when the interaction surface needs a lightweight status label
+- represent thread-level “needs attention” in the sidebar by extending the same
+  unread-dot idiom already used in
+  [apps/app/src/components/layout/project-list/ThreadRow.tsx](/Users/michael/.codex/worktrees/250d/bb/apps/app/src/components/layout/project-list/ThreadRow.tsx),
+  rather than introducing a new sidebar badge shape just for pending
+  interactions
+- keep page-level spacing, width, and footer alignment consistent by staying
+  inside `PageShell` from
+  [apps/app/src/components/layout/PageShell.tsx](/Users/michael/.codex/worktrees/250d/bb/apps/app/src/components/layout/PageShell.tsx)
+  and the existing thread detail layout
+- avoid creating a separate “approval center” visual system; pending
+  interactions should read as a natural extension of thread detail, composer,
+  and sidebar patterns that already exist
 
 Exit condition:
 
@@ -452,6 +513,8 @@ Exit condition:
   path
 - app interaction surfaces are visually and structurally consistent with
   existing app components
+- the in-thread pending-interaction banner feels like a sibling of the existing
+  git diff stats banner rather than a new standalone panel style
 
 ## Open Questions
 
@@ -515,6 +578,8 @@ Add or update tests for:
 - app UI behavior for the same interaction kinds already proven in phase 5
 - reuse of existing app primitives rather than a parallel interaction-specific
   UI path where applicable
+- interaction banner rendering and expansion behavior near the prompt area,
+  matching the existing composer-adjacent treatment
 
 ### Manual
 
@@ -562,6 +627,8 @@ Repeat the relevant UI checks once phase 6 lands:
    after resolution.
 4. Compare the interaction UI against existing app surfaces and verify it uses
    the same layout, status, and action patterns rather than a one-off design.
+5. Compare the pending-interaction banner against the git diff stats banner
+   above the prompt box and verify they read as the same family of UI.
 
 ### Manual Comparison Checklist
 
