@@ -298,10 +298,40 @@ const codexNetworkPermissionsSchema = z.object({
   enabled: z.boolean().nullable(),
 });
 
+const codexMacOsPreferencesPermissionSchema = z.enum([
+  "none",
+  "read_only",
+  "read_write",
+]);
+
+const codexMacOsContactsPermissionSchema = z.enum([
+  "none",
+  "read_only",
+  "read_write",
+]);
+
+const codexMacOsAutomationPermissionSchema = z.union([
+  z.literal("none"),
+  z.literal("all"),
+  z.object({
+    bundle_ids: z.array(z.string()),
+  }),
+]);
+
+const codexAdditionalMacOsPermissionsSchema = z.object({
+  preferences: codexMacOsPreferencesPermissionSchema,
+  automations: codexMacOsAutomationPermissionSchema,
+  launchServices: z.boolean(),
+  accessibility: z.boolean(),
+  calendar: z.boolean(),
+  reminders: z.boolean(),
+  contacts: codexMacOsContactsPermissionSchema,
+});
+
 const codexAdditionalPermissionsSchema = z.object({
   network: codexNetworkPermissionsSchema.nullable(),
   fileSystem: codexFileSystemPermissionsSchema.nullable(),
-  macos: z.unknown().nullable().optional(),
+  macos: codexAdditionalMacOsPermissionsSchema.nullable().optional(),
 });
 type CodexAdditionalPermissions = z.infer<typeof codexAdditionalPermissionsSchema>;
 
@@ -949,6 +979,25 @@ function toPendingInteractionPermissionProfile(
           write: permissions.fileSystem.write ?? [],
         }
       : null,
+    macos:
+      "macos" in permissions && permissions.macos
+        ? {
+            preferences: permissions.macos.preferences,
+            automations:
+              permissions.macos.automations === "none"
+                ? "none"
+                : permissions.macos.automations === "all"
+                  ? "all"
+                  : {
+                      bundleIds: permissions.macos.automations.bundle_ids,
+                    },
+            launchServices: permissions.macos.launchServices,
+            accessibility: permissions.macos.accessibility,
+            calendar: permissions.macos.calendar,
+            reminders: permissions.macos.reminders,
+            contacts: permissions.macos.contacts,
+          }
+        : null,
   });
 }
 
@@ -1431,12 +1480,6 @@ export function createCodexProviderAdapter(
             request.params,
           );
           if (!parsed.success) {
-            return null;
-          }
-          if (
-            parsed.data.additionalPermissions
-            && parsed.data.additionalPermissions.macos !== null
-          ) {
             return null;
           }
           const availableDecisions = parseCodexAvailableDecisions(

@@ -42,6 +42,7 @@ describe("pending interaction schemas", () => {
               enabled: true,
             },
             fileSystem: null,
+            macos: null,
           },
           availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
         },
@@ -206,6 +207,17 @@ describe("pending interaction schemas", () => {
           read: null,
           write: undefined,
         },
+        macos: {
+          preferences: "read_only",
+          automations: {
+            bundleIds: ["com.apple.finder"],
+          },
+          launchServices: true,
+          accessibility: undefined,
+          calendar: false,
+          reminders: null,
+          contacts: "read_only",
+        },
       }),
     ).toEqual({
       network: {
@@ -214,6 +226,18 @@ describe("pending interaction schemas", () => {
       fileSystem: {
         read: [],
         write: [],
+      },
+      macos: {
+        preferences: "read_only",
+        automations: {
+          kind: "bundle_ids",
+          bundleIds: ["com.apple.finder"],
+        },
+        launchServices: true,
+        accessibility: false,
+        calendar: false,
+        reminders: false,
+        contacts: "read_only",
       },
     });
   });

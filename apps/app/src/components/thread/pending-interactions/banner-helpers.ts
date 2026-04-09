@@ -1,4 +1,5 @@
 import {
+  type PendingInteractionMacOsPermissions,
   type PendingInteraction,
   type PendingInteractionCommandApprovalDecision,
   type PendingInteractionGrantedPermissionProfile,
@@ -131,6 +132,49 @@ export function summarizeRequestedPermissions(
       );
     }
   }
+  summaries.push(...summarizeRequestedMacOsPermissions(permissions.macos));
+  return summaries;
+}
+
+export function summarizeRequestedMacOsPermissions(
+  permissions: PendingInteractionMacOsPermissions | null,
+): string[] {
+  if (permissions === null) {
+    return [];
+  }
+
+  const summaries: string[] = [];
+  if (permissions.accessibility) {
+    summaries.push("macOS accessibility");
+  }
+  if (permissions.launchServices) {
+    summaries.push("macOS launch services");
+  }
+  if (permissions.calendar) {
+    summaries.push("macOS calendar");
+  }
+  if (permissions.reminders) {
+    summaries.push("macOS reminders");
+  }
+  if (permissions.preferences !== "none") {
+    summaries.push(`macOS preferences (${permissions.preferences.replace("_", " ")})`);
+  }
+  if (permissions.contacts !== "none") {
+    summaries.push(`macOS contacts (${permissions.contacts.replace("_", " ")})`);
+  }
+  if (permissions.automations === "all") {
+    summaries.push("macOS automation (all apps)");
+  } else if (
+    permissions.automations !== "none"
+    && permissions.automations.bundleIds.length > 0
+  ) {
+    summaries.push(
+      permissions.automations.bundleIds.length === 1
+        ? "macOS automation (1 app)"
+        : `macOS automation (${permissions.automations.bundleIds.length} apps)`,
+    );
+  }
+
   return summaries;
 }
 

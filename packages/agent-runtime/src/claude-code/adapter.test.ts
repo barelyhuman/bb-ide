@@ -393,6 +393,7 @@ describe("claude-code provider adapter", () => {
         permissions: {
           network: { enabled: true },
           fileSystem: null,
+          macos: null,
         },
       },
     });
@@ -470,6 +471,7 @@ describe("claude-code provider adapter", () => {
             permissions: {
               network: { enabled: true },
               fileSystem: null,
+              macos: null,
             },
           },
         },

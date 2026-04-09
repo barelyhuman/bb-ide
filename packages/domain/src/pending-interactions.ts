@@ -66,9 +66,53 @@ export type PendingInteractionFileSystemPermissions = z.infer<
   typeof pendingInteractionFileSystemPermissionsSchema
 >;
 
+export const pendingInteractionMacOsPreferencesPermissionSchema = z.enum([
+  "none",
+  "read_only",
+  "read_write",
+]);
+export type PendingInteractionMacOsPreferencesPermission = z.infer<
+  typeof pendingInteractionMacOsPreferencesPermissionSchema
+>;
+
+export const pendingInteractionMacOsContactsPermissionSchema = z.enum([
+  "none",
+  "read_only",
+  "read_write",
+]);
+export type PendingInteractionMacOsContactsPermission = z.infer<
+  typeof pendingInteractionMacOsContactsPermissionSchema
+>;
+
+export const pendingInteractionMacOsAutomationPermissionSchema = z.union([
+  z.literal("none"),
+  z.literal("all"),
+  z.object({
+    kind: z.literal("bundle_ids"),
+    bundleIds: z.array(z.string()),
+  }),
+]);
+export type PendingInteractionMacOsAutomationPermission = z.infer<
+  typeof pendingInteractionMacOsAutomationPermissionSchema
+>;
+
+export const pendingInteractionMacOsPermissionsSchema = z.object({
+  preferences: pendingInteractionMacOsPreferencesPermissionSchema,
+  automations: pendingInteractionMacOsAutomationPermissionSchema,
+  launchServices: z.boolean(),
+  accessibility: z.boolean(),
+  calendar: z.boolean(),
+  reminders: z.boolean(),
+  contacts: pendingInteractionMacOsContactsPermissionSchema,
+});
+export type PendingInteractionMacOsPermissions = z.infer<
+  typeof pendingInteractionMacOsPermissionsSchema
+>;
+
 export const pendingInteractionRequestedPermissionProfileSchema = z.object({
   network: pendingInteractionNetworkPermissionsSchema.nullable(),
   fileSystem: pendingInteractionFileSystemPermissionsSchema.nullable(),
+  macos: pendingInteractionMacOsPermissionsSchema.nullable().default(null),
 });
 export type PendingInteractionRequestedPermissionProfile = z.infer<
   typeof pendingInteractionRequestedPermissionProfileSchema
@@ -77,6 +121,7 @@ export type PendingInteractionRequestedPermissionProfile = z.infer<
 export interface PendingInteractionPermissionProfileInput {
   network: PendingInteractionPermissionNetworkInput | null | undefined;
   fileSystem: PendingInteractionPermissionFileSystemInput | null | undefined;
+  macos: PendingInteractionPermissionMacOsInput | null | undefined;
 }
 
 export interface PendingInteractionPermissionNetworkInput {
@@ -86,6 +131,38 @@ export interface PendingInteractionPermissionNetworkInput {
 export interface PendingInteractionPermissionFileSystemInput {
   read: string[] | null | undefined;
   write: string[] | null | undefined;
+}
+
+export interface PendingInteractionPermissionMacOsBundleIdsInput {
+  bundleIds: string[] | null | undefined;
+}
+
+export type PendingInteractionPermissionMacOsAutomationInput =
+  | "none"
+  | "all"
+  | PendingInteractionPermissionMacOsBundleIdsInput;
+
+export interface PendingInteractionPermissionMacOsInput {
+  preferences: PendingInteractionMacOsPreferencesPermission | null | undefined;
+  automations: PendingInteractionPermissionMacOsAutomationInput | null | undefined;
+  launchServices: boolean | null | undefined;
+  accessibility: boolean | null | undefined;
+  calendar: boolean | null | undefined;
+  reminders: boolean | null | undefined;
+  contacts: PendingInteractionMacOsContactsPermission | null | undefined;
+}
+
+function normalizePendingInteractionMacOsAutomationPermission(
+  input: PendingInteractionPermissionMacOsAutomationInput | null | undefined,
+): PendingInteractionMacOsAutomationPermission {
+  if (input === "none" || input === "all") {
+    return input;
+  }
+
+  return {
+    kind: "bundle_ids",
+    bundleIds: input?.bundleIds ?? [],
+  };
 }
 
 export function normalizePendingInteractionRequestedPermissionProfile(
@@ -101,6 +178,19 @@ export function normalizePendingInteractionRequestedPermissionProfile(
       ? {
           read: input.fileSystem.read ?? [],
           write: input.fileSystem.write ?? [],
+        }
+      : null,
+    macos: input.macos
+      ? {
+          preferences: input.macos.preferences ?? "none",
+          automations: normalizePendingInteractionMacOsAutomationPermission(
+            input.macos.automations,
+          ),
+          launchServices: input.macos.launchServices ?? false,
+          accessibility: input.macos.accessibility ?? false,
+          calendar: input.macos.calendar ?? false,
+          reminders: input.macos.reminders ?? false,
+          contacts: input.macos.contacts ?? "none",
         }
       : null,
   });

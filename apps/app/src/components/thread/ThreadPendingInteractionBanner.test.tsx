@@ -117,6 +117,7 @@ function createPermissionRequestInteraction(): PendingInteraction {
           read: ["/tmp/project/package.json"],
           write: ["/tmp/project/package.json"],
         },
+        macos: null,
       },
     },
   };

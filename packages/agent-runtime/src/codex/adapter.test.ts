@@ -1373,8 +1373,77 @@ describe("codex provider adapter", () => {
         requestedPermissions: {
           network: { enabled: true },
           fileSystem: null,
+          macos: null,
         },
         availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+      },
+    });
+  });
+
+  it("decodeInteractiveRequest preserves macOS permission bundles in command approvals", () => {
+    const adapter = createCodexProviderAdapter();
+    expect(
+      adapter.decodeInteractiveRequest?.({
+        jsonrpc: "2.0",
+        id: 8,
+        method: "item/commandExecution/requestApproval",
+        params: {
+          threadId: "t1",
+          turnId: "turn-1",
+          itemId: "item-1",
+          approvalId: null,
+          reason: "Needs approval",
+          command: "osascript -e 'tell app \"Finder\" to activate'",
+          cwd: "/tmp/project",
+          commandActions: [],
+          additionalPermissions: {
+            network: null,
+            fileSystem: null,
+            macos: {
+              preferences: "read_only",
+              automations: {
+                bundle_ids: ["com.apple.finder"],
+              },
+              launchServices: true,
+              accessibility: true,
+              calendar: false,
+              reminders: false,
+              contacts: "none",
+            },
+          },
+          availableDecisions: ["accept", "decline", "cancel"],
+        },
+      }),
+    ).toEqual({
+      requestId: 8,
+      method: "item/commandExecution/requestApproval",
+      providerThreadId: "t1",
+      turnId: "turn-1",
+      payload: {
+        kind: "command_approval",
+        itemId: "item-1",
+        approvalId: null,
+        reason: "Needs approval",
+        command: "osascript -e 'tell app \"Finder\" to activate'",
+        cwd: "/tmp/project",
+        commandActions: [],
+        requestedPermissions: {
+          network: null,
+          fileSystem: null,
+          macos: {
+            preferences: "read_only",
+            automations: {
+              kind: "bundle_ids",
+              bundleIds: ["com.apple.finder"],
+            },
+            launchServices: true,
+            accessibility: true,
+            calendar: false,
+            reminders: false,
+            contacts: "none",
+          },
+        },
+        availableDecisions: ["accept", "decline", "cancel"],
       },
     });
   });
@@ -1518,6 +1587,7 @@ describe("codex provider adapter", () => {
             read: ["/tmp/project/README.md"],
             write: [],
           },
+          macos: null,
         },
       },
     });
@@ -1645,6 +1715,7 @@ describe("codex provider adapter", () => {
                 read: ["/tmp/project/README.md"],
                 write: [],
               },
+              macos: null,
             },
           },
         },

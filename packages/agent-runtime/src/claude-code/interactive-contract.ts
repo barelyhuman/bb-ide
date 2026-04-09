@@ -206,6 +206,7 @@ export function toPendingInteractionPermissionProfile(
   return normalizePendingInteractionRequestedPermissionProfile({
     network,
     fileSystem,
+    macos: null,
   });
 }
 
