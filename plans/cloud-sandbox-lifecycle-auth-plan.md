@@ -2,7 +2,7 @@
 
 ## Goal
 
-Make ephemeral sandbox hosts safe and durable enough for real thread reuse by fixing lifecycle management, transporting the right runtime material into cloud sandboxes, and exposing the necessary controls in app and project settings.
+Make ephemeral sandbox hosts safe and durable enough for real thread reuse by fixing lifecycle management, transporting the right runtime material into cloud sandboxes, and exposing the necessary controls in app settings.
 
 ## Plan Status
 
@@ -25,7 +25,8 @@ Make ephemeral sandbox hosts safe and durable enough for real thread reuse by fi
 - `host.sync_runtime_material` is implemented end to end in the shared contract, server lifecycle state, daemon command dispatch, and daemon local-state persistence.
 - First ephemeral session open now requests and advances runtime material sync automatically, and reconnects invalidate then requeue the sync for the new session.
 - Existing server-scoped material (`BB_GITHUB_PAT`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) is now delivered through runtime sync instead of depending on bootstrap-only daemon env for cloud sandboxes.
-- There is still no per-user or per-project secret store or UI for custom sandbox env vars or cloud auth connections; that remains Milestone 2.
+- There is still no user secret store or app auth UI for cloud sandbox provider connections; that remains Milestone 2.
+- Custom sandbox env vars are intentionally deferred until the last Milestone 2 phase.
 
 ### 3. Activity and idle policy are wired to real server ingress
 
@@ -38,8 +39,9 @@ These ingress points now mark real sandbox activity. Heartbeats in `apps/server/
 
 ### 4. Milestone 2 is now the remaining auth and user-material work
 
-- Per-user and per-project secret storage is still missing.
-- App/project settings still do not expose cloud sandbox env vars or cloud auth connections.
+- User credential storage is still missing.
+- App settings still do not expose cloud sandbox auth connections.
+- Custom sandbox env vars are still deferred.
 - Provider auth file generation and refresh-token stripping rules are still future work on top of the Milestone 1 runtime-sync foundation.
 
 ### 5. Pi/Codex/Claude auth still needs server ownership
@@ -77,7 +79,7 @@ The smoke now also validates:
 - server-driven resume before new thread work
 - two parallel isolated runs with distinct local ports and public tunnel URLs
 
-Remaining QA gap: auth file materialization and user/project-specific runtime material remain Milestone 2 work.
+Remaining QA gap: auth file materialization and user-specific runtime material remain Milestone 2 work.
 
 ## External Research
 
@@ -96,7 +98,7 @@ Remaining QA gap: auth file materialization and user/project-specific runtime ma
 
 ## Recommended Architecture
 
-Milestone 1 should establish one durable server-owned path for ephemeral sandbox lifecycle and one durable server-to-daemon path for runtime material. Latest `main` already moved sandbox bootstrap into the async environment provisioning lifecycle, so Milestone 1 should build on that shipped baseline rather than introducing a second provisioning owner. Milestone 2 should layer user/project material and auth onto those shipped paths rather than introducing parallel bootstrap, sync, or lifecycle mechanisms.
+Milestone 1 should establish one durable server-owned path for ephemeral sandbox lifecycle and one durable server-to-daemon path for runtime material. Latest `main` already moved sandbox bootstrap into the async environment provisioning lifecycle, so Milestone 1 should build on that shipped baseline rather than introducing a second provisioning owner. Milestone 2 should layer user-level material and auth onto those shipped paths rather than introducing parallel bootstrap, sync, or lifecycle mechanisms.
 
 ## AGENTS.md Verification
 
@@ -139,8 +141,8 @@ Milestone 1 merge bar:
 
 Explicitly out of scope for Milestone 1:
 
-- user-specific or project-specific sandbox env vars
-- encrypted storage for user/project runtime material
+- user-specific sandbox env vars
+- encrypted storage for user runtime material
 - provider OAuth/subscription credential sync
 - provider auth file generation for Codex or Claude
 - settings UI for cloud auth or sandbox env vars
@@ -149,10 +151,11 @@ Explicitly out of scope for Milestone 1:
 
 Scope:
 
-- Phase 4B: user/project runtime material and provider auth logic
-- Phase 5: encrypted secret storage
-- Phase 6: settings UI
+- Phase 4B: provider auth runtime material and auth logic
+- Phase 5: encrypted credential storage
+- Phase 6: app settings auth UI
 - Phase 7B: auth-specific live QA coverage
+- Phase 8: custom sandbox env vars as the last phase
 
 ## Phase 1: Fix Lifecycle Ownership First
 
@@ -358,7 +361,7 @@ Milestone 1 should move the existing server-owned runtime material onto this pat
 
 That means the same material currently injected through `sandbox-daemon-env.ts` for cloud sandboxes should instead be delivered through `host.sync_runtime_material`, so bootstrap stays minimal and runtime state becomes refreshable/replayable after reconnect.
 
-Milestone 1 should not introduce user/project-specific env vars or provider auth files yet.
+Milestone 1 should not introduce user-specific custom env vars or provider auth files yet.
 
 ### Command contract
 
@@ -446,11 +449,11 @@ This aligns with current ownership boundaries:
 - server decides what material is allowed
 - daemon performs host-local file/env writes
 
-## Phase 4B: Add User-Specific Runtime Material And Auth Logic
+## Phase 4B: Add Provider Auth Runtime Material And Auth Logic
 
 Extend the runtime material service to build the full typed bundle containing:
 
-- merged env vars
+- provider auth/runtime env vars where applicable
 - managed auth/config files to write
 - metadata/version for change detection
 
@@ -479,10 +482,23 @@ Recommended first-class managed outputs:
 - environment variables for provider processes and shell tools
 - `~/.codex/auth.json`
 - `~/.claude/.credentials.json`
+- Pi auth material under an isolated `PI_CODING_AGENT_DIR` such as `~/.pi/agent/auth.json`
 
 For providers that use raw API keys, inject env vars only.
 
+For Pi specifically, keep the split explicit:
+
+- Pi subscription/OAuth credentials belong in this phase via Pi-compatible managed auth material
+- Pi API-key credentials do not need Pi-specific auth-file work and should be deferred to the final global custom sandbox env-var phase
+
 For providers that use OAuth/subscription credentials, refresh on the server and write sandbox files without refresh tokens.
+
+Pi-specific subscription guidance:
+
+- construct Pi-compatible `auth.json` entries in code for supported subscription providers
+- do not deliver refresh-capable Pi credentials into the sandbox
+- for providers that need extra Pi fields such as Google `projectId`, include those fields in the authoritative managed file
+- set `PI_CODING_AGENT_DIR` to the managed runtime-material directory so Pi resolves only the sandbox-owned material we provide
 
 ### Refresh ownership and failure behavior
 
@@ -497,16 +513,16 @@ Required rules:
 - if refresh fails, the server should keep the last-known-good sandbox material in place and surface the failure through lifecycle state/UI instead of writing a partial or empty auth file
 - if refresh succeeds, the next runtime-material sync must carry the refreshed access material and strip refresh fields again before delivery
 
-### Project and account binding model
+### Account binding model
 
 Define the account-binding model before building the settings UI.
 
 Recommended Milestone 2 model:
 
 - one default connection per provider per user
-- optional per-project override when the user has multiple connections for a provider
-- project bindings point to a saved server-owned credential record; they do not duplicate secrets
-- disconnecting a credential clears bindings or marks them invalid, and the next sync removes the corresponding managed auth material from affected sandboxes
+- no project-level credential override in this plan
+- the selected credential is a saved server-owned credential record
+- disconnecting a credential removes the corresponding managed auth material from affected sandboxes on the next sync
 
 ### Non-negotiable auth rule
 
@@ -518,24 +534,19 @@ Examples:
 - Claude credentials file must have `refreshToken: ""`
 - `last_refresh` / equivalent metadata should be written so the CLI does not immediately try to refresh
 - if a provider format supports multiple token-like fields, every refresh-capable field must be blanked before delivery, not just the primary one
+- Pi `auth.json` entries must use access-only OAuth snapshots; the server must refresh and re-sync them before expiry instead of relying on Pi refresh behavior
 
-## Phase 5: Add Encrypted Secret Storage
+## Phase 5: Add Encrypted Credential Storage
 
 Add explicit encrypted storage for cloud-sandbox runtime material.
 
 Recommended scopes:
 
-- app/global sandbox env vars
-- project sandbox env vars
 - user auth/subscription connections
-- project-to-credential bindings when the user has multiple connections for one provider
 
 Suggested tables:
 
-- `user_sandbox_env_vars`
-- `project_sandbox_env_vars`
 - `user_provider_credentials`
-- `project_sandbox_provider_bindings`
 
 Security requirements:
 
@@ -550,13 +561,9 @@ Security requirements:
 Merge order:
 
 1. server-required runtime vars
-2. app/global user vars
-3. project vars
-4. provider-specific runtime material
+2. provider-specific runtime material
 
-Project scope wins on key collision.
-
-## Phase 6: Add Settings UI
+## Phase 6: Add Auth Settings UI
 
 Only show these surfaces when `sandboxHostSupported` is true.
 
@@ -565,38 +572,24 @@ Only show these surfaces when `sandboxHostSupported` is true.
 Add sections to `apps/app/src/views/AppSettingsView.tsx`:
 
 - `Cloud Auth`
-- `Global Sandbox Env Vars`
 
 `Cloud Auth` should support:
 
 - Codex/OpenAI connection
 - Claude/Anthropic connection
+- Pi subscription-compatible connections backed by the same server-owned credential records where supported
 - any initial API-key-only providers we decide to support
 
 The app-level UI should make the binding model explicit:
 
 - show the current default connection per provider
 - allow replacing or disconnecting that default
-- show whether any project override depends on the credential being removed
-
-### Project settings
-
-Add sections to `apps/app/src/views/ProjectSettingsView.tsx`:
-
-- `Sandbox Env Vars`
-- `Cloud Credential Exposure` if multiple provider connections must be selectable per project
-
-The project page should let the user:
-
-- add/edit/remove project-scoped env vars
-- select which saved provider connection is exposed to the project, if more than one exists
-- clear a project override so the project falls back to the user default connection
 
 UI behavior requirements:
 
 - masked values stay masked after save
-- deleting an env var or credential makes it clear that the next sandbox sync will remove it from cloud sandboxes
-- invalid/missing bindings are shown explicitly instead of silently falling back to no auth
+- deleting a credential makes it clear that the next sandbox sync will remove it from cloud sandboxes
+- invalid/missing credentials are shown explicitly instead of silently falling back to no auth
 
 ## Phase 7A: Expand Isolated Live E2B QA For Milestone 1
 
@@ -624,11 +617,32 @@ Milestone 1 smoke should verify more than command success:
 Add coverage for:
 
 1. provider auth file generation with refresh tokens stripped
-2. user/project env merge behavior
-3. reconnect re-sync of auth/runtime material after sandbox resume
-4. deletion of managed auth files after credential disconnect or project unbind
-5. replacement of managed auth files after switching a provider connection
-6. reconnect after server-side refresh uses the refreshed access material without delivering a refresh token
+2. reconnect re-sync of auth/runtime material after sandbox resume
+3. deletion of managed auth files after credential disconnect
+4. replacement of managed auth files after switching a provider connection
+5. reconnect after server-side refresh uses the refreshed access material without delivering a refresh token
+
+## Phase 8: Add Custom Sandbox Env Vars Last
+
+Defer custom sandbox env vars until provider auth is complete and stable.
+
+Scope:
+
+- app/global custom sandbox env vars only
+- no project-scoped custom env vars in this plan
+
+Why last:
+
+- provider auth is the higher-value blocker for cloud sandbox usability
+- runtime-material sync, encrypted storage, and the app settings patterns will already exist
+- env-var support should then be a small extension on top of the shipped auth/runtime-material path
+
+Implementation expectations:
+
+- store custom sandbox env vars in encrypted server-owned storage
+- expose them only in app settings, not project settings
+- deleting a custom env var removes it from the authoritative runtime-material snapshot on the next sync
+- Pi API-key support is expected to ride on this phase by injecting the provider env vars Pi already understands rather than by adding new Pi-specific auth-file logic
 
 ## Rollout Strategy
 
@@ -643,8 +657,10 @@ Recommended order:
 2. automatic resume path plus sandbox-lifecycle-owned provision/destroy entrypoints
 3. runtime material sync plumbing plus migration of existing server-owned material
 4. idle suspension default-on
-5. user/project secret storage plus auth material builders
-6. settings UI
+5. credential storage plus auth material builders
+6. app settings auth UI
+7. auth-specific live QA
+8. custom sandbox env vars
 
 Milestone 1 should merge only after steps 1 through 4 are complete and validated. Milestone 2 should build on the shipped Milestone 1 path instead of reworking it.
 
@@ -673,14 +689,16 @@ Milestone 1 should merge only after steps 1 through 4 are complete and validated
 
 ## Milestone 2 Exit Criteria
 
-- App settings supports cloud auth connections and global sandbox env vars when sandbox hosts are supported.
-- Project settings supports project sandbox env vars and project credential binding/exposure when sandbox hosts are supported.
+- App settings supports cloud auth connections when sandbox hosts are supported.
 - Codex and Claude cloud auth files are generated without refresh tokens.
+- Pi subscription auth material is generated in a Pi-compatible format without refresh-capable fields.
 - Runtime material is refreshed only by the server.
-- User/project runtime material is stored encrypted at rest.
+- User credential storage is encrypted at rest.
 - Runtime material file sync is authoritative and deletes removed managed files.
-- Credential disconnect/unbind removes the corresponding managed sandbox material on the next sync.
-- Live QA covers auth file generation, user/project runtime material merge behavior, reconnect-after-refresh, and stale-file removal.
+- Credential disconnect removes the corresponding managed sandbox material on the next sync.
+- App settings supports global custom sandbox env vars as the final phase.
+- Custom sandbox env vars are stored encrypted at rest and synchronized through the authoritative runtime-material path.
+- Live QA covers auth file generation, reconnect-after-refresh, stale-file removal, and custom env-var sync.
 
 ## Validation
 
@@ -712,13 +730,13 @@ Database-backed lifecycle tests must use in-memory SQLite via `createConnection(
 
 For Milestone 2, also add:
 
-- env var merge order
 - authoritative managed-file replacement and deletion
 - runtime material builders stripping refresh tokens
+- Pi subscription auth material generation, including provider-specific fields such as Google `projectId`
 - server-side refresh locking/deduplication
-- disconnect/unbind cleanup behavior
-- default vs project-override credential binding resolution
-- user/project credential binding and auth-file generation behavior
+- disconnect cleanup behavior
+- per-user credential selection and auth-file generation behavior
+- custom sandbox env-var merge and deletion behavior
 
 ### Live E2B For Milestone 1
 
@@ -746,12 +764,14 @@ Use direct server state inspection to confirm lifecycle behavior:
 
 Using the same isolated real-server harness:
 
-1. Seed test credentials and user/project runtime material.
+1. Seed test credentials and custom runtime material.
 2. Run the smoke flow.
 3. Verify auth files are materialized without refresh tokens.
-4. Verify user/project env merge behavior and reconnect re-sync after pause/resume.
-5. Remove a bound credential or project override, rerun sync, and verify the managed auth file is deleted from the sandbox.
-6. Refresh a credential server-side, resume/reconnect the sandbox, and verify the updated access material appears without any refresh-capable fields.
+4. Verify Pi subscription auth material is written in Pi-compatible format and works without sandbox-side refresh.
+5. Verify reconnect re-sync after pause/resume.
+6. Remove a bound credential, rerun sync, and verify the managed auth file is deleted from the sandbox.
+7. Refresh a credential server-side, resume/reconnect the sandbox, and verify the updated access material appears without any refresh-capable fields.
+8. Add and remove a global custom sandbox env var and verify the authoritative runtime-material snapshot updates in the sandbox, including Pi API-key env support.
 
 ## Notes For Implementation
 
