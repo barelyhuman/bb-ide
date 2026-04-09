@@ -60,7 +60,7 @@ export function resolveStartBbContext(): StartBbContext {
     serverUrl,
     sharedEnv: {
       ...process.env,
-      BB_LOG_FORMAT: process.env.BB_LOG_FORMAT ?? "pretty",
+      BB_LOG_FORMAT: commonConfig.BB_LOG_FORMAT,
       NODE_ENV: resolveNodeEnvironment(mode),
     },
   };

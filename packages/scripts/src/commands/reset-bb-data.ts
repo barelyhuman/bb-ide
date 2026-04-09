@@ -29,7 +29,7 @@ function resolveNamedDataDirs(): NamedDataDirs {
   return {
     defaultDataDir: resolveConfiguredDataDir({ defaultDirName: DEFAULTS.dataDir.prod }),
     defaultDevDaemonDataDir: resolveConfiguredDataDir({
-      defaultDirName: `${DEFAULTS.dataDir.dev}-host-daemon`,
+      defaultDirName: DEFAULTS.dataDir.devHostDaemon,
     }),
     defaultDevDataDir: resolveConfiguredDataDir({ defaultDirName: DEFAULTS.dataDir.dev }),
   };
@@ -89,7 +89,7 @@ export function renderHelpText(): string {
     --yes   Skip the interactive confirmation prompt
 
   ${dim("Notes")}
-    Removes bb-managed state directories (${dim("~/.bb")}, ${dim("~/.bb-dev")}, ${dim("~/.bb-dev-host-daemon")}).
+    Removes bb-managed state directories (${dim("~/.bb")}, ${dim("~/.bb-dev")}, ${dim(`~/${DEFAULTS.dataDir.devHostDaemon}`)}).
     Does not touch provider auth/config managed by other tools.
     Respects BB_DATA_DIR for single-directory resets.
 \n`;

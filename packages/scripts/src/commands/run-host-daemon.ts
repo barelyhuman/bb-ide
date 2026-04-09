@@ -26,7 +26,6 @@ import { waitForServerHealth } from "../lib/wait-for-server-health.js";
 const commandDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(commandDir, "..", "..");
 const repoRoot = resolve(packageRoot, "..", "..");
-const DEV_AUTO_JOIN_DATA_DIR_NAME = `${DEFAULTS.dataDir.dev}-host-daemon`;
 
 function resolveMode(): HostMode {
   return resolveScriptMode();
@@ -38,7 +37,7 @@ function shouldAutoJoin(): boolean {
 
 export function resolveDefaultDataDirName(mode: HostMode, autoJoin: boolean): string {
   if (mode === "dev" && autoJoin) {
-    return DEV_AUTO_JOIN_DATA_DIR_NAME;
+    return DEFAULTS.dataDir.devHostDaemon;
   }
   return mode === "dev" ? DEFAULTS.dataDir.dev : DEFAULTS.dataDir.prod;
 }
