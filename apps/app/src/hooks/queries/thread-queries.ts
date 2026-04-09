@@ -1,10 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
+  PendingInteraction,
   ResolvedThreadExecutionOptions,
   Thread,
 } from "@bb/domain";
 import type {
   ThreadDraftListResponse,
+  ThreadPendingInteractionsResponse,
   ThreadTimelineResponse,
   TimelineToolDetailsResponse,
   WorkspaceFileListResponse,
@@ -22,6 +24,7 @@ import {
   threadDefaultExecutionOptionsQueryKey,
   threadDraftsQueryKey,
   threadListQueryKey,
+  threadPendingInteractionsQueryKey,
   threadQueryKey,
   threadStorageFilesQueryKey,
   threadStorageFilePreviewQueryKey,
@@ -119,6 +122,22 @@ export function useThreadDrafts(
   });
 }
 
+export function useThreadPendingInteractions(
+  id: string,
+  options?: QueryOptions,
+) {
+  return useQuery<ThreadPendingInteractionsResponse>({
+    queryKey: threadPendingInteractionsQueryKey(id),
+    queryFn: ({ signal }) =>
+      api.listThreadPendingInteractions(
+        requireThreadId(id, "useThreadPendingInteractions"),
+        signal,
+      ),
+    enabled: (options?.enabled ?? true) && Boolean(id),
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function useThreadStorageFiles(
   id: string,
   options?: QueryOptions,
@@ -193,4 +212,19 @@ export function useThreadTimelineToolDetails() {
         includeAllEvents ?? false,
       ),
   });
+}
+
+export function getLatestPendingInteraction(
+  interactions: readonly PendingInteraction[] | undefined,
+): PendingInteraction | null {
+  if (!interactions || interactions.length === 0) {
+    return null;
+  }
+
+  const [firstInteraction, ...restInteractions] = interactions;
+  return restInteractions.reduce<PendingInteraction>(
+    (latest, interaction) =>
+      interaction.createdAt > latest.createdAt ? interaction : latest,
+    firstInteraction,
+  );
 }

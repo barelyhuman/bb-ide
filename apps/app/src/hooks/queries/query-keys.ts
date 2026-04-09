@@ -8,6 +8,7 @@ export const THREADS_QUERY_KEY = "threads";
 export const THREAD_QUERY_KEY = "thread";
 export const THREAD_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY = "threadDefaultExecutionOptions";
 export const THREAD_DRAFTS_QUERY_KEY = "threadDrafts";
+export const THREAD_PENDING_INTERACTIONS_QUERY_KEY = "threadPendingInteractions";
 export const THREAD_STORAGE_FILES_QUERY_KEY = "threadStorageFiles";
 export const THREAD_STORAGE_FILE_PREVIEW_QUERY_KEY = "threadStorageFilePreview";
 export const ENVIRONMENT_QUERY_KEY = "environment";
@@ -57,6 +58,13 @@ export type ThreadDefaultExecutionOptionsQueryKey = readonly [
 ];
 export type ThreadDraftsQueryKeyPrefix = readonly [typeof THREAD_DRAFTS_QUERY_KEY];
 export type ThreadDraftsQueryKey = readonly [typeof THREAD_DRAFTS_QUERY_KEY, string];
+export type ThreadPendingInteractionsQueryKeyPrefix = readonly [
+  typeof THREAD_PENDING_INTERACTIONS_QUERY_KEY,
+];
+export type ThreadPendingInteractionsQueryKey = readonly [
+  typeof THREAD_PENDING_INTERACTIONS_QUERY_KEY,
+  string,
+];
 export type ThreadStorageFilesQueryKey = readonly [typeof THREAD_STORAGE_FILES_QUERY_KEY, string];
 export type ThreadStorageFilePreviewQueryKey = readonly [
   typeof THREAD_STORAGE_FILE_PREVIEW_QUERY_KEY,
@@ -192,6 +200,17 @@ export function threadDraftsQueryKey(threadId: string): ThreadDraftsQueryKey {
 
 export function allThreadDraftsQueryKeyPrefix(): ThreadDraftsQueryKeyPrefix {
   return [THREAD_DRAFTS_QUERY_KEY];
+}
+
+export function threadPendingInteractionsQueryKey(
+  threadId: string,
+): ThreadPendingInteractionsQueryKey {
+  return [THREAD_PENDING_INTERACTIONS_QUERY_KEY, threadId];
+}
+
+export function allThreadPendingInteractionsQueryKeyPrefix():
+  ThreadPendingInteractionsQueryKeyPrefix {
+  return [THREAD_PENDING_INTERACTIONS_QUERY_KEY];
 }
 
 export function threadStorageFilesQueryKey(threadId: string): ThreadStorageFilesQueryKey {

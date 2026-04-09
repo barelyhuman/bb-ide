@@ -16,6 +16,7 @@ import {
   allAvailableModelsQueryKeyPrefix,
   allHostQueryKeyPrefix,
   allThreadDraftsQueryKeyPrefix,
+  allThreadPendingInteractionsQueryKeyPrefix,
   allThreadQueryKeyPrefix,
   allThreadTimelineQueryKeyPrefix,
   hostsQueryKey,
@@ -25,6 +26,7 @@ import {
   threadStorageFilesQueryKey,
   threadStorageFilePreviewQueryKeyPrefix,
   threadDraftsQueryKey,
+  threadPendingInteractionsQueryKey,
   threadQueryKey,
   threadTimelineQueryKeyPrefix,
   threadsQueryKey,
@@ -61,6 +63,7 @@ const BRANCH_LIST_CHANGE_KINDS: readonly EnvironmentChangeKind[] = [
 ];
 
 interface ThreadChangeFlags {
+  interactionsChanged: boolean;
   listChanged: boolean;
   queueChanged: boolean;
   threadChanged: boolean;
@@ -70,6 +73,7 @@ interface ThreadChangeFlags {
 
 function toThreadChangeFlags(changes: readonly ThreadChangeKind[]): ThreadChangeFlags {
   const flags: ThreadChangeFlags = {
+    interactionsChanged: false,
     listChanged: false,
     queueChanged: false,
     threadChanged: false,
@@ -93,6 +97,11 @@ function toThreadChangeFlags(changes: readonly ThreadChangeKind[]): ThreadChange
       case "queue-changed":
         flags.queueChanged = true;
         flags.threadChanged = true;
+        break;
+      case "interactions-changed":
+        flags.interactionsChanged = true;
+        flags.threadChanged = true;
+        flags.timelineChanged = true;
         break;
       case "status-changed":
         flags.listChanged = true;
@@ -279,6 +288,7 @@ export function useWebSocket(): void {
     let shouldInvalidateThreads = false;
     let shouldInvalidateStatus = false;
     let shouldInvalidateAllThreadDrafts = false;
+    let shouldInvalidateAllThreadPendingInteractions = false;
     let shouldInvalidateAllThreadTimeline = false;
     let shouldInvalidateAllThreadsById = false;
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -316,6 +326,11 @@ export function useWebSocket(): void {
       if (shouldInvalidateAllThreadDrafts) {
         queryClient.invalidateQueries({ queryKey: allThreadDraftsQueryKeyPrefix() });
       }
+      if (shouldInvalidateAllThreadPendingInteractions) {
+        queryClient.invalidateQueries({
+          queryKey: allThreadPendingInteractionsQueryKeyPrefix(),
+        });
+      }
       if (shouldInvalidateAllThreadTimeline) {
         queryClient.invalidateQueries({ queryKey: allThreadTimelineQueryKeyPrefix() });
       }
@@ -332,6 +347,11 @@ export function useWebSocket(): void {
         }
         if (flags.queueChanged) {
           queryClient.invalidateQueries({ queryKey: threadDraftsQueryKey(id) });
+        }
+        if (flags.interactionsChanged) {
+          queryClient.invalidateQueries({
+            queryKey: threadPendingInteractionsQueryKey(id),
+          });
         }
         if (flags.timelineChanged) {
           if (flags.statusChanged) {
@@ -360,6 +380,7 @@ export function useWebSocket(): void {
       shouldInvalidateThreads = false;
       shouldInvalidateStatus = false;
       shouldInvalidateAllThreadDrafts = false;
+      shouldInvalidateAllThreadPendingInteractions = false;
       shouldInvalidateAllThreadTimeline = false;
       shouldInvalidateAllThreadsById = false;
     };
@@ -406,6 +427,7 @@ export function useWebSocket(): void {
             }
             shouldInvalidateAllThreadsById = globalFlags.threadChanged;
             shouldInvalidateAllThreadDrafts = globalFlags.queueChanged;
+            shouldInvalidateAllThreadPendingInteractions = globalFlags.interactionsChanged;
             shouldInvalidateAllThreadTimeline = globalFlags.timelineChanged;
           }
           if (shouldFlushThreadChangesImmediately(message.changes)) {

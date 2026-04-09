@@ -7,6 +7,7 @@ import type {
   AvailableModel,
   Environment,
   Host,
+  PendingInteraction,
   Project,
   ProjectSource,
   ResolvedThreadExecutionOptions,
@@ -38,9 +39,11 @@ import type {
   SandboxEnvVar,
   SandboxEnvVarsResponse,
   SystemVoiceTranscriptionResponse,
+  ThreadPendingInteractionsResponse,
   ThreadDraftListResponse,
   ThreadTimelineResponse,
   TimelineToolDetailsResponse,
+  ResolvePendingInteractionRequest,
   UpdateEnvironmentRequest,
   UpdateProjectRequest,
   UpdateThreadRequest,
@@ -472,6 +475,31 @@ export async function deleteThreadDraft(
 
 export async function stopThread(id: string): Promise<void> {
   await requestVoid(apiClient.threads[":id"].stop.$post({ param: { id } }));
+}
+
+export async function listThreadPendingInteractions(
+  id: string,
+  signal?: AbortSignal,
+): Promise<ThreadPendingInteractionsResponse> {
+  return request<ThreadPendingInteractionsResponse>(
+    apiClient.threads[":id"].interactions.$get(
+      { param: { id } },
+      requestOptions(signal),
+    ),
+  );
+}
+
+export async function resolveThreadPendingInteraction(
+  threadId: string,
+  interactionId: string,
+  req: ResolvePendingInteractionRequest,
+): Promise<PendingInteraction> {
+  return request<PendingInteraction>(
+    apiClient.threads[":id"].interactions[":interactionId"].resolve.$post({
+      param: { id: threadId, interactionId },
+      json: req,
+    }),
+  );
 }
 
 export async function archiveThread(

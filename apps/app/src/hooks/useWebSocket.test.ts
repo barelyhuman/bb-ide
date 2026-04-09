@@ -7,6 +7,7 @@ import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import {
   allAvailableModelsQueryKeyPrefix,
   allHostQueryKeyPrefix,
+  threadPendingInteractionsQueryKey,
   environmentGitDiffQueryKey,
   environmentGitDiffQueryKeyPrefix,
   environmentMergeBaseBranchesQueryKey,
@@ -420,6 +421,31 @@ describe("useWebSocket", () => {
     });
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: threadStorageFilePreviewQueryKeyPrefix("thread-1"),
+    });
+  });
+
+  it("invalidates pending interaction queries and timeline state for thread interaction changes", () => {
+    vi.useFakeTimers();
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+
+    renderHook(() => useWebSocket(), { wrapper });
+
+    act(() => {
+      changedCallbacks[0]?.({
+        changes: ["interactions-changed"],
+        entity: "thread",
+        id: "thread-1",
+        type: "changed",
+      });
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: threadPendingInteractionsQueryKey("thread-1"),
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: threadQueryKey("thread-1"),
     });
   });
 });
