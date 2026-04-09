@@ -3102,6 +3102,7 @@ describe("CLI JSON output contracts", () => {
           kind: "permission_request",
           itemId: "item-permission-grant",
           reason: "Grant workspace access",
+          toolName: null,
           permissions: {
             network: { enabled: true },
             fileSystem: {
@@ -3125,6 +3126,7 @@ describe("CLI JSON output contracts", () => {
           kind: "permission_request",
           itemId: "item-permission-grant",
           reason: "Grant workspace access",
+          toolName: null,
           permissions: {
             network: { enabled: true },
             fileSystem: {
@@ -3214,6 +3216,7 @@ describe("CLI JSON output contracts", () => {
           kind: "permission_request",
           itemId: "item-permission-deny",
           reason: "Grant network access",
+          toolName: null,
           permissions: {
             network: { enabled: true },
             fileSystem: null,
@@ -3234,6 +3237,7 @@ describe("CLI JSON output contracts", () => {
           kind: "permission_request",
           itemId: "item-permission-deny",
           reason: "Grant network access",
+          toolName: null,
           permissions: {
             network: { enabled: true },
             fileSystem: null,
@@ -3314,6 +3318,7 @@ describe("CLI JSON output contracts", () => {
               question: "Which environment?",
               allowsOther: false,
               isSecret: false,
+              multiSelect: false,
               options: [
                 { label: "staging", description: "Use staging" },
                 { label: "prod", description: "Use production" },
@@ -3325,6 +3330,7 @@ describe("CLI JSON output contracts", () => {
               question: "Which ticket?",
               allowsOther: true,
               isSecret: false,
+              multiSelect: false,
               options: [],
             },
           ],
@@ -3350,6 +3356,7 @@ describe("CLI JSON output contracts", () => {
               question: "Which environment?",
               allowsOther: false,
               isSecret: false,
+              multiSelect: false,
               options: [
                 { label: "staging", description: "Use staging" },
                 { label: "prod", description: "Use production" },
@@ -3361,6 +3368,7 @@ describe("CLI JSON output contracts", () => {
               question: "Which ticket?",
               allowsOther: true,
               isSecret: false,
+              multiSelect: false,
               options: [],
             },
           ],

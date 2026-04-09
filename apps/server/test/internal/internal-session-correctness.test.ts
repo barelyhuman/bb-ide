@@ -472,6 +472,66 @@ describe("internal session correctness", () => {
     }
   });
 
+  it("interrupts pending interactions after the daemon-disconnect grace period", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      vi.useFakeTimers();
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-daemon-pending-interaction-disconnect",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const registered = harness.deps.pendingInteractions.registerPendingInteraction({
+        threadId: thread.id,
+        turnId: "turn-disconnect-pending-interaction",
+        providerId: "codex",
+        providerThreadId: "provider-thread-disconnect-pending-interaction",
+        providerRequestId: "request-disconnect-pending-interaction",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        payload: {
+          kind: "command_approval",
+          itemId: "item-disconnect-pending-interaction",
+          approvalId: null,
+          reason: "Needs approval",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+        },
+      });
+      if (registered.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
+      }
+
+      onDaemonSocketClose(harness.deps, session.id);
+      await vi.advanceTimersByTimeAsync(DAEMON_DISCONNECT_GRACE_MS);
+
+      const interrupted = harness.deps.pendingInteractions.getThreadInteraction({
+        threadId: thread.id,
+        interactionId: registered.interaction.id,
+      });
+      expect(interrupted).toMatchObject({
+        status: "interrupted",
+        statusReason:
+          "Host daemon disconnected while awaiting user interaction; retry the thread to continue",
+      });
+    } finally {
+      vi.useRealTimers();
+      await harness.cleanup();
+    }
+  });
+
   it("cancels daemon-disconnect fallout if a replacement session opens during the grace period", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -524,6 +584,83 @@ describe("internal session correctness", () => {
       ).toBe(false);
     } finally {
       vi.useRealTimers();
+      await harness.cleanup();
+    }
+  });
+
+  it("interrupts pending interactions when a replacement daemon session has a new instance id", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-daemon-session-restart-interaction",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const registered = harness.deps.pendingInteractions.registerPendingInteraction({
+        threadId: thread.id,
+        turnId: "turn-session-restart-interaction",
+        providerId: "codex",
+        providerThreadId: "provider-thread-session-restart-interaction",
+        providerRequestId: "request-session-restart-interaction",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        payload: {
+          kind: "command_approval",
+          itemId: "item-session-restart-interaction",
+          approvalId: null,
+          reason: "Needs approval",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+        },
+      });
+      if (registered.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
+      }
+
+      const response = await harness.app.request("/internal/session/open", {
+        method: "POST",
+        headers: internalAuthHeaders(harness, { hostId: host.id, hostType: host.type }),
+        body: JSON.stringify({
+          hostId: host.id,
+          instanceId: "instance-restarted",
+          hostName: host.name,
+          hostType: host.type,
+          dataDir: "/tmp/host-daemon-session-restart-interaction",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          activeThreads: [],
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const interrupted = harness.deps.pendingInteractions.getThreadInteraction({
+        threadId: thread.id,
+        interactionId: registered.interaction.id,
+      });
+      expect(interrupted).toMatchObject({
+        status: "interrupted",
+        statusReason:
+          "Host daemon restarted while awaiting user interaction; retry the thread to continue",
+      });
+
+      const originalSession = harness.db
+        .select()
+        .from(hostDaemonSessions)
+        .where(eq(hostDaemonSessions.id, session.id))
+        .get();
+      expect(originalSession?.closeReason).toBe("replaced");
+    } finally {
       await harness.cleanup();
     }
   });

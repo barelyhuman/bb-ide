@@ -124,6 +124,7 @@ describe("pending interaction schemas", () => {
               question: "Which environment should I use?",
               allowsOther: true,
               isSecret: false,
+              multiSelect: false,
               options: [
                 {
                   label: "prod",

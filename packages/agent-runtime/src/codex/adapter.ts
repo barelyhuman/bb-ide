@@ -10,8 +10,13 @@
 
 import { getBuiltInAgentProviderInfo } from "@bb/agent-providers";
 import { z } from "zod";
+import {
+  pendingInteractionCommandActionSchema,
+} from "@bb/domain";
 import type {
   ApprovalPolicy,
+  PendingInteractionCommandAction,
+  PendingInteractionFileChangeApprovalDecision,
   PendingInteractionGrantedPermissionProfile,
   PendingInteractionRequestedPermissionProfile,
   PendingInteractionCommandApprovalDecision,
@@ -272,6 +277,16 @@ const pendingInteractionToCodexSimpleCommandApprovalDecision = {
   CodexSimpleCommandApprovalDecision
 >;
 
+const pendingInteractionToCodexFileChangeApprovalDecision = {
+  accept: "accept",
+  accept_for_session: "acceptForSession",
+  decline: "decline",
+  cancel: "cancel",
+} satisfies Record<
+  PendingInteractionFileChangeApprovalDecision,
+  FileChangeRequestApprovalResponse["decision"]
+>;
+
 const codexFileSystemPermissionsSchema = z.object({
   read: z.array(z.string()).nullable(),
   write: z.array(z.string()).nullable(),
@@ -300,29 +315,33 @@ type CodexInteractiveResponse =
   | PermissionsRequestApprovalResponse
   | ToolRequestUserInputResponse;
 
-const codexCommandActionSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("read"),
-    command: z.string(),
-    name: z.string(),
-    path: z.string(),
-  }),
-  z.object({
-    type: z.literal("listFiles"),
-    command: z.string(),
-    path: z.string().nullable(),
-  }),
-  z.object({
-    type: z.literal("search"),
-    command: z.string(),
-    query: z.string().nullable(),
-    path: z.string().nullable(),
-  }),
-  z.object({
-    type: z.literal("unknown"),
-    command: z.string(),
-  }),
-]);
+const codexCommandActionInputSchema = z.object({
+  type: z.string(),
+}).passthrough();
+
+const codexCommandActionsSchema = z.array(codexCommandActionInputSchema)
+  .nullable()
+  .optional()
+  .transform((value, ctx): PendingInteractionCommandAction[] | null | undefined => {
+    if (value == null) {
+      return value;
+    }
+
+    const parsedActions: PendingInteractionCommandAction[] = [];
+    for (const action of value) {
+      const parsedAction = pendingInteractionCommandActionSchema.safeParse(action);
+      if (!parsedAction.success) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Invalid command action",
+        });
+        return z.NEVER;
+      }
+      parsedActions.push(parsedAction.data);
+    }
+
+    return parsedActions;
+  });
 
 const codexCommandExecutionRequestApprovalParamsSchema = z.object({
   threadId: z.string(),
@@ -332,7 +351,7 @@ const codexCommandExecutionRequestApprovalParamsSchema = z.object({
   reason: z.string().nullable().optional(),
   command: z.string().nullable().optional(),
   cwd: z.string().nullable().optional(),
-  commandActions: z.array(codexCommandActionSchema).nullable().optional(),
+  commandActions: codexCommandActionsSchema,
   additionalPermissions: codexAdditionalPermissionsSchema.nullable().optional(),
   availableDecisions: z.array(codexCommandApprovalDecisionSchema).nullable().optional(),
 }).passthrough();
@@ -1000,7 +1019,7 @@ function parseCodexAvailableDecisions(
   decisions: CodexCommandApprovalDecision[] | null | undefined,
 ): PendingInteractionCommandApprovalDecision[] | null {
   if (!decisions) {
-    return ["accept", "decline", "cancel"];
+    return ["accept", "accept_for_session", "decline", "cancel"];
   }
 
   return decisions.map(fromCodexCommandApprovalDecision);
@@ -1533,21 +1552,10 @@ export function createCodexProviderAdapter(
             throw new Error("Interactive response kind mismatch for file change approval");
           }
           const response: FileChangeRequestApprovalResponse = {
-            decision: (() => {
-              const decision = args.resolution.decision;
-              switch (decision) {
-                case "accept":
-                  return "accept";
-                case "accept_for_session":
-                  return "acceptForSession";
-                case "decline":
-                  return "decline";
-                case "cancel":
-                  return "cancel";
-              }
-              const exhaustiveDecision: never = decision;
-              return exhaustiveDecision;
-            })(),
+            decision:
+              pendingInteractionToCodexFileChangeApprovalDecision[
+                args.resolution.decision
+              ],
           };
           return response;
         }

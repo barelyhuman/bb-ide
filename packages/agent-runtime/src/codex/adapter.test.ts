@@ -1452,6 +1452,77 @@ describe("codex provider adapter", () => {
     });
   });
 
+  it("decodeInteractiveRequest maps file-change approvals into pending interactions", () => {
+    const adapter = createCodexProviderAdapter();
+    expect(
+      adapter.decodeInteractiveRequest?.({
+        jsonrpc: "2.0",
+        id: 10,
+        method: "item/fileChange/requestApproval",
+        params: {
+          threadId: "t1",
+          turnId: "turn-file-change",
+          itemId: "item-file-change",
+          reason: "Review generated file changes",
+          grantRoot: "/tmp/project",
+        },
+      }),
+    ).toEqual({
+      requestId: 10,
+      method: "item/fileChange/requestApproval",
+      providerThreadId: "t1",
+      turnId: "turn-file-change",
+      payload: {
+        kind: "file_change_approval",
+        itemId: "item-file-change",
+        reason: "Review generated file changes",
+        grantRoot: "/tmp/project",
+      },
+    });
+  });
+
+  it("decodeInteractiveRequest maps permission approvals into pending interactions", () => {
+    const adapter = createCodexProviderAdapter();
+    expect(
+      adapter.decodeInteractiveRequest?.({
+        jsonrpc: "2.0",
+        id: 11,
+        method: "item/permissions/requestApproval",
+        params: {
+          threadId: "t1",
+          turnId: "turn-permissions",
+          itemId: "item-permissions",
+          reason: "Need network access",
+          permissions: {
+            network: { enabled: true },
+            fileSystem: {
+              read: ["/tmp/project/README.md"],
+              write: [],
+            },
+          },
+        },
+      }),
+    ).toEqual({
+      requestId: 11,
+      method: "item/permissions/requestApproval",
+      providerThreadId: "t1",
+      turnId: "turn-permissions",
+      payload: {
+        kind: "permission_request",
+        itemId: "item-permissions",
+        reason: "Need network access",
+        toolName: null,
+        permissions: {
+          network: { enabled: true },
+          fileSystem: {
+            read: ["/tmp/project/README.md"],
+            write: [],
+          },
+        },
+      },
+    });
+  });
+
   it("buildInteractiveResponse maps bb command approvals back to Codex responses", () => {
     const adapter = createCodexProviderAdapter();
     expect(
@@ -1525,6 +1596,79 @@ describe("codex provider adapter", () => {
           execpolicy_amendment: ["allow", "git", "push"],
         },
       },
+    });
+  });
+
+  it("buildInteractiveResponse maps file-change approvals back to Codex responses", () => {
+    const adapter = createCodexProviderAdapter();
+    expect(
+      adapter.buildInteractiveResponse?.({
+        request: {
+          requestId: 12,
+          method: "item/fileChange/requestApproval",
+          providerThreadId: "t1",
+          turnId: "turn-file-change",
+          payload: {
+            kind: "file_change_approval",
+            itemId: "item-file-change",
+            reason: "Review generated file changes",
+            grantRoot: "/tmp/project",
+          },
+        },
+        resolution: {
+          kind: "file_change_approval",
+          decision: "accept_for_session",
+        },
+      }),
+    ).toEqual({
+      decision: "acceptForSession",
+    });
+  });
+
+  it("buildInteractiveResponse maps permission grants back to Codex responses", () => {
+    const adapter = createCodexProviderAdapter();
+    expect(
+      adapter.buildInteractiveResponse?.({
+        request: {
+          requestId: 13,
+          method: "item/permissions/requestApproval",
+          providerThreadId: "t1",
+          turnId: "turn-permissions",
+          payload: {
+            kind: "permission_request",
+            itemId: "item-permissions",
+            reason: "Need network access",
+            toolName: null,
+            permissions: {
+              network: { enabled: true },
+              fileSystem: {
+                read: ["/tmp/project/README.md"],
+                write: [],
+              },
+            },
+          },
+        },
+        resolution: {
+          kind: "permission_request",
+          permissions: {
+            network: { enabled: true },
+            fileSystem: {
+              read: ["/tmp/project/README.md"],
+              write: [],
+            },
+          },
+          scope: "session",
+        },
+      }),
+    ).toEqual({
+      permissions: {
+        network: { enabled: true },
+        fileSystem: {
+          read: ["/tmp/project/README.md"],
+          write: null,
+        },
+      },
+      scope: "session",
     });
   });
 

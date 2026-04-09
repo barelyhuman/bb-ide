@@ -114,12 +114,13 @@ export interface ResolvedThreadRuntimeCommandConfig {
 
 function getDefaultApprovalPolicyForProvider(
   providerId: string | null | undefined,
-): ApprovalPolicy | undefined {
+): ApprovalPolicy {
   switch (providerId) {
     case "codex":
+    case "claude-code":
       return "on-request";
     default:
-      return undefined;
+      return "never";
   }
 }
 
@@ -251,8 +252,8 @@ export async function resolveExecutionOptions(
       lastExecution?.sandboxMode ??
       projectExecution?.sandboxMode ??
       DEFAULT_SANDBOX_MODE,
+    approvalPolicy,
     questionPolicy,
-    ...(approvalPolicy === undefined ? {} : { approvalPolicy }),
     source: args.requestedExecution.source,
   };
 }

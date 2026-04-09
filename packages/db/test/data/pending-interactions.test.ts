@@ -13,6 +13,7 @@ import {
   listPendingInteractionsByStatus,
   listPendingInteractionsByThread,
   setPendingInteractionExpired,
+  setPendingInteractionRejected,
   setPendingInteractionResolved,
 } from "../../src/data/pending-interactions.js";
 import { createThread } from "../../src/data/threads.js";
@@ -241,6 +242,37 @@ describe("pending interactions", () => {
       id: created.id,
       status: "expired",
       statusReason: "Timed out",
+    });
+    expect(listPendingInteractionsByStatus(db, { statuses: ["pending"] })).toHaveLength(0);
+  });
+
+  it("transitions pending interactions to rejected", () => {
+    const { db, thread } = setup();
+
+    const created = createPendingInteraction(db, {
+      threadId: thread.id,
+      turnId: "turn-reject-1",
+      providerId: "codex",
+      providerThreadId: "provider-thread-reject-1",
+      providerRequestId: "request-reject-1",
+      providerRequestMethod: "item/tool/requestUserInput",
+      kind: "user_input_request",
+      payload: JSON.stringify({
+        kind: "user_input_request",
+        itemId: "item-reject-1",
+        questions: [],
+      }),
+    });
+
+    const rejected = setPendingInteractionRejected(db, {
+      id: created.id,
+      statusReason: "Rejected by policy",
+    });
+
+    expect(rejected).toMatchObject({
+      id: created.id,
+      status: "rejected",
+      statusReason: "Rejected by policy",
     });
     expect(listPendingInteractionsByStatus(db, { statuses: ["pending"] })).toHaveLength(0);
   });

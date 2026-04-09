@@ -176,6 +176,59 @@ async function fetchInteraction(args: {
   );
 }
 
+interface ResolveInteractionArgs {
+  buildResolution: (interaction: PendingInteraction) => PendingInteractionResolution;
+  failureAction: string;
+  getUrl: () => string;
+  interactionId: string;
+  json: boolean | undefined;
+  successMessage: (args: {
+    interaction: PendingInteraction;
+    resolution: PendingInteractionResolution;
+    updated: PendingInteraction;
+  }) => string;
+  threadId: string;
+}
+
+async function resolveInteraction(
+  args: ResolveInteractionArgs,
+): Promise<void> {
+  const interaction = await fetchInteraction({
+    getUrl: args.getUrl,
+    interactionId: args.interactionId,
+    threadId: args.threadId,
+  });
+  const resolution = args.buildResolution(interaction);
+  const client = createClient(args.getUrl());
+  const updated = await unwrap<PendingInteraction>(
+    client.api.v1.threads[":id"].interactions[":interactionId"].resolve.$post({
+      param: {
+        id: args.threadId,
+        interactionId: args.interactionId,
+      },
+      json: resolution,
+    }),
+  ).catch((error: unknown) => {
+    throw prependErrorContext(
+      `Failed to ${args.failureAction} interaction ${args.interactionId}`,
+      error,
+    );
+  });
+
+  if (args.json) {
+    outputJson({ json: args.json }, updated);
+    return;
+  }
+
+  console.log(
+    args.successMessage({
+      interaction,
+      resolution,
+      updated,
+    }),
+  );
+}
+
 function buildBinaryResolution(
   interaction: PendingInteraction,
   action: "approve" | "deny",
@@ -445,31 +498,16 @@ export function registerInteractionCommands(
     ) => {
       const resolved = requireThreadIdWithLabelOrSelf(id, opts);
       printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
-      const interaction = await fetchInteraction({
+      await resolveInteraction({
+        buildResolution: (interaction) => buildBinaryResolution(interaction, "approve"),
+        failureAction: "approve",
         getUrl,
         interactionId,
+        json: opts.json,
         threadId: resolved.id,
+        successMessage: ({ resolution, updated }) =>
+          `Interaction ${interactionId} ${formatBinaryResolutionMessage(updated.resolution ?? resolution)}`,
       });
-
-      const client = createClient(getUrl());
-      const updated = await unwrap<PendingInteraction>(
-        client.api.v1.threads[":id"].interactions[":interactionId"].resolve.$post({
-          param: {
-            id: resolved.id,
-            interactionId,
-          },
-          json: buildBinaryResolution(interaction, "approve"),
-        }),
-      ).catch((error: unknown) => {
-        throw prependErrorContext(`Failed to approve interaction ${interactionId}`, error);
-      });
-
-      if (outputJson(opts, updated)) {
-        return;
-      }
-      console.log(
-        `Interaction ${interactionId} ${formatBinaryResolutionMessage(updated.resolution ?? buildBinaryResolution(interaction, "approve"))}`,
-      );
     }));
 
   interactions
@@ -485,39 +523,17 @@ export function registerInteractionCommands(
     ) => {
       const resolved = requireThreadIdWithLabelOrSelf(id, opts);
       printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
-      const interaction = await fetchInteraction({
+      const scope = parsePermissionGrantScope(opts.scope);
+      await resolveInteraction({
+        buildResolution: (interaction) => buildPermissionGrantResolution(interaction, scope),
+        failureAction: "grant",
         getUrl,
         interactionId,
+        json: opts.json,
         threadId: resolved.id,
+        successMessage: ({ resolution, updated }) =>
+          `Interaction ${interactionId} ${formatBinaryResolutionMessage(updated.resolution ?? resolution)}`,
       });
-
-      const client = createClient(getUrl());
-      const updated = await unwrap<PendingInteraction>(
-        client.api.v1.threads[":id"].interactions[":interactionId"].resolve.$post({
-          param: {
-            id: resolved.id,
-            interactionId,
-          },
-          json: buildPermissionGrantResolution(
-            interaction,
-            parsePermissionGrantScope(opts.scope),
-          ),
-        }),
-      ).catch((error: unknown) => {
-        throw prependErrorContext(`Failed to grant interaction ${interactionId}`, error);
-      });
-
-      if (outputJson(opts, updated)) {
-        return;
-      }
-      const resolution = updated.resolution
-        ?? buildPermissionGrantResolution(
-          interaction,
-          parsePermissionGrantScope(opts.scope),
-        );
-      console.log(
-        `Interaction ${interactionId} ${formatBinaryResolutionMessage(resolution)}`,
-      );
     }));
 
   interactions
@@ -532,31 +548,16 @@ export function registerInteractionCommands(
     ) => {
       const resolved = requireThreadIdWithLabelOrSelf(id, opts);
       printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
-      const interaction = await fetchInteraction({
+      await resolveInteraction({
+        buildResolution: (interaction) => buildBinaryResolution(interaction, "deny"),
+        failureAction: "deny",
         getUrl,
         interactionId,
+        json: opts.json,
         threadId: resolved.id,
+        successMessage: ({ resolution, updated }) =>
+          `Interaction ${interactionId} ${formatBinaryResolutionMessage(updated.resolution ?? resolution)}`,
       });
-
-      const client = createClient(getUrl());
-      const updated = await unwrap<PendingInteraction>(
-        client.api.v1.threads[":id"].interactions[":interactionId"].resolve.$post({
-          param: {
-            id: resolved.id,
-            interactionId,
-          },
-          json: buildBinaryResolution(interaction, "deny"),
-        }),
-      ).catch((error: unknown) => {
-        throw prependErrorContext(`Failed to deny interaction ${interactionId}`, error);
-      });
-
-      if (outputJson(opts, updated)) {
-        return;
-      }
-      console.log(
-        `Interaction ${interactionId} ${formatBinaryResolutionMessage(updated.resolution ?? buildBinaryResolution(interaction, "deny"))}`,
-      );
     }));
 
   interactions
@@ -577,28 +578,15 @@ export function registerInteractionCommands(
     ) => {
       const resolved = requireThreadIdWithLabelOrSelf(id, opts);
       printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
-      const interaction = await fetchInteraction({
+      await resolveInteraction({
+        buildResolution: (interaction) =>
+          buildUserInputResolution(interaction, opts.answer ?? []),
+        failureAction: "answer",
         getUrl,
         interactionId,
+        json: opts.json,
         threadId: resolved.id,
+        successMessage: () => `Interaction ${interactionId} answered`,
       });
-
-      const client = createClient(getUrl());
-      const updated = await unwrap<PendingInteraction>(
-        client.api.v1.threads[":id"].interactions[":interactionId"].resolve.$post({
-          param: {
-            id: resolved.id,
-            interactionId,
-          },
-          json: buildUserInputResolution(interaction, opts.answer ?? []),
-        }),
-      ).catch((error: unknown) => {
-        throw prependErrorContext(`Failed to answer interaction ${interactionId}`, error);
-      });
-
-      if (outputJson(opts, updated)) {
-        return;
-      }
-      console.log(`Interaction ${interactionId} answered`);
     }));
 }

@@ -157,6 +157,80 @@ describe("pending interaction lifecycle", () => {
     }
   });
 
+  it("rejects a second active interaction on the same thread", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-concurrent-reject",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const created = harness.deps.pendingInteractions.registerPendingInteraction({
+        threadId: thread.id,
+        turnId: "turn-concurrent-reject-1",
+        providerId: "codex",
+        providerThreadId: "provider-thread-concurrent-reject",
+        providerRequestId: "request-concurrent-reject-1",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        payload: {
+          kind: "command_approval",
+          itemId: "item-concurrent-reject-1",
+          approvalId: null,
+          reason: "Needs approval",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+        },
+      });
+      if (created.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+      }
+
+      expect(
+        harness.deps.pendingInteractions.registerPendingInteraction({
+          threadId: thread.id,
+          turnId: "turn-concurrent-reject-2",
+          providerId: "codex",
+          providerThreadId: "provider-thread-concurrent-reject",
+          providerRequestId: "request-concurrent-reject-2",
+          providerRequestMethod: "item/tool/requestUserInput",
+          payload: {
+            kind: "user_input_request",
+            itemId: "item-concurrent-reject-2",
+            questions: [
+              {
+                id: "environment",
+                header: "Env",
+                question: "Which environment?",
+                allowsOther: true,
+                isSecret: false,
+                multiSelect: false,
+                options: [],
+              },
+            ],
+          },
+        }),
+      ).toEqual({
+        outcome: "rejected",
+        reason: `Thread ${thread.id} is already awaiting user interaction`,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("rejects user-input requests when the thread question policy is deny", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -196,11 +270,12 @@ describe("pending interaction lifecycle", () => {
               {
                 id: "environment",
                 header: "Env",
-                question: "Which environment?",
-                allowsOther: true,
-                isSecret: false,
-                options: [],
-              },
+              question: "Which environment?",
+              allowsOther: true,
+              isSecret: false,
+              multiSelect: false,
+              options: [],
+            },
             ],
           },
         }),

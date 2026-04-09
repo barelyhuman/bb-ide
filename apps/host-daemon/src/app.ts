@@ -118,6 +118,12 @@ export interface HostDaemonApp {
   connection: ServerConnection;
 }
 
+interface PendingInteractiveInterruptRequest {
+  providerId: string;
+  reason: string;
+  threadIds: readonly string[];
+}
+
 export async function createHostDaemonApp(
   options: CreateHostDaemonAppOptions,
 ): Promise<HostDaemonApp> {
@@ -125,6 +131,11 @@ export async function createHostDaemonApp(
   const sessionState: SessionState = {
     value: null,
   };
+  const pendingInteractiveInterrupts = new Map<
+    string,
+    PendingInteractiveInterruptRequest
+  >();
+  let flushPendingInteractiveInterruptsPromise: Promise<void> | null = null;
 
   const serverClient = createServerClient({
     serverUrl: options.serverUrl,
@@ -146,6 +157,64 @@ export async function createHostDaemonApp(
     retryDelayMs: ENVIRONMENT_CHANGE_REPORT_RETRY_DELAY_MS,
     retryMaxDelayMs: ENVIRONMENT_CHANGE_REPORT_MAX_RETRY_DELAY_MS,
   });
+
+  function buildInteractiveInterruptKey(
+    request: PendingInteractiveInterruptRequest,
+  ): string {
+    return [
+      request.providerId,
+      request.reason,
+      [...request.threadIds].sort().join(","),
+    ].join("|");
+  }
+
+  async function flushPendingInteractiveInterrupts(): Promise<void> {
+    if (flushPendingInteractiveInterruptsPromise) {
+      await flushPendingInteractiveInterruptsPromise;
+      return;
+    }
+
+    flushPendingInteractiveInterruptsPromise = (async () => {
+      while (sessionState.value !== null) {
+        const nextEntry = pendingInteractiveInterrupts.entries().next().value;
+        if (!nextEntry) {
+          return;
+        }
+
+        const [key, request] = nextEntry;
+        try {
+          await serverClient.interruptInteractiveRequests(request);
+          pendingInteractiveInterrupts.delete(key);
+        } catch (error) {
+          options.logger.warn(
+            {
+              err: error,
+              providerId: request.providerId,
+              threadIds: request.threadIds,
+            },
+            "Failed to flush pending interactive interrupt request",
+          );
+          return;
+        }
+      }
+    })();
+
+    try {
+      await flushPendingInteractiveInterruptsPromise;
+    } finally {
+      flushPendingInteractiveInterruptsPromise = null;
+    }
+  }
+
+  function enqueueInteractiveInterrupt(
+    request: PendingInteractiveInterruptRequest,
+  ): void {
+    pendingInteractiveInterrupts.set(
+      buildInteractiveInterruptKey(request),
+      request,
+    );
+    void flushPendingInteractiveInterrupts();
+  }
 
   const eventBuffer = createEventBuffer({
     logger: options.logger,
@@ -248,19 +317,10 @@ export async function createHostDaemonApp(
         return;
       }
 
-      void serverClient.interruptInteractiveRequests({
+      enqueueInteractiveInterrupt({
         providerId: info.providerId,
         threadIds: info.threadIds,
         reason: `Provider "${info.providerId}" exited while awaiting user interaction`,
-      }).catch((error) => {
-        options.logger.warn(
-          {
-            err: error,
-            providerId: info.providerId,
-            threadIds: info.threadIds,
-          },
-          "Failed to interrupt pending interactions after provider exit",
-        );
       });
     },
     threadStorageRootPath,
@@ -316,6 +376,7 @@ export async function createHostDaemonApp(
         session.trackedThreadTargets,
       );
       eventBuffer.seed(session.threadHighWaterMarks);
+      void flushPendingInteractiveInterrupts();
       void commandFetchLoop.request();
     },
     setSession: (session) => {

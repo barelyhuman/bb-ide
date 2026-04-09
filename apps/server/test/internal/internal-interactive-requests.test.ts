@@ -188,4 +188,89 @@ describe("internal interactive request lifecycle", () => {
       await harness.cleanup();
     }
   });
+
+  it("persists Claude interactive requests and resolves them through the same lifecycle", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-claude-interaction-resolve",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        providerId: "claude-code",
+      });
+
+      const responsePromise = harness.app.request("/internal/session/interactive-request", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          interaction: {
+            threadId: thread.id,
+            turnId: "turn-claude-1",
+            providerId: "claude-code",
+            providerThreadId: "claude-thread-1",
+            providerRequestId: "request-claude-1",
+            providerRequestMethod: "item/permissions/requestApproval",
+            payload: {
+              kind: "permission_request",
+              itemId: "item-claude-1",
+              reason: "Need network access",
+              toolName: "WebFetch",
+              permissions: {
+                network: { enabled: true },
+                fileSystem: null,
+              },
+            },
+          },
+        }),
+      });
+
+      const interactionId = await waitForPendingInteractionId({
+        harness,
+        threadId: thread.id,
+      });
+      const resolved = harness.deps.pendingInteractions.resolvePendingInteraction({
+        threadId: thread.id,
+        interactionId,
+        resolution: {
+          kind: "permission_request",
+          permissions: {
+            network: { enabled: true },
+            fileSystem: null,
+          },
+          scope: "session",
+        },
+      });
+
+      expect(resolved).toMatchObject({
+        id: interactionId,
+        status: "resolved",
+      });
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        outcome: "resolved",
+        resolution: {
+          kind: "permission_request",
+          permissions: {
+            network: { enabled: true },
+            fileSystem: null,
+          },
+          scope: "session",
+        },
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
 });

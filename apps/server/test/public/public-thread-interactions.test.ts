@@ -246,6 +246,7 @@ describe("public thread interaction routes", () => {
               question: "Which environment?",
               allowsOther: false,
               isSecret: false,
+              multiSelect: false,
               options: [
                 { label: "staging", description: "Use staging" },
                 { label: "prod", description: "Use production" },
@@ -257,6 +258,7 @@ describe("public thread interaction routes", () => {
               question: "Which ticket?",
               allowsOther: true,
               isSecret: false,
+              multiSelect: false,
               options: [],
             },
           ],
@@ -365,6 +367,7 @@ describe("public thread interaction routes", () => {
           kind: "permission_request",
           itemId: "item-permission-resolution",
           reason: "Grant workspace access",
+          toolName: null,
           permissions: {
             network: { enabled: true },
             fileSystem: {
@@ -426,6 +429,7 @@ describe("public thread interaction routes", () => {
           kind: "permission_request",
           itemId: "item-permission-resolution-denied",
           reason: "Grant network access",
+          toolName: null,
           permissions: {
             network: { enabled: true },
             fileSystem: null,
@@ -478,6 +482,7 @@ describe("public thread interaction routes", () => {
           kind: "permission_request",
           itemId: "item-permission-resolution-invalid",
           reason: "Grant workspace access",
+          toolName: null,
           permissions: {
             network: null,
             fileSystem: {
@@ -822,6 +827,7 @@ describe("public thread interaction routes", () => {
               question: "Which environment?",
               allowsOther: false,
               isSecret: false,
+              multiSelect: false,
               options: [
                 { label: "staging", description: "Use staging" },
                 { label: "prod", description: "Use production" },
@@ -833,6 +839,7 @@ describe("public thread interaction routes", () => {
               question: "Which ticket?",
               allowsOther: true,
               isSecret: false,
+              multiSelect: false,
               options: [],
             },
           ],

@@ -6,33 +6,25 @@ import {
   getPendingInteraction,
   getPendingInteractionByProviderRequest,
   getThread,
+  interruptPendingInteractionsForThreadIds,
   interruptPendingInteractionsForThreads,
   listPendingInteractionsByThread,
   listPendingInteractionsByStatus,
   setPendingInteractionExpired,
   setPendingInteractionInterrupted,
   setPendingInteractionResolved,
-  type PendingInteractionRow,
 } from "@bb/db";
 import {
-  formatPendingInteractionCommandApprovalDecision,
-  formatPendingInteractionCommandApprovalResolutionMessage,
-  formatPendingInteractionFileChangeApprovalResolutionMessage,
-  formatPendingInteractionPermissionResolutionMessage,
-  pendingInteractionPayloadSchema,
-  pendingInteractionResolutionSchema,
-  pendingInteractionSchema,
   type PendingInteraction,
-  type PendingInteractionCommandApprovalDecision,
   type PendingInteractionCreate,
   type PendingInteractionResolution,
 } from "@bb/domain";
 import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
-import {
-  appendThreadEvent,
-  getLastExecutionOptions,
-} from "../threads/thread-events.js";
+import { getLastExecutionOptions } from "../threads/thread-events.js";
+import { appendPendingInteractionTimelineEvent } from "./pending-interaction-formatting.js";
+import { toPendingInteraction } from "./pending-interaction-serialization.js";
+import { validatePendingInteractionResolution } from "./pending-interaction-validation.js";
 
 interface PendingInteractionWaiter {
   resolve: (outcome: PendingInteractionWaitOutcome) => void;
@@ -88,6 +80,11 @@ interface InterruptPendingInteractionsForThreadsLifecycleArgs {
   threadIds: readonly string[];
 }
 
+interface InterruptPendingInteractionsForThreadIdsLifecycleArgs {
+  reason: string;
+  threadIds: readonly string[];
+}
+
 interface CreateLifecycleDeps {
   db: AppDeps["db"];
   hub: AppDeps["hub"];
@@ -113,42 +110,6 @@ interface PendingInteractionLifecycleArgs extends CreateLifecycleDeps {
 interface ExpirePendingInteractionArgs {
   interactionId: string;
   reason: string;
-}
-
-function parseStoredPendingInteractionJson(value: string): unknown {
-  try {
-    return JSON.parse(value);
-  } catch {
-    throw new ApiError(500, "internal_error", "Stored pending interaction JSON is invalid");
-  }
-}
-
-function toPendingInteraction(row: PendingInteractionRow): PendingInteraction {
-  const payload = pendingInteractionPayloadSchema.parse(
-    parseStoredPendingInteractionJson(row.payload),
-  );
-  const resolution =
-    row.resolution === null
-      ? null
-      : pendingInteractionResolutionSchema.parse(
-          parseStoredPendingInteractionJson(row.resolution),
-        );
-
-  return pendingInteractionSchema.parse({
-    id: row.id,
-    threadId: row.threadId,
-    turnId: row.turnId,
-    providerId: row.providerId,
-    providerThreadId: row.providerThreadId,
-    providerRequestId: row.providerRequestId,
-    providerRequestMethod: row.providerRequestMethod,
-    status: row.status,
-    payload,
-    resolution,
-    statusReason: row.statusReason,
-    createdAt: row.createdAt,
-    resolvedAt: row.resolvedAt,
-  });
 }
 
 function requireWaitableOutcome(
@@ -205,283 +166,6 @@ function unrefTimeoutHandle(timeout: PendingInteractionTimeoutHandle): void {
   if (timeoutHandleHasUnref(timeout)) {
     timeout.unref();
   }
-}
-
-function commandApprovalDecisionEquals(
-  left: PendingInteractionCommandApprovalDecision,
-  right: PendingInteractionCommandApprovalDecision,
-): boolean {
-  if (typeof left === "string" || typeof right === "string") {
-    return left === right;
-  }
-
-  if (left.kind !== right.kind) {
-    return false;
-  }
-
-  if (
-    left.kind === "accept_with_exec_policy_amendment"
-    && right.kind === "accept_with_exec_policy_amendment"
-  ) {
-    return (
-      left.execPolicyAmendment.length === right.execPolicyAmendment.length
-      && left.execPolicyAmendment.every(
-        (entry, index) => entry === right.execPolicyAmendment[index],
-      )
-    );
-  }
-
-  if (
-    left.kind === "apply_network_policy_amendment"
-    && right.kind === "apply_network_policy_amendment"
-  ) {
-    return (
-      left.networkPolicyAmendment.host === right.networkPolicyAmendment.host
-      && left.networkPolicyAmendment.action === right.networkPolicyAmendment.action
-    );
-  }
-
-  return false;
-}
-
-function formatPendingInteractionLifecycleMessage(
-  interaction: PendingInteraction,
-): string {
-  switch (interaction.status) {
-    case "pending": {
-      switch (interaction.payload.kind) {
-        case "command_approval":
-          return interaction.payload.command
-            ? `Awaiting approval for command: ${interaction.payload.command}`
-            : "Awaiting command approval";
-        case "file_change_approval":
-          return interaction.payload.reason ?? "Awaiting file-change approval";
-        case "permission_request":
-          return interaction.payload.reason
-            ?? (interaction.payload.toolName
-              ? `Awaiting permission approval for ${interaction.payload.toolName}`
-              : "Awaiting permission approval");
-        case "user_input_request":
-          return `Awaiting answers to ${interaction.payload.questions.length} question(s)`;
-      }
-      const exhaustivePayload: never = interaction.payload;
-      throw new Error(`Unsupported pending interaction payload: ${String(exhaustivePayload)}`);
-    }
-    case "resolved":
-      if (interaction.resolution === null) {
-        return "Interaction resolved";
-      }
-      switch (interaction.resolution.kind) {
-        case "command_approval":
-          return formatPendingInteractionCommandApprovalResolutionMessage(
-            interaction.resolution.decision,
-          );
-        case "file_change_approval":
-          return formatPendingInteractionFileChangeApprovalResolutionMessage(
-            interaction.resolution.decision,
-          );
-        case "permission_request":
-          return formatPendingInteractionPermissionResolutionMessage({
-            permissions: interaction.resolution.permissions,
-            scope: interaction.resolution.scope,
-          });
-        case "user_input_request":
-          return `Answered ${Object.keys(interaction.resolution.answers).length} question(s)`;
-      }
-      const exhaustiveResolution: never = interaction.resolution;
-      throw new Error(
-        `Unsupported pending interaction resolution: ${String(exhaustiveResolution)}`,
-      );
-    case "rejected":
-      return interaction.statusReason ?? "Interaction rejected";
-    case "interrupted":
-      return interaction.statusReason ?? "Interaction interrupted";
-    case "expired":
-      return interaction.statusReason ?? "Interaction expired";
-  }
-
-  const exhaustiveStatus: never = interaction.status;
-  throw new Error(`Unsupported pending interaction status: ${String(exhaustiveStatus)}`);
-}
-
-function toPendingInteractionOperationStatus(
-  interaction: PendingInteraction,
-): "completed" | "failed" | "started" {
-  switch (interaction.status) {
-    case "pending":
-      return "started";
-    case "resolved":
-      return "completed";
-    case "rejected":
-    case "interrupted":
-    case "expired":
-      return "failed";
-  }
-}
-
-function appendPendingInteractionTimelineEvent(
-  deps: CreateLifecycleDeps,
-  interaction: PendingInteraction,
-): void {
-  const thread = getThread(deps.db, interaction.threadId);
-
-  appendThreadEvent(deps, {
-    threadId: interaction.threadId,
-    environmentId: thread?.environmentId ?? null,
-    type: "system/operation",
-    data: {
-      operation: interaction.payload.kind,
-      status: toPendingInteractionOperationStatus(interaction),
-      operationId: interaction.id,
-      message: formatPendingInteractionLifecycleMessage(interaction),
-      metadata: {
-        interactionId: interaction.id,
-        providerId: interaction.providerId,
-        providerRequestId: interaction.providerRequestId,
-      },
-    },
-  });
-}
-
-function validateCommandApprovalResolution(
-  interaction: PendingInteraction,
-  resolution: PendingInteractionResolution,
-): void {
-  if (
-    interaction.payload.kind !== "command_approval"
-    || resolution.kind !== "command_approval"
-  ) {
-    return;
-  }
-
-  if (
-    interaction.payload.availableDecisions.some((decision) =>
-      commandApprovalDecisionEquals(decision, resolution.decision),
-    )
-  ) {
-    return;
-  }
-
-  throw new ApiError(
-    400,
-    "invalid_request",
-    `Command approval decision '${formatPendingInteractionCommandApprovalDecision(resolution.decision)}' is not available for interaction ${interaction.id}`,
-  );
-}
-
-function validateUserInputResolution(
-  interaction: PendingInteraction,
-  resolution: PendingInteractionResolution,
-): void {
-  if (
-    interaction.payload.kind !== "user_input_request"
-    || resolution.kind !== "user_input_request"
-  ) {
-    return;
-  }
-
-  const questions = new Map(
-    interaction.payload.questions.map((question) => [question.id, question]),
-  );
-  const unknownQuestionIds = Object.keys(resolution.answers).filter(
-    (questionId) => !questions.has(questionId),
-  );
-  if (unknownQuestionIds.length > 0) {
-    throw new ApiError(
-      400,
-      "invalid_request",
-      `Unknown question ids: ${unknownQuestionIds.join(", ")}`,
-    );
-  }
-
-  const missingQuestionIds = interaction.payload.questions
-    .map((question) => question.id)
-    .filter((questionId) => !(questionId in resolution.answers));
-  if (missingQuestionIds.length > 0) {
-    throw new ApiError(
-      400,
-      "invalid_request",
-      `Missing answers for question ids: ${missingQuestionIds.join(", ")}`,
-    );
-  }
-
-  for (const [questionId, answers] of Object.entries(resolution.answers)) {
-    if (answers.length > 0) {
-      continue;
-    }
-    throw new ApiError(
-      400,
-      "invalid_request",
-      `Question '${questionId}' requires at least one answer`,
-    );
-  }
-}
-
-function validatePermissionRequestResolution(
-  interaction: PendingInteraction,
-  resolution: PendingInteractionResolution,
-): void {
-  if (
-    interaction.payload.kind !== "permission_request"
-    || resolution.kind !== "permission_request"
-  ) {
-    return;
-  }
-
-  if (resolution.permissions.network !== null) {
-    if (
-      interaction.payload.permissions.network?.enabled !== true
-      || resolution.permissions.network.enabled !== true
-    ) {
-      throw new ApiError(
-        400,
-        "invalid_request",
-        "Granted network permissions must be a subset of the requested permissions",
-      );
-    }
-  }
-
-  if (resolution.permissions.fileSystem !== null) {
-    const requestedFileSystem = interaction.payload.permissions.fileSystem;
-    if (requestedFileSystem === null) {
-      throw new ApiError(
-        400,
-        "invalid_request",
-        "Granted file-system permissions must be a subset of the requested permissions",
-      );
-    }
-
-    const unknownReadPaths = resolution.permissions.fileSystem.read.filter(
-      (path) => !requestedFileSystem.read.includes(path),
-    );
-    const unknownWritePaths = resolution.permissions.fileSystem.write.filter(
-      (path) => !requestedFileSystem.write.includes(path),
-    );
-    if (unknownReadPaths.length > 0 || unknownWritePaths.length > 0) {
-      throw new ApiError(
-        400,
-        "invalid_request",
-        "Granted file-system permissions must be a subset of the requested permissions",
-      );
-    }
-  }
-}
-
-function validatePendingInteractionResolution(
-  interaction: PendingInteraction,
-  resolution: PendingInteractionResolution,
-): void {
-  if (interaction.payload.kind !== resolution.kind) {
-    throw new ApiError(
-      400,
-      "invalid_request",
-      "Pending interaction resolution kind does not match the interaction payload",
-    );
-  }
-
-  validateCommandApprovalResolution(interaction, resolution);
-  validatePermissionRequestResolution(interaction, resolution);
-  validateUserInputResolution(interaction, resolution);
 }
 
 export class PendingInteractionLifecycle {
@@ -703,12 +387,14 @@ export class PendingInteractionLifecycle {
       id: args.interactionId,
       resolution: JSON.stringify(args.resolution),
     });
-    const interaction = updated
-      ? toPendingInteraction(updated)
-      : this.getThreadInteraction({
-          threadId: args.threadId,
-          interactionId: args.interactionId,
-        });
+    if (!updated) {
+      return this.getThreadInteraction({
+        threadId: args.threadId,
+        interactionId: args.interactionId,
+      });
+    }
+
+    const interaction = toPendingInteraction(updated);
     this.finishInteraction(interaction);
     return interaction;
   }
@@ -734,6 +420,21 @@ export class PendingInteractionLifecycle {
   ): PendingInteraction[] {
     const updated = interruptPendingInteractionsForThreads(this.deps.db, {
       providerId: args.providerId,
+      threadIds: args.threadIds,
+      statusReason: args.reason,
+    }).map(toPendingInteraction);
+
+    for (const interaction of updated) {
+      this.finishInteraction(interaction);
+    }
+
+    return updated;
+  }
+
+  interruptPendingInteractionsForThreadIds(
+    args: InterruptPendingInteractionsForThreadIdsLifecycleArgs,
+  ): PendingInteraction[] {
+    const updated = interruptPendingInteractionsForThreadIds(this.deps.db, {
       threadIds: args.threadIds,
       statusReason: args.reason,
     }).map(toPendingInteraction);

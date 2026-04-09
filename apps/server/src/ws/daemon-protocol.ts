@@ -7,6 +7,7 @@ import {
   getActiveSession,
   heartbeatSession,
   hostDaemonSessions,
+  listHostThreadIds,
   threads,
 } from "@bb/db";
 import {
@@ -117,7 +118,7 @@ export function onDaemonSocketMessage(
 }
 
 export function onDaemonSocketClose(
-  deps: Pick<AppDeps, "db" | "hub" | "logger">,
+  deps: Pick<AppDeps, "db" | "hub" | "logger" | "pendingInteractions">,
   sessionId: string,
 ): void {
   deps.logger.info({ sessionId }, "Daemon WebSocket closed");
@@ -151,7 +152,7 @@ export function onDaemonSocketClose(
  * session exists for the host), this is a no-op.
  */
 function deferredThreadInterrupt(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: Pick<AppDeps, "db" | "hub" | "pendingInteractions">,
   hostId: string,
 ): void {
   // Host reconnected — nothing to interrupt.
@@ -163,6 +164,11 @@ function deferredThreadInterrupt(
     deps,
     hostId,
   );
+  deps.pendingInteractions.interruptPendingInteractionsForThreadIds({
+    threadIds: listHostThreadIds(deps.db, { hostId }),
+    reason:
+      "Host daemon disconnected while awaiting user interaction; retry the thread to continue",
+  });
   for (const threadId of interruptedThreadIds.eventThreadIds) {
     deps.hub.notifyThread(threadId, ["events-appended"]);
   }

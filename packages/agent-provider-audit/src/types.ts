@@ -14,6 +14,7 @@ import type {
 } from "@bb/agent-runtime";
 
 export interface ProviderAuditScenarioExecutionOptions {
+  approvalPolicy?: ThreadExecutionOptions["approvalPolicy"];
   questionPolicy?: ThreadExecutionOptions["questionPolicy"];
   reasoningLevel?: ThreadExecutionOptions["reasoningLevel"];
   sandboxMode?: ThreadExecutionOptions["sandboxMode"];

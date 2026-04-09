@@ -48,6 +48,7 @@ interface BuildExecutionOptionsArgs {
 }
 
 interface ProviderAuditResolvedExecutionOptions {
+  approvalPolicy: NonNullable<ProviderAuditScenarioExecutionOptions["approvalPolicy"]>;
   model: string;
   questionPolicy: NonNullable<ProviderAuditScenarioExecutionOptions["questionPolicy"]>;
   serviceTier: NonNullable<ProviderAuditScenarioExecutionOptions["serviceTier"]>;
@@ -541,6 +542,7 @@ function buildExecutionOptions(
   args: BuildExecutionOptionsArgs,
 ): ProviderAuditResolvedExecutionOptions {
   return {
+    approvalPolicy: args.execution?.approvalPolicy ?? "on-request",
     model: args.model ?? "provider-default",
     questionPolicy: args.execution?.questionPolicy ?? "allow",
     serviceTier: args.execution?.serviceTier ?? "fast",

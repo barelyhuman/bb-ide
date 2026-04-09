@@ -44,6 +44,7 @@ import {
   type ToolCallForwarder,
 } from "./tool-proxy-mcp.js";
 import {
+  CLAUDE_ASK_USER_QUESTION_TOOL_NAME,
   type ClaudeInteractiveResponse,
   type ClaudePermissionMode,
   type ClaudePermissionRequestApprovalParams,
@@ -383,7 +384,7 @@ function buildInteractiveRequestParams(
 ):
   | ClaudePermissionRequestApprovalParams
   | ClaudeToolRequestUserInputParams {
-  if (args.toolName === "AskUserQuestion") {
+  if (args.toolName === CLAUDE_ASK_USER_QUESTION_TOOL_NAME) {
     const parsedQuestionInput = claudeAskUserQuestionInputSchema.safeParse(
       args.input,
     );
@@ -497,7 +498,7 @@ function createForwardInteractiveRequest(
     toolCallRequestIdCounter += 1;
     const requestId = toolCallRequestIdCounter;
     const method =
-      args.toolName === "AskUserQuestion"
+      args.toolName === CLAUDE_ASK_USER_QUESTION_TOOL_NAME
         ? CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD
         : CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD;
 
@@ -521,7 +522,7 @@ function createForwardInteractiveRequest(
     threadSession.pendingInteractiveRequests.set(requestId, {
       itemId: args.toolUseId,
       kind:
-        args.toolName === "AskUserQuestion"
+        args.toolName === CLAUDE_ASK_USER_QUESTION_TOOL_NAME
           ? "user_input_request"
           : "permission_request",
       originalInput: args.input,
@@ -553,7 +554,7 @@ function createCanUseTool(
     }
     const suggestions = parseClaudePermissionUpdates(options.suggestions);
 
-    if (toolName === "AskUserQuestion") {
+    if (toolName === CLAUDE_ASK_USER_QUESTION_TOOL_NAME) {
       if (threadSession.questionPolicy === "deny") {
         return {
           behavior: "deny",
@@ -642,7 +643,7 @@ export function buildSessionOptions(
     env,
     permissionMode: params.permissionMode,
     ...(params.questionPolicy === "deny"
-      ? { disallowedTools: ["AskUserQuestion"] }
+      ? { disallowedTools: [CLAUDE_ASK_USER_QUESTION_TOOL_NAME] }
       : {}),
   };
 }

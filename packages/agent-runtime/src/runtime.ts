@@ -1,6 +1,7 @@
 import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
+import { isRecord } from "@bb/domain";
 import type {
   DynamicTool,
   InstructionMode,
@@ -30,10 +31,6 @@ import type {
 interface PendingRequest {
   resolve: (result: unknown) => void;
   reject: (error: Error) => void;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function isJsonRpcId(value: unknown): value is string | number {
@@ -110,6 +107,7 @@ function toAdapterOptions(
 interface ProviderProcess {
   child: ChildProcess;
   adapter: ProviderAdapter;
+  interactiveRequestScope: string;
   pending: Map<string | number, PendingRequest>;
   threadIds: Set<string>;
   stderrChunks: string[];
@@ -177,6 +175,13 @@ function buildThreadShellEnvironment(
     BB_THREAD_ID: args.threadId,
     BB_ENVIRONMENT_ID: args.environmentId,
   };
+}
+
+function scopeProviderRequestId(
+  scope: string,
+  requestId: string | number,
+): string {
+  return `${scope}:${String(requestId)}`;
 }
 
 export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
@@ -506,13 +511,17 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           );
           return;
         }
+        const buildInteractiveResponse = proc.adapter.buildInteractiveResponse;
 
         const scopedInteractiveReq: PendingInteractionCreate = {
           threadId: resolvedThreadId,
           turnId: interactiveReq.turnId,
           providerId,
           providerThreadId: interactiveReq.providerThreadId,
-          providerRequestId: String(interactiveReq.requestId),
+          providerRequestId: scopeProviderRequestId(
+            proc.interactiveRequestScope,
+            interactiveReq.requestId,
+          ),
           providerRequestMethod: interactiveReq.method,
           payload: interactiveReq.payload,
         };
@@ -539,7 +548,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           sendJsonRpcResult(
             proc.child,
             parsedId,
-            proc.adapter.buildInteractiveResponse!({
+            buildInteractiveResponse({
               request: interactiveReq,
               resolution,
             }),
@@ -711,6 +720,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     const proc: ProviderProcess = {
       child,
       adapter,
+      interactiveRequestScope: randomUUID(),
       pending: new Map(),
       threadIds: new Set(),
       stderrChunks: [],

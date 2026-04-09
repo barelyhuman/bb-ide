@@ -311,7 +311,7 @@ export const pendingInteractionUserInputQuestionSchema = z.object({
   question: z.string(),
   allowsOther: z.boolean(),
   isSecret: z.boolean(),
-  multiSelect: z.boolean().optional(),
+  multiSelect: z.boolean(),
   options: z.array(pendingInteractionQuestionOptionSchema),
 });
 export type PendingInteractionUserInputQuestion = z.infer<
@@ -347,7 +347,7 @@ export const permissionRequestPendingInteractionPayloadSchema = z.object({
   kind: z.literal("permission_request"),
   itemId: z.string().min(1),
   reason: z.string().nullable(),
-  toolName: z.string().nullable().optional(),
+  toolName: z.string().nullable(),
   permissions: pendingInteractionRequestedPermissionProfileSchema,
 });
 export type PermissionRequestPendingInteractionPayload = z.infer<

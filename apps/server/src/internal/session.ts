@@ -85,6 +85,14 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
 
     if (existingSession && existingSession.id !== session.id) {
       deps.hub.closeDaemonSession(existingSession.id, "replaced");
+
+      if (existingSession.instanceId !== payload.instanceId) {
+        deps.pendingInteractions.interruptPendingInteractionsForThreadIds({
+          threadIds: listHostThreadIds(deps.db, daemon.hostId),
+          reason:
+            "Host daemon restarted while awaiting user interaction; retry the thread to continue",
+        });
+      }
     }
 
     await reconcileSessionThreads(

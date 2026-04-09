@@ -1,10 +1,14 @@
 import { z } from "zod";
 import {
+  approvalPolicySchema,
+  questionPolicySchema,
+} from "./shared-types.js";
+import { isRecord } from "./type-guards.js";
+import {
   threadEventSchema,
   threadEventTypeSchema,
 } from "./provider-event.js";
 import type { ThreadEvent, ThreadEventType } from "./provider-event.js";
-import { questionPolicySchema } from "./shared-types.js";
 
 type ThreadEventByType = {
   [TType in ThreadEventType]: Extract<ThreadEvent, { type: TType }>;
@@ -78,10 +82,6 @@ const storedTurnRequestTypeSet = new Set<ThreadEventType>([
   "client/turn/start",
 ]);
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function normalizeStoredThreadEventArgs(
   args: StoredThreadEventParseArgs,
 ): StoredThreadEventParseArgs {
@@ -97,7 +97,10 @@ function normalizeStoredThreadEventArgs(
   const parsedQuestionPolicy = questionPolicySchema.safeParse(
     execution.questionPolicy,
   );
-  if (parsedQuestionPolicy.success) {
+  const parsedApprovalPolicy = approvalPolicySchema.safeParse(
+    execution.approvalPolicy,
+  );
+  if (parsedQuestionPolicy.success && parsedApprovalPolicy.success) {
     return args;
   }
 
@@ -107,7 +110,8 @@ function normalizeStoredThreadEventArgs(
       ...args.data,
       execution: {
         ...execution,
-        questionPolicy: "allow",
+        approvalPolicy: parsedApprovalPolicy.success ? execution.approvalPolicy : "on-request",
+        questionPolicy: parsedQuestionPolicy.success ? execution.questionPolicy : "allow",
       },
     },
   };

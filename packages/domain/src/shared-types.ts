@@ -89,6 +89,7 @@ export const resolvedThreadExecutionOptionsSchema =
     serviceTier: serviceTierSchema,
     reasoningLevel: reasoningLevelSchema,
     sandboxMode: sandboxModeSchema,
+    approvalPolicy: approvalPolicySchema,
     questionPolicy: questionPolicySchema,
     source: threadExecutionSourceSchema,
   });

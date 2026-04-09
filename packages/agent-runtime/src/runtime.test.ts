@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  isRecord,
   type ThreadEvent,
 } from "@bb/domain";
 import {
@@ -27,8 +28,18 @@ function wait(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
+async function waitForCondition(
+  condition: () => boolean,
+  timeoutMs = 1_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (condition()) {
+      return;
+    }
+    await wait(10);
+  }
+  throw new Error("Timed out waiting for condition");
 }
 
 function findLastRecordedCommand(
@@ -964,9 +975,10 @@ describe("createAgentRuntime", () => {
 
   it("routes provider-scoped tool calls through onToolCall and sends response back", async () => {
     const toolCalls: Array<{ threadId: string; providerThreadId: string; tool: string }> = [];
+    const events: ThreadEvent[] = [];
     const runtime = createAgentRuntime({
       workspacePath: tmpDir,
-      onEvent: () => {},
+      onEvent: (event) => events.push(event),
       onToolCall: async (req) => {
         toolCalls.push({
           threadId: req.threadId,
@@ -991,7 +1003,11 @@ describe("createAgentRuntime", () => {
       threadId: "t1",
       input: [{ type: "text", text: "call_tool:my_test_tool" }],
     });
-    await wait(200);
+    await waitForCondition(
+      () =>
+        toolCalls.length === 1
+        && events.some((event) => event.type === "turn/completed"),
+    );
 
     expect(toolCalls).toHaveLength(1);
     expect(toolCalls[0]).toEqual({
@@ -1004,9 +1020,10 @@ describe("createAgentRuntime", () => {
 
   it("rejects tool calls whose BB thread hint disagrees with the provider-thread mapping", async () => {
     const toolCalls: string[] = [];
+    const events: ThreadEvent[] = [];
     const runtime = createAgentRuntime({
       workspacePath: tmpDir,
-      onEvent: () => {},
+      onEvent: (event) => events.push(event),
       onToolCall: async (req) => {
         toolCalls.push(req.tool);
         return {
@@ -1027,7 +1044,9 @@ describe("createAgentRuntime", () => {
       threadId: "t1",
       input: [{ type: "text", text: "call_tool:my_test_tool" }],
     });
-    await wait(200);
+    await waitForCondition(
+      () => events.some((event) => event.type === "turn/completed"),
+    );
 
     expect(toolCalls).toEqual([]);
     await runtime.shutdown();
@@ -1055,7 +1074,9 @@ describe("createAgentRuntime", () => {
       threadId: "t1",
       input: [{ type: "text", text: "call_tool:failing_tool" }],
     });
-    await wait(200);
+    await waitForCondition(
+      () => events.some((event) => event.type === "turn/completed"),
+    );
     await runtime.shutdown();
     // The test passes if no unhandled promise rejection occurs
   });
@@ -1201,7 +1222,16 @@ rl.on("line", (line) => {
       threadId: "t1",
       input: [{ type: "text", text: "trigger interactive request" }],
     });
-    await wait(200);
+    await waitForCondition(
+      () =>
+        requests.length === 1
+        && events.some(
+          (event) =>
+            event.type === "item/completed"
+            && event.item.type === "agentMessage"
+            && event.item.text === "interactive:accept_for_session",
+        ),
+    );
 
     expect(requests).toEqual([
       {
@@ -1343,7 +1373,15 @@ rl.on("line", (line) => {
       threadId: "t1",
       input: [{ type: "text", text: "trigger unsupported interactive request" }],
     });
-    await wait(200);
+    await waitForCondition(
+      () =>
+        events.some(
+          (event) =>
+            event.type === "item/completed"
+            && event.item.type === "agentMessage"
+            && event.item.text === 'Unsupported provider request "request_unsupported"',
+        ),
+    );
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -1380,7 +1418,10 @@ rl.on("line", (line) => {
       threadId: "t1",
       input: [{ type: "text", text: "call_tool:my_test_tool" }],
     });
-    await wait(200);
+    await waitForCondition(
+      () =>
+        captures.some((entry) => entry.kind === "tool-call-result"),
+    );
     await runtime.shutdown();
 
     const rawEvents = captures.filter(
@@ -1537,7 +1578,7 @@ rl.on("line", (line) => {
     });
 
     await runtime.ensureProvider({ providerId: "fake" });
-    await wait(200);
+    await waitForCondition(() => exitInfo.mock.calls.length === 1);
 
     expect(exitInfo).toHaveBeenCalledWith(
       expect.objectContaining({ providerId: "fake", code: 42 }),
@@ -1638,6 +1679,7 @@ rl.on("line", (line) => {
       });`,
     );
 
+    const exitInfo = vi.fn();
     const runtime = createAgentRuntime({
       workspacePath: tmpDir,
       onEvent: () => {},
@@ -1645,6 +1687,7 @@ rl.on("line", (line) => {
         contentItems: [{ type: "inputText", text: "ok" }],
         success: true,
       }),
+      onProcessExit: exitInfo,
       adapterFactory: () => createFakeAdapter(crashAfterInitScript),
     });
 
@@ -1654,7 +1697,7 @@ rl.on("line", (line) => {
       projectId: "p1",
       providerId: "fake",
     });
-    await wait(200); // let the crash happen
+    await waitForCondition(() => exitInfo.mock.calls.length === 1);
 
     await expect(
       runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "hi" }] }),

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { pendingInteractionRequestedPermissionProfileSchema } from "@bb/domain";
 import type {
   ApprovalPolicy,
   PendingInteractionGrantedPermissionProfile,
@@ -11,6 +12,7 @@ export const CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD =
   "item/permissions/requestApproval";
 export const CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD =
   "item/tool/requestUserInput";
+export const CLAUDE_ASK_USER_QUESTION_TOOL_NAME = "AskUserQuestion";
 
 export const claudePermissionModeSchema = z.enum([
   "default",
@@ -106,19 +108,10 @@ export type ClaudePermissionUpdate = z.infer<
   typeof claudePermissionUpdateSchema
 >;
 
-const claudeRequestedNetworkPermissionsSchema = z.object({
-  enabled: z.boolean().nullable(),
-});
-
-const claudeRequestedFileSystemPermissionsSchema = z.object({
-  read: z.array(z.string()),
-  write: z.array(z.string()),
-});
-
-const claudeRequestedPermissionProfileSchema = z.object({
-  network: claudeRequestedNetworkPermissionsSchema.nullable(),
-  fileSystem: claudeRequestedFileSystemPermissionsSchema.nullable(),
-});
+const claudeRequestedPermissionProfileSchema =
+  z.custom<PendingInteractionRequestedPermissionProfile>((value) =>
+    pendingInteractionRequestedPermissionProfileSchema.safeParse(value).success
+  );
 
 export interface ClaudePermissionRequestProfileArgs {
   blockedPath: string | undefined;
@@ -128,24 +121,29 @@ export interface ClaudePermissionRequestProfileArgs {
 
 type ClaudeFilePermissionKind = "read" | "write" | "read_write";
 
+const CLAUDE_FILE_PERMISSION_KIND_BY_TOOL_NAME = new Map<
+  string,
+  ClaudeFilePermissionKind
+>([
+  ["Read", "read"],
+  ["Grep", "read"],
+  ["Glob", "read"],
+  ["LS", "read"],
+  ["Edit", "write"],
+  ["Write", "write"],
+  ["NotebookEdit", "write"],
+  ["Bash", "read_write"],
+]);
+
+const CLAUDE_NETWORK_PERMISSION_TOOL_NAMES = new Set([
+  "WebFetch",
+  "WebSearch",
+]);
+
 function getClaudeFilePermissionKind(
   toolName: string,
 ): ClaudeFilePermissionKind | null {
-  switch (toolName) {
-    case "Read":
-    case "Grep":
-    case "Glob":
-    case "LS":
-      return "read";
-    case "Edit":
-    case "Write":
-    case "NotebookEdit":
-      return "write";
-    case "Bash":
-      return "read_write";
-    default:
-      return null;
-  }
+  return CLAUDE_FILE_PERMISSION_KIND_BY_TOOL_NAME.get(toolName) ?? null;
 }
 
 function getSuggestedDirectories(
@@ -194,9 +192,7 @@ export function toPendingInteractionPermissionProfile(
         })();
 
   const network =
-    args.toolName === "WebFetch"
-      || args.toolName === "WebSearch"
-      || hasRuleSuggestion
+    CLAUDE_NETWORK_PERMISSION_TOOL_NAMES.has(args.toolName) || hasRuleSuggestion
       ? { enabled: true }
       : null;
 
@@ -217,7 +213,7 @@ export function shouldRequestClaudePermissionApproval(
   args: ShouldRequestClaudePermissionApprovalArgs,
 ): boolean {
   return (
-    args.toolName !== "AskUserQuestion"
+    args.toolName !== CLAUDE_ASK_USER_QUESTION_TOOL_NAME
     && (
       args.blockedPath !== undefined
       || args.decisionReason !== undefined
@@ -290,7 +286,7 @@ export function toClaudeUserInputUpdatedInput(
     questions: args.questions.map((question) => ({
       question: question.question,
       header: question.header,
-      multiSelect: question.multiSelect ?? false,
+      multiSelect: question.multiSelect,
       options: question.options.map((option) => ({
         label: option.label,
         description: option.description,

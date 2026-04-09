@@ -55,6 +55,12 @@ export interface InterruptPendingInteractionsForThreadsArgs {
   threadIds: readonly string[];
 }
 
+export interface InterruptPendingInteractionsForThreadIdsArgs {
+  resolvedAt?: number;
+  statusReason: string;
+  threadIds: readonly string[];
+}
+
 function getPendingInteractionRecord(
   db: PendingInteractionReadConnection,
   id: string,
@@ -243,6 +249,22 @@ export function setPendingInteractionExpired(
   });
 }
 
+export function setPendingInteractionRejected(
+  db: PendingInteractionWriteConnection,
+  args: {
+    id: string;
+    statusReason: string;
+  },
+): PendingInteractionRow | null {
+  return updatePendingInteractionTerminalState(db, {
+    id: args.id,
+    allowedCurrentStatuses: ["pending"],
+    resolution: null,
+    status: "rejected",
+    statusReason: args.statusReason,
+  });
+}
+
 export function interruptPendingInteractionsForThreads(
   db: PendingInteractionWriteConnection,
   args: InterruptPendingInteractionsForThreadsArgs,
@@ -264,6 +286,34 @@ export function interruptPendingInteractionsForThreads(
     .where(
       and(
         eq(pendingInteractions.providerId, args.providerId),
+        inArray(pendingInteractions.threadId, [...args.threadIds]),
+        eq(pendingInteractions.status, "pending"),
+      ),
+    )
+    .returning()
+    .all();
+}
+
+export function interruptPendingInteractionsForThreadIds(
+  db: PendingInteractionWriteConnection,
+  args: InterruptPendingInteractionsForThreadIdsArgs,
+): PendingInteractionRow[] {
+  if (args.threadIds.length === 0) {
+    return [];
+  }
+
+  const now = Date.now();
+
+  return db
+    .update(pendingInteractions)
+    .set({
+      status: "interrupted",
+      statusReason: args.statusReason,
+      resolvedAt: args.resolvedAt ?? now,
+      updatedAt: now,
+    })
+    .where(
+      and(
         inArray(pendingInteractions.threadId, [...args.threadIds]),
         eq(pendingInteractions.status, "pending"),
       ),
