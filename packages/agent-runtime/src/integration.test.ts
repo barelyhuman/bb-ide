@@ -11,12 +11,19 @@
  * Run with: pnpm test:integration
  */
 
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
-import type { ThreadEvent, ToolCallRequest, ToolCallResponse } from "@bb/domain";
+import type {
+  PendingInteractionCreate,
+  PendingInteractionResolution,
+  ThreadEvent,
+  ToolCallRequest,
+  ToolCallResponse,
+} from "@bb/domain";
+import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 import { createAgentRuntime } from "./runtime.js";
 import type { AgentRuntime } from "./types.js";
 
@@ -154,18 +161,33 @@ interface TestContext {
   runtime: AgentRuntime;
   events: ThreadEvent[];
   toolCalls: ToolCallRequest[];
+  interactiveRequests: PendingInteractionCreate[];
+  captures: AgentRuntimeCaptureEntry[];
   tmpDir: string;
+}
+
+type TestToolCallHandler = (
+  req: ToolCallRequest,
+) => Promise<ToolCallResponse>;
+
+type TestInteractiveRequestHandler = (
+  req: PendingInteractionCreate,
+) => Promise<PendingInteractionResolution>;
+
+interface CreateTestRuntimeOptions {
+  onInteractiveRequest?: TestInteractiveRequestHandler;
+  onToolCall?: TestToolCallHandler;
 }
 
 function createTestRuntime(
   providerId: string,
-  opts?: {
-    onToolCall?: (req: ToolCallRequest) => Promise<ToolCallResponse>;
-  },
+  opts?: CreateTestRuntimeOptions,
 ): TestContext {
   const tmpDir = mkdtempSync(join(tmpdir(), `bb-integ-${providerId}-`));
   const events: ThreadEvent[] = [];
   const toolCalls: ToolCallRequest[] = [];
+  const interactiveRequests: PendingInteractionCreate[] = [];
+  const captures: AgentRuntimeCaptureEntry[] = [];
 
   const defaultToolHandler = async (): Promise<ToolCallResponse> => ({
     contentItems: [{ type: "inputText" as const, text: "ok" }],
@@ -175,19 +197,82 @@ function createTestRuntime(
   const runtime = createAgentRuntime({
     workspacePath: tmpDir,
     onEvent: (e) => events.push(e),
+    onCapture: (entry) => captures.push(entry),
     onToolCall: async (req) => {
       toolCalls.push(req);
       if (opts?.onToolCall) return opts.onToolCall(req);
       return defaultToolHandler();
     },
+    onInteractiveRequest: async (req) => {
+      interactiveRequests.push(req);
+      if (opts?.onInteractiveRequest) {
+        return opts.onInteractiveRequest(req);
+      }
+      throw new Error(`Unexpected interactive request: ${req.payload.kind}`);
+    },
     onStderr: () => {},
   });
 
-  return { runtime, events, toolCalls, tmpDir };
+  return {
+    runtime,
+    events,
+    toolCalls,
+    interactiveRequests,
+    captures,
+    tmpDir,
+  };
 }
 
 function cleanup(ctx: TestContext): void {
   rmSync(ctx.tmpDir, { recursive: true, force: true });
+}
+
+function createSingleAnswerResolution(
+  request: PendingInteractionCreate,
+  answer: string,
+): PendingInteractionResolution {
+  if (request.payload.kind !== "user_input_request") {
+    throw new Error(`Expected user_input_request, got ${request.payload.kind}`);
+  }
+
+  return {
+    kind: "user_input_request",
+    answers: Object.fromEntries(
+      request.payload.questions.map((question) => [question.id, [answer]]),
+    ),
+  };
+}
+
+function createOrderedAnswerResolution(
+  request: PendingInteractionCreate,
+  answers: string[],
+): PendingInteractionResolution {
+  if (request.payload.kind !== "user_input_request") {
+    throw new Error(`Expected user_input_request, got ${request.payload.kind}`);
+  }
+
+  if (request.payload.questions.length !== answers.length) {
+    throw new Error(
+      `Expected ${answers.length} questions, got ${request.payload.questions.length}`,
+    );
+  }
+
+  return {
+    kind: "user_input_request",
+    answers: Object.fromEntries(
+      request.payload.questions.map((question, index) => [question.id, [answers[index]!]]),
+    ),
+  };
+}
+
+function getFirstNonEmptyLine(path: string): string {
+  const line = readFileSync(path, "utf8")
+    .split(/\r?\n/u)
+    .find((value) => value.trim().length > 0);
+  if (!line) {
+    throw new Error(`Expected a non-empty line in ${path}`);
+  }
+  return line;
 }
 
 // ---------------------------------------------------------------------------
@@ -782,8 +867,291 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
         await ctx.runtime.shutdown();
         cleanup(ctx);
       }
-    }, 45_000);
-  });
+  }, 45_000);
+});
+
+describe.concurrent("interactive request scenarios", () => {
+  it("routes Codex request_user_input round-trips through onInteractiveRequest", async () => {
+    const ctx = createTestRuntime("codex", {
+      onInteractiveRequest: async (request) =>
+        createSingleAnswerResolution(request, "BLUE"),
+    });
+
+    try {
+      const threadId = newThreadId();
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId: "codex",
+        options: {
+          sandboxMode: "danger-full-access",
+          questionPolicy: "allow",
+        },
+        instructions:
+          "When the user tells you to ask a question, you must use request_user_input before any plain-text answer.",
+      });
+
+      await ctx.runtime.runTurn({
+        threadId,
+        input: [
+          {
+            type: "text",
+            text:
+              "Before answering, use request_user_input to ask exactly one question with exactly two options labeled RED and BLUE. After you receive the answer, reply with exactly CHOSEN_BLUE.",
+          },
+        ],
+      });
+
+      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+        timeoutMs: 45_000,
+        label: "Codex interactive request",
+      });
+      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        timeoutMs: 45_000,
+        label: "Codex interactive turn/completed",
+      });
+
+      expect(ctx.interactiveRequests).toHaveLength(1);
+      expect(ctx.interactiveRequests[0]?.payload.kind).toBe("user_input_request");
+
+      const text = getAgentText(ctx.events) || getStreamedText(ctx.events);
+      expect(text.toUpperCase()).toContain("CHOSEN_BLUE");
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 60_000);
+
+  it("routes multi-question Codex request_user_input through onInteractiveRequest", async () => {
+    const ctx = createTestRuntime("codex", {
+      onInteractiveRequest: async (request) =>
+        createOrderedAnswerResolution(request, ["BLUE", "DOG"]),
+    });
+
+    try {
+      const threadId = newThreadId();
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId: "codex",
+        options: {
+          sandboxMode: "danger-full-access",
+          questionPolicy: "allow",
+        },
+        instructions:
+          "When the user tells you to ask questions, you must use request_user_input before any plain-text answer.",
+      });
+
+      await ctx.runtime.runTurn({
+        threadId,
+        input: [
+          {
+            type: "text",
+            text:
+              "Before answering, use request_user_input to ask exactly two questions. The first must have options RED and BLUE. The second must have options CAT and DOG. After you receive the answers, reply with exactly BLUE_DOG.",
+          },
+        ],
+      });
+
+      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+        timeoutMs: 45_000,
+        label: "Codex multi-question interactive request",
+      });
+      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        timeoutMs: 45_000,
+        label: "Codex multi-question turn/completed",
+      });
+
+      expect(ctx.interactiveRequests).toHaveLength(1);
+      expect(ctx.interactiveRequests[0]?.payload.kind).toBe("user_input_request");
+      expect(
+        ctx.interactiveRequests[0]?.payload.kind === "user_input_request"
+          ? ctx.interactiveRequests[0].payload.questions
+          : [],
+      ).toHaveLength(2);
+
+      const text = getAgentText(ctx.events) || getStreamedText(ctx.events);
+      expect(text.toUpperCase()).toContain("BLUE_DOG");
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 60_000);
+
+  it("routes Claude AskUserQuestion round-trips through onInteractiveRequest", async () => {
+    const ctx = createTestRuntime("claude-code", {
+      onInteractiveRequest: async (request) =>
+        createSingleAnswerResolution(request, "BLUE"),
+    });
+
+    try {
+      const threadId = newThreadId();
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId: "claude-code",
+        options: {
+          sandboxMode: "danger-full-access",
+          questionPolicy: "allow",
+        },
+        instructions:
+          "When the user explicitly tells you to use AskUserQuestion, do that before any plain-text answer.",
+      });
+
+      await ctx.runtime.runTurn({
+        threadId,
+        input: [
+          {
+            type: "text",
+            text:
+              "Before answering, use AskUserQuestion to ask exactly one question with exactly two options labeled RED and BLUE. After you receive the answer, reply with exactly CHOSEN_BLUE.",
+          },
+        ],
+      });
+
+      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+        timeoutMs: 45_000,
+        label: "Claude AskUserQuestion request",
+      });
+      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        timeoutMs: 45_000,
+        label: "Claude AskUserQuestion turn/completed",
+      });
+
+      expect(ctx.interactiveRequests).toHaveLength(1);
+      expect(ctx.interactiveRequests[0]?.payload.kind).toBe("user_input_request");
+
+      const text = getAgentText(ctx.events) || getStreamedText(ctx.events);
+      expect(text.toUpperCase()).toContain("CHOSEN_BLUE");
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 60_000);
+
+  it("routes multi-question Claude AskUserQuestion through onInteractiveRequest", async () => {
+    const ctx = createTestRuntime("claude-code", {
+      onInteractiveRequest: async (request) =>
+        createOrderedAnswerResolution(request, ["BLUE", "DOG"]),
+    });
+
+    try {
+      const threadId = newThreadId();
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId: "claude-code",
+        options: {
+          sandboxMode: "danger-full-access",
+          questionPolicy: "allow",
+        },
+        instructions:
+          "When the user explicitly tells you to use AskUserQuestion, do that before any plain-text answer.",
+      });
+
+      await ctx.runtime.runTurn({
+        threadId,
+        input: [
+          {
+            type: "text",
+            text:
+              "Before answering, use AskUserQuestion to ask exactly two questions. The first must have options RED and BLUE. The second must have options CAT and DOG. After you receive the answers, reply with exactly BLUE_DOG.",
+          },
+        ],
+      });
+
+      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+        timeoutMs: 45_000,
+        label: "Claude multi-question AskUserQuestion request",
+      });
+      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        timeoutMs: 45_000,
+        label: "Claude multi-question AskUserQuestion turn/completed",
+      });
+
+      expect(ctx.interactiveRequests).toHaveLength(1);
+      expect(ctx.interactiveRequests[0]?.payload.kind).toBe("user_input_request");
+      expect(
+        ctx.interactiveRequests[0]?.payload.kind === "user_input_request"
+          ? ctx.interactiveRequests[0].payload.questions
+          : [],
+      ).toHaveLength(2);
+
+      const text = getAgentText(ctx.events) || getStreamedText(ctx.events);
+      expect(text.toUpperCase()).toContain("BLUE_DOG");
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 60_000);
+
+  it("routes Claude permission requests through onInteractiveRequest", async () => {
+    const hostsPath = "/etc/hosts";
+    const expectedLine = getFirstNonEmptyLine(hostsPath);
+    const ctx = createTestRuntime("claude-code", {
+      onInteractiveRequest: async (request) => {
+        if (request.payload.kind !== "permission_request") {
+          throw new Error(`Expected permission_request, got ${request.payload.kind}`);
+        }
+
+        return {
+          kind: "permission_request",
+          permissions: request.payload.permissions,
+          scope: "turn",
+        };
+      },
+    });
+
+    try {
+      const threadId = newThreadId();
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId: "claude-code",
+        options: {
+          sandboxMode: "danger-full-access",
+          approvalPolicy: "on-request",
+        },
+        instructions:
+          "Use the Read tool when the user explicitly asks for it. Do not substitute Bash.",
+      });
+
+      await ctx.runtime.runTurn({
+        threadId,
+        input: [
+          {
+            type: "text",
+            text:
+              "Use the Read tool to read /etc/hosts, then reply with exactly the first non-empty line from the file and nothing else.",
+          },
+        ],
+      });
+
+      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+        timeoutMs: 45_000,
+        label: "Claude permission request",
+      });
+      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        timeoutMs: 45_000,
+        label: "Claude permission turn/completed",
+      });
+
+      expect(ctx.interactiveRequests).toHaveLength(1);
+      expect(ctx.interactiveRequests[0]?.payload.kind).toBe("permission_request");
+
+      const text = getAgentText(ctx.events) || getStreamedText(ctx.events);
+      expect(text).toContain(expectedLine);
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 60_000);
+});
 
   // Resume with dynamic tools
   it("preserves dynamic tools across resume", async () => {
