@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { pendingInteractionRequestedPermissionProfileSchema } from "@bb/domain";
+import {
+  normalizePendingInteractionQuestionOption,
+  normalizePendingInteractionRequestedPermissionProfile,
+  pendingInteractionRequestedPermissionProfileSchema,
+  toOptionalPendingInteractionQuestionOptionPreview,
+} from "@bb/domain";
 import type {
   ApprovalPolicy,
   PendingInteractionGrantedPermissionProfile,
@@ -75,11 +80,13 @@ export function toPendingInteractionUserQuestions(
     allowsOther: true,
     isSecret: false,
     multiSelect: question.multiSelect,
-    options: question.options.map((option) => ({
-      label: option.label,
-      description: option.description,
-      ...(option.preview === undefined ? {} : { preview: option.preview }),
-    })),
+    options: question.options.map((option) =>
+      normalizePendingInteractionQuestionOption({
+        label: option.label,
+        description: option.description,
+        preview: option.preview,
+      })
+    ),
   }));
 }
 
@@ -196,10 +203,10 @@ export function toPendingInteractionPermissionProfile(
       ? { enabled: true }
       : null;
 
-  return {
+  return normalizePendingInteractionRequestedPermissionProfile({
     network,
     fileSystem,
-  };
+  });
 }
 
 export interface ShouldRequestClaudePermissionApprovalArgs {
@@ -287,11 +294,16 @@ export function toClaudeUserInputUpdatedInput(
       question: question.question,
       header: question.header,
       multiSelect: question.multiSelect,
-      options: question.options.map((option) => ({
-        label: option.label,
-        description: option.description,
-        ...(option.preview === undefined ? {} : { preview: option.preview }),
-      })),
+      options: question.options.map((option) => {
+        const preview = toOptionalPendingInteractionQuestionOptionPreview(
+          option.preview,
+        );
+        return {
+          label: option.label,
+          description: option.description,
+          ...(preview === undefined ? {} : { preview }),
+        };
+      }),
     })),
     answers: Object.fromEntries(
       args.questions.map((question) => [

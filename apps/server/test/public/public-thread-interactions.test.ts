@@ -248,8 +248,8 @@ describe("public thread interaction routes", () => {
               isSecret: false,
               multiSelect: false,
               options: [
-                { label: "staging", description: "Use staging" },
-                { label: "prod", description: "Use production" },
+                { label: "staging", description: "Use staging", preview: null },
+                { label: "prod", description: "Use production", preview: null },
               ],
             },
             {
@@ -829,8 +829,8 @@ describe("public thread interaction routes", () => {
               isSecret: false,
               multiSelect: false,
               options: [
-                { label: "staging", description: "Use staging" },
-                { label: "prod", description: "Use production" },
+                { label: "staging", description: "Use staging", preview: null },
+                { label: "prod", description: "Use production", preview: null },
               ],
             },
             {

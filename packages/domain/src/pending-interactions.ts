@@ -74,6 +74,38 @@ export type PendingInteractionRequestedPermissionProfile = z.infer<
   typeof pendingInteractionRequestedPermissionProfileSchema
 >;
 
+export interface PendingInteractionPermissionProfileInput {
+  network: PendingInteractionPermissionNetworkInput | null | undefined;
+  fileSystem: PendingInteractionPermissionFileSystemInput | null | undefined;
+}
+
+export interface PendingInteractionPermissionNetworkInput {
+  enabled: boolean | null | undefined;
+}
+
+export interface PendingInteractionPermissionFileSystemInput {
+  read: string[] | null | undefined;
+  write: string[] | null | undefined;
+}
+
+export function normalizePendingInteractionRequestedPermissionProfile(
+  input: PendingInteractionPermissionProfileInput,
+): PendingInteractionRequestedPermissionProfile {
+  return pendingInteractionRequestedPermissionProfileSchema.parse({
+    network: input.network
+      ? {
+          enabled: input.network.enabled ?? null,
+        }
+      : null,
+    fileSystem: input.fileSystem
+      ? {
+          read: input.fileSystem.read ?? [],
+          write: input.fileSystem.write ?? [],
+        }
+      : null,
+  });
+}
+
 export const pendingInteractionGrantedPermissionProfileSchema = z.object({
   network: pendingInteractionNetworkPermissionsSchema.nullable(),
   fileSystem: pendingInteractionFileSystemPermissionsSchema.nullable(),
@@ -296,14 +328,36 @@ export function formatPendingInteractionPermissionResolutionMessage(
   return `Permissions ${formatPendingInteractionPermissionResolutionOutcome(args)}`;
 }
 
+export interface PendingInteractionQuestionOptionInput {
+  label: string;
+  description: string;
+  preview: string | null | undefined;
+}
+
 export const pendingInteractionQuestionOptionSchema = z.object({
   label: z.string(),
   description: z.string(),
-  preview: z.string().optional(),
+  preview: z.string().nullable(),
 });
 export type PendingInteractionQuestionOption = z.infer<
   typeof pendingInteractionQuestionOptionSchema
 >;
+
+export function normalizePendingInteractionQuestionOption(
+  input: PendingInteractionQuestionOptionInput,
+): PendingInteractionQuestionOption {
+  return pendingInteractionQuestionOptionSchema.parse({
+    label: input.label,
+    description: input.description,
+    preview: input.preview ?? null,
+  });
+}
+
+export function toOptionalPendingInteractionQuestionOptionPreview(
+  preview: string | null,
+): string | undefined {
+  return preview ?? undefined;
+}
 
 export const pendingInteractionUserInputQuestionSchema = z.object({
   id: z.string(),

@@ -7,6 +7,8 @@ import {
   formatPendingInteractionPermissionResolutionMessage,
   formatPendingInteractionPermissionResolutionOutcome,
   hasPendingInteractionGrantedPermissions,
+  normalizePendingInteractionQuestionOption,
+  normalizePendingInteractionRequestedPermissionProfile,
   pendingInteractionCreateSchema,
   pendingInteractionResolutionSchema,
   pendingInteractionSchema,
@@ -129,6 +131,7 @@ describe("pending interaction schemas", () => {
                 {
                   label: "prod",
                   description: "Use production",
+                  preview: null,
                 },
               ],
             },
@@ -177,6 +180,42 @@ describe("pending interaction schemas", () => {
         resolvedAt: 2,
       }),
     ).toThrow();
+  });
+
+  it("normalizes question options to an explicit null preview", () => {
+    expect(
+      normalizePendingInteractionQuestionOption({
+        label: "prod",
+        description: "Use production",
+        preview: undefined,
+      }),
+    ).toEqual({
+      label: "prod",
+      description: "Use production",
+      preview: null,
+    });
+  });
+
+  it("normalizes requested permission profiles to explicit nulls and arrays", () => {
+    expect(
+      normalizePendingInteractionRequestedPermissionProfile({
+        network: {
+          enabled: undefined,
+        },
+        fileSystem: {
+          read: null,
+          write: undefined,
+        },
+      }),
+    ).toEqual({
+      network: {
+        enabled: null,
+      },
+      fileSystem: {
+        read: [],
+        write: [],
+      },
+    });
   });
 
   it("formats approval outcomes and timeline messages consistently", () => {

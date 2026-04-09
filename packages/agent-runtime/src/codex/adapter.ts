@@ -11,7 +11,9 @@
 import { getBuiltInAgentProviderInfo } from "@bb/agent-providers";
 import { z } from "zod";
 import {
+  normalizePendingInteractionRequestedPermissionProfile,
   pendingInteractionCommandActionSchema,
+  normalizePendingInteractionQuestionOption,
 } from "@bb/domain";
 import type {
   ApprovalPolicy,
@@ -937,7 +939,7 @@ function translateCodexItem(item: unknown): ThreadEventItem | null {
 function toPendingInteractionPermissionProfile(
   permissions: CodexAdditionalPermissions | CodexRequestedPermissionProfile,
 ): PendingInteractionRequestedPermissionProfile {
-  return {
+  return normalizePendingInteractionRequestedPermissionProfile({
     network: permissions.network
       ? { enabled: permissions.network.enabled }
       : null,
@@ -947,7 +949,7 @@ function toPendingInteractionPermissionProfile(
           write: permissions.fileSystem.write ?? [],
         }
       : null,
-  };
+  });
 }
 
 function toCodexGrantedPermissionProfile(
@@ -1505,7 +1507,13 @@ export function createCodexProviderAdapter(
                 allowsOther: question.isOther,
                 isSecret: question.isSecret,
                 multiSelect: false,
-                options: question.options ?? [],
+                options: (question.options ?? []).map((option) =>
+                  normalizePendingInteractionQuestionOption({
+                    label: option.label,
+                    description: option.description,
+                    preview: null,
+                  })
+                ),
               })),
             },
           };

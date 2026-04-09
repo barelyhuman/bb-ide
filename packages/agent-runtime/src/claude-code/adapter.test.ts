@@ -442,8 +442,8 @@ describe("claude-code provider adapter", () => {
             isSecret: false,
             multiSelect: false,
             options: [
-              { label: "Summary", description: "Brief overview" },
-              { label: "Detailed", description: "Full explanation" },
+              { label: "Summary", description: "Brief overview", preview: null },
+              { label: "Detailed", description: "Full explanation", preview: null },
             ],
           },
         ],
@@ -519,8 +519,8 @@ describe("claude-code provider adapter", () => {
                 isSecret: false,
                 multiSelect: false,
                 options: [
-                  { label: "Summary", description: "Brief overview" },
-                  { label: "Detailed", description: "Full explanation" },
+                  { label: "Summary", description: "Brief overview", preview: null },
+                  { label: "Detailed", description: "Full explanation", preview: null },
                 ],
               },
             ],

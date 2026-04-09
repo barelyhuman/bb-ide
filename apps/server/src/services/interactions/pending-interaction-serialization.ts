@@ -1,5 +1,6 @@
 import {
   isRecord,
+  normalizePendingInteractionQuestionOption,
   pendingInteractionPayloadSchema,
   pendingInteractionResolutionSchema,
   pendingInteractionSchema,
@@ -22,10 +23,28 @@ function normalizeLegacyUserInputQuestion(question: unknown): unknown {
     return question;
   }
 
+  const options = Array.isArray(question.options)
+    ? question.options.map((option) => {
+        if (!isRecord(option)) {
+          return option;
+        }
+
+        return normalizePendingInteractionQuestionOption({
+          label: typeof option.label === "string" ? option.label : "",
+          description: typeof option.description === "string" ? option.description : "",
+          preview:
+            typeof option.preview === "string" || option.preview === null
+              ? option.preview
+              : null,
+        });
+      })
+    : question.options;
+
   return {
     ...question,
     multiSelect:
       typeof question.multiSelect === "boolean" ? question.multiSelect : false,
+    options,
   };
 }
 
