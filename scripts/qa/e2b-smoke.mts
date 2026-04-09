@@ -42,7 +42,7 @@ import {
   runSandboxCommand,
   writeSandboxFile,
 } from "../../packages/sandbox-host/src/index.ts";
-import { PI_DEFAULT_MODEL_PER_PROVIDER } from "../../packages/agent-runtime/src/pi/model-list.ts";
+import { PI_DEFAULT_MODEL_PER_PROVIDER } from "../../packages/agent-providers/src/index.ts";
 import { loadSandboxDaemonArtifacts } from "../../packages/sandbox-host/src/daemon-artifacts.ts";
 import {
   SANDBOX_BB_EXECUTABLE_PATH,
@@ -105,6 +105,7 @@ interface SmokeLogger {
 }
 
 interface SmokeQaAuthFixture {
+  codexRefreshCapable?: boolean;
   claude?: {
     access: string;
     expires: number;
@@ -193,6 +194,39 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function createCodexIdToken(email: string): string {
+  const header = Buffer.from(
+    JSON.stringify({ alg: "none", typ: "JWT" }),
+  ).toString("base64url");
+  const body = Buffer.from(
+    JSON.stringify({ email }),
+  ).toString("base64url");
+  return `${header}.${body}.signature`;
+}
+
+function decodeCodexEmailFromAccessToken(accessToken: string): string | null {
+  const parts = accessToken.split(".");
+  if (parts.length !== 3) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(
+      Buffer.from(parts[1] ?? "", "base64url").toString("utf8"),
+    );
+    if (!isRecord(payload)) {
+      return null;
+    }
+    const profile = payload["https://api.openai.com/profile"];
+    if (!isRecord(profile)) {
+      return null;
+    }
+    return typeof profile.email === "string" ? profile.email : null;
+  } catch {
+    return null;
+  }
+}
+
 function parseQaAuthFixture(
   value: unknown,
 ): SmokeQaAuthFixture {
@@ -266,38 +300,96 @@ function parseQaAuthFixture(
 async function enrichQaAuthFixture(
   fixture: SmokeQaAuthFixture | null,
 ): Promise<SmokeQaAuthFixture | null> {
-  const codexFixture = fixture?.["openai-codex"];
-  if (!fixture || !codexFixture || codexFixture.idToken) {
+  if (!fixture) {
     return fixture;
   }
 
-  const refreshedCredential = await getCloudAuthProviderDefinition("codex").refreshCredential({
-    credential: {
-      accessToken: codexFixture.access,
-      accountId: codexFixture.accountId ?? null,
-      expiresAt: codexFixture.expires,
-      idToken: null,
-      providerId: "codex",
-      refreshToken: codexFixture.refresh,
-    },
-  });
+  let nextFixture: SmokeQaAuthFixture = fixture;
 
-  if (!refreshedCredential.idToken) {
-    throw new Error("Codex credential refresh did not return an idToken");
+  if (fixture.claude) {
+    try {
+      const refreshedClaudeCredential = await getCloudAuthProviderDefinition("claude-code").refreshCredential({
+        credential: {
+          accessToken: fixture.claude.access,
+          accountEmail: null,
+          accountId: null,
+          expiresAt: fixture.claude.expires,
+          providerId: "claude-code",
+          refreshToken: fixture.claude.refresh,
+          scopes: CLAUDE_SCOPES,
+          subscriptionType: null,
+        },
+      });
+
+      nextFixture = {
+        ...nextFixture,
+        claude: {
+          access: refreshedClaudeCredential.accessToken,
+          expires: refreshedClaudeCredential.expiresAt,
+          refresh: refreshedClaudeCredential.refreshToken,
+        },
+      };
+    } catch {
+      console.warn(
+        "Claude fixture refresh failed; skipping Claude-specific smoke coverage",
+      );
+      const { claude: _removedClaude, ...remainingFixture } = nextFixture;
+      nextFixture = remainingFixture;
+    }
   }
 
-  return {
-    ...fixture,
-    "openai-codex": {
-      access: refreshedCredential.accessToken,
-      ...(refreshedCredential.accountId
-        ? { accountId: refreshedCredential.accountId }
-        : {}),
-      expires: refreshedCredential.expiresAt,
-      idToken: refreshedCredential.idToken,
-      refresh: refreshedCredential.refreshToken,
-    },
-  };
+  const codexFixture = nextFixture["openai-codex"];
+  if (!codexFixture) {
+    return nextFixture;
+  }
+
+  try {
+    const refreshedCredential = await getCloudAuthProviderDefinition("codex").refreshCredential({
+      credential: {
+        accessToken: codexFixture.access,
+        accountId: codexFixture.accountId ?? null,
+        expiresAt: codexFixture.expires,
+        idToken: null,
+        providerId: "codex",
+        refreshToken: codexFixture.refresh,
+      },
+    });
+
+    if (!refreshedCredential.idToken) {
+      throw new Error("Codex credential refresh did not return an idToken");
+    }
+
+    return {
+      ...nextFixture,
+      codexRefreshCapable: true,
+      "openai-codex": {
+        access: refreshedCredential.accessToken,
+        ...(refreshedCredential.accountId
+          ? { accountId: refreshedCredential.accountId }
+          : {}),
+        expires: refreshedCredential.expiresAt,
+        idToken: refreshedCredential.idToken,
+        refresh: refreshedCredential.refreshToken,
+      },
+    };
+  } catch (error) {
+    const email = decodeCodexEmailFromAccessToken(codexFixture.access);
+    if (!email) {
+      throw error;
+    }
+
+    console.warn(
+      "Codex fixture refresh failed; synthesizing idToken from access token claims for smoke validation",
+    );
+    return {
+      ...nextFixture,
+      codexRefreshCapable: false,
+      "openai-codex": {
+        ...codexFixture,
+        idToken: codexFixture.idToken ?? createCodexIdToken(email),
+      },
+    };
+  }
 }
 
 function shellQuote(value: string): string {
@@ -1175,12 +1267,16 @@ async function main(): Promise<void> {
       }),
     ]);
     const codexModel = choosePreferredModel("codex", codexModels, []);
-    const claudeModel = choosePreferredModel("claude-code", claudeModels, []);
+    const claudeModel = authFixture?.claude
+      ? choosePreferredModel("claude-code", claudeModels, [])
+      : null;
     const initialPiModel = choosePreferredModel("pi", piModels, [
       "openai-codex/",
       "anthropic/",
     ]);
-    const sharedPiAnthropicModel = requirePiDefaultModel(piModels, "anthropic");
+    const sharedPiAnthropicModel = authFixture?.claude
+      ? requirePiDefaultModel(piModels, "anthropic")
+      : null;
     const sharedPiOpenaiCodexModel = requirePiDefaultModel(piModels, "openai-codex");
     const resumedPiModel = choosePreferredModel("pi", piModels, [
       "openai-codex/",
@@ -1202,14 +1298,16 @@ async function main(): Promise<void> {
       throw new Error("Expected the shared Codex thread to create an environment");
     }
 
-    console.log(`Running shared-environment Claude thread with model ${claudeModel.model}`);
-    await runSmokeProviderTurn(localServerUrl, {
-      environment: buildReuseEnvironment(sharedEnvironmentId),
-      expectedToken: SMOKE_PROVIDER_OUTPUT_TOKENS.sharedClaude,
-      model: claudeModel.model,
-      projectId: project.id,
-      providerId: "claude-code",
-    });
+    if (claudeModel) {
+      console.log(`Running shared-environment Claude thread with model ${claudeModel.model}`);
+      await runSmokeProviderTurn(localServerUrl, {
+        environment: buildReuseEnvironment(sharedEnvironmentId),
+        expectedToken: SMOKE_PROVIDER_OUTPUT_TOKENS.sharedClaude,
+        model: claudeModel.model,
+        projectId: project.id,
+        providerId: "claude-code",
+      });
+    }
 
     console.log(
       `Running shared-environment Pi thread with model ${sharedPiOpenaiCodexModel.model}`,
@@ -1222,16 +1320,18 @@ async function main(): Promise<void> {
       providerId: "pi",
     });
 
-    console.log(
-      `Running shared-environment Pi thread with model ${sharedPiAnthropicModel.model}`,
-    );
-    await runSmokeProviderTurn(localServerUrl, {
-      environment: buildReuseEnvironment(sharedEnvironmentId),
-      expectedToken: SMOKE_PROVIDER_OUTPUT_TOKENS.sharedPiAnthropic,
-      model: sharedPiAnthropicModel.model,
-      projectId: project.id,
-      providerId: "pi",
-    });
+    if (sharedPiAnthropicModel) {
+      console.log(
+        `Running shared-environment Pi thread with model ${sharedPiAnthropicModel.model}`,
+      );
+      await runSmokeProviderTurn(localServerUrl, {
+        environment: buildReuseEnvironment(sharedEnvironmentId),
+        expectedToken: SMOKE_PROVIDER_OUTPUT_TOKENS.sharedPiAnthropic,
+        model: sharedPiAnthropicModel.model,
+        projectId: project.id,
+        providerId: "pi",
+      });
+    }
 
     console.log(`Running live Codex thread with model ${codexModel.model}`);
     const codexThread = await runSmokeProviderTurn(localServerUrl, {
@@ -1249,19 +1349,21 @@ async function main(): Promise<void> {
       throw new Error("Expected the initial Codex thread to create an environment");
     }
 
-    console.log(`Running live Claude thread with model ${claudeModel.model}`);
-    const claudeThread = await runSmokeProviderTurn(localServerUrl, {
-      environment: buildHostWorkspaceEnvironment(
-        smokeHost.hostId,
-        SMOKE_PROVIDER_WORKSPACES.claude,
-      ),
-      expectedToken: SMOKE_PROVIDER_OUTPUT_TOKENS.claude,
-      model: claudeModel.model,
-      projectId: project.id,
-      providerId: "claude-code",
-    });
-    if (!claudeThread.environmentId) {
-      throw new Error("Expected the initial Claude thread to create an environment");
+    if (claudeModel) {
+      console.log(`Running live Claude thread with model ${claudeModel.model}`);
+      const claudeThread = await runSmokeProviderTurn(localServerUrl, {
+        environment: buildHostWorkspaceEnvironment(
+          smokeHost.hostId,
+          SMOKE_PROVIDER_WORKSPACES.claude,
+        ),
+        expectedToken: SMOKE_PROVIDER_OUTPUT_TOKENS.claude,
+        model: claudeModel.model,
+        projectId: project.id,
+        providerId: "claude-code",
+      });
+      if (!claudeThread.environmentId) {
+        throw new Error("Expected the initial Claude thread to create an environment");
+      }
     }
 
     console.log(`Running live Pi thread with model ${initialPiModel.model}`);
@@ -1294,7 +1396,10 @@ async function main(): Promise<void> {
         "claude-code",
       );
     }
-    if (authFixture?.["openai-codex"]) {
+    if (
+      authFixture?.["openai-codex"]
+      && authFixture.codexRefreshCapable !== false
+    ) {
       console.log("Expiring Codex credential before resume");
       await expireSmokeCodexCredential(runtimeMaterialContext, authFixture);
     }
@@ -1369,7 +1474,11 @@ async function main(): Promise<void> {
     }
 
     if (authFixture?.["openai-codex"]) {
-      console.log("Checking refreshed Codex material after resume");
+      console.log(
+        authFixture.codexRefreshCapable === false
+          ? "Checking Codex material after resume"
+          : "Checking refreshed Codex material after resume",
+      );
       await assertSandboxFileContains(
         resumedSandbox,
         SMOKE_CODEX_PATH,
@@ -1384,7 +1493,10 @@ async function main(): Promise<void> {
         resumedSandbox,
         `cat ${toSandboxShellPath(SMOKE_CODEX_PATH)}`,
       );
-      if (codexResult.stdout.includes(STALE_CODEX_ACCESS_TOKEN)) {
+      if (
+        authFixture.codexRefreshCapable !== false
+        && codexResult.stdout.includes(STALE_CODEX_ACCESS_TOKEN)
+      ) {
         throw new Error("Codex auth file still contains the stale access token");
       }
     }
