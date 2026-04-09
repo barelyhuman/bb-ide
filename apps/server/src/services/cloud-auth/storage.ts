@@ -51,12 +51,10 @@ interface DeserializeCloudAuthCredentialArgs {
 export interface BuildSandboxProviderCredentialUpsertArgs {
   credential: StoredCloudAuthCredential;
   crypto: CloudAuthCrypto;
-  expiresAt: number | null;
   label: string | null;
   lastErrorMessage: string | null;
   lastRefreshedAt: number | null;
-  providerId: string;
-  updatedAt?: number;
+  updatedAt: number;
 }
 
 function decryptStringValue(
@@ -73,6 +71,7 @@ function encryptStringValue(
   crypto: CloudAuthCrypto,
   value: string,
 ): string {
+  // The crypto helper encrypts JSON payloads, so raw strings are wrapped as JSON strings.
   return crypto.encryptJson({
     plaintext: JSON.stringify(value),
   });
@@ -117,7 +116,7 @@ function buildCodexMetadata(
   };
 }
 
-function deserializeCredential(
+function assertStoredCredentialShape(
   credential: StoredCloudAuthCredential,
 ): StoredCloudAuthCredential {
   return storedCloudAuthCredentialSchema.parse(credential);
@@ -167,12 +166,6 @@ export function serializeCloudAuthCredential(
 export function deserializeCloudAuthCredential(
   args: DeserializeCloudAuthCredentialArgs,
 ): StoredCloudAuthCredential {
-  if (args.record.expiresAt === null) {
-    throw new Error(
-      `Missing expiresAt for sandbox provider credential ${args.record.providerId}`,
-    );
-  }
-
   switch (args.record.providerId) {
     case "claude-code": {
       const metadata = decryptMetadataValue(
@@ -180,7 +173,7 @@ export function deserializeCloudAuthCredential(
         args.record.encryptedMetadata,
         claudeCredentialMetadataSchema,
       );
-      return deserializeCredential({
+      return assertStoredCredentialShape({
         accessToken: decryptStringValue(
           args.crypto,
           args.record.encryptedAccessToken,
@@ -203,7 +196,7 @@ export function deserializeCloudAuthCredential(
         args.record.encryptedMetadata,
         codexCredentialMetadataSchema,
       );
-      return deserializeCredential({
+      return assertStoredCredentialShape({
         accessToken: decryptStringValue(
           args.crypto,
           args.record.encryptedAccessToken,
@@ -240,11 +233,11 @@ export function buildSandboxProviderCredentialUpsert(
     encryptedRefreshToken: serialized.encryptedRefreshToken,
     encryptedIdToken: serialized.encryptedIdToken,
     encryptedMetadata: serialized.encryptedMetadata,
-    expiresAt: args.expiresAt,
+    expiresAt: args.credential.expiresAt,
     label: args.label,
     lastErrorMessage: args.lastErrorMessage,
     lastRefreshedAt: args.lastRefreshedAt,
-    providerId: args.providerId,
-    ...(args.updatedAt === undefined ? {} : { updatedAt: args.updatedAt }),
+    providerId: args.credential.providerId,
+    updatedAt: args.updatedAt,
   };
 }

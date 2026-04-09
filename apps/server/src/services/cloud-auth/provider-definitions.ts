@@ -207,6 +207,21 @@ function extractProviderErrorCode(raw: string): string | null {
   return null;
 }
 
+function parseJsonResponseBody<TValue>(
+  args: {
+    action: string;
+    raw: string;
+    schema: z.ZodSchema<TValue>;
+  },
+): TValue {
+  try {
+    const parsedJson = JSON.parse(args.raw);
+    return args.schema.parse(parsedJson);
+  } catch {
+    throw new Error(`${args.action} returned an invalid response`);
+  }
+}
+
 async function readJsonResponse<TValue>(
   response: Response,
   schema: z.ZodSchema<TValue>,
@@ -222,8 +237,11 @@ async function readJsonResponse<TValue>(
     );
   }
 
-  const parsedJson = JSON.parse(raw);
-  return schema.parse(parsedJson);
+  return parseJsonResponseBody({
+    action,
+    raw,
+    schema,
+  });
 }
 
 function mapClaudeOrganizationTypeToSubscription(
@@ -294,7 +312,11 @@ async function fetchClaudeProfile(
   }
 
   const raw = await response.text();
-  return claudeProfileSchema.parse(JSON.parse(raw));
+  return parseJsonResponseBody({
+    action: "Claude OAuth profile fetch",
+    raw,
+    schema: claudeProfileSchema,
+  });
 }
 
 const claudeProviderDefinition: CloudAuthProviderDefinition<ClaudeStoredCredential> = {

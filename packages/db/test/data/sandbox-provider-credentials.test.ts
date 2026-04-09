@@ -65,9 +65,10 @@ describe("sandbox provider credentials", () => {
       encryptedIdToken: null,
       encryptedMetadata: "metadata-claude",
       label: "Claude",
-      expiresAt: null,
+      expiresAt: 1_700_000_200_000,
       lastRefreshedAt: null,
       lastErrorMessage: null,
+      updatedAt: 1_700_000_200_100,
     });
 
     expect(getSandboxProviderCredentialByProviderId(db, "claude-code")).toMatchObject({

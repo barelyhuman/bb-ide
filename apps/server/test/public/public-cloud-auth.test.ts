@@ -360,11 +360,10 @@ describe("public cloud auth routes", () => {
             refreshToken: "refresh-token-invalid",
           },
           crypto,
-          expiresAt: 1_700_000_000_000,
           label: "bad-credential",
           lastErrorMessage: "Token refresh failed",
           lastRefreshedAt: 1_700_000_000_100,
-          providerId: "codex",
+          updatedAt: 1_700_000_000_200,
         }),
       );
 
@@ -398,7 +397,7 @@ describe("public cloud auth routes", () => {
     }
   });
 
-  it("derives the displayed codex label from a saved id token", async () => {
+  it("returns the persisted codex label without decrypting credentials", async () => {
     const harness = await createTestAppHarness();
 
     try {
@@ -417,11 +416,9 @@ describe("public cloud auth routes", () => {
             refreshToken: "refresh-token-existing",
           },
           crypto,
-          expiresAt: 1_900_000_000_000,
-          label: "acct_codex_old",
+          label: "saved-codex@example.test",
           lastErrorMessage: null,
           lastRefreshedAt: 1_800_000_000_000,
-          providerId: "codex",
           updatedAt: 1_800_000_000_000,
         }),
       );
@@ -440,6 +437,80 @@ describe("public cloud auth routes", () => {
         lastRefreshedAt: 1_800_000_000_000,
         providerId: "codex",
         status: "connected",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("sanitizes malformed claude profile responses", async () => {
+    const nativeFetch = globalThis.fetch;
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>(async (input, init) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.startsWith("http://127.0.0.1:53692/")) {
+        return nativeFetch(input, init);
+      }
+      if (url === "https://platform.claude.com/v1/oauth/token") {
+        return new Response(
+          JSON.stringify({
+            access_token: "claude-access-1",
+            expires_in: 3600,
+            refresh_token: "claude-refresh-1",
+            scope: "user:profile",
+          }),
+          {
+            headers: {
+              "content-type": "application/json",
+            },
+            status: 200,
+          },
+        );
+      }
+      if (url === "https://api.anthropic.com/api/oauth/profile") {
+        return new Response("{", {
+          headers: {
+            "content-type": "application/json",
+          },
+          status: 200,
+        });
+      }
+      throw new Error(`Unexpected fetch URL: ${url}`);
+    }));
+
+    const harness = await createTestAppHarness();
+
+    try {
+      const startResponse = await harness.app.request(
+        "/api/v1/system/cloud-auth/claude-code/connect",
+        {
+          method: "POST",
+        },
+      );
+
+      expect(startResponse.status).toBe(201);
+      const startBody = cloudAuthConnectResponseSchema.parse(
+        await readJson(startResponse),
+      );
+      const authUrl = new URL(startBody.authorizationUrl);
+
+      await nativeFetch(
+        `http://127.0.0.1:53692/callback?code=test-code&state=${encodeURIComponent(authUrl.searchParams.get("state") ?? "")}`,
+      );
+
+      await vi.waitFor(async () => {
+        const attemptResponse = await harness.app.request(
+          `/api/v1/system/cloud-auth/attempts/${startBody.attemptId}`,
+        );
+        expect(attemptResponse.status).toBe(200);
+        const attemptBody = cloudAuthAttemptResponseSchema.parse(
+          await readJson(attemptResponse),
+        );
+        expect(attemptBody).toEqual({
+          attemptId: startBody.attemptId,
+          errorMessage: "Claude OAuth profile fetch returned an invalid response",
+          providerId: "claude-code",
+          status: "failed",
+        });
       });
     } finally {
       await harness.cleanup();

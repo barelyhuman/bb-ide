@@ -60,11 +60,10 @@ async function seedCodexCredential(args: {
     buildSandboxProviderCredentialUpsert({
       credential,
       crypto,
-      expiresAt: credential.expiresAt,
       label: args.accountId,
       lastErrorMessage: args.lastErrorMessage,
       lastRefreshedAt: args.lastRefreshedAt,
-      providerId: credential.providerId,
+      updatedAt: Date.now(),
     }),
   );
 }

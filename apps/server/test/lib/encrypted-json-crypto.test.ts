@@ -89,4 +89,36 @@ describe("encrypted JSON crypto", () => {
       })
     ).toThrow();
   });
+
+  it("uses a unique IV for each encryption", async () => {
+    const dataDir = await makeTempDir();
+    const crypto = await createEncryptedJsonCrypto({
+      dataDir,
+      fileName: "crypto-secret",
+    });
+
+    const ivEnvelopeSchema = z.object({
+      iv: z.string(),
+    });
+    const firstEnvelope = ivEnvelopeSchema.parse(
+      JSON.parse(
+        crypto.encryptJson({
+          plaintext: JSON.stringify({
+            accessToken: "secret-access-token",
+          }),
+        }),
+      ),
+    );
+    const secondEnvelope = ivEnvelopeSchema.parse(
+      JSON.parse(
+        crypto.encryptJson({
+          plaintext: JSON.stringify({
+            accessToken: "secret-access-token",
+          }),
+        }),
+      ),
+    );
+
+    expect(firstEnvelope.iv).not.toBe(secondEnvelope.iv);
+  });
 });

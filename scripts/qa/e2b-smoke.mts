@@ -760,11 +760,10 @@ async function seedSmokeCloudAuthFixture(
       buildSandboxProviderCredentialUpsert({
         credential,
         crypto: context.cloudAuthCrypto,
-        expiresAt: credential.expiresAt,
         label: null,
         lastErrorMessage: null,
         lastRefreshedAt: Date.now(),
-        providerId: credential.providerId,
+        updatedAt: Date.now(),
       }),
     );
   }
@@ -783,11 +782,10 @@ async function seedSmokeCloudAuthFixture(
       buildSandboxProviderCredentialUpsert({
         credential,
         crypto: context.cloudAuthCrypto,
-        expiresAt: credential.expiresAt,
         label: credential.accountId,
         lastErrorMessage: null,
         lastRefreshedAt: Date.now(),
-        providerId: credential.providerId,
+        updatedAt: Date.now(),
       }),
     );
   }
@@ -815,11 +813,10 @@ async function expireSmokeCodexCredential(
     buildSandboxProviderCredentialUpsert({
       credential: expiredCredential,
       crypto: context.cloudAuthCrypto,
-      expiresAt: expiredCredential.expiresAt,
       label: expiredCredential.accountId,
       lastErrorMessage: null,
       lastRefreshedAt: Date.now() - 60_000,
-      providerId: expiredCredential.providerId,
+      updatedAt: Date.now(),
     }),
   );
 }

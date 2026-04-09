@@ -10,10 +10,10 @@ export interface UpsertSandboxProviderCredentialArgs {
   encryptedIdToken: string | null;
   encryptedMetadata: string;
   label: string | null;
-  expiresAt: number | null;
+  expiresAt: number;
   lastRefreshedAt: number | null;
   lastErrorMessage: string | null;
-  updatedAt?: number;
+  updatedAt: number;
 }
 
 export interface SandboxProviderCredentialRecord {
@@ -24,7 +24,7 @@ export interface SandboxProviderCredentialRecord {
   encryptedIdToken: string | null;
   encryptedMetadata: string;
   label: string | null;
-  expiresAt: number | null;
+  expiresAt: number;
   lastRefreshedAt: number | null;
   lastErrorMessage: string | null;
   createdAt: number;
@@ -42,7 +42,7 @@ function toRecord(
     encryptedIdToken: row.encryptedIdToken,
     encryptedMetadata: row.encryptedMetadata,
     label: row.label,
-    expiresAt: row.expiresAt ? row.expiresAt.getTime() : null,
+    expiresAt: row.expiresAt.getTime(),
     lastRefreshedAt: row.lastRefreshedAt ? row.lastRefreshedAt.getTime() : null,
     lastErrorMessage: row.lastErrorMessage,
     createdAt: row.createdAt.getTime(),
@@ -77,7 +77,7 @@ export function upsertSandboxProviderCredential(
   db: DbConnection,
   args: UpsertSandboxProviderCredentialArgs,
 ): SandboxProviderCredentialRecord {
-  const now = new Date(args.updatedAt ?? Date.now());
+  const now = new Date(args.updatedAt);
   const existing = getSandboxProviderCredentialByProviderId(db, args.providerId);
   const credentialId = existing?.id ?? createSandboxProviderCredentialId();
   const createdAt = existing ? new Date(existing.createdAt) : now;
@@ -92,7 +92,7 @@ export function upsertSandboxProviderCredential(
       encryptedIdToken: args.encryptedIdToken,
       encryptedMetadata: args.encryptedMetadata,
       label: args.label,
-      expiresAt: args.expiresAt === null ? null : new Date(args.expiresAt),
+      expiresAt: new Date(args.expiresAt),
       lastRefreshedAt:
         args.lastRefreshedAt === null ? null : new Date(args.lastRefreshedAt),
       lastErrorMessage: args.lastErrorMessage,
@@ -107,7 +107,7 @@ export function upsertSandboxProviderCredential(
         encryptedIdToken: args.encryptedIdToken,
         encryptedMetadata: args.encryptedMetadata,
         label: args.label,
-        expiresAt: args.expiresAt === null ? null : new Date(args.expiresAt),
+        expiresAt: new Date(args.expiresAt),
         lastRefreshedAt:
           args.lastRefreshedAt === null
             ? null

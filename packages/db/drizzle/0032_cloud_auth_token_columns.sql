@@ -1,3 +1,4 @@
+-- NOTE: unreleased feature reset; existing sandbox provider credential rows are intentionally discarded.
 DROP TABLE IF EXISTS `sandbox_provider_credentials`;
 --> statement-breakpoint
 CREATE TABLE `sandbox_provider_credentials` (
@@ -8,7 +9,7 @@ CREATE TABLE `sandbox_provider_credentials` (
   `encrypted_id_token` text,
   `encrypted_metadata` text NOT NULL,
   `label` text,
-  `expires_at` integer,
+  `expires_at` integer NOT NULL,
   `last_refreshed_at` integer,
   `last_error_message` text,
   `created_at` integer NOT NULL,
