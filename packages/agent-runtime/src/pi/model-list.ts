@@ -13,9 +13,10 @@ import {
  * Best default model per provider. Subset of pi-mono's `defaultModelPerProvider`:
  * https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/src/core/model-resolver.ts
  */
-const DEFAULT_MODEL_PER_PROVIDER: Partial<Record<string, string>> = {
+export const PI_DEFAULT_MODEL_PER_PROVIDER: Partial<Record<string, string>> = {
   anthropic: "claude-opus-4-6",
   openai: "gpt-5.4",
+  "openai-codex": "gpt-5.4",
   "amazon-bedrock": "us.anthropic.claude-opus-4-6-v1",
   google: "gemini-2.5-pro",
   "google-gemini-cli": "gemini-2.5-pro",
@@ -121,7 +122,7 @@ function resolveDefaultPiModelId(models: AvailableModel[]): string | undefined {
   // Try the per-provider default for each provider represented in the list
   for (const model of models) {
     const provider = model.id.split("/")[0];
-    const defaultId = DEFAULT_MODEL_PER_PROVIDER[provider];
+    const defaultId = PI_DEFAULT_MODEL_PER_PROVIDER[provider];
     if (defaultId && model.id === toCanonicalPiModelId(provider, defaultId)) {
       return model.id;
     }

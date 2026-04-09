@@ -41,6 +41,7 @@ import {
   runSandboxCommand,
   writeSandboxFile,
 } from "../../packages/sandbox-host/src/index.ts";
+import { PI_DEFAULT_MODEL_PER_PROVIDER } from "../../packages/agent-runtime/src/pi/model-list.ts";
 import { loadSandboxDaemonArtifacts } from "../../packages/sandbox-host/src/daemon-artifacts.ts";
 import {
   SANDBOX_BB_EXECUTABLE_PATH,
@@ -133,6 +134,8 @@ interface SmokeThreadSummary {
   status: ThreadStatus;
 }
 
+type SmokePiProviderId = "anthropic" | "openai-codex";
+
 const smokeThreadResponseSchema = threadSchema.pick({
   environmentId: true,
   id: true,
@@ -165,11 +168,17 @@ const SMOKE_PROVIDER_OUTPUT_TOKENS = {
   codexResume: "SMOKE_CODEX_RESUME_OK",
   piInitial: "SMOKE_PI_INITIAL_OK",
   piResume: "SMOKE_PI_RESUME_OK",
+  sharedClaude: "SMOKE_SHARED_CLAUDE_OK",
+  sharedCodex: "SMOKE_SHARED_CODEX_OK",
+  sharedPiAnthropic: "SMOKE_SHARED_PI_ANTHROPIC_OK",
+  sharedPiOpenaiCodex: "SMOKE_SHARED_PI_OPENAI_CODEX_OK",
+  sharedResume: "SMOKE_SHARED_RESUME_OK",
 } as const;
 const SMOKE_PROVIDER_WORKSPACES = {
   claude: "/tmp/bb-smoke-claude",
   codex: "/tmp/bb-smoke-codex",
   pi: "/tmp/bb-smoke-pi",
+  shared: "/tmp/bb-smoke-shared",
 } as const;
 
 function formatError(error: unknown): string {
@@ -351,6 +360,33 @@ function choosePreferredModel(
   }
 
   throw new Error(`No models available for provider ${providerId}`);
+}
+
+function requireModelById(
+  providerId: string,
+  models: AvailableModel[],
+  modelId: string,
+): AvailableModel {
+  const model = models.find((candidate) => candidate.model === modelId);
+  if (model) {
+    return model;
+  }
+
+  throw new Error(
+    `Expected model ${modelId} for ${providerId}. Available models: ${models.map((candidate) => candidate.model).join(", ")}`,
+  );
+}
+
+function requirePiDefaultModel(
+  models: AvailableModel[],
+  providerId: SmokePiProviderId,
+): AvailableModel {
+  const defaultModelId = PI_DEFAULT_MODEL_PER_PROVIDER[providerId];
+  if (!defaultModelId) {
+    throw new Error(`Missing Pi default model for provider ${providerId}`);
+  }
+
+  return requireModelById("pi", models, `${providerId}/${defaultModelId}`);
 }
 
 function buildHostWorkspaceEnvironment(
@@ -973,6 +1009,7 @@ async function main(): Promise<void> {
   let completed = false;
   let codexEnvironmentId: string | null = null;
   let piEnvironmentId: string | null = null;
+  let sharedEnvironmentId: string | null = null;
 
   try {
     console.log(`Started quick tunnel at ${publicUrl}`);
@@ -1039,6 +1076,7 @@ async function main(): Promise<void> {
         shellQuote(SMOKE_PROVIDER_WORKSPACES.codex),
         shellQuote(SMOKE_PROVIDER_WORKSPACES.claude),
         shellQuote(SMOKE_PROVIDER_WORKSPACES.pi),
+        shellQuote(SMOKE_PROVIDER_WORKSPACES.shared),
       ].join(" "),
     );
 
@@ -1138,9 +1176,58 @@ async function main(): Promise<void> {
       "openai-codex/",
       "anthropic/",
     ]);
+    const sharedPiAnthropicModel = requirePiDefaultModel(piModels, "anthropic");
+    const sharedPiOpenaiCodexModel = requirePiDefaultModel(piModels, "openai-codex");
     const resumedPiModel = choosePreferredModel("pi", piModels, [
       "openai-codex/",
     ]);
+
+    console.log(`Running shared-environment Codex thread with model ${codexModel.model}`);
+    const sharedCodexThread = await runSmokeProviderTurn(localServerUrl, {
+      environment: buildHostWorkspaceEnvironment(
+        smokeHost.hostId,
+        SMOKE_PROVIDER_WORKSPACES.shared,
+      ),
+      expectedToken: SMOKE_PROVIDER_OUTPUT_TOKENS.sharedCodex,
+      model: codexModel.model,
+      projectId: project.id,
+      providerId: "codex",
+    });
+    sharedEnvironmentId = sharedCodexThread.environmentId;
+    if (!sharedEnvironmentId) {
+      throw new Error("Expected the shared Codex thread to create an environment");
+    }
+
+    console.log(`Running shared-environment Claude thread with model ${claudeModel.model}`);
+    await runSmokeProviderTurn(localServerUrl, {
+      environment: buildReuseEnvironment(sharedEnvironmentId),
+      expectedToken: SMOKE_PROVIDER_OUTPUT_TOKENS.sharedClaude,
+      model: claudeModel.model,
+      projectId: project.id,
+      providerId: "claude-code",
+    });
+
+    console.log(
+      `Running shared-environment Pi thread with model ${sharedPiOpenaiCodexModel.model}`,
+    );
+    await runSmokeProviderTurn(localServerUrl, {
+      environment: buildReuseEnvironment(sharedEnvironmentId),
+      expectedToken: SMOKE_PROVIDER_OUTPUT_TOKENS.sharedPiOpenaiCodex,
+      model: sharedPiOpenaiCodexModel.model,
+      projectId: project.id,
+      providerId: "pi",
+    });
+
+    console.log(
+      `Running shared-environment Pi thread with model ${sharedPiAnthropicModel.model}`,
+    );
+    await runSmokeProviderTurn(localServerUrl, {
+      environment: buildReuseEnvironment(sharedEnvironmentId),
+      expectedToken: SMOKE_PROVIDER_OUTPUT_TOKENS.sharedPiAnthropic,
+      model: sharedPiAnthropicModel.model,
+      projectId: project.id,
+      providerId: "pi",
+    });
 
     console.log(`Running live Codex thread with model ${codexModel.model}`);
     const codexThread = await runSmokeProviderTurn(localServerUrl, {
@@ -1316,6 +1403,19 @@ async function main(): Promise<void> {
         environment: buildReuseEnvironment(piEnvironmentId),
         expectedToken: SMOKE_PROVIDER_OUTPUT_TOKENS.piResume,
         model: resumedPiModel.model,
+        projectId: project.id,
+        providerId: "pi",
+      });
+    }
+
+    if (sharedEnvironmentId && authFixture?.["openai-codex"]) {
+      console.log(
+        `Running shared-environment Pi thread after resume with model ${sharedPiOpenaiCodexModel.model}`,
+      );
+      await runSmokeProviderTurn(localServerUrl, {
+        environment: buildReuseEnvironment(sharedEnvironmentId),
+        expectedToken: SMOKE_PROVIDER_OUTPUT_TOKENS.sharedResume,
+        model: sharedPiOpenaiCodexModel.model,
         projectId: project.id,
         providerId: "pi",
       });
