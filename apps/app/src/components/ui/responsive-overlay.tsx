@@ -25,8 +25,18 @@ export function useResponsiveRoot(
 ): ResponsiveOverlayContextValue {
   const isMobile = useIsMobile()
   const [internalOpen, setInternalOpen] = React.useState(false)
-  const open = controlledOpen ?? internalOpen
-  const onOpenChange = controlledOnChange ?? setInternalOpen
+  const isControlled = controlledOpen !== undefined
+  const open = isControlled ? controlledOpen : internalOpen
+
+  const onOpenChange = React.useCallback(
+    (next: boolean) => {
+      if (!isControlled) {
+        setInternalOpen(next)
+      }
+      controlledOnChange?.(next)
+    },
+    [isControlled, controlledOnChange],
+  )
 
   useBreakpointCross(
     isMobile,

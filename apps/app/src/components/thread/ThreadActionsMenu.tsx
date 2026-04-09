@@ -62,7 +62,6 @@ export function ThreadActionsMenu({
           title={`${capitalizedLabel} actions`}
           disabled={disabled}
           onClick={(event) => {
-            event.preventDefault()
             event.stopPropagation()
           }}
         >
