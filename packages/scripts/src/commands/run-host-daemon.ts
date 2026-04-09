@@ -29,6 +29,19 @@ export interface HostDaemonEnvironment extends NodeJS.ProcessEnv {
   BB_SERVER_URL: string;
 }
 
+type BootstrapEnvKey =
+  | "BB_BRIDGE_DIR"
+  | "BB_CLI_DIR"
+  | "BB_HOST_ENROLL_KEY"
+  | "BB_HOST_ID"
+  | "BB_HOST_NAME"
+  | "BB_HOST_TYPE";
+
+interface BootstrapEnvEntry {
+  key: BootstrapEnvKey;
+  value?: string;
+}
+
 const commandDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(commandDir, "..", "..");
 const repoRoot = resolve(packageRoot, "..", "..");
@@ -55,31 +68,41 @@ function resolveDataDir(mode: HostMode, autoJoin: boolean): string {
   });
 }
 
-function buildEnv(mode: HostMode, autoJoin: boolean): HostDaemonEnvironment {
-  const bootstrapEnv: Partial<HostDaemonEnvironment> = {
-    ...(hostDaemonEntrypointConfig.BB_BRIDGE_DIR
-      ? { BB_BRIDGE_DIR: hostDaemonEntrypointConfig.BB_BRIDGE_DIR }
-      : {}),
-    ...(hostDaemonEntrypointConfig.BB_CLI_DIR
-      ? { BB_CLI_DIR: hostDaemonEntrypointConfig.BB_CLI_DIR }
-      : {}),
-    ...(hostDaemonEntrypointConfig.BB_HOST_ENROLL_KEY
-      ? { BB_HOST_ENROLL_KEY: hostDaemonEntrypointConfig.BB_HOST_ENROLL_KEY }
-      : {}),
-    ...(hostDaemonEntrypointConfig.BB_HOST_ID
-      ? { BB_HOST_ID: hostDaemonEntrypointConfig.BB_HOST_ID }
-      : {}),
-    ...(hostDaemonEntrypointConfig.BB_HOST_NAME
-      ? { BB_HOST_NAME: hostDaemonEntrypointConfig.BB_HOST_NAME }
-      : {}),
-    ...(hostDaemonEntrypointConfig.BB_HOST_TYPE
-      ? { BB_HOST_TYPE: hostDaemonEntrypointConfig.BB_HOST_TYPE }
-      : {}),
-  };
+function setBootstrapEnvValue(
+  env: Partial<HostDaemonEnvironment>,
+  entry: BootstrapEnvEntry,
+): void {
+  if (!entry.value) {
+    return;
+  }
+  env[entry.key] = entry.value;
+}
 
+function buildBootstrapEnv(): Partial<HostDaemonEnvironment> {
+  const env: Partial<HostDaemonEnvironment> = {};
+  const entries: BootstrapEnvEntry[] = [
+    { key: "BB_BRIDGE_DIR", value: hostDaemonEntrypointConfig.BB_BRIDGE_DIR },
+    { key: "BB_CLI_DIR", value: hostDaemonEntrypointConfig.BB_CLI_DIR },
+    { key: "BB_HOST_ENROLL_KEY", value: hostDaemonEntrypointConfig.BB_HOST_ENROLL_KEY },
+    { key: "BB_HOST_ID", value: hostDaemonEntrypointConfig.BB_HOST_ID },
+    { key: "BB_HOST_NAME", value: hostDaemonEntrypointConfig.BB_HOST_NAME },
+    {
+      key: "BB_HOST_TYPE",
+      value: hostDaemonEntrypointConfig.BB_HOST_TYPE,
+    },
+  ];
+
+  for (const entry of entries) {
+    setBootstrapEnvValue(env, entry);
+  }
+
+  return env;
+}
+
+function buildEnv(mode: HostMode, autoJoin: boolean): HostDaemonEnvironment {
   return {
     ...process.env,
-    ...bootstrapEnv,
+    ...buildBootstrapEnv(),
     BB_DATA_DIR: resolveDataDir(mode, autoJoin),
     BB_SERVER_URL: hostDaemonConfig.BB_SERVER_URL,
     NODE_ENV: resolveNodeEnvironment(mode),
