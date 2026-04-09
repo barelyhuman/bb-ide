@@ -108,7 +108,7 @@ This plan is complete only when all of the following are true:
 - the observed tool surface in bb is no longer surprising relative to direct Pi
   runs for the same prompt and repo state
 - any remaining differences are documented in
-  [packages/provider-audit/README.md](/Users/michael/.codex/worktrees/b282/bb/packages/provider-audit/README.md)
+  [packages/agent-provider-audit/README.md](/Users/michael/.codex/worktrees/b282/bb/packages/agent-provider-audit/README.md)
 - at least one targeted Pi fixture has been re-captured after the change and
   reviewed end to end
 
@@ -116,8 +116,8 @@ This plan is complete only when all of the following are true:
 
 ### Automated
 
-- `pnpm exec turbo run test --filter=@bb/agent-runtime --filter=@bb/provider-audit --force`
-- `pnpm --filter @bb/provider-audit run ladle:prepare`
+- `pnpm exec turbo run test --filter=@bb/agent-runtime --filter=@bb/agent-provider-audit --force`
+- `pnpm --filter @bb/agent-provider-audit run ladle:prepare`
 
 ### Manual
 

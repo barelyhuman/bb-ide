@@ -104,7 +104,7 @@ afterEach(() => {
   }
 });
 
-describe("@bb/provider-audit fixture replay", () => {
+describe("@bb/agent-provider-audit fixture replay", () => {
   // CI runs this fixture corpus replay alongside many other package tests, and
   // the shared-machine contention can make the one-time replay setup much
   // slower than it is locally.

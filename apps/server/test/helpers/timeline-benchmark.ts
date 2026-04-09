@@ -20,7 +20,7 @@ import {
   toViewMessages,
   type ThreadEventWithMeta,
 } from "@bb/core-ui";
-import { replayFixtures } from "@bb/provider-audit";
+import { replayFixtures } from "@bb/agent-provider-audit";
 import { buildThreadEvent } from "@bb/domain";
 import type { ViewMessage } from "@bb/domain";
 import {
@@ -53,7 +53,7 @@ export interface TimelineBenchmarkScenario {
 
 const FIXTURE_ROOT = resolve(
   dirname(fileURLToPath(import.meta.url)),
-  "../../../../packages/provider-audit/fixtures",
+  "../../../../packages/agent-provider-audit/fixtures",
 );
 
 const TIMELINE_BENCHMARK_FIXTURES: TimelineBenchmarkFixture[] = [

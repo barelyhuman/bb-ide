@@ -1,5 +1,5 @@
 {
-  "name": "@bb/provider-audit",
+  "name": "@bb/agent-provider-audit",
   "version": "0.0.1",
   "type": "module",
   "exports": {
@@ -19,7 +19,7 @@
     "clean": "rimraf dist tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
-    "ladle:prepare": "pnpm exec turbo run build --filter=@bb/provider-audit --filter=@bb/ui-core --filter=@bb/core-ui --filter=@bb/domain --filter=@bb/agent-runtime && node ./dist/cli.js export-ladle-data --output ./.ladle/fixture-story-data.ts",
+    "ladle:prepare": "pnpm exec turbo run build --filter=@bb/agent-provider-audit --filter=@bb/ui-core --filter=@bb/core-ui --filter=@bb/domain --filter=@bb/agent-runtime && node ./dist/cli.js export-ladle-data --output ./.ladle/fixture-story-data.ts",
     "ladle": "pnpm run ladle:prepare && ladle serve",
     "ladle:build": "pnpm run ladle:prepare && ladle build"
   },

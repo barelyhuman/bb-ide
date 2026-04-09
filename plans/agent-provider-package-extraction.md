@@ -3,7 +3,8 @@
 ## Status
 
 - Draft
-- Not started
+- Phase 0 complete
+- Phase 1 in progress
 
 ## Goal
 
@@ -143,6 +144,9 @@ Rename `@bb/provider-audit` to `@bb/agent-provider-audit` first so the provider 
 Exit criteria:
 - package name and import paths are updated everywhere
 - no behavioral changes
+
+Status:
+- Complete
 
 ### Phase 1: `@bb/agent-providers`
 

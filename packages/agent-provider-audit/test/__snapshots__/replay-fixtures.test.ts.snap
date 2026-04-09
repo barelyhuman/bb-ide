@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`@bb/provider-audit fixture replay > exports shared React story data for the checked-in fixtures 1`] = `
+exports[`@bb/agent-provider-audit fixture replay > exports shared React story data for the checked-in fixtures 1`] = `
 [
   {
     "id": "excalidraw/claude-code/collab-startup-explanation",
@@ -131,7 +131,7 @@ exports[`@bb/provider-audit fixture replay > exports shared React story data for
 ]
 `;
 
-exports[`@bb/provider-audit fixture replay > replays every checked-in fixture into stable summaries 1`] = `
+exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixture into stable summaries 1`] = `
 [
   {
     "debugRawEventCount": 0,
@@ -2386,7 +2386,7 @@ exports[`@bb/provider-audit fixture replay > replays every checked-in fixture in
 ]
 `;
 
-exports[`@bb/provider-audit fixture replay > snapshots parsed context-window data for replayed token-usage events 1`] = `
+exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-window data for replayed token-usage events 1`] = `
 [
   {
     "contextWindowUsage": null,
@@ -2680,7 +2680,7 @@ exports[`@bb/provider-audit fixture replay > snapshots parsed context-window dat
 ]
 `;
 
-exports[`@bb/provider-audit fixture replay > snapshots verbose CLI timeline output for every fixture 1`] = `
+exports[`@bb/agent-provider-audit fixture replay > snapshots verbose CLI timeline output for every fixture 1`] = `
 [
   {
     "fixture": "excalidraw/claude-code/collab-startup-explanation",
@@ -12584,7 +12584,7 @@ Five of the nine tests fail on the old code. The boundary pair (just-fits vs. of
 ]
 `;
 
-exports[`@bb/provider-audit fixture replay > summarizes raw-event and tool-call coverage across the checked-in fixtures 1`] = `
+exports[`@bb/agent-provider-audit fixture replay > summarizes raw-event and tool-call coverage across the checked-in fixtures 1`] = `
 {
   "providers": [
     {

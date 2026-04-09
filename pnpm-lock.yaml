@@ -384,9 +384,9 @@ importers:
         specifier: ^3.24.0
         version: 3.25.76
     devDependencies:
-      '@bb/provider-audit':
+      '@bb/agent-provider-audit':
         specifier: workspace:*
-        version: link:../../packages/provider-audit
+        version: link:../../packages/agent-provider-audit
       '@bb/scripts':
         specifier: workspace:*
         version: link:../../packages/scripts
@@ -681,8 +681,7 @@ importers:
       vitest:
         specifier: ^4.0.18
         version: 4.1.1(@opentelemetry/api@1.9.1)(@types/node@22.19.10)(jsdom@29.0.1(@noble/hashes@2.0.1))(msw@2.12.14(@types/node@22.19.10)(typescript@5.9.3))(vite@7.3.1(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2))
-
-  packages/provider-audit:
+  packages/agent-provider-audit:
     dependencies:
       '@bb/agent-runtime':
         specifier: workspace:*

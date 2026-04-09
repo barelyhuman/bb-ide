@@ -1,6 +1,6 @@
 # Provider Audit
 
-`@bb/provider-audit` is the offline fidelity harness for provider rendering work.
+`@bb/agent-provider-audit` is the offline fidelity harness for provider rendering work.
 
 It exists to answer a narrow question: given real provider traces, what do we store, what do we project into `ViewMessage`, and what text would a user see in the CLI-style timeline?
 
@@ -195,11 +195,11 @@ When capturing new fixtures:
 1. Capture live runs to a temp output root:
 
 ```bash
-pnpm exec turbo run build --filter=@bb/provider-audit
-node ./packages/provider-audit/dist/cli.js \
+pnpm exec turbo run build --filter=@bb/agent-provider-audit
+node ./packages/agent-provider-audit/dist/cli.js \
   --provider codex \
   --scenario excalidraw-ttd-explanation \
-  --workspace /tmp/provider-audit-repos/excalidraw \
+  --workspace /tmp/agent-provider-audit-repos/excalidraw \
   --git-reset-ref "$BASE_SHA" \
   --output /tmp/bb-provider-audit-excalidraw
 ```
@@ -207,8 +207,8 @@ node ./packages/provider-audit/dist/cli.js \
 2. Import only the raw fixture inputs into the checked-in corpus:
 
 ```bash
-pnpm exec turbo run build --filter=@bb/provider-audit
-node ./packages/provider-audit/dist/cli.js import-fixtures \
+pnpm exec turbo run build --filter=@bb/agent-provider-audit
+node ./packages/agent-provider-audit/dist/cli.js import-fixtures \
   --source-root /tmp/bb-provider-audit-excalidraw \
   --corpus-id excalidraw
 ```
@@ -221,19 +221,19 @@ It replaces the target corpus, so when appending new bundles you should stage th
 Replay every tracked fixture and print a compact summary:
 
 ```bash
-pnpm exec turbo run build --filter=@bb/provider-audit
-node ./packages/provider-audit/dist/cli.js replay-fixtures
+pnpm exec turbo run build --filter=@bb/agent-provider-audit
+node ./packages/agent-provider-audit/dist/cli.js replay-fixtures
 ```
 
 Write derived outputs for inspection without committing them:
 
 ```bash
-pnpm exec turbo run build --filter=@bb/provider-audit
-node ./packages/provider-audit/dist/cli.js replay-fixtures \
+pnpm exec turbo run build --filter=@bb/agent-provider-audit
+node ./packages/agent-provider-audit/dist/cli.js replay-fixtures \
   --corpus-id excalidraw \
   --provider claude-code \
   --task search-feature \
-  --output-root /tmp/provider-audit-replay
+  --output-root /tmp/agent-provider-audit-replay
 ```
 
 That output root will contain generated files like:
@@ -254,23 +254,23 @@ the full expanded text for deeper debugging.
 Generate replayed story data for the checked-in fixtures:
 
 ```bash
-pnpm exec turbo run build --filter=@bb/provider-audit
-node ./packages/provider-audit/dist/cli.js export-ladle-data
+pnpm exec turbo run build --filter=@bb/agent-provider-audit
+node ./packages/agent-provider-audit/dist/cli.js export-ladle-data
 ```
 
-That writes a generated module to `packages/provider-audit/.ladle/fixture-story-data.ts`.
+That writes a generated module to `packages/agent-provider-audit/.ladle/fixture-story-data.ts`.
 It is intentionally ignored by git.
 
 Open the shared React timeline stories:
 
 ```bash
-pnpm --dir packages/provider-audit ladle
+pnpm --dir packages/agent-provider-audit ladle
 ```
 
 Build the static Ladle site:
 
 ```bash
-pnpm --dir packages/provider-audit ladle:build
+pnpm --dir packages/agent-provider-audit ladle:build
 ```
 
 Those stories replay the Excalidraw fixture corpus into the shared timeline
@@ -285,7 +285,7 @@ fixture-backed Ladle stories:
 ```bash
 npm install -g dev-browser
 dev-browser install
-pnpm --dir packages/provider-audit ladle
+pnpm --dir packages/agent-provider-audit ladle
 ```
 
 Then point `dev-browser` at the running Ladle server:
@@ -308,7 +308,7 @@ on the shared React timeline rows.
 
 ## Testing
 
-`pnpm exec turbo run test --filter=@bb/provider-audit`
+`pnpm exec turbo run test --filter=@bb/agent-provider-audit`
 
 The package test suite does two things:
 
