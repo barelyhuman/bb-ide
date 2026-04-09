@@ -1,8 +1,9 @@
 import { envsafe, port, str } from "envsafe";
-import { join } from "node:path";
 import { commonConfig } from "./common.js";
+import { databaseConfig } from "./database.js";
 import { DEFAULTS } from "./defaults.js";
 import { validateOptionalUrl } from "./public-url.js";
+import { serverPortConfig } from "./server-port.js";
 
 export { commonConfig };
 
@@ -20,15 +21,6 @@ const rawServerConfig = envsafe({
     desc: "Port the host daemon listens on for local API requests",
     default: DEFAULTS.hostDaemonPort.prod,
     devDefault: DEFAULTS.hostDaemonPort.dev,
-  }),
-  BB_SERVER_PORT: port({
-    desc: "HTTP port for the server",
-    default: DEFAULTS.serverPort.prod,
-    devDefault: DEFAULTS.serverPort.dev,
-  }),
-  BB_DATABASE_URL: str({
-    desc: "SQLite database path. Defaults to $BB_DATA_DIR/bb.db",
-    default: join(commonConfig.BB_DATA_DIR, "bb.db"),
   }),
   BB_PUBLIC_URL: str({
     desc: "Public URL sandboxes can use to reach the server",
@@ -70,7 +62,9 @@ const rawServerConfig = envsafe({
 });
 
 export const serverConfig = {
+  ...databaseConfig,
   ...rawServerConfig,
+  ...serverPortConfig,
   BB_PUBLIC_URL: validateOptionalUrl("BB_PUBLIC_URL", rawServerConfig.BB_PUBLIC_URL),
   BB_INFERENCE_MODEL: validateInferenceModel(rawServerConfig.BB_INFERENCE_MODEL),
 };

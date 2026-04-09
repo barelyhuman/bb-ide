@@ -81,6 +81,33 @@ describe("consumer-specific config", () => {
     expect(serverConfig.ANTHROPIC_API_KEY).toBe("test-anthropic-key");
   });
 
+  it("lets tooling read the server port without validating unrelated server env", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("BB_PUBLIC_URL", "not-a-url");
+    vi.stubEnv("BB_SERVER_PORT", undefined);
+
+    const { serverPortConfig } =
+      await importFresh<typeof import("../src/server-port.js")>(
+        "../src/server-port.js",
+      );
+
+    expect(serverPortConfig.BB_SERVER_PORT).toBe(3334);
+  });
+
+  it("lets tooling read the database path without validating unrelated server env", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("BB_DATA_DIR", "/tmp/bb-data");
+    vi.stubEnv("BB_PUBLIC_URL", "not-a-url");
+    vi.stubEnv("BB_DATABASE_URL", undefined);
+
+    const { databaseConfig } =
+      await importFresh<typeof import("../src/database.js")>(
+        "../src/database.js",
+      );
+
+    expect(databaseConfig.BB_DATABASE_URL).toBe("/tmp/bb-data/bb.db");
+  });
+
   it("requires provider/model format for BB_INFERENCE_MODEL", async () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");

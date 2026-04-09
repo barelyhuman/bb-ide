@@ -11,6 +11,10 @@
       "import": "./dist/server.js",
       "types": "./dist/server.d.ts"
     },
+    "./server-port": {
+      "import": "./dist/server-port.js",
+      "types": "./dist/server-port.d.ts"
+    },
     "./dev-env": {
       "import": "./dist/dev-env.js",
       "types": "./dist/dev-env.d.ts"
@@ -30,6 +34,10 @@
     "./defaults": {
       "import": "./dist/defaults.js",
       "types": "./dist/defaults.d.ts"
+    },
+    "./database": {
+      "import": "./dist/database.js",
+      "types": "./dist/database.d.ts"
     },
     "./data-dir": {
       "import": "./dist/data-dir.js",

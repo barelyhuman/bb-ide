@@ -1,8 +1,8 @@
 import { defineConfig } from "drizzle-kit";
 import { resolve } from "node:path";
-import { serverConfig } from "../config/src/server.js";
+import { databaseConfig } from "../config/src/database.js";
 
-const dbPath = resolve(serverConfig.BB_DATABASE_URL);
+const dbPath = resolve(databaseConfig.BB_DATABASE_URL);
 
 export default defineConfig({
   schema: "./src/schema.ts",
