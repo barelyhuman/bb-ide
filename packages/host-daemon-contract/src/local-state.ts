@@ -10,9 +10,16 @@ export const hostRuntimeMaterialEnvSchema = z.record(
   z.string().min(1),
   z.string(),
 );
+export const hostRuntimeMaterialManagedFileSchema = z.object({
+  contents: z.string(),
+  managedBy: nonEmptyTrimmedStringSchema,
+  mode: z.number().int().positive(),
+  path: nonEmptyTrimmedStringSchema,
+}).strict();
 export const hostRuntimeMaterialSnapshotSchema = z.object({
-  version: nonEmptyTrimmedStringSchema,
   env: hostRuntimeMaterialEnvSchema,
+  files: z.array(hostRuntimeMaterialManagedFileSchema),
+  version: nonEmptyTrimmedStringSchema,
 }).strict();
 
 export function normalizeServerUrl(serverUrl: string): string {
@@ -32,6 +39,9 @@ export const hostAuthStateSchema = z.object({
 }).strict();
 
 export type HostAuthState = z.infer<typeof hostAuthStateSchema>;
+export type HostRuntimeMaterialManagedFile = z.infer<
+  typeof hostRuntimeMaterialManagedFileSchema
+>;
 export type HostRuntimeMaterialSnapshot = z.infer<
   typeof hostRuntimeMaterialSnapshotSchema
 >;

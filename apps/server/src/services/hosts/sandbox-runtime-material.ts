@@ -36,16 +36,16 @@ interface EnsureSandboxRuntimeMaterialSyncedArgs {
   timeoutMs?: number;
 }
 
-export function requestSandboxRuntimeMaterialSync(
-  deps: Pick<AppDeps, "config" | "db">,
+export async function requestSandboxRuntimeMaterialSync(
+  deps: Pick<AppDeps, "cloudAuth" | "config" | "db">,
   args: { hostId: string },
-): HostRuntimeMaterialSnapshot {
+): Promise<HostRuntimeMaterialSnapshot> {
   const host = getHost(deps.db, args.hostId);
   if (!host || host.destroyedAt !== null) {
     throw new ApiError(404, "host_not_found", "Host not found");
   }
 
-  const desiredSnapshot = buildSandboxRuntimeMaterialSnapshot(deps.config);
+  const desiredSnapshot = await buildSandboxRuntimeMaterialSnapshot(deps);
   const existingOperation = getRuntimeMaterialOperation(deps, args.hostId);
   const existingPayload =
     existingOperation
@@ -145,10 +145,10 @@ export function advanceSandboxRuntimeMaterialSync(
 }
 
 export async function ensureSandboxRuntimeMaterialSynced(
-  deps: Pick<AppDeps, "config" | "db" | "hub">,
+  deps: Pick<AppDeps, "cloudAuth" | "config" | "db" | "hub">,
   args: EnsureSandboxRuntimeMaterialSyncedArgs,
 ): Promise<HostRuntimeMaterialSnapshot> {
-  const desiredSnapshot = requestSandboxRuntimeMaterialSync(deps, {
+  const desiredSnapshot = await requestSandboxRuntimeMaterialSync(deps, {
     hostId: args.hostId,
   });
   const operation = getRuntimeMaterialOperation(deps, args.hostId);

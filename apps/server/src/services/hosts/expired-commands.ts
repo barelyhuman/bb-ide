@@ -22,7 +22,13 @@ type LifecycleFailureReport =
 
 type ExpiredCommandDeps = Pick<
   AppDeps,
-  "config" | "db" | "hub" | "logger" | "machineAuth" | "sandboxRegistry"
+  | "cloudAuth"
+  | "config"
+  | "db"
+  | "hub"
+  | "logger"
+  | "machineAuth"
+  | "sandboxRegistry"
 >;
 
 function buildExpiredLifecycleFailureReport(

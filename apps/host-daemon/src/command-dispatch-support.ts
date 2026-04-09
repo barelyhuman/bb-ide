@@ -30,6 +30,7 @@ export interface CommandDispatchOptions {
   fetchRuntimeMaterial: (
     version: string,
   ) => Promise<HostRuntimeMaterialSnapshot>;
+  readPersistedRuntimeMaterial: () => Promise<HostRuntimeMaterialSnapshot | null>;
   persistRuntimeMaterial: (
     snapshot: HostRuntimeMaterialSnapshot,
   ) => Promise<void>;

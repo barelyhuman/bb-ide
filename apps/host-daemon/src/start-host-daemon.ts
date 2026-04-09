@@ -26,6 +26,7 @@ import {
   prepareRuntimeShellEnv,
   resolveLocalBbExecutableDirectory,
 } from "./runtime-shell-env.js";
+import { resolveRuntimeMaterialEnv } from "./runtime-material-files.js";
 import { readRuntimeMaterialState } from "./runtime-material-state.js";
 import type { CreateReconnectingWebSocket } from "./server-connection.js";
 
@@ -172,7 +173,9 @@ export async function startHostDaemon(
       createWebSocket: options.createWebSocket,
     });
     if (persistedRuntimeMaterial) {
-      app.runtimeManager.replaceManagedShellEnv(persistedRuntimeMaterial.env);
+      app.runtimeManager.replaceManagedShellEnv(
+        resolveRuntimeMaterialEnv(persistedRuntimeMaterial.env),
+      );
     }
     await app.daemon.start();
     return app.daemon;

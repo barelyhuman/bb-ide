@@ -137,12 +137,22 @@ describe("CommandRouter", () => {
       env: {
         OPENAI_API_KEY: "test-openai-key",
       },
+      files: [
+        {
+          contents: "{}\n",
+          managedBy: "bb-runtime-material",
+          mode: 0o600,
+          path: "/tmp/runtime-material/auth.json",
+        },
+      ],
       version: "runtime-version-1",
     }));
+    const readPersistedRuntimeMaterial = vi.fn(async () => null);
     const persistRuntimeMaterial = vi.fn(async () => undefined);
     const reportResult = vi.fn(async () => undefined);
     const router = new CommandRouter({
       fetchRuntimeMaterial,
+      readPersistedRuntimeMaterial,
       persistRuntimeMaterial,
       reportResult,
       runtimeManager: manager,
@@ -161,10 +171,19 @@ describe("CommandRouter", () => {
     ]);
 
     expect(fetchRuntimeMaterial).toHaveBeenCalledWith("runtime-version-1");
+    expect(readPersistedRuntimeMaterial).toHaveBeenCalledTimes(1);
     expect(persistRuntimeMaterial).toHaveBeenCalledWith({
       env: {
         OPENAI_API_KEY: "test-openai-key",
       },
+      files: [
+        {
+          contents: "{}\n",
+          managedBy: "bb-runtime-material",
+          mode: 0o600,
+          path: "/tmp/runtime-material/auth.json",
+        },
+      ],
       version: "runtime-version-1",
     });
     expect(reportResult).toHaveBeenCalledWith(
@@ -195,6 +214,7 @@ describe("CommandRouter", () => {
 
     const router = new CommandRouter({
       fetchRuntimeMaterial: vi.fn(),
+      readPersistedRuntimeMaterial: vi.fn(async () => null),
       runtimeManager: manager,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
@@ -257,6 +277,7 @@ describe("CommandRouter", () => {
 
     const router = new CommandRouter({
       fetchRuntimeMaterial: vi.fn(),
+      readPersistedRuntimeMaterial: vi.fn(async () => null),
       runtimeManager: manager,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
@@ -340,6 +361,7 @@ describe("CommandRouter", () => {
     const reported: string[] = [];
     const router = new CommandRouter({
       fetchRuntimeMaterial: vi.fn(),
+      readPersistedRuntimeMaterial: vi.fn(async () => null),
       runtimeManager: manager,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
@@ -427,6 +449,7 @@ describe("CommandRouter", () => {
     const results: Array<{ commandId: string; completedAt: number; ok: boolean }> = [];
     const router = new CommandRouter({
       fetchRuntimeMaterial: vi.fn(),
+      readPersistedRuntimeMaterial: vi.fn(async () => null),
       runtimeManager: manager,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
@@ -505,6 +528,7 @@ describe("CommandRouter", () => {
 
     const router = new CommandRouter({
       fetchRuntimeMaterial: vi.fn(),
+      readPersistedRuntimeMaterial: vi.fn(async () => null),
       runtimeManager: manager,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger: createLogger(),
@@ -557,6 +581,7 @@ describe("CommandRouter", () => {
     const reported: string[] = [];
     const router = new CommandRouter({
       fetchRuntimeMaterial: vi.fn(),
+      readPersistedRuntimeMaterial: vi.fn(async () => null),
       runtimeManager: manager,
       threadStorageRootPath: "/tmp/bb-test-thread-storage",
       logger,

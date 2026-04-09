@@ -6,6 +6,17 @@ import type {
 } from "@bb/server-contract";
 import type { StoredCloudAuthCredential } from "./provider-definitions.js";
 
+export interface CloudAuthResolvedCredential<
+  TCredential extends StoredCloudAuthCredential = StoredCloudAuthCredential,
+> {
+  credential: TCredential;
+  label: string | null;
+  lastErrorMessage: string | null;
+  lastRefreshedAt: number | null;
+  providerId: TCredential["providerId"];
+  updatedAt: number;
+}
+
 export interface GetCloudAuthAttemptArgs {
   attemptId: string;
 }
@@ -28,7 +39,7 @@ export interface CloudAuthService {
   getAttempt(args: GetCloudAuthAttemptArgs): CloudAuthAttemptResponse | null;
   getValidCredential(
     args: GetCloudAuthCredentialArgs,
-  ): Promise<StoredCloudAuthCredential | null>;
+  ): Promise<CloudAuthResolvedCredential | null>;
   listConnections(): Promise<CloudAuthConnection[]>;
   startConnection(
     args: StartCloudAuthConnectionArgs,

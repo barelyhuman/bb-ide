@@ -6,11 +6,13 @@ export {
   HOST_RUNTIME_MATERIAL_FILE_NAME,
   hostAuthStateSchema,
   hostRuntimeMaterialEnvSchema,
+  hostRuntimeMaterialManagedFileSchema,
   hostRuntimeMaterialSnapshotSchema,
   normalizeServerUrl,
 } from "./local-state.js";
 export type {
   HostAuthState,
+  HostRuntimeMaterialManagedFile,
   HostRuntimeMaterialSnapshot,
 } from "./local-state.js";
 

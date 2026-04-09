@@ -37,6 +37,14 @@ describe("runtime material state", () => {
         GITHUB_TOKEN: "test-github-token",
         OPENAI_API_KEY: "test-openai-key",
       },
+      files: [
+        {
+          contents: "{\"token\":\"value\"}\n",
+          managedBy: "bb-runtime-material",
+          mode: 0o600,
+          path: "~/.codex/auth.json",
+        },
+      ],
       version: "runtime-version-1",
     });
 
@@ -45,6 +53,14 @@ describe("runtime material state", () => {
         GITHUB_TOKEN: "test-github-token",
         OPENAI_API_KEY: "test-openai-key",
       },
+      files: [
+        {
+          contents: "{\"token\":\"value\"}\n",
+          managedBy: "bb-runtime-material",
+          mode: 0o600,
+          path: "~/.codex/auth.json",
+        },
+      ],
       version: "runtime-version-1",
     });
 

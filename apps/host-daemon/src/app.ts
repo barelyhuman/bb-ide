@@ -16,7 +16,10 @@ import {
   type CreateReconnectingWebSocket,
 } from "./server-connection.js";
 import { ensureThreadStorageRoot } from "./thread-storage-root.js";
-import { writeRuntimeMaterialState } from "./runtime-material-state.js";
+import {
+  readRuntimeMaterialState,
+  writeRuntimeMaterialState,
+} from "./runtime-material-state.js";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import type { HostType, ToolCallRequest, ToolCallResponse } from "@bb/domain";
 import type { HostWatcher } from "@bb/host-watcher";
@@ -220,6 +223,8 @@ export async function createHostDaemonApp(
   const router = new CommandRouter({
     fetchRuntimeMaterial: (version) =>
       serverClient.fetchRuntimeMaterial({ version }),
+    readPersistedRuntimeMaterial: () =>
+      readRuntimeMaterialState(options.dataDir),
     runtimeManager,
     listModels: (providerId) =>
       defaultListModels(providerId, {

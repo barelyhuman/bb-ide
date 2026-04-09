@@ -326,7 +326,7 @@ describe("internal session routes", () => {
         leaseTimeoutMs: 30_000,
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
       });
-      const initialSnapshot = requestSandboxRuntimeMaterialSync(harness.deps, {
+      const initialSnapshot = await requestSandboxRuntimeMaterialSync(harness.deps, {
         hostId: host.id,
       });
       const initialRuntimeSync = advanceSandboxRuntimeMaterialSync(harness.deps, {
@@ -402,7 +402,7 @@ describe("internal session routes", () => {
         leaseTimeoutMs: 30_000,
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
       });
-      const initialSnapshot = requestSandboxRuntimeMaterialSync(harness.deps, {
+      const initialSnapshot = await requestSandboxRuntimeMaterialSync(harness.deps, {
         hostId: host.id,
       });
       const initialRuntimeSync = advanceSandboxRuntimeMaterialSync(harness.deps, {
@@ -660,9 +660,10 @@ describe("internal session routes", () => {
         ({ command, row }) =>
           row.hostId === host.id && command.type === "host.sync_runtime_material",
       );
+      const desiredSnapshot = await buildSandboxRuntimeMaterialSnapshot(harness.deps);
       expect(queuedRuntimeSync.command).toMatchObject({
         type: "host.sync_runtime_material",
-        version: buildSandboxRuntimeMaterialSnapshot(harness.config).version,
+        version: desiredSnapshot.version,
       });
       expect(runtimeSyncOperation?.commandId).toBe(queuedRuntimeSync.row.id);
     } finally {
@@ -692,7 +693,7 @@ describe("internal session routes", () => {
         leaseTimeoutMs: 30_000,
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
       });
-      const desiredSnapshot = buildSandboxRuntimeMaterialSnapshot(harness.config);
+      const desiredSnapshot = await buildSandboxRuntimeMaterialSnapshot(harness.deps);
 
       const response = await harness.app.request(
         `/internal/session/runtime-material?sessionId=${session.id}&version=${desiredSnapshot.version}`,

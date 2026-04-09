@@ -66,7 +66,10 @@ export async function runManagedEnvironmentArchiveCleanupSweep(
 }
 
 export async function runEphemeralHostCleanupSweep(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
+  deps: Pick<
+    AppDeps,
+    "cloudAuth" | "config" | "db" | "hub" | "logger" | "sandboxRegistry"
+  >,
   destroySandboxHost: DestroyHostFn,
 ): Promise<void> {
   for (const host of sweepEphemeralHostsPendingCleanup(deps.db)) {
@@ -94,7 +97,13 @@ export async function runEphemeralHostCleanupSweep(
 export async function runProjectDeletionSweep(
   deps: Pick<
     AppDeps,
-    "config" | "db" | "hub" | "logger" | "machineAuth" | "sandboxRegistry"
+    | "cloudAuth"
+    | "config"
+    | "db"
+    | "hub"
+    | "logger"
+    | "machineAuth"
+    | "sandboxRegistry"
   >,
 ): Promise<void> {
   for (const projectId of listProjectsPendingDeletion(deps)) {
@@ -115,7 +124,13 @@ export async function runProjectDeletionSweep(
 export async function runEnvironmentProvisioningSweep(
   deps: Pick<
     AppDeps,
-    "config" | "db" | "hub" | "logger" | "machineAuth" | "sandboxRegistry"
+    | "cloudAuth"
+    | "config"
+    | "db"
+    | "hub"
+    | "logger"
+    | "machineAuth"
+    | "sandboxRegistry"
   >,
 ): Promise<void> {
   const seenEnvironmentIds = new Set<string>();
@@ -157,7 +172,10 @@ export async function runEnvironmentProvisioningSweep(
 }
 
 export async function runIdleSandboxSuspendSweep(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "sandboxRegistry">,
+  deps: Pick<
+    AppDeps,
+    "cloudAuth" | "config" | "db" | "hub" | "logger" | "sandboxRegistry"
+  >,
 ): Promise<void> {
   for (const host of sweepIdleEphemeralHostsEligibleForSuspend(deps.db, {
     inactiveBefore: Date.now() - deps.config.sandboxIdleThresholdMs,
@@ -253,7 +271,13 @@ export async function runThreadLifecycleSweep(
 export async function runPeriodicSweeps(
   deps: Pick<
     AppDeps,
-    "config" | "db" | "hub" | "logger" | "machineAuth" | "sandboxRegistry"
+    | "cloudAuth"
+    | "config"
+    | "db"
+    | "hub"
+    | "logger"
+    | "machineAuth"
+    | "sandboxRegistry"
   >,
 ): Promise<void> {
   try {

@@ -1,12 +1,23 @@
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
 import type { CommandDispatchOptions, CommandOf } from "../command-dispatch-support.js";
+import {
+  replaceManagedRuntimeFiles,
+  resolveRuntimeMaterialEnv,
+} from "../runtime-material-files.js";
 
 export async function syncRuntimeMaterial(
   command: CommandOf<"host.sync_runtime_material">,
   options: CommandDispatchOptions,
 ): Promise<HostDaemonCommandResult<"host.sync_runtime_material">> {
+  const previousSnapshot = await options.readPersistedRuntimeMaterial();
   const snapshot = await options.fetchRuntimeMaterial(command.version);
-  options.runtimeManager.replaceManagedShellEnv(snapshot.env);
+  await replaceManagedRuntimeFiles({
+    nextSnapshot: snapshot,
+    previousSnapshot,
+  });
+  options.runtimeManager.replaceManagedShellEnv(
+    resolveRuntimeMaterialEnv(snapshot.env),
+  );
   await options.runtimeManager.evictIdleEnvironments();
   await options.persistRuntimeMaterial(snapshot);
   return {

@@ -2,16 +2,12 @@ import { createHash } from "node:crypto";
 import type { HostRuntimeMaterialSnapshot } from "@bb/host-daemon-contract";
 import { ApiError } from "../../errors.js";
 import type { AppDeps, ServerRuntimeConfig } from "../../types.js";
+import { buildCloudAuthRuntimeMaterial } from "../cloud-auth/runtime-material.js";
 
 type SandboxRuntimeMaterialConfig = Pick<
   ServerRuntimeConfig,
   "anthropicApiKey" | "githubPat" | "openAiApiKey"
 >;
-
-const snapshotCache = new WeakMap<
-  SandboxRuntimeMaterialConfig,
-  HostRuntimeMaterialSnapshot
->();
 
 function buildManagedRuntimeEnv(
   config: SandboxRuntimeMaterialConfig,
@@ -37,39 +33,57 @@ function toStableEnvEntries(
   return Object.entries(env).sort(([left], [right]) => left.localeCompare(right));
 }
 
-function buildSnapshotVersion(env: Record<string, string>): string {
-  const stableEntries = JSON.stringify(toStableEnvEntries(env));
-  return createHash("sha256").update(stableEntries).digest("hex");
+function toStableFiles(
+  snapshot: Pick<HostRuntimeMaterialSnapshot, "files">,
+) {
+  return snapshot.files
+    .map((file) => ({
+      contents: file.contents,
+      managedBy: file.managedBy,
+      mode: file.mode,
+      path: file.path,
+    }))
+    .sort((left, right) => left.path.localeCompare(right.path));
 }
 
-export function buildSandboxRuntimeMaterialSnapshot(
-  config: SandboxRuntimeMaterialConfig,
-): HostRuntimeMaterialSnapshot {
-  const cached = snapshotCache.get(config);
-  if (cached) {
-    return cached;
-  }
+function buildSnapshotVersion(snapshot: HostRuntimeMaterialSnapshot): string {
+  const stablePayload = JSON.stringify({
+    env: toStableEnvEntries(snapshot.env),
+    files: toStableFiles(snapshot),
+  });
+  return createHash("sha256").update(stablePayload).digest("hex");
+}
 
-  const env = buildManagedRuntimeEnv(config);
-  const snapshot = {
-    env,
-    version: buildSnapshotVersion(env),
+export async function buildSandboxRuntimeMaterialSnapshot(
+  deps: Pick<AppDeps, "cloudAuth" | "config">,
+): Promise<HostRuntimeMaterialSnapshot> {
+  const baseEnv = buildManagedRuntimeEnv(deps.config);
+  const cloudAuthRuntimeMaterial = await buildCloudAuthRuntimeMaterial(deps);
+  const snapshot: HostRuntimeMaterialSnapshot = {
+    env: {
+      ...baseEnv,
+      ...cloudAuthRuntimeMaterial.env,
+    },
+    files: cloudAuthRuntimeMaterial.files,
+    version: "",
   };
-  snapshotCache.set(config, snapshot);
-  return snapshot;
+  return {
+    ...snapshot,
+    version: buildSnapshotVersion(snapshot),
+  };
 }
 
 export function isEmptySandboxRuntimeMaterialSnapshot(
   snapshot: HostRuntimeMaterialSnapshot,
 ): boolean {
-  return Object.keys(snapshot.env).length === 0;
+  return Object.keys(snapshot.env).length === 0 && snapshot.files.length === 0;
 }
 
-export function readSandboxRuntimeMaterialSnapshotForVersion(
-  deps: Pick<AppDeps, "config">,
+export async function readSandboxRuntimeMaterialSnapshotForVersion(
+  deps: Pick<AppDeps, "cloudAuth" | "config">,
   args: { version: string },
-): HostRuntimeMaterialSnapshot {
-  const desiredSnapshot = buildSandboxRuntimeMaterialSnapshot(deps.config);
+): Promise<HostRuntimeMaterialSnapshot> {
+  const desiredSnapshot = await buildSandboxRuntimeMaterialSnapshot(deps);
   if (desiredSnapshot.version !== args.version) {
     throw new ApiError(
       409,

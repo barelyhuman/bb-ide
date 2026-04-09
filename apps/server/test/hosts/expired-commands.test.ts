@@ -143,7 +143,7 @@ describe("expired commands", () => {
         id: "host-expired-runtime-sync",
         type: "ephemeral",
       });
-      requestSandboxRuntimeMaterialSync(harness.deps, {
+      await requestSandboxRuntimeMaterialSync(harness.deps, {
         hostId: host.id,
       });
       const commandId = advanceSandboxRuntimeMaterialSync(harness.deps, {

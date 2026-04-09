@@ -40,6 +40,14 @@ describe("createServerClient", () => {
           env: {
             OPENAI_API_KEY: "test-openai-key",
           },
+          files: [
+            {
+              contents: "{}\n",
+              managedBy: "bb-runtime-material",
+              mode: 0o600,
+              path: "~/.codex/auth.json",
+            },
+          ],
           version: "runtime-version-1",
         }),
         {
@@ -66,6 +74,14 @@ describe("createServerClient", () => {
       env: {
         OPENAI_API_KEY: "test-openai-key",
       },
+      files: [
+        {
+          contents: "{}\n",
+          managedBy: "bb-runtime-material",
+          mode: 0o600,
+          path: "~/.codex/auth.json",
+        },
+      ],
       version: "runtime-version-1",
     });
     expect(fetchFn).toHaveBeenCalledTimes(1);

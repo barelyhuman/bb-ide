@@ -14,6 +14,7 @@ type CommandResultReport = Omit<HostDaemonCommandResultReport, "sessionId">;
 
 export interface CommandRouterOptions {
   fetchRuntimeMaterial: CommandDispatchOptions["fetchRuntimeMaterial"];
+  readPersistedRuntimeMaterial: CommandDispatchOptions["readPersistedRuntimeMaterial"];
   persistRuntimeMaterial: CommandDispatchOptions["persistRuntimeMaterial"];
   runtimeManager: RuntimeManager;
   reportResult?: (result: CommandResultReport) => Promise<void>;
@@ -124,6 +125,7 @@ export class CommandRouter {
     try {
       const result = await dispatchCommand(envelope.command, {
         fetchRuntimeMaterial: this.options.fetchRuntimeMaterial,
+        readPersistedRuntimeMaterial: this.options.readPersistedRuntimeMaterial,
         persistRuntimeMaterial: this.options.persistRuntimeMaterial,
         runtimeManager: this.options.runtimeManager,
         seedThreadHighWaterMark: this.options.seedThreadHighWaterMark,

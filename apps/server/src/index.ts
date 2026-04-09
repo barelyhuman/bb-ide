@@ -70,6 +70,7 @@ async function main(): Promise<void> {
 
   setInterval(() => {
     void runPeriodicSweeps({
+      cloudAuth,
       config: runtimeConfig,
       db,
       hub,

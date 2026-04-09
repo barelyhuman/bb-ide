@@ -64,7 +64,7 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
       // A replaced session can strand a fetched runtime-sync command on the
       // old daemon session. Refresh the desired version first, then requeue
       // only if the existing operation is no longer reusable.
-      requestSandboxRuntimeMaterialSync(deps, {
+      await requestSandboxRuntimeMaterialSync(deps, {
         hostId: daemon.hostId,
       });
       reconcileSandboxRuntimeMaterialAfterSessionOpen(deps, {
@@ -126,7 +126,7 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
 
       return context.json(
         hostRuntimeMaterialSnapshotSchema.parse(
-          readSandboxRuntimeMaterialSnapshotForVersion(deps, {
+          await readSandboxRuntimeMaterialSnapshotForVersion(deps, {
             version: query.version,
           }),
         ),

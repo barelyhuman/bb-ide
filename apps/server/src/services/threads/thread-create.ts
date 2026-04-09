@@ -65,7 +65,13 @@ import {
 
 type ThreadCreateDeps = Pick<
   AppDeps,
-  "config" | "db" | "hub" | "logger" | "machineAuth" | "sandboxRegistry"
+  | "cloudAuth"
+  | "config"
+  | "db"
+  | "hub"
+  | "logger"
+  | "machineAuth"
+  | "sandboxRegistry"
 >;
 
 interface CreateThreadInEnvironmentArgs {
@@ -533,7 +539,7 @@ export async function createThreadFromRequest(
 export async function ensureProjectSourceEnvironment(
   deps: Pick<
     AppDeps,
-    "config" | "db" | "hub" | "machineAuth" | "sandboxRegistry"
+    "cloudAuth" | "config" | "db" | "hub" | "machineAuth" | "sandboxRegistry"
   >,
   args: {
     hostId: string;

@@ -22,7 +22,10 @@ import {
   storedCloudAuthCredentialSchema,
   type StoredCloudAuthCredential,
 } from "./provider-definitions.js";
-import type { CloudAuthService } from "./types.js";
+import type {
+  CloudAuthResolvedCredential,
+  CloudAuthService,
+} from "./types.js";
 import type { ServerLogger } from "../../types.js";
 
 const ATTEMPT_RETENTION_MS = 10 * 60_000;
@@ -45,7 +48,22 @@ interface CloudAuthAttemptState {
 interface PersistCredentialArgs {
   credential: StoredCloudAuthCredential;
   lastErrorMessage: string | null;
+  lastRefreshedAt?: number | null;
   updatedAt?: number;
+}
+
+function buildResolvedCredential(
+  record: SandboxProviderCredentialRecord,
+  credential: StoredCloudAuthCredential,
+): CloudAuthResolvedCredential {
+  return {
+    credential,
+    label: record.label,
+    lastErrorMessage: record.lastErrorMessage,
+    lastRefreshedAt: record.lastRefreshedAt,
+    providerId: credential.providerId,
+    updatedAt: record.updatedAt,
+  };
 }
 
 function getConnectionLabel(
@@ -128,7 +146,10 @@ export async function createCloudAuthService(
   args: CreateCloudAuthServiceArgs,
 ): Promise<CloudAuthService> {
   const crypto = await createCloudAuthCrypto({ dataDir: args.dataDir });
-  const refreshDeduper = createAsyncDeduper<CloudAuthProviderId, StoredCloudAuthCredential>();
+  const refreshDeduper = createAsyncDeduper<
+    CloudAuthProviderId,
+    CloudAuthResolvedCredential
+  >();
   const attemptsById = new Map<string, CloudAuthAttemptState>();
   const pendingAttemptIdsByProvider = new Map<CloudAuthProviderId, string>();
 
@@ -207,7 +228,10 @@ export async function createCloudAuthService(
       expiresAt: argsPersist.credential.expiresAt,
       label: getConnectionLabel(argsPersist.credential),
       lastErrorMessage: argsPersist.lastErrorMessage,
-      lastRefreshedAt: argsPersist.updatedAt ?? Date.now(),
+      lastRefreshedAt:
+        argsPersist.lastRefreshedAt === undefined
+          ? argsPersist.updatedAt ?? Date.now()
+          : argsPersist.lastRefreshedAt,
       providerId: argsPersist.credential.providerId,
       updatedAt: argsPersist.updatedAt,
     });
@@ -230,7 +254,7 @@ export async function createCloudAuthService(
 
   async function getValidCredential(
     providerId: CloudAuthProviderId,
-  ): Promise<StoredCloudAuthCredential | null> {
+  ): Promise<CloudAuthResolvedCredential | null> {
     const record = await getCredentialRecord(providerId);
     if (!record) {
       return null;
@@ -258,10 +282,15 @@ export async function createCloudAuthService(
         await persistCredential({
           credential,
           lastErrorMessage: null,
+          lastRefreshedAt: record.lastRefreshedAt,
           updatedAt: Date.now(),
         });
+        const refreshedRecord = await getCredentialRecord(providerId);
+        if (refreshedRecord) {
+          return buildResolvedCredential(refreshedRecord, credential);
+        }
       }
-      return credential;
+      return buildResolvedCredential(record, credential);
     }
 
     return refreshDeduper.run(providerId, async () => {
@@ -272,17 +301,23 @@ export async function createCloudAuthService(
 
       const currentCredential = readCredential(currentRecord);
       if (currentCredential.expiresAt > Date.now() + REFRESH_SKEW_MS) {
-        return currentCredential;
+        return buildResolvedCredential(currentRecord, currentCredential);
       }
 
       try {
         const refreshedCredential = await refreshCredential(currentCredential);
+        const updatedAt = Date.now();
         await persistCredential({
           credential: refreshedCredential,
           lastErrorMessage: null,
-          updatedAt: Date.now(),
+          lastRefreshedAt: updatedAt,
+          updatedAt,
         });
-        return refreshedCredential;
+        const refreshedRecord = await getCredentialRecord(providerId);
+        if (!refreshedRecord) {
+          throw new Error(`Missing credential for ${providerId} after refresh`);
+        }
+        return buildResolvedCredential(refreshedRecord, refreshedCredential);
       } catch (error) {
         upsertSandboxProviderCredential(args.db, {
           encryptedPayload: currentRecord.encryptedPayload,
@@ -301,7 +336,7 @@ export async function createCloudAuthService(
           },
           "Failed to refresh sandbox provider credential",
         );
-        return currentCredential;
+        return buildResolvedCredential(currentRecord, currentCredential);
       }
     });
   }

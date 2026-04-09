@@ -392,7 +392,7 @@ export function requestEnvironmentProvision(
 async function bootstrapSandboxProvisioning(
   deps: Pick<
     AppDeps,
-    "config" | "db" | "hub" | "machineAuth" | "sandboxRegistry"
+    "cloudAuth" | "config" | "db" | "hub" | "machineAuth" | "sandboxRegistry"
   >,
   args: {
     environment: Environment;
@@ -497,7 +497,7 @@ async function bootstrapSandboxProvisioning(
 export async function advanceEnvironmentProvisioning(
   deps: Pick<
     AppDeps,
-    "config" | "db" | "hub" | "machineAuth" | "sandboxRegistry"
+    "cloudAuth" | "config" | "db" | "hub" | "machineAuth" | "sandboxRegistry"
   >,
   args: AdvanceEnvironmentProvisioningArgs,
 ): Promise<string | null> {

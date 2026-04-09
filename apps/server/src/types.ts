@@ -33,7 +33,7 @@ export interface AppDeps {
 
 export type SandboxLifecycleDeps = Pick<
   AppDeps,
-  "config" | "db" | "hub" | "machineAuth" | "sandboxRegistry"
+  "cloudAuth" | "config" | "db" | "hub" | "machineAuth" | "sandboxRegistry"
 >;
 
 /**

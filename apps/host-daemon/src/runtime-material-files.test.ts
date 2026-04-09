@@ -1,0 +1,77 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  replaceManagedRuntimeFiles,
+  resolveRuntimeMaterialEnv,
+} from "./runtime-material-files.js";
+
+const tempDirs: string[] = [];
+
+async function makeTempDir(prefix: string): Promise<string> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+}
+
+afterEach(async () => {
+  vi.restoreAllMocks();
+  await Promise.all(
+    tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
+  );
+});
+
+describe("runtime material files", () => {
+  it("writes managed files and deletes removed files", async () => {
+    const rootDir = await makeTempDir("bb-runtime-material-files-");
+    const previousPath = path.join(rootDir, "claude", "credentials.json");
+    const nextPath = path.join(rootDir, "codex", "auth.json");
+
+    await replaceManagedRuntimeFiles({
+      previousSnapshot: {
+        env: {},
+        files: [
+          {
+            contents: "{\"old\":true}\n",
+            managedBy: "bb-runtime-material",
+            mode: 0o600,
+            path: previousPath,
+          },
+        ],
+        version: "previous",
+      },
+      nextSnapshot: {
+        env: {},
+        files: [
+          {
+            contents: "{\"new\":true}\n",
+            managedBy: "bb-runtime-material",
+            mode: 0o600,
+            path: nextPath,
+          },
+        ],
+        version: "next",
+      },
+    });
+
+    await expect(fs.readFile(nextPath, "utf8")).resolves.toBe("{\"new\":true}\n");
+    await expect(fs.access(previousPath)).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("expands home-relative env paths", () => {
+    vi.spyOn(os, "homedir").mockReturnValue("/tmp/runtime-home");
+
+    expect(
+      resolveRuntimeMaterialEnv({
+        PI_CODING_AGENT_DIR: "~/.pi/agent",
+        OPENAI_API_KEY: "test-openai-key",
+      }),
+    ).toEqual({
+      PI_CODING_AGENT_DIR: "/tmp/runtime-home/.pi/agent",
+      OPENAI_API_KEY: "test-openai-key",
+    });
+  });
+});
