@@ -257,7 +257,10 @@ function formatPendingInteractionLifecycleMessage(
         case "file_change_approval":
           return interaction.payload.reason ?? "Awaiting file-change approval";
         case "permission_request":
-          return interaction.payload.reason ?? "Awaiting permission approval";
+          return interaction.payload.reason
+            ?? (interaction.payload.toolName
+              ? `Awaiting permission approval for ${interaction.payload.toolName}`
+              : "Awaiting permission approval");
         case "user_input_request":
           return `Awaiting answers to ${interaction.payload.questions.length} question(s)`;
       }

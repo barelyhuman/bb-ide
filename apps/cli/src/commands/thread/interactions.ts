@@ -71,7 +71,9 @@ function formatInteractionSummary(interaction: PendingInteraction): string {
     case "file_change_approval":
       return interaction.payload.reason ?? interaction.payload.grantRoot ?? "File changes pending approval";
     case "permission_request":
-      return interaction.payload.reason ?? "Permission request";
+      return interaction.payload.reason
+        ?? interaction.payload.toolName
+        ?? "Permission request";
     case "user_input_request":
       return `${interaction.payload.questions.length} question(s)`;
   }
@@ -114,6 +116,9 @@ function printInteraction(interaction: PendingInteraction): void {
       }
       break;
     case "permission_request":
+      if (interaction.payload.toolName) {
+        console.log(`  Tool: ${interaction.payload.toolName}`);
+      }
       if (interaction.payload.reason) {
         console.log(`  Prompt: ${interaction.payload.reason}`);
       }

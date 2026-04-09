@@ -299,6 +299,7 @@ export function formatPendingInteractionPermissionResolutionMessage(
 export const pendingInteractionQuestionOptionSchema = z.object({
   label: z.string(),
   description: z.string(),
+  preview: z.string().optional(),
 });
 export type PendingInteractionQuestionOption = z.infer<
   typeof pendingInteractionQuestionOptionSchema
@@ -310,6 +311,7 @@ export const pendingInteractionUserInputQuestionSchema = z.object({
   question: z.string(),
   allowsOther: z.boolean(),
   isSecret: z.boolean(),
+  multiSelect: z.boolean().optional(),
   options: z.array(pendingInteractionQuestionOptionSchema),
 });
 export type PendingInteractionUserInputQuestion = z.infer<
@@ -345,6 +347,7 @@ export const permissionRequestPendingInteractionPayloadSchema = z.object({
   kind: z.literal("permission_request"),
   itemId: z.string().min(1),
   reason: z.string().nullable(),
+  toolName: z.string().nullable().optional(),
   permissions: pendingInteractionRequestedPermissionProfileSchema,
 });
 export type PermissionRequestPendingInteractionPayload = z.infer<

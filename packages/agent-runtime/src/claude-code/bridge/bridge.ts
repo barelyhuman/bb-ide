@@ -16,11 +16,17 @@
  */
 
 import { createInterface } from "node:readline";
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import type { Options } from "@anthropic-ai/claude-agent-sdk";
+import type {
+  CanUseTool,
+  Options,
+  PermissionResult,
+  SDKMessage,
+} from "@anthropic-ai/claude-agent-sdk";
 import {
   instructionModeValues,
+  questionPolicySchema,
   type InstructionMode,
+  type QuestionPolicy,
 } from "@bb/domain";
 import { z } from "zod";
 import {
@@ -37,6 +43,21 @@ import {
   BRIDGE_MCP_SERVER_NAME,
   type ToolCallForwarder,
 } from "./tool-proxy-mcp.js";
+import {
+  type ClaudeInteractiveResponse,
+  type ClaudePermissionMode,
+  type ClaudePermissionRequestApprovalParams,
+  type ClaudePermissionUpdate,
+  type ClaudeToolRequestUserInputParams,
+  CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+  CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD,
+  claudeAskUserQuestionInputSchema,
+  claudeInteractiveResponseSchema,
+  claudePermissionModeSchema,
+  claudePermissionUpdateSchema,
+  shouldRequestClaudePermissionApproval,
+  toPendingInteractionPermissionProfile,
+} from "../interactive-contract.js";
 
 // ---------------------------------------------------------------------------
 // Command schema — defines what JSON-RPC requests this bridge accepts
@@ -61,6 +82,8 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
       threadId: z.string(),
       cwd: z.string(),
       baseInstructions: z.string(),
+      permissionMode: claudePermissionModeSchema,
+      questionPolicy: questionPolicySchema,
       config: z.record(z.string(), z.unknown()).optional(),
       model: z.string().optional(),
       instructionMode: bridgeInstructionModeSchema,
@@ -78,6 +101,8 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
       cwd: z.string(),
       providerThreadId: z.string().nullable(),
       baseInstructions: z.string().optional(),
+      permissionMode: claudePermissionModeSchema,
+      questionPolicy: questionPolicySchema,
       config: z.record(z.string(), z.unknown()).optional(),
       model: z.string().optional(),
       instructionMode: bridgeInstructionModeSchema,
@@ -117,7 +142,14 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
 
 export type ClaudeCodeCommand = z.infer<typeof claudeCodeCommandSchema>;
 
-function decodeClaudeCodeJsonRpcRequest(raw: unknown): (ClaudeCodeCommand & { jsonrpc: "2.0"; id: string | number }) | null {
+type ClaudeCodeJsonRpcRequest = ClaudeCodeCommand & {
+  jsonrpc: "2.0";
+  id: string | number;
+};
+
+function decodeClaudeCodeJsonRpcRequest(
+  raw: unknown,
+): ClaudeCodeJsonRpcRequest | null {
   const envelope = jsonRpcEnvelopeSchema.safeParse(raw);
   if (!envelope.success) return null;
 
@@ -155,17 +187,55 @@ interface PendingToolCall {
   resolve: (value: { content: string; isError?: boolean }) => void;
 }
 
+interface ThreadIdRef {
+  current: string;
+}
+
+interface PendingInteractiveRequest {
+  itemId: string;
+  kind: "permission_request" | "user_input_request";
+  originalInput: Record<string, unknown>;
+  resolve: (value: PermissionResult) => void;
+}
+
 interface ThreadSession {
   session: SdkSession;
   pendingToolCalls: Map<string | number, PendingToolCall>;
+  pendingInteractiveRequests: Map<string | number, PendingInteractiveRequest>;
+  permissionMode: ClaudePermissionMode;
+  questionPolicy: QuestionPolicy;
   providerThreadId?: string;
 }
 
-interface BuildSessionOptionsParams {
+interface ClaudeCanUseToolDecisionContext {
+  blockedPath: string | undefined;
+  decisionReason: string | undefined;
+  suggestions: ClaudePermissionUpdate[] | undefined;
+  toolName: string;
+}
+
+interface BuildInteractiveRequestParamsArgs {
+  providerThreadId: string;
+  threadId: string;
+  toolName: string;
+  toolUseId: string;
+  input: Record<string, unknown>;
+  decisionReason: string | undefined;
+  blockedPath: string | undefined;
+  suggestions: ClaudePermissionUpdate[] | undefined;
+}
+
+interface BuildSessionOptionsArgs {
   baseInstructions?: string;
   cwd: string;
   instructionMode: InstructionMode;
   model?: string;
+  permissionMode: ClaudePermissionMode;
+  questionPolicy: QuestionPolicy;
+}
+
+interface ForwardInteractiveRequestArgs extends BuildInteractiveRequestParamsArgs {
+  signal: AbortSignal;
 }
 
 const sessions = new Map<string, ThreadSession>();
@@ -195,14 +265,18 @@ function sendSdkMessage(threadId: string, message: SDKMessage): void {
   });
 }
 
-function createOnSdkMessage(threadIdRef: { current: string }): (message: SDKMessage) => void {
+function createOnSdkMessage(
+  threadIdRef: ThreadIdRef,
+): (message: SDKMessage) => void {
   return (message: SDKMessage) => {
     if (!sessions.has(threadIdRef.current)) return;
     sendSdkMessage(threadIdRef.current, message);
   };
 }
 
-function createOnSdkDone(threadIdRef: { current: string }): (error?: unknown) => void {
+function createOnSdkDone(
+  threadIdRef: ThreadIdRef,
+): (error?: unknown) => void {
   return (error?: unknown) => {
     if (!error) return;
     if (!sessions.has(threadIdRef.current)) return;
@@ -218,7 +292,7 @@ function createOnSdkDone(threadIdRef: { current: string }): (error?: unknown) =>
   };
 }
 
-function createForwardToolCall(threadIdRef: { current: string }): ToolCallForwarder {
+function createForwardToolCall(threadIdRef: ThreadIdRef): ToolCallForwarder {
   return (toolName, args) => {
     return new Promise<{ content: string; isError?: boolean }>((resolve) => {
       const threadSession = sessions.get(threadIdRef.current);
@@ -253,6 +327,18 @@ function findSessionByPendingToolCall(id: string | number): ThreadSession | unde
   return undefined;
 }
 
+function findSessionByPendingInteractiveRequest(
+  id: string | number,
+): ThreadSession | undefined {
+  for (const session of sessions.values()) {
+    if (session.pendingInteractiveRequests.has(id)) {
+      return session;
+    }
+  }
+
+  return undefined;
+}
+
 function extractEnvOverrides(config: Record<string, unknown> | undefined): Record<string, string> {
   const envOverrides: Record<string, string> = {};
   if (config) {
@@ -277,8 +363,264 @@ function buildSessionEnv(envOverrides: Record<string, string>): NodeJS.ProcessEn
   };
 }
 
+function parseClaudePermissionUpdates(
+  value: unknown,
+): ClaudePermissionUpdate[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const parsedUpdates = value.flatMap((entry) => {
+    const parsed = claudePermissionUpdateSchema.safeParse(entry);
+    return parsed.success ? [parsed.data] : [];
+  });
+
+  return parsedUpdates.length > 0 ? parsedUpdates : undefined;
+}
+
+function buildInteractiveRequestParams(
+  args: BuildInteractiveRequestParamsArgs,
+):
+  | ClaudePermissionRequestApprovalParams
+  | ClaudeToolRequestUserInputParams {
+  if (args.toolName === "AskUserQuestion") {
+    const parsedQuestionInput = claudeAskUserQuestionInputSchema.safeParse(
+      args.input,
+    );
+    if (!parsedQuestionInput.success) {
+      throw new Error("Invalid AskUserQuestion input");
+    }
+
+    return {
+      threadId: args.threadId,
+      providerThreadId: args.providerThreadId,
+      turnId: "",
+      itemId: args.toolUseId,
+      questions: parsedQuestionInput.data.questions,
+    };
+  }
+
+  return {
+    threadId: args.threadId,
+    providerThreadId: args.providerThreadId,
+    turnId: "",
+    itemId: args.toolUseId,
+    toolName: args.toolName,
+    reason: args.decisionReason ?? null,
+    permissions: toPendingInteractionPermissionProfile({
+      toolName: args.toolName,
+      blockedPath: args.blockedPath,
+      suggestions: args.suggestions,
+    }),
+  };
+}
+
+function buildInteractivePermissionResult(
+  pending: PendingInteractiveRequest,
+  response: ClaudeInteractiveResponse,
+): PermissionResult {
+  if (pending.kind !== response.kind) {
+    return {
+      behavior: "deny",
+      message: "Interactive response kind mismatch",
+      toolUseID: pending.itemId,
+    };
+  }
+
+  switch (response.kind) {
+    case "permission_request":
+      if (response.behavior === "deny") {
+        return {
+          behavior: "deny",
+          message: response.message,
+          ...(response.interrupt === undefined
+            ? {}
+            : { interrupt: response.interrupt }),
+          toolUseID: pending.itemId,
+        };
+      }
+      return {
+        behavior: "allow",
+        updatedInput: pending.originalInput,
+        ...(response.updatedPermissions === undefined
+          ? {}
+          : { updatedPermissions: response.updatedPermissions }),
+        toolUseID: pending.itemId,
+      };
+    case "user_input_request":
+      if (response.behavior === "deny") {
+        return {
+          behavior: "deny",
+          message: response.message,
+          ...(response.interrupt === undefined
+            ? {}
+            : { interrupt: response.interrupt }),
+          toolUseID: pending.itemId,
+        };
+      }
+      return {
+        behavior: "allow",
+        updatedInput: response.updatedInput,
+        toolUseID: pending.itemId,
+      };
+  }
+}
+
+function createForwardInteractiveRequest(
+  threadIdRef: ThreadIdRef,
+): (args: ForwardInteractiveRequestArgs) => Promise<PermissionResult> {
+  return (args) => new Promise<PermissionResult>((resolve) => {
+    const threadSession = sessions.get(threadIdRef.current);
+    if (!threadSession) {
+      resolve({
+        behavior: "deny",
+        message: "Thread session not found",
+        toolUseID: args.toolUseId,
+      });
+      return;
+    }
+
+    let params:
+      | ClaudePermissionRequestApprovalParams
+      | ClaudeToolRequestUserInputParams;
+    try {
+      params = buildInteractiveRequestParams(args);
+    } catch (error) {
+      resolve({
+        behavior: "deny",
+        message: error instanceof Error ? error.message : String(error),
+        toolUseID: args.toolUseId,
+      });
+      return;
+    }
+
+    toolCallRequestIdCounter += 1;
+    const requestId = toolCallRequestIdCounter;
+    const method =
+      args.toolName === "AskUserQuestion"
+        ? CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD
+        : CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD;
+
+    const finish = (result: PermissionResult): void => {
+      args.signal.removeEventListener("abort", onAbort);
+      resolve(result);
+    };
+
+    const onAbort = (): void => {
+      if (!threadSession.pendingInteractiveRequests.delete(requestId)) {
+        return;
+      }
+      finish({
+        behavior: "deny",
+        message: "Interactive request cancelled",
+        toolUseID: args.toolUseId,
+      });
+    };
+
+    args.signal.addEventListener("abort", onAbort, { once: true });
+    threadSession.pendingInteractiveRequests.set(requestId, {
+      itemId: args.toolUseId,
+      kind:
+        args.toolName === "AskUserQuestion"
+          ? "user_input_request"
+          : "permission_request",
+      originalInput: args.input,
+      resolve: finish,
+    });
+
+    send({
+      jsonrpc: "2.0",
+      id: requestId,
+      method,
+      params,
+    });
+  });
+}
+
+function createCanUseTool(
+  threadIdRef: ThreadIdRef,
+): CanUseTool {
+  const forwardInteractiveRequest = createForwardInteractiveRequest(threadIdRef);
+
+  return async (toolName, input, options) => {
+    const threadSession = sessions.get(threadIdRef.current);
+    if (!threadSession) {
+      return {
+        behavior: "deny",
+        message: "Thread session not found",
+        toolUseID: options.toolUseID,
+      };
+    }
+    const suggestions = parseClaudePermissionUpdates(options.suggestions);
+
+    if (toolName === "AskUserQuestion") {
+      if (threadSession.questionPolicy === "deny") {
+        return {
+          behavior: "deny",
+          message: "Question requests are disabled for this thread",
+          toolUseID: options.toolUseID,
+        };
+      }
+
+      return forwardInteractiveRequest({
+        threadId: threadIdRef.current,
+        providerThreadId:
+          threadSession.providerThreadId ?? threadIdRef.current,
+        toolName,
+        toolUseId: options.toolUseID,
+        input,
+        decisionReason: options.decisionReason,
+        blockedPath: options.blockedPath,
+        suggestions,
+        signal: options.signal,
+      });
+    }
+
+    const requestContext: ClaudeCanUseToolDecisionContext = {
+      toolName,
+      blockedPath: options.blockedPath,
+      decisionReason: options.decisionReason,
+      suggestions,
+    };
+    const shouldRequestApproval =
+      shouldRequestClaudePermissionApproval(requestContext)
+      || (options.suggestions?.length ?? 0) > 0;
+
+    if (!shouldRequestApproval) {
+      return {
+        behavior: "allow",
+        updatedInput: input,
+        toolUseID: options.toolUseID,
+      };
+    }
+
+    if (threadSession.permissionMode === "dontAsk") {
+      return {
+        behavior: "deny",
+        message:
+          options.decisionReason
+          ?? `Tool ${toolName} is denied by the thread approval policy`,
+        toolUseID: options.toolUseID,
+      };
+    }
+
+    return forwardInteractiveRequest({
+      threadId: threadIdRef.current,
+      providerThreadId:
+        threadSession.providerThreadId ?? threadIdRef.current,
+      toolName,
+      toolUseId: options.toolUseID,
+      input,
+      decisionReason: options.decisionReason,
+      blockedPath: options.blockedPath,
+      suggestions,
+      signal: options.signal,
+    });
+  };
+}
+
 export function buildSessionOptions(
-  params: BuildSessionOptionsParams,
+  params: BuildSessionOptionsArgs,
   env: NodeJS.ProcessEnv,
 ): SdkSessionOptions {
   const systemPrompt: Exclude<Options["systemPrompt"], undefined> =
@@ -298,16 +640,14 @@ export function buildSessionOptions(
     systemPrompt,
     model,
     env,
+    permissionMode: params.permissionMode,
+    ...(params.questionPolicy === "deny"
+      ? { disallowedTools: ["AskUserQuestion"] }
+      : {}),
   };
 }
 
-function requireInstructionMode(value: unknown): InstructionMode {
-  return bridgeInstructionModeSchema.parse(value);
-}
-
-async function handleRequest(
-  request: ClaudeCodeCommand & { id: string | number },
-): Promise<void> {
+async function handleRequest(request: ClaudeCodeJsonRpcRequest): Promise<void> {
   switch (request.method) {
     case "initialize":
       sendResult(request.id, { ok: true });
@@ -353,12 +693,8 @@ function handleThreadStart(
 
   const envOverrides = extractEnvOverrides(params.config);
   const sessionEnv = buildSessionEnv(envOverrides);
-  const sessionOptions = buildSessionOptions({
-    baseInstructions: params.baseInstructions,
-    cwd: params.cwd,
-    instructionMode: requireInstructionMode(params.instructionMode),
-    model: params.model,
-  }, sessionEnv);
+  const sessionOptions = buildSessionOptions(params, sessionEnv);
+  sessionOptions.canUseTool = createCanUseTool(threadIdRef);
   if (params.dynamicTools && params.dynamicTools.length > 0) {
     const mcpServer = buildBridgeMcpServer(
       params.dynamicTools,
@@ -368,14 +704,21 @@ function handleThreadStart(
     sessionOptions.allowedTools = getAllowedToolNames(params.dynamicTools);
   }
 
-  const session = new SdkSession(sessionOptions, createOnSdkMessage(threadIdRef), createOnSdkDone(threadIdRef));
-  session.start();
+  const session = new SdkSession(
+    sessionOptions,
+    createOnSdkMessage(threadIdRef),
+    createOnSdkDone(threadIdRef),
+  );
 
   const threadSession: ThreadSession = {
     session,
     pendingToolCalls: new Map(),
+    pendingInteractiveRequests: new Map(),
+    permissionMode: params.permissionMode,
+    questionPolicy: params.questionPolicy,
   };
   sessions.set(threadIdRef.current, threadSession);
+  session.start();
 
   sendResult(id, { threadId: threadIdRef.current, providerThreadId: null });
 
@@ -407,13 +750,9 @@ function handleThreadResume(
 
   const envOverrides = extractEnvOverrides(params.config);
   const sessionEnv = buildSessionEnv(envOverrides);
-  const sessionOptions = buildSessionOptions({
-    baseInstructions: params.baseInstructions,
-    cwd: params.cwd,
-    instructionMode: requireInstructionMode(params.instructionMode),
-    model: params.model,
-  }, sessionEnv);
   const threadIdRef = { current: threadId };
+  const sessionOptions = buildSessionOptions(params, sessionEnv);
+  sessionOptions.canUseTool = createCanUseTool(threadIdRef);
   if (params.dynamicTools && params.dynamicTools.length > 0) {
     const mcpServer = buildBridgeMcpServer(
       params.dynamicTools,
@@ -422,16 +761,22 @@ function handleThreadResume(
     sessionOptions.mcpServers = { [BRIDGE_MCP_SERVER_NAME]: mcpServer };
     sessionOptions.allowedTools = getAllowedToolNames(params.dynamicTools);
   }
-  const session = new SdkSession(sessionOptions, createOnSdkMessage(threadIdRef), createOnSdkDone(threadIdRef));
-
-  session.start(providerThreadId);
+  const session = new SdkSession(
+    sessionOptions,
+    createOnSdkMessage(threadIdRef),
+    createOnSdkDone(threadIdRef),
+  );
 
   const threadSession: ThreadSession = {
     session,
     pendingToolCalls: new Map(),
+    pendingInteractiveRequests: new Map(),
+    permissionMode: params.permissionMode,
+    questionPolicy: params.questionPolicy,
     ...(providerThreadId ? { providerThreadId } : {}),
   };
   sessions.set(threadId, threadSession);
+  session.start(providerThreadId);
 
   sendResult(id, { threadId, providerThreadId: providerThreadId ?? null });
 }
@@ -528,6 +873,37 @@ function handleLine(line: string): void {
     } else {
       pending.resolve(decodeToolCallResponsePayload(response.result));
     }
+    return;
+  }
+
+  if (response && findSessionByPendingInteractiveRequest(response.id)) {
+    const threadSession = findSessionByPendingInteractiveRequest(response.id)!;
+    const pending = threadSession.pendingInteractiveRequests.get(response.id)!;
+    threadSession.pendingInteractiveRequests.delete(response.id);
+    if ("error" in response) {
+      pending.resolve({
+        behavior: "deny",
+        message: response.error.message ?? "Interactive request failed",
+        toolUseID: pending.itemId,
+      });
+      return;
+    }
+
+    const parsedResponse = claudeInteractiveResponseSchema.safeParse(
+      response.result,
+    );
+    if (!parsedResponse.success) {
+      pending.resolve({
+        behavior: "deny",
+        message: "Invalid interactive response payload",
+        toolUseID: pending.itemId,
+      });
+      return;
+    }
+
+    pending.resolve(
+      buildInteractivePermissionResult(pending, parsedResponse.data),
+    );
     return;
   }
 

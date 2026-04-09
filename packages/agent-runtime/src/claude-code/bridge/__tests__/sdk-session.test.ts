@@ -79,4 +79,60 @@ describe("SdkSession", () => {
       }),
     );
   });
+
+  it("passes non-bypass permission modes through without the dangerous skip flag", () => {
+    const onMessage = vi.fn();
+    const onDone = vi.fn();
+    const session = new SdkSession(
+      {
+        ...defaultOptions,
+        permissionMode: "dontAsk",
+        disallowedTools: ["AskUserQuestion"],
+      },
+      onMessage,
+      onDone,
+    );
+
+    session.start();
+
+    expect(queryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          permissionMode: "dontAsk",
+          disallowedTools: ["AskUserQuestion"],
+        }),
+      }),
+    );
+    expect(queryMock).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          allowDangerouslySkipPermissions: true,
+        }),
+      }),
+    );
+  });
+
+  it("only enables dangerous permission skipping for bypass mode", () => {
+    const onMessage = vi.fn();
+    const onDone = vi.fn();
+    const session = new SdkSession(
+      {
+        ...defaultOptions,
+        permissionMode: "bypassPermissions",
+      },
+      onMessage,
+      onDone,
+    );
+
+    session.start();
+
+    expect(queryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          permissionMode: "bypassPermissions",
+          allowDangerouslySkipPermissions: true,
+        }),
+      }),
+    );
+  });
 });

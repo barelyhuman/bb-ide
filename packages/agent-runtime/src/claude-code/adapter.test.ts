@@ -5,6 +5,10 @@ import { describe, expect, it } from "vitest";
 import {
   createClaudeCodeProviderAdapter,
 } from "./adapter.js";
+import {
+  CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+  CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD,
+} from "./interactive-contract.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = resolve(__dirname, "../__fixtures__/claude-code");
@@ -79,6 +83,9 @@ describe("claude-code provider adapter", () => {
     expect(cmd?.params).toMatchObject({
       threadId: "bb-thread-1",
       cwd: "/tmp/worktree",
+      permissionMode: "default",
+      questionPolicy: "allow",
+      cwd: "/tmp/worktree",
     });
   });
 
@@ -92,6 +99,8 @@ describe("claude-code provider adapter", () => {
       instructionMode: "append",
       options: {
         model: "claude-sonnet-4-5",
+        approvalPolicy: "never",
+        questionPolicy: "deny",
         instructions: "Focus on the failing tests first.",
         reasoningLevel: "high",
         envVars: {
@@ -117,6 +126,8 @@ describe("claude-code provider adapter", () => {
       params: {
         threadId: "bb-thread-1",
         model: "claude-sonnet-4-5",
+        permissionMode: "dontAsk",
+        questionPolicy: "deny",
         baseInstructions: expect.stringContaining("Focus on the failing tests first."),
         dynamicTools: [{
           name: "bb_test_ping",
@@ -159,6 +170,8 @@ describe("claude-code provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
+      permissionMode: "default",
+      questionPolicy: "allow",
     });
   });
 
@@ -343,6 +356,203 @@ describe("claude-code provider adapter", () => {
         },
       }),
     ).toBeNull();
+  });
+
+  it("decodes Claude permission approval requests into pending interactions", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    expect(
+      adapter.decodeInteractiveRequest?.({
+        jsonrpc: "2.0",
+        id: "req-2",
+        method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+        params: {
+          threadId: "thr_1",
+          providerThreadId: "claude-session-1",
+          turnId: "",
+          itemId: "toolu_1",
+          toolName: "WebFetch",
+          reason: "Needs approval",
+          permissions: {
+            network: { enabled: true },
+            fileSystem: null,
+          },
+        },
+      }),
+    ).toEqual({
+      requestId: "req-2",
+      method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+      threadId: "thr_1",
+      providerThreadId: "claude-session-1",
+      turnId: "",
+      payload: {
+        kind: "permission_request",
+        itemId: "toolu_1",
+        toolName: "WebFetch",
+        reason: "Needs approval",
+        permissions: {
+          network: { enabled: true },
+          fileSystem: null,
+        },
+      },
+    });
+  });
+
+  it("decodes Claude AskUserQuestion requests into pending interactions", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    expect(
+      adapter.decodeInteractiveRequest?.({
+        jsonrpc: "2.0",
+        id: "req-3",
+        method: CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD,
+        params: {
+          threadId: "thr_1",
+          providerThreadId: "claude-session-1",
+          turnId: "",
+          itemId: "toolu_2",
+          questions: [
+            {
+              header: "Format",
+              question: "How should I format the output?",
+              multiSelect: false,
+              options: [
+                { label: "Summary", description: "Brief overview" },
+                { label: "Detailed", description: "Full explanation" },
+              ],
+            },
+          ],
+        },
+      }),
+    ).toEqual({
+      requestId: "req-3",
+      method: CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD,
+      threadId: "thr_1",
+      providerThreadId: "claude-session-1",
+      turnId: "",
+      payload: {
+        kind: "user_input_request",
+        itemId: "toolu_2",
+        questions: [
+          {
+            id: "question-1",
+            header: "Format",
+            question: "How should I format the output?",
+            allowsOther: true,
+            isSecret: false,
+            multiSelect: false,
+            options: [
+              { label: "Summary", description: "Brief overview" },
+              { label: "Detailed", description: "Full explanation" },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
+  it("builds Claude permission approval responses", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    expect(
+      adapter.buildInteractiveResponse?.({
+        request: {
+          requestId: "req-4",
+          method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+          threadId: "thr_1",
+          providerThreadId: "claude-session-1",
+          turnId: "",
+          payload: {
+            kind: "permission_request",
+            itemId: "toolu_3",
+            toolName: "WebFetch",
+            reason: "Needs network",
+            permissions: {
+              network: { enabled: true },
+              fileSystem: null,
+            },
+          },
+        },
+        resolution: {
+          kind: "permission_request",
+          permissions: {
+            network: { enabled: true },
+            fileSystem: null,
+          },
+          scope: "session",
+        },
+      }),
+    ).toEqual({
+      kind: "permission_request",
+      behavior: "allow",
+      updatedPermissions: [
+        {
+          type: "addRules",
+          rules: [{ toolName: "WebFetch" }],
+          behavior: "allow",
+          destination: "session",
+        },
+      ],
+    });
+  });
+
+  it("builds Claude AskUserQuestion responses keyed by question text", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    expect(
+      adapter.buildInteractiveResponse?.({
+        request: {
+          requestId: "req-5",
+          method: CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD,
+          threadId: "thr_1",
+          providerThreadId: "claude-session-1",
+          turnId: "",
+          payload: {
+            kind: "user_input_request",
+            itemId: "toolu_4",
+            questions: [
+              {
+                id: "question-1",
+                header: "Format",
+                question: "How should I format the output?",
+                allowsOther: true,
+                isSecret: false,
+                multiSelect: false,
+                options: [
+                  { label: "Summary", description: "Brief overview" },
+                  { label: "Detailed", description: "Full explanation" },
+                ],
+              },
+            ],
+          },
+        },
+        resolution: {
+          kind: "user_input_request",
+          answers: {
+            "question-1": ["Summary"],
+          },
+        },
+      }),
+    ).toEqual({
+      kind: "user_input_request",
+      behavior: "allow",
+      updatedInput: {
+        questions: [
+          {
+            header: "Format",
+            question: "How should I format the output?",
+            multiSelect: false,
+            options: [
+              { label: "Summary", description: "Brief overview" },
+              { label: "Detailed", description: "Full explanation" },
+            ],
+          },
+        ],
+        answers: {
+          "How should I format the output?": "Summary",
+        },
+      },
+    });
   });
 
   // -- translateEvent: assistant messages -----------------------------------

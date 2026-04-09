@@ -18,7 +18,10 @@ import type {
   ThreadEventTokenUsage,
   ThreadEventTokenUsageBreakdown,
 } from "@bb/domain";
-import { toPositiveNumber } from "@bb/domain";
+import {
+  pendingInteractionRequestedPermissionProfileSchema,
+  toPositiveNumber,
+} from "@bb/domain";
 import {
   decodeNormalizedProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
@@ -57,11 +60,22 @@ import {
 } from "../shared/json-rpc-envelope.js";
 import type {
   AdapterCommand,
+  DecodedInteractiveRequest,
   DecodedToolCallRequest,
   JsonRpcMessage,
   ProviderTranslationContext,
   ProviderAdapter,
 } from "../provider-adapter.js";
+import {
+  buildClaudePermissionUpdates,
+  CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+  CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD,
+  claudePermissionRequestApprovalParamsSchema,
+  claudeToolRequestUserInputParamsSchema,
+  toClaudePermissionMode,
+  toClaudeUserInputUpdatedInput,
+  toPendingInteractionUserQuestions,
+} from "./interactive-contract.js";
 import { claudeCodeVisibilityMetadata } from "./visibility.js";
 
 // ---------------------------------------------------------------------------
@@ -818,6 +832,10 @@ export function createClaudeCodeProviderAdapter(
               threadId: command.threadId,
               cwd: command.cwd,
               instructionMode: command.instructionMode,
+              permissionMode: toClaudePermissionMode({
+                approvalPolicy: command.options?.approvalPolicy,
+              }),
+              questionPolicy: command.options?.questionPolicy ?? "allow",
               ...(Object.keys(finalConfig).length > 0 ? { config: finalConfig } : {}),
               ...(command.options?.model ? { model: command.options.model } : {}),
               ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
@@ -851,6 +869,10 @@ export function createClaudeCodeProviderAdapter(
               cwd: command.cwd,
               providerThreadId: command.providerThreadId ?? null,
               instructionMode: command.instructionMode,
+              permissionMode: toClaudePermissionMode({
+                approvalPolicy: command.options?.approvalPolicy,
+              }),
+              questionPolicy: command.options?.questionPolicy ?? "allow",
               ...(Object.keys(finalResumeConfig).length > 0 ? { config: finalResumeConfig } : {}),
               ...(command.options?.model ? { model: command.options.model } : {}),
               ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
@@ -917,6 +939,123 @@ export function createClaudeCodeProviderAdapter(
         request.method,
         request.params,
       );
+    },
+
+    decodeInteractiveRequest(request: JsonRpcMessage): DecodedInteractiveRequest | null {
+      if (typeof request.id !== "string" && typeof request.id !== "number") {
+        return null;
+      }
+
+      switch (request.method) {
+        case CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD: {
+          const parsed = claudePermissionRequestApprovalParamsSchema.safeParse(
+            request.params,
+          );
+          if (!parsed.success) {
+            return null;
+          }
+
+          return {
+            requestId: request.id,
+            method: request.method,
+            threadId: parsed.data.threadId,
+            providerThreadId: parsed.data.providerThreadId,
+            turnId: parsed.data.turnId,
+            payload: {
+              kind: "permission_request",
+              itemId: parsed.data.itemId,
+              reason: parsed.data.reason,
+              toolName: parsed.data.toolName,
+              permissions:
+                pendingInteractionRequestedPermissionProfileSchema.parse(
+                  parsed.data.permissions,
+                ),
+            },
+          };
+        }
+        case CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD: {
+          const parsed = claudeToolRequestUserInputParamsSchema.safeParse(
+            request.params,
+          );
+          if (!parsed.success) {
+            return null;
+          }
+
+          return {
+            requestId: request.id,
+            method: request.method,
+            threadId: parsed.data.threadId,
+            providerThreadId: parsed.data.providerThreadId,
+            turnId: parsed.data.turnId,
+            payload: {
+              kind: "user_input_request",
+              itemId: parsed.data.itemId,
+              questions: toPendingInteractionUserQuestions({
+                questions: parsed.data.questions,
+              }),
+            },
+          };
+        }
+        default:
+          return null;
+      }
+    },
+
+    buildInteractiveResponse(args) {
+      switch (args.request.payload.kind) {
+        case "permission_request": {
+          if (args.resolution.kind !== "permission_request") {
+            throw new Error(
+              "Interactive response kind mismatch for permission request",
+            );
+          }
+
+          if (
+            args.resolution.permissions.network === null
+            && args.resolution.permissions.fileSystem === null
+          ) {
+            return {
+              kind: "permission_request",
+              behavior: "deny",
+              message: "Permission request denied",
+            };
+          }
+
+          const updatedPermissions = buildClaudePermissionUpdates({
+            permissions: args.resolution.permissions,
+            scope: args.resolution.scope,
+            toolName: args.request.payload.toolName,
+          });
+
+          return {
+            kind: "permission_request",
+            behavior: "allow",
+            ...(updatedPermissions === undefined
+              ? {}
+              : { updatedPermissions }),
+          };
+        }
+        case "user_input_request": {
+          if (args.resolution.kind !== "user_input_request") {
+            throw new Error(
+              "Interactive response kind mismatch for user input request",
+            );
+          }
+
+          return {
+            kind: "user_input_request",
+            behavior: "allow",
+            updatedInput: toClaudeUserInputUpdatedInput({
+              questions: args.request.payload.questions,
+              answers: args.resolution.answers,
+            }),
+          };
+        }
+        default:
+          throw new Error(
+            `Unsupported interactive request kind for Claude: ${args.request.payload.kind}`,
+          );
+      }
     },
 
   };

@@ -54,18 +54,21 @@ describe("bridge", () => {
     });
   });
 
-  it("leaves manager sessions on the default Claude built-in tool set", () => {
+  it("keeps manager sessions on a plain string system prompt", () => {
     const options = buildSessionOptions(
       {
         baseInstructions: "You are a manager.",
         cwd: "/tmp/worktree",
         instructionMode: "replace",
+        permissionMode: "default",
+        questionPolicy: "allow",
       },
       {},
     );
 
     expect(options.tools).toBeUndefined();
     expect(options.cwd).toBe("/tmp/worktree");
+    expect(options.systemPrompt).toBe("You are a manager.");
   });
 
   it("leaves standard sessions on the default Claude tool preset", () => {
@@ -74,6 +77,8 @@ describe("bridge", () => {
         baseInstructions: "You are a coder.",
         cwd: "/tmp/worktree",
         instructionMode: "append",
+        permissionMode: "default",
+        questionPolicy: "allow",
       },
       {},
     );
@@ -87,17 +92,34 @@ describe("bridge", () => {
     });
   });
 
-  it("keeps manager sessions on a plain string system prompt", () => {
+  it("passes the resolved Claude permission mode through to the session", () => {
     const options = buildSessionOptions(
       {
-        baseInstructions: "You are a manager.",
+        baseInstructions: "You are a coder.",
         cwd: "/tmp/worktree",
-        instructionMode: "replace",
+        instructionMode: "append",
+        permissionMode: "dontAsk",
+        questionPolicy: "allow",
       },
       {},
     );
 
-    expect(options.systemPrompt).toBe("You are a manager.");
+    expect(options.permissionMode).toBe("dontAsk");
+  });
+
+  it("disallows AskUserQuestion when the thread question policy denies it", () => {
+    const options = buildSessionOptions(
+      {
+        baseInstructions: "You are a coder.",
+        cwd: "/tmp/worktree",
+        instructionMode: "append",
+        permissionMode: "default",
+        questionPolicy: "deny",
+      },
+      {},
+    );
+
+    expect(options.disallowedTools).toEqual(["AskUserQuestion"]);
   });
 
   it("returns the static Claude model list with 1M aliases", async () => {

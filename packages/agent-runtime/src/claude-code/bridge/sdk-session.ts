@@ -1,20 +1,24 @@
 import {
   query,
+  type CanUseTool,
   type McpSdkServerConfigWithInstance,
   type Options,
   type Query,
   type SDKMessage,
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
+import type { ClaudePermissionMode } from "../interactive-contract.js";
 
 export interface SdkSessionOptions {
   cwd: string;
   systemPrompt: Exclude<Options["systemPrompt"], undefined>;
   model?: string;
-  permissionMode?: string;
+  permissionMode?: ClaudePermissionMode;
   mcpServers?: Record<string, McpSdkServerConfigWithInstance>;
   allowedTools?: string[];
+  disallowedTools?: string[];
   tools?: string[];
+  canUseTool?: CanUseTool;
   env?: NodeJS.ProcessEnv;
 }
 
@@ -71,8 +75,7 @@ export class SdkSession {
       abortController: this.abortController,
       cwd: this.options.cwd,
       systemPrompt: this.options.systemPrompt,
-      permissionMode: "bypassPermissions",
-      allowDangerouslySkipPermissions: true,
+      permissionMode: this.options.permissionMode ?? "default",
       includePartialMessages: true,
       settingSources: [],
       persistSession: true,
@@ -83,7 +86,16 @@ export class SdkSession {
       ...(this.options.allowedTools
         ? { allowedTools: this.options.allowedTools }
         : {}),
+      ...(this.options.disallowedTools
+        ? { disallowedTools: this.options.disallowedTools }
+        : {}),
       ...(this.options.tools ? { tools: this.options.tools } : {}),
+      ...(this.options.canUseTool
+        ? { canUseTool: this.options.canUseTool }
+        : {}),
+      ...(this.options.permissionMode === "bypassPermissions"
+        ? { allowDangerouslySkipPermissions: true }
+        : {}),
       ...(resumeSessionId ? { resume: resumeSessionId } : {}),
       ...(this.options.model ? { model: this.options.model } : {}),
     };

@@ -75,7 +75,8 @@ surface to:
 ### Later backend scope
 
 - permission scopes and grant persistence semantics
-- headless and deferred resolution flows
+- thread-level question policy and timeout policy by thread class
+- no durable pause/resume for disconnected runs
 - Claude parity on top of the same internal lifecycle
 - MCP elicitation is explicitly deferred beyond this milestone
 
@@ -93,6 +94,10 @@ surface to:
   submission.
 - Providers only translate between provider-native payloads and bb's internal
   interaction contract.
+- Thread execution and interaction policy should use separate knobs:
+  `sandboxMode` controls what the agent can do directly, while
+  `questionPolicy` controls whether the agent should ask the user for more
+  information.
 - Backend and CLI should form the first closed loop. App UI is a later consumer
   of the same contract, not a prerequisite for proving it.
 - Phase 1 supports exactly one active pending interaction per thread. Queueing
@@ -114,6 +119,59 @@ surface to:
 
 Introduce a new server-owned lifecycle module and shared contract centered on a
 generic `PendingInteraction`.
+
+### Thread interaction policy controls
+
+Keep interaction policy separate from pending-interaction lifecycle state.
+
+Minimum thread/runtime controls:
+
+- `sandboxMode`
+  - existing execution constraint knob
+- `questionPolicy`
+  - provider-agnostic thread-level intent for whether the agent should ask the
+    user clarifying questions or request structured answers
+  - initial values:
+    - `allow`
+    - `avoid`
+    - `deny`
+
+The first implementation should map `questionPolicy` per provider rather than
+overloading `sandboxMode` or `approvalPolicy`:
+
+- Codex:
+  - control `request_user_input` availability and instructions separately from
+    approval policy
+  - `deny` must include a server-side rejection backstop if Codex still sends
+    `item/tool/requestUserInput`
+- Claude:
+  - control `AskUserQuestion` availability separately from permission prompts
+  - `deny` should remove or block `AskUserQuestion`, not just rely on prompts
+- extension-backed or host-owned harnesses:
+  - some integrations may not have a provider-native "ask the user" callback
+  - in those cases, `questionPolicy` should be enforced by host-owned tool
+    availability, host UI exposure, and runtime blocking rather than by a
+    provider-native pending-interaction request
+  - `deny` should mean the question tool or extension is unavailable, plus a
+    host-side rejection if the agent still attempts to invoke it
+
+Default thread-class policy:
+
+- regular persistent host-daemon thread:
+  - `questionPolicy: allow`
+  - no pending-interaction timeout
+- sandbox-hosted thread:
+  - `questionPolicy: avoid`
+  - explicit opt-in may loosen this to `allow`
+  - pending interactions time out after 10 minutes
+- automation thread:
+  - `questionPolicy: avoid`
+  - explicit opt-in may loosen this to `allow`, but this is expected to be
+    less useful than foreground runs
+- manager-owned thread:
+  - `questionPolicy: avoid`
+  - root-thread-only pending-interaction enforcement remains a backstop for
+    child threads
 
 ### Shared interaction shape
 
@@ -191,6 +249,11 @@ phases improve them:
   - the pending interaction transitions to `interrupted`
   - the blocked provider request is not resumed automatically
   - the user must retry the turn manually
+- no durable pause/resume:
+  - pending interaction rows remain durable for audit and UI purposes
+  - disconnected or expired runs do not resume automatically from stored
+    interaction state alone
+  - if the daemon or provider process goes away, the user retries manually
 - expired interactions:
   - unresolved interactions can be marked `expired` by the lifecycle module
   - expiry produces an explicit user-visible reason rather than silently
@@ -339,21 +402,34 @@ Exit condition:
 
 1. Add permission-request support with explicit grant scope handling.
 2. Extend the CLI and server routes to support those payloads.
-3. Remove Claude's unconditional permission bypass for supported interaction
+3. Introduce a provider-agnostic `questionPolicy` on thread execution/runtime
+   configuration.
+4. Map `questionPolicy` onto provider-specific controls and backstops:
+   - Codex `request_user_input` availability and explicit rejection handling
+   - Claude `AskUserQuestion` tool availability or denial
+   - extension-backed or host-owned integrations use host-owned question tools
+     or extension gates rather than provider-native callbacks
+5. Remove Claude's unconditional permission bypass for supported interaction
    modes.
-4. Map Claude approval and question callbacks onto the same generic lifecycle.
-5. Add a headless or deferred flow for non-foreground runs:
-   - durable pending state
-   - explicit "awaiting user input" status visible to clients
-   - later resolution from CLI or API
-6. Decide how automations and background runs should behave when interaction is
-   required.
-7. Keep these kinds on the same lifecycle model and authorization boundary.
+6. Map Claude approval and question callbacks onto the same generic lifecycle.
+7. Finalize non-durable background interaction policy:
+   - persistent host-daemon threads do not time out
+   - sandbox-hosted threads time out after 10 minutes
+   - daemon restart or provider exit interrupts the interaction and requires a
+     manual retry
+   - no durable pause/resume is introduced in this phase
+8. Keep these kinds on the same lifecycle model and authorization boundary.
 
 Exit condition:
 
-- permission requests, deferred flows, and Claude use the same
+- permission requests, `questionPolicy`, and Claude use the same
   pending-interaction lifecycle and backend contract
+- `questionPolicy` is implementable both for provider-native question callbacks
+  and for host-owned question tools or extensions
+- background and sandbox runs have explicit non-durable timeout behavior rather
+  than implicit waiting forever
+- phase 5 is fully implementable and verifiable through daemon + server + CLI
+  without depending on any phase 6 app work
 
 ### Phase 6: Add the app surface last
 
@@ -377,10 +453,6 @@ Exit condition:
 
 1. Should later phases add queued interactions per thread, or keep the invariant
    of one active interaction per thread even after phase 1?
-2. Should manager threads ever be allowed to issue `ask-user-question`, or do
-   we reserve that for standard threads only?
-3. How should automations and other headless runs surface deferred pending
-   interactions to users once phase 5 begins?
 
 ## Exit Criteria
 
@@ -390,6 +462,8 @@ This plan is complete only when all of the following are true:
 - Codex uses that lifecycle for the supported first-ship interaction kinds
 - the CLI can list and resolve pending interactions through first-class server
   routes and commands
+- thread execution policy distinguishes at least `sandboxMode` and
+  `questionPolicy`
 - the app can later display and resolve those same interactions through
   first-class API routes and UI
 - the daemon and server correctly recover pending interactions across reconnects
@@ -401,57 +475,95 @@ This plan is complete only when all of the following are true:
 
 ### Automated
 
-- `pnpm exec turbo run typecheck --filter=@bb/domain --filter=@bb/db --filter=@bb/server-contract --filter=@bb/host-daemon-contract --filter=@bb/agent-runtime --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/cli --filter=@bb/app`
-- `pnpm exec turbo run test --filter=@bb/domain --filter=@bb/db --filter=@bb/server-contract --filter=@bb/host-daemon-contract --filter=@bb/agent-runtime --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/cli --filter=@bb/app --force`
+#### Phase 5
+
+These checks must be sufficient to ship phase 5 before any app work exists:
+
+- `pnpm exec turbo run typecheck --filter=@bb/domain --filter=@bb/db --filter=@bb/server-contract --filter=@bb/host-daemon-contract --filter=@bb/agent-runtime --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/cli`
+- `pnpm exec turbo run test --filter=@bb/domain --filter=@bb/db --filter=@bb/server-contract --filter=@bb/host-daemon-contract --filter=@bb/agent-runtime --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/cli --force`
 
 Add or update tests for:
 
-- runtime forwarding of non-tool provider requests
-- daemon-server request persistence and later resolution
-- pending interaction lifecycle transitions
-- duplicate and stale resolution handling
-- reconnect recovery
-- provider-process exit while an interaction is pending
-- CLI list and resolve flows
-- app query and resolve flows
+- permission-request registration, persistence, resolution, and grant-scope handling
+- Codex `request_user_input` allow and deny behavior under `questionPolicy`
+- Claude `AskUserQuestion` allow and deny behavior under `questionPolicy`
+- explicit rejection when `questionPolicy: deny` blocks a question request
+- timeout behavior with injectable clocks or timers:
+  - sandbox-hosted threads expire after 10 minutes
+  - persistent host-daemon threads do not auto-expire
+- daemon restart and provider-process exit while an interaction is pending
+- CLI list, show, approve, deny, and answer flows for permission and question payloads
 - Codex adapter request and response mapping
 - Claude adapter request and response mapping once phase 5 lands
+- no phase 5 test should depend on `@bb/app`
+
+#### Phase 6
+
+Add app-specific checks on top of the phase 5 baseline:
+
+- `pnpm exec turbo run typecheck --filter=@bb/app`
+- `pnpm exec turbo run test --filter=@bb/app --force`
+
+Add or update tests for:
+
+- app query and resolve flows
+- global bounded pending-interactions route usage in the app
+- app UI behavior for the same interaction kinds already proven in phase 5
 
 ### Manual
 
-Run these scenarios against a local CLI + server + daemon, then repeat the
-relevant UI checks once phase 6 lands:
+#### Phase 5
 
-1. Start a Codex-backed thread configured to allow interactive requests.
+Run these scenarios against a local CLI + server + daemon. None of these checks
+should require the phase 6 app UI:
+
+1. Start a Codex-backed thread configured to allow interactive requests and
+   `questionPolicy: allow`.
 2. Trigger a command approval request and confirm it appears in
    `bb thread interactions list`.
 3. Deny the request through the CLI and verify the provider receives a denial
    and the turn continues or fails as designed.
-4. Trigger an ask-user-question request and verify the CLI answer path resumes
-   the same turn.
+4. Trigger an ask-user-question request with multiple questions and verify the
+   CLI answer path resumes the same turn.
 5. Trigger a file-change approval request and verify the CLI can inspect and
    resolve the payload correctly.
 6. Trigger a permission request and verify the CLI applies the documented grant
    scope semantics.
-7. Restart the daemon while a request is pending and verify the lifecycle
+7. Start a thread with `questionPolicy: deny`, trigger a question request, and
+   verify the request is rejected explicitly rather than becoming a pending
+   interaction.
+8. Run the same approval and question flows on a Claude-backed thread once
+   phase 5 lands.
+9. Restart the daemon while a request is pending and verify the lifecycle
    recovers or fails in the documented way.
-8. Kill the provider process while a request is pending and verify the
+10. Kill the provider process while a request is pending and verify the
    interaction transitions to `interrupted` with the documented recovery path.
-9. Run a deferred or headless flow once phase 5 lands and verify the pending
-    interaction remains listable and resolvable without app UI.
-10. Once phase 6 lands, refresh the app while a request is pending and verify
-    the interaction is still visible and resolvable there as well.
-11. Once phase 6 lands, resolve the same kind through the app and confirm the
-    server and daemon behavior matches the CLI path.
+11. Verify sandbox-hosted timeout behavior with a dev/test timeout override so
+    the expiry path can be exercised quickly, while automated tests still
+    assert the production default remains 10 minutes.
 12. Verify unsupported kinds produce an explicit user-visible explanation
     rather than disappearing.
+
+#### Phase 6
+
+Repeat the relevant UI checks once phase 6 lands:
+
+1. Refresh the app while a request is pending and verify the interaction is
+   still visible and resolvable there.
+2. Resolve the same kind through the app and confirm the server and daemon
+   behavior matches the CLI path.
+3. Verify app badge or inbox views reflect the bounded pending-interactions
+   query.
 
 ### Manual Comparison Checklist
 
 - pending interactions are visible without reading raw timeline data
 - CLI resolution is sufficient to exercise the lifecycle before app UI lands
+- phase 5 verification is complete without depending on app hooks or app UI
 - resolutions are correlated to the correct provider request
 - the same internal contract can represent both Codex and Claude requests
+- `questionPolicy` can also be enforced for extension-backed harnesses without
+  inventing a provider-specific product surface
 - no thread status or turn status field is overloaded to represent this
   lifecycle
 - root-thread-only restrictions are enforced intentionally, not accidentally

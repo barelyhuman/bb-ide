@@ -102,6 +102,48 @@ describe("codex provider adapter", () => {
     });
   });
 
+  it("buildCommand thread/start enables request_user_input outside deny mode", () => {
+    const adapter = createCodexProviderAdapter();
+    const cmd = adapter.buildCommand({
+      type: "thread/start",
+      threadId: "bb-thread-1",
+      input: [{ type: "text", text: "hello" }],
+      options: {
+        questionPolicy: "avoid",
+      },
+    });
+
+    expect(cmd).toMatchObject({
+      method: "thread/start",
+      params: {
+        config: {
+          "features.default_mode_request_user_input": true,
+        },
+      },
+    });
+  });
+
+  it("buildCommand thread/start disables request_user_input when question policy denies it", () => {
+    const adapter = createCodexProviderAdapter();
+    const cmd = adapter.buildCommand({
+      type: "thread/start",
+      threadId: "bb-thread-1",
+      input: [{ type: "text", text: "hello" }],
+      options: {
+        questionPolicy: "deny",
+      },
+    });
+
+    expect(cmd).toMatchObject({
+      method: "thread/start",
+      params: {
+        config: {
+          "features.default_mode_request_user_input": false,
+        },
+      },
+    });
+  });
+
   it("buildCommand thread/start passes through model, service tier, env vars, instructions, and dynamic tools", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommand({

@@ -697,6 +697,8 @@ function buildCodexConfig(
   if (options?.reasoningLevel) {
     config["model_reasoning_effort"] = options.reasoningLevel;
   }
+  config["features.default_mode_request_user_input"] =
+    options?.questionPolicy !== "deny";
   return Object.keys(config).length > 0 ? config : undefined;
 }
 
@@ -1483,6 +1485,7 @@ export function createCodexProviderAdapter(
                 question: question.question,
                 allowsOther: question.isOther,
                 isSecret: question.isSecret,
+                multiSelect: false,
                 options: question.options ?? [],
               })),
             },
@@ -1504,6 +1507,7 @@ export function createCodexProviderAdapter(
               kind: "permission_request",
               itemId: parsed.data.itemId,
               reason: parsed.data.reason,
+              toolName: null,
               permissions: toPendingInteractionPermissionProfile(parsed.data.permissions),
             },
           };
