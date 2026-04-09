@@ -7,6 +7,7 @@ import {
   UserRound,
 } from "lucide-react"
 import { NavLink } from "react-router-dom"
+import { useThreadPendingInteractions } from "@/hooks/queries/thread-queries"
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu"
 import { SidebarMenuBadge } from "@/components/ui/sidebar"
 import { isBusyThread, isUnreadDoneThread } from "@/lib/thread-activity"
@@ -90,12 +91,14 @@ function ManagerChevron({
 }
 
 interface ThreadLeadingGlyphProps {
+  hasPendingInteraction: boolean
   isManagedChild: boolean
   isBusy: boolean
   showUnreadBadge: boolean
 }
 
 function ThreadLeadingGlyph({
+  hasPendingInteraction,
   isManagedChild,
   isBusy,
   showUnreadBadge,
@@ -104,6 +107,12 @@ function ThreadLeadingGlyph({
     <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center text-sidebar-foreground/60">
       {isManagedChild ? (
         <ChevronDown aria-hidden="true" className="size-4 shrink-0 rotate-45" />
+      ) : hasPendingInteraction ? (
+        <span
+          className="size-1.5 rounded-full bg-primary"
+          aria-label="Pending interaction requires attention"
+          title="Pending interaction"
+        />
       ) : isBusy ? (
         <CircleDashed className="size-4 animate-spin" />
       ) : showUnreadBadge ? (
@@ -131,8 +140,12 @@ export function ThreadRow({
   options,
 }: ThreadRowProps) {
   const [isActionsOpen, setIsActionsOpen] = useState(false)
-  const threadIsBusy = isBusyThread(thread)
-  const showUnreadBadge = isUnreadDoneThread(thread)
+  const { data: pendingInteractions = [] } = useThreadPendingInteractions(thread.id, {
+    enabled: thread.parentThreadId === null,
+  })
+  const hasPendingInteraction = thread.parentThreadId === null && pendingInteractions.length > 0
+  const threadIsBusy = isBusyThread(thread) && !hasPendingInteraction
+  const showUnreadBadge = !hasPendingInteraction && isUnreadDoneThread(thread)
   const threadTitle = getThreadDisplayTitle(thread)
   const isManager = options.kind === "manager"
   const isManagedChild = options.kind === "managed-child"
@@ -172,6 +185,7 @@ export function ThreadRow({
         />
       ) : (
         <ThreadLeadingGlyph
+          hasPendingInteraction={hasPendingInteraction}
           isManagedChild={isManagedChild}
           isBusy={threadIsBusy}
           showUnreadBadge={showUnreadBadge}
