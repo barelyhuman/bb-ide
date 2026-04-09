@@ -162,10 +162,11 @@ describe("pending interaction lifecycle", () => {
       const pendingInteractions = new PendingInteractionLifecycle({
         db: harness.db,
         hub: harness.hub,
-        interactionExpiryMs: 20,
+        sandboxInteractionExpiryMs: 20,
       });
       const { host } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-expiry",
+        type: "ephemeral",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -216,6 +217,65 @@ describe("pending interaction lifecycle", () => {
           statusReason: "Pending interaction expired while waiting for a user response",
         }),
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not expire pending interactions on persistent hosts", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const pendingInteractions = new PendingInteractionLifecycle({
+        db: harness.db,
+        hub: harness.hub,
+        sandboxInteractionExpiryMs: 20,
+      });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-no-expiry",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const created = pendingInteractions.registerPendingInteraction({
+        threadId: thread.id,
+        turnId: "turn-no-expiry",
+        providerId: "codex",
+        providerThreadId: "provider-thread-no-expiry",
+        providerRequestId: "request-no-expiry",
+        providerRequestMethod: "item/commandExecution/requestApproval",
+        payload: {
+          kind: "command_approval",
+          itemId: "item-no-expiry",
+          approvalId: null,
+          reason: "Needs approval",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+        },
+      });
+      if (created.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+      }
+
+      await sleep(50);
+
+      expect(
+        pendingInteractions.getThreadInteraction({
+          threadId: thread.id,
+          interactionId: created.interaction.id,
+        }).status,
+      ).toBe("pending");
     } finally {
       await harness.cleanup();
     }

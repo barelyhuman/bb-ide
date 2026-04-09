@@ -16,6 +16,7 @@ import {
 } from "../helpers.js";
 import {
   parseSandboxMode,
+  parseQuestionPolicy,
   parseServiceTier,
   statusText,
 } from "./helpers.js";
@@ -34,6 +35,7 @@ interface ThreadSpawnCommandOptions {
   serviceTier?: string;
   sandboxMode?: string;
   host?: string;
+  questionPolicy?: string;
   contextParentThread?: boolean;
 }
 
@@ -146,6 +148,10 @@ export function registerSpawnCommand(
     )
     .option("--host <id>", "Host ID (defaults to local host)")
     .option(
+      "--question-policy <policy>",
+      "Question policy: allow, avoid, or deny",
+    )
+    .option(
       "--no-context-parent-thread",
       "Do not default parent thread context to BB_THREAD_ID",
     )
@@ -172,6 +178,7 @@ export function registerSpawnCommand(
       const reasoningLevel = parseReasoningLevel(opts.reasoningLevel);
       const serviceTier = parseServiceTier(opts.serviceTier);
       const sandboxMode = parseSandboxMode(opts.sandboxMode);
+      const questionPolicy = parseQuestionPolicy(opts.questionPolicy);
       const parentThreadId =
         opts.parentThread ??
         (opts.contextParentThread === false ? undefined : resolveThreadId());
@@ -190,6 +197,7 @@ export function registerSpawnCommand(
               ...(opts.title ? { title: opts.title } : {}),
               ...(serviceTier ? { serviceTier } : {}),
               ...(sandboxMode ? { sandboxMode } : {}),
+              ...(questionPolicy ? { questionPolicy } : {}),
               environment,
               ...(parentThreadId ? { parentThreadId } : {}),
             },

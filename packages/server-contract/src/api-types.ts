@@ -8,6 +8,7 @@ import {
   projectSchema,
   projectSourceSchema,
   promptInputSchema,
+  questionPolicySchema,
   reasoningLevelSchema,
   sandboxBackendInfoSchema,
   sandboxModeSchema,
@@ -93,6 +94,7 @@ export const createThreadRequestSchema = z.object({
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
   sandboxMode: sandboxModeSchema.optional(),
+  questionPolicy: questionPolicySchema.optional(),
   environment: environmentArgsSchema,
   parentThreadId: z.string().min(1).optional(),
 });
@@ -107,6 +109,7 @@ const automationThreadRequestSchema = z.object({
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
   sandboxMode: sandboxModeSchema.optional(),
+  questionPolicy: questionPolicySchema.optional(),
   environment: environmentArgsSchema,
   parentThreadId: z.string().min(1).optional(),
 });
@@ -219,6 +222,7 @@ export const sendMessageRequestSchema = z.object({
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
   sandboxMode: sandboxModeSchema.optional(),
+  questionPolicy: questionPolicySchema.optional(),
   mode: sendMessageModeSchema,
 });
 export type SendMessageRequest = z.infer<typeof sendMessageRequestSchema>;
@@ -376,6 +380,7 @@ export const createManagerThreadRequestSchema = z.object({
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
   sandboxMode: sandboxModeSchema.optional(),
+  questionPolicy: questionPolicySchema.optional(),
   environment: managerEnvironmentArgsSchema,
 });
 export type CreateManagerThreadRequest = z.infer<

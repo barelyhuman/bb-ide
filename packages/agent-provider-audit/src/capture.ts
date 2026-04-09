@@ -49,6 +49,7 @@ interface BuildExecutionOptionsArgs {
 
 interface ProviderAuditResolvedExecutionOptions {
   model: string;
+  questionPolicy: NonNullable<ProviderAuditScenarioExecutionOptions["questionPolicy"]>;
   serviceTier: NonNullable<ProviderAuditScenarioExecutionOptions["serviceTier"]>;
   reasoningLevel: NonNullable<ProviderAuditScenarioExecutionOptions["reasoningLevel"]>;
   sandboxMode: NonNullable<ProviderAuditScenarioExecutionOptions["sandboxMode"]>;
@@ -541,6 +542,7 @@ function buildExecutionOptions(
 ): ProviderAuditResolvedExecutionOptions {
   return {
     model: args.model ?? "provider-default",
+    questionPolicy: args.execution?.questionPolicy ?? "allow",
     serviceTier: args.execution?.serviceTier ?? "fast",
     reasoningLevel: args.execution?.reasoningLevel ?? "medium",
     sandboxMode: args.execution?.sandboxMode ?? "danger-full-access",

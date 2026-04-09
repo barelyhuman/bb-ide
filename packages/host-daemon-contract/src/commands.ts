@@ -4,6 +4,7 @@ import {
   dynamicToolSchema,
   instructionModeSchema,
   promptInputSchema,
+  questionPolicySchema,
   threadExecutionOptionsSchema,
   threadGitDiffResponseSchema,
   workspaceProvisionTypeSchema,
@@ -51,6 +52,7 @@ export const hostDaemonExecutionOptionsSchema = threadExecutionOptionsSchema.ext
   serviceTier: serviceTierSchema,
   reasoningLevel: reasoningLevelSchema,
   sandboxMode: sandboxModeSchema,
+  questionPolicy: questionPolicySchema,
 });
 export type HostDaemonExecutionOptions = z.infer<
   typeof hostDaemonExecutionOptionsSchema

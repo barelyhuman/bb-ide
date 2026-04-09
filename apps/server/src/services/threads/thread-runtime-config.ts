@@ -1,6 +1,8 @@
 import path from "node:path";
 import {
   getDefaultProjectSource,
+  getEnvironment,
+  getHost,
   getProject,
   getThread,
 } from "@bb/db";
@@ -9,6 +11,7 @@ import type {
   DynamicTool,
   InstructionMode,
   ProjectExecutionDefaults,
+  QuestionPolicy,
   ReasoningLevel,
   ResolvedThreadExecutionOptions,
   SandboxMode,
@@ -36,6 +39,15 @@ const STANDARD_AGENT_INSTRUCTIONS = renderTemplate(
   "standardAgentInstructions",
   {},
 );
+const QUESTION_POLICY_INSTRUCTIONS: Record<
+  Exclude<QuestionPolicy, "allow">,
+  string
+> = {
+  avoid:
+    "Avoid asking the user follow-up questions unless the task truly cannot proceed without clarification. Prefer making reasonable assumptions and continue.",
+  deny:
+    "Do not ask the user follow-up questions or request additional user input. Make reasonable assumptions and proceed without asking.",
+};
 const MESSAGE_USER_TOOL_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -78,6 +90,7 @@ export interface RequestedExecutionOptions extends ThreadExecutionOptions {
 
 export interface ResolveThreadRuntimeCommandConfigArgs {
   environment: ThreadRuntimeCommandEnvironment;
+  questionPolicy: QuestionPolicy;
   thread: Thread;
   /**
    * True during thread creation. Skips the daemon round-trip to read
@@ -116,6 +129,47 @@ function requireWorkspacePath(environment: ThreadRuntimeCommandEnvironment): str
   }
 
   return environment.path;
+}
+
+function appendQuestionPolicyInstructions(
+  instructions: string,
+  questionPolicy: QuestionPolicy,
+): string {
+  if (questionPolicy === "allow") {
+    return instructions;
+  }
+
+  return `${instructions}\n\n${QUESTION_POLICY_INSTRUCTIONS[questionPolicy]}`;
+}
+
+function resolveDefaultQuestionPolicy(
+  deps: Pick<AppDeps, "db">,
+  thread: Thread | null,
+): QuestionPolicy {
+  if (!thread) {
+    return "allow";
+  }
+  if (thread.parentThreadId !== null) {
+    return "avoid";
+  }
+  if (thread.automationId !== null) {
+    return "avoid";
+  }
+  if (thread.environmentId === null) {
+    return "allow";
+  }
+
+  const environment = getEnvironment(deps.db, thread.environmentId);
+  if (!environment) {
+    return "allow";
+  }
+
+  const host = getHost(deps.db, environment.hostId);
+  if (host?.type === "ephemeral") {
+    return "avoid";
+  }
+
+  return "allow";
 }
 
 async function readManagerPreferences(
@@ -175,6 +229,10 @@ export async function resolveExecutionOptions(
     args.requestedExecution.approvalPolicy ??
     lastExecution?.approvalPolicy ??
     getDefaultApprovalPolicyForProvider(thread?.providerId);
+  const questionPolicy =
+    args.requestedExecution.questionPolicy ??
+    lastExecution?.questionPolicy ??
+    resolveDefaultQuestionPolicy(deps, thread);
 
   return {
     model,
@@ -193,6 +251,7 @@ export async function resolveExecutionOptions(
       lastExecution?.sandboxMode ??
       projectExecution?.sandboxMode ??
       DEFAULT_SANDBOX_MODE,
+    questionPolicy,
     ...(approvalPolicy === undefined ? {} : { approvalPolicy }),
     source: args.requestedExecution.source,
   };
@@ -217,7 +276,10 @@ export async function resolveThreadRuntimeCommandConfig(
     return {
       dynamicTools: [],
       instructionMode: "append",
-      instructions: STANDARD_AGENT_INSTRUCTIONS,
+      instructions: appendQuestionPolicyInstructions(
+        STANDARD_AGENT_INSTRUCTIONS,
+        args.questionPolicy,
+      ),
       projectId: args.thread.projectId,
       providerId: args.thread.providerId,
       workspacePath,
@@ -239,16 +301,19 @@ export async function resolveThreadRuntimeCommandConfig(
   return {
     dynamicTools: MANAGER_DYNAMIC_TOOLS,
     instructionMode: "replace",
-    instructions: renderTemplate("managerAgentInstructions", {
-      hostId: args.environment.hostId,
-      localTimezone: resolveLocalTimezone(),
-      managerPreferencesContent,
-      managerThreadId: args.thread.id,
-      threadStoragePath,
-      projectId: args.thread.projectId,
-      projectName: project.name,
-      projectRootPath,
-    }),
+    instructions: appendQuestionPolicyInstructions(
+      renderTemplate("managerAgentInstructions", {
+        hostId: args.environment.hostId,
+        localTimezone: resolveLocalTimezone(),
+        managerPreferencesContent,
+        managerThreadId: args.thread.id,
+        threadStoragePath,
+        projectId: args.thread.projectId,
+        projectName: project.name,
+        projectRootPath,
+      }),
+      args.questionPolicy,
+    ),
     projectId: args.thread.projectId,
     providerId: args.thread.providerId,
     threadStoragePath,

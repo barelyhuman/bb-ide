@@ -32,6 +32,13 @@ export const approvalPolicySchema = z.enum([
 ]);
 export type ApprovalPolicy = z.infer<typeof approvalPolicySchema>;
 
+export const questionPolicySchema = z.enum([
+  "allow",
+  "avoid",
+  "deny",
+]);
+export type QuestionPolicy = z.infer<typeof questionPolicySchema>;
+
 export const promptInputSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("text"),
@@ -68,6 +75,7 @@ export const threadExecutionOptionsSchema = z.object({
   reasoningLevel: reasoningLevelSchema.optional(),
   sandboxMode: sandboxModeSchema.optional(),
   approvalPolicy: approvalPolicySchema.optional(),
+  questionPolicy: questionPolicySchema.optional(),
   source: threadExecutionSourceSchema.optional(),
   seq: z.number().int().optional(),
 });
@@ -81,6 +89,7 @@ export const resolvedThreadExecutionOptionsSchema =
     serviceTier: serviceTierSchema,
     reasoningLevel: reasoningLevelSchema,
     sandboxMode: sandboxModeSchema,
+    questionPolicy: questionPolicySchema,
     source: threadExecutionSourceSchema,
   });
 export type ResolvedThreadExecutionOptions = z.infer<

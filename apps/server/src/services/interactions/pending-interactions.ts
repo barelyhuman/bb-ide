@@ -1,6 +1,8 @@
 import {
   createPendingInteraction,
   getActivePendingInteractionForThread,
+  getEnvironment,
+  getHost,
   getPendingInteraction,
   getPendingInteractionByProviderRequest,
   getThread,
@@ -87,7 +89,7 @@ interface CreateLifecycleDeps {
   hub: AppDeps["hub"];
 }
 
-export const DEFAULT_PENDING_INTERACTION_EXPIRY_MS = 30 * 60 * 1000;
+export const DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS = 10 * 60 * 1000;
 
 type PendingInteractionTimeoutHandle = ReturnType<typeof setTimeout>;
 
@@ -100,7 +102,7 @@ interface PendingInteractionTimeoutHandleWithUnref {
 }
 
 interface PendingInteractionLifecycleArgs extends CreateLifecycleDeps {
-  interactionExpiryMs: number;
+  sandboxInteractionExpiryMs: number;
   now?: () => number;
 }
 
@@ -423,13 +425,13 @@ function validatePendingInteractionResolution(
 
 export class PendingInteractionLifecycle {
   private readonly deps: CreateLifecycleDeps;
-  private readonly interactionExpiryMs: number;
+  private readonly sandboxInteractionExpiryMs: number;
   private readonly now: () => number;
   private readonly expiryTimers = new Map<string, PendingInteractionExpiryTimer>();
   private readonly waiters = new Map<string, Set<PendingInteractionWaiter>>();
 
   constructor(args: PendingInteractionLifecycleArgs) {
-    if (args.interactionExpiryMs <= 0) {
+    if (args.sandboxInteractionExpiryMs <= 0) {
       throw new Error("Pending interaction expiry must be positive");
     }
 
@@ -437,7 +439,7 @@ export class PendingInteractionLifecycle {
       db: args.db,
       hub: args.hub,
     };
-    this.interactionExpiryMs = args.interactionExpiryMs;
+    this.sandboxInteractionExpiryMs = args.sandboxInteractionExpiryMs;
     this.now = args.now ?? Date.now;
 
     this.hydratePendingInteractions();
@@ -707,6 +709,27 @@ export class PendingInteractionLifecycle {
     }
   }
 
+  private resolveInteractionExpiryMs(
+    interaction: PendingInteraction,
+  ): number | null {
+    const thread = getThread(this.deps.db, interaction.threadId);
+    if (!thread?.environmentId) {
+      return null;
+    }
+
+    const environment = getEnvironment(this.deps.db, thread.environmentId);
+    if (!environment) {
+      return null;
+    }
+
+    const host = getHost(this.deps.db, environment.hostId);
+    if (host?.type !== "ephemeral") {
+      return null;
+    }
+
+    return this.sandboxInteractionExpiryMs;
+  }
+
   private scheduleInteractionExpiry(interaction: PendingInteraction): void {
     this.clearExpiryTimer(interaction.id);
 
@@ -714,7 +737,12 @@ export class PendingInteractionLifecycle {
       return;
     }
 
-    const expiresAt = interaction.createdAt + this.interactionExpiryMs;
+    const interactionExpiryMs = this.resolveInteractionExpiryMs(interaction);
+    if (interactionExpiryMs === null) {
+      return;
+    }
+
+    const expiresAt = interaction.createdAt + interactionExpiryMs;
     const delayMs = expiresAt - this.now();
     if (delayMs <= 0) {
       this.expirePendingInteraction({

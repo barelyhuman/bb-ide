@@ -1,5 +1,10 @@
 import { Command } from "commander";
-import { type ReasoningLevel, type Thread, type ThreadStatus } from "@bb/domain";
+import {
+  type QuestionPolicy,
+  type ReasoningLevel,
+  type Thread,
+  type ThreadStatus,
+} from "@bb/domain";
 import { action } from "../../action.js";
 import { assertNever } from "../../assert-never.js";
 import { createClient, unwrap } from "../../client.js";
@@ -10,6 +15,7 @@ import {
   prependErrorContext,
   requireThreadIdOrSelf,
 } from "../helpers.js";
+import { parseQuestionPolicy } from "./helpers.js";
 
 interface ThreadUpdateCommandOptions {
   self?: boolean;
@@ -38,6 +44,7 @@ interface ThreadDeleteCommandOptions {
 interface ThreadTellCommandOptions {
   json?: boolean;
   model?: string;
+  questionPolicy?: string;
   reasoningLevel?: string;
   mode?: string;
 }
@@ -53,6 +60,7 @@ interface PostThreadMessageArgs {
   message: string;
   mode: "auto" | "steer";
   model?: string;
+  questionPolicy?: QuestionPolicy;
   reasoningLevel?: ReasoningLevel;
 }
 
@@ -207,6 +215,7 @@ export function registerActionsCommands(
       "--reasoning-level <level>",
       "Reasoning level: low, medium, high, xhigh",
     )
+    .option("--question-policy <policy>", "Question policy: allow, avoid, or deny")
     .option("--mode <mode>", "Message mode (e.g. steer)")
     .action(action(
       async (
@@ -220,6 +229,7 @@ export function registerActionsCommands(
           message,
           mode: resolveThreadMessageMode(opts.mode),
           model: opts.model,
+          questionPolicy: parseQuestionPolicy(opts.questionPolicy),
           reasoningLevel: parseReasoningLevel(opts.reasoningLevel),
         });
         if (outputJson(opts, { threadId: id, ...response })) return;
@@ -265,6 +275,7 @@ async function postThreadMessage(
         input: [{ type: "text", text: args.message }],
         mode: args.mode,
         ...(args.model ? { model: args.model } : {}),
+        ...(args.questionPolicy ? { questionPolicy: args.questionPolicy } : {}),
         ...(args.reasoningLevel
           ? { reasoningLevel: args.reasoningLevel }
           : {}),

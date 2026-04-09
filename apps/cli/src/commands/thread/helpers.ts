@@ -1,4 +1,6 @@
 import {
+  questionPolicySchema,
+  type QuestionPolicy,
   sandboxModeSchema,
   type SandboxMode,
   type ThreadStatus,
@@ -23,6 +25,11 @@ const SANDBOX_MODES: SandboxMode[] = [
   "read-only",
   "workspace-write",
   "danger-full-access",
+];
+const QUESTION_POLICIES: QuestionPolicy[] = [
+  "allow",
+  "avoid",
+  "deny",
 ];
 
 export function statusText(status: ThreadStatus): string {
@@ -89,5 +96,18 @@ export function parseSandboxMode(
   }
   throw new Error(
     `Invalid sandbox mode '${value}'. Expected ${joinValues(SANDBOX_MODES)}.`,
+  );
+}
+
+export function parseQuestionPolicy(
+  value: string | undefined,
+): QuestionPolicy | undefined {
+  if (value === undefined) return undefined;
+  const parsed = questionPolicySchema.safeParse(value);
+  if (parsed.success) {
+    return parsed.data;
+  }
+  throw new Error(
+    `Invalid question policy '${value}'. Expected ${joinValues(QUESTION_POLICIES)}.`,
   );
 }

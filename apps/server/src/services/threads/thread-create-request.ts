@@ -14,6 +14,7 @@ export interface ThreadCreateServiceRequestInput {
   parentThreadId?: string;
   projectId: string;
   providerId?: CreateThreadRequest["providerId"];
+  questionPolicy?: CreateThreadRequest["questionPolicy"];
   reasoningLevel?: CreateThreadRequest["reasoningLevel"];
   sandboxMode?: CreateThreadRequest["sandboxMode"];
   serviceTier?: CreateThreadRequest["serviceTier"];

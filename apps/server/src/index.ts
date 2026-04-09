@@ -11,7 +11,7 @@ import { createCloudAuthService } from "./services/cloud-auth/service.js";
 import { createHostLifecycleService } from "./services/hosts/host-lifecycle-service.js";
 import { createSandboxHostRegistry } from "./services/hosts/sandbox-registry.js";
 import {
-  DEFAULT_PENDING_INTERACTION_EXPIRY_MS,
+  DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS,
   PendingInteractionLifecycle,
 } from "./services/interactions/pending-interactions.js";
 import { createMachineAuthService } from "./services/machine-auth.js";
@@ -28,7 +28,7 @@ async function main(): Promise<void> {
   const pendingInteractions = new PendingInteractionLifecycle({
     db,
     hub,
-    interactionExpiryMs: DEFAULT_PENDING_INTERACTION_EXPIRY_MS,
+    sandboxInteractionExpiryMs: DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS,
   });
   const sandboxRegistry = createSandboxHostRegistry();
   const publicUrl = toOptionalString(serverConfig.BB_PUBLIC_URL);

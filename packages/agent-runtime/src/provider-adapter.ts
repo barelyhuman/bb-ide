@@ -7,6 +7,7 @@ import type {
   PendingInteractionResolution,
   PromptInput,
   ProviderCapabilities,
+  QuestionPolicy,
   ReasoningLevel,
   SandboxMode,
   ServiceTier,
@@ -63,6 +64,7 @@ export interface AdapterOptions {
   reasoningLevel?: ReasoningLevel;
   sandboxMode?: SandboxMode;
   approvalPolicy?: ApprovalPolicy;
+  questionPolicy?: QuestionPolicy;
   instructions?: string;
   envVars?: Record<string, string>;
 }

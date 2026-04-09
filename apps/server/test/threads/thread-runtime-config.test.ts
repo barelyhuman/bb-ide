@@ -54,6 +54,96 @@ describe("thread runtime config", () => {
     }
   });
 
+  it("defaults question policy to allow for persistent root threads", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-runtime-question-policy-default",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const execution = await resolveExecutionOptions(harness.deps, {
+        threadId: thread.id,
+        requestedExecution: {
+          model: "gpt-5",
+          source: "client/turn/requested",
+        },
+      });
+
+      expect(execution.questionPolicy).toBe("allow");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("defaults question policy to avoid for worker threads and sandbox-host threads", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host: persistentHost } = seedHostSession(harness.deps, {
+        id: "host-runtime-question-policy-worker",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: persistentHost.id,
+      });
+      const persistentEnvironment = seedEnvironment(harness.deps, {
+        hostId: persistentHost.id,
+        projectId: project.id,
+      });
+      const parentThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: persistentEnvironment.id,
+      });
+      const workerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: persistentEnvironment.id,
+        parentThreadId: parentThread.id,
+      });
+
+      const { host: sandboxHost } = seedHostSession(harness.deps, {
+        id: "host-runtime-question-policy-sandbox",
+        type: "ephemeral",
+      });
+      const sandboxEnvironment = seedEnvironment(harness.deps, {
+        hostId: sandboxHost.id,
+        projectId: project.id,
+      });
+      const sandboxThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: sandboxEnvironment.id,
+      });
+
+      const workerExecution = await resolveExecutionOptions(harness.deps, {
+        threadId: workerThread.id,
+        requestedExecution: {
+          model: "gpt-5",
+          source: "client/turn/requested",
+        },
+      });
+      const sandboxExecution = await resolveExecutionOptions(harness.deps, {
+        threadId: sandboxThread.id,
+        requestedExecution: {
+          model: "gpt-5",
+          source: "client/turn/requested",
+        },
+      });
+
+      expect(workerExecution.questionPolicy).toBe("avoid");
+      expect(sandboxExecution.questionPolicy).toBe("avoid");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("uses the project root as cwd and a host data-dir workspace for managers", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -83,6 +173,7 @@ describe("thread runtime config", () => {
           workspaceProvisionType: environment.workspaceProvisionType,
         },
         isThreadCreation: true,
+        questionPolicy: "allow",
       });
 
       expect(runtimeConfig.instructions).toContain(
@@ -129,6 +220,7 @@ describe("thread runtime config", () => {
           path: environment.path,
           workspaceProvisionType: environment.workspaceProvisionType,
         },
+        questionPolicy: "allow",
       });
 
       const queued = await waitForQueuedCommand(
@@ -202,6 +294,7 @@ describe("thread runtime config", () => {
           path: environment.path,
           workspaceProvisionType: environment.workspaceProvisionType,
         },
+        questionPolicy: "allow",
       });
 
       const queued = await waitForQueuedCommand(

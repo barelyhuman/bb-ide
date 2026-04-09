@@ -11,7 +11,7 @@ import { createCloudAuthService } from "../../src/services/cloud-auth/service.js
 import { createHostLifecycleService } from "../../src/services/hosts/host-lifecycle-service.js";
 import { createSandboxHostRegistry } from "../../src/services/hosts/sandbox-registry.js";
 import {
-  DEFAULT_PENDING_INTERACTION_EXPIRY_MS,
+  DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS,
   PendingInteractionLifecycle,
 } from "../../src/services/interactions/pending-interactions.js";
 import { createMachineAuthService } from "../../src/services/machine-auth.js";
@@ -90,7 +90,7 @@ export async function createTestAppHarness(
   const pendingInteractions = new PendingInteractionLifecycle({
     db,
     hub,
-    interactionExpiryMs: DEFAULT_PENDING_INTERACTION_EXPIRY_MS,
+    sandboxInteractionExpiryMs: DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS,
   });
   const sandboxRegistry = createSandboxHostRegistry();
   const machineAuth = await createMachineAuthService({

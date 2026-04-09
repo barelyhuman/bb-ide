@@ -11,6 +11,7 @@ import {
   printContextLabel,
   requireProjectIdWithLabel,
 } from "./helpers.js";
+import { parseQuestionPolicy } from "./thread/helpers.js";
 
 interface ManagerHireCommandOptions {
   json?: boolean;
@@ -20,6 +21,7 @@ interface ManagerHireCommandOptions {
   provider?: string;
   model?: string;
   reasoningLevel?: string;
+  questionPolicy?: string;
 }
 
 interface ManagerListCommandOptions {
@@ -55,6 +57,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
       "Model ID for the manager. Omit to use the project's remembered manager default for the resolved provider",
     )
     .option("--reasoning-level <level>", "Reasoning level (low, medium, high, xhigh)")
+    .option("--question-policy <policy>", "Question policy (allow, avoid, deny)")
     .option("--host <id>", "Host ID (defaults to local host)")
     .option("--json", "Print machine-readable JSON output")
     .action(action(async (
@@ -66,6 +69,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
       const projectId = resolvedProject.id;
       printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
       const reasoningLevel = parseReasoningLevel(opts.reasoningLevel);
+      const questionPolicy = parseQuestionPolicy(opts.questionPolicy);
       let hostId: string | undefined = opts.host;
       if (!hostId) {
         hostId = (await fetchLocalHostId()) ?? undefined;
@@ -85,6 +89,7 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
             ...(opts.model ? { model: opts.model } : {}),
             environment: { type: "host", hostId },
             ...(reasoningLevel ? { reasoningLevel } : {}),
+            ...(questionPolicy ? { questionPolicy } : {}),
           },
         }),
       );
