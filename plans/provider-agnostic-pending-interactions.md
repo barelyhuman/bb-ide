@@ -84,7 +84,11 @@ surface to:
 
 - app query hooks and mutations on top of the same server contract
 - first-class app UI for all supported interaction kinds
-- app badge or inbox views backed by the same paginated interaction queries
+- thread-level unread indicators that direct the user into the thread-scoped
+  interaction UI
+- app interaction UI should reuse existing app primitives and styling so it
+  looks consistent with the rest of bb rather than introducing a separate
+  visual language
 
 ## Design Principles
 
@@ -110,8 +114,6 @@ surface to:
   routing, and resolution APIs.
 - Authorization for listing and resolving interactions must match authorization
   for the owning thread.
-- Any global or cross-thread pending-interaction query must be paginated and
-  bounded.
 - Root-thread-only support is acceptable for the first ship if it is enforced
   explicitly and documented.
 
@@ -226,8 +228,6 @@ Minimum requirements:
 - durable normalized payload
 - durable resolution payload
 - ability to query pending interactions by thread id
-- bounded global query support for app badges or inbox UI with cursor pagination
-  and a server-side page-size cap of 100
 - an invariant of at most one active `pending` interaction per thread in phase 1
 
 ### Recovery Semantics
@@ -434,13 +434,15 @@ Exit condition:
 ### Phase 6: Add the app surface last
 
 1. Reuse the thread-scoped list, get, and resolve routes from phase 3.
-2. Add one bounded global pending-interactions route for app badges or inbox
-   views.
-3. Add app query hooks and mutations on top of the canonical server contract.
-4. Add first-class app UI for command approval, ask-user-question,
+2. Add app query hooks and mutations on top of the canonical server contract.
+3. Add first-class app UI for command approval, ask-user-question,
    file-change approval, and permission requests.
+4. Add thread-level unread indicators that reflect pending interactions without
+   introducing a separate global inbox route.
 5. Reuse the same lifecycle rules, authorization rules, and dedupe semantics
    already proven through the CLI.
+6. Reuse existing app shell, detail, status, and action primitives so the
+   interaction UI is stylistically aligned with the rest of the application.
 
 Exit condition:
 
@@ -448,6 +450,8 @@ Exit condition:
   supported by the backend and CLI
 - app UI does not introduce a second lifecycle or provider-specific product
   path
+- app interaction surfaces are visually and structurally consistent with
+  existing app components
 
 ## Open Questions
 
@@ -507,8 +511,10 @@ Add app-specific checks on top of the phase 5 baseline:
 Add or update tests for:
 
 - app query and resolve flows
-- global bounded pending-interactions route usage in the app
+- thread-level unread indicator behavior for pending interactions
 - app UI behavior for the same interaction kinds already proven in phase 5
+- reuse of existing app primitives rather than a parallel interaction-specific
+  UI path where applicable
 
 ### Manual
 
@@ -552,8 +558,10 @@ Repeat the relevant UI checks once phase 6 lands:
    still visible and resolvable there.
 2. Resolve the same kind through the app and confirm the server and daemon
    behavior matches the CLI path.
-3. Verify app badge or inbox views reflect the bounded pending-interactions
-   query.
+3. Verify thread-level unread indicators reflect pending interactions and clear
+   after resolution.
+4. Compare the interaction UI against existing app surfaces and verify it uses
+   the same layout, status, and action patterns rather than a one-off design.
 
 ### Manual Comparison Checklist
 
