@@ -7,6 +7,7 @@ import type { DbConnection } from "@bb/db";
 import type { HostType } from "@bb/domain";
 import { initDb } from "../../src/db.js";
 import { createApp } from "../../src/server.js";
+import { createCloudAuthService } from "../../src/services/cloud-auth/service.js";
 import { createSandboxHostRegistry } from "../../src/services/hosts/sandbox-registry.js";
 import { createMachineAuthService } from "../../src/services/machine-auth.js";
 import type { AppDeps, ServerRuntimeConfig } from "../../src/types.js";
@@ -99,6 +100,11 @@ export async function createTestAppHarness(
       return machineAuth.verifyDaemonHostKey(token);
     },
   };
+  const cloudAuth = await createCloudAuthService({
+    dataDir,
+    db,
+    logger: testLogger,
+  });
   const config: ServerRuntimeConfig = {
     anthropicApiKey: "",
     dataDir,
@@ -114,6 +120,7 @@ export async function createTestAppHarness(
     ...overrides,
   };
   const deps: AppDeps = {
+    cloudAuth,
     config,
     db,
     hub,
@@ -130,6 +137,7 @@ export async function createTestAppHarness(
     deps,
     hub,
     async cleanup(): Promise<void> {
+      await cloudAuth.dispose();
       await rm(dataDir, { recursive: true, force: true });
     },
   };

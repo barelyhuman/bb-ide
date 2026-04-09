@@ -7,6 +7,7 @@ import { commonConfig, serverConfig } from "@bb/config/server";
 import { createLogger } from "@bb/logger";
 import { initDb } from "./db.js";
 import { createApp } from "./server.js";
+import { createCloudAuthService } from "./services/cloud-auth/service.js";
 import { createSandboxHostRegistry } from "./services/hosts/sandbox-registry.js";
 import { createMachineAuthService } from "./services/machine-auth.js";
 import { runPeriodicSweeps } from "./services/system/periodic-sweeps.js";
@@ -48,9 +49,15 @@ async function main(): Promise<void> {
     logger,
   });
   await machineAuth.ensureReady();
+  const cloudAuth = await createCloudAuthService({
+    dataDir: commonConfig.BB_DATA_DIR,
+    db,
+    logger,
+  });
 
   const { app, injectWebSocket } = createApp(
     {
+      cloudAuth,
       config: runtimeConfig,
       db,
       hub,

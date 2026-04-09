@@ -183,6 +183,17 @@ export type {
 } from "./host-lifecycle-state.js";
 
 export {
+  deleteSandboxProviderCredentialByProviderId,
+  getSandboxProviderCredentialByProviderId,
+  listSandboxProviderCredentials,
+  upsertSandboxProviderCredential,
+} from "./sandbox-provider-credentials.js";
+export type {
+  SandboxProviderCredentialRecord,
+  UpsertSandboxProviderCredentialArgs,
+} from "./sandbox-provider-credentials.js";
+
+export {
   upsertHost,
   getHost,
   getNonDestroyedHost,

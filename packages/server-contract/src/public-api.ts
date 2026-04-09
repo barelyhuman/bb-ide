@@ -15,14 +15,19 @@ import type {
 import type {
   EmptyInput,
   Endpoint,
+  PathAttemptId,
   PathId,
   PathProjectAutomationId,
   PathProjectId,
+  PathProviderId,
   PathThreadAndDraft,
 } from "./common.js";
 import type {
   ArchiveThreadRequest,
   Automation,
+  CloudAuthAttemptResponse,
+  CloudAuthConnectResponse,
+  CloudAuthSettingsResponse,
   CreateAutomationRequest,
   CreateHostJoinRequest,
   CreateHostJoinResponse,
@@ -327,6 +332,25 @@ export type PublicApiSchema = {
 
   "/system/config": {
     $get: Endpoint<EmptyInput, SystemConfigResponse>;
+  };
+  "/system/cloud-auth": {
+    /** Returns the current app-level cloud auth connection state for sandbox-compatible providers. */
+    $get: Endpoint<EmptyInput, CloudAuthSettingsResponse>;
+  };
+  "/system/cloud-auth/:providerId/connect": {
+    /**
+     * Starts an app-level OAuth flow for the requested provider and returns the
+     * authorization URL the UI should open in a browser.
+     */
+    $post: Endpoint<PathProviderId, CloudAuthConnectResponse, 201>;
+  };
+  "/system/cloud-auth/attempts/:attemptId": {
+    /** Returns the status of a previously started cloud auth connection attempt. */
+    $get: Endpoint<PathAttemptId, CloudAuthAttemptResponse>;
+  };
+  "/system/cloud-auth/:providerId": {
+    /** Removes the saved app-level cloud auth connection for the provider. */
+    $delete: Endpoint<PathProviderId, { ok: true }>;
   };
   "/system/sandbox-backends": {
     /** List sandbox backends supported by the server. */

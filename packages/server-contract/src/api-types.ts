@@ -478,6 +478,63 @@ export const systemProvidersQuerySchema = z.object({
 }).partial();
 export type SystemProvidersQuery = z.infer<typeof systemProvidersQuerySchema>;
 
+export const cloudAuthProviderIdSchema = z.enum(["claude-code", "codex"]);
+export type CloudAuthProviderId = z.infer<typeof cloudAuthProviderIdSchema>;
+
+export const cloudAuthConnectionStatusSchema = z.enum([
+  "connected",
+  "invalid",
+  "missing",
+]);
+export type CloudAuthConnectionStatus = z.infer<
+  typeof cloudAuthConnectionStatusSchema
+>;
+
+export const cloudAuthAttemptStatusSchema = z.enum([
+  "completed",
+  "expired",
+  "failed",
+  "pending",
+]);
+export type CloudAuthAttemptStatus = z.infer<typeof cloudAuthAttemptStatusSchema>;
+
+export const cloudAuthConnectionSchema = z.object({
+  providerId: cloudAuthProviderIdSchema,
+  displayName: z.string().min(1),
+  status: cloudAuthConnectionStatusSchema,
+  label: z.string().nullable(),
+  connectedAt: z.number().nullable(),
+  expiresAt: z.number().nullable(),
+  lastRefreshedAt: z.number().nullable(),
+  errorMessage: z.string().nullable(),
+}).strict();
+export type CloudAuthConnection = z.infer<typeof cloudAuthConnectionSchema>;
+
+export const cloudAuthSettingsResponseSchema = z.object({
+  connections: z.array(cloudAuthConnectionSchema),
+}).strict();
+export type CloudAuthSettingsResponse = z.infer<
+  typeof cloudAuthSettingsResponseSchema
+>;
+
+export const cloudAuthConnectResponseSchema = z.object({
+  attemptId: z.string().min(1),
+  authorizationUrl: z.string().url(),
+}).strict();
+export type CloudAuthConnectResponse = z.infer<
+  typeof cloudAuthConnectResponseSchema
+>;
+
+export const cloudAuthAttemptResponseSchema = z.object({
+  attemptId: z.string().min(1),
+  providerId: cloudAuthProviderIdSchema,
+  status: cloudAuthAttemptStatusSchema,
+  errorMessage: z.string().nullable(),
+}).strict();
+export type CloudAuthAttemptResponse = z.infer<
+  typeof cloudAuthAttemptResponseSchema
+>;
+
 export interface ProjectAttachmentUploadForm {
   [key: string]: string | Blob;
 }

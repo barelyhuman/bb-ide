@@ -4,6 +4,7 @@ export type { DbConnection, DbTransaction } from "./connection.js";
 export * from "./schema.js";
 export {
   createAutomationId,
+  createCloudAuthAttemptId,
   createDraftId,
   createEnvironmentId,
   createEventId,
@@ -14,6 +15,7 @@ export {
   createManagerThreadNudgeId,
   createProjectId,
   createProjectSourceId,
+  createSandboxProviderCredentialId,
   createThreadId,
 } from "./ids.js";
 

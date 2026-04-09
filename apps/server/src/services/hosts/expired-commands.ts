@@ -20,6 +20,11 @@ type LifecycleFailureReport =
   | Extract<HostDaemonCommandResultReport, { type: "thread.start" }>
   | Extract<HostDaemonCommandResultReport, { type: "thread.stop" }>;
 
+type ExpiredCommandDeps = Pick<
+  AppDeps,
+  "config" | "db" | "hub" | "logger" | "machineAuth" | "sandboxRegistry"
+>;
+
 function buildExpiredLifecycleFailureReport(
   args: {
     commandId: string;
@@ -38,7 +43,7 @@ function buildExpiredLifecycleFailureReport(
 }
 
 export async function handleExpiredCommands(
-  deps: AppDeps,
+  deps: ExpiredCommandDeps,
   args: {
     commandIds: string[];
   },

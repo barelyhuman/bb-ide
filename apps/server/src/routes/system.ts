@@ -1,5 +1,6 @@
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import {
+  cloudAuthProviderIdSchema,
   githubReposQuerySchema,
   systemModelsQuerySchema,
   systemProvidersQuerySchema,
@@ -36,7 +37,7 @@ function resolveHostId(deps: AppDeps, query: HostLookupQuery): string {
 }
 
 export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
-  const { get, post } = typedRoutes<PublicApiSchema>(app, {
+  const { del, get, post } = typedRoutes<PublicApiSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
   });
 
@@ -48,6 +49,39 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
       voiceTranscriptionEnabled: !!deps.config.openAiApiKey,
     }),
   );
+
+  get("/system/cloud-auth", async (context) =>
+    context.json({
+      connections: await deps.cloudAuth.listConnections(),
+    }),
+  );
+
+  post("/system/cloud-auth/:providerId/connect", async (context) => {
+    const providerId = cloudAuthProviderIdSchema.parse(
+      context.req.param("providerId"),
+    );
+    return context.json(
+      await deps.cloudAuth.startConnection({ providerId }),
+      201,
+    );
+  });
+
+  get("/system/cloud-auth/attempts/:attemptId", (context) => {
+    const attemptId = context.req.param("attemptId");
+    const attempt = deps.cloudAuth.getAttempt({ attemptId });
+    if (!attempt) {
+      throw new ApiError(404, "cloud_auth_attempt_not_found", "Cloud auth attempt not found");
+    }
+    return context.json(attempt);
+  });
+
+  del("/system/cloud-auth/:providerId", async (context) => {
+    const providerId = cloudAuthProviderIdSchema.parse(
+      context.req.param("providerId"),
+    );
+    await deps.cloudAuth.disconnectProvider({ providerId });
+    return context.json({ ok: true });
+  });
 
   get("/system/sandbox-backends", (context) =>
     context.json(listAvailableSandboxBackends(deps.config)),

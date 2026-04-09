@@ -71,3 +71,11 @@ export function createHostDaemonSessionId(): string {
 export function createHostDaemonCommandId(): string {
   return createId("hcmd");
 }
+
+export function createSandboxProviderCredentialId(): string {
+  return createId("pcred");
+}
+
+export function createCloudAuthAttemptId(): string {
+  return createId("authatt");
+}

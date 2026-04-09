@@ -77,6 +77,27 @@ export const authApiKeys = sqliteTable(
   ],
 );
 
+export const sandboxProviderCredentials = sqliteTable(
+  "sandbox_provider_credentials",
+  {
+    id: text("id").primaryKey(),
+    providerId: text("provider_id").notNull(),
+    encryptedPayload: text("encrypted_payload").notNull(),
+    label: text("label"),
+    expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
+    lastRefreshedAt: integer("last_refreshed_at", { mode: "timestamp_ms" }),
+    lastErrorMessage: text("last_error_message"),
+    createdAt: integer("created_at", { mode: "timestamp_ms" }).notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" }).notNull(),
+  },
+  (table) => [
+    uniqueIndex("sandbox_provider_credentials_provider_id_idx").on(
+      table.providerId,
+    ),
+    index("sandbox_provider_credentials_expires_at_idx").on(table.expiresAt),
+  ],
+);
+
 export const hosts = sqliteTable(
   "hosts",
   {

@@ -63,6 +63,11 @@ import {
   type ThreadCreateServiceRequest,
 } from "./thread-create-request.js";
 
+type ThreadCreateDeps = Pick<
+  AppDeps,
+  "config" | "db" | "hub" | "logger" | "machineAuth" | "sandboxRegistry"
+>;
+
 interface CreateThreadInEnvironmentArgs {
   environment: Environment;
   projectDefaults: Parameters<typeof buildExecutionOptions>[2]["projectDefaults"];
@@ -86,7 +91,7 @@ interface CreateSandboxHostThreadArgs {
 }
 
 async function createThreadInEnvironment(
-  deps: AppDeps,
+  deps: ThreadCreateDeps,
   args: CreateThreadInEnvironmentArgs,
 ) {
   const thread = createThreadRecord(
@@ -181,7 +186,7 @@ async function createThreadInEnvironment(
 }
 
 async function reuseEnvironmentByHostPath(
-  deps: AppDeps,
+  deps: ThreadCreateDeps,
   args: ReuseEnvironmentByHostPathArgs,
 ): Promise<ReturnType<typeof getThreadSafe> | null> {
   const existing = findEnvironmentByHostPath(deps.db, args.hostId, args.path);
@@ -223,7 +228,7 @@ async function reuseEnvironmentByHostPath(
 }
 
 async function startQueuedThreadIfNeeded(
-  deps: AppDeps,
+  deps: ThreadCreateDeps,
   args: {
     environment: Environment;
     execution: Awaited<ReturnType<typeof buildExecutionOptions>>;
@@ -249,7 +254,7 @@ async function startQueuedThreadIfNeeded(
 }
 
 async function createSandboxHostThread(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "machineAuth" | "sandboxRegistry">,
+  deps: ThreadCreateDeps,
   args: CreateSandboxHostThreadArgs,
 ) {
   requireReachablePublicServerUrl(deps.config);
@@ -323,7 +328,7 @@ async function createSandboxHostThread(
 }
 
 export async function createThreadFromRequest(
-  deps: Pick<AppDeps, "config" | "db" | "hub" | "logger" | "machineAuth" | "sandboxRegistry">,
+  deps: ThreadCreateDeps,
   requestInput: ThreadCreateServiceRequestInput,
 ) {
   requireProjectExists(deps, requestInput.projectId);

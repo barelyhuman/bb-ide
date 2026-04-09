@@ -1,6 +1,3 @@
-import { randomBytes } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 import { and, eq, inArray, isNotNull, lt, ne } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { betterAuth } from "better-auth";
@@ -16,6 +13,7 @@ import {
 } from "@bb/host-daemon-contract";
 import { hostTypeSchema, type HostType } from "@bb/domain";
 import { z } from "zod";
+import { readOrCreateSecretFile } from "./lib/secret-file.js";
 import type { ServerLogger } from "../types.js";
 
 const AUTH_SECRET_FILE_NAME = "auth-secret";
@@ -130,43 +128,12 @@ function parseCredentialMetadata(raw: unknown): MachineCredentialMetadata | null
 }
 
 async function readOrCreateAuthSecret(dataDir: string): Promise<string> {
-  await mkdir(dataDir, { recursive: true });
-  const secretPath = join(dataDir, AUTH_SECRET_FILE_NAME);
-
-  try {
-    const existing = (await readFile(secretPath, "utf8")).trim();
-    if (existing.length > 0) {
-      return existing;
-    }
-  } catch (error) {
-    const errorCode =
-      error instanceof Error && "code" in error ? error.code : undefined;
-    if (errorCode !== "ENOENT") {
-      throw error;
-    }
-  }
-
-  const generatedSecret = randomBytes(32).toString("hex");
-  try {
-    await writeFile(secretPath, `${generatedSecret}\n`, {
-      encoding: "utf8",
-      flag: "wx",
-      mode: 0o600,
-    });
-    return generatedSecret;
-  } catch (error) {
-    const errorCode =
-      error instanceof Error && "code" in error ? error.code : undefined;
-    if (errorCode !== "EEXIST") {
-      throw error;
-    }
-  }
-
-  const racedSecret = (await readFile(secretPath, "utf8")).trim();
-  if (racedSecret.length === 0) {
-    throw new Error(`Failed to initialize auth secret at ${secretPath}`);
-  }
-  return racedSecret;
+  return readOrCreateSecretFile({
+    bytes: 32,
+    dataDir,
+    encoding: "hex",
+    fileName: AUTH_SECRET_FILE_NAME,
+  });
 }
 
 export async function createMachineAuthService(

@@ -49,6 +49,11 @@ import {
   tryTransition,
 } from "../services/threads/thread-transitions.js";
 
+type CommandResultSideEffectsDeps = Pick<
+  AppDeps,
+  "config" | "db" | "hub" | "logger" | "machineAuth" | "sandboxRegistry"
+>;
+
 function parseCommand(
   commandRow: typeof hostDaemonCommands.$inferSelect,
 ) {
@@ -84,7 +89,7 @@ function isWorkspaceMutationCommand(
   return "environmentId" in command && command.type === expectedType;
 }
 async function handleProvisionCommandResult(
-  deps: AppDeps,
+  deps: CommandResultSideEffectsDeps,
   report: Extract<HostDaemonCommandResultReport, { type: "environment.provision" }>,
   commandRow: typeof hostDaemonCommands.$inferSelect,
 ): Promise<void> {
@@ -328,7 +333,7 @@ function handleThreadStartResult(
 }
 
 function handleThreadStopResult(
-  deps: AppDeps,
+  deps: CommandResultSideEffectsDeps,
   report: Extract<HostDaemonCommandResultReport, { type: "thread.stop" }>,
   commandRow: typeof hostDaemonCommands.$inferSelect,
 ): Promise<void> {
@@ -436,7 +441,7 @@ function handleSandboxRuntimeMaterialResult(
 }
 
 export async function handleCommandResultSideEffects(
-  deps: AppDeps,
+  deps: CommandResultSideEffectsDeps,
   report: HostDaemonCommandResultReport,
   commandRow: typeof hostDaemonCommands.$inferSelect,
 ): Promise<void> {
