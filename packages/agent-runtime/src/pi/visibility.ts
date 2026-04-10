@@ -67,6 +67,14 @@ interface PiThreadIdentityRawEvent {
   kind: "thread/identity";
 }
 
+interface PiThreadContextWindowUsageRawEvent {
+  kind: "thread/contextWindowUsage/updated";
+}
+
+interface PiErrorRawEvent {
+  kind: "error";
+}
+
 interface PiNonSdkRawEvent {
   kind: "non-sdk";
   method: string;
@@ -104,10 +112,12 @@ interface PiToolExecutionStartRawEvent {
 }
 
 type PiRawEvent =
+  | PiErrorRawEvent
   | PiMessageBoundaryRawEvent
   | PiMessageUpdateRawEvent
   | PiNonSdkRawEvent
   | PiSimpleSdkRawEvent
+  | PiThreadContextWindowUsageRawEvent
   | PiThreadIdentityRawEvent
   | PiToolExecutionStartRawEvent
   | PiUnknownSdkRawEvent;
@@ -199,6 +209,14 @@ function parsePiRawEvent(event: JsonRpcMessage): PiRawEvent {
     return { kind: "thread/identity" };
   }
 
+  if (event.method === "thread/contextWindowUsage/updated") {
+    return { kind: "thread/contextWindowUsage/updated" };
+  }
+
+  if (event.method === "error") {
+    return { kind: "error" };
+  }
+
   if (event.method !== "sdk/message") {
     return {
       kind: "non-sdk",
@@ -279,6 +297,12 @@ function describeParsedPiRawEvent(
   switch (event.kind) {
     case "thread/identity":
       return { kind: "thread/identity", coverage: "normalized" };
+
+    case "thread/contextWindowUsage/updated":
+      return { kind: "thread/contextWindowUsage/updated", coverage: "normalized" };
+
+    case "error":
+      return { kind: "error", coverage: "normalized" };
 
     case "non-sdk":
       return { kind: event.method, coverage: "unknown" };

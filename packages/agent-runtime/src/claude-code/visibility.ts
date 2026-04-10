@@ -77,6 +77,14 @@ interface ClaudeThreadIdentityRawEvent {
   kind: "thread/identity";
 }
 
+interface ClaudeThreadContextWindowUsageRawEvent {
+  kind: "thread/contextWindowUsage/updated";
+}
+
+interface ClaudeErrorRawEvent {
+  kind: "error";
+}
+
 interface ClaudeNonSdkRawEvent {
   kind: "non-sdk";
   method: string;
@@ -139,6 +147,7 @@ interface ClaudeSimpleStreamRawEvent {
 
 type ClaudeRawEvent =
   | ClaudeAssistantRawEvent
+  | ClaudeErrorRawEvent
   | ClaudeNonSdkRawEvent
   | ClaudeRateLimitRawEvent
   | ClaudeResultRawEvent
@@ -146,6 +155,7 @@ type ClaudeRawEvent =
   | ClaudeStreamDeltaRawEvent
   | ClaudeStreamStartRawEvent
   | ClaudeSystemRawEvent
+  | ClaudeThreadContextWindowUsageRawEvent
   | ClaudeThreadIdentityRawEvent
   | ClaudeUnknownSdkRawEvent
   | ClaudeUserRawEvent;
@@ -257,6 +267,14 @@ function parseClaudeRawEvent(event: JsonRpcMessage): ClaudeRawEvent {
     return { kind: "thread/identity" };
   }
 
+  if (event.method === "thread/contextWindowUsage/updated") {
+    return { kind: "thread/contextWindowUsage/updated" };
+  }
+
+  if (event.method === "error") {
+    return { kind: "error" };
+  }
+
   if (event.method !== "sdk/message") {
     return {
       kind: "non-sdk",
@@ -361,6 +379,12 @@ function describeParsedClaudeRawEvent(
   switch (event.kind) {
     case "thread/identity":
       return { kind: "thread/identity", coverage: "normalized" };
+
+    case "thread/contextWindowUsage/updated":
+      return { kind: "thread/contextWindowUsage/updated", coverage: "normalized" };
+
+    case "error":
+      return { kind: "error", coverage: "normalized" };
 
     case "non-sdk":
       return { kind: event.method, coverage: "unknown" };
