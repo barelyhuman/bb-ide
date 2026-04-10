@@ -1,9 +1,5 @@
 import { z } from "zod";
-import {
-  approvalPolicySchema,
-  questionPolicySchema,
-  resolvedThreadExecutionOptionsSchema,
-} from "./shared-types.js";
+import { resolvedThreadExecutionOptionsSchema } from "./shared-types.js";
 import {
   threadEventSchema,
   threadEventTypeSchema,
@@ -83,13 +79,8 @@ const storedTurnRequestTypeSet = new Set<ThreadEventType>([
   "client/turn/start",
 ]);
 
-const storedTurnRequestExecutionSchema = resolvedThreadExecutionOptionsSchema.extend({
-  approvalPolicy: approvalPolicySchema.optional().default("on-request"),
-  questionPolicy: questionPolicySchema.optional().default("allow"),
-});
-
 const storedTurnRequestEventDataSchema = turnRequestEventDataSchema.extend({
-  execution: storedTurnRequestExecutionSchema,
+  execution: resolvedThreadExecutionOptionsSchema,
 });
 
 function parseStoredTurnRequestEventData(

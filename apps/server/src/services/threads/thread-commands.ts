@@ -31,9 +31,8 @@ import {
 
 export interface ExecutionOptionsRequest {
   model?: CreateThreadRequest["model"];
-  questionPolicy?: CreateThreadRequest["questionPolicy"];
+  permissionMode?: CreateThreadRequest["permissionMode"];
   reasoningLevel?: CreateThreadRequest["reasoningLevel"];
-  sandboxMode?: CreateThreadRequest["sandboxMode"];
   serviceTier?: CreateThreadRequest["serviceTier"];
 }
 
@@ -106,8 +105,7 @@ export async function buildExecutionOptions(
       ...(request.model ? { model: request.model } : {}),
       ...(request.serviceTier ? { serviceTier: request.serviceTier } : {}),
       ...(request.reasoningLevel ? { reasoningLevel: request.reasoningLevel } : {}),
-      ...(request.sandboxMode ? { sandboxMode: request.sandboxMode } : {}),
-      ...(request.questionPolicy ? { questionPolicy: request.questionPolicy } : {}),
+      ...(request.permissionMode ? { permissionMode: request.permissionMode } : {}),
       source,
     },
     threadId: args.threadId,
@@ -122,7 +120,6 @@ export async function buildThreadStartCommand(
     thread: args.thread,
     environment: args.environment,
     isThreadCreation: true,
-    questionPolicy: args.execution.questionPolicy,
   });
   return {
     type: "thread.start",
@@ -188,7 +185,6 @@ export async function prepareTurnRunCommandPayload(
   const runtimeContext = await resolveThreadRuntimeCommandConfig(deps, {
     thread: args.thread,
     environment: args.environment,
-    questionPolicy: args.execution.questionPolicy,
   });
   return buildPreparedTurnRunCommandPayload({
     environmentId: args.environment.id,
@@ -276,7 +272,6 @@ export async function queueTurnSteerCommand(
   const runtimeContext = await resolveThreadRuntimeCommandConfig(deps, {
     thread: args.thread,
     environment: args.environment,
-    questionPolicy: args.execution.questionPolicy,
   });
   queueCommand(deps.db, deps.hub, {
     hostId: args.environment.hostId,

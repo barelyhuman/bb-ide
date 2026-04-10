@@ -973,8 +973,8 @@ describe("CLI command output contracts", () => {
         "high",
         "--service-tier",
         "fast",
-        "--sandbox-mode",
-        "workspace-write",
+        "--permission-mode",
+        "limited",
       ],
       (program) => registerThreadCommands(program, () => "http://server"),
     );
@@ -986,7 +986,7 @@ describe("CLI command output contracts", () => {
         providerId: "codex",
         model: "gpt-5",
         reasoningLevel: "high",
-        sandboxMode: "workspace-write",
+        permissionMode: "limited",
         serviceTier: "fast",
         input: [{ type: "text", text: "hello" }],
         environment: { type: "host", hostId: "host-test-001", workspace: { type: "unmanaged", path: null } },
@@ -3276,135 +3276,4 @@ describe("CLI JSON output contracts", () => {
     ]);
   });
 
-  it("bb thread interactions answer resolves user-input requests", async () => {
-    const getInteraction = vi.fn(async () =>
-      makePendingInteraction({
-        id: "int-answer",
-        providerId: "codex",
-        providerRequestId: "request-answer",
-        providerThreadId: "provider-thread-answer",
-        threadId: "thread-answer",
-        turnId: "turn-answer",
-        payload: {
-          kind: "user_input_request",
-          itemId: "item-answer",
-          questions: [
-            {
-              id: "environment",
-              header: "Env",
-              question: "Which environment?",
-              allowsOther: false,
-              multiSelect: false,
-              options: [
-                { label: "staging", description: "Use staging", preview: null },
-                { label: "prod", description: "Use production", preview: null },
-              ],
-            },
-            {
-              id: "ticket",
-              header: "Ticket",
-              question: "Which ticket?",
-              allowsOther: true,
-              multiSelect: false,
-              options: [],
-            },
-          ],
-        },
-      }),
-    );
-    const resolveInteraction = vi.fn(async () =>
-      makePendingInteraction({
-        id: "int-answer",
-        providerId: "codex",
-        providerRequestId: "request-answer",
-        providerThreadId: "provider-thread-answer",
-        threadId: "thread-answer",
-        turnId: "turn-answer",
-        payload: {
-          kind: "user_input_request",
-          itemId: "item-answer",
-          questions: [
-            {
-              id: "environment",
-              header: "Env",
-              question: "Which environment?",
-              allowsOther: false,
-              multiSelect: false,
-              options: [
-                { label: "staging", description: "Use staging", preview: null },
-                { label: "prod", description: "Use production", preview: null },
-              ],
-            },
-            {
-              id: "ticket",
-              header: "Ticket",
-              question: "Which ticket?",
-              allowsOther: true,
-              multiSelect: false,
-              options: [],
-            },
-          ],
-        },
-        status: "resolved",
-        resolvedAt: Date.now(),
-        resolution: {
-          kind: "user_input_request",
-          answers: {
-            environment: ["staging"],
-            ticket: ["OPS-123"],
-          },
-        },
-      }),
-    );
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              interactions: {
-                ":interactionId": {
-                  $get: getInteraction,
-                  resolve: {
-                    $post: resolveInteraction,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    }));
-
-    await runCommand(
-      [
-        "thread",
-        "interactions",
-        "answer",
-        "int-answer",
-        "thread-answer",
-        "--answer",
-        "environment=staging",
-        "--answer",
-        "ticket=OPS-123",
-      ],
-      (program) => registerThreadCommands(program, () => "http://server"),
-    );
-
-    expect(resolveInteraction).toHaveBeenCalledWith({
-      param: {
-        id: "thread-answer",
-        interactionId: "int-answer",
-      },
-      json: {
-        kind: "user_input_request",
-        answers: {
-          environment: ["staging"],
-          ticket: ["OPS-123"],
-        },
-      },
-    });
-    expect(collectLogLines(vi.mocked(console.log))).toEqual([
-      "Interaction int-answer answered",
-    ]);
-  });
 });

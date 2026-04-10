@@ -1,24 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  normalizePendingInteractionQuestionOption,
   normalizePendingInteractionRequestedPermissionProfile,
 } from "./pending-interaction-normalization.js";
 
 describe("pending interaction normalization", () => {
-  it("normalizes question options to an explicit null preview", () => {
-    expect(
-      normalizePendingInteractionQuestionOption({
-        label: "prod",
-        description: "Use production",
-        preview: undefined,
-      }),
-    ).toEqual({
-      label: "prod",
-      description: "Use production",
-      preview: null,
-    });
-  });
-
   it("normalizes requested permission profiles to explicit nulls and arrays", () => {
     expect(
       normalizePendingInteractionRequestedPermissionProfile({

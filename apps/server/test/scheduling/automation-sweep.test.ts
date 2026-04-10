@@ -118,7 +118,7 @@ describe("automation sweep", () => {
         threadType: "standard",
         model: "gpt-5-mini",
         reasoningLevel: "medium",
-        sandboxMode: "danger-full-access",
+        permissionMode: "full",
         serviceTier: "default",
       });
 
@@ -157,7 +157,7 @@ describe("automation sweep", () => {
         providerId: "codex",
         model: "gpt-5-mini",
         reasoningLevel: "medium",
-        sandboxMode: "danger-full-access",
+        permissionMode: "full",
         serviceTier: "default",
       });
     } finally {

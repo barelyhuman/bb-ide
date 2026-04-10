@@ -61,7 +61,6 @@ describe("bridge", () => {
         cwd: "/tmp/worktree",
         instructionMode: "replace",
         permissionMode: "default",
-        questionPolicy: "allow",
       },
       {},
     );
@@ -78,7 +77,6 @@ describe("bridge", () => {
         cwd: "/tmp/worktree",
         instructionMode: "append",
         permissionMode: "default",
-        questionPolicy: "allow",
       },
       {},
     );
@@ -99,7 +97,6 @@ describe("bridge", () => {
         cwd: "/tmp/worktree",
         instructionMode: "append",
         permissionMode: "dontAsk",
-        questionPolicy: "allow",
       },
       {},
     );
@@ -107,22 +104,7 @@ describe("bridge", () => {
     expect(options.permissionMode).toBe("dontAsk");
   });
 
-  it("disallows AskUserQuestion when the thread question policy denies it", () => {
-    const options = buildSessionOptions(
-      {
-        baseInstructions: "You are a coder.",
-        cwd: "/tmp/worktree",
-        instructionMode: "append",
-        permissionMode: "default",
-        questionPolicy: "deny",
-      },
-      {},
-    );
-
-    expect(options.disallowedTools).toEqual(["AskUserQuestion"]);
-  });
-
-  it("returns the static Claude model list with 1M aliases", async () => {
+  it("returns the bridge-owned Claude model list from the SDK probe", async () => {
     await expect(listClaudeCodeBridgeModels()).resolves.toEqual([
       expect.objectContaining({
         id: "opus[1m]",

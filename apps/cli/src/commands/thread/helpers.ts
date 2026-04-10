@@ -1,8 +1,6 @@
 import {
-  questionPolicySchema,
-  type QuestionPolicy,
-  sandboxModeSchema,
-  type SandboxMode,
+  permissionModeSchema,
+  type PermissionMode,
   type ThreadStatus,
   serviceTierSchema,
   type ServiceTier,
@@ -21,16 +19,7 @@ export const DEFAULT_THREAD_WAIT_TIMEOUT_SECONDS = 30;
 export const DEFAULT_THREAD_WAIT_POLL_INTERVAL_MS = 250;
 
 const SERVICE_TIERS: ServiceTier[] = ["fast", "default"];
-const SANDBOX_MODES: SandboxMode[] = [
-  "read-only",
-  "workspace-write",
-  "danger-full-access",
-];
-const QUESTION_POLICIES: QuestionPolicy[] = [
-  "allow",
-  "avoid",
-  "deny",
-];
+const PERMISSION_MODES: PermissionMode[] = ["limited", "full"];
 
 export function statusText(status: ThreadStatus): string {
   switch (status) {
@@ -86,28 +75,15 @@ export function parseServiceTier(
   );
 }
 
-export function parseSandboxMode(
+export function parsePermissionMode(
   value: string | undefined,
-): SandboxMode | undefined {
+): PermissionMode | undefined {
   if (value === undefined) return undefined;
-  const parsed = sandboxModeSchema.safeParse(value);
+  const parsed = permissionModeSchema.safeParse(value);
   if (parsed.success) {
     return parsed.data;
   }
   throw new Error(
-    `Invalid sandbox mode '${value}'. Expected ${joinValues(SANDBOX_MODES)}.`,
-  );
-}
-
-export function parseQuestionPolicy(
-  value: string | undefined,
-): QuestionPolicy | undefined {
-  if (value === undefined) return undefined;
-  const parsed = questionPolicySchema.safeParse(value);
-  if (parsed.success) {
-    return parsed.data;
-  }
-  throw new Error(
-    `Invalid question policy '${value}'. Expected ${joinValues(QUESTION_POLICIES)}.`,
+    `Invalid permission mode '${value}'. Expected ${joinValues(PERMISSION_MODES)}.`,
   );
 }

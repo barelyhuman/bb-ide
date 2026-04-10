@@ -30,6 +30,7 @@ describe("codex provider adapter", () => {
     expect(adapter.capabilities).toEqual({
       supportsRename: true,
       supportsServiceTier: true,
+      supportedPermissionModes: ["limited", "full"],
     });
   });
 
@@ -64,7 +65,7 @@ describe("codex provider adapter", () => {
     });
   });
 
-  it("buildCommand thread/start includes approval policy and sandbox", () => {
+  it("buildCommand thread/start defaults to full permissions", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommand({
       type: "thread/start",
@@ -83,7 +84,7 @@ describe("codex provider adapter", () => {
     });
   });
 
-  it("buildCommand thread/start passes through explicit approval policy", () => {
+  it("buildCommand thread/start maps limited permissions to on-request approvals", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommand({
       type: "thread/start",
@@ -92,7 +93,7 @@ describe("codex provider adapter", () => {
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
       options: {
-        approvalPolicy: "on-request",
+        permissionMode: "limited",
       },
     });
 
@@ -100,11 +101,12 @@ describe("codex provider adapter", () => {
       method: "thread/start",
       params: {
         approvalPolicy: "on-request",
+        sandbox: "workspace-write",
       },
     });
   });
 
-  it("buildCommand thread/start enables request_user_input outside deny mode", () => {
+  it("buildCommand thread/start disables provider user-input requests", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommand({
       type: "thread/start",
@@ -112,32 +114,6 @@ describe("codex provider adapter", () => {
       threadId: "bb-thread-1",
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
-      options: {
-        questionPolicy: "avoid",
-      },
-    });
-
-    expect(cmd).toMatchObject({
-      method: "thread/start",
-      params: {
-        config: {
-          "features.default_mode_request_user_input": true,
-        },
-      },
-    });
-  });
-
-  it("buildCommand thread/start disables request_user_input when question policy denies it", () => {
-    const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommand({
-      type: "thread/start",
-      cwd: "/tmp/worktree",
-      threadId: "bb-thread-1",
-      input: [{ type: "text", text: "hello" }],
-      instructionMode: "append",
-      options: {
-        questionPolicy: "deny",
-      },
     });
 
     expect(cmd).toMatchObject({
@@ -280,7 +256,7 @@ describe("codex provider adapter", () => {
     });
   });
 
-  it("buildCommand turn/start passes through explicit approval policy", () => {
+  it("buildCommand turn/start maps limited permissions to on-request approvals", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommand({
       type: "turn/start",
@@ -288,7 +264,7 @@ describe("codex provider adapter", () => {
       providerThreadId: "codex-1",
       input: [{ type: "text", text: "do it" }],
       options: {
-        approvalPolicy: "on-request",
+        permissionMode: "limited",
       },
     });
 
@@ -300,35 +276,14 @@ describe("codex provider adapter", () => {
     });
   });
 
-  it("buildCommand turn/start maps read-only sandbox policy", () => {
-    const adapter = createCodexProviderAdapter();
-    const cmd = adapter.buildCommand({
-      type: "turn/start",
-      threadId: "t1",
-      providerThreadId: "codex-1",
-      input: [{ type: "text", text: "inspect only" }],
-      options: { sandboxMode: "read-only" },
-    });
-    expect(cmd).toMatchObject({
-      method: "turn/start",
-      params: {
-        sandboxPolicy: {
-          type: "readOnly",
-          access: { type: "fullAccess" },
-          networkAccess: false,
-        },
-      },
-    });
-  });
-
-  it("buildCommand turn/start maps workspace-write sandbox policy", () => {
+  it("buildCommand turn/start maps limited permissions to workspace-write sandbox policy", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommand({
       type: "turn/start",
       threadId: "t1",
       providerThreadId: "codex-1",
       input: [{ type: "text", text: "edit it" }],
-      options: { sandboxMode: "workspace-write" },
+      options: { permissionMode: "limited" },
     });
     expect(cmd).toMatchObject({
       method: "turn/start",
@@ -1698,33 +1653,6 @@ describe("codex provider adapter", () => {
     });
   });
 
-  it("decodeInteractiveRequest rejects secret user-input requests", () => {
-    const adapter = createCodexProviderAdapter();
-
-    expect(
-      adapter.decodeInteractiveRequest?.({
-        jsonrpc: "2.0",
-        id: 12,
-        method: "item/tool/requestUserInput",
-        params: {
-          threadId: "t1",
-          turnId: "turn-secret-input",
-          itemId: "item-secret-input",
-          questions: [
-            {
-              id: "token",
-              header: "Token",
-              question: "Enter the token",
-              isOther: false,
-              isSecret: true,
-              options: null,
-            },
-          ],
-        },
-      }),
-    ).toBeNull();
-  });
-
   it("buildInteractiveResponse maps bb command approvals back to Codex responses", () => {
     const adapter = createCodexProviderAdapter();
     expect(
@@ -1870,37 +1798,6 @@ describe("codex provider adapter", () => {
         },
       },
       scope: "session",
-    });
-  });
-
-  it("buildInteractiveResponse maps user input answers back to Codex responses", () => {
-    const adapter = createCodexProviderAdapter();
-    expect(
-      adapter.buildInteractiveResponse?.({
-        request: {
-          requestId: 9,
-          method: "item/tool/requestUserInput",
-          providerThreadId: "t1",
-          turnId: "turn-1",
-          payload: {
-            kind: "user_input_request",
-            itemId: "item-2",
-            questions: [],
-          },
-        },
-        resolution: {
-          kind: "user_input_request",
-          answers: {
-            target: ["prod"],
-          },
-        },
-      }),
-    ).toEqual({
-      answers: {
-        target: {
-          answers: ["prod"],
-        },
-      },
     });
   });
 

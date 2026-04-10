@@ -1,7 +1,6 @@
 import { z } from "zod";
 import {
   pendingInteractionRequestedPermissionProfileSchema,
-  type PendingInteractionQuestionOption,
   type PendingInteractionRequestedPermissionProfile,
 } from "@bb/domain";
 
@@ -100,30 +99,10 @@ type PendingInteractionRequestedPermissionProfileInput = z.input<
   typeof pendingInteractionRequestedPermissionProfileInputSchema
 >;
 
-const pendingInteractionQuestionOptionInputSchema = z.object({
-  label: z.string(),
-  description: z.string(),
-  preview: z.preprocess(nullToUndefined, z.string().optional()),
-}).transform((value) => ({
-  label: value.label,
-  description: value.description,
-  preview: value.preview ?? null,
-}));
-
-type PendingInteractionQuestionOptionInput = z.input<
-  typeof pendingInteractionQuestionOptionInputSchema
->;
-
 export function normalizePendingInteractionRequestedPermissionProfile(
   input: PendingInteractionRequestedPermissionProfileInput,
 ): PendingInteractionRequestedPermissionProfile {
   return pendingInteractionRequestedPermissionProfileSchema.parse(
     pendingInteractionRequestedPermissionProfileInputSchema.parse(input),
   );
-}
-
-export function normalizePendingInteractionQuestionOption(
-  input: PendingInteractionQuestionOptionInput,
-): PendingInteractionQuestionOption {
-  return pendingInteractionQuestionOptionInputSchema.parse(input);
 }

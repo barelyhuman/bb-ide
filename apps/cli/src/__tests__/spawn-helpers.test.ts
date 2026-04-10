@@ -8,7 +8,7 @@ import {
   parseThreadWaitTimeoutSeconds,
   parseThreadWaitPollIntervalMs,
   parseServiceTier,
-  parseSandboxMode,
+  parsePermissionMode,
   DEFAULT_THREAD_WAIT_TIMEOUT_SECONDS,
   DEFAULT_THREAD_WAIT_POLL_INTERVAL_MS,
 } from "../commands/thread/helpers.js";
@@ -263,26 +263,22 @@ describe("parseServiceTier", () => {
   });
 });
 
-describe("parseSandboxMode", () => {
+describe("parsePermissionMode", () => {
   it("returns undefined when undefined", () => {
-    expect(parseSandboxMode(undefined)).toBeUndefined();
+    expect(parsePermissionMode(undefined)).toBeUndefined();
   });
 
-  it("returns 'read-only' for 'read-only'", () => {
-    expect(parseSandboxMode("read-only")).toBe("read-only");
+  it("returns 'limited' for 'limited'", () => {
+    expect(parsePermissionMode("limited")).toBe("limited");
   });
 
-  it("returns 'workspace-write' for 'workspace-write'", () => {
-    expect(parseSandboxMode("workspace-write")).toBe("workspace-write");
-  });
-
-  it("returns 'danger-full-access' for 'danger-full-access'", () => {
-    expect(parseSandboxMode("danger-full-access")).toBe("danger-full-access");
+  it("returns 'full' for 'full'", () => {
+    expect(parsePermissionMode("full")).toBe("full");
   });
 
   it("throws for invalid mode", () => {
-    expect(() => parseSandboxMode("readwrite")).toThrow(
-      "Invalid sandbox mode",
+    expect(() => parsePermissionMode("readwrite")).toThrow(
+      "Invalid permission mode",
     );
   });
 });

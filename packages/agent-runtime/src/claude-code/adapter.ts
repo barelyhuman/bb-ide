@@ -69,12 +69,8 @@ import type {
 import {
   buildClaudePermissionUpdates,
   CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
-  CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD,
   claudePermissionRequestApprovalParamsSchema,
-  claudeToolRequestUserInputParamsSchema,
   toClaudePermissionMode,
-  toClaudeUserInputUpdatedInput,
-  toPendingInteractionUserQuestions,
 } from "./interactive-contract.js";
 import { claudeCodeVisibilityMetadata } from "./visibility.js";
 
@@ -382,6 +378,7 @@ export function createClaudeCodeProviderAdapter(
   const capabilities: ProviderCapabilities = {
     supportsRename: providerInfo.capabilities.supportsRename,
     supportsServiceTier: providerInfo.capabilities.supportsServiceTier,
+    supportedPermissionModes: providerInfo.capabilities.supportedPermissionModes,
   };
 
   const turnState = createProviderTurnStateRegistry<ClaudeTurnState>({
@@ -833,9 +830,8 @@ export function createClaudeCodeProviderAdapter(
               cwd: command.cwd,
               instructionMode: command.instructionMode,
               permissionMode: toClaudePermissionMode({
-                approvalPolicy: command.options?.approvalPolicy,
+                permissionMode: command.options?.permissionMode,
               }),
-              questionPolicy: command.options?.questionPolicy ?? "allow",
               ...(Object.keys(finalConfig).length > 0 ? { config: finalConfig } : {}),
               ...(command.options?.model ? { model: command.options.model } : {}),
               ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
@@ -870,9 +866,8 @@ export function createClaudeCodeProviderAdapter(
               providerThreadId: command.providerThreadId ?? null,
               instructionMode: command.instructionMode,
               permissionMode: toClaudePermissionMode({
-                approvalPolicy: command.options?.approvalPolicy,
+                permissionMode: command.options?.permissionMode,
               }),
-              questionPolicy: command.options?.questionPolicy ?? "allow",
               ...(Object.keys(finalResumeConfig).length > 0 ? { config: finalResumeConfig } : {}),
               ...(command.options?.model ? { model: command.options.model } : {}),
               ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
@@ -973,29 +968,6 @@ export function createClaudeCodeProviderAdapter(
             },
           };
         }
-        case CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD: {
-          const parsed = claudeToolRequestUserInputParamsSchema.safeParse(
-            request.params,
-          );
-          if (!parsed.success) {
-            return null;
-          }
-
-          return {
-            requestId: request.id,
-            method: request.method,
-            threadId: parsed.data.threadId,
-            providerThreadId: parsed.data.providerThreadId,
-            turnId: parsed.data.turnId,
-            payload: {
-              kind: "user_input_request",
-              itemId: parsed.data.itemId,
-              questions: toPendingInteractionUserQuestions({
-                questions: parsed.data.questions,
-              }),
-            },
-          };
-        }
         default:
           return null;
       }
@@ -1034,22 +1006,6 @@ export function createClaudeCodeProviderAdapter(
             ...(updatedPermissions === undefined
               ? {}
               : { updatedPermissions }),
-          };
-        }
-        case "user_input_request": {
-          if (args.resolution.kind !== "user_input_request") {
-            throw new Error(
-              "Interactive response kind mismatch for user input request",
-            );
-          }
-
-          return {
-            kind: "user_input_request",
-            behavior: "allow",
-            updatedInput: toClaudeUserInputUpdatedInput({
-              questions: args.request.payload.questions,
-              answers: args.resolution.answers,
-            }),
           };
         }
         default:

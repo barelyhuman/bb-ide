@@ -217,7 +217,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       content: payload.input,
       model: execution.model,
       reasoningLevel: execution.reasoningLevel,
-      sandboxMode: execution.sandboxMode,
+      permissionMode: execution.permissionMode,
       serviceTier: execution.serviceTier,
     });
     return context.json(toQueuedMessage(draft), 201);

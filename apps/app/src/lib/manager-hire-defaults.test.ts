@@ -13,6 +13,7 @@ function makeProvider(id: string): SystemProviderInfo {
     capabilities: {
       supportsRename: true,
       supportsServiceTier: true,
+      supportedPermissionModes: ["limited", "full"],
     },
     available: true,
   };

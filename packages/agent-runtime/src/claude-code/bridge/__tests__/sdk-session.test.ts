@@ -87,7 +87,7 @@ describe("SdkSession", () => {
       {
         ...defaultOptions,
         permissionMode: "dontAsk",
-        disallowedTools: ["AskUserQuestion"],
+        disallowedTools: ["WebFetch"],
       },
       onMessage,
       onDone,
@@ -99,7 +99,7 @@ describe("SdkSession", () => {
       expect.objectContaining({
         options: expect.objectContaining({
           permissionMode: "dontAsk",
-          disallowedTools: ["AskUserQuestion"],
+          disallowedTools: ["WebFetch"],
         }),
       }),
     );

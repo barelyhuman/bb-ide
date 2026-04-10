@@ -420,7 +420,7 @@ describe("internal event side effects", () => {
           model: "gpt-5.4",
           serviceTier: "default",
           reasoningLevel: "medium",
-          sandboxMode: "danger-full-access",
+          permissionMode: "full",
           source: "client/turn/requested",
         },
         resumeContext: {
@@ -611,7 +611,7 @@ describe("internal event side effects", () => {
           model: "gpt-5.4",
           serviceTier: "default",
           reasoningLevel: "medium",
-          sandboxMode: "danger-full-access",
+          permissionMode: "full",
           source: "client/turn/requested",
         },
         resumeContext: {
@@ -728,7 +728,7 @@ describe("internal event side effects", () => {
           model: "gpt-5.4",
           serviceTier: "default",
           reasoningLevel: "medium",
-          sandboxMode: "danger-full-access",
+          permissionMode: "full",
           source: "client/turn/requested",
         },
         resumeContext: {

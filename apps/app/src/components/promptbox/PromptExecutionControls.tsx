@@ -1,4 +1,4 @@
-import type { ReasoningLevel, SandboxMode, ServiceTier } from "@bb/domain";
+import type { PermissionMode, ReasoningLevel, ServiceTier } from "@bb/domain";
 import { formatModelLabel } from "@/hooks/useThreadCreationOptions";
 import { PromptProviderModelPicker } from "./PromptProviderModelPicker";
 import { PromptOptionPicker, PromptOptionDisplay, type PromptOption } from "./PromptOptionPicker";
@@ -32,10 +32,11 @@ export interface PromptExecutionReasoningConfig {
   onChange: (value: ReasoningLevel) => void;
 }
 
-export interface PromptExecutionSandboxConfig {
-  value?: SandboxMode;
-  options: readonly PromptOption<SandboxMode>[];
-  onChange: (value: SandboxMode) => void;
+export interface PromptExecutionPermissionConfig {
+  value?: PermissionMode;
+  options: readonly PromptOption<PermissionMode>[];
+  onChange: (value: PermissionMode) => void;
+  supported: boolean;
 }
 
 export interface PromptExecutionControlsProps {
@@ -43,7 +44,7 @@ export interface PromptExecutionControlsProps {
   model: PromptExecutionModelConfig;
   serviceTier?: PromptExecutionServiceTierConfig;
   reasoning: PromptExecutionReasoningConfig;
-  sandbox: PromptExecutionSandboxConfig;
+  permission: PromptExecutionPermissionConfig;
 }
 
 export function PromptExecutionControls({
@@ -51,9 +52,9 @@ export function PromptExecutionControls({
   model,
   serviceTier,
   reasoning,
-  sandbox,
+  permission,
 }: PromptExecutionControlsProps) {
-  const resolvedSandboxMode = sandbox.value ?? sandbox.options[0]?.value ?? "workspace-write";
+  const resolvedPermissionMode = permission.value ?? permission.options[0]?.value ?? "full";
   const handleProviderChange = provider.onChange ?? (() => {});
   const handleServiceTierChange = serviceTier?.onChange ?? (() => {});
 
@@ -101,12 +102,14 @@ export function PromptExecutionControls({
           onChange={reasoning.onChange}
         />
       ) : null}
-      <PromptOptionPicker
-        label="Sandbox"
-        value={resolvedSandboxMode}
-        options={sandbox.options}
-        onChange={sandbox.onChange}
-      />
+      {permission.supported && permission.options.length > 1 ? (
+        <PromptOptionPicker
+          label="Permissions"
+          value={resolvedPermissionMode}
+          options={permission.options}
+          onChange={permission.onChange}
+        />
+      ) : null}
     </>
   );
 }

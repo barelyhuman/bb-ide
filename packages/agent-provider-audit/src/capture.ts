@@ -48,12 +48,10 @@ interface BuildExecutionOptionsArgs {
 }
 
 interface ProviderAuditResolvedExecutionOptions {
-  approvalPolicy: NonNullable<ProviderAuditScenarioExecutionOptions["approvalPolicy"]>;
   model: string;
-  questionPolicy: NonNullable<ProviderAuditScenarioExecutionOptions["questionPolicy"]>;
+  permissionMode: NonNullable<ProviderAuditScenarioExecutionOptions["permissionMode"]>;
   serviceTier: NonNullable<ProviderAuditScenarioExecutionOptions["serviceTier"]>;
   reasoningLevel: NonNullable<ProviderAuditScenarioExecutionOptions["reasoningLevel"]>;
-  sandboxMode: NonNullable<ProviderAuditScenarioExecutionOptions["sandboxMode"]>;
 }
 
 const BUILT_IN_SCENARIOS: Record<string, ProviderAuditScenario> = {
@@ -542,12 +540,10 @@ function buildExecutionOptions(
   args: BuildExecutionOptionsArgs,
 ): ProviderAuditResolvedExecutionOptions {
   return {
-    approvalPolicy: args.execution?.approvalPolicy ?? "never",
     model: args.model ?? "provider-default",
-    questionPolicy: args.execution?.questionPolicy ?? "allow",
+    permissionMode: args.execution?.permissionMode ?? "full",
     serviceTier: args.execution?.serviceTier ?? "fast",
     reasoningLevel: args.execution?.reasoningLevel ?? "medium",
-    sandboxMode: args.execution?.sandboxMode ?? "danger-full-access",
   };
 }
 

@@ -17,7 +17,6 @@ import {
   pendingInteractionNetworkPermissionsSchema,
 } from "@bb/domain";
 import type {
-  ApprovalPolicy,
   PendingInteractionCommandAction,
   PendingInteractionFileChangeApprovalDecision,
   PendingInteractionGrantedPermissionProfile,
@@ -26,7 +25,6 @@ import type {
   PendingInteractionCommandApprovalSimpleDecision,
   PromptInput,
   ProviderCapabilities,
-  SandboxMode,
   ServiceTier,
   ThreadEvent,
   ThreadEventContextWindowUsage,
@@ -43,7 +41,7 @@ import type { DynamicToolSpec } from "./generated/codex-app-server/schema/v2/Dyn
 import type { CommandExecutionRequestApprovalResponse } from "./generated/codex-app-server/schema/v2/CommandExecutionRequestApprovalResponse.js";
 import type { FileChangeRequestApprovalResponse } from "./generated/codex-app-server/schema/v2/FileChangeRequestApprovalResponse.js";
 import type { PermissionsRequestApprovalResponse } from "./generated/codex-app-server/schema/v2/PermissionsRequestApprovalResponse.js";
-import type { ToolRequestUserInputResponse } from "./generated/codex-app-server/schema/v2/ToolRequestUserInputResponse.js";
+import type { SandboxMode as CodexSandboxMode } from "./generated/codex-app-server/schema/v2/SandboxMode.js";
 import type { ThreadResumeParams } from "./generated/codex-app-server/schema/v2/ThreadResumeParams.js";
 import type { ThreadStartParams } from "./generated/codex-app-server/schema/v2/ThreadStartParams.js";
 import type { UserInput as CodexUserInput } from "./generated/codex-app-server/schema/v2/UserInput.js";
@@ -53,10 +51,7 @@ import {
   buildShellEnvironmentPolicyConfig,
   toOptionalRecord,
 } from "../shared/adapter-utils.js";
-import {
-  normalizePendingInteractionQuestionOption,
-  normalizePendingInteractionRequestedPermissionProfile,
-} from "../shared/pending-interaction-normalization.js";
+import { normalizePendingInteractionRequestedPermissionProfile } from "../shared/pending-interaction-normalization.js";
 import {
   decodeNativeProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
@@ -92,19 +87,39 @@ function toCodexContextWindowUsage(
   };
 }
 
-function toCodexApprovalPolicy(
-  policy: ApprovalPolicy | undefined,
-): AskForApproval | undefined {
-  switch (policy) {
-    case undefined:
-      return undefined;
-    case "never":
-    case "on-request":
-    case "on-failure":
-    case "untrusted":
-      return policy;
-    default:
-      return undefined;
+interface CodexPermissionSettings {
+  approvalPolicy: AskForApproval;
+  sandbox: CodexSandboxMode;
+  sandboxPolicy: SandboxPolicy;
+}
+
+function toLimitedCodexSandboxPolicy(): SandboxPolicy {
+  return {
+    type: "workspaceWrite",
+    writableRoots: [],
+    readOnlyAccess: { type: "fullAccess" },
+    networkAccess: true,
+    excludeTmpdirEnvVar: false,
+    excludeSlashTmp: false,
+  };
+}
+
+function toCodexPermissionSettings(
+  mode: AdapterOptions["permissionMode"],
+): CodexPermissionSettings {
+  switch (mode ?? "full") {
+    case "limited":
+      return {
+        approvalPolicy: "on-request",
+        sandbox: "workspace-write",
+        sandboxPolicy: toLimitedCodexSandboxPolicy(),
+      };
+    case "full":
+      return {
+        approvalPolicy: "never",
+        sandbox: "danger-full-access",
+        sandboxPolicy: { type: "dangerFullAccess" },
+      };
   }
 }
 
@@ -345,8 +360,7 @@ type CodexGrantedPermissionProfile = PermissionsRequestApprovalResponse["permiss
 type CodexInteractiveResponse =
   | CommandExecutionRequestApprovalResponse
   | FileChangeRequestApprovalResponse
-  | PermissionsRequestApprovalResponse
-  | ToolRequestUserInputResponse;
+  | PermissionsRequestApprovalResponse;
 
 const codexCommandActionInputSchema = z.object({
   type: z.string(),
@@ -395,27 +409,6 @@ const codexFileChangeRequestApprovalParamsSchema = z.object({
   itemId: z.string(),
   reason: z.string().nullable().optional(),
   grantRoot: z.string().nullable().optional(),
-});
-
-const codexToolRequestUserInputOptionSchema = z.object({
-  label: z.string(),
-  description: z.string(),
-});
-
-const codexToolRequestUserInputQuestionSchema = z.object({
-  id: z.string(),
-  header: z.string(),
-  question: z.string(),
-  isOther: z.boolean(),
-  isSecret: z.boolean(),
-  options: z.array(codexToolRequestUserInputOptionSchema).nullable(),
-});
-
-const codexToolRequestUserInputParamsSchema = z.object({
-  threadId: z.string(),
-  turnId: z.string(),
-  itemId: z.string(),
-  questions: z.array(codexToolRequestUserInputQuestionSchema),
 });
 
 const codexPermissionsRequestApprovalParamsSchema = z.object({
@@ -673,27 +666,6 @@ function isHandledCodexMethod(method: string): method is HandledCodexMethod {
   return handledCodexMethodSet.has(method);
 }
 
-function toSandboxPolicy(sandboxMode?: SandboxMode): SandboxPolicy {
-  const resolved: SandboxMode = sandboxMode ?? "danger-full-access";
-  switch (resolved) {
-    case "read-only":
-      return { type: "readOnly", access: { type: "fullAccess" }, networkAccess: false };
-    case "workspace-write":
-      return {
-        type: "workspaceWrite",
-        writableRoots: [],
-        readOnlyAccess: { type: "fullAccess" },
-        networkAccess: true,
-        excludeTmpdirEnvVar: false,
-        excludeSlashTmp: false,
-      };
-    case "danger-full-access":
-      return { type: "dangerFullAccess" };
-    default:
-      return assertNever(resolved);
-  }
-}
-
 function toCodexServiceTier(tier: ServiceTier | undefined): "fast" | undefined {
   return tier === "fast" ? "fast" : undefined;
 }
@@ -749,8 +721,7 @@ function buildCodexConfig(
   if (options?.reasoningLevel) {
     config["model_reasoning_effort"] = options.reasoningLevel;
   }
-  config["features.default_mode_request_user_input"] =
-    options?.questionPolicy !== "deny";
+  config["features.default_mode_request_user_input"] = false;
   return Object.keys(config).length > 0 ? config : undefined;
 }
 
@@ -1090,6 +1061,7 @@ export function createCodexProviderAdapter(
   const capabilities: ProviderCapabilities = {
     supportsRename: providerInfo.capabilities.supportsRename,
     supportsServiceTier: providerInfo.capabilities.supportsServiceTier,
+    supportedPermissionModes: providerInfo.capabilities.supportedPermissionModes,
   };
 
   return {
@@ -1120,10 +1092,12 @@ export function createCodexProviderAdapter(
           };
         case "thread/start": {
           const dynamicTools = toCodexDynamicTools(command.dynamicTools);
+          const permissionSettings = toCodexPermissionSettings(
+            command.options?.permissionMode,
+          );
           const params: ThreadStartParams = {
-            approvalPolicy:
-              toCodexApprovalPolicy(command.options?.approvalPolicy) ?? "never",
-            sandbox: command.options?.sandboxMode ?? "danger-full-access",
+            approvalPolicy: permissionSettings.approvalPolicy,
+            sandbox: permissionSettings.sandbox,
             cwd: command.cwd,
             baseInstructions: command.options?.instructions ?? "",
             model: command.options?.model ?? undefined,
@@ -1141,11 +1115,13 @@ export function createCodexProviderAdapter(
         }
         case "thread/resume": {
           const dynamicTools = toCodexDynamicTools(command.dynamicTools);
+          const permissionSettings = toCodexPermissionSettings(
+            command.options?.permissionMode,
+          );
           const params: ThreadResumeParams = {
             threadId: command.providerThreadId ?? command.threadId,
-            approvalPolicy:
-              toCodexApprovalPolicy(command.options?.approvalPolicy) ?? "never",
-            sandbox: command.options?.sandboxMode ?? "danger-full-access",
+            approvalPolicy: permissionSettings.approvalPolicy,
+            sandbox: permissionSettings.sandbox,
             cwd: command.cwd,
             baseInstructions: command.options?.instructions ?? "",
             model: command.options?.model ?? undefined,
@@ -1160,20 +1136,23 @@ export function createCodexProviderAdapter(
             params,
           };
         }
-        case "turn/start":
+        case "turn/start": {
+          const permissionSettings = toCodexPermissionSettings(
+            command.options?.permissionMode,
+          );
           return {
             jsonrpc: "2.0",
             method: "turn/start",
             params: {
               threadId: command.providerThreadId ?? command.threadId,
               input: toCodexUserInput(command.input),
-              approvalPolicy:
-                toCodexApprovalPolicy(command.options?.approvalPolicy) ?? "never",
-              sandboxPolicy: toSandboxPolicy(command.options?.sandboxMode),
+              approvalPolicy: permissionSettings.approvalPolicy,
+              sandboxPolicy: permissionSettings.sandboxPolicy,
               model: command.options?.model ?? undefined,
               serviceTier: toCodexServiceTier(command.options?.serviceTier),
             },
           };
+        }
         case "turn/steer":
           return {
             jsonrpc: "2.0",
@@ -1524,41 +1503,6 @@ export function createCodexProviderAdapter(
             },
           };
         }
-        case "item/tool/requestUserInput": {
-          const parsed = codexToolRequestUserInputParamsSchema.safeParse(
-            request.params,
-          );
-          if (!parsed.success) {
-            return null;
-          }
-          if (parsed.data.questions.some((question) => question.isSecret)) {
-            return null;
-          }
-          return {
-            requestId: request.id,
-            method: request.method,
-            providerThreadId: parsed.data.threadId,
-            turnId: parsed.data.turnId,
-            payload: {
-              kind: "user_input_request",
-              itemId: parsed.data.itemId,
-              questions: parsed.data.questions.map((question) => ({
-                id: question.id,
-                header: question.header,
-                question: question.question,
-                allowsOther: question.isOther,
-                multiSelect: false,
-                options: (question.options ?? []).map((option) =>
-                  normalizePendingInteractionQuestionOption({
-                    label: option.label,
-                    description: option.description,
-                    preview: null,
-                  })
-                ),
-              })),
-            },
-          };
-        }
         case "item/permissions/requestApproval": {
           const parsed = codexPermissionsRequestApprovalParamsSchema.safeParse(
             request.params,
@@ -1605,20 +1549,6 @@ export function createCodexProviderAdapter(
               pendingInteractionToCodexFileChangeApprovalDecision[
                 args.resolution.decision
               ],
-          };
-          return response;
-        }
-        case "user_input_request": {
-          if (args.resolution.kind !== "user_input_request") {
-            throw new Error("Interactive response kind mismatch for user input request");
-          }
-          const response: ToolRequestUserInputResponse = {
-            answers: Object.fromEntries(
-              Object.entries(args.resolution.answers).map(([questionId, answers]) => [
-                questionId,
-                { answers },
-              ]),
-            ),
           };
           return response;
         }

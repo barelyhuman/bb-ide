@@ -45,7 +45,7 @@ export interface AgentRuntimeOptions {
    *  `threadId` is always the BB thread id and `providerThreadId` is always present. */
   onToolCall: (request: ToolCallRequest) => Promise<ToolCallResponse>;
 
-  /** Called when a provider pauses for user interaction such as approvals or questions.
+  /** Called when a provider pauses for user permission or approval.
    *  The runtime converts provider-native requests into bb's shared pending-interaction contract. */
   onInteractiveRequest?: (
     request: PendingInteractionCreate,

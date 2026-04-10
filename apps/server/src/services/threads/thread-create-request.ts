@@ -12,11 +12,10 @@ export interface ThreadCreateServiceRequestInput {
   model?: CreateThreadRequest["model"];
   origin: ThreadCreateOrigin | null;
   parentThreadId?: string;
+  permissionMode?: CreateThreadRequest["permissionMode"];
   projectId: string;
   providerId?: CreateThreadRequest["providerId"];
-  questionPolicy?: CreateThreadRequest["questionPolicy"];
   reasoningLevel?: CreateThreadRequest["reasoningLevel"];
-  sandboxMode?: CreateThreadRequest["sandboxMode"];
   serviceTier?: CreateThreadRequest["serviceTier"];
   title?: string;
   type: ThreadType;

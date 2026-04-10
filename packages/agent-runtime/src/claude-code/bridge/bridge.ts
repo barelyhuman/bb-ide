@@ -24,9 +24,7 @@ import type {
 } from "@anthropic-ai/claude-agent-sdk";
 import {
   instructionModeValues,
-  questionPolicySchema,
   type InstructionMode,
-  type QuestionPolicy,
 } from "@bb/domain";
 import { z } from "zod";
 import {
@@ -44,15 +42,11 @@ import {
   type ToolCallForwarder,
 } from "./tool-proxy-mcp.js";
 import {
-  CLAUDE_ASK_USER_QUESTION_TOOL_NAME,
   type ClaudeInteractiveResponse,
   type ClaudePermissionMode,
   type ClaudePermissionRequestApprovalParams,
   type ClaudePermissionUpdate,
-  type ClaudeToolRequestUserInputParams,
   CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
-  CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD,
-  claudeAskUserQuestionInputSchema,
   claudeInteractiveResponseSchema,
   claudePermissionModeSchema,
   claudePermissionUpdateSchema,
@@ -65,7 +59,6 @@ import {
 // ---------------------------------------------------------------------------
 
 const bridgeInstructionModeSchema = z.enum(instructionModeValues);
-const claudeQuestionPolicySchema = z.enum(questionPolicySchema.options);
 
 const claudeCodeCommandSchema = z.discriminatedUnion("method", [
   z.object({
@@ -85,7 +78,6 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
       cwd: z.string(),
       baseInstructions: z.string(),
       permissionMode: claudePermissionModeSchema,
-      questionPolicy: claudeQuestionPolicySchema,
       config: z.record(z.string(), z.unknown()).optional(),
       model: z.string().optional(),
       instructionMode: bridgeInstructionModeSchema,
@@ -104,7 +96,6 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
       providerThreadId: z.string().nullable(),
       baseInstructions: z.string().optional(),
       permissionMode: claudePermissionModeSchema,
-      questionPolicy: claudeQuestionPolicySchema,
       config: z.record(z.string(), z.unknown()).optional(),
       model: z.string().optional(),
       instructionMode: bridgeInstructionModeSchema,
@@ -195,7 +186,7 @@ interface ThreadIdRef {
 
 interface PendingInteractiveRequest {
   itemId: string;
-  kind: "permission_request" | "user_input_request";
+  kind: "permission_request";
   originalInput: Record<string, unknown>;
   resolve: (value: PermissionResult) => void;
 }
@@ -205,7 +196,6 @@ interface ThreadSession {
   pendingToolCalls: Map<string | number, PendingToolCall>;
   pendingInteractiveRequests: Map<string | number, PendingInteractiveRequest>;
   permissionMode: ClaudePermissionMode;
-  questionPolicy: QuestionPolicy;
   providerThreadId?: string;
 }
 
@@ -233,7 +223,6 @@ interface BuildSessionOptionsArgs {
   instructionMode: InstructionMode;
   model?: string;
   permissionMode: ClaudePermissionMode;
-  questionPolicy: QuestionPolicy;
 }
 
 interface ForwardInteractiveRequestArgs extends BuildInteractiveRequestParamsArgs {
@@ -382,26 +371,7 @@ function parseClaudePermissionUpdates(
 
 function buildInteractiveRequestParams(
   args: BuildInteractiveRequestParamsArgs,
-):
-  | ClaudePermissionRequestApprovalParams
-  | ClaudeToolRequestUserInputParams {
-  if (args.toolName === CLAUDE_ASK_USER_QUESTION_TOOL_NAME) {
-    const parsedQuestionInput = claudeAskUserQuestionInputSchema.safeParse(
-      args.input,
-    );
-    if (!parsedQuestionInput.success) {
-      throw new Error("Invalid AskUserQuestion input");
-    }
-
-    return {
-      threadId: args.threadId,
-      providerThreadId: args.providerThreadId,
-      turnId: "",
-      itemId: args.toolUseId,
-      questions: parsedQuestionInput.data.questions,
-    };
-  }
-
+): ClaudePermissionRequestApprovalParams {
   return {
     threadId: args.threadId,
     providerThreadId: args.providerThreadId,
@@ -449,22 +419,6 @@ function buildInteractivePermissionResult(
           : { updatedPermissions: response.updatedPermissions }),
         toolUseID: pending.itemId,
       };
-    case "user_input_request":
-      if (response.behavior === "deny") {
-        return {
-          behavior: "deny",
-          message: response.message,
-          ...(response.interrupt === undefined
-            ? {}
-            : { interrupt: response.interrupt }),
-          toolUseID: pending.itemId,
-        };
-      }
-      return {
-        behavior: "allow",
-        updatedInput: response.updatedInput,
-        toolUseID: pending.itemId,
-      };
   }
 }
 
@@ -482,9 +436,7 @@ function createForwardInteractiveRequest(
       return;
     }
 
-    let params:
-      | ClaudePermissionRequestApprovalParams
-      | ClaudeToolRequestUserInputParams;
+    let params: ClaudePermissionRequestApprovalParams;
     try {
       params = buildInteractiveRequestParams(args);
     } catch (error) {
@@ -498,10 +450,6 @@ function createForwardInteractiveRequest(
 
     toolCallRequestIdCounter += 1;
     const requestId = toolCallRequestIdCounter;
-    const method =
-      args.toolName === CLAUDE_ASK_USER_QUESTION_TOOL_NAME
-        ? CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD
-        : CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD;
 
     const finish = (result: PermissionResult): void => {
       args.signal.removeEventListener("abort", onAbort);
@@ -522,10 +470,7 @@ function createForwardInteractiveRequest(
     args.signal.addEventListener("abort", onAbort, { once: true });
     threadSession.pendingInteractiveRequests.set(requestId, {
       itemId: args.toolUseId,
-      kind:
-        args.toolName === CLAUDE_ASK_USER_QUESTION_TOOL_NAME
-          ? "user_input_request"
-          : "permission_request",
+      kind: "permission_request",
       originalInput: args.input,
       resolve: finish,
     });
@@ -533,7 +478,7 @@ function createForwardInteractiveRequest(
     send({
       jsonrpc: "2.0",
       id: requestId,
-      method,
+      method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
       params,
     });
   });
@@ -555,29 +500,6 @@ function createCanUseTool(
     }
     const suggestions = parseClaudePermissionUpdates(options.suggestions);
 
-    if (toolName === CLAUDE_ASK_USER_QUESTION_TOOL_NAME) {
-      if (threadSession.questionPolicy === "deny") {
-        return {
-          behavior: "deny",
-          message: "Question requests are disabled for this thread",
-          toolUseID: options.toolUseID,
-        };
-      }
-
-      return forwardInteractiveRequest({
-        threadId: threadIdRef.current,
-        providerThreadId:
-          threadSession.providerThreadId ?? threadIdRef.current,
-        toolName,
-        toolUseId: options.toolUseID,
-        input,
-        decisionReason: options.decisionReason,
-        blockedPath: options.blockedPath,
-        suggestions,
-        signal: options.signal,
-      });
-    }
-
     const requestContext: ClaudeCanUseToolDecisionContext = {
       toolName,
       blockedPath: options.blockedPath,
@@ -589,6 +511,14 @@ function createCanUseTool(
       || (options.suggestions?.length ?? 0) > 0;
 
     if (!shouldRequestApproval) {
+      return {
+        behavior: "allow",
+        updatedInput: input,
+        toolUseID: options.toolUseID,
+      };
+    }
+
+    if (threadSession.permissionMode === "bypassPermissions") {
       return {
         behavior: "allow",
         updatedInput: input,
@@ -643,9 +573,6 @@ export function buildSessionOptions(
     model,
     env,
     permissionMode: params.permissionMode,
-    ...(params.questionPolicy === "deny"
-      ? { disallowedTools: [CLAUDE_ASK_USER_QUESTION_TOOL_NAME] }
-      : {}),
   };
 }
 
@@ -717,7 +644,6 @@ function handleThreadStart(
     pendingToolCalls: new Map(),
     pendingInteractiveRequests: new Map(),
     permissionMode: params.permissionMode,
-    questionPolicy: params.questionPolicy,
   };
   sessions.set(threadIdRef.current, threadSession);
   session.start();
@@ -774,7 +700,6 @@ function handleThreadResume(
     pendingToolCalls: new Map(),
     pendingInteractiveRequests: new Map(),
     permissionMode: params.permissionMode,
-    questionPolicy: params.questionPolicy,
     ...(providerThreadId ? { providerThreadId } : {}),
   };
   sessions.set(threadId, threadSession);

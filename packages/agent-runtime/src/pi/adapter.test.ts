@@ -43,6 +43,7 @@ describe("pi provider adapter", () => {
     expect(adapter.capabilities).toEqual({
       supportsRename: false,
       supportsServiceTier: false,
+      supportedPermissionModes: ["full"],
     });
   });
 

@@ -261,7 +261,7 @@ describe("public project and host routes", () => {
         threadType: "standard",
         model: "gpt-5",
         reasoningLevel: "high",
-        sandboxMode: "workspace-write",
+        permissionMode: "limited",
         serviceTier: "fast",
       });
 
@@ -274,7 +274,7 @@ describe("public project and host routes", () => {
         providerId: "codex",
         model: "gpt-5",
         reasoningLevel: "high",
-        sandboxMode: "workspace-write",
+        permissionMode: "limited",
         serviceTier: "fast",
       });
     } finally {
@@ -297,7 +297,7 @@ describe("public project and host routes", () => {
         threadType: "standard",
         model: "gpt-5",
         reasoningLevel: "medium",
-        sandboxMode: "danger-full-access",
+        permissionMode: "full",
         serviceTier: "default",
       });
       upsertProjectExecutionDefaults(harness.db, {
@@ -306,7 +306,7 @@ describe("public project and host routes", () => {
         threadType: "manager",
         model: "gpt-5-mini",
         reasoningLevel: "high",
-        sandboxMode: "workspace-write",
+        permissionMode: "limited",
         serviceTier: "fast",
       });
 
@@ -319,7 +319,7 @@ describe("public project and host routes", () => {
         providerId: "codex",
         model: "gpt-5-mini",
         reasoningLevel: "high",
-        sandboxMode: "workspace-write",
+        permissionMode: "limited",
         serviceTier: "fast",
       });
     } finally {
@@ -342,7 +342,7 @@ describe("public project and host routes", () => {
         threadType: "standard",
         model: "gpt-5-mini",
         reasoningLevel: "medium",
-        sandboxMode: "danger-full-access",
+        permissionMode: "full",
         serviceTier: "default",
       });
 
@@ -373,7 +373,7 @@ describe("public project and host routes", () => {
         providerId: "codex",
         model: "gpt-5-mini",
         reasoningLevel: "medium",
-        sandboxMode: "danger-full-access",
+        permissionMode: "full",
         serviceTier: "default",
       });
       expect(
@@ -385,7 +385,7 @@ describe("public project and host routes", () => {
         providerId: "codex",
         model: "gpt-5",
         reasoningLevel: "high",
-        sandboxMode: "danger-full-access",
+        permissionMode: "full",
         serviceTier: "default",
       });
     } finally {
@@ -408,7 +408,7 @@ describe("public project and host routes", () => {
         threadType: "manager",
         model: "gpt-5",
         reasoningLevel: "high",
-        sandboxMode: "workspace-write",
+        permissionMode: "limited",
         serviceTier: "fast",
       });
 
@@ -436,7 +436,7 @@ describe("public project and host routes", () => {
         providerId: "codex",
         model: "gpt-5",
         reasoningLevel: "high",
-        sandboxMode: "workspace-write",
+        permissionMode: "limited",
         serviceTier: "fast",
       });
     } finally {

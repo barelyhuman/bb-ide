@@ -1,10 +1,8 @@
 export {
   instructionModeValues,
   instructionModeSchema,
-  approvalPolicySchema,
-  questionPolicySchema,
+  permissionModeSchema,
   reasoningLevelSchema,
-  sandboxModeSchema,
   serviceTierSchema,
   promptInputSchema,
   projectExecutionDefaultsSchema,
@@ -14,13 +12,11 @@ export {
 } from "./shared-types.js";
 export type {
   InstructionMode,
-  ApprovalPolicy,
+  PermissionMode,
   ProjectExecutionDefaults,
   PromptInput,
-  QuestionPolicy,
   ReasoningLevel,
   ResolvedThreadExecutionOptions,
-  SandboxMode,
   ServiceTier,
   ThreadExecutionOptions,
   ThreadExecutionSource,
@@ -45,8 +41,6 @@ export {
   pendingInteractionNetworkPermissionsSchema,
   permissionRequestPendingInteractionPayloadSchema,
   permissionRequestPendingInteractionResolutionSchema,
-  userInputRequestPendingInteractionPayloadSchema,
-  userInputRequestPendingInteractionResolutionSchema,
 } from "./pending-interactions.js";
 export type {
   CommandApprovalPendingInteractionPayload,
@@ -74,15 +68,11 @@ export type {
   PendingInteractionNetworkPolicyRuleAction,
   PendingInteractionPayload,
   PendingInteractionPermissionGrantScope,
-  PendingInteractionQuestionOption,
   PendingInteractionRequestedPermissionProfile,
   PendingInteractionResolution,
   PendingInteractionStatus,
-  PendingInteractionUserInputQuestion,
   PermissionRequestPendingInteractionPayload,
   PermissionRequestPendingInteractionResolution,
-  UserInputRequestPendingInteractionPayload,
-  UserInputRequestPendingInteractionResolution,
 } from "./pending-interactions.js";
 
 export {

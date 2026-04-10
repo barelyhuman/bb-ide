@@ -54,14 +54,15 @@ export function ProjectMainView() {
     setServiceTier,
     reasoningLevel,
     setReasoningLevel,
-    sandboxMode,
-    setSandboxMode,
+    permissionMode,
+    setPermissionMode,
     environmentSelectionValue,
     setEnvironmentSelectionValue,
     activeModel,
     modelOptions,
     reasoningOptions,
-    sandboxOptions,
+    permissionModeOptions,
+    supportsPermissionModeSelection,
     supportsServiceTier,
     serviceTierSupportByProvider,
   } = useThreadCreationOptions({ scope: "new-thread", projectId });
@@ -211,7 +212,7 @@ export function ProjectMainView() {
         model: selectedThreadModel,
         ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
         reasoningLevel,
-        sandboxMode,
+        permissionMode,
         environment: selectedEnvironment,
       });
       promptDraft.clearIfCurrentMatches(submittedDraft);
@@ -296,10 +297,11 @@ export function ProjectMainView() {
                 options: reasoningOptions,
                 onChange: setReasoningLevel,
               }}
-              sandbox={{
-                value: sandboxMode,
-                options: sandboxOptions,
-                onChange: setSandboxMode,
+              permission={{
+                value: permissionMode,
+                options: permissionModeOptions,
+                onChange: setPermissionMode,
+                supported: supportsPermissionModeSelection,
               }}
             />
           }

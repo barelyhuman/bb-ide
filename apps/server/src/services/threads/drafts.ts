@@ -1,5 +1,5 @@
 import { promptInputSchema, threadQueuedMessageSchema } from "@bb/domain";
-import type { PromptInput, ThreadQueuedMessage } from "@bb/domain";
+import type { PermissionMode, PromptInput, ThreadQueuedMessage } from "@bb/domain";
 import { z } from "zod";
 import { ApiError } from "../../errors.js";
 
@@ -9,7 +9,7 @@ interface StoredDraftRow {
   id: string;
   model: string;
   reasoningLevel: string;
-  sandboxMode: string;
+  permissionMode: PermissionMode;
   serviceTier: string;
   threadId: string;
   updatedAt: number;
@@ -47,7 +47,7 @@ export function toQueuedMessage(row: StoredDraftRow): ThreadQueuedMessage {
     content: parseStoredDraftContent(row),
     model: row.model,
     reasoningLevel: row.reasoningLevel,
-    sandboxMode: row.sandboxMode,
+    permissionMode: row.permissionMode,
     serviceTier: row.serviceTier,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

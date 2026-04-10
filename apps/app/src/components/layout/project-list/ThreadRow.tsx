@@ -139,7 +139,7 @@ export function ThreadRow({
   options,
 }: ThreadRowProps) {
   const [isActionsOpen, setIsActionsOpen] = useState(false)
-  const hasPendingInteraction = thread.parentThreadId === null && thread.hasPendingInteraction
+  const hasPendingInteraction = thread.hasPendingInteraction
   const threadIsBusy = isBusyThread(thread) && !hasPendingInteraction
   const showUnreadBadge = !hasPendingInteraction && isUnreadDoneThread(thread)
   const threadTitle = getThreadDisplayTitle(thread)

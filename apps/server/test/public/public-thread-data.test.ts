@@ -143,8 +143,7 @@ describe("public thread data routes", () => {
           execution: {
             model: "gpt-4o-mini",
             reasoningLevel: "medium",
-            sandboxMode: "danger-full-access",
-            questionPolicy: "allow",
+            permissionMode: "full",
             serviceTier: "fast",
             source: "client/turn/requested",
           },
@@ -200,11 +199,9 @@ describe("public thread data routes", () => {
       );
       expect(defaultsResponse.status).toBe(200);
       await expect(readJson(defaultsResponse)).resolves.toEqual({
-        approvalPolicy: "on-request",
         model: "gpt-4o-mini",
         reasoningLevel: "medium",
-        sandboxMode: "danger-full-access",
-        questionPolicy: "allow",
+        permissionMode: "full",
         serviceTier: "fast",
         source: "client/turn/requested",
       });
@@ -354,8 +351,7 @@ describe("public thread data routes", () => {
           execution: {
             model: "gpt-5",
             reasoningLevel: "medium",
-            sandboxMode: "danger-full-access",
-            questionPolicy: "allow",
+            permissionMode: "full",
             serviceTier: "default",
             source: "client/thread/start",
           },
@@ -378,8 +374,7 @@ describe("public thread data routes", () => {
           execution: {
             model: "gpt-5-mini",
             reasoningLevel: "high",
-            sandboxMode: "read-only",
-            questionPolicy: "allow",
+            permissionMode: "limited",
             serviceTier: "fast",
             source: "client/turn/requested",
           },
@@ -397,11 +392,9 @@ describe("public thread data routes", () => {
       );
       expect(defaultsResponse.status).toBe(200);
       await expect(readJson(defaultsResponse)).resolves.toEqual({
-        approvalPolicy: "on-request",
         model: "gpt-5-mini",
         reasoningLevel: "high",
-        sandboxMode: "read-only",
-        questionPolicy: "allow",
+        permissionMode: "limited",
         serviceTier: "fast",
         source: "client/turn/requested",
       });
@@ -436,8 +429,7 @@ describe("public thread data routes", () => {
             model: "gpt-5",
             serviceTier: "default",
             reasoningLevel: "medium",
-            sandboxMode: "danger-full-access",
-            questionPolicy: "allow",
+            permissionMode: "full",
             source: "client/turn/requested",
           },
           initiator: "user",
@@ -547,8 +539,7 @@ describe("public thread data routes", () => {
             model: "gpt-5",
             serviceTier: "default",
             reasoningLevel: "medium",
-            sandboxMode: "danger-full-access",
-            questionPolicy: "allow",
+            permissionMode: "full",
             source: "client/turn/requested",
           },
           initiator: "user",
@@ -570,7 +561,7 @@ describe("public thread data routes", () => {
           body: JSON.stringify({
             input: [{ type: "text", text: "Draft from test" }],
             reasoningLevel: "high",
-            sandboxMode: "danger-full-access",
+            permissionMode: "full",
           }),
         },
       );
@@ -612,7 +603,7 @@ describe("public thread data routes", () => {
         content: [{ type: "text", text: "First queued draft" }],
         model: "gpt-5",
         reasoningLevel: "medium",
-        sandboxMode: "danger-full-access",
+        permissionMode: "full",
         serviceTier: "default",
       });
       seedDraft(harness.deps, {
@@ -620,7 +611,7 @@ describe("public thread data routes", () => {
         content: [{ type: "text", text: "Second queued draft" }],
         model: "gpt-5",
         reasoningLevel: "high",
-        sandboxMode: "danger-full-access",
+        permissionMode: "full",
         serviceTier: "fast",
       });
 
@@ -634,14 +625,14 @@ describe("public thread data routes", () => {
           content: [{ type: "text", text: "First queued draft" }],
           model: "gpt-5",
           reasoningLevel: "medium",
-          sandboxMode: "danger-full-access",
+          permissionMode: "full",
           serviceTier: "default",
         }),
         expect.objectContaining({
           content: [{ type: "text", text: "Second queued draft" }],
           model: "gpt-5",
           reasoningLevel: "high",
-          sandboxMode: "danger-full-access",
+          permissionMode: "full",
           serviceTier: "fast",
         }),
       ]));
@@ -675,7 +666,7 @@ describe("public thread data routes", () => {
             model: "gpt-5",
             serviceTier: "default",
             reasoningLevel: "medium",
-            sandboxMode: "danger-full-access",
+            permissionMode: "full",
             source: "client/turn/requested",
           },
           initiator: "user",
@@ -706,7 +697,7 @@ describe("public thread data routes", () => {
         model: "gpt-5",
         serviceTier: "default",
         reasoningLevel: "medium",
-        sandboxMode: "danger-full-access",
+        permissionMode: "full",
       });
     } finally {
       await harness.cleanup();
@@ -743,7 +734,7 @@ describe("public thread data routes", () => {
             model: "gpt-5",
             serviceTier: "default",
             reasoningLevel: "high",
-            sandboxMode: "danger-full-access",
+            permissionMode: "full",
           }),
         },
       );
@@ -1264,7 +1255,7 @@ describe("public thread data routes", () => {
           model: "gpt-5",
           serviceTier: "default",
           reasoningLevel: "medium",
-          sandboxMode: "danger-full-access",
+          permissionMode: "full",
           claimedAt: null,
           createdAt: now,
           updatedAt: now,

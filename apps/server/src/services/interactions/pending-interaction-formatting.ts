@@ -41,8 +41,6 @@ export function formatPendingInteractionLifecycleMessage(
             ?? (interaction.payload.toolName
               ? `Awaiting permission approval for ${interaction.payload.toolName}`
               : "Awaiting permission approval");
-        case "user_input_request":
-          return `Awaiting answers to ${interaction.payload.questions.length} question(s)`;
       }
       const exhaustivePayload: never = interaction.payload;
       throw new Error(`Unsupported pending interaction payload: ${String(exhaustivePayload)}`);
@@ -65,8 +63,6 @@ export function formatPendingInteractionLifecycleMessage(
             permissions: interaction.resolution.permissions,
             scope: interaction.resolution.scope,
           });
-        case "user_input_request":
-          return `Answered ${Object.keys(interaction.resolution.answers).length} question(s)`;
       }
       const exhaustiveResolution: never = interaction.resolution;
       throw new Error(

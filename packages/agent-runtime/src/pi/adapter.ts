@@ -555,6 +555,7 @@ export function createPiProviderAdapter(
   const capabilities: ProviderCapabilities = {
     supportsRename: providerInfo.capabilities.supportsRename,
     supportsServiceTier: providerInfo.capabilities.supportsServiceTier,
+    supportedPermissionModes: providerInfo.capabilities.supportedPermissionModes,
   };
   const resolveModelContextWindow = opts?.resolveModelContextWindow
     ?? createPiModelContextWindowResolver();

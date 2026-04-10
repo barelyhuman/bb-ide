@@ -26,24 +26,15 @@ function createPendingInteraction(): PendingInteraction {
     providerRequestId: "request-1",
     status: "pending",
     payload: {
-      kind: "user_input_request",
+      kind: "permission_request",
       itemId: "item_1",
-      questions: [
-        {
-          id: "target",
-          header: "Target",
-          question: "Which environment should I use?",
-          allowsOther: true,
-          multiSelect: false,
-          options: [
-            {
-              label: "prod",
-              description: "Use production",
-              preview: null,
-            },
-          ],
-        },
-      ],
+      reason: "Needs network access",
+      toolName: "WebFetch",
+      permissions: {
+        network: { enabled: true },
+        fileSystem: null,
+        macos: null,
+      },
     },
     resolution: null,
     statusReason: null,

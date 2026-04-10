@@ -33,24 +33,14 @@ function createResolvedInteraction(): PendingInteraction {
     providerRequestId: "request-1",
     status: "resolved",
     payload: {
-      kind: "user_input_request",
+      kind: "file_change_approval",
       itemId: "item_1",
-      questions: [
-        {
-          id: "target",
-          header: "Target",
-          question: "Which environment should I use?",
-          allowsOther: true,
-          multiSelect: false,
-          options: [],
-        },
-      ],
+      reason: "Needs file write approval",
+      grantRoot: "/tmp/project",
     },
     resolution: {
-      kind: "user_input_request",
-      answers: {
-        target: ["prod"],
-      },
+      kind: "file_change_approval",
+      decision: "accept",
     },
     statusReason: null,
     createdAt: 1,
@@ -80,10 +70,8 @@ describe("useResolveThreadPendingInteraction", () => {
         threadId: "thr_1",
         interactionId: "pi_1",
         resolution: {
-          kind: "user_input_request",
-          answers: {
-            target: ["prod"],
-          },
+          kind: "file_change_approval",
+          decision: "accept",
         },
       });
     });
@@ -92,10 +80,8 @@ describe("useResolveThreadPendingInteraction", () => {
       "thr_1",
       "pi_1",
       {
-        kind: "user_input_request",
-        answers: {
-          target: ["prod"],
-        },
+        kind: "file_change_approval",
+        decision: "accept",
       },
     );
     expect(invalidateQueries).toHaveBeenCalledWith({

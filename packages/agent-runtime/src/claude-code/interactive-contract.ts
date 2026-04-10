@@ -5,22 +5,15 @@ import {
   pendingInteractionNetworkPermissionsSchema,
 } from "@bb/domain";
 import type {
-  ApprovalPolicy,
   PendingInteractionGrantedPermissionProfile,
   PendingInteractionPermissionGrantScope,
   PendingInteractionRequestedPermissionProfile,
-  PendingInteractionUserInputQuestion,
+  PermissionMode,
 } from "@bb/domain";
-import {
-  normalizePendingInteractionQuestionOption,
-  normalizePendingInteractionRequestedPermissionProfile,
-} from "../shared/pending-interaction-normalization.js";
+import { normalizePendingInteractionRequestedPermissionProfile } from "../shared/pending-interaction-normalization.js";
 
 export const CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD =
   "item/permissions/requestApproval";
-export const CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD =
-  "item/tool/requestUserInput";
-export const CLAUDE_ASK_USER_QUESTION_TOOL_NAME = "AskUserQuestion";
 
 export const claudePermissionModeSchema = z.enum([
   "default",
@@ -32,58 +25,18 @@ export const claudePermissionModeSchema = z.enum([
 export type ClaudePermissionMode = z.infer<typeof claudePermissionModeSchema>;
 
 interface ToClaudePermissionModeArgs {
-  approvalPolicy: ApprovalPolicy | undefined;
+  permissionMode: PermissionMode | undefined;
 }
 
 export function toClaudePermissionMode(
   args: ToClaudePermissionModeArgs,
 ): ClaudePermissionMode {
-  if (args.approvalPolicy === "never") {
-    return "dontAsk";
+  switch (args.permissionMode ?? "full") {
+    case "full":
+      return "bypassPermissions";
+    case "limited":
+      return "default";
   }
-
-  return "default";
-}
-
-const claudeAskUserQuestionOptionSchema = z.object({
-  label: z.string(),
-  description: z.string(),
-  preview: z.string().optional(),
-});
-
-const claudeAskUserQuestionSchema = z.object({
-  question: z.string(),
-  header: z.string(),
-  options: z.array(claudeAskUserQuestionOptionSchema).min(2).max(4),
-  multiSelect: z.boolean(),
-});
-type ClaudeAskUserQuestion = z.infer<typeof claudeAskUserQuestionSchema>;
-
-export const claudeAskUserQuestionInputSchema = z.object({
-  questions: z.array(claudeAskUserQuestionSchema).min(1).max(4),
-});
-
-interface ToPendingInteractionUserQuestionsArgs {
-  questions: ClaudeAskUserQuestion[];
-}
-
-export function toPendingInteractionUserQuestions(
-  args: ToPendingInteractionUserQuestionsArgs,
-): PendingInteractionUserInputQuestion[] {
-  return args.questions.map((question, index) => ({
-    id: `question-${index + 1}`,
-    header: question.header,
-    question: question.question,
-    allowsOther: true,
-    multiSelect: question.multiSelect,
-    options: question.options.map((option) =>
-      normalizePendingInteractionQuestionOption({
-        label: option.label,
-        description: option.description,
-        preview: option.preview,
-      })
-    ),
-  }));
 }
 
 const claudePermissionRuleValueSchema = z.object({
@@ -233,12 +186,9 @@ export function shouldRequestClaudePermissionApproval(
   args: ShouldRequestClaudePermissionApprovalArgs,
 ): boolean {
   return (
-    args.toolName !== CLAUDE_ASK_USER_QUESTION_TOOL_NAME
-    && (
-      args.blockedPath !== undefined
-      || args.decisionReason !== undefined
-      || (args.suggestions?.length ?? 0) > 0
-    )
+    args.blockedPath !== undefined
+    || args.decisionReason !== undefined
+    || (args.suggestions?.length ?? 0) > 0
   );
 }
 
@@ -253,17 +203,6 @@ export const claudePermissionRequestApprovalParamsSchema = z.object({
 });
 export type ClaudePermissionRequestApprovalParams = z.infer<
   typeof claudePermissionRequestApprovalParamsSchema
->;
-
-export const claudeToolRequestUserInputParamsSchema = z.object({
-  threadId: z.string(),
-  providerThreadId: z.string(),
-  turnId: z.string(),
-  itemId: z.string(),
-  questions: z.array(claudeAskUserQuestionSchema).min(1).max(4),
-});
-export type ClaudeToolRequestUserInputParams = z.infer<
-  typeof claudeToolRequestUserInputParamsSchema
 >;
 
 const claudePermissionApprovalResponseSchema = z.discriminatedUnion(
@@ -283,66 +222,7 @@ const claudePermissionApprovalResponseSchema = z.discriminatedUnion(
   ],
 );
 
-const claudeUserInputUpdatedInputSchema = z.object({
-  questions: z.array(claudeAskUserQuestionSchema).min(1).max(4),
-  answers: z.record(z.string(), z.string()),
-});
-type ClaudeUserInputUpdatedInput = z.infer<
-  typeof claudeUserInputUpdatedInputSchema
->;
-
-interface ToClaudeUserInputUpdatedInputArgs {
-  answers: Record<string, string[]>;
-  questions: PendingInteractionUserInputQuestion[];
-}
-
-export function toClaudeUserInputUpdatedInput(
-  args: ToClaudeUserInputUpdatedInputArgs,
-): ClaudeUserInputUpdatedInput {
-  return {
-    questions: args.questions.map((question) => ({
-      question: question.question,
-      header: question.header,
-      multiSelect: question.multiSelect,
-      options: question.options.map((option) => {
-        const preview = option.preview ?? undefined;
-        return {
-          label: option.label,
-          description: option.description,
-          ...(preview === undefined ? {} : { preview }),
-        };
-      }),
-    })),
-    answers: Object.fromEntries(
-      args.questions.map((question) => [
-        question.question,
-        (args.answers[question.id] ?? []).join(", "),
-      ]),
-    ),
-  };
-}
-
-const claudeUserInputApprovalResponseSchema = z.discriminatedUnion(
-  "behavior",
-  [
-    z.object({
-      kind: z.literal("user_input_request"),
-      behavior: z.literal("allow"),
-      updatedInput: claudeUserInputUpdatedInputSchema,
-    }),
-    z.object({
-      kind: z.literal("user_input_request"),
-      behavior: z.literal("deny"),
-      message: z.string(),
-      interrupt: z.boolean().optional(),
-    }),
-  ],
-);
-
-export const claudeInteractiveResponseSchema = z.discriminatedUnion("kind", [
-  claudePermissionApprovalResponseSchema,
-  claudeUserInputApprovalResponseSchema,
-]);
+export const claudeInteractiveResponseSchema = claudePermissionApprovalResponseSchema;
 export type ClaudeInteractiveResponse = z.infer<
   typeof claudeInteractiveResponseSchema
 >;

@@ -227,44 +227,6 @@ function cleanup(ctx: TestContext): void {
   rmSync(ctx.tmpDir, { recursive: true, force: true });
 }
 
-function createSingleAnswerResolution(
-  request: PendingInteractionCreate,
-  answer: string,
-): PendingInteractionResolution {
-  if (request.payload.kind !== "user_input_request") {
-    throw new Error(`Expected user_input_request, got ${request.payload.kind}`);
-  }
-
-  return {
-    kind: "user_input_request",
-    answers: Object.fromEntries(
-      request.payload.questions.map((question) => [question.id, [answer]]),
-    ),
-  };
-}
-
-function createOrderedAnswerResolution(
-  request: PendingInteractionCreate,
-  answers: string[],
-): PendingInteractionResolution {
-  if (request.payload.kind !== "user_input_request") {
-    throw new Error(`Expected user_input_request, got ${request.payload.kind}`);
-  }
-
-  if (request.payload.questions.length !== answers.length) {
-    throw new Error(
-      `Expected ${answers.length} questions, got ${request.payload.questions.length}`,
-    );
-  }
-
-  return {
-    kind: "user_input_request",
-    answers: Object.fromEntries(
-      request.payload.questions.map((question, index) => [question.id, [answers[index]!]]),
-    ),
-  };
-}
-
 async function createApprovalResolution(
   request: PendingInteractionCreate,
 ): Promise<PendingInteractionResolution> {
@@ -344,7 +306,7 @@ for (const providerId of providers) {
           projectId: "test-project",
           providerId,
           options: {
-            sandboxMode: "danger-full-access",
+            permissionMode: "full",
             ...(model ? { model } : {}),
           },
         });
@@ -352,7 +314,7 @@ for (const providerId of providers) {
         await ctx.runtime.runTurn({
           threadId,
           options: {
-            sandboxMode: "danger-full-access",
+            permissionMode: "full",
             ...(model ? { model } : {}),
           },
           input: [{ type: "text", text: "Reply with exactly: PONG" }],
@@ -398,7 +360,7 @@ for (const providerId of providers) {
           projectId: "test-project",
           providerId,
           options: {
-            sandboxMode: "danger-full-access",
+            permissionMode: "full",
             ...(model ? { model } : {}),
           },
           instructions:
@@ -408,7 +370,7 @@ for (const providerId of providers) {
         await ctx.runtime.runTurn({
           threadId,
           options: {
-            sandboxMode: "danger-full-access",
+            permissionMode: "full",
             ...(model ? { model } : {}),
           },
           input: [{
@@ -460,7 +422,7 @@ for (const providerId of providers) {
           threadId,
           projectId: "test-project",
           providerId,
-          options: { sandboxMode: "danger-full-access" },
+          options: { permissionMode: "full" },
         });
 
         // Turn 1
@@ -506,7 +468,7 @@ for (const providerId of providers) {
           projectId: "test-project",
           providerId,
           options: {
-            sandboxMode: "danger-full-access",
+            permissionMode: "full",
           },
           instructions: "IMPORTANT: End every single response with exactly [TEST_TAG]. Never omit this tag.",
         });
@@ -539,7 +501,7 @@ for (const providerId of providers) {
           threadId,
           projectId: "test-project",
           providerId,
-          options: { sandboxMode: "danger-full-access" },
+          options: { permissionMode: "full" },
         });
 
         // Good turn 1
@@ -610,7 +572,7 @@ for (const providerId of providers) {
           threadId,
           projectId: "test-project",
           providerId,
-          options: { sandboxMode: "danger-full-access" },
+          options: { permissionMode: "full" },
           dynamicTools: [
             {
               name: "bb_test_ping",
@@ -665,7 +627,7 @@ for (const providerId of providers) {
           threadId: firstThreadId,
           projectId: "test-project",
           providerId,
-          options: { sandboxMode: "danger-full-access" },
+          options: { permissionMode: "full" },
         });
 
         providerThreadId = startResult.providerThreadId || undefined;
@@ -759,7 +721,7 @@ for (const providerId of providers) {
               threadId: fallbackThreadId,
               projectId: "test-project",
               providerId,
-              options: { sandboxMode: "danger-full-access" },
+              options: { permissionMode: "full" },
             });
 
             await ctx3.runtime.runTurn({
@@ -811,7 +773,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
           threadId: threadA,
           projectId: "test-project",
           providerId: "codex",
-          options: { sandboxMode: "danger-full-access" },
+          options: { permissionMode: "full" },
         });
 
         await ctx.runtime.startThread({
@@ -819,7 +781,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
           threadId: threadB,
           projectId: "test-project",
           providerId: "codex",
-          options: { sandboxMode: "danger-full-access" },
+          options: { permissionMode: "full" },
         });
 
         // Run turns concurrently
@@ -862,7 +824,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
           threadId: codexThread,
           projectId: "test-project",
           providerId: "codex",
-          options: { sandboxMode: "danger-full-access" },
+          options: { permissionMode: "full" },
         });
 
         await ctx.runtime.startThread({
@@ -870,7 +832,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
           threadId: claudeThread,
           projectId: "test-project",
           providerId: "claude-code",
-          options: { sandboxMode: "danger-full-access" },
+          options: { permissionMode: "full" },
         });
 
         // Run turns concurrently on both providers
@@ -903,224 +865,6 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
 });
 
 describe.concurrent("interactive request scenarios", () => {
-  it("routes Codex request_user_input round-trips through onInteractiveRequest", async () => {
-    const ctx = createTestRuntime("codex", {
-      onInteractiveRequest: async (request) =>
-        createSingleAnswerResolution(request, "BLUE"),
-    });
-
-    try {
-      const threadId = newThreadId();
-      await ctx.runtime.startThread({
-        environmentId: "env-1",
-        threadId,
-        projectId: "test-project",
-        providerId: "codex",
-        options: {
-          sandboxMode: "danger-full-access",
-          questionPolicy: "allow",
-        },
-        instructions:
-          "When the user tells you to ask a question, you must use request_user_input before any plain-text answer.",
-      });
-
-      await ctx.runtime.runTurn({
-        threadId,
-        input: [
-          {
-            type: "text",
-            text:
-              "Before answering, use request_user_input to ask exactly one question with exactly two options labeled RED and BLUE. After you receive the answer, reply with exactly CHOSEN_BLUE.",
-          },
-        ],
-      });
-
-      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
-        timeoutMs: 45_000,
-        label: "Codex interactive request",
-      });
-      await waitForCondition(() => hasTurnCompleted(ctx.events), {
-        timeoutMs: 45_000,
-        label: "Codex interactive turn/completed",
-      });
-
-      expect(ctx.interactiveRequests).toHaveLength(1);
-      expect(ctx.interactiveRequests[0]?.payload.kind).toBe("user_input_request");
-
-      const text = getAgentText(ctx.events) || getStreamedText(ctx.events);
-      expect(text.toUpperCase()).toContain("CHOSEN_BLUE");
-    } finally {
-      await ctx.runtime.shutdown();
-      cleanup(ctx);
-    }
-  }, 60_000);
-
-  it("routes multi-question Codex request_user_input through onInteractiveRequest", async () => {
-    const ctx = createTestRuntime("codex", {
-      onInteractiveRequest: async (request) =>
-        createOrderedAnswerResolution(request, ["BLUE", "DOG"]),
-    });
-
-    try {
-      const threadId = newThreadId();
-      await ctx.runtime.startThread({
-        environmentId: "env-1",
-        threadId,
-        projectId: "test-project",
-        providerId: "codex",
-        options: {
-          sandboxMode: "danger-full-access",
-          questionPolicy: "allow",
-        },
-        instructions:
-          "When the user tells you to ask questions, you must use request_user_input before any plain-text answer.",
-      });
-
-      await ctx.runtime.runTurn({
-        threadId,
-        input: [
-          {
-            type: "text",
-            text:
-              "Before answering, use request_user_input to ask exactly two questions. The first must have options RED and BLUE. The second must have options CAT and DOG. After you receive the answers, reply with exactly BLUE_DOG.",
-          },
-        ],
-      });
-
-      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
-        timeoutMs: 45_000,
-        label: "Codex multi-question interactive request",
-      });
-      await waitForCondition(() => hasTurnCompleted(ctx.events), {
-        timeoutMs: 45_000,
-        label: "Codex multi-question turn/completed",
-      });
-
-      expect(ctx.interactiveRequests).toHaveLength(1);
-      expect(ctx.interactiveRequests[0]?.payload.kind).toBe("user_input_request");
-      expect(
-        ctx.interactiveRequests[0]?.payload.kind === "user_input_request"
-          ? ctx.interactiveRequests[0].payload.questions
-          : [],
-      ).toHaveLength(2);
-
-      const text = getAgentText(ctx.events) || getStreamedText(ctx.events);
-      expect(text.toUpperCase()).toContain("BLUE_DOG");
-    } finally {
-      await ctx.runtime.shutdown();
-      cleanup(ctx);
-    }
-  }, 60_000);
-
-  it("routes Claude AskUserQuestion round-trips through onInteractiveRequest", async () => {
-    const ctx = createTestRuntime("claude-code", {
-      onInteractiveRequest: async (request) =>
-        createSingleAnswerResolution(request, "BLUE"),
-    });
-
-    try {
-      const threadId = newThreadId();
-      await ctx.runtime.startThread({
-        environmentId: "env-1",
-        threadId,
-        projectId: "test-project",
-        providerId: "claude-code",
-        options: {
-          sandboxMode: "danger-full-access",
-          questionPolicy: "allow",
-        },
-        instructions:
-          "When the user explicitly tells you to use AskUserQuestion, do that before any plain-text answer.",
-      });
-
-      await ctx.runtime.runTurn({
-        threadId,
-        input: [
-          {
-            type: "text",
-            text:
-              "Before answering, use AskUserQuestion to ask exactly one question with exactly two options labeled RED and BLUE. After you receive the answer, reply with exactly CHOSEN_BLUE.",
-          },
-        ],
-      });
-
-      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
-        timeoutMs: 45_000,
-        label: "Claude AskUserQuestion request",
-      });
-      await waitForCondition(() => hasTurnCompleted(ctx.events), {
-        timeoutMs: 45_000,
-        label: "Claude AskUserQuestion turn/completed",
-      });
-
-      expect(ctx.interactiveRequests).toHaveLength(1);
-      expect(ctx.interactiveRequests[0]?.payload.kind).toBe("user_input_request");
-
-      const text = getAgentText(ctx.events) || getStreamedText(ctx.events);
-      expect(text.toUpperCase()).toContain("CHOSEN_BLUE");
-    } finally {
-      await ctx.runtime.shutdown();
-      cleanup(ctx);
-    }
-  }, 60_000);
-
-  it("routes multi-question Claude AskUserQuestion through onInteractiveRequest", async () => {
-    const ctx = createTestRuntime("claude-code", {
-      onInteractiveRequest: async (request) =>
-        createOrderedAnswerResolution(request, ["BLUE", "DOG"]),
-    });
-
-    try {
-      const threadId = newThreadId();
-      await ctx.runtime.startThread({
-        environmentId: "env-1",
-        threadId,
-        projectId: "test-project",
-        providerId: "claude-code",
-        options: {
-          sandboxMode: "danger-full-access",
-          questionPolicy: "allow",
-        },
-        instructions:
-          "When the user explicitly tells you to use AskUserQuestion, do that before any plain-text answer.",
-      });
-
-      await ctx.runtime.runTurn({
-        threadId,
-        input: [
-          {
-            type: "text",
-            text:
-              "Before answering, use AskUserQuestion to ask exactly two questions. The first must have options RED and BLUE. The second must have options CAT and DOG. After you receive the answers, reply with exactly BLUE_DOG.",
-          },
-        ],
-      });
-
-      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
-        timeoutMs: 45_000,
-        label: "Claude multi-question AskUserQuestion request",
-      });
-      await waitForCondition(() => hasTurnCompleted(ctx.events), {
-        timeoutMs: 45_000,
-        label: "Claude multi-question AskUserQuestion turn/completed",
-      });
-
-      expect(ctx.interactiveRequests).toHaveLength(1);
-      expect(ctx.interactiveRequests[0]?.payload.kind).toBe("user_input_request");
-      expect(
-        ctx.interactiveRequests[0]?.payload.kind === "user_input_request"
-          ? ctx.interactiveRequests[0].payload.questions
-          : [],
-      ).toHaveLength(2);
-
-      const text = getAgentText(ctx.events) || getStreamedText(ctx.events);
-      expect(text.toUpperCase()).toContain("BLUE_DOG");
-    } finally {
-      await ctx.runtime.shutdown();
-      cleanup(ctx);
-    }
-  }, 60_000);
-
   it("routes Claude permission requests through onInteractiveRequest", async () => {
     const hostsPath = "/etc/hosts";
     const expectedLine = getFirstNonEmptyLine(hostsPath);
@@ -1146,8 +890,7 @@ describe.concurrent("interactive request scenarios", () => {
         projectId: "test-project",
         providerId: "claude-code",
         options: {
-          sandboxMode: "danger-full-access",
-          approvalPolicy: "on-request",
+          permissionMode: "limited",
         },
         instructions:
           "Use the Read tool when the user explicitly asks for it. Do not substitute Bash.",
@@ -1225,7 +968,7 @@ describe.concurrent("interactive request scenarios", () => {
         threadId: firstThreadId,
         projectId: "test-project",
         providerId,
-        options: { sandboxMode: "danger-full-access" },
+        options: { permissionMode: "full" },
         dynamicTools,
       });
 
@@ -1316,7 +1059,7 @@ describe.concurrent("interactive request scenarios", () => {
         threadId: firstThreadId,
         projectId: "test-project",
         providerId,
-        options: { sandboxMode: "danger-full-access" },
+        options: { permissionMode: "full" },
       });
 
       providerThreadId = startResult.providerThreadId || undefined;
@@ -1412,7 +1155,7 @@ describe.concurrent("interactive request scenarios", () => {
         threadId: firstThreadId,
         projectId: "test-project",
         providerId,
-        options: { sandboxMode: "danger-full-access" },
+        options: { permissionMode: "full" },
         dynamicTools,
       });
 
@@ -1511,14 +1254,14 @@ describe.concurrent("interactive request scenarios", () => {
           threadId: codexThreadId1,
           projectId: "test-project",
           providerId: "codex",
-          options: { sandboxMode: "danger-full-access" },
+          options: { permissionMode: "full" },
         }),
         ctx1.runtime.startThread({
           environmentId: "env-1",
           threadId: claudeThreadId1,
           projectId: "test-project",
           providerId: "claude-code",
-          options: { sandboxMode: "danger-full-access" },
+          options: { permissionMode: "full" },
         }),
       ]);
 

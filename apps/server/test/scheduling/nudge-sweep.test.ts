@@ -90,7 +90,7 @@ function seedRunnableManagerThread(args: {
     execution: {
       model: "gpt-5",
       reasoningLevel: "medium",
-      sandboxMode: "danger-full-access",
+      permissionMode: "full",
       serviceTier: "default",
       source: "client/thread/start",
     },
@@ -320,7 +320,7 @@ describe("nudge sweep", () => {
             options: {
               model: "gpt-5",
               reasoningLevel: "medium",
-              sandboxMode: "danger-full-access",
+              permissionMode: "full",
               serviceTier: "default",
               source: "client/turn/requested",
             },

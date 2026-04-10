@@ -287,7 +287,7 @@ describe("public thread routes", () => {
           model: "gpt-5-mini",
           serviceTier: "fast",
           reasoningLevel: "high",
-          sandboxMode: "workspace-write",
+          permissionMode: "limited",
           input: [{ type: "text", text: "Create with explicit execution options" }],
           environment: {
             type: "reuse",
@@ -309,7 +309,7 @@ describe("public thread routes", () => {
           model: "gpt-5-mini",
           serviceTier: "fast",
           reasoningLevel: "high",
-          sandboxMode: "workspace-write",
+          permissionMode: "limited",
           source: "client/thread/start",
         },
       });
@@ -323,7 +323,7 @@ describe("public thread routes", () => {
         model: "gpt-5-mini",
         serviceTier: "fast",
         reasoningLevel: "high",
-        sandboxMode: "workspace-write",
+        permissionMode: "limited",
       });
     } finally {
       await harness.cleanup();
@@ -356,7 +356,7 @@ describe("public thread routes", () => {
           model: "gpt-5-mini",
           serviceTier: "fast",
           reasoningLevel: "high",
-          sandboxMode: "workspace-write",
+          permissionMode: "limited",
           input: [{ type: "text", text: "Create without mutating project defaults" }],
           environment: {
             type: "reuse",
@@ -398,7 +398,7 @@ describe("public thread routes", () => {
         model: "gpt-5",
         serviceTier: "fast",
         reasoningLevel: "high",
-        sandboxMode: "workspace-write",
+        permissionMode: "limited",
       });
 
       const response = await harness.app.request("/api/v1/threads", {
@@ -430,7 +430,7 @@ describe("public thread routes", () => {
           model: "gpt-5",
           serviceTier: "fast",
           reasoningLevel: "high",
-          sandboxMode: "workspace-write",
+          permissionMode: "limited",
           source: "client/thread/start",
         },
       });
@@ -460,7 +460,7 @@ describe("public thread routes", () => {
         model: "gpt-5",
         serviceTier: "fast",
         reasoningLevel: "high",
-        sandboxMode: "workspace-write",
+        permissionMode: "limited",
       });
 
       const response = await harness.app.request("/api/v1/threads", {
@@ -950,7 +950,7 @@ describe("public thread routes", () => {
           model: "gpt-5",
           serviceTier: "default",
           reasoningLevel: "medium",
-          sandboxMode: "danger-full-access",
+          permissionMode: "full",
           source: "client/thread/start",
         },
       });
@@ -2072,7 +2072,7 @@ describe("public thread routes", () => {
             model: "gpt-5",
             serviceTier: "default",
             reasoningLevel: "medium",
-            sandboxMode: "danger-full-access",
+            permissionMode: "full",
             source: "client/turn/requested",
           },
           initiator: "user",
@@ -2105,7 +2105,7 @@ describe("public thread routes", () => {
             model: "gpt-5",
             serviceTier: "default",
             reasoningLevel: "medium",
-            sandboxMode: "danger-full-access",
+            permissionMode: "full",
             source: "client/turn/requested",
           },
           initiator: "user",
@@ -2142,7 +2142,7 @@ describe("public thread routes", () => {
           model: "gpt-5",
           serviceTier: "default",
           reasoningLevel: "medium",
-          sandboxMode: "danger-full-access",
+          permissionMode: "full",
           source: "client/turn/requested",
         },
         resumeContext: {
@@ -2180,7 +2180,7 @@ describe("public thread routes", () => {
           model: "gpt-5",
           serviceTier: "default",
           reasoningLevel: "medium",
-          sandboxMode: "danger-full-access",
+          permissionMode: "full",
           source: "client/turn/requested",
         },
         resumeContext: {
@@ -2226,7 +2226,7 @@ describe("public thread routes", () => {
         model: "gpt-5",
         serviceTier: "default",
         reasoningLevel: "medium",
-        sandboxMode: "danger-full-access",
+        permissionMode: "full",
       });
 
       const response = await harness.app.request(
@@ -2242,7 +2242,7 @@ describe("public thread routes", () => {
             model: "gpt-5-mini",
             serviceTier: "fast",
             reasoningLevel: "high",
-            sandboxMode: "workspace-write",
+            permissionMode: "limited",
           }),
         },
       );
@@ -2259,7 +2259,7 @@ describe("public thread routes", () => {
           model: "gpt-5-mini",
           serviceTier: "fast",
           reasoningLevel: "high",
-          sandboxMode: "workspace-write",
+          permissionMode: "limited",
           source: "client/turn/requested",
         },
       });
@@ -2273,7 +2273,7 @@ describe("public thread routes", () => {
         model: "gpt-5",
         serviceTier: "default",
         reasoningLevel: "medium",
-        sandboxMode: "danger-full-access",
+        permissionMode: "full",
       });
     } finally {
       await harness.cleanup();
@@ -3313,7 +3313,7 @@ describe("public thread routes", () => {
         model: "gpt-5",
         serviceTier: "default",
         reasoningLevel: "medium",
-        sandboxMode: "danger-full-access",
+        permissionMode: "full",
         source: "client/thread/start",
       });
       expect(managerStartCommand.command.dynamicTools).toEqual(
@@ -3443,7 +3443,7 @@ describe("public thread routes", () => {
           model: "gpt-5.4",
           serviceTier: "default",
           reasoningLevel: "medium",
-          sandboxMode: "danger-full-access",
+          permissionMode: "full",
           source: "client/turn/requested",
         },
         resumeContext: {
@@ -3544,7 +3544,7 @@ describe("public thread routes", () => {
           model: "gpt-5.4",
           serviceTier: "default",
           reasoningLevel: "medium",
-          sandboxMode: "danger-full-access",
+          permissionMode: "full",
           source: "client/turn/requested",
         },
         resumeContext: {

@@ -17,6 +17,7 @@ describe("agent provider catalog", () => {
         capabilities: {
           supportsRename: true,
           supportsServiceTier: true,
+          supportedPermissionModes: ["limited", "full"],
         },
         available: true,
       },
@@ -26,6 +27,7 @@ describe("agent provider catalog", () => {
         capabilities: {
           supportsRename: false,
           supportsServiceTier: false,
+          supportedPermissionModes: ["limited", "full"],
         },
         available: true,
       },
@@ -35,6 +37,7 @@ describe("agent provider catalog", () => {
         capabilities: {
           supportsRename: false,
           supportsServiceTier: false,
+          supportedPermissionModes: ["full"],
         },
         available: true,
       },

@@ -38,7 +38,7 @@ describe("drafts", () => {
       content: defaultInput,
       model: "gpt-5",
       reasoningLevel: "medium",
-      sandboxMode: "danger-full-access",
+      permissionMode: "full",
       serviceTier: "default",
     });
 
@@ -56,7 +56,7 @@ describe("drafts", () => {
       content: defaultInput,
       model: "gpt-5",
       reasoningLevel: "medium",
-      sandboxMode: "danger-full-access",
+      permissionMode: "full",
       serviceTier: "default",
     });
 
@@ -72,7 +72,7 @@ describe("drafts", () => {
       content: defaultInput,
       model: "gpt-5",
       reasoningLevel: "medium",
-      sandboxMode: "danger-full-access",
+      permissionMode: "full",
       serviceTier: "default",
     });
     createDraft(db, noopNotifier, {
@@ -80,7 +80,7 @@ describe("drafts", () => {
       content: altInput,
       model: "gpt-5",
       reasoningLevel: "high",
-      sandboxMode: "danger-full-access",
+      permissionMode: "full",
       serviceTier: "default",
     });
 
@@ -94,7 +94,7 @@ describe("drafts", () => {
       content: defaultInput,
       model: "gpt-5",
       reasoningLevel: "medium",
-      sandboxMode: "danger-full-access",
+      permissionMode: "full",
       serviceTier: "default",
     });
 
@@ -110,7 +110,7 @@ describe("drafts", () => {
       content: defaultInput,
       model: "gpt-5",
       reasoningLevel: "medium",
-      sandboxMode: "danger-full-access",
+      permissionMode: "full",
       serviceTier: "default",
     });
 
@@ -132,7 +132,7 @@ describe("drafts", () => {
         content: defaultInput,
         model: "gpt-5",
         reasoningLevel: "medium",
-        sandboxMode: "danger-full-access",
+        permissionMode: "full",
         serviceTier: "default",
       });
       nowSpy.mockReturnValueOnce(2_000);
@@ -141,7 +141,7 @@ describe("drafts", () => {
         content: altInput,
         model: "gpt-5",
         reasoningLevel: "high",
-        sandboxMode: "danger-full-access",
+        permissionMode: "full",
         serviceTier: "default",
       });
 

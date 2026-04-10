@@ -32,7 +32,7 @@ const { providerThreadId } = await runtime.startThread({
   threadId: "t1",
   projectId: "p1",
   providerId: "codex",
-  options: { sandboxMode: "danger-full-access", instructions: "Be concise." },
+  options: { permissionMode: "full", instructions: "Be concise." },
   dynamicTools: [{ name: "my_tool", description: "...", inputSchema: { ... } }],
 });
 

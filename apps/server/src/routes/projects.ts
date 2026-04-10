@@ -291,8 +291,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
       ...(payload.model ? { model: payload.model } : {}),
       ...(payload.serviceTier ? { serviceTier: payload.serviceTier } : {}),
       ...(payload.reasoningLevel ? { reasoningLevel: payload.reasoningLevel } : {}),
-      ...(payload.sandboxMode ? { sandboxMode: payload.sandboxMode } : {}),
-      ...(payload.questionPolicy ? { questionPolicy: payload.questionPolicy } : {}),
+      ...(payload.permissionMode ? { permissionMode: payload.permissionMode } : {}),
       environment: {
         type: "host",
         hostId,

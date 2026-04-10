@@ -1,5 +1,5 @@
 import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
-import type { PromptInput } from "@bb/domain";
+import type { PermissionMode, PromptInput } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { queuedThreadMessages } from "../schema.js";
@@ -10,7 +10,7 @@ export interface CreateDraftInput {
   content: PromptInput[];
   model: string;
   reasoningLevel: string;
-  sandboxMode: string;
+  permissionMode: PermissionMode;
   serviceTier: string;
 }
 
@@ -30,7 +30,7 @@ export function createDraft(
       content: JSON.stringify(input.content),
       model: input.model,
       reasoningLevel: input.reasoningLevel,
-      sandboxMode: input.sandboxMode,
+      permissionMode: input.permissionMode,
       serviceTier: input.serviceTier,
       claimedAt: null,
       createdAt: now,

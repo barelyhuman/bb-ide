@@ -1,15 +1,13 @@
 import type {
-  ApprovalPolicy,
   AvailableModel,
   DynamicTool,
   InstructionMode,
   PendingInteractionPayload,
   PendingInteractionResolution,
+  PermissionMode,
   PromptInput,
   ProviderCapabilities,
-  QuestionPolicy,
   ReasoningLevel,
-  SandboxMode,
   ServiceTier,
   ThreadEvent,
 } from "@bb/domain";
@@ -70,9 +68,7 @@ export interface AdapterOptions {
   model?: string;
   serviceTier?: ServiceTier;
   reasoningLevel?: ReasoningLevel;
-  sandboxMode?: SandboxMode;
-  approvalPolicy?: ApprovalPolicy;
-  questionPolicy?: QuestionPolicy;
+  permissionMode?: PermissionMode;
   instructions?: string;
   envVars?: Record<string, string>;
 }

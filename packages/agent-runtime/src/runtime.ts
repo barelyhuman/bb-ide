@@ -95,9 +95,7 @@ function toAdapterOptions(
     model: execOpts?.model,
     serviceTier: execOpts?.serviceTier,
     reasoningLevel: execOpts?.reasoningLevel,
-    sandboxMode: execOpts?.sandboxMode,
-    approvalPolicy: execOpts?.approvalPolicy,
-    questionPolicy: execOpts?.questionPolicy,
+    permissionMode: execOpts?.permissionMode,
     instructions,
     envVars,
   };
@@ -265,9 +263,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       left?.model === right?.model &&
       left?.serviceTier === right?.serviceTier &&
       left?.reasoningLevel === right?.reasoningLevel &&
-      left?.sandboxMode === right?.sandboxMode &&
-      left?.approvalPolicy === right?.approvalPolicy &&
-      left?.questionPolicy === right?.questionPolicy
+      left?.permissionMode === right?.permissionMode
     );
   }
 

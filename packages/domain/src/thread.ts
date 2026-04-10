@@ -1,8 +1,8 @@
 import { z } from "zod";
 import {
   promptInputSchema,
+  permissionModeSchema,
   reasoningLevelSchema,
-  sandboxModeSchema,
   serviceTierSchema,
 } from "./shared-types.js";
 
@@ -94,7 +94,7 @@ export const threadQueuedMessageSchema = z.object({
   content: z.array(promptInputSchema).min(1),
   model: z.string().min(1),
   reasoningLevel: reasoningLevelSchema,
-  sandboxMode: sandboxModeSchema,
+  permissionMode: permissionModeSchema,
   serviceTier: serviceTierSchema,
   createdAt: z.number(),
   updatedAt: z.number(),

@@ -62,29 +62,15 @@ function createPendingInteraction(): PendingInteraction {
     providerRequestId: "request-1",
     status: "pending",
     payload: {
-      kind: "user_input_request",
+      kind: "permission_request",
       itemId: "item_1",
-      questions: [
-        {
-          id: "environment",
-          header: "Environment",
-          question: "Which environment should I use?",
-          allowsOther: true,
-          multiSelect: false,
-          options: [
-            {
-              label: "prod",
-              description: "Use production",
-              preview: null,
-            },
-            {
-              label: "staging",
-              description: "Use staging",
-              preview: null,
-            },
-          ],
-        },
-      ],
+      reason: "Need network access",
+      toolName: "WebFetch",
+      permissions: {
+        network: { enabled: true },
+        fileSystem: null,
+        macos: null,
+      },
     },
     resolution: null,
     statusReason: null,
@@ -99,6 +85,7 @@ function makeProvider(overrides: ProviderOverrides = {}): SystemProviderInfo {
     capabilities: {
       supportsRename: true,
       supportsServiceTier: false,
+      supportedPermissionModes: ["limited", "full"],
     },
     displayName: "Codex",
     id: "codex",
@@ -197,12 +184,10 @@ describe("ThreadDetailPromptArea", () => {
       );
     });
 
-    expect(await screen.findByText("User input")).not.toBeNull();
+    expect(await screen.findByText("Permission request")).not.toBeNull();
 
     await waitFor(() => {
-      expect(
-        screen.getAllByText("Which environment should I use?").length,
-      ).toBeGreaterThan(0);
+      expect(screen.getAllByText("Need network access").length).toBeGreaterThan(0);
     });
     expect(
       await screen.findByPlaceholderText(

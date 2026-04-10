@@ -94,54 +94,6 @@ describe("pending interaction schemas", () => {
     });
   });
 
-  it("parses resolved user input interactions", () => {
-    expect(
-      pendingInteractionSchema.parse({
-        id: "pi_123",
-        threadId: "thr_123",
-        turnId: "turn_123",
-        providerId: "codex",
-        providerThreadId: "provider-thread-123",
-        providerRequestId: "request-124",
-        status: "resolved",
-        payload: {
-          kind: "user_input_request",
-          itemId: "item_124",
-          questions: [
-            {
-              id: "environment",
-              header: "Target",
-              question: "Which environment should I use?",
-              allowsOther: true,
-              multiSelect: false,
-              options: [
-                {
-                  label: "prod",
-                  description: "Use production",
-                  preview: null,
-                },
-              ],
-            },
-          ],
-        },
-        resolution: {
-          kind: "user_input_request",
-          answers: {
-            environment: ["prod"],
-          },
-        },
-        statusReason: null,
-        createdAt: 1,
-        resolvedAt: 2,
-      }),
-    ).toMatchObject({
-      status: "resolved",
-      resolution: {
-        kind: "user_input_request",
-      },
-    });
-  });
-
   it("rejects mismatched payload and resolution kinds", () => {
     expect(() =>
       pendingInteractionSchema.parse({
@@ -153,12 +105,17 @@ describe("pending interaction schemas", () => {
         providerRequestId: "request-125",
         status: "resolved",
         payload: {
-          kind: "user_input_request",
+          kind: "command_approval",
           itemId: "item_125",
-          questions: [],
+          reason: null,
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: ["accept", "decline", "cancel"],
         },
         resolution: pendingInteractionResolutionSchema.parse({
-          kind: "command_approval",
+          kind: "file_change_approval",
           decision: "accept",
         }),
         statusReason: null,

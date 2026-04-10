@@ -157,7 +157,7 @@ describe("public thread interaction routes", () => {
     }
   });
 
-  it("rejects unavailable command decisions and invalid user-input answers", async () => {
+  it("rejects unavailable command decisions and mismatched resolution kinds", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
@@ -171,10 +171,6 @@ describe("public thread interaction routes", () => {
         projectId: project.id,
       });
       const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-      });
-      const secondThread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
       });
@@ -227,10 +223,8 @@ describe("public thread interaction routes", () => {
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            kind: "user_input_request",
-            answers: {
-              environment: ["staging"],
-            },
+            kind: "file_change_approval",
+            decision: "accept",
           }),
         },
       );
@@ -264,151 +258,6 @@ describe("public thread interaction routes", () => {
         message: `Pending interaction ${commandApproval.interaction.id} is already interrupted`,
       });
 
-      const userInput = harness.deps.pendingInteractions.registerPendingInteraction({
-        threadId: secondThread.id,
-        turnId: "turn-invalid-user-input-resolution",
-        providerId: "codex",
-        providerThreadId: "provider-thread-invalid-user-input-resolution",
-        providerRequestId: "request-invalid-user-input-resolution",
-        payload: {
-          kind: "user_input_request",
-          itemId: "item-invalid-user-input-resolution",
-          questions: [
-            {
-              id: "environment",
-              header: "Env",
-              question: "Which environment?",
-              allowsOther: false,
-              multiSelect: false,
-              options: [
-                { label: "staging", description: "Use staging", preview: null },
-                { label: "prod", description: "Use production", preview: null },
-              ],
-            },
-            {
-              id: "ticket",
-              header: "Ticket",
-              question: "Which ticket?",
-              allowsOther: true,
-              multiSelect: false,
-              options: [],
-            },
-          ],
-        },
-      });
-      if (userInput.outcome === "rejected") {
-        throw new Error(`Expected user-input interaction registration to succeed: ${userInput.reason}`);
-      }
-
-      const missingAnswerResponse = await harness.app.request(
-        `/api/v1/threads/${secondThread.id}/interactions/${userInput.interaction.id}/resolve`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            kind: "user_input_request",
-            answers: {
-              environment: ["staging"],
-            },
-          }),
-        },
-      );
-      expect(missingAnswerResponse.status).toBe(400);
-      await expect(readJson(missingAnswerResponse)).resolves.toEqual({
-        code: "invalid_request",
-        message: "Missing answers for question ids: ticket",
-      });
-
-      const unknownQuestionResponse = await harness.app.request(
-        `/api/v1/threads/${secondThread.id}/interactions/${userInput.interaction.id}/resolve`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            kind: "user_input_request",
-            answers: {
-              environment: ["staging"],
-              ticket: ["OPS-123"],
-              extra: ["unexpected"],
-            },
-          }),
-        },
-      );
-      expect(unknownQuestionResponse.status).toBe(400);
-      await expect(readJson(unknownQuestionResponse)).resolves.toEqual({
-        code: "invalid_request",
-        message: "Unknown question ids: extra",
-      });
-
-      const emptyAnswerResponse = await harness.app.request(
-        `/api/v1/threads/${secondThread.id}/interactions/${userInput.interaction.id}/resolve`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            kind: "user_input_request",
-            answers: {
-              environment: ["staging"],
-              ticket: [],
-            },
-          }),
-        },
-      );
-      expect(emptyAnswerResponse.status).toBe(400);
-      await expect(readJson(emptyAnswerResponse)).resolves.toEqual({
-        code: "invalid_request",
-        message: "Question 'ticket' requires at least one answer",
-      });
-
-      const blankAnswerResponse = await harness.app.request(
-        `/api/v1/threads/${secondThread.id}/interactions/${userInput.interaction.id}/resolve`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            kind: "user_input_request",
-            answers: {
-              environment: [""],
-              ticket: ["OPS-123"],
-            },
-          }),
-        },
-      );
-      expect(blankAnswerResponse.status).toBe(400);
-      await expect(readJson(blankAnswerResponse)).resolves.toEqual({
-        code: "invalid_request",
-        message: "Question 'environment' cannot include empty answers",
-      });
-
-      const multiAnswerResponse = await harness.app.request(
-        `/api/v1/threads/${secondThread.id}/interactions/${userInput.interaction.id}/resolve`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            kind: "user_input_request",
-            answers: {
-              environment: ["staging", "prod"],
-              ticket: ["OPS-123"],
-            },
-          }),
-        },
-      );
-      expect(multiAnswerResponse.status).toBe(400);
-      await expect(readJson(multiAnswerResponse)).resolves.toEqual({
-        code: "invalid_request",
-        message: "Question 'environment' accepts only one answer",
-      });
     } finally {
       await harness.cleanup();
     }
@@ -706,7 +555,7 @@ describe("public thread interaction routes", () => {
         model: "gpt-5",
         serviceTier: "default",
         reasoningLevel: "medium",
-        sandboxMode: "danger-full-access",
+        permissionMode: "full",
       });
       const pending = harness.deps.pendingInteractions.registerPendingInteraction({
         threadId: thread.id,
@@ -768,11 +617,11 @@ describe("public thread interaction routes", () => {
     }
   });
 
-  it("queues Codex turn commands with on-request approval policy", async () => {
+  it("queues turn commands with the resolved permission mode", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
-        id: "host-public-thread-approval-policy",
+        id: "host-public-thread-permission-mode",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -780,7 +629,7 @@ describe("public thread interaction routes", () => {
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
-        path: "/tmp/approval-policy-project",
+        path: "/tmp/permission-mode-project",
       });
       const thread = seedThread(harness.deps, {
         projectId: project.id,
@@ -791,7 +640,7 @@ describe("public thread interaction routes", () => {
       seedThreadRuntimeState(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
-        providerThreadId: "provider-thread-approval",
+        providerThreadId: "provider-thread-permission-mode",
       });
 
       const response = await harness.app.request(
@@ -816,14 +665,14 @@ describe("public thread interaction routes", () => {
           command.threadId === thread.id,
       );
       expect(queued.command.options).toMatchObject({
-        approvalPolicy: "on-request",
+        permissionMode: "full",
       });
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("resolves file-change and user-input interactions through thread routes", async () => {
+  it("resolves file-change interactions through thread routes", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
@@ -881,70 +730,6 @@ describe("public thread interaction routes", () => {
         },
       });
 
-      const userInput = harness.deps.pendingInteractions.registerPendingInteraction({
-        threadId: thread.id,
-        turnId: "turn-user-input",
-        providerId: "codex",
-        providerThreadId: "provider-thread-user-input",
-        providerRequestId: "request-user-input",
-        payload: {
-          kind: "user_input_request",
-          itemId: "item-user-input",
-          questions: [
-            {
-              id: "environment",
-              header: "Env",
-              question: "Which environment?",
-              allowsOther: false,
-              multiSelect: false,
-              options: [
-                { label: "staging", description: "Use staging", preview: null },
-                { label: "prod", description: "Use production", preview: null },
-              ],
-            },
-            {
-              id: "ticket",
-              header: "Ticket",
-              question: "Which ticket?",
-              allowsOther: true,
-              multiSelect: false,
-              options: [],
-            },
-          ],
-        },
-      });
-      if (userInput.outcome === "rejected") {
-        throw new Error(`Expected user-input interaction registration to succeed: ${userInput.reason}`);
-      }
-
-      const userInputResponse = await harness.app.request(
-        `/api/v1/threads/${thread.id}/interactions/${userInput.interaction.id}/resolve`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            kind: "user_input_request",
-            answers: {
-              environment: ["staging"],
-              ticket: ["OPS-123"],
-            },
-          }),
-        },
-      );
-      expect(userInputResponse.status).toBe(200);
-      await expect(readJson(userInputResponse)).resolves.toMatchObject({
-        id: userInput.interaction.id,
-        status: "resolved",
-        resolution: {
-          kind: "user_input_request",
-          answers: {
-            environment: ["staging"],
-            ticket: ["OPS-123"],
-          },
-        },
-      });
     } finally {
       await harness.cleanup();
     }

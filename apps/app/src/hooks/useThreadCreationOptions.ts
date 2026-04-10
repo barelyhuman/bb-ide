@@ -1,9 +1,9 @@
 import { useAtom } from "jotai";
 import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+  PermissionMode,
   ProviderInfo,
   ReasoningLevel,
-  SandboxMode,
   ServiceTier,
 } from "@bb/domain";
 import {
@@ -20,7 +20,7 @@ import {
 const MODEL_STORAGE_KEY = "bb.promptbox.model";
 const SERVICE_TIER_STORAGE_KEY = "bb.promptbox.service-tier";
 const REASONING_STORAGE_KEY = "bb.promptbox.reasoning";
-const SANDBOX_STORAGE_KEY = "bb.promptbox.sandbox";
+const PERMISSION_MODE_STORAGE_KEY = "bb.promptbox.permission-mode";
 const ENVIRONMENT_STORAGE_KEY = "bb.promptbox.environment";
 const PROVIDER_STORAGE_KEY = "bb.promptbox.provider";
 type StoredServiceTier = "" | ServiceTier;
@@ -33,12 +33,11 @@ const REASONING_LABELS: Record<ReasoningLevel, string> = {
   xhigh: "Extra High",
 };
 
-const SANDBOX_OPTIONS: PromptOption<SandboxMode>[] = [
-  { value: "read-only", label: "Read Only" },
-  { value: "workspace-write", label: "Workspace Write" },
+const PERMISSION_MODE_OPTIONS: PromptOption<PermissionMode>[] = [
+  { value: "limited", label: "Limited" },
   {
-    value: "danger-full-access",
-    label: "Full Access",
+    value: "full",
+    label: "Full",
     tone: "warning",
   },
 ];
@@ -58,7 +57,7 @@ interface UsePromptModelReasoningOptions {
   initialModel?: string;
   initialServiceTier?: ServiceTier;
   initialReasoningLevel?: ReasoningLevel;
-  initialSandboxMode?: SandboxMode;
+  initialPermissionMode?: PermissionMode;
   initialEnvironmentSelectionValue?: string;
 }
 
@@ -67,7 +66,7 @@ interface ThreadPromptSelections {
   selectedModel: string;
   serviceTier: ServiceTier | undefined;
   reasoningLevel: ReasoningLevel;
-  sandboxMode: SandboxMode;
+  permissionMode: PermissionMode;
   environmentSelectionValue: string;
 }
 
@@ -89,12 +88,8 @@ function isReasoningLevel(value: unknown): value is ReasoningLevel {
   return value === "low" || value === "medium" || value === "high" || value === "xhigh";
 }
 
-function isSandboxMode(value: unknown): value is SandboxMode {
-  return (
-    value === "read-only" ||
-    value === "workspace-write" ||
-    value === "danger-full-access"
-  );
+function isPermissionMode(value: unknown): value is PermissionMode {
+  return value === "limited" || value === "full";
 }
 
 function isServiceTier(value: unknown): value is ServiceTier {
@@ -111,8 +106,8 @@ const storedServiceTierStorage = createLocalStorageEnumStorage<StoredServiceTier
 const reasoningLevelStorage = createLocalStorageEnumStorage<ReasoningLevel>(
   (value): value is ReasoningLevel => isReasoningLevel(value),
 );
-const sandboxModeStorage = createLocalStorageEnumStorage<SandboxMode>(
-  (value): value is SandboxMode => isSandboxMode(value),
+const permissionModeStorage = createLocalStorageEnumStorage<PermissionMode>(
+  (value): value is PermissionMode => isPermissionMode(value),
 );
 const providerIdAtomFamily = createProjectScopedStorageAtomFamily(
   PROVIDER_STORAGE_KEY,
@@ -134,10 +129,10 @@ const reasoningLevelAtomFamily = createProjectScopedStorageAtomFamily(
   "medium",
   reasoningLevelStorage,
 );
-const sandboxModeAtomFamily = createProjectScopedStorageAtomFamily(
-  SANDBOX_STORAGE_KEY,
-  "danger-full-access",
-  sandboxModeStorage,
+const permissionModeAtomFamily = createProjectScopedStorageAtomFamily(
+  PERMISSION_MODE_STORAGE_KEY,
+  "full",
+  permissionModeStorage,
 );
 const environmentSelectionAtomFamily = createProjectScopedStorageAtomFamily(
   ENVIRONMENT_STORAGE_KEY,
@@ -153,7 +148,7 @@ function getInitialThreadPromptSelections(
     selectedModel: options?.initialModel ?? "",
     serviceTier: options?.initialServiceTier,
     reasoningLevel: options?.initialReasoningLevel ?? "medium",
-    sandboxMode: options?.initialSandboxMode ?? "danger-full-access",
+    permissionMode: options?.initialPermissionMode ?? "full",
     environmentSelectionValue: options?.initialEnvironmentSelectionValue ?? "",
   };
 }
@@ -195,10 +190,10 @@ function syncUntouchedThreadPromptSelections({
     changed = true;
   }
   if (
-    !touchedFields.has("sandboxMode") &&
-    currentSelections.sandboxMode !== nextSelections.sandboxMode
+    !touchedFields.has("permissionMode") &&
+    currentSelections.permissionMode !== nextSelections.permissionMode
   ) {
-    updatedSelections.sandboxMode = nextSelections.sandboxMode;
+    updatedSelections.permissionMode = nextSelections.permissionMode;
     changed = true;
   }
   if (
@@ -254,8 +249,8 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
     initialEnvironmentSelectionValue,
     initialModel,
     initialProviderId,
+    initialPermissionMode,
     initialReasoningLevel,
-    initialSandboxMode,
     initialServiceTier,
     projectId,
     resetKey,
@@ -273,8 +268,8 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
   const [storedReasoningLevel, setStoredReasoningLevel] = useAtom(
     reasoningLevelAtomFamily(projectId),
   );
-  const [storedSandboxMode, setStoredSandboxMode] = useAtom(
-    sandboxModeAtomFamily(projectId),
+  const [storedPermissionMode, setStoredPermissionMode] = useAtom(
+    permissionModeAtomFamily(projectId),
   );
   const [storedEnvironmentSelectionValue, setStoredEnvironmentSelectionValue] = useAtom(
     environmentSelectionAtomFamily(projectId),
@@ -284,8 +279,8 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
       initialEnvironmentSelectionValue,
       initialModel,
       initialProviderId,
+      initialPermissionMode,
       initialReasoningLevel,
-      initialSandboxMode,
       initialServiceTier,
     }),
   );
@@ -305,8 +300,8 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
     scope === "new-thread" ? storedServiceTier || undefined : threadSelections.serviceTier;
   const rawReasoningLevel =
     scope === "new-thread" ? storedReasoningLevel : threadSelections.reasoningLevel;
-  const rawSandboxMode =
-    scope === "new-thread" ? storedSandboxMode : threadSelections.sandboxMode;
+  const rawPermissionMode =
+    scope === "new-thread" ? storedPermissionMode : threadSelections.permissionMode;
   const rawEnvironmentSelectionValue =
     scope === "new-thread"
       ? storedEnvironmentSelectionValue
@@ -347,6 +342,10 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
 
   const supportsServiceTier =
     activeProviderCapabilities?.supportsServiceTier ?? false;
+  const supportedPermissionModes: readonly PermissionMode[] =
+    activeProviderCapabilities?.supportedPermissionModes ?? ["full"];
+  const supportsPermissionModeSelection =
+    supportedPermissionModes.length > 1;
 
   const serviceTierSupportByProvider = useMemo(
     () => {
@@ -432,8 +431,10 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
     return activeModel?.defaultReasoningEffort ?? reasoningOptions[0].value;
   }, [activeModel, rawReasoningLevel, reasoningOptions]);
 
+  const permissionMode = supportedPermissionModes.includes(rawPermissionMode)
+    ? rawPermissionMode
+    : supportedPermissionModes[0] ?? "full";
   const environmentSelectionValue = rawEnvironmentSelectionValue;
-  const sandboxMode = rawSandboxMode;
 
   useEffect(() => {
     if (scope !== "thread") return;
@@ -441,8 +442,8 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
       initialEnvironmentSelectionValue,
       initialModel,
       initialProviderId,
+      initialPermissionMode,
       initialReasoningLevel,
-      initialSandboxMode,
       initialServiceTier,
     });
     if (threadResetKeyRef.current !== resetKey) {
@@ -460,8 +461,8 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
     initialEnvironmentSelectionValue,
     initialModel,
     initialProviderId,
+    initialPermissionMode,
     initialReasoningLevel,
-    initialSandboxMode,
     initialServiceTier,
     resetKey,
     scope,
@@ -522,18 +523,18 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
       value,
     }));
   }, [scope, setStoredReasoningLevel]);
-  const setSandboxMode = useCallback((value: SandboxMode) => {
+  const setPermissionMode = useCallback((value: PermissionMode) => {
     if (scope === "new-thread") {
-      setStoredSandboxMode(value);
+      setStoredPermissionMode(value);
       return;
     }
-    touchedThreadFieldsRef.current.add("sandboxMode");
+    touchedThreadFieldsRef.current.add("permissionMode");
     setThreadSelections((currentSelections) => updateThreadPromptSelections({
       currentSelections,
-      field: "sandboxMode",
+      field: "permissionMode",
       value,
     }));
-  }, [scope, setStoredSandboxMode]);
+  }, [scope, setStoredPermissionMode]);
   const setEnvironmentSelectionValue = useCallback((value: string) => {
     if (scope === "new-thread") {
       setStoredEnvironmentSelectionValue(value);
@@ -559,14 +560,17 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
     setServiceTier,
     reasoningLevel,
     setReasoningLevel,
-    sandboxMode,
-    setSandboxMode,
+    permissionMode,
+    setPermissionMode,
     environmentSelectionValue,
     setEnvironmentSelectionValue,
     activeModel,
     modelOptions,
     reasoningOptions,
-    sandboxOptions: SANDBOX_OPTIONS,
+    permissionModeOptions: PERMISSION_MODE_OPTIONS.filter((option) =>
+      supportedPermissionModes.includes(option.value)
+    ),
+    supportsPermissionModeSelection,
     supportsServiceTier,
     serviceTierSupportByProvider,
   };

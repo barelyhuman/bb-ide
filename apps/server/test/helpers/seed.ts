@@ -14,8 +14,8 @@ import {
 } from "@bb/domain";
 import type {
   EnvironmentStatus,
+  PermissionMode,
   PromptInput,
-  QuestionPolicy,
   StoredThreadEventDataForType,
   ThreadEventItemType,
   ThreadEventType,
@@ -159,7 +159,7 @@ export function seedDraft(
     threadId: string;
     model?: string;
     reasoningLevel?: string;
-    sandboxMode?: string;
+    permissionMode?: PermissionMode;
     serviceTier?: string;
   },
 ) {
@@ -168,7 +168,7 @@ export function seedDraft(
     content: args.content,
     model: args.model ?? "gpt-5",
     reasoningLevel: args.reasoningLevel ?? "medium",
-    sandboxMode: args.sandboxMode ?? "danger-full-access",
+    permissionMode: args.permissionMode ?? "full",
     serviceTier: args.serviceTier ?? "default",
   });
 }
@@ -209,9 +209,8 @@ export function seedThreadRuntimeState(
     inputText?: string;
     model?: string;
     providerThreadId: string;
-    questionPolicy?: QuestionPolicy;
+    permissionMode?: PermissionMode;
     reasoningLevel?: string;
-    sandboxMode?: string;
     sequenceStart?: number;
     serviceTier?: string;
     threadId: string;
@@ -244,8 +243,7 @@ export function seedThreadRuntimeState(
         model: args.model ?? "gpt-5",
         serviceTier: args.serviceTier ?? "default",
         reasoningLevel: args.reasoningLevel ?? "medium",
-        sandboxMode: args.sandboxMode ?? "danger-full-access",
-        questionPolicy: args.questionPolicy ?? "allow",
+        permissionMode: args.permissionMode ?? "full",
         source: "client/turn/requested",
       },
       initiator: "user",

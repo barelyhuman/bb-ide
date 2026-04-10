@@ -1,8 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import type {
   ProjectExecutionDefaults,
+  PermissionMode,
   ReasoningLevel,
-  SandboxMode,
   ServiceTier,
   ThreadType,
 } from "@bb/domain";
@@ -18,7 +18,7 @@ export interface UpsertProjectExecutionDefaultsArgs extends GetProjectExecutionD
   providerId: string;
   model: string;
   reasoningLevel: ReasoningLevel;
-  sandboxMode: SandboxMode;
+  permissionMode: PermissionMode;
   serviceTier: ServiceTier;
   updatedAt?: number;
 }
@@ -32,7 +32,7 @@ export function getProjectExecutionDefaults(
       providerId: projectExecutionDefaults.providerId,
       model: projectExecutionDefaults.model,
       reasoningLevel: projectExecutionDefaults.reasoningLevel,
-      sandboxMode: projectExecutionDefaults.sandboxMode,
+      permissionMode: projectExecutionDefaults.permissionMode,
       serviceTier: projectExecutionDefaults.serviceTier,
     })
     .from(projectExecutionDefaults)
@@ -60,7 +60,7 @@ export function upsertProjectExecutionDefaults(
       threadType: args.threadType,
       model: args.model,
       reasoningLevel: args.reasoningLevel,
-      sandboxMode: args.sandboxMode,
+      permissionMode: args.permissionMode,
       serviceTier: args.serviceTier,
       updatedAt,
     })
@@ -73,7 +73,7 @@ export function upsertProjectExecutionDefaults(
         providerId: args.providerId,
         model: args.model,
         reasoningLevel: args.reasoningLevel,
-        sandboxMode: args.sandboxMode,
+        permissionMode: args.permissionMode,
         serviceTier: args.serviceTier,
         updatedAt,
       },
@@ -82,7 +82,7 @@ export function upsertProjectExecutionDefaults(
       providerId: projectExecutionDefaults.providerId,
       model: projectExecutionDefaults.model,
       reasoningLevel: projectExecutionDefaults.reasoningLevel,
-      sandboxMode: projectExecutionDefaults.sandboxMode,
+      permissionMode: projectExecutionDefaults.permissionMode,
       serviceTier: projectExecutionDefaults.serviceTier,
     })
     .get();

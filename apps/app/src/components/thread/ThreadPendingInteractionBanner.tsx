@@ -24,11 +24,6 @@ import {
   type PermissionDecisionButtonConfig,
 } from "./pending-interactions/banner-helpers";
 import { renderPendingInteractionDetails } from "./pending-interactions/PendingInteractionDetails";
-import {
-  buildUserInputResolution,
-  createInitialUserInputDraftState,
-  PendingInteractionUserInputFields,
-} from "./pending-interactions/PendingInteractionUserInput";
 import { Button } from "../ui/button";
 
 interface ThreadPendingInteractionBannerProps {
@@ -91,23 +86,17 @@ export function ThreadPendingInteractionBanner({
   threadId,
 }: ThreadPendingInteractionBannerProps) {
   const resolvePendingInteraction = useResolveThreadPendingInteraction();
-  const [isExpanded, setIsExpanded] = useState(
-    interaction.payload.kind === "user_input_request",
-  );
-  const [userInputDraftState, setUserInputDraftState] = useState(
-    () => createInitialUserInputDraftState(interaction),
-  );
+  const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
-    setIsExpanded(interaction.payload.kind === "user_input_request");
-    setUserInputDraftState(createInitialUserInputDraftState(interaction));
+    setIsExpanded(false);
   }, [interaction.id]);
 
   const details = useMemo(
     () => renderPendingInteractionDetails(interaction),
     [interaction],
   );
-  const canExpand = hasExpandableDetails(interaction) && interaction.payload.kind !== "user_input_request";
+  const canExpand = hasExpandableDetails(interaction);
   const mutationErrorMessage =
     resolvePendingInteraction.error
       ? getMutationErrorMessage({
@@ -149,11 +138,6 @@ export function ThreadPendingInteractionBanner({
       },
     });
   };
-
-  const userInputResolution = buildUserInputResolution(
-    userInputDraftState,
-    interaction,
-  );
 
   return (
     <div className="mb-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
@@ -266,35 +250,7 @@ export function ThreadPendingInteractionBanner({
           : null}
       </div>
 
-      {interaction.payload.kind === "user_input_request" ? (
-        <PendingInteractionSection isExpanded={true}>
-          <PendingInteractionUserInputFields
-            interaction={interaction}
-            draftState={userInputDraftState}
-            disabled={resolvePendingInteraction.isPending}
-            onDraftStateChange={setUserInputDraftState}
-          />
-          <div className="mt-3 flex items-center gap-2">
-            <PendingInteractionActionButton
-              variant="default"
-              disabled={resolvePendingInteraction.isPending || userInputResolution === null}
-              onClick={() => {
-                if (!userInputResolution) {
-                  return;
-                }
-
-                void resolvePendingInteraction.mutateAsync({
-                  threadId,
-                  interactionId: interaction.id,
-                  resolution: userInputResolution,
-                });
-              }}
-            >
-              Send answers
-            </PendingInteractionActionButton>
-          </div>
-        </PendingInteractionSection>
-      ) : details ? (
+      {details ? (
         <PendingInteractionSection isExpanded={isExpanded}>
           {details}
         </PendingInteractionSection>

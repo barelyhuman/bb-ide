@@ -73,13 +73,13 @@ describe("ThreadRow", () => {
     });
   });
 
-  it("does not show the pending interaction dot for managed child threads", () => {
+  it("shows the pending interaction dot for managed child threads", () => {
     renderThreadRow(createThread({
       id: "thr_child",
       parentThreadId: "thr_parent",
       hasPendingInteraction: true,
     }));
 
-    expect(screen.queryByLabelText("Pending interaction requires attention")).toBeNull();
+    expect(screen.getByLabelText("Pending interaction requires attention")).not.toBeNull();
   });
 });

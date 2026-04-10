@@ -2,8 +2,8 @@ import { type ComponentProps, type ComponentType, type ReactNode, type RefObject
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import { CornerDownRight, Pencil, Trash2, ChevronDown } from "lucide-react";
 import {
+  type PermissionMode,
   type ReasoningLevel,
-  type SandboxMode,
   type ServiceTier,
   type ThreadQueuedMessage,
   type WorkspaceStatus,
@@ -190,19 +190,20 @@ export interface ComposerExecutionProps {
   activeModel?: { model: string } | null;
   hasMultipleProviders?: boolean;
   modelOptions: readonly PromptOption<string>[];
+  onPermissionModeChange: (value: PermissionMode) => void;
   onReasoningLevelChange: (value: ReasoningLevel) => void;
-  onSandboxModeChange: (value: SandboxMode) => void;
   onSelectedModelChange: (value: string) => void;
   onServiceTierChange: (value: ServiceTier | undefined) => void;
+  permissionMode?: PermissionMode;
+  permissionModeOptions: readonly PromptOption<PermissionMode>[];
   providerDisplayName?: string;
   providerOptions?: readonly PromptOption<string>[];
   reasoningLevel: ReasoningLevel;
   reasoningOptions: readonly PromptOption<ReasoningLevel>[];
-  sandboxMode?: SandboxMode;
-  sandboxOptions: readonly PromptOption<SandboxMode>[];
   selectedModel: string;
   selectedProviderId?: string;
   serviceTier?: ServiceTier;
+  supportsPermissionModeSelection: boolean;
   supportsServiceTier: boolean;
   serviceTierSupportByProvider?: Record<string, boolean>;
 }
@@ -422,10 +423,11 @@ export function ThreadFollowUpComposer({
                 options: execution.reasoningOptions,
                 onChange: execution.onReasoningLevelChange,
               }}
-              sandbox={{
-                value: execution.sandboxMode,
-                options: execution.sandboxOptions,
-                onChange: execution.onSandboxModeChange,
+              permission={{
+                value: execution.permissionMode,
+                options: execution.permissionModeOptions,
+                onChange: execution.onPermissionModeChange,
+                supported: execution.supportsPermissionModeSelection,
               }}
             />
           }

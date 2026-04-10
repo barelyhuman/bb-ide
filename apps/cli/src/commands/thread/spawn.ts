@@ -15,8 +15,7 @@ import {
   prependErrorContext,
 } from "../helpers.js";
 import {
-  parseSandboxMode,
-  parseQuestionPolicy,
+  parsePermissionMode,
   parseServiceTier,
   statusText,
 } from "./helpers.js";
@@ -33,9 +32,8 @@ interface ThreadSpawnCommandOptions {
   reasoningLevel?: string;
   title?: string;
   serviceTier?: string;
-  sandboxMode?: string;
   host?: string;
-  questionPolicy?: string;
+  permissionMode?: string;
   contextParentThread?: boolean;
 }
 
@@ -141,16 +139,9 @@ export function registerSpawnCommand(
       "Reasoning level: low, medium, high, xhigh",
     )
     .option("--title <title>", "Thread title")
-    .option("--service-tier <tier>", "Service tier: fast or default")
-    .option(
-      "--sandbox-mode <mode>",
-      "Sandbox mode: read-only, workspace-write, or danger-full-access",
-    )
+    .option("--service-tier <tier>", "Service tier: fast or flex")
+    .option("--permission-mode <mode>", "Permission mode: limited or full")
     .option("--host <id>", "Host ID (defaults to local host)")
-    .option(
-      "--question-policy <policy>",
-      "Question policy: allow, avoid, or deny",
-    )
     .option(
       "--no-context-parent-thread",
       "Do not default parent thread context to BB_THREAD_ID",
@@ -177,8 +168,7 @@ export function registerSpawnCommand(
       });
       const reasoningLevel = parseReasoningLevel(opts.reasoningLevel);
       const serviceTier = parseServiceTier(opts.serviceTier);
-      const sandboxMode = parseSandboxMode(opts.sandboxMode);
-      const questionPolicy = parseQuestionPolicy(opts.questionPolicy);
+      const permissionMode = parsePermissionMode(opts.permissionMode);
       const parentThreadId =
         opts.parentThread ??
         (opts.contextParentThread === false ? undefined : resolveThreadId());
@@ -196,8 +186,7 @@ export function registerSpawnCommand(
               ...(reasoningLevel ? { reasoningLevel } : {}),
               ...(opts.title ? { title: opts.title } : {}),
               ...(serviceTier ? { serviceTier } : {}),
-              ...(sandboxMode ? { sandboxMode } : {}),
-              ...(questionPolicy ? { questionPolicy } : {}),
+              ...(permissionMode ? { permissionMode } : {}),
               environment,
               ...(parentThreadId ? { parentThreadId } : {}),
             },

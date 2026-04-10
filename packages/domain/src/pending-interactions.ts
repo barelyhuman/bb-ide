@@ -4,7 +4,6 @@ export const pendingInteractionKindSchema = z.enum([
   "command_approval",
   "file_change_approval",
   "permission_request",
-  "user_input_request",
 ]);
 export type PendingInteractionKind = z.infer<
   typeof pendingInteractionKindSchema
@@ -199,27 +198,6 @@ export type PendingInteractionPermissionGrantScope = z.infer<
   typeof pendingInteractionPermissionGrantScopeSchema
 >;
 
-const pendingInteractionQuestionOptionSchema = z.object({
-  label: z.string(),
-  description: z.string(),
-  preview: z.string().nullable(),
-});
-export type PendingInteractionQuestionOption = z.infer<
-  typeof pendingInteractionQuestionOptionSchema
->;
-
-const pendingInteractionUserInputQuestionSchema = z.object({
-  id: z.string(),
-  header: z.string(),
-  question: z.string(),
-  allowsOther: z.boolean(),
-  multiSelect: z.boolean(),
-  options: z.array(pendingInteractionQuestionOptionSchema),
-});
-export type PendingInteractionUserInputQuestion = z.infer<
-  typeof pendingInteractionUserInputQuestionSchema
->;
-
 export const commandApprovalPendingInteractionPayloadSchema = z.object({
   kind: z.literal("command_approval"),
   itemId: z.string().min(1),
@@ -255,20 +233,10 @@ export type PermissionRequestPendingInteractionPayload = z.infer<
   typeof permissionRequestPendingInteractionPayloadSchema
 >;
 
-export const userInputRequestPendingInteractionPayloadSchema = z.object({
-  kind: z.literal("user_input_request"),
-  itemId: z.string().min(1),
-  questions: z.array(pendingInteractionUserInputQuestionSchema),
-});
-export type UserInputRequestPendingInteractionPayload = z.infer<
-  typeof userInputRequestPendingInteractionPayloadSchema
->;
-
 export const pendingInteractionPayloadSchema = z.discriminatedUnion("kind", [
   commandApprovalPendingInteractionPayloadSchema,
   fileChangeApprovalPendingInteractionPayloadSchema,
   permissionRequestPendingInteractionPayloadSchema,
-  userInputRequestPendingInteractionPayloadSchema,
 ]);
 export type PendingInteractionPayload = z.infer<
   typeof pendingInteractionPayloadSchema
@@ -299,19 +267,10 @@ export type PermissionRequestPendingInteractionResolution = z.infer<
   typeof permissionRequestPendingInteractionResolutionSchema
 >;
 
-export const userInputRequestPendingInteractionResolutionSchema = z.object({
-  kind: z.literal("user_input_request"),
-  answers: z.record(z.string(), z.array(z.string())),
-});
-export type UserInputRequestPendingInteractionResolution = z.infer<
-  typeof userInputRequestPendingInteractionResolutionSchema
->;
-
 export const pendingInteractionResolutionSchema = z.discriminatedUnion("kind", [
   commandApprovalPendingInteractionResolutionSchema,
   fileChangeApprovalPendingInteractionResolutionSchema,
   permissionRequestPendingInteractionResolutionSchema,
-  userInputRequestPendingInteractionResolutionSchema,
 ]);
 export type PendingInteractionResolution = z.infer<
   typeof pendingInteractionResolutionSchema

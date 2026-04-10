@@ -172,7 +172,5 @@ export function renderPendingInteractionDetails(
           ) : null}
         </DetailCard>
       );
-    case "user_input_request":
-      return null;
   }
 }

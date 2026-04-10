@@ -72,75 +72,6 @@ function validateCommandApprovalResolution(
   );
 }
 
-function hasEmptyAnswer(answers: string[]): boolean {
-  return answers.some((answer) => answer.trim().length === 0);
-}
-
-function validateUserInputResolution(
-  interaction: PendingInteraction,
-  resolution: PendingInteractionResolution,
-): void {
-  if (
-    interaction.payload.kind !== "user_input_request"
-    || resolution.kind !== "user_input_request"
-  ) {
-    return;
-  }
-
-  const questions = new Map(
-    interaction.payload.questions.map((question) => [question.id, question]),
-  );
-  const unknownQuestionIds = Object.keys(resolution.answers).filter(
-    (questionId) => !questions.has(questionId),
-  );
-  if (unknownQuestionIds.length > 0) {
-    throw new ApiError(
-      400,
-      "invalid_request",
-      `Unknown question ids: ${unknownQuestionIds.join(", ")}`,
-    );
-  }
-
-  const missingQuestionIds = interaction.payload.questions
-    .map((question) => question.id)
-    .filter((questionId) => !(questionId in resolution.answers));
-  if (missingQuestionIds.length > 0) {
-    throw new ApiError(
-      400,
-      "invalid_request",
-      `Missing answers for question ids: ${missingQuestionIds.join(", ")}`,
-    );
-  }
-
-  for (const [questionId, answers] of Object.entries(resolution.answers)) {
-    const question = questions.get(questionId);
-    if (!question) {
-      continue;
-    }
-    if (answers.length === 0) {
-      throw new ApiError(
-        400,
-        "invalid_request",
-        `Question '${questionId}' requires at least one answer`,
-      );
-    }
-    if (hasEmptyAnswer(answers)) {
-      throw new ApiError(
-        400,
-        "invalid_request",
-        `Question '${questionId}' cannot include empty answers`,
-      );
-    }
-    if (!question.multiSelect && answers.length > 1) {
-      throw new ApiError(
-        400,
-        "invalid_request",
-        `Question '${questionId}' accepts only one answer`,
-      );
-    }
-  }
-}
-
 function validateFileChangeApprovalResolution(
   interaction: PendingInteraction,
   resolution: PendingInteractionResolution,
@@ -234,5 +165,4 @@ export function validatePendingInteractionResolution(
   validateCommandApprovalResolution(interaction, resolution);
   validateFileChangeApprovalResolution(interaction, resolution);
   validatePermissionRequestResolution(interaction, resolution);
-  validateUserInputResolution(interaction, resolution);
 }

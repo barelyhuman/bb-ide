@@ -1,20 +1,20 @@
 import path from "node:path";
 import {
+  getBuiltInAgentProviderInfo,
+  isAgentProviderId,
+} from "@bb/agent-providers";
+import {
   getDefaultProjectSource,
-  getEnvironment,
-  getHost,
   getProject,
   getThread,
 } from "@bb/db";
 import type {
-  ApprovalPolicy,
   DynamicTool,
   InstructionMode,
+  PermissionMode,
   ProjectExecutionDefaults,
-  QuestionPolicy,
   ReasoningLevel,
   ResolvedThreadExecutionOptions,
-  SandboxMode,
   ServiceTier,
   Thread,
   ThreadExecutionOptions,
@@ -32,22 +32,13 @@ import { requireThreadStoragePath } from "./thread-storage.js";
 
 const DEFAULT_SERVICE_TIER: ServiceTier = "default";
 const DEFAULT_REASONING_LEVEL: ReasoningLevel = "medium";
-const DEFAULT_SANDBOX_MODE: SandboxMode = "danger-full-access";
+const DEFAULT_PERMISSION_MODE: PermissionMode = "full";
 const MANAGER_PREFERENCES_FILE_NAME = "PREFERENCES.md";
 const NO_MANAGER_PREFERENCES = "(file does not exist)";
 const STANDARD_AGENT_INSTRUCTIONS = renderTemplate(
   "standardAgentInstructions",
   {},
 );
-const QUESTION_POLICY_INSTRUCTIONS: Record<
-  Exclude<QuestionPolicy, "allow">,
-  string
-> = {
-  avoid:
-    "Avoid asking the user follow-up questions unless the task truly cannot proceed without clarification. Prefer making reasonable assumptions and continue.",
-  deny:
-    "Do not ask the user follow-up questions or request additional user input. Make reasonable assumptions and proceed without asking.",
-};
 const MESSAGE_USER_TOOL_SCHEMA = {
   type: "object",
   additionalProperties: false,
@@ -90,7 +81,6 @@ export interface RequestedExecutionOptions extends ThreadExecutionOptions {
 
 export interface ResolveThreadRuntimeCommandConfigArgs {
   environment: ThreadRuntimeCommandEnvironment;
-  questionPolicy: QuestionPolicy;
   thread: Thread;
   /**
    * True during thread creation. Skips the daemon round-trip to read
@@ -112,70 +102,12 @@ export interface ResolvedThreadRuntimeCommandConfig {
   workspaceProvisionType: WorkspaceProvisionType;
 }
 
-function resolveDefaultApprovalPolicy(
-  thread: Thread | null,
-): ApprovalPolicy {
-  if (thread && thread.parentThreadId !== null) {
-    return "never";
-  }
-
-  const providerId = thread?.providerId;
-  switch (providerId) {
-    case "codex":
-    case "claude-code":
-      return "on-request";
-    default:
-      return "never";
-  }
-}
-
 function requireWorkspacePath(environment: ThreadRuntimeCommandEnvironment): string {
   if (!environment.path) {
     throw new ApiError(409, "invalid_request", "Environment is not ready");
   }
 
   return environment.path;
-}
-
-function appendQuestionPolicyInstructions(
-  instructions: string,
-  questionPolicy: QuestionPolicy,
-): string {
-  if (questionPolicy === "allow") {
-    return instructions;
-  }
-
-  return `${instructions}\n\n${QUESTION_POLICY_INSTRUCTIONS[questionPolicy]}`;
-}
-
-function resolveDefaultQuestionPolicy(
-  deps: Pick<AppDeps, "db">,
-  thread: Thread | null,
-): QuestionPolicy {
-  if (!thread) {
-    return "allow";
-  }
-  if (thread.parentThreadId !== null) {
-    return "avoid";
-  }
-  if (thread.automationId !== null) {
-    return "avoid";
-  }
-  if (thread.environmentId === null) {
-    return "allow";
-  }
-
-  const environment = getEnvironment(deps.db, thread.environmentId);
-  if (!environment) {
-    return "allow";
-  }
-
-  const host = getHost(deps.db, environment.hostId);
-  if (host?.type === "ephemeral") {
-    return "avoid";
-  }
-
-  return "allow";
 }
 
 async function readManagerPreferences(
@@ -212,6 +144,26 @@ async function readManagerPreferences(
   }
 }
 
+function validateProviderPermissionMode(
+  providerId: string | undefined,
+  permissionMode: PermissionMode,
+): void {
+  if (!providerId || !isAgentProviderId(providerId)) {
+    return;
+  }
+
+  const provider = getBuiltInAgentProviderInfo(providerId);
+  if (provider.capabilities.supportedPermissionModes.includes(permissionMode)) {
+    return;
+  }
+
+  throw new ApiError(
+    400,
+    "invalid_request",
+    `Provider ${providerId} only supports ${provider.capabilities.supportedPermissionModes.join(", ")} permission mode.`,
+  );
+}
+
 export async function resolveExecutionOptions(
   deps: Pick<AppDeps, "db">,
   args: ResolveExecutionOptionsArgs,
@@ -231,14 +183,12 @@ export async function resolveExecutionOptions(
     );
   }
 
-  const approvalPolicy =
-    args.requestedExecution.approvalPolicy ??
-    lastExecution?.approvalPolicy ??
-    resolveDefaultApprovalPolicy(thread);
-  const questionPolicy =
-    args.requestedExecution.questionPolicy ??
-    lastExecution?.questionPolicy ??
-    resolveDefaultQuestionPolicy(deps, thread);
+  const permissionMode =
+    args.requestedExecution.permissionMode ??
+    lastExecution?.permissionMode ??
+    projectExecution?.permissionMode ??
+    DEFAULT_PERMISSION_MODE;
+  validateProviderPermissionMode(thread?.providerId, permissionMode);
 
   return {
     model,
@@ -252,13 +202,7 @@ export async function resolveExecutionOptions(
       lastExecution?.reasoningLevel ??
       projectExecution?.reasoningLevel ??
       DEFAULT_REASONING_LEVEL,
-    sandboxMode:
-      args.requestedExecution.sandboxMode ??
-      lastExecution?.sandboxMode ??
-      projectExecution?.sandboxMode ??
-      DEFAULT_SANDBOX_MODE,
-    approvalPolicy,
-    questionPolicy,
+    permissionMode,
     source: args.requestedExecution.source,
   };
 }
@@ -282,10 +226,7 @@ export async function resolveThreadRuntimeCommandConfig(
     return {
       dynamicTools: [],
       instructionMode: "append",
-      instructions: appendQuestionPolicyInstructions(
-        STANDARD_AGENT_INSTRUCTIONS,
-        args.questionPolicy,
-      ),
+      instructions: STANDARD_AGENT_INSTRUCTIONS,
       projectId: args.thread.projectId,
       providerId: args.thread.providerId,
       workspacePath,
@@ -307,19 +248,16 @@ export async function resolveThreadRuntimeCommandConfig(
   return {
     dynamicTools: MANAGER_DYNAMIC_TOOLS,
     instructionMode: "replace",
-    instructions: appendQuestionPolicyInstructions(
-      renderTemplate("managerAgentInstructions", {
-        hostId: args.environment.hostId,
-        localTimezone: resolveLocalTimezone(),
-        managerPreferencesContent,
-        managerThreadId: args.thread.id,
-        threadStoragePath,
-        projectId: args.thread.projectId,
-        projectName: project.name,
-        projectRootPath,
-      }),
-      args.questionPolicy,
-    ),
+    instructions: renderTemplate("managerAgentInstructions", {
+      hostId: args.environment.hostId,
+      localTimezone: resolveLocalTimezone(),
+      managerPreferencesContent,
+      managerThreadId: args.thread.id,
+      threadStoragePath,
+      projectId: args.thread.projectId,
+      projectName: project.name,
+      projectRootPath,
+    }),
     projectId: args.thread.projectId,
     providerId: args.thread.providerId,
     threadStoragePath,

@@ -232,6 +232,13 @@
       "when": 1775727600000,
       "tag": "0033_clumsy_arachne",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "6",
+      "when": 1775861081000,
+      "tag": "0034_permission_mode",
+      "breakpoints": true
     }
   ]
 }

@@ -17,27 +17,8 @@ export const instructionModeValues = ["append", "replace"] as const;
 export const instructionModeSchema = z.enum(instructionModeValues);
 export type InstructionMode = z.infer<typeof instructionModeSchema>;
 
-export const sandboxModeSchema = z.enum([
-  "read-only",
-  "workspace-write",
-  "danger-full-access",
-]);
-export type SandboxMode = z.infer<typeof sandboxModeSchema>;
-
-export const approvalPolicySchema = z.enum([
-  "never",
-  "on-request",
-  "on-failure",
-  "untrusted",
-]);
-export type ApprovalPolicy = z.infer<typeof approvalPolicySchema>;
-
-export const questionPolicySchema = z.enum([
-  "allow",
-  "avoid",
-  "deny",
-]);
-export type QuestionPolicy = z.infer<typeof questionPolicySchema>;
+export const permissionModeSchema = z.enum(["limited", "full"]);
+export type PermissionMode = z.infer<typeof permissionModeSchema>;
 
 export const promptInputSchema = z.discriminatedUnion("type", [
   z.object({
@@ -73,9 +54,7 @@ export const threadExecutionOptionsSchema = z.object({
   model: z.string().optional(),
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
-  sandboxMode: sandboxModeSchema.optional(),
-  approvalPolicy: approvalPolicySchema.optional(),
-  questionPolicy: questionPolicySchema.optional(),
+  permissionMode: permissionModeSchema.optional(),
   source: threadExecutionSourceSchema.optional(),
   seq: z.number().int().optional(),
 });
@@ -88,9 +67,7 @@ export const resolvedThreadExecutionOptionsSchema =
     model: z.string().min(1),
     serviceTier: serviceTierSchema,
     reasoningLevel: reasoningLevelSchema,
-    sandboxMode: sandboxModeSchema,
-    approvalPolicy: approvalPolicySchema,
-    questionPolicy: questionPolicySchema,
+    permissionMode: permissionModeSchema,
     source: threadExecutionSourceSchema,
   });
 export type ResolvedThreadExecutionOptions = z.infer<
@@ -102,7 +79,7 @@ export const projectExecutionDefaultsSchema = z.object({
   model: z.string().min(1),
   serviceTier: serviceTierSchema,
   reasoningLevel: reasoningLevelSchema,
-  sandboxMode: sandboxModeSchema,
+  permissionMode: permissionModeSchema,
 });
 export type ProjectExecutionDefaults = z.infer<
   typeof projectExecutionDefaultsSchema

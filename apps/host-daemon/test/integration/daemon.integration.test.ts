@@ -66,7 +66,7 @@ function createStandardThreadStartCommand(args: {
       model: "gpt-5",
       serviceTier: "default" as const,
       reasoningLevel: "medium" as const,
-      sandboxMode: "danger-full-access" as const,
+      permissionMode: "full" as const,
     },
     instructions: "Be a helpful coding agent.",
     dynamicTools: [],
@@ -94,7 +94,7 @@ function createTurnRunCommand(args: {
       model: "gpt-5",
       serviceTier: "default" as const,
       reasoningLevel: "medium" as const,
-      sandboxMode: "danger-full-access" as const,
+      permissionMode: "full" as const,
     },
     resumeContext: {
       workspaceContext: { workspacePath: args.workspacePath, workspaceProvisionType: "unmanaged" as const },

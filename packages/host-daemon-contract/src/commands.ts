@@ -1,17 +1,15 @@
 import {
-  approvalPolicySchema,
   availableModelSchema,
   discoveredWorkspacePropertiesSchema,
   dynamicToolSchema,
   instructionModeSchema,
   promptInputSchema,
-  questionPolicySchema,
+  permissionModeSchema,
   threadExecutionOptionsSchema,
   threadGitDiffResponseSchema,
   workspaceProvisionTypeSchema,
   providerInfoSchema,
   reasoningLevelSchema,
-  sandboxModeSchema,
   serviceTierSchema,
   provisioningTranscriptEntrySchema,
   workspaceDiffTargetSchema,
@@ -52,9 +50,7 @@ export const hostDaemonExecutionOptionsSchema = threadExecutionOptionsSchema.ext
   model: z.string().min(1),
   serviceTier: serviceTierSchema,
   reasoningLevel: reasoningLevelSchema,
-  sandboxMode: sandboxModeSchema,
-  approvalPolicy: approvalPolicySchema,
-  questionPolicy: questionPolicySchema,
+  permissionMode: permissionModeSchema,
 });
 export type HostDaemonExecutionOptions = z.infer<
   typeof hostDaemonExecutionOptionsSchema

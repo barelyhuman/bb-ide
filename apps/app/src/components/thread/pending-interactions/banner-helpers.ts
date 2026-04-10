@@ -11,11 +11,6 @@ import {
   type PendingInteractionRequestedPermissionProfile,
 } from "@bb/domain";
 
-export interface UserInputDraftState {
-  customAnswersByQuestionId: Record<string, string>;
-  selectedOptionsByQuestionId: Record<string, string[]>;
-}
-
 export type FileChangeDecisionAction = "accept_for_session" | "decline" | "cancel";
 
 export interface CommandDecisionButtonConfig {
@@ -95,8 +90,6 @@ export function hasExpandableDetails(interaction: PendingInteraction): boolean {
           interaction.payload.permissions,
         ).length > 0
       );
-    case "user_input_request":
-      return true;
   }
 }
 

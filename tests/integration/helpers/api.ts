@@ -58,7 +58,7 @@ export interface CreateReuseThreadOptions {
 
 export type ThreadExecutionRequestOptions = Pick<
   ThreadExecutionOptions,
-  "model" | "reasoningLevel" | "sandboxMode" | "serviceTier"
+  "model" | "reasoningLevel" | "permissionMode" | "serviceTier"
 >;
 
 export interface SendTextMessageOptions {

@@ -42,11 +42,19 @@ type PiDefaultModelPerProvider = Partial<Record<string, string>>;
 const CODEX_CAPABILITIES: ProviderCapabilities = {
   supportsRename: true,
   supportsServiceTier: true,
+  supportedPermissionModes: ["limited", "full"],
 };
 
-const DEFAULT_CAPABILITIES: ProviderCapabilities = {
+const CLAUDE_CAPABILITIES: ProviderCapabilities = {
   supportsRename: false,
   supportsServiceTier: false,
+  supportedPermissionModes: ["limited", "full"],
+};
+
+const PI_CAPABILITIES: ProviderCapabilities = {
+  supportsRename: false,
+  supportsServiceTier: false,
+  supportedPermissionModes: ["full"],
 };
 
 const CLAUDE_CLOUD_AUTH_PROVIDER = {
@@ -112,7 +120,7 @@ const BUILT_IN_AGENT_PROVIDER_CATALOG: BuiltInAgentProviderCatalogEntry[] = [
     cloudAuth: CLAUDE_CLOUD_AUTH_PROVIDER,
     info: {
       available: true,
-      capabilities: DEFAULT_CAPABILITIES,
+      capabilities: CLAUDE_CAPABILITIES,
       displayName: "Claude Code",
       id: "claude-code",
     },
@@ -121,7 +129,7 @@ const BUILT_IN_AGENT_PROVIDER_CATALOG: BuiltInAgentProviderCatalogEntry[] = [
     cloudAuth: null,
     info: {
       available: true,
-      capabilities: DEFAULT_CAPABILITIES,
+      capabilities: PI_CAPABILITIES,
       displayName: "Pi",
       id: "pi",
     },
@@ -158,6 +166,7 @@ function cloneCapabilities(capabilities: ProviderCapabilities): ProviderCapabili
   return {
     supportsRename: capabilities.supportsRename,
     supportsServiceTier: capabilities.supportsServiceTier,
+    supportedPermissionModes: [...capabilities.supportedPermissionModes],
   };
 }
 

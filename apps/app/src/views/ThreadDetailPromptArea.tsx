@@ -1,8 +1,8 @@
 import { useCallback, useState, type ComponentType, type ReactNode, type RefObject } from "react";
 import type {
+  PermissionMode,
   PromptInput,
   ReasoningLevel,
-  SandboxMode,
   ServiceTier,
   Thread,
   TimelineRow,
@@ -37,8 +37,8 @@ interface SendFollowUpInputParams {
   input: PromptInput[];
   mode?: "auto" | "steer";
   model?: string;
+  permissionMode?: PermissionMode;
   reasoningLevel?: ReasoningLevel;
-  sandboxMode?: SandboxMode;
   serviceTier?: ServiceTier;
 }
 
@@ -130,12 +130,13 @@ export function ThreadDetailPromptArea({
     setServiceTier,
     reasoningLevel,
     setReasoningLevel,
-    sandboxMode,
-    setSandboxMode,
+    permissionMode,
+    setPermissionMode,
     activeModel,
     modelOptions,
     reasoningOptions,
-    sandboxOptions,
+    permissionModeOptions,
+    supportsPermissionModeSelection,
     supportsServiceTier,
     serviceTierSupportByProvider,
   } = useThreadCreationOptions({
@@ -145,7 +146,7 @@ export function ThreadDetailPromptArea({
     initialModel: defaultExecutionOptions?.model,
     initialServiceTier: defaultExecutionOptions?.serviceTier,
     initialReasoningLevel: defaultExecutionOptions?.reasoningLevel,
-    initialSandboxMode: defaultExecutionOptions?.sandboxMode,
+    initialPermissionMode: defaultExecutionOptions?.permissionMode,
     initialEnvironmentSelectionValue: thread.environmentId ?? undefined,
   });
   const handleFollowUpAcknowledged = useCallback((submittedDraft: PromptDraftState) => {
@@ -194,7 +195,7 @@ export function ThreadDetailPromptArea({
       model,
       serviceTier: executionServiceTier,
       reasoningLevel: executionReasoningLevel,
-      sandboxMode: executionSandboxMode,
+      permissionMode: executionPermissionMode,
     }: SendFollowUpInputParams) => {
       if (input.length === 0) {
         return;
@@ -211,7 +212,7 @@ export function ThreadDetailPromptArea({
               ...(model ? { model } : {}),
               ...(executionServiceTier ? { serviceTier: executionServiceTier } : {}),
               ...(executionReasoningLevel ? { reasoningLevel: executionReasoningLevel } : {}),
-              ...(executionSandboxMode ? { sandboxMode: executionSandboxMode } : {}),
+              ...(executionPermissionMode ? { permissionMode: executionPermissionMode } : {}),
             }),
       });
     },
@@ -259,7 +260,7 @@ export function ThreadDetailPromptArea({
           model: activeModel?.model ?? selectedModel,
           ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
           reasoningLevel,
-          sandboxMode,
+          permissionMode,
         });
         promptDraft.clearIfCurrentMatches(submittedDraft);
         setAttachmentError(null);
@@ -284,7 +285,7 @@ export function ThreadDetailPromptArea({
         model: activeModel?.model ?? selectedModel,
         ...(supportsServiceTier && serviceTier ? { serviceTier } : {}),
         reasoningLevel,
-        sandboxMode,
+        permissionMode,
       });
     } catch (nextError) {
       clearPendingFollowUp();
@@ -300,7 +301,7 @@ export function ThreadDetailPromptArea({
     createDraft,
     promptDraft,
     reasoningLevel,
-    sandboxMode,
+    permissionMode,
     selectedModel,
     sendFollowUpInput,
     serviceTier,
@@ -449,15 +450,16 @@ export function ThreadDetailPromptArea({
         hasMultipleProviders,
         modelOptions,
         onReasoningLevelChange: setReasoningLevel,
-        onSandboxModeChange: setSandboxMode,
+        onPermissionModeChange: setPermissionMode,
         onSelectedModelChange: setSelectedModel,
         onServiceTierChange: setServiceTier,
         providerDisplayName: selectedProviderDisplayName,
         providerOptions,
         reasoningLevel,
         reasoningOptions,
-        sandboxMode,
-        sandboxOptions,
+        permissionMode,
+        permissionModeOptions,
+        supportsPermissionModeSelection,
         selectedModel,
         selectedProviderId,
         serviceTier,

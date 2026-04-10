@@ -115,11 +115,12 @@ describe("pending interactions", () => {
       providerId: "codex",
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-2",
-      kind: "user_input_request",
+      kind: "file_change_approval",
       payload: JSON.stringify({
-        kind: "user_input_request",
+        kind: "file_change_approval",
         itemId: "item-2",
-        questions: [],
+        reason: "Needs file write approval",
+        grantRoot: "/tmp/project",
       }),
     });
 

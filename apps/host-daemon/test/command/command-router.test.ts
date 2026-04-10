@@ -131,7 +131,7 @@ function createStandardRuntimeCommandContext(args: {
       model: "gpt-5",
       serviceTier: "default" as const,
       reasoningLevel: "medium" as const,
-      sandboxMode: "danger-full-access" as const,
+      permissionMode: "full" as const,
     },
     instructions: "Be a helpful coding agent.",
     dynamicTools: [],
@@ -391,7 +391,7 @@ describe("CommandRouter", () => {
             model: "gpt-5",
             serviceTier: "default" as const,
             reasoningLevel: "medium" as const,
-            sandboxMode: "danger-full-access" as const,
+            permissionMode: "full" as const,
           },
           resumeContext: {
             workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" as const },
@@ -417,7 +417,7 @@ describe("CommandRouter", () => {
             model: "gpt-5",
             serviceTier: "default" as const,
             reasoningLevel: "medium" as const,
-            sandboxMode: "danger-full-access" as const,
+            permissionMode: "full" as const,
           },
           resumeContext: {
             workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" as const },

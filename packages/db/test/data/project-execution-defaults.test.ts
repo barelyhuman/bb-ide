@@ -48,7 +48,7 @@ describe("project-execution-defaults", () => {
       threadType: "standard",
       model: "gpt-5",
       reasoningLevel: "medium",
-      sandboxMode: "danger-full-access",
+      permissionMode: "full",
       serviceTier: "default",
     });
 
@@ -61,7 +61,7 @@ describe("project-execution-defaults", () => {
       providerId: "codex",
       model: "gpt-5",
       reasoningLevel: "medium",
-      sandboxMode: "danger-full-access",
+      permissionMode: "full",
       serviceTier: "default",
     });
   });
@@ -75,7 +75,7 @@ describe("project-execution-defaults", () => {
       threadType: "standard",
       model: "gpt-5",
       reasoningLevel: "medium",
-      sandboxMode: "danger-full-access",
+      permissionMode: "full",
       serviceTier: "default",
     });
     upsertProjectExecutionDefaults(db, {
@@ -84,7 +84,7 @@ describe("project-execution-defaults", () => {
       threadType: "standard",
       model: "gpt-5-mini",
       reasoningLevel: "high",
-      sandboxMode: "workspace-write",
+      permissionMode: "limited",
       serviceTier: "fast",
     });
 
@@ -97,7 +97,7 @@ describe("project-execution-defaults", () => {
       providerId: "codex",
       model: "gpt-5-mini",
       reasoningLevel: "high",
-      sandboxMode: "workspace-write",
+      permissionMode: "limited",
       serviceTier: "fast",
     });
   });
@@ -111,7 +111,7 @@ describe("project-execution-defaults", () => {
       threadType: "standard",
       model: "gpt-5",
       reasoningLevel: "medium",
-      sandboxMode: "danger-full-access",
+      permissionMode: "full",
       serviceTier: "default",
     });
     upsertProjectExecutionDefaults(db, {
@@ -120,7 +120,7 @@ describe("project-execution-defaults", () => {
       threadType: "manager",
       model: "gpt-5-mini",
       reasoningLevel: "high",
-      sandboxMode: "workspace-write",
+      permissionMode: "limited",
       serviceTier: "fast",
     });
     upsertProjectExecutionDefaults(db, {
@@ -129,7 +129,7 @@ describe("project-execution-defaults", () => {
       threadType: "standard",
       model: "claude-opus-4-1",
       reasoningLevel: "high",
-      sandboxMode: "workspace-write",
+      permissionMode: "limited",
       serviceTier: "fast",
     });
 
@@ -162,7 +162,7 @@ describe("project-execution-defaults", () => {
       threadType: "standard",
       model: "gpt-5",
       reasoningLevel: "medium",
-      sandboxMode: "danger-full-access",
+      permissionMode: "full",
       serviceTier: "default",
     });
 

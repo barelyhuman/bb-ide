@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import {
-  type QuestionPolicy,
+  type PermissionMode,
   type ReasoningLevel,
   type Thread,
   type ThreadStatus,
@@ -15,7 +15,7 @@ import {
   prependErrorContext,
   requireThreadIdOrSelf,
 } from "../helpers.js";
-import { parseQuestionPolicy } from "./helpers.js";
+import { parsePermissionMode } from "./helpers.js";
 
 interface ThreadUpdateCommandOptions {
   self?: boolean;
@@ -44,7 +44,7 @@ interface ThreadDeleteCommandOptions {
 interface ThreadTellCommandOptions {
   json?: boolean;
   model?: string;
-  questionPolicy?: string;
+  permissionMode?: string;
   reasoningLevel?: string;
   mode?: string;
 }
@@ -60,7 +60,7 @@ interface PostThreadMessageArgs {
   message: string;
   mode: "auto" | "steer";
   model?: string;
-  questionPolicy?: QuestionPolicy;
+  permissionMode?: PermissionMode;
   reasoningLevel?: ReasoningLevel;
 }
 
@@ -215,7 +215,7 @@ export function registerActionsCommands(
       "--reasoning-level <level>",
       "Reasoning level: low, medium, high, xhigh",
     )
-    .option("--question-policy <policy>", "Question policy: allow, avoid, or deny")
+    .option("--permission-mode <mode>", "Permission mode: limited or full")
     .option("--mode <mode>", "Message mode (e.g. steer)")
     .action(action(
       async (
@@ -229,7 +229,7 @@ export function registerActionsCommands(
           message,
           mode: resolveThreadMessageMode(opts.mode),
           model: opts.model,
-          questionPolicy: parseQuestionPolicy(opts.questionPolicy),
+          permissionMode: parsePermissionMode(opts.permissionMode),
           reasoningLevel: parseReasoningLevel(opts.reasoningLevel),
         });
         if (outputJson(opts, { threadId: id, ...response })) return;
@@ -275,7 +275,7 @@ async function postThreadMessage(
         input: [{ type: "text", text: args.message }],
         mode: args.mode,
         ...(args.model ? { model: args.model } : {}),
-        ...(args.questionPolicy ? { questionPolicy: args.questionPolicy } : {}),
+        ...(args.permissionMode ? { permissionMode: args.permissionMode } : {}),
         ...(args.reasoningLevel
           ? { reasoningLevel: args.reasoningLevel }
           : {}),

@@ -69,9 +69,7 @@ describe("expired commands", () => {
         options: {
           model: "gpt-5",
           reasoningLevel: "medium" as const,
-          sandboxMode: "danger-full-access" as const,
-          approvalPolicy: "on-request" as const,
-          questionPolicy: "allow" as const,
+          permissionMode: "full" as const,
           serviceTier: "default" as const,
           source: "client/thread/start" as const,
         },

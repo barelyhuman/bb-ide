@@ -8,10 +8,9 @@ import {
   projectSchema,
   projectSourceSchema,
   promptInputSchema,
-  questionPolicySchema,
+  permissionModeSchema,
   reasoningLevelSchema,
   sandboxBackendInfoSchema,
-  sandboxModeSchema,
   serviceTierSchema,
   threadListEntrySchema,
   threadTypeSchema,
@@ -94,8 +93,7 @@ export const createThreadRequestSchema = z.object({
   model: z.string().min(1).optional(),
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
-  sandboxMode: sandboxModeSchema.optional(),
-  questionPolicy: questionPolicySchema.optional(),
+  permissionMode: permissionModeSchema.optional(),
   environment: environmentArgsSchema,
   parentThreadId: z.string().min(1).optional(),
 });
@@ -109,8 +107,7 @@ const automationThreadRequestSchema = z.object({
   model: z.string().min(1),
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
-  sandboxMode: sandboxModeSchema.optional(),
-  questionPolicy: questionPolicySchema.optional(),
+  permissionMode: permissionModeSchema.optional(),
   environment: environmentArgsSchema,
   parentThreadId: z.string().min(1).optional(),
 });
@@ -222,8 +219,7 @@ export const sendMessageRequestSchema = z.object({
   model: z.string().optional(),
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
-  sandboxMode: sandboxModeSchema.optional(),
-  questionPolicy: questionPolicySchema.optional(),
+  permissionMode: permissionModeSchema.optional(),
   mode: sendMessageModeSchema,
 });
 export type SendMessageRequest = z.infer<typeof sendMessageRequestSchema>;
@@ -233,7 +229,7 @@ export const createDraftRequestSchema = z.object({
   model: z.string().optional(),
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
-  sandboxMode: sandboxModeSchema.optional(),
+  permissionMode: permissionModeSchema.optional(),
 });
 export type CreateDraftRequest = z.infer<typeof createDraftRequestSchema>;
 
@@ -383,8 +379,7 @@ export const createManagerThreadRequestSchema = z.object({
   model: z.string().min(1).optional(),
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
-  sandboxMode: sandboxModeSchema.optional(),
-  questionPolicy: questionPolicySchema.optional(),
+  permissionMode: permissionModeSchema.optional(),
   environment: managerEnvironmentArgsSchema,
 });
 export type CreateManagerThreadRequest = z.infer<

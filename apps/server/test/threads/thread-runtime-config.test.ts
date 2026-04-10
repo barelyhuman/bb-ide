@@ -21,11 +21,11 @@ function resolveLocalTimezone(): string {
 }
 
 describe("thread runtime config", () => {
-  it("defaults Codex execution approval policy to on-request", async () => {
+  it("defaults execution permission mode to full", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
-        id: "host-runtime-approval-policy",
+        id: "host-runtime-permission-mode",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -48,17 +48,17 @@ describe("thread runtime config", () => {
         },
       });
 
-      expect(execution.approvalPolicy).toBe("on-request");
+      expect(execution.permissionMode).toBe("full");
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("defaults question policy to allow for persistent root threads", async () => {
+  it("honors requested limited permission mode when the provider supports it", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
-        id: "host-runtime-question-policy-default",
+        id: "host-runtime-permission-mode-limited",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -76,79 +76,22 @@ describe("thread runtime config", () => {
         threadId: thread.id,
         requestedExecution: {
           model: "gpt-5",
+          permissionMode: "limited",
           source: "client/turn/requested",
         },
       });
 
-      expect(execution.questionPolicy).toBe("allow");
+      expect(execution.permissionMode).toBe("limited");
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("defaults question policy to avoid for worker threads and sandbox-host threads", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host: persistentHost } = seedHostSession(harness.deps, {
-        id: "host-runtime-question-policy-worker",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: persistentHost.id,
-      });
-      const persistentEnvironment = seedEnvironment(harness.deps, {
-        hostId: persistentHost.id,
-        projectId: project.id,
-      });
-      const parentThread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: persistentEnvironment.id,
-      });
-      const workerThread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: persistentEnvironment.id,
-        parentThreadId: parentThread.id,
-      });
-
-      const { host: sandboxHost } = seedHostSession(harness.deps, {
-        id: "host-runtime-question-policy-sandbox",
-        type: "ephemeral",
-      });
-      const sandboxEnvironment = seedEnvironment(harness.deps, {
-        hostId: sandboxHost.id,
-        projectId: project.id,
-      });
-      const sandboxThread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: sandboxEnvironment.id,
-      });
-
-      const workerExecution = await resolveExecutionOptions(harness.deps, {
-        threadId: workerThread.id,
-        requestedExecution: {
-          model: "gpt-5",
-          source: "client/turn/requested",
-        },
-      });
-      const sandboxExecution = await resolveExecutionOptions(harness.deps, {
-        threadId: sandboxThread.id,
-        requestedExecution: {
-          model: "gpt-5",
-          source: "client/turn/requested",
-        },
-      });
-
-      expect(workerExecution.questionPolicy).toBe("avoid");
-      expect(sandboxExecution.questionPolicy).toBe("avoid");
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("defaults approval policy to never for child threads", async () => {
+  it("rejects permission modes unsupported by the provider", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
-        id: "host-runtime-child-approval-policy",
+        id: "host-runtime-permission-mode-unsupported",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -157,27 +100,22 @@ describe("thread runtime config", () => {
         hostId: host.id,
         projectId: project.id,
       });
-      const parentThread = seedThread(harness.deps, {
+      const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
-        providerId: "codex",
-      });
-      const childThread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        providerId: "codex",
-        parentThreadId: parentThread.id,
+        providerId: "pi",
       });
 
-      const execution = await resolveExecutionOptions(harness.deps, {
-        threadId: childThread.id,
-        requestedExecution: {
-          model: "gpt-5",
-          source: "client/turn/requested",
-        },
-      });
-
-      expect(execution.approvalPolicy).toBe("never");
+      await expect(
+        resolveExecutionOptions(harness.deps, {
+          threadId: thread.id,
+          requestedExecution: {
+            model: "openai/codex-mini",
+            permissionMode: "limited",
+            source: "client/turn/requested",
+          },
+        }),
+      ).rejects.toThrow("Provider pi only supports full permission mode.");
     } finally {
       await harness.cleanup();
     }
@@ -212,7 +150,6 @@ describe("thread runtime config", () => {
           workspaceProvisionType: environment.workspaceProvisionType,
         },
         isThreadCreation: true,
-        questionPolicy: "allow",
       });
 
       expect(runtimeConfig.instructions).toContain(
@@ -259,7 +196,6 @@ describe("thread runtime config", () => {
           path: environment.path,
           workspaceProvisionType: environment.workspaceProvisionType,
         },
-        questionPolicy: "allow",
       });
 
       const queued = await waitForQueuedCommand(
@@ -333,7 +269,6 @@ describe("thread runtime config", () => {
           path: environment.path,
           workspaceProvisionType: environment.workspaceProvisionType,
         },
-        questionPolicy: "allow",
       });
 
       const queued = await waitForQueuedCommand(

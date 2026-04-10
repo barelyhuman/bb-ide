@@ -227,7 +227,11 @@ export function createFakeAdapter(
    */
   return {
     buildCommand,
-    capabilities: { supportsRename: true, supportsServiceTier: false },
+    capabilities: {
+      supportsRename: true,
+      supportsServiceTier: false,
+      supportedPermissionModes: ["limited", "full"],
+    },
     decodeToolCallRequest,
     displayName: options.displayName ?? DEFAULT_DISPLAY_NAME,
     id: options.id ?? DEFAULT_ADAPTER_ID,

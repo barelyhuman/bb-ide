@@ -18,8 +18,6 @@ export function formatPendingInteractionKindLabel(
       return args.surface === "app" ? "File changes" : "file-change";
     case "permission_request":
       return args.surface === "app" ? "Permission request" : "permission";
-    case "user_input_request":
-      return args.surface === "app" ? "User input" : "question";
   }
 }
 
@@ -65,11 +63,5 @@ export function formatPendingInteractionSummary(
 
       return interaction.payload.toolName ?? "Permission request";
     }
-    case "user_input_request":
-      return surface === "app"
-        ? interaction.payload.questions.length === 1
-          ? interaction.payload.questions[0].question
-          : `${interaction.payload.questions.length} questions need answers`
-        : `${interaction.payload.questions.length} question(s)`;
   }
 }

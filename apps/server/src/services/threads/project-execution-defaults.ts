@@ -98,7 +98,7 @@ export function rememberProjectExecutionDefaultsForCreate(
     threadType: args.request.type,
     model: args.execution.model,
     reasoningLevel: args.execution.reasoningLevel,
-    sandboxMode: args.execution.sandboxMode,
+    permissionMode: args.execution.permissionMode,
     serviceTier: args.execution.serviceTier,
   });
 }

@@ -96,33 +96,4 @@ describe("pending interaction presentation", () => {
     ).toBe("WebFetch");
   });
 
-  it("formats single-question user input summaries differently per surface", () => {
-    const interaction = createInteraction({
-      kind: "user_input_request",
-      itemId: "item_123",
-      questions: [
-        {
-          id: "environment",
-          header: "Environment",
-          question: "Which environment should I use?",
-          allowsOther: true,
-          multiSelect: false,
-          options: [],
-        },
-      ],
-    });
-
-    expect(
-      formatPendingInteractionSummary({
-        interaction,
-        surface: "app",
-      }),
-    ).toBe("Which environment should I use?");
-    expect(
-      formatPendingInteractionSummary({
-        interaction,
-        surface: "cli",
-      }),
-    ).toBe("1 question(s)");
-  });
 });

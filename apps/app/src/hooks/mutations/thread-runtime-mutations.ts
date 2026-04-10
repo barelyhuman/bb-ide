@@ -73,7 +73,7 @@ export function useSendThreadMessage() {
       model,
       serviceTier,
       reasoningLevel,
-      sandboxMode,
+      permissionMode,
       mode,
     }: SendThreadMessageMutationRequest) =>
       api.sendThreadMessage(id, {
@@ -81,7 +81,7 @@ export function useSendThreadMessage() {
         model,
         serviceTier,
         reasoningLevel,
-        sandboxMode,
+        permissionMode,
         mode,
       }),
     onMutate: async (variables) => {
@@ -137,14 +137,14 @@ export function useCreateThreadDraft() {
       model,
       serviceTier,
       reasoningLevel,
-      sandboxMode,
+      permissionMode,
     }: CreateThreadDraftMutationRequest): Promise<ThreadQueuedMessage> =>
       api.createThreadDraft(id, {
         input,
         model,
         serviceTier,
         reasoningLevel,
-        sandboxMode,
+        permissionMode,
       }),
     onSuccess: (_queuedMessage, variables) => {
       queryClient.invalidateQueries({ queryKey: threadQueryKey(variables.id) });

@@ -48,7 +48,7 @@ describe("internal authorization regressions", () => {
           model: "gpt-5",
           serviceTier: "default",
           reasoningLevel: "medium",
-          sandboxMode: "danger-full-access",
+          permissionMode: "full",
           source: "client/thread/start",
         },
         initiator: "user",

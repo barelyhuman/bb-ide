@@ -31,16 +31,8 @@ interface ThreadInteractionTargetOptions {
   json?: boolean;
 }
 
-interface ThreadInteractionAnswerOptions extends ThreadInteractionTargetOptions {
-  answer?: string[];
-}
-
 interface ThreadInteractionGrantOptions extends ThreadInteractionTargetOptions {
   scope?: string;
-}
-
-function collectAnswers(value: string, previous: string[]): string[] {
-  return [...previous, value];
 }
 
 function parsePermissionGrantScope(
@@ -127,17 +119,6 @@ function printInteraction(interaction: PendingInteraction): void {
       }
       printRequestedPermissions(interaction.payload.permissions);
       break;
-    case "user_input_request":
-      console.log(`  Questions: ${interaction.payload.questions.length}`);
-      for (const question of interaction.payload.questions) {
-        console.log(`  ${question.header}: ${question.question}`);
-        if (question.options.length > 0) {
-          console.log(
-            `    Options: ${question.options.map((option) => option.label).join(", ")}`,
-          );
-        }
-      }
-      break;
   }
 
   if (interaction.resolution) {
@@ -156,9 +137,6 @@ function printInteraction(interaction: PendingInteraction): void {
         break;
       case "permission_request":
         console.log(`  Scope: ${interaction.resolution.scope}`);
-        break;
-      case "user_input_request":
-        console.log(`  Answers: ${Object.keys(interaction.resolution.answers).length}`);
         break;
     }
   }
@@ -300,10 +278,6 @@ function buildBinaryResolution(
         },
         scope: "turn",
       };
-    case "user_input_request":
-      throw new Error(
-        `Interaction ${interaction.id} is ${formatInteractionKind(interaction.payload.kind)} and cannot be resolved with approve/deny.`,
-      );
   }
 }
 
@@ -341,79 +315,12 @@ function formatBinaryResolutionMessage(
         permissions: resolution.permissions,
         scope: resolution.scope,
       });
-    case "user_input_request":
-      throw new Error(
-        `Resolution ${resolution.kind} does not support approval messaging.`,
-      );
   }
 
   const exhaustiveResolution: never = resolution;
   throw new Error(
     `Unsupported interaction resolution: ${String(exhaustiveResolution)}`,
   );
-}
-
-function parseAnswerEntries(values: readonly string[]): Record<string, string[]> {
-  const answers: Record<string, string[]> = {};
-
-  for (const value of values) {
-    const separatorIndex = value.indexOf("=");
-    if (separatorIndex <= 0) {
-      throw new Error(
-        `Invalid --answer '${value}'. Expected questionId=value.`,
-      );
-    }
-    const questionId = value.slice(0, separatorIndex).trim();
-    const answer = value.slice(separatorIndex + 1).trim();
-    if (questionId.length === 0 || answer.length === 0) {
-      throw new Error(
-        `Invalid --answer '${value}'. Expected questionId=value.`,
-      );
-    }
-
-    const existing = answers[questionId] ?? [];
-    answers[questionId] = [...existing, answer];
-  }
-
-  return answers;
-}
-
-function buildUserInputResolution(
-  interaction: PendingInteraction,
-  values: readonly string[],
-): PendingInteractionResolution {
-  if (interaction.payload.kind !== "user_input_request") {
-    throw new Error(
-      `Interaction ${interaction.id} is ${formatInteractionKind(interaction.payload.kind)} and cannot be answered with this command.`,
-    );
-  }
-  if (values.length === 0) {
-    throw new Error(
-      "At least one --answer questionId=value entry is required.",
-    );
-  }
-
-  const answers = parseAnswerEntries(values);
-  const questionIds = new Set(interaction.payload.questions.map((question) => question.id));
-  const missingQuestionIds = interaction.payload.questions
-    .map((question) => question.id)
-    .filter((questionId) => !(questionId in answers));
-  if (missingQuestionIds.length > 0) {
-    throw new Error(
-      `Missing answers for ${missingQuestionIds.join(", ")}.`,
-    );
-  }
-
-  for (const questionId of Object.keys(answers)) {
-    if (!questionIds.has(questionId)) {
-      throw new Error(`Unknown question id '${questionId}'.`);
-    }
-  }
-
-  return {
-    kind: "user_input_request",
-    answers,
-  };
 }
 
 export function registerInteractionCommands(
@@ -567,33 +474,4 @@ export function registerInteractionCommands(
       });
     }));
 
-  interactions
-    .command("answer <interactionId> [id]")
-    .description("Answer a user-input interaction")
-    .option("--self", "Target the current thread (from BB_THREAD_ID)")
-    .option("--json", "Print machine-readable JSON output")
-    .option(
-      "--answer <questionId=value>",
-      "Provide an answer for a question; repeat for multiple answers",
-      collectAnswers,
-      [],
-    )
-    .action(action(async (
-      interactionId: string,
-      id: string | undefined,
-      opts: ThreadInteractionAnswerOptions,
-    ) => {
-      const resolved = requireThreadIdWithLabelOrSelf(id, opts);
-      printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
-      await resolveInteraction({
-        buildResolution: (interaction) =>
-          buildUserInputResolution(interaction, opts.answer ?? []),
-        failureAction: "answer",
-        getUrl,
-        interactionId,
-        json: opts.json,
-        threadId: resolved.id,
-        successMessage: () => `Interaction ${interactionId} answered`,
-      });
-    }));
 }

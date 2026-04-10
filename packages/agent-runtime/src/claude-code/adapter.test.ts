@@ -7,7 +7,6 @@ import {
 } from "./adapter.js";
 import {
   CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
-  CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD,
 } from "./interactive-contract.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -45,6 +44,7 @@ describe("claude-code provider adapter", () => {
     expect(adapter.capabilities).toEqual({
       supportsRename: false,
       supportsServiceTier: false,
+      supportedPermissionModes: ["limited", "full"],
     });
   });
 
@@ -82,8 +82,7 @@ describe("claude-code provider adapter", () => {
     });
     expect(cmd?.params).toMatchObject({
       threadId: "bb-thread-1",
-      permissionMode: "default",
-      questionPolicy: "allow",
+      permissionMode: "bypassPermissions",
       cwd: "/tmp/worktree",
     });
   });
@@ -98,8 +97,7 @@ describe("claude-code provider adapter", () => {
       instructionMode: "append",
       options: {
         model: "claude-sonnet-4-5",
-        approvalPolicy: "never",
-        questionPolicy: "deny",
+        permissionMode: "limited",
         instructions: "Focus on the failing tests first.",
         reasoningLevel: "high",
         envVars: {
@@ -125,8 +123,7 @@ describe("claude-code provider adapter", () => {
       params: {
         threadId: "bb-thread-1",
         model: "claude-sonnet-4-5",
-        permissionMode: "dontAsk",
-        questionPolicy: "deny",
+        permissionMode: "default",
         baseInstructions: expect.stringContaining("Focus on the failing tests first."),
         dynamicTools: [{
           name: "bb_test_ping",
@@ -169,8 +166,7 @@ describe("claude-code provider adapter", () => {
       cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
-      permissionMode: "default",
-      questionPolicy: "allow",
+      permissionMode: "bypassPermissions",
     });
   });
 
@@ -422,58 +418,6 @@ describe("claude-code provider adapter", () => {
     ).toBeNull();
   });
 
-  it("decodes Claude AskUserQuestion requests into pending interactions", () => {
-    const adapter = createClaudeCodeProviderAdapter();
-
-    expect(
-      adapter.decodeInteractiveRequest?.({
-        jsonrpc: "2.0",
-        id: "req-3",
-        method: CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD,
-        params: {
-          threadId: "thr_1",
-          providerThreadId: "claude-session-1",
-          turnId: "",
-          itemId: "toolu_2",
-          questions: [
-            {
-              header: "Format",
-              question: "How should I format the output?",
-              multiSelect: false,
-              options: [
-                { label: "Summary", description: "Brief overview" },
-                { label: "Detailed", description: "Full explanation" },
-              ],
-            },
-          ],
-        },
-      }),
-    ).toEqual({
-      requestId: "req-3",
-      method: CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD,
-      threadId: "thr_1",
-      providerThreadId: "claude-session-1",
-      turnId: "",
-      payload: {
-        kind: "user_input_request",
-        itemId: "toolu_2",
-        questions: [
-          {
-            id: "question-1",
-            header: "Format",
-            question: "How should I format the output?",
-            allowsOther: true,
-            multiSelect: false,
-            options: [
-              { label: "Summary", description: "Brief overview", preview: null },
-              { label: "Detailed", description: "Full explanation", preview: null },
-            ],
-          },
-        ],
-      },
-    });
-  });
-
   it("builds Claude permission approval responses", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
@@ -563,64 +507,6 @@ describe("claude-code provider adapter", () => {
           destination: "session",
         },
       ],
-    });
-  });
-
-  it("builds Claude AskUserQuestion responses keyed by question text", () => {
-    const adapter = createClaudeCodeProviderAdapter();
-
-    expect(
-      adapter.buildInteractiveResponse?.({
-        request: {
-          requestId: "req-5",
-          method: CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD,
-          threadId: "thr_1",
-          providerThreadId: "claude-session-1",
-          turnId: "",
-          payload: {
-            kind: "user_input_request",
-            itemId: "toolu_4",
-            questions: [
-              {
-                id: "question-1",
-                header: "Format",
-                question: "How should I format the output?",
-                allowsOther: true,
-                multiSelect: false,
-                options: [
-                  { label: "Summary", description: "Brief overview", preview: null },
-                  { label: "Detailed", description: "Full explanation", preview: null },
-                ],
-              },
-            ],
-          },
-        },
-        resolution: {
-          kind: "user_input_request",
-          answers: {
-            "question-1": ["Summary"],
-          },
-        },
-      }),
-    ).toEqual({
-      kind: "user_input_request",
-      behavior: "allow",
-      updatedInput: {
-        questions: [
-          {
-            header: "Format",
-            question: "How should I format the output?",
-            multiSelect: false,
-            options: [
-              { label: "Summary", description: "Brief overview" },
-              { label: "Detailed", description: "Full explanation" },
-            ],
-          },
-        ],
-        answers: {
-          "How should I format the output?": "Summary",
-        },
-      },
     });
   });
 

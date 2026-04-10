@@ -394,7 +394,7 @@ describe("events", () => {
         execution: {
           model: "gpt-5",
           reasoningLevel: "medium",
-          sandboxMode: "workspace-write",
+          permissionMode: "limited",
           source: "client/thread/start",
           serviceTier: "auto",
         },
