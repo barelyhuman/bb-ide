@@ -1192,10 +1192,7 @@ async function main(): Promise<void> {
         "claude-code",
       );
     }
-    if (
-      authFixture?.["openai-codex"]
-      && authFixture.codexRefreshCapable !== false
-    ) {
+    if (authFixture?.["openai-codex"]) {
       console.log("Expiring Codex credential before resume");
       await expireSmokeCodexCredential(runtimeMaterialContext, authFixture);
     }
@@ -1270,11 +1267,7 @@ async function main(): Promise<void> {
     }
 
     if (authFixture?.["openai-codex"]) {
-      console.log(
-        authFixture.codexRefreshCapable === false
-          ? "Checking Codex material after resume"
-          : "Checking refreshed Codex material after resume",
-      );
+      console.log("Checking refreshed Codex material after resume");
       await assertSandboxFileContains(
         resumedSandbox,
         SMOKE_CODEX_PATH,
@@ -1289,10 +1282,7 @@ async function main(): Promise<void> {
         resumedSandbox,
         `cat ${toSandboxShellPath(SMOKE_CODEX_PATH)}`,
       );
-      if (
-        authFixture.codexRefreshCapable !== false
-        && codexResult.stdout.includes(STALE_CODEX_ACCESS_TOKEN)
-      ) {
+      if (codexResult.stdout.includes(STALE_CODEX_ACCESS_TOKEN)) {
         throw new Error("Codex auth file still contains the stale access token");
       }
     }

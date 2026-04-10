@@ -26,7 +26,6 @@ export interface SmokeQaCodexFixture {
 
 export interface SmokeQaAuthFixture {
   claude?: SmokeQaClaudeFixture;
-  codexRefreshCapable?: boolean;
   createdAt?: string;
   "openai-codex"?: SmokeQaCodexFixture;
 }
@@ -49,40 +48,6 @@ export interface QaAuthCoverageSummary {
   fixturePath: string;
   hasFullSubscriptionCoverage: boolean;
   hasSubscriptionCoverage: boolean;
-}
-
-function createCodexIdToken(email: string): string {
-  const header = Buffer.from(
-    JSON.stringify({ alg: "none", typ: "JWT" }),
-  ).toString("base64url");
-  const body = Buffer.from(
-    JSON.stringify({ email }),
-  ).toString("base64url");
-  return `${header}.${body}.signature`;
-}
-
-function decodeCodexEmailFromAccessToken(accessToken: string): string | null {
-  const parts = accessToken.split(".");
-  if (parts.length !== 3) {
-    return null;
-  }
-
-  try {
-    const payload = JSON.parse(
-      Buffer.from(parts[1] ?? "", "base64url").toString("utf8"),
-    );
-    if (typeof payload !== "object" || payload === null) {
-      return null;
-    }
-    const rawProfile = Reflect.get(payload, "https://api.openai.com/profile");
-    if (typeof rawProfile !== "object" || rawProfile === null) {
-      return null;
-    }
-    const email = Reflect.get(rawProfile, "email");
-    return typeof email === "string" ? email : null;
-  } catch {
-    return null;
-  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -128,19 +93,8 @@ function parseQaAuthFixture(raw: string): SmokeQaAuthFixture {
     throw new Error("Invalid cloud auth fixture createdAt");
   }
 
-  const codexRefreshCapable = value.codexRefreshCapable;
-  if (
-    codexRefreshCapable !== undefined
-    && typeof codexRefreshCapable !== "boolean"
-  ) {
-    throw new Error("Invalid cloud auth fixture codexRefreshCapable");
-  }
-
   return {
     ...(typeof createdAt === "string" ? { createdAt } : {}),
-    ...(typeof codexRefreshCapable === "boolean"
-      ? { codexRefreshCapable }
-      : {}),
     ...(claude && isRecord(claude)
       ? {
           claude: {
@@ -192,12 +146,29 @@ async function enrichQaAuthFixture(
 ): Promise<SmokeQaAuthFixture> {
   let nextFixture: SmokeQaAuthFixture = fixture;
 
-  if (fixture.claude && fixture.claude.expires <= Date.now()) {
-    notices.push(
-      "Claude fixture is expired; Claude-specific smoke coverage will be skipped until it is refreshed.",
-    );
-    const { claude: _removedClaude, ...remainingFixture } = nextFixture;
-    nextFixture = remainingFixture;
+  if (fixture.claude) {
+    try {
+      const refreshedCredential = await getCloudAuthProviderDefinition("claude-code").refreshCredential({
+        credential: {
+          accessToken: fixture.claude.access,
+          accountEmail: null,
+          accountId: null,
+          expiresAt: fixture.claude.expires,
+          providerId: "claude-code",
+          refreshToken: fixture.claude.refresh,
+          scopes: [],
+          subscriptionType: null,
+        },
+      });
+      nextFixture = {
+        ...nextFixture,
+        ...buildFixtureFromCredential(refreshedCredential),
+      };
+    } catch {
+      throw new Error(
+        "Claude fixture refresh failed; reacquire it with the auth-connect helper.",
+      );
+    }
   }
 
   const codexFixture = nextFixture["openai-codex"];
@@ -223,7 +194,6 @@ async function enrichQaAuthFixture(
 
     return {
       ...nextFixture,
-      codexRefreshCapable: true,
       "openai-codex": {
         access: refreshedCredential.accessToken,
         ...(refreshedCredential.accountId
@@ -235,24 +205,9 @@ async function enrichQaAuthFixture(
       },
     };
   } catch {
-    const email = decodeCodexEmailFromAccessToken(codexFixture.access);
-    if (!email) {
-      throw new Error(
-        "Codex fixture refresh failed and the access token did not contain enough claims to synthesize an idToken for smoke validation",
-      );
-    }
-
-    notices.push(
-      "Codex fixture refresh failed; smoke will synthesize an idToken from access-token claims for validation and skip refresh-specific assertions.",
+    throw new Error(
+      "Codex fixture refresh failed; reacquire it with the auth-connect helper.",
     );
-    return {
-      ...nextFixture,
-      codexRefreshCapable: false,
-      "openai-codex": {
-        ...codexFixture,
-        idToken: codexFixture.idToken ?? createCodexIdToken(email),
-      },
-    };
   }
 }
 
@@ -363,7 +318,6 @@ export async function upsertQaAuthFixtureCredential(
   const nextFixture: SmokeQaAuthFixture = {
     ...(existingFixture ?? {}),
     ...buildFixtureFromCredential(args.credential),
-    codexRefreshCapable: undefined,
     createdAt: new Date().toISOString(),
   };
 
