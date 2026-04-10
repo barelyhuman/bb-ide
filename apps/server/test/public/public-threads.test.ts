@@ -604,7 +604,6 @@ describe("public thread routes", () => {
         payload: "{}",
         providerId: "codex",
         providerRequestId: "request-1",
-        providerRequestMethod: "item/commandExecution/requestApproval",
         providerThreadId: "provider-thread-1",
         threadId: firstThread.id,
         turnId: "turn_1",

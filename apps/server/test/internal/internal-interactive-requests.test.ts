@@ -63,11 +63,9 @@ describe("internal interactive request lifecycle", () => {
             providerId: "codex",
             providerThreadId: "provider-thread-1",
             providerRequestId: "request-1",
-            providerRequestMethod: "item/commandExecution/requestApproval",
             payload: {
               kind: "command_approval",
               itemId: "item-1",
-              approvalId: null,
               reason: "Needs approval",
               command: "git push",
               cwd: "/tmp/project",
@@ -140,11 +138,9 @@ describe("internal interactive request lifecycle", () => {
             providerId: "codex",
             providerThreadId: "provider-thread-1",
             providerRequestId: "request-1",
-            providerRequestMethod: "item/commandExecution/requestApproval",
             payload: {
               kind: "command_approval",
               itemId: "item-1",
-              approvalId: null,
               reason: "Needs approval",
               command: "git push",
               cwd: "/tmp/project",
@@ -221,11 +217,9 @@ describe("internal interactive request lifecycle", () => {
             providerId: "codex",
             providerThreadId: "provider-thread-delete-1",
             providerRequestId: "request-delete-1",
-            providerRequestMethod: "item/commandExecution/requestApproval",
             payload: {
               kind: "command_approval",
               itemId: "item-delete-1",
-              approvalId: null,
               reason: "Needs approval",
               command: "git push",
               cwd: "/tmp/project",
@@ -303,7 +297,6 @@ describe("internal interactive request lifecycle", () => {
             providerId: "claude-code",
             providerThreadId: "claude-thread-1",
             providerRequestId: "request-claude-1",
-            providerRequestMethod: "item/permissions/requestApproval",
             payload: {
               kind: "permission_request",
               itemId: "item-claude-1",

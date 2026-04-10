@@ -9,6 +9,7 @@ import {
   createPendingInteraction,
   getActivePendingInteractionForThread,
   getPendingInteractionByProviderRequest,
+  interruptPendingInteractionsForThreadIds,
   interruptPendingInteractionsForThreads,
   listPendingInteractionThreadIds,
   listPendingInteractionsByStatus,
@@ -64,12 +65,10 @@ describe("pending interactions", () => {
       providerId: "codex",
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-1",
-      providerRequestMethod: "item/commandExecution/requestApproval",
       kind: "command_approval",
       payload: JSON.stringify({
         kind: "command_approval",
         itemId: "item-1",
-        approvalId: null,
         reason: "Needs approval",
         command: "git push",
         cwd: "/tmp/project",
@@ -99,12 +98,10 @@ describe("pending interactions", () => {
       providerId: "codex",
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-1",
-      providerRequestMethod: "item/commandExecution/requestApproval",
       kind: "command_approval",
       payload: JSON.stringify({
         kind: "command_approval",
         itemId: "item-1",
-        approvalId: null,
         reason: null,
         command: "git push",
         cwd: "/tmp/project",
@@ -119,7 +116,6 @@ describe("pending interactions", () => {
       providerId: "codex",
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-2",
-      providerRequestMethod: "item/tool/requestUserInput",
       kind: "user_input_request",
       payload: JSON.stringify({
         kind: "user_input_request",
@@ -156,12 +152,10 @@ describe("pending interactions", () => {
       providerId: "codex",
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-1",
-      providerRequestMethod: "item/commandExecution/requestApproval",
       kind: "command_approval",
       payload: JSON.stringify({
         kind: "command_approval",
         itemId: "item-1",
-        approvalId: null,
         reason: null,
         command: "git push",
         cwd: "/tmp/project",
@@ -176,12 +170,10 @@ describe("pending interactions", () => {
       providerId: "claude-code",
       providerThreadId: "provider-thread-2",
       providerRequestId: "request-2",
-      providerRequestMethod: "item/commandExecution/requestApproval",
       kind: "command_approval",
       payload: JSON.stringify({
         kind: "command_approval",
         itemId: "item-2",
-        approvalId: null,
         reason: null,
         command: "rm -rf build",
         cwd: "/tmp/project",
@@ -206,6 +198,103 @@ describe("pending interactions", () => {
     expect(getActivePendingInteractionForThread(db, siblingThread.id)?.status).toBe("pending");
   });
 
+  it("chunks provider-thread interrupts to stay under SQLite variable limits", () => {
+    const { db, thread } = setup();
+    const manyThreads = [thread];
+    for (let index = 0; index < 1_050; index += 1) {
+      manyThreads.push(
+        createThread(db, noopNotifier, {
+          projectId: thread.projectId,
+          environmentId: thread.environmentId,
+          providerId: "codex",
+        }),
+      );
+    }
+
+    const targetThreadIds = [manyThreads[0], manyThreads[1_000]]
+      .filter((currentThread) => currentThread !== undefined)
+      .map((currentThread) => currentThread.id);
+
+    for (const [index, threadId] of targetThreadIds.entries()) {
+      createPendingInteraction(db, {
+        threadId,
+        turnId: `turn-batched-interrupt-provider-${index}`,
+        providerId: "codex",
+        providerThreadId: `provider-thread-batched-interrupt-provider-${index}`,
+        providerRequestId: `request-batched-interrupt-provider-${index}`,
+        kind: "command_approval",
+        payload: JSON.stringify({
+          kind: "command_approval",
+          itemId: `item-batched-interrupt-provider-${index}`,
+          reason: null,
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: ["accept", "decline", "cancel"],
+        }),
+      });
+    }
+
+    expect(
+      new Set(
+        interruptPendingInteractionsForThreads(db, {
+          providerId: "codex",
+          threadIds: manyThreads.map((currentThread) => currentThread.id),
+          statusReason: "Provider exited",
+        }).map((row) => row.threadId),
+      ),
+    ).toEqual(new Set(targetThreadIds));
+  });
+
+  it("chunks thread-id interrupts to stay under SQLite variable limits", () => {
+    const { db, thread } = setup();
+    const manyThreads = [thread];
+    for (let index = 0; index < 1_050; index += 1) {
+      manyThreads.push(
+        createThread(db, noopNotifier, {
+          projectId: thread.projectId,
+          environmentId: thread.environmentId,
+          providerId: "codex",
+        }),
+      );
+    }
+
+    const targetThreadIds = [manyThreads[0], manyThreads[1_000]]
+      .filter((currentThread) => currentThread !== undefined)
+      .map((currentThread) => currentThread.id);
+
+    for (const [index, threadId] of targetThreadIds.entries()) {
+      createPendingInteraction(db, {
+        threadId,
+        turnId: `turn-batched-interrupt-thread-${index}`,
+        providerId: "codex",
+        providerThreadId: `provider-thread-batched-interrupt-thread-${index}`,
+        providerRequestId: `request-batched-interrupt-thread-${index}`,
+        kind: "command_approval",
+        payload: JSON.stringify({
+          kind: "command_approval",
+          itemId: `item-batched-interrupt-thread-${index}`,
+          reason: null,
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          requestedPermissions: null,
+          availableDecisions: ["accept", "decline", "cancel"],
+        }),
+      });
+    }
+
+    expect(
+      new Set(
+        interruptPendingInteractionsForThreadIds(db, {
+          threadIds: manyThreads.map((currentThread) => currentThread.id),
+          statusReason: "Thread stopped",
+        }).map((row) => row.threadId),
+      ),
+    ).toEqual(new Set(targetThreadIds));
+  });
+
   it("lists pending interactions by status and expires them", () => {
     const { db, thread } = setup();
 
@@ -215,12 +304,10 @@ describe("pending interactions", () => {
       providerId: "codex",
       providerThreadId: "provider-thread-expire-1",
       providerRequestId: "request-expire-1",
-      providerRequestMethod: "item/commandExecution/requestApproval",
       kind: "command_approval",
       payload: JSON.stringify({
         kind: "command_approval",
         itemId: "item-expire-1",
-        approvalId: null,
         reason: null,
         command: "git push",
         cwd: "/tmp/project",
@@ -256,7 +343,6 @@ describe("pending interactions", () => {
       providerId: "codex",
       providerThreadId: "provider-thread-reject-1",
       providerRequestId: "request-reject-1",
-      providerRequestMethod: "item/tool/requestUserInput",
       kind: "user_input_request",
       payload: JSON.stringify({
         kind: "user_input_request",
@@ -302,12 +388,10 @@ describe("pending interactions", () => {
         providerId: "codex",
         providerThreadId: `provider-thread-batched-${index}`,
         providerRequestId: `request-batched-${index}`,
-        providerRequestMethod: "item/commandExecution/requestApproval",
         kind: "command_approval",
         payload: JSON.stringify({
           kind: "command_approval",
           itemId: `item-batched-${index}`,
-          approvalId: null,
           reason: null,
           command: "git push",
           cwd: "/tmp/project",

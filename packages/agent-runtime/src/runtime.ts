@@ -525,7 +525,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
             proc.interactiveRequestScope,
             interactiveReq.requestId,
           ),
-          providerRequestMethod: interactiveReq.method,
           payload: interactiveReq.payload,
         };
         const captureId = createCaptureId();

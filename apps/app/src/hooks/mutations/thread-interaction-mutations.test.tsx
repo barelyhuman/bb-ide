@@ -31,7 +31,6 @@ function createResolvedInteraction(): PendingInteraction {
     providerId: "codex",
     providerThreadId: "provider-thread-1",
     providerRequestId: "request-1",
-    providerRequestMethod: "item/tool/requestUserInput",
     status: "resolved",
     payload: {
       kind: "user_input_request",
@@ -42,7 +41,6 @@ function createResolvedInteraction(): PendingInteraction {
           header: "Target",
           question: "Which environment should I use?",
           allowsOther: true,
-          isSecret: false,
           multiSelect: false,
           options: [],
         },

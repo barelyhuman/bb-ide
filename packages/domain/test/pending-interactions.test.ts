@@ -15,11 +15,9 @@ describe("pending interaction schemas", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-123",
         providerRequestId: "request-123",
-        providerRequestMethod: "item/commandExecution/requestApproval",
         payload: {
           kind: "command_approval",
           itemId: "item_123",
-          approvalId: null,
           reason: "Needs network access",
           command: "npm install",
           cwd: "/tmp/project",
@@ -57,12 +55,10 @@ describe("pending interaction schemas", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-124",
         providerRequestId: "request-126",
-        providerRequestMethod: "item/commandExecution/requestApproval",
         status: "resolved",
         payload: {
           kind: "command_approval",
           itemId: "item_126",
-          approvalId: null,
           reason: "Needs approval",
           command: "git push",
           cwd: "/tmp/project",
@@ -107,7 +103,6 @@ describe("pending interaction schemas", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-123",
         providerRequestId: "request-124",
-        providerRequestMethod: "item/tool/requestUserInput",
         status: "resolved",
         payload: {
           kind: "user_input_request",
@@ -118,7 +113,6 @@ describe("pending interaction schemas", () => {
               header: "Target",
               question: "Which environment should I use?",
               allowsOther: true,
-              isSecret: false,
               multiSelect: false,
               options: [
                 {
@@ -157,7 +151,6 @@ describe("pending interaction schemas", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-123",
         providerRequestId: "request-125",
-        providerRequestMethod: "item/tool/requestUserInput",
         status: "resolved",
         payload: {
           kind: "user_input_request",

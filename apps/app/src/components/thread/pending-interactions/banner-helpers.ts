@@ -1,6 +1,7 @@
 import {
   getPendingInteractionCommandApprovalDecisionKind,
   summarizePendingInteractionRequestedPermissions,
+  toGrantedPendingInteractionPermissions,
 } from "@bb/core-ui";
 import {
   type PendingInteraction,
@@ -99,26 +100,10 @@ export function hasExpandableDetails(interaction: PendingInteraction): boolean {
   }
 }
 
-function describeGrantedPermissions(
-  permissions: PendingInteractionRequestedPermissionProfile,
-): PendingInteractionGrantedPermissionProfile {
-  return {
-    network: permissions.network?.enabled === true
-      ? { enabled: true }
-      : null,
-    fileSystem: permissions.fileSystem
-      ? {
-          read: permissions.fileSystem.read,
-          write: permissions.fileSystem.write,
-        }
-      : null,
-  };
-}
-
 export function buildPermissionDecisionButtons(
   permissions: PendingInteractionRequestedPermissionProfile,
 ): PermissionDecisionButtonConfig[] {
-  const grantedPermissions = describeGrantedPermissions(permissions);
+  const grantedPermissions = toGrantedPendingInteractionPermissions(permissions);
   return [
     {
       label: "Allow for turn",

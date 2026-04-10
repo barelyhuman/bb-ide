@@ -18,6 +18,7 @@ import {
   hostsQueryKey,
   systemProvidersQueryKey,
   threadQueryKey,
+  threadTimelineQueryKeyPrefix,
   threadStorageFilesQueryKey,
   threadStorageFilePreviewQueryKeyPrefix,
   threadsQueryKey,
@@ -443,6 +444,9 @@ describe("useWebSocket", () => {
 
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: threadPendingInteractionsQueryKey("thread-1"),
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: threadTimelineQueryKeyPrefix("thread-1"),
     });
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: threadQueryKey("thread-1"),

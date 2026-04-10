@@ -497,11 +497,9 @@ describe("internal session correctness", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-disconnect-pending-interaction",
         providerRequestId: "request-disconnect-pending-interaction",
-        providerRequestMethod: "item/commandExecution/requestApproval",
         payload: {
           kind: "command_approval",
           itemId: "item-disconnect-pending-interaction",
-          approvalId: null,
           reason: "Needs approval",
           command: "git push",
           cwd: "/tmp/project",
@@ -612,11 +610,9 @@ describe("internal session correctness", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-session-restart-interaction",
         providerRequestId: "request-session-restart-interaction",
-        providerRequestMethod: "item/commandExecution/requestApproval",
         payload: {
           kind: "command_approval",
           itemId: "item-session-restart-interaction",
-          approvalId: null,
           reason: "Needs approval",
           command: "git push",
           cwd: "/tmp/project",

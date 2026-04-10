@@ -91,6 +91,19 @@ interface CreateLifecycleDeps {
   hub: AppDeps["hub"];
 }
 
+function getUnsupportedPendingInteractionReason(
+  interaction: PendingInteractionCreate,
+): string | null {
+  if (
+    interaction.payload.kind === "permission_request"
+    && interaction.payload.permissions.macos !== null
+  ) {
+    return "Pending interactions do not yet support standalone macOS permission requests";
+  }
+
+  return null;
+}
+
 export const DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS = 10 * 60 * 1000;
 const PENDING_INTERACTION_HYDRATE_BATCH_SIZE = 200;
 
@@ -246,6 +259,13 @@ export class PendingInteractionLifecycle {
         reason: "Thread question policy denies user-input requests",
       };
     }
+    const unsupportedReason = getUnsupportedPendingInteractionReason(interaction);
+    if (unsupportedReason) {
+      return {
+        outcome: "rejected",
+        reason: unsupportedReason,
+      };
+    }
 
     const registered = this.deps.db.transaction((tx) => {
       const existing = getPendingInteractionByProviderRequest(tx, {
@@ -287,7 +307,6 @@ export class PendingInteractionLifecycle {
           providerId: interaction.providerId,
           providerThreadId: interaction.providerThreadId,
           providerRequestId: interaction.providerRequestId,
-          providerRequestMethod: interaction.providerRequestMethod,
           kind: interaction.payload.kind,
           payload: JSON.stringify(interaction.payload),
         }),

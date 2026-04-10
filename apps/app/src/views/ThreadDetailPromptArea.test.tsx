@@ -60,7 +60,6 @@ function createPendingInteraction(): PendingInteraction {
     providerId: "codex",
     providerThreadId: "provider-thread-1",
     providerRequestId: "request-1",
-    providerRequestMethod: "item/tool/requestUserInput",
     status: "pending",
     payload: {
       kind: "user_input_request",
@@ -71,7 +70,6 @@ function createPendingInteraction(): PendingInteraction {
           header: "Environment",
           question: "Which environment should I use?",
           allowsOther: true,
-          isSecret: false,
           multiSelect: false,
           options: [
             {

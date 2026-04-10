@@ -1462,11 +1462,9 @@ describe("internal session routes", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-stop-interaction",
         providerRequestId: "request-stop-interaction",
-        providerRequestMethod: "item/commandExecution/requestApproval",
         payload: {
           kind: "command_approval",
           itemId: "item-stop-interaction",
-          approvalId: null,
           reason: "Approve command",
           command: "git push",
           cwd: "/tmp/project",

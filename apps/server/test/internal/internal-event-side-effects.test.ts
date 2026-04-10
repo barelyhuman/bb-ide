@@ -1383,11 +1383,9 @@ describe("internal event side effects", () => {
         providerId: "codex",
         providerThreadId: "provider-manager-awaiting-interaction",
         providerRequestId: "request-manager-awaiting-interaction",
-        providerRequestMethod: "item/commandExecution/requestApproval",
         payload: {
           kind: "command_approval",
           itemId: "item-manager-awaiting-interaction",
-          approvalId: null,
           reason: "Approve command",
           command: "git push",
           cwd: "/tmp/project",

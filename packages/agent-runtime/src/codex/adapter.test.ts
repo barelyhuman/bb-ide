@@ -1337,7 +1337,6 @@ describe("codex provider adapter", () => {
           threadId: "t1",
           turnId: "turn-1",
           itemId: "item-1",
-          approvalId: null,
           reason: "Needs approval",
           command: "git push",
           cwd: "/tmp/project",
@@ -1363,7 +1362,6 @@ describe("codex provider adapter", () => {
       payload: {
         kind: "command_approval",
         itemId: "item-1",
-        approvalId: null,
         reason: "Needs approval",
         command: "git push",
         cwd: "/tmp/project",
@@ -1394,7 +1392,6 @@ describe("codex provider adapter", () => {
           threadId: "t1",
           turnId: "turn-1",
           itemId: "item-1",
-          approvalId: null,
           reason: "Needs approval",
           command: "osascript -e 'tell app \"Finder\" to activate'",
           cwd: "/tmp/project",
@@ -1425,7 +1422,6 @@ describe("codex provider adapter", () => {
       payload: {
         kind: "command_approval",
         itemId: "item-1",
-        approvalId: null,
         reason: "Needs approval",
         command: "osascript -e 'tell app \"Finder\" to activate'",
         cwd: "/tmp/project",
@@ -1462,7 +1458,6 @@ describe("codex provider adapter", () => {
           threadId: "t1",
           turnId: "turn-1",
           itemId: "item-1",
-          approvalId: null,
           reason: "Needs approval",
           command: "open -a Finder",
           cwd: "/tmp/project",
@@ -1505,7 +1500,6 @@ describe("codex provider adapter", () => {
           threadId: "t1",
           turnId: "turn-1",
           itemId: "item-1",
-          approvalId: null,
           reason: "Needs approval",
           command: "open -a Finder",
           cwd: "/tmp/project",
@@ -1548,7 +1542,6 @@ describe("codex provider adapter", () => {
           threadId: "t1",
           turnId: "turn-2",
           itemId: "item-2",
-          approvalId: null,
           reason: "Needs approval",
           command: "git push",
           cwd: "/tmp/project",
@@ -1585,7 +1578,6 @@ describe("codex provider adapter", () => {
       payload: {
         kind: "command_approval",
         itemId: "item-2",
-        approvalId: null,
         reason: "Needs approval",
         command: "git push",
         cwd: "/tmp/project",
@@ -1682,6 +1674,33 @@ describe("codex provider adapter", () => {
     });
   });
 
+  it("decodeInteractiveRequest rejects secret user-input requests", () => {
+    const adapter = createCodexProviderAdapter();
+
+    expect(
+      adapter.decodeInteractiveRequest?.({
+        jsonrpc: "2.0",
+        id: 12,
+        method: "item/tool/requestUserInput",
+        params: {
+          threadId: "t1",
+          turnId: "turn-secret-input",
+          itemId: "item-secret-input",
+          questions: [
+            {
+              id: "token",
+              header: "Token",
+              question: "Enter the token",
+              isOther: false,
+              isSecret: true,
+              options: null,
+            },
+          ],
+        },
+      }),
+    ).toBeNull();
+  });
+
   it("buildInteractiveResponse maps bb command approvals back to Codex responses", () => {
     const adapter = createCodexProviderAdapter();
     expect(
@@ -1694,7 +1713,6 @@ describe("codex provider adapter", () => {
           payload: {
             kind: "command_approval",
             itemId: "item-1",
-            approvalId: null,
             reason: null,
             command: "git push",
             cwd: "/tmp/project",
@@ -1725,7 +1743,6 @@ describe("codex provider adapter", () => {
           payload: {
             kind: "command_approval",
             itemId: "item-3",
-            approvalId: null,
             reason: null,
             command: "git push",
             cwd: "/tmp/project",

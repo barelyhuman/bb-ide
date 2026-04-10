@@ -1506,7 +1506,6 @@ export function createCodexProviderAdapter(
             payload: {
               kind: "command_approval",
               itemId: parsed.data.itemId,
-              approvalId: parsed.data.approvalId ?? null,
               reason: parsed.data.reason ?? null,
               command: parsed.data.command ?? null,
               cwd: parsed.data.cwd ?? null,
@@ -1545,6 +1544,9 @@ export function createCodexProviderAdapter(
           if (!parsed.success) {
             return null;
           }
+          if (parsed.data.questions.some((question) => question.isSecret)) {
+            return null;
+          }
           return {
             requestId: request.id,
             method: request.method,
@@ -1558,7 +1560,6 @@ export function createCodexProviderAdapter(
                 header: question.header,
                 question: question.question,
                 allowsOther: question.isOther,
-                isSecret: question.isSecret,
                 multiSelect: false,
                 options: (question.options ?? []).map((option) =>
                   normalizePendingInteractionQuestionOption({

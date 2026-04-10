@@ -91,6 +91,22 @@ export function summarizePendingInteractionRequestedPermissions(
   ];
 }
 
+export function toGrantedPendingInteractionPermissions(
+  permissions: PendingInteractionRequestedPermissionProfile,
+): PendingInteractionGrantedPermissionProfile {
+  return {
+    network: permissions.network?.enabled === true
+      ? { enabled: true }
+      : null,
+    fileSystem: permissions.fileSystem
+      ? {
+          read: permissions.fileSystem.read,
+          write: permissions.fileSystem.write,
+        }
+      : null,
+  };
+}
+
 export function getPendingInteractionCommandApprovalDecisionKind(
   decision: PendingInteractionCommandApprovalDecision,
 ): PendingInteractionCommandApprovalDecisionKind {

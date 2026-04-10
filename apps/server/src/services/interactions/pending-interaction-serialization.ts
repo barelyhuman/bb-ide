@@ -33,7 +33,6 @@ export function toPendingInteraction(row: PendingInteractionRow): PendingInterac
     providerId: row.providerId,
     providerThreadId: row.providerThreadId,
     providerRequestId: row.providerRequestId,
-    providerRequestMethod: row.providerRequestMethod,
     status: row.status,
     payload,
     resolution,

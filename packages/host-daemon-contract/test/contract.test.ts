@@ -766,11 +766,9 @@ describe("host-daemon session schemas", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-123",
           providerRequestId: "request-123",
-          providerRequestMethod: "item/commandExecution/requestApproval",
           payload: {
             kind: "command_approval",
             itemId: "item_123",
-            approvalId: null,
             reason: "Needs approval",
             command: "git push",
             cwd: "/tmp/project",

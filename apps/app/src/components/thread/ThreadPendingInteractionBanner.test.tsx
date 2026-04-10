@@ -39,7 +39,6 @@ function createPendingInteractionBase(): Omit<PendingInteraction, "payload"> {
     providerId: "codex",
     providerThreadId: "provider-thread-1",
     providerRequestId: "request-1",
-    providerRequestMethod: "item/tool/requestUserInput",
     status: "pending",
     resolution: null,
     statusReason: null,
@@ -51,11 +50,9 @@ function createPendingInteractionBase(): Omit<PendingInteraction, "payload"> {
 function createCommandApprovalInteraction(): PendingInteraction {
   return {
     ...createPendingInteractionBase(),
-    providerRequestMethod: "item/commandExecution/requestApproval",
     payload: {
       kind: "command_approval",
       itemId: "item_1",
-      approvalId: null,
       reason: "Run a command that modifies the repo",
       command: "git push origin feature",
       cwd: "/tmp/project",
@@ -69,11 +66,9 @@ function createCommandApprovalInteraction(): PendingInteraction {
 function createAmendmentCommandApprovalInteraction(): PendingInteraction {
   return {
     ...createPendingInteractionBase(),
-    providerRequestMethod: "item/commandExecution/requestApproval",
     payload: {
       kind: "command_approval",
       itemId: "item_5",
-      approvalId: null,
       reason: null,
       command: null,
       cwd: null,
@@ -92,7 +87,6 @@ function createAmendmentCommandApprovalInteraction(): PendingInteraction {
 function createFileChangeInteraction(): PendingInteraction {
   return {
     ...createPendingInteractionBase(),
-    providerRequestMethod: "item/fileChange/requestApproval",
     payload: {
       kind: "file_change_approval",
       itemId: "item_2",
@@ -105,7 +99,6 @@ function createFileChangeInteraction(): PendingInteraction {
 function createPermissionRequestInteraction(): PendingInteraction {
   return {
     ...createPendingInteractionBase(),
-    providerRequestMethod: "item/permissions/requestApproval",
     payload: {
       kind: "permission_request",
       itemId: "item_3",
@@ -135,7 +128,6 @@ function createUserInputInteraction(): PendingInteraction {
           header: "Environment",
           question: "Which environment should I use?",
           allowsOther: true,
-          isSecret: false,
           multiSelect: false,
           options: [
             {

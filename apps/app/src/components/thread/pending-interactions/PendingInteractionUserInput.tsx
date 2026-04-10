@@ -137,7 +137,6 @@ export function PendingInteractionUserInputFields({
           draftState.selectedOptionsByQuestionId[question.id] ?? [];
         const customAnswer =
           draftState.customAnswersByQuestionId[question.id] ?? "";
-        const textInputType = question.isSecret ? "password" : "text";
         const answerCount = buildUserInputAnswers({
           draftState,
           question,
@@ -248,7 +247,7 @@ export function PendingInteractionUserInputFields({
                   />
                 ) : (
                   <Input
-                    type={textInputType}
+                    type="text"
                     value={customAnswer}
                     disabled={disabled}
                     placeholder={question.options.length > 0 ? "Other" : "Type your answer"}

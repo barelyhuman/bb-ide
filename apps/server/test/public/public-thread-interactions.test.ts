@@ -42,11 +42,9 @@ describe("public thread interaction routes", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-1",
         providerRequestId: "request-1",
-        providerRequestMethod: "item/commandExecution/requestApproval",
         payload: {
           kind: "command_approval",
           itemId: "item-1",
-          approvalId: null,
           reason: "Approve command",
           command: "git push",
           cwd: "/tmp/project",
@@ -187,11 +185,9 @@ describe("public thread interaction routes", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-invalid-command-resolution",
         providerRequestId: "request-invalid-command-resolution",
-        providerRequestMethod: "item/commandExecution/requestApproval",
         payload: {
           kind: "command_approval",
           itemId: "item-invalid-command-resolution",
-          approvalId: null,
           reason: "Approve command",
           command: "git push",
           cwd: "/tmp/project",
@@ -250,7 +246,6 @@ describe("public thread interaction routes", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-invalid-user-input-resolution",
         providerRequestId: "request-invalid-user-input-resolution",
-        providerRequestMethod: "item/tool/requestUserInput",
         payload: {
           kind: "user_input_request",
           itemId: "item-invalid-user-input-resolution",
@@ -260,7 +255,6 @@ describe("public thread interaction routes", () => {
               header: "Env",
               question: "Which environment?",
               allowsOther: false,
-              isSecret: false,
               multiSelect: false,
               options: [
                 { label: "staging", description: "Use staging", preview: null },
@@ -272,7 +266,6 @@ describe("public thread interaction routes", () => {
               header: "Ticket",
               question: "Which ticket?",
               allowsOther: true,
-              isSecret: false,
               multiSelect: false,
               options: [],
             },
@@ -399,7 +392,6 @@ describe("public thread interaction routes", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-permission-resolution",
         providerRequestId: "request-permission-resolution",
-        providerRequestMethod: "item/permissions/requestApproval",
         payload: {
           kind: "permission_request",
           itemId: "item-permission-resolution",
@@ -462,7 +454,6 @@ describe("public thread interaction routes", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-permission-resolution",
         providerRequestId: "request-permission-resolution-denied",
-        providerRequestMethod: "item/permissions/requestApproval",
         payload: {
           kind: "permission_request",
           itemId: "item-permission-resolution-denied",
@@ -516,7 +507,6 @@ describe("public thread interaction routes", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-permission-resolution",
         providerRequestId: "request-permission-resolution-invalid",
-        providerRequestMethod: "item/permissions/requestApproval",
         payload: {
           kind: "permission_request",
           itemId: "item-permission-resolution-invalid",
@@ -590,11 +580,9 @@ describe("public thread interaction routes", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-amendment-resolution",
         providerRequestId: "request-amendment-resolution",
-        providerRequestMethod: "item/commandExecution/requestApproval",
         payload: {
           kind: "command_approval",
           itemId: "item-amendment-resolution",
-          approvalId: null,
           reason: "Approve command",
           command: "git push",
           cwd: "/tmp/project",
@@ -680,11 +668,9 @@ describe("public thread interaction routes", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-blocked",
         providerRequestId: "request-blocked",
-        providerRequestMethod: "item/commandExecution/requestApproval",
         payload: {
           kind: "command_approval",
           itemId: "item-blocked",
-          approvalId: null,
           reason: "Approve command",
           command: "git push",
           cwd: "/tmp/project",
@@ -815,7 +801,6 @@ describe("public thread interaction routes", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-file-change",
         providerRequestId: "request-file-change",
-        providerRequestMethod: "item/fileChange/requestApproval",
         payload: {
           kind: "file_change_approval",
           itemId: "item-file-change",
@@ -856,7 +841,6 @@ describe("public thread interaction routes", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-user-input",
         providerRequestId: "request-user-input",
-        providerRequestMethod: "item/tool/requestUserInput",
         payload: {
           kind: "user_input_request",
           itemId: "item-user-input",
@@ -866,7 +850,6 @@ describe("public thread interaction routes", () => {
               header: "Env",
               question: "Which environment?",
               allowsOther: false,
-              isSecret: false,
               multiSelect: false,
               options: [
                 { label: "staging", description: "Use staging", preview: null },
@@ -878,7 +861,6 @@ describe("public thread interaction routes", () => {
               header: "Ticket",
               question: "Which ticket?",
               allowsOther: true,
-              isSecret: false,
               multiSelect: false,
               options: [],
             },
@@ -946,11 +928,9 @@ describe("public thread interaction routes", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-timeline",
         providerRequestId: "request-timeline",
-        providerRequestMethod: "item/commandExecution/requestApproval",
         payload: {
           kind: "command_approval",
           itemId: "item-timeline",
-          approvalId: null,
           reason: "Approve command",
           command: "git push",
           cwd: "/tmp/project",

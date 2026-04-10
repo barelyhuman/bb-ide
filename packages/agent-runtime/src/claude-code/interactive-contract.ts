@@ -82,7 +82,6 @@ export function toPendingInteractionUserQuestions(
     header: question.header,
     question: question.question,
     allowsOther: true,
-    isSecret: false,
     multiSelect: question.multiSelect,
     options: question.options.map((option) =>
       normalizePendingInteractionQuestionOption({

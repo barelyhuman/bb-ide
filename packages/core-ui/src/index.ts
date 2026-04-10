@@ -16,6 +16,7 @@ export {
   isPendingInteractionCommandApprovalPositiveDecision,
   summarizePendingInteractionRequestedMacOsPermissions,
   summarizePendingInteractionRequestedPermissions,
+  toGrantedPendingInteractionPermissions,
 } from "./pending-interaction-formatting.js";
 export type {
   PendingInteractionCommandApprovalDecisionKind,

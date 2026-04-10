@@ -37,11 +37,9 @@ describe("pending interaction lifecycle", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-aborted-signal",
         providerRequestId: "request-aborted-signal",
-        providerRequestMethod: "item/commandExecution/requestApproval",
         payload: {
           kind: "command_approval",
           itemId: "item-aborted-signal",
-          approvalId: null,
           reason: "Needs approval",
           command: "git push",
           cwd: "/tmp/project",
@@ -101,11 +99,9 @@ describe("pending interaction lifecycle", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-terminal-dedupe",
         providerRequestId: "request-terminal-dedupe",
-        providerRequestMethod: "item/commandExecution/requestApproval",
         payload: {
           kind: "command_approval",
           itemId: "item-terminal-dedupe-1",
-          approvalId: null,
           reason: "Needs approval",
           command: "git push",
           cwd: "/tmp/project",
@@ -134,11 +130,9 @@ describe("pending interaction lifecycle", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-terminal-dedupe",
           providerRequestId: "request-terminal-dedupe",
-          providerRequestMethod: "item/commandExecution/requestApproval",
           payload: {
             kind: "command_approval",
             itemId: "item-terminal-dedupe-2",
-            approvalId: null,
             reason: "Needs approval again",
             command: "git push",
             cwd: "/tmp/project",
@@ -181,11 +175,9 @@ describe("pending interaction lifecycle", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-concurrent-reject",
         providerRequestId: "request-concurrent-reject-1",
-        providerRequestMethod: "item/commandExecution/requestApproval",
         payload: {
           kind: "command_approval",
           itemId: "item-concurrent-reject-1",
-          approvalId: null,
           reason: "Needs approval",
           command: "git push",
           cwd: "/tmp/project",
@@ -205,7 +197,6 @@ describe("pending interaction lifecycle", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-concurrent-reject",
           providerRequestId: "request-concurrent-reject-2",
-          providerRequestMethod: "item/tool/requestUserInput",
           payload: {
             kind: "user_input_request",
             itemId: "item-concurrent-reject-2",
@@ -215,7 +206,6 @@ describe("pending interaction lifecycle", () => {
                 header: "Env",
                 question: "Which environment?",
                 allowsOther: true,
-                isSecret: false,
                 multiSelect: false,
                 options: [],
               },
@@ -262,7 +252,6 @@ describe("pending interaction lifecycle", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-question-policy-deny",
           providerRequestId: "request-question-policy-deny",
-          providerRequestMethod: "item/tool/requestUserInput",
           payload: {
             kind: "user_input_request",
             itemId: "item-question-policy-deny",
@@ -270,18 +259,72 @@ describe("pending interaction lifecycle", () => {
               {
                 id: "environment",
                 header: "Env",
-              question: "Which environment?",
-              allowsOther: true,
-              isSecret: false,
-              multiSelect: false,
-              options: [],
-            },
+                question: "Which environment?",
+                allowsOther: true,
+                multiSelect: false,
+                options: [],
+              },
             ],
           },
         }),
       ).toEqual({
         outcome: "rejected",
         reason: "Thread question policy denies user-input requests",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects standalone macOS permission requests", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-macos-permissions",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      expect(
+        harness.deps.pendingInteractions.registerPendingInteraction({
+          threadId: thread.id,
+          turnId: "turn-macos-permissions",
+          providerId: "codex",
+          providerThreadId: "provider-thread-macos-permissions",
+          providerRequestId: "request-macos-permissions",
+          payload: {
+            kind: "permission_request",
+            itemId: "item-macos-permissions",
+            reason: "Need macOS automation access",
+            toolName: "Bash",
+            permissions: {
+              network: null,
+              fileSystem: null,
+              macos: {
+                preferences: "none",
+                automations: "all",
+                launchServices: false,
+                accessibility: false,
+                calendar: false,
+                reminders: false,
+                contacts: "none",
+              },
+            },
+          },
+        }),
+      ).toEqual({
+        outcome: "rejected",
+        reason:
+          "Pending interactions do not yet support standalone macOS permission requests",
       });
     } finally {
       await harness.cleanup();
@@ -319,7 +362,6 @@ describe("pending interaction lifecycle", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-question-policy-avoid",
           providerRequestId: "request-question-policy-avoid",
-          providerRequestMethod: "item/tool/requestUserInput",
           payload: {
             kind: "user_input_request",
             itemId: "item-question-policy-avoid",
@@ -329,7 +371,6 @@ describe("pending interaction lifecycle", () => {
                 header: "Env",
                 question: "Which environment?",
                 allowsOther: true,
-                isSecret: false,
                 multiSelect: false,
                 options: [],
               },
@@ -374,11 +415,9 @@ describe("pending interaction lifecycle", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-expiry",
         providerRequestId: "request-expiry",
-        providerRequestMethod: "item/commandExecution/requestApproval",
         payload: {
           kind: "command_approval",
           itemId: "item-expiry",
-          approvalId: null,
           reason: "Needs approval",
           command: "git push",
           cwd: "/tmp/project",
@@ -439,11 +478,9 @@ describe("pending interaction lifecycle", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-no-expiry",
         providerRequestId: "request-no-expiry",
-        providerRequestMethod: "item/commandExecution/requestApproval",
         payload: {
           kind: "command_approval",
           itemId: "item-no-expiry",
-          approvalId: null,
           reason: "Needs approval",
           command: "git push",
           cwd: "/tmp/project",

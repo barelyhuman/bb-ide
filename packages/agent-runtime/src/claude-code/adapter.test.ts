@@ -463,7 +463,6 @@ describe("claude-code provider adapter", () => {
             header: "Format",
             question: "How should I format the output?",
             allowsOther: true,
-            isSecret: false,
             multiSelect: false,
             options: [
               { label: "Summary", description: "Brief overview", preview: null },
@@ -541,7 +540,6 @@ describe("claude-code provider adapter", () => {
                 header: "Format",
                 question: "How should I format the output?",
                 allowsOther: true,
-                isSecret: false,
                 multiSelect: false,
                 options: [
                   { label: "Summary", description: "Brief overview", preview: null },

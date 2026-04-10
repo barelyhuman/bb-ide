@@ -132,7 +132,6 @@ describe("createAgentRuntime", () => {
             payload: {
               kind: "command_approval",
               itemId: params.itemId,
-              approvalId: null,
               reason: typeof params.reason === "string" ? params.reason : null,
               command: typeof params.command === "string" ? params.command : null,
               cwd: typeof params.cwd === "string" ? params.cwd : null,

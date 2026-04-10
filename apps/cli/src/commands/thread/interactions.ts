@@ -8,6 +8,7 @@ import {
   formatPendingInteractionSummary,
   isPendingInteractionCommandApprovalPositiveDecision,
   summarizePendingInteractionRequestedPermissions,
+  toGrantedPendingInteractionPermissions,
 } from "@bb/core-ui";
 import {
   PendingInteraction,
@@ -318,7 +319,7 @@ function buildPermissionGrantResolution(
 
   return {
     kind: "permission_request",
-    permissions: interaction.payload.permissions,
+    permissions: toGrantedPendingInteractionPermissions(interaction.payload.permissions),
     scope,
   };
 }

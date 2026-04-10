@@ -214,7 +214,6 @@ export const pendingInteractionUserInputQuestionSchema = z.object({
   header: z.string(),
   question: z.string(),
   allowsOther: z.boolean(),
-  isSecret: z.boolean(),
   multiSelect: z.boolean(),
   options: z.array(pendingInteractionQuestionOptionSchema),
 });
@@ -225,7 +224,6 @@ export type PendingInteractionUserInputQuestion = z.infer<
 export const commandApprovalPendingInteractionPayloadSchema = z.object({
   kind: z.literal("command_approval"),
   itemId: z.string().min(1),
-  approvalId: z.string().nullable(),
   reason: z.string().nullable(),
   command: z.string().nullable(),
   cwd: z.string().nullable(),
@@ -326,7 +324,6 @@ export const pendingInteractionCreateSchema = z.object({
   providerId: z.string().min(1),
   providerThreadId: z.string().min(1),
   providerRequestId: z.string().min(1),
-  providerRequestMethod: z.string().min(1),
   payload: pendingInteractionPayloadSchema,
 });
 export type PendingInteractionCreate = z.infer<
@@ -340,7 +337,6 @@ export const pendingInteractionSchema = z.object({
   providerId: z.string().min(1),
   providerThreadId: z.string().min(1),
   providerRequestId: z.string().min(1),
-  providerRequestMethod: z.string().min(1),
   status: pendingInteractionStatusSchema,
   payload: pendingInteractionPayloadSchema,
   resolution: pendingInteractionResolutionSchema.nullable(),

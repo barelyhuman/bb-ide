@@ -15,7 +15,6 @@ function createInteraction(
     providerId: "codex",
     providerThreadId: "provider-thread-123",
     providerRequestId: "request-123",
-    providerRequestMethod: "interactive/request",
     status: "pending",
     payload,
     resolution: null,
@@ -45,7 +44,6 @@ describe("pending interaction presentation", () => {
     const interaction = createInteraction({
       kind: "command_approval",
       itemId: "item_123",
-      approvalId: null,
       reason: "Needs approval to publish",
       command: "npm publish",
       cwd: "/tmp/project",
@@ -108,7 +106,6 @@ describe("pending interaction presentation", () => {
           header: "Environment",
           question: "Which environment should I use?",
           allowsOther: true,
-          isSecret: false,
           multiSelect: false,
           options: [],
         },

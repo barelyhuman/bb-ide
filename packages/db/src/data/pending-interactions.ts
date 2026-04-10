@@ -17,7 +17,6 @@ export interface CreatePendingInteractionInput {
   payload: string;
   providerId: string;
   providerRequestId: string;
-  providerRequestMethod: string;
   providerThreadId: string;
   threadId: string;
   turnId: string;
@@ -68,6 +67,20 @@ export interface ListPendingInteractionThreadIdsArgs {
 }
 
 const SQLITE_IN_CLAUSE_BATCH_SIZE = 900;
+
+function sliceInClauseBatches<T>(values: readonly T[]): T[][] {
+  const batches: T[][] = [];
+
+  for (
+    let offset = 0;
+    offset < values.length;
+    offset += SQLITE_IN_CLAUSE_BATCH_SIZE
+  ) {
+    batches.push(values.slice(offset, offset + SQLITE_IN_CLAUSE_BATCH_SIZE));
+  }
+
+  return batches;
+}
 
 function getPendingInteractionRecord(
   db: PendingInteractionReadConnection,
@@ -122,7 +135,6 @@ export function createPendingInteraction(
       providerId: input.providerId,
       providerThreadId: input.providerThreadId,
       providerRequestId: input.providerRequestId,
-      providerRequestMethod: input.providerRequestMethod,
       kind: input.kind,
       status: "pending",
       payload: input.payload,
@@ -206,15 +218,7 @@ export function listPendingInteractionThreadIds(
   }
 
   const pendingThreadIds = new Set<string>();
-  for (
-    let offset = 0;
-    offset < args.threadIds.length;
-    offset += SQLITE_IN_CLAUSE_BATCH_SIZE
-  ) {
-    const threadIdsBatch = args.threadIds.slice(
-      offset,
-      offset + SQLITE_IN_CLAUSE_BATCH_SIZE,
-    );
+  for (const threadIdsBatch of sliceInClauseBatches(args.threadIds)) {
     const rows = db
       .select({ threadId: pendingInteractions.threadId })
       .from(pendingInteractions)
@@ -328,24 +332,31 @@ export function interruptPendingInteractionsForThreads(
   }
 
   const now = Date.now();
+  const interruptedRows: PendingInteractionRow[] = [];
 
-  return db
-    .update(pendingInteractions)
-    .set({
-      status: "interrupted",
-      statusReason: args.statusReason,
-      resolvedAt: args.resolvedAt ?? now,
-      updatedAt: now,
-    })
-    .where(
-      and(
-        eq(pendingInteractions.providerId, args.providerId),
-        inArray(pendingInteractions.threadId, [...args.threadIds]),
-        eq(pendingInteractions.status, "pending"),
-      ),
-    )
-    .returning()
-    .all();
+  for (const threadIdsBatch of sliceInClauseBatches(args.threadIds)) {
+    interruptedRows.push(
+      ...db
+        .update(pendingInteractions)
+        .set({
+          status: "interrupted",
+          statusReason: args.statusReason,
+          resolvedAt: args.resolvedAt ?? now,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(pendingInteractions.providerId, args.providerId),
+            inArray(pendingInteractions.threadId, threadIdsBatch),
+            eq(pendingInteractions.status, "pending"),
+          ),
+        )
+        .returning()
+        .all(),
+    );
+  }
+
+  return interruptedRows;
 }
 
 export function interruptPendingInteractionsForThreadIds(
@@ -357,21 +368,28 @@ export function interruptPendingInteractionsForThreadIds(
   }
 
   const now = Date.now();
+  const interruptedRows: PendingInteractionRow[] = [];
 
-  return db
-    .update(pendingInteractions)
-    .set({
-      status: "interrupted",
-      statusReason: args.statusReason,
-      resolvedAt: args.resolvedAt ?? now,
-      updatedAt: now,
-    })
-    .where(
-      and(
-        inArray(pendingInteractions.threadId, [...args.threadIds]),
-        eq(pendingInteractions.status, "pending"),
-      ),
-    )
-    .returning()
-    .all();
+  for (const threadIdsBatch of sliceInClauseBatches(args.threadIds)) {
+    interruptedRows.push(
+      ...db
+        .update(pendingInteractions)
+        .set({
+          status: "interrupted",
+          statusReason: args.statusReason,
+          resolvedAt: args.resolvedAt ?? now,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            inArray(pendingInteractions.threadId, threadIdsBatch),
+            eq(pendingInteractions.status, "pending"),
+          ),
+        )
+        .returning()
+        .all(),
+    );
+  }
+
+  return interruptedRows;
 }
