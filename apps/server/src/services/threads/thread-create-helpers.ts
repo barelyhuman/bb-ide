@@ -16,29 +16,18 @@ import { deriveTitleFallback } from "./title-generation.js";
 
 const REMOTE_WORKSPACE_ROOT = "/tmp/bb-managed-workspaces";
 
-function slugify(value: string): string {
-  const cleaned = value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, "-")
-    .replace(/^-+|-+$/gu, "");
-  return cleaned.length > 0 ? cleaned : "thread";
-}
-
 export function buildManagedBranchNameFromSeed(
-  seed: string,
+  _seed: string,
   threadId: string,
 ): string {
-  return `bb/${slugify(seed)}-${threadId.slice(0, 8)}`;
+  return `bb/${threadId.slice(0, 12)}`;
 }
 
 export function buildManagedBranchName(
-  request: ThreadCreateServiceRequest,
+  _request: ThreadCreateServiceRequest,
   threadId: string,
 ): string {
-  const seed = request.title
-    ?? deriveTitleFallback(request.input)
-    ?? threadId;
-  return buildManagedBranchNameFromSeed(seed, threadId);
+  return `bb/${threadId.slice(0, 12)}`;
 }
 
 function isRemoteSourcePath(sourcePath: string): boolean {
