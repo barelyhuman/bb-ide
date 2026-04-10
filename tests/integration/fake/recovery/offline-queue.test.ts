@@ -68,6 +68,7 @@ describe.sequential("fake provider offline queue recovery integration", () => {
           providerId: thread.providerId,
           providerThreadId,
           instructions: `Recovered queued work for ${projectName} in ${projectRootPath}`,
+          instructionMode: "append",
           dynamicTools: [],
         },
       });

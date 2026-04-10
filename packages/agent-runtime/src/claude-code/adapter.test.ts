@@ -1625,6 +1625,7 @@ describe("claude-code provider adapter", () => {
     adapter.buildCommand({
       type: "thread/start",
       threadId: "bb-thread-1",
+      cwd: "/tmp/worktree",
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
       options: {
@@ -1714,6 +1715,7 @@ describe("claude-code provider adapter", () => {
     adapter.buildCommand({
       type: "thread/start",
       threadId: "bb-thread-default",
+      cwd: "/tmp/worktree",
       input: [{ type: "text", text: "hello" }],
       instructionMode: "append",
       options: {
