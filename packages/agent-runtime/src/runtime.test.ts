@@ -395,6 +395,53 @@ describe("createAgentRuntime", () => {
     await runtime.shutdown();
   });
 
+  it("passes the workspace cwd when resuming a thread", async () => {
+    const recordedCommands: AdapterCommand[] = [];
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      shellEnv: {
+        PATH: "/tmp/bb-bin:/usr/bin",
+        BB_HOST_DAEMON_PORT: "3002",
+        BB_SERVER_URL: "http://127.0.0.1:3334",
+      },
+      onEvent: () => undefined,
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () =>
+        createRecordingAdapter({ recordedCommands, scriptPath }),
+    });
+
+    await runtime.resumeThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerThreadId: "prov-1",
+      providerId: "fake",
+    });
+
+    const resumeCommand = findLastRecordedCommand(
+      recordedCommands,
+      "thread/resume",
+    );
+    expect(resumeCommand?.type).toBe("thread/resume");
+    if (!resumeCommand || resumeCommand.type !== "thread/resume") {
+      throw new Error("Expected thread/resume command");
+    }
+    expect(resumeCommand.options?.envVars).toEqual({
+      PATH: "/tmp/bb-bin:/usr/bin",
+      BB_HOST_DAEMON_PORT: "3002",
+      BB_SERVER_URL: "http://127.0.0.1:3334",
+      BB_PROJECT_ID: "p1",
+      BB_THREAD_ID: "t1",
+      BB_ENVIRONMENT_ID: "env-1",
+    });
+    expect(resumeCommand.cwd).toBe(tmpDir);
+
+    await runtime.shutdown();
+  });
+
   it("runs a turn and receives turn/started + turn/completed events", async () => {
     const events: ThreadEvent[] = [];
     const runtime = createAgentRuntime({
