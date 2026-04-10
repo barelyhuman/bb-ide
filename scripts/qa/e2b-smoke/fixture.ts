@@ -168,6 +168,24 @@ function parseQaAuthFixture(raw: string): SmokeQaAuthFixture {
   };
 }
 
+function serializeQaAuthFixture(fixture: SmokeQaAuthFixture): string {
+  return `${JSON.stringify(fixture, null, 2)}\n`;
+}
+
+async function writeQaAuthFixtureFile(
+  args: {
+    fixture: SmokeQaAuthFixture;
+    fixturePath: string;
+  },
+): Promise<void> {
+  await fs.mkdir(path.dirname(args.fixturePath), { recursive: true });
+  await fs.writeFile(
+    args.fixturePath,
+    serializeQaAuthFixture(args.fixture),
+    { mode: 0o600 },
+  );
+}
+
 async function enrichQaAuthFixture(
   fixture: SmokeQaAuthFixture,
   notices: string[],
@@ -319,8 +337,16 @@ export async function loadQaAuthFixture(): Promise<LoadedSmokeQaAuthFixture> {
     };
   }
 
+  const enrichedFixture = await enrichQaAuthFixture(rawFixture, notices);
+  if (serializeQaAuthFixture(enrichedFixture) !== serializeQaAuthFixture(rawFixture)) {
+    await writeQaAuthFixtureFile({
+      fixture: enrichedFixture,
+      fixturePath,
+    });
+  }
+
   return {
-    fixture: await enrichQaAuthFixture(rawFixture, notices),
+    fixture: enrichedFixture,
     fixturePath,
     notices,
   };
@@ -341,12 +367,10 @@ export async function upsertQaAuthFixtureCredential(
     createdAt: new Date().toISOString(),
   };
 
-  await fs.mkdir(path.dirname(fixturePath), { recursive: true });
-  await fs.writeFile(
+  await writeQaAuthFixtureFile({
+    fixture: nextFixture,
     fixturePath,
-    `${JSON.stringify(nextFixture, null, 2)}\n`,
-    { mode: 0o600 },
-  );
+  });
   return fixturePath;
 }
 
