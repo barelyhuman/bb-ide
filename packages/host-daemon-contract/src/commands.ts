@@ -1,4 +1,5 @@
 import {
+  approvalPolicySchema,
   availableModelSchema,
   discoveredWorkspacePropertiesSchema,
   dynamicToolSchema,
@@ -52,6 +53,7 @@ export const hostDaemonExecutionOptionsSchema = threadExecutionOptionsSchema.ext
   serviceTier: serviceTierSchema,
   reasoningLevel: reasoningLevelSchema,
   sandboxMode: sandboxModeSchema,
+  approvalPolicy: approvalPolicySchema,
   questionPolicy: questionPolicySchema,
 });
 export type HostDaemonExecutionOptions = z.infer<

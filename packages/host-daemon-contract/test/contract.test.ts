@@ -27,7 +27,6 @@ const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
   "hostDaemonCommandSchema.maxDiffBytes": "workspace.diff may omit maxDiffBytes to use the system default cap.",
   "hostDaemonCommandSchema.maxFileListBytes": "workspace.diff may omit maxFileListBytes to use the system default cap.",
   "hostDaemonCommandSchema.mergeBaseBranch": "workspace.status may omit mergeBaseBranch when the caller only needs working-tree state.",
-  "hostDaemonCommandSchema.options.approvalPolicy": "Daemon command metadata may omit approval policy when the server does not need to override the default.",
   "hostDaemonCommandSchema.options.seq": "Daemon command metadata may omit sequence when the command source does not assign one.",
   "hostDaemonCommandSchema.options.source": "Daemon command metadata may omit source when the command origin is not being tracked.",
   "hostDaemonCommandSchema.query": "host.list_files and workspace.list_files may omit a search string to list files without filtering.",
@@ -300,6 +299,7 @@ describe("host-daemon command schemas", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
+          approvalPolicy: "on-request",
           questionPolicy: "allow",
         },
         instructions: "Be concise.",
@@ -321,6 +321,7 @@ describe("host-daemon command schemas", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
+          approvalPolicy: "on-request",
           questionPolicy: "allow",
         },
         resumeContext: {
@@ -355,6 +356,7 @@ describe("host-daemon command schemas", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
+          approvalPolicy: "on-request",
           questionPolicy: "allow",
         },
         instructions: "Be a helpful manager.",
@@ -410,6 +412,7 @@ describe("host-daemon command schemas", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
+          approvalPolicy: "on-request",
           questionPolicy: "allow",
         },
         resumeContext: {
@@ -443,6 +446,7 @@ describe("host-daemon command schemas", () => {
           serviceTier: "default",
           reasoningLevel: "medium",
           sandboxMode: "danger-full-access",
+          approvalPolicy: "on-request",
           questionPolicy: "allow",
         },
         resumeContext: {
@@ -480,6 +484,31 @@ describe("host-daemon command schemas", () => {
           instructions: "Be a helpful coding agent.",
           dynamicTools: [],
         },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "thread.start",
+        environmentId: "env_123",
+        threadId: "thr_123",
+        workspaceContext: {
+          workspacePath: "/tmp/workspace",
+          workspaceProvisionType: "unmanaged",
+        },
+        projectId: "proj_123",
+        providerId: "codex",
+        eventSequence: 0,
+        input: [{ type: "text", text: "hello" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          sandboxMode: "danger-full-access",
+          questionPolicy: "allow",
+        },
+        instructions: "Be concise.",
+        dynamicTools: [],
       }),
     ).toThrow();
   });
