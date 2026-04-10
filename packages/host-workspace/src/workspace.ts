@@ -76,6 +76,28 @@ type DiffArtifacts = {
   numstat: string;
 };
 
+type WorktreeEntry = {
+  path: string;
+  branchRef: string | null;
+};
+
+type SquashMergeTarget =
+  | {
+      kind: "local";
+      baseRef: string;
+      expectedSha: string;
+    }
+  | {
+      kind: "remote";
+      baseRef: string;
+    };
+
+type PublishSquashMergeCommitArgs = {
+  targetBranch: string;
+  target: SquashMergeTarget;
+  commitSha: string;
+};
+
 type ReadDiffArtifactsArgs = {
   diffArgs: string[];
   filesArgs: string[];
@@ -90,10 +112,39 @@ interface ListWorkspaceFilesRecursivelyArgs {
 const UNTRACKED_DIFF_BATCH_SIZE = 10;
 
 function countWorktrees(porcelainOutput: string): number {
-  return porcelainOutput
-    .split("\n")
-    .filter((line) => line.startsWith("worktree "))
-    .length;
+  return parseWorktreeList(porcelainOutput).length;
+}
+
+function parseWorktreeList(porcelainOutput: string): WorktreeEntry[] {
+  const entries: WorktreeEntry[] = [];
+  let currentPath: string | null = null;
+  let currentBranchRef: string | null = null;
+
+  for (const line of porcelainOutput.split("\n")) {
+    if (line === "") {
+      if (currentPath !== null) {
+        entries.push({ path: currentPath, branchRef: currentBranchRef });
+      }
+      currentPath = null;
+      currentBranchRef = null;
+      continue;
+    }
+
+    if (line.startsWith("worktree ")) {
+      currentPath = line.slice("worktree ".length);
+      continue;
+    }
+
+    if (line.startsWith("branch ")) {
+      currentBranchRef = line.slice("branch ".length);
+    }
+  }
+
+  if (currentPath !== null) {
+    entries.push({ path: currentPath, branchRef: currentBranchRef });
+  }
+
+  return entries;
 }
 
 function resolveWorkspaceFileStatusKind(args: {
@@ -506,38 +557,24 @@ export class Workspace {
       throw new WorkspaceError("detached_head", "Cannot squash merge from a detached workspace");
     }
 
+    const target = await this.resolveSquashMergeTarget(options.targetBranch);
     const tempDir = await createTempDir("bb-squash-");
     const worktreeCountBefore = await runGit(["worktree", "list", "--porcelain"], {
       cwd: this.path,
     });
 
     try {
-      if (await hasRef(this.path, `refs/heads/${options.targetBranch}`)) {
-        await runGit(["worktree", "add", tempDir, options.targetBranch], {
-          cwd: this.path,
-        });
-      } else if (await hasRef(this.path, `refs/remotes/origin/${options.targetBranch}`)) {
-        await runGit(
-          [
-            "worktree",
-            "add",
-            "-B",
-            options.targetBranch,
-            tempDir,
-            `origin/${options.targetBranch}`,
-          ],
-          { cwd: this.path },
-        );
-      } else {
-        throw new WorkspaceError(
-          "branch_not_found",
-          `Target branch does not exist: ${options.targetBranch}`,
-        );
-      }
-
+      await runGit(["worktree", "add", "--detach", tempDir, target.baseRef], {
+        cwd: this.path,
+      });
       await runGit(["merge", "--squash", sourceBranch], { cwd: tempDir });
       await runGit(["commit", "--no-verify", "-m", options.commitMessage], { cwd: tempDir });
       const commitSha = await revParse(tempDir, "HEAD");
+      await this.publishSquashMergeCommit({
+        targetBranch: options.targetBranch,
+        target,
+        commitSha,
+      });
 
       return {
         merged: true,
@@ -562,6 +599,85 @@ export class Workspace {
         throw new WorkspaceError("worktree_cleanup_failed", "Temporary worktree cleanup failed");
       }
     }
+  }
+
+  private async resolveSquashMergeTarget(targetBranch: string): Promise<SquashMergeTarget> {
+    const localRef = `refs/heads/${targetBranch}`;
+    if (await hasRef(this.path, localRef)) {
+      return {
+        kind: "local",
+        baseRef: localRef,
+        expectedSha: await revParse(this.path, localRef),
+      };
+    }
+
+    const remoteRef = `refs/remotes/origin/${targetBranch}`;
+    if (await hasRef(this.path, remoteRef)) {
+      return {
+        kind: "remote",
+        baseRef: remoteRef,
+      };
+    }
+
+    throw new WorkspaceError(
+      "branch_not_found",
+      `Target branch does not exist: ${targetBranch}`,
+    );
+  }
+
+  private async publishSquashMergeCommit(
+    args: PublishSquashMergeCommitArgs,
+  ): Promise<void> {
+    const checkedOutTargetPath = await this.findWorktreePathForBranch(args.targetBranch);
+    if (checkedOutTargetPath !== null) {
+      if (await hasUncommittedChanges(checkedOutTargetPath)) {
+        throw new WorkspaceError(
+          "dirty_target_branch",
+          `Cannot squash merge into ${args.targetBranch}: target branch is checked out at ${checkedOutTargetPath} with uncommitted changes`,
+        );
+      }
+
+      await runGit(["merge", "--ff-only", args.commitSha], {
+        cwd: checkedOutTargetPath,
+      });
+      return;
+    }
+
+    switch (args.target.kind) {
+      case "local":
+        await runGit(
+          [
+            "update-ref",
+            `refs/heads/${args.targetBranch}`,
+            args.commitSha,
+            args.target.expectedSha,
+          ],
+          { cwd: this.path },
+        );
+        return;
+      case "remote":
+        await runGit(["branch", args.targetBranch, args.commitSha], {
+          cwd: this.path,
+        });
+        return;
+      default: {
+        const _exhaustive: never = args.target;
+        return _exhaustive;
+      }
+    }
+  }
+
+  private async findWorktreePathForBranch(branchName: string): Promise<string | null> {
+    const entries = await this.listWorktrees();
+    const branchRef = `refs/heads/${branchName}`;
+    return entries.find((entry) => entry.branchRef === branchRef)?.path ?? null;
+  }
+
+  private async listWorktrees(): Promise<WorktreeEntry[]> {
+    const result = await runGit(["worktree", "list", "--porcelain"], {
+      cwd: this.path,
+    });
+    return parseWorktreeList(result.stdout);
   }
 
   private async buildDiffSummary(args: {
