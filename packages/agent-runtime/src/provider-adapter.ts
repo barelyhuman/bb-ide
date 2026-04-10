@@ -25,6 +25,14 @@ export interface JsonRpcMessage {
   params?: unknown;
 }
 
+export type JsonValue =
+  | boolean
+  | number
+  | string
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue | undefined };
+
 export interface ProviderTranslationContext {
   threadId?: string;
   parentToolCallId?: string;
@@ -135,5 +143,5 @@ export interface ProviderAdapter {
   buildInteractiveResponse?(args: {
     request: DecodedInteractiveRequest;
     resolution: PendingInteractionResolution;
-  }): unknown;
+  }): JsonValue;
 }
