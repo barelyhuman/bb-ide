@@ -490,9 +490,6 @@ importers:
       '@bb/agent-providers':
         specifier: workspace:*
         version: link:../agent-providers
-      '@bb/db':
-        specifier: workspace:*
-        version: link:../db
       '@bb/host-daemon-contract':
         specifier: workspace:*
         version: link:../host-daemon-contract

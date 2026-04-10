@@ -17,8 +17,11 @@ import {
 import { createHostDaemonClient } from "@bb/host-daemon-contract";
 import { initDb } from "../../../apps/server/src/db.js";
 import { createApp } from "../../../apps/server/src/server.js";
+import { createCloudAuthService } from "../../../apps/server/src/services/cloud-auth/service.js";
+import { createHostLifecycleService } from "../../../apps/server/src/services/hosts/host-lifecycle-service.js";
 import { createSandboxHostRegistry } from "../../../apps/server/src/services/hosts/sandbox-registry.js";
 import { createMachineAuthService } from "../../../apps/server/src/services/machine-auth.js";
+import { createSandboxEnvService } from "../../../apps/server/src/services/sandbox-env/service.js";
 import type { ServerRuntimeConfig } from "../../../apps/server/src/types.js";
 import { NotificationHub } from "../../../apps/server/src/ws/hub.js";
 import { createPublicApiClient } from "@bb/server-contract";
@@ -195,6 +198,8 @@ async function startIntegrationServer(
     inferenceModel: "test/mock-model",
     openAiApiKey: process.env.OPENAI_API_KEY ?? "test-openai-key",
     publicUrl: "https://bb.example.test",
+    sandboxActivityExtensionDebounceMs: 30_000,
+    sandboxIdleThresholdMs: 300_000,
   };
   const machineAuth = await createMachineAuthService({
     dataDir: serverDataDir,
@@ -202,12 +207,26 @@ async function startIntegrationServer(
     logger: testLogger,
   });
   await machineAuth.ensureReady();
+  const cloudAuth = await createCloudAuthService({
+    dataDir: serverDataDir,
+    db,
+    logger: testLogger,
+  });
+  const hostLifecycle = createHostLifecycleService();
+  const sandboxEnv = await createSandboxEnvService({
+    dataDir: serverDataDir,
+    db,
+    logger: testLogger,
+  });
   const { app, injectWebSocket } = createApp({
+    cloudAuth,
     config,
     db,
+    hostLifecycle,
     hub,
     logger: testLogger,
     machineAuth,
+    sandboxEnv,
     sandboxRegistry,
   });
 
@@ -241,6 +260,8 @@ async function startIntegrationServer(
     hub,
     machineAuth,
     async close(): Promise<void> {
+      await cloudAuth.dispose();
+      hostLifecycle.dispose();
       await new Promise<void>((resolve, reject) => {
         server.close((error) => {
           if (error) {
