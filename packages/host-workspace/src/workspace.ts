@@ -701,9 +701,18 @@ export class Workspace {
     };
   }
 
-  private async readCommitSummaries(range: string): Promise<WorkspaceCommitSummary[]> {
+  private async readPatchUniqueCommitSummaries(
+    mergeBaseBranch: string,
+  ): Promise<WorkspaceCommitSummary[]> {
     const log = await runGit(
-      ["log", "--reverse", "--format=%H%x1f%h%x1f%s%x1f%an%x1f%at", range],
+      [
+        "log",
+        "--cherry-pick",
+        "--right-only",
+        "--reverse",
+        "--format=%H%x1f%h%x1f%s%x1f%an%x1f%at",
+        `${mergeBaseBranch}...HEAD`,
+      ],
       { cwd: this.path, allowFailure: true },
     );
 
@@ -726,10 +735,17 @@ export class Workspace {
     const [mergeBaseRef, aheadBehindCounts, commits] = await Promise.all([
       readMergeBaseRef(this.path, mergeBaseBranch),
       runGit(
-        ["rev-list", "--left-right", "--count", `${mergeBaseBranch}...HEAD`],
+        [
+          "rev-list",
+          // Ignore patch-equivalent commits so squash-merged branches are not still ahead.
+          "--cherry-pick",
+          "--left-right",
+          "--count",
+          `${mergeBaseBranch}...HEAD`,
+        ],
         { cwd: this.path },
       ),
-      this.readCommitSummaries(`${mergeBaseBranch}..HEAD`),
+      this.readPatchUniqueCommitSummaries(mergeBaseBranch),
     ]);
     const [behindCount, aheadCount] = aheadBehindCounts.stdout
       .trim()

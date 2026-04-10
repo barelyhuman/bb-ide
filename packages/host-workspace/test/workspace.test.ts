@@ -201,6 +201,30 @@ describe("Workspace", () => {
     });
   });
 
+  it("does not report squash-merged branch commits as ahead of their merge base", async () => {
+    const { primaryRepo, worktreePath } = await createPrimaryAndFeatureWorktree();
+    await fs.writeFile(path.join(primaryRepo, "notes.txt"), "main work\n", "utf8");
+    await runGit(["add", "notes.txt"], { cwd: primaryRepo });
+    await runGit(["commit", "-m", "Main work"], { cwd: primaryRepo });
+
+    const workspace = new Workspace(worktreePath);
+    await workspace.squashMergeInto({
+      targetBranch: "main",
+      commitMessage: "feat: squash merge feature into main",
+    });
+
+    const status = await workspace.getStatus({ mergeBaseBranch: "main" });
+
+    expect(status.workingTree.state).toBe("clean");
+    expect(status.mergeBase).toMatchObject({
+      mergeBaseBranch: "main",
+      hasCommittedUnmergedChanges: false,
+      aheadCount: 0,
+      behindCount: 1,
+    });
+    expect(status.mergeBase?.commits).toEqual([]);
+  });
+
   it("reports status for git repositories with no commits yet", async () => {
     const repoPath = await makeTempDir("bb-workspace-unborn-repo-");
     await runGit(["init", "-b", "main"], { cwd: repoPath });
