@@ -1,11 +1,13 @@
 import {
+  getPendingInteractionCommandApprovalDecisionKind,
+  summarizePendingInteractionRequestedPermissions,
+} from "@bb/core-ui";
+import {
   type PendingInteraction,
   type PendingInteractionCommandApprovalDecision,
   type PendingInteractionGrantedPermissionProfile,
   type PendingInteractionPermissionGrantScope,
   type PendingInteractionRequestedPermissionProfile,
-  getPendingInteractionCommandApprovalDecisionKind,
-  summarizePendingInteractionRequestedPermissions,
 } from "@bb/domain";
 
 export interface UserInputDraftState {

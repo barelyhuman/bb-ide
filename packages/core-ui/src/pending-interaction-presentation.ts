@@ -1,5 +1,5 @@
 import type { PendingInteraction } from "@bb/domain";
-import { summarizePendingInteractionRequestedPermissions } from "@bb/domain";
+import { summarizePendingInteractionRequestedPermissions } from "./pending-interaction-formatting.js";
 
 export type PendingInteractionPresentationSurface = "app" | "cli";
 

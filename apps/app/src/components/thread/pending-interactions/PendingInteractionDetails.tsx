@@ -1,14 +1,16 @@
 import { type ReactNode } from "react";
 import {
   type PendingInteraction,
-  formatPendingInteractionCommandApprovalDecision,
-  summarizePendingInteractionRequestedMacOsPermissions,
-  summarizePendingInteractionRequestedPermissions,
 } from "@bb/domain";
 import {
   DetailCard,
   DetailRow,
 } from "@bb/ui-core";
+import {
+  formatPendingInteractionCommandApprovalDecision,
+  summarizePendingInteractionRequestedMacOsPermissions,
+  summarizePendingInteractionRequestedPermissions,
+} from "@bb/core-ui";
 
 interface PermissionPathListProps {
   label: string;

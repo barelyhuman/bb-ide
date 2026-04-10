@@ -4,6 +4,24 @@ export { formatEnvironmentDisplay } from "./environment-display.js";
 export type { EnvironmentDisplayInfo } from "./environment-display.js";
 
 export {
+  formatPendingInteractionCommandApprovalDecision,
+  formatPendingInteractionCommandApprovalResolutionMessage,
+  formatPendingInteractionCommandApprovalResolutionOutcome,
+  formatPendingInteractionFileChangeApprovalResolutionMessage,
+  formatPendingInteractionFileChangeApprovalResolutionOutcome,
+  formatPendingInteractionPermissionResolutionMessage,
+  formatPendingInteractionPermissionResolutionOutcome,
+  getPendingInteractionCommandApprovalDecisionKind,
+  hasPendingInteractionGrantedPermissions,
+  isPendingInteractionCommandApprovalPositiveDecision,
+  summarizePendingInteractionRequestedMacOsPermissions,
+  summarizePendingInteractionRequestedPermissions,
+} from "./pending-interaction-formatting.js";
+export type {
+  PendingInteractionCommandApprovalDecisionKind,
+  PendingInteractionPermissionResolutionSummaryArgs,
+} from "./pending-interaction-formatting.js";
+export {
   formatPendingInteractionKindLabel,
   formatPendingInteractionSummary,
 } from "./pending-interaction-presentation.js";

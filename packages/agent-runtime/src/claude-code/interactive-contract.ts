@@ -1,11 +1,8 @@
 import { z } from "zod";
 import {
-  normalizePendingInteractionQuestionOption,
-  normalizePendingInteractionRequestedPermissionProfile,
   pendingInteractionFileSystemPermissionsSchema,
   pendingInteractionMacOsPermissionsSchema,
   pendingInteractionNetworkPermissionsSchema,
-  toOptionalPendingInteractionQuestionOptionPreview,
 } from "@bb/domain";
 import type {
   ApprovalPolicy,
@@ -14,6 +11,11 @@ import type {
   PendingInteractionRequestedPermissionProfile,
   PendingInteractionUserInputQuestion,
 } from "@bb/domain";
+import {
+  normalizePendingInteractionQuestionOption,
+  normalizePendingInteractionRequestedPermissionProfile,
+  toOptionalPendingInteractionQuestionOptionPreview,
+} from "../shared/pending-interaction-normalization.js";
 
 export const CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD =
   "item/permissions/requestApproval";

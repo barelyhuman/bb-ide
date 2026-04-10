@@ -11,9 +11,7 @@
 import { getBuiltInAgentProviderInfo } from "@bb/agent-providers";
 import { z } from "zod";
 import {
-  normalizePendingInteractionRequestedPermissionProfile,
   pendingInteractionCommandActionSchema,
-  normalizePendingInteractionQuestionOption,
 } from "@bb/domain";
 import type {
   ApprovalPolicy,
@@ -52,6 +50,10 @@ import {
   buildShellEnvironmentPolicyConfig,
   toOptionalRecord,
 } from "../shared/adapter-utils.js";
+import {
+  normalizePendingInteractionQuestionOption,
+  normalizePendingInteractionRequestedPermissionProfile,
+} from "../shared/pending-interaction-normalization.js";
 import {
   decodeNativeProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";

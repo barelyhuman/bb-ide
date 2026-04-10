@@ -1,8 +1,10 @@
 import {
   formatPendingInteractionCommandApprovalDecision,
-  type PendingInteractionFileChangeApprovalDecision,
+} from "@bb/core-ui";
+import {
   type PendingInteraction,
   type PendingInteractionCommandApprovalDecision,
+  type PendingInteractionFileChangeApprovalDecision,
   type PendingInteractionResolution,
 } from "@bb/domain";
 import { ApiError } from "../../errors.js";

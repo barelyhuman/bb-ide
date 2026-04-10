@@ -1,19 +1,19 @@
 import { Command } from "commander";
 import {
-  formatPendingInteractionKindLabel,
-  formatPendingInteractionSummary,
-} from "@bb/core-ui";
-import {
   formatPendingInteractionCommandApprovalDecision,
   formatPendingInteractionCommandApprovalResolutionOutcome,
   formatPendingInteractionFileChangeApprovalResolutionOutcome,
+  formatPendingInteractionKindLabel,
   formatPendingInteractionPermissionResolutionOutcome,
+  formatPendingInteractionSummary,
   isPendingInteractionCommandApprovalPositiveDecision,
+  summarizePendingInteractionRequestedPermissions,
+} from "@bb/core-ui";
+import {
   PendingInteraction,
   type PendingInteractionRequestedPermissionProfile,
   pendingInteractionPermissionGrantScopeSchema,
   PendingInteractionResolution,
-  summarizePendingInteractionRequestedPermissions,
 } from "@bb/domain";
 import { action } from "../../action.js";
 import { createClient, unwrap } from "../../client.js";

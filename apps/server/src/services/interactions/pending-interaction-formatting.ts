@@ -2,6 +2,8 @@ import {
   formatPendingInteractionCommandApprovalResolutionMessage,
   formatPendingInteractionFileChangeApprovalResolutionMessage,
   formatPendingInteractionPermissionResolutionMessage,
+} from "@bb/core-ui";
+import {
   type PendingInteraction,
 } from "@bb/domain";
 import { getThread } from "@bb/db";
