@@ -265,6 +265,36 @@ function createOrderedAnswerResolution(
   };
 }
 
+async function createApprovalResolution(
+  request: PendingInteractionCreate,
+): Promise<PendingInteractionResolution> {
+  switch (request.payload.kind) {
+    case "command_approval": {
+      const fallbackDecision = request.payload.availableDecisions[0];
+      if (!fallbackDecision) {
+        throw new Error("Command approval request did not include decisions");
+      }
+      return {
+        kind: "command_approval",
+        decision: request.payload.availableDecisions.includes("accept_for_session")
+          ? "accept_for_session"
+          : fallbackDecision,
+      };
+    }
+    case "permission_request":
+      return {
+        kind: "permission_request",
+        permissions: {
+          network: request.payload.permissions.network,
+          fileSystem: request.payload.permissions.fileSystem,
+        },
+        scope: "turn",
+      };
+    default:
+      throw new Error(`Unexpected interactive request: ${request.payload.kind}`);
+  }
+}
+
 function getFirstNonEmptyLine(path: string): string {
   const line = readFileSync(path, "utf8")
     .split(/\r?\n/u)
@@ -346,7 +376,9 @@ for (const providerId of providers) {
     });
 
     it("starts turns in the workspace cwd and still allows cd outside it", async () => {
-      const ctx = createTestRuntime(providerId);
+      const ctx = createTestRuntime(providerId, {
+        onInteractiveRequest: createApprovalResolution,
+      });
       const workspaceMarkerName = `workspace-marker-${randomUUID()}.txt`;
       const parentMarkerName = `parent-marker-${randomUUID()}.txt`;
       const workspaceToken = `WORKSPACE_${randomUUID()}`;
