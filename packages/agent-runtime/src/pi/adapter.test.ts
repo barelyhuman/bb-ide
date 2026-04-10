@@ -273,6 +273,65 @@ describe("pi provider adapter", () => {
     );
   });
 
+  it("translateEvent auto_compaction_start emits a compaction item", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+
+    const events = adapter.translateEvent({
+      type: "auto_compaction_start",
+    } as AgentSessionEvent);
+
+    expect(events).toContainEqual({
+      type: "item/started",
+      threadId: "",
+      providerThreadId: "",
+      turnId: "turn-1",
+      item: {
+        type: "contextCompaction",
+        id: "pi-compaction-turn-1",
+      },
+    });
+  });
+
+  it("translateEvent auto_compaction_end emits thread/compacted", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+    adapter.translateEvent({
+      type: "auto_compaction_start",
+    } as AgentSessionEvent);
+
+    const events = adapter.translateEvent({
+      type: "auto_compaction_end",
+    } as AgentSessionEvent);
+
+    expect(events).toContainEqual({
+      type: "thread/compacted",
+      threadId: "",
+      providerThreadId: "",
+    });
+  });
+
+  it("translateEvent auto_compaction_start reuses the last completed turn id without opening a new turn", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+    adapter.translateEvent(loadFixture("agent-end-with-message.json"));
+
+    const events = adapter.translateEvent({
+      type: "auto_compaction_start",
+    } as AgentSessionEvent);
+
+    expect(events).toEqual([{
+      type: "item/started",
+      threadId: "",
+      providerThreadId: "",
+      turnId: "turn-1",
+      item: {
+        type: "contextCompaction",
+        id: "pi-compaction-turn-1",
+      },
+    }]);
+  });
+
   // -- translateEvent: streaming -------------------------------------------
 
   it("translateEvent message_update emits agentMessage delta", () => {

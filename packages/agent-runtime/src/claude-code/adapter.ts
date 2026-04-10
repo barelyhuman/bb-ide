@@ -456,7 +456,37 @@ export function createClaudeCodeProviderAdapter(
         if (!parsedMessage.success) {
           return buildUnexpectedClaudeSdkEvent({ event, context });
         }
-        // System init — no events emitted
+        const statusMessage = claudeStatusSystemMessageSchema.safeParse(event);
+        if (
+          statusMessage.success &&
+          statusMessage.data.status === "compacting"
+        ) {
+          const turnId = turnState.ensureTurnStarted({
+            events,
+            state,
+            threadId,
+          });
+          events.push({
+            type: "item/started",
+            threadId,
+            providerThreadId: "",
+            turnId,
+            item: {
+              type: "contextCompaction",
+              id: buildClaudeCompactionItemId(turnId),
+            },
+          });
+          return events;
+        }
+
+        const compactBoundaryMessage =
+          claudeCompactBoundarySystemMessageSchema.safeParse(event);
+        if (compactBoundaryMessage.success) {
+          events.push(buildClaudeCompactedEvent(threadId));
+          return events;
+        }
+
+        // System init / status reset — no events emitted
         return [];
       }
 
@@ -856,6 +886,15 @@ const claudeSystemMessageSchema = z.object({
   type: z.literal("system"),
 }).passthrough();
 
+const claudeStatusSystemMessageSchema = claudeSystemMessageSchema.extend({
+  subtype: z.literal("status"),
+  status: z.string().nullable().optional(),
+}).passthrough();
+
+const claudeCompactBoundarySystemMessageSchema = claudeSystemMessageSchema.extend({
+  subtype: z.literal("compact_boundary"),
+}).passthrough();
+
 const claudeAssistantMessageSchema = z.object({
   type: z.literal("assistant"),
   message: z.unknown(),
@@ -912,9 +951,27 @@ function parseMessageContent(
   return parsed.success ? (parsed.data.content ?? []) : [];
 }
 
+function buildClaudeCompactionItemId(
+  turnId: string,
+): string {
+  return turnId.length > 0
+    ? `claude-compaction-${turnId}`
+    : "claude-compaction";
+}
+
 interface ClaudeUnexpectedSdkEventArgs {
   event: unknown;
   context?: ProviderTranslationContext;
+}
+
+function buildClaudeCompactedEvent(
+  threadId: string,
+): ThreadEvent {
+  return {
+    type: "thread/compacted",
+    threadId,
+    providerThreadId: "",
+  };
 }
 
 function buildUnexpectedClaudeSdkEvent(

@@ -1372,13 +1372,68 @@ describe("claude-code provider adapter", () => {
 
   // -- translateEvent: system message --------------------------------------
 
-  it("translateEvent returns empty for system messages", () => {
+  it("translateEvent returns empty for non-compaction system messages", () => {
     const adapter = createClaudeCodeProviderAdapter();
     const events = adapter.translateEvent({
       type: "system",
+      subtype: "init",
       session_id: "sess-1",
     });
     expect(events).toEqual([]);
+  });
+
+  it("translateEvent status compacting starts a turn and emits a compaction item", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+    const events = adapter.translateEvent({
+      type: "system",
+      subtype: "status",
+      status: "compacting",
+      session_id: "sess-1",
+    });
+
+    expect(events).toContainEqual({
+      type: "turn/started",
+      threadId: "",
+      providerThreadId: "",
+      turnId: "turn-1",
+    });
+    expect(events).toContainEqual({
+      type: "item/started",
+      threadId: "",
+      providerThreadId: "",
+      turnId: "turn-1",
+      item: {
+        type: "contextCompaction",
+        id: "claude-compaction-turn-1",
+      },
+    });
+  });
+
+  it("translateEvent compact_boundary emits thread/compacted", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    adapter.translateEvent({
+      type: "system",
+      subtype: "status",
+      status: "compacting",
+      session_id: "sess-1",
+    });
+
+    const events = adapter.translateEvent({
+      type: "system",
+      subtype: "compact_boundary",
+      session_id: "sess-1",
+      compact_metadata: {
+        pre_tokens: 199622,
+        trigger: "auto",
+      },
+    });
+
+    expect(events).toContainEqual({
+      type: "thread/compacted",
+      threadId: "",
+      providerThreadId: "",
+    });
   });
 
   // -- translateEvent: multiple turns --------------------------------------

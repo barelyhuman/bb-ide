@@ -60,6 +60,8 @@ function toPiRawEventDescription(event: JsonRpcMessage): ProviderRawEventDescrip
     kind === "thread/identity" ||
     kind === "sdk/agent_start" ||
     kind === "sdk/agent_end" ||
+    kind === "sdk/auto_compaction_start" ||
+    kind === "sdk/auto_compaction_end" ||
     kind === "sdk/message_update:text_delta" ||
     kind === "sdk/tool_execution_start" ||
     kind === "sdk/tool_execution_end" ||

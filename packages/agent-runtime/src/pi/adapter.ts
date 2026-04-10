@@ -160,6 +160,8 @@ const piEventTypeSchema = z.object({
   type: z.enum([
     "agent_end",
     "agent_start",
+    "auto_compaction_end",
+    "auto_compaction_start",
     "message_update",
     "tool_execution_end",
     "tool_execution_start",
@@ -202,6 +204,14 @@ const piAgentStartEventSchema = z.object({
 const piAgentEndEventSchema = z.object({
   type: z.literal("agent_end"),
   messages: z.array(piConversationMessageSchema),
+}).passthrough();
+
+const piAutoCompactionStartEventSchema = z.object({
+  type: z.literal("auto_compaction_start"),
+}).passthrough();
+
+const piAutoCompactionEndEventSchema = z.object({
+  type: z.literal("auto_compaction_end"),
 }).passthrough();
 
 const piMessageUpdateEventSchema = z.object({
@@ -490,6 +500,20 @@ interface PiTurnState {
   toolItemsByCallId: Map<string, ThreadEventItem>;
 }
 
+function resolvePiCompactionTurnId(state: PiTurnState): string {
+  return state.currentTurnId ?? (
+    state.counter > 0
+      ? `turn-${state.counter}`
+      : ""
+  );
+}
+
+function buildPiCompactionItemId(turnId: string): string {
+  return turnId.length > 0
+    ? `pi-compaction-${turnId}`
+    : "pi-compaction";
+}
+
 export function createPiProviderAdapter(
   opts?: CreatePiProviderAdapterOptions,
 ): ProviderAdapter {
@@ -608,6 +632,36 @@ export function createPiProviderAdapter(
           events,
           state,
           threadId,
+        });
+        break;
+      }
+
+      case "auto_compaction_start": {
+        if (!piAutoCompactionStartEventSchema.safeParse(event).success) {
+          return buildUnexpectedPiSdkEvent(event, context);
+        }
+        const turnId = resolvePiCompactionTurnId(state);
+        events.push({
+          type: "item/started",
+          threadId,
+          providerThreadId: "",
+          turnId,
+          item: {
+            type: "contextCompaction",
+            id: buildPiCompactionItemId(turnId),
+          },
+        });
+        break;
+      }
+
+      case "auto_compaction_end": {
+        if (!piAutoCompactionEndEventSchema.safeParse(event).success) {
+          return buildUnexpectedPiSdkEvent(event, context);
+        }
+        events.push({
+          type: "thread/compacted",
+          threadId,
+          providerThreadId: "",
         });
         break;
       }

@@ -89,6 +89,8 @@ function toClaudeRawEventDescription(event: JsonRpcMessage): ProviderRawEventDes
 
   if (
     kind === "thread/identity" ||
+    kind === "sdk/system:status" ||
+    kind === "sdk/system:compact_boundary" ||
     kind === "sdk/assistant:text" ||
     kind === "sdk/assistant:tool_use" ||
     kind === "sdk/assistant:text+tool_use" ||
