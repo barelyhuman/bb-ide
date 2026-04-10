@@ -86,6 +86,7 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommand({
       type: "thread/start",
+      cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       input: [{ type: "text", text: "hello" }],
       options: {

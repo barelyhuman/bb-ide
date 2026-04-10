@@ -41,7 +41,7 @@ const piCommandSchema = z.discriminatedUnion("method", [
     method: z.literal("thread/start"),
     params: z.object({
       threadId: z.string().optional(),
-      cwd: z.string().optional(),
+      cwd: z.string(),
       baseInstructions: z.string().optional(),
       config: z.record(z.string(), z.unknown()).optional(),
       model: z.string().optional(),
@@ -57,7 +57,7 @@ const piCommandSchema = z.discriminatedUnion("method", [
     method: z.literal("thread/resume"),
     params: z.object({
       threadId: z.string(),
-      cwd: z.string().optional(),
+      cwd: z.string(),
       sessionPath: z.string().optional(),
       baseInstructions: z.string().optional(),
       config: z.record(z.string(), z.unknown()).optional(),
@@ -238,7 +238,7 @@ function buildSessionEnv(envOverrides: Record<string, string>): NodeJS.ProcessEn
 
 function buildSessionOptions(
   params: {
-    cwd?: string;
+    cwd: string;
     model?: string;
     baseInstructions?: string;
     sessionPath?: string;
@@ -249,7 +249,7 @@ function buildSessionOptions(
   const sessionFilePath = resolvePiSessionFilePath(threadId, params.sessionPath);
 
   return {
-    cwd: params.cwd ?? process.cwd(),
+    cwd: params.cwd,
     model: params.model,
     env,
     sessionFilePath,

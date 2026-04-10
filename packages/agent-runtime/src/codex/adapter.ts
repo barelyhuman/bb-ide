@@ -764,7 +764,7 @@ export function createCodexProviderAdapter(
           const params: ThreadStartParams = {
             approvalPolicy: "never",
             sandbox: command.options?.sandboxMode ?? "danger-full-access",
-            cwd: command.cwd ?? undefined,
+            cwd: command.cwd,
             baseInstructions: command.options?.instructions ?? "",
             model: command.options?.model ?? undefined,
             serviceTier: toCodexServiceTier(command.options?.serviceTier),
@@ -785,7 +785,7 @@ export function createCodexProviderAdapter(
             threadId: command.providerThreadId ?? command.threadId,
             approvalPolicy: "never",
             sandbox: command.options?.sandboxMode ?? "danger-full-access",
-            cwd: command.cwd ?? undefined,
+            cwd: command.cwd,
             baseInstructions: command.options?.instructions ?? "",
             model: command.options?.model ?? undefined,
             serviceTier: toCodexServiceTier(command.options?.serviceTier),

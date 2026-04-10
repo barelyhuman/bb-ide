@@ -52,7 +52,7 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
     method: z.literal("thread/start"),
     params: z.object({
       threadId: z.string(),
-      cwd: z.string().optional(),
+      cwd: z.string(),
       baseInstructions: z.string(),
       config: z.record(z.string(), z.unknown()).optional(),
       model: z.string().optional(),
@@ -68,7 +68,7 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
     method: z.literal("thread/resume"),
     params: z.object({
       threadId: z.string(),
-      cwd: z.string().optional(),
+      cwd: z.string(),
       providerThreadId: z.string().nullable(),
       baseInstructions: z.string().optional(),
       config: z.record(z.string(), z.unknown()).optional(),
@@ -272,7 +272,7 @@ function buildSessionEnv(envOverrides: Record<string, string>): NodeJS.ProcessEn
 export function buildSessionOptions(
   params: {
     baseInstructions?: string;
-    cwd?: string;
+    cwd: string;
     model?: string;
     managerMode?: boolean;
   },
@@ -280,11 +280,10 @@ export function buildSessionOptions(
 ): SdkSessionOptions {
   const systemPrompt = params.baseInstructions ?? "You are a helpful coding assistant.";
   const model = params.model;
-  const cwd = params.cwd ?? process.cwd();
   const managerMode = params.managerMode === true;
 
   return {
-    cwd,
+    cwd: params.cwd,
     systemPrompt,
     model,
     env,

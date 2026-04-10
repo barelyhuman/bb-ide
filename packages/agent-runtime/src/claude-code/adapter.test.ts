@@ -85,6 +85,7 @@ describe("claude-code provider adapter", () => {
     const adapter = createClaudeCodeProviderAdapter();
     const cmd = adapter.buildCommand({
       type: "thread/start",
+      cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       input: [{ type: "text", text: "hello" }],
       options: {
@@ -181,6 +182,7 @@ describe("claude-code provider adapter", () => {
     const adapter = createClaudeCodeProviderAdapter();
     const cmd = adapter.buildCommand({
       type: "thread/resume",
+      cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       providerThreadId: undefined,
     });
@@ -194,6 +196,7 @@ describe("claude-code provider adapter", () => {
     const adapter = createClaudeCodeProviderAdapter();
     const cmd = adapter.buildCommand({
       type: "thread/resume",
+      cwd: "/tmp/worktree",
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
       options: {

@@ -667,7 +667,7 @@ export function createClaudeCodeProviderAdapter(
             params: {
               baseInstructions,
               threadId: command.threadId,
-              ...(command.cwd ? { cwd: command.cwd } : {}),
+              cwd: command.cwd,
               ...(Object.keys(finalConfig).length > 0 ? { config: finalConfig } : {}),
               ...(command.options?.model ? { model: command.options.model } : {}),
               ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
@@ -692,7 +692,7 @@ export function createClaudeCodeProviderAdapter(
             params: {
               baseInstructions,
               threadId: command.threadId,
-              ...(command.cwd ? { cwd: command.cwd } : {}),
+              cwd: command.cwd,
               providerThreadId: command.providerThreadId ?? null,
               ...(Object.keys(finalResumeConfig).length > 0 ? { config: finalResumeConfig } : {}),
               ...(command.options?.model ? { model: command.options.model } : {}),

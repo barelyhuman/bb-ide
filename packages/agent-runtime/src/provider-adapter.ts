@@ -58,7 +58,7 @@ export type AdapterCommand =
   | {
       type: "thread/start";
       threadId: string;
-      cwd?: string;
+      cwd: string;
       input?: PromptInput[];
       options?: AdapterOptions;
       dynamicTools?: DynamicTool[];
@@ -66,7 +66,7 @@ export type AdapterCommand =
   | {
       type: "thread/resume";
       threadId: string;
-      cwd?: string;
+      cwd: string;
       providerThreadId?: string;
       options?: AdapterOptions;
       resumePath?: string;
