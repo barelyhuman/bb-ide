@@ -332,9 +332,6 @@ function describeParsedPiRawEvent(
       const kind = `sdk/${event.sdkType}:${event.role === "unknown" ? "" : event.role}`.replace(/:$/u, "");
       switch (event.role) {
         case "assistant":
-          if (event.sdkType === "message_end") {
-            return { kind, coverage: "noise" };
-          }
           return { kind, coverage: "noise" };
         case "toolResult":
         case "user":

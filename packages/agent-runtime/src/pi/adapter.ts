@@ -785,10 +785,13 @@ export function createPiProviderAdapter(
         if (assistantEvent.type === "thinking_delta" && state.currentTurnId) {
           const delta = assistantEvent.delta;
           if (delta) {
+            if (typeof assistantEvent.contentIndex !== "number") {
+              return buildUnexpectedPiSdkEvent(event, context);
+            }
             const itemId = getOrCreatePiReasoningItemId({
               state,
               parentToolCallId: context?.parentToolCallId,
-              contentIndex: assistantEvent.contentIndex ?? 0,
+              contentIndex: assistantEvent.contentIndex,
             });
             events.push({
               type: "item/reasoning/textDelta",
@@ -806,10 +809,13 @@ export function createPiProviderAdapter(
         if (assistantEvent.type === "thinking_end" && state.currentTurnId) {
           const content = assistantEvent.content;
           if (content) {
+            if (typeof assistantEvent.contentIndex !== "number") {
+              return buildUnexpectedPiSdkEvent(event, context);
+            }
             const itemId = resolveCompletedPiReasoningItemId({
               state,
               parentToolCallId: context?.parentToolCallId,
-              contentIndex: assistantEvent.contentIndex ?? 0,
+              contentIndex: assistantEvent.contentIndex,
             });
             events.push({
               type: "item/completed",

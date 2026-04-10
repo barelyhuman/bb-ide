@@ -464,6 +464,27 @@ describe("pi provider adapter", () => {
     );
   });
 
+  it("translateEvent surfaces Pi thinking without contentIndex as provider/unhandled", () => {
+    const adapter = createPiProviderAdapter();
+    adapter.translateEvent(loadFixture("agent-start.json"));
+
+    const events = adapter.translateEvent({
+      type: "message_update",
+      assistantMessageEvent: {
+        type: "thinking_delta",
+        delta: "Thinking without a scope.",
+      },
+    } as AgentSessionEvent);
+
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: "provider/unhandled",
+        providerId: "pi",
+        rawType: "sdk/message_update:thinking_delta",
+      }),
+    ]);
+  });
+
   // -- translateEvent: tool calls ------------------------------------------
 
   it("translateEvent tool_execution_start emits item/started", () => {

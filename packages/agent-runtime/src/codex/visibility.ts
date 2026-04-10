@@ -35,20 +35,17 @@ interface CodexNotificationRawEvent {
   kind: "notification";
   method: CodexServerNotificationMethod;
   params: JsonRpcMessage["params"];
-  rawEvent: JsonRpcMessage;
 }
 
 interface CodexMcpStartupStatusRawEvent {
   error: StringRecord | null;
   kind: "mcp-startup-status";
-  rawEvent: JsonRpcMessage;
   status?: string;
 }
 
 interface CodexUnknownRawEvent {
   kind: "unknown";
   method: string;
-  rawEvent: JsonRpcMessage;
 }
 
 type CodexRawEvent =
@@ -175,7 +172,6 @@ function parseCodexRawEvent(event: JsonRpcMessage): CodexRawEvent {
     const params = isRecord(event.params) ? event.params : null;
     return {
       kind: "mcp-startup-status",
-      rawEvent: event,
       status: params ? getStringProperty(params, "status") : undefined,
       error: params ? getRecordProperty(params, "error") : null,
     };
@@ -186,14 +182,12 @@ function parseCodexRawEvent(event: JsonRpcMessage): CodexRawEvent {
       kind: "notification",
       method: event.method,
       params: event.params,
-      rawEvent: event,
     };
   }
 
   return {
     kind: "unknown",
     method: event.method,
-    rawEvent: event,
   };
 }
 

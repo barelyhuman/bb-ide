@@ -5,6 +5,7 @@
 
 import {
   providerRawEventSchema,
+  type ProviderRawEvent,
   type ThreadEvent,
 } from "@bb/domain";
 import type {
@@ -39,8 +40,20 @@ export interface BuildUnhandledProviderEventsArgs {
 
 function toProviderRawEvent(
   rawEvent: JsonRpcMessage,
-) {
-  return providerRawEventSchema.parse(rawEvent);
+): ProviderRawEvent {
+  const parsed = providerRawEventSchema.safeParse(rawEvent);
+  if (parsed.success) {
+    return parsed.data;
+  }
+
+  return {
+    jsonrpc: "2.0",
+    ...(rawEvent.id !== undefined ? { id: rawEvent.id } : {}),
+    method: rawEvent.method,
+    params: {
+      serializationError: "Provider raw event params were not JSON-serializable.",
+    },
+  };
 }
 
 function getThreadIdFromRawEvent(rawEvent: JsonRpcMessage): string {
