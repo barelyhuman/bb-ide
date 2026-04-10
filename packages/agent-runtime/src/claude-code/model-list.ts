@@ -10,36 +10,6 @@ import {
   XHIGH_REASONING_EFFORT,
 } from "../shared/adapter-utils.js";
 
-const FALLBACK_CLAUDE_CODE_MODELS: AvailableModel[] = [
-  {
-    id: "claude-sonnet-4-6",
-    model: "claude-sonnet-4-6",
-    displayName: "Claude Sonnet 4.6",
-    description: "Fast, intelligent model for everyday coding tasks",
-    supportedReasoningEfforts: [LOW_REASONING_EFFORT, MEDIUM_REASONING_EFFORT, HIGH_REASONING_EFFORT],
-    defaultReasoningEffort: "medium",
-    isDefault: true,
-  },
-  {
-    id: "claude-opus-4-6",
-    model: "claude-opus-4-6",
-    displayName: "Claude Opus 4.6",
-    description: "Most capable model for complex coding tasks",
-    supportedReasoningEfforts: [LOW_REASONING_EFFORT, MEDIUM_REASONING_EFFORT, HIGH_REASONING_EFFORT, XHIGH_REASONING_EFFORT],
-    defaultReasoningEffort: "medium",
-    isDefault: false,
-  },
-  {
-    id: "claude-haiku-4-5",
-    model: "claude-haiku-4-5",
-    displayName: "Claude Haiku 4.5",
-    description: "Fast, compact model for simple tasks",
-    supportedReasoningEfforts: [LOW_REASONING_EFFORT, MEDIUM_REASONING_EFFORT],
-    defaultReasoningEffort: "low",
-    isDefault: false,
-  },
-];
-
 type ClaudeSdkModelInfo = Pick<
   ModelInfo,
   | "value"
@@ -49,11 +19,77 @@ type ClaudeSdkModelInfo = Pick<
   | "supportedEffortLevels"
 >;
 
-function cloneAvailableModel(model: AvailableModel): AvailableModel {
-  return {
-    ...model,
-    supportedReasoningEfforts: [...model.supportedReasoningEfforts],
-  };
+type ClaudeCodeCatalogEntry = {
+  id: string;
+  model: string;
+  displayName: string;
+  description: string;
+  requiresOneMillionContext: boolean;
+  sourceModelValues: readonly string[];
+  supportedReasoningEfforts: readonly ModelReasoningEffort[];
+  defaultReasoningEffort: AvailableModel["defaultReasoningEffort"];
+};
+
+const SONNET_REASONING_EFFORTS: readonly ModelReasoningEffort[] = [
+  LOW_REASONING_EFFORT,
+  MEDIUM_REASONING_EFFORT,
+  HIGH_REASONING_EFFORT,
+];
+
+const OPUS_REASONING_EFFORTS: readonly ModelReasoningEffort[] = [
+  LOW_REASONING_EFFORT,
+  MEDIUM_REASONING_EFFORT,
+  HIGH_REASONING_EFFORT,
+  XHIGH_REASONING_EFFORT,
+];
+
+const CLAUDE_CODE_CATALOG: readonly ClaudeCodeCatalogEntry[] = [
+  {
+    id: "sonnet[1m]",
+    model: "sonnet[1m]",
+    displayName: "Sonnet 4.6 (1M)",
+    description: "Sonnet 4.6 with 1M context for long coding sessions",
+    requiresOneMillionContext: true,
+    sourceModelValues: ["sonnet[1m]"],
+    supportedReasoningEfforts: SONNET_REASONING_EFFORTS,
+    defaultReasoningEffort: "medium",
+  },
+  {
+    id: "sonnet",
+    model: "sonnet",
+    displayName: "Sonnet 4.6",
+    description: "Sonnet 4.6 for everyday coding tasks",
+    requiresOneMillionContext: false,
+    sourceModelValues: ["sonnet"],
+    supportedReasoningEfforts: SONNET_REASONING_EFFORTS,
+    defaultReasoningEffort: "medium",
+  },
+  {
+    id: "opus[1m]",
+    model: "opus[1m]",
+    displayName: "Opus 4.6 (1M)",
+    description: "Opus 4.6 with 1M context for complex long coding sessions",
+    requiresOneMillionContext: true,
+    sourceModelValues: ["opus[1m]"],
+    supportedReasoningEfforts: OPUS_REASONING_EFFORTS,
+    defaultReasoningEffort: "medium",
+  },
+  {
+    id: "opus",
+    model: "opus",
+    displayName: "Opus 4.6",
+    description: "Opus 4.6 for complex coding tasks",
+    requiresOneMillionContext: false,
+    sourceModelValues: ["opus"],
+    supportedReasoningEfforts: OPUS_REASONING_EFFORTS,
+    defaultReasoningEffort: "medium",
+  },
+];
+
+function cloneReasoningEfforts(
+  efforts: readonly ModelReasoningEffort[],
+): ModelReasoningEffort[] {
+  return efforts.map((effort) => ({ ...effort }));
 }
 
 function toClaudeReasoningEfforts(
@@ -95,46 +131,58 @@ function toDefaultReasoningEffort(
   return supportedReasoningEfforts[0]?.reasoningEffort ?? "low";
 }
 
-function resolveDefaultClaudeModelId(
-  models: readonly AvailableModel[],
-): string | undefined {
-  const providerDefault = models.find((model) => model.model === "default");
-  if (providerDefault) {
-    return providerDefault.id;
+function findCatalogEntrySourceModelInfo(
+  entry: ClaudeCodeCatalogEntry,
+  modelInfos: readonly ClaudeSdkModelInfo[],
+): ClaudeSdkModelInfo | undefined {
+  for (const value of entry.sourceModelValues) {
+    const modelInfo = modelInfos.find((candidate) => candidate.value === value);
+    if (modelInfo) {
+      return modelInfo;
+    }
   }
+  return undefined;
+}
 
-  const oneMillionDefault = models.find((model) => model.model.endsWith("[1m]"));
-  if (oneMillionDefault) {
-    return oneMillionDefault.id;
-  }
+function buildCatalogModel(
+  entry: ClaudeCodeCatalogEntry,
+  modelInfos: readonly ClaudeSdkModelInfo[],
+): AvailableModel {
+  const sourceModelInfo = findCatalogEntrySourceModelInfo(entry, modelInfos);
+  const supportedReasoningEfforts = sourceModelInfo
+    ? toClaudeReasoningEfforts(sourceModelInfo)
+    : cloneReasoningEfforts(entry.supportedReasoningEfforts);
 
-  return models[0]?.id;
+  return {
+    id: entry.id,
+    model: entry.model,
+    displayName: entry.displayName,
+    description: sourceModelInfo?.description ?? entry.description,
+    supportedReasoningEfforts,
+    defaultReasoningEffort: sourceModelInfo
+      ? toDefaultReasoningEffort(supportedReasoningEfforts)
+      : entry.defaultReasoningEffort,
+    isDefault: false,
+  };
 }
 
 export function buildClaudeCodeAvailableModels(
   modelInfos: readonly ClaudeSdkModelInfo[],
 ): AvailableModel[] {
-  const models = modelInfos.map((modelInfo) => {
-    const supportedReasoningEfforts = toClaudeReasoningEfforts(modelInfo);
-    return {
-      id: modelInfo.value,
-      model: modelInfo.value,
-      displayName: modelInfo.displayName,
-      description: modelInfo.description,
-      supportedReasoningEfforts,
-      defaultReasoningEffort: toDefaultReasoningEffort(
-        supportedReasoningEfforts,
-      ),
-      isDefault: false,
-    };
-  });
+  const hasOneMillionContext = modelInfos.some((modelInfo) =>
+    modelInfo.value.endsWith("[1m]"),
+  );
+  const models = CLAUDE_CODE_CATALOG
+    .filter((entry) =>
+      !entry.requiresOneMillionContext || hasOneMillionContext,
+    )
+    .map((entry) => buildCatalogModel(entry, modelInfos));
 
-  const defaultModelId = resolveDefaultClaudeModelId(models);
-  return models.map((model) =>
-    model.id === defaultModelId ? { ...model, isDefault: true } : model,
+  return models.map((model, index) =>
+    index === 0 ? { ...model, isDefault: true } : model,
   );
 }
 
 export function listFallbackClaudeCodeModels(): AvailableModel[] {
-  return FALLBACK_CLAUDE_CODE_MODELS.map(cloneAvailableModel);
+  return buildClaudeCodeAvailableModels([]);
 }

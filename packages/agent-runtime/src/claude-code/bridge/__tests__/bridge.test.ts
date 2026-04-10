@@ -25,14 +25,21 @@ describe("bridge", () => {
           {
             value: "default",
             displayName: "Default (recommended)",
-            description: "Opus 4.6 with 1M context",
+            description: "Opus 4.6 with 1M context [NEW] · Most capable for complex work",
             supportsEffort: true,
             supportedEffortLevels: ["low", "medium", "high", "max"],
           },
           {
+            value: "sonnet",
+            displayName: "Sonnet",
+            description: "Sonnet 4.6 · Best for everyday tasks",
+            supportsEffort: true,
+            supportedEffortLevels: ["low", "medium", "high"],
+          },
+          {
             value: "sonnet[1m]",
             displayName: "Sonnet (1M context)",
-            description: "Sonnet 4.6 with 1M context",
+            description: "Sonnet 4.6 with 1M context · Billed as extra usage",
             supportsEffort: true,
             supportedEffortLevels: ["low", "medium", "high"],
           },
@@ -93,11 +100,32 @@ describe("bridge", () => {
     expect(options.systemPrompt).toBe("You are a manager.");
   });
 
-  it("returns the bridge-owned Claude model list from the SDK probe", async () => {
+  it("returns the curated Claude model list from the SDK 1M signal", async () => {
     await expect(listClaudeCodeBridgeModels()).resolves.toEqual([
-      expect.objectContaining({ id: "default", isDefault: true }),
-      expect.objectContaining({ id: "sonnet[1m]", isDefault: false }),
-      expect.objectContaining({ id: "haiku", isDefault: false }),
+      expect.objectContaining({
+        id: "sonnet[1m]",
+        model: "sonnet[1m]",
+        displayName: "Sonnet 4.6 (1M)",
+        isDefault: true,
+      }),
+      expect.objectContaining({
+        id: "sonnet",
+        model: "sonnet",
+        displayName: "Sonnet 4.6",
+        isDefault: false,
+      }),
+      expect.objectContaining({
+        id: "opus[1m]",
+        model: "opus[1m]",
+        displayName: "Opus 4.6 (1M)",
+        isDefault: false,
+      }),
+      expect.objectContaining({
+        id: "opus",
+        model: "opus",
+        displayName: "Opus 4.6",
+        isDefault: false,
+      }),
     ]);
   });
 });
