@@ -1,7 +1,6 @@
 import {
   pendingInteractionPayloadSchema,
   pendingInteractionResolutionSchema,
-  pendingInteractionSchema,
   type PendingInteraction,
 } from "@bb/domain";
 import type { PendingInteractionRow } from "@bb/db";
@@ -26,7 +25,15 @@ export function toPendingInteraction(row: PendingInteractionRow): PendingInterac
           parseStoredPendingInteractionJson(row.resolution),
         );
 
-  return pendingInteractionSchema.parse({
+  if (resolution !== null && resolution.kind !== payload.kind) {
+    throw new ApiError(
+      500,
+      "internal_error",
+      "Stored pending interaction resolution kind does not match its payload",
+    );
+  }
+
+  return {
     id: row.id,
     threadId: row.threadId,
     turnId: row.turnId,
@@ -39,5 +46,5 @@ export function toPendingInteraction(row: PendingInteractionRow): PendingInterac
     statusReason: row.statusReason,
     createdAt: row.createdAt,
     resolvedAt: row.resolvedAt,
-  });
+  };
 }

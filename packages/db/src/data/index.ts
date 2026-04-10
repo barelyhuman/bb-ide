@@ -289,7 +289,6 @@ export {
   listPendingInteractionsByStatus,
   setPendingInteractionExpired,
   setPendingInteractionInterrupted,
-  setPendingInteractionRejected,
   setPendingInteractionResolved,
 } from "./pending-interactions.js";
 export type {

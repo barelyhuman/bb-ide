@@ -12,7 +12,6 @@ export {
   formatPendingInteractionPermissionResolutionMessage,
   formatPendingInteractionPermissionResolutionOutcome,
   getPendingInteractionCommandApprovalDecisionKind,
-  hasPendingInteractionGrantedPermissions,
   isPendingInteractionCommandApprovalPositiveDecision,
   summarizePendingInteractionRequestedMacOsPermissions,
   summarizePendingInteractionRequestedPermissions,

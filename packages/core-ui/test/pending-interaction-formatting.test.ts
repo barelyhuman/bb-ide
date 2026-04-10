@@ -6,7 +6,6 @@ import {
   formatPendingInteractionFileChangeApprovalResolutionOutcome,
   formatPendingInteractionPermissionResolutionMessage,
   formatPendingInteractionPermissionResolutionOutcome,
-  hasPendingInteractionGrantedPermissions,
   summarizePendingInteractionRequestedPermissions,
 } from "../src/index.js";
 
@@ -59,12 +58,6 @@ describe("pending interaction formatting", () => {
     expect(formatPendingInteractionFileChangeApprovalResolutionMessage("accept")).toBe(
       "File changes approved",
     );
-    expect(
-      hasPendingInteractionGrantedPermissions({
-        network: { enabled: true },
-        fileSystem: null,
-      }),
-    ).toBe(true);
     expect(
       formatPendingInteractionPermissionResolutionOutcome({
         permissions: {

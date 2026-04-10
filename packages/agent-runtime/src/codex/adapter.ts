@@ -12,6 +12,9 @@ import { getBuiltInAgentProviderInfo } from "@bb/agent-providers";
 import { z } from "zod";
 import {
   pendingInteractionCommandActionSchema,
+  pendingInteractionFileSystemPermissionsSchema,
+  pendingInteractionMacOsPermissionsSchema,
+  pendingInteractionNetworkPermissionsSchema,
 } from "@bb/domain";
 import type {
   ApprovalPolicy,
@@ -294,42 +297,37 @@ const pendingInteractionToCodexFileChangeApprovalDecision = {
 const codexFileSystemPermissionsSchema = z.object({
   read: z.array(z.string()).nullable(),
   write: z.array(z.string()).nullable(),
-});
+}).transform((value) =>
+  pendingInteractionFileSystemPermissionsSchema.parse({
+    read: value.read ?? [],
+    write: value.write ?? [],
+  })
+);
 
 const codexNetworkPermissionsSchema = z.object({
   enabled: z.boolean().nullable(),
-});
-
-const codexMacOsPreferencesPermissionSchema = z.enum([
-  "none",
-  "read_only",
-  "read_write",
-]);
-
-const codexMacOsContactsPermissionSchema = z.enum([
-  "none",
-  "read_only",
-  "read_write",
-]);
+}).transform((value) => pendingInteractionNetworkPermissionsSchema.parse(value));
 
 const codexMacOsAutomationPermissionSchema = z.union([
   z.literal("none"),
   z.literal("all"),
   z.object({
     bundle_ids: z.array(z.string()),
-  }),
+  }).transform((value) => ({
+    kind: "bundle_ids" as const,
+    bundleIds: value.bundle_ids,
+  })),
 ]);
 
 const codexAdditionalMacOsPermissionsSchema = z.object({
-  preferences: codexMacOsPreferencesPermissionSchema,
+  preferences: z.string(),
   automations: codexMacOsAutomationPermissionSchema,
   launchServices: z.boolean(),
   accessibility: z.boolean(),
   calendar: z.boolean(),
   reminders: z.boolean(),
-  contacts: codexMacOsContactsPermissionSchema,
-});
-type CodexMacOsPermissions = z.infer<typeof codexAdditionalMacOsPermissionsSchema>;
+  contacts: z.string(),
+}).transform((value) => pendingInteractionMacOsPermissionsSchema.parse(value));
 
 const codexAdditionalPermissionsSchema = z.object({
   network: codexNetworkPermissionsSchema.nullable(),
@@ -389,7 +387,7 @@ const codexCommandExecutionRequestApprovalParamsSchema = z.object({
   commandActions: codexCommandActionsSchema,
   additionalPermissions: codexAdditionalPermissionsSchema.nullable().optional(),
   availableDecisions: z.array(codexCommandApprovalDecisionSchema).nullable().optional(),
-}).passthrough();
+});
 
 const codexFileChangeRequestApprovalParamsSchema = z.object({
   threadId: z.string(),
@@ -397,7 +395,7 @@ const codexFileChangeRequestApprovalParamsSchema = z.object({
   itemId: z.string(),
   reason: z.string().nullable().optional(),
   grantRoot: z.string().nullable().optional(),
-}).passthrough();
+});
 
 const codexToolRequestUserInputOptionSchema = z.object({
   label: z.string(),
@@ -418,7 +416,7 @@ const codexToolRequestUserInputParamsSchema = z.object({
   turnId: z.string(),
   itemId: z.string(),
   questions: z.array(codexToolRequestUserInputQuestionSchema),
-}).passthrough();
+});
 
 const codexPermissionsRequestApprovalParamsSchema = z.object({
   threadId: z.string(),
@@ -426,7 +424,7 @@ const codexPermissionsRequestApprovalParamsSchema = z.object({
   itemId: z.string(),
   reason: z.string().nullable(),
   permissions: codexRequestPermissionsSchema,
-}).passthrough();
+});
 
 const codexThreadItemEnvelopeSchema = z.object({
   type: z.string(),
@@ -986,9 +984,7 @@ function toPendingInteractionPermissionProfile(
       "macos" in permissions && permissions.macos
         ? {
             preferences: permissions.macos.preferences,
-            automations: toPendingInteractionMacOsAutomationPermission(
-              permissions.macos.automations,
-            ),
+            automations: permissions.macos.automations,
             launchServices: permissions.macos.launchServices,
             accessibility: permissions.macos.accessibility,
             calendar: permissions.macos.calendar,
@@ -997,18 +993,6 @@ function toPendingInteractionPermissionProfile(
           }
         : null,
   });
-}
-
-function toPendingInteractionMacOsAutomationPermission(
-  automations: CodexMacOsPermissions["automations"],
-): "none" | "all" | { bundleIds: string[] } {
-  if (automations === "none" || automations === "all") {
-    return automations;
-  }
-
-  return {
-    bundleIds: automations.bundle_ids,
-  };
 }
 
 function toCodexGrantedPermissionProfile(

@@ -307,22 +307,6 @@ export function setPendingInteractionExpired(
   });
 }
 
-export function setPendingInteractionRejected(
-  db: PendingInteractionWriteConnection,
-  args: {
-    id: string;
-    statusReason: string;
-  },
-): PendingInteractionRow | null {
-  return updatePendingInteractionTerminalState(db, {
-    id: args.id,
-    allowedCurrentStatuses: ["pending"],
-    resolution: null,
-    status: "rejected",
-    statusReason: args.statusReason,
-  });
-}
-
 export function interruptPendingInteractionsForThreads(
   db: PendingInteractionWriteConnection,
   args: InterruptPendingInteractionsForThreadsArgs,

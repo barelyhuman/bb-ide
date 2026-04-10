@@ -202,7 +202,7 @@ export function formatPendingInteractionFileChangeApprovalResolutionMessage(
   return `File changes ${formatPendingInteractionFileChangeApprovalResolutionOutcome(decision)}`;
 }
 
-export function hasPendingInteractionGrantedPermissions(
+function hasPendingInteractionGrantedPermissions(
   permissions: PendingInteractionGrantedPermissionProfile,
 ): boolean {
   return (

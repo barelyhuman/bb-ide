@@ -66,7 +66,7 @@ export type PendingInteractionFileSystemPermissions = z.infer<
   typeof pendingInteractionFileSystemPermissionsSchema
 >;
 
-export const pendingInteractionMacOsPreferencesPermissionSchema = z.enum([
+const pendingInteractionMacOsPreferencesPermissionSchema = z.enum([
   "none",
   "read_only",
   "read_write",
@@ -75,7 +75,7 @@ export type PendingInteractionMacOsPreferencesPermission = z.infer<
   typeof pendingInteractionMacOsPreferencesPermissionSchema
 >;
 
-export const pendingInteractionMacOsContactsPermissionSchema = z.enum([
+const pendingInteractionMacOsContactsPermissionSchema = z.enum([
   "none",
   "read_only",
   "read_write",
@@ -84,7 +84,7 @@ export type PendingInteractionMacOsContactsPermission = z.infer<
   typeof pendingInteractionMacOsContactsPermissionSchema
 >;
 
-export const pendingInteractionMacOsAutomationPermissionSchema = z.union([
+const pendingInteractionMacOsAutomationPermissionSchema = z.union([
   z.literal("none"),
   z.literal("all"),
   z.object({
@@ -118,7 +118,7 @@ export type PendingInteractionRequestedPermissionProfile = z.infer<
   typeof pendingInteractionRequestedPermissionProfileSchema
 >;
 
-export const pendingInteractionGrantedPermissionProfileSchema = z.object({
+const pendingInteractionGrantedPermissionProfileSchema = z.object({
   network: pendingInteractionNetworkPermissionsSchema.nullable(),
   fileSystem: pendingInteractionFileSystemPermissionsSchema.nullable(),
 });
@@ -126,7 +126,7 @@ export type PendingInteractionGrantedPermissionProfile = z.infer<
   typeof pendingInteractionGrantedPermissionProfileSchema
 >;
 
-export const pendingInteractionCommandApprovalSimpleDecisionSchema = z.enum([
+const pendingInteractionCommandApprovalSimpleDecisionSchema = z.enum([
   "accept",
   "accept_for_session",
   "decline",
@@ -136,7 +136,7 @@ export type PendingInteractionCommandApprovalSimpleDecision = z.infer<
   typeof pendingInteractionCommandApprovalSimpleDecisionSchema
 >;
 
-export const pendingInteractionNetworkPolicyRuleActionSchema = z.enum([
+const pendingInteractionNetworkPolicyRuleActionSchema = z.enum([
   "allow",
   "deny",
 ]);
@@ -144,12 +144,12 @@ export type PendingInteractionNetworkPolicyRuleAction = z.infer<
   typeof pendingInteractionNetworkPolicyRuleActionSchema
 >;
 
-export const pendingInteractionExecPolicyAmendmentSchema = z.array(z.string());
+const pendingInteractionExecPolicyAmendmentSchema = z.array(z.string());
 export type PendingInteractionExecPolicyAmendment = z.infer<
   typeof pendingInteractionExecPolicyAmendmentSchema
 >;
 
-export const pendingInteractionNetworkPolicyAmendmentSchema = z.object({
+const pendingInteractionNetworkPolicyAmendmentSchema = z.object({
   host: z.string(),
   action: pendingInteractionNetworkPolicyRuleActionSchema,
 });
@@ -157,7 +157,7 @@ export type PendingInteractionNetworkPolicyAmendment = z.infer<
   typeof pendingInteractionNetworkPolicyAmendmentSchema
 >;
 
-export const pendingInteractionExecPolicyAmendmentDecisionSchema = z.object({
+const pendingInteractionExecPolicyAmendmentDecisionSchema = z.object({
   kind: z.literal("accept_with_exec_policy_amendment"),
   execPolicyAmendment: pendingInteractionExecPolicyAmendmentSchema,
 });
@@ -165,7 +165,7 @@ export type PendingInteractionExecPolicyAmendmentDecision = z.infer<
   typeof pendingInteractionExecPolicyAmendmentDecisionSchema
 >;
 
-export const pendingInteractionNetworkPolicyAmendmentDecisionSchema = z.object({
+const pendingInteractionNetworkPolicyAmendmentDecisionSchema = z.object({
   kind: z.literal("apply_network_policy_amendment"),
   networkPolicyAmendment: pendingInteractionNetworkPolicyAmendmentSchema,
 });
@@ -173,7 +173,7 @@ export type PendingInteractionNetworkPolicyAmendmentDecision = z.infer<
   typeof pendingInteractionNetworkPolicyAmendmentDecisionSchema
 >;
 
-export const pendingInteractionCommandApprovalDecisionSchema = z.union([
+const pendingInteractionCommandApprovalDecisionSchema = z.union([
   pendingInteractionCommandApprovalSimpleDecisionSchema,
   pendingInteractionExecPolicyAmendmentDecisionSchema,
   pendingInteractionNetworkPolicyAmendmentDecisionSchema,
@@ -182,7 +182,7 @@ export type PendingInteractionCommandApprovalDecision = z.infer<
   typeof pendingInteractionCommandApprovalDecisionSchema
 >;
 
-export const pendingInteractionFileChangeApprovalDecisionSchema = z.enum([
+const pendingInteractionFileChangeApprovalDecisionSchema = z.enum([
   "accept",
   "accept_for_session",
   "decline",
@@ -200,7 +200,7 @@ export type PendingInteractionPermissionGrantScope = z.infer<
   typeof pendingInteractionPermissionGrantScopeSchema
 >;
 
-export const pendingInteractionQuestionOptionSchema = z.object({
+const pendingInteractionQuestionOptionSchema = z.object({
   label: z.string(),
   description: z.string(),
   preview: z.string().nullable(),
@@ -209,7 +209,7 @@ export type PendingInteractionQuestionOption = z.infer<
   typeof pendingInteractionQuestionOptionSchema
 >;
 
-export const pendingInteractionUserInputQuestionSchema = z.object({
+const pendingInteractionUserInputQuestionSchema = z.object({
   id: z.string(),
   header: z.string(),
   question: z.string(),
