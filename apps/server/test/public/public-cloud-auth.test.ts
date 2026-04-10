@@ -164,6 +164,7 @@ describe("public cloud auth routes", () => {
 
       await nativeFetch(
         `http://127.0.0.1:1455/auth/callback?code=test-code&state=${encodeURIComponent(authUrl.searchParams.get("state") ?? "")}`,
+        { redirect: "manual" },
       );
 
       await vi.waitFor(async () => {
@@ -248,6 +249,7 @@ describe("public cloud auth routes", () => {
 
       await nativeFetch(
         `http://127.0.0.1:1455/auth/callback?code=test-code&state=${encodeURIComponent(authUrl.searchParams.get("state") ?? "")}`,
+        { redirect: "manual" },
       );
 
       await vi.waitFor(async () => {
@@ -342,6 +344,7 @@ describe("public cloud auth routes", () => {
 
       await nativeFetch(
         `http://127.0.0.1:53692/callback?code=test-code&state=${encodeURIComponent(authUrl.searchParams.get("state") ?? "")}`,
+        { redirect: "manual" },
       );
 
       await vi.waitFor(async () => {
@@ -493,6 +496,7 @@ describe("public cloud auth routes", () => {
 
       await nativeFetch(
         `http://127.0.0.1:1455/auth/callback?code=test-code&state=${encodeURIComponent(authUrl.searchParams.get("state") ?? "")}`,
+        { redirect: "manual" },
       );
 
       await vi.waitFor(() => {
@@ -649,6 +653,7 @@ describe("public cloud auth routes", () => {
 
       await nativeFetch(
         `http://127.0.0.1:53692/callback?code=test-code&state=${encodeURIComponent(authUrl.searchParams.get("state") ?? "")}`,
+        { redirect: "manual" },
       );
 
       await vi.waitFor(async () => {

@@ -58,7 +58,7 @@ describe("thread runtime config", () => {
         `Thread storage: \`/tmp/bb-host-data/${hostId}/thread-storage/${managerThread.id}\``,
       );
       expect(runtimeConfig.instructions).toContain(
-        `Local timezone for reminder-style work: \`${resolveLocalTimezone()}\``,
+        `Local timezone: \`${resolveLocalTimezone()}\``,
       );
     } finally {
       await harness.cleanup();
@@ -129,7 +129,7 @@ describe("thread runtime config", () => {
         `Thread storage: \`${threadStoragePath}\``,
       );
       expect(runtimeConfig.instructions).toContain(
-        `Local timezone for reminder-style work: \`${resolveLocalTimezone()}\``,
+        `Local timezone: \`${resolveLocalTimezone()}\``,
       );
       expect(runtimeConfig.instructions).toContain("# Preferences");
       expect(runtimeConfig.instructions).toContain("terse updates");
