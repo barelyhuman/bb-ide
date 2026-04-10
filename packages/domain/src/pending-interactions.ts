@@ -112,7 +112,7 @@ export type PendingInteractionMacOsPermissions = z.infer<
 export const pendingInteractionRequestedPermissionProfileSchema = z.object({
   network: pendingInteractionNetworkPermissionsSchema.nullable(),
   fileSystem: pendingInteractionFileSystemPermissionsSchema.nullable(),
-  macos: pendingInteractionMacOsPermissionsSchema.nullable().default(null),
+  macos: pendingInteractionMacOsPermissionsSchema.nullable(),
 });
 export type PendingInteractionRequestedPermissionProfile = z.infer<
   typeof pendingInteractionRequestedPermissionProfileSchema

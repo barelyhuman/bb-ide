@@ -1,6 +1,9 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { describe, expect, it } from "vitest";
-import { internalAuthHeaders } from "../helpers/commands.js";
+import {
+  internalAuthHeaders,
+  waitForQueuedCommand,
+} from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
 import {
   seedEnvironment,
@@ -189,6 +192,87 @@ describe("internal interactive request lifecycle", () => {
     }
   });
 
+  it("interrupts pending interactive requests before deleting threads", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-interaction-delete-thread",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const responsePromise = harness.app.request("/internal/session/interactive-request", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          interaction: {
+            threadId: thread.id,
+            turnId: "turn-delete-1",
+            providerId: "codex",
+            providerThreadId: "provider-thread-delete-1",
+            providerRequestId: "request-delete-1",
+            providerRequestMethod: "item/commandExecution/requestApproval",
+            payload: {
+              kind: "command_approval",
+              itemId: "item-delete-1",
+              approvalId: null,
+              reason: "Needs approval",
+              command: "git push",
+              cwd: "/tmp/project",
+              commandActions: [],
+              requestedPermissions: null,
+              availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+            },
+          },
+        }),
+      });
+
+      await waitForPendingInteractionId({
+        harness,
+        threadId: thread.id,
+      });
+
+      const threadEventWaiter = harness.hub.registerThreadEventWaiter(
+        thread.id,
+        1_000,
+      );
+
+      const deleteResponse = await harness.app.request(`/api/v1/threads/${thread.id}`, {
+        method: "DELETE",
+      });
+      expect(deleteResponse.status).toBe(200);
+
+      expect(await threadEventWaiter.promise).toBe(true);
+
+      const queuedDelete = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.deleted" && command.threadId === thread.id,
+      );
+      expect(queuedDelete.row.sessionId).toBe(session.id);
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        outcome: "interrupted",
+        reason: "Thread was deleted while awaiting user interaction",
+      });
+      expect(harness.deps.pendingInteractions.listThreadInteractions(thread.id)).toEqual([]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("persists Claude interactive requests and resolves them through the same lifecycle", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -228,6 +312,7 @@ describe("internal interactive request lifecycle", () => {
               permissions: {
                 network: { enabled: true },
                 fileSystem: null,
+                macos: null,
               },
             },
           },

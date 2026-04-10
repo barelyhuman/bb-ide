@@ -550,6 +550,11 @@ export async function finalizeStoppedThread(
   }
 
   if (finalizedThread.deletedAt !== null) {
+    deps.pendingInteractions.interruptPendingInteractionsForThreadIds({
+      threadIds: [finalizedThread.id],
+      reason: "Thread was deleted while awaiting user interaction",
+    });
+
     const environmentId = finalizedThread.environmentId;
     const environment = environmentId ? getEnvironment(deps.db, environmentId) : null;
     if (environment) {

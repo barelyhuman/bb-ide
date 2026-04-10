@@ -58,6 +58,7 @@ export type CommandResultSideEffectsDeps = Pick<
   | "hub"
   | "logger"
   | "machineAuth"
+  | "pendingInteractions"
   | "sandboxEnv"
   | "sandboxRegistry"
 >;

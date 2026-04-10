@@ -2,12 +2,17 @@ import { z } from "zod";
 import {
   normalizePendingInteractionQuestionOption,
   normalizePendingInteractionRequestedPermissionProfile,
-  pendingInteractionRequestedPermissionProfileSchema,
+  pendingInteractionFileSystemPermissionsSchema,
+  pendingInteractionMacOsPermissionsSchema,
+  pendingInteractionNetworkPermissionsSchema,
   toOptionalPendingInteractionQuestionOptionPreview,
 } from "@bb/domain";
 import type {
   ApprovalPolicy,
+  PendingInteractionFileSystemPermissions,
   PendingInteractionGrantedPermissionProfile,
+  PendingInteractionMacOsPermissions,
+  PendingInteractionNetworkPermissions,
   PendingInteractionPermissionGrantScope,
   PendingInteractionRequestedPermissionProfile,
   PendingInteractionUserInputQuestion,
@@ -115,10 +120,76 @@ export type ClaudePermissionUpdate = z.infer<
   typeof claudePermissionUpdateSchema
 >;
 
-const claudeRequestedPermissionProfileSchema =
-  z.custom<PendingInteractionRequestedPermissionProfile>((value) =>
-    pendingInteractionRequestedPermissionProfileSchema.safeParse(value).success
-  );
+const claudeRequestedPermissionProfileInputSchema = z.object({
+  network: z.unknown().nullable(),
+  fileSystem: z.unknown().nullable(),
+  macos: z.unknown().nullable().optional(),
+});
+type ClaudeRequestedPermissionProfileInputData = z.infer<
+  typeof claudeRequestedPermissionProfileInputSchema
+>;
+
+export interface ParseClaudeRequestedNetworkPermissionsArgs {
+  value: unknown;
+}
+
+function parseClaudeRequestedNetworkPermissions(
+  args: ParseClaudeRequestedNetworkPermissionsArgs,
+): PendingInteractionNetworkPermissions | null {
+  if (args.value === null) {
+    return null;
+  }
+
+  return pendingInteractionNetworkPermissionsSchema.parse(args.value);
+}
+
+export interface ParseClaudeRequestedFileSystemPermissionsArgs {
+  value: unknown;
+}
+
+function parseClaudeRequestedFileSystemPermissions(
+  args: ParseClaudeRequestedFileSystemPermissionsArgs,
+): PendingInteractionFileSystemPermissions | null {
+  if (args.value === null) {
+    return null;
+  }
+
+  return pendingInteractionFileSystemPermissionsSchema.parse(args.value);
+}
+
+export interface ParseClaudeRequestedMacOsPermissionsArgs {
+  value: unknown;
+}
+
+function parseClaudeRequestedMacOsPermissions(
+  args: ParseClaudeRequestedMacOsPermissionsArgs,
+): PendingInteractionMacOsPermissions | null {
+  if (args.value === null || args.value === undefined) {
+    return null;
+  }
+
+  return pendingInteractionMacOsPermissionsSchema.parse(args.value);
+}
+
+export interface NormalizeClaudeRequestedPermissionProfileArgs {
+  permissions: ClaudeRequestedPermissionProfileInputData;
+}
+
+export function normalizeClaudeRequestedPermissionProfile(
+  args: NormalizeClaudeRequestedPermissionProfileArgs,
+): PendingInteractionRequestedPermissionProfile {
+  return normalizePendingInteractionRequestedPermissionProfile({
+    network: parseClaudeRequestedNetworkPermissions({
+      value: args.permissions.network,
+    }),
+    fileSystem: parseClaudeRequestedFileSystemPermissions({
+      value: args.permissions.fileSystem,
+    }),
+    macos: parseClaudeRequestedMacOsPermissions({
+      value: args.permissions.macos,
+    }),
+  });
+}
 
 export interface ClaudePermissionRequestProfileArgs {
   blockedPath: string | undefined;
@@ -237,7 +308,7 @@ export const claudePermissionRequestApprovalParamsSchema = z.object({
   itemId: z.string(),
   toolName: z.string(),
   reason: z.string().nullable(),
-  permissions: claudeRequestedPermissionProfileSchema,
+  permissions: claudeRequestedPermissionProfileInputSchema,
 });
 export type ClaudePermissionRequestApprovalParams = z.infer<
   typeof claudePermissionRequestApprovalParamsSchema

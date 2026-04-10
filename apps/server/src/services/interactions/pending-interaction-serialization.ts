@@ -1,5 +1,7 @@
 import {
   isRecord,
+  pendingInteractionMacOsPermissionsSchema,
+  normalizePendingInteractionRequestedPermissionProfile,
   normalizePendingInteractionQuestionOption,
   pendingInteractionPayloadSchema,
   pendingInteractionResolutionSchema,
@@ -55,7 +57,53 @@ function normalizeLegacyPendingInteractionPayload(
     return payload;
   }
 
+  const parseLegacyMacOsPermissions = (value: unknown) => {
+    const parsed = pendingInteractionMacOsPermissionsSchema.safeParse(value);
+    return parsed.success ? parsed.data : null;
+  };
+
   switch (payload.kind) {
+    case "command_approval":
+      return {
+        ...payload,
+        requestedPermissions:
+          payload.requestedPermissions === null
+          || payload.requestedPermissions === undefined
+            ? null
+            : normalizePendingInteractionRequestedPermissionProfile({
+                network:
+                  isRecord(payload.requestedPermissions)
+                  && isRecord(payload.requestedPermissions.network)
+                    ? {
+                        enabled:
+                          typeof payload.requestedPermissions.network.enabled === "boolean"
+                          || payload.requestedPermissions.network.enabled === null
+                            ? payload.requestedPermissions.network.enabled
+                            : null,
+                      }
+                    : null,
+                fileSystem:
+                  isRecord(payload.requestedPermissions)
+                  && isRecord(payload.requestedPermissions.fileSystem)
+                    ? {
+                        read: Array.isArray(payload.requestedPermissions.fileSystem.read)
+                          ? payload.requestedPermissions.fileSystem.read.filter(
+                              (path): path is string => typeof path === "string",
+                            )
+                          : [],
+                        write: Array.isArray(payload.requestedPermissions.fileSystem.write)
+                          ? payload.requestedPermissions.fileSystem.write.filter(
+                              (path): path is string => typeof path === "string",
+                            )
+                          : [],
+                      }
+                    : null,
+                macos:
+                  isRecord(payload.requestedPermissions)
+                    ? parseLegacyMacOsPermissions(payload.requestedPermissions.macos)
+                    : null,
+              }),
+      };
     case "permission_request":
       return {
         ...payload,
@@ -63,6 +111,37 @@ function normalizeLegacyPendingInteractionPayload(
           typeof payload.toolName === "string" || payload.toolName === null
             ? payload.toolName
             : null,
+        permissions: normalizePendingInteractionRequestedPermissionProfile({
+          network:
+            isRecord(payload.permissions) && isRecord(payload.permissions.network)
+              ? {
+                  enabled:
+                    typeof payload.permissions.network.enabled === "boolean"
+                    || payload.permissions.network.enabled === null
+                      ? payload.permissions.network.enabled
+                      : null,
+                }
+              : null,
+          fileSystem:
+            isRecord(payload.permissions) && isRecord(payload.permissions.fileSystem)
+              ? {
+                  read: Array.isArray(payload.permissions.fileSystem.read)
+                    ? payload.permissions.fileSystem.read.filter(
+                        (path): path is string => typeof path === "string",
+                      )
+                    : [],
+                  write: Array.isArray(payload.permissions.fileSystem.write)
+                    ? payload.permissions.fileSystem.write.filter(
+                        (path): path is string => typeof path === "string",
+                      )
+                    : [],
+                }
+              : null,
+          macos:
+            isRecord(payload.permissions)
+              ? parseLegacyMacOsPermissions(payload.permissions.macos)
+              : null,
+        }),
       };
     case "user_input_request":
       return {

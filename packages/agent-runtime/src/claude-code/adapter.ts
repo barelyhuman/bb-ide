@@ -18,10 +18,7 @@ import type {
   ThreadEventTokenUsage,
   ThreadEventTokenUsageBreakdown,
 } from "@bb/domain";
-import {
-  pendingInteractionRequestedPermissionProfileSchema,
-  toPositiveNumber,
-} from "@bb/domain";
+import { toPositiveNumber } from "@bb/domain";
 import {
   decodeNormalizedProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
@@ -72,6 +69,7 @@ import {
   CLAUDE_TOOL_REQUEST_USER_INPUT_METHOD,
   claudePermissionRequestApprovalParamsSchema,
   claudeToolRequestUserInputParamsSchema,
+  normalizeClaudeRequestedPermissionProfile,
   toClaudePermissionMode,
   toClaudeUserInputUpdatedInput,
   toPendingInteractionUserQuestions,
@@ -966,10 +964,9 @@ export function createClaudeCodeProviderAdapter(
               itemId: parsed.data.itemId,
               reason: parsed.data.reason,
               toolName: parsed.data.toolName,
-              permissions:
-                pendingInteractionRequestedPermissionProfileSchema.parse(
-                  parsed.data.permissions,
-                ),
+              permissions: normalizeClaudeRequestedPermissionProfile({
+                permissions: parsed.data.permissions,
+              }),
             },
           };
         }

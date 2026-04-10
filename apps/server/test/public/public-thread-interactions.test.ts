@@ -374,6 +374,7 @@ describe("public thread interaction routes", () => {
               read: ["/tmp/project/README.md"],
               write: ["/tmp/project/notes.md"],
             },
+            macos: null,
           },
         },
       });

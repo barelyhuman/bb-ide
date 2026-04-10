@@ -45,6 +45,7 @@ export type SandboxLifecycleDeps = Pick<
   | "hostLifecycle"
   | "hub"
   | "machineAuth"
+  | "pendingInteractions"
   | "sandboxEnv"
   | "sandboxRegistry"
 >;
