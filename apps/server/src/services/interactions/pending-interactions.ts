@@ -39,7 +39,7 @@ interface WaitForTerminalStateArgs {
 
 export type PendingInteractionWaitOutcome =
   | {
-      outcome: "expired" | "interrupted" | "rejected";
+      outcome: "expired" | "interrupted";
       interaction: PendingInteraction;
       reason: string;
     }
@@ -163,7 +163,6 @@ function requireWaitableOutcome(
       };
     case "interrupted":
     case "expired":
-    case "rejected":
       return {
         outcome: interaction.status,
         interaction,

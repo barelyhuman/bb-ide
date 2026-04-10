@@ -18,7 +18,6 @@ function toPendingInteractionOperationStatus(
       return "started";
     case "resolved":
       return "completed";
-    case "rejected":
     case "interrupted":
     case "expired":
       return "failed";
@@ -73,8 +72,6 @@ export function formatPendingInteractionLifecycleMessage(
       throw new Error(
         `Unsupported pending interaction resolution: ${String(exhaustiveResolution)}`,
       );
-    case "rejected":
-      return interaction.statusReason ?? "Interaction rejected";
     case "interrupted":
       return interaction.statusReason ?? "Interaction interrupted";
     case "expired":

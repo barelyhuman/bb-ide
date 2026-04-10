@@ -63,7 +63,6 @@ export function registerInternalInteractiveRequestRoutes(
             outcome: "resolved",
             resolution: outcome.resolution,
           });
-        case "rejected":
         case "interrupted":
         case "expired":
           return context.json({

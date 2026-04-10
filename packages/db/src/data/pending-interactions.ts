@@ -45,7 +45,7 @@ export interface SetPendingInteractionTerminalStateArgs {
   id: string;
   resolution: string | null;
   resolvedAt?: number;
-  status: "expired" | "interrupted" | "rejected" | "resolved";
+  status: "expired" | "interrupted" | "resolved";
   statusReason: string | null;
 }
 
