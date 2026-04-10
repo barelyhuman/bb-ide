@@ -12,11 +12,7 @@ import {
 
 type ClaudeSdkModelInfo = Pick<
   ModelInfo,
-  | "value"
-  | "displayName"
-  | "description"
-  | "supportsEffort"
-  | "supportedEffortLevels"
+  "value"
 >;
 
 type ClaudeCodeCatalogEntry = {
@@ -25,7 +21,6 @@ type ClaudeCodeCatalogEntry = {
   displayName: string;
   description: string;
   requiresOneMillionContext: boolean;
-  sourceModelValues: readonly string[];
   supportedReasoningEfforts: readonly ModelReasoningEffort[];
   defaultReasoningEffort: AvailableModel["defaultReasoningEffort"];
 };
@@ -43,34 +38,17 @@ const OPUS_REASONING_EFFORTS: readonly ModelReasoningEffort[] = [
   XHIGH_REASONING_EFFORT,
 ];
 
+const HAIKU_REASONING_EFFORTS: readonly ModelReasoningEffort[] = [
+  LOW_REASONING_EFFORT,
+];
+
 const CLAUDE_CODE_CATALOG: readonly ClaudeCodeCatalogEntry[] = [
-  {
-    id: "sonnet[1m]",
-    model: "sonnet[1m]",
-    displayName: "Sonnet 4.6 (1M)",
-    description: "Sonnet 4.6 with 1M context for long coding sessions",
-    requiresOneMillionContext: true,
-    sourceModelValues: ["sonnet[1m]"],
-    supportedReasoningEfforts: SONNET_REASONING_EFFORTS,
-    defaultReasoningEffort: "medium",
-  },
-  {
-    id: "sonnet",
-    model: "sonnet",
-    displayName: "Sonnet 4.6",
-    description: "Sonnet 4.6 for everyday coding tasks",
-    requiresOneMillionContext: false,
-    sourceModelValues: ["sonnet"],
-    supportedReasoningEfforts: SONNET_REASONING_EFFORTS,
-    defaultReasoningEffort: "medium",
-  },
   {
     id: "opus[1m]",
     model: "opus[1m]",
     displayName: "Opus 4.6 (1M)",
     description: "Opus 4.6 with 1M context for complex long coding sessions",
     requiresOneMillionContext: true,
-    sourceModelValues: ["opus[1m]"],
     supportedReasoningEfforts: OPUS_REASONING_EFFORTS,
     defaultReasoningEffort: "medium",
   },
@@ -80,9 +58,35 @@ const CLAUDE_CODE_CATALOG: readonly ClaudeCodeCatalogEntry[] = [
     displayName: "Opus 4.6",
     description: "Opus 4.6 for complex coding tasks",
     requiresOneMillionContext: false,
-    sourceModelValues: ["opus"],
     supportedReasoningEfforts: OPUS_REASONING_EFFORTS,
     defaultReasoningEffort: "medium",
+  },
+  {
+    id: "sonnet[1m]",
+    model: "sonnet[1m]",
+    displayName: "Sonnet 4.6 (1M)",
+    description: "Sonnet 4.6 with 1M context for long coding sessions",
+    requiresOneMillionContext: true,
+    supportedReasoningEfforts: SONNET_REASONING_EFFORTS,
+    defaultReasoningEffort: "medium",
+  },
+  {
+    id: "sonnet",
+    model: "sonnet",
+    displayName: "Sonnet 4.6",
+    description: "Sonnet 4.6 for everyday coding tasks",
+    requiresOneMillionContext: false,
+    supportedReasoningEfforts: SONNET_REASONING_EFFORTS,
+    defaultReasoningEffort: "medium",
+  },
+  {
+    id: "haiku",
+    model: "haiku",
+    displayName: "Haiku 4.5",
+    description: "Haiku 4.5 for quick answers",
+    requiresOneMillionContext: false,
+    supportedReasoningEfforts: HAIKU_REASONING_EFFORTS,
+    defaultReasoningEffort: "low",
   },
 ];
 
@@ -92,76 +96,18 @@ function cloneReasoningEfforts(
   return efforts.map((effort) => ({ ...effort }));
 }
 
-function toClaudeReasoningEfforts(
-  model: ClaudeSdkModelInfo,
-): ModelReasoningEffort[] {
-  if (!model.supportsEffort) {
-    return [LOW_REASONING_EFFORT];
-  }
-
-  const levels = model.supportedEffortLevels ?? ["low", "medium", "high"];
-  const efforts: ModelReasoningEffort[] = [];
-  for (const level of levels) {
-    if (level === "low") {
-      efforts.push(LOW_REASONING_EFFORT);
-      continue;
-    }
-    if (level === "medium") {
-      efforts.push(MEDIUM_REASONING_EFFORT);
-      continue;
-    }
-    if (level === "high") {
-      efforts.push(HIGH_REASONING_EFFORT);
-      continue;
-    }
-    if (level === "max") {
-      efforts.push(XHIGH_REASONING_EFFORT);
-    }
-  }
-
-  return efforts.length > 0 ? efforts : [LOW_REASONING_EFFORT];
-}
-
-function toDefaultReasoningEffort(
-  supportedReasoningEfforts: readonly ModelReasoningEffort[],
-): AvailableModel["defaultReasoningEffort"] {
-  if (supportedReasoningEfforts.some((effort) => effort.reasoningEffort === "medium")) {
-    return "medium";
-  }
-  return supportedReasoningEfforts[0]?.reasoningEffort ?? "low";
-}
-
-function findCatalogEntrySourceModelInfo(
-  entry: ClaudeCodeCatalogEntry,
-  modelInfos: readonly ClaudeSdkModelInfo[],
-): ClaudeSdkModelInfo | undefined {
-  for (const value of entry.sourceModelValues) {
-    const modelInfo = modelInfos.find((candidate) => candidate.value === value);
-    if (modelInfo) {
-      return modelInfo;
-    }
-  }
-  return undefined;
-}
-
 function buildCatalogModel(
   entry: ClaudeCodeCatalogEntry,
-  modelInfos: readonly ClaudeSdkModelInfo[],
 ): AvailableModel {
-  const sourceModelInfo = findCatalogEntrySourceModelInfo(entry, modelInfos);
-  const supportedReasoningEfforts = sourceModelInfo
-    ? toClaudeReasoningEfforts(sourceModelInfo)
-    : cloneReasoningEfforts(entry.supportedReasoningEfforts);
-
   return {
     id: entry.id,
     model: entry.model,
     displayName: entry.displayName,
-    description: sourceModelInfo?.description ?? entry.description,
-    supportedReasoningEfforts,
-    defaultReasoningEffort: sourceModelInfo
-      ? toDefaultReasoningEffort(supportedReasoningEfforts)
-      : entry.defaultReasoningEffort,
+    description: entry.description,
+    supportedReasoningEfforts: cloneReasoningEfforts(
+      entry.supportedReasoningEfforts,
+    ),
+    defaultReasoningEffort: entry.defaultReasoningEffort,
     isDefault: false,
   };
 }
@@ -176,7 +122,7 @@ export function buildClaudeCodeAvailableModels(
     .filter((entry) =>
       !entry.requiresOneMillionContext || hasOneMillionContext,
     )
-    .map((entry) => buildCatalogModel(entry, modelInfos));
+    .map(buildCatalogModel);
 
   return models.map((model, index) =>
     index === 0 ? { ...model, isDefault: true } : model,

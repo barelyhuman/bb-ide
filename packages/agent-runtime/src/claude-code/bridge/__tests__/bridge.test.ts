@@ -103,10 +103,22 @@ describe("bridge", () => {
   it("returns the curated Claude model list from the SDK 1M signal", async () => {
     await expect(listClaudeCodeBridgeModels()).resolves.toEqual([
       expect.objectContaining({
+        id: "opus[1m]",
+        model: "opus[1m]",
+        displayName: "Opus 4.6 (1M)",
+        isDefault: true,
+      }),
+      expect.objectContaining({
+        id: "opus",
+        model: "opus",
+        displayName: "Opus 4.6",
+        isDefault: false,
+      }),
+      expect.objectContaining({
         id: "sonnet[1m]",
         model: "sonnet[1m]",
         displayName: "Sonnet 4.6 (1M)",
-        isDefault: true,
+        isDefault: false,
       }),
       expect.objectContaining({
         id: "sonnet",
@@ -115,15 +127,9 @@ describe("bridge", () => {
         isDefault: false,
       }),
       expect.objectContaining({
-        id: "opus[1m]",
-        model: "opus[1m]",
-        displayName: "Opus 4.6 (1M)",
-        isDefault: false,
-      }),
-      expect.objectContaining({
-        id: "opus",
-        model: "opus",
-        displayName: "Opus 4.6",
+        id: "haiku",
+        model: "haiku",
+        displayName: "Haiku 4.5",
         isDefault: false,
       }),
     ]);
