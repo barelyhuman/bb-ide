@@ -38,6 +38,7 @@ import {
 } from "../shared/adapter-utils.js";
 import {
   createProviderTurnStateRegistry,
+  type EnsureProviderTurnStartedArgs,
 } from "../shared/turn-state.js";
 import {
   getOrCreateScopedItemId,
@@ -341,6 +342,7 @@ interface ClaudeTurnState {
   counter: number;
   currentTurnId: string | undefined;
   cumulativeTokens: ThreadEventTokenUsageBreakdown;
+  latestRequestContextTokens: number | undefined;
   openAssistantMessageIdsByScope: Map<string, string>;
   openReasoningItemIdsByScope: Map<string, string>;
   reasoningItemCounter: number;
@@ -350,6 +352,7 @@ interface ClaudeTurnState {
 
 interface ClaudeContextWindowUsageArgs {
   fallbackModelContextWindow: number | null;
+  latestRequestContextTokens: number | undefined;
   message: ClaudeResultMessage | SDKResultMessage;
 }
 
@@ -371,6 +374,7 @@ export function createClaudeCodeProviderAdapter(
       counter: 0,
       currentTurnId: undefined,
       cumulativeTokens: { totalTokens: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 },
+      latestRequestContextTokens: undefined,
       openAssistantMessageIdsByScope: new Map(),
       openReasoningItemIdsByScope: new Map(),
       reasoningItemCounter: 0,
@@ -385,6 +389,15 @@ export function createClaudeCodeProviderAdapter(
   ): void {
     const state = turnState.getOrCreate({ threadId });
     state.selectedModelContextWindow = resolveClaudeModelContextWindowHint(model);
+  }
+
+  function ensureClaudeTurnStarted(
+    args: EnsureProviderTurnStartedArgs<ClaudeTurnState>,
+  ): string {
+    if (!args.state.currentTurnId) {
+      args.state.latestRequestContextTokens = undefined;
+    }
+    return turnState.ensureTurnStarted(args);
   }
 
   function translateClaudeEvent(
@@ -478,7 +491,7 @@ export function createClaudeCodeProviderAdapter(
           statusMessage.success &&
           statusMessage.data.status === "compacting"
         ) {
-          const turnId = turnState.ensureTurnStarted({
+          const turnId = ensureClaudeTurnStarted({
             events,
             state,
             threadId,
@@ -513,11 +526,15 @@ export function createClaudeCodeProviderAdapter(
           return buildUnexpectedClaudeSdkEvent({ event, context });
         }
         const message = parsedMessage.data;
-        const turnId = turnState.ensureTurnStarted({
+        const turnId = ensureClaudeTurnStarted({
           events,
           state,
           threadId,
         });
+        const requestContextTokens = extractClaudeRequestContextTokens(message);
+        if (requestContextTokens !== null) {
+          state.latestRequestContextTokens = requestContextTokens;
+        }
         const assistantMessageId = getNestedMessageId(message.message);
 
         const thinkingBlocks = extractThinkingBlocks(message);
@@ -591,7 +608,7 @@ export function createClaudeCodeProviderAdapter(
         const message = parsedMessage.data;
         const reasoningDelta = extractStreamThinkingDelta(message);
         if (reasoningDelta) {
-          const turnId = turnState.ensureTurnStarted({
+          const turnId = ensureClaudeTurnStarted({
             events,
             state,
             threadId,
@@ -614,7 +631,7 @@ export function createClaudeCodeProviderAdapter(
 
         const textDelta = extractStreamTextDelta(message);
         if (textDelta) {
-          const turnId = turnState.ensureTurnStarted({
+          const turnId = ensureClaudeTurnStarted({
             events,
             state,
             threadId,
@@ -677,6 +694,7 @@ export function createClaudeCodeProviderAdapter(
             : null;
           const contextWindowUsage = extractClaudeContextWindowUsage({
             fallbackModelContextWindow: state.selectedModelContextWindow,
+            latestRequestContextTokens: state.latestRequestContextTokens,
             message,
           });
           if (
@@ -1281,14 +1299,11 @@ function extractTokenUsage(
 function extractClaudeContextWindowUsage(
   args: ClaudeContextWindowUsageArgs,
 ): ThreadEventContextWindowUsage | undefined {
-  const parsedUsage = sdkUsageSchema.safeParse(args.message.usage);
-  const usedTokens = parsedUsage.success
-    ? toClaudeCurrentContextTokens(parsedUsage.data)
-    : null;
   const parsedModelUsage = claudeModelUsageSchema.safeParse(args.message.modelUsage);
   const modelContextWindow = parsedModelUsage.success
     ? extractModelContextWindow(parsedModelUsage.data)
     : args.fallbackModelContextWindow;
+  const usedTokens = args.latestRequestContextTokens ?? null;
 
   if (usedTokens === null && modelContextWindow === null) {
     return undefined;
@@ -1299,6 +1314,21 @@ function extractClaudeContextWindowUsage(
     modelContextWindow,
     estimated: true,
   };
+}
+
+const claudeAssistantUsageMessageSchema = z.object({
+  usage: sdkUsageSchema.optional(),
+}).passthrough();
+
+function extractClaudeRequestContextTokens(
+  message: ClaudeAssistantMessage,
+): number | null {
+  const parsedMessage = claudeAssistantUsageMessageSchema.safeParse(message.message);
+  if (!parsedMessage.success || !parsedMessage.data.usage) {
+    return null;
+  }
+
+  return toClaudeCurrentContextTokens(parsedMessage.data.usage);
 }
 
 function toTokenUsageBreakdown(

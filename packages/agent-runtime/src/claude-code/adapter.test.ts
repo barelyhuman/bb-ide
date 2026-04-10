@@ -1625,7 +1625,7 @@ describe("claude-code provider adapter", () => {
       expect.objectContaining({
         type: "thread/contextWindowUsage/updated",
         contextWindowUsage: {
-          usedTokens: 15_432,
+          usedTokens: 2_723,
           modelContextWindow: 200000,
           estimated: true,
         },
@@ -1636,6 +1636,87 @@ describe("claude-code provider adapter", () => {
         type: "turn/completed",
         turnId: "turn-1",
         status: "completed",
+      }),
+    );
+  });
+
+  it("uses the latest Claude request context for context-window usage while keeping aggregate token usage", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    adapter.translateEvent({
+      type: "assistant",
+      message: {
+        type: "message",
+        role: "assistant",
+        content: [],
+        usage: {
+          input_tokens: 1,
+          cache_read_input_tokens: 49_000,
+          cache_creation_input_tokens: 999,
+          output_tokens: 120,
+        },
+      },
+    });
+    adapter.translateEvent({
+      type: "assistant",
+      message: {
+        type: "message",
+        role: "assistant",
+        content: [],
+        usage: {
+          input_tokens: 1,
+          cache_read_input_tokens: 51_908,
+          cache_creation_input_tokens: 300,
+          output_tokens: 164,
+        },
+      },
+    });
+
+    const events = adapter.translateEvent({
+      type: "result",
+      subtype: "success",
+      duration_ms: 1,
+      duration_api_ms: 1,
+      is_error: false,
+      num_turns: 1,
+      result: "ok",
+      stop_reason: "end_turn",
+      total_cost_usd: 0,
+      usage: {
+        input_tokens: 16,
+        cache_read_input_tokens: 704_436,
+        cache_creation_input_tokens: 0,
+        output_tokens: 2_544,
+      },
+      modelUsage: {
+        "claude-opus-4-6": {
+          contextWindow: 1_000_000,
+        },
+      },
+      session_id: "session-1",
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "thread/tokenUsage/updated",
+        tokenUsage: expect.objectContaining({
+          last: expect.objectContaining({
+            totalTokens: 706_996,
+            inputTokens: 16,
+            cachedInputTokens: 704_436,
+            outputTokens: 2_544,
+          }),
+        }),
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "thread/contextWindowUsage/updated",
+        contextWindowUsage: {
+          usedTokens: 52_209,
+          modelContextWindow: 1_000_000,
+          estimated: true,
+        },
       }),
     );
   });
@@ -1715,7 +1796,7 @@ describe("claude-code provider adapter", () => {
       expect.objectContaining({
         type: "thread/contextWindowUsage/updated",
         contextWindowUsage: {
-          usedTokens: 170,
+          usedTokens: 2_723,
           modelContextWindow: 1_000_000,
           estimated: true,
         },
@@ -1755,7 +1836,7 @@ describe("claude-code provider adapter", () => {
       expect.objectContaining({
         type: "thread/contextWindowUsage/updated",
         contextWindowUsage: {
-          usedTokens: 170,
+          usedTokens: 2_723,
           modelContextWindow: null,
           estimated: true,
         },
@@ -1805,7 +1886,7 @@ describe("claude-code provider adapter", () => {
       expect.objectContaining({
         type: "thread/contextWindowUsage/updated",
         contextWindowUsage: {
-          usedTokens: 170,
+          usedTokens: 2_723,
           modelContextWindow: null,
           estimated: true,
         },
@@ -1852,7 +1933,7 @@ describe("claude-code provider adapter", () => {
       expect.objectContaining({
         type: "thread/contextWindowUsage/updated",
         contextWindowUsage: {
-          usedTokens: 170,
+          usedTokens: 2_723,
           modelContextWindow: 200000,
           estimated: true,
         },
