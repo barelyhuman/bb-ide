@@ -30,7 +30,10 @@ export interface CreateUnhandledProviderEventArgs {
 export interface BuildUnhandledProviderEventsArgs {
   providerId: string;
   rawEvent: JsonRpcMessage;
-  visibilityMetadata: Pick<ProviderVisibilityMetadata, "describeRawEvent">;
+  visibilityMetadata: Pick<
+    ProviderVisibilityMetadata,
+    "describeParsedRawEvent" | "parseRawEvent"
+  >;
   parentToolCallId?: string;
 }
 
@@ -76,7 +79,8 @@ export function createUnhandledProviderEvent(
 export function buildUnhandledProviderEvents(
   args: BuildUnhandledProviderEventsArgs,
 ): ThreadEvent[] {
-  const description = args.visibilityMetadata.describeRawEvent(args.rawEvent);
+  const parsedRawEvent = args.visibilityMetadata.parseRawEvent(args.rawEvent);
+  const description = args.visibilityMetadata.describeParsedRawEvent(parsedRawEvent);
   if (description.coverage !== "unknown") {
     return [];
   }
