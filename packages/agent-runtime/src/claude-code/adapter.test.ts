@@ -1602,7 +1602,7 @@ describe("claude-code provider adapter", () => {
     );
   });
 
-  it("fixture: result-success produces token usage + turn/completed", () => {
+  it("fixture: result-success produces request context usage, token usage, and turn/completed", () => {
     const adapter = createClaudeCodeProviderAdapter();
     // Start a turn first
     adapter.translateEvent(loadFixture("assistant-text.json"));
@@ -1715,6 +1715,57 @@ describe("claude-code provider adapter", () => {
         contextWindowUsage: {
           usedTokens: 52_209,
           modelContextWindow: 1_000_000,
+          estimated: true,
+        },
+      }),
+    );
+  });
+
+  it("clears the latest Claude request context when a non-assistant event starts the next turn", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    adapter.translateEvent(loadFixture("assistant-text.json"), {
+      threadId: "bb-thread-1",
+    });
+    adapter.translateEvent(loadFixture("result-success.json"), {
+      threadId: "bb-thread-1",
+    });
+    adapter.translateEvent({
+      type: "system",
+      subtype: "status",
+      status: "compacting",
+      session_id: "session-1",
+    }, {
+      threadId: "bb-thread-1",
+    });
+
+    const events = adapter.translateEvent({
+      type: "result",
+      subtype: "success",
+      duration_ms: 1,
+      duration_api_ms: 1,
+      is_error: false,
+      num_turns: 1,
+      result: "ok",
+      stop_reason: "end_turn",
+      total_cost_usd: 0,
+      usage: {
+        input_tokens: 100,
+        output_tokens: 20,
+        cache_creation_input_tokens: 30,
+        cache_read_input_tokens: 40,
+      },
+      session_id: "session-1",
+    }, {
+      threadId: "bb-thread-1",
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "thread/contextWindowUsage/updated",
+        contextWindowUsage: {
+          usedTokens: null,
+          modelContextWindow: 200000,
           estimated: true,
         },
       }),
