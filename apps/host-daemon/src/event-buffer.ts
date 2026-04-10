@@ -54,7 +54,7 @@ export function createEventBuffer(
   }
 
   let buffer: BufferedEvent[] = [];
-  let flushPromise: Promise<void> | null = null;
+  let flushPromise: Promise<boolean> | null = null;
   const flushAbortController = new AbortController();
   const debouncedFlush = pDebounce(
     async () => {
@@ -130,43 +130,54 @@ export function createEventBuffer(
   }
 
   async function flush(): Promise<void> {
-    if (flushPromise) {
-      return flushPromise;
-    }
-
-    if (buffer.length === 0) {
-      return;
-    }
-
-    const batch = buffer.slice();
-    flushPromise = (async () => {
-      try {
-        const threadHighWaterMarks = await options.postEvents(batch);
-        if (threadHighWaterMarks) {
-          ack(threadHighWaterMarks);
+    while (true) {
+      if (flushPromise) {
+        const succeeded = await flushPromise;
+        if (!succeeded || buffer.length === 0) {
+          return;
         }
-      } catch (error) {
-        options.logger.warn(
-          {
-            err: error,
-            bufferDepth: batch.length,
-          },
-          "event flush failed, will retry",
-        );
-        queueDebouncedFlush();
-      } finally {
-        flushPromise = null;
-        if (buffer.length > 0) {
-          if (buffer.length >= flushAtCount) {
-            void flush();
-          } else {
-            queueDebouncedFlush();
-          }
-        }
+        continue;
       }
-    })();
 
-    return flushPromise;
+      if (buffer.length === 0) {
+        return;
+      }
+
+      const batch = buffer.slice();
+      flushPromise = (async (): Promise<boolean> => {
+        let succeeded = false;
+        try {
+          const threadHighWaterMarks = await options.postEvents(batch);
+          if (threadHighWaterMarks) {
+            ack(threadHighWaterMarks);
+          }
+          succeeded = true;
+        } catch (error) {
+          options.logger.warn(
+            {
+              err: error,
+              bufferDepth: batch.length,
+            },
+            "event flush failed, will retry",
+          );
+        } finally {
+          flushPromise = null;
+        }
+        return succeeded;
+      })();
+
+      const succeeded = await flushPromise;
+      if (!succeeded) {
+        if (buffer.length > 0) {
+          queueDebouncedFlush();
+        }
+        return;
+      }
+
+      if (buffer.length === 0) {
+        return;
+      }
+    }
   }
 
   function dispose(): void {
