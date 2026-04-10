@@ -17,14 +17,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ThreadEvent, ToolCallRequest, ToolCallResponse } from "@bb/domain";
-import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 import { createAgentRuntime } from "./runtime.js";
 import type { AgentRuntime } from "./types.js";
-
-type CompletedItemEvent = Extract<ThreadEvent, { type: "item/completed" }>;
-type CompletedCommandExecutionEvent = CompletedItemEvent & {
-  item: Extract<CompletedItemEvent["item"], { type: "commandExecution" }>;
-};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -95,122 +89,17 @@ function getCompletedCommandOutputs(events: ThreadEvent[]): string {
   return outputs.join("\n");
 }
 
-function isCompletedCommandExecutionEvent(
-  event: ThreadEvent,
-): event is CompletedCommandExecutionEvent {
-  return event.type === "item/completed" && event.item.type === "commandExecution";
-}
-
 function getCompletedCommands(events: ThreadEvent[]): string[] {
   const commands: string[] = [];
   for (const event of events) {
-    if (isCompletedCommandExecutionEvent(event)) {
+    if (
+      event.type === "item/completed"
+      && event.item.type === "commandExecution"
+    ) {
       commands.push(event.item.command);
     }
   }
   return commands;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function getStringProperty(
-  value: Record<string, unknown>,
-  key: string,
-): string | undefined {
-  const property = value[key];
-  return typeof property === "string" ? property : undefined;
-}
-
-function getRecordProperty(
-  value: Record<string, unknown>,
-  key: string,
-): Record<string, unknown> | undefined {
-  const property = value[key];
-  return isRecord(property) ? property : undefined;
-}
-
-function getRawProviderErrorDetails(captures: AgentRuntimeCaptureEntry[]): string[] {
-  const details: string[] = [];
-  for (const capture of captures) {
-    if (capture.kind !== "raw-provider-event") {
-      continue;
-    }
-
-    const rawEvent = capture.rawEvent;
-    if (rawEvent.method === "error" && isRecord(rawEvent.params)) {
-      const message = getStringProperty(rawEvent.params, "message");
-      const detail = getStringProperty(rawEvent.params, "detail");
-      if (message || detail) {
-        details.push([message, detail].filter(Boolean).join(": "));
-      }
-      continue;
-    }
-
-    if (!isRecord(rawEvent.params)) {
-      continue;
-    }
-
-    const providerMessage = getRecordProperty(rawEvent.params, "message");
-    if (!providerMessage) {
-      continue;
-    }
-
-    const nestedProviderMessage =
-      getRecordProperty(providerMessage, "message") ?? providerMessage;
-    const errorMessage = getStringProperty(nestedProviderMessage, "errorMessage");
-    const stopReason = getStringProperty(nestedProviderMessage, "stopReason");
-    if (errorMessage) {
-      details.push(
-        stopReason === undefined
-          ? errorMessage
-          : `${stopReason}: ${errorMessage}`,
-      );
-    }
-  }
-
-  return details;
-}
-
-function getEventErrorDetails(events: ThreadEvent[]): string[] {
-  const details: string[] = [];
-  for (const event of events) {
-    if (event.type === "error") {
-      const extra = event.detail ? `: ${event.detail}` : "";
-      details.push(`${event.message}${extra}`);
-      continue;
-    }
-
-    if (event.type === "turn/completed" && event.error?.message) {
-      details.push(`turn ${event.status}: ${event.error.message}`);
-    }
-  }
-  return details;
-}
-
-function buildDiagnostics(ctx: TestContext): string {
-  const agentText = getAgentText(ctx.events) || getStreamedText(ctx.events);
-  const completedTurns = ctx.events.filter((event) => event.type === "turn/completed");
-  const completedCommands = ctx.events
-    .filter(isCompletedCommandExecutionEvent)
-    .map((event) => ({
-      command: event.item.command,
-      cwd: event.item.cwd,
-      output: event.item.aggregatedOutput,
-      status: event.item.status,
-    }));
-
-  return JSON.stringify({
-    providerId: ctx.providerId,
-    eventTypes: ctx.events.map((event) => event.type),
-    errors: getEventErrorDetails(ctx.events),
-    rawProviderErrors: getRawProviderErrorDetails(ctx.captures),
-    agentText,
-    completedTurns,
-    completedCommands,
-    stderrTail: ctx.stderrLines.slice(-10),
-  }, null, 2);
 }
 
 function resolveDefaultModel(providerId: string, ctx: TestContext): Promise<string | undefined> {
@@ -219,63 +108,13 @@ function resolveDefaultModel(providerId: string, ctx: TestContext): Promise<stri
   );
 }
 
-function buildCwdRegressionInstructions(providerId: string): string {
-  switch (providerId) {
-    case "claude-code":
-      return "When the user asks you to execute exact shell commands, use the Bash tool exactly as requested and preserve the command output.";
-    case "pi":
-      return "When the user asks you to execute exact shell commands, use the bash tool exactly as requested and preserve the command output.";
-    case "codex":
-      return "When the user asks you to execute exact shell commands, use shell command execution exactly as requested and preserve the command output.";
-    default:
-      return "When the user asks you to execute exact shell commands, use the shell tool exactly as requested and preserve the command output.";
-  }
-}
-
-function buildCwdRegressionPrompt(
-  providerId: string,
-  workspaceMarkerName: string,
-  parentMarkerName: string,
-): string {
-  switch (providerId) {
-    case "claude-code":
-      return (
-        `Use the Bash tool exactly twice. First run \`pwd && cat ${workspaceMarkerName}\`. `
-        + `Then run \`cd .. && pwd && cat ${parentMarkerName}\`. `
-        + "Do not use absolute paths. After both commands, reply with exactly DONE."
-      );
-    case "pi":
-      return (
-        `Use the bash tool exactly twice. First run \`pwd && cat ${workspaceMarkerName}\`. `
-        + `Then run \`cd .. && pwd && cat ${parentMarkerName}\`. `
-        + "Do not use absolute paths. After both commands, reply with exactly DONE."
-      );
-    case "codex":
-      return (
-        "Use shell command execution exactly twice. "
-        + `First run \`pwd && cat ${workspaceMarkerName}\`. `
-        + `Then run \`cd .. && pwd && cat ${parentMarkerName}\`. `
-        + "Do not use absolute paths. After both commands, reply with exactly DONE."
-      );
-    default:
-      return (
-        `Use the shell tool exactly twice. First run \`pwd && cat ${workspaceMarkerName}\`. `
-        + `Then run \`cd .. && pwd && cat ${parentMarkerName}\`. `
-        + "Do not use absolute paths. After both commands, reply with exactly DONE."
-      );
-  }
-}
-
 function newThreadId(): string {
   return randomUUID();
 }
 
 interface TestContext {
-  captures: AgentRuntimeCaptureEntry[];
   runtime: AgentRuntime;
   events: ThreadEvent[];
-  providerId: string;
-  stderrLines: string[];
   toolCalls: ToolCallRequest[];
   tmpDir: string;
 }
@@ -287,9 +126,7 @@ function createTestRuntime(
   },
 ): TestContext {
   const tmpDir = mkdtempSync(join(tmpdir(), `bb-integ-${providerId}-`));
-  const captures: AgentRuntimeCaptureEntry[] = [];
   const events: ThreadEvent[] = [];
-  const stderrLines: string[] = [];
   const toolCalls: ToolCallRequest[] = [];
 
   const defaultToolHandler = async (): Promise<ToolCallResponse> => ({
@@ -299,17 +136,16 @@ function createTestRuntime(
 
   const runtime = createAgentRuntime({
     workspacePath: tmpDir,
-    onCapture: (entry) => captures.push(entry),
     onEvent: (e) => events.push(e),
     onToolCall: async (req) => {
       toolCalls.push(req);
       if (opts?.onToolCall) return opts.onToolCall(req);
       return defaultToolHandler();
     },
-    onStderr: (line) => stderrLines.push(line),
+    onStderr: () => {},
   });
 
-  return { captures, runtime, events, providerId, stderrLines, toolCalls, tmpDir };
+  return { runtime, events, toolCalls, tmpDir };
 }
 
 function cleanup(ctx: TestContext): void {
@@ -379,11 +215,7 @@ for (const providerId of providers) {
 
         // Should have some content (agent message or streamed text)
         const text = getAgentText(ctx.events) || getStreamedText(ctx.events);
-        if (text.length === 0) {
-          throw new Error(
-            `Expected a provider response but received none.\n${buildDiagnostics(ctx)}`,
-          );
-        }
+        expect(text.length).toBeGreaterThan(0);
       } finally {
         await ctx.runtime.shutdown();
         cleanup(ctx);
@@ -414,7 +246,8 @@ for (const providerId of providers) {
             sandboxMode: "danger-full-access",
             ...(model ? { model } : {}),
           },
-          instructions: buildCwdRegressionInstructions(providerId),
+          instructions:
+            "When the user asks you to run exact shell commands, use your shell or command execution tool and preserve the command output.",
         });
 
         await ctx.runtime.runTurn({
@@ -425,11 +258,10 @@ for (const providerId of providers) {
           },
           input: [{
             type: "text",
-            text: buildCwdRegressionPrompt(
-              providerId,
-              workspaceMarkerName,
-              parentMarkerName,
-            ),
+            text:
+              `Run these two shell commands exactly as written, in order, from the current working directory: `
+              + `\`pwd && cat ${workspaceMarkerName}\` and \`cd .. && pwd && cat ${parentMarkerName}\`. `
+              + "Do not use absolute paths. After both commands finish, reply with exactly DONE.",
           }],
         });
 
@@ -449,15 +281,6 @@ for (const providerId of providers) {
 
         const outputs = getCompletedCommandOutputs(ctx.events);
         const commands = getCompletedCommands(ctx.events);
-        if (
-          !outputs.includes(workspaceToken)
-          || !outputs.includes(parentToken)
-        ) {
-          throw new Error(
-            `Expected workspace and parent command outputs.\n${buildDiagnostics(ctx)}`,
-          );
-        }
-
         expect(outputs).toContain(ctx.tmpDir);
         expect(outputs).toContain(parentDir);
         expect(outputs).toContain(workspaceToken);
