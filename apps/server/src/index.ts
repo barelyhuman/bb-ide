@@ -63,7 +63,7 @@ async function main(): Promise<void> {
     logger,
   });
 
-  const { app, injectWebSocket } = createApp(
+  const { app, closeWebSockets, injectWebSocket } = createApp(
     {
       cloudAuth,
       config: runtimeConfig,
@@ -116,7 +116,7 @@ async function main(): Promise<void> {
       clearInterval(sweepInterval);
       await cloudAuth.dispose();
       hostLifecycle.dispose();
-      await new Promise<void>((resolve, reject) => {
+      const closeServer = new Promise<void>((resolve, reject) => {
         server.close((error) => {
           if (error) {
             reject(error);
@@ -125,6 +125,8 @@ async function main(): Promise<void> {
           resolve();
         });
       });
+      await closeWebSockets();
+      await closeServer;
     })();
     return shutdownPromise;
   };

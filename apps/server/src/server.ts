@@ -30,9 +30,20 @@ import {
   validateDaemonWebSocket,
 } from "./ws/daemon-protocol.js";
 
+export type CloseWebSockets = () => Promise<void>;
+type NodeWebSocketServer = ReturnType<typeof createNodeWebSocket>["wss"];
+type WebSocketCloseError = Error | undefined;
+
 export interface ServerApp {
   app: Hono;
+  closeWebSockets: CloseWebSockets;
   injectWebSocket: ReturnType<typeof createNodeWebSocket>["injectWebSocket"];
+}
+
+interface CloseWebSocketServerArgs {
+  forceCloseAfterMs: number;
+  reason: string;
+  server: NodeWebSocketServer;
 }
 
 function unauthorizedResponse(): Response {
@@ -65,6 +76,10 @@ const LOCAL_APP_ORIGINS = [
   "http://localhost:5173",
 ] as const;
 
+const WEB_SOCKET_SHUTDOWN_CODE = 1001;
+const WEB_SOCKET_SHUTDOWN_FORCE_CLOSE_MS = 1_000;
+const WEB_SOCKET_SHUTDOWN_REASON = "server-shutdown";
+
 function buildAllowedCorsOrigins(deps: AppDeps): Set<string> {
   const allowedOrigins = new Set<string>(LOCAL_APP_ORIGINS);
   if (deps.config.publicUrl) {
@@ -73,9 +88,33 @@ function buildAllowedCorsOrigins(deps: AppDeps): Set<string> {
   return allowedOrigins;
 }
 
+function closeWebSocketServer(args: CloseWebSocketServerArgs): Promise<void> {
+  for (const client of args.server.clients) {
+    client.close(WEB_SOCKET_SHUTDOWN_CODE, args.reason);
+  }
+
+  return new Promise<void>((resolvePromise, reject) => {
+    const forceCloseTimeout = setTimeout(() => {
+      for (const client of args.server.clients) {
+        client.terminate();
+      }
+    }, args.forceCloseAfterMs);
+    forceCloseTimeout.unref();
+
+    args.server.close((error: WebSocketCloseError) => {
+      clearTimeout(forceCloseTimeout);
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolvePromise();
+    });
+  });
+}
+
 export function createApp(deps: AppDeps, options?: CreateAppOptions): ServerApp {
   const app = new Hono();
-  const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
+  const { injectWebSocket, upgradeWebSocket, wss } = createNodeWebSocket({ app });
   const allowedCorsOrigins = buildAllowedCorsOrigins(deps);
 
   app.use("*", cors({
@@ -208,6 +247,12 @@ export function createApp(deps: AppDeps, options?: CreateAppOptions): ServerApp 
 
   return {
     app,
+    closeWebSockets: () =>
+      closeWebSocketServer({
+        forceCloseAfterMs: WEB_SOCKET_SHUTDOWN_FORCE_CLOSE_MS,
+        reason: WEB_SOCKET_SHUTDOWN_REASON,
+        server: wss,
+      }),
     injectWebSocket,
   };
 }

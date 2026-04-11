@@ -34,6 +34,12 @@ interface BuildArgs {
   filters: string[];
 }
 
+interface ScheduleForcedKillArgs {
+  child: ChildProcess;
+  forceKillAfterMs: number;
+  serviceName: string;
+}
+
 export interface DevSupervisorOptions {
   buildCwd: string;
   buildFilters: string[];
@@ -44,12 +50,35 @@ export interface DevSupervisorOptions {
   serviceName: string;
 }
 
+const DEV_SUPERVISOR_FORCE_KILL_AFTER_MS = 5_000;
+
 function formatExit(code: number, signal: NodeJS.Signals | null): string {
   if (signal) {
     return `signal ${signal}`;
   }
 
   return `exit code ${code}`;
+}
+
+function isChildRunning(child: ChildProcess): boolean {
+  return child.exitCode === null && child.signalCode === null;
+}
+
+function scheduleForcedKill(
+  args: ScheduleForcedKillArgs,
+): ReturnType<typeof setTimeout> {
+  const timeout = setTimeout(() => {
+    if (!isChildRunning(args.child)) {
+      return;
+    }
+
+    process.stderr.write(
+      `[dev-supervisor:${args.serviceName}] Child did not exit after ${args.forceKillAfterMs}ms. Forcing shutdown.\n`,
+    );
+    killProcessIfRunning(args.child, "SIGKILL");
+  }, args.forceKillAfterMs);
+  timeout.unref();
+  return timeout;
 }
 
 function spawnChildProcess(args: SpawnChildArgs): ChildProcess {
@@ -85,6 +114,7 @@ async function runBuild(args: BuildArgs): Promise<boolean> {
 export async function runDevSupervisor(options: DevSupervisorOptions): Promise<void> {
   const pidPath = resolveSupervisorPidPath(options.serviceName);
   let activeChild: ChildProcess | null = null;
+  let forceKillTimeout: ReturnType<typeof setTimeout> | null = null;
   let stopRequested = false;
   let restartRequested = false;
 
@@ -94,12 +124,32 @@ export async function runDevSupervisor(options: DevSupervisorOptions): Promise<v
 
   process.on("exit", cleanupPidFile);
 
+  const clearForceKillTimeout = () => {
+    if (!forceKillTimeout) {
+      return;
+    }
+
+    clearTimeout(forceKillTimeout);
+    forceKillTimeout = null;
+  };
+
+  const terminateActiveChild = (signal: NodeJS.Signals) => {
+    if (!activeChild || !isChildRunning(activeChild)) {
+      return;
+    }
+
+    killProcessIfRunning(activeChild, signal);
+    clearForceKillTimeout();
+    forceKillTimeout = scheduleForcedKill({
+      child: activeChild,
+      forceKillAfterMs: DEV_SUPERVISOR_FORCE_KILL_AFTER_MS,
+      serviceName: options.serviceName,
+    });
+  };
+
   const requestStop = (signal: NodeJS.Signals) => {
     stopRequested = true;
-
-    if (activeChild && activeChild.exitCode === null && activeChild.signalCode === null) {
-      activeChild.kill(signal);
-    }
+    terminateActiveChild(signal);
   };
 
   const removeSignalForwarding = installTerminationSignalForwarding(requestStop);
@@ -113,9 +163,7 @@ export async function runDevSupervisor(options: DevSupervisorOptions): Promise<v
       `[dev-supervisor:${options.serviceName}] Restart requested.\n`,
     );
 
-    if (activeChild) {
-      killProcessIfRunning(activeChild, "SIGTERM");
-    }
+    terminateActiveChild("SIGTERM");
   });
 
   await writePidFile({
@@ -132,6 +180,7 @@ export async function runDevSupervisor(options: DevSupervisorOptions): Promise<v
     });
 
     const { code, signal } = await waitForChildExit(activeChild);
+    clearForceKillTimeout();
     activeChild = null;
 
     if (stopRequested) {

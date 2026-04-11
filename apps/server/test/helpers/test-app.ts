@@ -159,7 +159,7 @@ export async function startTestServer(
 ): Promise<RunningTestServer> {
   const harness = await createTestAppHarness(overrides);
   let addressInfo: AddressInfo | null = null;
-  const { app, injectWebSocket } = createApp(harness.deps);
+  const { app, closeWebSockets, injectWebSocket } = createApp(harness.deps);
   const server = serve(
     {
       // The client always connects to 127.0.0.1, so bind the test server to
@@ -185,7 +185,7 @@ export async function startTestServer(
     app,
     baseUrl: `http://${TEST_SERVER_HOST}:${addressInfo.port}`,
     async close(): Promise<void> {
-      await new Promise<void>((resolve, reject) => {
+      const closeServer = new Promise<void>((resolve, reject) => {
         server.close((error) => {
           if (error) {
             reject(error);
@@ -194,6 +194,8 @@ export async function startTestServer(
           resolve();
         });
       });
+      await closeWebSockets();
+      await closeServer;
       await harness.cleanup();
     },
   };

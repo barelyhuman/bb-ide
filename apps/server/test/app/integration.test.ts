@@ -21,6 +21,13 @@ function waitForOpen(socket: WebSocket): Promise<void> {
   });
 }
 
+function waitForClose(socket: WebSocket): Promise<void> {
+  return new Promise((resolve, reject) => {
+    socket.once("close", () => resolve());
+    socket.once("error", reject);
+  });
+}
+
 function waitForMatchingMessage<T>(
   socket: WebSocket,
   matches: (message: unknown) => message is T,
@@ -129,6 +136,27 @@ async function getNextEventSequence(
 }
 
 describe("server integration", () => {
+  it("closes active websocket clients during server shutdown", async () => {
+    const server = await startTestServer();
+    let serverClosed = false;
+
+    try {
+      const socket = new WebSocket(`${server.baseUrl.replace("http", "ws")}/ws`);
+      await waitForOpen(socket);
+
+      const closePromise = waitForClose(socket);
+      await server.close();
+      serverClosed = true;
+      await closePromise;
+
+      expect(socket.readyState).toBe(WebSocket.CLOSED);
+    } finally {
+      if (!serverClosed) {
+        await server.close();
+      }
+    }
+  });
+
   it("runs session open -> thread creation -> command fetch -> result report -> state update", async () => {
     const server = await startTestServer();
     try {
