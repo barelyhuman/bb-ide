@@ -71,9 +71,9 @@ function sendRequest(
 // Adapter options helpers
 // ---------------------------------------------------------------------------
 
-function createRuntimeTurnIdPrefix(): string {
-  const runtimeId = randomUUID().replaceAll("-", "").slice(0, 16);
-  return `turn_${runtimeId}_`;
+function createAdapterTurnIdPrefix(): string {
+  const adapterId = randomUUID().replaceAll("-", "").slice(0, 16);
+  return `turn_${adapterId}_`;
 }
 
 function toAdapterOptions(
@@ -162,7 +162,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     }
     return createProviderForId(providerId, {
       bridgeBundleDir: options.bridgeBundleDir,
-      turnIdPrefix: createRuntimeTurnIdPrefix(),
+      turnIdPrefix: createAdapterTurnIdPrefix(),
     });
   }
 
