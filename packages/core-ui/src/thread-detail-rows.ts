@@ -304,6 +304,10 @@ function getToolGroupStatus(messages: ViewMessage[]): TimelineToolGroupRow["stat
   );
 }
 
+function isActiveTurn(messages: IndexedTurnMessage[]): boolean {
+  return messages.some(({ message }) => getGroupMessageStatus(message) === "pending");
+}
+
 interface IndexedTurnMessage {
   index: number;
   message: ViewMessage;
@@ -391,6 +395,10 @@ export function buildTimelineRows(
   const collapsedMessageIndices = new Set<number>();
 
   for (const { messages: turnMessages, turnId } of collectMessagesByTurnSegment(mergedMessages)) {
+    if (isActiveTurn(turnMessages)) {
+      continue;
+    }
+
     const terminalIndex = collapseAll ? null : findLastTerminalIndex(turnMessages);
     const groupedTurnMessages = turnMessages.filter(({ index, message }) => {
       if (isUngroupableMessage(message)) return false;

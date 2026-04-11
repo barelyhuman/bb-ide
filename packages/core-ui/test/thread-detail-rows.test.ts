@@ -806,6 +806,124 @@ describe("buildTimelineRows primary-checkout (operation) collapsing", () => {
     expect(rows.map((row) => row.kind)).toEqual(["message", "message"]);
   });
 
+  it("does not collapse an active turn before a streaming assistant message", () => {
+    const rows = buildTimelineRows([
+      {
+        kind: "user",
+        id: "user-1",
+        threadId: "thread-1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        createdAt: 1,
+        turnId: "turn-1",
+        text: "Fix the bug",
+      },
+      {
+        kind: "tasks",
+        id: "tasks-1",
+        threadId: "thread-1",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+        createdAt: 2,
+        turnId: "turn-1",
+        source: "todo",
+        title: "Tasks updated",
+        status: "completed",
+        tasks: [{ text: "Inspect SearchMenu.tsx", status: "completed" }],
+      },
+      {
+        kind: "tool-call",
+        id: "tool-1",
+        threadId: "thread-1",
+        sourceSeqStart: 3,
+        sourceSeqEnd: 3,
+        createdAt: 3,
+        turnId: "turn-1",
+        toolName: "exec_command",
+        callId: "call-1",
+        command: "pnpm exec turbo run test --filter=@bb/core-ui",
+        status: "completed",
+      },
+      {
+        kind: "assistant-text",
+        id: "assistant-1",
+        threadId: "thread-1",
+        sourceSeqStart: 4,
+        sourceSeqEnd: 4,
+        createdAt: 4,
+        turnId: "turn-1",
+        text: "I am still working on this.",
+        status: "streaming",
+      },
+    ]);
+
+    expect(rows.map((row) => row.kind)).toEqual([
+      "message",
+      "message",
+      "message",
+      "message",
+    ]);
+  });
+
+  it("does not collapse an active turn with pending tool work", () => {
+    const rows = buildTimelineRows([
+      {
+        kind: "user",
+        id: "user-1",
+        threadId: "thread-1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        createdAt: 1,
+        turnId: "turn-1",
+        text: "Run validation",
+      },
+      {
+        kind: "tasks",
+        id: "tasks-1",
+        threadId: "thread-1",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+        createdAt: 2,
+        turnId: "turn-1",
+        source: "todo",
+        title: "Tasks updated",
+        status: "completed",
+        tasks: [{ text: "Run focused tests", status: "active" }],
+      },
+      {
+        kind: "tool-call",
+        id: "tool-1",
+        threadId: "thread-1",
+        sourceSeqStart: 3,
+        sourceSeqEnd: 3,
+        createdAt: 3,
+        turnId: "turn-1",
+        toolName: "exec_command",
+        callId: "call-1",
+        command: "pnpm exec turbo run test --filter=@bb/core-ui",
+        status: "pending",
+      },
+      {
+        kind: "assistant-text",
+        id: "assistant-1",
+        threadId: "thread-1",
+        sourceSeqStart: 4,
+        sourceSeqEnd: 4,
+        createdAt: 4,
+        turnId: "turn-1",
+        text: "I am waiting for validation.",
+        status: "completed",
+      },
+    ]);
+
+    expect(rows.map((row) => row.kind)).toEqual([
+      "message",
+      "message",
+      "message",
+      "message",
+    ]);
+  });
+
   it("leaves all turn activity standalone when assistant-text is the only terminal message and nothing precedes it to group", () => {
     const rows = buildTimelineRows([
       {
