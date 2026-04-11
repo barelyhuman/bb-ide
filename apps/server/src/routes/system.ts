@@ -28,28 +28,13 @@ import { fetchGithubRepos } from "../services/github/repos.js";
 
 type HostLookupQuery = Pick<SystemProvidersQuery, "environmentId" | "hostId">;
 
-function requireSystemLookupHostId(deps: AppDeps, hostId: string): string {
-  const host = requireNonDestroyedHostWithStatus(deps.db, hostId);
-  if (host.type !== "persistent") {
-    throw new ApiError(
-      409,
-      "invalid_request",
-      "System provider lookups require a persistent host",
-    );
-  }
-  if (host.status !== "connected") {
-    throw new ApiError(502, "host_disconnected", "Host is not connected");
-  }
-  return host.id;
-}
-
 function resolveSystemLookupHostId(deps: AppDeps, query: HostLookupQuery): string {
   if (query.environmentId) {
-    const environment = requireEnvironment(deps.db, query.environmentId);
-    return requireSystemLookupHostId(deps, environment.hostId);
+    return requireEnvironment(deps.db, query.environmentId).hostId;
   }
   if (query.hostId) {
-    return requireSystemLookupHostId(deps, query.hostId);
+    requireNonDestroyedHostWithStatus(deps.db, query.hostId);
+    return query.hostId;
   }
   return requireDefaultConnectedPersistentHostId(deps.db);
 }

@@ -376,11 +376,11 @@ export type PublicApiSchema = {
     $get: Endpoint<{ query?: GithubReposQuery }, GithubRepoInfo[]>;
   };
   "/system/models": {
-    /** List available models. Proxies to `provider.list_models` on persistent hosts only. */
+    /** List available models. Proxies to `provider.list_models`; default lookup uses persistent hosts only. */
     $get: Endpoint<{ query?: SystemModelsQuery }, AvailableModel[]>;
   };
   "/system/providers": {
-    /** List available providers. Proxies to `provider.list` on persistent hosts only. */
+    /** List available providers. Proxies to `provider.list`; default lookup uses persistent hosts only. */
     $get: Endpoint<{ query?: SystemProvidersQuery }, SystemProviderInfo[]>;
   };
   "/system/voice-transcription": {
