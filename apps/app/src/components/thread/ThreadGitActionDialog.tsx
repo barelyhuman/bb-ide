@@ -19,7 +19,6 @@ import {
   MergeBaseBranchPicker,
 } from "@/components/thread/MergeBaseBranchPicker";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
-import { threadTypeLabel } from "@/lib/thread-title";
 
 export type ThreadGitActionDialogTarget =
   | { kind: "commit" }
@@ -58,7 +57,7 @@ interface ThreadGitActionDialogProps {
   onAskAgentToFix?: (input: PromptInput[]) => Promise<void>;
 }
 
-function getDialogCopy(target: ThreadGitActionDialogTarget, label: string) {
+function getDialogCopy(target: ThreadGitActionDialogTarget) {
   switch (target.kind) {
     case "commit":
       return {
@@ -71,7 +70,7 @@ function getDialogCopy(target: ThreadGitActionDialogTarget, label: string) {
     case "commit_and_squash_merge":
       return {
         title: "Commit and squash merge",
-        description: `Commit the current workspace changes, then squash merge this ${label} branch.`,
+        description: "Commit the current workspace changes, then squash merge this branch.",
         submitLabel: "Commit + squash merge",
         showCommitControls: true,
         showMergeBase: true,
@@ -79,7 +78,7 @@ function getDialogCopy(target: ThreadGitActionDialogTarget, label: string) {
     case "squash_merge":
       return {
         title: "Squash merge",
-        description: `Squash merge this ${label} branch into the selected merge base.`,
+        description: "Squash merge this branch into the selected merge base.",
         submitLabel: "Squash merge",
         showCommitControls: false,
         showMergeBase: true,
@@ -110,8 +109,7 @@ export function ThreadGitActionDialog({
   onSquashMerge,
   onAskAgentToFix,
 }: ThreadGitActionDialogProps) {
-  const label = threadTypeLabel(threadType ?? "standard");
-  const dialogCopy = useMemo(() => (target ? getDialogCopy(target, label) : null), [target, label]);
+  const dialogCopy = useMemo(() => (target ? getDialogCopy(target) : null), [target]);
 
   return (
     <Dialog open={target !== null} onOpenChange={onOpenChange}>
@@ -170,8 +168,7 @@ function ThreadGitActionDialogContent({
 }) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [askAgentInput, setAskAgentInput] = useState<PromptInput[] | null>(null);
-  const label = threadTypeLabel(threadType ?? "standard");
-  const dialogCopy = getDialogCopy(target, label);
+  const dialogCopy = getDialogCopy(target);
   const mergeBaseCandidates = getMergeBaseBranchCandidates({
     mergeBaseBranch,
     mergeBaseBranchOptions,
