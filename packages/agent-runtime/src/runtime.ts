@@ -1,4 +1,5 @@
 import type { ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import type {
   DynamicTool,
@@ -69,6 +70,11 @@ function sendRequest(
 // ---------------------------------------------------------------------------
 // Adapter options helpers
 // ---------------------------------------------------------------------------
+
+function createRuntimeTurnIdPrefix(): string {
+  const runtimeId = randomUUID().replaceAll("-", "").slice(0, 16);
+  return `turn_${runtimeId}_`;
+}
 
 function toAdapterOptions(
   execOpts: ThreadExecutionOptions | undefined,
@@ -156,6 +162,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     }
     return createProviderForId(providerId, {
       bridgeBundleDir: options.bridgeBundleDir,
+      turnIdPrefix: createRuntimeTurnIdPrefix(),
     });
   }
 
