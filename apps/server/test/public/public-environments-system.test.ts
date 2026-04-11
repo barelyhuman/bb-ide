@@ -1,10 +1,14 @@
 import {
   createEnvironment,
   hostDaemonCommands,
+  openSession,
   updateHost,
+  upsertHost,
 } from "@bb/db";
+import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  reportNextRuntimeMaterialSyncSuccess,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
 } from "../helpers/commands.js";
@@ -992,6 +996,129 @@ describe("public environment and system routes", () => {
           available: true,
         },
       ]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("uses a persistent host for default system provider lookups", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-system-default-persistent",
+      });
+      const sandboxHost = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-system-default",
+        id: "host-system-default-sandbox",
+        name: "Default Sandbox Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      openSession(harness.db, harness.hub, {
+        dataDir: "/tmp/bb-host-data/host-system-default-sandbox",
+        heartbeatIntervalMs: 5_000,
+        hostId: sandboxHost.id,
+        hostName: sandboxHost.name,
+        hostType: "ephemeral",
+        instanceId: "instance-system-default-sandbox",
+        leaseTimeoutMs: 30_000,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+      });
+
+      const providersPromise = harness.app.request("/api/v1/system/providers");
+      const providersCommand = await waitForQueuedCommand(
+        harness,
+        (queued) =>
+          queued.command.type === "provider.list" &&
+          queued.row.hostId === host.id,
+      );
+      await reportQueuedCommandSuccess(
+        harness,
+        providersCommand,
+        {
+          providers: [
+            {
+              id: "codex",
+              displayName: "Codex",
+              capabilities: {
+                supportsRename: true,
+                supportsServiceTier: true,
+              },
+              available: true,
+            },
+          ],
+        },
+        { hostId: host.id },
+      );
+
+      expect((await providersPromise).status).toBe(200);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("allows explicit ephemeral host system provider lookups", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const sandboxHost = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-system-explicit",
+        id: "host-system-explicit-sandbox",
+        name: "Explicit Sandbox Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      openSession(harness.db, harness.hub, {
+        dataDir: "/tmp/bb-host-data/host-system-explicit-sandbox",
+        heartbeatIntervalMs: 5_000,
+        hostId: sandboxHost.id,
+        hostName: sandboxHost.name,
+        hostType: "ephemeral",
+        instanceId: "instance-system-explicit-sandbox",
+        leaseTimeoutMs: 30_000,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+      });
+      harness.deps.sandboxRegistry.set(sandboxHost.id, {
+        destroy: vi.fn().mockResolvedValue(undefined),
+        extendTimeout: vi.fn().mockResolvedValue(undefined),
+        externalId: sandboxHost.externalId ?? "sandbox-system-explicit",
+        hostId: sandboxHost.id,
+        resume: vi.fn().mockResolvedValue(undefined),
+        suspend: vi.fn().mockResolvedValue(undefined),
+      });
+
+      const providersPromise = harness.app.request(
+        `/api/v1/system/providers?hostId=${sandboxHost.id}`,
+      );
+      await reportNextRuntimeMaterialSyncSuccess(harness, {
+        hostId: sandboxHost.id,
+        hostType: "ephemeral",
+      });
+      const providersCommand = await waitForQueuedCommand(
+        harness,
+        (queued) =>
+          queued.command.type === "provider.list" &&
+          queued.row.hostId === sandboxHost.id,
+      );
+      await reportQueuedCommandSuccess(
+        harness,
+        providersCommand,
+        {
+          providers: [
+            {
+              id: "codex",
+              displayName: "Codex",
+              capabilities: {
+                supportsRename: true,
+                supportsServiceTier: true,
+              },
+              available: true,
+            },
+          ],
+        },
+        { hostId: sandboxHost.id, hostType: "ephemeral" },
+      );
+
+      expect((await providersPromise).status).toBe(200);
     } finally {
       await harness.cleanup();
     }

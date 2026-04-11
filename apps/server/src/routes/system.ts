@@ -17,7 +17,7 @@ import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
 import {
   requireEnvironment,
-  requireDefaultConnectedHostId,
+  requireDefaultConnectedPersistentHostId,
   requireNonDestroyedHostWithStatus,
 } from "../services/lib/entity-lookup.js";
 import { queueCommandAndWait } from "../services/hosts/command-wait.js";
@@ -28,7 +28,7 @@ import { fetchGithubRepos } from "../services/github/repos.js";
 
 type HostLookupQuery = Pick<SystemProvidersQuery, "environmentId" | "hostId">;
 
-function resolveHostId(deps: AppDeps, query: HostLookupQuery): string {
+function resolveSystemLookupHostId(deps: AppDeps, query: HostLookupQuery): string {
   if (query.environmentId) {
     return requireEnvironment(deps.db, query.environmentId).hostId;
   }
@@ -36,7 +36,7 @@ function resolveHostId(deps: AppDeps, query: HostLookupQuery): string {
     requireNonDestroyedHostWithStatus(deps.db, query.hostId);
     return query.hostId;
   }
-  return requireDefaultConnectedHostId(deps.db);
+  return requireDefaultConnectedPersistentHostId(deps.db);
 }
 
 export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
@@ -123,7 +123,7 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
   });
 
   get("/system/providers", systemProvidersQuerySchema, async (context, query) => {
-    const hostId = resolveHostId(deps, query);
+    const hostId = resolveSystemLookupHostId(deps, query);
     const rawResult = await queueCommandAndWait(deps, {
       hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
@@ -135,7 +135,7 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
   });
 
   get("/system/models", systemModelsQuerySchema, async (context, query) => {
-    const hostId = resolveHostId(deps, query);
+    const hostId = resolveSystemLookupHostId(deps, query);
     if (query.providerId) {
       const rawResult = await queueCommandAndWait(deps, {
         hostId,

@@ -1268,6 +1268,9 @@ describe("public thread routes", () => {
       await waitForAssertion(() => {
         expect(provisionHostMock).toHaveBeenCalledWith(expect.objectContaining({
           apiKey: "test-e2b-api-key",
+          daemonEnv: expect.objectContaining({
+            GITHUB_TOKEN: "test-github-pat",
+          }),
           enrollKey: expect.stringMatching(/^bbde_/u),
           hostId: expect.stringMatching(/^host_/u),
           hostName: expect.stringMatching(/^sandbox-/u),

@@ -15,7 +15,7 @@ type SandboxRuntimeMaterialConfig = Pick<
   "anthropicApiKey" | "githubPat" | "openAiApiKey"
 >;
 
-function buildManagedRuntimeEnv(
+export function buildManagedRuntimeEnv(
   config: SandboxRuntimeMaterialConfig,
 ): Record<string, string> {
   const env: Record<string, string> = {};
