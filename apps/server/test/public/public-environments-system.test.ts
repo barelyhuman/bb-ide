@@ -1,8 +1,11 @@
 import {
   createEnvironment,
   hostDaemonCommands,
+  openSession,
   updateHost,
+  upsertHost,
 } from "@bb/db";
+import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   reportQueuedCommandSuccess,
@@ -992,6 +995,119 @@ describe("public environment and system routes", () => {
           available: true,
         },
       ]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("uses a persistent host for default system provider lookups", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-system-default-persistent",
+      });
+      const sandboxHost = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-system-default",
+        id: "host-system-default-sandbox",
+        name: "Default Sandbox Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      openSession(harness.db, harness.hub, {
+        dataDir: "/tmp/bb-host-data/host-system-default-sandbox",
+        heartbeatIntervalMs: 5_000,
+        hostId: sandboxHost.id,
+        hostName: sandboxHost.name,
+        hostType: "ephemeral",
+        instanceId: "instance-system-default-sandbox",
+        leaseTimeoutMs: 30_000,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+      });
+
+      const providersPromise = harness.app.request("/api/v1/system/providers");
+      const providersCommand = await waitForQueuedCommand(
+        harness,
+        (queued) =>
+          queued.command.type === "provider.list" &&
+          queued.row.hostId === host.id,
+      );
+      await reportQueuedCommandSuccess(
+        harness,
+        providersCommand,
+        {
+          providers: [
+            {
+              id: "codex",
+              displayName: "Codex",
+              capabilities: {
+                supportsRename: true,
+                supportsServiceTier: true,
+              },
+              available: true,
+            },
+          ],
+        },
+        { hostId: host.id },
+      );
+
+      expect((await providersPromise).status).toBe(200);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects ephemeral hosts for system provider lookups", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const sandboxHost = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-system-rejected",
+        id: "host-system-rejected-sandbox",
+        name: "Rejected Sandbox Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      openSession(harness.db, harness.hub, {
+        dataDir: "/tmp/bb-host-data/host-system-rejected-sandbox",
+        heartbeatIntervalMs: 5_000,
+        hostId: sandboxHost.id,
+        hostName: sandboxHost.name,
+        hostType: "ephemeral",
+        instanceId: "instance-system-rejected-sandbox",
+        leaseTimeoutMs: 30_000,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: sandboxHost.id,
+        path: "/tmp/system-rejected-sandbox-source",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: sandboxHost.id,
+        projectId: project.id,
+        path: "/tmp/system-rejected-sandbox-source/worktree",
+      });
+
+      const hostResponse = await harness.app.request(
+        `/api/v1/system/providers?hostId=${sandboxHost.id}`,
+      );
+      const environmentResponse = await harness.app.request(
+        `/api/v1/system/models?environmentId=${environment.id}&providerId=codex`,
+      );
+
+      expect(hostResponse.status).toBe(409);
+      await expect(readJson(hostResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+      });
+      expect(environmentResponse.status).toBe(409);
+      await expect(readJson(environmentResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+      });
+      expect(
+        harness.db
+          .select()
+          .from(hostDaemonCommands)
+          .all()
+          .filter((command) => command.hostId === sandboxHost.id),
+      ).toHaveLength(0);
     } finally {
       await harness.cleanup();
     }

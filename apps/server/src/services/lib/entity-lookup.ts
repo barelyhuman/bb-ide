@@ -184,10 +184,12 @@ export function requirePublicThreadEnvironment(
   };
 }
 
-export function requireDefaultConnectedHostId(db: DbConnection): string {
-  const hostId = getMostRecentlyUpdatedConnectedHostId(db);
+export function requireDefaultConnectedPersistentHostId(db: DbConnection): string {
+  const hostId = getMostRecentlyUpdatedConnectedHostId(db, {
+    hostType: "persistent",
+  });
   if (!hostId) {
-    throw new ApiError(502, "host_disconnected", "Host is not connected");
+    throw new ApiError(502, "host_disconnected", "Persistent host is not connected");
   }
   return hostId;
 }

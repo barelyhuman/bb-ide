@@ -15,6 +15,10 @@ export interface GetCurrentSessionArgs {
   hostId: string;
 }
 
+export interface GetMostRecentlyUpdatedConnectedHostIdArgs {
+  hostType?: HostType;
+}
+
 export interface OpenSessionInput {
   hostId: string;
   instanceId: string;
@@ -194,6 +198,7 @@ export function listConnectedHostIds(db: SessionReadConnection): string[] {
 
 export function getMostRecentlyUpdatedConnectedHostId(
   db: SessionReadConnection,
+  args: GetMostRecentlyUpdatedConnectedHostIdArgs = {},
 ): string | null {
   const row = db
     .select({ hostId: hostDaemonSessions.hostId })
@@ -202,6 +207,7 @@ export function getMostRecentlyUpdatedConnectedHostId(
       and(
         eq(hostDaemonSessions.status, "active"),
         gt(hostDaemonSessions.leaseExpiresAt, Date.now()),
+        args.hostType ? eq(hostDaemonSessions.hostType, args.hostType) : undefined,
       ),
     )
     .orderBy(desc(hostDaemonSessions.updatedAt))

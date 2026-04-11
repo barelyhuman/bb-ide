@@ -14,6 +14,7 @@ import { ApiError } from "../../errors.js";
 import type { ServerRuntimeConfig } from "../../types.js";
 import { hasConfiguredReachablePublicServerUrl } from "./public-server-url.js";
 import { hasConfiguredSandboxTemplate } from "./sandbox-config.js";
+import { buildManagedRuntimeEnv } from "./sandbox-runtime-material-snapshot.js";
 
 export type SandboxBackendInfoResolverConfig = Pick<
   ServerRuntimeConfig,
@@ -25,6 +26,8 @@ export type SandboxBackendConfig = Pick<
   | "e2bApiKey"
   | "e2bTemplate"
   | "githubPat"
+  | "anthropicApiKey"
+  | "openAiApiKey"
 >;
 
 export interface SandboxBackendProvisionArgs {
@@ -143,6 +146,7 @@ function buildProvisionHostOptions(
   return {
     apiKey: args.config.e2bApiKey,
     enrollKey: args.enrollKey,
+    daemonEnv: buildManagedRuntimeEnv(args.config),
     hostId: args.hostId,
     hostName: args.hostName,
     progressCallbacks: args.progressCallbacks,
@@ -156,6 +160,7 @@ function buildResumeHostOptions(
 ): ResumeHostOptions {
   return {
     apiKey: toOptionalString(args.config.e2bApiKey),
+    daemonEnv: buildManagedRuntimeEnv(args.config),
     externalId: args.externalId,
     hostId: args.hostId,
     hostName: args.hostName,
