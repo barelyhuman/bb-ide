@@ -1124,6 +1124,39 @@ describe("public environment and system routes", () => {
     }
   });
 
+  it("returns 502 when no persistent host is connected for default system provider lookup", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const sandboxHost = upsertHost(harness.db, harness.hub, {
+        externalId: "sandbox-system-no-persistent",
+        id: "host-system-no-persistent-sandbox",
+        name: "Only Sandbox Host",
+        provider: "e2b",
+        type: "ephemeral",
+      });
+      openSession(harness.db, harness.hub, {
+        dataDir: "/tmp/bb-host-data/host-system-no-persistent-sandbox",
+        heartbeatIntervalMs: 5_000,
+        hostId: sandboxHost.id,
+        hostName: sandboxHost.name,
+        hostType: "ephemeral",
+        instanceId: "instance-system-no-persistent-sandbox",
+        leaseTimeoutMs: 30_000,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+      });
+
+      const response = await harness.app.request("/api/v1/system/providers");
+
+      expect(response.status).toBe(502);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "host_disconnected",
+        message: "Persistent host is not connected",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("rejects destroyed hosts for system host lookups", async () => {
     const harness = await createTestAppHarness();
     try {
