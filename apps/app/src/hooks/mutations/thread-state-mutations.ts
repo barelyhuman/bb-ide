@@ -125,21 +125,39 @@ export function useArchiveThread() {
     },
     mutationFn: ({ id, force }: ArchiveThreadMutationRequest) =>
       api.archiveThread(id, { force }),
-    onSuccess: (_data, variables) => {
-      const archivedAt = Date.now();
-      const currentThread = queryClient.getQueryData<Thread>(threadQueryKey(variables.id));
-      const currentThreadLists = queryClient.getQueriesData<Thread[]>({
+    onMutate: async ({ id }) => {
+      await queryClient.cancelQueries({ queryKey: threadQueryKey(id) });
+      await queryClient.cancelQueries({ queryKey: threadsQueryKey() });
+
+      const previousThread = queryClient.getQueryData<Thread>(threadQueryKey(id));
+      const previousThreadLists = queryClient.getQueriesData<Thread[]>({
         queryKey: threadsQueryKey(),
       });
 
-      if (currentThread) {
-        queryClient.setQueryData<Thread>(threadQueryKey(variables.id), {
-          ...currentThread,
+      const archivedAt = Date.now();
+
+      queryClient.setQueryData<Thread>(threadQueryKey(id), (thread) => {
+        if (!thread) {
+          return thread;
+        }
+
+        return {
+          ...thread,
           archivedAt,
-        });
+        };
+      });
+
+      archiveThreadInLists(queryClient, previousThreadLists, id);
+
+      return { previousThread, previousThreadLists };
+    },
+    onError: (_error, variables, context?: ThreadListMutationContext) => {
+      if (!context) {
+        return;
       }
 
-      archiveThreadInLists(queryClient, currentThreadLists, variables.id);
+      queryClient.setQueryData(threadQueryKey(variables.id), context.previousThread);
+      restoreThreadLists(queryClient, context.previousThreadLists);
     },
     onSettled: (_data, _error, variables) => {
       queryClient.invalidateQueries({ queryKey: threadQueryKey(variables.id) });
