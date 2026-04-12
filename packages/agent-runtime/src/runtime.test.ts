@@ -381,6 +381,57 @@ describe("createAgentRuntime", () => {
     await runtime.shutdown();
   });
 
+  it("accepts thread/start results with a null providerThreadId", async () => {
+    const nullIdentityScriptPath = join(tmpDir, "null-identity-provider.cjs");
+    writeFileSync(
+      nullIdentityScriptPath,
+      `
+const readline = require("node:readline");
+
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + "\\n");
+}
+
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.method === "initialize") {
+    send({ jsonrpc: "2.0", id: message.id, result: {} });
+    return;
+  }
+
+  if (message.method === "thread/start") {
+    send({
+      jsonrpc: "2.0",
+      id: message.id,
+      result: { threadId: "prov-thread-fallback", providerThreadId: null },
+    });
+  }
+});
+`,
+      "utf8",
+    );
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: () => undefined,
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () => createFakeAdapter(nullIdentityScriptPath),
+    });
+
+    const { providerThreadId } = await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+    });
+
+    expect(providerThreadId).toBe("prov-thread-fallback");
+    await runtime.shutdown();
+  });
+
   it("merges runtime shell env with per-thread context on start", async () => {
     const recordedCommands: AdapterCommand[] = [];
     const runtime = createAgentRuntime({

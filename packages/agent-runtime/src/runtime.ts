@@ -37,8 +37,8 @@ interface PendingRequest {
 
 const ignoredJsonRpcResultSchema = z.unknown();
 const threadIdentityResultSchema = z.object({
-  providerThreadId: z.string().optional(),
-  threadId: z.string().optional(),
+  providerThreadId: z.string().nullable().optional(),
+  threadId: z.string().nullable().optional(),
 });
 
 function isRecord(value: unknown): value is Record<string, unknown> {
