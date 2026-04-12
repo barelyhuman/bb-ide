@@ -60,6 +60,7 @@ describe("bridge", () => {
         baseInstructions: "You are a manager.",
         cwd: "/tmp/worktree",
         instructionMode: "replace",
+        permissionEscalation: "ask",
         permissionMode: "default",
       },
       {},
@@ -76,6 +77,7 @@ describe("bridge", () => {
         baseInstructions: "You are a coder.",
         cwd: "/tmp/worktree",
         instructionMode: "append",
+        permissionEscalation: "ask",
         permissionMode: "default",
       },
       {},
@@ -96,12 +98,112 @@ describe("bridge", () => {
         baseInstructions: "You are a coder.",
         cwd: "/tmp/worktree",
         instructionMode: "append",
+        permissionEscalation: "deny",
         permissionMode: "dontAsk",
       },
       {},
     );
 
     expect(options.permissionMode).toBe("dontAsk");
+  });
+
+  it("configures workspace-write sessions with Claude sandbox settings", () => {
+    const askOptions = buildSessionOptions(
+      {
+        baseInstructions: "You are a coder.",
+        cwd: "/tmp/worktree",
+        instructionMode: "append",
+        permissionEscalation: "ask",
+        permissionMode: "acceptEdits",
+      },
+      {},
+    );
+    const denyOptions = buildSessionOptions(
+      {
+        baseInstructions: "You are a coder.",
+        cwd: "/tmp/worktree",
+        instructionMode: "append",
+        permissionEscalation: "deny",
+        permissionMode: "acceptEdits",
+      },
+      {},
+    );
+
+    expect(askOptions.sandbox).toEqual({
+      enabled: true,
+      autoAllowBashIfSandboxed: true,
+      allowUnsandboxedCommands: true,
+    });
+    expect(denyOptions.sandbox).toEqual({
+      enabled: true,
+      autoAllowBashIfSandboxed: true,
+      allowUnsandboxedCommands: false,
+    });
+  });
+
+  it("configures readonly sessions with PreToolUse policy hooks", async () => {
+    const askOptions = buildSessionOptions(
+      {
+        baseInstructions: "You are a coder.",
+        cwd: "/tmp/worktree",
+        instructionMode: "append",
+        permissionEscalation: "ask",
+        permissionMode: "default",
+      },
+      {},
+    );
+    const denyOptions = buildSessionOptions(
+      {
+        baseInstructions: "You are a coder.",
+        cwd: "/tmp/worktree",
+        instructionMode: "append",
+        permissionEscalation: "deny",
+        permissionMode: "dontAsk",
+      },
+      {},
+    );
+
+    const askHook = askOptions.hooks?.PreToolUse?.[0]?.hooks[0];
+    if (!askHook) {
+      throw new Error("Expected readonly ask PreToolUse hook");
+    }
+    await expect(
+      askHook({
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: {},
+        tool_use_id: "tool-1",
+        session_id: "session-1",
+        transcript_path: "/tmp/transcript.jsonl",
+        cwd: "/tmp/worktree",
+      }, "tool-1", { signal: new AbortController().signal }),
+    ).resolves.toMatchObject({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "ask",
+      },
+    });
+
+    const preToolUseHook = denyOptions.hooks?.PreToolUse?.[0]?.hooks[0];
+    if (!preToolUseHook) {
+      throw new Error("Expected readonly PreToolUse hook");
+    }
+    await expect(
+      preToolUseHook({
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: {},
+        tool_use_id: "tool-1",
+        session_id: "session-1",
+        transcript_path: "/tmp/transcript.jsonl",
+        cwd: "/tmp/worktree",
+      }, "tool-1", { signal: new AbortController().signal }),
+    ).resolves.toMatchObject({
+      hookSpecificOutput: {
+        hookEventName: "PreToolUse",
+        permissionDecision: "deny",
+      },
+    });
   });
 
   it("returns the bridge-owned Claude model list from the SDK probe", async () => {

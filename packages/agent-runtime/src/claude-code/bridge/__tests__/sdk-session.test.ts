@@ -135,4 +135,40 @@ describe("SdkSession", () => {
       }),
     );
   });
+
+  it("forwards sandbox and hooks to the SDK when configured", () => {
+    const onMessage = vi.fn();
+    const onDone = vi.fn();
+    const hooks: NonNullable<SdkSessionOptions["hooks"]> = {
+      PreToolUse: [{ hooks: [vi.fn()] }],
+    };
+    const session = new SdkSession(
+      {
+        ...defaultOptions,
+        sandbox: {
+          enabled: true,
+          autoAllowBashIfSandboxed: true,
+          allowUnsandboxedCommands: false,
+        },
+        hooks,
+      },
+      onMessage,
+      onDone,
+    );
+
+    session.start();
+
+    expect(queryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          sandbox: {
+            enabled: true,
+            autoAllowBashIfSandboxed: true,
+            allowUnsandboxedCommands: false,
+          },
+          hooks,
+        }),
+      }),
+    );
+  });
 });

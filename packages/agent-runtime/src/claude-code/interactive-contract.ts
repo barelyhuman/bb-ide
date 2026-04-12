@@ -3,6 +3,7 @@ import type {
   PendingInteractionGrantedPermissionProfile,
   PendingInteractionGrantablePermissionProfile,
   PendingInteractionPermissionGrantScope,
+  PermissionEscalation,
   PermissionMode,
 } from "@bb/domain";
 
@@ -19,6 +20,7 @@ export const claudePermissionModeSchema = z.enum([
 export type ClaudePermissionMode = z.infer<typeof claudePermissionModeSchema>;
 
 interface ToClaudePermissionModeArgs {
+  permissionEscalation: PermissionEscalation | undefined;
   permissionMode: PermissionMode | undefined;
 }
 
@@ -31,7 +33,7 @@ export function toClaudePermissionMode(
     case "workspace-write":
       return "acceptEdits";
     case "readonly":
-      return "default";
+      return args.permissionEscalation === "deny" ? "dontAsk" : "default";
   }
 }
 

@@ -25,6 +25,8 @@ import type {
 import {
   instructionModeValues,
   type InstructionMode,
+  permissionEscalationValues,
+  type PermissionEscalation,
 } from "@bb/domain";
 import { z } from "zod";
 import {
@@ -59,6 +61,7 @@ import {
 // ---------------------------------------------------------------------------
 
 const bridgeInstructionModeSchema = z.enum(instructionModeValues);
+const bridgePermissionEscalationSchema = z.enum(permissionEscalationValues);
 
 const claudeCodeCommandSchema = z.discriminatedUnion("method", [
   z.object({
@@ -78,6 +81,7 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
       cwd: z.string(),
       baseInstructions: z.string(),
       permissionMode: claudePermissionModeSchema,
+      permissionEscalation: bridgePermissionEscalationSchema,
       config: z.record(z.string(), z.unknown()).optional(),
       model: z.string().optional(),
       instructionMode: bridgeInstructionModeSchema,
@@ -96,6 +100,7 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
       providerThreadId: z.string().nullable(),
       baseInstructions: z.string().optional(),
       permissionMode: claudePermissionModeSchema,
+      permissionEscalation: bridgePermissionEscalationSchema,
       config: z.record(z.string(), z.unknown()).optional(),
       model: z.string().optional(),
       instructionMode: bridgeInstructionModeSchema,
@@ -195,6 +200,7 @@ interface ThreadSession {
   session: SdkSession;
   pendingToolCalls: Map<string | number, PendingToolCall>;
   pendingInteractiveRequests: Map<string | number, PendingInteractiveRequest>;
+  permissionEscalation: PermissionEscalation;
   permissionMode: ClaudePermissionMode;
   providerThreadId?: string;
 }
@@ -222,6 +228,7 @@ interface BuildSessionOptionsArgs {
   cwd: string;
   instructionMode: InstructionMode;
   model?: string;
+  permissionEscalation: PermissionEscalation;
   permissionMode: ClaudePermissionMode;
 }
 
@@ -231,6 +238,79 @@ interface ForwardInteractiveRequestArgs extends BuildInteractiveRequestParamsArg
 
 const sessions = new Map<string, ThreadSession>();
 let toolCallRequestIdCounter = 0;
+const READONLY_ALLOWED_TOOLS = new Set([
+  "Glob",
+  "Grep",
+  "LS",
+  "Read",
+  "TodoRead",
+]);
+
+function buildReadonlyDenialMessage(): string {
+  return "bb readonly mode allows reading and analysis only. Continue with a read-only answer; do not modify files, run shell commands, use network, or use mutating tools.";
+}
+
+function buildWorkspaceWriteDenialMessage(): string {
+  return "bb workspace-write mode allows work inside the current workspace only. Stay inside the workspace or explain why extra access is needed.";
+}
+
+function buildReadonlyHooks(
+  params: BuildSessionOptionsArgs,
+): Options["hooks"] | undefined {
+  if (
+    params.permissionMode !== "default"
+    && params.permissionMode !== "dontAsk"
+  ) {
+    return undefined;
+  }
+
+  const permissionDecision =
+    params.permissionEscalation === "deny" ? "deny" : "ask";
+  const permissionDecisionReason =
+    permissionDecision === "deny"
+      ? buildReadonlyDenialMessage()
+      : "bb readonly mode requires approval before using tools that can modify state, run commands, access network, or perform non-read actions.";
+
+  return {
+    PreToolUse: [
+      {
+        hooks: [
+          async (input) => {
+            if (
+              input.hook_event_name !== "PreToolUse"
+              || READONLY_ALLOWED_TOOLS.has(input.tool_name)
+            ) {
+              return { continue: true };
+            }
+
+            return {
+              continue: true,
+              hookSpecificOutput: {
+                hookEventName: "PreToolUse",
+                permissionDecision,
+                permissionDecisionReason,
+              },
+            };
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function buildWorkspaceWriteSandbox(
+  params: BuildSessionOptionsArgs,
+): Options["sandbox"] | undefined {
+  if (params.permissionMode !== "acceptEdits") {
+    return undefined;
+  }
+
+  return {
+    enabled: true,
+    autoAllowBashIfSandboxed: true,
+    allowUnsandboxedCommands: params.permissionEscalation === "ask",
+  };
+}
 
 function send(msg: JsonRpcResponse | SdkMessageNotification | BridgeEventNotification | BridgeToolCallRequest): void {
   process.stdout.write(JSON.stringify(msg) + "\n");
@@ -552,12 +632,18 @@ function createCanUseTool(
       };
     }
 
-    if (threadSession.permissionMode === "dontAsk") {
+    if (
+      threadSession.permissionEscalation === "deny"
+      || threadSession.permissionMode === "dontAsk"
+    ) {
+      const policyMessage = threadSession.permissionMode === "acceptEdits"
+        ? buildWorkspaceWriteDenialMessage()
+        : buildReadonlyDenialMessage();
       return {
         behavior: "deny",
         message:
           options.decisionReason
-          ?? `Tool ${toolName} is denied by the thread approval policy`,
+          ?? policyMessage,
         toolUseID: options.toolUseID,
       };
     }
@@ -592,6 +678,8 @@ export function buildSessionOptions(
             : {}),
         };
   const model = params.model;
+  const sandbox = buildWorkspaceWriteSandbox(params);
+  const hooks = buildReadonlyHooks(params);
 
   return {
     cwd: params.cwd,
@@ -599,6 +687,8 @@ export function buildSessionOptions(
     model,
     env,
     permissionMode: params.permissionMode,
+    ...(sandbox ? { sandbox } : {}),
+    ...(hooks ? { hooks } : {}),
   };
 }
 
@@ -671,6 +761,7 @@ function handleThreadStart(
     session,
     pendingToolCalls: new Map(),
     pendingInteractiveRequests: new Map(),
+    permissionEscalation: params.permissionEscalation,
     permissionMode: params.permissionMode,
   };
   sessions.set(threadIdRef.current, threadSession);
@@ -729,6 +820,7 @@ function handleThreadResume(
     session,
     pendingToolCalls: new Map(),
     pendingInteractiveRequests: new Map(),
+    permissionEscalation: params.permissionEscalation,
     permissionMode: params.permissionMode,
     ...(providerThreadId ? { providerThreadId } : {}),
   };

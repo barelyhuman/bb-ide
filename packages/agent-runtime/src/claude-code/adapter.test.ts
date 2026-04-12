@@ -83,6 +83,7 @@ describe("claude-code provider adapter", () => {
     expect(cmd?.params).toMatchObject({
       threadId: "bb-thread-1",
       permissionMode: "bypassPermissions",
+      permissionEscalation: "ask",
       cwd: "/tmp/worktree",
     });
   });
@@ -124,6 +125,7 @@ describe("claude-code provider adapter", () => {
         threadId: "bb-thread-1",
         model: "claude-sonnet-4-5",
         permissionMode: "acceptEdits",
+        permissionEscalation: "ask",
         baseInstructions: expect.stringContaining("Focus on the failing tests first."),
         dynamicTools: [{
           name: "bb_test_ping",
@@ -167,6 +169,26 @@ describe("claude-code provider adapter", () => {
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
       permissionMode: "bypassPermissions",
+      permissionEscalation: "ask",
+    });
+  });
+
+  it("buildCommand thread/start maps readonly deny policy to dontAsk with deny escalation", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+    const cmd = adapter.buildCommand({
+      type: "thread/start",
+      cwd: "/tmp/worktree",
+      threadId: "bb-thread-1",
+      input: [{ type: "text", text: "hello" }],
+      instructionMode: "append",
+      options: {
+        permissionMode: "readonly",
+        permissionEscalation: "deny",
+      },
+    });
+    expect(cmd?.params).toMatchObject({
+      permissionMode: "dontAsk",
+      permissionEscalation: "deny",
     });
   });
 

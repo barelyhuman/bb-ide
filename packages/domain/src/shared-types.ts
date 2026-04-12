@@ -17,10 +17,12 @@ export const instructionModeValues = ["append", "replace"] as const;
 export const instructionModeSchema = z.enum(instructionModeValues);
 export type InstructionMode = z.infer<typeof instructionModeSchema>;
 
-export const permissionModeSchema = z.enum(["readonly", "workspace-write", "full"]);
+export const permissionModeValues = ["readonly", "workspace-write", "full"] as const;
+export const permissionModeSchema = z.enum(permissionModeValues);
 export type PermissionMode = z.infer<typeof permissionModeSchema>;
 
-export const permissionEscalationSchema = z.enum(["ask", "deny"]);
+export const permissionEscalationValues = ["ask", "deny"] as const;
+export const permissionEscalationSchema = z.enum(permissionEscalationValues);
 export type PermissionEscalation = z.infer<typeof permissionEscalationSchema>;
 
 export const promptInputSchema = z.discriminatedUnion("type", [

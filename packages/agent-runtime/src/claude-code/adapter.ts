@@ -837,7 +837,9 @@ export function createClaudeCodeProviderAdapter(
               instructionMode: command.instructionMode,
               permissionMode: toClaudePermissionMode({
                 permissionMode: command.options?.permissionMode,
+                permissionEscalation: command.options?.permissionEscalation,
               }),
+              permissionEscalation: command.options?.permissionEscalation ?? "ask",
               ...(Object.keys(finalConfig).length > 0 ? { config: finalConfig } : {}),
               ...(command.options?.model ? { model: command.options.model } : {}),
               ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
@@ -873,7 +875,9 @@ export function createClaudeCodeProviderAdapter(
               instructionMode: command.instructionMode,
               permissionMode: toClaudePermissionMode({
                 permissionMode: command.options?.permissionMode,
+                permissionEscalation: command.options?.permissionEscalation,
               }),
+              permissionEscalation: command.options?.permissionEscalation ?? "ask",
               ...(Object.keys(finalResumeConfig).length > 0 ? { config: finalResumeConfig } : {}),
               ...(command.options?.model ? { model: command.options.model } : {}),
               ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),

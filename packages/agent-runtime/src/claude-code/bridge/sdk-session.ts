@@ -14,6 +14,8 @@ export interface SdkSessionOptions {
   systemPrompt: Exclude<Options["systemPrompt"], undefined>;
   model?: string;
   permissionMode?: ClaudePermissionMode;
+  sandbox?: Options["sandbox"];
+  hooks?: Options["hooks"];
   mcpServers?: Record<string, McpSdkServerConfigWithInstance>;
   allowedTools?: string[];
   disallowedTools?: string[];
@@ -93,6 +95,8 @@ export class SdkSession {
       ...(this.options.canUseTool
         ? { canUseTool: this.options.canUseTool }
         : {}),
+      ...(this.options.sandbox ? { sandbox: this.options.sandbox } : {}),
+      ...(this.options.hooks ? { hooks: this.options.hooks } : {}),
       ...(this.options.permissionMode === "bypassPermissions"
         ? { allowDangerouslySkipPermissions: true }
         : {}),
