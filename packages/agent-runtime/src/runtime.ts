@@ -5,6 +5,8 @@ import type {
   DynamicTool,
   InstructionMode,
   PendingInteractionCreate,
+  PendingInteractionPayload,
+  PendingInteractionResolution,
   ThreadEvent,
   ToolCallRequest,
 } from "@bb/domain";
@@ -113,6 +115,28 @@ function toAdapterOptions(
     instructions,
     envVars,
   };
+}
+
+function buildDeniedInteractiveResolution(
+  payload: PendingInteractionPayload,
+): PendingInteractionResolution {
+  switch (payload.kind) {
+    case "command_approval":
+      return {
+        kind: "command_approval",
+        decision: "decline",
+      };
+    case "file_change_approval":
+      return {
+        kind: "file_change_approval",
+        decision: "decline",
+      };
+    case "permission_request":
+      return {
+        kind: "permission_request",
+        decision: "deny",
+      };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -593,14 +617,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       );
       return true;
     }
-    if (!options.onInteractiveRequest) {
-      sendJsonRpcError(
-        args.proc.child,
-        args.parsedId,
-        `Interactive provider request "${interactiveReq.method}" is not supported`,
-      );
-      return true;
-    }
     if (!args.proc.adapter.buildInteractiveResponse) {
       sendJsonRpcError(
         args.proc.child,
@@ -632,6 +648,32 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       rawRequest: args.rawRequest,
       request: scopedInteractiveReq,
     });
+    const threadConfig = threadRuntimeConfigs.get(resolvedThreadId);
+    if (
+      threadConfig?.options?.permissionEscalation === "deny"
+      || !options.onInteractiveRequest
+    ) {
+      const resolution = buildDeniedInteractiveResolution(interactiveReq.payload);
+      emitCapture({
+        kind: "interactive-result",
+        capturedAt: Date.now(),
+        providerId,
+        requestCaptureId: captureId,
+        requestId: scopedInteractiveReq.providerRequestId,
+        success: true,
+        resolution,
+      });
+      sendJsonRpcResult(
+        args.proc.child,
+        args.parsedId,
+        buildInteractiveResponse({
+          request: interactiveReq,
+          resolution,
+        }),
+      );
+      return true;
+    }
+
     void options.onInteractiveRequest(scopedInteractiveReq).then((resolution) => {
       emitCapture({
         kind: "interactive-result",

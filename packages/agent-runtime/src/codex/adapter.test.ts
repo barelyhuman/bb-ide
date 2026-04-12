@@ -106,6 +106,29 @@ describe("codex provider adapter", () => {
     });
   });
 
+  it("buildCommand thread/start maps deny escalation to no approval prompts", () => {
+    const adapter = createCodexProviderAdapter();
+    const cmd = adapter.buildCommand({
+      type: "thread/start",
+      cwd: "/tmp/worktree",
+      threadId: "t1",
+      input: [{ type: "text", text: "hello" }],
+      instructionMode: "append",
+      options: {
+        permissionMode: "workspace-write",
+        permissionEscalation: "deny",
+      },
+    });
+
+    expect(cmd).toMatchObject({
+      method: "thread/start",
+      params: {
+        approvalPolicy: "never",
+        sandbox: "workspace-write",
+      },
+    });
+  });
+
   it("buildCommand thread/start disables provider user-input requests", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommand({
@@ -295,6 +318,48 @@ describe("codex provider adapter", () => {
           networkAccess: true,
           excludeTmpdirEnvVar: false,
           excludeSlashTmp: false,
+        },
+      },
+    });
+  });
+
+  it("buildCommand turn/start maps readonly permissions to a read-only sandbox policy", () => {
+    const adapter = createCodexProviderAdapter();
+    const cmd = adapter.buildCommand({
+      type: "turn/start",
+      threadId: "t1",
+      providerThreadId: "codex-1",
+      input: [{ type: "text", text: "inspect it" }],
+      options: { permissionMode: "readonly", permissionEscalation: "ask" },
+    });
+    expect(cmd).toMatchObject({
+      method: "turn/start",
+      params: {
+        approvalPolicy: "on-request",
+        sandboxPolicy: {
+          type: "readOnly",
+          access: { type: "fullAccess" },
+          networkAccess: false,
+        },
+      },
+    });
+  });
+
+  it("buildCommand turn/start maps readonly deny escalation to no approval prompts", () => {
+    const adapter = createCodexProviderAdapter();
+    const cmd = adapter.buildCommand({
+      type: "turn/start",
+      threadId: "t1",
+      providerThreadId: "codex-1",
+      input: [{ type: "text", text: "inspect it" }],
+      options: { permissionMode: "readonly", permissionEscalation: "deny" },
+    });
+    expect(cmd).toMatchObject({
+      method: "turn/start",
+      params: {
+        approvalPolicy: "never",
+        sandboxPolicy: {
+          type: "readOnly",
         },
       },
     });

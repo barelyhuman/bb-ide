@@ -1180,6 +1180,152 @@ rl.on("line", (line) => {
     await runtime.shutdown();
   });
 
+  it("denies interactive requests when permission escalation is deny", async () => {
+    const interactiveScriptPath = join(tmpDir, "interactive-deny-provider.cjs");
+    writeFileSync(
+      interactiveScriptPath,
+      `
+const readline = require("node:readline");
+let nextThreadId = 1;
+let nextRequestId = 1;
+const threads = new Map();
+const pendingInteractive = new Map();
+
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + "\\n");
+}
+
+function completeTurn(providerThreadId, turnId, text) {
+  send({
+    jsonrpc: "2.0",
+    method: "item/completed",
+    params: {
+      threadId: providerThreadId,
+      turnId,
+      item: { type: "agentMessage", id: "msg-" + turnId, text },
+    },
+  });
+  send({
+    jsonrpc: "2.0",
+    method: "turn/completed",
+    params: { threadId: providerThreadId, turnId, status: "completed", providerThreadId },
+  });
+}
+
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+
+  if (message.id !== undefined && !message.method) {
+    const pending = pendingInteractive.get(message.id);
+    if (!pending) return;
+    pendingInteractive.delete(message.id);
+    const decision =
+      message.result && message.result.resolution
+      && message.result.resolution.kind === "command_approval"
+        ? message.result.resolution.decision
+        : "unknown";
+    completeTurn(pending.providerThreadId, pending.turnId, "interactive:" + decision);
+    return;
+  }
+
+  if (message.method === "initialize" || message.method === "model/list") {
+    send({ jsonrpc: "2.0", id: message.id, result: message.method === "model/list" ? [] : {} });
+    return;
+  }
+
+  if (message.method === "thread/start") {
+    const threadId = message.params.threadId;
+    const providerThreadId = "prov-" + String(nextThreadId++);
+    threads.set(threadId, { providerThreadId, turnCount: 0 });
+    send({ jsonrpc: "2.0", id: message.id, result: { providerThreadId } });
+    send({ jsonrpc: "2.0", method: "thread/identity", params: { threadId, providerThreadId } });
+    return;
+  }
+
+  if (message.method === "thread/resume") {
+    send({ jsonrpc: "2.0", id: message.id, result: { providerThreadId: message.params.threadId } });
+    return;
+  }
+
+  if (message.method === "turn/start") {
+    const providerThreadId = message.params.providerThreadId || message.params.threadId;
+    const thread = threads.get(message.params.threadId);
+    thread.turnCount += 1;
+    const turnId = "turn-" + String(thread.turnCount);
+    send({
+      jsonrpc: "2.0",
+      method: "turn/started",
+      params: { threadId: providerThreadId, turnId, providerThreadId },
+    });
+    send({ jsonrpc: "2.0", id: message.id, result: { ok: true } });
+    const requestId = nextRequestId++;
+    pendingInteractive.set(requestId, { providerThreadId, turnId });
+    send({
+      jsonrpc: "2.0",
+      id: requestId,
+      method: "request_interaction",
+      params: {
+        threadId: providerThreadId,
+        turnId,
+        itemId: "item-deny",
+        kind: "command_approval",
+        command: "git push",
+        cwd: "/tmp/project",
+        reason: "Needs approval",
+      },
+    });
+  }
+});
+`,
+      "utf8",
+    );
+
+    const requests: string[] = [];
+    const events: ThreadEvent[] = [];
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: (event) => events.push(event),
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      onInteractiveRequest: async (request) => {
+        requests.push(request.providerRequestId);
+        return {
+          kind: "command_approval",
+          decision: "accept",
+        };
+      },
+      adapterFactory: () => createInteractiveRequestAdapter(interactiveScriptPath),
+    });
+
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+      options: { permissionMode: "readonly", permissionEscalation: "deny" },
+    });
+    await runtime.runTurn({
+      threadId: "t1",
+      input: [{ type: "text", text: "trigger denied interactive request" }],
+      options: { permissionMode: "readonly", permissionEscalation: "deny" },
+    });
+    await waitForCondition(
+      () =>
+        events.some(
+          (event) =>
+            event.type === "item/completed"
+            && event.item.type === "agentMessage"
+            && event.item.text === "interactive:decline",
+        ),
+    );
+
+    expect(requests).toEqual([]);
+    await runtime.shutdown();
+  });
+
   it("sends JSON-RPC error back when onInteractiveRequest throws", async () => {
     const interactiveScriptPath = join(tmpDir, "interactive-error-provider.cjs");
     writeFileSync(
