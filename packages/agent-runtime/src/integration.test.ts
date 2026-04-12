@@ -42,6 +42,21 @@ const workspaceWriteAskRuntimeOptions = {
   permissionEscalation: "ask",
 } satisfies AgentRuntimeExecutionOptions;
 
+const workspaceWriteDenyRuntimeOptions = {
+  permissionMode: "workspace-write",
+  permissionEscalation: "deny",
+} satisfies AgentRuntimeExecutionOptions;
+
+const readonlyAskRuntimeOptions = {
+  permissionMode: "readonly",
+  permissionEscalation: "ask",
+} satisfies AgentRuntimeExecutionOptions;
+
+const readonlyDenyRuntimeOptions = {
+  permissionMode: "readonly",
+  permissionEscalation: "deny",
+} satisfies AgentRuntimeExecutionOptions;
+
 function waitForCondition(
   predicate: () => boolean,
   opts?: { timeoutMs?: number; label?: string },
@@ -969,6 +984,134 @@ describe.sequential("interactive request scenarios", () => {
     }
   }, 60_000);
 
+  it("allows Claude workspace-write Write tool mutations without interactive requests", async () => {
+    const ctx = createTestRuntime("claude-code");
+    const fileName = createTempFileName("claude-workspace-write-tool");
+    const filePath = join(ctx.tmpDir, fileName);
+    const token = createToken("CLAUDE_WORKSPACE_WRITE_TOOL_APPROVED");
+
+    try {
+      const threadId = newThreadId();
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId: "claude-code",
+        options: workspaceWriteAskRuntimeOptions,
+        instructions:
+          "Use the Write tool when the user explicitly asks for Write. Do not substitute Bash.",
+      });
+
+      await ctx.runtime.runTurn({
+        threadId,
+        options: workspaceWriteAskRuntimeOptions,
+        input: [{
+          type: "text",
+          text:
+            `Use the Write tool to create exactly this file: ${filePath}. `
+            + `The file content must be exactly ${token} with no trailing newline. `
+            + "Do not use Bash. After the file is written, reply with exactly DONE.",
+        }],
+      });
+
+      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        timeoutMs: 45_000,
+        label: "Claude workspace-write Write turn/completed",
+      });
+
+      expect(ctx.interactiveRequests).toHaveLength(0);
+      expect(readFileSync(filePath, "utf8")).toBe(token);
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 75_000);
+
+  it("allows Claude workspace-write sandboxed Bash workspace writes without interactive requests", async () => {
+    const ctx = createTestRuntime("claude-code");
+    const fileName = createTempFileName("claude-workspace-write-bash");
+    const filePath = join(ctx.tmpDir, fileName);
+    const token = createToken("CLAUDE_WORKSPACE_BASH_APPROVED");
+
+    try {
+      const threadId = newThreadId();
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId: "claude-code",
+        options: workspaceWriteAskRuntimeOptions,
+        instructions:
+          "Use the Bash tool when the user explicitly asks for Bash. Do not substitute Write.",
+      });
+
+      await ctx.runtime.runTurn({
+        threadId,
+        options: workspaceWriteAskRuntimeOptions,
+        input: [{
+          type: "text",
+          text:
+            `Use Bash to run exactly: printf '${token}' > ${fileName}. `
+            + "Do not use the Write tool. After the command finishes, reply with exactly DONE.",
+        }],
+      });
+
+      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        timeoutMs: 45_000,
+        label: "Claude workspace-write sandboxed Bash turn/completed",
+      });
+
+      expect(ctx.interactiveRequests).toHaveLength(0);
+      expect(readFileSync(filePath, "utf8")).toBe(token);
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 75_000);
+
+  it("blocks Claude workspace-write outside-workspace Bash without interactive requests when escalation is deny", async () => {
+    const ctx = createTestRuntime("claude-code");
+    const outsideDir = mkdtempSync(join(tmpdir(), "bb-claude-outside-"));
+    const filePath = join(outsideDir, createTempFileName("claude-outside-bash-denied"));
+    const token = createToken("CLAUDE_WORKSPACE_BASH_DENIED");
+
+    try {
+      const threadId = newThreadId();
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId: "claude-code",
+        options: workspaceWriteDenyRuntimeOptions,
+        instructions:
+          "Use the Bash tool when the user explicitly asks for Bash. Do not substitute Write.",
+      });
+
+      await ctx.runtime.runTurn({
+        threadId,
+        options: workspaceWriteDenyRuntimeOptions,
+        input: [{
+          type: "text",
+          text:
+            `Use Bash to run exactly: printf '${token}' > '${filePath}'. `
+            + "If it is denied or blocked, say DENIED.",
+        }],
+      });
+
+      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        timeoutMs: 45_000,
+        label: "Claude workspace-write outside Bash deny turn/completed",
+      });
+
+      expect(ctx.interactiveRequests).toHaveLength(0);
+      expect(existsSync(filePath)).toBe(false);
+    } finally {
+      await ctx.runtime.shutdown();
+      rmSync(outsideDir, { recursive: true, force: true });
+      cleanup(ctx);
+    }
+  }, 75_000);
+
   it("allows Codex workspace-write workspace writes without interactive requests", async () => {
     const ctx = createTestRuntime("codex");
     const fileName = createTempFileName("codex-workspace-write");
@@ -1091,20 +1234,14 @@ describe.sequential("interactive request scenarios", () => {
         threadId,
         projectId: "test-project",
         providerId: "codex",
-        options: {
-          permissionEscalation: "ask",
-          permissionMode: "readonly",
-        },
+        options: readonlyAskRuntimeOptions,
         instructions:
           "When the user asks you to run an exact shell command, run that shell command exactly once and then report DONE.",
       });
 
       await ctx.runtime.runTurn({
         threadId,
-        options: {
-          permissionEscalation: "ask",
-          permissionMode: "readonly",
-        },
+        options: readonlyAskRuntimeOptions,
         input: [{
           type: "text",
           text:
@@ -1147,20 +1284,14 @@ describe.sequential("interactive request scenarios", () => {
         threadId,
         projectId: "test-project",
         providerId: "codex",
-        options: {
-          permissionEscalation: "deny",
-          permissionMode: "readonly",
-        },
+        options: readonlyDenyRuntimeOptions,
         instructions:
           "When the user asks you to run an exact shell command, run that shell command exactly once and then report DONE.",
       });
 
       await ctx.runtime.runTurn({
         threadId,
-        options: {
-          permissionEscalation: "deny",
-          permissionMode: "readonly",
-        },
+        options: readonlyDenyRuntimeOptions,
         input: [{
           type: "text",
           text:
@@ -1197,20 +1328,14 @@ describe.sequential("interactive request scenarios", () => {
         threadId,
         projectId: "test-project",
         providerId: "claude-code",
-        options: {
-          permissionEscalation: "ask",
-          permissionMode: "readonly",
-        },
+        options: readonlyAskRuntimeOptions,
         instructions:
           "Use the Bash tool when the user explicitly asks for Bash. Do not use another tool.",
       });
 
       await ctx.runtime.runTurn({
         threadId,
-        options: {
-          permissionEscalation: "ask",
-          permissionMode: "readonly",
-        },
+        options: readonlyAskRuntimeOptions,
         input: [{
           type: "text",
           text:
@@ -1238,6 +1363,57 @@ describe.sequential("interactive request scenarios", () => {
     }
   }, 75_000);
 
+  it("routes Claude readonly Write tool mutations through onInteractiveRequest when escalation is ask", async () => {
+    const ctx = createTestRuntime("claude-code", {
+      onInteractiveRequest: createApprovalResolution,
+    });
+    const fileName = createTempFileName("claude-readonly-write-tool");
+    const filePath = join(ctx.tmpDir, fileName);
+    const token = createToken("CLAUDE_READONLY_WRITE_TOOL_APPROVED");
+
+    try {
+      const threadId = newThreadId();
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId: "claude-code",
+        options: readonlyAskRuntimeOptions,
+        instructions:
+          "Use the Write tool when the user explicitly asks for Write. Do not substitute Bash.",
+      });
+
+      await ctx.runtime.runTurn({
+        threadId,
+        options: readonlyAskRuntimeOptions,
+        input: [{
+          type: "text",
+          text:
+            `Use the Write tool to create exactly this file: ${filePath}. `
+            + `The file content must be exactly ${token} with no trailing newline. `
+            + "Do not use Bash. After the file is written, reply with exactly DONE.",
+        }],
+      });
+
+      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+        timeoutMs: 45_000,
+        label: "Claude readonly Write permission request",
+      });
+      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        timeoutMs: 45_000,
+        label: "Claude readonly Write ask turn/completed",
+      });
+
+      expect(ctx.interactiveRequests.some((request) =>
+        request.payload.kind === "permission_request",
+      )).toBe(true);
+      expect(readFileSync(filePath, "utf8")).toBe(token);
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 75_000);
+
   it("blocks Claude readonly Bash mutations without interactive requests when escalation is deny", async () => {
     const ctx = createTestRuntime("claude-code");
     const fileName = createTempFileName("claude-readonly-denied");
@@ -1251,20 +1427,14 @@ describe.sequential("interactive request scenarios", () => {
         threadId,
         projectId: "test-project",
         providerId: "claude-code",
-        options: {
-          permissionEscalation: "deny",
-          permissionMode: "readonly",
-        },
+        options: readonlyDenyRuntimeOptions,
         instructions:
           "Use the Bash tool when the user explicitly asks for Bash. Do not use another tool.",
       });
 
       await ctx.runtime.runTurn({
         threadId,
-        options: {
-          permissionEscalation: "deny",
-          permissionMode: "readonly",
-        },
+        options: readonlyDenyRuntimeOptions,
         input: [{
           type: "text",
           text:
