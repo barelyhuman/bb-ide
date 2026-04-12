@@ -1,9 +1,20 @@
 import { useCallback, useState } from "react";
-import { Check, Code2, FolderOpen, Terminal, Wrench } from "lucide-react";
+import { Check } from "lucide-react";
 import type {
   WorkspaceOpenTarget,
   WorkspaceOpenTargetId,
 } from "@bb/host-daemon-contract";
+import vscodeIcon from "@/assets/workspace-open-target-icons/vscode.png";
+import cursorIcon from "@/assets/workspace-open-target-icons/cursor.png";
+import sublimeTextIcon from "@/assets/workspace-open-target-icons/sublime-text.png";
+import zedIcon from "@/assets/workspace-open-target-icons/zed.png";
+import windsurfIcon from "@/assets/workspace-open-target-icons/windsurf.png";
+import antigravityIcon from "@/assets/workspace-open-target-icons/antigravity.png";
+import finderIcon from "@/assets/workspace-open-target-icons/finder.png";
+import terminalIcon from "@/assets/workspace-open-target-icons/terminal.png";
+import iterm2Icon from "@/assets/workspace-open-target-icons/iterm2.png";
+import ghosttyIcon from "@/assets/workspace-open-target-icons/ghostty.png";
+import xcodeIcon from "@/assets/workspace-open-target-icons/xcode.png";
 import { SplitButton, type SplitButtonAction } from "@/components/ui/split-button";
 import {
   resolvePreferredWorkspaceOpenTarget,
@@ -13,6 +24,20 @@ import { toast } from "sonner";
 
 const WORKSPACE_OPEN_BUTTON_CLASS =
   "h-7 rounded-md border-border/70 bg-background/70 px-2 text-xs font-medium text-foreground/85 shadow-none hover:bg-muted/45 hover:text-foreground";
+
+const WORKSPACE_OPEN_TARGET_ICONS: Record<WorkspaceOpenTargetId, string> = {
+  vscode: vscodeIcon,
+  cursor: cursorIcon,
+  "sublime-text": sublimeTextIcon,
+  zed: zedIcon,
+  windsurf: windsurfIcon,
+  antigravity: antigravityIcon,
+  finder: finderIcon,
+  terminal: terminalIcon,
+  iterm2: iterm2Icon,
+  ghostty: ghosttyIcon,
+  xcode: xcodeIcon,
+};
 
 interface ThreadWorkspaceOpenButtonProps {
   onOpenWorkspace: (targetId: WorkspaceOpenTargetId) => Promise<void>;
@@ -24,20 +49,14 @@ interface WorkspaceOpenTargetIconProps {
 }
 
 function WorkspaceOpenTargetIcon({ target }: WorkspaceOpenTargetIconProps) {
-  switch (target.kind) {
-    case "file-manager":
-      return <FolderOpen className="size-3.5" />;
-    case "terminal":
-      return <Terminal className="size-3.5" />;
-    case "ide":
-      return <Wrench className="size-3.5" />;
-    case "editor":
-      return <Code2 className="size-3.5" />;
-    default: {
-      const _exhaustive: never = target.kind;
-      return _exhaustive;
-    }
-  }
+  return (
+    <img
+      alt=""
+      className="size-4 shrink-0 rounded-[3px]"
+      draggable={false}
+      src={WORKSPACE_OPEN_TARGET_ICONS[target.id]}
+    />
+  );
 }
 
 export function ThreadWorkspaceOpenButton({
