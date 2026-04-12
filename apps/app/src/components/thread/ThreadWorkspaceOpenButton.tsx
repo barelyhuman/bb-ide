@@ -3,7 +3,6 @@ import { Check } from "lucide-react";
 import type {
   WorkspaceOpenTarget,
   WorkspaceOpenTargetId,
-  WorkspaceOpenTargetKind,
 } from "@bb/host-daemon-contract";
 import vscodeIcon from "@/assets/workspace-open-target-icons/vscode.png";
 import cursorIcon from "@/assets/workspace-open-target-icons/cursor.png";
@@ -38,13 +37,6 @@ const WORKSPACE_OPEN_TARGET_ICONS: Record<WorkspaceOpenTargetId, string> = {
   iterm2: iterm2Icon,
   ghostty: ghosttyIcon,
   xcode: xcodeIcon,
-};
-
-const WORKSPACE_OPEN_TARGET_KIND_LABELS: Record<WorkspaceOpenTargetKind, string> = {
-  editor: "Editors",
-  "file-manager": "File Managers",
-  terminal: "Terminals",
-  ide: "IDEs",
 };
 
 interface ThreadWorkspaceOpenButtonProps {
@@ -115,7 +107,6 @@ export function ThreadWorkspaceOpenButton({
     content: <WorkspaceOpenTargetIcon target={selectedTarget} />,
   };
   const secondaryActions: SplitButtonAction[] = targets.map((target) => ({
-    groupLabel: WORKSPACE_OPEN_TARGET_KIND_LABELS[target.kind],
     label: target.label,
     onSelect: () => {
       void openTarget(target, true);

@@ -12,12 +12,10 @@ const TARGETS: WorkspaceOpenTarget[] = [
   {
     id: "vscode",
     label: "VS Code",
-    kind: "editor",
   },
   {
     id: "finder",
     label: "Finder",
-    kind: "file-manager",
   },
 ];
 
@@ -78,8 +76,6 @@ describe("ThreadWorkspaceOpenButton", () => {
     fireEvent.pointerDown(
       screen.getByRole("button", { name: "Choose workspace open target" }),
     );
-    expect(await screen.findByText("Editors")).toBeTruthy();
-    expect(screen.getByText("File Managers")).toBeTruthy();
     fireEvent.click(await screen.findByRole("menuitem", { name: "Finder" }));
 
     await waitFor(() => {

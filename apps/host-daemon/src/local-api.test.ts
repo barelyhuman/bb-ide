@@ -228,12 +228,10 @@ describe("local API server", () => {
       {
         id: "vscode",
         label: "VS Code",
-        kind: "editor",
       },
       {
         id: "finder",
         label: "Finder",
-        kind: "file-manager",
       },
     ];
     const listWorkspaceOpenTargets = vi.fn(async () => targets);

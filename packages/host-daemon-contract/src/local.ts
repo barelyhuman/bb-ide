@@ -35,19 +35,9 @@ export const workspaceOpenTargetIdValues = [
 export const workspaceOpenTargetIdSchema = z.enum(workspaceOpenTargetIdValues);
 export type WorkspaceOpenTargetId = z.infer<typeof workspaceOpenTargetIdSchema>;
 
-export const workspaceOpenTargetKindValues = [
-  "editor",
-  "file-manager",
-  "terminal",
-  "ide",
-] as const;
-export const workspaceOpenTargetKindSchema = z.enum(workspaceOpenTargetKindValues);
-export type WorkspaceOpenTargetKind = z.infer<typeof workspaceOpenTargetKindSchema>;
-
 export const workspaceOpenTargetSchema = z.object({
   id: workspaceOpenTargetIdSchema,
   label: z.string().min(1),
-  kind: workspaceOpenTargetKindSchema,
 });
 export type WorkspaceOpenTarget = z.infer<typeof workspaceOpenTargetSchema>;
 

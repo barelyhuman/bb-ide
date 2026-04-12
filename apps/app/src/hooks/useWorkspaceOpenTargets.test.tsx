@@ -199,7 +199,6 @@ describe("useWorkspaceOpenTargets", () => {
         {
           id: "vscode",
           label: "VS Code",
-          kind: "editor",
         },
       ],
       workspaceOpenTargetsStatus: 200,
@@ -308,7 +307,6 @@ describe("useWorkspaceOpenTargets", () => {
       {
         id: "vscode",
         label: "VS Code",
-        kind: "editor",
       },
     ];
     socket.open();

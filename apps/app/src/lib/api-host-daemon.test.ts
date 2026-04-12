@@ -144,7 +144,6 @@ describe("api-host-daemon", () => {
       {
         id: "vscode",
         label: "VS Code",
-        kind: "editor",
       },
     ]
     installFetchRoutes([

@@ -6,12 +6,10 @@ const TARGETS: WorkspaceOpenTarget[] = [
   {
     id: "vscode",
     label: "VS Code",
-    kind: "editor",
   },
   {
     id: "finder",
     label: "Finder",
-    kind: "file-manager",
   },
 ];
 
@@ -25,7 +23,6 @@ describe("resolvePreferredWorkspaceOpenTarget", () => {
     ).toEqual({
       id: "finder",
       label: "Finder",
-      kind: "file-manager",
     });
   });
 
@@ -38,7 +35,6 @@ describe("resolvePreferredWorkspaceOpenTarget", () => {
     ).toEqual({
       id: "vscode",
       label: "VS Code",
-      kind: "editor",
     });
   });
 
@@ -51,7 +47,6 @@ describe("resolvePreferredWorkspaceOpenTarget", () => {
     ).toEqual({
       id: "vscode",
       label: "VS Code",
-      kind: "editor",
     });
   });
 

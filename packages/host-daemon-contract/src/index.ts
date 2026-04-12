@@ -35,8 +35,6 @@ export {
   statusResponseSchema,
   workspaceOpenTargetIdSchema,
   workspaceOpenTargetIdValues,
-  workspaceOpenTargetKindSchema,
-  workspaceOpenTargetKindValues,
   workspaceOpenTargetSchema,
   workspaceOpenTargetsResponseSchema,
 } from "./local.js";
@@ -54,7 +52,6 @@ export type {
   StatusResponse,
   WorkspaceOpenTarget,
   WorkspaceOpenTargetId,
-  WorkspaceOpenTargetKind,
   WorkspaceOpenTargetsResponse,
 } from "./local.js";
 

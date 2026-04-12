@@ -36,12 +36,10 @@ describe("host-daemon local schemas", () => {
       contract.workspaceOpenTargetSchema.parse({
         id: "vscode",
         label: "VS Code",
-        kind: "editor",
       }),
     ).toEqual({
       id: "vscode",
       label: "VS Code",
-      kind: "editor",
     });
 
     expect(
@@ -50,12 +48,10 @@ describe("host-daemon local schemas", () => {
           {
             id: "finder",
             label: "Finder",
-            kind: "file-manager",
           },
           {
             id: "terminal",
             label: "Terminal",
-            kind: "terminal",
           },
         ],
       }),
@@ -64,12 +60,10 @@ describe("host-daemon local schemas", () => {
         {
           id: "finder",
           label: "Finder",
-          kind: "file-manager",
         },
         {
           id: "terminal",
           label: "Terminal",
-          kind: "terminal",
         },
       ],
     });
@@ -90,7 +84,6 @@ describe("host-daemon local schemas", () => {
       contract.workspaceOpenTargetSchema.parse({
         id: "unknown-editor",
         label: "Unknown",
-        kind: "editor",
       }),
     ).toThrow();
 
@@ -100,7 +93,6 @@ describe("host-daemon local schemas", () => {
           {
             id: "vscode",
             label: "",
-            kind: "editor",
           },
         ],
       }),

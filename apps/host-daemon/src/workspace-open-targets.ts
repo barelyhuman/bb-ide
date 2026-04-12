@@ -6,7 +6,6 @@ import { promisify } from "node:util";
 import type {
   WorkspaceOpenTarget,
   WorkspaceOpenTargetId,
-  WorkspaceOpenTargetKind,
 } from "@bb/host-daemon-contract";
 
 const execFileAsync = promisify(execFile);
@@ -57,7 +56,6 @@ interface MacWorkspaceOpenTargetDefinition {
 interface WorkspaceOpenTargetDefinition {
   id: WorkspaceOpenTargetId;
   label: string;
-  kind: WorkspaceOpenTargetKind;
   macos: MacWorkspaceOpenTargetDefinition;
 }
 
@@ -65,7 +63,6 @@ const WORKSPACE_OPEN_TARGET_DEFINITIONS: WorkspaceOpenTargetDefinition[] = [
   {
     id: "vscode",
     label: "VS Code",
-    kind: "editor",
     macos: {
       appName: "Visual Studio Code",
       bundleIds: ["com.microsoft.VSCode"],
@@ -75,7 +72,6 @@ const WORKSPACE_OPEN_TARGET_DEFINITIONS: WorkspaceOpenTargetDefinition[] = [
   {
     id: "cursor",
     label: "Cursor",
-    kind: "editor",
     macos: {
       appName: "Cursor",
       // ToDesktop bundle IDs are generated; keep app-name path fallback below.
@@ -86,7 +82,6 @@ const WORKSPACE_OPEN_TARGET_DEFINITIONS: WorkspaceOpenTargetDefinition[] = [
   {
     id: "sublime-text",
     label: "Sublime Text",
-    kind: "editor",
     macos: {
       appName: "Sublime Text",
       bundleIds: ["com.sublimetext.4", "com.sublimetext.3"],
@@ -96,7 +91,6 @@ const WORKSPACE_OPEN_TARGET_DEFINITIONS: WorkspaceOpenTargetDefinition[] = [
   {
     id: "zed",
     label: "Zed",
-    kind: "editor",
     macos: {
       appName: "Zed",
       bundleIds: ["dev.zed.Zed"],
@@ -106,7 +100,6 @@ const WORKSPACE_OPEN_TARGET_DEFINITIONS: WorkspaceOpenTargetDefinition[] = [
   {
     id: "windsurf",
     label: "Windsurf",
-    kind: "editor",
     macos: {
       appName: "Windsurf",
       bundleIds: ["com.exafunction.windsurf"],
@@ -116,7 +109,6 @@ const WORKSPACE_OPEN_TARGET_DEFINITIONS: WorkspaceOpenTargetDefinition[] = [
   {
     id: "antigravity",
     label: "Antigravity",
-    kind: "editor",
     macos: {
       appName: "Antigravity",
       bundleIds: ["com.google.antigravity", "com.googlelabs.antigravity"],
@@ -126,7 +118,6 @@ const WORKSPACE_OPEN_TARGET_DEFINITIONS: WorkspaceOpenTargetDefinition[] = [
   {
     id: "finder",
     label: "Finder",
-    kind: "file-manager",
     macos: {
       appName: "Finder",
       bundleIds: ["com.apple.finder"],
@@ -136,7 +127,6 @@ const WORKSPACE_OPEN_TARGET_DEFINITIONS: WorkspaceOpenTargetDefinition[] = [
   {
     id: "terminal",
     label: "Terminal",
-    kind: "terminal",
     macos: {
       appName: "Terminal",
       bundleIds: ["com.apple.Terminal"],
@@ -146,7 +136,6 @@ const WORKSPACE_OPEN_TARGET_DEFINITIONS: WorkspaceOpenTargetDefinition[] = [
   {
     id: "iterm2",
     label: "iTerm2",
-    kind: "terminal",
     macos: {
       appName: "iTerm",
       bundleIds: ["com.googlecode.iterm2"],
@@ -156,7 +145,6 @@ const WORKSPACE_OPEN_TARGET_DEFINITIONS: WorkspaceOpenTargetDefinition[] = [
   {
     id: "ghostty",
     label: "Ghostty",
-    kind: "terminal",
     macos: {
       appName: "Ghostty",
       bundleIds: ["com.mitchellh.ghostty"],
@@ -166,7 +154,6 @@ const WORKSPACE_OPEN_TARGET_DEFINITIONS: WorkspaceOpenTargetDefinition[] = [
   {
     id: "xcode",
     label: "Xcode",
-    kind: "ide",
     macos: {
       appName: "Xcode",
       bundleIds: ["com.apple.dt.Xcode"],
@@ -181,7 +168,6 @@ function toWorkspaceOpenTarget(
   return {
     id: definition.id,
     label: definition.label,
-    kind: definition.kind,
   };
 }
 
