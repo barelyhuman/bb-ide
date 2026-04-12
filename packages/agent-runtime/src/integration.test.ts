@@ -11,7 +11,7 @@
  * Run with: pnpm test:integration
  */
 
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -24,6 +24,7 @@ import type {
   ToolCallResponse,
 } from "@bb/domain";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
+import { listAvailableProviderInfos } from "./provider-registry.js";
 import { createAgentRuntime } from "./runtime.js";
 import type { AgentRuntime } from "./types.js";
 
@@ -157,6 +158,14 @@ function newThreadId(): string {
   return randomUUID();
 }
 
+function createToken(prefix: string): string {
+  return `${prefix}_${randomUUID().replaceAll("-", "")}`;
+}
+
+function createTempFileName(prefix: string): string {
+  return `${prefix}-${randomUUID().replaceAll("-", "")}.txt`;
+}
+
 interface TestContext {
   runtime: AgentRuntime;
   events: ThreadEvent[];
@@ -253,8 +262,13 @@ async function createApprovalResolution(
         },
         scope: "turn",
       };
+    case "file_change_approval":
+      return {
+        kind: "file_change_approval",
+        decision: "accept",
+      };
     default:
-      throw new Error(`Unexpected interactive request: ${request.payload.kind}`);
+      throw new Error("Unexpected interactive request");
   }
 }
 
@@ -865,7 +879,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
   }, 45_000);
 });
 
-describe.concurrent("interactive request scenarios", () => {
+describe.sequential("interactive request scenarios", () => {
   it("routes Claude permission requests through onInteractiveRequest", async () => {
     const hostsPath = "/etc/hosts";
     const expectedLine = getFirstNonEmptyLine(hostsPath);
@@ -928,6 +942,272 @@ describe.concurrent("interactive request scenarios", () => {
       cleanup(ctx);
     }
   }, 60_000);
+
+  it("allows Codex workspace-write workspace writes without interactive requests", async () => {
+    const ctx = createTestRuntime("codex");
+    const fileName = createTempFileName("codex-workspace-write");
+    const filePath = join(ctx.tmpDir, fileName);
+    const token = createToken("CODEX_WORKSPACE_WRITE_APPROVED");
+
+    try {
+      const threadId = newThreadId();
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId: "codex",
+        options: {
+          permissionEscalation: "ask",
+          permissionMode: "workspace-write",
+        },
+        instructions:
+          "When the user asks you to run an exact shell command, run that shell command exactly once and then report DONE.",
+      });
+
+      await ctx.runtime.runTurn({
+        threadId,
+        options: {
+          permissionEscalation: "ask",
+          permissionMode: "workspace-write",
+        },
+        input: [{
+          type: "text",
+          text:
+            `Run this exact shell command: printf '${token}' > ${fileName}. `
+            + "After the command finishes, reply with exactly DONE.",
+        }],
+      });
+
+      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        timeoutMs: 45_000,
+        label: "Codex workspace-write turn/completed",
+      });
+
+      expect(ctx.interactiveRequests).toHaveLength(0);
+      expect(readFileSync(filePath, "utf8")).toBe(token);
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 75_000);
+
+  it("routes Codex readonly workspace writes through onInteractiveRequest when escalation is ask", async () => {
+    const ctx = createTestRuntime("codex", {
+      onInteractiveRequest: createApprovalResolution,
+    });
+    const fileName = createTempFileName("codex-readonly-write");
+    const filePath = join(ctx.tmpDir, fileName);
+    const token = createToken("CODEX_READONLY_APPROVED");
+
+    try {
+      const threadId = newThreadId();
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId: "codex",
+        options: {
+          permissionEscalation: "ask",
+          permissionMode: "readonly",
+        },
+        instructions:
+          "When the user asks you to run an exact shell command, run that shell command exactly once and then report DONE.",
+      });
+
+      await ctx.runtime.runTurn({
+        threadId,
+        options: {
+          permissionEscalation: "ask",
+          permissionMode: "readonly",
+        },
+        input: [{
+          type: "text",
+          text:
+            `Run this exact shell command: printf '${token}' > ${fileName}. `
+            + "After the command finishes, reply with exactly DONE.",
+        }],
+      });
+
+      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+        timeoutMs: 45_000,
+        label: "Codex readonly command approval",
+      });
+      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        timeoutMs: 45_000,
+        label: "Codex readonly ask turn/completed",
+      });
+
+      expect(ctx.interactiveRequests.some((request) =>
+        request.payload.kind === "command_approval"
+        || request.payload.kind === "permission_request"
+        || request.payload.kind === "file_change_approval",
+      )).toBe(true);
+      expect(readFileSync(filePath, "utf8")).toBe(token);
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 75_000);
+
+  it("blocks Codex readonly workspace writes without interactive requests when escalation is deny", async () => {
+    const ctx = createTestRuntime("codex");
+    const fileName = createTempFileName("codex-readonly-denied");
+    const filePath = join(ctx.tmpDir, fileName);
+    const token = createToken("CODEX_READONLY_DENIED");
+
+    try {
+      const threadId = newThreadId();
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId: "codex",
+        options: {
+          permissionEscalation: "deny",
+          permissionMode: "readonly",
+        },
+        instructions:
+          "When the user asks you to run an exact shell command, run that shell command exactly once and then report DONE.",
+      });
+
+      await ctx.runtime.runTurn({
+        threadId,
+        options: {
+          permissionEscalation: "deny",
+          permissionMode: "readonly",
+        },
+        input: [{
+          type: "text",
+          text:
+            `Run this exact shell command: printf '${token}' > ${fileName}. `
+            + "If it is denied, say DENIED.",
+        }],
+      });
+
+      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        timeoutMs: 45_000,
+        label: "Codex readonly deny turn/completed",
+      });
+
+      expect(ctx.interactiveRequests).toHaveLength(0);
+      expect(existsSync(filePath)).toBe(false);
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 75_000);
+
+  it("routes Claude readonly Bash mutations through onInteractiveRequest when escalation is ask", async () => {
+    const ctx = createTestRuntime("claude-code", {
+      onInteractiveRequest: createApprovalResolution,
+    });
+    const fileName = createTempFileName("claude-readonly-write");
+    const filePath = join(ctx.tmpDir, fileName);
+    const token = createToken("CLAUDE_READONLY_APPROVED");
+
+    try {
+      const threadId = newThreadId();
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId: "claude-code",
+        options: {
+          permissionEscalation: "ask",
+          permissionMode: "readonly",
+        },
+        instructions:
+          "Use the Bash tool when the user explicitly asks for Bash. Do not use another tool.",
+      });
+
+      await ctx.runtime.runTurn({
+        threadId,
+        options: {
+          permissionEscalation: "ask",
+          permissionMode: "readonly",
+        },
+        input: [{
+          type: "text",
+          text:
+            `Use Bash to run exactly: printf '${token}' > ${fileName}. `
+            + "After the command finishes, reply with exactly DONE.",
+        }],
+      });
+
+      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+        timeoutMs: 45_000,
+        label: "Claude readonly permission request",
+      });
+      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        timeoutMs: 45_000,
+        label: "Claude readonly ask turn/completed",
+      });
+
+      expect(ctx.interactiveRequests.some((request) =>
+        request.payload.kind === "permission_request",
+      )).toBe(true);
+      expect(readFileSync(filePath, "utf8")).toBe(token);
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 75_000);
+
+  it("blocks Claude readonly Bash mutations without interactive requests when escalation is deny", async () => {
+    const ctx = createTestRuntime("claude-code");
+    const fileName = createTempFileName("claude-readonly-denied");
+    const filePath = join(ctx.tmpDir, fileName);
+    const token = createToken("CLAUDE_READONLY_DENIED");
+
+    try {
+      const threadId = newThreadId();
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId: "claude-code",
+        options: {
+          permissionEscalation: "deny",
+          permissionMode: "readonly",
+        },
+        instructions:
+          "Use the Bash tool when the user explicitly asks for Bash. Do not use another tool.",
+      });
+
+      await ctx.runtime.runTurn({
+        threadId,
+        options: {
+          permissionEscalation: "deny",
+          permissionMode: "readonly",
+        },
+        input: [{
+          type: "text",
+          text:
+            `Use Bash to run exactly: printf '${token}' > ${fileName}. `
+            + "If it is denied, say DENIED.",
+        }],
+      });
+
+      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        timeoutMs: 45_000,
+        label: "Claude readonly deny turn/completed",
+      });
+
+      expect(ctx.interactiveRequests).toHaveLength(0);
+      expect(existsSync(filePath)).toBe(false);
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 75_000);
+
+  it("keeps Pi limited to full permission mode", () => {
+    const piProvider = listAvailableProviderInfos().find((provider) =>
+      provider.id === "pi",
+    );
+
+    expect(piProvider?.capabilities.supportedPermissionModes).toEqual(["full"]);
+  });
 });
 
   // Resume with dynamic tools
