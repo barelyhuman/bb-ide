@@ -1696,6 +1696,79 @@ describe("toViewMessages replay coverage", () => {
     expect(search?.output).toBe("Found the React Suspense docs");
   });
 
+  it("merges a completed web search into a flushed pending web-search cell", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          providerThreadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "webSearch",
+            id: "web-1",
+            query: "",
+            action: "other",
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          providerThreadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "agentMessage",
+            id: "assistant-1",
+            text: "I found the relevant docs.",
+          },
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/completed",
+        data: {
+          providerThreadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "webSearch",
+            id: "web-1",
+            query: "react suspense",
+            action: "search",
+            outputText: "Found the React Suspense docs",
+          },
+        },
+        createdAt: 3,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), { threadStatus: "idle" });
+    const searches = projected.filter(
+      (message): message is Extract<ViewMessage, { kind: "web-search" }> =>
+        message.kind === "web-search",
+    );
+
+    expect(searches).toHaveLength(1);
+    expect(searches[0]).toMatchObject({
+      id: "thread-1:web-search:web-1",
+      sourceSeqStart: 1,
+      sourceSeqEnd: 3,
+      createdAt: 3,
+      status: "completed",
+      query: "react suspense",
+      output: "Found the React Suspense docs",
+    });
+  });
+
   it("preserves unknown provider web-search action types", () => {
     const events: ThreadEventRow[] = [
       {

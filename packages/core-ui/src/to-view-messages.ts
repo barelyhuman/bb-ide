@@ -533,6 +533,19 @@ function findCallInHistoryCells(
   return null;
 }
 
+function findWebSearchInHistoryCells(
+  state: ProjectionState,
+  callId: string,
+): ViewWebSearchMessage | null {
+  for (let index = state.toolActivity.historyCells.length - 1; index >= 0; index -= 1) {
+    const cell = state.toolActivity.historyCells[index];
+    if (cell?.kind !== "web-search" || cell.callId !== callId) continue;
+    return cell;
+  }
+
+  return null;
+}
+
 function mergeCallSummary(
   target: ViewToolCallSummary | ViewToolCallMessage,
   incoming: ExecCallPartial,
@@ -878,6 +891,23 @@ function onWebSearchBegin(
   };
 }
 
+function mergeWebSearchMessage(
+  target: ViewWebSearchMessage,
+  meta: EventMeta,
+  turnId: string | undefined,
+  payload: WebSearchLifecycleEvent,
+): void {
+  target.sourceSeqEnd = Math.max(target.sourceSeqEnd, meta.seq);
+  target.createdAt = Math.max(target.createdAt, meta.createdAt);
+  if (!target.turnId && turnId) target.turnId = turnId;
+  if (!target.parentToolCallId && payload.parentToolCallId) {
+    target.parentToolCallId = payload.parentToolCallId;
+  }
+  if (payload.query) target.query = payload.query;
+  if (payload.action) target.action = payload.action;
+  if (payload.output) target.output = payload.output;
+}
+
 function onWebSearchEnd(
   state: ProjectionState,
   meta: EventMeta,
@@ -891,11 +921,7 @@ function onWebSearchEnd(
 
   const active = state.toolActivity.activeCell;
   if (active?.kind === "web-search" && active.callId === payload.callId) {
-    active.sourceSeqEnd = Math.max(active.sourceSeqEnd, meta.seq);
-    active.createdAt = Math.max(active.createdAt, meta.createdAt);
-    if (payload.query) active.query = payload.query;
-    if (payload.action) active.action = payload.action;
-    if (payload.output) active.output = payload.output;
+    mergeWebSearchMessage(active, meta, turnId, payload);
     active.status = "completed";
     flushActiveToolCell(state);
     state.toolActivity.finalizedWebSearchCallIds.add(payload.callId);
@@ -903,6 +929,14 @@ function onWebSearchEnd(
   }
 
   flushActiveToolCell(state);
+
+  const historyMatch = findWebSearchInHistoryCells(state, payload.callId);
+  if (historyMatch) {
+    mergeWebSearchMessage(historyMatch, meta, turnId, payload);
+    historyMatch.status = "completed";
+    state.toolActivity.finalizedWebSearchCallIds.add(payload.callId);
+    return;
+  }
 
   state.messages.push({
     kind: "web-search",
