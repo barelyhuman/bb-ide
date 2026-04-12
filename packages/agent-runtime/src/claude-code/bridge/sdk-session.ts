@@ -13,6 +13,7 @@ export interface SdkSessionOptions {
   cwd: string;
   systemPrompt: Exclude<Options["systemPrompt"], undefined>;
   model?: string;
+  sessionId?: string;
   permissionMode?: ClaudePermissionMode;
   sandbox?: Options["sandbox"];
   hooks?: Options["hooks"];
@@ -30,7 +31,6 @@ type SdkSessionDoneHandler = (error?: unknown) => void;
 export class SdkSession {
   private query: Query | undefined;
   private sessionId: string | undefined;
-  private sessionIdResolve: ((id: string) => void) | null = null;
   private inputResolve:
     | ((value: IteratorResult<SDKUserMessage>) => void)
     | null = null;
@@ -38,26 +38,21 @@ export class SdkSession {
   private inputDone = false;
   private readonly abortController = new AbortController();
   private isProcessing = false;
+  private readonly completion: Promise<void>;
+  private complete: (() => void) | null = null;
 
   constructor(
     private readonly options: SdkSessionOptions,
     private readonly onMessage: SdkSessionMessageHandler,
     private readonly onDone: SdkSessionDoneHandler,
-  ) {}
+  ) {
+    this.completion = new Promise((resolve) => {
+      this.complete = resolve;
+    });
+  }
 
   getSessionId(): string | undefined {
     return this.sessionId;
-  }
-
-  /**
-   * Returns a promise that resolves with the SDK session ID once the first
-   * message with a session_id arrives from the SDK stream.
-   */
-  waitForSessionId(): Promise<string> {
-    if (this.sessionId) return Promise.resolve(this.sessionId);
-    return new Promise<string>((resolve) => {
-      this.sessionIdResolve = resolve;
-    });
   }
 
   getIsProcessing(): boolean {
@@ -67,10 +62,8 @@ export class SdkSession {
   start(resumeSessionId?: string): void {
     if (resumeSessionId) {
       this.sessionId = resumeSessionId;
-      if (this.sessionIdResolve) {
-        this.sessionIdResolve(resumeSessionId);
-        this.sessionIdResolve = null;
-      }
+    } else if (this.options.sessionId) {
+      this.sessionId = this.options.sessionId;
     }
 
     const sdkOptions: Options = {
@@ -101,6 +94,9 @@ export class SdkSession {
         ? { allowDangerouslySkipPermissions: true }
         : {}),
       ...(resumeSessionId ? { resume: resumeSessionId } : {}),
+      ...(!resumeSessionId && this.options.sessionId
+        ? { sessionId: this.options.sessionId }
+        : {}),
       ...(this.options.model ? { model: this.options.model } : {}),
     };
 
@@ -141,6 +137,33 @@ export class SdkSession {
     this.isProcessing = false;
   }
 
+  async closeGracefully(timeoutMs: number): Promise<void> {
+    this.inputDone = true;
+    this.resolveInputDone();
+
+    if (!this.query) {
+      return;
+    }
+
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        this.completion,
+        new Promise<void>((_, reject) => {
+          timeout = setTimeout(() => {
+            reject(new Error(`Claude SDK session did not close within ${timeoutMs}ms`));
+          }, timeoutMs);
+        }),
+      ]);
+    } catch {
+      this.stop();
+    } finally {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+    }
+  }
+
   private createInputIterable(): AsyncIterable<SDKUserMessage> {
     const self = this;
     return {
@@ -148,14 +171,14 @@ export class SdkSession {
         return {
           async next(): Promise<IteratorResult<SDKUserMessage>> {
             if (self.inputQueue.length > 0) {
-              const value = self.inputQueue.shift()!;
+              const value = self.inputQueue.shift();
+              if (!value) {
+                return { value: undefined, done: true };
+              }
               return { value, done: false };
             }
             if (self.inputDone) {
-              return {
-                value: undefined as unknown as SDKUserMessage,
-                done: true,
-              };
+              return { value: undefined, done: true };
             }
             return new Promise<IteratorResult<SDKUserMessage>>((resolve) => {
               self.inputResolve = resolve;
@@ -164,10 +187,7 @@ export class SdkSession {
           async return(): Promise<IteratorResult<SDKUserMessage>> {
             self.inputDone = true;
             self.resolveInputDone();
-            return {
-              value: undefined as unknown as SDKUserMessage,
-              done: true,
-            };
+            return { value: undefined, done: true };
           },
         };
       },
@@ -178,10 +198,7 @@ export class SdkSession {
     if (!this.inputResolve) return;
     const resolve = this.inputResolve;
     this.inputResolve = null;
-    resolve({
-      value: undefined as unknown as SDKUserMessage,
-      done: true,
-    });
+    resolve({ value: undefined, done: true });
   }
 
   private async consumeStream(): Promise<void> {
@@ -199,6 +216,12 @@ export class SdkSession {
     } catch (error) {
       this.isProcessing = false;
       this.onDone(error);
+    } finally {
+      this.query = undefined;
+      if (this.complete) {
+        this.complete();
+        this.complete = null;
+      }
     }
   }
 
@@ -206,10 +229,6 @@ export class SdkSession {
     const { session_id } = message;
     if (session_id.trim().length > 0) {
       this.sessionId = session_id;
-      if (this.sessionIdResolve) {
-        this.sessionIdResolve(session_id);
-        this.sessionIdResolve = null;
-      }
     }
   }
 

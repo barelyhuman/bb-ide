@@ -146,6 +146,26 @@ function getStreamedText(events: ThreadEvent[]): string {
   return chunks.join("");
 }
 
+function getThreadText(events: ThreadEvent[], threadId: string): string {
+  const threadEvents = events.filter((event) =>
+    "threadId" in event && event.threadId === threadId,
+  );
+  return getAgentText(threadEvents) || getStreamedText(threadEvents);
+}
+
+function describeEventsForFailure(events: ThreadEvent[]): string {
+  return events.map((event) => {
+    const threadId = "threadId" in event ? event.threadId : "no-thread";
+    if (event.type === "item/completed") {
+      return `${threadId} ${event.type}:${event.item.type}`;
+    }
+    if (event.type === "error") {
+      return `${threadId} ${event.type}:${event.message}${event.detail ? ` ${event.detail}` : ""}`;
+    }
+    return `${threadId} ${event.type}`;
+  }).join("\n");
+}
+
 function getCompletedCommandOutputs(events: ThreadEvent[]): string {
   const outputs: string[] = [];
   for (const event of events) {
@@ -198,6 +218,7 @@ interface TestContext {
   interactiveRequests: PendingInteractionCreate[];
   captures: AgentRuntimeCaptureEntry[];
   tmpDir: string;
+  ownsTmpDir: boolean;
 }
 
 type TestToolCallHandler = (
@@ -211,13 +232,15 @@ type TestInteractiveRequestHandler = (
 interface CreateTestRuntimeOptions {
   onInteractiveRequest?: TestInteractiveRequestHandler;
   onToolCall?: TestToolCallHandler;
+  workspacePath?: string;
 }
 
 function createTestRuntime(
   providerId: string,
   opts?: CreateTestRuntimeOptions,
 ): TestContext {
-  const tmpDir = mkdtempSync(join(tmpdir(), `bb-integ-${providerId}-`));
+  const tmpDir = opts?.workspacePath ?? mkdtempSync(join(tmpdir(), `bb-integ-${providerId}-`));
+  const ownsTmpDir = !opts?.workspacePath;
   const events: ThreadEvent[] = [];
   const toolCalls: ToolCallRequest[] = [];
   const interactiveRequests: PendingInteractionCreate[] = [];
@@ -254,11 +277,14 @@ function createTestRuntime(
     interactiveRequests,
     captures,
     tmpDir,
+    ownsTmpDir,
   };
 }
 
 function cleanup(ctx: TestContext): void {
-  rmSync(ctx.tmpDir, { recursive: true, force: true });
+  if (ctx.ownsTmpDir) {
+    rmSync(ctx.tmpDir, { recursive: true, force: true });
+  }
 }
 
 async function createApprovalResolution(
@@ -656,19 +682,14 @@ for (const providerId of providers) {
       }
     });
 
-    // 7. Resumes a thread across process lifetimes
-    //
-    // Verifies that after shutting down one runtime (simulating process death),
-    // a new runtime can resume or re-create a session. For codex and pi, this
-    // uses actual session resume with conversation recall. For claude-code, the
-    // SDK's session persistence may not complete before SIGTERM, so we verify
-    // the runtime lifecycle by starting a fresh session in the new process.
+    // 7. Resumes a thread across process lifetimes.
     it("resumes a thread across process lifetimes", async () => {
       const ctx1 = createTestRuntime(providerId);
       let providerThreadId: string | undefined;
       let resumePath: string | undefined;
       let firstRuntimeEvents: ThreadEvent[] = [];
       const firstThreadId = newThreadId();
+      let ctx1Shutdown = false;
 
       try {
         const startResult = await ctx1.runtime.startThread({
@@ -713,96 +734,49 @@ for (const providerId of providers) {
 
         // Shutdown first runtime (simulates process death)
         await ctx1.runtime.shutdown();
-      } finally {
-        cleanup(ctx1);
-      }
+        ctx1Shutdown = true;
 
-      // Create a new runtime and attempt to resume
-      const ctx2 = createTestRuntime(providerId);
-      try {
+        // Create a new runtime and attempt to resume in the same workspace.
+        const ctx2 = createTestRuntime(providerId, { workspacePath: ctx1.tmpDir });
         const threadId = newThreadId();
 
-        // Attempt resume
-        await ctx2.runtime.resumeThread({
-          environmentId: "env-1",
-          threadId,
-          providerThreadId,
-          providerId,
-          resumePath,
-          options: fullRuntimeOptions,
-        });
-
-        await ctx2.runtime.runTurn({
-          threadId,
-          input: [{ type: "text", text: "What was the secret word I told you to remember? Reply with just the word." }],
-          options: fullRuntimeOptions,
-        });
-
-        // Wait for a turn to complete. Use a shorter initial timeout so we can
-        // fall back to a fresh thread if the provider doesn't support resume.
-        let resumed = false;
         try {
+          await ctx2.runtime.resumeThread({
+            environmentId: "env-1",
+            threadId,
+            providerThreadId,
+            providerId,
+            resumePath,
+            options: fullRuntimeOptions,
+          });
+
+          await ctx2.runtime.runTurn({
+            threadId,
+            input: [{ type: "text", text: "What was the secret word I told you to remember? Reply with just the word." }],
+            options: fullRuntimeOptions,
+          });
+
           await waitForCondition(() => hasTurnCompleted(ctx2.events), {
-            timeoutMs: 15_000,
+            timeoutMs: 30_000,
             label: "resumed turn/completed",
           });
-          resumed = true;
-        } catch {
-          // Resume didn't produce events — acceptable for providers whose SDK
-          // doesn't persist sessions across SIGTERM (claude-code).
-        }
 
-        if (resumed) {
           expectNoSharedRuntimeTurnIds({
             firstEvents: firstRuntimeEvents,
             providerId,
             secondEvents: ctx2.events,
           });
-          const text = getAgentText(ctx2.events) || getStreamedText(ctx2.events);
+          const text = getThreadText(ctx2.events, threadId);
           expect(text.toUpperCase()).toContain("STRAWBERRY");
-        } else {
-          // Fall back: verify the new runtime can start a fresh session.
-          // Shut down the current (potentially stuck) runtime first.
+        } finally {
           await ctx2.runtime.shutdown();
-
-          const ctx3 = createTestRuntime(providerId);
-          try {
-            const fallbackThreadId = newThreadId();
-            await ctx3.runtime.startThread({
-              environmentId: "env-1",
-              threadId: fallbackThreadId,
-              projectId: "test-project",
-              providerId,
-              options: fullRuntimeOptions,
-            });
-
-            await ctx3.runtime.runTurn({
-              threadId: fallbackThreadId,
-              input: [{ type: "text", text: "Reply with exactly: LIFECYCLE_OK" }],
-              options: fullRuntimeOptions,
-            });
-
-            await waitForCondition(() => hasTurnCompleted(ctx3.events), {
-              timeoutMs: 30_000,
-              label: "fallback turn/completed",
-            });
-            expectNoSharedRuntimeTurnIds({
-              firstEvents: firstRuntimeEvents,
-              providerId,
-              secondEvents: ctx3.events,
-            });
-
-            const text = getAgentText(ctx3.events) || getStreamedText(ctx3.events);
-            expect(text.length).toBeGreaterThan(0);
-          } finally {
-            await ctx3.runtime.shutdown();
-            cleanup(ctx3);
-          }
+          cleanup(ctx2);
         }
       } finally {
-        // Only shutdown if not already shut down (in the fallback path)
-        try { await ctx2.runtime.shutdown(); } catch { /* already shut down */ }
-        cleanup(ctx2);
+        if (!ctx1Shutdown) {
+          await ctx1.runtime.shutdown();
+        }
+        cleanup(ctx1);
       }
     });
   });
@@ -1792,6 +1766,7 @@ describe.sequential("interactive request scenarios", () => {
     const claudeThreadId1 = newThreadId();
     let codexProviderThreadId: string | undefined;
     let claudeProviderThreadId: string | undefined;
+    let ctx1Shutdown = false;
 
     try {
       const [codexStart, claudeStart] = await Promise.all([
@@ -1852,72 +1827,69 @@ describe.sequential("interactive request scenarios", () => {
       }
 
       await ctx1.runtime.shutdown();
-    } finally {
-      cleanup(ctx1);
-    }
+      ctx1Shutdown = true;
 
-    // Runtime 2: resume both threads, ask what fruit they remember
-    const ctx2 = createTestRuntime("codex");
-    try {
+      // Runtime 2: resume both threads in the same workspace.
+      const ctx2 = createTestRuntime("codex", { workspacePath: ctx1.tmpDir });
       const codexThreadId2 = newThreadId();
       const claudeThreadId2 = newThreadId();
 
-      await Promise.all([
-        ctx2.runtime.resumeThread({
-          environmentId: "env-1",
-          threadId: codexThreadId2,
-          providerThreadId: codexProviderThreadId,
-          providerId: "codex",
-          options: fullRuntimeOptions,
-        }),
-        ctx2.runtime.resumeThread({
-          environmentId: "env-1",
-          threadId: claudeThreadId2,
-          providerThreadId: claudeProviderThreadId,
-          providerId: "claude-code",
-          options: fullRuntimeOptions,
-        }),
-      ]);
-
-      await Promise.all([
-        ctx2.runtime.runTurn({
-          threadId: codexThreadId2,
-          input: [{ type: "text", text: "What fruit did I ask you to remember? Reply with just the fruit name." }],
-          options: fullRuntimeOptions,
-        }),
-        ctx2.runtime.runTurn({
-          threadId: claudeThreadId2,
-          input: [{ type: "text", text: "What fruit did I ask you to remember? Reply with just the fruit name." }],
-          options: fullRuntimeOptions,
-        }),
-      ]);
-
-      // Wait for at least one turn to complete — both providers resuming
-      // concurrently can take a while.
-      await waitForCondition(() => turnCompletedCount(ctx2.events) >= 1, {
-        timeoutMs: 45_000,
-        label: "at least one resumed thread turn/completed",
-      });
-
-      // Try to wait for the second, but don't fail if it doesn't arrive
-      // (claude-code SDK may not persist sessions on SIGTERM).
       try {
-        await waitForCondition(() => turnCompletedCount(ctx2.events) >= 2, {
-          timeoutMs: 15_000,
-          label: "second resumed thread turn/completed",
-        });
-      } catch {
-        // Acceptable — one provider's resume may not have completed
-      }
+        await Promise.all([
+          ctx2.runtime.resumeThread({
+            environmentId: "env-1",
+            threadId: codexThreadId2,
+            providerThreadId: codexProviderThreadId,
+            providerId: "codex",
+            options: fullRuntimeOptions,
+          }),
+          ctx2.runtime.resumeThread({
+            environmentId: "env-1",
+            threadId: claudeThreadId2,
+            providerThreadId: claudeProviderThreadId,
+            providerId: "claude-code",
+            options: fullRuntimeOptions,
+          }),
+        ]);
 
-      // Verify at least one provider recalled its fruit
-      const allText = (getAgentText(ctx2.events) || getStreamedText(ctx2.events)).toUpperCase();
-      expect(allText.length).toBeGreaterThan(0);
-      // At least codex should recall APPLE (it has reliable resume)
-      expect(allText).toContain("APPLE");
+        await Promise.all([
+          ctx2.runtime.runTurn({
+            threadId: codexThreadId2,
+            input: [{ type: "text", text: "What fruit did I ask you to remember? Reply with just the fruit name." }],
+            options: fullRuntimeOptions,
+          }),
+          ctx2.runtime.runTurn({
+            threadId: claudeThreadId2,
+            input: [{ type: "text", text: "What fruit did I ask you to remember? Reply with just the fruit name." }],
+            options: fullRuntimeOptions,
+          }),
+        ]);
+
+        try {
+          await waitForCondition(() => turnCompletedCount(ctx2.events) >= 2, {
+            timeoutMs: 45_000,
+            label: "both resumed threads turn/completed",
+          });
+        } catch (error) {
+          throw new Error(
+            `${error instanceof Error ? error.message : "Resume wait failed"}\n`
+            + `Events:\n${describeEventsForFailure(ctx2.events)}`,
+          );
+        }
+
+        const codexText = getThreadText(ctx2.events, codexThreadId2).toUpperCase();
+        const claudeText = getThreadText(ctx2.events, claudeThreadId2).toUpperCase();
+        expect(codexText).toContain("APPLE");
+        expect(claudeText).toContain("ORANGE");
+      } finally {
+        await ctx2.runtime.shutdown();
+        cleanup(ctx2);
+      }
     } finally {
-      await ctx2.runtime.shutdown();
-      cleanup(ctx2);
+      if (!ctx1Shutdown) {
+        await ctx1.runtime.shutdown();
+      }
+      cleanup(ctx1);
     }
   }, 90_000);
 });

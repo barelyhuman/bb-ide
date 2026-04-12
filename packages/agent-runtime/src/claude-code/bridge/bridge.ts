@@ -15,6 +15,7 @@
  * - Emits `thread/identity` when the SDK session ID is captured
  */
 
+import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline";
 import type {
   CanUseTool,
@@ -342,11 +343,31 @@ function sendSdkMessage(threadId: string, message: SDKMessage): void {
   });
 }
 
+function sendThreadIdentity(threadId: string, providerThreadId: string): void {
+  send({
+    jsonrpc: "2.0",
+    method: "thread/identity",
+    params: {
+      threadId,
+      providerThreadId,
+    },
+  });
+}
+
 function createOnSdkMessage(
   threadIdRef: ThreadIdRef,
 ): (message: SDKMessage) => void {
   return (message: SDKMessage) => {
-    if (!sessions.has(threadIdRef.current)) return;
+    const threadSession = sessions.get(threadIdRef.current);
+    if (!threadSession) return;
+    const providerThreadId = message.session_id.trim();
+    if (
+      providerThreadId.length > 0
+      && threadSession.providerThreadId !== providerThreadId
+    ) {
+      threadSession.providerThreadId = providerThreadId;
+      sendThreadIdentity(threadIdRef.current, providerThreadId);
+    }
     sendSdkMessage(threadIdRef.current, message);
   };
 }
@@ -440,6 +461,16 @@ function stopThreadSession(threadId: string, message: string): void {
   resolvePendingInteractiveRequests(threadSession, message);
   threadSession.session.stop();
   sessions.delete(threadId);
+}
+
+async function closeThreadSessionsGracefully(message: string): Promise<void> {
+  const closePromises: Promise<void>[] = [];
+  for (const [threadId, threadSession] of sessions) {
+    resolvePendingInteractiveRequests(threadSession, message);
+    sessions.delete(threadId);
+    closePromises.push(threadSession.session.closeGracefully(4_000));
+  }
+  await Promise.all(closePromises);
 }
 
 function extractEnvOverrides(config: Record<string, unknown> | undefined): Record<string, string> {
@@ -747,6 +778,8 @@ function handleThreadStart(
   const envOverrides = extractEnvOverrides(params.config);
   const sessionEnv = buildSessionEnv(envOverrides);
   const sessionOptions = buildSessionOptions(params, sessionEnv);
+  const providerThreadId = randomUUID();
+  sessionOptions.sessionId = providerThreadId;
   sessionOptions.canUseTool = createCanUseTool(threadIdRef);
   if (params.dynamicTools && params.dynamicTools.length > 0) {
     const mcpServer = buildBridgeMcpServer(
@@ -769,23 +802,13 @@ function handleThreadStart(
     pendingInteractiveRequests: new Map(),
     permissionEscalation: params.permissionEscalation,
     permissionMode: params.permissionMode,
+    providerThreadId,
   };
   sessions.set(threadIdRef.current, threadSession);
   session.start();
 
-  sendResult(id, { threadId: threadIdRef.current, providerThreadId: null });
-
-  void session.waitForSessionId().then((sdkSessionId) => {
-    threadSession.providerThreadId = sdkSessionId;
-    send({
-      jsonrpc: "2.0",
-      method: "thread/identity",
-      params: {
-        threadId: threadIdRef.current,
-        providerThreadId: sdkSessionId,
-      },
-    });
-  });
+  sendResult(id, { threadId: threadIdRef.current, providerThreadId });
+  sendThreadIdentity(threadIdRef.current, providerThreadId);
 }
 
 function handleThreadResume(
@@ -972,14 +995,28 @@ function handleLine(line: string): void {
 }
 
 // Main entry point
+let shuttingDown = false;
+
+function shutdownGracefully(message: string): void {
+  if (shuttingDown) {
+    return;
+  }
+  shuttingDown = true;
+  void closeThreadSessionsGracefully(message).finally(() => {
+    process.exit(0);
+  });
+}
+
+process.once("SIGTERM", () => {
+  shutdownGracefully("Bridge shutting down while awaiting permission approval");
+});
+
+process.once("SIGINT", () => {
+  shutdownGracefully("Bridge interrupted while awaiting permission approval");
+});
+
 const rl = createInterface({ input: process.stdin, terminal: false });
 rl.on("line", handleLine);
 rl.on("close", () => {
-  for (const threadId of [...sessions.keys()]) {
-    stopThreadSession(
-      threadId,
-      "Bridge closed while awaiting permission approval",
-    );
-  }
-  process.exit(0);
+  shutdownGracefully("Bridge closed while awaiting permission approval");
 });

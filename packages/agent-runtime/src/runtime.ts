@@ -44,9 +44,27 @@ const threadIdentityResultSchema = z.object({
   providerThreadId: z.string().nullable().optional(),
   threadId: z.string().nullable().optional(),
 });
+type ThreadIdentityResult = z.infer<typeof threadIdentityResultSchema>;
+
+interface ResolveThreadIdentityResultArgs {
+  result: ThreadIdentityResult;
+  threadId: string;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function resolveThreadIdentityResult(
+  args: ResolveThreadIdentityResultArgs,
+): string | undefined {
+  if (args.result.providerThreadId) {
+    return args.result.providerThreadId;
+  }
+  if (args.result.threadId && args.result.threadId !== args.threadId) {
+    return args.result.threadId;
+  }
+  return undefined;
 }
 
 function isJsonRpcId(value: unknown): value is string | number {
@@ -468,8 +486,10 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         () => nextRequestId++,
         threadIdentityResultSchema,
       );
-      const providerThreadId =
-        result.providerThreadId ?? result.threadId;
+      const providerThreadId = resolveThreadIdentityResult({
+        result,
+        threadId: args.threadId,
+      });
       if (providerThreadId) {
         recordProviderThreadIdentity(proc, args.threadId, providerThreadId);
       }
@@ -1105,8 +1125,10 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         () => nextRequestId++,
         threadIdentityResultSchema,
       );
-      const providerThreadId =
-        result.providerThreadId ?? result.threadId ?? undefined;
+      const providerThreadId = resolveThreadIdentityResult({
+        result,
+        threadId,
+      });
       if (providerThreadId) {
         recordProviderThreadIdentity(proc, threadId, providerThreadId);
       }
@@ -1202,8 +1224,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         threadIdentityResultSchema,
       );
       const resolvedId =
-        result.providerThreadId ??
-        result.threadId ??
+        resolveThreadIdentityResult({ result, threadId }) ??
         providerThreadId ??
         threadToProviderThread.get(threadId);
       if (!resolvedId) {
