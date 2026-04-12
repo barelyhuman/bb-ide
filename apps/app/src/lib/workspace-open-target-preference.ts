@@ -7,7 +7,7 @@ import {
 } from "@bb/host-daemon-contract";
 import { createLocalStorageEnumStorage } from "./browser-storage";
 
-const WORKSPACE_OPEN_TARGET_STORAGE_KEY = "bb.workspaceOpenTarget";
+export const WORKSPACE_OPEN_TARGET_STORAGE_KEY = "bb.workspaceOpenTarget";
 
 export type StoredWorkspaceOpenTargetPreference = "" | WorkspaceOpenTargetId;
 
@@ -53,4 +53,3 @@ export function resolvePreferredWorkspaceOpenTarget(
 export function useWorkspaceOpenTargetPreference() {
   return useAtom(workspaceOpenTargetPreferenceAtom);
 }
-
