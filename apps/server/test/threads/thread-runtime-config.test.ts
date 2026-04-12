@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  resolvePermissionEscalation,
   resolveExecutionOptions,
   resolveThreadRuntimeCommandConfig,
 } from "../../src/services/threads/thread-runtime-config.js";
@@ -116,6 +117,63 @@ describe("thread runtime config", () => {
           },
         }),
       ).rejects.toThrow("Provider pi only supports full permission mode.");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("derives ask escalation only for direct user root-thread work", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-runtime-permission-escalation",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const rootThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      const childThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        parentThreadId: rootThread.id,
+      });
+      const managerThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+      });
+
+      expect(
+        resolvePermissionEscalation({
+          thread: rootThread,
+          initiator: "user",
+        }),
+      ).toBe("ask");
+      expect(
+        resolvePermissionEscalation({
+          thread: rootThread,
+          initiator: "system",
+        }),
+      ).toBe("deny");
+      expect(
+        resolvePermissionEscalation({
+          thread: childThread,
+          initiator: "user",
+        }),
+      ).toBe("deny");
+      expect(
+        resolvePermissionEscalation({
+          thread: managerThread,
+          initiator: "user",
+        }),
+      ).toBe("deny");
     } finally {
       await harness.cleanup();
     }
