@@ -1,5 +1,9 @@
 // @vitest-environment jsdom
 
+import {
+  openWorkspaceRequestSchema,
+  type WorkspaceOpenTarget,
+} from "@bb/host-daemon-contract"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils"
 
@@ -133,5 +137,89 @@ describe("api-host-daemon", () => {
     const { fetchHostId } = await importFreshApiHostDaemon()
 
     await expect(fetchHostId(3002)).resolves.toBeNull()
+  })
+
+  it("fetches workspace open targets from the daemon", async () => {
+    const targets: WorkspaceOpenTarget[] = [
+      {
+        id: "vscode",
+        label: "VS Code",
+        kind: "editor",
+      },
+    ]
+    installFetchRoutes([
+      {
+        pathname: "/workspace-open-targets",
+        port: 3002,
+        handler: async () => jsonResponse({ targets }),
+      },
+    ])
+
+    const { fetchWorkspaceOpenTargets } = await importFreshApiHostDaemon()
+
+    await expect(fetchWorkspaceOpenTargets(3002)).resolves.toEqual(targets)
+  })
+
+  it("returns no workspace open targets when the daemon route is unavailable", async () => {
+    installFetchRoutes([
+      {
+        pathname: "/workspace-open-targets",
+        port: 3002,
+        handler: async () => new Response(null, { status: 404 }),
+      },
+    ])
+
+    const { fetchWorkspaceOpenTargets } = await importFreshApiHostDaemon()
+
+    await expect(fetchWorkspaceOpenTargets(3002)).resolves.toEqual([])
+  })
+
+  it("opens a workspace with a selected target", async () => {
+    const requests: Array<ReturnType<typeof openWorkspaceRequestSchema.parse>> = []
+    installFetchRoutes([
+      {
+        method: "POST",
+        pathname: "/open-workspace",
+        port: 3002,
+        handler: async (request) => {
+          requests.push(openWorkspaceRequestSchema.parse(await request.json()))
+          return jsonResponse({})
+        },
+      },
+    ])
+
+    const { openWorkspace } = await importFreshApiHostDaemon()
+
+    await openWorkspace(3002, {
+      path: "/tmp/workspace",
+      targetId: "vscode",
+    })
+
+    expect(requests).toEqual([
+      {
+        path: "/tmp/workspace",
+        targetId: "vscode",
+      },
+    ])
+  })
+
+  it("rejects failed workspace open requests", async () => {
+    installFetchRoutes([
+      {
+        method: "POST",
+        pathname: "/open-workspace",
+        port: 3002,
+        handler: async () => new Response(null, { status: 400 }),
+      },
+    ])
+
+    const { openWorkspace } = await importFreshApiHostDaemon()
+
+    await expect(
+      openWorkspace(3002, {
+        path: "/tmp/workspace",
+        targetId: "vscode",
+      }),
+    ).rejects.toThrow("Failed to open workspace: 400")
   })
 })

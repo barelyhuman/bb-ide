@@ -3,6 +3,12 @@
 import { Suspense, useEffect, type ReactNode } from "react"
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import type { Host } from "@bb/domain"
+import {
+  openRequestSchema,
+  openWorkspaceRequestSchema,
+  type OpenWorkspaceRequest,
+  type WorkspaceOpenTarget,
+} from "@bb/host-daemon-contract"
 import type { HostDaemonStatusSnapshot } from "@/lib/api-host-daemon"
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness"
 import { resetFakeReconnectingWebSockets } from "@/test/fake-reconnecting-websocket"
@@ -23,6 +29,8 @@ interface HostDaemonFetchState {
   hostDaemonPort: number | null
   hosts: Host[]
   pickedFolderPath: string | null
+  workspaceOpenTargets: WorkspaceOpenTarget[]
+  workspaceOpenTargetsStatus: number
 }
 
 interface HostDaemonSnapshot {
@@ -31,10 +39,12 @@ interface HostDaemonSnapshot {
   isLocalHost: (hostId: string | null | undefined) => boolean
   localHost: Host | null
   localHostId: string | null
+  openWorkspace: ((request: OpenWorkspaceRequest) => Promise<void>) | null
   openPath: ((path: string) => Promise<void>) | null
   pickFolder: (() => Promise<string | null>) | null
   supportsNativeFolderPicker: boolean
   platform: "darwin" | "linux" | "wsl" | "unknown" | null
+  workspaceOpenTargets: WorkspaceOpenTarget[]
 }
 
 interface HostDaemonModules {
@@ -91,10 +101,22 @@ function createHostDaemonProbe(useHostDaemon: HostDaemonModules["useHostDaemon"]
         <div data-testid="has-daemon">{String(value.hasDaemon)}</div>
         <div data-testid="is-connected">{String(value.hasConnectedPersistentHost)}</div>
         <div data-testid="supports-folder-picker">{String(value.supportsNativeFolderPicker)}</div>
+        <div data-testid="workspace-open-targets">{String(value.workspaceOpenTargets.length)}</div>
         <div data-testid="is-local-host-1">{String(value.isLocalHost("host-1"))}</div>
         <div data-testid="is-local-host-2">{String(value.isLocalHost("host-2"))}</div>
         <button disabled={value.openPath == null} onClick={() => { void value.openPath?.("/tmp/file.txt") }}>
           open path
+        </button>
+        <button
+          disabled={value.openWorkspace == null}
+          onClick={() => {
+            void value.openWorkspace?.({
+              path: "/tmp/workspace",
+              targetId: "vscode",
+            })
+          }}
+        >
+          open workspace
         </button>
         <button disabled={value.pickFolder == null} onClick={() => { void value.pickFolder?.() }}>
           pick folder
@@ -107,6 +129,7 @@ function createHostDaemonProbe(useHostDaemon: HostDaemonModules["useHostDaemon"]
 function installHostDaemonFetchRoutes(
   state: HostDaemonFetchState,
   openPathRequests: string[],
+  openWorkspaceRequests: OpenWorkspaceRequest[] = [],
 ) {
   installFetchRoutes([
     {
@@ -135,9 +158,25 @@ function installHostDaemonFetchRoutes(
       pathname: "/open-path",
       port: 4123,
       handler: async (request) => {
-        const bodyText = await request.text()
-        const parsedBody = JSON.parse(bodyText) as { path: string }
+        const parsedBody = openRequestSchema.parse(await request.json())
         openPathRequests.push(parsedBody.path)
+        return jsonResponse({})
+      },
+    },
+    {
+      pathname: "/workspace-open-targets",
+      port: 4123,
+      handler: async () =>
+        state.workspaceOpenTargetsStatus === 200
+          ? jsonResponse({ targets: state.workspaceOpenTargets })
+          : new Response(null, { status: state.workspaceOpenTargetsStatus }),
+    },
+    {
+      method: "POST",
+      pathname: "/open-workspace",
+      port: 4123,
+      handler: async (request) => {
+        openWorkspaceRequests.push(openWorkspaceRequestSchema.parse(await request.json()))
         return jsonResponse({})
       },
     },
@@ -189,9 +228,18 @@ describe("useHostDaemon", () => {
       hostDaemonPort: 4123,
       hosts: [makeHost()],
       pickedFolderPath: "/picked/path",
+      workspaceOpenTargets: [
+        {
+          id: "vscode",
+          label: "VS Code",
+          kind: "editor",
+        },
+      ],
+      workspaceOpenTargetsStatus: 200,
     }
     const openPathRequests: string[] = []
-    installHostDaemonFetchRoutes(state, openPathRequests)
+    const openWorkspaceRequests: OpenWorkspaceRequest[] = []
+    installHostDaemonFetchRoutes(state, openPathRequests, openWorkspaceRequests)
 
     const latestSnapshot: { current: HostDaemonSnapshot | null } = { current: null }
     const { useHostDaemon } = await importFreshHostDaemonModules()
@@ -211,15 +259,23 @@ describe("useHostDaemon", () => {
     expect(screen.getByTestId("has-daemon").textContent).toBe("true")
     expect(screen.getByTestId("is-connected").textContent).toBe("true")
     expect(screen.getByTestId("supports-folder-picker").textContent).toBe("true")
+    expect(screen.getByTestId("workspace-open-targets").textContent).toBe("1")
     expect(screen.getByTestId("is-local-host-1").textContent).toBe("true")
     expect(screen.getByTestId("is-local-host-2").textContent).toBe("false")
     expect(latestSnapshot.current?.localHost).toEqual(makeHost())
 
     fireEvent.click(screen.getByRole("button", { name: "open path" }))
+    fireEvent.click(screen.getByRole("button", { name: "open workspace" }))
     fireEvent.click(screen.getByRole("button", { name: "pick folder" }))
 
     await waitFor(() => {
       expect(openPathRequests).toEqual(["/tmp/file.txt"])
+      expect(openWorkspaceRequests).toEqual([
+        {
+          path: "/tmp/workspace",
+          targetId: "vscode",
+        },
+      ])
     })
   })
 
@@ -229,6 +285,8 @@ describe("useHostDaemon", () => {
       hostDaemonPort: null,
       hosts: [],
       pickedFolderPath: null,
+      workspaceOpenTargets: [],
+      workspaceOpenTargetsStatus: 404,
     }
     installHostDaemonFetchRoutes(state, [])
 
@@ -247,12 +305,52 @@ describe("useHostDaemon", () => {
     expect(screen.getByTestId("has-daemon").textContent).toBe("false")
     expect(screen.getByTestId("is-connected").textContent).toBe("false")
     expect(screen.getByTestId("supports-folder-picker").textContent).toBe("false")
+    expect(screen.getByTestId("workspace-open-targets").textContent).toBe("0")
     expect(screen.getByTestId("is-local-host-1").textContent).toBe("false")
     expect(screen.getByRole("button", { name: "open path" }).hasAttribute("disabled")).toBe(true)
+    expect(screen.getByRole("button", { name: "open workspace" }).hasAttribute("disabled")).toBe(true)
     expect(screen.getByRole("button", { name: "pick folder" }).hasAttribute("disabled")).toBe(true)
     expect(latestSnapshot.current?.localHost).toBeNull()
     expect(latestSnapshot.current?.openPath).toBeNull()
+    expect(latestSnapshot.current?.openWorkspace).toBeNull()
     expect(latestSnapshot.current?.pickFolder).toBeNull()
+  })
+
+  it("treats missing workspace open target routes as unsupported", async () => {
+    const state: HostDaemonFetchState = {
+      daemonStatus: {
+        connected: true,
+        hostId: "host-1",
+        serverUrl: "http://localhost:3334",
+        supportsNativeFolderPicker: false,
+        platform: "linux",
+      },
+      hostDaemonPort: 4123,
+      hosts: [makeHost()],
+      pickedFolderPath: null,
+      workspaceOpenTargets: [],
+      workspaceOpenTargetsStatus: 404,
+    }
+    installHostDaemonFetchRoutes(state, [])
+
+    const latestSnapshot: { current: HostDaemonSnapshot | null } = { current: null }
+    const { useHostDaemon } = await importFreshHostDaemonModules()
+    const HostDaemonProbe = createHostDaemonProbe(useHostDaemon)
+
+    await act(async () => {
+      render(<HostDaemonProbe onSnapshot={(snapshot) => { latestSnapshot.current = snapshot }} />, {
+        wrapper: createSuspenseWrapper(),
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId("local-host-id").textContent).toBe("host-1")
+    })
+
+    expect(screen.getByTestId("workspace-open-targets").textContent).toBe("0")
+    expect(screen.getByRole("button", { name: "open workspace" }).hasAttribute("disabled")).toBe(true)
+    expect(latestSnapshot.current?.workspaceOpenTargets).toEqual([])
+    expect(latestSnapshot.current?.openWorkspace).toBeNull()
   })
 
   it("re-probes daemon capabilities after websocket reconnects", async () => {
@@ -267,6 +365,8 @@ describe("useHostDaemon", () => {
       hostDaemonPort: 4123,
       hosts: [makeHost()],
       pickedFolderPath: null,
+      workspaceOpenTargets: [],
+      workspaceOpenTargetsStatus: 200,
     }
     installHostDaemonFetchRoutes(state, [])
 
@@ -280,6 +380,7 @@ describe("useHostDaemon", () => {
     })
 
     expect((await screen.findByTestId("supports-folder-picker")).textContent).toBe("false")
+    expect(screen.getByTestId("workspace-open-targets").textContent).toBe("0")
 
     wsManager.connect()
     const socket = FakeReconnectingWebSocket.latest()
@@ -292,10 +393,18 @@ describe("useHostDaemon", () => {
       supportsNativeFolderPicker: true,
       platform: "linux",
     }
+    state.workspaceOpenTargets = [
+      {
+        id: "vscode",
+        label: "VS Code",
+        kind: "editor",
+      },
+    ]
     socket.open()
 
     await waitFor(() => {
       expect(screen.getByTestId("supports-folder-picker").textContent).toBe("true")
+      expect(screen.getByTestId("workspace-open-targets").textContent).toBe("1")
     })
 
     wsManager.disconnect()
