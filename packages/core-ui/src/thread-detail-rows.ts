@@ -6,9 +6,6 @@ import type {
 import { assertNever } from "./assert-never.js";
 import { getMessageStartedAt } from "./format-helpers.js";
 import { mergeProvisioningOperations } from "./provisioning-helpers.js";
-import {
-  mergeThreadOperationMessages,
-} from "./thread-operation-helpers.js";
 
 /** Messages that are never absorbed into a tool-group (they always stay standalone). */
 function isUngroupableMessage(message: ViewMessage): boolean {
@@ -380,11 +377,8 @@ export function buildTimelineRows(
   const includeToolGroupMessages = options?.includeToolGroupMessages ?? true;
   const collapseAll = options?.collapseAll ?? false;
   const provisioningMergedMessages = mergeProvisioningOperations(messages);
-  const threadOperationMergedMessages = mergeThreadOperationMessages(
-    provisioningMergedMessages,
-  );
   const reconnectMergedMessages = mergeConsecutiveReconnectErrors(
-    threadOperationMergedMessages,
+    provisioningMergedMessages,
   );
   const mergedMessages = mergeConsecutiveToolActivityMessages(reconnectMergedMessages);
 

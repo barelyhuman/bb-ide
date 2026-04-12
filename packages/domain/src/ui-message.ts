@@ -162,9 +162,6 @@ export const viewOperationTypeSchema = z.enum(viewOperationTypeValues);
 export type ViewOperationType = z.infer<typeof viewOperationTypeSchema>;
 
 export const viewThreadOperationKindValues = [
-  "commit",
-  "squash_merge",
-  "primary_checkout",
   "ownership_change",
   "other",
 ] as const;

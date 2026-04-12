@@ -32,15 +32,8 @@ function providerDisplayName(providerId: string): string {
 }
 
 function normalizeThreadOperationKind(rawOperation: string): ViewThreadOperationKind {
-  switch (rawOperation) {
-    case "commit":
-    case "squash_merge":
-    case "primary_checkout":
-    case "ownership_change":
-      return rawOperation;
-    default:
-      return "other";
-  }
+  if (rawOperation === "ownership_change") return "ownership_change";
+  return "other";
 }
 
 function normalizeThreadOperationStatus(rawStatus: string): ViewThreadOperationStatus {
@@ -77,58 +70,6 @@ export function threadOperationTitle(meta: ViewThreadOperationMetadata | null): 
   const { operation, rawOperation, status, rawStatus, metadata } = meta;
 
   switch (operation) {
-    case "commit":
-      switch (status) {
-        case "running":
-          return "Committing changes";
-        case "completed":
-          return "Changes committed";
-        case "failed":
-          return "Commit failed";
-        case "requested":
-          return "Commit requested";
-        case "queued":
-          return "Commit queued";
-        case "noop":
-          return "No commit needed";
-        default:
-          return `Commit ${rawStatus}`;
-      }
-    case "squash_merge":
-      switch (status) {
-        case "running":
-          return "Squash merging";
-        case "completed":
-          return "Squash merged";
-        case "failed":
-          return "Squash merge failed";
-        case "requested":
-          return "Squash merge requested";
-        case "queued":
-          return "Squash merge queued";
-        case "noop":
-          return "No squash merge needed";
-        default:
-          return `Squash merge ${rawStatus}`;
-      }
-    case "primary_checkout": {
-      const action = typeof metadata?.action === "string" ? metadata.action : undefined;
-      const verb = action === "demote" ? "Demoting from" : "Promoting to";
-      const past = action === "demote" ? "Demoted from" : "Promoted to";
-      switch (status) {
-        case "started":
-        case "running":
-          return `${verb} primary checkout`;
-        case "completed":
-          return `${past} primary checkout`;
-        case "failed":
-          return `Primary checkout ${action ?? "update"} failed`;
-        case "noop":
-          return `Primary checkout already ${action === "demote" ? "demoted" : "promoted"}`;
-        default:
-          return `Primary checkout ${rawStatus}`;
-      }
-    }
     case "ownership_change": {
       const action = typeof metadata?.action === "string" ? metadata.action : undefined;
       switch (status) {
@@ -392,20 +333,8 @@ export function interruptOperationMessage(message: ViewOperationMessage): void {
 
   switch (message.opType) {
     case "operation":
-      switch (message.threadOperation?.operation) {
-        case "commit":
-          message.title = "Commit interrupted";
-          return;
-        case "squash_merge":
-          message.title = "Squash merge interrupted";
-          return;
-        case "primary_checkout":
-          message.title = "Primary checkout interrupted";
-          return;
-        default:
-          message.title = "Operation interrupted";
-          return;
-      }
+      message.title = "Operation interrupted";
+      return;
     case "provisioning":
       message.title = "Provisioning interrupted";
       return;

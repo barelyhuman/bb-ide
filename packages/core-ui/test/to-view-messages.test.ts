@@ -2541,67 +2541,6 @@ describe("toViewMessages replay coverage", () => {
     expect(ops[0]?.status).toBe("pending");
   });
 
-  it("projects primary-checkout lifecycle events with stable metadata", () => {
-    const events: ThreadEventRow[] = [
-      {
-        id: "evt-1",
-        threadId: "thread-1",
-        seq: 1,
-        type: "system/operation",
-        data: {
-          operation: "primary_checkout",
-          status: "started",
-          message: "Promoting thread worktree into primary checkout",
-          metadata: { action: "promote" },
-        },
-        createdAt: 1,
-      },
-      {
-        id: "evt-2",
-        threadId: "thread-1",
-        seq: 2,
-        type: "system/operation",
-        data: {
-          operation: "primary_checkout",
-          status: "completed",
-          message: "Primary checkout now reflects this thread worktree",
-          metadata: { action: "promote", branch: "feat/example" },
-        },
-        createdAt: 2,
-      },
-    ];
-
-    const projected = toViewMessages(fromRows(events), {
-      threadStatus: "active",
-    });
-    const ops = projected.filter(
-      (message): message is Extract<ViewMessage, { kind: "operation" }> =>
-        message.kind === "operation",
-    );
-
-    expect(ops).toHaveLength(2);
-    expect(ops[0]?.opType).toBe("operation");
-    expect(ops[0]?.title).toBe("Promoting to primary checkout");
-    expect(ops[0]?.threadOperation).toEqual({
-      operation: "primary_checkout",
-      rawOperation: "primary_checkout",
-      status: "started",
-      rawStatus: "started",
-      metadata: { action: "promote" },
-    });
-
-    expect(ops[1]?.opType).toBe("operation");
-    expect(ops[1]?.title).toBe("Promoted to primary checkout");
-    expect(ops[1]?.threadOperation).toEqual({
-      operation: "primary_checkout",
-      rawOperation: "primary_checkout",
-      status: "completed",
-      rawStatus: "completed",
-      metadata: { action: "promote", branch: "feat/example" },
-    });
-    expect(ops[1]?.detail).toContain("Branch: feat/example");
-  });
-
   it("captures provisioning transcript entries from the new single event type", () => {
     const events: ThreadEventRow[] = [
       {
@@ -2634,64 +2573,6 @@ describe("toViewMessages replay coverage", () => {
       { type: "step", key: "branch", text: "checked out branch bb/thread-123 (abcdef1)", status: "completed" },
       { type: "step", key: "setup", text: "running .bb-env-setup.sh", status: "started" },
     ]);
-  });
-
-  it("projects thread operation lifecycle events as operations", () => {
-    const events: ThreadEventRow[] = [
-      {
-        id: "evt-1",
-        threadId: "thread-1",
-        seq: 1,
-        type: "system/operation",
-        data: {
-          operation: "commit",
-          status: "requested",
-          message: "Commit operation requested",
-        },
-        createdAt: 1,
-      },
-      {
-        id: "evt-2",
-        threadId: "thread-1",
-        seq: 2,
-        type: "system/operation",
-        data: {
-          operation: "commit",
-          status: "queued",
-          operationId: "op-1",
-          message: "Commit operation queued for deterministic execution",
-        },
-        createdAt: 2,
-      },
-    ];
-
-    const projected = toViewMessages(fromRows(events), {
-      threadStatus: "active",
-    });
-    const ops = projected.filter(
-      (message): message is Extract<ViewMessage, { kind: "operation" }> =>
-        message.kind === "operation",
-    );
-
-    expect(ops).toHaveLength(2);
-    expect(ops[0]?.opType).toBe("operation");
-    expect(ops[0]?.title).toBe("Commit requested");
-    expect(ops[0]?.threadOperation).toEqual({
-      operation: "commit",
-      rawOperation: "commit",
-      status: "requested",
-      rawStatus: "requested",
-    });
-    expect(ops[1]?.opType).toBe("operation");
-    expect(ops[1]?.title).toBe("Commit queued");
-    expect(ops[1]?.threadOperation).toEqual({
-      operation: "commit",
-      rawOperation: "commit",
-      status: "queued",
-      rawStatus: "queued",
-      operationId: "op-1",
-    });
-    expect(ops[1]?.detail).toContain("deterministic execution");
   });
 
   it("projects ownership change operations", () => {
