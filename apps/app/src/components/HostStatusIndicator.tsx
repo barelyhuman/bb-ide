@@ -9,7 +9,7 @@ export function HostStatusDot({ className }: HostStatusDotProps) {
   return (
     <span
       className={cn(
-        "inline-block size-1.5 shrink-0 rounded-full bg-emerald-500",
+        "inline-block size-1.5 shrink-0 rounded-full bg-success",
         className,
       )}
       aria-label="Online"

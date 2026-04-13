@@ -108,7 +108,7 @@ function ThreadLeadingGlyph({
         <ChevronDown aria-hidden="true" className="size-4 shrink-0 rotate-45" />
       ) : hasPendingInteraction ? (
         <span
-          className="size-1.5 rounded-full bg-primary"
+          className="size-1.5 rounded-full bg-attention"
           aria-label="Pending interaction requires attention"
           title="Pending interaction"
         />

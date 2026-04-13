@@ -15,12 +15,9 @@ export const PROMPT_OPTION_BASE_CLASS_NAME =
 export const PROMPT_OPTION_INTERACTIVE_CLASS_NAME =
   "border-none bg-transparent shadow-none hover:bg-transparent hover:text-foreground"
 export const PROMPT_OPTION_CONTENT_CLASS_NAME = "flex min-w-0 items-center gap-1.5"
-const PROMPT_OPTION_WARNING_TEXT_CLASS_NAME =
-  "text-amber-600 dark:text-amber-400"
-const PROMPT_OPTION_WARNING_INTERACTIVE_CLASS_NAME =
-  "hover:text-amber-700 dark:hover:text-amber-300"
-const PROMPT_OPTION_WARNING_ICON_CLASS_NAME =
-  "text-amber-500/90 dark:text-amber-300"
+const PROMPT_OPTION_WARNING_TEXT_CLASS_NAME = "text-warning"
+const PROMPT_OPTION_WARNING_INTERACTIVE_CLASS_NAME = "hover:text-warning/80"
+const PROMPT_OPTION_WARNING_ICON_CLASS_NAME = "text-warning/90"
 
 export interface PromptOption<T extends string> {
   value: T
@@ -139,8 +136,7 @@ export function PromptOptionPicker<T extends string>({
               <span
                 className={cn(
                   "flex min-w-0 items-start gap-2",
-                  option.tone === "warning" &&
-                    "text-amber-700 dark:text-amber-300"
+                  option.tone === "warning" && "text-warning"
                 )}
               >
                 {OptionIcon ? <OptionIcon className="mt-0.5 size-4 shrink-0" /> : null}

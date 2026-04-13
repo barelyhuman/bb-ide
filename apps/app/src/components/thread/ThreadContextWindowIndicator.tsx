@@ -30,7 +30,7 @@ export function ThreadContextWindowIndicator({
   const toneClass = usedPercent >= 90
     ? "text-destructive/75"
     : usedPercent >= 75
-      ? "text-amber-500/75"
+      ? "text-warning/75"
       : "text-muted-foreground/60";
 
   const usedTokensLabel = formatCompactTokenCount(usage.usedTokens);
