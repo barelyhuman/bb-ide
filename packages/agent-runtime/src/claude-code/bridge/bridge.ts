@@ -22,21 +22,25 @@ import type {
   PermissionResult,
   SDKMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import {
-  instructionModeValues,
-  permissionEscalationValues,
-  type PermissionEscalation,
-} from "@bb/domain";
+import type { PermissionEscalation } from "@bb/domain";
 import { z } from "zod";
 import {
   decodeBridgeJsonRpcResponse,
   decodeToolCallResponsePayload,
-  jsonRpcEnvelopeSchema,
   type BridgeToolCallRequest,
 } from "../../shared/bridge-tool-calls.js";
 import { shouldAutoDenyInteractiveRequest } from "../../shared/permission-policy.js";
 import { SdkSession } from "./sdk-session.js";
 import { listClaudeCodeBridgeModels } from "./model-list.js";
+import {
+  decodeClaudeCodeJsonRpcRequest,
+  type ClaudeCodeJsonRpcRequest,
+  type ThreadResumeParams,
+  type ThreadStartParams,
+  type ThreadStopParams,
+  type TurnStartParams,
+  type TurnSteerParams,
+} from "./commands.js";
 import {
   buildReadonlyDenialMessage,
   buildSessionOptions,
@@ -56,120 +60,15 @@ import {
   type ClaudePermissionUpdate,
   CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
   claudeInteractiveResponseSchema,
-  claudePermissionModeSchema,
   claudePermissionUpdateSchema,
   shouldRequestClaudePermissionApproval,
   toPendingInteractionPermissionProfile,
 } from "../interactive-contract.js";
 
-// ---------------------------------------------------------------------------
-// Command schema — defines what JSON-RPC requests this bridge accepts
-// ---------------------------------------------------------------------------
-
-const bridgeInstructionModeSchema = z.enum(instructionModeValues);
-const bridgePermissionEscalationSchema =
-  z.enum(permissionEscalationValues).nullable();
 const promptTextInputSchema = z.object({
   type: z.literal("text"),
   text: z.string(),
 });
-
-const claudeCodeCommandSchema = z.discriminatedUnion("method", [
-  z.object({
-    method: z.literal("initialize"),
-    params: z.object({
-      clientInfo: z.object({ name: z.string(), version: z.string() }),
-    }),
-  }),
-  z.object({
-    method: z.literal("model/list"),
-    params: z.object({}),
-  }),
-  z.object({
-    method: z.literal("thread/start"),
-    params: z.object({
-      threadId: z.string(),
-      cwd: z.string(),
-      baseInstructions: z.string(),
-      permissionMode: claudePermissionModeSchema,
-      permissionEscalation: bridgePermissionEscalationSchema,
-      config: z.record(z.string(), z.unknown()).optional(),
-      model: z.string().optional(),
-      instructionMode: bridgeInstructionModeSchema,
-      dynamicTools: z.array(z.object({
-        name: z.string(),
-        description: z.string(),
-        inputSchema: z.unknown(),
-      })).optional(),
-    }),
-  }),
-  z.object({
-    method: z.literal("thread/resume"),
-    params: z.object({
-      threadId: z.string(),
-      cwd: z.string(),
-      providerThreadId: z.string().nullable(),
-      baseInstructions: z.string().optional(),
-      permissionMode: claudePermissionModeSchema,
-      permissionEscalation: bridgePermissionEscalationSchema,
-      config: z.record(z.string(), z.unknown()).optional(),
-      model: z.string().optional(),
-      instructionMode: bridgeInstructionModeSchema,
-      dynamicTools: z.array(z.object({
-        name: z.string(),
-        description: z.string(),
-        inputSchema: z.unknown(),
-      })).optional(),
-    }),
-  }),
-  z.object({
-    method: z.literal("turn/start"),
-    params: z.object({
-      threadId: z.string(),
-      providerThreadId: z.string().nullable(),
-      input: z.array(z.unknown()),
-      model: z.string().optional(),
-      config: z.record(z.string(), z.unknown()).optional(),
-    }),
-  }),
-  z.object({
-    method: z.literal("turn/steer"),
-    params: z.object({
-      threadId: z.string(),
-      providerThreadId: z.string().nullable(),
-      expectedTurnId: z.string(),
-      input: z.array(z.unknown()),
-    }),
-  }),
-  z.object({
-    method: z.literal("thread/stop"),
-    params: z.object({
-      threadId: z.string(),
-    }),
-  }),
-]);
-
-export type ClaudeCodeCommand = z.infer<typeof claudeCodeCommandSchema>;
-
-type ClaudeCodeJsonRpcRequest = ClaudeCodeCommand & {
-  jsonrpc: "2.0";
-  id: string | number;
-};
-
-function decodeClaudeCodeJsonRpcRequest(
-  raw: unknown,
-): ClaudeCodeJsonRpcRequest | null {
-  const envelope = jsonRpcEnvelopeSchema.safeParse(raw);
-  if (!envelope.success) return null;
-
-  const command = claudeCodeCommandSchema.safeParse({
-    method: envelope.data.method,
-    params: envelope.data.params ?? {},
-  });
-  if (!command.success) return null;
-
-  return { ...command.data, jsonrpc: "2.0", id: envelope.data.id };
-}
 
 interface JsonRpcResponse {
   jsonrpc: "2.0";
@@ -647,12 +546,6 @@ async function handleRequest(request: ClaudeCodeJsonRpcRequest): Promise<void> {
       break;
   }
 }
-
-type ThreadStartParams = Extract<ClaudeCodeCommand, { method: "thread/start" }>["params"];
-type ThreadResumeParams = Extract<ClaudeCodeCommand, { method: "thread/resume" }>["params"];
-type TurnStartParams = Extract<ClaudeCodeCommand, { method: "turn/start" }>["params"];
-type TurnSteerParams = Extract<ClaudeCodeCommand, { method: "turn/steer" }>["params"];
-type ThreadStopParams = Extract<ClaudeCodeCommand, { method: "thread/stop" }>["params"];
 
 function handleThreadStart(
   id: string | number,
