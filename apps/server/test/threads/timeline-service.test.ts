@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
+import type { TimelineRow } from "@bb/domain";
 import { createTestAppHarness } from "../helpers/test-app.js";
 import {
   seedEnvironment,
@@ -9,6 +10,8 @@ import {
 } from "../helpers/seed.js";
 import { getTimelineBenchmarkScenarios } from "../helpers/timeline-benchmark.js";
 import { buildThreadTimeline } from "../../src/services/threads/timeline.js";
+
+type TimelineMessageRow = Extract<TimelineRow, { kind: "message" }>;
 
 describe("buildThreadTimeline", () => {
   const scenarios = getTimelineBenchmarkScenarios();
@@ -362,5 +365,120 @@ describe("buildThreadTimeline", () => {
       showAllManagerEvents: true,
     });
     expect(debugTimeline.rows.length).toBeGreaterThan(defaultTimeline.rows.length);
+  });
+
+  it("keeps manager-visible messages that would otherwise be buried in turn tool groups", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      type: "manager",
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-1",
+      turnId: "turn-1",
+      sequence: 1,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-1",
+      turnId: "turn-1",
+      sequence: 2,
+      type: "item/started",
+      data: {
+        item: {
+          id: "compact-1",
+          type: "contextCompaction",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-1",
+      turnId: "turn-1",
+      sequence: 3,
+      type: "item/completed",
+      data: {
+        item: {
+          id: "compact-1",
+          type: "contextCompaction",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      sequence: 4,
+      type: "system/manager/user_message",
+      data: {
+        text: "Visible manager update",
+        toolCallId: "tool-1",
+        turnId: "turn-1",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-1",
+      turnId: "turn-1",
+      sequence: 5,
+      type: "item/completed",
+      data: {
+        item: {
+          id: "internal-final",
+          type: "agentMessage",
+          text: "internal final response",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-1",
+      turnId: "turn-1",
+      sequence: 6,
+      type: "turn/completed",
+      data: {
+        status: "completed",
+      },
+    });
+
+    const timeline = buildThreadTimeline(harness.db, thread, {});
+    const rows = timeline.rows.filter(
+      (row): row is TimelineMessageRow => row.kind === "message",
+    );
+
+    expect(timeline.rows).toHaveLength(2);
+    expect(rows.map((row) => row.message.kind)).toEqual([
+      "operation",
+      "assistant-text",
+    ]);
+    expect(rows[0]?.message.kind).toBe("operation");
+    if (rows[0]?.message.kind === "operation") {
+      expect(rows[0].message.opType).toBe("compaction");
+      expect(rows[0].message.title).toBe("Context compacted");
+    }
+    expect(rows[1]?.message.kind).toBe("assistant-text");
+    if (rows[1]?.message.kind === "assistant-text") {
+      expect(rows[1].message.text).toBe("Visible manager update");
+      expect(rows[1].message.isManagerUserMessage).toBe(true);
+    }
   });
 });

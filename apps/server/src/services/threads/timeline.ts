@@ -1,5 +1,6 @@
 import {
   buildTimelineRows,
+  buildTimelineRowsFromMessagesForNestedDisplay,
   extractThreadContextWindowUsage,
   TIMELINE_NOISE_EVENT_TYPES,
   toViewProjection,
@@ -34,6 +35,8 @@ interface TimelineSourceSeqRange {
   sourceSeqStart: number;
 }
 
+type TimelineMessageRow = Extract<TimelineRow, { kind: "message" }>;
+
 /**
  * For manager threads in the default (non-debug) view, only show user messages,
  * message_user output, and lifecycle operations (provisioning, compaction).
@@ -52,11 +55,40 @@ function isManagerConversationMessage(message: ViewMessage): boolean {
   return false;
 }
 
-function filterManagerConversationRows(rows: TimelineRow[]): TimelineRow[] {
-  return rows.filter(
-    (row): row is Extract<TimelineRow, { kind: "message" }> =>
-      row.kind === "message" && isManagerConversationMessage(row.message),
+function toTimelineMessageRow(message: ViewMessage): TimelineMessageRow {
+  return {
+    kind: "message",
+    id: message.id,
+    message,
+  };
+}
+
+function flattenTimelineRowsToMessageRows(
+  rows: TimelineRow[],
+): TimelineMessageRow[] {
+  const messageRows: TimelineMessageRow[] = [];
+  for (const row of rows) {
+    if (row.kind === "message") {
+      messageRows.push(row);
+      continue;
+    }
+    for (const message of row.messages) {
+      messageRows.push(toTimelineMessageRow(message));
+    }
+  }
+  return messageRows;
+}
+
+function buildManagerConversationRows(
+  projection: ViewProjection,
+): TimelineMessageRow[] {
+  const messages = flattenProjectionMessages(projection).filter(
+    isManagerConversationMessage,
   );
+  const rows = buildTimelineRowsFromMessagesForNestedDisplay(messages, {
+    includeToolGroupMessages: true,
+  });
+  return flattenTimelineRowsToMessageRows(rows);
 }
 
 function flattenProjectionMessages(projection: ViewProjection): ViewMessage[] {
@@ -165,22 +197,22 @@ export function buildThreadTimeline(
       : { excludedTypes: TIMELINE_NOISE_EVENT_TYPES }),
   });
   const eventRows = compactSummaryStoredEventRows(rawEventRows);
+  const isDefaultManagerView =
+    thread.type === "manager" && !options.showAllManagerEvents;
   const projection = toViewProjection(
     eventRows.map((row) => toThreadEventWithMeta(row)),
     {
       includeInternalSystemMessages: options.showAllManagerEvents,
       threadStatus: thread.status,
       threadType: thread.type,
-      turnMessageDetail: "summary",
+      turnMessageDetail: isDefaultManagerView ? "full" : "summary",
     },
   );
-  const allRows = buildTimelineRows(projection, {
-    includeToolGroupMessages: options.includeToolGroupMessages ?? false,
-  });
-  const rows =
-    thread.type === "manager" && !options.showAllManagerEvents
-      ? filterManagerConversationRows(allRows)
-      : allRows;
+  const rows = isDefaultManagerView
+    ? buildManagerConversationRows(projection)
+    : buildTimelineRows(projection, {
+        includeToolGroupMessages: options.includeToolGroupMessages ?? false,
+      });
   const contextWindowUsageRows = listContextWindowUsageRows(db, {
     threadId: thread.id,
   });
