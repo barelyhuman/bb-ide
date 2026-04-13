@@ -4,11 +4,10 @@ import type {
   PendingInteractionGrantablePermissionProfile,
   PendingInteractionGrantedPermissionProfile,
   PendingInteractionMacOsPermissions,
+  PendingInteraction,
+  PendingInteractionResolution,
   PendingInteractionRequestedPermissionProfile,
 } from "@bb/domain";
-
-export type PendingInteractionCommandApprovalDecisionKind =
-  PendingInteractionApprovalDecision;
 
 export type PendingInteractionPermissionResolutionSummaryArgs =
   ApprovalPendingInteractionResolution;
@@ -106,12 +105,6 @@ export function toGrantedPendingInteractionPermissions(
   };
 }
 
-export function getPendingInteractionCommandApprovalDecisionKind(
-  decision: PendingInteractionApprovalDecision,
-): PendingInteractionCommandApprovalDecisionKind {
-  return decision;
-}
-
 export function formatPendingInteractionCommandApprovalDecision(
   decision: PendingInteractionApprovalDecision,
 ): string {
@@ -140,13 +133,46 @@ export function formatPendingInteractionCommandApprovalResolutionMessage(
 export function isPendingInteractionCommandApprovalPositiveDecision(
   decision: PendingInteractionApprovalDecision,
 ): boolean {
-  switch (getPendingInteractionCommandApprovalDecisionKind(decision)) {
+  switch (decision) {
     case "allow_once":
     case "allow_for_session":
       return true;
     case "deny":
       return false;
   }
+}
+
+export function getPendingInteractionApprovalGrantedPermissions(
+  interaction: PendingInteraction,
+): PendingInteractionGrantedPermissionProfile | null {
+  if (
+    interaction.payload.kind === "approval"
+    && interaction.payload.subject.kind === "permission_grant"
+  ) {
+    return toGrantedPendingInteractionPermissions(
+      interaction.payload.subject.permissions,
+    );
+  }
+
+  return null;
+}
+
+export function buildPendingInteractionApprovalResolution(
+  interaction: PendingInteraction,
+  decision: PendingInteractionApprovalDecision,
+): PendingInteractionResolution {
+  if (decision === "deny") {
+    return {
+      kind: "approval",
+      decision,
+    };
+  }
+
+  return {
+    kind: "approval",
+    decision,
+    grantedPermissions: getPendingInteractionApprovalGrantedPermissions(interaction),
+  };
 }
 
 export function formatPendingInteractionFileChangeApprovalResolutionOutcome(

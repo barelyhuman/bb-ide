@@ -35,9 +35,7 @@ export function formatPendingInteractionSummary(
 
       switch (interaction.payload.subject.kind) {
         case "command":
-          return surface === "app"
-            ? interaction.payload.subject.command
-            : interaction.payload.subject.command;
+          return interaction.payload.subject.command;
         case "file_change":
           return "File changes pending approval";
         case "permission_grant":

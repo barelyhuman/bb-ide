@@ -2730,7 +2730,7 @@ describe("CLI JSON output contracts", () => {
     expect(lines).toContain("  Decision: allow_for_session");
   });
 
-  it("bb thread interactions approve resolves command approvals for the session", async () => {
+  it("bb thread interactions approve resolves command approvals for the current turn", async () => {
     const getInteraction = vi.fn(async () =>
       makePendingInteraction({
         id: "int-approve",
@@ -2753,7 +2753,7 @@ describe("CLI JSON output contracts", () => {
         resolvedAt: null,
         resolution: {
           kind: "approval",
-          decision: "allow_for_session",
+          decision: "allow_once",
           grantedPermissions: null,
         },
       }),
@@ -2788,12 +2788,12 @@ describe("CLI JSON output contracts", () => {
       },
       json: {
         kind: "approval",
-        decision: "allow_for_session",
+        decision: "allow_once",
         grantedPermissions: null,
       },
     });
     expect(collectLogLines(vi.mocked(console.log))).toEqual([
-      "Interaction int-approve submitted (approved for this session); delivering to provider",
+      "Interaction int-approve submitted (approved); delivering to provider",
     ]);
   });
 
@@ -3022,7 +3022,7 @@ describe("CLI JSON output contracts", () => {
     );
   });
 
-  it("bb thread interactions approve resolves file-change approvals for the session", async () => {
+  it("bb thread interactions approve resolves file-change approvals without granting extra permissions", async () => {
     const getInteraction = vi.fn(async () =>
       makePendingInteraction({
         id: "int-file-change",
@@ -3047,14 +3047,8 @@ describe("CLI JSON output contracts", () => {
         resolvedAt: null,
         resolution: {
           kind: "approval",
-          decision: "allow_for_session",
-          grantedPermissions: {
-            network: null,
-            fileSystem: {
-              read: [],
-              write: ["/tmp/project"],
-            },
-          },
+          decision: "allow_once",
+          grantedPermissions: null,
         },
       }),
     );
@@ -3088,18 +3082,12 @@ describe("CLI JSON output contracts", () => {
       },
       json: {
         kind: "approval",
-        decision: "allow_for_session",
-        grantedPermissions: {
-          network: null,
-          fileSystem: {
-            read: [],
-            write: ["/tmp/project"],
-          },
-        },
+        decision: "allow_once",
+        grantedPermissions: null,
       },
     });
     expect(collectLogLines(vi.mocked(console.log))).toEqual([
-      "Interaction int-file-change submitted (approved for this session); delivering to provider",
+      "Interaction int-file-change submitted (approved); delivering to provider",
     ]);
   });
 

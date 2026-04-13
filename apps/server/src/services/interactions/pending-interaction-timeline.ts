@@ -2,6 +2,7 @@ import {
   formatPendingInteractionCommandApprovalResolutionMessage,
   formatPendingInteractionFileChangeApprovalResolutionMessage,
   formatPendingInteractionPermissionResolutionMessage,
+  assertNever,
 } from "@bb/core-ui";
 import {
   type PendingInteraction,
@@ -41,7 +42,14 @@ export function formatPendingInteractionLifecycleMessage(
               return interaction.payload.subject.toolName
                 ? `Waiting for approval to grant ${interaction.payload.subject.toolName}`
                 : "Waiting for approval to grant permissions";
+            default:
+              return assertNever(
+                interaction.payload.subject,
+                "Unsupported approval subject for pending interaction",
+              );
           }
+        default:
+          throw new Error("Unsupported pending interaction payload");
       }
     }
     case "resolving":
@@ -71,7 +79,14 @@ export function formatPendingInteractionLifecycleMessage(
               return formatPendingInteractionPermissionResolutionMessage(
                 interaction.resolution,
               );
+            default:
+              return assertNever(
+                interaction.payload.subject,
+                "Unsupported approval subject for resolved interaction",
+              );
           }
+        default:
+          throw new Error("Unsupported pending interaction resolution");
       }
     case "interrupted":
       return interaction.statusReason ?? "Interaction interrupted";

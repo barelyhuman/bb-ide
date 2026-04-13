@@ -1,14 +1,13 @@
 import { Command } from "commander";
 import {
+  buildPendingInteractionApprovalResolution,
   formatPendingInteractionCommandApprovalDecision,
   formatPendingInteractionCommandApprovalResolutionOutcome,
   formatPendingInteractionSummary,
   summarizePendingInteractionRequestedPermissions,
-  toGrantedPendingInteractionPermissions,
 } from "@bb/core-ui";
 import {
   PendingInteraction,
-  type PendingInteractionApprovalDecision,
   type PendingInteractionGrantablePermissionProfile,
   type PendingInteractionRequestedPermissionProfile,
   pendingInteractionPermissionGrantScopeSchema,
@@ -234,17 +233,17 @@ function buildBinaryResolution(
     case "approval": {
       const decision = (() => {
         if (action === "approve") {
-          const sessionApproval = interaction.payload.availableDecisions.find(
-            (availableDecision) => availableDecision === "allow_for_session",
-          );
-          if (sessionApproval) {
-            return sessionApproval;
-          }
           const turnApproval = interaction.payload.availableDecisions.find(
             (availableDecision) => availableDecision === "allow_once",
           );
           if (turnApproval) {
             return turnApproval;
+          }
+          const sessionApproval = interaction.payload.availableDecisions.find(
+            (availableDecision) => availableDecision === "allow_for_session",
+          );
+          if (sessionApproval) {
+            return sessionApproval;
           }
           throw new Error(
             `Interaction ${interaction.id} does not offer an approval decision.`,
@@ -263,10 +262,10 @@ function buildBinaryResolution(
         && interaction.payload.subject.kind === "permission_grant"
       ) {
         throw new Error(
-          `Interaction ${interaction.id} is permission and must be resolved with the grant command.`,
+          `Interaction ${interaction.id} is a permission grant; use bb thread interactions grant.`,
         );
       }
-      return buildApprovalResolution(interaction, decision);
+      return buildPendingInteractionApprovalResolution(interaction, decision);
     }
   }
 }
@@ -284,7 +283,7 @@ function buildPermissionGrantResolution(
     );
   }
 
-  return buildApprovalResolution(
+  return buildPendingInteractionApprovalResolution(
     interaction,
     scope === "session" ? "allow_for_session" : "allow_once",
   );
@@ -299,37 +298,6 @@ function formatBinaryResolutionMessage(
         resolution.decision,
       );
   }
-}
-
-function getApprovalGrantedPermissions(
-  interaction: PendingInteraction,
-): PendingInteractionGrantablePermissionProfile | null {
-  if (interaction.payload.kind !== "approval") {
-    return null;
-  }
-  if (interaction.payload.subject.kind === "permission_grant") {
-    return toGrantedPendingInteractionPermissions(
-      interaction.payload.subject.permissions,
-    );
-  }
-  return interaction.payload.grantablePermissions;
-}
-
-function buildApprovalResolution(
-  interaction: PendingInteraction,
-  decision: PendingInteractionApprovalDecision,
-): PendingInteractionResolution {
-  if (decision === "deny") {
-    return {
-      kind: "approval",
-      decision,
-    };
-  }
-  return {
-    kind: "approval",
-    decision,
-    grantedPermissions: getApprovalGrantedPermissions(interaction),
-  };
 }
 
 function formatResolutionSuccessMessage(

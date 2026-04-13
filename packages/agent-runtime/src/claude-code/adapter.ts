@@ -239,9 +239,6 @@ function resolveClaudeGrantedPermissions(
   if (payload.subject.kind === "permission_grant") {
     return payload.subject.permissions;
   }
-  if (payload.grantablePermissions) {
-    return payload.grantablePermissions;
-  }
   return {
     network: null,
     fileSystem: null,

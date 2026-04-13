@@ -648,6 +648,46 @@ describe("claude-code provider adapter", () => {
     });
   });
 
+  it("does not grant top-level file-change permissions without an explicit resolution grant", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    expect(
+      adapter.buildInteractiveResponse?.({
+        request: {
+          requestId: "req-4e",
+          method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+          threadId: "thr_1",
+          providerThreadId: "claude-session-1",
+          turnId: "",
+          payload: {
+            kind: "approval",
+            subject: {
+              kind: "file_change",
+              itemId: "toolu_3e",
+            },
+            reason: "Needs file access",
+            grantablePermissions: {
+              network: null,
+              fileSystem: {
+                read: ["/tmp/project"],
+                write: ["/tmp/project"],
+              },
+            },
+            availableDecisions: ["allow_once", "allow_for_session", "deny"],
+          },
+        },
+        resolution: {
+          kind: "approval",
+          decision: "allow_for_session",
+          grantedPermissions: null,
+        },
+      }),
+    ).toEqual({
+      kind: "permission_request",
+      behavior: "allow",
+    });
+  });
+
   it("keeps turn-scoped Claude permission approvals scoped to the current tool request", () => {
     const adapter = createClaudeCodeProviderAdapter();
 

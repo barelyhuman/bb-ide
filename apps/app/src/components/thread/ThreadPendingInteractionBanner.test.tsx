@@ -188,6 +188,36 @@ describe("ThreadPendingInteractionBanner", () => {
     });
   });
 
+  it("does not grant extra permissions when approving file-change interactions", async () => {
+    vi.mocked(api.resolveThreadPendingInteraction).mockResolvedValue({
+      ...createFileChangeInteraction(),
+      status: "resolving",
+      resolution: {
+        kind: "approval",
+        decision: "allow_once",
+        grantedPermissions: null,
+      },
+    });
+
+    renderBanner({
+      interaction: createFileChangeInteraction(),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Submit/ }));
+
+    await waitFor(() => {
+      expect(api.resolveThreadPendingInteraction).toHaveBeenCalledWith(
+        "thr_1",
+        "pi_1",
+        {
+          kind: "approval",
+          decision: "allow_once",
+          grantedPermissions: null,
+        },
+      );
+    });
+  });
+
   it("resolves permission requests with the selected grant scope", async () => {
     vi.mocked(api.resolveThreadPendingInteraction).mockResolvedValue({
       ...createPermissionRequestInteraction(),

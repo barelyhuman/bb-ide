@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
+  buildPendingInteractionApprovalResolution,
   extractShellCommandFromString,
 } from "@bb/core-ui";
 import {
   type PendingInteraction,
   type PendingInteractionApprovalDecision,
-  type PendingInteractionGrantedPermissionProfile,
   type PendingInteractionResolution,
 } from "@bb/domain";
 import { ExpandableLine, StatusPill } from "@bb/ui-core";
@@ -162,10 +162,9 @@ export function ThreadPendingInteractionBanner({
 function buildBannerModel(interaction: PendingInteraction): BannerModel {
   switch (interaction.payload.kind) {
     case "approval": {
-      const grantedPermissions = getApprovalGrantedPermissions(interaction);
       const options = interaction.payload.availableDecisions.map((decision) => ({
         label: labelForApprovalDecision(interaction, decision),
-        resolution: buildApprovalResolution(decision, grantedPermissions),
+        resolution: buildPendingInteractionApprovalResolution(interaction, decision),
       }));
 
       switch (interaction.payload.subject.kind) {
@@ -224,33 +223,4 @@ function labelForApprovalDecision(
     return labelForPermissionDecision(decision);
   }
   return labelForCommandDecision(decision);
-}
-
-function getApprovalGrantedPermissions(
-  interaction: PendingInteraction,
-): PendingInteractionGrantedPermissionProfile | null {
-  if (interaction.payload.kind !== "approval") {
-    return null;
-  }
-  if (interaction.payload.subject.kind === "permission_grant") {
-    return interaction.payload.subject.permissions;
-  }
-  return interaction.payload.grantablePermissions;
-}
-
-function buildApprovalResolution(
-  decision: PendingInteractionApprovalDecision,
-  grantedPermissions: PendingInteractionGrantedPermissionProfile | null,
-): PendingInteractionResolution {
-  if (decision === "deny") {
-    return {
-      kind: "approval",
-      decision,
-    };
-  }
-  return {
-    kind: "approval",
-    decision,
-    grantedPermissions,
-  };
 }
