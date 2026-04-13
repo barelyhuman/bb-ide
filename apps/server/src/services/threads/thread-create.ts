@@ -118,7 +118,7 @@ interface CreateSandboxHostThreadArgs {
 
 type ManagedThreadMetadataDeps = Pick<ThreadCreateDeps, "config" | "db" | "hub" | "logger">;
 
-const MANAGED_THREAD_METADATA_TIMEOUT_MS = 2_000;
+const MANAGED_THREAD_METADATA_TIMEOUT_MS = 5_000;
 
 async function resolveManagedThreadMetadata(
   deps: ManagedThreadMetadataDeps,
