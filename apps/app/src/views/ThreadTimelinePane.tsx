@@ -1,4 +1,4 @@
-import { type ReactNode, type RefObject } from "react";
+import { type ReactNode } from "react";
 import type { TimelineRow, TimelineToolGroupRow, ViewMessage } from "@bb/domain";
 import {
   ConversationEmptyState,
@@ -11,7 +11,6 @@ import { usePreferredTheme } from "@/hooks/useTheme";
 import { toUserAttachmentImageSrc } from "@/lib/user-attachment-images";
 
 interface ThreadTimelinePaneProps {
-  bottomSentinelRef: RefObject<HTMLDivElement | null>;
   footer: ReactNode;
   header: ReactNode;
   isReasoningBlockActive: boolean;
@@ -31,7 +30,6 @@ interface ThreadTimelinePaneProps {
 }
 
 export function ThreadTimelinePane({
-  bottomSentinelRef,
   footer,
   header,
   isReasoningBlockActive,
@@ -88,12 +86,6 @@ export function ThreadTimelinePane({
             label={ongoingIndicatorLabel}
           />
         ) : null}
-        <div
-          ref={bottomSentinelRef}
-          aria-hidden="true"
-          data-thread-bottom-sentinel="true"
-          className="h-px w-full shrink-0"
-        />
       </PageShell>
     </div>
   );

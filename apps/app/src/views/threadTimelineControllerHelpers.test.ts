@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   captureTimelineScrollAnchorFromViewport,
-  getScrollBottomTargetScrollTop,
   getTimelineAnchorOffsetDelta,
   hasMeaningfulComposerHeightChange,
   hasMeaningfulTimelineContainerResize,
@@ -91,16 +90,7 @@ describe("threadTimelineControllerHelpers", () => {
     expect(hasMeaningfulComposerHeightChange(64, 64.2)).toBe(false);
   });
 
-  it("computes scroll targets and tool-group loading eligibility", () => {
-    expect(
-      getScrollBottomTargetScrollTop({
-        clientHeight: 500,
-        containerTop: 100,
-        scrollTop: 200,
-        sentinelBottom: 1_050,
-      }),
-    ).toBe(650);
-
+  it("computes tool-group loading eligibility", () => {
     expect(
       shouldLoadToolGroupMessages({
         cachedMessageCount: 0,

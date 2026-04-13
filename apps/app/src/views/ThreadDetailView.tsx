@@ -215,7 +215,6 @@ export function ThreadDetailView() {
   const isReasoningBlockActive = false;
   const isThreadTimelinePending = timelineLoading && threadDetailRows.length === 0;
   const {
-    bottomSentinelRef,
     captureTimelineScrollPosition,
     handleLoadToolGroupMessages,
     handleTimelineScroll,
@@ -743,7 +742,6 @@ export function ThreadDetailView() {
         }}
         showThreadMetadata={showThreadMetadata}
         timeline={{
-          bottomSentinelRef,
           isReasoningBlockActive,
           isThreadTimelinePending,
           latestActivityRowId,

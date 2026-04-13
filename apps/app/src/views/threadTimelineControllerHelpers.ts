@@ -99,20 +99,6 @@ export function getTimelineAnchorOffsetDelta(args: {
   return Math.abs(offsetDelta) >= 0.5 ? offsetDelta : 0;
 }
 
-export function getScrollBottomTargetScrollTop(args: {
-  clientHeight: number;
-  containerTop: number;
-  scrollTop: number;
-  sentinelBottom: number;
-}): number {
-  const targetScrollTop =
-    args.scrollTop +
-    (args.sentinelBottom - args.containerTop) -
-    args.clientHeight;
-
-  return Math.max(0, targetScrollTop);
-}
-
 export function hasMeaningfulTimelineContainerResize(
   previous: TimelineContainerSize | null,
   next: TimelineContainerSize,

@@ -10,7 +10,6 @@ import { type TimelineRow, type TimelineToolGroupRow } from "@bb/domain";
 import { useResizeObserver } from "usehooks-ts";
 import {
   captureTimelineScrollAnchorFromViewport,
-  getScrollBottomTargetScrollTop,
   getTimelineAnchorOffsetDelta,
   hasMeaningfulComposerHeightChange,
   hasMeaningfulTimelineContainerResize,
@@ -105,18 +104,8 @@ function restoreAnchorPosition(
   }
 }
 
-function scrollBottomSentinelIntoView(
-  container: HTMLDivElement,
-  sentinel: HTMLDivElement,
-): void {
-  const containerRect = container.getBoundingClientRect();
-  const sentinelRect = sentinel.getBoundingClientRect();
-  container.scrollTop = getScrollBottomTargetScrollTop({
-    clientHeight: container.clientHeight,
-    containerTop: containerRect.top,
-    scrollTop: container.scrollTop,
-    sentinelBottom: sentinelRect.bottom,
-  });
+function scrollContainerToBottom(container: HTMLDivElement): void {
+  container.scrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
 }
 
 export function useThreadTimelineController({
@@ -138,7 +127,6 @@ export function useThreadTimelineController({
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null!);
   const promptComposerRef = useRef<HTMLDivElement>(null!);
-  const bottomSentinelRef = useRef<HTMLDivElement | null>(null);
   const modeRef = useRef<TimelineScrollMode>("pinned_bottom");
   const timelineScrollAnchorRef = useRef<TimelineScrollAnchor | null>(null);
   const scheduledFrameRef = useRef<number | null>(null);
@@ -178,12 +166,7 @@ export function useThreadTimelineController({
 
     const mode = modeRef.current;
     if (mode === "pinned_bottom") {
-      const sentinel = bottomSentinelRef.current;
-      if (sentinel) {
-        scrollBottomSentinelIntoView(container, sentinel);
-      } else {
-        container.scrollTop = container.scrollHeight;
-      }
+      scrollContainerToBottom(container);
     } else {
       const anchor = timelineScrollAnchorRef.current;
       if (anchor) {
@@ -246,12 +229,7 @@ export function useThreadTimelineController({
     setIsStickingToBottom(true);
     setShowScrollToBottom(false);
     if (container) {
-      const sentinel = bottomSentinelRef.current;
-      if (sentinel) {
-        scrollBottomSentinelIntoView(container, sentinel);
-      } else {
-        container.scrollTop = container.scrollHeight;
-      }
+      scrollContainerToBottom(container);
     }
     scheduleReconcile("request_jump_to_bottom");
 
@@ -425,7 +403,6 @@ export function useThreadTimelineController({
   }, []);
 
   return {
-    bottomSentinelRef,
     captureTimelineScrollPosition,
     handleLoadToolGroupMessages,
     handleTimelineScroll,
