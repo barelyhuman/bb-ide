@@ -20,14 +20,17 @@ import type {
 } from "./provider-adapter.js";
 import { createProviderForId } from "./provider-registry.js";
 import {
+  getJsonRpcStringParam,
   ignoredJsonRpcResultSchema,
-  isJsonRpcId,
+  type JsonRpcObject,
+  parseJsonRpcLine,
   type PendingJsonRpcRequest,
   sendJsonRpc,
   sendJsonRpcError,
   sendJsonRpcRequest,
   sendJsonRpcResult,
   sendProviderRequestDecodeErrorIfKnown,
+  settleJsonRpcResponse,
 } from "./runtime-json-rpc.js";
 import type {
   AgentRuntime,
@@ -71,10 +74,6 @@ interface ResolveProviderRequestThreadIdArgs {
   providerThreadId: string;
   requestKind: ProviderRequestKind;
   threadIdHint: string | undefined;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 function resolveThreadIdentityResult(
@@ -174,8 +173,12 @@ interface ThreadShellEnvironmentArgs {
   threadId: string;
 }
 
+interface BuildThreadShellEnvironmentArgs extends ThreadShellEnvironmentArgs {
+  baseShellEnv: AgentRuntimeShellEnvironment | undefined;
+}
+
 interface RuntimeParsedMessageArgs {
-  parsed: Record<string, unknown>;
+  parsed: JsonRpcObject;
   proc: ProviderProcess;
 }
 
@@ -206,9 +209,7 @@ interface EmitTranslatedEventsArgs {
 }
 
 function buildThreadShellEnvironment(
-  args: ThreadShellEnvironmentArgs & {
-    baseShellEnv: AgentRuntimeShellEnvironment | undefined;
-  },
+  args: BuildThreadShellEnvironmentArgs,
 ): Record<string, string> {
   return {
     ...(args.baseShellEnv ?? {}),
@@ -478,25 +479,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   }
 
   function handleJsonRpcResponse(args: RuntimeJsonRpcResponseArgs): void {
-    const pending = args.proc.pending.get(args.parsedId);
-    if (!pending) {
-      return;
-    }
-
-    args.proc.pending.delete(args.parsedId);
-    if (args.parsed.error) {
-      const err = isRecord(args.parsed.error) ? args.parsed.error : null;
-      pending.reject(
-        new Error(
-          typeof err?.message === "string"
-            ? err.message
-            : JSON.stringify(args.parsed.error),
-        ),
-      );
-      return;
-    }
-
-    pending.resolve(args.parsed.result);
+    settleJsonRpcResponse({
+      id: args.parsedId,
+      pending: args.proc.pending,
+      response: args.parsed,
+    });
   }
 
   function handleToolCallProviderRequest(
@@ -802,8 +789,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   function handleProviderNotification(
     args: RuntimeProviderNotificationArgs,
   ): void {
-    const params = isRecord(args.parsed.params) ? args.parsed.params : undefined;
-    const sourceThreadId = typeof params?.threadId === "string" ? params.threadId : undefined;
+    const sourceThreadId = getJsonRpcStringParam(args.parsed, "threadId");
     const rawCaptureId = createCaptureId();
     const rawEvent: JsonRpcMessage = {
       jsonrpc: "2.0",
@@ -834,60 +820,42 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     line: string,
     proc: ProviderProcess,
   ): void {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      // Not JSON — treat as stderr-like output
+    const parsedLine = parseJsonRpcLine(line);
+    if (parsedLine.kind === "non_json" || parsedLine.kind === "invalid_json_rpc") {
       options.onStderr?.(line);
       return;
     }
 
-    if (!isRecord(parsed)) {
-      options.onStderr?.(line);
-      return;
-    }
-
-    // JSON-RPC response (has id, has result or error, no method)
-    const parsedId = parsed.id;
-    if (isJsonRpcId(parsedId) && !parsed.method) {
-      handleJsonRpcResponse({ parsed, parsedId, proc });
-      return;
-    }
-
-    // JSON-RPC request from provider (has id AND method).
-    const parsedMethod = parsed.method;
-    if (isJsonRpcId(parsedId) && typeof parsedMethod === "string") {
-      const rawRequest: JsonRpcMessage = {
-        jsonrpc: "2.0",
-        id: parsedId,
-        method: parsedMethod,
-        ...(Object.hasOwn(parsed, "params") ? { params: parsed.params } : {}),
-      };
-      handleProviderRequest({
-        line,
-        parsedId,
-        parsedMethod,
+    if (parsedLine.kind === "response") {
+      handleJsonRpcResponse({
+        parsed: parsedLine.parsed,
+        parsedId: parsedLine.parsedId,
         proc,
-        rawRequest,
       });
       return;
     }
 
-    // JSON-RPC notification (no id, has method) — provider event.
+    if (parsedLine.kind === "request") {
+      handleProviderRequest({
+        line,
+        parsedId: parsedLine.parsedId,
+        parsedMethod: parsedLine.parsedMethod,
+        proc,
+        rawRequest: parsedLine.rawRequest,
+      });
+      return;
+    }
+
     // The runtime does NOT interpret notification content — it delegates
     // entirely to the adapter's translateEvent. Each adapter knows its
     // own wire format (codex sends direct notifications, bridges wrap
     // SDK messages in sdk/message envelopes, etc.).
-    const notificationMethod = parsed.method;
-    if (typeof notificationMethod === "string") {
-      handleProviderNotification({
-        line,
-        notificationMethod,
-        parsed,
-        proc,
-      });
-    }
+    handleProviderNotification({
+      line,
+      notificationMethod: parsedLine.notificationMethod,
+      parsed: parsedLine.parsed,
+      proc,
+    });
   }
 
   function spawnProvider(

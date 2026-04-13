@@ -12,6 +12,42 @@ export interface PendingJsonRpcRequest {
 
 export const ignoredJsonRpcResultSchema = z.unknown();
 
+export type JsonRpcObject = Record<string, unknown>;
+
+export interface ParsedJsonRpcNonJsonLine {
+  kind: "non_json";
+}
+
+export interface ParsedJsonRpcInvalidLine {
+  kind: "invalid_json_rpc";
+}
+
+export interface ParsedJsonRpcResponseLine {
+  kind: "response";
+  parsed: JsonRpcObject;
+  parsedId: string | number;
+}
+
+export interface ParsedJsonRpcRequestLine {
+  kind: "request";
+  parsedId: string | number;
+  parsedMethod: string;
+  rawRequest: JsonRpcMessage;
+}
+
+export interface ParsedJsonRpcNotificationLine {
+  kind: "notification";
+  notificationMethod: string;
+  parsed: JsonRpcObject;
+}
+
+export type ParsedJsonRpcLine =
+  | ParsedJsonRpcNonJsonLine
+  | ParsedJsonRpcInvalidLine
+  | ParsedJsonRpcResponseLine
+  | ParsedJsonRpcRequestLine
+  | ParsedJsonRpcNotificationLine;
+
 export interface SendJsonRpcRequestArgs<TResult> {
   child: ChildProcess;
   getNextId: () => number;
@@ -40,8 +76,100 @@ interface SendProviderRequestDecodeErrorArgs {
   id: string | number;
 }
 
-export function isJsonRpcId(value: unknown): value is string | number {
+interface SettleJsonRpcResponseArgs {
+  id: string | number;
+  pending: Map<string | number, PendingJsonRpcRequest>;
+  response: JsonRpcObject;
+}
+
+function isJsonRpcObject(value: unknown): value is JsonRpcObject {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isJsonRpcId(value: unknown): value is string | number {
   return typeof value === "string" || typeof value === "number";
+}
+
+function formatJsonRpcErrorMessage(error: unknown): string {
+  if (isJsonRpcObject(error) && typeof error.message === "string") {
+    return error.message;
+  }
+  return JSON.stringify(error);
+}
+
+export function parseJsonRpcLine(line: string): ParsedJsonRpcLine {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(line);
+  } catch {
+    return { kind: "non_json" };
+  }
+
+  if (!isJsonRpcObject(parsed)) {
+    return { kind: "invalid_json_rpc" };
+  }
+
+  const parsedId = parsed.id;
+  const parsedMethod = parsed.method;
+  if (isJsonRpcId(parsedId) && !parsedMethod) {
+    return {
+      kind: "response",
+      parsed,
+      parsedId,
+    };
+  }
+
+  if (isJsonRpcId(parsedId) && typeof parsedMethod === "string") {
+    const rawRequest: JsonRpcMessage = {
+      jsonrpc: "2.0",
+      id: parsedId,
+      method: parsedMethod,
+      ...(Object.hasOwn(parsed, "params") ? { params: parsed.params } : {}),
+    };
+    return {
+      kind: "request",
+      parsedId,
+      parsedMethod,
+      rawRequest,
+    };
+  }
+
+  if (typeof parsedMethod === "string") {
+    return {
+      kind: "notification",
+      notificationMethod: parsedMethod,
+      parsed,
+    };
+  }
+
+  return { kind: "invalid_json_rpc" };
+}
+
+export function getJsonRpcStringParam(
+  message: JsonRpcObject,
+  key: string,
+): string | undefined {
+  if (!isJsonRpcObject(message.params)) {
+    return undefined;
+  }
+
+  const value = message.params[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+export function settleJsonRpcResponse(args: SettleJsonRpcResponseArgs): void {
+  const pending = args.pending.get(args.id);
+  if (!pending) {
+    return;
+  }
+
+  args.pending.delete(args.id);
+  if (args.response.error) {
+    pending.reject(new Error(formatJsonRpcErrorMessage(args.response.error)));
+    return;
+  }
+
+  pending.resolve(args.response.result);
 }
 
 export function sendJsonRpc(
