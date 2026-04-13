@@ -23,9 +23,8 @@ import { isExploringCall } from "./tool-call-parsing.js";
 import { parseOperationMessage, finalizeOperationMessage } from "./parse-operation-message.js";
 import { parseErrorMessage, isDuplicateEventType, isIgnoredItemStartEvent, isIgnoredItemCompletedEvent, appendDebugEvent } from "./parse-error-message.js";
 import {
-  findLastTerminalTimelineMessageIndex,
+  findLastTerminalTimelineMessage,
   isTimelineUngroupableMessage,
-  toIndexedTimelineMessages,
 } from "./timeline-message-helpers.js";
 import { isIgnoredNoiseType } from "./timeline-noise-events.js";
 import {
@@ -1308,6 +1307,13 @@ interface ProjectionTurnDraft {
   turn: ViewTurn;
 }
 
+interface ProjectionTurnBoundsUpdate {
+  createdAt: number;
+  sourceSeqEnd: number;
+  sourceSeqStart: number;
+  threadId: string;
+}
+
 interface BuildProjectionFromMessagesArgs {
   events: ThreadEventWithMeta[];
   messages: ViewMessage[];
@@ -1317,7 +1323,6 @@ interface BuildProjectionFromMessagesArgs {
 interface TurnEntryDraft {
   kind: "turn";
   createdAt: number;
-  order: number;
   sourceSeqStart: number;
   turnId: string;
 }
@@ -1326,7 +1331,6 @@ interface StandaloneMessageEntryDraft {
   kind: "message";
   createdAt: number;
   message: ViewMessage;
-  order: number;
   sourceSeqStart: number;
 }
 
@@ -1394,19 +1398,20 @@ function createProjectionTurn(
   };
 }
 
-function updateProjectionTurnStart(
+function updateProjectionTurnBounds(
   draft: ProjectionTurnDraft,
-  event: TurnStartedEvent,
-  meta: EventMeta,
+  update: ProjectionTurnBoundsUpdate,
 ): void {
-  draft.turn.threadId = event.threadId;
-  draft.turn.sourceSeqStart = Math.min(draft.turn.sourceSeqStart, meta.seq);
-  draft.turn.sourceSeqEnd = Math.max(draft.turn.sourceSeqEnd, meta.seq);
-  draft.turn.startedAt = Math.min(draft.turn.startedAt, meta.createdAt);
-  draft.turn.createdAt = Math.max(draft.turn.createdAt, meta.createdAt);
-  draft.turn.completedAt = null;
-  draft.turn.status = "pending";
-  delete draft.turn.durationMs;
+  draft.turn.threadId = update.threadId;
+  draft.turn.sourceSeqStart = Math.min(
+    draft.turn.sourceSeqStart,
+    update.sourceSeqStart,
+  );
+  draft.turn.sourceSeqEnd = Math.max(
+    draft.turn.sourceSeqEnd,
+    update.sourceSeqEnd,
+  );
+  draft.turn.createdAt = Math.max(draft.turn.createdAt, update.createdAt);
 }
 
 function updateProjectionTurnCompletion(
@@ -1414,9 +1419,12 @@ function updateProjectionTurnCompletion(
   event: TurnCompletedEvent,
   meta: EventMeta,
 ): void {
-  draft.turn.threadId = event.threadId;
-  draft.turn.sourceSeqEnd = Math.max(draft.turn.sourceSeqEnd, meta.seq);
-  draft.turn.createdAt = Math.max(draft.turn.createdAt, meta.createdAt);
+  updateProjectionTurnBounds(draft, {
+    threadId: event.threadId,
+    sourceSeqStart: meta.seq,
+    sourceSeqEnd: meta.seq,
+    createdAt: meta.createdAt,
+  });
   draft.turn.completedAt = meta.createdAt;
   draft.turn.status = toViewTurnStatus(event.status);
   const durationMs = getTurnDurationMs(draft.turn.startedAt, meta.createdAt);
@@ -1427,13 +1435,23 @@ function updateProjectionTurnCompletion(
   }
 }
 
+function addProjectionTurnMessage(
+  draft: ProjectionTurnDraft,
+  message: ViewMessage,
+): void {
+  draft.messages.push(message);
+  updateProjectionTurnBounds(draft, {
+    threadId: message.threadId,
+    sourceSeqStart: message.sourceSeqStart,
+    sourceSeqEnd: message.sourceSeqEnd,
+    createdAt: message.createdAt,
+  });
+}
+
 function findProjectionTerminalMessage(
   messages: ViewMessage[],
 ): ViewMessage | undefined {
-  const terminalIndex = findLastTerminalTimelineMessageIndex(
-    toIndexedTimelineMessages(messages),
-  );
-  return terminalIndex === null ? undefined : messages[terminalIndex];
+  return findLastTerminalTimelineMessage(messages);
 }
 
 function getProjectionMessageSummaryCount(message: ViewMessage): number {
@@ -1528,24 +1546,22 @@ function buildProjectionFromMessages(
 ): ViewProjection {
   const turnsById = new Map<string, ProjectionTurnDraft>();
   const entryDrafts: ProjectionEntryDraft[] = [];
-  let nextOrder = 0;
 
   for (const { event, meta } of args.events) {
     if (event.type === "turn/started") {
       const existing = turnsById.get(event.turnId);
       if (existing) {
-        updateProjectionTurnStart(existing, event, meta);
-      } else {
-        turnsById.set(event.turnId, createProjectionTurn(event, meta));
-        entryDrafts.push({
-          kind: "turn",
-          turnId: event.turnId,
-          sourceSeqStart: meta.seq,
-          createdAt: meta.createdAt,
-          order: nextOrder,
-        });
-        nextOrder += 1;
+        throw new Error(
+          `Timeline projection found duplicate turn/started for ${event.turnId}`,
+        );
       }
+      turnsById.set(event.turnId, createProjectionTurn(event, meta));
+      entryDrafts.push({
+        kind: "turn",
+        turnId: event.turnId,
+        sourceSeqStart: meta.seq,
+        createdAt: meta.createdAt,
+      });
       continue;
     }
 
@@ -1568,9 +1584,7 @@ function buildProjectionFromMessages(
         message,
         sourceSeqStart: message.sourceSeqStart,
         createdAt: message.createdAt,
-        order: nextOrder,
       });
-      nextOrder += 1;
       continue;
     }
 
@@ -1581,20 +1595,7 @@ function buildProjectionFromMessages(
       );
     }
 
-    turnDraft.messages.push(message);
-    turnDraft.turn.threadId = message.threadId;
-    turnDraft.turn.sourceSeqStart = Math.min(
-      turnDraft.turn.sourceSeqStart,
-      message.sourceSeqStart,
-    );
-    turnDraft.turn.sourceSeqEnd = Math.max(
-      turnDraft.turn.sourceSeqEnd,
-      message.sourceSeqEnd,
-    );
-    turnDraft.turn.createdAt = Math.max(
-      turnDraft.turn.createdAt,
-      message.createdAt,
-    );
+    addProjectionTurnMessage(turnDraft, message);
   }
 
   const orderedEntryDrafts = [...entryDrafts].sort((left, right) => {
@@ -1604,7 +1605,7 @@ function buildProjectionFromMessages(
     if (left.createdAt !== right.createdAt) {
       return left.createdAt - right.createdAt;
     }
-    return left.order - right.order;
+    return 0;
   });
 
   return {

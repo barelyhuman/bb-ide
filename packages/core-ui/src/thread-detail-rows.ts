@@ -43,6 +43,11 @@ function getGroupDurationMs(messages: readonly Pick<ViewMessage, "createdAt" | "
 
 type TerminalStatus = "pending" | "completed" | "error" | "interrupted";
 
+interface ReconnectAttempt {
+  attempt: number;
+  total: number;
+}
+
 function statusPriority(status: TerminalStatus): number {
   switch (status) {
     case "completed":
@@ -64,7 +69,7 @@ function mergeStatus<T extends TerminalStatus>(left: T, right: T): T {
 
 function parseReconnectAttempt(
   message: Extract<ViewMessage, { kind: "error" }>,
-): { attempt: number; total: number } | null {
+): ReconnectAttempt | null {
   const match = message.message.trim().match(/^Reconnecting\.\.\.\s+(\d+)\/(\d+)$/);
   if (!match) return null;
 
@@ -83,7 +88,7 @@ function parseReconnectAttempt(
 function mergeConsecutiveReconnectErrors(messages: ViewMessage[]): ViewMessage[] {
   const merged: ViewMessage[] = [];
   let active: Extract<ViewMessage, { kind: "error" }> | null = null;
-  let activeReconnect: { attempt: number; total: number } | null = null;
+  let activeReconnect: ReconnectAttempt | null = null;
 
   const flush = () => {
     if (!active) return;
@@ -387,33 +392,26 @@ function buildPendingTurnRows(turn: ViewTurn): TimelineRow[] {
   );
 }
 
-function buildSummaryTurnRows(
-  turn: ViewTurn,
-  includeToolGroupMessages: boolean,
-): TimelineRow[] {
-  const rows: TimelineRow[] = [];
-  if (turn.summaryCount > 0) {
-    rows.push(buildTurnToolGroupRow({
-      durationMs: turn.durationMs ?? getGroupDurationMs(turn.messages ?? []),
-      includeToolGroupMessages,
-      messages: turn.messages ?? [],
-      summaryCount: turn.summaryCount,
-      turn,
-    }));
-  }
-  if (turn.terminalMessage) {
-    rows.push(toMessageRow(turn.terminalMessage));
-  }
-  return rows;
-}
-
 function buildTerminalTurnRows(
   turn: ViewTurn,
   includeToolGroupMessages: boolean,
   collapseAll: boolean,
 ): TimelineRow[] {
   if (!turn.messages) {
-    return buildSummaryTurnRows(turn, includeToolGroupMessages);
+    const rows: TimelineRow[] = [];
+    if (turn.summaryCount > 0) {
+      rows.push(buildTurnToolGroupRow({
+        durationMs: turn.durationMs,
+        includeToolGroupMessages,
+        messages: [],
+        summaryCount: turn.summaryCount,
+        turn,
+      }));
+    }
+    if (turn.terminalMessage) {
+      rows.push(toMessageRow(turn.terminalMessage));
+    }
+    return rows;
   }
 
   const mergedMessages = prepareTimelineMessages(turn.messages);

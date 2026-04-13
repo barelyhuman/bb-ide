@@ -3,6 +3,7 @@ import {
   extractThreadContextWindowUsage,
   mergeProvisioningOperations,
   TIMELINE_NOISE_EVENT_TYPES,
+  toViewMessages,
   toViewProjection,
   type ThreadEventWithMeta,
 } from "@bb/core-ui";
@@ -12,6 +13,7 @@ import type {
   TimelineToolGroupRow,
   ViewMessage,
   ViewProjection,
+  ViewTurn,
 } from "@bb/domain";
 import type {
   ThreadTimelineResponse,
@@ -36,6 +38,15 @@ interface TimelineSourceSeqRange {
 }
 
 type TimelineMessageRow = Extract<TimelineRow, { kind: "message" }>;
+
+interface BuildThreadTimelineOptions {
+  showAllManagerEvents?: boolean;
+  includeToolGroupMessages?: boolean;
+}
+
+interface BuildTimelineToolDetailsOptions extends TimelineSourceSeqRange {
+  showAllManagerEvents?: boolean;
+}
 
 /**
  * For manager threads in the default (non-debug) view, only show user messages,
@@ -63,14 +74,37 @@ function toTimelineMessageRow(message: ViewMessage): TimelineMessageRow {
   };
 }
 
-function buildManagerConversationRows(
-  projection: ViewProjection,
-): TimelineMessageRow[] {
-  const visibleMessages = flattenProjectionMessagesDeep(projection).filter(
+function buildManagerConversationRows(messages: ViewMessage[]): TimelineMessageRow[] {
+  const visibleMessages = flattenViewMessagesDeep(messages).filter(
     isManagerConversationMessage,
   );
   return mergeProvisioningOperations(visibleMessages).map((message) =>
     toTimelineMessageRow(message)
+  );
+}
+
+function flattenViewMessagesDeep(rootMessages: ViewMessage[]): ViewMessage[] {
+  const messages: ViewMessage[] = [];
+  for (const message of rootMessages) {
+    messages.push(message);
+    if (message.kind === "delegation") {
+      messages.push(...flattenProjectionMessagesDeep(message.childProjection));
+    }
+  }
+  return messages;
+}
+
+function assertTerminalMessageIncludedInMessages(turn: ViewTurn): void {
+  const messages = turn.messages;
+  const terminalMessage = turn.terminalMessage;
+  if (!messages || !terminalMessage) {
+    return;
+  }
+  if (messages.some((message) => message.id === terminalMessage.id)) {
+    return;
+  }
+  throw new Error(
+    `Timeline projection turn ${turn.turnId} has terminal message ${terminalMessage.id} outside its messages array`,
   );
 }
 
@@ -82,6 +116,7 @@ function flattenProjectionMessages(projection: ViewProjection): ViewMessage[] {
       continue;
     }
     if (entry.turn.messages) {
+      assertTerminalMessageIncludedInMessages(entry.turn);
       messages.push(...entry.turn.messages);
       continue;
     }
@@ -202,10 +237,7 @@ export function compactSummaryStoredEventRows(
 export function buildThreadTimeline(
   db: DbConnection,
   thread: Thread,
-  options: {
-    showAllManagerEvents?: boolean;
-    includeToolGroupMessages?: boolean;
-  },
+  options: BuildThreadTimelineOptions,
 ): ThreadTimelineResponse {
   const rawEventRows = listRecentStoredEventRows(db, {
     threadId: thread.id,
@@ -219,11 +251,10 @@ export function buildThreadTimeline(
   const decodedEvents = eventRows.map((row) => toThreadEventWithMeta(row));
   const rows = isDefaultManagerView
     ? buildManagerConversationRows(
-        toViewProjection(decodedEvents, {
+        toViewMessages(decodedEvents, {
           includeInternalSystemMessages: options.showAllManagerEvents,
           threadStatus: thread.status,
           threadType: thread.type,
-          turnMessageDetail: "full",
         }),
       )
     : buildTimelineRows(
@@ -253,11 +284,7 @@ export function buildThreadTimeline(
 export function buildTimelineToolDetails(
   db: DbConnection,
   thread: Thread,
-  options: {
-    showAllManagerEvents?: boolean;
-    sourceSeqEnd: number;
-    sourceSeqStart: number;
-  },
+  options: BuildTimelineToolDetailsOptions,
 ): TimelineToolDetailsResponse {
   const eventRows = listStoredEventRowsInRange(db, {
     threadId: thread.id,

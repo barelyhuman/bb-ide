@@ -17,6 +17,11 @@ export const viewTurnMessageDetailValues = [
 export const viewTurnMessageDetailSchema = z.enum(
   viewTurnMessageDetailValues,
 );
+/**
+ * Controls how eagerly completed turns include their message arrays.
+ * Summary projections may still include messages when row ordering,
+ * ungroupable messages, or nested delegation projections need them.
+ */
 export type ViewTurnMessageDetail = z.infer<
   typeof viewTurnMessageDetailSchema
 >;

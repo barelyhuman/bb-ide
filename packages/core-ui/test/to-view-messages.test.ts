@@ -50,6 +50,40 @@ function assertMonotonicSourceSeq(messages: ViewMessage[]): void {
 }
 
 describe("toViewProjection turn lifecycle", () => {
+  it("fails loudly when a turn has duplicate turn/started lifecycle events", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "turn/started",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+        },
+        createdAt: 10,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "turn/started",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+        },
+        createdAt: 20,
+      },
+    ];
+
+    expect(() =>
+      toViewProjection(fromRows(events), {
+        threadStatus: "active",
+        turnMessageDetail: "summary",
+      })
+    ).toThrow(/duplicate turn\/started for turn-1/);
+  });
+
   it("uses turn/completed as the authoritative completed state in summary mode", () => {
     const events: ThreadEventRow[] = [
       {
