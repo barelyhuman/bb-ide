@@ -1,5 +1,6 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { deleteThread } from "@bb/db";
+import type { HostDaemonInteractiveRequest } from "@bb/host-daemon-contract";
 import { describe, expect, it } from "vitest";
 import {
   internalAuthHeaders,
@@ -15,10 +16,27 @@ import {
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
-async function waitForPendingInteractionId(args: {
-  harness: Awaited<ReturnType<typeof createTestAppHarness>>;
+type TestAppHarness = Awaited<ReturnType<typeof createTestAppHarness>>;
+
+interface WaitForPendingInteractionIdArgs {
+  harness: TestAppHarness;
   threadId: string;
-}): Promise<string> {
+}
+
+interface RegisterInteractiveRequestArgs {
+  body: HostDaemonInteractiveRequest;
+  harness: TestAppHarness;
+}
+
+interface BuildCommandApprovalInteractiveRequestArgs {
+  sessionId: string;
+  suffix: string;
+  threadId: string;
+}
+
+async function waitForPendingInteractionId(
+  args: WaitForPendingInteractionIdArgs,
+): Promise<string> {
   const deadline = Date.now() + 1_000;
 
   while (Date.now() < deadline) {
@@ -33,6 +51,41 @@ async function waitForPendingInteractionId(args: {
   }
 
   throw new Error("Timed out waiting for pending interaction");
+}
+
+function buildCommandApprovalInteractiveRequest(
+  args: BuildCommandApprovalInteractiveRequestArgs,
+): HostDaemonInteractiveRequest {
+  return {
+    sessionId: args.sessionId,
+    interaction: {
+      threadId: args.threadId,
+      turnId: `turn-${args.suffix}`,
+      providerId: "codex",
+      providerThreadId: `provider-thread-${args.suffix}`,
+      providerRequestId: `request-${args.suffix}`,
+      payload: {
+        kind: "command_approval",
+        itemId: `item-${args.suffix}`,
+        reason: "Needs approval",
+        command: "git push",
+        cwd: "/tmp/project",
+        commandActions: [],
+        requestedPermissions: null,
+        availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+      },
+    },
+  };
+}
+
+function registerInteractiveRequest(
+  args: RegisterInteractiveRequestArgs,
+): Promise<Response> {
+  return args.harness.app.request("/internal/session/interactive-request", {
+    method: "POST",
+    headers: internalAuthHeaders(args.harness),
+    body: JSON.stringify(args.body),
+  });
 }
 
 describe("internal interactive request lifecycle", () => {
@@ -138,6 +191,119 @@ describe("internal interactive request lifecycle", () => {
           decision: "accept_for_session",
         },
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns the existing pending interaction when registration is retried", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-interaction-registration-retry",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      const body = buildCommandApprovalInteractiveRequest({
+        sessionId: session.id,
+        suffix: "registration-retry",
+        threadId: thread.id,
+      });
+
+      const firstResponse = await registerInteractiveRequest({ body, harness });
+      expect(firstResponse.status).toBe(200);
+      await expect(readJson(firstResponse)).resolves.toMatchObject({
+        outcome: "created",
+        status: "pending",
+      });
+      const interactionId = await waitForPendingInteractionId({
+        harness,
+        threadId: thread.id,
+      });
+
+      const retryResponse = await registerInteractiveRequest({ body, harness });
+
+      expect(retryResponse.status).toBe(200);
+      await expect(readJson(retryResponse)).resolves.toMatchObject({
+        outcome: "existing",
+        interactionId,
+        status: "pending",
+      });
+      expect(
+        harness.deps.pendingInteractions.listThreadInteractions(thread.id),
+      ).toHaveLength(1);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns the existing resolving interaction when registration retry arrives after user resolution", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-interaction-registration-retry-resolving",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+      const body = buildCommandApprovalInteractiveRequest({
+        sessionId: session.id,
+        suffix: "registration-retry-resolving",
+        threadId: thread.id,
+      });
+
+      const firstResponse = await registerInteractiveRequest({ body, harness });
+      expect(firstResponse.status).toBe(200);
+      await expect(readJson(firstResponse)).resolves.toMatchObject({
+        outcome: "created",
+        status: "pending",
+      });
+      const interactionId = await waitForPendingInteractionId({
+        harness,
+        threadId: thread.id,
+      });
+      harness.deps.pendingInteractions.resolvePendingInteraction({
+        threadId: thread.id,
+        interactionId,
+        resolution: {
+          kind: "command_approval",
+          decision: "accept_for_session",
+        },
+      });
+
+      const retryResponse = await registerInteractiveRequest({ body, harness });
+
+      expect(retryResponse.status).toBe(200);
+      await expect(readJson(retryResponse)).resolves.toMatchObject({
+        outcome: "existing",
+        interactionId,
+        status: "resolving",
+      });
+      expect(
+        harness.deps.pendingInteractions.listThreadInteractions(thread.id),
+      ).toEqual([
+        expect.objectContaining({
+          id: interactionId,
+          status: "resolving",
+        }),
+      ]);
     } finally {
       await harness.cleanup();
     }
