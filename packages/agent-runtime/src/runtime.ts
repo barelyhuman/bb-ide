@@ -1,26 +1,19 @@
-import type { ChildProcess } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { createInterface } from "node:readline";
 import type {
   DynamicTool,
   InstructionMode,
   ThreadEvent,
 } from "@bb/domain";
-import { spawnPortablePipedProcess } from "@bb/process-utils";
 import { z } from "zod";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 import type {
   AdapterOptions,
   JsonRpcMessage,
-  ProviderAdapter,
 } from "./provider-adapter.js";
-import { createProviderForId } from "./provider-registry.js";
 import {
   getJsonRpcStringParam,
   ignoredJsonRpcResultSchema,
   type JsonRpcObject,
   parseJsonRpcLine,
-  type PendingJsonRpcRequest,
   sendJsonRpc,
   sendJsonRpcError,
   sendJsonRpcRequest,
@@ -32,8 +25,11 @@ import {
   type RuntimeProviderRequestKind,
 } from "./runtime-provider-requests.js";
 import {
+  RuntimeProviderProcessManager,
+  type RuntimeProviderProcess,
+} from "./runtime-provider-process.js";
+import {
   RuntimeThreadIdentityRegistry,
-  type RuntimeProviderIdentityState,
   stampThreadEventScope,
 } from "./runtime-thread-identity.js";
 import type {
@@ -84,11 +80,6 @@ function resolveThreadIdentityResult(
 // Adapter options helpers
 // ---------------------------------------------------------------------------
 
-function createAdapterTurnIdPrefix(): string {
-  const adapterId = randomUUID().replaceAll("-", "").slice(0, 16);
-  return `turn_${adapterId}_`;
-}
-
 function toAdapterOptions(
   execOpts: AgentRuntimeExecutionOptions,
   instructions: string | undefined,
@@ -109,14 +100,7 @@ function toAdapterOptions(
 // Runtime implementation
 // ---------------------------------------------------------------------------
 
-interface ProviderProcess {
-  child: ChildProcess;
-  adapter: ProviderAdapter;
-  interactiveRequestScope: string;
-  identity: RuntimeProviderIdentityState;
-  pending: Map<string | number, PendingJsonRpcRequest>;
-  stderrChunks: string[];
-}
+type ProviderProcess = RuntimeProviderProcess;
 
 interface ThreadRuntimeConfig {
   dynamicTools?: DynamicTool[];
@@ -175,17 +159,15 @@ function buildThreadShellEnvironment(
 }
 
 /**
- * Owns provider processes for an environment and bridges provider JSON-RPC
- * traffic into bb thread events, dynamic tool calls, and pending interactions.
+ * Coordinates provider processes for an environment and bridges provider
+ * JSON-RPC traffic into bb thread events, dynamic tool calls, and pending
+ * interactions.
  */
 export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   let nextRequestId = 1;
   let nextCaptureId = 1;
-  const processes = new Map<string, ProviderProcess>();
-  const providerStarting = new Map<string, Promise<void>>();
   const threadIdentityRegistry = new RuntimeThreadIdentityRegistry();
   const threadRuntimeConfigs = new Map<string, ThreadRuntimeConfig>();
-  let shuttingDown = false;
 
   function createCaptureId(): string {
     const captureId = `capture-${nextCaptureId}`;
@@ -197,28 +179,29 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     options.onCapture?.(entry);
   }
 
-  function getAdapter(providerId: string): ProviderAdapter {
-    if (options.adapterFactory) {
-      return options.adapterFactory(providerId);
-    }
-    return createProviderForId(providerId, {
-      bridgeBundleDir: options.bridgeBundleDir,
-      turnIdPrefix: createAdapterTurnIdPrefix(),
-    });
-  }
+  const providerProcesses = new RuntimeProviderProcessManager({
+    adapterFactory: options.adapterFactory,
+    bridgeBundleDir: options.bridgeBundleDir,
+    createProviderIdentityState: (providerId) =>
+      threadIdentityRegistry.createProviderState({ providerId }),
+    emitCapture,
+    env: options.env,
+    getNextRequestId: () => nextRequestId++,
+    handleStdoutLine: (args) =>
+      handleStdoutLine(args.line, args.providerProcess),
+    onProcessExit: options.onProcessExit,
+    onProviderIdentityWaitersInterrupted: (providerProcess) =>
+      threadIdentityRegistry.resolvePendingIdentityWaiters(providerProcess.identity),
+    onProviderThreadDetached: (threadId) => {
+      threadIdentityRegistry.clearThread(threadId);
+      clearThreadRuntimeConfig(threadId);
+    },
+    onStderr: options.onStderr,
+    workspacePath: options.workspacePath,
+  });
 
   function requireProviderProcess(providerId: string): ProviderProcess {
-    const proc = processes.get(providerId);
-    if (!proc) {
-      throw new Error(`Provider "${providerId}" is not running`);
-    }
-    if (proc.child.exitCode !== null) {
-      processes.delete(providerId);
-      throw new Error(
-        `Provider "${providerId}" has exited (code ${proc.child.exitCode})`,
-      );
-    }
-    return proc;
+    return providerProcesses.requireProviderProcess(providerId);
   }
 
   function resolveProviderForThread(threadId: string): string {
@@ -314,10 +297,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       threadId,
       timeoutMs,
     });
-  }
-
-  function resolvePendingIdentityWaiters(proc: ProviderProcess): void {
-    threadIdentityRegistry.resolvePendingIdentityWaiters(proc.identity);
   }
 
   async function reconfigureThreadIfNeeded(
@@ -523,158 +502,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     });
   }
 
-  function spawnProvider(
-    providerId: string,
-    adapter: ProviderAdapter,
-  ): ProviderProcess {
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
-      ...options.env,
-    };
-
-    const child = spawnPortablePipedProcess({
-      command: adapter.process.command,
-      args: adapter.process.args,
-      cwd: options.workspacePath,
-      env,
-    });
-
-    const proc: ProviderProcess = {
-      child,
-      adapter,
-      interactiveRequestScope: randomUUID(),
-      identity: threadIdentityRegistry.createProviderState({ providerId }),
-      pending: new Map(),
-      stderrChunks: [],
-    };
-
-    // Read stdout line by line
-    const rl = createInterface({ input: child.stdout });
-    rl.on("line", (line) => handleStdoutLine(line, proc));
-
-    // Forward stderr
-    const stderrRl = createInterface({ input: child.stderr });
-    stderrRl.on("line", (line) => {
-      proc.stderrChunks.push(line);
-      options.onStderr?.(line);
-      emitCapture({
-        kind: "provider-stderr",
-        capturedAt: Date.now(),
-        providerId,
-        line,
-      });
-    });
-
-    // Handle spawn errors (e.g., binary not found)
-    child.on("error", (err) => {
-      if (shuttingDown) return;
-      processes.delete(providerId);
-      for (const [, pending] of proc.pending) {
-        pending.reject(new Error(`Provider "${providerId}" failed to start: ${err.message}`));
-      }
-      proc.pending.clear();
-      resolvePendingIdentityWaiters(proc);
-
-      emitCapture({
-        kind: "provider-process-error",
-        capturedAt: Date.now(),
-        providerId,
-        message: err.message,
-      });
-
-      options.onProcessExit?.({
-        providerId,
-        threadIds: [...proc.identity.threadIds],
-        code: null,
-        signal: null,
-      });
-    });
-
-    // Handle exit
-    child.on("exit", (code, signal) => {
-      if (shuttingDown) return;
-      processes.delete(providerId);
-      const threadIds = [...proc.identity.threadIds];
-      for (const tid of threadIds) {
-        threadIdentityRegistry.clearThread(tid);
-        clearThreadRuntimeConfig(tid);
-      }
-      // Reject any pending requests
-      for (const [, pending] of proc.pending) {
-        pending.reject(new Error(`Provider "${providerId}" exited unexpectedly`));
-      }
-      proc.pending.clear();
-      resolvePendingIdentityWaiters(proc);
-
-      emitCapture({
-        kind: "provider-process-exit",
-        capturedAt: Date.now(),
-        providerId,
-        threadIds,
-        code: code ?? null,
-        signal: signal ?? null,
-        stderrChunks: [...proc.stderrChunks],
-      });
-
-      options.onProcessExit?.({
-        providerId,
-        threadIds,
-        code: code ?? null,
-        signal: signal ?? null,
-      });
-    });
-
-    processes.set(providerId, proc);
-    return proc;
-  }
-
   // -------------------------------------------------------------------------
   // Public API
   // -------------------------------------------------------------------------
 
   const runtime: AgentRuntime = {
     async ensureProvider({ providerId }) {
-      if (processes.has(providerId)) return;
-
-      const existing = providerStarting.get(providerId);
-      if (existing) {
-        await existing;
-        return;
-      }
-
-      const startPromise = (async () => {
-        const adapter = getAdapter(providerId);
-        const proc = spawnProvider(providerId, adapter);
-
-        // Check for immediate startup failure
-        if (proc.child.exitCode !== null) {
-          processes.delete(providerId);
-          const stderr = proc.stderrChunks.join("\n").slice(0, 500);
-          throw new Error(
-            `Provider "${providerId}" exited during startup with code ${proc.child.exitCode}` +
-            (stderr ? `\nstderr: ${stderr}` : ""),
-          );
-        }
-
-        // Send initialize command
-        const initCmd = adapter.buildCommand({ type: "initialize" });
-        if (initCmd) {
-          await sendJsonRpcRequest({
-            child: proc.child,
-            message: initCmd,
-            pending: proc.pending,
-            getNextId: () => nextRequestId++,
-            resultSchema: ignoredJsonRpcResultSchema,
-          });
-        }
-      })();
-
-      providerStarting.set(providerId, startPromise);
-      try {
-        await startPromise;
-      } finally {
-        providerStarting.delete(providerId);
-      }
+      await providerProcesses.ensureProvider({ providerId });
     },
 
     async startThread({
@@ -950,45 +784,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     },
 
     listRunningProviders() {
-      return [...processes.keys()];
+      return providerProcesses.listRunningProviders();
     },
 
     async shutdown() {
-      shuttingDown = true;
-      const shutdownPromises: Promise<void>[] = [];
-
-      for (const [providerId, proc] of processes) {
-        shutdownPromises.push(
-          new Promise<void>((resolve) => {
-            const timer = setTimeout(() => {
-              proc.child.kill("SIGKILL");
-              resolve();
-            }, 5000);
-
-            proc.child.on("exit", () => {
-              clearTimeout(timer);
-              resolve();
-            });
-
-            proc.child.kill("SIGTERM");
-          }),
-        );
-        // Reject pending requests
-        for (const [, pending] of proc.pending) {
-          pending.reject(new Error(`Runtime shutting down`));
-        }
-        proc.pending.clear();
-        resolvePendingIdentityWaiters(proc);
-
-        // Clean up mappings
-        for (const tid of proc.identity.threadIds) {
-          threadIdentityRegistry.clearThread(tid);
-          clearThreadRuntimeConfig(tid);
-        }
-        processes.delete(providerId);
-      }
-
-      await Promise.all(shutdownPromises);
+      await providerProcesses.shutdown();
     },
   };
 
