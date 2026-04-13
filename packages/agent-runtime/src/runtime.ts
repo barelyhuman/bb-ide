@@ -4,11 +4,7 @@ import { createInterface } from "node:readline";
 import type {
   DynamicTool,
   InstructionMode,
-  PendingInteractionCreate,
-  PendingInteractionPayload,
-  PendingInteractionResolution,
   ThreadEvent,
-  ToolCallRequest,
 } from "@bb/domain";
 import { spawnPortablePipedProcess } from "@bb/process-utils";
 import { z } from "zod";
@@ -28,10 +24,13 @@ import {
   sendJsonRpc,
   sendJsonRpcError,
   sendJsonRpcRequest,
-  sendJsonRpcResult,
-  sendProviderRequestDecodeErrorIfKnown,
   settleJsonRpcResponse,
 } from "./runtime-json-rpc.js";
+import {
+  handleRuntimeProviderRequest,
+  type ResolveRuntimeProviderRequestThreadIdArgs,
+  type RuntimeProviderRequestKind,
+} from "./runtime-provider-requests.js";
 import {
   RuntimeThreadIdentityRegistry,
   type RuntimeProviderIdentityState,
@@ -45,7 +44,6 @@ import type {
 } from "./types.js";
 import {
   resolveAdapterPermissionPolicy,
-  shouldAutoDenyInteractiveRequest,
 } from "./shared/permission-policy.js";
 
 const threadIdentityResultSchema = z.object({
@@ -65,14 +63,9 @@ interface ReconfigureThreadIfNeededArgs {
   threadId: string;
 }
 
-type ProviderRequestKind = "interactive request" | "tool call";
-
-interface ResolveProviderRequestThreadIdArgs {
-  parsedId: string | number;
+interface ResolveProviderRequestThreadIdArgs
+  extends ResolveRuntimeProviderRequestThreadIdArgs {
   proc: ProviderProcess;
-  providerThreadId: string;
-  requestKind: ProviderRequestKind;
-  threadIdHint: string | undefined;
 }
 
 function resolveThreadIdentityResult(
@@ -110,28 +103,6 @@ function toAdapterOptions(
     instructions,
     envVars,
   };
-}
-
-function buildDeniedInteractiveResolution(
-  payload: PendingInteractionPayload,
-): PendingInteractionResolution {
-  switch (payload.kind) {
-    case "command_approval":
-      return {
-        kind: "command_approval",
-        decision: "decline",
-      };
-    case "file_change_approval":
-      return {
-        kind: "file_change_approval",
-        decision: "decline",
-      };
-    case "permission_request":
-      return {
-        kind: "permission_request",
-        decision: "deny",
-      };
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -178,14 +149,6 @@ interface RuntimeJsonRpcResponseArgs extends RuntimeParsedMessageArgs {
   parsedId: string | number;
 }
 
-interface RuntimeProviderRequestArgs {
-  line: string;
-  parsedId: string | number;
-  parsedMethod: string;
-  proc: ProviderProcess;
-  rawRequest: JsonRpcMessage;
-}
-
 interface RuntimeProviderNotificationArgs extends RuntimeParsedMessageArgs {
   line: string;
   notificationMethod: string;
@@ -209,13 +172,6 @@ function buildThreadShellEnvironment(
     BB_THREAD_ID: args.threadId,
     BB_ENVIRONMENT_ID: args.environmentId,
   };
-}
-
-function scopeProviderRequestId(
-  scope: string,
-  requestId: string | number,
-): string {
-  return `${scope}:${String(requestId)}`;
 }
 
 /**
@@ -280,7 +236,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   }
 
   function formatProviderRequestKindForSentence(
-    requestKind: ProviderRequestKind,
+    requestKind: RuntimeProviderRequestKind,
   ): string {
     return requestKind === "tool call" ? "Tool call" : "Interactive request";
   }
@@ -433,241 +389,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     });
   }
 
-  function handleToolCallProviderRequest(
-    args: RuntimeProviderRequestArgs,
-  ): boolean {
-    const providerId = args.proc.adapter.id;
-    let toolCallReq: ReturnType<ProviderAdapter["decodeToolCallRequest"]>;
-    try {
-      toolCallReq = args.proc.adapter.decodeToolCallRequest(args.rawRequest);
-    } catch (error) {
-      if (sendProviderRequestDecodeErrorIfKnown({
-        child: args.proc.child,
-        error,
-        id: args.parsedId,
-      })) {
-        return true;
-      }
-      throw error;
-    }
-    if (!toolCallReq) {
-      return false;
-    }
-
-    const resolvedThreadId = resolveProviderRequestThreadId({
-      parsedId: args.parsedId,
-      proc: args.proc,
-      providerThreadId: toolCallReq.providerThreadId,
-      requestKind: "tool call",
-      threadIdHint: toolCallReq.threadId,
-    });
-    if (!resolvedThreadId) {
-      return true;
-    }
-
-    const scopedToolCallReq: ToolCallRequest = {
-      requestId: toolCallReq.requestId,
-      threadId: resolvedThreadId,
-      providerThreadId: toolCallReq.providerThreadId,
-      turnId: toolCallReq.turnId,
-      callId: toolCallReq.callId,
-      tool: toolCallReq.tool,
-      ...(toolCallReq.arguments !== undefined ? { arguments: toolCallReq.arguments } : {}),
-    };
-    const captureId = createCaptureId();
-    emitCapture({
-      kind: "tool-call-request",
-      captureId,
-      capturedAt: Date.now(),
-      providerId,
-      rawLine: args.line,
-      rawRequest: args.rawRequest,
-      request: scopedToolCallReq,
-    });
-    void options.onToolCall(scopedToolCallReq).then((response) => {
-      emitCapture({
-        kind: "tool-call-result",
-        capturedAt: Date.now(),
-        providerId,
-        requestCaptureId: captureId,
-        requestId: scopedToolCallReq.requestId,
-        success: true,
-        response,
-      });
-      sendJsonRpcResult({
-        child: args.proc.child,
-        id: args.parsedId,
-        result: response,
-      });
-    }).catch((err) => {
-      emitCapture({
-        kind: "tool-call-result",
-        capturedAt: Date.now(),
-        providerId,
-        requestCaptureId: captureId,
-        requestId: scopedToolCallReq.requestId,
-        success: false,
-        errorMessage: err instanceof Error ? err.message : String(err),
-      });
-      sendJsonRpcError({
-        child: args.proc.child,
-        id: args.parsedId,
-        message: err instanceof Error ? err.message : String(err),
-      });
-    });
-    return true;
-  }
-
-  function handleInteractiveProviderRequest(
-    args: RuntimeProviderRequestArgs,
-  ): boolean {
-    const providerId = args.proc.adapter.id;
-    const decodeInteractiveRequest = args.proc.adapter.decodeInteractiveRequest;
-    if (!decodeInteractiveRequest) {
-      return false;
-    }
-
-    let interactiveReq: ReturnType<typeof decodeInteractiveRequest>;
-    try {
-      interactiveReq = decodeInteractiveRequest(args.rawRequest);
-    } catch (error) {
-      if (sendProviderRequestDecodeErrorIfKnown({
-        child: args.proc.child,
-        error,
-        id: args.parsedId,
-      })) {
-        return true;
-      }
-      throw error;
-    }
-    if (!interactiveReq) {
-      return false;
-    }
-
-    const resolvedThreadId = resolveProviderRequestThreadId({
-      parsedId: args.parsedId,
-      proc: args.proc,
-      providerThreadId: interactiveReq.providerThreadId,
-      requestKind: "interactive request",
-      threadIdHint: interactiveReq.threadId,
-    });
-    if (!resolvedThreadId) {
-      return true;
-    }
-    if (!args.proc.adapter.buildInteractiveResponse) {
-      sendJsonRpcError({
-        child: args.proc.child,
-        id: args.parsedId,
-        message: `Provider "${providerId}" cannot encode interactive response for "${interactiveReq.method}"`,
-      });
-      return true;
-    }
-    const buildInteractiveResponse = args.proc.adapter.buildInteractiveResponse;
-
-    const scopedInteractiveReq: PendingInteractionCreate = {
-      threadId: resolvedThreadId,
-      turnId: interactiveReq.turnId,
-      providerId,
-      providerThreadId: interactiveReq.providerThreadId,
-      providerRequestId: scopeProviderRequestId(
-        args.proc.interactiveRequestScope,
-        interactiveReq.requestId,
-      ),
-      payload: interactiveReq.payload,
-    };
-    const captureId = createCaptureId();
-    emitCapture({
-      kind: "interactive-request",
-      captureId,
-      capturedAt: Date.now(),
-      providerId,
-      rawLine: args.line,
-      rawRequest: args.rawRequest,
-      request: scopedInteractiveReq,
-    });
-    const threadConfig = threadRuntimeConfigs.get(resolvedThreadId);
-    if (
-      // Managed/non-interactive contexts use deny escalation so providers get a
-      // deterministic denial instead of waiting for a UI that will never answer.
-      (threadConfig
-        ? shouldAutoDenyInteractiveRequest(threadConfig.options)
-        : false)
-      || !options.onInteractiveRequest
-    ) {
-      const resolution = buildDeniedInteractiveResolution(interactiveReq.payload);
-      emitCapture({
-        kind: "interactive-result",
-        capturedAt: Date.now(),
-        providerId,
-        requestCaptureId: captureId,
-        requestId: scopedInteractiveReq.providerRequestId,
-        success: true,
-        resolution,
-      });
-      sendJsonRpcResult({
-        child: args.proc.child,
-        id: args.parsedId,
-        result: buildInteractiveResponse({
-          request: interactiveReq,
-          resolution,
-        }),
-      });
-      return true;
-    }
-
-    void options.onInteractiveRequest(scopedInteractiveReq).then((resolution) => {
-      emitCapture({
-        kind: "interactive-result",
-        capturedAt: Date.now(),
-        providerId,
-        requestCaptureId: captureId,
-        requestId: scopedInteractiveReq.providerRequestId,
-        success: true,
-        resolution,
-      });
-      sendJsonRpcResult({
-        child: args.proc.child,
-        id: args.parsedId,
-        result: buildInteractiveResponse({
-          request: interactiveReq,
-          resolution,
-        }),
-      });
-    }).catch((err) => {
-      emitCapture({
-        kind: "interactive-result",
-        capturedAt: Date.now(),
-        providerId,
-        requestCaptureId: captureId,
-        requestId: scopedInteractiveReq.providerRequestId,
-        success: false,
-        errorMessage: err instanceof Error ? err.message : String(err),
-      });
-      sendJsonRpcError({
-        child: args.proc.child,
-        id: args.parsedId,
-        message: err instanceof Error ? err.message : String(err),
-      });
-    });
-    return true;
-  }
-
-  function handleProviderRequest(args: RuntimeProviderRequestArgs): void {
-    if (handleToolCallProviderRequest(args)) {
-      return;
-    }
-    if (handleInteractiveProviderRequest(args)) {
-      return;
-    }
-
-    sendJsonRpcError({
-      child: args.proc.child,
-      id: args.parsedId,
-      message: `Unsupported provider request "${args.parsedMethod}"`,
-      code: -32601,
-    });
-  }
-
   function emitTranslatedEvents(args: EmitTranslatedEventsArgs): void {
     for (const event of args.events) {
       if (event.type !== "thread/identity" || !event.providerThreadId) {
@@ -769,12 +490,23 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     }
 
     if (parsedLine.kind === "request") {
-      handleProviderRequest({
+      handleRuntimeProviderRequest({
+        createCaptureId,
+        emitCapture,
+        getThreadExecutionOptions: (threadId) =>
+          threadRuntimeConfigs.get(threadId)?.options,
         line,
+        onInteractiveRequest: options.onInteractiveRequest,
+        onToolCall: options.onToolCall,
         parsedId: parsedLine.parsedId,
         parsedMethod: parsedLine.parsedMethod,
-        proc,
+        providerProcess: proc,
         rawRequest: parsedLine.rawRequest,
+        resolveThreadId: (request) =>
+          resolveProviderRequestThreadId({
+            ...request,
+            proc,
+          }),
       });
       return;
     }
