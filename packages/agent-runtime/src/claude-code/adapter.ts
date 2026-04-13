@@ -67,6 +67,7 @@ import type {
   ProviderTranslationContext,
   ProviderAdapter,
 } from "../provider-adapter.js";
+import { ProviderResponseEncodeError } from "../provider-adapter.js";
 import {
   buildClaudeSessionPermissionUpdates,
   CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
@@ -237,20 +238,15 @@ function buildClaudeApprovalSubject(
 }
 
 function resolveClaudeGrantedPermissions(
-  payload: ApprovalPendingInteractionPayload,
   grantedPermissions: PendingInteractionGrantedPermissionProfile | null,
 ): PendingInteractionGrantedPermissionProfile {
   if (grantedPermissions === null) {
-    throw new Error("Session approval resolution must include granted permissions");
+    throw new ProviderResponseEncodeError(
+      "Session approval resolution must include granted permissions",
+    );
   }
 
-  switch (payload.subject.kind) {
-    case "command":
-    case "file_change":
-      return grantedPermissions;
-    case "permission_grant":
-      return grantedPermissions;
-  }
+  return grantedPermissions;
 }
 
 function getClaudePermissionUpdateToolName(
@@ -1077,52 +1073,43 @@ export function createClaudeCodeProviderAdapter(
     },
 
     buildInteractiveResponse(args) {
-      switch (args.request.payload.kind) {
-        case "approval": {
-          if (args.resolution.kind !== "approval") {
-            throw new Error(
-              "Interactive response kind mismatch for approval",
-            );
-          }
-          if (args.resolution.decision === "deny") {
-            return {
-              kind: "permission_request",
-              behavior: "deny",
-              message: "Permission request denied",
-            };
-          }
-
-          if (args.resolution.decision === "allow_once") {
-            // Claude canUseTool approvals without updatedPermissions apply only
-            // to the current tool request. Session grants are the only scope
-            // that should mutate Claude's permission state.
-            return {
-              kind: "permission_request",
-              behavior: "allow",
-            };
-          }
-
-          const updatedPermissions = buildClaudeSessionPermissionUpdates({
-            permissions: resolveClaudeGrantedPermissions(
-              args.request.payload,
-              args.resolution.grantedPermissions,
-            ),
-            toolName: getClaudePermissionUpdateToolName(args.request.payload),
-          });
-
-          return {
-            kind: "permission_request",
-            behavior: "allow",
-            ...(updatedPermissions === undefined
-              ? {}
-              : { updatedPermissions }),
-          };
-        }
-        default:
-          throw new Error(
-            `Unsupported interactive request kind for Claude: ${args.request.payload.kind}`,
-          );
+      if (args.resolution.kind !== "approval") {
+        throw new ProviderResponseEncodeError(
+          "Interactive response kind mismatch for approval",
+        );
       }
+      if (args.resolution.decision === "deny") {
+        return {
+          kind: "permission_request",
+          behavior: "deny",
+          message: "Permission request denied",
+        };
+      }
+
+      if (args.resolution.decision === "allow_once") {
+        // Claude canUseTool approvals without updatedPermissions apply only
+        // to the current tool request. Session grants are the only scope
+        // that should mutate Claude's permission state.
+        return {
+          kind: "permission_request",
+          behavior: "allow",
+        };
+      }
+
+      const updatedPermissions = buildClaudeSessionPermissionUpdates({
+        permissions: resolveClaudeGrantedPermissions(
+          args.resolution.grantedPermissions,
+        ),
+        toolName: getClaudePermissionUpdateToolName(args.request.payload),
+      });
+
+      return {
+        kind: "permission_request",
+        behavior: "allow",
+        ...(updatedPermissions === undefined
+          ? {}
+          : { updatedPermissions }),
+      };
     },
 
   };

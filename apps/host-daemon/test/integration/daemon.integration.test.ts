@@ -2,7 +2,9 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import type { ProviderAdapter } from "@bb/agent-runtime";
 import { createFakeAdapter } from "@bb/agent-runtime/test";
+import { jsonValueSchema, type JsonValue } from "@bb/domain";
 import {
   HOST_AUTH_FILE_NAME,
 } from "@bb/host-daemon-contract";
@@ -12,7 +14,43 @@ import {
 } from "../helpers/test-server.js";
 
 const tempDirs: string[] = [];
-type ProviderAdapter = ReturnType<typeof createFakeAdapter>;
+
+interface InteractiveRequestParams {
+  command: string;
+  cwd: string | null;
+  itemId: string;
+  reason: string | null;
+  threadId: string;
+  turnId: string;
+}
+
+interface JsonValueObject {
+  [key: string]: JsonValue;
+}
+
+function parseInteractiveRequestParams(value: JsonValue): InteractiveRequestParams | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const params: JsonValueObject = value;
+  if (
+    typeof params.threadId !== "string"
+    || typeof params.turnId !== "string"
+    || typeof params.itemId !== "string"
+    || typeof params.command !== "string"
+  ) {
+    return null;
+  }
+
+  return {
+    command: params.command,
+    cwd: typeof params.cwd === "string" ? params.cwd : null,
+    itemId: params.itemId,
+    reason: typeof params.reason === "string" ? params.reason : null,
+    threadId: params.threadId,
+    turnId: params.turnId,
+  };
+}
 
 async function makeTempDir(prefix: string): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
@@ -43,10 +81,6 @@ async function pathExists(pathToCheck: string): Promise<boolean> {
     }
     throw error;
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 async function writeInteractiveProviderScript(scriptPath: string): Promise<void> {
@@ -169,17 +203,12 @@ function createInteractiveRequestAdapter(scriptPath: string): ProviderAdapter {
       if (typeof request.id !== "string" && typeof request.id !== "number") {
         return null;
       }
-      if (!isRecord(request.params)) {
+      const parsedJson = jsonValueSchema.safeParse(request.params);
+      if (!parsedJson.success) {
         return null;
       }
-
-      const params = request.params;
-      if (
-        typeof params.threadId !== "string" ||
-        typeof params.turnId !== "string" ||
-        typeof params.itemId !== "string" ||
-        typeof params.command !== "string"
-      ) {
+      const params = parseInteractiveRequestParams(parsedJson.data);
+      if (params === null) {
         return null;
       }
 
@@ -194,9 +223,11 @@ function createInteractiveRequestAdapter(scriptPath: string): ProviderAdapter {
             kind: "command",
             itemId: params.itemId,
             command: params.command,
-            cwd: typeof params.cwd === "string" ? params.cwd : null,
+            cwd: params.cwd ?? null,
+            actions: [],
+            sessionGrant: null,
           },
-          reason: typeof params.reason === "string" ? params.reason : null,
+          reason: params.reason ?? null,
           availableDecisions: ["allow_once", "allow_for_session", "deny"],
         },
       };

@@ -172,14 +172,6 @@ export function validatePendingInteractionResolution(
   interaction: PendingInteraction,
   resolution: PendingInteractionResolution,
 ): void {
-  if (interaction.payload.kind !== resolution.kind) {
-    throw new ApiError(
-      400,
-      "invalid_request",
-      "Pending interaction resolution kind does not match the interaction payload",
-    );
-  }
-
   validateAvailableDecision(interaction, resolution.decision);
   if (resolution.decision !== "deny") {
     if (resolution.grantedPermissions !== null) {
@@ -193,6 +185,18 @@ export function validatePendingInteractionResolution(
         400,
         "invalid_request",
         "Allowed permission-grant resolutions must include granted permissions",
+      );
+    } else if (
+      resolution.decision === "allow_for_session"
+      && (
+        interaction.payload.subject.kind === "command"
+        || interaction.payload.subject.kind === "file_change"
+      )
+    ) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        "Session approval resolutions must include granted permissions",
       );
     }
   }

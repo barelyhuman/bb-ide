@@ -204,9 +204,7 @@ export type ApprovalPendingInteractionPayload = z.infer<
   typeof approvalPendingInteractionPayloadSchema
 >;
 
-export const pendingInteractionPayloadSchema = z.discriminatedUnion("kind", [
-  approvalPendingInteractionPayloadSchema,
-]);
+export const pendingInteractionPayloadSchema = approvalPendingInteractionPayloadSchema;
 export type PendingInteractionPayload = z.infer<
   typeof pendingInteractionPayloadSchema
 >;
@@ -263,13 +261,5 @@ export const pendingInteractionSchema = z.object({
   statusReason: z.string().nullable(),
   createdAt: z.number().int().nonnegative(),
   resolvedAt: z.number().int().nonnegative().nullable(),
-}).superRefine((value, context) => {
-  if (value.resolution !== null && value.resolution.kind !== value.payload.kind) {
-    context.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "resolution kind must match payload kind",
-      path: ["resolution", "kind"],
-    });
-  }
 });
 export type PendingInteraction = z.infer<typeof pendingInteractionSchema>;

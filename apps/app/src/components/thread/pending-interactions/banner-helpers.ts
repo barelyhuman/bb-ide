@@ -2,20 +2,7 @@ import {
   type PendingInteractionApprovalDecision,
 } from "@bb/domain";
 
-export function labelForCommandDecision(
-  decision: PendingInteractionApprovalDecision,
-): string {
-  switch (decision) {
-    case "allow_once":
-      return "Yes";
-    case "allow_for_session":
-      return "Yes, and don't ask again this session";
-    case "deny":
-      return "No";
-  }
-}
-
-export function labelForPermissionDecision(
+export function labelForApprovalDecision(
   decision: PendingInteractionApprovalDecision,
 ): string {
   switch (decision) {

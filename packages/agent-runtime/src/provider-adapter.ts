@@ -42,6 +42,15 @@ export class ProviderRequestDecodeError extends Error {
   }
 }
 
+export class ProviderResponseEncodeError extends Error {
+  readonly code = JSON_RPC_INVALID_PARAMS_CODE;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "ProviderResponseEncodeError";
+  }
+}
+
 export interface ProviderTranslationContext {
   threadId?: string;
   parentToolCallId?: string;

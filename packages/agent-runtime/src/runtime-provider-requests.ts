@@ -67,13 +67,10 @@ function scopeProviderRequestId(
 function buildDeniedInteractiveResolution(
   payload: PendingInteractionPayload,
 ): PendingInteractionResolution {
-  switch (payload.kind) {
-    case "approval":
-      return {
-        kind: "approval",
-        decision: "deny",
-      };
-  }
+  return {
+    kind: payload.kind,
+    decision: "deny",
+  };
 }
 
 function handleToolCallProviderRequest(

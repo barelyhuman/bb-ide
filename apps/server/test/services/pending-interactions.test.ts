@@ -73,11 +73,11 @@ describe("pending interaction lifecycle", () => {
       harness.deps.pendingInteractions.resolvePendingInteraction({
         threadId: thread.id,
         interactionId: created.interaction.id,
-        resolution: createAllowForSessionResolution(),
+        resolution: createAllowOnceResolution(),
       });
       harness.deps.pendingInteractions.completeResolvingInteraction({
         interactionId: created.interaction.id,
-        resolution: createAllowForSessionResolution(),
+        resolution: createAllowOnceResolution(),
       });
 
       expect(
@@ -362,6 +362,60 @@ describe("pending interaction lifecycle", () => {
           },
         }),
       }));
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects session command approvals without granted permissions", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-null-session-grant",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const created = registerPendingInteraction(
+        harness.deps.pendingInteractions,
+        {
+          threadId: thread.id,
+          turnId: "turn-null-session-grant",
+          providerId: "codex",
+          providerThreadId: "provider-thread-null-session-grant",
+          providerRequestId: "request-null-session-grant",
+          payload: createCommandApprovalPayload({
+            itemId: "item-null-session-grant",
+            reason: "Needs network",
+            command: "curl https://example.com",
+            sessionGrant: {
+              network: { enabled: true },
+              fileSystem: null,
+            },
+          }),
+        },
+        session.id,
+      );
+      if (created.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+      }
+
+      expect(() =>
+        harness.deps.pendingInteractions.resolvePendingInteraction({
+          threadId: thread.id,
+          interactionId: created.interaction.id,
+          resolution: createAllowForSessionResolution(null),
+        }),
+      ).toThrow("Session approval resolutions must include granted permissions");
     } finally {
       await harness.cleanup();
     }

@@ -9,6 +9,7 @@ import {
 } from "../helpers/commands.js";
 import {
   createAllowForSessionResolution,
+  createAllowOnceResolution,
   createCommandApprovalPayload,
   createDenyResolution,
   createFileChangeApprovalPayload,
@@ -133,14 +134,14 @@ describe("public thread interaction routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify(createAllowForSessionResolution()),
+          body: JSON.stringify(createAllowOnceResolution()),
         },
       );
       expect(resolveResponse.status).toBe(200);
       await expect(readJson(resolveResponse)).resolves.toMatchObject({
         id: registered.interaction.id,
         status: "resolving",
-        resolution: createAllowForSessionResolution(),
+        resolution: createAllowOnceResolution(),
       });
 
       const duplicateResolveResponse = await harness.app.request(
@@ -150,14 +151,14 @@ describe("public thread interaction routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify(createAllowForSessionResolution()),
+          body: JSON.stringify(createAllowOnceResolution()),
         },
       );
       expect(duplicateResolveResponse.status).toBe(200);
       await expect(readJson(duplicateResolveResponse)).resolves.toMatchObject({
         id: registered.interaction.id,
         status: "resolving",
-        resolution: createAllowForSessionResolution(),
+        resolution: createAllowOnceResolution(),
       });
 
       const conflictingResolveResponse = await harness.app.request(
@@ -752,14 +753,14 @@ describe("public thread interaction routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify(createAllowForSessionResolution()),
+          body: JSON.stringify(createAllowOnceResolution()),
         },
       );
       expect(fileChangeResponse.status).toBe(200);
       await expect(readJson(fileChangeResponse)).resolves.toMatchObject({
         id: fileChange.interaction.id,
         status: "resolving",
-        resolution: createAllowForSessionResolution(),
+        resolution: createAllowOnceResolution(),
       });
 
     } finally {
@@ -821,7 +822,7 @@ describe("public thread interaction routes", () => {
       harness.deps.pendingInteractions.resolvePendingInteraction({
         threadId: thread.id,
         interactionId: registered.interaction.id,
-        resolution: createAllowForSessionResolution(),
+        resolution: createAllowOnceResolution(),
       });
       const queuedResolve = await waitForQueuedCommand(
         harness,

@@ -3231,7 +3231,7 @@ describe("toViewMessages replay coverage", () => {
         command: "git push",
         status: "completed",
         output: "done",
-        approvalStatus: undefined,
+        approvalStatus: null,
       },
     ]);
   });
@@ -3350,7 +3350,7 @@ describe("toViewMessages replay coverage", () => {
         },
       ],
     });
-    expect(projected).not.toHaveProperty("approvalStatus");
+    expect(projected).toHaveProperty("approvalStatus", null);
   });
 
   it("classifies duplicate-event types but does not emit debug rows for them", () => {

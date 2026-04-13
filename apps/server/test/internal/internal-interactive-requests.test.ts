@@ -16,6 +16,7 @@ import {
 } from "../helpers/seed.js";
 import {
   createAllowForSessionResolution,
+  createAllowOnceResolution,
   createCommandApprovalPayload,
   createPermissionGrantApprovalPayload,
 } from "../helpers/pending-interactions.js";
@@ -141,7 +142,7 @@ describe("internal interactive request lifecycle", () => {
       const resolved = harness.deps.pendingInteractions.resolvePendingInteraction({
         threadId: thread.id,
         interactionId,
-        resolution: createAllowForSessionResolution(),
+        resolution: createAllowOnceResolution(),
       });
 
       expect(resolved).toMatchObject({
@@ -160,7 +161,7 @@ describe("internal interactive request lifecycle", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-1",
         providerRequestId: "request-1",
-        resolution: createAllowForSessionResolution(),
+        resolution: createAllowOnceResolution(),
       });
       const commandResultResponse = await reportQueuedCommandSuccess(
         harness,
@@ -177,7 +178,7 @@ describe("internal interactive request lifecycle", () => {
       ).toMatchObject({
         id: interactionId,
         status: "resolved",
-        resolution: createAllowForSessionResolution(),
+        resolution: createAllowOnceResolution(),
       });
 
       const retriedCommandResultResponse = await reportQueuedCommandSuccess(
@@ -194,7 +195,7 @@ describe("internal interactive request lifecycle", () => {
       ).toMatchObject({
         id: interactionId,
         status: "resolved",
-        resolution: createAllowForSessionResolution(),
+        resolution: createAllowOnceResolution(),
       });
     } finally {
       await harness.cleanup();
@@ -287,7 +288,7 @@ describe("internal interactive request lifecycle", () => {
       harness.deps.pendingInteractions.resolvePendingInteraction({
         threadId: thread.id,
         interactionId,
-        resolution: createAllowForSessionResolution(),
+        resolution: createAllowOnceResolution(),
       });
 
       const retryResponse = await registerInteractiveRequest({ body, harness });

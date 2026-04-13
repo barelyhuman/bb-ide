@@ -6,7 +6,10 @@ import type {
   JsonRpcMessage,
   ProviderAdapter,
 } from "../provider-adapter.js";
-import { ProviderRequestDecodeError as ProviderRequestDecodeErrorValue } from "../provider-adapter.js";
+import {
+  ProviderRequestDecodeError as ProviderRequestDecodeErrorValue,
+  ProviderResponseEncodeError,
+} from "../provider-adapter.js";
 import {
   parseCodexAvailableDecisions,
   pendingInteractionToCodexFileChangeApprovalDecision,
@@ -32,17 +35,21 @@ export type CodexInteractiveResponse =
   | PermissionsRequestApprovalResponse;
 
 function assertNever(value: never, message?: string): never {
-  throw new Error(message ?? `Unexpected value: ${String(value)}`);
+  throw new ProviderResponseEncodeError(message ?? `Unexpected value: ${String(value)}`);
 }
 
 function requireGrantedPermissions(
   args: BuildCodexInteractiveResponseResolution,
 ) {
   if (args.decision === "deny") {
-    throw new Error("Denied approval responses do not include granted permissions");
+    throw new ProviderResponseEncodeError(
+      "Denied approval responses do not include granted permissions",
+    );
   }
   if (args.grantedPermissions === null) {
-    throw new Error("Permission grant approval must include granted permissions");
+    throw new ProviderResponseEncodeError(
+      "Permission grant approval must include granted permissions",
+    );
   }
   return args.grantedPermissions;
 }
@@ -163,48 +170,46 @@ export function decodeCodexInteractiveRequest(
 export function buildCodexInteractiveResponse(
   args: BuildCodexInteractiveResponseArgs,
 ): CodexInteractiveResponse {
-  switch (args.request.payload.kind) {
-    case "approval": {
-      if (args.resolution.kind !== "approval") {
-        throw new Error("Interactive response kind mismatch for approval");
-      }
-      switch (args.request.payload.subject.kind) {
-        case "command": {
-          const response: CommandExecutionRequestApprovalResponse = {
-            decision: toCodexCommandApprovalDecision(args.resolution.decision),
-          };
-          return response;
-        }
-        case "file_change": {
-          const response: FileChangeRequestApprovalResponse = {
-            decision:
-              pendingInteractionToCodexFileChangeApprovalDecision[
-                args.resolution.decision
-              ],
-          };
-          return response;
-        }
-        case "permission_grant": {
-          if (args.resolution.decision === "deny") {
-            const response: PermissionsRequestApprovalResponse = {
-              permissions: {},
-              scope: "turn",
-            };
-            return response;
-          }
-          const response: PermissionsRequestApprovalResponse = {
-            permissions: toCodexGrantedPermissionProfile(
-              requireGrantedPermissions(args.resolution),
-            ),
-            scope: args.resolution.decision === "allow_for_session"
-              ? "session"
-              : "turn",
-          };
-          return response;
-        }
-        default:
-          return assertNever(args.request.payload.subject);
-      }
+  if (args.resolution.kind !== "approval") {
+    throw new ProviderResponseEncodeError(
+      "Interactive response kind mismatch for approval",
+    );
+  }
+  switch (args.request.payload.subject.kind) {
+    case "command": {
+      const response: CommandExecutionRequestApprovalResponse = {
+        decision: toCodexCommandApprovalDecision(args.resolution.decision),
+      };
+      return response;
     }
+    case "file_change": {
+      const response: FileChangeRequestApprovalResponse = {
+        decision:
+          pendingInteractionToCodexFileChangeApprovalDecision[
+            args.resolution.decision
+          ],
+      };
+      return response;
+    }
+    case "permission_grant": {
+      if (args.resolution.decision === "deny") {
+        const response: PermissionsRequestApprovalResponse = {
+          permissions: {},
+          scope: "turn",
+        };
+        return response;
+      }
+      const response: PermissionsRequestApprovalResponse = {
+        permissions: toCodexGrantedPermissionProfile(
+          requireGrantedPermissions(args.resolution),
+        ),
+        scope: args.resolution.decision === "allow_for_session"
+          ? "session"
+          : "turn",
+      };
+      return response;
+    }
+    default:
+      return assertNever(args.request.payload.subject);
   }
 }

@@ -113,10 +113,7 @@ function buildResolveConflictError(interaction: PendingInteraction): ApiError {
 function getUnsupportedPendingInteractionReason(
   interaction: PendingInteractionCreate,
 ): string | null {
-  if (
-    interaction.payload.kind === "approval"
-    && interaction.payload.availableDecisions.length === 0
-  ) {
+  if (interaction.payload.availableDecisions.length === 0) {
     return "Approvals must include at least one available decision";
   }
 

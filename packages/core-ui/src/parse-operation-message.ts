@@ -175,14 +175,24 @@ function op(
     sourceSeqEnd: meta.seq,
     createdAt: meta.createdAt,
     startedAt: meta.createdAt,
+    approvalTarget: null,
     ...fields,
   };
 }
 
 type ViewOperationFields = Omit<
   ViewOperationMessage,
-  "kind" | "id" | "threadId" | "sourceSeqStart" | "sourceSeqEnd" | "createdAt" | "startedAt"
->;
+  | "kind"
+  | "id"
+  | "threadId"
+  | "sourceSeqStart"
+  | "sourceSeqEnd"
+  | "createdAt"
+  | "startedAt"
+  | "approvalTarget"
+> & {
+  approvalTarget?: ViewApprovalTarget | null;
+};
 
 function formatPlanStepStatus(status: ThreadEventPlanStepStatus | undefined): string {
   switch (status) {
@@ -325,7 +335,7 @@ export function parseOperationMessage(
       title,
       detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
       status: threadOperationStatus(threadOperation),
-      ...(approvalTarget ? { approvalTarget } : {}),
+      approvalTarget,
       threadOperation,
     });
   }

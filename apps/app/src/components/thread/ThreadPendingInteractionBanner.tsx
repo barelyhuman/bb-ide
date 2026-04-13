@@ -7,7 +7,6 @@ import {
 } from "@bb/core-ui";
 import {
   type PendingInteraction,
-  type PendingInteractionApprovalDecision,
   type PendingInteractionResolution,
 } from "@bb/domain";
 import { ExpandableLine, StatusPill } from "@bb/ui-core";
@@ -15,8 +14,7 @@ import { useResolveThreadPendingInteraction } from "@/hooks/mutations/thread-int
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { cn } from "@/lib/utils";
 import {
-  labelForCommandDecision,
-  labelForPermissionDecision,
+  labelForApprovalDecision,
 } from "./pending-interactions/banner-helpers";
 import { Button } from "../ui/button";
 
@@ -162,95 +160,78 @@ export function ThreadPendingInteractionBanner({
 }
 
 function buildBannerModel(interaction: PendingInteraction): BannerModel {
-  switch (interaction.payload.kind) {
-    case "approval": {
-      const options = interaction.payload.availableDecisions.map((decision) => ({
-        label: labelForApprovalDecision(interaction, decision),
-        resolution: buildPendingInteractionApprovalResolution(interaction, decision),
-      }));
+  const options = interaction.payload.availableDecisions.map((decision) => ({
+    label: labelForApprovalDecision(decision),
+    resolution: buildPendingInteractionApprovalResolution(interaction, decision),
+  }));
 
-      switch (interaction.payload.subject.kind) {
-        case "command": {
-          const rawCommand = interaction.payload.subject.command;
-          const command = rawCommand
-            ? extractShellCommandFromString(rawCommand) ?? rawCommand
-            : null;
-          const detailLines = formatPendingInteractionSubjectDetailLines(
-            interaction,
-          ).filter((line) => !line.startsWith("Command: "));
-          const subject = command ? (
-            <div className="overflow-hidden rounded-lg border border-border bg-card">
-              <pre className="max-h-[220px] overflow-auto whitespace-pre px-4 py-3 font-mono ui-text-sm leading-tight text-foreground">
-                $ {command}
-              </pre>
-              {detailLines.length > 0 ? (
-                <ul className="border-t border-border/60 px-4 py-3 text-xs text-muted-foreground">
-                  {detailLines.map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-          ) : null;
+  switch (interaction.payload.subject.kind) {
+    case "command": {
+      const rawCommand = interaction.payload.subject.command;
+      const command = rawCommand
+        ? extractShellCommandFromString(rawCommand) ?? rawCommand
+        : null;
+      const detailLines = formatPendingInteractionSubjectDetailLines(
+        interaction,
+      ).filter((line) => !line.startsWith("Command: "));
+      const subject = command ? (
+        <div className="overflow-hidden rounded-lg border border-border bg-card">
+          <pre className="max-h-[220px] overflow-auto whitespace-pre px-4 py-3 font-mono ui-text-sm leading-tight text-foreground">
+            $ {command}
+          </pre>
+          {detailLines.length > 0 ? (
+            <ul className="border-t border-border/60 px-4 py-3 text-xs text-muted-foreground">
+              {detailLines.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null;
 
-          return {
-            title: interaction.payload.reason ?? "Do you want to run this command?",
-            subject,
-            options,
-            skip: null,
-          };
-        }
-        case "file_change": {
-          const detailLines = formatPendingInteractionSubjectDetailLines(
-            interaction,
-          );
-          return {
-            title: interaction.payload.reason ?? "Do you want to make these changes?",
-            subject: detailLines.length > 0 ? (
-              <ul className="rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
-                {detailLines.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
-            ) : null,
-            options,
-            skip: null,
-          };
-        }
-        case "permission_grant": {
-          const detailLines = formatPendingInteractionSubjectDetailLines(
-            interaction,
-          );
-          return {
-            title:
-              interaction.payload.reason ?? "Do you want to grant this permission?",
-            subject: detailLines.length > 0 ? (
-              <ul className="rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
-                {detailLines.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
-            ) : null,
-            options,
-            skip: null,
-          };
-        }
-        default:
-          return assertNever(interaction.payload.subject);
-      }
+      return {
+        title: interaction.payload.reason ?? "Do you want to run this command?",
+        subject,
+        options,
+        skip: null,
+      };
     }
+    case "file_change": {
+      const detailLines = formatPendingInteractionSubjectDetailLines(
+        interaction,
+      );
+      return {
+        title: interaction.payload.reason ?? "Do you want to make these changes?",
+        subject: detailLines.length > 0 ? (
+          <ul className="rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
+            {detailLines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        ) : null,
+        options,
+        skip: null,
+      };
+    }
+    case "permission_grant": {
+      const detailLines = formatPendingInteractionSubjectDetailLines(
+        interaction,
+      );
+      return {
+        title:
+          interaction.payload.reason ?? "Do you want to grant this permission?",
+        subject: detailLines.length > 0 ? (
+          <ul className="rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
+            {detailLines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        ) : null,
+        options,
+        skip: null,
+      };
+    }
+    default:
+      return assertNever(interaction.payload.subject);
   }
-}
-
-function labelForApprovalDecision(
-  interaction: PendingInteraction,
-  decision: PendingInteractionApprovalDecision,
-): string {
-  if (
-    interaction.payload.kind === "approval"
-    && interaction.payload.subject.kind === "permission_grant"
-  ) {
-    return labelForPermissionDecision(decision);
-  }
-  return labelForCommandDecision(decision);
 }

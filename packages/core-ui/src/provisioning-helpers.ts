@@ -157,6 +157,7 @@ export function mergeProvisioningOperations(messages: ViewMessage[]): ViewMessag
       title,
       detail: uniqueDetailLines.length > 0 ? uniqueDetailLines.join("\n") : undefined,
       status: mergedStatus,
+      approvalTarget: null,
       ...(provisioning ? { provisioning } : {}),
     });
 

@@ -264,12 +264,12 @@ function mergeCallStatus(
 }
 
 function mergeApprovalStatus(
-  current: ViewApprovalLifecycleStatus | undefined,
-  incoming: ViewApprovalLifecycleStatus | undefined,
+  current: ViewApprovalLifecycleStatus | null,
+  incoming: ViewApprovalLifecycleStatus | null | undefined,
   incomingStatus: ViewToolCallMessage["status"] | undefined,
-): ViewApprovalLifecycleStatus | undefined {
+): ViewApprovalLifecycleStatus | null {
   if (incoming !== undefined) return incoming;
-  if (incomingStatus !== undefined) return undefined;
+  if (incomingStatus !== undefined) return null;
   return current;
 }
 
@@ -312,7 +312,7 @@ function upsertRunningExecCall(
       exitCode: incoming.exitCode,
       duration: incoming.duration,
       durationMs: incoming.durationMs,
-      approvalStatus: incoming.approvalStatus,
+      approvalStatus: incoming.approvalStatus ?? null,
       status: incoming.status ?? "pending",
       turnId,
       parentToolCallId: incoming.parentToolCallId,
@@ -722,7 +722,7 @@ function onExecBegin(
     return;
   }
 
-  const exploring = call.approvalStatus ? false : isExploringCall(call);
+  const exploring = call.approvalStatus !== null ? false : isExploringCall(call);
   const active = state.toolActivity.activeCell;
 
   if (exploring && active?.kind === "tool-exploring") {
@@ -1046,7 +1046,7 @@ function upsertFileEdit(
       changes: partial.changes ?? [],
       stdout: partial.stdout,
       stderr: partial.stderr,
-      approvalStatus: partial.approvalStatus,
+      approvalStatus: partial.approvalStatus ?? null,
       status: partial.status ?? "pending",
     };
     state.fileEditsByCallId.set(partial.callId, message);
@@ -1078,11 +1078,11 @@ function upsertFileEdit(
     existing.stderr = partial.stderr;
   }
 
-  if (partial.approvalStatus !== undefined) {
-    existing.approvalStatus = partial.approvalStatus;
-  } else if (partial.status !== undefined) {
-    delete existing.approvalStatus;
-  }
+  existing.approvalStatus = partial.approvalStatus !== undefined
+    ? partial.approvalStatus
+    : partial.status !== undefined
+    ? null
+    : existing.approvalStatus;
 
   if (partial.status) {
     if (partial.status === "error") {
@@ -1129,6 +1129,7 @@ function onCompactionBegin(
     title: "Context compacting...",
     detail: payload.detail,
     status: "pending",
+    approvalTarget: null,
   };
   state.openCompactionsByKey.set(payload.key, message);
   state.messages.push(message);
@@ -1171,6 +1172,7 @@ function onCompactionEnd(
     title: "Context compacted",
     detail: payload.detail,
     status: "completed",
+    approvalTarget: null,
   });
   state.finalizedCompactionKeys.add(payload.key);
   state.lastCompletedCompactionKeyByThreadId.set(threadId, payload.key);

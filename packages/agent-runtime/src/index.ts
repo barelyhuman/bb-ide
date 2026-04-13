@@ -22,6 +22,9 @@ export type {
   ProviderInfo,
 } from "./types.js";
 export type {
+  ProviderAdapter,
+} from "./provider-adapter.js";
+export type {
   ProviderObservedToolCall,
   ProviderObservedToolCallCoverage,
   ProviderRawEventCoverage,

@@ -55,6 +55,8 @@ function createCommandApprovalRequest(
         itemId: "item-registry",
         command: "git push",
         cwd: "/tmp/project",
+        actions: [],
+        sessionGrant: null,
       },
       reason: "Needs approval",
       availableDecisions: ["allow_once", "deny"],

@@ -100,7 +100,7 @@ export interface ViewToolCallSummary extends ViewDelegationMetadata {
   exitCode?: number;
   duration?: string;
   durationMs?: number;
-  approvalStatus?: ViewApprovalLifecycleStatus;
+  approvalStatus: ViewApprovalLifecycleStatus | null;
   status: Extract<
     ViewMessageStatus,
     "pending" | "completed" | "error" | "interrupted"
@@ -126,7 +126,7 @@ export interface ViewToolCallMessage
   exitCode?: number;
   duration?: string;
   durationMs?: number;
-  approvalStatus?: ViewApprovalLifecycleStatus;
+  approvalStatus: ViewApprovalLifecycleStatus | null;
   status: Extract<
     ViewMessageStatus,
     "pending" | "completed" | "error" | "interrupted"
@@ -155,7 +155,7 @@ export interface ViewFileEditMessage extends ViewMessageBase {
   changes: ViewFileEditChange[];
   stdout?: string;
   stderr?: string;
-  approvalStatus?: ViewApprovalLifecycleStatus;
+  approvalStatus: ViewApprovalLifecycleStatus | null;
   status: Extract<
     ViewMessageStatus,
     "pending" | "completed" | "error" | "interrupted"
@@ -243,7 +243,7 @@ export interface ViewOperationMessage extends ViewMessageBase {
     ViewMessageStatus,
     "pending" | "completed" | "error" | "interrupted"
   >;
-  approvalTarget?: ViewApprovalTarget;
+  approvalTarget: ViewApprovalTarget | null;
   provisioning?: ViewProvisioningMetadata;
   threadOperation?: ViewThreadOperationMetadata;
 }

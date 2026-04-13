@@ -25,6 +25,8 @@ function createInteractiveRequest(): PendingInteractionCreate {
         itemId: "item-123",
         command: "git push",
         cwd: "/tmp/project",
+        actions: [],
+        sessionGrant: null,
       },
       reason: "Needs approval",
       availableDecisions: ["allow_once", "deny"],

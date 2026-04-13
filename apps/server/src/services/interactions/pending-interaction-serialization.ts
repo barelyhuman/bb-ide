@@ -25,14 +25,6 @@ export function toPendingInteraction(row: PendingInteractionRow): PendingInterac
           parseStoredPendingInteractionJson(row.resolution),
         );
 
-  if (resolution !== null && resolution.kind !== payload.kind) {
-    throw new ApiError(
-      500,
-      "internal_error",
-      "Stored pending interaction resolution kind does not match its payload",
-    );
-  }
-
   return {
     id: row.id,
     threadId: row.threadId,

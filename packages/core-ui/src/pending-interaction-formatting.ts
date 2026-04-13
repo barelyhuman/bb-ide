@@ -128,53 +128,50 @@ function formatPermissionSummaryLine(
 export function formatPendingInteractionSubjectDetailLines(
   interaction: PendingInteraction,
 ): string[] {
-  switch (interaction.payload.kind) {
-    case "approval":
-      switch (interaction.payload.subject.kind) {
-        case "command": {
-          const actionLines = summarizePendingInteractionCommandActions(
-            interaction.payload.subject.actions,
-          ).map((action) => `Action: ${action}`);
-          const sessionGrant = formatPermissionSummaryLine(
-            "Session grant",
-            interaction.payload.subject.sessionGrant,
-          );
-          return [
-            `Command: ${interaction.payload.subject.command}`,
-            ...(interaction.payload.subject.cwd
-              ? [`Cwd: ${interaction.payload.subject.cwd}`]
-              : []),
-            ...actionLines,
-            ...(sessionGrant ? [sessionGrant] : []),
-          ];
-        }
-        case "file_change": {
-          const sessionGrant = formatPermissionSummaryLine(
-            "Session grant",
-            interaction.payload.subject.sessionGrant,
-          );
-          return [
-            `Item: ${interaction.payload.subject.itemId}`,
-            ...(interaction.payload.subject.writeScope
-              ? [`Write root: ${interaction.payload.subject.writeScope.root}`]
-              : []),
-            ...(sessionGrant ? [sessionGrant] : []),
-          ];
-        }
-        case "permission_grant": {
-          const permissions = summarizePendingInteractionRequestedPermissions(
-            interaction.payload.subject.permissions,
-          );
-          return [
-            ...(interaction.payload.subject.toolName
-              ? [`Tool: ${interaction.payload.subject.toolName}`]
-              : []),
-            ...permissions.map((permission) => `Permission: ${permission}`),
-          ];
-        }
-        default:
-          return assertNever(interaction.payload.subject);
-      }
+  switch (interaction.payload.subject.kind) {
+    case "command": {
+      const actionLines = summarizePendingInteractionCommandActions(
+        interaction.payload.subject.actions,
+      ).map((action) => `Action: ${action}`);
+      const sessionGrant = formatPermissionSummaryLine(
+        "Session grant",
+        interaction.payload.subject.sessionGrant,
+      );
+      return [
+        `Command: ${interaction.payload.subject.command}`,
+        ...(interaction.payload.subject.cwd
+          ? [`Cwd: ${interaction.payload.subject.cwd}`]
+          : []),
+        ...actionLines,
+        ...(sessionGrant ? [sessionGrant] : []),
+      ];
+    }
+    case "file_change": {
+      const sessionGrant = formatPermissionSummaryLine(
+        "Session grant",
+        interaction.payload.subject.sessionGrant,
+      );
+      return [
+        `Item: ${interaction.payload.subject.itemId}`,
+        ...(interaction.payload.subject.writeScope
+          ? [`Write root: ${interaction.payload.subject.writeScope.root}`]
+          : []),
+        ...(sessionGrant ? [sessionGrant] : []),
+      ];
+    }
+    case "permission_grant": {
+      const permissions = summarizePendingInteractionRequestedPermissions(
+        interaction.payload.subject.permissions,
+      );
+      return [
+        ...(interaction.payload.subject.toolName
+          ? [`Tool: ${interaction.payload.subject.toolName}`]
+          : []),
+        ...permissions.map((permission) => `Permission: ${permission}`),
+      ];
+    }
+    default:
+      return assertNever(interaction.payload.subject);
   }
 }
 
@@ -239,10 +236,7 @@ export function getPendingInteractionApprovalGrantedPermissions(
   interaction: PendingInteraction,
   decision: PendingInteractionApprovalDecision,
 ): PendingInteractionGrantedPermissionProfile | null {
-  if (
-    interaction.payload.kind === "approval"
-    && interaction.payload.subject.kind === "permission_grant"
-  ) {
+  if (interaction.payload.subject.kind === "permission_grant") {
     return toGrantedPendingInteractionPermissions(
       interaction.payload.subject.permissions,
     );
@@ -253,11 +247,8 @@ export function getPendingInteractionApprovalGrantedPermissions(
   }
 
   if (
-    interaction.payload.kind === "approval"
-    && (
-      interaction.payload.subject.kind === "command"
-      || interaction.payload.subject.kind === "file_change"
-    )
+    interaction.payload.subject.kind === "command"
+    || interaction.payload.subject.kind === "file_change"
   ) {
     return interaction.payload.subject.sessionGrant;
   }

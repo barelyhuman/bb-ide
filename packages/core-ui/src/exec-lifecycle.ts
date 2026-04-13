@@ -61,7 +61,7 @@ function itemStatusToExecStatus(status: ThreadEventItemStatus): ExecItemViewStat
 
 export function itemStatusToApprovalStatus(
   status: ThreadEventItemStatus,
-): ViewApprovalLifecycleStatus | undefined {
+): ViewApprovalLifecycleStatus | null {
   switch (status) {
     case "waiting_for_approval":
       return "waiting_for_approval";
@@ -71,7 +71,7 @@ export function itemStatusToApprovalStatus(
     case "completed":
     case "failed":
     case "interrupted":
-      return undefined;
+      return null;
   }
 }
 
