@@ -1,6 +1,12 @@
 import type { ThreadEvent, ThreadEventItemStatus } from "@bb/domain";
 import { getEventParentToolCallId, type EventMeta } from "./event-decode.js";
-import type { ViewFileEditMessage, ViewToolCallMessage, ViewToolCallSummary, ViewToolParsedIntent } from "@bb/domain";
+import type {
+  ViewApprovalLifecycleStatus,
+  ViewFileEditMessage,
+  ViewToolCallMessage,
+  ViewToolCallSummary,
+  ViewToolParsedIntent,
+} from "@bb/domain";
 import { durationToString, getFirstStringField } from "./format-helpers.js";
 import {
   baseToolName,
@@ -38,6 +44,10 @@ type ExecItemViewStatus = ViewToolCallMessage["status"];
 
 function itemStatusToExecStatus(status: ThreadEventItemStatus): ExecItemViewStatus {
   switch (status) {
+    case "waiting_for_approval":
+      return "pending";
+    case "denied":
+      return "interrupted";
     case "pending":
       return "pending";
     case "completed":
@@ -46,6 +56,22 @@ function itemStatusToExecStatus(status: ThreadEventItemStatus): ExecItemViewStat
       return "error";
     case "interrupted":
       return "interrupted";
+  }
+}
+
+export function itemStatusToApprovalStatus(
+  status: ThreadEventItemStatus,
+): ViewApprovalLifecycleStatus | undefined {
+  switch (status) {
+    case "waiting_for_approval":
+      return "waiting_for_approval";
+    case "denied":
+      return "denied";
+    case "pending":
+    case "completed":
+    case "failed":
+    case "interrupted":
+      return undefined;
   }
 }
 
@@ -265,6 +291,7 @@ export function parseExecLifecycleEvent(
         exitCode,
         durationMs,
         duration: durationToString(durationMs),
+        approvalStatus: itemStatusToApprovalStatus(decoded.item.status),
         status,
         ...(parentToolCallId ? { parentToolCallId } : {}),
       },

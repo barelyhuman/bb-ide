@@ -185,102 +185,76 @@ describe("buildTimelineRows projection turn lifecycle", () => {
     expect(buildTimelineRows({ entries: [] })).toEqual([]);
   });
 
-  it("keeps approval and command execution rows ordered with command preview details", () => {
+  it("keeps command approval state on the command row", () => {
     const rows = buildRowsFromMessages([
       {
-        kind: "operation",
-        id: "approval-started",
+        kind: "tool-call",
+        id: "command-waiting",
         threadId: "thread-1",
         turnId: "turn-1",
         sourceSeqStart: 1,
         sourceSeqEnd: 1,
         createdAt: 1,
-        opType: "operation",
-        title: "Waiting for approval to run git push",
-        status: "pending",
-        approvalTarget: {
-          kind: "command",
-          itemId: "item-1",
-          command: "git push",
-          cwd: "/tmp/project",
-        },
-        threadOperation: {
-          operation: "other",
-          rawOperation: "approval",
-          status: "started",
-          rawStatus: "started",
-          operationId: "pi_1",
-        },
-      },
-      {
-        kind: "operation",
-        id: "approval-resolved",
-        threadId: "thread-1",
-        turnId: "turn-1",
-        sourceSeqStart: 2,
-        sourceSeqEnd: 2,
-        createdAt: 2,
-        opType: "operation",
-        title: "Command approved",
-        status: "completed",
-        approvalTarget: {
-          kind: "command",
-          itemId: "item-1",
-          command: "git push",
-          cwd: "/tmp/project",
-        },
-        threadOperation: {
-          operation: "other",
-          rawOperation: "approval",
-          status: "completed",
-          rawStatus: "completed",
-          operationId: "pi_1",
-        },
-      },
-      {
-        kind: "tool-call",
-        id: "command-started",
-        threadId: "thread-1",
-        turnId: "turn-1",
-        sourceSeqStart: 3,
-        sourceSeqEnd: 3,
-        createdAt: 3,
         toolName: "exec_command",
-        callId: "call-1",
+        callId: "item-1",
         command: "git push",
         status: "pending",
+        approvalStatus: "waiting_for_approval",
       },
       {
         kind: "tool-call",
         id: "command-completed",
         threadId: "thread-1",
         turnId: "turn-1",
-        sourceSeqStart: 4,
-        sourceSeqEnd: 4,
-        createdAt: 4,
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+        createdAt: 2,
         toolName: "exec_command",
-        callId: "call-1",
+        callId: "item-1",
         command: "git push",
         status: "completed",
         output: "done",
       },
-    ], { collapseAll: true });
+    ]);
 
     expect(rows.map((row) => row.kind === "message" ? row.message.id : row.id)).toEqual([
-      "approval-started",
-      "approval-resolved",
-      "command-started",
+      "command-waiting",
       "command-completed",
     ]);
     const approvalRow = expectMessageRow(rows[0]);
     expect(approvalRow.message).toMatchObject({
-      kind: "operation",
-      title: "Waiting for approval to run git push",
-      approvalTarget: {
-        kind: "command",
+      kind: "tool-call",
+      command: "git push",
+      approvalStatus: "waiting_for_approval",
+    });
+  });
+
+  it("keeps denied approval state on the command row", () => {
+    const rows = buildRowsFromMessages([
+      {
+        kind: "tool-call",
+        id: "command-denied",
+        threadId: "thread-1",
+        turnId: "turn-1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        createdAt: 1,
+        toolName: "exec_command",
+        callId: "item-1",
         command: "git push",
-        cwd: "/tmp/project",
+        status: "interrupted",
+        approvalStatus: "denied",
       },
+    ]);
+
+    expect(rows.map((row) => row.kind === "message" ? row.message.id : row.id)).toEqual([
+      "command-denied",
+    ]);
+    const deniedRow = expectMessageRow(rows[0]);
+    expect(deniedRow.message).toMatchObject({
+      kind: "tool-call",
+      command: "git push",
+      approvalStatus: "denied",
     });
   });
 

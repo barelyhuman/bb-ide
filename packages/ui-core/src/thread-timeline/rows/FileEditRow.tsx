@@ -307,6 +307,12 @@ export function FileEditRow({
   );
   const preferApplyingLabel = preferOngoingLabels && message.status === "completed";
   const actionLabel = useMemo(() => {
+    if (message.approvalStatus === "waiting_for_approval") {
+      return "Waiting for approval to edit";
+    }
+    if (message.approvalStatus === "denied") {
+      return "Permission denied:";
+    }
     if (message.status === "error") return "Failed";
     if (message.status === "interrupted") return "Declined";
     if (message.status === "pending" || preferApplyingLabel) return "Applying";
@@ -316,8 +322,10 @@ export function FileEditRow({
     const hasMixed = actions.some((action) => action !== first);
     if (hasMixed || !first) return "Changed";
     return fileChangeActionLabel(first);
-  }, [message.changes, message.status, preferApplyingLabel]);
-  const isApplying = message.status === "pending" || preferApplyingLabel;
+  }, [message.approvalStatus, message.changes, message.status, preferApplyingLabel]);
+  const isApplying =
+    message.approvalStatus !== "denied" &&
+    (message.status === "pending" || preferApplyingLabel);
   const tone = message.status === "error" ? "destructive" : "default";
   const summaryLabel =
     isExpanded && uniqueFileCount > 1

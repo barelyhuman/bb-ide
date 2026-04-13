@@ -2517,6 +2517,74 @@ describe("CLI JSON output contracts", () => {
     expect(output).not.toContain("Provisioning interrupted");
   });
 
+  it("bb thread log renders approval state on command and file-change rows", async () => {
+    const getEvents = vi.fn(async () => []);
+    const getTimeline = vi.fn(async () => ({
+      rows: [
+        {
+          kind: "message",
+          id: "command-approval",
+          message: {
+            kind: "tool-call",
+            id: "command-approval",
+            threadId: "thread-log",
+            sourceSeqStart: 1,
+            sourceSeqEnd: 1,
+            createdAt: 1,
+            startedAt: 1,
+            toolName: "exec_command",
+            callId: "cmd-1",
+            command: "git push",
+            parsedCmd: [],
+            status: "pending",
+            approvalStatus: "waiting_for_approval",
+          },
+        },
+        {
+          kind: "message",
+          id: "file-approval",
+          message: {
+            kind: "file-edit",
+            id: "file-approval",
+            threadId: "thread-log",
+            sourceSeqStart: 2,
+            sourceSeqEnd: 2,
+            createdAt: 2,
+            startedAt: 2,
+            callId: "file-1",
+            changes: [],
+            status: "interrupted",
+            approvalStatus: "denied",
+          },
+        },
+      ],
+    }));
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              events: {
+                $get: getEvents,
+              },
+              timeline: {
+                $get: getTimeline,
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(["thread", "log", "thread-log"], (program) =>
+      registerThreadCommands(program, () => "http://server"),
+    );
+
+    const output = String(vi.mocked(console.log).mock.calls[0]?.[0]);
+    expect(output).toContain("Waiting for approval to run git push");
+    expect(output).toContain("Permission denied: file changes");
+  });
+
   it("bb thread log --self resolves from BB_THREAD_ID", async () => {
     process.env.BB_THREAD_ID = "thread-log-self";
     const getEvents = vi.fn(async () => []);

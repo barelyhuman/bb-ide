@@ -15,6 +15,8 @@ export const threadEventItemStatusSchema = z.enum([
   "completed",
   "failed",
   "interrupted",
+  "waiting_for_approval",
+  "denied",
 ]);
 export type ThreadEventItemStatus = z.infer<typeof threadEventItemStatusSchema>;
 

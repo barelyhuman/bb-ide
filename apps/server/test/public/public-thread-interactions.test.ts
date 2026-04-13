@@ -22,6 +22,7 @@ import {
   seedThreadRuntimeState,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
+import { appendThreadEvent } from "../../src/services/threads/thread-events.js";
 
 function registerPendingInteraction(
   lifecycle: PendingInteractionLifecycle,
@@ -782,6 +783,18 @@ describe("public thread interaction routes", () => {
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
+        status: "active",
+      });
+      appendThreadEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        type: "turn/started",
+        providerThreadId: "provider-thread-timeline",
+        turnId: "turn-timeline",
+        data: {
+          providerThreadId: "provider-thread-timeline",
+          turnId: "turn-timeline",
+        },
       });
 
       const registered = registerPendingInteraction(
@@ -833,45 +846,12 @@ describe("public thread interaction routes", () => {
             expect.objectContaining({
               kind: "message",
               message: expect.objectContaining({
-                kind: "operation",
-                opType: "operation",
-                threadOperation: expect.objectContaining({
-                  rawOperation: "approval",
-                  operationId: registered.interaction.id,
-                  status: "started",
-                  metadata: expect.objectContaining({
-                    subjectKind: "command",
-                    itemId: "item-timeline",
-                    command: "git push",
-                    cwd: "/tmp/project",
-                  }),
-                }),
-                title: "Waiting for approval to run git push",
-                approvalTarget: {
-                  kind: "command",
-                  itemId: "item-timeline",
-                  command: "git push",
-                  cwd: "/tmp/project",
-                },
-              }),
-            }),
-            expect.objectContaining({
-              kind: "message",
-              message: expect.objectContaining({
-                kind: "operation",
-                opType: "operation",
-                status: "completed",
-                threadOperation: expect.objectContaining({
-                  rawOperation: "approval",
-                  operationId: registered.interaction.id,
-                }),
-                title: "Command approved for this session",
-                approvalTarget: {
-                  kind: "command",
-                  itemId: "item-timeline",
-                  command: "git push",
-                  cwd: "/tmp/project",
-                },
+                kind: "tool-call",
+                callId: "item-timeline",
+                command: "git push",
+                cwd: "/tmp/project",
+                status: "pending",
+                approvalStatus: "waiting_for_approval",
               }),
             }),
           ]),
@@ -898,6 +878,18 @@ describe("public thread interaction routes", () => {
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
+        status: "active",
+      });
+      appendThreadEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        type: "turn/started",
+        providerThreadId: "provider-thread-denied-timeline",
+        turnId: "turn-denied-timeline",
+        data: {
+          providerThreadId: "provider-thread-denied-timeline",
+          turnId: "turn-denied-timeline",
+        },
       });
 
       const registered = registerPendingInteraction(
@@ -949,45 +941,12 @@ describe("public thread interaction routes", () => {
             expect.objectContaining({
               kind: "message",
               message: expect.objectContaining({
-                kind: "operation",
-                opType: "operation",
-                threadOperation: expect.objectContaining({
-                  rawOperation: "approval",
-                  operationId: registered.interaction.id,
-                  status: "started",
-                  metadata: expect.objectContaining({
-                    subjectKind: "command",
-                    itemId: "item-denied-timeline",
-                    command: "rm -rf build",
-                    cwd: "/tmp/project",
-                  }),
-                }),
-                title: "Waiting for approval to run rm -rf build",
-                approvalTarget: {
-                  kind: "command",
-                  itemId: "item-denied-timeline",
-                  command: "rm -rf build",
-                  cwd: "/tmp/project",
-                },
-              }),
-            }),
-            expect.objectContaining({
-              kind: "message",
-              message: expect.objectContaining({
-                kind: "operation",
-                opType: "operation",
-                status: "completed",
-                threadOperation: expect.objectContaining({
-                  rawOperation: "approval",
-                  operationId: registered.interaction.id,
-                }),
-                title: "Permission denied: rm -rf build",
-                approvalTarget: {
-                  kind: "command",
-                  itemId: "item-denied-timeline",
-                  command: "rm -rf build",
-                  cwd: "/tmp/project",
-                },
+                kind: "tool-call",
+                callId: "item-denied-timeline",
+                command: "rm -rf build",
+                cwd: "/tmp/project",
+                status: "interrupted",
+                approvalStatus: "denied",
               }),
             }),
           ]),
@@ -1014,6 +973,18 @@ describe("public thread interaction routes", () => {
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
+        status: "active",
+      });
+      appendThreadEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        type: "turn/started",
+        providerThreadId: "provider-thread-file-timeline",
+        turnId: "turn-file-timeline",
+        data: {
+          providerThreadId: "provider-thread-file-timeline",
+          turnId: "turn-file-timeline",
+        },
       });
 
       const registered = registerPendingInteraction(
@@ -1046,23 +1017,11 @@ describe("public thread interaction routes", () => {
             expect.objectContaining({
               kind: "message",
               message: expect.objectContaining({
-                kind: "operation",
-                opType: "operation",
-                title: "Waiting for approval to edit files",
-                approvalTarget: {
-                  kind: "file_change",
-                  itemId: "item-file-timeline",
-                  writeRoot: "/tmp/project",
-                },
-                threadOperation: expect.objectContaining({
-                  rawOperation: "approval",
-                  operationId: registered.interaction.id,
-                  metadata: expect.objectContaining({
-                    subjectKind: "file_change",
-                    itemId: "item-file-timeline",
-                    writeRoot: "/tmp/project",
-                  }),
-                }),
+                kind: "file-edit",
+                callId: "item-file-timeline",
+                changes: [],
+                status: "pending",
+                approvalStatus: "waiting_for_approval",
               }),
             }),
           ]),

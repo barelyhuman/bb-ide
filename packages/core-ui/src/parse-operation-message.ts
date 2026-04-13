@@ -88,27 +88,6 @@ function parseApprovalTarget(
   }
 
   switch (subjectKind) {
-    case "command": {
-      const command = metadataStringValue(decoded.metadata, "command");
-      if (!command) {
-        return undefined;
-      }
-      const cwd = metadataStringValue(decoded.metadata, "cwd");
-      return {
-        kind: "command",
-        itemId,
-        command,
-        ...(cwd ? { cwd } : {}),
-      };
-    }
-    case "file_change": {
-      const writeRoot = metadataStringValue(decoded.metadata, "writeRoot");
-      return {
-        kind: "file_change",
-        itemId,
-        ...(writeRoot ? { writeRoot } : {}),
-      };
-    }
     case "permission_grant": {
       const toolName = metadataStringValue(decoded.metadata, "toolName");
       return {

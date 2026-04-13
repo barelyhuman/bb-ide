@@ -17,7 +17,6 @@ import {
   getStaticEventToneClass,
   useStickyBottomAutoScroll,
 } from "./shared.js";
-import { TerminalOutputBlock } from "./TerminalOutputBlock.js";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
 
 
@@ -401,24 +400,6 @@ export function OperationRow({
         tone={tone}
       >
         <div className="mt-0.5 space-y-2">
-          {approvalTarget?.kind === "command" ? (
-            <TerminalOutputBlock
-              command={approvalTarget.command}
-              outputText=""
-              isExpanded={isExpanded}
-            />
-          ) : null}
-          {approvalTarget?.kind === "file_change" ? (
-            <OperationDetailLines
-              lines={[
-                `File change approval`,
-                `Item: ${approvalTarget.itemId}`,
-                ...(approvalTarget.writeRoot
-                  ? [`Write root: ${approvalTarget.writeRoot}`]
-                  : []),
-              ]}
-            />
-          ) : null}
           {approvalTarget?.kind === "permission_grant" ? (
             <OperationDetailLines
               lines={[

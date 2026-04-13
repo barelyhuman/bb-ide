@@ -13,6 +13,17 @@ export const viewMessageStatusValues = [
 export const viewMessageStatusSchema = z.enum(viewMessageStatusValues);
 export type ViewMessageStatus = z.infer<typeof viewMessageStatusSchema>;
 
+export const viewApprovalLifecycleStatusValues = [
+  "waiting_for_approval",
+  "denied",
+] as const;
+export const viewApprovalLifecycleStatusSchema = z.enum(
+  viewApprovalLifecycleStatusValues,
+);
+export type ViewApprovalLifecycleStatus = z.infer<
+  typeof viewApprovalLifecycleStatusSchema
+>;
+
 export interface ViewMessageBase {
   id: string;
   threadId: string;
@@ -89,6 +100,7 @@ export interface ViewToolCallSummary extends ViewDelegationMetadata {
   exitCode?: number;
   duration?: string;
   durationMs?: number;
+  approvalStatus?: ViewApprovalLifecycleStatus;
   status: Extract<
     ViewMessageStatus,
     "pending" | "completed" | "error" | "interrupted"
@@ -114,6 +126,7 @@ export interface ViewToolCallMessage
   exitCode?: number;
   duration?: string;
   durationMs?: number;
+  approvalStatus?: ViewApprovalLifecycleStatus;
   status: Extract<
     ViewMessageStatus,
     "pending" | "completed" | "error" | "interrupted"
@@ -142,6 +155,7 @@ export interface ViewFileEditMessage extends ViewMessageBase {
   changes: ViewFileEditChange[];
   stdout?: string;
   stderr?: string;
+  approvalStatus?: ViewApprovalLifecycleStatus;
   status: Extract<
     ViewMessageStatus,
     "pending" | "completed" | "error" | "interrupted"
@@ -214,22 +228,11 @@ export interface ViewProvisioningMetadata {
 }
 
 export type ViewApprovalTarget =
-  | {
-      kind: "command";
-      itemId: string;
-      command: string;
-      cwd?: string;
-    }
-  | {
-      kind: "file_change";
-      itemId: string;
-      writeRoot?: string;
-    }
-  | {
-      kind: "permission_grant";
-      itemId: string;
-      toolName?: string;
-    };
+  {
+    kind: "permission_grant";
+    itemId: string;
+    toolName?: string;
+  };
 
 export interface ViewOperationMessage extends ViewMessageBase {
   kind: "operation";

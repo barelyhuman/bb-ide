@@ -377,6 +377,8 @@ export {
   viewMessageSchema,
   viewOperationTypeSchema,
   viewOperationTypeValues,
+  viewApprovalLifecycleStatusSchema,
+  viewApprovalLifecycleStatusValues,
   viewThreadOperationKindSchema,
   viewThreadOperationKindValues,
   viewThreadOperationStatusSchema,
@@ -387,6 +389,7 @@ export {
 export type {
   ToViewMessagesOptions,
   ViewApprovalTarget,
+  ViewApprovalLifecycleStatus,
   ViewAssistantReasoningMessage,
   ViewAssistantTextMessage,
   ViewDelegationMessage,

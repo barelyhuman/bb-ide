@@ -103,37 +103,25 @@ function formatMessagesAsText(
 }
 
 describe("formatTimelineAsText", () => {
-  it("renders verbose approval command targets", () => {
+  it("renders command approval state on tool-call rows", () => {
     const text = formatMessagesAsText([
       {
-        kind: "operation",
+        kind: "tool-call",
         id: "approval-1",
         threadId: "t1",
         sourceSeqStart: 1,
         sourceSeqEnd: 1,
         createdAt: 1,
-        opType: "operation",
-        title: "Waiting for approval to run git push",
+        toolName: "exec_command",
+        callId: "item-1",
+        command: "git push",
         status: "pending",
-        approvalTarget: {
-          kind: "command",
-          itemId: "item-1",
-          command: "git push",
-          cwd: "/tmp/project",
-        },
-        threadOperation: {
-          operation: "other",
-          rawOperation: "approval",
-          status: "started",
-          rawStatus: "started",
-          operationId: "pi_1",
-        },
+        approvalStatus: "waiting_for_approval",
       },
     ], { verbose: true });
 
-    expect(text).toContain("Operation: Waiting for approval to run git push");
-    expect(text).toContain("$ git push");
-    expect(text).toContain("cwd: /tmp/project");
+    expect(text).toContain("Waiting for approval to run git push");
+    expect(text).toContain("git push");
   });
 
   it("renders user + assistant + tool-call in minimal mode", () => {

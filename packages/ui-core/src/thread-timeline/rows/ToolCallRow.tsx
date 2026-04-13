@@ -16,6 +16,22 @@ function getToolCallTone(message: ViewToolCallMessage): "default" | "destructive
   return message.status === "error" ? "destructive" : "default";
 }
 
+function toolCallActionLabel(
+  message: ViewToolCallMessage,
+  preferRunningLabel: boolean,
+): string {
+  if (message.approvalStatus === "waiting_for_approval") {
+    return "Waiting for approval to run";
+  }
+  if (message.approvalStatus === "denied") {
+    return "Permission denied:";
+  }
+  if (message.status === "error") return "Failed";
+  if (message.status === "interrupted") return "Declined";
+  if (message.status === "pending" || preferRunningLabel) return "Running";
+  return "Ran";
+}
+
 export function ToolCallRow({
   message,
   initialExpanded = false,
@@ -29,16 +45,11 @@ export function ToolCallRow({
   const command = message.command ?? message.toolName;
   const outputText = message.output && message.output.length > 0 ? message.output : "(no output)";
   const preferRunningLabel = preferOngoingLabels && message.status === "completed";
-  const actionLabel =
-    message.status === "error"
-      ? "Failed"
-      : message.status === "interrupted"
-        ? "Declined"
-        : message.status === "pending" || preferRunningLabel
-          ? "Running"
-          : "Ran";
+  const actionLabel = toolCallActionLabel(message, preferRunningLabel);
   const duration = formatSummaryDuration(message.durationMs);
-  const isRunning = message.status === "pending" || preferRunningLabel;
+  const isRunning =
+    message.approvalStatus !== "denied" &&
+    (message.status === "pending" || preferRunningLabel);
   const tone = getToolCallTone(message);
   const summaryContent = (
     <EventTitle

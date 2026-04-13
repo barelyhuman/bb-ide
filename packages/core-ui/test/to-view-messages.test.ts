@@ -3160,26 +3160,98 @@ describe("toViewMessages replay coverage", () => {
     });
   });
 
-  it("projects command approval operations with command preview metadata", () => {
+  it("replaces command approval state with the command item lifecycle", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-approval-1",
         threadId: "thread-1",
         seq: 1,
-        type: "system/operation",
+        type: "item/started",
         data: {
-          operation: "approval",
-          status: "started",
-          operationId: "pi_1",
-          message: "Waiting for approval to run git push",
-          metadata: {
-            interactionId: "pi_1",
-            providerId: "codex",
-            providerRequestId: "request-1",
-            subjectKind: "command",
-            itemId: "item-1",
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: "item-1",
             command: "git push",
             cwd: "/tmp/project",
+            status: "waiting_for_approval",
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-command-started",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/started",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: "item-1",
+            command: "git push",
+            cwd: "/tmp/project",
+            status: "pending",
+          },
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-command-completed",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: "item-1",
+            command: "git push",
+            cwd: "/tmp/project",
+            status: "completed",
+            aggregatedOutput: "done",
+            exitCode: 0,
+          },
+        },
+        createdAt: 3,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "active",
+    });
+
+    expect(projected).toMatchObject([
+      {
+        kind: "tool-call",
+        callId: "item-1",
+        command: "git push",
+        status: "completed",
+        output: "done",
+        approvalStatus: undefined,
+      },
+    ]);
+  });
+
+  it("projects denied command approvals as the command item terminal state", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-approval-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: "item-1",
+            command: "git push",
+            cwd: "/tmp/project",
+            status: "waiting_for_approval",
           },
         },
         createdAt: 1,
@@ -3188,20 +3260,16 @@ describe("toViewMessages replay coverage", () => {
         id: "evt-approval-2",
         threadId: "thread-1",
         seq: 2,
-        type: "system/operation",
+        type: "item/completed",
         data: {
-          operation: "approval",
-          status: "completed",
-          operationId: "pi_1",
-          message: "Permission denied: git push",
-          metadata: {
-            interactionId: "pi_1",
-            providerId: "codex",
-            providerRequestId: "request-1",
-            subjectKind: "command",
-            itemId: "item-1",
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "commandExecution",
+            id: "item-1",
             command: "git push",
             cwd: "/tmp/project",
+            status: "denied",
           },
         },
         createdAt: 2,
@@ -3214,61 +3282,56 @@ describe("toViewMessages replay coverage", () => {
 
     expect(projected).toMatchObject([
       {
-        kind: "operation",
-        title: "Waiting for approval to run git push",
-        detail: undefined,
-        approvalTarget: {
-          kind: "command",
-          itemId: "item-1",
-          command: "git push",
-          cwd: "/tmp/project",
-        },
-        threadOperation: {
-          rawOperation: "approval",
-          status: "started",
-          operationId: "pi_1",
-        },
-      },
-      {
-        kind: "operation",
-        title: "Permission denied: git push",
-        approvalTarget: {
-          kind: "command",
-          itemId: "item-1",
-          command: "git push",
-          cwd: "/tmp/project",
-        },
-        threadOperation: {
-          rawOperation: "approval",
-          status: "completed",
-          operationId: "pi_1",
-        },
+        kind: "tool-call",
+        callId: "item-1",
+        command: "git push",
+        status: "interrupted",
+        approvalStatus: "denied",
       },
     ]);
   });
 
-  it("projects file-change approval operations without inventing diffs", () => {
+  it("replaces file-change approval state with the file-change item lifecycle", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-file-approval-1",
         threadId: "thread-1",
         seq: 1,
-        type: "system/operation",
+        type: "item/started",
         data: {
-          operation: "approval",
-          status: "started",
-          operationId: "pi_file",
-          message: "Waiting for approval to edit files",
-          metadata: {
-            interactionId: "pi_file",
-            providerId: "codex",
-            providerRequestId: "request-file",
-            subjectKind: "file_change",
-            itemId: "item-file",
-            writeRoot: "/tmp/project",
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "fileChange",
+            id: "item-file",
+            changes: [],
+            status: "waiting_for_approval",
           },
         },
         createdAt: 1,
+      },
+      {
+        id: "evt-file-completed",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "fileChange",
+            id: "item-file",
+            changes: [
+              {
+                path: "src/app.ts",
+                kind: "update",
+                diff: "@@ -1 +1 @@\n-old\n+new",
+              },
+            ],
+            status: "completed",
+          },
+        },
+        createdAt: 2,
       },
     ];
 
@@ -3277,15 +3340,17 @@ describe("toViewMessages replay coverage", () => {
     });
 
     expect(projected).toMatchObject({
-      kind: "operation",
-      title: "Waiting for approval to edit files",
-      approvalTarget: {
-        kind: "file_change",
-        itemId: "item-file",
-        writeRoot: "/tmp/project",
-      },
+      kind: "file-edit",
+      callId: "item-file",
+      status: "completed",
+      changes: [
+        {
+          path: "src/app.ts",
+          kind: "update",
+        },
+      ],
     });
-    expect(projected).not.toHaveProperty("changes");
+    expect(projected).not.toHaveProperty("approvalStatus");
   });
 
   it("classifies duplicate-event types but does not emit debug rows for them", () => {

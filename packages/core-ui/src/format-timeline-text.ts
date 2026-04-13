@@ -151,7 +151,13 @@ function formatToolCall(
   const badge = statusBadge(msg.status, color);
   const name = msg.toolName ?? "exec_command";
   const cmd = msg.command ?? "";
-  lines.push(separator(`Tool Call: ${name}`, color));
+  const title =
+    msg.approvalStatus === "waiting_for_approval"
+      ? `Waiting for approval to run ${cmd || name}`
+      : msg.approvalStatus === "denied"
+        ? `Permission denied: ${cmd || name}`
+        : `Tool Call: ${name}`;
+  lines.push(separator(title, color));
   lines.push(`  ${badge} ${cyan(cmd || name, color)}`);
 
   const durationLine = formatDurationLine(msg.durationMs, msg.duration, color);
@@ -205,7 +211,16 @@ function formatFileEdit(
 ): string {
   const lines: string[] = [];
   const badge = statusBadge(msg.status, color);
-  lines.push(separator("File Edit", color));
+  const title =
+    msg.approvalStatus === "waiting_for_approval"
+      ? "Waiting for approval to edit files"
+      : msg.approvalStatus === "denied"
+        ? "Permission denied: file changes"
+        : "File Edit";
+  lines.push(separator(title, color));
+  if (msg.changes.length === 0) {
+    lines.push(`  ${badge} ${cyan("file changes", color)}`);
+  }
   for (const change of msg.changes) {
     const kindLabel = change.kind ? ` (${change.kind})` : "";
     lines.push(`  ${badge} ${cyan(change.path, color)}${dim(kindLabel, color)}`);
@@ -246,18 +261,6 @@ function formatOperation(
   if (msg.detail) lines.push(dim(`  ${msg.detail}`, color));
   if (verbose && msg.approvalTarget) {
     switch (msg.approvalTarget.kind) {
-      case "command":
-        lines.push(`  $ ${msg.approvalTarget.command}`);
-        if (msg.approvalTarget.cwd) {
-          lines.push(dim(`  cwd: ${msg.approvalTarget.cwd}`, color));
-        }
-        break;
-      case "file_change":
-        lines.push(`  item: ${msg.approvalTarget.itemId}`);
-        if (msg.approvalTarget.writeRoot) {
-          lines.push(dim(`  write root: ${msg.approvalTarget.writeRoot}`, color));
-        }
-        break;
       case "permission_grant":
         lines.push(`  item: ${msg.approvalTarget.itemId}`);
         if (msg.approvalTarget.toolName) {

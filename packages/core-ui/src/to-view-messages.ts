@@ -55,6 +55,7 @@ import {
 import type {
   ToViewMessagesOptions,
   ToViewProjectionOptions,
+  ViewApprovalLifecycleStatus,
   ViewAssistantReasoningMessage,
   ViewAssistantTextMessage,
   ViewFileEditChange,
@@ -262,6 +263,16 @@ function mergeCallStatus(
     : current;
 }
 
+function mergeApprovalStatus(
+  current: ViewApprovalLifecycleStatus | undefined,
+  incoming: ViewApprovalLifecycleStatus | undefined,
+  incomingStatus: ViewToolCallMessage["status"] | undefined,
+): ViewApprovalLifecycleStatus | undefined {
+  if (incoming !== undefined) return incoming;
+  if (incomingStatus !== undefined) return undefined;
+  return current;
+}
+
 function hasSemanticIntent(intents: ViewToolParsedIntent[]): boolean {
   return intents.some((intent) => intent.type !== "unknown");
 }
@@ -301,6 +312,7 @@ function upsertRunningExecCall(
       exitCode: incoming.exitCode,
       duration: incoming.duration,
       durationMs: incoming.durationMs,
+      approvalStatus: incoming.approvalStatus,
       status: incoming.status ?? "pending",
       turnId,
       parentToolCallId: incoming.parentToolCallId,
@@ -349,6 +361,11 @@ function upsertRunningExecCall(
   existing.threadId = threadId;
   existing.parsedCmd = chooseParsedIntents(existing.parsedCmd, incoming.parsedCmd);
   if (incoming.exitCode !== undefined) existing.exitCode = incoming.exitCode;
+  existing.approvalStatus = mergeApprovalStatus(
+    existing.approvalStatus,
+    incoming.approvalStatus,
+    incoming.status,
+  );
   existing.status = mergeCallStatus(existing.status, incoming.status) ?? "pending";
   existing.sourceSeqEnd = Math.max(existing.sourceSeqEnd, meta.seq);
   existing.createdAt = Math.max(existing.createdAt, meta.createdAt);
@@ -593,6 +610,11 @@ function mergeCallSummary(
   if (incoming.description && !target.description) {
     target.description = incoming.description;
   }
+  target.approvalStatus = mergeApprovalStatus(
+    target.approvalStatus,
+    incoming.approvalStatus,
+    incoming.status,
+  );
   target.status = mergeCallStatus(target.status, incoming.status) ?? target.status;
 }
 
@@ -645,6 +667,7 @@ function createToolCallMessage(
     exitCode: call.exitCode,
     duration: call.duration,
     durationMs: call.durationMs,
+    approvalStatus: call.approvalStatus,
     status: call.status,
   };
 }
@@ -699,7 +722,7 @@ function onExecBegin(
     return;
   }
 
-  const exploring = isExploringCall(call);
+  const exploring = call.approvalStatus ? false : isExploringCall(call);
   const active = state.toolActivity.activeCell;
 
   if (exploring && active?.kind === "tool-exploring") {
@@ -851,7 +874,7 @@ function onExecEnd(
 
   flushActiveToolCell(state);
 
-  if (isExploringCall(merged)) {
+  if (!merged.approvalStatus && isExploringCall(merged)) {
     const exploringMessage = createExploringMessage(merged);
     syncExploringStatus(exploringMessage);
     state.toolActivity.activeCell = exploringMessage;
@@ -1023,6 +1046,7 @@ function upsertFileEdit(
       changes: partial.changes ?? [],
       stdout: partial.stdout,
       stderr: partial.stderr,
+      approvalStatus: partial.approvalStatus,
       status: partial.status ?? "pending",
     };
     state.fileEditsByCallId.set(partial.callId, message);
@@ -1052,6 +1076,12 @@ function upsertFileEdit(
 
   if (partial.stderr) {
     existing.stderr = partial.stderr;
+  }
+
+  if (partial.approvalStatus !== undefined) {
+    existing.approvalStatus = partial.approvalStatus;
+  } else if (partial.status !== undefined) {
+    delete existing.approvalStatus;
   }
 
   if (partial.status) {

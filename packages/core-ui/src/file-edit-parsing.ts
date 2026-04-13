@@ -1,5 +1,8 @@
 import type { ThreadEvent, ThreadEventFileChange } from "@bb/domain";
-import { itemStatusToFileEditStatus } from "./exec-lifecycle.js";
+import {
+  itemStatusToApprovalStatus,
+  itemStatusToFileEditStatus,
+} from "./exec-lifecycle.js";
 import { getEventParentToolCallId } from "./event-decode.js";
 import type { ViewFileEditChange, ViewFileEditMessage } from "@bb/domain";
 
@@ -51,6 +54,7 @@ export function parseFileEditFromItemEvent(
   return {
     callId,
     changes,
+    approvalStatus: itemStatusToApprovalStatus(decoded.item.status),
     status: itemStatusToFileEditStatus(decoded.item.status) ?? defaultStatus,
     ...(parentToolCallId ? { parentToolCallId } : {}),
   };
