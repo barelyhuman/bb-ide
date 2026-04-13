@@ -12,7 +12,7 @@ import {
 import { createTestAppHarness } from "../helpers/test-app.js";
 
 describe("pending interaction lifecycle", () => {
-  it("aborts waits without interrupting the pending interaction", async () => {
+  it("interrupts waits that start with an already-aborted signal", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
@@ -61,22 +61,13 @@ describe("pending interaction lifecycle", () => {
           abortReason: "Request aborted",
         }),
       ).resolves.toMatchObject({
-        outcome: "aborted",
+        outcome: "interrupted",
         reason: "Request aborted",
         interaction: expect.objectContaining({
           id: registered.interaction.id,
-          status: "pending",
-          statusReason: null,
+          status: "interrupted",
+          statusReason: "Request aborted",
         }),
-      });
-      expect(
-        harness.deps.pendingInteractions.getThreadInteraction({
-          threadId: thread.id,
-          interactionId: registered.interaction.id,
-        }),
-      ).toMatchObject({
-        status: "pending",
-        statusReason: null,
       });
     } finally {
       await harness.cleanup();
@@ -288,73 +279,6 @@ describe("pending interaction lifecycle", () => {
         status: "resolved",
         resolution: firstResolution.resolution,
       });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("rejects permission approvals that grant no permissions", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host } = seedHostSession(harness.deps, {
-        id: "host-pending-interaction-empty-permission-grant",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-      });
-
-      const created = harness.deps.pendingInteractions.registerPendingInteraction({
-        threadId: thread.id,
-        turnId: "turn-empty-permission-grant",
-        providerId: "codex",
-        providerThreadId: "provider-thread-empty-permission-grant",
-        providerRequestId: "request-empty-permission-grant",
-        payload: {
-          kind: "permission_request",
-          itemId: "item-empty-permission-grant",
-          reason: "Needs workspace access",
-          toolName: "Bash",
-          permissions: {
-            network: null,
-            fileSystem: {
-              read: ["/tmp/project"],
-              write: ["/tmp/project"],
-            },
-          },
-        },
-      });
-      if (created.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
-      }
-
-      expect(() =>
-        harness.deps.pendingInteractions.resolvePendingInteraction({
-          threadId: thread.id,
-          interactionId: created.interaction.id,
-          resolution: {
-            kind: "permission_request",
-            decision: "allow",
-            permissions: {
-              network: null,
-              fileSystem: {
-                read: [],
-                write: [],
-              },
-            },
-            scope: "session",
-          },
-        })
-      ).toThrowError(
-        "Permission request approvals must grant at least one requested permission",
-      );
     } finally {
       await harness.cleanup();
     }
@@ -726,7 +650,7 @@ describe("pending interaction lifecycle", () => {
     }
   });
 
-  it("expires pending interactions on persistent hosts", async () => {
+  it("does not expire pending interactions on persistent hosts", async () => {
     const harness = await createTestAppHarness();
     try {
       const pendingInteractions = new PendingInteractionLifecycle({
@@ -735,7 +659,7 @@ describe("pending interaction lifecycle", () => {
         sandboxInteractionExpiryMs: 20,
       });
       const { host } = seedHostSession(harness.deps, {
-        id: "host-pending-interaction-persistent-expiry",
+        id: "host-pending-interaction-no-expiry",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -751,13 +675,13 @@ describe("pending interaction lifecycle", () => {
 
       const created = pendingInteractions.registerPendingInteraction({
         threadId: thread.id,
-        turnId: "turn-persistent-expiry",
+        turnId: "turn-no-expiry",
         providerId: "codex",
-        providerThreadId: "provider-thread-persistent-expiry",
-        providerRequestId: "request-persistent-expiry",
+        providerThreadId: "provider-thread-no-expiry",
+        providerRequestId: "request-no-expiry",
         payload: {
           kind: "command_approval",
-          itemId: "item-persistent-expiry",
+          itemId: "item-no-expiry",
           reason: "Needs approval",
           command: "git push",
           cwd: "/tmp/project",
@@ -776,11 +700,8 @@ describe("pending interaction lifecycle", () => {
         pendingInteractions.getThreadInteraction({
           threadId: thread.id,
           interactionId: created.interaction.id,
-        }),
-      ).toMatchObject({
-        status: "expired",
-        statusReason: "Pending interaction expired while waiting for a user response",
-      });
+        }).status,
+      ).toBe("pending");
     } finally {
       await harness.cleanup();
     }

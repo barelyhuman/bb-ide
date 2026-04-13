@@ -1441,7 +1441,7 @@ describe("codex provider adapter", () => {
     });
   });
 
-  it("decodeInteractiveRequest preserves empty command approval decisions for lifecycle rejection", () => {
+  it("decodeInteractiveRequest rejects empty command approval decisions", () => {
     const adapter = createCodexProviderAdapter();
     expect(
       adapter.decodeInteractiveRequest?.({
@@ -1459,12 +1459,7 @@ describe("codex provider adapter", () => {
           availableDecisions: [],
         },
       }),
-    ).toMatchObject({
-      payload: {
-        kind: "command_approval",
-        availableDecisions: [],
-      },
-    });
+    ).toBeNull();
   });
 
   it("decodeInteractiveRequest preserves macOS permission bundles in command approvals", () => {

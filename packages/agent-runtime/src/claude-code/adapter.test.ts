@@ -536,7 +536,7 @@ describe("claude-code provider adapter", () => {
     });
   });
 
-  it("does not create Claude session permission updates for empty grants", () => {
+  it("builds Claude permission approval responses for addRules-only session grants", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
     expect(
@@ -571,6 +571,14 @@ describe("claude-code provider adapter", () => {
     ).toEqual({
       kind: "permission_request",
       behavior: "allow",
+      updatedPermissions: [
+        {
+          type: "addRules",
+          rules: [{ toolName: "Bash" }],
+          behavior: "allow",
+          destination: "session",
+        },
+      ],
     });
   });
 
@@ -592,10 +600,7 @@ describe("claude-code provider adapter", () => {
             reason: "Needs approval",
             permissions: {
               network: null,
-              fileSystem: {
-                read: ["/tmp/worktree"],
-                write: ["/tmp/worktree"],
-              },
+              fileSystem: null,
             },
           },
         },
@@ -604,10 +609,7 @@ describe("claude-code provider adapter", () => {
           decision: "allow",
           permissions: {
             network: null,
-            fileSystem: {
-              read: ["/tmp/worktree"],
-              write: ["/tmp/worktree"],
-            },
+            fileSystem: null,
           },
           scope: "turn",
         },
