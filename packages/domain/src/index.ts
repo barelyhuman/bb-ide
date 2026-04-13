@@ -386,6 +386,7 @@ export {
 } from "./ui-message.js";
 export type {
   ToViewMessagesOptions,
+  ViewApprovalTarget,
   ViewAssistantReasoningMessage,
   ViewAssistantTextMessage,
   ViewDelegationMessage,

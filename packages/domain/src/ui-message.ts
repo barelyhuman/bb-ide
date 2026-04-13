@@ -213,6 +213,24 @@ export interface ViewProvisioningMetadata {
   transcript?: ViewProvisioningTranscriptEntry[];
 }
 
+export type ViewApprovalTarget =
+  | {
+      kind: "command";
+      itemId: string;
+      command: string;
+      cwd?: string;
+    }
+  | {
+      kind: "file_change";
+      itemId: string;
+      writeRoot?: string;
+    }
+  | {
+      kind: "permission_grant";
+      itemId: string;
+      toolName?: string;
+    };
+
 export interface ViewOperationMessage extends ViewMessageBase {
   kind: "operation";
   opType: ViewOperationType;
@@ -222,6 +240,7 @@ export interface ViewOperationMessage extends ViewMessageBase {
     ViewMessageStatus,
     "pending" | "completed" | "error" | "interrupted"
   >;
+  approvalTarget?: ViewApprovalTarget;
   provisioning?: ViewProvisioningMetadata;
   threadOperation?: ViewThreadOperationMetadata;
 }

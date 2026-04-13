@@ -839,8 +839,20 @@ describe("public thread interaction routes", () => {
                   rawOperation: "approval",
                   operationId: registered.interaction.id,
                   status: "started",
+                  metadata: expect.objectContaining({
+                    subjectKind: "command",
+                    itemId: "item-timeline",
+                    command: "git push",
+                    cwd: "/tmp/project",
+                  }),
                 }),
-                detail: "Waiting for approval to run git push",
+                title: "Waiting for approval to run git push",
+                approvalTarget: {
+                  kind: "command",
+                  itemId: "item-timeline",
+                  command: "git push",
+                  cwd: "/tmp/project",
+                },
               }),
             }),
             expect.objectContaining({
@@ -853,7 +865,13 @@ describe("public thread interaction routes", () => {
                   rawOperation: "approval",
                   operationId: registered.interaction.id,
                 }),
-                detail: expect.stringContaining("Command approved for this session"),
+                title: "Command approved for this session",
+                approvalTarget: {
+                  kind: "command",
+                  itemId: "item-timeline",
+                  command: "git push",
+                  cwd: "/tmp/project",
+                },
               }),
             }),
           ]),
@@ -937,8 +955,20 @@ describe("public thread interaction routes", () => {
                   rawOperation: "approval",
                   operationId: registered.interaction.id,
                   status: "started",
+                  metadata: expect.objectContaining({
+                    subjectKind: "command",
+                    itemId: "item-denied-timeline",
+                    command: "rm -rf build",
+                    cwd: "/tmp/project",
+                  }),
                 }),
-                detail: "Waiting for approval to run rm -rf build",
+                title: "Waiting for approval to run rm -rf build",
+                approvalTarget: {
+                  kind: "command",
+                  itemId: "item-denied-timeline",
+                  command: "rm -rf build",
+                  cwd: "/tmp/project",
+                },
               }),
             }),
             expect.objectContaining({
@@ -951,7 +981,88 @@ describe("public thread interaction routes", () => {
                   rawOperation: "approval",
                   operationId: registered.interaction.id,
                 }),
-                detail: "Permission denied: rm -rf build",
+                title: "Permission denied: rm -rf build",
+                approvalTarget: {
+                  kind: "command",
+                  itemId: "item-denied-timeline",
+                  command: "rm -rf build",
+                  cwd: "/tmp/project",
+                },
+              }),
+            }),
+          ]),
+        }),
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("projects file-change approvals into item-specific timeline rows without diffs", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-public-thread-interaction-file-timeline",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const registered = registerPendingInteraction(
+        harness.deps.pendingInteractions,
+        {
+          threadId: thread.id,
+          turnId: "turn-file-timeline",
+          providerId: "codex",
+          providerThreadId: "provider-thread-file-timeline",
+          providerRequestId: "request-file-timeline",
+          payload: createFileChangeApprovalPayload({
+            itemId: "item-file-timeline",
+            reason: "Approve file edits",
+            writeScope: { root: "/tmp/project" },
+          }),
+        },
+        session.id,
+      );
+      if (registered.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
+      }
+
+      const timelineResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/timeline`,
+      );
+      expect(timelineResponse.status).toBe(200);
+      await expect(readJson(timelineResponse)).resolves.toEqual(
+        expect.objectContaining({
+          rows: expect.arrayContaining([
+            expect.objectContaining({
+              kind: "message",
+              message: expect.objectContaining({
+                kind: "operation",
+                opType: "operation",
+                title: "Waiting for approval to edit files",
+                approvalTarget: {
+                  kind: "file_change",
+                  itemId: "item-file-timeline",
+                  writeRoot: "/tmp/project",
+                },
+                threadOperation: expect.objectContaining({
+                  rawOperation: "approval",
+                  operationId: registered.interaction.id,
+                  metadata: expect.objectContaining({
+                    subjectKind: "file_change",
+                    itemId: "item-file-timeline",
+                    writeRoot: "/tmp/project",
+                  }),
+                }),
               }),
             }),
           ]),

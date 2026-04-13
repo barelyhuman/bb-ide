@@ -3138,7 +3138,7 @@ describe("toViewMessages replay coverage", () => {
     ];
 
     const projected = toViewMessages(fromRows(events), {
-      threadStatus: "idle",
+      threadStatus: "active",
     });
     const op = projected.find(
       (message): message is Extract<ViewMessage, { kind: "operation" }> =>
@@ -3158,6 +3158,134 @@ describe("toViewMessages replay coverage", () => {
         nextParentThreadId: "manager-1",
       },
     });
+  });
+
+  it("projects command approval operations with command preview metadata", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-approval-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "system/operation",
+        data: {
+          operation: "approval",
+          status: "started",
+          operationId: "pi_1",
+          message: "Waiting for approval to run git push",
+          metadata: {
+            interactionId: "pi_1",
+            providerId: "codex",
+            providerRequestId: "request-1",
+            subjectKind: "command",
+            itemId: "item-1",
+            command: "git push",
+            cwd: "/tmp/project",
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-approval-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "system/operation",
+        data: {
+          operation: "approval",
+          status: "completed",
+          operationId: "pi_1",
+          message: "Permission denied: git push",
+          metadata: {
+            interactionId: "pi_1",
+            providerId: "codex",
+            providerRequestId: "request-1",
+            subjectKind: "command",
+            itemId: "item-1",
+            command: "git push",
+            cwd: "/tmp/project",
+          },
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "active",
+    });
+
+    expect(projected).toMatchObject([
+      {
+        kind: "operation",
+        title: "Waiting for approval to run git push",
+        detail: undefined,
+        approvalTarget: {
+          kind: "command",
+          itemId: "item-1",
+          command: "git push",
+          cwd: "/tmp/project",
+        },
+        threadOperation: {
+          rawOperation: "approval",
+          status: "started",
+          operationId: "pi_1",
+        },
+      },
+      {
+        kind: "operation",
+        title: "Permission denied: git push",
+        approvalTarget: {
+          kind: "command",
+          itemId: "item-1",
+          command: "git push",
+          cwd: "/tmp/project",
+        },
+        threadOperation: {
+          rawOperation: "approval",
+          status: "completed",
+          operationId: "pi_1",
+        },
+      },
+    ]);
+  });
+
+  it("projects file-change approval operations without inventing diffs", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-file-approval-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "system/operation",
+        data: {
+          operation: "approval",
+          status: "started",
+          operationId: "pi_file",
+          message: "Waiting for approval to edit files",
+          metadata: {
+            interactionId: "pi_file",
+            providerId: "codex",
+            providerRequestId: "request-file",
+            subjectKind: "file_change",
+            itemId: "item-file",
+            writeRoot: "/tmp/project",
+          },
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const [projected] = toViewMessages(fromRows(events), {
+      threadStatus: "active",
+    });
+
+    expect(projected).toMatchObject({
+      kind: "operation",
+      title: "Waiting for approval to edit files",
+      approvalTarget: {
+        kind: "file_change",
+        itemId: "item-file",
+        writeRoot: "/tmp/project",
+      },
+    });
+    expect(projected).not.toHaveProperty("changes");
   });
 
   it("classifies duplicate-event types but does not emit debug rows for them", () => {

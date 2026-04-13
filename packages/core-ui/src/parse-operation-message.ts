@@ -2,6 +2,7 @@ import type {
   ThreadEvent,
   ThreadEventPlanStepStatus,
   SystemThreadProvisioningStatus,
+  ViewApprovalTarget,
   ViewThreadOperationKind,
   ViewThreadOperationStatus,
 } from "@bb/domain";
@@ -63,6 +64,62 @@ function createThreadOperationMetadata(
     ...(decoded.operationId ? { operationId: decoded.operationId } : {}),
     ...(decoded.metadata ? { metadata: decoded.metadata } : {}),
   };
+}
+
+function metadataStringValue(
+  metadata: ViewThreadOperationMetadata["metadata"],
+  key: string,
+): string | undefined {
+  const value = metadata?.[key];
+  return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+function parseApprovalTarget(
+  decoded: Extract<ThreadEvent, { type: "system/operation" }>,
+): ViewApprovalTarget | undefined {
+  if (decoded.operation !== "approval") {
+    return undefined;
+  }
+
+  const subjectKind = metadataStringValue(decoded.metadata, "subjectKind");
+  const itemId = metadataStringValue(decoded.metadata, "itemId");
+  if (!subjectKind || !itemId) {
+    return undefined;
+  }
+
+  switch (subjectKind) {
+    case "command": {
+      const command = metadataStringValue(decoded.metadata, "command");
+      if (!command) {
+        return undefined;
+      }
+      const cwd = metadataStringValue(decoded.metadata, "cwd");
+      return {
+        kind: "command",
+        itemId,
+        command,
+        ...(cwd ? { cwd } : {}),
+      };
+    }
+    case "file_change": {
+      const writeRoot = metadataStringValue(decoded.metadata, "writeRoot");
+      return {
+        kind: "file_change",
+        itemId,
+        ...(writeRoot ? { writeRoot } : {}),
+      };
+    }
+    case "permission_grant": {
+      const toolName = metadataStringValue(decoded.metadata, "toolName");
+      return {
+        kind: "permission_grant",
+        itemId,
+        ...(toolName ? { toolName } : {}),
+      };
+    }
+    default:
+      return undefined;
+  }
 }
 
 export function threadOperationTitle(meta: ViewThreadOperationMetadata | null): string {
@@ -274,11 +331,12 @@ export function parseOperationMessage(
 
   if (decoded.type === "system/operation") {
     const threadOperation = createThreadOperationMetadata(decoded);
-    const title = threadOperationTitle(threadOperation);
+    const approvalTarget = parseApprovalTarget(decoded);
+    const title = approvalTarget ? decoded.message : threadOperationTitle(threadOperation);
 
     const branch = typeof decoded.metadata?.branch === "string" ? decoded.metadata.branch : undefined;
     const detailParts = [
-      decoded.message,
+      approvalTarget ? undefined : decoded.message,
       branch ? `Branch: ${branch}` : undefined,
     ].filter((value): value is string => Boolean(value));
 
@@ -288,6 +346,7 @@ export function parseOperationMessage(
       title,
       detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
       status: threadOperationStatus(threadOperation),
+      ...(approvalTarget ? { approvalTarget } : {}),
       threadOperation,
     });
   }
@@ -343,6 +402,11 @@ export function finalizeOperationMessage(
   options: ToViewMessagesOptions | undefined,
 ): void {
   if (message.status !== "pending") return;
+
+  if (message.approvalTarget) {
+    message.status = "completed";
+    return;
+  }
 
   if (options?.threadStatus === "error") {
     switch (message.opType) {

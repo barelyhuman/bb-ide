@@ -17,6 +17,7 @@ import {
   getStaticEventToneClass,
   useStickyBottomAutoScroll,
 } from "./shared.js";
+import { TerminalOutputBlock } from "./TerminalOutputBlock.js";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
 
 
@@ -270,6 +271,10 @@ function buildOperationSummary(
   message: ViewOperationMessage,
   tone: "default" | "destructive",
 ): ReactNode {
+  if (message.approvalTarget) {
+    return <span>{message.title}</span>;
+  }
+
   const metadata = message.threadOperation;
   if (!metadata) return <span>{message.title}</span>;
   const metadataAction =
@@ -383,7 +388,8 @@ export function OperationRow({
   if (message.opType === "operation") {
     const { operationDetailText, promptText } = extractPromptSections(message.detail);
     const summaryContent = buildOperationSummary(message, tone);
-    if (!operationDetailText && !promptText) {
+    const approvalTarget = message.approvalTarget;
+    if (!operationDetailText && !promptText && !approvalTarget) {
       return <StaticOperationRow summaryContent={summaryContent} tone={tone} />;
     }
 
@@ -395,6 +401,33 @@ export function OperationRow({
         tone={tone}
       >
         <div className="mt-0.5 space-y-2">
+          {approvalTarget?.kind === "command" ? (
+            <TerminalOutputBlock
+              command={approvalTarget.command}
+              outputText=""
+              isExpanded={isExpanded}
+            />
+          ) : null}
+          {approvalTarget?.kind === "file_change" ? (
+            <OperationDetailLines
+              lines={[
+                `File change approval`,
+                `Item: ${approvalTarget.itemId}`,
+                ...(approvalTarget.writeRoot
+                  ? [`Write root: ${approvalTarget.writeRoot}`]
+                  : []),
+              ]}
+            />
+          ) : null}
+          {approvalTarget?.kind === "permission_grant" ? (
+            <OperationDetailLines
+              lines={[
+                `Permission grant approval`,
+                `Item: ${approvalTarget.itemId}`,
+                ...(approvalTarget.toolName ? [`Tool: ${approvalTarget.toolName}`] : []),
+              ]}
+            />
+          ) : null}
           {operationDetailText ? (
             <OperationDetailLines lines={splitNonEmptyLines(operationDetailText)} />
           ) : null}

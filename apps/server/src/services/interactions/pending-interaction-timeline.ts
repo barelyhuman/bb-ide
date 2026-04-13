@@ -11,6 +11,48 @@ import { getThread } from "@bb/db";
 import type { AppDeps } from "../../types.js";
 import { appendThreadEvent } from "../threads/thread-events.js";
 
+function buildPendingInteractionTimelineMetadata(
+  interaction: PendingInteraction,
+): Record<string, string> {
+  const base = {
+    interactionId: interaction.id,
+    providerId: interaction.providerId,
+    providerRequestId: interaction.providerRequestId,
+    subjectKind: interaction.payload.subject.kind,
+    itemId: interaction.payload.subject.itemId,
+  };
+
+  switch (interaction.payload.subject.kind) {
+    case "command":
+      return {
+        ...base,
+        command: interaction.payload.subject.command,
+        ...(interaction.payload.subject.cwd
+          ? { cwd: interaction.payload.subject.cwd }
+          : {}),
+      };
+    case "file_change":
+      return {
+        ...base,
+        ...(interaction.payload.subject.writeScope
+          ? { writeRoot: interaction.payload.subject.writeScope.root }
+          : {}),
+      };
+    case "permission_grant":
+      return {
+        ...base,
+        ...(interaction.payload.subject.toolName
+          ? { toolName: interaction.payload.subject.toolName }
+          : {}),
+      };
+    default:
+      return assertNever(
+        interaction.payload.subject,
+        "Unsupported approval subject for timeline metadata",
+      );
+  }
+}
+
 function toPendingInteractionOperationStatus(
   interaction: PendingInteraction,
 ): "completed" | "failed" | "started" {
@@ -113,13 +155,7 @@ export function appendPendingInteractionTimelineEvent(
       status: toPendingInteractionOperationStatus(interaction),
       operationId: interaction.id,
       message: formatPendingInteractionLifecycleMessage(interaction),
-      metadata: {
-        interactionId: interaction.id,
-        providerId: interaction.providerId,
-        providerRequestId: interaction.providerRequestId,
-        subjectKind: interaction.payload.subject.kind,
-        itemId: interaction.payload.subject.itemId,
-      },
+      metadata: buildPendingInteractionTimelineMetadata(interaction),
     },
   });
 }

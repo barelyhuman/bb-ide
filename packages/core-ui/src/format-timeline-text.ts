@@ -238,12 +238,34 @@ function formatWebSearch(
 
 function formatOperation(
   msg: ViewOperationMessage,
-  _verbose: boolean,
+  verbose: boolean,
   color: boolean,
 ): string {
   const lines: string[] = [];
   lines.push(separator(`Operation: ${msg.title}`, color));
   if (msg.detail) lines.push(dim(`  ${msg.detail}`, color));
+  if (verbose && msg.approvalTarget) {
+    switch (msg.approvalTarget.kind) {
+      case "command":
+        lines.push(`  $ ${msg.approvalTarget.command}`);
+        if (msg.approvalTarget.cwd) {
+          lines.push(dim(`  cwd: ${msg.approvalTarget.cwd}`, color));
+        }
+        break;
+      case "file_change":
+        lines.push(`  item: ${msg.approvalTarget.itemId}`);
+        if (msg.approvalTarget.writeRoot) {
+          lines.push(dim(`  write root: ${msg.approvalTarget.writeRoot}`, color));
+        }
+        break;
+      case "permission_grant":
+        lines.push(`  item: ${msg.approvalTarget.itemId}`);
+        if (msg.approvalTarget.toolName) {
+          lines.push(dim(`  tool: ${msg.approvalTarget.toolName}`, color));
+        }
+        break;
+    }
+  }
   if (
     msg.status &&
     msg.opType !== "warning" &&
