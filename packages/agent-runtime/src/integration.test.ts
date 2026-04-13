@@ -211,6 +211,17 @@ function createTempFileName(prefix: string): string {
   return `${prefix}-${randomUUID().replaceAll("-", "")}.txt`;
 }
 
+function expectSemanticApprovalRequest(request: PendingInteractionCreate): void {
+  expect(request.payload.kind).toBe("approval");
+  expect(["command", "file_change", "permission_grant"]).toContain(
+    request.payload.subject.kind,
+  );
+  expect(request.payload.availableDecisions.length).toBeGreaterThan(0);
+  for (const decision of request.payload.availableDecisions) {
+    expect(["allow_once", "allow_for_session", "deny"]).toContain(decision);
+  }
+}
+
 interface TestContext {
   runtime: AgentRuntime;
   events: ThreadEvent[];
@@ -261,6 +272,7 @@ function createTestRuntime(
       return defaultToolHandler();
     },
     onInteractiveRequest: async (req) => {
+      expectSemanticApprovalRequest(req);
       interactiveRequests.push(req);
       if (opts?.onInteractiveRequest) {
         return opts.onInteractiveRequest(req);
@@ -1249,6 +1261,61 @@ describe("interactive request scenarios", () => {
     }
   }, 75_000);
 
+  it.concurrent("routes Codex readonly file edits through semantic file-change approvals", async () => {
+    const ctx = createTestRuntime("codex", {
+      onInteractiveRequest: createApprovalResolution,
+    });
+    const fileName = createTempFileName("codex-readonly-file-change");
+    const filePath = join(ctx.tmpDir, fileName);
+    const token = createToken("CODEX_FILE_CHANGE_APPROVED");
+
+    try {
+      const threadId = newThreadId();
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId: "codex",
+        options: readonlyAskRuntimeOptions,
+        instructions:
+          "When the user asks you to edit a file, use your file editing capability. Do not run shell commands for file edits. If approval is needed, request approval; it will be approved.",
+      });
+
+      await ctx.runtime.runTurn({
+        threadId,
+        options: readonlyAskRuntimeOptions,
+        input: [{
+          type: "text",
+          text:
+            `Create a file named ${fileName} in the current workspace. `
+            + `The file content must be exactly ${token} with no trailing newline. `
+            + "Do not run shell commands. After the file is written, reply with exactly DONE.",
+        }],
+      });
+
+      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+        timeoutMs: 45_000,
+        label: "Codex readonly file-change approval",
+      });
+      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        timeoutMs: 45_000,
+        label: "Codex readonly file-change turn/completed",
+      });
+
+      expect(ctx.interactiveRequests.some((request) =>
+        request.payload.kind === "approval"
+        && request.payload.subject.kind === "file_change"
+        && request.payload.availableDecisions.includes("allow_once"),
+      ), `Expected a Codex file-change approval; got ${JSON.stringify(
+        ctx.interactiveRequests.map((request) => request.payload),
+      )}`).toBe(true);
+      expect(readFileSync(filePath, "utf8").trimEnd()).toBe(token);
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 75_000);
+
   it.concurrent("respects user-denied Codex command approvals in readonly ask mode", async () => {
     const ctx = createTestRuntime("codex", {
       onInteractiveRequest: async (request) => {
@@ -1350,6 +1417,56 @@ describe("interactive request scenarios", () => {
 
       expect(ctx.interactiveRequests).toHaveLength(0);
       expect(existsSync(filePath)).toBe(false);
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 75_000);
+
+  it.concurrent("routes Codex readonly network requests through semantic approvals", async () => {
+    const ctx = createTestRuntime("codex", {
+      onInteractiveRequest: createApprovalResolution,
+    });
+
+    try {
+      const threadId = newThreadId();
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId: "codex",
+        options: readonlyAskRuntimeOptions,
+        instructions:
+          "When the user asks you to run an exact shell command, run that shell command exactly once. If approval is needed, request approval; it will be approved. Then report DONE.",
+      });
+
+      await ctx.runtime.runTurn({
+        threadId,
+        options: readonlyAskRuntimeOptions,
+        input: [{
+          type: "text",
+          text:
+            "Run this exact shell command: curl -L --max-time 10 https://example.com >/dev/null. "
+            + "If approval is needed, request approval. After the command finishes, reply with exactly DONE.",
+        }],
+      });
+
+      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+        timeoutMs: 45_000,
+        label: "Codex readonly network approval",
+      });
+      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        timeoutMs: 45_000,
+        label: "Codex readonly network turn/completed",
+      });
+
+      expect(ctx.interactiveRequests.some((request) =>
+        request.payload.kind === "approval"
+        && request.payload.subject.kind === "command"
+        && request.payload.availableDecisions.includes("allow_once"),
+      ), `Expected a Codex command approval for network access; got ${JSON.stringify(
+        ctx.interactiveRequests.map((request) => request.payload),
+      )}`).toBe(true);
     } finally {
       await ctx.runtime.shutdown();
       cleanup(ctx);
@@ -1462,6 +1579,80 @@ describe("interactive request scenarios", () => {
       cleanup(ctx);
     }
   }, 75_000);
+
+  it.concurrent("applies Claude allow_for_session approvals to later WebFetch calls in the same session", async () => {
+    const ctx = createTestRuntime("claude-code", {
+      onInteractiveRequest: createApprovalResolution,
+    });
+    const fetchUrl = "https://example.com";
+
+    try {
+      const threadId = newThreadId();
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId: "claude-code",
+        options: readonlyAskRuntimeOptions,
+        instructions:
+          "Use the WebFetch tool when the user explicitly asks for WebFetch. Do not substitute Bash or any other tool.",
+      });
+
+      await ctx.runtime.runTurn({
+        threadId,
+        options: readonlyAskRuntimeOptions,
+        input: [{
+          type: "text",
+          text:
+            `Use WebFetch to fetch ${fetchUrl}. `
+            + "After the fetch finishes, reply with exactly FIRST_DONE.",
+        }],
+      });
+
+      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+        timeoutMs: 45_000,
+        label: "Claude session WebFetch approval",
+      });
+      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        timeoutMs: 45_000,
+        label: "Claude session first WebFetch turn/completed",
+      });
+
+      const firstRequestCount = ctx.interactiveRequests.length;
+      expect(
+        ctx.interactiveRequests.some((request) =>
+          request.payload.kind === "approval"
+          && request.payload.subject.kind === "permission_grant"
+          && request.payload.subject.toolName === "WebFetch"
+          && request.payload.availableDecisions.includes("allow_for_session")
+        ),
+        `Expected a session-capable WebFetch permission approval; got ${JSON.stringify(
+          ctx.interactiveRequests.map((request) => request.payload),
+        )}`,
+      ).toBe(true);
+
+      await ctx.runtime.runTurn({
+        threadId,
+        options: readonlyAskRuntimeOptions,
+        input: [{
+          type: "text",
+          text:
+            `Use WebFetch to fetch ${fetchUrl} again. `
+            + "After the fetch finishes, reply with exactly SECOND_DONE.",
+        }],
+      });
+
+      await waitForCondition(() => turnCompletedCount(ctx.events) >= 2, {
+        timeoutMs: 45_000,
+        label: "Claude session second WebFetch turn/completed",
+      });
+
+      expect(ctx.interactiveRequests).toHaveLength(firstRequestCount);
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 90_000);
 
   it.concurrent("respects user-denied Claude permission requests in readonly ask mode", async () => {
     const ctx = createTestRuntime("claude-code", {
