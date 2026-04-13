@@ -342,6 +342,7 @@ function buildInteractiveRequestParams(
     turnId: "",
     itemId: args.toolUseId,
     toolName: args.toolName,
+    input: args.input,
     reason: args.decisionReason ?? null,
     permissions: toPendingInteractionPermissionProfile({
       toolName: args.toolName,

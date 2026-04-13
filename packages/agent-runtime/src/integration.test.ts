@@ -291,35 +291,18 @@ async function createApprovalResolution(
   request: PendingInteractionCreate,
 ): Promise<PendingInteractionResolution> {
   switch (request.payload.kind) {
-    case "command_approval": {
-      const fallbackDecision = request.payload.availableDecisions[0];
-      if (!fallbackDecision) {
-        throw new Error("Command approval request did not include decisions");
-      }
+    case "approval": {
       return {
-        kind: "command_approval",
-        decision: request.payload.availableDecisions.includes("accept_for_session")
-          ? "accept_for_session"
-          : fallbackDecision,
+        kind: "approval",
+        decision: request.payload.availableDecisions.includes("allow_for_session")
+          ? "allow_for_session"
+          : "allow_once",
+        grantedPermissions:
+          request.payload.subject.kind === "permission_grant"
+            ? request.payload.subject.permissions
+            : request.payload.grantablePermissions,
       };
     }
-    case "permission_request":
-      return {
-        kind: "permission_request",
-        decision: "allow",
-        permissions: {
-          network: request.payload.permissions.network,
-          fileSystem: request.payload.permissions.fileSystem,
-        },
-        scope: "turn",
-      };
-    case "file_change_approval":
-      return {
-        kind: "file_change_approval",
-        decision: "accept",
-      };
-    default:
-      throw new Error("Unexpected interactive request");
   }
 }
 
@@ -896,20 +879,22 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
 });
 
 describe("interactive request scenarios", () => {
-  it.concurrent("routes Claude permission requests through onInteractiveRequest", async () => {
+  it.concurrent("routes Claude Read prompts as semantic permission-grant approvals", async () => {
     const hostsPath = "/etc/hosts";
     const expectedLine = getFirstNonEmptyLine(hostsPath);
     const ctx = createTestRuntime("claude-code", {
       onInteractiveRequest: async (request) => {
-        if (request.payload.kind !== "permission_request") {
-          throw new Error(`Expected permission_request, got ${request.payload.kind}`);
+        if (
+          request.payload.kind !== "approval"
+          || request.payload.subject.kind !== "permission_grant"
+        ) {
+          throw new Error(`Expected permission grant approval, got ${request.payload.kind}`);
         }
 
         return {
-          kind: "permission_request",
-          decision: "allow",
-          permissions: request.payload.permissions,
-          scope: "turn",
+          kind: "approval",
+          decision: "allow_once",
+          grantedPermissions: request.payload.subject.permissions,
         };
       },
     });
@@ -948,7 +933,14 @@ describe("interactive request scenarios", () => {
       });
 
       expect(ctx.interactiveRequests).toHaveLength(1);
-      expect(ctx.interactiveRequests[0]?.payload.kind).toBe("permission_request");
+      expect(ctx.interactiveRequests[0]?.payload).toMatchObject({
+        kind: "approval",
+        subject: {
+          kind: "permission_grant",
+          toolName: "Read",
+        },
+        availableDecisions: expect.arrayContaining(["allow_once", "deny"]),
+      });
 
       const text = getAgentText(ctx.events) || getStreamedText(ctx.events);
       expect(text).toContain(expectedLine);
@@ -1181,7 +1173,11 @@ describe("interactive request scenarios", () => {
       });
 
       expect(ctx.interactiveRequests.some((request) =>
-        request.payload.kind === "command_approval",
+        request.payload.kind === "approval"
+        && request.payload.subject.kind === "command"
+        && request.payload.availableDecisions.includes("allow_once")
+        && request.payload.availableDecisions.includes("allow_for_session")
+        && request.payload.availableDecisions.includes("deny"),
       )).toBe(true);
       expect(readFileSync(filePath, "utf8")).toBe(token);
     } finally {
@@ -1232,7 +1228,11 @@ describe("interactive request scenarios", () => {
       });
 
       expect(ctx.interactiveRequests.some((request) =>
-        request.payload.kind === "command_approval",
+        request.payload.kind === "approval"
+        && request.payload.subject.kind === "command"
+        && request.payload.availableDecisions.includes("allow_once")
+        && request.payload.availableDecisions.includes("allow_for_session")
+        && request.payload.availableDecisions.includes("deny"),
       )).toBe(true);
       expect(readFileSync(filePath, "utf8")).toBe(token);
     } finally {
@@ -1244,15 +1244,18 @@ describe("interactive request scenarios", () => {
   it.concurrent("respects user-denied Codex command approvals in readonly ask mode", async () => {
     const ctx = createTestRuntime("codex", {
       onInteractiveRequest: async (request) => {
-        if (request.payload.kind !== "command_approval") {
-          throw new Error(`Expected command_approval, got ${request.payload.kind}`);
+        if (
+          request.payload.kind !== "approval"
+          || request.payload.subject.kind !== "command"
+        ) {
+          throw new Error(`Expected command approval, got ${request.payload.kind}`);
         }
-        if (!request.payload.availableDecisions.includes("decline")) {
-          throw new Error("Codex command approval did not offer decline");
+        if (!request.payload.availableDecisions.includes("deny")) {
+          throw new Error("Codex command approval did not offer deny");
         }
         return {
-          kind: "command_approval",
-          decision: "decline",
+          kind: "approval",
+          decision: "deny",
         };
       },
     });
@@ -1293,7 +1296,8 @@ describe("interactive request scenarios", () => {
       });
 
       expect(ctx.interactiveRequests.some((request) =>
-        request.payload.kind === "command_approval",
+        request.payload.kind === "approval"
+        && request.payload.subject.kind === "command",
       )).toBe(true);
       expect(existsSync(filePath)).toBe(false);
     } finally {
@@ -1385,7 +1389,10 @@ describe("interactive request scenarios", () => {
       });
 
       expect(ctx.interactiveRequests.some((request) =>
-        request.payload.kind === "permission_request",
+        request.payload.kind === "approval"
+        && request.payload.subject.kind === "command"
+        && request.payload.availableDecisions.includes("allow_once")
+        && request.payload.availableDecisions.includes("deny"),
       )).toBe(true);
       expect(readFileSync(filePath, "utf8")).toBe(token);
     } finally {
@@ -1436,7 +1443,10 @@ describe("interactive request scenarios", () => {
       });
 
       expect(ctx.interactiveRequests.some((request) =>
-        request.payload.kind === "permission_request",
+        request.payload.kind === "approval"
+        && request.payload.subject.kind === "file_change"
+        && request.payload.availableDecisions.includes("allow_once")
+        && request.payload.availableDecisions.includes("deny"),
       )).toBe(true);
       expect(readFileSync(filePath, "utf8")).toBe(token);
     } finally {
@@ -1448,11 +1458,11 @@ describe("interactive request scenarios", () => {
   it.concurrent("respects user-denied Claude permission requests in readonly ask mode", async () => {
     const ctx = createTestRuntime("claude-code", {
       onInteractiveRequest: async (request) => {
-        if (request.payload.kind !== "permission_request") {
-          throw new Error(`Expected permission_request, got ${request.payload.kind}`);
+        if (request.payload.kind !== "approval") {
+          throw new Error(`Expected approval, got ${request.payload.kind}`);
         }
         return {
-          kind: "permission_request",
+          kind: "approval",
           decision: "deny",
         };
       },
@@ -1494,7 +1504,8 @@ describe("interactive request scenarios", () => {
       });
 
       expect(ctx.interactiveRequests.some((request) =>
-        request.payload.kind === "permission_request",
+        request.payload.kind === "approval"
+        && request.payload.subject.kind === "command",
       )).toBe(true);
       expect(existsSync(filePath)).toBe(false);
     } finally {

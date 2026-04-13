@@ -131,20 +131,23 @@ describe("createAgentRuntime", () => {
         }
 
         if (params.kind === "command_approval") {
+          const command = typeof params.command === "string" ? params.command : "";
           return {
             requestId: request.id,
             method: request.method,
             providerThreadId: params.threadId,
             turnId: params.turnId,
             payload: {
-              kind: "command_approval",
-              itemId: params.itemId,
+              kind: "approval",
+              subject: {
+                kind: "command",
+                itemId: params.itemId,
+                command,
+                cwd: typeof params.cwd === "string" ? params.cwd : null,
+              },
               reason: typeof params.reason === "string" ? params.reason : null,
-              command: typeof params.command === "string" ? params.command : null,
-              cwd: typeof params.cwd === "string" ? params.cwd : null,
-              commandActions: [],
-              requestedPermissions: null,
-              availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+              grantablePermissions: null,
+              availableDecisions: ["allow_once", "allow_for_session", "deny"],
             },
           };
         }
@@ -156,10 +159,14 @@ describe("createAgentRuntime", () => {
             providerThreadId: params.threadId,
             turnId: params.turnId,
             payload: {
-              kind: "file_change_approval",
-              itemId: params.itemId,
+              kind: "approval",
+              subject: {
+                kind: "file_change",
+                itemId: params.itemId,
+              },
               reason: null,
-              grantRoot: null,
+              grantablePermissions: null,
+              availableDecisions: ["allow_once", "deny"],
             },
           };
         }
@@ -1216,7 +1223,7 @@ rl.on("line", (line) => {
     pendingInteractive.delete(message.id);
     const decision =
       message.result && message.result.resolution
-      && message.result.resolution.kind === "command_approval"
+      && message.result.resolution.kind === "approval"
         ? message.result.resolution.decision
         : "unknown";
     completeTurn(pending.providerThreadId, pending.turnId, "interactive:" + decision);
@@ -1287,8 +1294,9 @@ rl.on("line", (line) => {
           kind: request.payload.kind,
         });
         return {
-          kind: "command_approval",
-          decision: "accept_for_session",
+          kind: "approval",
+          decision: "allow_for_session",
+          grantedPermissions: null,
         };
       },
       adapterFactory: () => createInteractiveRequestAdapter(interactiveScriptPath),
@@ -1313,7 +1321,7 @@ rl.on("line", (line) => {
           (event) =>
             event.type === "item/completed"
             && event.item.type === "agentMessage"
-            && event.item.text === "interactive:accept_for_session",
+            && event.item.text === "interactive:allow_for_session",
         ),
     );
 
@@ -1321,7 +1329,7 @@ rl.on("line", (line) => {
       {
         threadId: "t1",
         providerThreadId: "prov-1",
-        kind: "command_approval",
+        kind: "approval",
       },
     ]);
     expect(events).toContainEqual(
@@ -1329,7 +1337,7 @@ rl.on("line", (line) => {
         type: "item/completed",
         item: expect.objectContaining({
           type: "agentMessage",
-          text: "interactive:accept_for_session",
+          text: "interactive:allow_for_session",
         }),
       }),
     );
@@ -1378,7 +1386,7 @@ rl.on("line", (line) => {
     pendingInteractive.delete(message.id);
     const decision =
       message.result && message.result.resolution
-      && message.result.resolution.kind === "command_approval"
+      && message.result.resolution.kind === "approval"
         ? message.result.resolution.decision
         : "unknown";
     completeTurn(pending.providerThreadId, pending.turnId, "interactive:" + decision);
@@ -1449,8 +1457,9 @@ rl.on("line", (line) => {
       onInteractiveRequest: async (request) => {
         requests.push(request.providerRequestId);
         return {
-          kind: "command_approval",
-          decision: "accept",
+          kind: "approval",
+          decision: "allow_once",
+          grantedPermissions: null,
         };
       },
       adapterFactory: () => createInteractiveRequestAdapter(interactiveScriptPath),
@@ -1474,7 +1483,7 @@ rl.on("line", (line) => {
           (event) =>
             event.type === "item/completed"
             && event.item.type === "agentMessage"
-            && event.item.text === "interactive:decline",
+            && event.item.text === "interactive:deny",
         ),
     );
 

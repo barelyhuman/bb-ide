@@ -1,23 +1,17 @@
 import type {
-  PendingInteractionCommandApprovalDecision,
-  PendingInteractionFileChangeApprovalDecision,
+  PendingInteractionApprovalDecision,
+  ApprovalPendingInteractionResolution,
   PendingInteractionGrantablePermissionProfile,
   PendingInteractionGrantedPermissionProfile,
   PendingInteractionMacOsPermissions,
-  PermissionRequestPendingInteractionResolution,
   PendingInteractionRequestedPermissionProfile,
 } from "@bb/domain";
 
 export type PendingInteractionCommandApprovalDecisionKind =
-  | "accept"
-  | "accept_for_session"
-  | "decline"
-  | "cancel"
-  | "accept_with_exec_policy_amendment"
-  | "apply_network_policy_amendment";
+  PendingInteractionApprovalDecision;
 
 export type PendingInteractionPermissionResolutionSummaryArgs =
-  PermissionRequestPendingInteractionResolution;
+  ApprovalPendingInteractionResolution;
 type PendingInteractionPermissionSummaryProfile =
   | PendingInteractionGrantablePermissionProfile
   | PendingInteractionRequestedPermissionProfile;
@@ -113,97 +107,64 @@ export function toGrantedPendingInteractionPermissions(
 }
 
 export function getPendingInteractionCommandApprovalDecisionKind(
-  decision: PendingInteractionCommandApprovalDecision,
+  decision: PendingInteractionApprovalDecision,
 ): PendingInteractionCommandApprovalDecisionKind {
-  return typeof decision === "string" ? decision : decision.kind;
+  return decision;
 }
 
 export function formatPendingInteractionCommandApprovalDecision(
-  decision: PendingInteractionCommandApprovalDecision,
+  decision: PendingInteractionApprovalDecision,
 ): string {
-  if (typeof decision === "string") {
-    return decision;
-  }
-
-  switch (decision.kind) {
-    case "accept_with_exec_policy_amendment":
-      return `accept_with_exec_policy_amendment(${decision.execPolicyAmendment.join(", ")})`;
-    case "apply_network_policy_amendment":
-      return `apply_network_policy_amendment(${decision.networkPolicyAmendment.action} ${decision.networkPolicyAmendment.host})`;
-  }
+  return decision;
 }
 
 export function formatPendingInteractionCommandApprovalResolutionOutcome(
-  decision: PendingInteractionCommandApprovalDecision,
+  decision: PendingInteractionApprovalDecision,
 ): string {
-  if (typeof decision === "string") {
-    switch (decision) {
-      case "accept":
-        return "approved";
-      case "accept_for_session":
-        return "approved for this session";
-      case "decline":
-        return "denied";
-      case "cancel":
-        return "cancelled";
-    }
-  }
-
-  switch (decision.kind) {
-    case "accept_with_exec_policy_amendment":
-      return "approved with exec policy amendment";
-    case "apply_network_policy_amendment":
-      return "approved with network policy amendment";
+  switch (decision) {
+    case "allow_once":
+      return "approved";
+    case "allow_for_session":
+      return "approved for this session";
+    case "deny":
+      return "denied";
   }
 }
 
 export function formatPendingInteractionCommandApprovalResolutionMessage(
-  decision: PendingInteractionCommandApprovalDecision,
+  decision: PendingInteractionApprovalDecision,
 ): string {
-  if (typeof decision === "string" && decision === "cancel") {
-    return "Command request cancelled";
-  }
-
   return `Command ${formatPendingInteractionCommandApprovalResolutionOutcome(decision)}`;
 }
 
 export function isPendingInteractionCommandApprovalPositiveDecision(
-  decision: PendingInteractionCommandApprovalDecision,
+  decision: PendingInteractionApprovalDecision,
 ): boolean {
   switch (getPendingInteractionCommandApprovalDecisionKind(decision)) {
-    case "accept":
-    case "accept_for_session":
-    case "accept_with_exec_policy_amendment":
-    case "apply_network_policy_amendment":
+    case "allow_once":
+    case "allow_for_session":
       return true;
-    case "decline":
-    case "cancel":
+    case "deny":
       return false;
   }
 }
 
 export function formatPendingInteractionFileChangeApprovalResolutionOutcome(
-  decision: PendingInteractionFileChangeApprovalDecision,
+  decision: PendingInteractionApprovalDecision,
 ): string {
   switch (decision) {
-    case "accept":
+    case "allow_once":
       return "approved";
-    case "accept_for_session":
+    case "allow_for_session":
       return "approved for this session";
-    case "decline":
+    case "deny":
       return "denied";
-    case "cancel":
-      return "cancelled";
   }
 }
 
 export function formatPendingInteractionFileChangeApprovalResolutionMessage(
-  decision: PendingInteractionFileChangeApprovalDecision,
+  decision: PendingInteractionApprovalDecision,
 ): string {
-  if (decision === "cancel") {
-    return "File-change request cancelled";
-  }
-
   return `File changes ${formatPendingInteractionFileChangeApprovalResolutionOutcome(decision)}`;
 }
 
@@ -224,14 +185,17 @@ export function formatPendingInteractionPermissionResolutionOutcome(
     return "denied";
   }
 
-  if (!hasPendingInteractionGrantedPermissions(args.permissions)) {
+  if (
+    args.grantedPermissions === null
+    || !hasPendingInteractionGrantedPermissions(args.grantedPermissions)
+  ) {
     return "denied";
   }
 
-  switch (args.scope) {
-    case "turn":
+  switch (args.decision) {
+    case "allow_once":
       return "granted for this turn";
-    case "session":
+    case "allow_for_session":
       return "granted for this session";
   }
 }
@@ -243,7 +207,10 @@ export function formatPendingInteractionPermissionResolutionMessage(
     return "Permission request denied";
   }
 
-  if (!hasPendingInteractionGrantedPermissions(args.permissions)) {
+  if (
+    args.grantedPermissions === null
+    || !hasPendingInteractionGrantedPermissions(args.grantedPermissions)
+  ) {
     return "Permission request denied";
   }
 

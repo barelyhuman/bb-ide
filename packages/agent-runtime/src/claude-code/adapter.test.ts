@@ -440,6 +440,7 @@ describe("claude-code provider adapter", () => {
           turnId: "",
           itemId: "toolu_1",
           toolName: "WebFetch",
+          input: { url: "https://example.com" },
           reason: "Needs approval",
           permissions: {
             network: { enabled: true },
@@ -454,14 +455,22 @@ describe("claude-code provider adapter", () => {
       providerThreadId: "claude-session-1",
       turnId: "",
       payload: {
-        kind: "permission_request",
-        itemId: "toolu_1",
-        toolName: "WebFetch",
+        kind: "approval",
+        subject: {
+          kind: "permission_grant",
+          itemId: "toolu_1",
+          toolName: "WebFetch",
+          permissions: {
+            network: { enabled: true },
+            fileSystem: null,
+          },
+        },
         reason: "Needs approval",
-        permissions: {
+        grantablePermissions: {
           network: { enabled: true },
           fileSystem: null,
         },
+        availableDecisions: ["allow_once", "allow_for_session", "deny"],
       },
     });
   });
@@ -480,6 +489,7 @@ describe("claude-code provider adapter", () => {
           turnId: "",
           itemId: "toolu_1",
           toolName: "WebFetch",
+          input: { url: "https://example.com" },
           reason: "Needs approval",
           permissions: {
             network: { enabled: "yes" },
@@ -502,24 +512,31 @@ describe("claude-code provider adapter", () => {
           providerThreadId: "claude-session-1",
           turnId: "",
           payload: {
-            kind: "permission_request",
-            itemId: "toolu_3",
-            toolName: "WebFetch",
+            kind: "approval",
+            subject: {
+              kind: "permission_grant",
+              itemId: "toolu_3",
+              toolName: "WebFetch",
+              permissions: {
+                network: { enabled: true },
+                fileSystem: null,
+              },
+            },
             reason: "Needs network",
-            permissions: {
+            grantablePermissions: {
               network: { enabled: true },
               fileSystem: null,
             },
+            availableDecisions: ["allow_once", "allow_for_session", "deny"],
           },
         },
         resolution: {
-          kind: "permission_request",
-          decision: "allow",
-          permissions: {
+          kind: "approval",
+          decision: "allow_for_session",
+          grantedPermissions: {
             network: { enabled: true },
             fileSystem: null,
           },
-          scope: "session",
         },
       }),
     ).toEqual({
@@ -548,24 +565,28 @@ describe("claude-code provider adapter", () => {
           providerThreadId: "claude-session-1",
           turnId: "",
           payload: {
-            kind: "permission_request",
-            itemId: "toolu_3b",
-            toolName: "Bash",
+            kind: "approval",
+            subject: {
+              kind: "command",
+              itemId: "toolu_3b",
+              command: "pwd",
+              cwd: null,
+            },
             reason: "Needs approval",
-            permissions: {
+            grantablePermissions: {
               network: null,
               fileSystem: null,
             },
+            availableDecisions: ["allow_once", "deny"],
           },
         },
         resolution: {
-          kind: "permission_request",
-          decision: "allow",
-          permissions: {
+          kind: "approval",
+          decision: "allow_for_session",
+          grantedPermissions: {
             network: null,
             fileSystem: null,
           },
-          scope: "session",
         },
       }),
     ).toEqual({
@@ -586,30 +607,32 @@ describe("claude-code provider adapter", () => {
           providerThreadId: "claude-session-1",
           turnId: "",
           payload: {
-            kind: "permission_request",
-            itemId: "toolu_3d",
-            toolName: "Edit",
+            kind: "approval",
+            subject: {
+              kind: "file_change",
+              itemId: "toolu_3d",
+            },
             reason: "Needs file access",
-            permissions: {
+            grantablePermissions: {
               network: null,
               fileSystem: {
                 read: ["/tmp/project"],
                 write: ["/tmp/project"],
               },
             },
+            availableDecisions: ["allow_once", "allow_for_session", "deny"],
           },
         },
         resolution: {
-          kind: "permission_request",
-          decision: "allow",
-          permissions: {
+          kind: "approval",
+          decision: "allow_for_session",
+          grantedPermissions: {
             network: null,
             fileSystem: {
               read: ["/tmp/project"],
               write: ["/tmp/project"],
             },
           },
-          scope: "session",
         },
       }),
     ).toEqual({
@@ -637,24 +660,25 @@ describe("claude-code provider adapter", () => {
           providerThreadId: "claude-session-1",
           turnId: "",
           payload: {
-            kind: "permission_request",
-            itemId: "toolu_3c",
-            toolName: "Bash",
+            kind: "approval",
+            subject: {
+              kind: "command",
+              itemId: "toolu_3c",
+              command: "pwd",
+              cwd: null,
+            },
             reason: "Needs approval",
-            permissions: {
+            grantablePermissions: {
               network: null,
               fileSystem: null,
             },
+            availableDecisions: ["allow_once", "deny"],
           },
         },
         resolution: {
-          kind: "permission_request",
-          decision: "allow",
-          permissions: {
-            network: null,
-            fileSystem: null,
-          },
-          scope: "turn",
+          kind: "approval",
+          decision: "allow_once",
+          grantedPermissions: null,
         },
       }),
     ).toEqual({

@@ -2,12 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   pendingInteractionMacOsPermissionsSchema,
   pendingInteractionCreateSchema,
-  pendingInteractionResolutionSchema,
   pendingInteractionSchema,
 } from "../src/index.js";
 
 describe("pending interaction schemas", () => {
-  it("parses command approval interactions", () => {
+  it("parses semantic command approval interactions", () => {
     expect(
       pendingInteractionCreateSchema.parse({
         threadId: "thr_123",
@@ -16,68 +15,99 @@ describe("pending interaction schemas", () => {
         providerThreadId: "provider-thread-123",
         providerRequestId: "request-123",
         payload: {
-          kind: "command_approval",
-          itemId: "item_123",
+          kind: "approval",
+          subject: {
+            kind: "command",
+            itemId: "item_123",
+            command: "npm install",
+            cwd: "/tmp/project",
+          },
           reason: "Needs network access",
-          command: "npm install",
-          cwd: "/tmp/project",
-          commandActions: [
-            {
-              type: "unknown",
-              command: "npm install",
-            },
-          ],
-          requestedPermissions: {
+          grantablePermissions: {
             network: {
               enabled: true,
             },
             fileSystem: null,
-            macos: null,
           },
-          availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+          availableDecisions: ["allow_once", "allow_for_session", "deny"],
         },
       }),
     ).toMatchObject({
       providerId: "codex",
       payload: {
-        kind: "command_approval",
-        availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+        kind: "approval",
+        subject: {
+          kind: "command",
+        },
+        availableDecisions: ["allow_once", "allow_for_session", "deny"],
       },
     });
   });
 
-  it("parses command approvals with amendment decisions", () => {
+  it("parses semantic file-change approvals without diff fields", () => {
     expect(
-      pendingInteractionSchema.parse({
-        id: "pi_124",
+      pendingInteractionCreateSchema.parse({
         threadId: "thr_124",
         turnId: "turn_124",
         providerId: "codex",
         providerThreadId: "provider-thread-124",
-        providerRequestId: "request-126",
+        providerRequestId: "request-124",
+        payload: {
+          kind: "approval",
+          subject: {
+            kind: "file_change",
+            itemId: "item_124",
+          },
+          reason: "Review file edits",
+          grantablePermissions: null,
+          availableDecisions: ["allow_once", "deny"],
+        },
+      }),
+    ).toMatchObject({
+      payload: {
+        subject: {
+          kind: "file_change",
+          itemId: "item_124",
+        },
+      },
+    });
+  });
+
+  it("parses semantic permission grant approval resolutions", () => {
+    expect(
+      pendingInteractionSchema.parse({
+        id: "pi_125",
+        threadId: "thr_125",
+        turnId: "turn_125",
+        providerId: "claude-code",
+        providerThreadId: "provider-thread-125",
+        providerRequestId: "request-125",
         status: "resolved",
         payload: {
-          kind: "command_approval",
-          itemId: "item_126",
-          reason: "Needs approval",
-          command: "git push",
-          cwd: "/tmp/project",
-          commandActions: [],
-          requestedPermissions: null,
-          availableDecisions: [
-            {
-              kind: "accept_with_exec_policy_amendment",
-              execPolicyAmendment: ["allow", "git", "push"],
+          kind: "approval",
+          subject: {
+            kind: "permission_grant",
+            itemId: "item_125",
+            toolName: "WebFetch",
+            permissions: {
+              network: {
+                enabled: true,
+              },
+              fileSystem: null,
             },
-            "decline",
-            "cancel",
-          ],
+          },
+          reason: null,
+          grantablePermissions: null,
+          availableDecisions: ["allow_once", "allow_for_session", "deny"],
         },
         resolution: {
-          kind: "command_approval",
-          decision: {
-            kind: "accept_with_exec_policy_amendment",
-            execPolicyAmendment: ["allow", "git", "push"],
+          kind: "approval",
+          decision: "allow_for_session",
+          grantedPermissions: {
+            network: {
+              enabled: true,
+            },
+            fileSystem: null,
           },
         },
         statusReason: null,
@@ -86,43 +116,10 @@ describe("pending interaction schemas", () => {
       }),
     ).toMatchObject({
       resolution: {
-        kind: "command_approval",
-        decision: {
-          kind: "accept_with_exec_policy_amendment",
-        },
+        kind: "approval",
+        decision: "allow_for_session",
       },
     });
-  });
-
-  it("rejects mismatched payload and resolution kinds", () => {
-    expect(() =>
-      pendingInteractionSchema.parse({
-        id: "pi_123",
-        threadId: "thr_123",
-        turnId: "turn_123",
-        providerId: "codex",
-        providerThreadId: "provider-thread-123",
-        providerRequestId: "request-125",
-        status: "resolved",
-        payload: {
-          kind: "command_approval",
-          itemId: "item_125",
-          reason: null,
-          command: "git push",
-          cwd: "/tmp/project",
-          commandActions: [],
-          requestedPermissions: null,
-          availableDecisions: ["accept", "decline", "cancel"],
-        },
-        resolution: pendingInteractionResolutionSchema.parse({
-          kind: "file_change_approval",
-          decision: "accept",
-        }),
-        statusReason: null,
-        createdAt: 1,
-        resolvedAt: 2,
-      }),
-    ).toThrow();
   });
 
   it("rejects invalid macOS automation permission values", () => {

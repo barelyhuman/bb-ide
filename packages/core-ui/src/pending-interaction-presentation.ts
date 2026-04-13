@@ -12,12 +12,8 @@ export function formatPendingInteractionKindLabel(
   args: FormatPendingInteractionKindLabelArgs,
 ): string {
   switch (args.kind) {
-    case "command_approval":
-      return args.surface === "app" ? "Command approval" : "command";
-    case "file_change_approval":
-      return args.surface === "app" ? "File changes" : "file-change";
-    case "permission_request":
-      return args.surface === "app" ? "Permission request" : "permission";
+    case "approval":
+      return args.surface === "app" ? "Approval" : "approval";
   }
 }
 
@@ -32,28 +28,25 @@ export function formatPendingInteractionSummary(
   const { interaction, surface } = args;
 
   switch (interaction.payload.kind) {
-    case "command_approval":
-      return surface === "app"
-        ? interaction.payload.reason
-          ?? interaction.payload.command
-          ?? "Review requested command"
-        : interaction.payload.command
-          ?? interaction.payload.reason
-          ?? "(no command provided)";
-    case "file_change_approval":
-      return surface === "app"
-        ? interaction.payload.reason ?? "Allow file changes for this thread"
-        : interaction.payload.reason
-          ?? interaction.payload.grantRoot
-          ?? "File changes pending approval";
-    case "permission_request": {
+    case "approval": {
       if (interaction.payload.reason) {
         return interaction.payload.reason;
       }
 
+      switch (interaction.payload.subject.kind) {
+        case "command":
+          return surface === "app"
+            ? interaction.payload.subject.command
+            : interaction.payload.subject.command;
+        case "file_change":
+          return "File changes pending approval";
+        case "permission_grant":
+          break;
+      }
+
       if (surface === "app") {
         const requestedPermissionSummary = summarizePendingInteractionRequestedPermissions(
-          interaction.payload.permissions,
+          interaction.payload.subject.permissions,
         );
         if (requestedPermissionSummary.length > 0) {
           return requestedPermissionSummary.join(" . ");
@@ -61,7 +54,7 @@ export function formatPendingInteractionSummary(
         return "Review requested permissions";
       }
 
-      return interaction.payload.toolName ?? "Permission request";
+      return interaction.payload.subject.toolName ?? "Permission request";
     }
   }
 }

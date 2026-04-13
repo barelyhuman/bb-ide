@@ -10,6 +10,10 @@
 import type { SDKResultMessage } from "@anthropic-ai/claude-agent-sdk";
 import { getBuiltInAgentProviderInfo } from "@bb/agent-providers";
 import type {
+  ApprovalPendingInteractionPayload,
+  PendingInteractionApprovalDecision,
+  PendingInteractionApprovalSubject,
+  PendingInteractionGrantedPermissionProfile,
   ProviderCapabilities,
   ThreadEvent,
   ThreadEventContextWindowUsage,
@@ -66,6 +70,7 @@ import type {
 import {
   buildClaudeSessionPermissionUpdates,
   CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+  type ClaudePermissionRequestApprovalParams,
   claudePermissionRequestApprovalParamsSchema,
   toClaudePermissionMode,
 } from "./interactive-contract.js";
@@ -122,6 +127,12 @@ function getNestedMessageId(message: unknown): string | undefined {
 
 type ClaudePendingFileChangeItem = Extract<ThreadEventItem, { type: "fileChange" }>;
 
+const CLAUDE_CONCRETE_FILE_CHANGE_TOOL_NAMES = new Set([
+  "Edit",
+  "Write",
+  "NotebookEdit",
+]);
+
 interface ClaudeToolUseTranslationInput {
   callId: string;
   toolName: string;
@@ -162,6 +173,78 @@ function buildClaudeFileChangeItem(
       ...(diff ? { diff } : {}),
     }],
     status: "pending",
+  };
+}
+
+function hasClaudeSessionPermissionUpdate(
+  args: ClaudePermissionRequestApprovalParams,
+): boolean {
+  return buildClaudeSessionPermissionUpdates({
+    permissions: args.permissions,
+    toolName: args.toolName,
+  }) !== undefined;
+}
+
+function buildClaudeApprovalAvailableDecisions(
+  args: ClaudePermissionRequestApprovalParams,
+): PendingInteractionApprovalDecision[] {
+  return hasClaudeSessionPermissionUpdate(args)
+    ? ["allow_once", "allow_for_session", "deny"]
+    : ["allow_once", "deny"];
+}
+
+function buildClaudeApprovalSubject(
+  args: ClaudePermissionRequestApprovalParams,
+): PendingInteractionApprovalSubject {
+  if (args.toolName === "Bash") {
+    const parsed = bashArgsSchema.safeParse(args.input);
+    const command = parsed.success
+      ? toOptionalString(parsed.data.command)
+      : undefined;
+    if (command) {
+      return {
+        kind: "command",
+        itemId: args.itemId,
+        command,
+        cwd: parsed.success ? (toOptionalString(parsed.data.cwd) ?? null) : null,
+      };
+    }
+  }
+
+  if (CLAUDE_CONCRETE_FILE_CHANGE_TOOL_NAMES.has(args.toolName)) {
+    const parsed = claudeFileEditArgsSchema.safeParse(args.input);
+    if (parsed.success && (parsed.data.file_path ?? parsed.data.path)) {
+      return {
+        kind: "file_change",
+        itemId: args.itemId,
+      };
+    }
+  }
+
+  return {
+    kind: "permission_grant",
+    itemId: args.itemId,
+    toolName: args.toolName,
+    permissions: args.permissions,
+  };
+}
+
+function resolveClaudeGrantedPermissions(
+  payload: ApprovalPendingInteractionPayload,
+  grantedPermissions: PendingInteractionGrantedPermissionProfile | null,
+): PendingInteractionGrantedPermissionProfile {
+  if (grantedPermissions) {
+    return grantedPermissions;
+  }
+  if (payload.subject.kind === "permission_grant") {
+    return payload.subject.permissions;
+  }
+  if (payload.grantablePermissions) {
+    return payload.grantablePermissions;
+  }
+  return {
+    network: null,
+    fileSystem: null,
   };
 }
 
@@ -963,11 +1046,11 @@ export function createClaudeCodeProviderAdapter(
             providerThreadId: parsed.data.providerThreadId,
             turnId: parsed.data.turnId,
             payload: {
-              kind: "permission_request",
-              itemId: parsed.data.itemId,
+              kind: "approval",
+              subject: buildClaudeApprovalSubject(parsed.data),
               reason: parsed.data.reason,
-              toolName: parsed.data.toolName,
-              permissions: parsed.data.permissions,
+              grantablePermissions: parsed.data.permissions,
+              availableDecisions: buildClaudeApprovalAvailableDecisions(parsed.data),
             },
           };
         }
@@ -978,10 +1061,10 @@ export function createClaudeCodeProviderAdapter(
 
     buildInteractiveResponse(args) {
       switch (args.request.payload.kind) {
-        case "permission_request": {
-          if (args.resolution.kind !== "permission_request") {
+        case "approval": {
+          if (args.resolution.kind !== "approval") {
             throw new Error(
-              "Interactive response kind mismatch for permission request",
+              "Interactive response kind mismatch for approval",
             );
           }
           if (args.resolution.decision === "deny") {
@@ -992,7 +1075,7 @@ export function createClaudeCodeProviderAdapter(
             };
           }
 
-          if (args.resolution.scope === "turn") {
+          if (args.resolution.decision === "allow_once") {
             // Claude canUseTool approvals without updatedPermissions apply only
             // to the current tool request. Session grants are the only scope
             // that should mutate Claude's permission state.
@@ -1003,8 +1086,13 @@ export function createClaudeCodeProviderAdapter(
           }
 
           const updatedPermissions = buildClaudeSessionPermissionUpdates({
-            permissions: args.resolution.permissions,
-            toolName: args.request.payload.toolName,
+            permissions: resolveClaudeGrantedPermissions(
+              args.request.payload,
+              args.resolution.grantedPermissions,
+            ),
+            toolName: args.request.payload.subject.kind === "permission_grant"
+              ? args.request.payload.subject.toolName
+              : null,
           });
 
           return {

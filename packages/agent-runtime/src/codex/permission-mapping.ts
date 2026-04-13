@@ -1,7 +1,5 @@
 import type {
-  PendingInteractionCommandApprovalDecision,
-  PendingInteractionCommandApprovalSimpleDecision,
-  PendingInteractionFileChangeApprovalDecision,
+  PendingInteractionApprovalDecision,
   PendingInteractionGrantedPermissionProfile,
   PendingInteractionGrantablePermissionProfile,
   PendingInteractionRequestedPermissionProfile,
@@ -18,33 +16,30 @@ import type {
   CodexSimpleCommandApprovalDecision,
 } from "./schemas.js";
 
-const codexToPendingInteractionSimpleCommandApprovalDecision = {
-  accept: "accept",
-  acceptForSession: "accept_for_session",
-  decline: "decline",
-  cancel: "cancel",
+const codexToPendingInteractionApprovalDecision = {
+  accept: "allow_once",
+  acceptForSession: "allow_for_session",
+  decline: "deny",
 } satisfies Record<
-  CodexSimpleCommandApprovalDecision,
-  PendingInteractionCommandApprovalSimpleDecision
+  Exclude<CodexSimpleCommandApprovalDecision, "cancel">,
+  PendingInteractionApprovalDecision
 >;
 
-const pendingInteractionToCodexSimpleCommandApprovalDecision = {
-  accept: "accept",
-  accept_for_session: "acceptForSession",
-  decline: "decline",
-  cancel: "cancel",
+export const pendingInteractionToCodexSimpleApprovalDecision = {
+  allow_once: "accept",
+  allow_for_session: "acceptForSession",
+  deny: "decline",
 } satisfies Record<
-  PendingInteractionCommandApprovalSimpleDecision,
-  CodexSimpleCommandApprovalDecision
+  PendingInteractionApprovalDecision,
+  Exclude<CodexSimpleCommandApprovalDecision, "cancel">
 >;
 
 export const pendingInteractionToCodexFileChangeApprovalDecision = {
-  accept: "accept",
-  accept_for_session: "acceptForSession",
-  decline: "decline",
-  cancel: "cancel",
+  allow_once: "accept",
+  allow_for_session: "acceptForSession",
+  deny: "decline",
 } satisfies Record<
-  PendingInteractionFileChangeApprovalDecision,
+  PendingInteractionApprovalDecision,
   FileChangeRequestApprovalResponse["decision"]
 >;
 
@@ -77,7 +72,7 @@ export function toPendingInteractionPermissionProfile(
 }
 
 export function toPendingInteractionGrantablePermissionProfile(
-  permissions: CodexRequestedPermissionProfile,
+  permissions: CodexAdditionalPermissions | CodexRequestedPermissionProfile,
 ): PendingInteractionGrantablePermissionProfile {
   const normalized = toPendingInteractionPermissionProfile(permissions);
   return {
@@ -104,58 +99,28 @@ export function toCodexGrantedPermissionProfile(
 
 function fromCodexCommandApprovalDecision(
   decision: CodexCommandApprovalDecision,
-): PendingInteractionCommandApprovalDecision {
+): PendingInteractionApprovalDecision | null {
+  if (decision === "cancel") {
+    return null;
+  }
   if (typeof decision === "string") {
-    return codexToPendingInteractionSimpleCommandApprovalDecision[decision];
+    return codexToPendingInteractionApprovalDecision[decision];
   }
 
-  if ("acceptWithExecpolicyAmendment" in decision) {
-    return {
-      kind: "accept_with_exec_policy_amendment",
-      execPolicyAmendment: decision.acceptWithExecpolicyAmendment.execpolicy_amendment,
-    };
-  }
-
-  return {
-    kind: "apply_network_policy_amendment",
-    networkPolicyAmendment: {
-      host: decision.applyNetworkPolicyAmendment.network_policy_amendment.host,
-      action: decision.applyNetworkPolicyAmendment.network_policy_amendment.action,
-    },
-  };
+  return null;
 }
 
 export function toCodexCommandApprovalDecision(
-  decision: PendingInteractionCommandApprovalDecision,
+  decision: PendingInteractionApprovalDecision,
 ): CommandExecutionRequestApprovalResponse["decision"] {
-  if (typeof decision === "string") {
-    return pendingInteractionToCodexSimpleCommandApprovalDecision[decision];
-  }
-
-  switch (decision.kind) {
-    case "accept_with_exec_policy_amendment":
-      return {
-        acceptWithExecpolicyAmendment: {
-          execpolicy_amendment: decision.execPolicyAmendment,
-        },
-      };
-    case "apply_network_policy_amendment":
-      return {
-        applyNetworkPolicyAmendment: {
-          network_policy_amendment: {
-            host: decision.networkPolicyAmendment.host,
-            action: decision.networkPolicyAmendment.action,
-          },
-        },
-      };
-  }
+  return pendingInteractionToCodexSimpleApprovalDecision[decision];
 }
 
 export function parseCodexAvailableDecisions(
   decisions: CodexCommandApprovalDecision[] | null | undefined,
-): PendingInteractionCommandApprovalDecision[] {
+): PendingInteractionApprovalDecision[] {
   if (!decisions) {
-    return ["accept", "accept_for_session", "decline", "cancel"];
+    return ["allow_once", "allow_for_session", "deny"];
   }
   if (decisions.length === 0) {
     throw new ProviderRequestDecodeError(
@@ -163,5 +128,15 @@ export function parseCodexAvailableDecisions(
     );
   }
 
-  return decisions.map(fromCodexCommandApprovalDecision);
+  const mappedDecisions = decisions.flatMap((decision) => {
+    const mapped = fromCodexCommandApprovalDecision(decision);
+    return mapped === null ? [] : [mapped];
+  });
+  const uniqueDecisions = [...new Set(mappedDecisions)];
+  if (uniqueDecisions.length === 0) {
+    throw new ProviderRequestDecodeError(
+      "Command approval request did not include provider-neutral decisions",
+    );
+  }
+  return uniqueDecisions;
 }

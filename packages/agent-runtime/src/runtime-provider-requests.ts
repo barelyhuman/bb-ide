@@ -68,19 +68,9 @@ function buildDeniedInteractiveResolution(
   payload: PendingInteractionPayload,
 ): PendingInteractionResolution {
   switch (payload.kind) {
-    case "command_approval":
+    case "approval":
       return {
-        kind: "command_approval",
-        decision: "decline",
-      };
-    case "file_change_approval":
-      return {
-        kind: "file_change_approval",
-        decision: "decline",
-      };
-    case "permission_request":
-      return {
-        kind: "permission_request",
+        kind: "approval",
         decision: "deny",
       };
   }

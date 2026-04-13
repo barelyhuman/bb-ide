@@ -1421,23 +1421,19 @@ describe("codex provider adapter", () => {
       providerThreadId: "t1",
       turnId: "turn-1",
       payload: {
-        kind: "command_approval",
-        itemId: "item-1",
+        kind: "approval",
+        subject: {
+          kind: "command",
+          itemId: "item-1",
+          command: "git push",
+          cwd: "/tmp/project",
+        },
         reason: "Needs approval",
-        command: "git push",
-        cwd: "/tmp/project",
-        commandActions: [
-          {
-            type: "unknown",
-            command: "git push",
-          },
-        ],
-        requestedPermissions: {
+        grantablePermissions: {
           network: { enabled: true },
           fileSystem: null,
-          macos: null,
         },
-        availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+        availableDecisions: ["allow_once", "allow_for_session", "deny"],
       },
     });
   });
@@ -1463,7 +1459,7 @@ describe("codex provider adapter", () => {
     ).toThrowError(ProviderRequestDecodeError);
   });
 
-  it("decodeInteractiveRequest preserves macOS permission bundles in command approvals", () => {
+  it("decodeInteractiveRequest omits macOS permissions from grantable command approvals", () => {
     const adapter = createCodexProviderAdapter();
     expect(
       adapter.decodeInteractiveRequest?.({
@@ -1502,29 +1498,19 @@ describe("codex provider adapter", () => {
       providerThreadId: "t1",
       turnId: "turn-1",
       payload: {
-        kind: "command_approval",
-        itemId: "item-1",
+        kind: "approval",
+        subject: {
+          kind: "command",
+          itemId: "item-1",
+          command: "osascript -e 'tell app \"Finder\" to activate'",
+          cwd: "/tmp/project",
+        },
         reason: "Needs approval",
-        command: "osascript -e 'tell app \"Finder\" to activate'",
-        cwd: "/tmp/project",
-        commandActions: [],
-        requestedPermissions: {
+        grantablePermissions: {
           network: null,
           fileSystem: null,
-          macos: {
-            preferences: "read_only",
-            automations: {
-              kind: "bundle_ids",
-              bundleIds: ["com.apple.finder"],
-            },
-            launchServices: true,
-            accessibility: true,
-            calendar: false,
-            reminders: false,
-            contacts: "none",
-          },
         },
-        availableDecisions: ["accept", "decline", "cancel"],
+        availableDecisions: ["allow_once", "deny"],
       },
     });
   });
@@ -1562,10 +1548,9 @@ describe("codex provider adapter", () => {
       }),
     ).toMatchObject({
       payload: {
-        requestedPermissions: {
-          macos: {
-            automations: "none",
-          },
+        grantablePermissions: {
+          network: null,
+          fileSystem: null,
         },
       },
     });
@@ -1604,16 +1589,15 @@ describe("codex provider adapter", () => {
       }),
     ).toMatchObject({
       payload: {
-        requestedPermissions: {
-          macos: {
-            automations: "all",
-          },
+        grantablePermissions: {
+          network: null,
+          fileSystem: null,
         },
       },
     });
   });
 
-  it("decodeInteractiveRequest keeps amendment approval decisions in command approvals", () => {
+  it("decodeInteractiveRequest filters provider-specific amendment decisions", () => {
     const adapter = createCodexProviderAdapter();
     expect(
       adapter.decodeInteractiveRequest?.({
@@ -1658,28 +1642,16 @@ describe("codex provider adapter", () => {
       providerThreadId: "t1",
       turnId: "turn-2",
       payload: {
-        kind: "command_approval",
-        itemId: "item-2",
+        kind: "approval",
+        subject: {
+          kind: "command",
+          itemId: "item-2",
+          command: "git push",
+          cwd: "/tmp/project",
+        },
         reason: "Needs approval",
-        command: "git push",
-        cwd: "/tmp/project",
-        commandActions: [],
-        requestedPermissions: null,
-        availableDecisions: [
-          {
-            kind: "accept_with_exec_policy_amendment",
-            execPolicyAmendment: ["allow", "git", "push"],
-          },
-          {
-            kind: "apply_network_policy_amendment",
-            networkPolicyAmendment: {
-              host: "api.openai.com",
-              action: "allow",
-            },
-          },
-          "decline",
-          "cancel",
-        ],
+        grantablePermissions: null,
+        availableDecisions: ["deny"],
       },
     });
   });
@@ -1705,10 +1677,20 @@ describe("codex provider adapter", () => {
       providerThreadId: "t1",
       turnId: "turn-file-change",
       payload: {
-        kind: "file_change_approval",
-        itemId: "item-file-change",
+        kind: "approval",
+        subject: {
+          kind: "file_change",
+          itemId: "item-file-change",
+        },
         reason: "Review generated file changes",
-        grantRoot: "/tmp/project",
+        grantablePermissions: {
+          network: null,
+          fileSystem: {
+            read: [],
+            write: ["/tmp/project"],
+          },
+        },
+        availableDecisions: ["allow_once", "allow_for_session", "deny"],
       },
     });
   });
@@ -1740,17 +1722,22 @@ describe("codex provider adapter", () => {
       providerThreadId: "t1",
       turnId: "turn-permissions",
       payload: {
-        kind: "permission_request",
-        itemId: "item-permissions",
-        reason: "Need network access",
-        toolName: null,
-        permissions: {
-          network: { enabled: true },
-          fileSystem: {
-            read: ["/tmp/project/README.md"],
-            write: [],
+        kind: "approval",
+        subject: {
+          kind: "permission_grant",
+          itemId: "item-permissions",
+          toolName: null,
+          permissions: {
+            network: { enabled: true },
+            fileSystem: {
+              read: ["/tmp/project/README.md"],
+              write: [],
+            },
           },
         },
+        reason: "Need network access",
+        grantablePermissions: null,
+        availableDecisions: ["allow_once", "allow_for_session", "deny"],
       },
     });
   });
@@ -1765,19 +1752,22 @@ describe("codex provider adapter", () => {
           providerThreadId: "t1",
           turnId: "turn-1",
           payload: {
-            kind: "command_approval",
-            itemId: "item-1",
+            kind: "approval",
+            subject: {
+              kind: "command",
+              itemId: "item-1",
+              command: "git push",
+              cwd: "/tmp/project",
+            },
             reason: null,
-            command: "git push",
-            cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: ["accept", "decline", "cancel"],
+            grantablePermissions: null,
+            availableDecisions: ["allow_once", "allow_for_session", "deny"],
           },
         },
         resolution: {
-          kind: "command_approval",
-          decision: "accept_for_session",
+          kind: "approval",
+          decision: "allow_for_session",
+          grantedPermissions: null,
         },
       }),
     ).toEqual({
@@ -1785,7 +1775,7 @@ describe("codex provider adapter", () => {
     });
   });
 
-  it("buildInteractiveResponse maps amended command approvals back to Codex responses", () => {
+  it("buildInteractiveResponse maps command denial back to Codex responses", () => {
     const adapter = createCodexProviderAdapter();
     expect(
       adapter.buildInteractiveResponse?.({
@@ -1795,37 +1785,25 @@ describe("codex provider adapter", () => {
           providerThreadId: "t1",
           turnId: "turn-3",
           payload: {
-            kind: "command_approval",
-            itemId: "item-3",
+            kind: "approval",
+            subject: {
+              kind: "command",
+              itemId: "item-3",
+              command: "git push",
+              cwd: "/tmp/project",
+            },
             reason: null,
-            command: "git push",
-            cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: [
-              {
-                kind: "accept_with_exec_policy_amendment",
-                execPolicyAmendment: ["allow", "git", "push"],
-              },
-              "decline",
-              "cancel",
-            ],
+            grantablePermissions: null,
+            availableDecisions: ["allow_once", "deny"],
           },
         },
         resolution: {
-          kind: "command_approval",
-          decision: {
-            kind: "accept_with_exec_policy_amendment",
-            execPolicyAmendment: ["allow", "git", "push"],
-          },
+          kind: "approval",
+          decision: "deny",
         },
       }),
     ).toEqual({
-      decision: {
-        acceptWithExecpolicyAmendment: {
-          execpolicy_amendment: ["allow", "git", "push"],
-        },
-      },
+      decision: "decline",
     });
   });
 
@@ -1839,15 +1817,20 @@ describe("codex provider adapter", () => {
           providerThreadId: "t1",
           turnId: "turn-file-change",
           payload: {
-            kind: "file_change_approval",
-            itemId: "item-file-change",
+            kind: "approval",
+            subject: {
+              kind: "file_change",
+              itemId: "item-file-change",
+            },
             reason: "Review generated file changes",
-            grantRoot: "/tmp/project",
+            grantablePermissions: null,
+            availableDecisions: ["allow_once", "allow_for_session", "deny"],
           },
         },
         resolution: {
-          kind: "file_change_approval",
-          decision: "accept_for_session",
+          kind: "approval",
+          decision: "allow_for_session",
+          grantedPermissions: null,
         },
       }),
     ).toEqual({
@@ -1865,30 +1848,34 @@ describe("codex provider adapter", () => {
           providerThreadId: "t1",
           turnId: "turn-permissions",
           payload: {
-            kind: "permission_request",
-            itemId: "item-permissions",
-            reason: "Need network access",
-            toolName: null,
-            permissions: {
-              network: { enabled: true },
-              fileSystem: {
-                read: ["/tmp/project/README.md"],
-                write: [],
+            kind: "approval",
+            subject: {
+              kind: "permission_grant",
+              itemId: "item-permissions",
+              toolName: null,
+              permissions: {
+                network: { enabled: true },
+                fileSystem: {
+                  read: ["/tmp/project/README.md"],
+                  write: [],
+                },
               },
             },
+            reason: "Need network access",
+            grantablePermissions: null,
+            availableDecisions: ["allow_once", "allow_for_session", "deny"],
           },
         },
         resolution: {
-          kind: "permission_request",
-          decision: "allow",
-          permissions: {
+          kind: "approval",
+          decision: "allow_for_session",
+          grantedPermissions: {
             network: { enabled: true },
             fileSystem: {
               read: ["/tmp/project/README.md"],
               write: [],
             },
           },
-          scope: "session",
         },
       }),
     ).toEqual({

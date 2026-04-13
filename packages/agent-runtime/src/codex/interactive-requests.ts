@@ -6,13 +6,13 @@ import type {
   JsonRpcMessage,
   ProviderAdapter,
 } from "../provider-adapter.js";
+import { ProviderRequestDecodeError as ProviderRequestDecodeErrorValue } from "../provider-adapter.js";
 import {
   parseCodexAvailableDecisions,
   pendingInteractionToCodexFileChangeApprovalDecision,
   toCodexCommandApprovalDecision,
   toCodexGrantedPermissionProfile,
   toPendingInteractionGrantablePermissionProfile,
-  toPendingInteractionPermissionProfile,
 } from "./permission-mapping.js";
 import {
   codexCommandExecutionRequestApprovalParamsSchema,
@@ -31,6 +31,15 @@ export type CodexInteractiveResponse =
 
 function assertNever(value: never, message?: string): never {
   throw new Error(message ?? `Unexpected value: ${String(value)}`);
+}
+
+function requireCommandSubject(command: string | null | undefined): string {
+  if (!command) {
+    throw new ProviderRequestDecodeErrorValue(
+      "Command approval request did not include a command subject",
+    );
+  }
+  return command;
 }
 
 export function decodeCodexInteractiveRequest(
@@ -57,14 +66,16 @@ export function decodeCodexInteractiveRequest(
         providerThreadId: parsed.data.threadId,
         turnId: parsed.data.turnId,
         payload: {
-          kind: "command_approval",
-          itemId: parsed.data.itemId,
+          kind: "approval",
+          subject: {
+            kind: "command",
+            itemId: parsed.data.itemId,
+            command: requireCommandSubject(parsed.data.command),
+            cwd: parsed.data.cwd ?? null,
+          },
           reason: parsed.data.reason ?? null,
-          command: parsed.data.command ?? null,
-          cwd: parsed.data.cwd ?? null,
-          commandActions: parsed.data.commandActions ?? [],
-          requestedPermissions: parsed.data.additionalPermissions
-            ? toPendingInteractionPermissionProfile(parsed.data.additionalPermissions)
+          grantablePermissions: parsed.data.additionalPermissions
+            ? toPendingInteractionGrantablePermissionProfile(parsed.data.additionalPermissions)
             : null,
           availableDecisions,
         },
@@ -83,10 +94,22 @@ export function decodeCodexInteractiveRequest(
         providerThreadId: parsed.data.threadId,
         turnId: parsed.data.turnId,
         payload: {
-          kind: "file_change_approval",
-          itemId: parsed.data.itemId,
+          kind: "approval",
+          subject: {
+            kind: "file_change",
+            itemId: parsed.data.itemId,
+          },
           reason: parsed.data.reason ?? null,
-          grantRoot: parsed.data.grantRoot ?? null,
+          grantablePermissions: parsed.data.grantRoot
+            ? {
+                network: null,
+                fileSystem: {
+                  read: [],
+                  write: [parsed.data.grantRoot],
+                },
+              }
+            : null,
+          availableDecisions: ["allow_once", "allow_for_session", "deny"],
         },
       };
     }
@@ -97,19 +120,25 @@ export function decodeCodexInteractiveRequest(
       if (!parsed.success) {
         return null;
       }
+      const permissions = toPendingInteractionGrantablePermissionProfile(
+        parsed.data.permissions,
+      );
       return {
         requestId: request.id,
         method: request.method,
         providerThreadId: parsed.data.threadId,
         turnId: parsed.data.turnId,
         payload: {
-          kind: "permission_request",
-          itemId: parsed.data.itemId,
+          kind: "approval",
+          subject: {
+            kind: "permission_grant",
+            itemId: parsed.data.itemId,
+            toolName: null,
+            permissions,
+          },
           reason: parsed.data.reason,
-          toolName: null,
-          permissions: toPendingInteractionGrantablePermissionProfile(
-            parsed.data.permissions,
-          ),
+          grantablePermissions: null,
+          availableDecisions: ["allow_once", "allow_for_session", "deny"],
         },
       };
     }
@@ -122,45 +151,48 @@ export function buildCodexInteractiveResponse(
   args: BuildCodexInteractiveResponseArgs,
 ): CodexInteractiveResponse {
   switch (args.request.payload.kind) {
-    case "command_approval": {
-      if (args.resolution.kind !== "command_approval") {
-        throw new Error("Interactive response kind mismatch for command approval");
+    case "approval": {
+      if (args.resolution.kind !== "approval") {
+        throw new Error("Interactive response kind mismatch for approval");
       }
-      const response: CommandExecutionRequestApprovalResponse = {
-        decision: toCodexCommandApprovalDecision(args.resolution.decision),
-      };
-      return response;
+      switch (args.request.payload.subject.kind) {
+        case "command": {
+          const response: CommandExecutionRequestApprovalResponse = {
+            decision: toCodexCommandApprovalDecision(args.resolution.decision),
+          };
+          return response;
+        }
+        case "file_change": {
+          const response: FileChangeRequestApprovalResponse = {
+            decision:
+              pendingInteractionToCodexFileChangeApprovalDecision[
+                args.resolution.decision
+              ],
+          };
+          return response;
+        }
+        case "permission_grant": {
+          if (args.resolution.decision === "deny") {
+            const response: PermissionsRequestApprovalResponse = {
+              permissions: {},
+              scope: "turn",
+            };
+            return response;
+          }
+          const response: PermissionsRequestApprovalResponse = {
+            permissions: toCodexGrantedPermissionProfile(
+              args.resolution.grantedPermissions
+                ?? args.request.payload.subject.permissions,
+            ),
+            scope: args.resolution.decision === "allow_for_session"
+              ? "session"
+              : "turn",
+          };
+          return response;
+        }
+        default:
+          return assertNever(args.request.payload.subject);
+      }
     }
-    case "file_change_approval": {
-      if (args.resolution.kind !== "file_change_approval") {
-        throw new Error("Interactive response kind mismatch for file change approval");
-      }
-      const response: FileChangeRequestApprovalResponse = {
-        decision:
-          pendingInteractionToCodexFileChangeApprovalDecision[
-            args.resolution.decision
-          ],
-      };
-      return response;
-    }
-    case "permission_request": {
-      if (args.resolution.kind !== "permission_request") {
-        throw new Error("Interactive response kind mismatch for permission request");
-      }
-      if (args.resolution.decision === "deny") {
-        const response: PermissionsRequestApprovalResponse = {
-          permissions: {},
-          scope: "turn",
-        };
-        return response;
-      }
-      const response: PermissionsRequestApprovalResponse = {
-        permissions: toCodexGrantedPermissionProfile(args.resolution.permissions),
-        scope: args.resolution.scope,
-      };
-      return response;
-    }
-    default:
-      return assertNever(args.request.payload);
   }
 }

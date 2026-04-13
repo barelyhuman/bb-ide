@@ -183,6 +183,7 @@ export const claudePermissionRequestApprovalParamsSchema = z.object({
   turnId: z.string(),
   itemId: z.string(),
   toolName: z.string(),
+  input: z.record(z.string(), z.unknown()),
   reason: z.string().nullable(),
   permissions: claudeRequestedPermissionProfileInputSchema,
 });
