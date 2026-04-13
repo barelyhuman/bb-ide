@@ -5,6 +5,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
@@ -44,6 +45,7 @@ interface PromptOptionPickerProps<T extends string> {
   options: readonly PromptOption<T>[]
   onChange: (value: T) => void
   className?: string
+  contentClassName?: string
 }
 
 export function PromptOptionDisplay({
@@ -81,6 +83,7 @@ export function PromptOptionPicker<T extends string>({
   options,
   onChange,
   className,
+  contentClassName,
 }: PromptOptionPickerProps<T>) {
   const selectedOption = options.find((option) => option.value === value)
   const selectedIsWarning = selectedOption?.tone === "warning"
@@ -121,7 +124,10 @@ export function PromptOptionPicker<T extends string>({
           />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-52 max-w-96">
+      <DropdownMenuContent align="start" className={cn("min-w-52 max-w-96", contentClassName)} mobileTitle={label}>
+        <DropdownMenuLabel className="ui-text-xs text-muted-foreground">
+          {label}
+        </DropdownMenuLabel>
         {options.map((option) => {
           const OptionIcon = option.icon
           return (

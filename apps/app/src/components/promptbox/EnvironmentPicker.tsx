@@ -184,7 +184,7 @@ export function EnvironmentPicker({
           <ChevronDown className="size-3.5 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-52 max-w-80 divide-y [&>*+*]:pt-2 [&>*:not(:last-child)]:pb-2">
+      <DropdownMenuContent align="start" className="min-w-52 max-w-80 divide-y [&>*+*]:pt-2 [&>*:not(:last-child)]:pb-2" mobileTitle="Environment">
         {hostSections.map((section) => {
           const enabled = section.isConnected && section.hasSource;
           return (

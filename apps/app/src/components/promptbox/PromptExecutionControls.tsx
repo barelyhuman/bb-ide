@@ -44,7 +44,29 @@ export interface PromptExecutionControlsProps {
   model: PromptExecutionModelConfig;
   serviceTier?: PromptExecutionServiceTierConfig;
   reasoning: PromptExecutionReasoningConfig;
-  permission: PromptExecutionPermissionConfig;
+}
+
+export function PromptPermissionModePicker({
+  value,
+  options,
+  onChange,
+  supported,
+  className,
+}: PromptExecutionPermissionConfig & { className?: string }) {
+  if (!supported || options.length <= 1) {
+    return null;
+  }
+  const resolved = value ?? options[0]?.value ?? "full";
+  return (
+    <PromptOptionPicker
+      label="Permission mode"
+      value={resolved}
+      options={options}
+      onChange={onChange}
+      className={className}
+      contentClassName="max-w-72"
+    />
+  );
 }
 
 export function PromptExecutionControls({
@@ -52,9 +74,7 @@ export function PromptExecutionControls({
   model,
   serviceTier,
   reasoning,
-  permission,
 }: PromptExecutionControlsProps) {
-  const resolvedPermissionMode = permission.value ?? permission.options[0]?.value ?? "full";
   const handleProviderChange = provider.onChange ?? (() => {});
   const handleServiceTierChange = serviceTier?.onChange ?? (() => {});
 
@@ -96,18 +116,10 @@ export function PromptExecutionControls({
       ) : null}
       {reasoning.options.length > 0 ? (
         <PromptOptionPicker
-          label="Reasoning"
+          label="Reasoning level"
           value={reasoning.value}
           options={reasoning.options}
           onChange={reasoning.onChange}
-        />
-      ) : null}
-      {permission.supported && permission.options.length > 1 ? (
-        <PromptOptionPicker
-          label="Permissions"
-          value={resolvedPermissionMode}
-          options={permission.options}
-          onChange={permission.onChange}
         />
       ) : null}
     </>

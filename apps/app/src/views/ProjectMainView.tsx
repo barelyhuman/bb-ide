@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { PromptBox } from "@/components/promptbox/PromptBox";
-import { PromptExecutionControls } from "@/components/promptbox/PromptExecutionControls";
+import {
+  PromptExecutionControls,
+  PromptPermissionModePicker,
+} from "@/components/promptbox/PromptExecutionControls";
 import { EnvironmentPicker, parseEnvironmentValue } from "@/components/promptbox/EnvironmentPicker";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { PageShell } from "@/components/layout/PageShell";
@@ -297,12 +300,6 @@ export function ProjectMainView() {
                 options: reasoningOptions,
                 onChange: setReasoningLevel,
               }}
-              permission={{
-                value: permissionMode,
-                options: permissionModeOptions,
-                onChange: setPermissionMode,
-                supported: supportsPermissionModeSelection,
-              }}
             />
           }
         />
@@ -313,6 +310,12 @@ export function ProjectMainView() {
               onChange={setEnvironmentSelectionValue}
               projectId={projectId}
               sources={projectSources}
+            />
+            <PromptPermissionModePicker
+              value={permissionMode}
+              options={permissionModeOptions}
+              onChange={setPermissionMode}
+              supported={supportsPermissionModeSelection}
             />
           </div>
         </div>

@@ -36,19 +36,16 @@ const REASONING_LABELS: Record<ReasoningLevel, string> = {
 const PERMISSION_MODE_OPTIONS: PromptOption<PermissionMode>[] = [
   {
     value: "full",
-    label: "Full",
-    description: "No permission prompts. The agent can use full provider permissions.",
+    label: "Full Access",
     tone: "warning",
   },
   {
     value: "workspace-write",
     label: "Workspace Write",
-    description: "Can edit and run safely inside the workspace. Asks before leaving that boundary.",
   },
   {
     value: "readonly",
     label: "Readonly",
-    description: "Can inspect files. Asks before edits, shell commands, network, or other changes.",
   },
 ];
 

@@ -17,7 +17,10 @@ import {
   PromptOptionDisplay,
   type PromptOption,
 } from "@/components/promptbox/PromptOptionPicker";
-import { PromptExecutionControls } from "@/components/promptbox/PromptExecutionControls";
+import {
+  PromptExecutionControls,
+  PromptPermissionModePicker,
+} from "@/components/promptbox/PromptExecutionControls";
 import { Button } from "@/components/ui/button";
 import { ScrollToBottomButton } from "@/components/shared/ScrollToBottomButton";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
@@ -423,29 +426,34 @@ export function ThreadFollowUpComposer({
                 options: execution.reasoningOptions,
                 onChange: execution.onReasoningLevelChange,
               }}
-              permission={{
-                value: execution.permissionMode,
-                options: execution.permissionModeOptions,
-                onChange: execution.onPermissionModeChange,
-                supported: execution.supportsPermissionModeSelection,
-              }}
             />
           }
         />
         {environment.environmentLabel || environment.contextWindowUsage ? (
           <div className="mt-1 flex items-center justify-between gap-2 pl-[15px] pr-3.5">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5">
-              {environment.environmentLabel ? (
-                <PromptOptionDisplay
-                  label="Environment"
-                  value={environment.environmentLabel}
-                  icon={environment.environmentIcon}
-                  className="h-6"
-                />
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+              {environment.environmentLabel || environment.environmentHostConnected !== undefined ? (
+                <div className="flex min-w-0 items-center pr-1">
+                  {environment.environmentLabel ? (
+                    <PromptOptionDisplay
+                      label="Environment"
+                      value={environment.environmentLabel}
+                      icon={environment.environmentIcon}
+                      className="h-6"
+                    />
+                  ) : null}
+                  {environment.environmentHostConnected !== undefined ? (
+                    <HostStatusBadge connected={environment.environmentHostConnected} />
+                  ) : null}
+                </div>
               ) : null}
-              {environment.environmentHostConnected !== undefined ? (
-                <HostStatusBadge connected={environment.environmentHostConnected} />
-              ) : null}
+              <PromptPermissionModePicker
+                value={execution.permissionMode}
+                options={execution.permissionModeOptions}
+                onChange={execution.onPermissionModeChange}
+                supported={execution.supportsPermissionModeSelection}
+                className="h-6"
+              />
             </div>
             {environment.contextWindowUsage ? (
               <ThreadContextWindowIndicator usage={environment.contextWindowUsage} />
