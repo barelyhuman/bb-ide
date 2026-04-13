@@ -13,6 +13,7 @@ import {
 import type {
   PromptInput,
   ProvisioningTranscriptEntry,
+  SystemThreadProvisioningStatus,
   TurnRequestEventData,
   ThreadEventType,
   ResolvedThreadExecutionOptions,
@@ -145,7 +146,7 @@ export function appendThreadProvisioningEvent(
   args: {
     entries: ProvisioningTranscriptEntry[];
     environmentId: string;
-    status: "completed" | "failed" | "in_progress" | "started";
+    status: SystemThreadProvisioningStatus;
     threadId: string;
   },
 ): number {

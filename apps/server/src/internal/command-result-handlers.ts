@@ -12,7 +12,10 @@ import {
   hostDaemonCommandSchema,
   type HostDaemonCommandResultReport,
 } from "@bb/host-daemon-contract";
-import { systemThreadProvisioningEventDataSchema } from "@bb/domain";
+import {
+  type ProvisioningTranscriptEntry,
+  systemThreadProvisioningEventDataSchema,
+} from "@bb/domain";
 import type { AppDeps } from "../types.js";
 import {
   appendThreadProvisioningEvent,
@@ -95,6 +98,13 @@ type HasStreamedProvisioningTranscriptArgs = {
   threadId: string;
   afterSequence: number;
 };
+type ParsedStoredTurnRequestEvent = ReturnType<typeof parseStoredTurnRequestEvent>;
+
+const WORKSPACE_PROVISIONING_TRANSCRIPT_KEY_PREFIXES = [
+  "git-",
+  "setup-",
+  "workspace-",
+];
 
 function isWorkspaceMutationCommand(
   command: ParsedHostDaemonCommand,
@@ -119,9 +129,19 @@ function hasStreamedProvisioningTranscript(
     .all();
 
   return rows.some((row) => {
-    const eventData = systemThreadProvisioningEventDataSchema.parse(JSON.parse(row.data));
-    return eventData.entries.length > 0;
+    const eventData = systemThreadProvisioningEventDataSchema.parse(
+      JSON.parse(row.data),
+    );
+    return eventData.entries.some(isWorkspaceProvisioningTranscriptEntry);
   });
+}
+
+function isWorkspaceProvisioningTranscriptEntry(
+  entry: ProvisioningTranscriptEntry,
+): boolean {
+  return WORKSPACE_PROVISIONING_TRANSCRIPT_KEY_PREFIXES.some((prefix) =>
+    entry.key.startsWith(prefix)
+  );
 }
 
 async function handleProvisionCommandResult(
@@ -171,6 +191,39 @@ async function handleProvisionCommandResult(
         continue;
       }
 
+      let parsedStartEvent: ParsedStoredTurnRequestEvent | null = null;
+      if (thread.status === "created" || thread.status === "provisioning") {
+        const startEvent = deps.db
+          .select({
+            data: events.data,
+            sequence: events.sequence,
+            threadId: events.threadId,
+            type: events.type,
+          })
+          .from(events)
+          .where(
+            and(
+              eq(events.threadId, thread.id),
+              or(
+                eq(events.type, "client/thread/start"),
+                eq(events.type, "client/turn/requested"),
+              ),
+            ),
+          )
+          .orderBy(desc(events.sequence))
+          .limit(1)
+          .get();
+        parsedStartEvent = startEvent
+          ? parseStoredTurnRequestEvent({
+              data: startEvent.data,
+              sequence: startEvent.sequence,
+              threadId: startEvent.threadId,
+              type: startEvent.type,
+            })
+          : null;
+      }
+
+      const willStartThread = Boolean(parsedStartEvent?.input?.length);
       const isInitiator = thread.id === command.initiator?.threadId;
       const hasStreamedTranscript = isInitiator && command.initiator
         ? hasStreamedProvisioningTranscript({
@@ -181,51 +234,17 @@ async function handleProvisionCommandResult(
         : false;
       const entries = hasStreamedTranscript
         ? []
-        : report.result.transcript.length > 0
+        : isInitiator && report.result.transcript.length > 0
           ? report.result.transcript
           : cwdBranchEntries;
       const workspaceReadyEventSequence = appendThreadProvisioningEvent(deps, {
         threadId: thread.id,
         environmentId: command.environmentId,
-        status: "in_progress",
+        status: willStartThread ? "active" : "completed",
         entries,
       });
 
-      if (thread.status !== "created" && thread.status !== "provisioning") {
-        continue;
-      }
-
-      const startEvent = deps.db
-        .select({
-          data: events.data,
-          sequence: events.sequence,
-          threadId: events.threadId,
-          type: events.type,
-        })
-        .from(events)
-        .where(
-          and(
-            eq(events.threadId, thread.id),
-            or(
-              eq(events.type, "client/thread/start"),
-              eq(events.type, "client/turn/requested"),
-            ),
-          ),
-        )
-        .orderBy(desc(events.sequence))
-        .limit(1)
-        .get();
-      if (!startEvent) {
-        continue;
-      }
-
-      const parsedStartEvent = parseStoredTurnRequestEvent({
-        data: startEvent.data,
-        sequence: startEvent.sequence,
-        threadId: startEvent.threadId,
-        type: startEvent.type,
-      });
-      if (!parsedStartEvent.input || parsedStartEvent.input.length === 0) {
+      if (!parsedStartEvent?.input || parsedStartEvent.input.length === 0) {
         continue;
       }
 
@@ -369,6 +388,10 @@ function handleThreadStartResult(
   }
 
   if (!report.ok) {
+    failThreadStartForCommand(deps, {
+      commandId: commandRow.id,
+      failureReason: report.errorMessage,
+    });
     appendThreadProvisioningEvent(deps, {
       threadId: thread.id,
       environmentId: command.environmentId,
@@ -383,10 +406,6 @@ function handleThreadStartResult(
           metadata: { durationMs: Date.now() - commandRow.createdAt },
         },
       ],
-    });
-    failThreadStartForCommand(deps, {
-      commandId: commandRow.id,
-      failureReason: report.errorMessage,
     });
     return;
   }

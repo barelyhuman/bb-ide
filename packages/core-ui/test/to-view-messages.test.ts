@@ -814,7 +814,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "system/thread-provisioning",
         data: {
-          status: "started",
+          status: "active",
           environmentId: "env-1",
           entries: [{ type: "step", key: "provision", text: "Creating worktree", status: "started" }],
         },
@@ -826,7 +826,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "system/thread-provisioning",
         data: {
-          status: "in_progress",
+          status: "active",
           environmentId: "env-1",
           entries: [{ type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" }],
         },
@@ -2432,7 +2432,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "system/thread-provisioning",
         data: {
-          status: "started",
+          status: "active",
           environmentId: "env-1",
           entries: [{ type: "step", key: "provision", text: "Creating worktree", status: "started" }],
         },
@@ -2444,7 +2444,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "system/thread-provisioning",
         data: {
-          status: "in_progress",
+          status: "active",
           environmentId: "env-1",
           entries: [{ type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" }],
         },
@@ -2481,7 +2481,7 @@ describe("toViewMessages replay coverage", () => {
     expect(ops[2]?.title).toBe("Provisioned thread");
   });
 
-  it("projects provisioning in_progress events as pending operations", () => {
+  it("projects active provisioning events as pending operations", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-1",
@@ -2489,7 +2489,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "system/thread-provisioning",
         data: {
-          status: "in_progress",
+          status: "active",
           environmentId: "env-1",
           entries: [{ type: "step", key: "session", text: "Starting agent session", status: "started" }],
         },
@@ -2519,7 +2519,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 1,
         type: "system/thread-provisioning",
         data: {
-          status: "in_progress",
+          status: "active",
           environmentId: "env-1",
           entries: [
             { type: "step", key: "branch", text: "Using branch: bb/thread-123 (abcdef1)", status: "completed" },
@@ -2939,7 +2939,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "system/thread-provisioning",
         data: {
-          status: "started",
+          status: "active",
           environmentId: "env-1",
           entries: [{ type: "step", key: "provision", text: "Creating worktree", status: "started" }],
         },
@@ -3033,7 +3033,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "system/thread-provisioning",
         data: {
-          status: "started",
+          status: "active",
           environmentId: "env-1",
           entries: [{ type: "step", key: "provision", text: "Provisioning thread", status: "started" }],
         },
@@ -3404,7 +3404,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "system/thread-provisioning",
         data: {
-          status: "started",
+          status: "active",
           environmentId: "env-1",
           entries: [{ type: "step", key: "provision", text: "Creating worktree", status: "started" }],
         },
@@ -3519,7 +3519,7 @@ describe("toViewMessages replay coverage", () => {
         seq: 2,
         type: "system/thread-provisioning",
         data: {
-          status: "started",
+          status: "active",
           environmentId: "env-1",
           entries: [{ type: "step", key: "provision", text: "Provisioning thread", status: "started" }],
         },

@@ -101,8 +101,20 @@ export type ProvisioningTranscriptEntry = z.infer<
   typeof provisioningTranscriptEntrySchema
 >;
 
+export const systemThreadProvisioningStatusValues = [
+  "active",
+  "completed",
+  "failed",
+] as const;
+export const systemThreadProvisioningStatusSchema = z.enum(
+  systemThreadProvisioningStatusValues,
+);
+export type SystemThreadProvisioningStatus = z.infer<
+  typeof systemThreadProvisioningStatusSchema
+>;
+
 export const systemThreadProvisioningEventDataSchema = z.object({
-  status: z.enum(["started", "in_progress", "completed", "failed"]),
+  status: systemThreadProvisioningStatusSchema,
   environmentId: z.string(),
   entries: z.array(provisioningTranscriptEntrySchema),
 });

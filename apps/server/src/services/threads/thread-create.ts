@@ -142,9 +142,6 @@ function metadataCompletedText(args: MetadataCompletedTextArgs): string {
   if (hasBranchName) {
     return "Generated branch name";
   }
-  if (args.outcome.reason === "timeout") {
-    return "Using fallback branch name after 5s";
-  }
   return "Using fallback branch name";
 }
 
@@ -156,7 +153,7 @@ async function resolveManagedThreadMetadata(
   appendThreadProvisioningEvent(deps, {
     threadId: args.threadId,
     environmentId: args.environmentId,
-    status: "in_progress",
+    status: "active",
     entries: [
       {
         type: "step",
@@ -180,7 +177,7 @@ async function resolveManagedThreadMetadata(
   const metadataCompletedSequence = appendThreadProvisioningEvent(deps, {
     threadId: args.threadId,
     environmentId: args.environmentId,
-    status: "in_progress",
+    status: "active",
     entries: [
       {
         type: "step",
@@ -274,7 +271,7 @@ async function createThreadInEnvironment(
       appendThreadProvisioningEvent(deps, {
         threadId: thread.id,
         environmentId: args.environment.id,
-        status: "started",
+        status: "active",
         entries: args.provisioningEntries ?? [
           {
             type: "step",
@@ -296,7 +293,7 @@ async function createThreadInEnvironment(
         latestSequence = appendThreadProvisioningEvent(deps, {
           threadId: thread.id,
           environmentId: args.environment.id,
-          status: "completed",
+          status: "active",
           entries: cwdEntries,
         });
       }
@@ -622,7 +619,7 @@ export async function createThreadFromRequest(
   const provisionEventSequence = appendThreadProvisioningEvent(deps, {
     threadId: thread.id,
     environmentId: environment.id,
-    status: "started",
+    status: "active",
     entries: provisioningEntries,
   });
 

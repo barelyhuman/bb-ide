@@ -316,21 +316,24 @@ export async function requestThreadStart(
     return;
   }
 
-  const agentSessionStartedAt = Date.now();
-  const eventSequence = appendThreadProvisioningEvent(deps, {
-    threadId: args.thread.id,
-    environmentId: args.environment.id,
-    status: "in_progress",
-    entries: [
-      {
-        type: "step",
-        key: "agent-session-started",
-        text: "Starting agent session",
-        status: "started",
-        startedAt: agentSessionStartedAt,
-      },
-    ],
-  });
+  let eventSequence = args.eventSequence;
+  if (args.thread.status === "created" || args.thread.status === "provisioning") {
+    const agentSessionStartedAt = Date.now();
+    eventSequence = appendThreadProvisioningEvent(deps, {
+      threadId: args.thread.id,
+      environmentId: args.environment.id,
+      status: "active",
+      entries: [
+        {
+          type: "step",
+          key: "agent-session-started",
+          text: "Starting agent session",
+          status: "started",
+          startedAt: agentSessionStartedAt,
+        },
+      ],
+    });
+  }
 
   const command = await buildThreadStartCommand(deps, {
     ...args,

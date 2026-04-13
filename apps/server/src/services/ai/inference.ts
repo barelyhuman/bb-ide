@@ -49,11 +49,14 @@ export interface InferenceTimeoutErrorArgs {
   timeoutMs: number;
 }
 
+/**
+ * Raised when an inference request exceeds its configured timeout budget.
+ */
 export class InferenceTimeoutError extends Error {
   readonly timeoutMs: number;
 
   constructor(args: InferenceTimeoutErrorArgs) {
-    super("Inference request timed out");
+    super(`Inference request timed out after ${args.timeoutMs}ms`);
     this.name = "InferenceTimeoutError";
     this.timeoutMs = args.timeoutMs;
   }

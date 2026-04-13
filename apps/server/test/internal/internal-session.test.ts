@@ -910,7 +910,7 @@ describe("internal session routes", () => {
           eventData.entries.some((entry) => entry.key === "git-worktree-command")
         );
       expect(transcriptEvents).toHaveLength(1);
-      expect(transcriptEvents[0]?.status).toBe("in_progress");
+      expect(transcriptEvents[0]?.status).toBe("active");
       expect(transcriptEvents[0]?.entries).toEqual(transcriptEntries);
     } finally {
       await harness.cleanup();
@@ -942,7 +942,7 @@ describe("internal session routes", () => {
         sequence: 11,
         type: "system/thread-provisioning",
         data: {
-          status: "in_progress",
+          status: "active",
           environmentId: environment.id,
           entries: [
             { type: "step", key: "git-worktree-started", text: "Creating worktree", status: "started" },
@@ -1004,7 +1004,7 @@ describe("internal session routes", () => {
       expect(provisioningEvents).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            status: "in_progress",
+            status: "completed",
             entries: [],
           }),
         ]),
@@ -1358,22 +1358,29 @@ describe("internal session routes", () => {
           expect.objectContaining({ key: "workspace-branch", text: "Using branch: bb/reprovision-filter (abc1234)" }),
         ]),
       );
-      // Sibling gets the same environment-level transcript.
+      // Sibling gets its own concise workspace summary, not the initiator's daemon transcript.
       const siblingEvents = harness.db
         .select({ data: events.data })
         .from(events)
         .where(and(eq(events.threadId, idleSibling.id), eq(events.type, "system/thread-provisioning")))
         .all()
-        .map((row) => systemThreadProvisioningEventDataSchema.parse(JSON.parse(row.data)))
-        .filter((eventData) =>
+        .map((row) => systemThreadProvisioningEventDataSchema.parse(JSON.parse(row.data)));
+      expect(
+        siblingEvents.some((eventData) =>
           eventData.entries.some((entry) => entry.key === "git-worktree-command")
-        );
+        ),
+      ).toBe(false);
+      const siblingWorkspaceEvents = siblingEvents.filter((eventData) =>
+        eventData.entries.some((entry) => entry.key === "workspace-path")
+      );
+      expect(siblingWorkspaceEvents).toHaveLength(1);
+      expect(siblingWorkspaceEvents[0].status).toBe("completed");
       expect(siblingEvents).toHaveLength(1);
-      expect(siblingEvents[0].entries).toHaveLength(4);
-      expect(siblingEvents[0].entries).toEqual(
+      expect(siblingWorkspaceEvents[0].entries).toHaveLength(2);
+      expect(siblingWorkspaceEvents[0].entries).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ key: "workspace-target", text: "Using workspace: /tmp/reprovision-filter" }),
-          expect.objectContaining({ key: "workspace-branch", text: "Using branch: bb/reprovision-filter (abc1234)" }),
+          expect.objectContaining({ key: "workspace-path", text: "Using workspace: /tmp/reprovision-filter" }),
+          expect.objectContaining({ key: "workspace-branch", text: "Using branch: bb/reprovision-filter" }),
         ]),
       );
 

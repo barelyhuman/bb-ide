@@ -21,6 +21,7 @@ import type {
   Environment,
   EnvironmentOperationKind,
   ProvisioningTranscriptEntry,
+  SystemThreadProvisioningStatus,
   Thread,
 } from "@bb/domain";
 import {
@@ -118,7 +119,7 @@ function appendThreadProvisioningEventToEnvironmentThreads(
   args: {
     entries: ProvisioningTranscriptEntry[];
     environmentId: string;
-    status: "completed" | "failed" | "in_progress" | "started";
+    status: SystemThreadProvisioningStatus;
     threads?: LiveEnvironmentThread[];
   },
 ): void {
@@ -409,7 +410,7 @@ async function bootstrapSandboxProvisioning(
 ): Promise<void> {
   appendThreadProvisioningEventToEnvironmentThreads(deps, {
     environmentId: args.environment.id,
-    status: "in_progress",
+    status: "active",
     entries: [
       {
         type: "step",
@@ -428,7 +429,7 @@ async function bootstrapSandboxProvisioning(
         onProgress: (event) => {
           appendThreadProvisioningEventToEnvironmentThreads(deps, {
             environmentId: args.environment.id,
-            status: "in_progress",
+            status: "active",
             entries: [sandboxHostProgressEntry(event)],
           });
         },
@@ -437,7 +438,7 @@ async function bootstrapSandboxProvisioning(
 
     appendThreadProvisioningEventToEnvironmentThreads(deps, {
       environmentId: args.environment.id,
-      status: "in_progress",
+      status: "active",
       entries: [
         {
           type: "step",
@@ -611,7 +612,7 @@ export async function queueManagedEnvironmentReprovision(
   const provisionEventSequence = appendThreadProvisioningEvent(deps, {
     threadId: args.thread.id,
     environmentId: args.environment.id,
-    status: "started",
+    status: "active",
     entries: [
       {
         type: "step",

@@ -1,6 +1,7 @@
 import type {
   ThreadEvent,
   ThreadEventPlanStepStatus,
+  SystemThreadProvisioningStatus,
   ViewThreadOperationKind,
   ViewThreadOperationStatus,
 } from "@bb/domain";
@@ -109,11 +110,10 @@ export function threadOperationStatus(
 }
 
 function provisioningOperationStatus(
-  status: "started" | "in_progress" | "completed" | "failed",
+  status: SystemThreadProvisioningStatus,
 ): ViewOperationMessage["status"] {
   switch (status) {
-    case "started":
-    case "in_progress":
+    case "active":
       return "pending";
     case "completed":
       return "completed";
@@ -246,8 +246,7 @@ export function parseOperationMessage(
     const transcript = readProvisioningTranscript(decoded.entries);
     const title = (() => {
       switch (status) {
-        case "started":
-        case "in_progress":
+        case "active":
           return "Provisioning thread";
         case "completed":
           return "Provisioned thread";

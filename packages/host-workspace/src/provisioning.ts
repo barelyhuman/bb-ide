@@ -281,7 +281,6 @@ export async function runSetupScript(
 ): Promise<{ ran: boolean; exitCode?: number; output?: string }> {
   const scriptPath = await resolveSetupScriptPath(args.workspacePath);
   if (!scriptPath) {
-    emitStep({ onProgress: args.onProgress, key: "setup-skipped", text: "No .bb-env-setup.sh found", status: "completed" });
     return { ran: false };
   }
 

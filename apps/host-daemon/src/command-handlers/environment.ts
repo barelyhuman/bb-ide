@@ -111,7 +111,7 @@ function buildOnProgress(args: BuildOnProgressArgs): ProvisionProgressCallback {
       event: {
         type: "system/thread-provisioning",
         threadId,
-        status: "in_progress",
+        status: "active",
         environmentId: command.environmentId,
         entries: [entry],
       },
