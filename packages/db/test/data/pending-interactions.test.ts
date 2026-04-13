@@ -64,7 +64,6 @@ function commandApprovalPayload(command: string, itemId: string): string {
       cwd: "/tmp/project",
     },
     reason: null,
-    grantablePermissions: null,
     availableDecisions: ["allow_once", "allow_for_session", "deny"],
   });
 }
@@ -77,13 +76,6 @@ function fileChangeApprovalPayload(itemId: string): string {
       itemId,
     },
     reason: "Needs file write approval",
-    grantablePermissions: {
-      network: null,
-      fileSystem: {
-        read: [],
-        write: ["/tmp/project"],
-      },
-    },
     availableDecisions: ["allow_once", "allow_for_session", "deny"],
   });
 }

@@ -233,16 +233,19 @@ function resolveClaudeGrantedPermissions(
   payload: ApprovalPendingInteractionPayload,
   grantedPermissions: PendingInteractionGrantedPermissionProfile | null,
 ): PendingInteractionGrantedPermissionProfile {
-  if (grantedPermissions) {
-    return grantedPermissions;
+  switch (payload.subject.kind) {
+    case "command":
+    case "file_change":
+      return {
+        network: null,
+        fileSystem: null,
+      };
+    case "permission_grant":
+      if (grantedPermissions === null) {
+        throw new Error("Permission grant resolution must include granted permissions");
+      }
+      return grantedPermissions;
   }
-  if (payload.subject.kind === "permission_grant") {
-    return payload.subject.permissions;
-  }
-  return {
-    network: null,
-    fileSystem: null,
-  };
 }
 
 function translateClaudeToolUseItem(
@@ -1046,7 +1049,6 @@ export function createClaudeCodeProviderAdapter(
               kind: "approval",
               subject: buildClaudeApprovalSubject(parsed.data),
               reason: parsed.data.reason,
-              grantablePermissions: parsed.data.permissions,
               availableDecisions: buildClaudeApprovalAvailableDecisions(parsed.data),
             },
           };

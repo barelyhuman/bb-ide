@@ -120,12 +120,6 @@ function printInteraction(interaction: PendingInteraction): void {
       if (interaction.payload.reason) {
         console.log(`  Prompt: ${interaction.payload.reason}`);
       }
-      if (
-        interaction.payload.subject.kind !== "permission_grant"
-        && interaction.payload.grantablePermissions
-      ) {
-        printRequestedPermissions(interaction.payload.grantablePermissions);
-      }
       console.log(
         `  Decisions: ${interaction.payload.availableDecisions.map(formatPendingInteractionCommandApprovalDecision).join(", ")}`,
       );
@@ -391,7 +385,7 @@ export function registerInteractionCommands(
 
   interactions
     .command("approve <interactionId> [id]")
-    .description("Approve a command or file-change interaction for the current session")
+    .description("Approve a command or file-change interaction for this turn")
     .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
     .action(action(async (

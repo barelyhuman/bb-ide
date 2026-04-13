@@ -59,7 +59,6 @@ function createCommandApprovalInteraction(): PendingInteraction {
         cwd: "/tmp/project",
       },
       reason: "Run a command that modifies the repo",
-      grantablePermissions: null,
       availableDecisions: ["allow_once", "allow_for_session", "deny"],
     },
   };
@@ -87,13 +86,6 @@ function createFileChangeInteraction(): PendingInteraction {
         itemId: "item_2",
       },
       reason: "Write generated files",
-      grantablePermissions: {
-        network: null,
-        fileSystem: {
-          read: [],
-          write: ["/tmp/project"],
-        },
-      },
       availableDecisions: ["allow_once", "allow_for_session", "deny"],
     },
   };
@@ -117,7 +109,6 @@ function createPermissionRequestInteraction(): PendingInteraction {
         },
       },
       reason: "Need repo write access",
-      grantablePermissions: null,
       availableDecisions: ["allow_once", "allow_for_session", "deny"],
     },
   };

@@ -1429,10 +1429,6 @@ describe("codex provider adapter", () => {
           cwd: "/tmp/project",
         },
         reason: "Needs approval",
-        grantablePermissions: {
-          network: { enabled: true },
-          fileSystem: null,
-        },
         availableDecisions: ["allow_once", "allow_for_session", "deny"],
       },
     });
@@ -1506,10 +1502,6 @@ describe("codex provider adapter", () => {
           cwd: "/tmp/project",
         },
         reason: "Needs approval",
-        grantablePermissions: {
-          network: null,
-          fileSystem: null,
-        },
         availableDecisions: ["allow_once", "deny"],
       },
     });
@@ -1548,10 +1540,7 @@ describe("codex provider adapter", () => {
       }),
     ).toMatchObject({
       payload: {
-        grantablePermissions: {
-          network: null,
-          fileSystem: null,
-        },
+        kind: "approval",
       },
     });
   });
@@ -1589,10 +1578,7 @@ describe("codex provider adapter", () => {
       }),
     ).toMatchObject({
       payload: {
-        grantablePermissions: {
-          network: null,
-          fileSystem: null,
-        },
+        kind: "approval",
       },
     });
   });
@@ -1650,7 +1636,6 @@ describe("codex provider adapter", () => {
           cwd: "/tmp/project",
         },
         reason: "Needs approval",
-        grantablePermissions: null,
         availableDecisions: ["deny"],
       },
     });
@@ -1683,13 +1668,6 @@ describe("codex provider adapter", () => {
           itemId: "item-file-change",
         },
         reason: "Review generated file changes",
-        grantablePermissions: {
-          network: null,
-          fileSystem: {
-            read: [],
-            write: ["/tmp/project"],
-          },
-        },
         availableDecisions: ["allow_once", "allow_for_session", "deny"],
       },
     });
@@ -1736,7 +1714,6 @@ describe("codex provider adapter", () => {
           },
         },
         reason: "Need network access",
-        grantablePermissions: null,
         availableDecisions: ["allow_once", "allow_for_session", "deny"],
       },
     });
@@ -1760,7 +1737,6 @@ describe("codex provider adapter", () => {
               cwd: "/tmp/project",
             },
             reason: null,
-            grantablePermissions: null,
             availableDecisions: ["allow_once", "allow_for_session", "deny"],
           },
         },
@@ -1793,7 +1769,6 @@ describe("codex provider adapter", () => {
               cwd: "/tmp/project",
             },
             reason: null,
-            grantablePermissions: null,
             availableDecisions: ["allow_once", "deny"],
           },
         },
@@ -1823,7 +1798,6 @@ describe("codex provider adapter", () => {
               itemId: "item-file-change",
             },
             reason: "Review generated file changes",
-            grantablePermissions: null,
             availableDecisions: ["allow_once", "allow_for_session", "deny"],
           },
         },
@@ -1862,7 +1836,6 @@ describe("codex provider adapter", () => {
               },
             },
             reason: "Need network access",
-            grantablePermissions: null,
             availableDecisions: ["allow_once", "allow_for_session", "deny"],
           },
         },

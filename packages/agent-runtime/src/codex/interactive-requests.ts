@@ -74,9 +74,6 @@ export function decodeCodexInteractiveRequest(
             cwd: parsed.data.cwd ?? null,
           },
           reason: parsed.data.reason ?? null,
-          grantablePermissions: parsed.data.additionalPermissions
-            ? toPendingInteractionGrantablePermissionProfile(parsed.data.additionalPermissions)
-            : null,
           availableDecisions,
         },
       };
@@ -100,15 +97,6 @@ export function decodeCodexInteractiveRequest(
             itemId: parsed.data.itemId,
           },
           reason: parsed.data.reason ?? null,
-          grantablePermissions: parsed.data.grantRoot
-            ? {
-                network: null,
-                fileSystem: {
-                  read: [],
-                  write: [parsed.data.grantRoot],
-                },
-              }
-            : null,
           availableDecisions: ["allow_once", "allow_for_session", "deny"],
         },
       };
@@ -137,7 +125,6 @@ export function decodeCodexInteractiveRequest(
             permissions,
           },
           reason: parsed.data.reason,
-          grantablePermissions: null,
           availableDecisions: ["allow_once", "allow_for_session", "deny"],
         },
       };

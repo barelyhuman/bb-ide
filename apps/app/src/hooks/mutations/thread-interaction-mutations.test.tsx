@@ -39,7 +39,6 @@ function createResolvingInteraction(): PendingInteraction {
         itemId: "item_1",
       },
       reason: "Needs file write approval",
-      grantablePermissions: null,
       availableDecisions: ["allow_once", "deny"],
     },
     resolution: {

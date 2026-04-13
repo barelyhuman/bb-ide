@@ -104,7 +104,6 @@ function makePendingInteraction(
         cwd: "/tmp/project",
       },
       reason: "Approve command",
-      grantablePermissions: null,
       availableDecisions: ["allow_once", "allow_for_session", "deny"],
     },
     resolution: null,
@@ -132,7 +131,6 @@ function makeCommandApprovalPayload(
       cwd: "/tmp/project",
     },
     reason: "Approve command",
-    grantablePermissions: null,
     availableDecisions,
   };
 }
@@ -145,13 +143,6 @@ function makeFileChangeApprovalPayload(itemId: string): PendingInteraction["payl
       itemId,
     },
     reason: "Approve file changes",
-    grantablePermissions: {
-      network: null,
-      fileSystem: {
-        read: [],
-        write: ["/tmp/project"],
-      },
-    },
     availableDecisions: ["allow_once", "allow_for_session", "deny"],
   };
 }
@@ -172,7 +163,6 @@ function makePermissionGrantApprovalPayload(itemId: string): PendingInteraction[
       },
     },
     reason: "Grant workspace access",
-    grantablePermissions: null,
     availableDecisions: ["allow_once", "allow_for_session", "deny"],
   };
 }

@@ -736,13 +736,6 @@ describe("public thread interaction routes", () => {
           payload: createFileChangeApprovalPayload({
             itemId: "item-file-change",
             reason: "Approve file changes",
-            grantablePermissions: {
-              network: null,
-              fileSystem: {
-                read: [],
-                write: ["/tmp/project"],
-              },
-            },
           }),
         },
         session.id,
@@ -758,26 +751,14 @@ describe("public thread interaction routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify(createAllowForSessionResolution({
-            network: null,
-            fileSystem: {
-              read: [],
-              write: ["/tmp/project"],
-            },
-          })),
+          body: JSON.stringify(createAllowForSessionResolution()),
         },
       );
       expect(fileChangeResponse.status).toBe(200);
       await expect(readJson(fileChangeResponse)).resolves.toMatchObject({
         id: fileChange.interaction.id,
         status: "resolving",
-        resolution: createAllowForSessionResolution({
-          network: null,
-          fileSystem: {
-            read: [],
-            write: ["/tmp/project"],
-          },
-        }),
+        resolution: createAllowForSessionResolution(),
       });
 
     } finally {

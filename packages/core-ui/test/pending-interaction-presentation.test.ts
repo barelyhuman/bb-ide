@@ -50,7 +50,6 @@ describe("pending interaction presentation", () => {
         cwd: "/tmp/project",
       },
       reason: "Needs approval to publish",
-      grantablePermissions: null,
       availableDecisions: ["allow_once", "deny"],
     });
 
@@ -84,7 +83,6 @@ describe("pending interaction presentation", () => {
         },
       },
       reason: null,
-      grantablePermissions: null,
       availableDecisions: ["allow_once", "allow_for_session", "deny"],
     });
 

@@ -466,10 +466,6 @@ describe("claude-code provider adapter", () => {
           },
         },
         reason: "Needs approval",
-        grantablePermissions: {
-          network: { enabled: true },
-          fileSystem: null,
-        },
         availableDecisions: ["allow_once", "allow_for_session", "deny"],
       },
     });
@@ -523,10 +519,6 @@ describe("claude-code provider adapter", () => {
               },
             },
             reason: "Needs network",
-            grantablePermissions: {
-              network: { enabled: true },
-              fileSystem: null,
-            },
             availableDecisions: ["allow_once", "allow_for_session", "deny"],
           },
         },
@@ -573,10 +565,6 @@ describe("claude-code provider adapter", () => {
               cwd: null,
             },
             reason: "Needs approval",
-            grantablePermissions: {
-              network: null,
-              fileSystem: null,
-            },
             availableDecisions: ["allow_once", "deny"],
           },
         },
@@ -595,7 +583,7 @@ describe("claude-code provider adapter", () => {
     });
   });
 
-  it("builds Claude directory updates for file-system session grants", () => {
+  it("does not build Claude directory updates for file-change approvals", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
     expect(
@@ -613,13 +601,6 @@ describe("claude-code provider adapter", () => {
               itemId: "toolu_3d",
             },
             reason: "Needs file access",
-            grantablePermissions: {
-              network: null,
-              fileSystem: {
-                read: ["/tmp/project"],
-                write: ["/tmp/project"],
-              },
-            },
             availableDecisions: ["allow_once", "allow_for_session", "deny"],
           },
         },
@@ -638,13 +619,6 @@ describe("claude-code provider adapter", () => {
     ).toEqual({
       kind: "permission_request",
       behavior: "allow",
-      updatedPermissions: [
-        {
-          type: "addDirectories",
-          directories: ["/tmp/project"],
-          destination: "session",
-        },
-      ],
     });
   });
 
@@ -666,13 +640,6 @@ describe("claude-code provider adapter", () => {
               itemId: "toolu_3e",
             },
             reason: "Needs file access",
-            grantablePermissions: {
-              network: null,
-              fileSystem: {
-                read: ["/tmp/project"],
-                write: ["/tmp/project"],
-              },
-            },
             availableDecisions: ["allow_once", "allow_for_session", "deny"],
           },
         },
@@ -708,10 +675,6 @@ describe("claude-code provider adapter", () => {
               cwd: null,
             },
             reason: "Needs approval",
-            grantablePermissions: {
-              network: null,
-              fileSystem: null,
-            },
             availableDecisions: ["allow_once", "deny"],
           },
         },

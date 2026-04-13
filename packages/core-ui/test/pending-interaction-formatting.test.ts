@@ -101,10 +101,6 @@ describe("pending interaction formatting", () => {
         cwd: "/tmp/project",
       },
       reason: "Needs network",
-      grantablePermissions: {
-        network: { enabled: true },
-        fileSystem: null,
-      },
       availableDecisions: ["allow_once", "allow_for_session", "deny"],
     });
 
@@ -130,7 +126,6 @@ describe("pending interaction formatting", () => {
         },
       },
       reason: "Needs network",
-      grantablePermissions: null,
       availableDecisions: ["allow_once", "allow_for_session", "deny"],
     });
 

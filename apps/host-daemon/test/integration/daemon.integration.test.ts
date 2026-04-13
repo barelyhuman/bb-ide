@@ -197,7 +197,6 @@ function createInteractiveRequestAdapter(scriptPath: string): ProviderAdapter {
             cwd: typeof params.cwd === "string" ? params.cwd : null,
           },
           reason: typeof params.reason === "string" ? params.reason : null,
-          grantablePermissions: null,
           availableDecisions: ["allow_once", "allow_for_session", "deny"],
         },
       };

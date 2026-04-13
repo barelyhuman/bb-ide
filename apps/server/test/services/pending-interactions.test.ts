@@ -352,13 +352,6 @@ describe("pending interaction lifecycle", () => {
             payload: createFileChangeApprovalPayload({
               itemId: "item-concurrent-reject-2",
               reason: "Needs file write approval",
-              grantablePermissions: {
-                network: null,
-                fileSystem: {
-                  read: [],
-                  write: ["/tmp/project"],
-                },
-              },
             }),
           },
           session.id,

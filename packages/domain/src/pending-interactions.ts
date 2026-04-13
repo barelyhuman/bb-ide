@@ -187,7 +187,6 @@ export const approvalPendingInteractionPayloadSchema = z.object({
   kind: z.literal("approval"),
   subject: pendingInteractionApprovalSubjectSchema,
   reason: z.string().nullable(),
-  grantablePermissions: pendingInteractionGrantablePermissionProfileSchema.nullable(),
   availableDecisions: z.array(pendingInteractionApprovalDecisionSchema).min(1),
 });
 export type ApprovalPendingInteractionPayload = z.infer<

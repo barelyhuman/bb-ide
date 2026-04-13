@@ -792,7 +792,6 @@ describe("host-daemon session schemas", () => {
               cwd: "/tmp/project",
             },
             reason: "Needs approval",
-            grantablePermissions: null,
             availableDecisions: ["allow_once", "deny"],
           },
         },

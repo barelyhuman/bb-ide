@@ -13,14 +13,12 @@ type CommandApprovalPayloadOptions = {
   reason?: string | null;
   command?: string;
   cwd?: string | null;
-  grantablePermissions?: PendingInteractionGrantablePermissionProfile | null;
   availableDecisions?: PendingInteractionApprovalDecision[];
 };
 
 type FileChangeApprovalPayloadOptions = {
   itemId?: string;
   reason?: string | null;
-  grantablePermissions?: PendingInteractionGrantablePermissionProfile | null;
   availableDecisions?: PendingInteractionApprovalDecision[];
 };
 
@@ -55,7 +53,6 @@ export function createCommandApprovalPayload(
       cwd: options.cwd ?? "/tmp/project",
     },
     reason: options.reason ?? "Needs approval",
-    grantablePermissions: options.grantablePermissions ?? null,
     availableDecisions: options.availableDecisions ?? defaultAvailableDecisions,
   };
 }
@@ -70,7 +67,6 @@ export function createFileChangeApprovalPayload(
       itemId: options.itemId ?? "item-file-change-approval",
     },
     reason: options.reason ?? "Approve file edit",
-    grantablePermissions: options.grantablePermissions ?? null,
     availableDecisions: options.availableDecisions ?? defaultAvailableDecisions,
   };
 }
@@ -88,7 +84,6 @@ export function createPermissionGrantApprovalPayload(
       permissions,
     },
     reason: options.reason ?? "Grant permission",
-    grantablePermissions: null,
     availableDecisions: options.availableDecisions ?? defaultAvailableDecisions,
   };
 }

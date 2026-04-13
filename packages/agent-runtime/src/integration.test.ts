@@ -312,7 +312,7 @@ async function createApprovalResolution(
         grantedPermissions:
           request.payload.subject.kind === "permission_grant"
             ? request.payload.subject.permissions
-            : request.payload.grantablePermissions,
+            : null,
       };
     }
   }
@@ -1321,7 +1321,6 @@ describe("interactive request scenarios", () => {
         kind: "file_change",
         itemId: expect.any(String),
       });
-      expect(fileChangeApproval.payload.grantablePermissions).toBeNull();
       expect(fileChangeApproval.payload.availableDecisions).toContain("allow_once");
       expect(Object.keys(fileChangeApproval.payload.subject).sort()).toEqual([
         "itemId",

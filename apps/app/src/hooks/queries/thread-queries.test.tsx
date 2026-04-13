@@ -37,7 +37,6 @@ function createPendingInteraction(): PendingInteraction {
         },
       },
       reason: "Needs network access",
-      grantablePermissions: null,
       availableDecisions: ["allow_once", "allow_for_session", "deny"],
     },
     resolution: null,

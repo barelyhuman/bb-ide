@@ -1,7 +1,6 @@
 import {
   type PendingInteraction,
   type PendingInteractionApprovalDecision,
-  type PendingInteractionGrantablePermissionProfile,
   type PendingInteractionGrantedPermissionProfile,
   type PendingInteractionResolution,
 } from "@bb/domain";
@@ -91,11 +90,11 @@ function validateAvailableDecision(
 
 function getRequestedPermissions(
   interaction: PendingInteraction,
-): PendingInteractionGrantablePermissionProfile | null {
+): PendingInteractionGrantedPermissionProfile | null {
   if (interaction.payload.subject.kind === "permission_grant") {
     return interaction.payload.subject.permissions;
   }
-  return interaction.payload.grantablePermissions;
+  return null;
 }
 
 function validateGrantedPermissions(
