@@ -433,7 +433,7 @@ export function ThreadFollowUpComposer({
           <div className="mt-1 flex items-center justify-between gap-2 pl-[15px] pr-3.5">
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
               {environment.environmentLabel || environment.environmentHostConnected !== undefined ? (
-                <div className="flex min-w-0 items-center pr-1">
+                <div className="flex min-w-0 items-center pr-1.5">
                   {environment.environmentLabel ? (
                     <PromptOptionDisplay
                       label="Environment"
