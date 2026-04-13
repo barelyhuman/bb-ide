@@ -74,6 +74,11 @@ export {
 export type {
   BuildTimelineRowsOptions,
 } from "./thread-detail-rows.js";
+export {
+  flattenProjectionMessages,
+  flattenProjectionMessagesDeep,
+  flattenViewMessagesDeep,
+} from "./projection-flatten.js";
 
 export { decodeRow } from "./event-decode.js";
 export type { EventMeta } from "./event-decode.js";

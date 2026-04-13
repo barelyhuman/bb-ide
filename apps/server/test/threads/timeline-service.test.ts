@@ -276,6 +276,71 @@ describe("buildThreadTimeline", () => {
     ).toThrow(/could not match tool group range 1-5/);
   });
 
+  it("returns flattened tool details when the selected range has no tool groups", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 1,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 2,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "agentMessage",
+          id: "assistant-1",
+          text: "Nothing to expand.",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 3,
+      type: "turn/completed",
+      data: {
+        status: "completed",
+      },
+    });
+
+    const details = buildTimelineToolDetails(harness.db, thread, {
+      sourceSeqStart: 1,
+      sourceSeqEnd: 3,
+    });
+
+    expect(details.messages).toHaveLength(1);
+    expect(details.messages[0]?.kind).toBe("assistant-text");
+    if (details.messages[0]?.kind === "assistant-text") {
+      expect(details.messages[0].text).toBe("Nothing to expand.");
+    }
+  });
+
   it("filters manager thread timeline to user messages, message_user output, and operations", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);

@@ -181,6 +181,10 @@ function getOperationRows(messages: ViewMessage[]): Array<Extract<ViewMessage, {
 }
 
 describe("buildTimelineRows projection turn lifecycle", () => {
+  it("returns no rows for an empty projection", () => {
+    expect(buildTimelineRows({ entries: [] })).toEqual([]);
+  });
+
   it("collapses a completed turn even when a child message is still pending", () => {
     const projection: ViewProjection = {
       entries: [

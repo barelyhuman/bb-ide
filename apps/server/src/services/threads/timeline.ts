@@ -1,6 +1,8 @@
 import {
   buildTimelineRows,
   extractThreadContextWindowUsage,
+  flattenProjectionMessages,
+  flattenViewMessagesDeep,
   mergeProvisioningOperations,
   TIMELINE_NOISE_EVENT_TYPES,
   toViewMessages,
@@ -13,7 +15,6 @@ import type {
   TimelineToolGroupRow,
   ViewMessage,
   ViewProjection,
-  ViewTurn,
 } from "@bb/domain";
 import type {
   ThreadTimelineResponse,
@@ -81,61 +82,6 @@ function buildManagerConversationRows(messages: ViewMessage[]): TimelineMessageR
   return mergeProvisioningOperations(visibleMessages).map((message) =>
     toTimelineMessageRow(message)
   );
-}
-
-function flattenViewMessagesDeep(rootMessages: ViewMessage[]): ViewMessage[] {
-  const messages: ViewMessage[] = [];
-  for (const message of rootMessages) {
-    messages.push(message);
-    if (message.kind === "delegation") {
-      messages.push(...flattenProjectionMessagesDeep(message.childProjection));
-    }
-  }
-  return messages;
-}
-
-function assertTerminalMessageIncludedInMessages(turn: ViewTurn): void {
-  const messages = turn.messages;
-  const terminalMessage = turn.terminalMessage;
-  if (!messages || !terminalMessage) {
-    return;
-  }
-  if (messages.some((message) => message.id === terminalMessage.id)) {
-    return;
-  }
-  throw new Error(
-    `Timeline projection turn ${turn.turnId} has terminal message ${terminalMessage.id} outside its messages array`,
-  );
-}
-
-function flattenProjectionMessages(projection: ViewProjection): ViewMessage[] {
-  const messages: ViewMessage[] = [];
-  for (const entry of projection.entries) {
-    if (entry.kind === "message") {
-      messages.push(entry.message);
-      continue;
-    }
-    if (entry.turn.messages) {
-      assertTerminalMessageIncludedInMessages(entry.turn);
-      messages.push(...entry.turn.messages);
-      continue;
-    }
-    if (entry.turn.terminalMessage) {
-      messages.push(entry.turn.terminalMessage);
-    }
-  }
-  return messages;
-}
-
-function flattenProjectionMessagesDeep(projection: ViewProjection): ViewMessage[] {
-  const messages: ViewMessage[] = [];
-  for (const message of flattenProjectionMessages(projection)) {
-    messages.push(message);
-    if (message.kind === "delegation") {
-      messages.push(...flattenProjectionMessagesDeep(message.childProjection));
-    }
-  }
-  return messages;
 }
 
 function findMatchingToolGroupRow(
