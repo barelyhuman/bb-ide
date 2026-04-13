@@ -1,5 +1,4 @@
 import { useCallback, useState } from "react";
-import { Check } from "lucide-react";
 import type {
   WorkspaceOpenTarget,
   WorkspaceOpenTargetId,
@@ -23,7 +22,7 @@ import {
 import { toast } from "sonner";
 
 const WORKSPACE_OPEN_BUTTON_CLASS =
-  "h-7 rounded-md border-border/70 bg-background/70 px-2 text-xs font-medium text-foreground/85 shadow-none hover:bg-muted/45 hover:text-foreground";
+  "h-7 rounded-md border-border/70 bg-background/70 px-1 text-xs font-medium text-foreground/85 shadow-none hover:bg-muted/45 hover:text-foreground";
 
 const WORKSPACE_OPEN_TARGET_ICONS: Record<WorkspaceOpenTargetId, string> = {
   vscode: vscodeIcon,
@@ -46,13 +45,17 @@ interface ThreadWorkspaceOpenButtonProps {
 
 interface WorkspaceOpenTargetIconProps {
   target: WorkspaceOpenTarget;
+  className?: string;
 }
 
-function WorkspaceOpenTargetIcon({ target }: WorkspaceOpenTargetIconProps) {
+function WorkspaceOpenTargetIcon({
+  target,
+  className = "size-4",
+}: WorkspaceOpenTargetIconProps) {
   return (
     <img
       alt=""
-      className="size-4 shrink-0 rounded-[3px]"
+      className={`${className} shrink-0 rounded-[3px]`}
       draggable={false}
       src={WORKSPACE_OPEN_TARGET_ICONS[target.id]}
     />
@@ -104,7 +107,7 @@ export function ThreadWorkspaceOpenButton({
     onSelect: () => {
       void openTarget(selectedTarget, false);
     },
-    content: <WorkspaceOpenTargetIcon target={selectedTarget} />,
+    content: <WorkspaceOpenTargetIcon target={selectedTarget} className="size-5" />,
   };
   const secondaryActions: SplitButtonAction[] = targets.map((target) => ({
     label: target.label,
@@ -113,9 +116,8 @@ export function ThreadWorkspaceOpenButton({
     },
     content: (
       <>
-        <WorkspaceOpenTargetIcon target={target} />
+        <WorkspaceOpenTargetIcon target={target} className="size-5" />
         <span className="min-w-0 flex-1">{target.label}</span>
-        {target.id === selectedTarget.id ? <Check className="size-3.5" /> : null}
       </>
     ),
   }));
