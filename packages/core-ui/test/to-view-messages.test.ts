@@ -4,8 +4,8 @@ import { decodeRow } from "../src/event-decode.js";
 import { toViewMessages, toViewProjection } from "../src/to-view-messages.js";
 import type { ThreadEventWithMeta } from "../src/to-view-messages.js";
 import {
-  buildTimelineRows as buildTimelineRowsFromProjection,
-  buildTimelineRowsFromMessagesForNestedDisplay as buildTimelineRows,
+  buildTimelineRows,
+  buildTimelineRowsFromMessagesForNestedDisplay,
 } from "../src/thread-detail-rows.js";
 import type { ViewMessage } from "@bb/domain";
 
@@ -309,7 +309,7 @@ describe("toViewProjection turn lifecycle", () => {
     expect(entry.turn.terminalMessage).toBeUndefined();
     expect(entry.turn.messages).toBeUndefined();
 
-    const rows = buildTimelineRowsFromProjection(projection);
+    const rows = buildTimelineRows(projection);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.kind).toBe("tool-group");
   });
@@ -1213,7 +1213,7 @@ describe("toViewMessages replay coverage", () => {
     ];
 
     const projected = toViewMessages(fromRows(events), { threadStatus: "provisioning" });
-    const rows = buildTimelineRows(projected, {
+    const rows = buildTimelineRowsFromMessagesForNestedDisplay(projected, {
       includeToolGroupMessages: false,
     });
     const messageRows = rows.filter(
@@ -3425,7 +3425,7 @@ describe("toViewMessages replay coverage", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "error",
     });
-    const rows = buildTimelineRows(projected, {
+    const rows = buildTimelineRowsFromMessagesForNestedDisplay(projected, {
       includeToolGroupMessages: false,
     });
     const messageRows = rows.filter(
@@ -3507,7 +3507,7 @@ describe("toViewMessages replay coverage", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "error",
     });
-    const rows = buildTimelineRows(projected, {
+    const rows = buildTimelineRowsFromMessagesForNestedDisplay(projected, {
       includeToolGroupMessages: false,
     });
     const messageRows = rows.filter(
@@ -3918,7 +3918,7 @@ describe("toViewMessages replay coverage", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "idle",
     });
-    const rows = buildTimelineRows(projected, {
+    const rows = buildTimelineRowsFromMessagesForNestedDisplay(projected, {
       includeToolGroupMessages: false,
     });
     const messageRows = rows.filter(
@@ -3993,7 +3993,7 @@ describe("toViewMessages replay coverage", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "idle",
     });
-    const rows = buildTimelineRows(projected, {
+    const rows = buildTimelineRowsFromMessagesForNestedDisplay(projected, {
       includeToolGroupMessages: false,
     });
     const messageRows = rows.filter(
