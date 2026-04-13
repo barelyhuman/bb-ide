@@ -471,6 +471,100 @@ describe("claude-code provider adapter", () => {
     });
   });
 
+  it("decodes Claude Bash approvals with command execution scope", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    expect(
+      adapter.decodeInteractiveRequest?.({
+        jsonrpc: "2.0",
+        id: "req-bash",
+        method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+        params: {
+          threadId: "thr_1",
+          providerThreadId: "claude-session-1",
+          turnId: "",
+          itemId: "toolu_bash",
+          toolName: "Bash",
+          input: { command: "git status", cwd: "/tmp/project" },
+          reason: "Needs approval",
+          permissions: {
+            network: null,
+            fileSystem: {
+              read: ["/tmp/project"],
+              write: ["/tmp/project"],
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      payload: {
+        kind: "approval",
+        subject: {
+          kind: "command",
+          itemId: "toolu_bash",
+          command: "git status",
+          cwd: "/tmp/project",
+          actions: [{ type: "unknown", command: "git status" }],
+          executionScope: {
+            network: null,
+            fileSystem: {
+              read: ["/tmp/project"],
+              write: ["/tmp/project"],
+            },
+          },
+        },
+      },
+    });
+  });
+
+  it("decodes Claude Edit approvals with file-change execution scope", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    expect(
+      adapter.decodeInteractiveRequest?.({
+        jsonrpc: "2.0",
+        id: "req-edit",
+        method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+        params: {
+          threadId: "thr_1",
+          providerThreadId: "claude-session-1",
+          turnId: "",
+          itemId: "toolu_edit",
+          toolName: "Edit",
+          input: {
+            file_path: "/tmp/project/README.md",
+            old_string: "before",
+            new_string: "after",
+          },
+          reason: "Needs approval",
+          permissions: {
+            network: null,
+            fileSystem: {
+              read: [],
+              write: ["/tmp/project"],
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      payload: {
+        kind: "approval",
+        subject: {
+          kind: "file_change",
+          itemId: "toolu_edit",
+          writeScope: null,
+          executionScope: {
+            network: null,
+            fileSystem: {
+              read: [],
+              write: ["/tmp/project"],
+            },
+          },
+        },
+      },
+    });
+  });
+
   it("returns null for malformed Claude permission approval payloads", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
@@ -563,6 +657,8 @@ describe("claude-code provider adapter", () => {
               itemId: "toolu_3b",
               command: "pwd",
               cwd: null,
+              actions: [],
+              executionScope: null,
             },
             reason: "Needs approval",
             availableDecisions: ["allow_once", "deny"],
@@ -599,6 +695,8 @@ describe("claude-code provider adapter", () => {
             subject: {
               kind: "file_change",
               itemId: "toolu_3d",
+              writeScope: null,
+              executionScope: null,
             },
             reason: "Needs file access",
             availableDecisions: ["allow_once", "allow_for_session", "deny"],
@@ -638,6 +736,8 @@ describe("claude-code provider adapter", () => {
             subject: {
               kind: "file_change",
               itemId: "toolu_3e",
+              writeScope: null,
+              executionScope: null,
             },
             reason: "Needs file access",
             availableDecisions: ["allow_once", "allow_for_session", "deny"],
@@ -673,6 +773,8 @@ describe("claude-code provider adapter", () => {
               itemId: "toolu_3c",
               command: "pwd",
               cwd: null,
+              actions: [],
+              executionScope: null,
             },
             reason: "Needs approval",
             availableDecisions: ["allow_once", "deny"],

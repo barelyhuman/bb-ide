@@ -21,6 +21,11 @@ describe("pending interaction schemas", () => {
             itemId: "item_123",
             command: "npm install",
             cwd: "/tmp/project",
+            actions: [],
+            executionScope: {
+              network: { enabled: true },
+              fileSystem: null,
+            },
           },
           reason: "Needs network access",
           availableDecisions: ["allow_once", "allow_for_session", "deny"],
@@ -51,6 +56,8 @@ describe("pending interaction schemas", () => {
           subject: {
             kind: "file_change",
             itemId: "item_124",
+            writeScope: { root: "/tmp/project" },
+            executionScope: null,
           },
           reason: "Review file edits",
           availableDecisions: ["allow_once", "deny"],

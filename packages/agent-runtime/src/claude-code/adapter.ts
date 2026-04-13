@@ -207,6 +207,11 @@ function buildClaudeApprovalSubject(
         itemId: args.itemId,
         command,
         cwd: parsed.success ? (toOptionalString(parsed.data.cwd) ?? null) : null,
+        actions: [{
+          type: "unknown",
+          command,
+        }],
+        executionScope: args.permissions,
       };
     }
   }
@@ -217,6 +222,8 @@ function buildClaudeApprovalSubject(
       return {
         kind: "file_change",
         itemId: args.itemId,
+        writeScope: null,
+        executionScope: args.permissions,
       };
     }
   }

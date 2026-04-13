@@ -33,15 +33,6 @@ function assertNever(value: never, message?: string): never {
   throw new Error(message ?? `Unexpected value: ${String(value)}`);
 }
 
-function requireCommandSubject(command: string | null | undefined): string {
-  if (!command) {
-    throw new ProviderRequestDecodeErrorValue(
-      "Command approval request did not include a command subject",
-    );
-  }
-  return command;
-}
-
 export function decodeCodexInteractiveRequest(
   request: JsonRpcMessage,
 ): DecodedInteractiveRequest | null {
@@ -60,6 +51,11 @@ export function decodeCodexInteractiveRequest(
       const availableDecisions = parseCodexAvailableDecisions(
         parsed.data.availableDecisions,
       );
+      if (!parsed.data.command) {
+        throw new ProviderRequestDecodeErrorValue(
+          "Command approval request did not include a command subject",
+        );
+      }
       return {
         requestId: request.id,
         method: request.method,
@@ -70,8 +66,14 @@ export function decodeCodexInteractiveRequest(
           subject: {
             kind: "command",
             itemId: parsed.data.itemId,
-            command: requireCommandSubject(parsed.data.command),
+            command: parsed.data.command,
             cwd: parsed.data.cwd ?? null,
+            actions: parsed.data.commandActions ?? [],
+            executionScope: parsed.data.additionalPermissions
+              ? toPendingInteractionGrantablePermissionProfile(
+                  parsed.data.additionalPermissions,
+                )
+              : null,
           },
           reason: parsed.data.reason ?? null,
           availableDecisions,
@@ -95,6 +97,8 @@ export function decodeCodexInteractiveRequest(
           subject: {
             kind: "file_change",
             itemId: parsed.data.itemId,
+            writeScope: parsed.data.grantRoot ? { root: parsed.data.grantRoot } : null,
+            executionScope: null,
           },
           reason: parsed.data.reason ?? null,
           availableDecisions: ["allow_once", "allow_for_session", "deny"],

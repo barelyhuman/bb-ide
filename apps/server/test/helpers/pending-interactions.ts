@@ -1,6 +1,8 @@
 import type {
   ApprovalPendingInteractionResolution,
   PendingInteractionApprovalDecision,
+  PendingInteractionCommandAction,
+  PendingInteractionFileChangeWriteScope,
   PendingInteractionCreate,
   PendingInteractionGrantedPermissionProfile,
   PendingInteractionGrantablePermissionProfile,
@@ -13,12 +15,16 @@ type CommandApprovalPayloadOptions = {
   reason?: string | null;
   command?: string;
   cwd?: string | null;
+  actions?: PendingInteractionCommandAction[];
+  executionScope?: PendingInteractionGrantablePermissionProfile | null;
   availableDecisions?: PendingInteractionApprovalDecision[];
 };
 
 type FileChangeApprovalPayloadOptions = {
   itemId?: string;
   reason?: string | null;
+  writeScope?: PendingInteractionFileChangeWriteScope | null;
+  executionScope?: PendingInteractionGrantablePermissionProfile | null;
   availableDecisions?: PendingInteractionApprovalDecision[];
 };
 
@@ -51,6 +57,8 @@ export function createCommandApprovalPayload(
       itemId: options.itemId ?? "item-command-approval",
       command: options.command ?? "git push",
       cwd: options.cwd ?? "/tmp/project",
+      actions: options.actions ?? [],
+      executionScope: options.executionScope ?? null,
     },
     reason: options.reason ?? "Needs approval",
     availableDecisions: options.availableDecisions ?? defaultAvailableDecisions,
@@ -65,6 +73,8 @@ export function createFileChangeApprovalPayload(
     subject: {
       kind: "file_change",
       itemId: options.itemId ?? "item-file-change-approval",
+      writeScope: options.writeScope ?? null,
+      executionScope: options.executionScope ?? null,
     },
     reason: options.reason ?? "Approve file edit",
     availableDecisions: options.availableDecisions ?? defaultAvailableDecisions,

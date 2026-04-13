@@ -146,11 +146,20 @@ export type PendingInteractionPermissionGrantScope = z.infer<
   typeof pendingInteractionPermissionGrantScopeSchema
 >;
 
+export const pendingInteractionFileChangeWriteScopeSchema = z.object({
+  root: z.string().min(1),
+});
+export type PendingInteractionFileChangeWriteScope = z.infer<
+  typeof pendingInteractionFileChangeWriteScopeSchema
+>;
+
 export const pendingInteractionCommandApprovalSubjectSchema = z.object({
   kind: z.literal("command"),
   itemId: z.string().min(1),
   command: z.string().min(1),
   cwd: z.string().nullable(),
+  actions: z.array(pendingInteractionCommandActionSchema),
+  executionScope: pendingInteractionGrantablePermissionProfileSchema.nullable(),
 });
 export type PendingInteractionCommandApprovalSubject = z.infer<
   typeof pendingInteractionCommandApprovalSubjectSchema
@@ -159,6 +168,8 @@ export type PendingInteractionCommandApprovalSubject = z.infer<
 export const pendingInteractionFileChangeApprovalSubjectSchema = z.object({
   kind: z.literal("file_change"),
   itemId: z.string().min(1),
+  writeScope: pendingInteractionFileChangeWriteScopeSchema.nullable(),
+  executionScope: pendingInteractionGrantablePermissionProfileSchema.nullable(),
 });
 export type PendingInteractionFileChangeApprovalSubject = z.infer<
   typeof pendingInteractionFileChangeApprovalSubjectSchema

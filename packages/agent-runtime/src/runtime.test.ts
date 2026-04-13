@@ -144,6 +144,8 @@ describe("createAgentRuntime", () => {
                 itemId: params.itemId,
                 command,
                 cwd: typeof params.cwd === "string" ? params.cwd : null,
+                actions: [],
+                executionScope: null,
               },
               reason: typeof params.reason === "string" ? params.reason : null,
               availableDecisions: ["allow_once", "allow_for_session", "deny"],
@@ -162,6 +164,8 @@ describe("createAgentRuntime", () => {
               subject: {
                 kind: "file_change",
                 itemId: params.itemId,
+                writeScope: null,
+                executionScope: null,
               },
               reason: null,
               availableDecisions: ["allow_once", "deny"],
