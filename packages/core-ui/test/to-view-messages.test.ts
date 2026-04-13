@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ThreadEventRow } from "@bb/domain";
 import { decodeRow } from "../src/event-decode.js";
-import { toViewMessages } from "../src/to-view-messages.js";
+import { toViewMessages, toViewProjection } from "../src/to-view-messages.js";
 import type { ThreadEventWithMeta } from "../src/to-view-messages.js";
 import { buildTimelineRows } from "../src/thread-detail-rows.js";
 import type { ViewMessage } from "@bb/domain";
@@ -25,6 +25,164 @@ function assertMonotonicSourceSeq(messages: ViewMessage[]): void {
     expect(next.sourceSeqStart).toBeGreaterThanOrEqual(prev.sourceSeqStart);
   }
 }
+
+describe("toViewProjection turn lifecycle", () => {
+  it("uses turn/completed as the authoritative completed state in summary mode", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "turn/started",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+        },
+        createdAt: 10,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/started",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "toolCall",
+            id: "tool-1",
+            tool: "exec_command",
+            arguments: { cmd: "pnpm test" },
+            status: "pending",
+          },
+        },
+        createdAt: 20,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "agentMessage",
+            id: "assistant-1",
+            text: "Done.",
+          },
+        },
+        createdAt: 30,
+      },
+      {
+        id: "evt-4",
+        threadId: "thread-1",
+        seq: 4,
+        type: "turn/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          status: "completed",
+        },
+        createdAt: 40,
+      },
+    ];
+
+    const projection = toViewProjection(fromRows(events), {
+      threadStatus: "active",
+      turnMessageDetail: "summary",
+    });
+
+    expect(projection.entries).toHaveLength(1);
+    const entry = projection.entries[0];
+    expect(entry?.kind).toBe("turn");
+    if (entry?.kind !== "turn") {
+      throw new Error("Expected a turn entry");
+    }
+    expect(entry.turn.status).toBe("completed");
+    expect(entry.turn.sourceSeqStart).toBe(1);
+    expect(entry.turn.sourceSeqEnd).toBe(4);
+    expect(entry.turn.completedAt).toBe(40);
+    expect(entry.turn.durationMs).toBe(30);
+    expect(entry.turn.summaryCount).toBe(1);
+    expect(entry.turn.messages).toBeUndefined();
+    expect(entry.turn.terminalMessage?.kind).toBe("assistant-text");
+  });
+
+  it("keeps pending turn messages present even when current messages are terminal", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "turn/started",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "agentMessage",
+            id: "assistant-1",
+            text: "Still working.",
+          },
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projection = toViewProjection(fromRows(events), {
+      threadStatus: "idle",
+      turnMessageDetail: "summary",
+    });
+
+    const entry = projection.entries[0];
+    expect(entry?.kind).toBe("turn");
+    if (entry?.kind !== "turn") {
+      throw new Error("Expected a turn entry");
+    }
+    expect(entry.turn.status).toBe("pending");
+    expect(entry.turn.messages).toHaveLength(1);
+    expect(entry.turn.messages?.[0]?.kind).toBe("assistant-text");
+  });
+
+  it("rejects turn-scoped messages that do not have turn lifecycle events", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/completed",
+        data: {
+          providerThreadId: "provider-thread-1",
+          turnId: "missing-turn",
+          item: {
+            type: "agentMessage",
+            id: "assistant-1",
+            text: "No lifecycle.",
+          },
+        },
+        createdAt: 1,
+      },
+    ];
+
+    expect(() =>
+      toViewProjection(fromRows(events), {
+        threadStatus: "idle",
+        turnMessageDetail: "summary",
+      })
+    ).toThrow(/without turn\/started/);
+  });
+});
 
 describe("toViewMessages replay coverage", () => {
   it("projects flat event data with the same output as raw events", () => {

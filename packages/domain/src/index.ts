@@ -416,6 +416,23 @@ export type {
 } from "./ui-message.js";
 
 export {
+  viewTurnMessageDetailSchema,
+  viewTurnMessageDetailValues,
+  viewTurnStatusSchema,
+  viewTurnStatusValues,
+} from "./timeline-projection.js";
+export type {
+  ToViewProjectionOptions,
+  ViewProjection,
+  ViewStandaloneTimelineEntry,
+  ViewTimelineEntry,
+  ViewTurn,
+  ViewTurnMessageDetail,
+  ViewTurnStatus,
+  ViewTurnTimelineEntry,
+} from "./timeline-projection.js";
+
+export {
   REALTIME_ENTITIES,
   THREAD_CHANGE_KINDS,
   PROJECT_CHANGE_KINDS,

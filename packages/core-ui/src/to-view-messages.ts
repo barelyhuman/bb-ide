@@ -1,6 +1,7 @@
 import type { ThreadEvent } from "@bb/domain";
 import type { CompactionLifecycleEvent } from "./compaction-lifecycle.js";
 import { parseCompactionLifecycleEvent } from "./compaction-lifecycle.js";
+import { assertNever } from "./assert-never.js";
 import {
   getEventParentToolCallId,
   getEventProviderThreadId,
@@ -42,16 +43,22 @@ import {
 } from "./assistant-buffering.js";
 import type {
   ToViewMessagesOptions,
+  ToViewProjectionOptions,
   ViewAssistantReasoningMessage,
   ViewAssistantTextMessage,
   ViewFileEditChange,
   ViewFileEditMessage,
   ViewMessage,
   ViewOperationMessage,
+  ViewProjection,
+  ViewTimelineEntry,
   ViewToolCallMessage,
   ViewToolCallSummary,
   ViewToolExploringMessage,
   ViewToolParsedIntent,
+  ViewTurn,
+  ViewTurnMessageDetail,
+  ViewTurnStatus,
   ViewWebSearchMessage,
 } from "@bb/domain";
 
@@ -1283,6 +1290,307 @@ export interface ThreadEventWithMeta {
   meta: EventMeta;
 }
 
+type TurnCompletedEvent = Extract<ThreadEvent, { type: "turn/completed" }>;
+type TurnStartedEvent = Extract<ThreadEvent, { type: "turn/started" }>;
+
+interface ProjectionTurnDraft {
+  messages: ViewMessage[];
+  turn: ViewTurn;
+}
+
+interface BuildProjectionFromMessagesArgs {
+  events: ThreadEventWithMeta[];
+  messages: ViewMessage[];
+  turnMessageDetail: ViewTurnMessageDetail;
+}
+
+interface TurnEntryDraft {
+  kind: "turn";
+  createdAt: number;
+  order: number;
+  sourceSeqStart: number;
+  turnId: string;
+}
+
+interface StandaloneMessageEntryDraft {
+  kind: "message";
+  createdAt: number;
+  message: ViewMessage;
+  order: number;
+  sourceSeqStart: number;
+}
+
+type ProjectionEntryDraft = TurnEntryDraft | StandaloneMessageEntryDraft;
+
+function getOrderedThreadEvents(
+  events: ThreadEventWithMeta[],
+): ThreadEventWithMeta[] {
+  let areEventsOrdered = true;
+  for (let index = 1; index < events.length; index += 1) {
+    if (events[index - 1].meta.seq > events[index].meta.seq) {
+      areEventsOrdered = false;
+      break;
+    }
+  }
+
+  return areEventsOrdered
+    ? events
+    : [...events].sort((a, b) => a.meta.seq - b.meta.seq);
+}
+
+function toViewTurnStatus(
+  status: TurnCompletedEvent["status"],
+): ViewTurnStatus {
+  switch (status) {
+    case "completed":
+      return "completed";
+    case "failed":
+      return "error";
+    case "interrupted":
+      return "interrupted";
+    default:
+      return assertNever(status);
+  }
+}
+
+function getTurnDurationMs(
+  startedAt: number,
+  completedAt: number | null,
+): number | undefined {
+  if (completedAt === null) {
+    return undefined;
+  }
+  const durationMs = completedAt - startedAt;
+  return durationMs > 0 ? durationMs : undefined;
+}
+
+function createProjectionTurn(
+  event: TurnStartedEvent,
+  meta: EventMeta,
+): ProjectionTurnDraft {
+  return {
+    messages: [],
+    turn: {
+      turnId: event.turnId,
+      threadId: event.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      startedAt: meta.createdAt,
+      createdAt: meta.createdAt,
+      completedAt: null,
+      status: "pending",
+      summaryCount: 0,
+    },
+  };
+}
+
+function updateProjectionTurnStart(
+  draft: ProjectionTurnDraft,
+  event: TurnStartedEvent,
+  meta: EventMeta,
+): void {
+  draft.turn.threadId = event.threadId;
+  draft.turn.sourceSeqStart = Math.min(draft.turn.sourceSeqStart, meta.seq);
+  draft.turn.sourceSeqEnd = Math.max(draft.turn.sourceSeqEnd, meta.seq);
+  draft.turn.startedAt = Math.min(draft.turn.startedAt, meta.createdAt);
+  draft.turn.createdAt = Math.max(draft.turn.createdAt, meta.createdAt);
+  draft.turn.completedAt = null;
+  draft.turn.status = "pending";
+  delete draft.turn.durationMs;
+}
+
+function updateProjectionTurnCompletion(
+  draft: ProjectionTurnDraft,
+  event: TurnCompletedEvent,
+  meta: EventMeta,
+): void {
+  draft.turn.threadId = event.threadId;
+  draft.turn.sourceSeqEnd = Math.max(draft.turn.sourceSeqEnd, meta.seq);
+  draft.turn.createdAt = Math.max(draft.turn.createdAt, meta.createdAt);
+  draft.turn.completedAt = meta.createdAt;
+  draft.turn.status = toViewTurnStatus(event.status);
+  const durationMs = getTurnDurationMs(draft.turn.startedAt, meta.createdAt);
+  if (durationMs === undefined) {
+    delete draft.turn.durationMs;
+  } else {
+    draft.turn.durationMs = durationMs;
+  }
+}
+
+function isProjectionTerminalMessage(message: ViewMessage): boolean {
+  return message.kind === "assistant-text" || message.kind === "error";
+}
+
+function findProjectionTerminalMessage(
+  messages: ViewMessage[],
+): ViewMessage | undefined {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message && isProjectionTerminalMessage(message)) {
+      return message;
+    }
+  }
+  return undefined;
+}
+
+function getProjectionMessageSummaryCount(message: ViewMessage): number {
+  if (message.kind === "tool-exploring") {
+    return Math.max(1, message.calls.length);
+  }
+  if (message.kind === "file-edit") {
+    return Math.max(1, message.changes.length);
+  }
+  return 1;
+}
+
+function getProjectionSummaryCount(
+  messages: ViewMessage[],
+  terminalMessage: ViewMessage | undefined,
+): number {
+  return messages.reduce((count, message) => {
+    if (message.kind === "user" || message.kind === "debug/raw-event") {
+      return count;
+    }
+    if (terminalMessage && message.id === terminalMessage.id) {
+      return count;
+    }
+    return count + getProjectionMessageSummaryCount(message);
+  }, 0);
+}
+
+function createViewTimelineEntry(
+  draft: ProjectionEntryDraft,
+  turnsById: Map<string, ProjectionTurnDraft>,
+  turnMessageDetail: ViewTurnMessageDetail,
+): ViewTimelineEntry {
+  if (draft.kind === "message") {
+    return {
+      kind: "message",
+      message: draft.message,
+    };
+  }
+
+  const turnDraft = turnsById.get(draft.turnId);
+  if (!turnDraft) {
+    throw new Error(
+      `Cannot build timeline projection for missing turn ${draft.turnId}`,
+    );
+  }
+
+  const terminalMessage = findProjectionTerminalMessage(turnDraft.messages);
+  const summaryCount = getProjectionSummaryCount(
+    turnDraft.messages,
+    terminalMessage,
+  );
+  const includeMessages =
+    turnDraft.turn.status === "pending" || turnMessageDetail === "full";
+  const turn: ViewTurn = {
+    ...turnDraft.turn,
+    summaryCount,
+    ...(terminalMessage ? { terminalMessage } : {}),
+    ...(includeMessages ? { messages: turnDraft.messages } : {}),
+  };
+  return {
+    kind: "turn",
+    turn,
+  };
+}
+
+function buildProjectionFromMessages(
+  args: BuildProjectionFromMessagesArgs,
+): ViewProjection {
+  const turnsById = new Map<string, ProjectionTurnDraft>();
+  const entryDrafts: ProjectionEntryDraft[] = [];
+  let nextOrder = 0;
+
+  for (const { event, meta } of args.events) {
+    if (event.type === "turn/started") {
+      const existing = turnsById.get(event.turnId);
+      if (existing) {
+        updateProjectionTurnStart(existing, event, meta);
+      } else {
+        turnsById.set(event.turnId, createProjectionTurn(event, meta));
+        entryDrafts.push({
+          kind: "turn",
+          turnId: event.turnId,
+          sourceSeqStart: meta.seq,
+          createdAt: meta.createdAt,
+          order: nextOrder,
+        });
+        nextOrder += 1;
+      }
+      continue;
+    }
+
+    if (event.type === "turn/completed") {
+      const existing = turnsById.get(event.turnId);
+      if (!existing) {
+        throw new Error(
+          `Timeline projection found turn/completed without turn/started for ${event.turnId}`,
+        );
+      }
+      updateProjectionTurnCompletion(existing, event, meta);
+    }
+  }
+
+  for (const message of args.messages) {
+    const turnId = message.turnId;
+    if (!turnId) {
+      entryDrafts.push({
+        kind: "message",
+        message,
+        sourceSeqStart: message.sourceSeqStart,
+        createdAt: message.createdAt,
+        order: nextOrder,
+      });
+      nextOrder += 1;
+      continue;
+    }
+
+    const turnDraft = turnsById.get(turnId);
+    if (!turnDraft) {
+      throw new Error(
+        `Timeline projection found message ${message.id} for turn ${turnId} without turn/started`,
+      );
+    }
+
+    turnDraft.messages.push(message);
+    turnDraft.turn.threadId = message.threadId;
+    turnDraft.turn.sourceSeqStart = Math.min(
+      turnDraft.turn.sourceSeqStart,
+      message.sourceSeqStart,
+    );
+    turnDraft.turn.sourceSeqEnd = Math.max(
+      turnDraft.turn.sourceSeqEnd,
+      message.sourceSeqEnd,
+    );
+    turnDraft.turn.createdAt = Math.max(
+      turnDraft.turn.createdAt,
+      message.createdAt,
+    );
+  }
+
+  const orderedEntryDrafts = [...entryDrafts].sort((left, right) => {
+    if (left.sourceSeqStart !== right.sourceSeqStart) {
+      return left.sourceSeqStart - right.sourceSeqStart;
+    }
+    if (left.createdAt !== right.createdAt) {
+      return left.createdAt - right.createdAt;
+    }
+    return left.order - right.order;
+  });
+
+  return {
+    entries: orderedEntryDrafts.map((entryDraft) =>
+      createViewTimelineEntry(
+        entryDraft,
+        turnsById,
+        args.turnMessageDetail,
+      )
+    ),
+  };
+}
+
 export function toViewMessages(
   events: ThreadEventWithMeta[] | undefined,
   options?: ToViewMessagesOptions,
@@ -1294,16 +1602,7 @@ export function toViewMessages(
   const includeInternalSystemMessages =
     options?.includeInternalSystemMessages ?? false;
 
-  let areEventsOrdered = true;
-  for (let index = 1; index < events.length; index += 1) {
-    if (events[index - 1].meta.seq > events[index].meta.seq) {
-      areEventsOrdered = false;
-      break;
-    }
-  }
-  const orderedEvents = areEventsOrdered
-    ? events
-    : [...events].sort((a, b) => a.meta.seq - b.meta.seq);
+  const orderedEvents = getOrderedThreadEvents(events);
   const pendingUserSignatureCounts: PendingUserSignatureCounts = {
     clientStart: new Map(),
     clientThreadStart: new Map(),
@@ -1870,4 +2169,21 @@ export function toViewMessages(
 
   finalizePendingMessages(state, options);
   return normalizeSemanticViewMessages(state.messages);
+}
+
+export function toViewProjection(
+  events: ThreadEventWithMeta[] | undefined,
+  options: ToViewProjectionOptions,
+): ViewProjection {
+  if (!events || events.length === 0) {
+    return { entries: [] };
+  }
+
+  const orderedEvents = getOrderedThreadEvents(events);
+  const messages = toViewMessages(orderedEvents, options);
+  return buildProjectionFromMessages({
+    events: orderedEvents,
+    messages,
+    turnMessageDetail: options.turnMessageDetail,
+  });
 }
