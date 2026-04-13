@@ -1181,9 +1181,7 @@ describe("interactive request scenarios", () => {
       });
 
       expect(ctx.interactiveRequests.some((request) =>
-        request.payload.kind === "command_approval"
-        || request.payload.kind === "permission_request"
-        || request.payload.kind === "file_change_approval",
+        request.payload.kind === "command_approval",
       )).toBe(true);
       expect(readFileSync(filePath, "utf8")).toBe(token);
     } finally {
@@ -1234,11 +1232,70 @@ describe("interactive request scenarios", () => {
       });
 
       expect(ctx.interactiveRequests.some((request) =>
-        request.payload.kind === "command_approval"
-        || request.payload.kind === "permission_request"
-        || request.payload.kind === "file_change_approval",
+        request.payload.kind === "command_approval",
       )).toBe(true);
       expect(readFileSync(filePath, "utf8")).toBe(token);
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 75_000);
+
+  it.concurrent("respects user-denied Codex command approvals in readonly ask mode", async () => {
+    const ctx = createTestRuntime("codex", {
+      onInteractiveRequest: async (request) => {
+        if (request.payload.kind !== "command_approval") {
+          throw new Error(`Expected command_approval, got ${request.payload.kind}`);
+        }
+        if (!request.payload.availableDecisions.includes("decline")) {
+          throw new Error("Codex command approval did not offer decline");
+        }
+        return {
+          kind: "command_approval",
+          decision: "decline",
+        };
+      },
+    });
+    const fileName = createTempFileName("codex-readonly-user-denied");
+    const filePath = join(ctx.tmpDir, fileName);
+    const token = createToken("CODEX_READONLY_USER_DENIED");
+
+    try {
+      const threadId = newThreadId();
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId: "codex",
+        options: readonlyAskRuntimeOptions,
+        instructions:
+          "When the user asks you to run an exact shell command, run that shell command exactly once. If approval is denied, say DENIED.",
+      });
+
+      await ctx.runtime.runTurn({
+        threadId,
+        options: readonlyAskRuntimeOptions,
+        input: [{
+          type: "text",
+          text:
+            `Run this exact shell command: printf '${token}' > ${fileName}. `
+            + "If approval is denied, reply with exactly DENIED.",
+        }],
+      });
+
+      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+        timeoutMs: 45_000,
+        label: "Codex user-denied command approval",
+      });
+      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        timeoutMs: 45_000,
+        label: "Codex user-denied turn/completed",
+      });
+
+      expect(ctx.interactiveRequests.some((request) =>
+        request.payload.kind === "command_approval",
+      )).toBe(true);
+      expect(existsSync(filePath)).toBe(false);
     } finally {
       await ctx.runtime.shutdown();
       cleanup(ctx);
@@ -1382,6 +1439,64 @@ describe("interactive request scenarios", () => {
         request.payload.kind === "permission_request",
       )).toBe(true);
       expect(readFileSync(filePath, "utf8")).toBe(token);
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 75_000);
+
+  it.concurrent("respects user-denied Claude permission requests in readonly ask mode", async () => {
+    const ctx = createTestRuntime("claude-code", {
+      onInteractiveRequest: async (request) => {
+        if (request.payload.kind !== "permission_request") {
+          throw new Error(`Expected permission_request, got ${request.payload.kind}`);
+        }
+        return {
+          kind: "permission_request",
+          decision: "deny",
+        };
+      },
+    });
+    const fileName = createTempFileName("claude-readonly-user-denied");
+    const filePath = join(ctx.tmpDir, fileName);
+    const token = createToken("CLAUDE_READONLY_USER_DENIED");
+
+    try {
+      const threadId = newThreadId();
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId: "claude-code",
+        options: readonlyAskRuntimeOptions,
+        instructions:
+          "Use the Bash tool when the user explicitly asks for Bash. Do not use another tool.",
+      });
+
+      await ctx.runtime.runTurn({
+        threadId,
+        options: readonlyAskRuntimeOptions,
+        input: [{
+          type: "text",
+          text:
+            `Use Bash to run exactly: printf '${token}' > ${fileName}. `
+            + "If permission is denied, reply with exactly DENIED.",
+        }],
+      });
+
+      await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
+        timeoutMs: 45_000,
+        label: "Claude user-denied permission request",
+      });
+      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        timeoutMs: 45_000,
+        label: "Claude user-denied turn/completed",
+      });
+
+      expect(ctx.interactiveRequests.some((request) =>
+        request.payload.kind === "permission_request",
+      )).toBe(true);
+      expect(existsSync(filePath)).toBe(false);
     } finally {
       await ctx.runtime.shutdown();
       cleanup(ctx);
