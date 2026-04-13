@@ -54,6 +54,40 @@ function setup() {
   return { db, thread, siblingThread };
 }
 
+function commandApprovalPayload(command: string, itemId: string): string {
+  return JSON.stringify({
+    kind: "approval",
+    subject: {
+      kind: "command",
+      itemId,
+      command,
+      cwd: "/tmp/project",
+    },
+    reason: null,
+    grantablePermissions: null,
+    availableDecisions: ["allow_once", "allow_for_session", "deny"],
+  });
+}
+
+function fileChangeApprovalPayload(itemId: string): string {
+  return JSON.stringify({
+    kind: "approval",
+    subject: {
+      kind: "file_change",
+      itemId,
+    },
+    reason: "Needs file write approval",
+    grantablePermissions: {
+      network: null,
+      fileSystem: {
+        read: [],
+        write: ["/tmp/project"],
+      },
+    },
+    availableDecisions: ["allow_once", "allow_for_session", "deny"],
+  });
+}
+
 describe("pending interactions", () => {
   it("creates and looks up provider-correlated pending interactions", () => {
     const { db, thread } = setup();
@@ -65,17 +99,8 @@ describe("pending interactions", () => {
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-1",
       sessionId: "session-1",
-      kind: "command_approval",
-      payload: JSON.stringify({
-        kind: "command_approval",
-        itemId: "item-1",
-        reason: "Needs approval",
-        command: "git push",
-        cwd: "/tmp/project",
-        commandActions: [],
-        requestedPermissions: null,
-        availableDecisions: ["accept", "decline", "cancel"],
-      }),
+      kind: "approval",
+      payload: commandApprovalPayload("git push", "item-1"),
     });
 
     expect(created.status).toBe("pending");
@@ -100,17 +125,8 @@ describe("pending interactions", () => {
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-1",
       sessionId: "session-1",
-      kind: "command_approval",
-      payload: JSON.stringify({
-        kind: "command_approval",
-        itemId: "item-1",
-        reason: null,
-        command: "git push",
-        cwd: "/tmp/project",
-        commandActions: [],
-        requestedPermissions: null,
-        availableDecisions: ["accept", "decline", "cancel"],
-      }),
+      kind: "approval",
+      payload: commandApprovalPayload("git push", "item-1"),
     });
     const newer = createPendingInteraction(db, {
       threadId: thread.id,
@@ -119,13 +135,8 @@ describe("pending interactions", () => {
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-2",
       sessionId: "session-1",
-      kind: "file_change_approval",
-      payload: JSON.stringify({
-        kind: "file_change_approval",
-        itemId: "item-2",
-        reason: "Needs file write approval",
-        grantRoot: "/tmp/project",
-      }),
+      kind: "approval",
+      payload: fileChangeApprovalPayload("item-2"),
     });
 
     expect(listPendingInteractionsByThread(db, { threadId: thread.id }).map((row) => row.id)).toEqual([
@@ -136,8 +147,9 @@ describe("pending interactions", () => {
     const resolved = setPendingInteractionResolved(db, {
       id: older.id,
       resolution: JSON.stringify({
-        kind: "command_approval",
-        decision: "accept_for_session",
+        kind: "approval",
+        decision: "allow_for_session",
+        grantedPermissions: null,
       }),
     });
 
@@ -157,17 +169,8 @@ describe("pending interactions", () => {
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-1",
       sessionId: "session-1",
-      kind: "command_approval",
-      payload: JSON.stringify({
-        kind: "command_approval",
-        itemId: "item-1",
-        reason: null,
-        command: "git push",
-        cwd: "/tmp/project",
-        commandActions: [],
-        requestedPermissions: null,
-        availableDecisions: ["accept", "decline", "cancel"],
-      }),
+      kind: "approval",
+      payload: commandApprovalPayload("git push", "item-1"),
     });
     createPendingInteraction(db, {
       threadId: siblingThread.id,
@@ -176,17 +179,8 @@ describe("pending interactions", () => {
       providerThreadId: "provider-thread-2",
       providerRequestId: "request-2",
       sessionId: "session-1",
-      kind: "command_approval",
-      payload: JSON.stringify({
-        kind: "command_approval",
-        itemId: "item-2",
-        reason: null,
-        command: "rm -rf build",
-        cwd: "/tmp/project",
-        commandActions: [],
-        requestedPermissions: null,
-        availableDecisions: ["accept", "decline", "cancel"],
-      }),
+      kind: "approval",
+      payload: commandApprovalPayload("rm -rf build", "item-2"),
     });
 
     const interrupted = interruptPendingInteractionsForThreads(db, {
@@ -229,17 +223,11 @@ describe("pending interactions", () => {
         providerThreadId: `provider-thread-batched-interrupt-provider-${index}`,
         providerRequestId: `request-batched-interrupt-provider-${index}`,
         sessionId: "session-1",
-        kind: "command_approval",
-        payload: JSON.stringify({
-          kind: "command_approval",
-          itemId: `item-batched-interrupt-provider-${index}`,
-          reason: null,
-          command: "git push",
-          cwd: "/tmp/project",
-          commandActions: [],
-          requestedPermissions: null,
-          availableDecisions: ["accept", "decline", "cancel"],
-        }),
+        kind: "approval",
+        payload: commandApprovalPayload(
+          "git push",
+          `item-batched-interrupt-provider-${index}`,
+        ),
       });
     }
 
@@ -279,17 +267,11 @@ describe("pending interactions", () => {
         providerThreadId: `provider-thread-batched-interrupt-thread-${index}`,
         providerRequestId: `request-batched-interrupt-thread-${index}`,
         sessionId: "session-1",
-        kind: "command_approval",
-        payload: JSON.stringify({
-          kind: "command_approval",
-          itemId: `item-batched-interrupt-thread-${index}`,
-          reason: null,
-          command: "git push",
-          cwd: "/tmp/project",
-          commandActions: [],
-          requestedPermissions: null,
-          availableDecisions: ["accept", "decline", "cancel"],
-        }),
+        kind: "approval",
+        payload: commandApprovalPayload(
+          "git push",
+          `item-batched-interrupt-thread-${index}`,
+        ),
       });
     }
 
@@ -313,17 +295,8 @@ describe("pending interactions", () => {
       providerThreadId: "provider-thread-expire-1",
       providerRequestId: "request-expire-1",
       sessionId: "session-1",
-      kind: "command_approval",
-      payload: JSON.stringify({
-        kind: "command_approval",
-        itemId: "item-expire-1",
-        reason: null,
-        command: "git push",
-        cwd: "/tmp/project",
-        commandActions: [],
-        requestedPermissions: null,
-        availableDecisions: ["accept", "decline", "cancel"],
-      }),
+      kind: "approval",
+      payload: commandApprovalPayload("git push", "item-expire-1"),
     });
 
     expect(
@@ -368,17 +341,8 @@ describe("pending interactions", () => {
         providerThreadId: `provider-thread-batched-${index}`,
         providerRequestId: `request-batched-${index}`,
         sessionId: "session-1",
-        kind: "command_approval",
-        payload: JSON.stringify({
-          kind: "command_approval",
-          itemId: `item-batched-${index}`,
-          reason: null,
-          command: "git push",
-          cwd: "/tmp/project",
-          commandActions: [],
-          requestedPermissions: null,
-          availableDecisions: ["accept", "decline", "cancel"],
-        }),
+        kind: "approval",
+        payload: commandApprovalPayload("git push", `item-batched-${index}`),
       });
     }
 

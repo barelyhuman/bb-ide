@@ -251,15 +251,16 @@ describe("host-daemon command schemas", () => {
         providerThreadId: "provider-thread-123",
         providerRequestId: "request-123",
         resolution: {
-          kind: "command_approval",
-          decision: "accept_for_session",
+          kind: "approval",
+          decision: "allow_for_session",
+          grantedPermissions: null,
         },
       }),
     ).toMatchObject({
       type: "interactive.resolve",
       interactionId: "pint_123",
       resolution: {
-        decision: "accept_for_session",
+        decision: "allow_for_session",
       },
     });
 
@@ -783,14 +784,16 @@ describe("host-daemon session schemas", () => {
           providerThreadId: "provider-thread-123",
           providerRequestId: "request-123",
           payload: {
-            kind: "command_approval",
-            itemId: "item_123",
+            kind: "approval",
+            subject: {
+              kind: "command",
+              itemId: "item_123",
+              command: "git push",
+              cwd: "/tmp/project",
+            },
             reason: "Needs approval",
-            command: "git push",
-            cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: ["accept", "decline", "cancel"],
+            grantablePermissions: null,
+            availableDecisions: ["allow_once", "deny"],
           },
         },
       }),

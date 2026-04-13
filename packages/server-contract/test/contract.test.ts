@@ -297,14 +297,16 @@ describe("server-contract canonical schemas", () => {
           providerRequestId: "request-123",
           status: "pending",
           payload: {
-            kind: "command_approval",
-            itemId: "item_123",
+            kind: "approval",
+            subject: {
+              kind: "command",
+              itemId: "item_123",
+              command: "git push",
+              cwd: "/tmp/project",
+            },
             reason: "Needs approval",
-            command: "git push",
-            cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: ["accept", "decline", "cancel"],
+            grantablePermissions: null,
+            availableDecisions: ["allow_once", "deny"],
           },
           resolution: null,
           statusReason: null,
@@ -316,30 +318,23 @@ describe("server-contract canonical schemas", () => {
 
     expect(
       resolvePendingInteractionRequestSchema.parse({
-        kind: "command_approval",
-        decision: "accept_for_session",
+        kind: "approval",
+        decision: "allow_for_session",
+        grantedPermissions: null,
       }),
     ).toMatchObject({
-      kind: "command_approval",
-      decision: "accept_for_session",
+      kind: "approval",
+      decision: "allow_for_session",
     });
 
     expect(
       resolvePendingInteractionRequestSchema.parse({
-        kind: "command_approval",
-        decision: {
-          kind: "apply_network_policy_amendment",
-          networkPolicyAmendment: {
-            host: "api.openai.com",
-            action: "allow",
-          },
-        },
+        kind: "approval",
+        decision: "deny",
       }),
     ).toMatchObject({
-      kind: "command_approval",
-      decision: {
-        kind: "apply_network_policy_amendment",
-      },
+      kind: "approval",
+      decision: "deny",
     });
 
     expect(

@@ -28,28 +28,30 @@ describe("pending interaction presentation", () => {
   it("formats kind labels for app and cli surfaces", () => {
     expect(
       formatPendingInteractionKindLabel({
-        kind: "command_approval",
+        kind: "approval",
         surface: "app",
       }),
-    ).toBe("Command approval");
+    ).toBe("Approval");
     expect(
       formatPendingInteractionKindLabel({
-        kind: "command_approval",
+        kind: "approval",
         surface: "cli",
       }),
-    ).toBe("command");
+    ).toBe("approval");
   });
 
   it("formats command approval summaries differently per surface", () => {
     const interaction = createInteraction({
-      kind: "command_approval",
-      itemId: "item_123",
+      kind: "approval",
+      subject: {
+        kind: "command",
+        itemId: "item_123",
+        command: "npm publish",
+        cwd: "/tmp/project",
+      },
       reason: "Needs approval to publish",
-      command: "npm publish",
-      cwd: "/tmp/project",
-      commandActions: [],
-      requestedPermissions: null,
-      availableDecisions: ["accept", "decline", "cancel"],
+      grantablePermissions: null,
+      availableDecisions: ["allow_once", "deny"],
     });
 
     expect(
@@ -63,22 +65,27 @@ describe("pending interaction presentation", () => {
         interaction,
         surface: "cli",
       }),
-    ).toBe("npm publish");
+    ).toBe("Needs approval to publish");
   });
 
   it("formats permission request summaries differently per surface", () => {
     const interaction = createInteraction({
-      kind: "permission_request",
-      itemId: "item_123",
-      reason: null,
-      toolName: "WebFetch",
-      permissions: {
-        network: { enabled: true },
-        fileSystem: {
-          read: ["/tmp/a", "/tmp/b"],
-          write: [],
+      kind: "approval",
+      subject: {
+        kind: "permission_grant",
+        itemId: "item_123",
+        toolName: "WebFetch",
+        permissions: {
+          network: { enabled: true },
+          fileSystem: {
+            read: ["/tmp/a", "/tmp/b"],
+            write: [],
+          },
         },
       },
+      reason: null,
+      grantablePermissions: null,
+      availableDecisions: ["allow_once", "allow_for_session", "deny"],
     });
 
     expect(

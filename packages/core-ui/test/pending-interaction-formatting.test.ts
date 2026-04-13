@@ -40,39 +40,32 @@ describe("pending interaction formatting", () => {
   });
 
   it("formats approval outcomes and timeline messages consistently", () => {
-    expect(formatPendingInteractionCommandApprovalResolutionOutcome("accept_for_session")).toBe(
+    expect(formatPendingInteractionCommandApprovalResolutionOutcome("allow_for_session")).toBe(
       "approved for this session",
     );
-    expect(
-      formatPendingInteractionCommandApprovalResolutionOutcome({
-        kind: "accept_with_exec_policy_amendment",
-        execPolicyAmendment: ["allow", "git", "push"],
-      }),
-    ).toBe("approved with exec policy amendment");
-    expect(formatPendingInteractionCommandApprovalResolutionMessage("cancel")).toBe(
-      "Command request cancelled",
+    expect(formatPendingInteractionCommandApprovalResolutionMessage("deny")).toBe(
+      "Command denied",
     );
-    expect(formatPendingInteractionFileChangeApprovalResolutionOutcome("decline")).toBe(
+    expect(formatPendingInteractionFileChangeApprovalResolutionOutcome("deny")).toBe(
       "denied",
     );
-    expect(formatPendingInteractionFileChangeApprovalResolutionMessage("accept")).toBe(
+    expect(formatPendingInteractionFileChangeApprovalResolutionMessage("allow_once")).toBe(
       "File changes approved",
     );
     expect(
       formatPendingInteractionPermissionResolutionOutcome({
-        kind: "permission_request",
+        kind: "approval",
         decision: "deny",
       }),
     ).toBe("denied");
     expect(
       formatPendingInteractionPermissionResolutionMessage({
-        kind: "permission_request",
-        decision: "allow",
-        permissions: {
+        kind: "approval",
+        decision: "allow_for_session",
+        grantedPermissions: {
           network: { enabled: true },
           fileSystem: null,
         },
-        scope: "session",
       }),
     ).toBe("Permissions granted for this session");
   });
