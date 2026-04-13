@@ -216,6 +216,19 @@ function expectSemanticApprovalRequest(request: PendingInteractionCreate): void 
   expect(["command", "file_change", "permission_grant"]).toContain(
     request.payload.subject.kind,
   );
+  switch (request.payload.subject.kind) {
+    case "command":
+      expect(Array.isArray(request.payload.subject.actions)).toBe(true);
+      expect(request.payload.subject).toHaveProperty("executionScope");
+      break;
+    case "file_change":
+      expect(request.payload.subject).toHaveProperty("writeScope");
+      expect(request.payload.subject).toHaveProperty("executionScope");
+      break;
+    case "permission_grant":
+      expect(request.payload.subject.permissions).toBeDefined();
+      break;
+  }
   expect(request.payload.availableDecisions.length).toBeGreaterThan(0);
   for (const decision of request.payload.availableDecisions) {
     expect(["allow_once", "allow_for_session", "deny"]).toContain(decision);
@@ -1317,14 +1330,16 @@ describe("interactive request scenarios", () => {
       ) {
         throw new Error("Expected a semantic file-change approval");
       }
-      expect(fileChangeApproval.payload.subject).toEqual({
-        kind: "file_change",
-        itemId: expect.any(String),
-      });
+      expect(fileChangeApproval.payload.subject.kind).toBe("file_change");
+      expect(fileChangeApproval.payload.subject.itemId).toEqual(expect.any(String));
+      expect(fileChangeApproval.payload.subject).toHaveProperty("writeScope");
+      expect(fileChangeApproval.payload.subject).toHaveProperty("executionScope");
       expect(fileChangeApproval.payload.availableDecisions).toContain("allow_once");
       expect(Object.keys(fileChangeApproval.payload.subject).sort()).toEqual([
+        "executionScope",
         "itemId",
         "kind",
+        "writeScope",
       ]);
       expect(readFileSync(filePath, "utf8").trimEnd()).toBe(token);
     } finally {
@@ -1477,13 +1492,24 @@ describe("interactive request scenarios", () => {
         label: "Codex readonly network turn/completed",
       });
 
-      expect(ctx.interactiveRequests.some((request) =>
+      const commandApproval = ctx.interactiveRequests.find((request) =>
         request.payload.kind === "approval"
         && request.payload.subject.kind === "command"
-        && request.payload.availableDecisions.includes("allow_once"),
-      ), `Expected a Codex command approval for network access; got ${JSON.stringify(
+        && request.payload.availableDecisions.includes("allow_once")
+      );
+      expect(commandApproval, `Expected a Codex command approval for network access; got ${JSON.stringify(
         ctx.interactiveRequests.map((request) => request.payload),
-      )}`).toBe(true);
+      )}`).toBeDefined();
+      if (
+        !commandApproval
+        || commandApproval.payload.kind !== "approval"
+        || commandApproval.payload.subject.kind !== "command"
+      ) {
+        throw new Error("Expected a semantic command approval");
+      }
+      expect(commandApproval.payload.subject.executionScope?.network).toEqual({
+        enabled: true,
+      });
     } finally {
       await ctx.runtime.shutdown();
       cleanup(ctx);
@@ -1530,12 +1556,27 @@ describe("interactive request scenarios", () => {
         label: "Claude readonly ask turn/completed",
       });
 
-      expect(ctx.interactiveRequests.some((request) =>
+      const commandApproval = ctx.interactiveRequests.find((request) =>
         request.payload.kind === "approval"
         && request.payload.subject.kind === "command"
         && request.payload.availableDecisions.includes("allow_once")
-        && request.payload.availableDecisions.includes("deny"),
-      )).toBe(true);
+        && request.payload.availableDecisions.includes("deny")
+      );
+      expect(commandApproval).toBeDefined();
+      if (
+        !commandApproval
+        || commandApproval.payload.kind !== "approval"
+        || commandApproval.payload.subject.kind !== "command"
+      ) {
+        throw new Error("Expected a semantic command approval");
+      }
+      expect(commandApproval.payload.subject.actions).toContainEqual({
+        type: "unknown",
+        command: expect.stringContaining("printf"),
+      });
+      expect(
+        commandApproval.payload.subject.executionScope?.fileSystem?.write.length ?? 0,
+      ).toBeGreaterThan(0);
       expect(readFileSync(filePath, "utf8")).toBe(token);
     } finally {
       await ctx.runtime.shutdown();
@@ -1584,12 +1625,23 @@ describe("interactive request scenarios", () => {
         label: "Claude readonly Write ask turn/completed",
       });
 
-      expect(ctx.interactiveRequests.some((request) =>
+      const fileChangeApproval = ctx.interactiveRequests.find((request) =>
         request.payload.kind === "approval"
         && request.payload.subject.kind === "file_change"
         && request.payload.availableDecisions.includes("allow_once")
-        && request.payload.availableDecisions.includes("deny"),
-      )).toBe(true);
+        && request.payload.availableDecisions.includes("deny")
+      );
+      expect(fileChangeApproval).toBeDefined();
+      if (
+        !fileChangeApproval
+        || fileChangeApproval.payload.kind !== "approval"
+        || fileChangeApproval.payload.subject.kind !== "file_change"
+      ) {
+        throw new Error("Expected a semantic file-change approval");
+      }
+      expect(
+        fileChangeApproval.payload.subject.executionScope?.fileSystem?.write.length ?? 0,
+      ).toBeGreaterThan(0);
       expect(readFileSync(filePath, "utf8")).toBe(token);
     } finally {
       await ctx.runtime.shutdown();
