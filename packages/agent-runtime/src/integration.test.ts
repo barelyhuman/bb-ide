@@ -306,6 +306,26 @@ async function createApprovalResolution(
   }
 }
 
+function isWriteApprovalRequest(request: PendingInteractionCreate): boolean {
+  return (
+    request.payload.kind === "approval"
+    && (
+      request.payload.subject.kind === "command"
+      || request.payload.subject.kind === "file_change"
+    )
+    && request.payload.availableDecisions.includes("allow_once")
+  );
+}
+
+function expectWriteApprovalRequest(requests: PendingInteractionCreate[]): void {
+  expect(
+    requests.some(isWriteApprovalRequest),
+    `Expected a command or file-change approval with allow_once; got ${JSON.stringify(
+      requests.map((request) => request.payload),
+    )}`,
+  ).toBe(true);
+}
+
 function getFirstNonEmptyLine(path: string): string {
   const line = readFileSync(path, "utf8")
     .split(/\r?\n/u)
@@ -1146,7 +1166,7 @@ describe("interactive request scenarios", () => {
           permissionMode: "workspace-write",
         },
         instructions:
-          "When the user asks you to run an exact shell command, run that shell command exactly once. If approval is needed, request it. Then report DONE.",
+          "When the user asks you to run an exact shell command, run that shell command exactly once. If approval is needed, request approval; it will be approved. Then report DONE.",
       });
 
       await ctx.runtime.runTurn({
@@ -1159,7 +1179,7 @@ describe("interactive request scenarios", () => {
           type: "text",
           text:
             `Run this exact shell command: printf '${token}' > '${filePath}'. `
-            + "If it is denied or blocked, report the exact error. Otherwise reply DONE.",
+            + "If approval is needed, request approval. If it is denied or blocked, report the exact error. Otherwise reply DONE.",
         }],
       });
 
@@ -1172,13 +1192,7 @@ describe("interactive request scenarios", () => {
         label: "Codex workspace-write outside-workspace turn/completed",
       });
 
-      expect(ctx.interactiveRequests.some((request) =>
-        request.payload.kind === "approval"
-        && request.payload.subject.kind === "command"
-        && request.payload.availableDecisions.includes("allow_once")
-        && request.payload.availableDecisions.includes("allow_for_session")
-        && request.payload.availableDecisions.includes("deny"),
-      )).toBe(true);
+      expectWriteApprovalRequest(ctx.interactiveRequests);
       expect(readFileSync(filePath, "utf8")).toBe(token);
     } finally {
       await ctx.runtime.shutdown();
@@ -1204,7 +1218,7 @@ describe("interactive request scenarios", () => {
         providerId: "codex",
         options: readonlyAskRuntimeOptions,
         instructions:
-          "When the user asks you to run an exact shell command, run that shell command exactly once and then report DONE.",
+          "When the user asks you to run an exact shell command, run that shell command exactly once. If approval is needed, request approval; it will be approved. Then report DONE.",
       });
 
       await ctx.runtime.runTurn({
@@ -1214,26 +1228,20 @@ describe("interactive request scenarios", () => {
           type: "text",
           text:
             `Run this exact shell command: printf '${token}' > ${fileName}. `
-            + "After the command finishes, reply with exactly DONE.",
+            + "If approval is needed, request approval. After the command finishes, reply with exactly DONE.",
         }],
       });
 
       await waitForCondition(() => ctx.interactiveRequests.length >= 1, {
         timeoutMs: 45_000,
-        label: "Codex readonly command approval",
+        label: "Codex readonly write approval",
       });
       await waitForCondition(() => hasTurnCompleted(ctx.events), {
         timeoutMs: 45_000,
         label: "Codex readonly ask turn/completed",
       });
 
-      expect(ctx.interactiveRequests.some((request) =>
-        request.payload.kind === "approval"
-        && request.payload.subject.kind === "command"
-        && request.payload.availableDecisions.includes("allow_once")
-        && request.payload.availableDecisions.includes("allow_for_session")
-        && request.payload.availableDecisions.includes("deny"),
-      )).toBe(true);
+      expectWriteApprovalRequest(ctx.interactiveRequests);
       expect(readFileSync(filePath, "utf8")).toBe(token);
     } finally {
       await ctx.runtime.shutdown();
