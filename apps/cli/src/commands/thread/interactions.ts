@@ -2,16 +2,13 @@ import { Command } from "commander";
 import {
   formatPendingInteractionCommandApprovalDecision,
   formatPendingInteractionCommandApprovalResolutionOutcome,
-  formatPendingInteractionFileChangeApprovalResolutionOutcome,
-  formatPendingInteractionKindLabel,
-  formatPendingInteractionPermissionResolutionOutcome,
   formatPendingInteractionSummary,
-  isPendingInteractionCommandApprovalPositiveDecision,
   summarizePendingInteractionRequestedPermissions,
   toGrantedPendingInteractionPermissions,
 } from "@bb/core-ui";
 import {
   PendingInteraction,
+  type PendingInteractionApprovalDecision,
   type PendingInteractionGrantablePermissionProfile,
   type PendingInteractionRequestedPermissionProfile,
   pendingInteractionPermissionGrantScopeSchema,
@@ -61,11 +58,15 @@ function parsePermissionGrantScope(
   throw new Error("Invalid --scope. Expected 'turn' or 'session'.");
 }
 
-function formatInteractionKind(kind: PendingInteraction["payload"]["kind"]): string {
-  return formatPendingInteractionKindLabel({
-    kind,
-    surface: "cli",
-  });
+function formatInteractionKind(interaction: PendingInteraction): string {
+  switch (interaction.payload.subject.kind) {
+    case "command":
+      return "command";
+    case "file_change":
+      return "file-change";
+    case "permission_grant":
+      return "permission";
+  }
 }
 
 function printRequestedPermissions(
@@ -85,7 +86,7 @@ function printRequestedPermissions(
 function printInteraction(interaction: PendingInteraction): void {
   console.log(`Interaction: ${interaction.id}`);
   console.log(`  Thread: ${interaction.threadId}`);
-  console.log(`  Kind: ${formatInteractionKind(interaction.payload.kind)}`);
+  console.log(`  Kind: ${formatInteractionKind(interaction)}`);
   console.log(`  Status: ${interaction.status}`);
   console.log(`  Created: ${new Date(interaction.createdAt).toLocaleString()}`);
   if (interaction.resolvedAt !== null) {
@@ -99,39 +100,36 @@ function printInteraction(interaction: PendingInteraction): void {
   }
 
   switch (interaction.payload.kind) {
-    case "command_approval":
-      if (interaction.payload.command) {
-        console.log(`  Command: ${interaction.payload.command}`);
-      }
-      if (interaction.payload.cwd) {
-        console.log(`  Cwd: ${interaction.payload.cwd}`);
+    case "approval":
+      switch (interaction.payload.subject.kind) {
+        case "command":
+          console.log(`  Command: ${interaction.payload.subject.command}`);
+          if (interaction.payload.subject.cwd) {
+            console.log(`  Cwd: ${interaction.payload.subject.cwd}`);
+          }
+          break;
+        case "file_change":
+          console.log(`  Item: ${interaction.payload.subject.itemId}`);
+          break;
+        case "permission_grant":
+          if (interaction.payload.subject.toolName) {
+            console.log(`  Tool: ${interaction.payload.subject.toolName}`);
+          }
+          printRequestedPermissions(interaction.payload.subject.permissions);
+          break;
       }
       if (interaction.payload.reason) {
         console.log(`  Prompt: ${interaction.payload.reason}`);
       }
-      if (interaction.payload.requestedPermissions) {
-        printRequestedPermissions(interaction.payload.requestedPermissions);
+      if (
+        interaction.payload.subject.kind !== "permission_grant"
+        && interaction.payload.grantablePermissions
+      ) {
+        printRequestedPermissions(interaction.payload.grantablePermissions);
       }
       console.log(
         `  Decisions: ${interaction.payload.availableDecisions.map(formatPendingInteractionCommandApprovalDecision).join(", ")}`,
       );
-      break;
-    case "file_change_approval":
-      if (interaction.payload.reason) {
-        console.log(`  Prompt: ${interaction.payload.reason}`);
-      }
-      if (interaction.payload.grantRoot) {
-        console.log(`  Grant root: ${interaction.payload.grantRoot}`);
-      }
-      break;
-    case "permission_request":
-      if (interaction.payload.toolName) {
-        console.log(`  Tool: ${interaction.payload.toolName}`);
-      }
-      if (interaction.payload.reason) {
-        console.log(`  Prompt: ${interaction.payload.reason}`);
-      }
-      printRequestedPermissions(interaction.payload.permissions);
       break;
   }
 
@@ -139,20 +137,16 @@ function printInteraction(interaction: PendingInteraction): void {
     console.log("");
     console.log("Resolution:");
     switch (interaction.resolution.kind) {
-      case "command_approval":
+      case "approval":
         console.log(
           `  Decision: ${formatPendingInteractionCommandApprovalDecision(
             interaction.resolution.decision,
           )}`,
         );
-        break;
-      case "file_change_approval":
-        console.log(`  Decision: ${interaction.resolution.decision}`);
-        break;
-      case "permission_request":
-        console.log(`  Decision: ${interaction.resolution.decision}`);
-        if (interaction.resolution.decision === "allow") {
-          console.log(`  Scope: ${interaction.resolution.scope}`);
+        if (interaction.resolution.decision === "allow_for_session") {
+          console.log("  Scope: session");
+        } else if (interaction.resolution.decision === "allow_once") {
+          console.log("  Scope: turn");
         }
         break;
     }
@@ -237,64 +231,43 @@ function buildBinaryResolution(
   action: "approve" | "deny",
 ): PendingInteractionResolution {
   switch (interaction.payload.kind) {
-    case "command_approval": {
+    case "approval": {
       const decision = (() => {
         if (action === "approve") {
           const sessionApproval = interaction.payload.availableDecisions.find(
-            (availableDecision) => availableDecision === "accept_for_session",
+            (availableDecision) => availableDecision === "allow_for_session",
           );
           if (sessionApproval) {
             return sessionApproval;
           }
           const turnApproval = interaction.payload.availableDecisions.find(
-            (availableDecision) => availableDecision === "accept",
+            (availableDecision) => availableDecision === "allow_once",
           );
           if (turnApproval) {
             return turnApproval;
-          }
-          const amendedApproval = interaction.payload.availableDecisions.find(
-            (availableDecision) => isPendingInteractionCommandApprovalPositiveDecision(
-              availableDecision,
-            ),
-          );
-          if (amendedApproval) {
-            return amendedApproval;
           }
           throw new Error(
             `Interaction ${interaction.id} does not offer an approval decision.`,
           );
         }
 
-        if (interaction.payload.availableDecisions.includes("decline")) {
-          return "decline";
-        }
-        if (interaction.payload.availableDecisions.includes("cancel")) {
-          return "cancel";
+        if (interaction.payload.availableDecisions.includes("deny")) {
+          return "deny";
         }
         throw new Error(
           `Interaction ${interaction.id} does not offer a deny decision.`,
         );
       })();
-      return {
-        kind: "command_approval",
-        decision,
-      };
-    }
-    case "file_change_approval":
-      return {
-        kind: "file_change_approval",
-        decision: action === "approve" ? "accept_for_session" : "decline",
-      };
-    case "permission_request":
-      if (action === "approve") {
+      if (
+        action === "approve"
+        && interaction.payload.subject.kind === "permission_grant"
+      ) {
         throw new Error(
           `Interaction ${interaction.id} is permission and must be resolved with the grant command.`,
         );
       }
-      return {
-        kind: "permission_request",
-        decision: "deny",
-      };
+      return buildApprovalResolution(interaction, decision);
+    }
   }
 }
 
@@ -302,40 +275,61 @@ function buildPermissionGrantResolution(
   interaction: PendingInteraction,
   scope: "session" | "turn",
 ): PendingInteractionResolution {
-  if (interaction.payload.kind !== "permission_request") {
+  if (
+    interaction.payload.kind !== "approval"
+    || interaction.payload.subject.kind !== "permission_grant"
+  ) {
     throw new Error(
-      `Interaction ${interaction.id} is ${formatInteractionKind(interaction.payload.kind)} and cannot be granted with this command.`,
+      `Interaction ${interaction.id} is ${formatInteractionKind(interaction)} and cannot be granted with this command.`,
     );
   }
 
-  return {
-    kind: "permission_request",
-    decision: "allow",
-    permissions: toGrantedPendingInteractionPermissions(interaction.payload.permissions),
-    scope,
-  };
+  return buildApprovalResolution(
+    interaction,
+    scope === "session" ? "allow_for_session" : "allow_once",
+  );
 }
 
 function formatBinaryResolutionMessage(
   resolution: PendingInteractionResolution,
 ): string {
   switch (resolution.kind) {
-    case "command_approval":
+    case "approval":
       return formatPendingInteractionCommandApprovalResolutionOutcome(
         resolution.decision,
       );
-    case "file_change_approval":
-      return formatPendingInteractionFileChangeApprovalResolutionOutcome(
-        resolution.decision,
-      );
-    case "permission_request":
-      return formatPendingInteractionPermissionResolutionOutcome(resolution);
   }
+}
 
-  const exhaustiveResolution: never = resolution;
-  throw new Error(
-    `Unsupported interaction resolution: ${String(exhaustiveResolution)}`,
-  );
+function getApprovalGrantedPermissions(
+  interaction: PendingInteraction,
+): PendingInteractionGrantablePermissionProfile | null {
+  if (interaction.payload.kind !== "approval") {
+    return null;
+  }
+  if (interaction.payload.subject.kind === "permission_grant") {
+    return toGrantedPendingInteractionPermissions(
+      interaction.payload.subject.permissions,
+    );
+  }
+  return interaction.payload.grantablePermissions;
+}
+
+function buildApprovalResolution(
+  interaction: PendingInteraction,
+  decision: PendingInteractionApprovalDecision,
+): PendingInteractionResolution {
+  if (decision === "deny") {
+    return {
+      kind: "approval",
+      decision,
+    };
+  }
+  return {
+    kind: "approval",
+    decision,
+    grantedPermissions: getApprovalGrantedPermissions(interaction),
+  };
 }
 
 function formatResolutionSuccessMessage(
@@ -390,7 +384,7 @@ export function registerInteractionCommands(
         },
         items.map((interaction) => [
           interaction.id,
-          formatInteractionKind(interaction.payload.kind),
+          formatInteractionKind(interaction),
           interaction.status,
           formatPendingInteractionSummary({
             interaction,

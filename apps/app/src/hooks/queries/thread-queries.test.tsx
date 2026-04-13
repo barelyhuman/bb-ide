@@ -26,14 +26,19 @@ function createPendingInteraction(): PendingInteraction {
     providerRequestId: "request-1",
     status: "pending",
     payload: {
-      kind: "permission_request",
-      itemId: "item_1",
-      reason: "Needs network access",
-      toolName: "WebFetch",
-      permissions: {
-        network: { enabled: true },
-        fileSystem: null,
+      kind: "approval",
+      subject: {
+        kind: "permission_grant",
+        itemId: "item_1",
+        toolName: "WebFetch",
+        permissions: {
+          network: { enabled: true },
+          fileSystem: null,
+        },
       },
+      reason: "Needs network access",
+      grantablePermissions: null,
+      availableDecisions: ["allow_once", "allow_for_session", "deny"],
     },
     resolution: null,
     statusReason: null,

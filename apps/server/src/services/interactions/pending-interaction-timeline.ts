@@ -31,20 +31,18 @@ export function formatPendingInteractionLifecycleMessage(
   switch (interaction.status) {
     case "pending": {
       switch (interaction.payload.kind) {
-        case "command_approval":
-          return interaction.payload.command
-            ? `Awaiting approval for command: ${interaction.payload.command}`
-            : "Awaiting command approval";
-        case "file_change_approval":
-          return interaction.payload.reason ?? "Awaiting file-change approval";
-        case "permission_request":
-          return interaction.payload.reason
-            ?? (interaction.payload.toolName
-              ? `Awaiting permission approval for ${interaction.payload.toolName}`
-              : "Awaiting permission approval");
+        case "approval":
+          switch (interaction.payload.subject.kind) {
+            case "command":
+              return `Waiting for approval to run ${interaction.payload.subject.command}`;
+            case "file_change":
+              return "Waiting for approval to edit files";
+            case "permission_grant":
+              return interaction.payload.subject.toolName
+                ? `Waiting for approval to grant ${interaction.payload.subject.toolName}`
+                : "Waiting for approval to grant permissions";
+          }
       }
-      const exhaustivePayload: never = interaction.payload;
-      throw new Error(`Unsupported pending interaction payload: ${String(exhaustivePayload)}`);
     }
     case "resolving":
       return "Delivering user response to provider";
@@ -53,23 +51,22 @@ export function formatPendingInteractionLifecycleMessage(
         return "Interaction resolved";
       }
       switch (interaction.resolution.kind) {
-        case "command_approval":
-          return formatPendingInteractionCommandApprovalResolutionMessage(
-            interaction.resolution.decision,
-          );
-        case "file_change_approval":
-          return formatPendingInteractionFileChangeApprovalResolutionMessage(
-            interaction.resolution.decision,
-          );
-        case "permission_request":
-          return formatPendingInteractionPermissionResolutionMessage(
-            interaction.resolution,
-          );
+        case "approval":
+          switch (interaction.payload.subject.kind) {
+            case "command":
+              return formatPendingInteractionCommandApprovalResolutionMessage(
+                interaction.resolution.decision,
+              );
+            case "file_change":
+              return formatPendingInteractionFileChangeApprovalResolutionMessage(
+                interaction.resolution.decision,
+              );
+            case "permission_grant":
+              return formatPendingInteractionPermissionResolutionMessage(
+                interaction.resolution,
+              );
+          }
       }
-      const exhaustiveResolution: never = interaction.resolution;
-      throw new Error(
-        `Unsupported pending interaction resolution: ${String(exhaustiveResolution)}`,
-      );
     case "interrupted":
       return interaction.statusReason ?? "Interaction interrupted";
     case "expired":
@@ -99,6 +96,8 @@ export function appendPendingInteractionTimelineEvent(
         interactionId: interaction.id,
         providerId: interaction.providerId,
         providerRequestId: interaction.providerRequestId,
+        subjectKind: interaction.payload.subject.kind,
+        itemId: interaction.payload.subject.itemId,
       },
     },
   });

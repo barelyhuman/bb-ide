@@ -35,6 +35,7 @@ import {
   seedThreadRuntimeState,
   seedThread,
 } from "../helpers/seed.js";
+import { createCommandApprovalPayload } from "../helpers/pending-interactions.js";
 import { queueManagerSystemMessage } from "../../src/services/threads/manager-system-messages.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
@@ -1384,16 +1385,12 @@ describe("internal event side effects", () => {
           providerId: "codex",
           providerThreadId: "provider-manager-awaiting-interaction",
           providerRequestId: "request-manager-awaiting-interaction",
-          payload: {
-            kind: "command_approval",
+          payload: createCommandApprovalPayload({
             itemId: "item-manager-awaiting-interaction",
             reason: "Approve command",
             command: "git push",
             cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-          },
+          }),
         },
         sessionId: "session-1",
       });

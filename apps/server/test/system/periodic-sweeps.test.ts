@@ -43,6 +43,7 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
+import { createCommandApprovalPayload } from "../helpers/pending-interactions.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 import {
   reportNextRuntimeMaterialSyncSuccess,
@@ -825,16 +826,12 @@ describe("periodic sweeps", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-periodic-expired-interaction",
           providerRequestId: "request-periodic-expired-interaction",
-          payload: {
-            kind: "command_approval",
+          payload: createCommandApprovalPayload({
             itemId: "item-periodic-expired-interaction",
             reason: "Approve command",
             command: "git push",
             cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-          },
+          }),
         },
         sessionId: session.id,
       });

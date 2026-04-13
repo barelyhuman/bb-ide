@@ -114,10 +114,10 @@ function getUnsupportedPendingInteractionReason(
   interaction: PendingInteractionCreate,
 ): string | null {
   if (
-    interaction.payload.kind === "command_approval"
+    interaction.payload.kind === "approval"
     && interaction.payload.availableDecisions.length === 0
   ) {
-    return "Command approvals must include at least one available decision";
+    return "Approvals must include at least one available decision";
   }
 
   return null;

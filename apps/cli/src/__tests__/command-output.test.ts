@@ -96,20 +96,84 @@ function makePendingInteraction(
   return {
     createdAt: Date.now(),
     payload: {
-      kind: "command_approval",
-      itemId: "item-1",
+      kind: "approval",
+      subject: {
+        kind: "command",
+        itemId: "item-1",
+        command: "git push",
+        cwd: "/tmp/project",
+      },
       reason: "Approve command",
-      command: "git push",
-      cwd: "/tmp/project",
-      commandActions: [],
-      requestedPermissions: null,
-      availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+      grantablePermissions: null,
+      availableDecisions: ["allow_once", "allow_for_session", "deny"],
     },
     resolution: null,
     resolvedAt: null,
     status: "pending",
     statusReason: null,
     ...overrides,
+  };
+}
+
+function makeCommandApprovalPayload(
+  itemId: string,
+  availableDecisions: PendingInteraction["payload"]["availableDecisions"] = [
+    "allow_once",
+    "allow_for_session",
+    "deny",
+  ],
+): PendingInteraction["payload"] {
+  return {
+    kind: "approval",
+    subject: {
+      kind: "command",
+      itemId,
+      command: "git push",
+      cwd: "/tmp/project",
+    },
+    reason: "Approve command",
+    grantablePermissions: null,
+    availableDecisions,
+  };
+}
+
+function makeFileChangeApprovalPayload(itemId: string): PendingInteraction["payload"] {
+  return {
+    kind: "approval",
+    subject: {
+      kind: "file_change",
+      itemId,
+    },
+    reason: "Approve file changes",
+    grantablePermissions: {
+      network: null,
+      fileSystem: {
+        read: [],
+        write: ["/tmp/project"],
+      },
+    },
+    availableDecisions: ["allow_once", "allow_for_session", "deny"],
+  };
+}
+
+function makePermissionGrantApprovalPayload(itemId: string): PendingInteraction["payload"] {
+  return {
+    kind: "approval",
+    subject: {
+      kind: "permission_grant",
+      itemId,
+      toolName: null,
+      permissions: {
+        network: { enabled: true },
+        fileSystem: {
+          read: ["/tmp/project/README.md"],
+          write: ["/tmp/project/notes.md"],
+        },
+      },
+    },
+    reason: "Grant workspace access",
+    grantablePermissions: null,
+    availableDecisions: ["allow_once", "allow_for_session", "deny"],
   };
 }
 
@@ -2561,7 +2625,7 @@ describe("CLI JSON output contracts", () => {
     expect(lines[1]).toContain("int-1");
     expect(lines[1]).toContain("command");
     expect(lines[1]).toContain("pending");
-    expect(lines[1]).toContain("git push");
+    expect(lines[1]).toContain("Approve command");
     expect(lines[2]).toBe("");
   });
 
@@ -2618,7 +2682,7 @@ describe("CLI JSON output contracts", () => {
       "  Command: git push",
       "  Cwd: /tmp/project",
       "  Prompt: Approve command",
-      "  Decisions: accept, accept_for_session, decline, cancel",
+      "  Decisions: allow_once, allow_for_session, deny",
     ]);
   });
 
@@ -2633,8 +2697,9 @@ describe("CLI JSON output contracts", () => {
         turnId: "turn-show-resolving",
         status: "resolving",
         resolution: {
-          kind: "command_approval",
-          decision: "accept_for_session",
+          kind: "approval",
+          decision: "allow_for_session",
+          grantedPermissions: null,
         },
       }),
     );
@@ -2662,7 +2727,7 @@ describe("CLI JSON output contracts", () => {
     expect(lines).toContain("  Status: resolving");
     expect(lines).toContain("  Delivery: waiting for provider acknowledgement");
     expect(lines).toContain("Resolution:");
-    expect(lines).toContain("  Decision: accept_for_session");
+    expect(lines).toContain("  Decision: allow_for_session");
   });
 
   it("bb thread interactions approve resolves command approvals for the session", async () => {
@@ -2687,8 +2752,9 @@ describe("CLI JSON output contracts", () => {
         status: "resolving",
         resolvedAt: null,
         resolution: {
-          kind: "command_approval",
-          decision: "accept_for_session",
+          kind: "approval",
+          decision: "allow_for_session",
+          grantedPermissions: null,
         },
       }),
     );
@@ -2721,8 +2787,9 @@ describe("CLI JSON output contracts", () => {
         interactionId: "int-approve",
       },
       json: {
-        kind: "command_approval",
-        decision: "accept_for_session",
+        kind: "approval",
+        decision: "allow_for_session",
+        grantedPermissions: null,
       },
     });
     expect(collectLogLines(vi.mocked(console.log))).toEqual([
@@ -2739,16 +2806,10 @@ describe("CLI JSON output contracts", () => {
         providerThreadId: "provider-thread-approve-no-session",
         threadId: "thread-approve-no-session",
         turnId: "turn-approve-no-session",
-        payload: {
-          kind: "command_approval",
-          itemId: "item-approve-no-session",
-          reason: "Approve command",
-          command: "git push",
-          cwd: "/tmp/project",
-          commandActions: [],
-          requestedPermissions: null,
-          availableDecisions: ["accept", "decline", "cancel"],
-        },
+        payload: makeCommandApprovalPayload("item-approve-no-session", [
+          "allow_once",
+          "deny",
+        ]),
       }),
     );
     const resolveInteraction = vi.fn(async () =>
@@ -2759,21 +2820,16 @@ describe("CLI JSON output contracts", () => {
         providerThreadId: "provider-thread-approve-no-session",
         threadId: "thread-approve-no-session",
         turnId: "turn-approve-no-session",
-        payload: {
-          kind: "command_approval",
-          itemId: "item-approve-no-session",
-          reason: "Approve command",
-          command: "git push",
-          cwd: "/tmp/project",
-          commandActions: [],
-          requestedPermissions: null,
-          availableDecisions: ["accept", "decline", "cancel"],
-        },
+        payload: makeCommandApprovalPayload("item-approve-no-session", [
+          "allow_once",
+          "deny",
+        ]),
         status: "resolving",
         resolvedAt: null,
         resolution: {
-          kind: "command_approval",
-          decision: "accept",
+          kind: "approval",
+          decision: "allow_once",
+          grantedPermissions: null,
         },
       }),
     );
@@ -2807,8 +2863,9 @@ describe("CLI JSON output contracts", () => {
         interactionId: "int-approve-no-session",
       },
       json: {
-        kind: "command_approval",
-        decision: "accept",
+        kind: "approval",
+        decision: "allow_once",
+        grantedPermissions: null,
       },
     });
     expect(collectLogLines(vi.mocked(console.log))).toEqual([
@@ -2816,7 +2873,7 @@ describe("CLI JSON output contracts", () => {
     ]);
   });
 
-  it("bb thread interactions approve uses amendment approvals when plain acceptance is unavailable", async () => {
+  it("bb thread interactions approve errors when no allow decision is available", async () => {
     const getInteraction = vi.fn(async () =>
       makePendingInteraction({
         id: "int-approve-amendment",
@@ -2825,61 +2882,10 @@ describe("CLI JSON output contracts", () => {
         providerThreadId: "provider-thread-approve-amendment",
         threadId: "thread-approve-amendment",
         turnId: "turn-approve-amendment",
-        payload: {
-          kind: "command_approval",
-          itemId: "item-approve-amendment",
-          reason: "Approve command",
-          command: "git push",
-          cwd: "/tmp/project",
-          commandActions: [],
-          requestedPermissions: null,
-          availableDecisions: [
-            {
-              kind: "accept_with_exec_policy_amendment",
-              execPolicyAmendment: ["allow", "git", "push"],
-            },
-            "decline",
-            "cancel",
-          ],
-        },
+        payload: makeCommandApprovalPayload("item-approve-amendment", ["deny"]),
       }),
     );
-    const resolveInteraction = vi.fn(async () =>
-      makePendingInteraction({
-        id: "int-approve-amendment",
-        providerId: "codex",
-        providerRequestId: "request-approve-amendment",
-        providerThreadId: "provider-thread-approve-amendment",
-        threadId: "thread-approve-amendment",
-        turnId: "turn-approve-amendment",
-        payload: {
-          kind: "command_approval",
-          itemId: "item-approve-amendment",
-          reason: "Approve command",
-          command: "git push",
-          cwd: "/tmp/project",
-          commandActions: [],
-          requestedPermissions: null,
-          availableDecisions: [
-            {
-              kind: "accept_with_exec_policy_amendment",
-              execPolicyAmendment: ["allow", "git", "push"],
-            },
-            "decline",
-            "cancel",
-          ],
-        },
-        status: "resolving",
-        resolvedAt: null,
-        resolution: {
-          kind: "command_approval",
-          decision: {
-            kind: "accept_with_exec_policy_amendment",
-            execPolicyAmendment: ["allow", "git", "push"],
-          },
-        },
-      }),
-    );
+    const resolveInteraction = vi.fn();
     createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
@@ -2899,27 +2905,14 @@ describe("CLI JSON output contracts", () => {
       },
     }));
 
-    await runCommand(
+    await expect(runCommand(
       ["thread", "interactions", "approve", "int-approve-amendment", "thread-approve-amendment"],
       (program) => registerThreadCommands(program, () => "http://server"),
+    )).rejects.toThrow("process.exit:1");
+    expect(resolveInteraction).not.toHaveBeenCalled();
+    expect(collectLogLines(vi.mocked(console.error)).join("\n")).toContain(
+      "does not offer an approval decision",
     );
-
-    expect(resolveInteraction).toHaveBeenCalledWith({
-      param: {
-        id: "thread-approve-amendment",
-        interactionId: "int-approve-amendment",
-      },
-      json: {
-        kind: "command_approval",
-        decision: {
-          kind: "accept_with_exec_policy_amendment",
-          execPolicyAmendment: ["allow", "git", "push"],
-        },
-      },
-    });
-    expect(collectLogLines(vi.mocked(console.log))).toEqual([
-      "Interaction int-approve-amendment submitted (approved with exec policy amendment); delivering to provider",
-    ]);
   });
 
   it("bb thread interactions deny uses decline when it is available", async () => {
@@ -2944,8 +2937,8 @@ describe("CLI JSON output contracts", () => {
         status: "resolving",
         resolvedAt: null,
         resolution: {
-          kind: "command_approval",
-          decision: "decline",
+          kind: "approval",
+          decision: "deny",
         },
       }),
     );
@@ -2978,8 +2971,8 @@ describe("CLI JSON output contracts", () => {
         interactionId: "int-deny",
       },
       json: {
-        kind: "command_approval",
-        decision: "decline",
+        kind: "approval",
+        decision: "deny",
       },
     });
     expect(collectLogLines(vi.mocked(console.log))).toEqual([
@@ -2987,7 +2980,7 @@ describe("CLI JSON output contracts", () => {
     ]);
   });
 
-  it("bb thread interactions deny falls back to cancel when decline is unavailable", async () => {
+  it("bb thread interactions deny errors when deny is unavailable", async () => {
     const getInteraction = vi.fn(async () =>
       makePendingInteraction({
         id: "int-cancel",
@@ -2996,44 +2989,10 @@ describe("CLI JSON output contracts", () => {
         providerThreadId: "provider-thread-cancel",
         threadId: "thread-cancel",
         turnId: "turn-cancel",
-        payload: {
-          kind: "command_approval",
-          itemId: "item-cancel",
-          reason: "Approve command",
-          command: "git push",
-          cwd: "/tmp/project",
-          commandActions: [],
-          requestedPermissions: null,
-          availableDecisions: ["accept", "cancel"],
-        },
+        payload: makeCommandApprovalPayload("item-cancel", ["allow_once"]),
       }),
     );
-    const resolveInteraction = vi.fn(async () =>
-      makePendingInteraction({
-        id: "int-cancel",
-        providerId: "codex",
-        providerRequestId: "request-cancel",
-        providerThreadId: "provider-thread-cancel",
-        threadId: "thread-cancel",
-        turnId: "turn-cancel",
-        payload: {
-          kind: "command_approval",
-          itemId: "item-cancel",
-          reason: "Approve command",
-          command: "git push",
-          cwd: "/tmp/project",
-          commandActions: [],
-          requestedPermissions: null,
-          availableDecisions: ["accept", "cancel"],
-        },
-        status: "resolving",
-        resolvedAt: null,
-        resolution: {
-          kind: "command_approval",
-          decision: "cancel",
-        },
-      }),
-    );
+    const resolveInteraction = vi.fn();
     createClientMock.mockReturnValue(asServerClient({
       api: {
         v1: {
@@ -3053,24 +3012,14 @@ describe("CLI JSON output contracts", () => {
       },
     }));
 
-    await runCommand(
+    await expect(runCommand(
       ["thread", "interactions", "deny", "int-cancel", "thread-cancel"],
       (program) => registerThreadCommands(program, () => "http://server"),
+    )).rejects.toThrow("process.exit:1");
+    expect(resolveInteraction).not.toHaveBeenCalled();
+    expect(collectLogLines(vi.mocked(console.error)).join("\n")).toContain(
+      "does not offer a deny decision",
     );
-
-    expect(resolveInteraction).toHaveBeenCalledWith({
-      param: {
-        id: "thread-cancel",
-        interactionId: "int-cancel",
-      },
-      json: {
-        kind: "command_approval",
-        decision: "cancel",
-      },
-    });
-    expect(collectLogLines(vi.mocked(console.log))).toEqual([
-      "Interaction int-cancel submitted (cancelled); delivering to provider",
-    ]);
   });
 
   it("bb thread interactions approve resolves file-change approvals for the session", async () => {
@@ -3082,12 +3031,7 @@ describe("CLI JSON output contracts", () => {
         providerThreadId: "provider-thread-file-change",
         threadId: "thread-file-change",
         turnId: "turn-file-change",
-        payload: {
-          kind: "file_change_approval",
-          itemId: "item-file-change",
-          reason: "Approve file changes",
-          grantRoot: "/tmp/project",
-        },
+        payload: makeFileChangeApprovalPayload("item-file-change"),
       }),
     );
     const resolveInteraction = vi.fn(async () =>
@@ -3098,17 +3042,19 @@ describe("CLI JSON output contracts", () => {
         providerThreadId: "provider-thread-file-change",
         threadId: "thread-file-change",
         turnId: "turn-file-change",
-        payload: {
-          kind: "file_change_approval",
-          itemId: "item-file-change",
-          reason: "Approve file changes",
-          grantRoot: "/tmp/project",
-        },
+        payload: makeFileChangeApprovalPayload("item-file-change"),
         status: "resolving",
         resolvedAt: null,
         resolution: {
-          kind: "file_change_approval",
-          decision: "accept_for_session",
+          kind: "approval",
+          decision: "allow_for_session",
+          grantedPermissions: {
+            network: null,
+            fileSystem: {
+              read: [],
+              write: ["/tmp/project"],
+            },
+          },
         },
       }),
     );
@@ -3141,8 +3087,15 @@ describe("CLI JSON output contracts", () => {
         interactionId: "int-file-change",
       },
       json: {
-        kind: "file_change_approval",
-        decision: "accept_for_session",
+        kind: "approval",
+        decision: "allow_for_session",
+        grantedPermissions: {
+          network: null,
+          fileSystem: {
+            read: [],
+            write: ["/tmp/project"],
+          },
+        },
       },
     });
     expect(collectLogLines(vi.mocked(console.log))).toEqual([
@@ -3159,19 +3112,7 @@ describe("CLI JSON output contracts", () => {
         providerThreadId: "provider-thread-permission-grant",
         threadId: "thread-permission-grant",
         turnId: "turn-permission-grant",
-        payload: {
-          kind: "permission_request",
-          itemId: "item-permission-grant",
-          reason: "Grant workspace access",
-          toolName: null,
-          permissions: {
-            network: { enabled: true },
-            fileSystem: {
-              read: ["/tmp/project/README.md"],
-              write: ["/tmp/project/notes.md"],
-            },
-          },
-        },
+        payload: makePermissionGrantApprovalPayload("item-permission-grant"),
       }),
     );
     const resolveInteraction = vi.fn(async () =>
@@ -3182,32 +3123,19 @@ describe("CLI JSON output contracts", () => {
         providerThreadId: "provider-thread-permission-grant",
         threadId: "thread-permission-grant",
         turnId: "turn-permission-grant",
-        payload: {
-          kind: "permission_request",
-          itemId: "item-permission-grant",
-          reason: "Grant workspace access",
-          toolName: null,
-          permissions: {
-            network: { enabled: true },
-            fileSystem: {
-              read: ["/tmp/project/README.md"],
-              write: ["/tmp/project/notes.md"],
-            },
-          },
-        },
+        payload: makePermissionGrantApprovalPayload("item-permission-grant"),
         status: "resolving",
         resolvedAt: null,
         resolution: {
-          kind: "permission_request",
-          decision: "allow",
-          permissions: {
+          kind: "approval",
+          decision: "allow_for_session",
+          grantedPermissions: {
             network: { enabled: true },
             fileSystem: {
               read: ["/tmp/project/README.md"],
               write: ["/tmp/project/notes.md"],
             },
           },
-          scope: "session",
         },
       }),
     );
@@ -3247,20 +3175,19 @@ describe("CLI JSON output contracts", () => {
         interactionId: "int-permission-grant",
       },
       json: {
-        kind: "permission_request",
-        decision: "allow",
-        permissions: {
+        kind: "approval",
+        decision: "allow_for_session",
+        grantedPermissions: {
           network: { enabled: true },
           fileSystem: {
             read: ["/tmp/project/README.md"],
             write: ["/tmp/project/notes.md"],
           },
         },
-        scope: "session",
       },
     });
     expect(collectLogLines(vi.mocked(console.log))).toEqual([
-      "Interaction int-permission-grant submitted (granted for this session); delivering to provider",
+      "Interaction int-permission-grant submitted (approved for this session); delivering to provider",
     ]);
   });
 
@@ -3273,16 +3200,7 @@ describe("CLI JSON output contracts", () => {
         providerThreadId: "provider-thread-permission-deny",
         threadId: "thread-permission-deny",
         turnId: "turn-permission-deny",
-        payload: {
-          kind: "permission_request",
-          itemId: "item-permission-deny",
-          reason: "Grant network access",
-          toolName: null,
-          permissions: {
-            network: { enabled: true },
-            fileSystem: null,
-          },
-        },
+        payload: makePermissionGrantApprovalPayload("item-permission-deny"),
       }),
     );
     const resolveInteraction = vi.fn(async () =>
@@ -3293,20 +3211,11 @@ describe("CLI JSON output contracts", () => {
         providerThreadId: "provider-thread-permission-deny",
         threadId: "thread-permission-deny",
         turnId: "turn-permission-deny",
-        payload: {
-          kind: "permission_request",
-          itemId: "item-permission-deny",
-          reason: "Grant network access",
-          toolName: null,
-          permissions: {
-            network: { enabled: true },
-            fileSystem: null,
-          },
-        },
+        payload: makePermissionGrantApprovalPayload("item-permission-deny"),
         status: "resolving",
         resolvedAt: null,
         resolution: {
-          kind: "permission_request",
+          kind: "approval",
           decision: "deny",
         },
       }),
@@ -3341,7 +3250,7 @@ describe("CLI JSON output contracts", () => {
         interactionId: "int-permission-deny",
       },
       json: {
-        kind: "permission_request",
+        kind: "approval",
         decision: "deny",
       },
     });

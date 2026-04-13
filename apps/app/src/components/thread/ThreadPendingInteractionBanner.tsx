@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   extractShellCommandFromString,
-  getPendingInteractionCommandApprovalDecisionKind,
 } from "@bb/core-ui";
 import {
   type PendingInteraction,
+  type PendingInteractionApprovalDecision,
+  type PendingInteractionGrantedPermissionProfile,
   type PendingInteractionResolution,
 } from "@bb/domain";
 import { ExpandableLine, StatusPill } from "@bb/ui-core";
@@ -12,8 +13,8 @@ import { useResolveThreadPendingInteraction } from "@/hooks/mutations/thread-int
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { cn } from "@/lib/utils";
 import {
-  buildPermissionDecisionButtons,
   labelForCommandDecision,
+  labelForPermissionDecision,
 } from "./pending-interactions/banner-helpers";
 import { Button } from "../ui/button";
 
@@ -160,94 +161,96 @@ export function ThreadPendingInteractionBanner({
 
 function buildBannerModel(interaction: PendingInteraction): BannerModel {
   switch (interaction.payload.kind) {
-    case "command_approval": {
-      const rawCommand = interaction.payload.command;
-      const command = rawCommand
-        ? extractShellCommandFromString(rawCommand) ?? rawCommand
-        : null;
-      const subject = command ? (
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
-          <pre className="max-h-[220px] overflow-auto whitespace-pre px-4 py-3 font-mono text-xs leading-tight text-foreground">
-            $ {command}
-          </pre>
-        </div>
-      ) : null;
+    case "approval": {
+      const grantedPermissions = getApprovalGrantedPermissions(interaction);
+      const options = interaction.payload.availableDecisions.map((decision) => ({
+        label: labelForApprovalDecision(interaction, decision),
+        resolution: buildApprovalResolution(decision, grantedPermissions),
+      }));
 
-      const cancelDecision = interaction.payload.availableDecisions.find(
-        (decision) =>
-          getPendingInteractionCommandApprovalDecisionKind(decision) === "cancel",
-      );
-      const nonCancelDecisions = interaction.payload.availableDecisions.filter(
-        (decision) =>
-          getPendingInteractionCommandApprovalDecisionKind(decision) !== "cancel",
-      );
+      switch (interaction.payload.subject.kind) {
+        case "command": {
+          const rawCommand = interaction.payload.subject.command;
+          const command = rawCommand
+            ? extractShellCommandFromString(rawCommand) ?? rawCommand
+            : null;
+          const subject = command ? (
+            <div className="overflow-hidden rounded-lg border border-border bg-card">
+              <pre className="max-h-[220px] overflow-auto whitespace-pre px-4 py-3 font-mono ui-text-sm leading-tight text-foreground">
+                $ {command}
+              </pre>
+            </div>
+          ) : null;
 
-      return {
-        title: interaction.payload.reason ?? "Do you want to run this command?",
-        subject,
-        options: nonCancelDecisions.map((decision) => ({
-          label: labelForCommandDecision(decision),
-          resolution: {
-            kind: "command_approval",
-            decision,
-          },
-        })),
-        skip: cancelDecision
-          ? {
-              label: "Cancel",
-              resolution: {
-                kind: "command_approval",
-                decision: cancelDecision,
-              },
-            }
-          : null,
-      };
-    }
-    case "file_change_approval": {
-      return {
-        title: interaction.payload.reason ?? "Do you want to make these changes?",
-        subject: null,
-        options: [
-          {
-            label: "Yes",
-            resolution: {
-              kind: "file_change_approval",
-              decision: "accept_for_session",
-            },
-          },
-          {
-            label: "No",
-            resolution: {
-              kind: "file_change_approval",
-              decision: "decline",
-            },
-          },
-        ],
-        skip: {
-          label: "Cancel",
-          resolution: {
-            kind: "file_change_approval",
-            decision: "cancel",
-          },
-        },
-      };
-    }
-    case "permission_request": {
-      const buttons = buildPermissionDecisionButtons(interaction.payload.permissions);
-      return {
-        title:
-          interaction.payload.reason ?? "Do you want to grant this permission?",
-        subject: interaction.payload.toolName ? (
-          <div className="rounded-lg border border-border bg-card px-4 py-3 font-mono text-xs leading-tight text-foreground">
-            {interaction.payload.toolName}
-          </div>
-        ) : null,
-        options: buttons.map((button) => ({
-          label: button.label,
-          resolution: button.resolution,
-        })),
-        skip: null,
-      };
+          return {
+            title: interaction.payload.reason ?? "Do you want to run this command?",
+            subject,
+            options,
+            skip: null,
+          };
+        }
+        case "file_change":
+          return {
+            title: interaction.payload.reason ?? "Do you want to make these changes?",
+            subject: null,
+            options,
+            skip: null,
+          };
+        case "permission_grant":
+          return {
+            title:
+              interaction.payload.reason ?? "Do you want to grant this permission?",
+            subject: interaction.payload.subject.toolName ? (
+              <div className="rounded-lg border border-border bg-card px-4 py-3 font-mono ui-text-sm leading-tight text-foreground">
+                {interaction.payload.subject.toolName}
+              </div>
+            ) : null,
+            options,
+            skip: null,
+          };
+      }
     }
   }
+}
+
+function labelForApprovalDecision(
+  interaction: PendingInteraction,
+  decision: PendingInteractionApprovalDecision,
+): string {
+  if (
+    interaction.payload.kind === "approval"
+    && interaction.payload.subject.kind === "permission_grant"
+  ) {
+    return labelForPermissionDecision(decision);
+  }
+  return labelForCommandDecision(decision);
+}
+
+function getApprovalGrantedPermissions(
+  interaction: PendingInteraction,
+): PendingInteractionGrantedPermissionProfile | null {
+  if (interaction.payload.kind !== "approval") {
+    return null;
+  }
+  if (interaction.payload.subject.kind === "permission_grant") {
+    return interaction.payload.subject.permissions;
+  }
+  return interaction.payload.grantablePermissions;
+}
+
+function buildApprovalResolution(
+  decision: PendingInteractionApprovalDecision,
+  grantedPermissions: PendingInteractionGrantedPermissionProfile | null,
+): PendingInteractionResolution {
+  if (decision === "deny") {
+    return {
+      kind: "approval",
+      decision,
+    };
+  }
+  return {
+    kind: "approval",
+    decision,
+    grantedPermissions,
+  };
 }

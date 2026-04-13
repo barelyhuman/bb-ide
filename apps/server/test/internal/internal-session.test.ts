@@ -63,6 +63,7 @@ import {
   seedStoredEvent,
   seedThread,
 } from "../helpers/seed.js";
+import { createCommandApprovalPayload } from "../helpers/pending-interactions.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
 describe("internal session routes", () => {
@@ -436,16 +437,12 @@ describe("internal session routes", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-replace-interaction-session",
           providerRequestId: "request-replace-interaction-session",
-          payload: {
-            kind: "command_approval",
+          payload: createCommandApprovalPayload({
             itemId: "item-replace-interaction-session",
             reason: "Approve command",
             command: "git push",
             cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-          },
+          }),
         },
         sessionId: existing.session.id,
       });
@@ -1770,16 +1767,12 @@ describe("internal session routes", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-stop-interaction",
           providerRequestId: "request-stop-interaction",
-          payload: {
-            kind: "command_approval",
+          payload: createCommandApprovalPayload({
             itemId: "item-stop-interaction",
             reason: "Approve command",
             command: "git push",
             cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-          },
+          }),
         },
         sessionId: "session-1",
       });

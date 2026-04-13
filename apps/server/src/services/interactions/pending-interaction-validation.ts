@@ -1,51 +1,11 @@
 import {
-  formatPendingInteractionCommandApprovalDecision,
-} from "@bb/core-ui";
-import {
   type PendingInteraction,
-  type PendingInteractionCommandApprovalDecision,
-  type PendingInteractionFileChangeApprovalDecision,
+  type PendingInteractionApprovalDecision,
+  type PendingInteractionGrantablePermissionProfile,
   type PendingInteractionGrantedPermissionProfile,
   type PendingInteractionResolution,
 } from "@bb/domain";
 import { ApiError } from "../../errors.js";
-
-function commandApprovalDecisionEquals(
-  left: PendingInteractionCommandApprovalDecision,
-  right: PendingInteractionCommandApprovalDecision,
-): boolean {
-  if (typeof left === "string" || typeof right === "string") {
-    return left === right;
-  }
-
-  if (left.kind !== right.kind) {
-    return false;
-  }
-
-  if (
-    left.kind === "accept_with_exec_policy_amendment"
-    && right.kind === "accept_with_exec_policy_amendment"
-  ) {
-    return (
-      left.execPolicyAmendment.length === right.execPolicyAmendment.length
-      && left.execPolicyAmendment.every(
-        (entry, index) => entry === right.execPolicyAmendment[index],
-      )
-    );
-  }
-
-  if (
-    left.kind === "apply_network_policy_amendment"
-    && right.kind === "apply_network_policy_amendment"
-  ) {
-    return (
-      left.networkPolicyAmendment.host === right.networkPolicyAmendment.host
-      && left.networkPolicyAmendment.action === right.networkPolicyAmendment.action
-    );
-  }
-
-  return false;
-}
 
 function stringSetEquals(left: readonly string[], right: readonly string[]): boolean {
   const leftSet = new Set(left);
@@ -100,100 +60,49 @@ export function pendingInteractionResolutionEquals(
     return false;
   }
 
-  switch (left.kind) {
-    case "command_approval":
-      return (
-        right.kind === "command_approval"
-        && commandApprovalDecisionEquals(left.decision, right.decision)
-      );
-    case "file_change_approval":
-      return (
-        right.kind === "file_change_approval"
-        && left.decision === right.decision
-      );
-    case "permission_request":
-      if (right.kind !== "permission_request" || left.decision !== right.decision) {
-        return false;
-      }
-      if (left.decision === "deny" || right.decision === "deny") {
-        return left.decision === right.decision;
-      }
-      return (
-        left.scope === right.scope
-        && permissionProfileEquals(left.permissions, right.permissions)
-      );
+  if (left.decision !== right.decision) {
+    return false;
   }
+  if (left.decision === "deny" || right.decision === "deny") {
+    return left.decision === right.decision;
+  }
+
+  if (left.grantedPermissions === null || right.grantedPermissions === null) {
+    return left.grantedPermissions === right.grantedPermissions;
+  }
+
+  return permissionProfileEquals(left.grantedPermissions, right.grantedPermissions);
 }
 
-function validateCommandApprovalResolution(
+function validateAvailableDecision(
   interaction: PendingInteraction,
-  resolution: PendingInteractionResolution,
+  decision: PendingInteractionApprovalDecision,
 ): void {
-  if (
-    interaction.payload.kind !== "command_approval"
-    || resolution.kind !== "command_approval"
-  ) {
-    return;
-  }
-
-  if (
-    interaction.payload.availableDecisions.some((decision) =>
-      commandApprovalDecisionEquals(decision, resolution.decision),
-    )
-  ) {
+  if (interaction.payload.availableDecisions.includes(decision)) {
     return;
   }
 
   throw new ApiError(
     400,
     "invalid_request",
-    `Command approval decision '${formatPendingInteractionCommandApprovalDecision(resolution.decision)}' is not available for interaction ${interaction.id}`,
+    `Approval decision '${decision}' is not available for interaction ${interaction.id}`,
   );
 }
 
-function validateFileChangeApprovalResolution(
+function getRequestedPermissions(
   interaction: PendingInteraction,
-  resolution: PendingInteractionResolution,
-): void {
-  if (
-    interaction.payload.kind !== "file_change_approval"
-    || resolution.kind !== "file_change_approval"
-  ) {
-    return;
+): PendingInteractionGrantablePermissionProfile | null {
+  if (interaction.payload.subject.kind === "permission_grant") {
+    return interaction.payload.subject.permissions;
   }
-
-  const allowedDecisions = new Set<PendingInteractionFileChangeApprovalDecision>([
-    "accept",
-    "accept_for_session",
-    "decline",
-    "cancel",
-  ]);
-  if (allowedDecisions.has(resolution.decision)) {
-    return;
-  }
-
-  throw new ApiError(
-    400,
-    "invalid_request",
-    `File-change approval decision '${resolution.decision}' is invalid`,
-  );
+  return interaction.payload.grantablePermissions;
 }
 
-function validatePermissionRequestResolution(
+function validateGrantedPermissions(
   interaction: PendingInteraction,
-  resolution: PendingInteractionResolution,
+  permissions: PendingInteractionGrantedPermissionProfile,
 ): void {
-  if (
-    interaction.payload.kind !== "permission_request"
-    || resolution.kind !== "permission_request"
-  ) {
-    return;
-  }
-  if (resolution.decision === "deny") {
-    return;
-  }
-
-  if (!hasGrantedPermissions(resolution.permissions)) {
+  if (!hasGrantedPermissions(permissions)) {
     throw new ApiError(
       400,
       "invalid_request",
@@ -201,10 +110,19 @@ function validatePermissionRequestResolution(
     );
   }
 
-  if (resolution.permissions.network !== null) {
+  const requestedPermissions = getRequestedPermissions(interaction);
+  if (requestedPermissions === null) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "Granted permissions must be a subset of the requested permissions",
+    );
+  }
+
+  if (permissions.network !== null) {
     if (
-      interaction.payload.permissions.network?.enabled !== true
-      || resolution.permissions.network.enabled !== true
+      requestedPermissions.network?.enabled !== true
+      || permissions.network.enabled !== true
     ) {
       throw new ApiError(
         400,
@@ -214,8 +132,8 @@ function validatePermissionRequestResolution(
     }
   }
 
-  if (resolution.permissions.fileSystem !== null) {
-    const requestedFileSystem = interaction.payload.permissions.fileSystem;
+  if (permissions.fileSystem !== null) {
+    const requestedFileSystem = requestedPermissions.fileSystem;
     if (requestedFileSystem === null) {
       throw new ApiError(
         400,
@@ -224,10 +142,10 @@ function validatePermissionRequestResolution(
       );
     }
 
-    const unknownReadPaths = resolution.permissions.fileSystem.read.filter(
+    const unknownReadPaths = permissions.fileSystem.read.filter(
       (path) => !requestedFileSystem.read.includes(path),
     );
-    const unknownWritePaths = resolution.permissions.fileSystem.write.filter(
+    const unknownWritePaths = permissions.fileSystem.write.filter(
       (path) => !requestedFileSystem.write.includes(path),
     );
     if (unknownReadPaths.length > 0 || unknownWritePaths.length > 0) {
@@ -252,7 +170,16 @@ export function validatePendingInteractionResolution(
     );
   }
 
-  validateCommandApprovalResolution(interaction, resolution);
-  validateFileChangeApprovalResolution(interaction, resolution);
-  validatePermissionRequestResolution(interaction, resolution);
+  validateAvailableDecision(interaction, resolution.decision);
+  if (resolution.decision !== "deny") {
+    if (resolution.grantedPermissions !== null) {
+      validateGrantedPermissions(interaction, resolution.grantedPermissions);
+    } else if (interaction.payload.subject.kind === "permission_grant") {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        "Allowed permission-grant resolutions must include granted permissions",
+      );
+    }
+  }
 }

@@ -25,6 +25,7 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
+import { createCommandApprovalPayload } from "../helpers/pending-interactions.js";
 import {
   createTestDaemonHostKey,
   createTestAppHarness,
@@ -498,16 +499,12 @@ describe("internal session correctness", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-disconnect-pending-interaction",
           providerRequestId: "request-disconnect-pending-interaction",
-          payload: {
-            kind: "command_approval",
+          payload: createCommandApprovalPayload({
             itemId: "item-disconnect-pending-interaction",
             reason: "Needs approval",
             command: "git push",
             cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-          },
+          }),
         },
         sessionId: session.id,
       });
@@ -614,16 +611,12 @@ describe("internal session correctness", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-session-restart-interaction",
           providerRequestId: "request-session-restart-interaction",
-          payload: {
-            kind: "command_approval",
+          payload: createCommandApprovalPayload({
             itemId: "item-session-restart-interaction",
             reason: "Needs approval",
             command: "git push",
             cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-          },
+          }),
         },
         sessionId: session.id,
       });

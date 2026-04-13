@@ -49,22 +49,25 @@ function createCommandApprovalRequest(
     providerThreadId: "provider-thread-registry",
     providerRequestId: args.providerRequestId ?? "request-registry",
     payload: {
-      kind: "command_approval",
-      itemId: "item-registry",
+      kind: "approval",
+      subject: {
+        kind: "command",
+        itemId: "item-registry",
+        command: "git push",
+        cwd: "/tmp/project",
+      },
       reason: "Needs approval",
-      command: "git push",
-      cwd: "/tmp/project",
-      commandActions: [],
-      requestedPermissions: null,
-      availableDecisions: ["accept", "decline", "cancel"],
+      grantablePermissions: null,
+      availableDecisions: ["allow_once", "deny"],
     },
   };
 }
 
 function createCommandApprovalResolution(): PendingInteractionResolution {
   return {
-    kind: "command_approval",
-    decision: "accept",
+    kind: "approval",
+    decision: "allow_once",
+    grantedPermissions: null,
   };
 }
 

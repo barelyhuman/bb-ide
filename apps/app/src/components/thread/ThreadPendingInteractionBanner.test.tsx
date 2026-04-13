@@ -51,14 +51,16 @@ function createCommandApprovalInteraction(): PendingInteraction {
   return {
     ...createPendingInteractionBase(),
     payload: {
-      kind: "command_approval",
-      itemId: "item_1",
+      kind: "approval",
+      subject: {
+        kind: "command",
+        itemId: "item_1",
+        command: "git push origin feature",
+        cwd: "/tmp/project",
+      },
       reason: "Run a command that modifies the repo",
-      command: "git push origin feature",
-      cwd: "/tmp/project",
-      commandActions: [],
-      requestedPermissions: null,
-      availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
+      grantablePermissions: null,
+      availableDecisions: ["allow_once", "allow_for_session", "deny"],
     },
   };
 }
@@ -68,29 +70,9 @@ function createResolvingCommandApprovalInteraction(): PendingInteraction {
     ...createCommandApprovalInteraction(),
     status: "resolving",
     resolution: {
-      kind: "command_approval",
-      decision: "accept_for_session",
-    },
-  };
-}
-
-function createAmendmentCommandApprovalInteraction(): PendingInteraction {
-  return {
-    ...createPendingInteractionBase(),
-    payload: {
-      kind: "command_approval",
-      itemId: "item_5",
-      reason: null,
-      command: null,
-      cwd: null,
-      commandActions: [],
-      requestedPermissions: null,
-      availableDecisions: [
-        {
-          kind: "accept_with_exec_policy_amendment",
-          execPolicyAmendment: ["allow workspace-write"],
-        },
-      ],
+      kind: "approval",
+      decision: "allow_for_session",
+      grantedPermissions: null,
     },
   };
 }
@@ -99,10 +81,20 @@ function createFileChangeInteraction(): PendingInteraction {
   return {
     ...createPendingInteractionBase(),
     payload: {
-      kind: "file_change_approval",
-      itemId: "item_2",
+      kind: "approval",
+      subject: {
+        kind: "file_change",
+        itemId: "item_2",
+      },
       reason: "Write generated files",
-      grantRoot: "/tmp/project",
+      grantablePermissions: {
+        network: null,
+        fileSystem: {
+          read: [],
+          write: ["/tmp/project"],
+        },
+      },
+      availableDecisions: ["allow_once", "allow_for_session", "deny"],
     },
   };
 }
@@ -111,17 +103,22 @@ function createPermissionRequestInteraction(): PendingInteraction {
   return {
     ...createPendingInteractionBase(),
     payload: {
-      kind: "permission_request",
-      itemId: "item_3",
-      reason: "Need repo write access",
-      toolName: "Edit",
-      permissions: {
-        network: null,
-        fileSystem: {
-          read: ["/tmp/project/package.json"],
-          write: ["/tmp/project/package.json"],
+      kind: "approval",
+      subject: {
+        kind: "permission_grant",
+        itemId: "item_3",
+        toolName: "Edit",
+        permissions: {
+          network: null,
+          fileSystem: {
+            read: ["/tmp/project/package.json"],
+            write: ["/tmp/project/package.json"],
+          },
         },
       },
+      reason: "Need repo write access",
+      grantablePermissions: null,
+      availableDecisions: ["allow_once", "allow_for_session", "deny"],
     },
   };
 }
@@ -137,8 +134,9 @@ describe("ThreadPendingInteractionBanner", () => {
       ...createCommandApprovalInteraction(),
       status: "resolving",
       resolution: {
-        kind: "command_approval",
-        decision: "accept",
+        kind: "approval",
+        decision: "allow_once",
+        grantedPermissions: null,
       },
     });
 
@@ -153,8 +151,9 @@ describe("ThreadPendingInteractionBanner", () => {
         "thr_1",
         "pi_1",
         {
-          kind: "command_approval",
-          decision: "accept",
+          kind: "approval",
+          decision: "allow_once",
+          grantedPermissions: null,
         },
       );
     });
@@ -165,8 +164,8 @@ describe("ThreadPendingInteractionBanner", () => {
       ...createFileChangeInteraction(),
       status: "resolving",
       resolution: {
-        kind: "file_change_approval",
-        decision: "decline",
+        kind: "approval",
+        decision: "deny",
       },
     });
 
@@ -182,8 +181,8 @@ describe("ThreadPendingInteractionBanner", () => {
         "thr_1",
         "pi_1",
         {
-          kind: "file_change_approval",
-          decision: "decline",
+          kind: "approval",
+          decision: "deny",
         },
       );
     });
@@ -194,16 +193,15 @@ describe("ThreadPendingInteractionBanner", () => {
       ...createPermissionRequestInteraction(),
       status: "resolving",
       resolution: {
-        kind: "permission_request",
-        decision: "allow",
-        permissions: {
+        kind: "approval",
+        decision: "allow_for_session",
+        grantedPermissions: {
           network: null,
           fileSystem: {
             read: ["/tmp/project/package.json"],
             write: ["/tmp/project/package.json"],
           },
         },
-        scope: "session",
       },
     });
 
@@ -219,16 +217,15 @@ describe("ThreadPendingInteractionBanner", () => {
         "thr_1",
         "pi_1",
         {
-          kind: "permission_request",
-          decision: "allow",
-          permissions: {
+          kind: "approval",
+          decision: "allow_for_session",
+          grantedPermissions: {
             network: null,
             fileSystem: {
               read: ["/tmp/project/package.json"],
               write: ["/tmp/project/package.json"],
             },
           },
-          scope: "session",
         },
       );
     });
@@ -259,16 +256,6 @@ describe("ThreadPendingInteractionBanner", () => {
       expect(screen.getByText("Resolution rejected")).not.toBeNull();
     });
     expect(submitButton.hasAttribute("disabled")).toBe(false);
-  });
-
-  it("offers an amendment option when the provider proposes one", () => {
-    renderBanner({
-      interaction: createAmendmentCommandApprovalInteraction(),
-    });
-
-    expect(
-      screen.getByRole("button", { name: "Yes, and always allow similar commands" }),
-    ).not.toBeNull();
   });
 
   it("shows resolving interactions as submitted instead of actionable", () => {

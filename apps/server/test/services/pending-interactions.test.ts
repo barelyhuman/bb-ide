@@ -10,6 +10,13 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
+import {
+  createAllowForSessionResolution,
+  createAllowOnceResolution,
+  createCommandApprovalPayload,
+  createFileChangeApprovalPayload,
+  createPermissionGrantApprovalPayload,
+} from "../helpers/pending-interactions.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
 function registerPendingInteraction(
@@ -50,16 +57,12 @@ describe("pending interaction lifecycle", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-terminal-dedupe",
           providerRequestId: "request-terminal-dedupe",
-          payload: {
-            kind: "command_approval",
+          payload: createCommandApprovalPayload({
             itemId: "item-terminal-dedupe-1",
             reason: "Needs approval",
             command: "git push",
             cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-          },
+          }),
         },
         session.id,
       );
@@ -70,17 +73,11 @@ describe("pending interaction lifecycle", () => {
       harness.deps.pendingInteractions.resolvePendingInteraction({
         threadId: thread.id,
         interactionId: created.interaction.id,
-        resolution: {
-          kind: "command_approval",
-          decision: "accept_for_session",
-        },
+        resolution: createAllowForSessionResolution(),
       });
       harness.deps.pendingInteractions.completeResolvingInteraction({
         interactionId: created.interaction.id,
-        resolution: {
-          kind: "command_approval",
-          decision: "accept_for_session",
-        },
+        resolution: createAllowForSessionResolution(),
       });
 
       expect(
@@ -92,16 +89,13 @@ describe("pending interaction lifecycle", () => {
             providerId: "codex",
             providerThreadId: "provider-thread-terminal-dedupe",
             providerRequestId: "request-terminal-dedupe",
-            payload: {
-              kind: "command_approval",
+            payload: createCommandApprovalPayload({
               itemId: "item-terminal-dedupe-2",
               reason: "Needs approval again",
               command: "git push",
               cwd: "/tmp/project",
-              commandActions: [],
-              requestedPermissions: null,
-              availableDecisions: ["accept", "decline", "cancel"],
-            },
+              availableDecisions: ["allow_once", "deny"],
+            }),
           },
           session.id,
         ),
@@ -143,16 +137,13 @@ describe("pending interaction lifecycle", () => {
             providerId: "claude-code",
             providerThreadId: "provider-thread-provider-mismatch",
             providerRequestId: "request-provider-mismatch",
-            payload: {
-              kind: "command_approval",
+            payload: createCommandApprovalPayload({
               itemId: "item-provider-mismatch",
               reason: "Needs approval",
               command: "git push",
               cwd: "/tmp/project",
-              commandActions: [],
-              requestedPermissions: null,
-              availableDecisions: ["accept", "decline", "cancel"],
-            },
+              availableDecisions: ["allow_once", "deny"],
+            }),
           },
           session.id,
         ),
@@ -192,8 +183,7 @@ describe("pending interaction lifecycle", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-idempotent-permissions",
           providerRequestId: "request-idempotent-permissions",
-          payload: {
-            kind: "permission_request",
+          payload: createPermissionGrantApprovalPayload({
             itemId: "item-idempotent-permissions",
             reason: "Needs workspace access",
             toolName: "Bash",
@@ -204,7 +194,7 @@ describe("pending interaction lifecycle", () => {
                 write: ["/tmp/project/c", "/tmp/project/d"],
               },
             },
-          },
+          }),
         },
         session.id,
       );
@@ -215,36 +205,26 @@ describe("pending interaction lifecycle", () => {
       const firstResolution = harness.deps.pendingInteractions.resolvePendingInteraction({
         threadId: thread.id,
         interactionId: created.interaction.id,
-        resolution: {
-          kind: "permission_request",
-          decision: "allow",
-          permissions: {
-            network: null,
-            fileSystem: {
-              read: ["/tmp/project/a", "/tmp/project/b"],
-              write: ["/tmp/project/c", "/tmp/project/d"],
-            },
+        resolution: createAllowOnceResolution({
+          network: null,
+          fileSystem: {
+            read: ["/tmp/project/a", "/tmp/project/b"],
+            write: ["/tmp/project/c", "/tmp/project/d"],
           },
-          scope: "turn",
-        },
+        }),
       });
       expect(firstResolution.status).toBe("resolving");
 
       const retryResolution = harness.deps.pendingInteractions.resolvePendingInteraction({
         threadId: thread.id,
         interactionId: created.interaction.id,
-        resolution: {
-          kind: "permission_request",
-          decision: "allow",
-          permissions: {
+        resolution: createAllowOnceResolution({
             network: null,
             fileSystem: {
               read: ["/tmp/project/b", "/tmp/project/a"],
               write: ["/tmp/project/d", "/tmp/project/c"],
             },
-          },
-          scope: "turn",
-        },
+        }),
       });
 
       expect(retryResolution).toMatchObject({
@@ -283,8 +263,7 @@ describe("pending interaction lifecycle", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-empty-grant",
           providerRequestId: "request-empty-grant",
-          payload: {
-            kind: "permission_request",
+          payload: createPermissionGrantApprovalPayload({
             itemId: "item-empty-grant",
             reason: "Needs network access",
             toolName: "WebFetch",
@@ -292,7 +271,7 @@ describe("pending interaction lifecycle", () => {
               network: { enabled: true },
               fileSystem: null,
             },
-          },
+          }),
         },
         session.id,
       );
@@ -304,15 +283,10 @@ describe("pending interaction lifecycle", () => {
         harness.deps.pendingInteractions.resolvePendingInteraction({
           threadId: thread.id,
           interactionId: created.interaction.id,
-          resolution: {
-            kind: "permission_request",
-            decision: "allow",
-            permissions: {
+          resolution: createAllowForSessionResolution({
               network: null,
               fileSystem: null,
-            },
-            scope: "session",
-          },
+          }),
         }),
       ).toThrow("Allowed permission resolutions must grant at least one permission");
 
@@ -353,16 +327,12 @@ describe("pending interaction lifecycle", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-concurrent-reject",
           providerRequestId: "request-concurrent-reject-1",
-          payload: {
-            kind: "command_approval",
+          payload: createCommandApprovalPayload({
             itemId: "item-concurrent-reject-1",
             reason: "Needs approval",
             command: "git push",
             cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-          },
+          }),
         },
         session.id,
       );
@@ -379,12 +349,17 @@ describe("pending interaction lifecycle", () => {
             providerId: "codex",
             providerThreadId: "provider-thread-concurrent-reject",
             providerRequestId: "request-concurrent-reject-2",
-            payload: {
-              kind: "file_change_approval",
+            payload: createFileChangeApprovalPayload({
               itemId: "item-concurrent-reject-2",
               reason: "Needs file write approval",
-              grantRoot: "/tmp/project",
-            },
+              grantablePermissions: {
+                network: null,
+                fileSystem: {
+                  read: [],
+                  write: ["/tmp/project"],
+                },
+              },
+            }),
           },
           session.id,
         ),
@@ -424,22 +399,19 @@ describe("pending interaction lifecycle", () => {
             providerId: "codex",
             providerThreadId: "provider-thread-empty-decisions",
             providerRequestId: "request-empty-decisions",
-            payload: {
-              kind: "command_approval",
+            payload: createCommandApprovalPayload({
               itemId: "item-empty-decisions",
               reason: "Needs approval",
               command: "git push",
               cwd: "/tmp/project",
-              commandActions: [],
-              requestedPermissions: null,
               availableDecisions: [],
-            },
+            }),
           },
           session.id,
         ),
       ).toEqual({
         outcome: "rejected",
-        reason: "Command approvals must include at least one available decision",
+        reason: "Approvals must include at least one available decision",
       });
     } finally {
       await harness.cleanup();
@@ -472,16 +444,12 @@ describe("pending interaction lifecycle", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-resolve-interrupted",
           providerRequestId: "request-resolve-interrupted",
-          payload: {
-            kind: "command_approval",
+          payload: createCommandApprovalPayload({
             itemId: "item-resolve-interrupted",
             reason: "Needs approval",
             command: "git push",
             cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-          },
+          }),
         },
         session.id,
       );
@@ -498,10 +466,7 @@ describe("pending interaction lifecycle", () => {
         harness.deps.pendingInteractions.resolvePendingInteraction({
           threadId: thread.id,
           interactionId: created.interaction.id,
-          resolution: {
-            kind: "command_approval",
-            decision: "accept",
-          },
+          resolution: createAllowOnceResolution(),
         })
       ).toThrowError(
         `Pending interaction ${created.interaction.id} is already interrupted`,
@@ -543,16 +508,12 @@ describe("pending interaction lifecycle", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-expiry",
           providerRequestId: "request-expiry",
-          payload: {
-            kind: "command_approval",
+          payload: createCommandApprovalPayload({
             itemId: "item-expiry",
             reason: "Needs approval",
             command: "git push",
             cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-          },
+          }),
         },
         session.id,
       );
@@ -609,16 +570,12 @@ describe("pending interaction lifecycle", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-hydrate-expiry",
           providerRequestId: "request-hydrate-expiry",
-          payload: {
-            kind: "command_approval",
+          payload: createCommandApprovalPayload({
             itemId: "item-hydrate-expiry",
             reason: "Needs approval",
             command: "git push",
             cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-          },
+          }),
         },
         session.id,
       );
@@ -680,16 +637,12 @@ describe("pending interaction lifecycle", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-no-expiry",
           providerRequestId: "request-no-expiry",
-          payload: {
-            kind: "command_approval",
+          payload: createCommandApprovalPayload({
             itemId: "item-no-expiry",
             reason: "Needs approval",
             command: "git push",
             cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-          },
+          }),
         },
         session.id,
       );

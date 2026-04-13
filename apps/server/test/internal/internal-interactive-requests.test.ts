@@ -14,6 +14,11 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
+import {
+  createAllowForSessionResolution,
+  createCommandApprovalPayload,
+  createPermissionGrantApprovalPayload,
+} from "../helpers/pending-interactions.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
 type TestAppHarness = Awaited<ReturnType<typeof createTestAppHarness>>;
@@ -64,16 +69,12 @@ function buildCommandApprovalInteractiveRequest(
       providerId: "codex",
       providerThreadId: `provider-thread-${args.suffix}`,
       providerRequestId: `request-${args.suffix}`,
-      payload: {
-        kind: "command_approval",
+      payload: createCommandApprovalPayload({
         itemId: `item-${args.suffix}`,
         reason: "Needs approval",
         command: "git push",
         cwd: "/tmp/project",
-        commandActions: [],
-        requestedPermissions: null,
-        availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-      },
+      }),
     },
   };
 }
@@ -118,16 +119,12 @@ describe("internal interactive request lifecycle", () => {
             providerId: "codex",
             providerThreadId: "provider-thread-1",
             providerRequestId: "request-1",
-            payload: {
-              kind: "command_approval",
+            payload: createCommandApprovalPayload({
               itemId: "item-1",
               reason: "Needs approval",
               command: "git push",
               cwd: "/tmp/project",
-              commandActions: [],
-              requestedPermissions: null,
-              availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-            },
+            }),
           },
         }),
       });
@@ -144,10 +141,7 @@ describe("internal interactive request lifecycle", () => {
       const resolved = harness.deps.pendingInteractions.resolvePendingInteraction({
         threadId: thread.id,
         interactionId,
-        resolution: {
-          kind: "command_approval",
-          decision: "accept_for_session",
-        },
+        resolution: createAllowForSessionResolution(),
       });
 
       expect(resolved).toMatchObject({
@@ -166,10 +160,7 @@ describe("internal interactive request lifecycle", () => {
         providerId: "codex",
         providerThreadId: "provider-thread-1",
         providerRequestId: "request-1",
-        resolution: {
-          kind: "command_approval",
-          decision: "accept_for_session",
-        },
+        resolution: createAllowForSessionResolution(),
       });
       const commandResultResponse = await reportQueuedCommandSuccess(
         harness,
@@ -186,10 +177,7 @@ describe("internal interactive request lifecycle", () => {
       ).toMatchObject({
         id: interactionId,
         status: "resolved",
-        resolution: {
-          kind: "command_approval",
-          decision: "accept_for_session",
-        },
+        resolution: createAllowForSessionResolution(),
       });
 
       const retriedCommandResultResponse = await reportQueuedCommandSuccess(
@@ -206,10 +194,7 @@ describe("internal interactive request lifecycle", () => {
       ).toMatchObject({
         id: interactionId,
         status: "resolved",
-        resolution: {
-          kind: "command_approval",
-          decision: "accept_for_session",
-        },
+        resolution: createAllowForSessionResolution(),
       });
     } finally {
       await harness.cleanup();
@@ -302,10 +287,7 @@ describe("internal interactive request lifecycle", () => {
       harness.deps.pendingInteractions.resolvePendingInteraction({
         threadId: thread.id,
         interactionId,
-        resolution: {
-          kind: "command_approval",
-          decision: "accept_for_session",
-        },
+        resolution: createAllowForSessionResolution(),
       });
 
       const retryResponse = await registerInteractiveRequest({ body, harness });
@@ -358,16 +340,12 @@ describe("internal interactive request lifecycle", () => {
             providerId: "codex",
             providerThreadId: "provider-thread-1",
             providerRequestId: "request-1",
-            payload: {
-              kind: "command_approval",
+            payload: createCommandApprovalPayload({
               itemId: "item-1",
               reason: "Needs approval",
               command: "git push",
               cwd: "/tmp/project",
-              commandActions: [],
-              requestedPermissions: null,
-              availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-            },
+            }),
           },
         }),
       });
@@ -449,16 +427,12 @@ describe("internal interactive request lifecycle", () => {
             providerId: "codex",
             providerThreadId: "provider-thread-interrupt-live",
             providerRequestId: "request-interrupt-live",
-            payload: {
-              kind: "command_approval",
+            payload: createCommandApprovalPayload({
               itemId: "item-interrupt-live",
               reason: "Needs approval",
               command: "git push",
               cwd: "/tmp/project",
-              commandActions: [],
-              requestedPermissions: null,
-              availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-            },
+            }),
           },
         }),
       });
@@ -536,16 +510,12 @@ describe("internal interactive request lifecycle", () => {
             providerId: "codex",
             providerThreadId: "provider-thread-delete-1",
             providerRequestId: "request-delete-1",
-            payload: {
-              kind: "command_approval",
+            payload: createCommandApprovalPayload({
               itemId: "item-delete-1",
               reason: "Needs approval",
               command: "git push",
               cwd: "/tmp/project",
-              commandActions: [],
-              requestedPermissions: null,
-              availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-            },
+            }),
           },
         }),
       });
@@ -615,8 +585,7 @@ describe("internal interactive request lifecycle", () => {
             providerId: "claude-code",
             providerThreadId: "claude-thread-1",
             providerRequestId: "request-claude-1",
-            payload: {
-              kind: "permission_request",
+            payload: createPermissionGrantApprovalPayload({
               itemId: "item-claude-1",
               reason: "Need network access",
               toolName: "WebFetch",
@@ -624,7 +593,7 @@ describe("internal interactive request lifecycle", () => {
                 network: { enabled: true },
                 fileSystem: null,
               },
-            },
+            }),
           },
         }),
       });
@@ -641,15 +610,10 @@ describe("internal interactive request lifecycle", () => {
       const resolved = harness.deps.pendingInteractions.resolvePendingInteraction({
         threadId: thread.id,
         interactionId,
-        resolution: {
-          kind: "permission_request",
-          decision: "allow",
-          permissions: {
+        resolution: createAllowForSessionResolution({
             network: { enabled: true },
             fileSystem: null,
-          },
-          scope: "session",
-        },
+        }),
       });
 
       expect(resolved).toMatchObject({
@@ -668,15 +632,10 @@ describe("internal interactive request lifecycle", () => {
         providerId: "claude-code",
         providerThreadId: "claude-thread-1",
         providerRequestId: "request-claude-1",
-        resolution: {
-          kind: "permission_request",
-          decision: "allow",
-          permissions: {
+        resolution: createAllowForSessionResolution({
             network: { enabled: true },
             fileSystem: null,
-          },
-          scope: "session",
-        },
+        }),
       });
       const commandResultResponse = await reportQueuedCommandSuccess(
         harness,

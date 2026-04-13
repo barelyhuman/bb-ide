@@ -8,6 +8,13 @@ import {
   waitForQueuedCommand,
 } from "../helpers/commands.js";
 import {
+  createAllowForSessionResolution,
+  createCommandApprovalPayload,
+  createDenyResolution,
+  createFileChangeApprovalPayload,
+  createPermissionGrantApprovalPayload,
+} from "../helpers/pending-interactions.js";
+import {
   seedEnvironment,
   seedHostSession,
   seedProjectWithSource,
@@ -58,16 +65,12 @@ describe("public thread interaction routes", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-1",
           providerRequestId: "request-1",
-          payload: {
-            kind: "command_approval",
+          payload: createCommandApprovalPayload({
             itemId: "item-1",
             reason: "Approve command",
             command: "git push",
             cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-          },
+          }),
         },
         session.id,
       );
@@ -85,8 +88,11 @@ describe("public thread interaction routes", () => {
           threadId: thread.id,
           status: "pending",
           payload: {
-            kind: "command_approval",
-            command: "git push",
+            kind: "approval",
+            subject: {
+              kind: "command",
+              command: "git push",
+            },
           },
         },
       ]);
@@ -126,20 +132,14 @@ describe("public thread interaction routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({
-            kind: "command_approval",
-            decision: "accept_for_session",
-          }),
+          body: JSON.stringify(createAllowForSessionResolution()),
         },
       );
       expect(resolveResponse.status).toBe(200);
       await expect(readJson(resolveResponse)).resolves.toMatchObject({
         id: registered.interaction.id,
         status: "resolving",
-        resolution: {
-          kind: "command_approval",
-          decision: "accept_for_session",
-        },
+        resolution: createAllowForSessionResolution(),
       });
 
       const duplicateResolveResponse = await harness.app.request(
@@ -149,20 +149,14 @@ describe("public thread interaction routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({
-            kind: "command_approval",
-            decision: "accept_for_session",
-          }),
+          body: JSON.stringify(createAllowForSessionResolution()),
         },
       );
       expect(duplicateResolveResponse.status).toBe(200);
       await expect(readJson(duplicateResolveResponse)).resolves.toMatchObject({
         id: registered.interaction.id,
         status: "resolving",
-        resolution: {
-          kind: "command_approval",
-          decision: "accept_for_session",
-        },
+        resolution: createAllowForSessionResolution(),
       });
 
       const conflictingResolveResponse = await harness.app.request(
@@ -172,10 +166,7 @@ describe("public thread interaction routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({
-            kind: "command_approval",
-            decision: "decline",
-          }),
+          body: JSON.stringify(createDenyResolution()),
         },
       );
       expect(conflictingResolveResponse.status).toBe(409);
@@ -207,7 +198,7 @@ describe("public thread interaction routes", () => {
     }
   });
 
-  it("rejects unavailable command decisions and mismatched resolution kinds", async () => {
+  it("rejects unavailable command decisions and malformed provider-specific resolutions", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -233,16 +224,13 @@ describe("public thread interaction routes", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-invalid-command-resolution",
           providerRequestId: "request-invalid-command-resolution",
-          payload: {
-            kind: "command_approval",
+          payload: createCommandApprovalPayload({
             itemId: "item-invalid-command-resolution",
             reason: "Approve command",
             command: "git push",
             cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: ["accept", "decline", "cancel"],
-          },
+            availableDecisions: ["allow_once", "deny"],
+          }),
         },
         session.id,
       );
@@ -257,59 +245,13 @@ describe("public thread interaction routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({
-            kind: "command_approval",
-            decision: "accept_for_session",
-          }),
+          body: JSON.stringify(createAllowForSessionResolution()),
         },
       );
       expect(invalidCommandResolution.status).toBe(400);
       await expect(readJson(invalidCommandResolution)).resolves.toEqual({
         code: "invalid_request",
-        message: `Command approval decision 'accept_for_session' is not available for interaction ${commandApproval.interaction.id}`,
-      });
-
-      const mismatchedKindResponse = await harness.app.request(
-        `/api/v1/threads/${thread.id}/interactions/${commandApproval.interaction.id}/resolve`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            kind: "file_change_approval",
-            decision: "accept",
-          }),
-        },
-      );
-      expect(mismatchedKindResponse.status).toBe(400);
-      await expect(readJson(mismatchedKindResponse)).resolves.toEqual({
-        code: "invalid_request",
-        message: "Pending interaction resolution kind does not match the interaction payload",
-      });
-
-      harness.deps.pendingInteractions.interruptPendingInteraction({
-        interactionId: commandApproval.interaction.id,
-        reason: "Provider exited",
-      });
-
-      const interruptedResolution = await harness.app.request(
-        `/api/v1/threads/${thread.id}/interactions/${commandApproval.interaction.id}/resolve`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-          },
-          body: JSON.stringify({
-            kind: "command_approval",
-            decision: "accept",
-          }),
-        },
-      );
-      expect(interruptedResolution.status).toBe(409);
-      await expect(readJson(interruptedResolution)).resolves.toEqual({
-        code: "invalid_request",
-        message: `Pending interaction ${commandApproval.interaction.id} is already interrupted`,
+        message: `Approval decision 'allow_for_session' is not available for interaction ${commandApproval.interaction.id}`,
       });
 
       const malformedBodyResponse = await harness.app.request(
@@ -328,9 +270,33 @@ describe("public thread interaction routes", () => {
       expect(malformedBodyResponse.status).toBe(400);
       await expect(readJson(malformedBodyResponse)).resolves.toEqual({
         code: "invalid_request",
-        message: "Invalid input",
+        message: "Invalid discriminator value. Expected 'allow_once' | 'allow_for_session' | 'deny'",
       });
 
+      harness.deps.pendingInteractions.interruptPendingInteraction({
+        interactionId: commandApproval.interaction.id,
+        reason: "Provider exited",
+      });
+
+      const interruptedResolution = await harness.app.request(
+        `/api/v1/threads/${thread.id}/interactions/${commandApproval.interaction.id}/resolve`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            kind: "approval",
+            decision: "allow_once",
+            grantedPermissions: null,
+          }),
+        },
+      );
+      expect(interruptedResolution.status).toBe(409);
+      await expect(readJson(interruptedResolution)).resolves.toEqual({
+        code: "invalid_request",
+        message: `Pending interaction ${commandApproval.interaction.id} is already interrupted`,
+      });
     } finally {
       await harness.cleanup();
     }
@@ -362,8 +328,7 @@ describe("public thread interaction routes", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-permission-resolution",
           providerRequestId: "request-permission-resolution",
-          payload: {
-            kind: "permission_request",
+          payload: createPermissionGrantApprovalPayload({
             itemId: "item-permission-resolution",
             reason: "Grant workspace access",
             toolName: null,
@@ -374,7 +339,7 @@ describe("public thread interaction routes", () => {
                 write: ["/tmp/project/notes.md"],
               },
             },
-          },
+          }),
         },
         session.id,
       );
@@ -389,36 +354,26 @@ describe("public thread interaction routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({
-            kind: "permission_request",
-            decision: "allow",
-            permissions: {
-              network: { enabled: true },
-              fileSystem: {
-                read: ["/tmp/project/README.md"],
-                write: [],
-              },
+          body: JSON.stringify(createAllowForSessionResolution({
+            network: { enabled: true },
+            fileSystem: {
+              read: ["/tmp/project/README.md"],
+              write: [],
             },
-            scope: "session",
-          }),
+          })),
         },
       );
       expect(grantResponse.status).toBe(200);
       await expect(readJson(grantResponse)).resolves.toMatchObject({
         id: permissionRequest.interaction.id,
         status: "resolving",
-        resolution: {
-          kind: "permission_request",
-          decision: "allow",
-          permissions: {
-            network: { enabled: true },
-            fileSystem: {
-              read: ["/tmp/project/README.md"],
-              write: [],
-            },
+        resolution: createAllowForSessionResolution({
+          network: { enabled: true },
+          fileSystem: {
+            read: ["/tmp/project/README.md"],
+            write: [],
           },
-          scope: "session",
-        },
+        }),
       });
       const grantCommand = await waitForQueuedCommand(
         harness,
@@ -441,8 +396,7 @@ describe("public thread interaction routes", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-permission-resolution",
           providerRequestId: "request-permission-resolution-denied",
-          payload: {
-            kind: "permission_request",
+          payload: createPermissionGrantApprovalPayload({
             itemId: "item-permission-resolution-denied",
             reason: "Grant network access",
             toolName: null,
@@ -450,7 +404,7 @@ describe("public thread interaction routes", () => {
               network: { enabled: true },
               fileSystem: null,
             },
-          },
+          }),
         },
         session.id,
       );
@@ -465,20 +419,14 @@ describe("public thread interaction routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({
-            kind: "permission_request",
-            decision: "deny",
-          }),
+          body: JSON.stringify(createDenyResolution()),
         },
       );
       expect(denyResponse.status).toBe(200);
       await expect(readJson(denyResponse)).resolves.toMatchObject({
         id: deniedPermissionRequest.interaction.id,
         status: "resolving",
-        resolution: {
-          kind: "permission_request",
-          decision: "deny",
-        },
+        resolution: createDenyResolution(),
       });
       const denyCommand = await waitForQueuedCommand(
         harness,
@@ -501,8 +449,7 @@ describe("public thread interaction routes", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-permission-resolution",
           providerRequestId: "request-permission-resolution-invalid",
-          payload: {
-            kind: "permission_request",
+          payload: createPermissionGrantApprovalPayload({
             itemId: "item-permission-resolution-invalid",
             reason: "Grant workspace access",
             toolName: null,
@@ -513,7 +460,7 @@ describe("public thread interaction routes", () => {
                 write: [],
               },
             },
-          },
+          }),
         },
         session.id,
       );
@@ -529,16 +476,15 @@ describe("public thread interaction routes", () => {
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            kind: "permission_request",
-            decision: "allow",
-            permissions: {
+            kind: "approval",
+            decision: "allow_once",
+            grantedPermissions: {
               network: { enabled: true },
               fileSystem: {
                 read: ["/tmp/project/README.md"],
                 write: [],
               },
             },
-            scope: "turn",
           }),
         },
       );
@@ -552,7 +498,7 @@ describe("public thread interaction routes", () => {
     }
   });
 
-  it("accepts command approval amendment resolutions that were offered by the provider", async () => {
+  it("rejects provider-specific command approval amendment resolutions", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -578,23 +524,13 @@ describe("public thread interaction routes", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-amendment-resolution",
           providerRequestId: "request-amendment-resolution",
-          payload: {
-            kind: "command_approval",
+          payload: createCommandApprovalPayload({
             itemId: "item-amendment-resolution",
             reason: "Approve command",
             command: "git push",
             cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: [
-              {
-                kind: "accept_with_exec_policy_amendment",
-                execPolicyAmendment: ["allow", "git", "push"],
-              },
-              "decline",
-              "cancel",
-            ],
-          },
+            availableDecisions: ["allow_once", "deny"],
+          }),
         },
         session.id,
       );
@@ -618,17 +554,10 @@ describe("public thread interaction routes", () => {
           }),
         },
       );
-      expect(resolveResponse.status).toBe(200);
-      await expect(readJson(resolveResponse)).resolves.toMatchObject({
-        id: commandApproval.interaction.id,
-        status: "resolving",
-        resolution: {
-          kind: "command_approval",
-          decision: {
-            kind: "accept_with_exec_policy_amendment",
-            execPolicyAmendment: ["allow", "git", "push"],
-          },
-        },
+      expect(resolveResponse.status).toBe(400);
+      await expect(readJson(resolveResponse)).resolves.toEqual({
+        code: "invalid_request",
+        message: "Invalid discriminator value. Expected 'allow_once' | 'allow_for_session' | 'deny'",
       });
     } finally {
       await harness.cleanup();
@@ -670,16 +599,12 @@ describe("public thread interaction routes", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-blocked",
           providerRequestId: "request-blocked",
-          payload: {
-            kind: "command_approval",
+          payload: createCommandApprovalPayload({
             itemId: "item-blocked",
             reason: "Approve command",
             command: "git push",
             cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-          },
+          }),
         },
         session.id,
       );
@@ -808,12 +733,17 @@ describe("public thread interaction routes", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-file-change",
           providerRequestId: "request-file-change",
-          payload: {
-            kind: "file_change_approval",
+          payload: createFileChangeApprovalPayload({
             itemId: "item-file-change",
             reason: "Approve file changes",
-            grantRoot: "/tmp/project",
-          },
+            grantablePermissions: {
+              network: null,
+              fileSystem: {
+                read: [],
+                write: ["/tmp/project"],
+              },
+            },
+          }),
         },
         session.id,
       );
@@ -828,20 +758,26 @@ describe("public thread interaction routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify({
-            kind: "file_change_approval",
-            decision: "accept_for_session",
-          }),
+          body: JSON.stringify(createAllowForSessionResolution({
+            network: null,
+            fileSystem: {
+              read: [],
+              write: ["/tmp/project"],
+            },
+          })),
         },
       );
       expect(fileChangeResponse.status).toBe(200);
       await expect(readJson(fileChangeResponse)).resolves.toMatchObject({
         id: fileChange.interaction.id,
         status: "resolving",
-        resolution: {
-          kind: "file_change_approval",
-          decision: "accept_for_session",
-        },
+        resolution: createAllowForSessionResolution({
+          network: null,
+          fileSystem: {
+            read: [],
+            write: ["/tmp/project"],
+          },
+        }),
       });
 
     } finally {
@@ -875,16 +811,12 @@ describe("public thread interaction routes", () => {
           providerId: "codex",
           providerThreadId: "provider-thread-timeline",
           providerRequestId: "request-timeline",
-          payload: {
-            kind: "command_approval",
+          payload: createCommandApprovalPayload({
             itemId: "item-timeline",
             reason: "Approve command",
             command: "git push",
             cwd: "/tmp/project",
-            commandActions: [],
-            requestedPermissions: null,
-            availableDecisions: ["accept", "accept_for_session", "decline", "cancel"],
-          },
+          }),
         },
         session.id,
       );
@@ -895,10 +827,7 @@ describe("public thread interaction routes", () => {
       harness.deps.pendingInteractions.resolvePendingInteraction({
         threadId: thread.id,
         interactionId: registered.interaction.id,
-        resolution: {
-          kind: "command_approval",
-          decision: "accept_for_session",
-        },
+        resolution: createAllowForSessionResolution(),
       });
       const queuedResolve = await waitForQueuedCommand(
         harness,
@@ -927,7 +856,7 @@ describe("public thread interaction routes", () => {
                 opType: "operation",
                 status: "completed",
                 threadOperation: expect.objectContaining({
-                  rawOperation: "command_approval",
+                  rawOperation: "approval",
                   operationId: registered.interaction.id,
                 }),
                 detail: expect.stringContaining("Command approved for this session"),

@@ -19,14 +19,16 @@ function createInteractiveRequest(): PendingInteractionCreate {
     providerThreadId: "provider-thread-123",
     providerRequestId: "request-123",
     payload: {
-      kind: "command_approval",
-      itemId: "item-123",
+      kind: "approval",
+      subject: {
+        kind: "command",
+        itemId: "item-123",
+        command: "git push",
+        cwd: "/tmp/project",
+      },
       reason: "Needs approval",
-      command: "git push",
-      cwd: "/tmp/project",
-      commandActions: [],
-      requestedPermissions: null,
-      availableDecisions: ["accept", "decline", "cancel"],
+      grantablePermissions: null,
+      availableDecisions: ["allow_once", "deny"],
     },
   };
 }

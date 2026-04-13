@@ -33,14 +33,19 @@ function createResolvingInteraction(): PendingInteraction {
     providerRequestId: "request-1",
     status: "resolving",
     payload: {
-      kind: "file_change_approval",
-      itemId: "item_1",
+      kind: "approval",
+      subject: {
+        kind: "file_change",
+        itemId: "item_1",
+      },
       reason: "Needs file write approval",
-      grantRoot: "/tmp/project",
+      grantablePermissions: null,
+      availableDecisions: ["allow_once", "deny"],
     },
     resolution: {
-      kind: "file_change_approval",
-      decision: "accept",
+      kind: "approval",
+      decision: "allow_once",
+      grantedPermissions: null,
     },
     statusReason: null,
     createdAt: 1,
@@ -70,8 +75,9 @@ describe("useResolveThreadPendingInteraction", () => {
         threadId: "thr_1",
         interactionId: "pi_1",
         resolution: {
-          kind: "file_change_approval",
-          decision: "accept",
+          kind: "approval",
+          decision: "allow_once",
+          grantedPermissions: null,
         },
       });
     });
@@ -80,8 +86,9 @@ describe("useResolveThreadPendingInteraction", () => {
       "thr_1",
       "pi_1",
       {
-        kind: "file_change_approval",
-        decision: "accept",
+        kind: "approval",
+        decision: "allow_once",
+        grantedPermissions: null,
       },
     );
     expect(invalidateQueries).toHaveBeenCalledWith({
