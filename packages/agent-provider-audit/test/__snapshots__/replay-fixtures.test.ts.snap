@@ -714,7 +714,7 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "\`\`\`",
       "── User ────────────────────────────────────────────────────",
       "What's the safest extension point if I want to tweak the UI without changing the scene-generation logic?",
-      "── Worked for 1m 0s ────────────────────────────────────────",
+      "── Worked for 1m ────────────────────────────────────────",
       "── Assistant ───────────────────────────────────────────────",
       "Here's a layered answer, from safest to progressively more involved:",
       "---",
@@ -6571,7 +6571,7 @@ TTDDialogTrigger → setAppState({ openDialog: "ttd" })
 ── User ────────────────────────────────────────────────────
 What's the safest extension point if I want to tweak the UI without changing the scene-generation logic?
 
-── Worked for 1m 0s ────────────────────────────────────────
+── Worked for 1m ────────────────────────────────────────
   ── Reasoning ───────────────────────────────────────────────
   The user wants to know the safest extension point for tweaking the UI without touching scene-generation logic. Based on the thorough analysis we already did, I can answer this from what we know, but let me verify a few specific things about the component boundaries and prop interfaces to give precise advice.
   ── Assistant ───────────────────────────────────────────────
