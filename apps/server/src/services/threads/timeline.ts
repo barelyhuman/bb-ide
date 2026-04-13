@@ -121,6 +121,29 @@ function findMatchingToolGroupRow(
   ) ?? null;
 }
 
+function hasToolGroupRows(rows: TimelineRow[]): boolean {
+  return rows.some((row) => row.kind === "tool-group");
+}
+
+function resolveTimelineToolDetailsMessages(
+  rows: TimelineRow[],
+  projection: ViewProjection,
+  options: TimelineSourceSeqRange,
+): ViewMessage[] {
+  const matchingToolGroup = findMatchingToolGroupRow(rows, options);
+  if (matchingToolGroup) {
+    return matchingToolGroup.messages;
+  }
+
+  if (hasToolGroupRows(rows)) {
+    throw new Error(
+      `Timeline tool details could not match tool group range ${options.sourceSeqStart}-${options.sourceSeqEnd}`,
+    );
+  }
+
+  return flattenProjectionMessages(projection);
+}
+
 export function toThreadEventWithMeta(
   row: StoredEventRow,
 ): ThreadEventWithMeta {
@@ -253,12 +276,15 @@ export function buildTimelineToolDetails(
   const rows = buildTimelineRows(projection, {
     includeToolGroupMessages: true,
   });
-  const matchingToolGroup = findMatchingToolGroupRow(rows, {
-    sourceSeqStart: options.sourceSeqStart,
-    sourceSeqEnd: options.sourceSeqEnd,
-  });
 
   return {
-    messages: matchingToolGroup?.messages ?? flattenProjectionMessages(projection),
+    messages: resolveTimelineToolDetailsMessages(
+      rows,
+      projection,
+      {
+        sourceSeqStart: options.sourceSeqStart,
+        sourceSeqEnd: options.sourceSeqEnd,
+      },
+    ),
   };
 }

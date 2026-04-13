@@ -1,7 +1,11 @@
 import { and, eq } from "drizzle-orm";
 import { createDraftId, environments, events, getDraft, getThread, queuedThreadMessages } from "@bb/db";
-import { threadSchema } from "@bb/domain";
-import { threadDraftListResponseSchema } from "@bb/server-contract";
+import { threadSchema, type TimelineRow } from "@bb/domain";
+import {
+  threadDraftListResponseSchema,
+  threadTimelineResponseSchema,
+  timelineToolDetailsResponseSchema,
+} from "@bb/server-contract";
 import { z } from "zod";
 import { describe, expect, it } from "vitest";
 import {
@@ -33,6 +37,8 @@ const threadEventWaitResponseSchema = z.object({
   seq: z.number(),
   type: z.string(),
 });
+
+type TimelineToolGroupRow = Extract<TimelineRow, { kind: "tool-group" }>;
 
 describe("public thread data routes", () => {
   it("returns timeline rows and timeline tool details from thread events", async () => {
@@ -82,11 +88,117 @@ describe("public thread data routes", () => {
         `/api/v1/threads/${thread.id}/timeline/tool-details?sourceSeqStart=2&sourceSeqEnd=2`,
       );
       expect(toolDetailsResponse.status).toBe(200);
-      const toolDetails = await readJson(toolDetailsResponse) as {
-        messages: Array<{ text?: string }>;
-      };
+      const toolDetails = timelineToolDetailsResponseSchema.parse(
+        await readJson(toolDetailsResponse),
+      );
       expect(toolDetails.messages).toHaveLength(1);
-      expect(toolDetails.messages[0]?.text).toBe("Manager note two");
+      expect(toolDetails.messages[0]?.kind).toBe("assistant-text");
+      if (toolDetails.messages[0]?.kind === "assistant-text") {
+        expect(toolDetails.messages[0].text).toBe("Manager note two");
+      }
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("hydrates timeline tool-group details from the summary row range", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-thread-1",
+        turnId: "turn-1",
+        sequence: 1,
+        type: "turn/started",
+        data: {},
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-thread-1",
+        turnId: "turn-1",
+        sequence: 2,
+        type: "item/completed",
+        data: {
+          item: {
+            type: "toolCall",
+            id: "tool-1",
+            tool: "exec_command",
+            arguments: { cmd: "pnpm test" },
+            status: "completed",
+          },
+        },
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-thread-1",
+        turnId: "turn-1",
+        sequence: 3,
+        type: "item/completed",
+        data: {
+          item: {
+            type: "agentMessage",
+            id: "assistant-1",
+            text: "Done.",
+          },
+        },
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-thread-1",
+        turnId: "turn-1",
+        sequence: 4,
+        type: "turn/completed",
+        data: {
+          status: "completed",
+        },
+      });
+
+      const timelineResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/timeline`,
+      );
+      expect(timelineResponse.status).toBe(200);
+      const timeline = threadTimelineResponseSchema.parse(
+        await readJson(timelineResponse),
+      );
+      const toolGroup = timeline.rows.find(
+        (row): row is TimelineToolGroupRow => row.kind === "tool-group",
+      );
+      expect(toolGroup).toBeDefined();
+      if (!toolGroup) {
+        throw new Error("Expected a tool-group row");
+      }
+      expect(toolGroup.messages).toHaveLength(0);
+
+      const toolDetailsResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/timeline/tool-details?sourceSeqStart=${toolGroup.sourceSeqStart}&sourceSeqEnd=${toolGroup.sourceSeqEnd}`,
+      );
+      expect(toolDetailsResponse.status).toBe(200);
+      const toolDetails = timelineToolDetailsResponseSchema.parse(
+        await readJson(toolDetailsResponse),
+      );
+
+      expect(toolDetails.messages.map((message) => message.kind)).toEqual([
+        "tool-call",
+      ]);
+      expect(toolDetails.messages[0]?.kind).toBe("tool-call");
+      if (toolDetails.messages[0]?.kind === "tool-call") {
+        expect(toolDetails.messages[0].callId).toBe("tool-1");
+      }
     } finally {
       await harness.cleanup();
     }

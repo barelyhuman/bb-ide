@@ -9,7 +9,10 @@ import {
   seedThread,
 } from "../helpers/seed.js";
 import { getTimelineBenchmarkScenarios } from "../helpers/timeline-benchmark.js";
-import { buildThreadTimeline } from "../../src/services/threads/timeline.js";
+import {
+  buildThreadTimeline,
+  buildTimelineToolDetails,
+} from "../../src/services/threads/timeline.js";
 
 type TimelineMessageRow = Extract<TimelineRow, { kind: "message" }>;
 
@@ -193,6 +196,84 @@ describe("buildThreadTimeline", () => {
       modelContextWindow: 200_000,
       estimated: true,
     });
+  });
+
+  it("fails loudly when tool details cannot match a projected tool-group range", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 1,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 2,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "toolCall",
+          id: "tool-1",
+          tool: "exec_command",
+          arguments: { cmd: "pnpm test" },
+          status: "completed",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 3,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "agentMessage",
+          id: "assistant-1",
+          text: "Done.",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 4,
+      type: "turn/completed",
+      data: {
+        status: "completed",
+      },
+    });
+
+    expect(() =>
+      buildTimelineToolDetails(harness.db, thread, {
+        sourceSeqStart: 1,
+        sourceSeqEnd: 5,
+      })
+    ).toThrow(/could not match tool group range 1-5/);
   });
 
   it("filters manager thread timeline to user messages, message_user output, and operations", async () => {
