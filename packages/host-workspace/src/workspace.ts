@@ -18,8 +18,10 @@ import {
   pathExists,
   readDefaultBranch,
   readMergeBaseRef,
+  parsePatchId,
   revParse,
   runGit,
+  runShellPipeline,
   summarizeNumstat,
   WorkspaceError,
 } from "./git.js";
@@ -751,8 +753,21 @@ export class Workspace {
       .trim()
       .split(/\s+/)
       .map((value) => Number.parseInt(value, 10));
-    const normalizedAheadCount = Number.isFinite(aheadCount) ? aheadCount : 0;
+    let normalizedAheadCount = Number.isFinite(aheadCount) ? aheadCount : 0;
     const normalizedBehindCount = Number.isFinite(behindCount) ? behindCount : 0;
+    let effectiveCommits = commits;
+
+    // `--cherry-pick` handles regular merges, rebase-merges, and cherry-picks,
+    // but not squash merges. Only look for a squash when the branch still
+    // appears ahead AND the base has advanced since the fork point — if the
+    // base hasn't moved, no squash could exist there.
+    if (normalizedAheadCount > 0 && normalizedBehindCount > 0 && mergeBaseRef) {
+      const squashMerged = await this.detectSquashMerge(mergeBaseRef, mergeBaseBranch);
+      if (squashMerged) {
+        normalizedAheadCount = 0;
+        effectiveCommits = [];
+      }
+    }
 
     return {
       mergeBaseBranch,
@@ -760,8 +775,61 @@ export class Workspace {
       aheadCount: normalizedAheadCount,
       behindCount: normalizedBehindCount,
       hasCommittedUnmergedChanges: normalizedAheadCount > 0,
-      commits,
+      commits: effectiveCommits,
     };
+  }
+
+  /**
+   * Detect whether the branch has already landed on the base as a squash
+   * merge. A squash collapses N branch commits into a single base commit with
+   * a combined patch-id that none of the originals match, so `--cherry-pick`
+   * can't see it. Compare the branch's cumulative patch-id against each
+   * commit on the base since the merge-base; a match means the branch
+   * landed. If the cumulative diff is empty (e.g. commits that cancel out),
+   * treat the branch as merged — there's nothing left to land.
+   *
+   * The diff/log pipelines are offloaded to `sh -c` so git streams directly
+   * into `git patch-id` without Node buffering the intermediate output; only
+   * the tiny patch-id output (one line per commit) is captured.
+   */
+  private async detectSquashMerge(
+    mergeBaseRef: string,
+    mergeBaseBranch: string,
+  ): Promise<boolean> {
+    const branchPatchIdResult = await runShellPipeline(
+      'git diff "$1".."$2" | git patch-id --stable',
+      [mergeBaseRef, "HEAD"],
+      { cwd: this.path, allowFailure: true },
+    );
+    if (branchPatchIdResult.exitCode !== 0) {
+      return false;
+    }
+    if (!branchPatchIdResult.stdout.trim()) {
+      // Empty cumulative diff — the branch contributes no net changes and is
+      // effectively merged.
+      return true;
+    }
+    const branchPatchId = parsePatchId(branchPatchIdResult.stdout.split("\n")[0]);
+    if (!branchPatchId) {
+      return false;
+    }
+
+    // Cap the base-side scan to keep `getStatus` bounded on long-divergent
+    // branches. Squash merges we care about land within a reasonable window;
+    // if the user opens a branch that's thousands of commits behind, we'll
+    // miss detection and report the branch as ahead — the fallback is
+    // pessimistic but correct.
+    const basePatchIdsResult = await runShellPipeline(
+      'git log -p -n 1000 --format="commit %H" "$1".."$2" | git patch-id --stable',
+      [mergeBaseRef, mergeBaseBranch],
+      { cwd: this.path, allowFailure: true },
+    );
+    if (basePatchIdsResult.exitCode !== 0) {
+      return false;
+    }
+    return basePatchIdsResult.stdout
+      .split("\n")
+      .some((line) => parsePatchId(line) === branchPatchId);
   }
 
   private async readDiffArtifacts(target: WorkspaceDiffTarget): Promise<[string, string, string]> {

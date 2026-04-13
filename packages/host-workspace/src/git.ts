@@ -112,6 +112,64 @@ export async function runGit(
   }
 }
 
+/**
+ * Run a POSIX shell pipeline and capture stdout. Arguments are passed as
+ * positional shell parameters (`$1`, `$2`, ...) so interpolation doesn't
+ * evaluate them — `mergeBaseBranch = "; rm -rf /"` is treated as the literal
+ * value of `$2`, not as additional shell tokens.
+ *
+ * Use this for building short git pipelines (e.g. `git diff | git patch-id`)
+ * where Node-side buffer-and-resend would otherwise be required. All
+ * supported platforms (macOS, Linux, WSL2) ship POSIX `sh`.
+ */
+export async function runShellPipeline(
+  script: string,
+  positionalArgs: string[],
+  options: { cwd: string; allowFailure?: boolean },
+): Promise<GitCommandResult> {
+  try {
+    const result = await execFileAsync(
+      "sh",
+      ["-c", script, "sh", ...positionalArgs],
+      {
+        cwd: options.cwd,
+        encoding: "utf8",
+        maxBuffer: DEFAULT_BUFFER_BYTES,
+      },
+    );
+    return { stdout: result.stdout, stderr: result.stderr, exitCode: 0 };
+  } catch (error) {
+    const execError = toExecError(error);
+    if (options.allowFailure) {
+      return {
+        stdout: execError?.stdout ?? "",
+        stderr: execError?.stderr ?? "",
+        exitCode: getExitCode(execError),
+      };
+    }
+    const stderr = trimOutput(execError?.stderr ?? "");
+    const detail = stderr ? `: ${stderr}` : "";
+    throw new WorkspaceError(
+      "shell_pipeline_failed",
+      `shell pipeline failed${detail}`,
+      { cause: error },
+    );
+  }
+}
+
+/**
+ * Parse the patch-id SHA from a single line of `git patch-id` output. The
+ * output format is `<patch-id> <commit-sha>` with one line per input commit.
+ */
+export function parsePatchId(line: string | undefined): string | undefined {
+  const trimmed = line?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const [patchId] = trimmed.split(/\s+/);
+  return patchId || undefined;
+}
+
 export async function pathExists(targetPath: string): Promise<boolean> {
   try {
     await fs.access(targetPath);
