@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
+  assertNever,
   buildPendingInteractionApprovalResolution,
   extractShellCommandFromString,
   formatPendingInteractionSubjectDetailLines,
@@ -234,6 +235,8 @@ function buildBannerModel(interaction: PendingInteraction): BannerModel {
             skip: null,
           };
         }
+        default:
+          return assertNever(interaction.payload.subject);
       }
     }
   }

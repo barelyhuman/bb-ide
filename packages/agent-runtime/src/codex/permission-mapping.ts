@@ -20,8 +20,9 @@ const codexToPendingInteractionApprovalDecision = {
   accept: "allow_once",
   acceptForSession: "allow_for_session",
   decline: "deny",
+  cancel: "deny",
 } satisfies Record<
-  Exclude<CodexSimpleCommandApprovalDecision, "cancel">,
+  CodexSimpleCommandApprovalDecision,
   PendingInteractionApprovalDecision
 >;
 
@@ -100,13 +101,13 @@ export function toCodexGrantedPermissionProfile(
 function fromCodexCommandApprovalDecision(
   decision: CodexCommandApprovalDecision,
 ): PendingInteractionApprovalDecision | null {
-  if (decision === "cancel") {
-    return null;
-  }
   if (typeof decision === "string") {
     return codexToPendingInteractionApprovalDecision[decision];
   }
 
+  // Policy-amendment choices require a provider-specific response shape that the
+  // provider-neutral approval contract does not expose. Keep the neutral choices
+  // available, but do not present an option we cannot encode back to Codex.
   return null;
 }
 
@@ -128,10 +129,13 @@ export function parseCodexAvailableDecisions(
     );
   }
 
-  const mappedDecisions = decisions.flatMap((decision) => {
-    const mapped = fromCodexCommandApprovalDecision(decision);
-    return mapped === null ? [] : [mapped];
-  });
+  const mappedDecisions: PendingInteractionApprovalDecision[] = [];
+  for (const decision of decisions) {
+    const mappedDecision = fromCodexCommandApprovalDecision(decision);
+    if (mappedDecision) {
+      mappedDecisions.push(mappedDecision);
+    }
+  }
   const uniqueDecisions = [...new Set(mappedDecisions)];
   if (uniqueDecisions.length === 0) {
     throw new ProviderRequestDecodeError(

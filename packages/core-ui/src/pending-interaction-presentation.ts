@@ -1,4 +1,5 @@
 import type { PendingInteraction } from "@bb/domain";
+import { assertNever } from "./assert-never.js";
 import { summarizePendingInteractionRequestedPermissions } from "./pending-interaction-formatting.js";
 
 export type PendingInteractionPresentationSurface = "app" | "cli";
@@ -14,6 +15,8 @@ export function formatPendingInteractionKindLabel(
   switch (args.kind) {
     case "approval":
       return args.surface === "app" ? "Approval" : "approval";
+    default:
+      return assertNever(args.kind);
   }
 }
 
@@ -40,6 +43,8 @@ export function formatPendingInteractionSummary(
           return "File changes pending approval";
         case "permission_grant":
           break;
+        default:
+          return assertNever(interaction.payload.subject);
       }
 
       if (surface === "app") {

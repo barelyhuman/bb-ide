@@ -2,10 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { PendingInteraction } from "@bb/domain";
 import {
   buildPendingInteractionApprovalResolution,
+  formatPendingInteractionApprovalResolutionOutcome,
   formatPendingInteractionCommandApprovalResolutionMessage,
-  formatPendingInteractionCommandApprovalResolutionOutcome,
   formatPendingInteractionFileChangeApprovalResolutionMessage,
-  formatPendingInteractionFileChangeApprovalResolutionOutcome,
   formatPendingInteractionPermissionResolutionMessage,
   formatPendingInteractionPermissionResolutionOutcome,
   formatPendingInteractionSubjectDetailLines,
@@ -62,14 +61,11 @@ describe("pending interaction formatting", () => {
   });
 
   it("formats approval outcomes and timeline messages consistently", () => {
-    expect(formatPendingInteractionCommandApprovalResolutionOutcome("allow_for_session")).toBe(
+    expect(formatPendingInteractionApprovalResolutionOutcome("allow_for_session")).toBe(
       "approved for this session",
     );
     expect(formatPendingInteractionCommandApprovalResolutionMessage("deny")).toBe(
       "Command denied",
-    );
-    expect(formatPendingInteractionFileChangeApprovalResolutionOutcome("deny")).toBe(
-      "denied",
     );
     expect(formatPendingInteractionFileChangeApprovalResolutionMessage("allow_once")).toBe(
       "File changes approved",

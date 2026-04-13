@@ -4,6 +4,7 @@ import {
 } from "@bb/core-ui";
 import type {
   PendingInteraction,
+  PendingInteractionApprovalSubject,
   PendingInteractionPermissionGrantApprovalSubject,
   ThreadEventItem,
 } from "@bb/domain";
@@ -61,12 +62,8 @@ function permissionGrantOperationStatus(
 function appendPermissionGrantTimelineEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   interaction: PendingInteraction,
+  subject: PendingInteractionPermissionGrantApprovalSubject,
 ): void {
-  const subject = interaction.payload.subject;
-  if (subject.kind !== "permission_grant") {
-    return;
-  }
-
   const thread = getThread(deps.db, interaction.threadId);
   appendThreadEvent(deps, {
     threadId: interaction.threadId,
@@ -112,9 +109,9 @@ function appendApprovalItemEvent(
 function appendApprovalSubjectItemEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   interaction: PendingInteraction,
+  subject: Exclude<PendingInteractionApprovalSubject, { kind: "permission_grant" }>,
   status: ApprovalTimelineItemStatus,
 ): void {
-  const subject = interaction.payload.subject;
   switch (subject.kind) {
     case "command":
       appendApprovalItemEvent(deps, interaction, {
@@ -133,9 +130,6 @@ function appendApprovalSubjectItemEvent(
         status,
       });
       return;
-    case "permission_grant":
-      appendPermissionGrantTimelineEvent(deps, interaction);
-      return;
     default:
       return assertNever(
         subject,
@@ -144,29 +138,64 @@ function appendApprovalSubjectItemEvent(
   }
 }
 
-export function appendPendingInteractionTimelineEvent(
+function appendPermissionGrantLifecycleTimelineEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   interaction: PendingInteraction,
+  subject: PendingInteractionPermissionGrantApprovalSubject,
 ): void {
   switch (interaction.status) {
     case "pending":
-      appendApprovalSubjectItemEvent(deps, interaction, "waiting_for_approval");
+    case "resolving":
+    case "resolved":
+    case "interrupted":
+    case "expired":
+      appendPermissionGrantTimelineEvent(deps, interaction, subject);
+      return;
+  }
+}
+
+function appendItemLifecycleTimelineEvent(
+  deps: Pick<AppDeps, "db" | "hub">,
+  interaction: PendingInteraction,
+  subject: Exclude<PendingInteractionApprovalSubject, { kind: "permission_grant" }>,
+): void {
+  switch (interaction.status) {
+    case "pending":
+      appendApprovalSubjectItemEvent(
+        deps,
+        interaction,
+        subject,
+        "waiting_for_approval",
+      );
       return;
     case "resolving":
-      if (interaction.payload.subject.kind === "permission_grant") {
-        appendPermissionGrantTimelineEvent(deps, interaction);
-      }
       return;
     case "resolved":
       if (interaction.resolution?.decision === "deny") {
-        appendApprovalSubjectItemEvent(deps, interaction, "denied");
-      } else if (interaction.payload.subject.kind === "permission_grant") {
-        appendPermissionGrantTimelineEvent(deps, interaction);
+        appendApprovalSubjectItemEvent(deps, interaction, subject, "denied");
       }
       return;
     case "interrupted":
     case "expired":
-      appendApprovalSubjectItemEvent(deps, interaction, "interrupted");
+      appendApprovalSubjectItemEvent(deps, interaction, subject, "interrupted");
       return;
+  }
+}
+
+export function appendPendingInteractionTimelineEvent(
+  deps: Pick<AppDeps, "db" | "hub">,
+  interaction: PendingInteraction,
+): void {
+  const subject = interaction.payload.subject;
+  switch (subject.kind) {
+    case "permission_grant":
+      appendPermissionGrantLifecycleTimelineEvent(deps, interaction, subject);
+      return;
+    case "command":
+    case "file_change":
+      appendItemLifecycleTimelineEvent(deps, interaction, subject);
+      return;
+    default:
+      return assertNever(subject, "Unsupported approval subject for timeline");
   }
 }

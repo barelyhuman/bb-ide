@@ -2583,6 +2583,8 @@ describe("CLI JSON output contracts", () => {
     const output = String(vi.mocked(console.log).mock.calls[0]?.[0]);
     expect(output).toContain("Waiting for approval to run git push");
     expect(output).toContain("Permission denied: file changes");
+    expect(output).not.toContain("Command approval started");
+    expect(output).not.toContain("File-change approval started");
   });
 
   it("bb thread log --self resolves from BB_THREAD_ID", async () => {

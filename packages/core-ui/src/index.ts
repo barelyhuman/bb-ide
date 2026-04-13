@@ -7,11 +7,9 @@ export type { EnvironmentDisplayInfo } from "./environment-display.js";
 
 export {
   buildPendingInteractionApprovalResolution,
-  formatPendingInteractionCommandApprovalDecision,
+  formatPendingInteractionApprovalResolutionOutcome,
   formatPendingInteractionCommandApprovalResolutionMessage,
-  formatPendingInteractionCommandApprovalResolutionOutcome,
   formatPendingInteractionFileChangeApprovalResolutionMessage,
-  formatPendingInteractionFileChangeApprovalResolutionOutcome,
   formatPendingInteractionPermissionResolutionMessage,
   formatPendingInteractionPermissionResolutionOutcome,
   formatPendingInteractionSubjectDetailLines,

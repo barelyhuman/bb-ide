@@ -219,11 +219,11 @@ function expectSemanticApprovalRequest(request: PendingInteractionCreate): void 
   switch (request.payload.subject.kind) {
     case "command":
       expect(Array.isArray(request.payload.subject.actions)).toBe(true);
-      expect(request.payload.subject).toHaveProperty("sessionGrant");
+      expect(request.payload.subject.sessionGrant).not.toBeUndefined();
       break;
     case "file_change":
-      expect(request.payload.subject).toHaveProperty("writeScope");
-      expect(request.payload.subject).toHaveProperty("sessionGrant");
+      expect(request.payload.subject.writeScope).not.toBeUndefined();
+      expect(request.payload.subject.sessionGrant).not.toBeUndefined();
       break;
     case "permission_grant":
       expect(request.payload.subject.permissions).toBeDefined();
@@ -1335,8 +1335,8 @@ describe("interactive request scenarios", () => {
       }
       expect(fileChangeApproval.payload.subject.kind).toBe("file_change");
       expect(fileChangeApproval.payload.subject.itemId).toEqual(expect.any(String));
-      expect(fileChangeApproval.payload.subject).toHaveProperty("writeScope");
-      expect(fileChangeApproval.payload.subject).toHaveProperty("sessionGrant");
+      expect(fileChangeApproval.payload.subject.writeScope).not.toBeUndefined();
+      expect(fileChangeApproval.payload.subject.sessionGrant).not.toBeUndefined();
       expect(fileChangeApproval.payload.availableDecisions).toContain("allow_once");
       expect(Object.keys(fileChangeApproval.payload.subject).sort()).toEqual([
         "itemId",
@@ -1510,7 +1510,7 @@ describe("interactive request scenarios", () => {
       ) {
         throw new Error("Expected a semantic command approval");
       }
-      expect(commandApproval.payload.subject).toHaveProperty("sessionGrant");
+      expect(commandApproval.payload.subject.sessionGrant).toBeNull();
     } finally {
       await ctx.runtime.shutdown();
       cleanup(ctx);
@@ -1640,7 +1640,10 @@ describe("interactive request scenarios", () => {
       ) {
         throw new Error("Expected a semantic file-change approval");
       }
-      expect(fileChangeApproval.payload.subject).toHaveProperty("sessionGrant");
+      expect(fileChangeApproval.payload.subject.sessionGrant).toEqual({
+        network: null,
+        fileSystem: null,
+      });
       expect(readFileSync(filePath, "utf8")).toBe(token);
     } finally {
       await ctx.runtime.shutdown();

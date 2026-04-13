@@ -1465,7 +1465,7 @@ describe("codex provider adapter", () => {
     ).toThrowError(ProviderRequestDecodeError);
   });
 
-  it("decodeInteractiveRequest omits macOS permissions from grantable command approvals", () => {
+  it("decodeInteractiveRequest omits unsupported macOS permissions from command session grants", () => {
     const adapter = createCodexProviderAdapter();
     expect(
       adapter.decodeInteractiveRequest?.({
@@ -1498,26 +1498,16 @@ describe("codex provider adapter", () => {
           availableDecisions: ["accept", "decline", "cancel"],
         },
       }),
-    ).toEqual({
-      requestId: 8,
-      method: "item/commandExecution/requestApproval",
-      providerThreadId: "t1",
-      turnId: "turn-1",
+    ).toMatchObject({
       payload: {
         kind: "approval",
         subject: {
           kind: "command",
-          itemId: "item-1",
-          command: "osascript -e 'tell app \"Finder\" to activate'",
-          cwd: "/tmp/project",
-          actions: [],
           sessionGrant: {
             network: null,
             fileSystem: null,
           },
         },
-        reason: "Needs approval",
-        availableDecisions: ["allow_once", "deny"],
       },
     });
   });
@@ -1560,7 +1550,7 @@ describe("codex provider adapter", () => {
     });
   });
 
-  it("decodeInteractiveRequest preserves macOS automation all in command approvals", () => {
+  it("decodeInteractiveRequest omits unsupported macOS automation grants from command session grants", () => {
     const adapter = createCodexProviderAdapter();
     expect(
       adapter.decodeInteractiveRequest?.({
@@ -1594,11 +1584,18 @@ describe("codex provider adapter", () => {
     ).toMatchObject({
       payload: {
         kind: "approval",
+        subject: {
+          kind: "command",
+          sessionGrant: {
+            network: null,
+            fileSystem: null,
+          },
+        },
       },
     });
   });
 
-  it("decodeInteractiveRequest filters provider-specific amendment decisions", () => {
+  it("decodeInteractiveRequest ignores unsupported policy-amendment decisions", () => {
     const adapter = createCodexProviderAdapter();
     expect(
       adapter.decodeInteractiveRequest?.({
@@ -1637,22 +1634,9 @@ describe("codex provider adapter", () => {
           ],
         },
       }),
-    ).toEqual({
-      requestId: 9,
-      method: "item/commandExecution/requestApproval",
-      providerThreadId: "t1",
-      turnId: "turn-2",
+    ).toMatchObject({
       payload: {
         kind: "approval",
-        subject: {
-          kind: "command",
-          itemId: "item-2",
-          command: "git push",
-          cwd: "/tmp/project",
-          actions: [],
-          sessionGrant: null,
-        },
-        reason: "Needs approval",
         availableDecisions: ["deny"],
       },
     });

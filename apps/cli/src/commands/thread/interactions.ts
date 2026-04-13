@@ -1,14 +1,15 @@
 import { Command } from "commander";
 import {
+  assertNever,
   buildPendingInteractionApprovalResolution,
-  formatPendingInteractionCommandApprovalDecision,
-  formatPendingInteractionCommandApprovalResolutionOutcome,
+  formatPendingInteractionApprovalResolutionOutcome,
   formatPendingInteractionSubjectDetailLines,
   formatPendingInteractionSummary,
   summarizePendingInteractionRequestedPermissions,
 } from "@bb/core-ui";
 import {
   PendingInteraction,
+  type PendingInteractionApprovalDecision,
   type PendingInteractionGrantablePermissionProfile,
   type PendingInteractionRequestedPermissionProfile,
   pendingInteractionPermissionGrantScopeSchema,
@@ -66,6 +67,8 @@ function formatInteractionKind(interaction: PendingInteraction): string {
       return "file-change";
     case "permission_grant":
       return "permission";
+    default:
+      return assertNever(interaction.payload.subject);
   }
 }
 
@@ -114,12 +117,14 @@ function printInteraction(interaction: PendingInteraction): void {
           }
           printRequestedPermissions(interaction.payload.subject.permissions);
           break;
+        default:
+          assertNever(interaction.payload.subject);
       }
       if (interaction.payload.reason) {
         console.log(`  Prompt: ${interaction.payload.reason}`);
       }
       console.log(
-        `  Decisions: ${interaction.payload.availableDecisions.map(formatPendingInteractionCommandApprovalDecision).join(", ")}`,
+        `  Decisions: ${interaction.payload.availableDecisions.join(", ")}`,
       );
       break;
   }
@@ -130,9 +135,7 @@ function printInteraction(interaction: PendingInteraction): void {
     switch (interaction.resolution.kind) {
       case "approval":
         console.log(
-          `  Decision: ${formatPendingInteractionCommandApprovalDecision(
-            interaction.resolution.decision,
-          )}`,
+          `  Decision: ${interaction.resolution.decision}`,
         );
         if (interaction.resolution.decision === "allow_for_session") {
           console.log("  Scope: session");
@@ -217,38 +220,42 @@ async function resolveInteraction(
   );
 }
 
+function pickApprovalDecision(
+  interaction: PendingInteraction,
+  action: "approve" | "deny",
+): PendingInteractionApprovalDecision {
+  if (action === "approve") {
+    const turnApproval = interaction.payload.availableDecisions.find(
+      (availableDecision) => availableDecision === "allow_once",
+    );
+    if (turnApproval) {
+      return turnApproval;
+    }
+    const sessionApproval = interaction.payload.availableDecisions.find(
+      (availableDecision) => availableDecision === "allow_for_session",
+    );
+    if (sessionApproval) {
+      return sessionApproval;
+    }
+    throw new Error(
+      `Interaction ${interaction.id} does not offer an approval decision.`,
+    );
+  }
+
+  if (interaction.payload.availableDecisions.includes("deny")) {
+    return "deny";
+  }
+  throw new Error(
+    `Interaction ${interaction.id} does not offer a deny decision.`,
+  );
+}
+
 function buildBinaryResolution(
   interaction: PendingInteraction,
   action: "approve" | "deny",
 ): PendingInteractionResolution {
   switch (interaction.payload.kind) {
     case "approval": {
-      const decision = (() => {
-        if (action === "approve") {
-          const turnApproval = interaction.payload.availableDecisions.find(
-            (availableDecision) => availableDecision === "allow_once",
-          );
-          if (turnApproval) {
-            return turnApproval;
-          }
-          const sessionApproval = interaction.payload.availableDecisions.find(
-            (availableDecision) => availableDecision === "allow_for_session",
-          );
-          if (sessionApproval) {
-            return sessionApproval;
-          }
-          throw new Error(
-            `Interaction ${interaction.id} does not offer an approval decision.`,
-          );
-        }
-
-        if (interaction.payload.availableDecisions.includes("deny")) {
-          return "deny";
-        }
-        throw new Error(
-          `Interaction ${interaction.id} does not offer a deny decision.`,
-        );
-      })();
       if (
         action === "approve"
         && interaction.payload.subject.kind === "permission_grant"
@@ -257,6 +264,7 @@ function buildBinaryResolution(
           `Interaction ${interaction.id} is a permission grant; use bb thread interactions grant.`,
         );
       }
+      const decision = pickApprovalDecision(interaction, action);
       return buildPendingInteractionApprovalResolution(interaction, decision);
     }
   }
@@ -286,7 +294,7 @@ function formatBinaryResolutionMessage(
 ): string {
   switch (resolution.kind) {
     case "approval":
-      return formatPendingInteractionCommandApprovalResolutionOutcome(
+      return formatPendingInteractionApprovalResolutionOutcome(
         resolution.decision,
       );
   }

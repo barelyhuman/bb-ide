@@ -9,6 +9,7 @@ import type {
   PendingInteractionResolution,
   PendingInteractionRequestedPermissionProfile,
 } from "@bb/domain";
+import { assertNever } from "./assert-never.js";
 
 export type PendingInteractionPermissionResolutionSummaryArgs =
   ApprovalPendingInteractionResolution;
@@ -107,6 +108,8 @@ export function summarizePendingInteractionCommandActions(
           : "Search files";
       case "unknown":
         return action.command;
+      default:
+        return assertNever(action);
     }
   });
 }
@@ -169,6 +172,8 @@ export function formatPendingInteractionSubjectDetailLines(
             ...permissions.map((permission) => `Permission: ${permission}`),
           ];
         }
+        default:
+          return assertNever(interaction.payload.subject);
       }
   }
 }
@@ -189,13 +194,7 @@ export function toGrantedPendingInteractionPermissions(
   };
 }
 
-export function formatPendingInteractionCommandApprovalDecision(
-  decision: PendingInteractionApprovalDecision,
-): string {
-  return decision;
-}
-
-export function formatPendingInteractionCommandApprovalResolutionOutcome(
+export function formatPendingInteractionApprovalResolutionOutcome(
   decision: PendingInteractionApprovalDecision,
 ): string {
   switch (decision) {
@@ -205,13 +204,21 @@ export function formatPendingInteractionCommandApprovalResolutionOutcome(
       return "approved for this session";
     case "deny":
       return "denied";
+    default:
+      return assertNever(decision);
   }
 }
 
 export function formatPendingInteractionCommandApprovalResolutionMessage(
   decision: PendingInteractionApprovalDecision,
 ): string {
-  return `Command ${formatPendingInteractionCommandApprovalResolutionOutcome(decision)}`;
+  return `Command ${formatPendingInteractionApprovalResolutionOutcome(decision)}`;
+}
+
+export function formatPendingInteractionFileChangeApprovalResolutionMessage(
+  decision: PendingInteractionApprovalDecision,
+): string {
+  return `File changes ${formatPendingInteractionApprovalResolutionOutcome(decision)}`;
 }
 
 export function isPendingInteractionCommandApprovalPositiveDecision(
@@ -223,6 +230,8 @@ export function isPendingInteractionCommandApprovalPositiveDecision(
       return true;
     case "deny":
       return false;
+    default:
+      return assertNever(decision);
   }
 }
 
@@ -275,25 +284,6 @@ export function buildPendingInteractionApprovalResolution(
       decision,
     ),
   };
-}
-
-export function formatPendingInteractionFileChangeApprovalResolutionOutcome(
-  decision: PendingInteractionApprovalDecision,
-): string {
-  switch (decision) {
-    case "allow_once":
-      return "approved";
-    case "allow_for_session":
-      return "approved for this session";
-    case "deny":
-      return "denied";
-  }
-}
-
-export function formatPendingInteractionFileChangeApprovalResolutionMessage(
-  decision: PendingInteractionApprovalDecision,
-): string {
-  return `File changes ${formatPendingInteractionFileChangeApprovalResolutionOutcome(decision)}`;
 }
 
 function hasPendingInteractionGrantedPermissions(
