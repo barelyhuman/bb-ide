@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   buildTimelineRows,
-  buildTimelineRowsFromMessagesForNestedDisplay,
+  type BuildTimelineRowsOptions,
   type TimelineRow,
 } from "../src/thread-detail-rows.js";
 import type {
   ViewMessage,
   ViewProjection,
   ViewProvisioningTranscriptEntry,
+  ViewTurn,
+  ViewTurnStatus,
 } from "@bb/domain";
 
 type TimelineMessageRow = Extract<TimelineRow, { kind: "message" }>;
@@ -82,8 +84,97 @@ function provisioningOperation(
   };
 }
 
+function getStartedAt(message: ViewMessage): number {
+  return message.startedAt ?? message.createdAt;
+}
+
+function getTurnStatus(messages: ViewMessage[]): ViewTurnStatus {
+  if (messages.some((message) => message.kind === "error")) {
+    return "error";
+  }
+  if (
+    messages.some((message) =>
+      "status" in message &&
+      (message.status === "pending" || message.status === "streaming")
+    )
+  ) {
+    return "pending";
+  }
+  return "completed";
+}
+
+function projectionTurnFromMessages(
+  turnId: string,
+  messages: ViewMessage[],
+): ViewTurn {
+  const sourceSeqStart = Math.min(...messages.map((message) => message.sourceSeqStart));
+  const sourceSeqEnd = Math.max(...messages.map((message) => message.sourceSeqEnd));
+  const startedAt = Math.min(...messages.map((message) => getStartedAt(message)));
+  const createdAt = Math.max(...messages.map((message) => message.createdAt));
+  const status = getTurnStatus(messages);
+  return {
+    turnId,
+    threadId: messages[0]?.threadId ?? "thread-1",
+    sourceSeqStart,
+    sourceSeqEnd,
+    startedAt,
+    createdAt,
+    completedAt: status === "pending" ? null : createdAt,
+    status,
+    summaryCount: 0,
+    messages,
+  };
+}
+
+function projectionFromMessages(messages: ViewMessage[]): ViewProjection {
+  const entries: ViewProjection["entries"] = [];
+  const turnMessagesById = new Map<string, ViewMessage[]>();
+  const emittedTurnIds = new Set<string>();
+
+  for (const message of messages) {
+    if (!message.turnId) {
+      entries.push({
+        kind: "message",
+        message,
+      });
+      continue;
+    }
+
+    const turnMessages = turnMessagesById.get(message.turnId) ?? [];
+    turnMessages.push(message);
+    turnMessagesById.set(message.turnId, turnMessages);
+    if (!emittedTurnIds.has(message.turnId)) {
+      emittedTurnIds.add(message.turnId);
+      entries.push({
+        kind: "turn",
+        turn: projectionTurnFromMessages(message.turnId, turnMessages),
+      });
+    }
+  }
+
+  return {
+    entries: entries.map((entry) => {
+      if (entry.kind === "message") {
+        return entry;
+      }
+      const messagesForTurn = turnMessagesById.get(entry.turn.turnId) ?? [];
+      return {
+        kind: "turn",
+        turn: projectionTurnFromMessages(entry.turn.turnId, messagesForTurn),
+      };
+    }),
+  };
+}
+
+function buildRowsFromMessages(
+  messages: ViewMessage[],
+  options?: BuildTimelineRowsOptions,
+): TimelineRow[] {
+  return buildTimelineRows(projectionFromMessages(messages), options);
+}
+
 function getOperationRows(messages: ViewMessage[]): Array<Extract<ViewMessage, { kind: "operation" }>> {
-  return buildTimelineRowsFromMessagesForNestedDisplay(messages)
+  return buildRowsFromMessages(messages)
     .filter((row): row is Extract<TimelineRow, { kind: "message" }> =>
       row.kind === "message" && row.message.kind === "operation")
     .map((row) => row.message);
@@ -406,7 +497,7 @@ describe("buildTimelineRows projection turn lifecycle", () => {
 
 describe("buildTimelineRows tool group collapsing", () => {
   it("collapses earlier assistant messages before the last terminal into a tool group", () => {
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay([
+    const rows = buildRowsFromMessages([
       {
         kind: "user",
         id: "user-1",
@@ -445,7 +536,7 @@ describe("buildTimelineRows tool group collapsing", () => {
   });
 
   it("collapses delegation and tasks rows into a tool group before the final assistant text", () => {
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay([
+    const rows = buildRowsFromMessages([
       {
         kind: "delegation",
         id: "delegation-1",
@@ -460,28 +551,7 @@ describe("buildTimelineRows tool group collapsing", () => {
         command: "Agent [Explore] Search for SearchMenu references",
         output: "Subagent report: found SearchMenu component and tests",
         status: "completed",
-        children: [
-          {
-            kind: "tool-exploring",
-            id: "child-exploring-1",
-            threadId: "thread-1",
-            sourceSeqStart: 2,
-            sourceSeqEnd: 2,
-            createdAt: 2,
-            turnId: "turn-1",
-            label: "Exploring",
-            status: "completed",
-            calls: [
-              {
-                callId: "exec-1",
-                command: 'rg -n "SearchMenu" packages/excalidraw',
-                status: "completed",
-                output: "packages/excalidraw/components/SearchMenu.tsx:14",
-                parsedCmd: [{ type: "search", query: "SearchMenu" }],
-              },
-            ],
-          },
-        ],
+        childProjection: { entries: [] },
       },
       {
         kind: "tasks",
@@ -528,7 +598,7 @@ describe("buildTimelineRows tool group collapsing", () => {
   });
 
   it("keeps intermediate assistant text inside the tool group and the last assistant text standalone", () => {
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay([
+    const rows = buildRowsFromMessages([
       {
         kind: "user",
         id: "user-1",
@@ -589,7 +659,7 @@ describe("buildTimelineRows tool group collapsing", () => {
   });
 
   it("marks grouped error rows as failed work and counts non-tool rows", () => {
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay([
+    const rows = buildRowsFromMessages([
       {
         kind: "tasks",
         id: "tasks-1",
@@ -638,7 +708,7 @@ describe("buildTimelineRows tool group collapsing", () => {
   });
 
   it("counts intermediate assistant-text messages in summaryCount", () => {
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay([
+    const rows = buildRowsFromMessages([
       {
         kind: "assistant-text",
         id: "assistant-1",
@@ -686,7 +756,7 @@ describe("buildTimelineRows tool group collapsing", () => {
   });
 
   it("groups pre-terminal messages before the last assistant-text, leaving it standalone", () => {
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay([
+    const rows = buildRowsFromMessages([
       {
         kind: "assistant-text",
         id: "assistant-1",
@@ -735,7 +805,7 @@ describe("buildTimelineRows tool group collapsing", () => {
   });
 
   it("groups delegation, tasks, and errors together before the final answer", () => {
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay([
+    const rows = buildRowsFromMessages([
       {
         kind: "delegation",
         id: "delegation-1",
@@ -747,7 +817,7 @@ describe("buildTimelineRows tool group collapsing", () => {
         toolName: "Agent",
         callId: "agent-1",
         status: "completed",
-        children: [],
+        childProjection: { entries: [] },
       },
       {
         kind: "tasks",
@@ -796,7 +866,7 @@ describe("buildTimelineRows tool group collapsing", () => {
   });
 
   it("groups each turn independently in multi-turn conversations", () => {
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay([
+    const rows = buildRowsFromMessages([
       {
         kind: "user",
         id: "user-1",
@@ -908,95 +978,8 @@ describe("buildTimelineRows tool group collapsing", () => {
     expect(toolGroups[1]?.turnId).toBe("turn-2");
   });
 
-  it("does not group a reused turn id across a later user message", () => {
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay([
-      {
-        kind: "user",
-        id: "user-1",
-        threadId: "thread-1",
-        sourceSeqStart: 1,
-        sourceSeqEnd: 1,
-        createdAt: 1,
-        text: "First prompt",
-      },
-      {
-        kind: "tool-call",
-        id: "tool-1",
-        threadId: "thread-1",
-        sourceSeqStart: 2,
-        sourceSeqEnd: 2,
-        createdAt: 2,
-        turnId: "turn-1",
-        toolName: "exec_command",
-        callId: "call-1",
-        command: "pnpm exec turbo run test --filter=@bb/core-ui",
-        status: "completed",
-      },
-      {
-        kind: "assistant-text",
-        id: "assistant-1",
-        threadId: "thread-1",
-        sourceSeqStart: 3,
-        sourceSeqEnd: 3,
-        createdAt: 3,
-        turnId: "turn-1",
-        text: "First answer.",
-        status: "completed",
-      },
-      {
-        kind: "user",
-        id: "user-2",
-        threadId: "thread-1",
-        sourceSeqStart: 4,
-        sourceSeqEnd: 4,
-        createdAt: 4,
-        text: "Second prompt after a resumed provider session",
-      },
-      {
-        kind: "tool-call",
-        id: "tool-2",
-        threadId: "thread-1",
-        sourceSeqStart: 5,
-        sourceSeqEnd: 5,
-        createdAt: 5,
-        turnId: "turn-1",
-        toolName: "exec_command",
-        callId: "call-2",
-        command: "pnpm exec turbo run build --filter=@bb/core-ui",
-        status: "completed",
-      },
-      {
-        kind: "assistant-text",
-        id: "assistant-2",
-        threadId: "thread-1",
-        sourceSeqStart: 6,
-        sourceSeqEnd: 6,
-        createdAt: 6,
-        turnId: "turn-1",
-        text: "Second answer.",
-        status: "completed",
-      },
-    ]);
-
-    expect(rows.map((row) => row.kind)).toEqual([
-      "message",
-      "tool-group",
-      "message",
-      "message",
-      "tool-group",
-      "message",
-    ]);
-    const toolGroups = rows.filter((row): row is Extract<TimelineRow, { kind: "tool-group" }> =>
-      row.kind === "tool-group");
-    expect(toolGroups).toHaveLength(2);
-    expect(toolGroups[0]?.sourceSeqStart).toBe(2);
-    expect(toolGroups[0]?.sourceSeqEnd).toBe(2);
-    expect(toolGroups[1]?.sourceSeqStart).toBe(5);
-    expect(toolGroups[1]?.sourceSeqEnd).toBe(5);
-  });
-
   it("does not collapse a turn that has only one tool message and no terminal", () => {
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay([
+    const rows = buildRowsFromMessages([
       {
         kind: "user",
         id: "user-1",
@@ -1026,7 +1009,7 @@ describe("buildTimelineRows tool group collapsing", () => {
   });
 
   it("does not collapse an active turn before a streaming assistant message", () => {
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay([
+    const rows = buildRowsFromMessages([
       {
         kind: "user",
         id: "user-1",
@@ -1085,7 +1068,7 @@ describe("buildTimelineRows tool group collapsing", () => {
   });
 
   it("does not collapse an active turn with pending tool work", () => {
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay([
+    const rows = buildRowsFromMessages([
       {
         kind: "user",
         id: "user-1",
@@ -1144,7 +1127,7 @@ describe("buildTimelineRows tool group collapsing", () => {
   });
 
   it("leaves all turn activity standalone when assistant-text is the only terminal message and nothing precedes it to group", () => {
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay([
+    const rows = buildRowsFromMessages([
       {
         kind: "user",
         id: "user-1",
@@ -1204,7 +1187,7 @@ describe("buildTimelineRows tool group collapsing", () => {
   });
 
   it("leaves messages standalone when the only terminal is first and nothing non-ungroupable precedes it", () => {
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay([
+    const rows = buildRowsFromMessages([
       {
         kind: "user",
         id: "user-1",
@@ -1253,7 +1236,7 @@ describe("buildTimelineRows tool group collapsing", () => {
 
 describe("buildTimelineRows reconnect error collapsing", () => {
   it("collapses consecutive reconnect retry errors into the latest row", () => {
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay([
+    const rows = buildRowsFromMessages([
       {
         kind: "error",
         id: "error-1",
@@ -1300,7 +1283,7 @@ describe("buildTimelineRows reconnect error collapsing", () => {
   });
 
   it("groups pre-terminal activity before the last error, leaving it standalone", () => {
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay([
+    const rows = buildRowsFromMessages([
       {
         kind: "error",
         id: "error-1",
@@ -1495,7 +1478,7 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
   });
 
   it("keeps one provisioning row when user interruption lands mid-provisioning", () => {
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay([
+    const rows = buildRowsFromMessages([
       provisioningOperation(1, "Provisioning thread", "pending", undefined, {
         transcript: [
           { type: "step", key: "provision", text: "Provisioning thread", status: "started" },

@@ -34,6 +34,7 @@ export type {
 export { formatTimelineAsText } from "./format-timeline-text.js";
 export type {
   FormatTimelineOptions,
+  TimelineTextFormatOptions,
   TimelineFormat,
 } from "./format-timeline-text.js";
 export { durationToCompactString, timeAgo } from "./format-helpers.js";
@@ -65,10 +66,10 @@ export {
 } from "./provider-event-utils.js";
 
 export { extractThreadContextWindowUsage } from "./thread-context-window-usage.js";
+export { mergeProvisioningOperations } from "./provisioning-helpers.js";
 
 export {
   buildTimelineRows,
-  buildTimelineRowsFromMessagesForNestedDisplay,
 } from "./thread-detail-rows.js";
 export type {
   BuildTimelineRowsOptions,

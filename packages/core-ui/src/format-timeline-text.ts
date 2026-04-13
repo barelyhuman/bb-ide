@@ -16,7 +16,7 @@ import type {
 } from "@bb/domain";
 import { durationToCompactString } from "./format-helpers.js";
 import { taskStatusGlyph } from "./task-status.js";
-import { buildTimelineRowsFromMessagesForNestedDisplay } from "./thread-detail-rows.js";
+import { buildTimelineRows } from "./thread-detail-rows.js";
 import { buildToolGroupSummaryParts } from "./timeline-summary.js";
 import {
   buildExploringDetailLines,
@@ -27,11 +27,14 @@ import {
 
 export type TimelineFormat = "json" | "minimal" | "verbose";
 
-type TimelineTextEntry = TimelineRow | ViewMessage;
-
 export interface FormatTimelineOptions {
   format: TimelineFormat;
   /** Whether to use ANSI colors. Default: auto-detect from stdout.isTTY. */
+  color?: boolean;
+}
+
+export interface TimelineTextFormatOptions {
+  verbose?: boolean;
   color?: boolean;
 }
 
@@ -101,37 +104,6 @@ function formatDurationLine(
     return undefined;
   }
   return dim(`  ${duration ?? `${durationMs}ms`}`, color);
-}
-
-function isTimelineRow(entry: TimelineTextEntry): entry is TimelineRow {
-  if (entry.kind === "message") {
-    return "message" in entry;
-  }
-  if (entry.kind === "tool-group") {
-    return "messages" in entry && "summaryCount" in entry;
-  }
-  return false;
-}
-
-function toTimelineRows(entries: TimelineTextEntry[]): TimelineRow[] {
-  if (entries.every((entry) => isTimelineRow(entry))) {
-    return entries;
-  }
-
-  const messages: ViewMessage[] = [];
-  for (const entry of entries) {
-    if (isTimelineRow(entry)) {
-      if (entry.kind === "message") {
-        messages.push(entry.message);
-        continue;
-      }
-      messages.push(...entry.messages);
-      continue;
-    }
-    messages.push(entry);
-  }
-
-  return buildTimelineRowsFromMessagesForNestedDisplay(messages);
 }
 
 function formatUser(msg: ViewUserMessage, _verbose: boolean, color: boolean): string {
@@ -314,10 +286,7 @@ function formatDelegation(
     return lines.join("\n");
   }
 
-  for (const row of buildTimelineRowsFromMessagesForNestedDisplay(
-    msg.children,
-    { collapseAll: true },
-  )) {
+  for (const row of buildTimelineRows(msg.childProjection, { collapseAll: true })) {
     const block = formatTimelineRow(row, true, color);
     if (block) {
       lines.push(indentBlock(block, "  "));
@@ -405,18 +374,17 @@ function formatTimelineRow(row: TimelineRow, verbose: boolean, color: boolean): 
 }
 
 /**
- * Format timeline rows or messages as human-readable terminal text.
+ * Format timeline rows as human-readable terminal text.
  *
  * - `minimal`: Compact view — grouped tool work stays collapsed, reasoning hidden
  * - `verbose`: Expanded view — grouped rows are expanded, reasoning included, diffs shown
  */
 export function formatTimelineAsText(
-  entries: TimelineTextEntry[],
-  options?: { verbose?: boolean; color?: boolean },
+  rows: TimelineRow[],
+  options?: TimelineTextFormatOptions,
 ): string {
   const verbose = options?.verbose ?? false;
   const color = options?.color ?? false;
-  const rows = toTimelineRows(entries);
 
   const blocks: string[] = [];
   for (const row of rows) {

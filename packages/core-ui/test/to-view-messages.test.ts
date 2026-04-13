@@ -1,17 +1,37 @@
 import { describe, expect, it } from "vitest";
-import type { ThreadEventRow } from "@bb/domain";
+import type {
+  ThreadEventRow,
+  ViewMessage,
+  ViewProjection,
+} from "@bb/domain";
 import { decodeRow } from "../src/event-decode.js";
 import { toViewMessages, toViewProjection } from "../src/to-view-messages.js";
 import type { ThreadEventWithMeta } from "../src/to-view-messages.js";
 import {
   buildTimelineRows,
-  buildTimelineRowsFromMessagesForNestedDisplay,
 } from "../src/thread-detail-rows.js";
-import type { ViewMessage } from "@bb/domain";
 
 /** Convert raw ThreadEventRow[] (test fixtures / inline data) to typed input for toViewMessages. */
 function fromRows(rows: ThreadEventRow[]): ThreadEventWithMeta[] {
   return rows.map((row) => decodeRow(row));
+}
+
+function flattenProjectionMessages(projection: ViewProjection): ViewMessage[] {
+  const messages: ViewMessage[] = [];
+  for (const entry of projection.entries) {
+    if (entry.kind === "message") {
+      messages.push(entry.message);
+      continue;
+    }
+    if (entry.turn.messages) {
+      messages.push(...entry.turn.messages);
+      continue;
+    }
+    if (entry.turn.terminalMessage) {
+      messages.push(entry.turn.terminalMessage);
+    }
+  }
+  return messages;
 }
 
 function unique<T>(values: T[]): T[] {
@@ -928,12 +948,15 @@ describe("toViewMessages replay coverage", () => {
       sourceSeqStart: 1,
       sourceSeqEnd: 4,
     });
-    expect(delegation?.children).toHaveLength(1);
-    expect(delegation?.children[0]?.kind).toBe("tool-exploring");
-    if (delegation?.children[0]?.kind === "tool-exploring") {
-      expect(delegation.children[0].calls).toHaveLength(1);
-      expect(delegation.children[0].calls[0]?.callId).toBe("exec-1");
-      expect(delegation.children[0].calls[0]?.status).toBe("completed");
+    const childMessages = delegation
+      ? flattenProjectionMessages(delegation.childProjection)
+      : [];
+    expect(childMessages).toHaveLength(1);
+    expect(childMessages[0]?.kind).toBe("tool-exploring");
+    if (childMessages[0]?.kind === "tool-exploring") {
+      expect(childMessages[0].calls).toHaveLength(1);
+      expect(childMessages[0].calls[0]?.callId).toBe("exec-1");
+      expect(childMessages[0].calls[0]?.status).toBe("completed");
     }
   });
 
@@ -1068,19 +1091,22 @@ describe("toViewMessages replay coverage", () => {
       callId: "agent-1",
       description: "Explore SearchMenu implementation",
     });
-    expect(delegation?.children).toHaveLength(2);
-    expect(delegation?.children[0]?.kind).toBe("tool-exploring");
-    expect(delegation?.children[1]?.kind).toBe("tool-call");
+    const childMessages = delegation
+      ? flattenProjectionMessages(delegation.childProjection)
+      : [];
+    expect(childMessages).toHaveLength(2);
+    expect(childMessages[0]?.kind).toBe("tool-exploring");
+    expect(childMessages[1]?.kind).toBe("tool-call");
 
-    if (delegation?.children[0]?.kind === "tool-exploring") {
-      expect(delegation.children[0].calls).toHaveLength(1);
-      expect(delegation.children[0].calls[0]?.callId).toBe("exec-1");
-      expect(delegation.children[0].calls[0]?.status).toBe("completed");
+    if (childMessages[0]?.kind === "tool-exploring") {
+      expect(childMessages[0].calls).toHaveLength(1);
+      expect(childMessages[0].calls[0]?.callId).toBe("exec-1");
+      expect(childMessages[0].calls[0]?.status).toBe("completed");
     }
 
-    if (delegation?.children[1]?.kind === "tool-call") {
-      expect(delegation.children[1].toolName).toBe("wait");
-      expect(delegation.children[1].parentToolCallId).toBe("agent-1");
+    if (childMessages[1]?.kind === "tool-call") {
+      expect(childMessages[1].toolName).toBe("wait");
+      expect(childMessages[1].parentToolCallId).toBe("agent-1");
     }
   });
 
@@ -1212,10 +1238,13 @@ describe("toViewMessages replay coverage", () => {
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), { threadStatus: "provisioning" });
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay(projected, {
-      includeToolGroupMessages: false,
-    });
+    const rows = buildTimelineRows(
+      toViewProjection(fromRows(events), {
+        threadStatus: "provisioning",
+        turnMessageDetail: "full",
+      }),
+      { includeToolGroupMessages: false },
+    );
     const messageRows = rows.filter(
       (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
         row.kind === "message",
@@ -3422,12 +3451,13 @@ describe("toViewMessages replay coverage", () => {
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), {
-      threadStatus: "error",
-    });
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay(projected, {
-      includeToolGroupMessages: false,
-    });
+    const rows = buildTimelineRows(
+      toViewProjection(fromRows(events), {
+        threadStatus: "error",
+        turnMessageDetail: "full",
+      }),
+      { includeToolGroupMessages: false },
+    );
     const messageRows = rows.filter(
       (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
         row.kind === "message",
@@ -3504,12 +3534,13 @@ describe("toViewMessages replay coverage", () => {
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), {
-      threadStatus: "error",
-    });
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay(projected, {
-      includeToolGroupMessages: false,
-    });
+    const rows = buildTimelineRows(
+      toViewProjection(fromRows(events), {
+        threadStatus: "error",
+        turnMessageDetail: "full",
+      }),
+      { includeToolGroupMessages: false },
+    );
     const messageRows = rows.filter(
       (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
         row.kind === "message",
@@ -3915,12 +3946,13 @@ describe("toViewMessages replay coverage", () => {
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), {
-      threadStatus: "idle",
-    });
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay(projected, {
-      includeToolGroupMessages: false,
-    });
+    const rows = buildTimelineRows(
+      toViewProjection(fromRows(events), {
+        threadStatus: "idle",
+        turnMessageDetail: "full",
+      }),
+      { includeToolGroupMessages: false },
+    );
     const messageRows = rows.filter(
       (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
         row.kind === "message",
@@ -3990,12 +4022,13 @@ describe("toViewMessages replay coverage", () => {
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), {
-      threadStatus: "idle",
-    });
-    const rows = buildTimelineRowsFromMessagesForNestedDisplay(projected, {
-      includeToolGroupMessages: false,
-    });
+    const rows = buildTimelineRows(
+      toViewProjection(fromRows(events), {
+        threadStatus: "idle",
+        turnMessageDetail: "full",
+      }),
+      { includeToolGroupMessages: false },
+    );
     const messageRows = rows.filter(
       (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
         row.kind === "message",

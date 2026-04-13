@@ -20,7 +20,7 @@ function baseDelegationMessage(): ViewDelegationMessage {
     toolName: "Agent",
     callId: "agent-1",
     status: "completed",
-    children: [],
+    childProjection: { entries: [] },
   };
 }
 

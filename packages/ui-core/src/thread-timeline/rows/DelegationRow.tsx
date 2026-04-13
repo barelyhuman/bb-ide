@@ -1,7 +1,7 @@
 import { useMemo, type ReactNode } from "react";
 import { cn } from "../../cn.js";
 import {
-  buildTimelineRowsFromMessagesForNestedDisplay,
+  buildTimelineRows,
   buildToolGroupSummaryParts,
   formatDelegationSummary,
 } from "@bb/core-ui";
@@ -116,10 +116,10 @@ export function DelegationRow({
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const nestedRows = useMemo(
     () =>
-      buildTimelineRowsFromMessagesForNestedDisplay(message.children, {
+      buildTimelineRows(message.childProjection, {
         collapseAll: true,
       }),
-    [message.children],
+    [message.childProjection],
   );
   const nestedLatestActivityRowId = useMemo(
     () => findLatestActivityRowId(nestedRows),

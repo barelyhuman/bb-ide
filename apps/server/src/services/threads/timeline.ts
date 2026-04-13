@@ -1,10 +1,9 @@
 import {
   buildTimelineRows,
-  buildTimelineRowsFromMessagesForNestedDisplay,
   extractThreadContextWindowUsage,
+  mergeProvisioningOperations,
   TIMELINE_NOISE_EVENT_TYPES,
   toViewProjection,
-  toViewMessages,
   type ThreadEventWithMeta,
 } from "@bb/core-ui";
 import type {
@@ -64,30 +63,15 @@ function toTimelineMessageRow(message: ViewMessage): TimelineMessageRow {
   };
 }
 
-function flattenTimelineRowsToMessageRows(
-  rows: TimelineRow[],
-): TimelineMessageRow[] {
-  const messageRows: TimelineMessageRow[] = [];
-  for (const row of rows) {
-    if (row.kind === "message") {
-      messageRows.push(row);
-      continue;
-    }
-    for (const message of row.messages) {
-      messageRows.push(toTimelineMessageRow(message));
-    }
-  }
-  return messageRows;
-}
-
 function buildManagerConversationRows(
-  messages: ViewMessage[],
+  projection: ViewProjection,
 ): TimelineMessageRow[] {
-  const visibleMessages = messages.filter(isManagerConversationMessage);
-  const rows = buildTimelineRowsFromMessagesForNestedDisplay(visibleMessages, {
-    includeToolGroupMessages: true,
-  });
-  return flattenTimelineRowsToMessageRows(rows);
+  const visibleMessages = flattenProjectionMessagesDeep(projection).filter(
+    isManagerConversationMessage,
+  );
+  return mergeProvisioningOperations(visibleMessages).map((message) =>
+    toTimelineMessageRow(message)
+  );
 }
 
 function flattenProjectionMessages(projection: ViewProjection): ViewMessage[] {
@@ -103,6 +87,17 @@ function flattenProjectionMessages(projection: ViewProjection): ViewMessage[] {
     }
     if (entry.turn.terminalMessage) {
       messages.push(entry.turn.terminalMessage);
+    }
+  }
+  return messages;
+}
+
+function flattenProjectionMessagesDeep(projection: ViewProjection): ViewMessage[] {
+  const messages: ViewMessage[] = [];
+  for (const message of flattenProjectionMessages(projection)) {
+    messages.push(message);
+    if (message.kind === "delegation") {
+      messages.push(...flattenProjectionMessagesDeep(message.childProjection));
     }
   }
   return messages;
@@ -224,10 +219,11 @@ export function buildThreadTimeline(
   const decodedEvents = eventRows.map((row) => toThreadEventWithMeta(row));
   const rows = isDefaultManagerView
     ? buildManagerConversationRows(
-        toViewMessages(decodedEvents, {
+        toViewProjection(decodedEvents, {
           includeInternalSystemMessages: options.showAllManagerEvents,
           threadStatus: thread.status,
           threadType: thread.type,
+          turnMessageDetail: "full",
         }),
       )
     : buildTimelineRows(

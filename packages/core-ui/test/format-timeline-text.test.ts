@@ -1,6 +1,106 @@
 import { describe, expect, it } from "vitest";
-import { formatTimelineAsText } from "../src/format-timeline-text.js";
-import type { ViewMessage } from "@bb/domain";
+import {
+  formatTimelineAsText,
+  type TimelineTextFormatOptions,
+} from "../src/format-timeline-text.js";
+import { buildTimelineRows } from "../src/thread-detail-rows.js";
+import type {
+  TimelineRow,
+  ViewMessage,
+  ViewProjection,
+  ViewTurn,
+  ViewTurnStatus,
+} from "@bb/domain";
+
+function getStartedAt(message: ViewMessage): number {
+  return message.startedAt ?? message.createdAt;
+}
+
+function getTurnStatus(messages: ViewMessage[]): ViewTurnStatus {
+  if (messages.some((message) => message.kind === "error")) {
+    return "error";
+  }
+  if (
+    messages.some((message) =>
+      "status" in message &&
+      (message.status === "pending" || message.status === "streaming")
+    )
+  ) {
+    return "pending";
+  }
+  return "completed";
+}
+
+function projectionTurnFromMessages(
+  turnId: string,
+  messages: ViewMessage[],
+): ViewTurn {
+  const sourceSeqStart = Math.min(...messages.map((message) => message.sourceSeqStart));
+  const sourceSeqEnd = Math.max(...messages.map((message) => message.sourceSeqEnd));
+  const startedAt = Math.min(...messages.map((message) => getStartedAt(message)));
+  const createdAt = Math.max(...messages.map((message) => message.createdAt));
+  const status = getTurnStatus(messages);
+  return {
+    turnId,
+    threadId: messages[0]?.threadId ?? "thread-1",
+    sourceSeqStart,
+    sourceSeqEnd,
+    startedAt,
+    createdAt,
+    completedAt: status === "pending" ? null : createdAt,
+    status,
+    summaryCount: 0,
+    messages,
+  };
+}
+
+function projectionFromMessages(messages: ViewMessage[]): ViewProjection {
+  const entries: ViewProjection["entries"] = [];
+  const turnMessagesById = new Map<string, ViewMessage[]>();
+  const emittedTurnIds = new Set<string>();
+
+  for (const message of messages) {
+    if (!message.turnId) {
+      entries.push({ kind: "message", message });
+      continue;
+    }
+
+    const turnMessages = turnMessagesById.get(message.turnId) ?? [];
+    turnMessages.push(message);
+    turnMessagesById.set(message.turnId, turnMessages);
+    if (!emittedTurnIds.has(message.turnId)) {
+      emittedTurnIds.add(message.turnId);
+      entries.push({
+        kind: "turn",
+        turn: projectionTurnFromMessages(message.turnId, turnMessages),
+      });
+    }
+  }
+
+  return {
+    entries: entries.map((entry) => {
+      if (entry.kind === "message") {
+        return entry;
+      }
+      const messagesForTurn = turnMessagesById.get(entry.turn.turnId) ?? [];
+      return {
+        kind: "turn",
+        turn: projectionTurnFromMessages(entry.turn.turnId, messagesForTurn),
+      };
+    }),
+  };
+}
+
+function timelineRowsFromMessages(messages: ViewMessage[]): TimelineRow[] {
+  return buildTimelineRows(projectionFromMessages(messages));
+}
+
+function formatMessagesAsText(
+  messages: ViewMessage[],
+  options?: TimelineTextFormatOptions,
+): string {
+  return formatTimelineAsText(timelineRowsFromMessages(messages), options);
+}
 
 describe("formatTimelineAsText", () => {
   it("renders user + assistant + tool-call in minimal mode", () => {
@@ -40,7 +140,7 @@ describe("formatTimelineAsText", () => {
       },
     ];
 
-    const text = formatTimelineAsText(messages, { color: false });
+    const text = formatMessagesAsText(messages, { color: false });
     expect(text).toContain("User");
     expect(text).toContain("Fix the bug");
     expect(text).toContain("Assistant");
@@ -79,12 +179,12 @@ describe("formatTimelineAsText", () => {
       },
     ];
 
-    const minimal = formatTimelineAsText(messages, { color: false });
+    const minimal = formatMessagesAsText(messages, { color: false });
     expect(minimal).toContain("Explored 1 file, 1 search");
     expect(minimal).not.toContain("Read main.ts");
     expect(minimal).not.toContain("Search bug in /src");
 
-    const verbose = formatTimelineAsText(messages, { color: false, verbose: true });
+    const verbose = formatMessagesAsText(messages, { color: false, verbose: true });
     expect(verbose).toContain("Explored 1 file, 1 search");
     expect(verbose).toContain("Read /src/main.ts");
     expect(verbose).toContain("Search bug in /src");
@@ -107,7 +207,7 @@ describe("formatTimelineAsText", () => {
       status: "completed" as const,
     }));
 
-    const minimal = formatTimelineAsText(
+    const minimal = formatMessagesAsText(
       [
         {
           kind: "tool-exploring",
@@ -144,12 +244,12 @@ describe("formatTimelineAsText", () => {
       },
     ];
 
-    const minimal = formatTimelineAsText(messages, { color: false });
+    const minimal = formatMessagesAsText(messages, { color: false });
     expect(minimal).toContain("File Edit");
     expect(minimal).toContain("/src/auth.ts");
     expect(minimal).not.toContain("if (!user)"); // diff hidden in minimal
 
-    const verbose = formatTimelineAsText(messages, { color: false, verbose: true });
+    const verbose = formatMessagesAsText(messages, { color: false, verbose: true });
     expect(verbose).toContain("if (!user)"); // diff shown in verbose
   });
 
@@ -167,7 +267,7 @@ describe("formatTimelineAsText", () => {
       },
     ];
 
-    const text = formatTimelineAsText(messages, { color: false });
+    const text = formatMessagesAsText(messages, { color: false });
     expect(text).toContain("Error");
     expect(text).toContain("Provider unavailable");
   });
@@ -186,10 +286,10 @@ describe("formatTimelineAsText", () => {
       },
     ];
 
-    const minimal = formatTimelineAsText(messages, { color: false });
+    const minimal = formatMessagesAsText(messages, { color: false });
     expect(minimal).toBe("");
 
-    const verbose = formatTimelineAsText(messages, { color: false, verbose: true });
+    const verbose = formatMessagesAsText(messages, { color: false, verbose: true });
     expect(verbose).toContain("Reasoning");
     expect(verbose).toContain("Let me think about this");
   });
@@ -239,13 +339,13 @@ describe("formatTimelineAsText", () => {
       },
     ];
 
-    const minimal = formatTimelineAsText(messages, { color: false });
+    const minimal = formatMessagesAsText(messages, { color: false });
     expect(minimal).toContain("Worked on 2 items");
     expect(minimal).toContain("Assistant");
     expect(minimal).toContain("Tests pass.");
     expect(minimal).not.toContain("npm test");
 
-    const verbose = formatTimelineAsText(messages, { color: false, verbose: true });
+    const verbose = formatMessagesAsText(messages, { color: false, verbose: true });
     expect(verbose).toContain("Worked on 2 items");
     expect(verbose).toContain("npm test");
     expect(verbose).toContain("npm run lint");
@@ -254,7 +354,7 @@ describe("formatTimelineAsText", () => {
   });
 
   it("renders error as standalone terminal message, not grouped with preceding tasks", () => {
-    const text = formatTimelineAsText(
+    const text = formatMessagesAsText(
       [
         {
           kind: "tasks",
@@ -314,7 +414,7 @@ describe("formatTimelineAsText", () => {
   });
 
   it("omits completed badges for warning operations", () => {
-    const text = formatTimelineAsText(
+    const text = formatMessagesAsText(
       [
         {
           kind: "operation",
@@ -353,15 +453,15 @@ describe("formatTimelineAsText", () => {
         subagentType: "Explore",
         description: "Inspect the docs tree",
         output: "## Findings\n\n- alpha\n- beta",
-        children: [],
+        childProjection: { entries: [] },
       },
     ];
 
-    const minimal = formatTimelineAsText(messages, { color: false });
+    const minimal = formatMessagesAsText(messages, { color: false });
     expect(minimal).toContain("Subagent Explore: Inspect the docs tree");
     expect(minimal).toContain("## Findings");
 
-    const verbose = formatTimelineAsText(messages, { color: false, verbose: true });
+    const verbose = formatMessagesAsText(messages, { color: false, verbose: true });
     expect(verbose).toContain("Subagent Explore: Inspect the docs tree");
     expect(verbose).toContain("## Findings");
     expect(verbose).toContain("- alpha");
@@ -385,7 +485,7 @@ describe("formatTimelineAsText", () => {
       },
     ];
 
-    const text = formatTimelineAsText(messages, { color: false });
+    const text = formatMessagesAsText(messages, { color: false });
     expect(text).toContain("Updated tasks");
     expect(text).not.toContain("Tasks updated");
     expect(text).toContain("Inspect docs");

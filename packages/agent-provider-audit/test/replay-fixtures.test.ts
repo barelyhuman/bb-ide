@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { extractThreadContextWindowUsage } from "@bb/core-ui";
-import type { ViewMessage } from "@bb/domain";
+import type { ViewMessage, ViewProjection } from "@bb/domain";
 import type {
   ProviderAuditBundle,
   ProviderAuditReplayFixturesResult,
@@ -32,6 +32,24 @@ function countMessageKinds(messages: ViewMessage[]): Record<string, number> {
     counts[message.kind] = (counts[message.kind] ?? 0) + 1;
     return counts;
   }, {});
+}
+
+function flattenProjectionMessages(projection: ViewProjection): ViewMessage[] {
+  const messages: ViewMessage[] = [];
+  for (const entry of projection.entries) {
+    if (entry.kind === "message") {
+      messages.push(entry.message);
+      continue;
+    }
+    if (entry.turn.messages) {
+      messages.push(...entry.turn.messages);
+      continue;
+    }
+    if (entry.turn.terminalMessage) {
+      messages.push(entry.turn.terminalMessage);
+    }
+  }
+  return messages;
 }
 
 function buildTimelinePreview(text: string): string[] {
@@ -250,9 +268,12 @@ describe("@bb/agent-provider-audit fixture replay", () => {
     );
 
     expect(delegation).toBeDefined();
-    expect(delegation?.children.length).toBeGreaterThan(0);
+    const childMessages = delegation
+      ? flattenProjectionMessages(delegation.childProjection)
+      : [];
+    expect(childMessages.length).toBeGreaterThan(0);
     expect(
-      delegation?.children.some(
+      childMessages.some(
         (child) => child.kind === "tool-exploring" || child.kind === "tool-call",
       ),
     ).toBe(true);

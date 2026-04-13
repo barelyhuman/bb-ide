@@ -28,7 +28,12 @@ import {
   toIndexedTimelineMessages,
 } from "./timeline-message-helpers.js";
 import { isIgnoredNoiseType } from "./timeline-noise-events.js";
-import { normalizeSemanticViewMessages } from "./semantic-view-messages.js";
+import {
+  compactTaskMessages,
+  normalizeSemanticViewMessages,
+  normalizeSemanticViewProjection,
+  sortViewMessagesBySource,
+} from "./semantic-view-messages.js";
 import { parseTaskMessage, shouldSuppressLowValueToolCall } from "./task-message-parsing.js";
 import {
   parsePromptInput,
@@ -1613,7 +1618,7 @@ function buildProjectionFromMessages(
   };
 }
 
-export function toViewMessages(
+function buildFlatViewMessages(
   events: ThreadEventWithMeta[] | undefined,
   options?: ToViewMessagesOptions,
 ): ViewMessage[] {
@@ -2190,7 +2195,90 @@ export function toViewMessages(
   }
 
   finalizePendingMessages(state, options);
-  return normalizeSemanticViewMessages(state.messages);
+  return sortViewMessagesBySource(compactTaskMessages(state.messages));
+}
+
+function toFullProjection(
+  events: ThreadEventWithMeta[],
+  options: ToViewProjectionOptions,
+): ViewProjection {
+  const messages = buildFlatViewMessages(events, options);
+  return buildProjectionFromMessages({
+    events,
+    messages,
+    turnMessageDetail: "full",
+  });
+}
+
+function withChildProjectionDetail(message: ViewMessage): ViewMessage {
+  if (message.kind !== "delegation") {
+    return message;
+  }
+  return {
+    ...message,
+    childProjection: applyProjectionTurnMessageDetail(
+      message.childProjection,
+      "full",
+    ),
+  };
+}
+
+function applyTurnMessageDetail(
+  turn: ViewTurn,
+  turnMessageDetail: ViewTurnMessageDetail,
+): ViewTurn {
+  const messages = (turn.messages ?? []).map((message) =>
+    withChildProjectionDetail(message)
+  );
+  const terminalMessage = findProjectionTerminalMessage(messages);
+  const summaryCount = getProjectionSummaryCount(messages, terminalMessage);
+  const includeMessages =
+    turn.status === "pending" ||
+    turnMessageDetail === "full" ||
+    shouldIncludeSummaryTurnMessages(messages, terminalMessage);
+
+  const detailedTurn: ViewTurn = {
+    ...turn,
+    summaryCount,
+  };
+  delete detailedTurn.terminalMessage;
+  delete detailedTurn.messages;
+  if (terminalMessage) {
+    detailedTurn.terminalMessage = terminalMessage;
+  }
+  if (includeMessages) {
+    detailedTurn.messages = messages;
+  }
+  return detailedTurn;
+}
+
+function applyProjectionTurnMessageDetail(
+  projection: ViewProjection,
+  turnMessageDetail: ViewTurnMessageDetail,
+): ViewProjection {
+  return {
+    entries: projection.entries.map((entry) => {
+      if (entry.kind === "message") {
+        return {
+          kind: "message",
+          message: withChildProjectionDetail(entry.message),
+        };
+      }
+      return {
+        kind: "turn",
+        turn: applyTurnMessageDetail(entry.turn, turnMessageDetail),
+      };
+    }),
+  };
+}
+
+export function toViewMessages(
+  events: ThreadEventWithMeta[] | undefined,
+  options?: ToViewMessagesOptions,
+): ViewMessage[] {
+  return normalizeSemanticViewMessages(
+    buildFlatViewMessages(events, options),
+  );
 }
 
 export function toViewProjection(
@@ -2202,10 +2290,10 @@ export function toViewProjection(
   }
 
   const orderedEvents = getOrderedThreadEvents(events);
-  const messages = toViewMessages(orderedEvents, options);
-  return buildProjectionFromMessages({
-    events: orderedEvents,
-    messages,
-    turnMessageDetail: options.turnMessageDetail,
-  });
+  const fullProjection = toFullProjection(orderedEvents, options);
+  const semanticProjection = normalizeSemanticViewProjection(fullProjection);
+  return applyProjectionTurnMessageDetail(
+    semanticProjection,
+    options.turnMessageDetail,
+  );
 }

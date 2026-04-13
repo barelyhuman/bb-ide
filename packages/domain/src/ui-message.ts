@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Thread } from "./thread.js";
 import type { ThreadEventRow } from "./stored-thread-event.js";
+import type { ViewProjection } from "./timeline-projection.js";
 
 export const viewMessageStatusValues = [
   "streaming",
@@ -264,7 +265,7 @@ export interface ViewDelegationMessage
     ViewMessageStatus,
     "pending" | "completed" | "error" | "interrupted"
   >;
-  children: ViewMessage[];
+  childProjection: ViewProjection;
 }
 
 export interface ViewErrorMessage extends ViewMessageBase {
