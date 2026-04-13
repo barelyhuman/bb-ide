@@ -54,10 +54,16 @@ export function formatPendingInteractionLifecycleMessage(
         case "approval":
           switch (interaction.payload.subject.kind) {
             case "command":
+              if (interaction.resolution.decision === "deny") {
+                return `Permission denied: ${interaction.payload.subject.command}`;
+              }
               return formatPendingInteractionCommandApprovalResolutionMessage(
                 interaction.resolution.decision,
               );
             case "file_change":
+              if (interaction.resolution.decision === "deny") {
+                return "Permission denied: file changes";
+              }
               return formatPendingInteractionFileChangeApprovalResolutionMessage(
                 interaction.resolution.decision,
               );

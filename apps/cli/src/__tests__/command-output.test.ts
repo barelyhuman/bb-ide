@@ -3191,6 +3191,96 @@ describe("CLI JSON output contracts", () => {
     ]);
   });
 
+  it("bb thread interactions grant builds a semantic turn-scoped resolution from server interaction data", async () => {
+    const getInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-claude-permission-grant",
+        providerId: "claude-code",
+        providerRequestId: "request-claude-permission-grant",
+        providerThreadId: "provider-thread-claude-permission-grant",
+        threadId: "thread-claude-permission-grant",
+        turnId: "turn-claude-permission-grant",
+        payload: makePermissionGrantApprovalPayload("item-claude-permission-grant"),
+      }),
+    );
+    const resolveInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-claude-permission-grant",
+        providerId: "claude-code",
+        providerRequestId: "request-claude-permission-grant",
+        providerThreadId: "provider-thread-claude-permission-grant",
+        threadId: "thread-claude-permission-grant",
+        turnId: "turn-claude-permission-grant",
+        payload: makePermissionGrantApprovalPayload("item-claude-permission-grant"),
+        status: "resolving",
+        resolvedAt: null,
+        resolution: {
+          kind: "approval",
+          decision: "allow_once",
+          grantedPermissions: {
+            network: { enabled: true },
+            fileSystem: {
+              read: ["/tmp/project/README.md"],
+              write: ["/tmp/project/notes.md"],
+            },
+          },
+        },
+      }),
+    );
+    createClientMock.mockReturnValue(asServerClient({
+      api: {
+        v1: {
+          threads: {
+            ":id": {
+              interactions: {
+                ":interactionId": {
+                  $get: getInteraction,
+                  resolve: {
+                    $post: resolveInteraction,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    }));
+
+    await runCommand(
+      [
+        "thread",
+        "interactions",
+        "grant",
+        "int-claude-permission-grant",
+        "thread-claude-permission-grant",
+        "--scope",
+        "turn",
+      ],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(resolveInteraction).toHaveBeenCalledWith({
+      param: {
+        id: "thread-claude-permission-grant",
+        interactionId: "int-claude-permission-grant",
+      },
+      json: {
+        kind: "approval",
+        decision: "allow_once",
+        grantedPermissions: {
+          network: { enabled: true },
+          fileSystem: {
+            read: ["/tmp/project/README.md"],
+            write: ["/tmp/project/notes.md"],
+          },
+        },
+      },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toEqual([
+      "Interaction int-claude-permission-grant submitted (approved); delivering to provider",
+    ]);
+  });
+
   it("bb thread interactions deny resolves permission requests as denied", async () => {
     const getInteraction = vi.fn(async () =>
       makePendingInteraction({

@@ -9,6 +9,7 @@ import {
   hostDaemonDaemonWsMessageSchema,
   hostDaemonEnvironmentChangeRequestSchema,
   hostDaemonEventBatchRequestSchema,
+  hostDaemonInteractiveRequestSchema,
   hostDaemonServerWsMessageSchema,
   hostDaemonSessionOpenRequestSchema,
   hostDaemonToolCallRequestSchema,
@@ -18,6 +19,7 @@ import {
   type HostDaemonDaemonWsMessage,
   type HostDaemonEnvironmentChangeRequest,
   type HostDaemonEventEnvelope,
+  type HostDaemonInteractiveRequest,
   type HostDaemonServerWsMessage,
   type HostDaemonSessionOpenRequest,
   type HostDaemonTrackedThreadTarget,
@@ -97,6 +99,7 @@ export interface TestServer {
     sessionId: string;
     message: HostDaemonDaemonWsMessage;
   }>;
+  interactiveRequests: HostDaemonInteractiveRequest[];
   sessionOpenCalls: HostDaemonSessionOpenRequest[];
   toolCalls: Array<{ sessionId: string; tool: string }>;
   queueCommand(command: HostDaemonCommand): HostDaemonCommandEnvelope;
@@ -123,6 +126,7 @@ export async function createTestServer(
   const commandResultReports: HostDaemonCommandResultReport[] = [];
   const environmentChanges: TestServer["environmentChanges"] = [];
   const toolCalls: Array<{ sessionId: string; tool: string }> = [];
+  const interactiveRequests: HostDaemonInteractiveRequest[] = [];
   const events: HostDaemonEventEnvelope[] = [];
   const activeSockets = new Set<WebSocket>();
   const commands = new Map<number, HostDaemonCommandEnvelope>();
@@ -274,6 +278,17 @@ export async function createTestServer(
       contentItems: [{ type: "inputText", text: "ok" }],
     });
   });
+  app.post("/internal/session/interactive-request", async (context) => {
+    const payload = hostDaemonInteractiveRequestSchema.parse(
+      await context.req.json(),
+    );
+    interactiveRequests.push(payload);
+    return context.json({
+      outcome: "created",
+      interactionId: `interaction-${interactiveRequests.length}`,
+      status: "pending",
+    });
+  });
 
   const server = createServer(async (request, response) => {
     await serveHonoRequest(app, request, response);
@@ -331,6 +346,7 @@ export async function createTestServer(
     environmentChanges,
     events,
     heartbeats,
+    interactiveRequests,
     sessionOpenCalls,
     toolCalls,
     queueCommand(command: HostDaemonCommand): HostDaemonCommandEnvelope {

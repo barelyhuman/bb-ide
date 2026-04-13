@@ -1302,13 +1302,31 @@ describe("interactive request scenarios", () => {
         label: "Codex readonly file-change turn/completed",
       });
 
-      expect(ctx.interactiveRequests.some((request) =>
+      const fileChangeApproval = ctx.interactiveRequests.find((request) =>
         request.payload.kind === "approval"
         && request.payload.subject.kind === "file_change"
-        && request.payload.availableDecisions.includes("allow_once"),
-      ), `Expected a Codex file-change approval; got ${JSON.stringify(
+        && request.payload.availableDecisions.includes("allow_once")
+      );
+      expect(fileChangeApproval, `Expected a Codex file-change approval; got ${JSON.stringify(
         ctx.interactiveRequests.map((request) => request.payload),
-      )}`).toBe(true);
+      )}`).toBeDefined();
+      if (
+        !fileChangeApproval
+        || fileChangeApproval.payload.kind !== "approval"
+        || fileChangeApproval.payload.subject.kind !== "file_change"
+      ) {
+        throw new Error("Expected a semantic file-change approval");
+      }
+      expect(fileChangeApproval.payload.subject).toEqual({
+        kind: "file_change",
+        itemId: expect.any(String),
+      });
+      expect(fileChangeApproval.payload.grantablePermissions).toBeNull();
+      expect(fileChangeApproval.payload.availableDecisions).toContain("allow_once");
+      expect(Object.keys(fileChangeApproval.payload.subject).sort()).toEqual([
+        "itemId",
+        "kind",
+      ]);
       expect(readFileSync(filePath, "utf8").trimEnd()).toBe(token);
     } finally {
       await ctx.runtime.shutdown();

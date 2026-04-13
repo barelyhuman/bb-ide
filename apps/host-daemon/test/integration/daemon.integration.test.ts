@@ -12,6 +12,7 @@ import {
 } from "../helpers/test-server.js";
 
 const tempDirs: string[] = [];
+type ProviderAdapter = ReturnType<typeof createFakeAdapter>;
 
 async function makeTempDir(prefix: string): Promise<string> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
@@ -42,6 +43,169 @@ async function pathExists(pathToCheck: string): Promise<boolean> {
     }
     throw error;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+async function writeInteractiveProviderScript(scriptPath: string): Promise<void> {
+  await fs.writeFile(
+    scriptPath,
+    `
+const readline = require("node:readline");
+const threads = new Map();
+const pendingInteractive = new Map();
+let nextThreadId = 1;
+let nextRequestId = 1;
+
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + "\\n");
+}
+
+function completeTurn(providerThreadId, turnId, text) {
+  send({
+    jsonrpc: "2.0",
+    method: "item/completed",
+    params: {
+      threadId: providerThreadId,
+      turnId,
+      providerThreadId,
+      item: {
+        type: "agentMessage",
+        id: "msg-" + turnId,
+        text,
+      },
+    },
+  });
+  send({
+    jsonrpc: "2.0",
+    method: "turn/completed",
+    params: {
+      threadId: providerThreadId,
+      turnId,
+      status: "completed",
+      providerThreadId,
+    },
+  });
+}
+
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+
+  if (message.id !== undefined && !message.method) {
+    const pending = pendingInteractive.get(message.id);
+    if (!pending) {
+      return;
+    }
+    pendingInteractive.delete(message.id);
+    const decision =
+      message.result && message.result.resolution
+      && message.result.resolution.kind === "approval"
+        ? message.result.resolution.decision
+        : "unknown";
+    completeTurn(pending.providerThreadId, pending.turnId, "interactive:" + decision);
+    return;
+  }
+
+  if (message.method === "initialize" || message.method === "model/list") {
+    send({ jsonrpc: "2.0", id: message.id, result: message.method === "model/list" ? [] : {} });
+    return;
+  }
+
+  if (message.method === "thread/start") {
+    const threadId = message.params.threadId;
+    const providerThreadId = "prov-" + String(nextThreadId++);
+    threads.set(threadId, { providerThreadId, turnCount: 0 });
+    send({ jsonrpc: "2.0", id: message.id, result: { providerThreadId } });
+    send({ jsonrpc: "2.0", method: "thread/identity", params: { threadId, providerThreadId } });
+    return;
+  }
+
+  if (message.method === "turn/start") {
+    const threadId = message.params.threadId;
+    const providerThreadId = message.params.providerThreadId || threadId;
+    const thread = threads.get(threadId);
+    thread.turnCount += 1;
+    const turnId = "turn-" + String(thread.turnCount);
+    send({
+      jsonrpc: "2.0",
+      method: "turn/started",
+      params: { threadId: providerThreadId, turnId, providerThreadId },
+    });
+    send({ jsonrpc: "2.0", id: message.id, result: { ok: true } });
+    const requestId = nextRequestId++;
+    pendingInteractive.set(requestId, { providerThreadId, turnId });
+    send({
+      jsonrpc: "2.0",
+      id: requestId,
+      method: "request_interaction",
+      params: {
+        threadId: providerThreadId,
+        turnId,
+        itemId: "item-host-daemon",
+        kind: "command_approval",
+        command: "git push",
+        cwd: "/tmp/project",
+        reason: "Needs approval",
+      },
+    });
+  }
+});
+`,
+    "utf8",
+  );
+}
+
+function createInteractiveRequestAdapter(scriptPath: string): ProviderAdapter {
+  const adapter = createFakeAdapter({ scriptPath });
+  return {
+    ...adapter,
+    decodeInteractiveRequest(request) {
+      if (request.method !== "request_interaction") {
+        return null;
+      }
+      if (typeof request.id !== "string" && typeof request.id !== "number") {
+        return null;
+      }
+      if (!isRecord(request.params)) {
+        return null;
+      }
+
+      const params = request.params;
+      if (
+        typeof params.threadId !== "string" ||
+        typeof params.turnId !== "string" ||
+        typeof params.itemId !== "string" ||
+        typeof params.command !== "string"
+      ) {
+        return null;
+      }
+
+      return {
+        requestId: request.id,
+        method: request.method,
+        providerThreadId: params.threadId,
+        turnId: params.turnId,
+        payload: {
+          kind: "approval",
+          subject: {
+            kind: "command",
+            itemId: params.itemId,
+            command: params.command,
+            cwd: typeof params.cwd === "string" ? params.cwd : null,
+          },
+          reason: typeof params.reason === "string" ? params.reason : null,
+          grantablePermissions: null,
+          availableDecisions: ["allow_once", "allow_for_session", "deny"],
+        },
+      };
+    },
+    buildInteractiveResponse({ resolution }) {
+      return { resolution };
+    },
+  };
 }
 
 function createStandardThreadStartCommand(args: {
@@ -110,7 +274,9 @@ function createTurnRunCommand(args: {
   };
 }
 
-async function setupDaemonHarness() {
+async function setupDaemonHarness(args: {
+  adapterFactory?: () => ProviderAdapter;
+} = {}) {
   const dataDir = await makeTempDir("bb-host-daemon-data-");
   const workspaceRoot = await makeTempDir("bb-host-daemon-workspaces-");
 
@@ -128,7 +294,7 @@ async function setupDaemonHarness() {
     serverUrl: server.baseUrl,
     enableLocalApi: false,
     createInstanceId: () => "instance-1",
-    adapterFactory: () => createFakeAdapter(),
+    adapterFactory: args.adapterFactory ?? (() => createFakeAdapter()),
   });
 
   await waitFor(() => server.sessionOpenCalls.length === 1);
@@ -236,6 +402,106 @@ describe("host daemon integration", () => {
           .filter((event) => event.threadId === "thread-a")
           .map((event) => event.event.type),
       ).toContain("turn/completed");
+    } finally {
+      await harness.daemon.shutdown("test");
+      await harness.server.close();
+    }
+  });
+
+  it("persists provider approvals on the server and resolves them through queued commands", async () => {
+    const dataDir = await makeTempDir("bb-host-daemon-interactive-provider-");
+    const scriptPath = path.join(dataDir, "interactive-provider.cjs");
+    await writeInteractiveProviderScript(scriptPath);
+    const harness = await setupDaemonHarness({
+      adapterFactory: () => createInteractiveRequestAdapter(scriptPath),
+    });
+
+    try {
+      harness.server.queueCommand({
+        ...createStandardThreadStartCommand({
+          environmentId: "env-a",
+          threadId: "thread-a",
+          workspacePath: harness.envAPath,
+          projectId: "project-1",
+          providerId: "fake",
+          eventSequence: 1,
+          input: [{ type: "text", text: "start" }],
+        }),
+      });
+      harness.server.sendWebSocketMessage({ type: "commands-available" });
+      await waitFor(() => harness.server.commandResults.length === 1);
+
+      harness.server.queueCommand({
+        ...createTurnRunCommand({
+          environmentId: "env-a",
+          threadId: "thread-a",
+          workspacePath: harness.envAPath,
+          projectId: "project-1",
+          providerId: "fake",
+          providerThreadId: "prov-1",
+          eventSequence: 1,
+          input: [{ type: "text", text: "trigger approval" }],
+        }),
+      });
+      harness.server.sendWebSocketMessage({ type: "commands-available" });
+
+      await waitFor(() => harness.server.interactiveRequests.length === 1);
+      const interactiveRequest = harness.server.interactiveRequests[0];
+      if (!interactiveRequest) {
+        throw new Error("Expected an interactive request");
+      }
+      expect(interactiveRequest.sessionId).toBe("session-1");
+      expect(interactiveRequest.interaction).toMatchObject({
+        threadId: "thread-a",
+        turnId: "turn-1",
+        providerId: "fake",
+        providerThreadId: "prov-1",
+        payload: {
+          kind: "approval",
+          subject: {
+            kind: "command",
+            itemId: "item-host-daemon",
+            command: "git push",
+            cwd: "/tmp/project",
+          },
+          availableDecisions: ["allow_once", "allow_for_session", "deny"],
+        },
+      });
+
+      harness.server.queueCommand({
+        type: "interactive.resolve",
+        environmentId: "env-a",
+        threadId: "thread-a",
+        interactionId: "interaction-1",
+        providerId: "fake",
+        providerThreadId: interactiveRequest.interaction.providerThreadId,
+        providerRequestId: interactiveRequest.interaction.providerRequestId,
+        resolution: {
+          kind: "approval",
+          decision: "allow_for_session",
+          grantedPermissions: null,
+        },
+      });
+      harness.server.sendWebSocketMessage({ type: "commands-available" });
+
+      await waitFor(() =>
+        harness.server.commandResults.some(
+          (result) => result.type === "interactive.resolve" && result.ok,
+        ) &&
+        harness.server.events.some(
+          (event) =>
+            event.threadId === "thread-a" &&
+            event.event.type === "item/completed" &&
+            event.event.item.type === "agentMessage" &&
+            event.event.item.text === "interactive:allow_for_session",
+        ),
+      );
+
+      expect(
+        harness.server.commandResults.some(
+          (result) => result.type === "turn.run" && result.ok,
+        ),
+      ).toBe(true);
     } finally {
       await harness.daemon.shutdown("test");
       await harness.server.close();

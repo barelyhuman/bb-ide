@@ -854,12 +854,123 @@ describe("public thread interaction routes", () => {
               message: expect.objectContaining({
                 kind: "operation",
                 opType: "operation",
+                threadOperation: expect.objectContaining({
+                  rawOperation: "approval",
+                  operationId: registered.interaction.id,
+                  status: "started",
+                }),
+                detail: "Waiting for approval to run git push",
+              }),
+            }),
+            expect.objectContaining({
+              kind: "message",
+              message: expect.objectContaining({
+                kind: "operation",
+                opType: "operation",
                 status: "completed",
                 threadOperation: expect.objectContaining({
                   rawOperation: "approval",
                   operationId: registered.interaction.id,
                 }),
                 detail: expect.stringContaining("Command approved for this session"),
+              }),
+            }),
+          ]),
+        }),
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("projects denied command approvals into target-specific timeline rows", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-public-thread-interaction-denied-timeline",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const registered = registerPendingInteraction(
+        harness.deps.pendingInteractions,
+        {
+          threadId: thread.id,
+          turnId: "turn-denied-timeline",
+          providerId: "codex",
+          providerThreadId: "provider-thread-denied-timeline",
+          providerRequestId: "request-denied-timeline",
+          payload: createCommandApprovalPayload({
+            itemId: "item-denied-timeline",
+            reason: "Approve command",
+            command: "rm -rf build",
+            cwd: "/tmp/project",
+          }),
+        },
+        session.id,
+      );
+      if (registered.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
+      }
+
+      harness.deps.pendingInteractions.resolvePendingInteraction({
+        threadId: thread.id,
+        interactionId: registered.interaction.id,
+        resolution: createDenyResolution(),
+      });
+      const queuedResolve = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "interactive.resolve" &&
+          command.interactionId === registered.interaction.id,
+      );
+      const commandResultResponse = await reportQueuedCommandSuccess(
+        harness,
+        queuedResolve,
+        {},
+      );
+      expect(commandResultResponse.status).toBe(200);
+
+      const timelineResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/timeline`,
+      );
+      expect(timelineResponse.status).toBe(200);
+      await expect(readJson(timelineResponse)).resolves.toEqual(
+        expect.objectContaining({
+          rows: expect.arrayContaining([
+            expect.objectContaining({
+              kind: "message",
+              message: expect.objectContaining({
+                kind: "operation",
+                opType: "operation",
+                threadOperation: expect.objectContaining({
+                  rawOperation: "approval",
+                  operationId: registered.interaction.id,
+                  status: "started",
+                }),
+                detail: "Waiting for approval to run rm -rf build",
+              }),
+            }),
+            expect.objectContaining({
+              kind: "message",
+              message: expect.objectContaining({
+                kind: "operation",
+                opType: "operation",
+                status: "completed",
+                threadOperation: expect.objectContaining({
+                  rawOperation: "approval",
+                  operationId: registered.interaction.id,
+                }),
+                detail: "Permission denied: rm -rf build",
               }),
             }),
           ]),
