@@ -6,6 +6,7 @@ import {
   type HostDaemonActiveThread,
 } from "@bb/host-daemon-contract";
 import type { HostDaemonLogger } from "../../src/logger.js";
+import { dispatchCommand } from "../../src/command-dispatch.js";
 import { createServerClient } from "../../src/server-client.js";
 import {
   ServerConnection,
@@ -15,6 +16,7 @@ import {
   createTestServer,
   type TestServer,
 } from "../helpers/test-server.js";
+import { createHarness } from "../command/dispatch-helpers.js";
 
 async function waitFor(
   predicate: () => boolean,
@@ -114,6 +116,58 @@ describe("ServerConnection", () => {
     expect(session.sessionId).toBe("session-1");
     expect(session.threadHighWaterMarks).toEqual({ threadA: 4 });
     expect(testServer.sessionOpenCalls).toHaveLength(1);
+
+    await connection.shutdown();
+  });
+
+  it("reports known idle threads as active after dispatching turn.run", async () => {
+    testServer = await createTestServer();
+    const harness = createHarness();
+    await harness.manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+    harness.manager.markThreadActive("env-1", "thread-1", "provider-1");
+    harness.manager.markThreadInactive("env-1", "thread-1");
+
+    await dispatchCommand(
+      {
+        type: "turn.run",
+        environmentId: "env-1",
+        threadId: "thread-1",
+        eventSequence: 5,
+        input: [{ type: "text", text: "resume work" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+        },
+        resumeContext: {
+          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+          projectId: "project-1",
+          providerId: "fake",
+          providerThreadId: "provider-1",
+          instructions: "Be a helpful coding agent.",
+          dynamicTools: [],
+          instructionMode: "append",
+        },
+      },
+      harness.dispatchOptions(),
+    );
+
+    const { connection } = createConnection(testServer, {
+      getActiveThreads: () => harness.manager.listActiveThreads(),
+    });
+
+    await connection.start();
+
+    expect(testServer.sessionOpenCalls[0]?.activeThreads).toEqual([
+      {
+        threadId: "thread-1",
+      },
+    ]);
 
     await connection.shutdown();
   });
