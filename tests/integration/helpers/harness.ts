@@ -195,6 +195,7 @@ async function startIntegrationServer(
   const pendingInteractions = new PendingInteractionLifecycle({
     db,
     hub,
+    logger: testLogger,
     sandboxInteractionExpiryMs: DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS,
   });
   pendingInteractions.start();
