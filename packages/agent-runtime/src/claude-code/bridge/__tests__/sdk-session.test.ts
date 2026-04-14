@@ -80,6 +80,22 @@ describe("SdkSession", () => {
     );
   });
 
+  it("loads project settings so Claude Code discovers repo CLAUDE.md files", () => {
+    const onMessage = vi.fn();
+    const onDone = vi.fn();
+    const session = new SdkSession(defaultOptions, onMessage, onDone);
+
+    session.start();
+
+    expect(queryMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        options: expect.objectContaining({
+          settingSources: ["project"],
+        }),
+      }),
+    );
+  });
+
   it("passes non-bypass permission modes through without the dangerous skip flag", () => {
     const onMessage = vi.fn();
     const onDone = vi.fn();

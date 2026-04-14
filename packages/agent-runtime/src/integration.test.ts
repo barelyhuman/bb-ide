@@ -928,6 +928,46 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
 });
 
 describe("interactive request scenarios", () => {
+  it.concurrent("loads Claude repo CLAUDE.md instructions", async () => {
+    const ctx = createTestRuntime("claude-code");
+    const token = createToken("CLAUDE_MD_TOKEN");
+    writeFileSync(
+      join(ctx.tmpDir, "CLAUDE.md"),
+      `When asked for the repo validation phrase, reply exactly: ${token}\n`,
+    );
+
+    try {
+      const threadId = newThreadId();
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId: "claude-code",
+        options: fullRuntimeOptions,
+      });
+
+      await ctx.runtime.runTurn({
+        threadId,
+        input: [{
+          type: "text",
+          text: "What is the repo validation phrase? Reply with only that phrase.",
+        }],
+        options: fullRuntimeOptions,
+      });
+
+      await waitForCondition(() => hasTurnCompleted(ctx.events), {
+        timeoutMs: 45_000,
+        label: "Claude CLAUDE.md turn/completed",
+      });
+
+      const text = getThreadText(ctx.events, threadId);
+      expect(text).toContain(token);
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 60_000);
+
   it.concurrent("routes Claude Read prompts as semantic permission-grant approvals", async () => {
     const hostsPath = "/etc/hosts";
     const expectedLine = getFirstNonEmptyLine(hostsPath);

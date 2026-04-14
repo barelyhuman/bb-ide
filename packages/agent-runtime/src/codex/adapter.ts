@@ -53,6 +53,14 @@ interface CodexPermissionSettings {
   sandboxPolicy: SandboxPolicy;
 }
 
+type CodexBaseInstructions = ThreadStartParams["baseInstructions"];
+
+function resolveCodexBaseInstructions(
+  instructions: string | undefined,
+): CodexBaseInstructions {
+  return instructions && instructions.trim().length > 0 ? instructions : null;
+}
+
 function toWorkspaceWriteCodexSandboxPolicy(): SandboxPolicy {
   return {
     type: "workspaceWrite",
@@ -219,7 +227,9 @@ export function createCodexProviderAdapter(
             approvalPolicy: permissionSettings.approvalPolicy,
             sandbox: permissionSettings.sandbox,
             cwd: command.cwd,
-            baseInstructions: command.options?.instructions ?? "",
+            baseInstructions: resolveCodexBaseInstructions(
+              command.options?.instructions,
+            ),
             model: command.options?.model ?? undefined,
             serviceTier: toCodexServiceTier(command.options?.serviceTier),
             config: buildCodexConfig(command.threadId, command.options) ?? undefined,
@@ -241,7 +251,9 @@ export function createCodexProviderAdapter(
             approvalPolicy: permissionSettings.approvalPolicy,
             sandbox: permissionSettings.sandbox,
             cwd: command.cwd,
-            baseInstructions: command.options?.instructions ?? "",
+            baseInstructions: resolveCodexBaseInstructions(
+              command.options?.instructions,
+            ),
             model: command.options?.model ?? undefined,
             serviceTier: toCodexServiceTier(command.options?.serviceTier),
             config: buildCodexConfig(command.threadId, command.options) ?? undefined,

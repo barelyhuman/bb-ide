@@ -20,8 +20,6 @@ const codexToPendingInteractionApprovalDecision = {
   accept: "allow_once",
   acceptForSession: "allow_for_session",
   decline: "deny",
-  // bb has one negative approval decision. Codex can distinguish declining
-  // from canceling/dismissing, but both mean "do not run this command" here.
   cancel: "deny",
 } satisfies Record<
   CodexSimpleCommandApprovalDecision,
@@ -115,6 +113,21 @@ function fromCodexCommandApprovalDecision(
   return codexToPendingInteractionApprovalDecision[decision];
 }
 
+type CodexPolicyAmendmentDecision = Extract<CodexCommandApprovalDecision, object>;
+
+function isCodexPolicyAmendmentDecision(
+  decision: CodexCommandApprovalDecision,
+): decision is CodexPolicyAmendmentDecision {
+  return (
+    typeof decision === "object" &&
+    decision !== null &&
+    (
+      "acceptWithExecpolicyAmendment" in decision ||
+      "applyNetworkPolicyAmendment" in decision
+    )
+  );
+}
+
 export function toCodexCommandApprovalDecision(
   decision: PendingInteractionApprovalDecision,
 ): CommandExecutionRequestApprovalResponse["decision"] {
@@ -135,11 +148,7 @@ export function parseCodexAvailableDecisions(
 
   const mappedDecisions: PendingInteractionApprovalDecision[] = [];
   for (const decision of decisions) {
-    if (typeof decision !== "string") {
-      // Provider-specific amendment decisions are offers to approve while
-      // changing Codex policy. The provider-neutral pending-interaction model
-      // cannot represent those yet, so keep the approval flow usable by
-      // dropping only the unsupported decision instead of rejecting the request.
+    if (isCodexPolicyAmendmentDecision(decision)) {
       continue;
     }
     mappedDecisions.push(fromCodexCommandApprovalDecision(decision));

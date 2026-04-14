@@ -93,6 +93,7 @@ describe("codex provider adapter", () => {
         approvalPolicy: "never",
         sandbox: "danger-full-access",
         cwd: "/tmp/worktree",
+        baseInstructions: null,
       },
     });
   });
@@ -266,6 +267,7 @@ describe("codex provider adapter", () => {
       params: {
         threadId: "codex-uuid-1",
         cwd: "/tmp/worktree",
+        baseInstructions: null,
       },
     });
   });
@@ -1731,7 +1733,7 @@ describe("codex provider adapter", () => {
       })).toThrowError(ProviderRequestDecodeError);
   });
 
-  it("decodeInteractiveRequest filters unsupported policy-amendment decisions", () => {
+  it("decodeInteractiveRequest ignores unsupported policy-amendment decisions when simple decisions remain", () => {
     const adapter = createCodexProviderAdapter();
     expect(
       adapter.decodeInteractiveRequest?.({
@@ -1747,10 +1749,6 @@ describe("codex provider adapter", () => {
           cwd: "/tmp/project",
           commandActions: [],
           additionalPermissions: null,
-          proposedExecpolicyAmendment: ["allow", "git", "push"],
-          proposedNetworkPolicyAmendments: [
-            { host: "api.openai.com", action: "allow" },
-          ],
           availableDecisions: [
             {
               acceptWithExecpolicyAmendment: {
@@ -1771,32 +1769,72 @@ describe("codex provider adapter", () => {
       }),
     ).toMatchObject({
       payload: {
+        subject: {
+          kind: "command",
+          command: "git push",
+        },
         availableDecisions: ["deny"],
       },
     });
   });
 
-  it("decodeInteractiveRequest preserves deny when Codex offers accept plus cancel", () => {
+  it("decodeInteractiveRequest rejects policy-amendment-only command approval decisions", () => {
+    const adapter = createCodexProviderAdapter();
+    expect(() => adapter.decodeInteractiveRequest?.({
+      jsonrpc: "2.0",
+      id: 90,
+      method: "item/commandExecution/requestApproval",
+      params: {
+        threadId: "t1",
+        turnId: "turn-network-amendment",
+        itemId: "item-network-amendment",
+        reason: "Needs network policy approval",
+        command: "curl https://api.openai.com",
+        cwd: "/tmp/project",
+        commandActions: [],
+        additionalPermissions: null,
+        availableDecisions: [
+          {
+            acceptWithExecpolicyAmendment: {
+              execpolicy_amendment: ["allow", "git", "push"],
+            },
+          },
+          {
+            applyNetworkPolicyAmendment: {
+              network_policy_amendment: {
+                host: "api.openai.com",
+                action: "allow",
+              },
+            },
+          },
+        ],
+      },
+    })).toThrowError(ProviderRequestDecodeError);
+  });
+
+  it("decodeInteractiveRequest preserves deny when policy amendments are paired with cancel", () => {
     const adapter = createCodexProviderAdapter();
     expect(
       adapter.decodeInteractiveRequest?.({
         jsonrpc: "2.0",
-        id: 10,
+        id: 91,
         method: "item/commandExecution/requestApproval",
         params: {
           threadId: "t1",
-          turnId: "turn-3",
-          itemId: "item-3",
-          reason: "Needs approval",
-          command: "touch denied.txt",
+          turnId: "turn-network-amendment-deny",
+          itemId: "item-network-amendment-deny",
+          reason: "Needs network policy approval",
+          command: "curl https://api.openai.com",
           cwd: "/tmp/project",
           commandActions: [],
           additionalPermissions: null,
           availableDecisions: [
-            "accept",
             {
-              acceptWithExecpolicyAmendment: {
-                execpolicy_amendment: ["allow", "touch", "denied.txt"],
+              applyNetworkPolicyAmendment: {
+                network_policy_amendment: {
+                  host: "api.openai.com",
+                  action: "allow",
+                },
               },
             },
             "cancel",
@@ -1805,7 +1843,7 @@ describe("codex provider adapter", () => {
       }),
     ).toMatchObject({
       payload: {
-        availableDecisions: ["allow_once", "deny"],
+        availableDecisions: ["deny"],
       },
     });
   });

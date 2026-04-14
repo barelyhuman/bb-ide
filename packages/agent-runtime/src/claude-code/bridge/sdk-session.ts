@@ -72,7 +72,7 @@ export class SdkSession {
       systemPrompt: this.options.systemPrompt,
       permissionMode: this.options.permissionMode ?? "default",
       includePartialMessages: true,
-      settingSources: [],
+      settingSources: ["project"],
       persistSession: true,
       env: this.options.env ?? process.env,
       ...(this.options.mcpServers
