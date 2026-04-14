@@ -138,6 +138,52 @@ describe("thread command dispatch", () => {
     expect(harness.runtimeState.steeredTurnInstructions).toBe("Be a helpful coding agent.");
   });
 
+  it("marks known idle threads active when dispatching turn.run", async () => {
+    const harness = createHarness();
+    await harness.manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+    harness.manager.markThreadActive("env-1", "thread-1", "provider-1");
+    harness.manager.markThreadInactive("env-1", "thread-1");
+    expect(harness.manager.listActiveThreads()).toEqual([]);
+
+    const result = await dispatchCommand(
+      {
+        type: "turn.run",
+        environmentId: "env-1",
+        threadId: "thread-1",
+        eventSequence: 5,
+        input: [{ type: "text", text: "resume work" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+        },
+        resumeContext: {
+          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+          projectId: "project-1",
+          providerId: "fake",
+          providerThreadId: "provider-1",
+          instructions: "Be a helpful coding agent.",
+          dynamicTools: [],
+          instructionMode: "append",
+        },
+      },
+      harness.dispatchOptions(),
+    );
+
+    expect(result).toEqual({});
+    expect(harness.runtimeState.ranTurnText).toBe("resume work");
+    expect(harness.manager.listActiveThreads()).toEqual([
+      {
+        threadId: "thread-1",
+      },
+    ]);
+  });
+
   it("lazily resumes a missing thread runtime before turn.run", async () => {
     const harness = createHarness({ workspacePath: "/tmp/env-lazy" });
 
