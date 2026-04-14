@@ -37,7 +37,7 @@ export interface RunningTestServer extends TestAppHarness {
   close(): Promise<void>;
 }
 
-const testLogger = {
+export const testLogger = {
   error(): void {},
   info(): void {},
   warn(): void {},
@@ -90,6 +90,7 @@ export async function createTestAppHarness(
   const pendingInteractions = new PendingInteractionLifecycle({
     db,
     hub,
+    logger: testLogger,
     sandboxInteractionExpiryMs: DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS,
   });
   pendingInteractions.start();

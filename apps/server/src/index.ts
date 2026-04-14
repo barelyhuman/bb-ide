@@ -28,6 +28,7 @@ async function main(): Promise<void> {
   const pendingInteractions = new PendingInteractionLifecycle({
     db,
     hub,
+    logger,
     sandboxInteractionExpiryMs: DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS,
   });
   pendingInteractions.start();

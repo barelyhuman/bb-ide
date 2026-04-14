@@ -1,5 +1,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
-import { describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
+import { describe, expect, it, vi } from "vitest";
+import { pendingInteractions as pendingInteractionTable } from "@bb/db";
 import type { PendingInteractionCreate } from "@bb/domain";
 import {
   PendingInteractionLifecycle,
@@ -31,6 +33,108 @@ function registerPendingInteraction(
 }
 
 describe("pending interaction lifecycle", () => {
+  it("skips corrupt rows when listing pending interactions", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const logger = {
+        error: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+      };
+      const lifecycle = new PendingInteractionLifecycle({
+        db: harness.db,
+        hub: harness.hub,
+        logger,
+        sandboxInteractionExpiryMs: 20,
+      });
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-corrupt-list",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      const corrupt = registerPendingInteraction(
+        lifecycle,
+        {
+          threadId: thread.id,
+          turnId: "turn-corrupt-list-1",
+          providerId: "codex",
+          providerThreadId: "provider-thread-corrupt-list",
+          providerRequestId: "request-corrupt-list-1",
+          payload: createCommandApprovalPayload({
+            itemId: "item-corrupt-list-1",
+            reason: "Needs approval",
+            command: "git push",
+            cwd: "/tmp/project",
+          }),
+        },
+        session.id,
+      );
+      if (corrupt.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${corrupt.reason}`);
+      }
+
+      harness.db
+        .update(pendingInteractionTable)
+        .set({
+          status: "resolved",
+          resolution: "{",
+          resolvedAt: Date.now(),
+        })
+        .where(eq(pendingInteractionTable.id, corrupt.interaction.id))
+        .run();
+
+      const valid = registerPendingInteraction(
+        lifecycle,
+        {
+          threadId: thread.id,
+          turnId: "turn-corrupt-list-2",
+          providerId: "codex",
+          providerThreadId: "provider-thread-corrupt-list",
+          providerRequestId: "request-corrupt-list-2",
+          payload: createCommandApprovalPayload({
+            itemId: "item-corrupt-list-2",
+            reason: "Needs approval",
+            command: "git status",
+            cwd: "/tmp/project",
+          }),
+        },
+        session.id,
+      );
+      if (valid.outcome === "rejected") {
+        throw new Error(`Expected interaction registration to succeed: ${valid.reason}`);
+      }
+
+      expect(lifecycle.listThreadInteractions(thread.id)).toEqual([
+        valid.interaction,
+      ]);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          field: "resolution",
+          interactionId: corrupt.interaction.id,
+        }),
+        "Skipping corrupt pending interaction row",
+      );
+      expect(() =>
+        lifecycle.getThreadInteraction({
+          threadId: thread.id,
+          interactionId: corrupt.interaction.id,
+        })
+      ).toThrow("Stored pending interaction resolution is invalid");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("rejects reused provider request ids after the original interaction is terminal", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -714,6 +818,7 @@ describe("pending interaction lifecycle", () => {
       const pendingInteractions = new PendingInteractionLifecycle({
         db: harness.db,
         hub: harness.hub,
+        logger: harness.deps.logger,
         sandboxInteractionExpiryMs: 20,
       });
       const { host, session } = seedHostSession(harness.deps, {
@@ -776,6 +881,7 @@ describe("pending interaction lifecycle", () => {
       const originalLifecycle = new PendingInteractionLifecycle({
         db: harness.db,
         hub: harness.hub,
+        logger: harness.deps.logger,
         sandboxInteractionExpiryMs: 60_000,
       });
       const { host, session } = seedHostSession(harness.deps, {
@@ -818,6 +924,7 @@ describe("pending interaction lifecycle", () => {
       const restartedLifecycle = new PendingInteractionLifecycle({
         db: harness.db,
         hub: harness.hub,
+        logger: harness.deps.logger,
         sandboxInteractionExpiryMs: 20,
       });
       restartedLifecycle.start();
@@ -844,6 +951,7 @@ describe("pending interaction lifecycle", () => {
       const pendingInteractions = new PendingInteractionLifecycle({
         db: harness.db,
         hub: harness.hub,
+        logger: harness.deps.logger,
         sandboxInteractionExpiryMs: 20,
       });
       const { host, session } = seedHostSession(harness.deps, {

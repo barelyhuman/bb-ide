@@ -107,6 +107,25 @@ function formatDurationLine(
   return dim(`  ${duration ?? `${durationMs}ms`}`, color);
 }
 
+function formatApprovalLifecycleTitle(
+  approvalStatus: "waiting_for_approval" | "denied" | null | undefined,
+  labels: {
+    pending: string;
+    denied: string;
+    fallback: string;
+  },
+): string {
+  switch (approvalStatus) {
+    case "waiting_for_approval":
+      return labels.pending;
+    case "denied":
+      return labels.denied;
+    case null:
+    case undefined:
+      return labels.fallback;
+  }
+}
+
 function formatUser(msg: ViewUserMessage, _verbose: boolean, color: boolean): string {
   const lines: string[] = [];
   lines.push(separator("User", color));
@@ -152,12 +171,11 @@ function formatToolCall(
   const badge = statusBadge(msg.status, color);
   const name = msg.toolName ?? "exec_command";
   const cmd = msg.command ?? "";
-  const title =
-    msg.approvalStatus === "waiting_for_approval"
-      ? `Waiting for approval to run ${cmd || name}`
-      : msg.approvalStatus === "denied"
-        ? `Permission denied: ${cmd || name}`
-        : `Tool Call: ${name}`;
+  const title = formatApprovalLifecycleTitle(msg.approvalStatus, {
+    pending: `Waiting for approval to run ${cmd || name}`,
+    denied: `Permission denied: ${cmd || name}`,
+    fallback: `Tool Call: ${name}`,
+  });
   lines.push(separator(title, color));
   lines.push(`  ${badge} ${cyan(cmd || name, color)}`);
 
@@ -212,12 +230,11 @@ function formatFileEdit(
 ): string {
   const lines: string[] = [];
   const badge = statusBadge(msg.status, color);
-  const title =
-    msg.approvalStatus === "waiting_for_approval"
-      ? "Waiting for approval to edit files"
-      : msg.approvalStatus === "denied"
-        ? "Permission denied: file changes"
-        : "File Edit";
+  const title = formatApprovalLifecycleTitle(msg.approvalStatus, {
+    pending: "Waiting for approval to edit files",
+    denied: "Permission denied: file changes",
+    fallback: "File Edit",
+  });
   lines.push(separator(title, color));
   if (msg.changes.length === 0) {
     lines.push(`  ${badge} ${cyan("file changes", color)}`);

@@ -129,6 +129,11 @@ function getNestedMessageId(message: unknown): string | undefined {
 
 type ClaudePendingFileChangeItem = Extract<ThreadEventItem, { type: "fileChange" }>;
 
+interface ClaudeBashCommand {
+  command: string;
+  cwd: string | null;
+}
+
 interface ClaudeToolUseTranslationInput {
   callId: string;
   toolName: string;
@@ -145,10 +150,29 @@ interface ClaudeToolResultTranslationInput {
   startedItem?: ThreadEventItem;
 }
 
+function parseClaudeBashCommand(input: unknown): ClaudeBashCommand | null {
+  const parsed = bashArgsSchema.safeParse(input);
+  if (!parsed.success) {
+    return null;
+  }
+  const command = toOptionalString(parsed.data.command);
+  if (!command) {
+    return null;
+  }
+  return {
+    command,
+    cwd: toOptionalString(parsed.data.cwd) ?? null,
+  };
+}
+
+function getClaudeFileEditPath(args: ClaudeFileEditArgs): string | null {
+  return args.file_path ?? args.path ?? null;
+}
+
 function buildClaudeFileChangeItem(
   args: ClaudeFileEditArgs,
 ): ClaudePendingFileChangeItem | null {
-  const filePath = args.file_path ?? args.path;
+  const filePath = getClaudeFileEditPath(args);
   if (!filePath) {
     return null;
   }
@@ -194,19 +218,16 @@ function buildClaudeApprovalSubject(
   args: ClaudePermissionRequestApprovalParams,
 ): PendingInteractionApprovalSubject {
   if (args.toolName === "Bash") {
-    const parsed = bashArgsSchema.safeParse(args.input);
-    const command = parsed.success
-      ? toOptionalString(parsed.data.command)
-      : undefined;
-    if (command) {
+    const bashCommand = parseClaudeBashCommand(args.input);
+    if (bashCommand) {
       return {
         kind: "command",
         itemId: args.itemId,
-        command,
-        cwd: parsed.success ? (toOptionalString(parsed.data.cwd) ?? null) : null,
+        command: bashCommand.command,
+        cwd: bashCommand.cwd,
         actions: [{
           type: "unknown",
-          command,
+          command: bashCommand.command,
         }],
         sessionGrant: args.permissions,
       };
@@ -215,7 +236,7 @@ function buildClaudeApprovalSubject(
 
   if (isClaudeConcreteFileChangeToolName(args.toolName)) {
     const parsed = claudeFileEditArgsSchema.safeParse(args.input);
-    if (parsed.success && (parsed.data.file_path ?? parsed.data.path)) {
+    if (parsed.success && getClaudeFileEditPath(parsed.data)) {
       return {
         kind: "file_change",
         itemId: args.itemId,
@@ -272,18 +293,15 @@ function translateClaudeToolUseItem(
 
   switch (input.toolName) {
     case "Bash": {
-      const parsed = bashArgsSchema.safeParse(input.args);
-      const command = parsed.success
-        ? toOptionalString(parsed.data.command)
-        : undefined;
-      if (!command) {
+      const bashCommand = parseClaudeBashCommand(input.args);
+      if (!bashCommand) {
         return withParentToolCallId(baseToolCall, input.parentToolCallId);
       }
       return withParentToolCallId({
         type: "commandExecution",
         id: input.callId,
-        command,
-        cwd: parsed.success ? (toOptionalString(parsed.data.cwd) ?? "") : "",
+        command: bashCommand.command,
+        cwd: bashCommand.cwd ?? "",
         status: "pending",
         approvalStatus: null,
       }, input.parentToolCallId);

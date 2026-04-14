@@ -27,7 +27,10 @@ import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
 import { appendPendingInteractionTimelineEvent } from "./pending-interaction-timeline.js";
-import { toPendingInteraction } from "./pending-interaction-serialization.js";
+import {
+  PendingInteractionSerializationError,
+  toPendingInteraction,
+} from "./pending-interaction-serialization.js";
 import {
   pendingInteractionResolutionEquals,
   validatePendingInteractionResolution,
@@ -100,6 +103,7 @@ interface InterruptPendingInteractionsForSessionIdsLifecycleArgs {
 interface CreateLifecycleDeps {
   db: AppDeps["db"];
   hub: AppDeps["hub"];
+  logger: AppDeps["logger"];
 }
 
 function buildResolveConflictError(interaction: PendingInteraction): ApiError {
@@ -181,6 +185,7 @@ export class PendingInteractionLifecycle {
     this.deps = {
       db: args.db,
       hub: args.hub,
+      logger: args.logger,
     };
     this.sandboxInteractionExpiryMs = args.sandboxInteractionExpiryMs;
     this.now = args.now ?? Date.now;
@@ -195,14 +200,18 @@ export class PendingInteractionLifecycle {
   }
 
   listThreadInteractions(threadId: string): PendingInteraction[] {
-    return listPendingInteractionsByThread(this.deps.db, { threadId }).map(toPendingInteraction);
+    return this.parseListRows(
+      listPendingInteractionsByThread(this.deps.db, { threadId }),
+    );
   }
 
   listPendingThreadInteractions(threadId: string): PendingInteraction[] {
-    return listPendingInteractionsByThread(this.deps.db, {
-      threadId,
-      statuses: ["pending", "resolving"],
-    }).map(toPendingInteraction);
+    return this.parseListRows(
+      listPendingInteractionsByThread(this.deps.db, {
+        threadId,
+        statuses: ["pending", "resolving"],
+      }),
+    );
   }
 
   getThreadInteraction(args: GetThreadInteractionArgs): PendingInteraction {
@@ -489,6 +498,29 @@ export class PendingInteractionLifecycle {
     return toPendingInteraction(this.requireInteractionRow(interactionId));
   }
 
+  private parseListRows(rows: PendingInteractionRow[]): PendingInteraction[] {
+    const interactions: PendingInteraction[] = [];
+    for (const row of rows) {
+      try {
+        interactions.push(toPendingInteraction(row));
+      } catch (error) {
+        if (error instanceof PendingInteractionSerializationError) {
+          this.deps.logger.warn(
+            {
+              err: error,
+              field: error.field,
+              interactionId: error.interactionId,
+            },
+            "Skipping corrupt pending interaction row",
+          );
+          continue;
+        }
+        throw error;
+      }
+    }
+    return interactions;
+  }
+
   private requireInteractionRow(interactionId: string): PendingInteractionRow {
     const interaction = getPendingInteraction(this.deps.db, interactionId);
     if (!interaction) {
@@ -501,10 +533,12 @@ export class PendingInteractionLifecycle {
   private hydratePendingInteractions(): void {
     let offset = 0;
     while (true) {
-      const pendingInteractions = listPendingInteractionsOnEphemeralHosts(this.deps.db, {
-        limit: PENDING_INTERACTION_HYDRATE_BATCH_SIZE,
-        offset,
-      }).map(toPendingInteraction);
+      const pendingInteractions = this.parseListRows(
+        listPendingInteractionsOnEphemeralHosts(this.deps.db, {
+          limit: PENDING_INTERACTION_HYDRATE_BATCH_SIZE,
+          offset,
+        }),
+      );
 
       for (const interaction of pendingInteractions) {
         this.scheduleInteractionExpiryWithMs(
