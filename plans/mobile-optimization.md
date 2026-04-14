@@ -107,7 +107,7 @@ Structural work. Needs real-device QA before landing.
 
 **Approach:** port the pattern from terragon-labs/terragon-oss (`apps/www/src/components/chat/secondary-panel.tsx`). Branch *inside* `ThreadDetailSecondaryContent` on `useIsMobile()`:
 
-- Mobile: render the secondary content inside our existing shadcn `Drawer` (vaul) at `h-[80vh]`. Don't render `PanelGroup` at all.
+- Mobile: render the secondary content inside our existing shadcn `Drawer` (vaul) at `h-[92dvh]`. Don't render `PanelGroup` at all.
 - Desktop: existing `PanelGroup` + resizable split unchanged.
 - **Same inner content component in both branches** — extract the current secondary-panel body into a `SecondaryContent` component so there's no duplicated rendering tree.
 
@@ -135,7 +135,7 @@ Structural work. Needs real-device QA before landing.
 
 **Implementation notes:**
 - `ThreadSecondaryPanel` accepts an `isMobile` prop. When true, it returns only the `<aside>` body (no `PanelResizeHandle`, no `Panel` wrapper). Desktop path unchanged.
-- `ThreadDetailSecondaryContent` branches at the top on `useIsMobile()`. Mobile: `ThreadTimelinePane` renders full-width in a flex column; the secondary panel body lives inside a shadcn `Drawer` at `h-[85dvh]` driven by `isSecondaryPanelOpen` / `secondaryPanel.onClose`.
+- `ThreadDetailSecondaryContent` branches at the top on `useIsMobile()`. Mobile: `ThreadTimelinePane` renders full-width in a flex column; the secondary panel body lives inside a shadcn `Drawer` at `h-[92dvh]` driven by `isSecondaryPanelOpen` / `secondaryPanel.onClose`.
 - `ThreadDetailHeader` swaps `PanelRight` → `PanelBottom` for the toggle icon when `useIsMobile()` is true. Same handler, same button.
 - Drawer defaults closed on mobile via the existing open-state machinery (no separate persistence needed — `isSecondaryPanelOpen` starts false on first load).
 

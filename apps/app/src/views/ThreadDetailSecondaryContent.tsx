@@ -1,11 +1,11 @@
-import { type ComponentProps, type ReactNode } from "react";
+import { type ComponentProps, type ReactNode, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import { Check, ChevronDown, ChevronRight, Copy, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Panel, PanelGroup } from "react-resizable-panels";
 import { Button } from "@/components/ui/button";
-import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
+import { ResponsiveDrawerShell } from "@/components/ui/responsive-overlay";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
   DropdownMenu,
@@ -459,6 +459,19 @@ export function ThreadDetailSecondaryContent({
   timeline,
 }: ThreadDetailSecondaryContentProps) {
   const isMobile = useIsMobile();
+  const didResetOnMobileRef = useRef(false);
+
+  useEffect(() => {
+    if (!isMobile) {
+      didResetOnMobileRef.current = false;
+      return;
+    }
+    if (didResetOnMobileRef.current) return;
+    didResetOnMobileRef.current = true;
+    if (isSecondaryPanelOpen) {
+      secondaryPanel.onClose();
+    }
+  }, [isMobile, isSecondaryPanelOpen, secondaryPanel]);
 
   const secondaryPanelContent = (
     <ThreadSecondaryPanel
@@ -489,19 +502,18 @@ export function ThreadDetailSecondaryContent({
           footer={footer}
           header={header}
         />
-        <Drawer
+        <ResponsiveDrawerShell
           open={isSecondaryPanelOpen}
           onOpenChange={(open) => {
             if (!open) secondaryPanel.onClose();
           }}
+          srLabel="Thread details"
+          contentClassName="h-[92dvh] max-h-[92dvh]"
         >
-          <DrawerContent className="h-[92dvh] max-h-[92dvh]">
-            <DrawerTitle className="sr-only">Thread details</DrawerTitle>
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              {secondaryPanelContent}
-            </div>
-          </DrawerContent>
-        </Drawer>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {secondaryPanelContent}
+          </div>
+        </ResponsiveDrawerShell>
       </div>
     );
   }

@@ -5,14 +5,15 @@ import { X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import {
-  Drawer,
-  DrawerContent,
+  DrawerDescription as DrawerDescriptionPrimitive,
   DrawerTitle as DrawerTitlePrimitive,
 } from "@/components/ui/drawer"
 import {
   type ResponsiveOverlayContextValue,
   useResponsiveRoot,
   MobileTrigger,
+  ResponsiveDrawerShell,
+  stripRadixContentProps,
 } from "@/components/ui/responsive-overlay"
 
 // ---------------------------------------------------------------------------
@@ -42,24 +43,22 @@ function Dialog({
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   const ctx = useResponsiveRoot(controlledOpen, controlledOnChange)
 
-  if (ctx.isMobile) {
-    return (
-      <ResponsiveDialogContext.Provider value={ctx}>
-        {children}
-      </ResponsiveDialogContext.Provider>
-    )
-  }
-
-  return (
+  const body = ctx.isMobile ? (
+    children
+  ) : (
     <DialogPrimitive.Root
       open={ctx.open}
       onOpenChange={ctx.onOpenChange}
       {...props}
     >
-      <ResponsiveDialogContext.Provider value={ctx}>
-        {children}
-      </ResponsiveDialogContext.Provider>
+      {children}
     </DialogPrimitive.Root>
+  )
+
+  return (
+    <ResponsiveDialogContext.Provider value={ctx}>
+      {body}
+    </ResponsiveDialogContext.Provider>
   )
 }
 
@@ -163,20 +162,20 @@ const DialogContent = React.forwardRef<
   const { isMobile, open, onOpenChange } = useResponsiveDialog()
 
   if (isMobile) {
+    const domProps = stripRadixContentProps(props)
     return (
-      <Drawer open={open} onOpenChange={onOpenChange}>
-        <DrawerContent>
-          <div
-            ref={ref}
-            className={cn(
-              "grid gap-4 overflow-y-auto px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]",
-              className,
-            )}
-          >
-            {children}
-          </div>
-        </DrawerContent>
-      </Drawer>
+      <ResponsiveDrawerShell open={open} onOpenChange={onOpenChange}>
+        <div
+          ref={ref}
+          className={cn(
+            "grid gap-4 overflow-y-auto px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]",
+            className,
+          )}
+          {...domProps}
+        >
+          {children}
+        </div>
+      </ResponsiveDrawerShell>
     )
   }
 
@@ -258,24 +257,21 @@ DialogTitle.displayName = "DialogTitle"
 const DialogDescription = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Description>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
->(({ className, ...props }, ref) => (
-  <DialogPrimitive.Description
-    ref={ref}
-    className={cn("text-sm text-muted-foreground", className)}
-    {...props}
-  />
-))
+>(({ className, ...props }, ref) => {
+  const { isMobile } = useResponsiveDialog()
+  const Comp = isMobile ? DrawerDescriptionPrimitive : DialogPrimitive.Description
+  return (
+    <Comp
+      ref={ref}
+      className={cn("text-sm text-muted-foreground", className)}
+      {...props}
+    />
+  )
+})
 DialogDescription.displayName = DialogPrimitive.Description.displayName
-
-// ---------------------------------------------------------------------------
-// Portal — desktop only. Unused externally but kept for parity.
-// ---------------------------------------------------------------------------
-
-const DialogPortal = DialogPrimitive.Portal
 
 export {
   Dialog,
-  DialogPortal,
   DialogOverlay,
   DialogTrigger,
   DialogClose,

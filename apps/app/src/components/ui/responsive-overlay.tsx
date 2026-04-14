@@ -1,8 +1,8 @@
 import * as React from "react"
 import { Slot } from "@radix-ui/react-slot"
 
+import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer"
 import { useIsMobile } from "@/hooks/useMobile"
-import { useBreakpointCross } from "@/hooks/useBreakpointCross"
 
 // ---------------------------------------------------------------------------
 // Shared context value for responsive overlays (dropdown menus, popovers)
@@ -36,13 +36,6 @@ export function useResponsiveRoot(
       controlledOnChange?.(next)
     },
     [isControlled, controlledOnChange],
-  )
-
-  useBreakpointCross(
-    isMobile,
-    React.useCallback(() => {
-      onOpenChange(false)
-    }, [onOpenChange]),
   )
 
   return React.useMemo(
@@ -138,4 +131,44 @@ export function stripRadixContentProps<T extends Record<string, unknown>>(
     }
   }
   return result as Omit<T, RadixContentPropName>
+}
+
+// ---------------------------------------------------------------------------
+// ResponsiveDrawerShell: shared scaffold for the mobile branch of any
+// responsive overlay. Wraps children in Drawer > DrawerContent, with an
+// optional sr-only DrawerTitle. Callers supply the body (ref, padding,
+// className, etc.) since those differ between Dialog, Popover, DropdownMenu,
+// and ThreadDetailSecondaryContent.
+// ---------------------------------------------------------------------------
+
+interface ResponsiveDrawerShellProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  /**
+   * Sr-only label announced when the drawer opens. Omit if the caller
+   * renders its own labeled heading inside children (e.g. DialogTitle).
+   */
+  srLabel?: string
+  /** Class name on the DrawerContent wrapper. */
+  contentClassName?: string
+  children: React.ReactNode
+}
+
+export function ResponsiveDrawerShell({
+  open,
+  onOpenChange,
+  srLabel,
+  contentClassName,
+  children,
+}: ResponsiveDrawerShellProps) {
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent className={contentClassName}>
+        {srLabel !== undefined ? (
+          <DrawerTitle className="sr-only">{srLabel}</DrawerTitle>
+        ) : null}
+        {children}
+      </DrawerContent>
+    </Drawer>
+  )
 }

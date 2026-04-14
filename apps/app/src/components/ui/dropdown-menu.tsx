@@ -4,14 +4,10 @@ import { Check, ChevronRight, Circle } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import {
-  Drawer,
-  DrawerContent,
-  DrawerTitle,
-} from "@/components/ui/drawer"
-import {
   type ResponsiveOverlayContextValue,
   useResponsiveRoot,
   MobileTrigger,
+  ResponsiveDrawerShell,
   stripRadixContentProps,
 } from "@/components/ui/responsive-overlay"
 
@@ -111,24 +107,23 @@ const DropdownMenuContent = React.forwardRef<
   if (isMobile) {
     const domProps = stripRadixContentProps(props)
     return (
-      <Drawer open={open} onOpenChange={onOpenChange}>
-        <DrawerContent>
-          <DrawerTitle className="sr-only">
-            {mobileTitle ?? "Menu"}
-          </DrawerTitle>
-          <div
-            ref={ref}
-            className={cn(
-              "flex flex-col gap-0.5 overflow-y-auto p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]",
-              className,
-            )}
-            style={{ minWidth: "auto", maxWidth: "none", width: "auto" }}
-            {...domProps}
-          >
-            {children}
-          </div>
-        </DrawerContent>
-      </Drawer>
+      <ResponsiveDrawerShell
+        open={open}
+        onOpenChange={onOpenChange}
+        srLabel={mobileTitle ?? "Menu"}
+      >
+        <div
+          ref={ref}
+          className={cn(
+            "flex flex-col gap-0.5 overflow-y-auto p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]",
+            className,
+          )}
+          style={{ minWidth: "auto", maxWidth: "none", width: "auto" }}
+          {...domProps}
+        >
+          {children}
+        </div>
+      </ResponsiveDrawerShell>
     )
   }
 

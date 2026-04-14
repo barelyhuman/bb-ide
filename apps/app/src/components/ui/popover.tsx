@@ -3,14 +3,10 @@ import * as PopoverPrimitive from "@radix-ui/react-popover"
 
 import { cn } from "@/lib/utils"
 import {
-  Drawer,
-  DrawerContent,
-  DrawerTitle,
-} from "@/components/ui/drawer"
-import {
   type ResponsiveOverlayContextValue,
   useResponsiveRoot,
   MobileTrigger,
+  ResponsiveDrawerShell,
   stripRadixContentProps,
 } from "@/components/ui/responsive-overlay"
 
@@ -116,22 +112,22 @@ const PopoverContent = React.forwardRef<
     const domProps = stripRadixContentProps(props)
 
     return (
-      <Drawer open={open} onOpenChange={onOpenChange}>
-        <DrawerContent className={mobileClassName}>
-          <DrawerTitle className="sr-only">
-            {mobileTitle ?? "Options"}
-          </DrawerTitle>
-          <div
-            ref={ref}
-            className={cn(
-              "overflow-y-auto px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]",
-            )}
-            {...domProps}
-          >
-            {children}
-          </div>
-        </DrawerContent>
-      </Drawer>
+      <ResponsiveDrawerShell
+        open={open}
+        onOpenChange={onOpenChange}
+        srLabel={mobileTitle ?? "Options"}
+        contentClassName={mobileClassName}
+      >
+        <div
+          ref={ref}
+          className={cn(
+            "overflow-y-auto px-4 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]",
+          )}
+          {...domProps}
+        >
+          {children}
+        </div>
+      </ResponsiveDrawerShell>
     )
   }
 
