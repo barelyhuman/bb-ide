@@ -168,12 +168,30 @@ type ThreadProvisionEnvironmentIntent = z.infer<
   typeof threadProvisionEnvironmentIntentSchema
 >;
 type ThreadProvisionPayload = z.infer<typeof threadProvisionPayloadSchema>;
+type ThreadProvisionMetadataPendingPayload = z.infer<
+  typeof threadProvisionMetadataPendingPayloadSchema
+>;
 type ThreadProvisionEnvironmentPendingPayload = z.infer<
   typeof threadProvisionEnvironmentPendingPayloadSchema
+>;
+type ThreadProvisionEnvironmentAttachedPayload = z.infer<
+  typeof threadProvisionEnvironmentAttachedPayloadSchema
 >;
 type ThreadProvisionEnvironmentProvisioningPayload = z.infer<
   typeof threadProvisionEnvironmentProvisioningPayloadSchema
 >;
+type ThreadProvisionWorkspaceReadyPayload = z.infer<
+  typeof threadProvisionWorkspaceReadyPayloadSchema
+>;
+type ThreadProvisionAttachablePayload =
+  | ThreadProvisionEnvironmentPendingPayload
+  | ThreadProvisionEnvironmentAttachedPayload
+  | ThreadProvisionEnvironmentProvisioningPayload
+  | ThreadProvisionWorkspaceReadyPayload;
+type ThreadProvisionProvisionablePayload =
+  | ThreadProvisionEnvironmentAttachedPayload
+  | ThreadProvisionEnvironmentProvisioningPayload
+  | ThreadProvisionWorkspaceReadyPayload;
 type DirectManagedIntent = z.infer<typeof directManagedIntentSchema>;
 type SandboxManagedIntent = z.infer<typeof sandboxManagedIntentSchema>;
 type DirectUnmanagedIntent = z.infer<typeof directUnmanagedIntentSchema>;
@@ -250,7 +268,13 @@ interface ResolveMetadataIfNeededArgs {
 
 interface EnvironmentPayloadThreadArgs {
   environment: Environment;
-  payload: ThreadProvisionPayload;
+  payload: ThreadProvisionProvisionablePayload;
+  thread: Thread;
+}
+
+interface AttachThreadToEnvironmentArgs {
+  environment: Environment;
+  payload: ThreadProvisionAttachablePayload;
   thread: Thread;
 }
 
@@ -288,6 +312,164 @@ function attachedEnvironmentIdForPayload(
     case "environment-provisioning":
     case "workspace-ready":
       return payload.attachedEnvironmentId;
+  }
+}
+
+function provisionEventSequenceForPayload(
+  payload: ThreadProvisionProvisionablePayload,
+): number | null {
+  switch (payload.stage) {
+    case "environment-attached":
+      return null;
+    case "environment-provisioning":
+    case "workspace-ready":
+      return payload.provisionEventSequence;
+  }
+}
+
+function isAttachablePayload(
+  payload: ThreadProvisionPayload,
+): payload is ThreadProvisionAttachablePayload {
+  switch (payload.stage) {
+    case "metadata-pending":
+      return false;
+    case "environment-pending":
+    case "environment-attached":
+    case "environment-provisioning":
+    case "workspace-ready":
+      return true;
+  }
+}
+
+function isProvisionablePayload(
+  payload: ThreadProvisionPayload,
+): payload is ThreadProvisionProvisionablePayload {
+  switch (payload.stage) {
+    case "metadata-pending":
+    case "environment-pending":
+      return false;
+    case "environment-attached":
+    case "environment-provisioning":
+    case "workspace-ready":
+      return true;
+  }
+}
+
+function createMetadataPendingPayload(
+  args: RequestThreadProvisionArgs,
+): ThreadProvisionMetadataPendingPayload {
+  return {
+    environmentIntent: args.environmentIntent,
+    execution: args.execution,
+    input: args.input,
+    stage: "metadata-pending",
+    titleProvided: args.titleProvided,
+  };
+}
+
+function createEnvironmentPendingPayload(
+  payload: ThreadProvisionMetadataPendingPayload,
+  args: { branchSlug: string | null },
+): ThreadProvisionEnvironmentPendingPayload {
+  return {
+    branchSlug: args.branchSlug,
+    environmentIntent: payload.environmentIntent,
+    execution: payload.execution,
+    input: payload.input,
+    stage: "environment-pending",
+    titleProvided: payload.titleProvided,
+  };
+}
+
+function createEnvironmentAttachedPayload(
+  payload: ThreadProvisionAttachablePayload,
+  args: { attachedEnvironmentId: string },
+): ThreadProvisionEnvironmentAttachedPayload {
+  return {
+    attachedEnvironmentId: args.attachedEnvironmentId,
+    branchSlug: payload.branchSlug,
+    environmentIntent: payload.environmentIntent,
+    execution: payload.execution,
+    input: payload.input,
+    stage: "environment-attached",
+    titleProvided: payload.titleProvided,
+  };
+}
+
+function createEnvironmentProvisioningPayload(
+  payload: ThreadProvisionProvisionablePayload,
+  args: { provisionEventSequence: number },
+): ThreadProvisionEnvironmentProvisioningPayload {
+  return {
+    attachedEnvironmentId: payload.attachedEnvironmentId,
+    branchSlug: payload.branchSlug,
+    environmentIntent: payload.environmentIntent,
+    execution: payload.execution,
+    input: payload.input,
+    provisionEventSequence: args.provisionEventSequence,
+    stage: "environment-provisioning",
+    titleProvided: payload.titleProvided,
+  };
+}
+
+function createReprovisioningPayload(
+  args: RequestThreadReprovisionArgs,
+): ThreadProvisionEnvironmentProvisioningPayload {
+  return {
+    attachedEnvironmentId: args.environment.id,
+    branchSlug: null,
+    environmentIntent: {
+      type: "reuse",
+      environmentId: args.environment.id,
+    },
+    execution: args.execution,
+    input: args.input,
+    provisionEventSequence: args.eventSequence,
+    stage: "environment-provisioning",
+    titleProvided: true,
+  };
+}
+
+function createWorkspaceReadyPayload(
+  payload: ThreadProvisionProvisionablePayload,
+  args: { workspaceReadyEventSequence: number },
+): ThreadProvisionWorkspaceReadyPayload {
+  return {
+    attachedEnvironmentId: payload.attachedEnvironmentId,
+    branchSlug: payload.branchSlug,
+    environmentIntent: payload.environmentIntent,
+    execution: payload.execution,
+    input: payload.input,
+    provisionEventSequence: provisionEventSequenceForPayload(payload),
+    stage: "workspace-ready",
+    titleProvided: payload.titleProvided,
+    workspaceReadyEventSequence: args.workspaceReadyEventSequence,
+  };
+}
+
+function provisionablePayloadForWorkspaceReady(
+  payload: ThreadProvisionAttachablePayload,
+  args: { attachedEnvironmentId: string },
+): ThreadProvisionProvisionablePayload {
+  switch (payload.stage) {
+    case "environment-pending":
+      return createEnvironmentAttachedPayload(payload, args);
+    case "environment-attached":
+    case "environment-provisioning":
+    case "workspace-ready":
+      return payload;
+  }
+}
+
+function provisioningStartedPayload(
+  payload: ThreadProvisionProvisionablePayload,
+): ThreadProvisionEnvironmentProvisioningPayload | ThreadProvisionWorkspaceReadyPayload | null {
+  switch (payload.stage) {
+    case "environment-attached":
+      return null;
+    case "environment-provisioning":
+    case "workspace-ready":
+      return payload;
   }
 }
 
@@ -370,10 +552,12 @@ function ensureWorkspaceReadyEvent(
       if (payload.stage === "workspace-ready") {
         return payload.workspaceReadyEventSequence;
       }
-      const attachedEnvironmentId = attachedEnvironmentIdForPayload(payload);
-      if (!attachedEnvironmentId) {
+      if (!isAttachablePayload(payload)) {
         return null;
       }
+      const provisionablePayload = provisionablePayloadForWorkspaceReady(payload, {
+        attachedEnvironmentId: args.environmentId,
+      });
 
       const eventSequence = appendThreadProvisioningEventInTransaction(tx, {
         threadId: args.threadId,
@@ -384,16 +568,9 @@ function ensureWorkspaceReadyEvent(
       upsertThreadOperationRecord(tx, {
         threadId: args.threadId,
         kind: "provision",
-        payload: JSON.stringify({
-          ...payload,
-          stage: "workspace-ready",
-          attachedEnvironmentId,
-          provisionEventSequence:
-            payload.stage === "environment-provisioning"
-              ? payload.provisionEventSequence
-              : null,
+        payload: JSON.stringify(createWorkspaceReadyPayload(provisionablePayload, {
           workspaceReadyEventSequence: eventSequence,
-        }),
+        })),
       });
       return eventSequence;
     },
@@ -494,11 +671,9 @@ async function resolveMetadataIfNeeded(
         );
       });
     }
-    const resolvedPayload: ThreadProvisionPayload = {
-      ...args.payload,
-      stage: "environment-pending",
+    const resolvedPayload = createEnvironmentPendingPayload(args.payload, {
       branchSlug: null,
-    };
+    });
     saveThreadProvisionPayload(deps, {
       threadId: args.thread.id,
       payload: resolvedPayload,
@@ -516,11 +691,9 @@ async function resolveMetadataIfNeeded(
     writeTranscript: false,
   });
 
-  const resolvedPayload: ThreadProvisionPayload = {
-    ...args.payload,
-    stage: "environment-pending",
+  const resolvedPayload = createEnvironmentPendingPayload(args.payload, {
     branchSlug: metadata.branchSlug,
-  };
+  });
   saveThreadProvisionPayload(deps, {
     threadId: args.thread.id,
     payload: resolvedPayload,
@@ -530,22 +703,22 @@ async function resolveMetadataIfNeeded(
 
 function attachThreadToEnvironment(
   deps: Pick<AppDeps, "db" | "hub">,
-  args: EnvironmentPayloadThreadArgs,
-): ThreadProvisionPayload {
+  args: AttachThreadToEnvironmentArgs,
+): ThreadProvisionProvisionablePayload {
   if (args.thread.environmentId !== args.environment.id) {
     updateThread(deps.db, deps.hub, args.thread.id, {
       environmentId: args.environment.id,
     });
   }
-  if (attachedEnvironmentIdForPayload(args.payload) === args.environment.id) {
+  if (
+    isProvisionablePayload(args.payload)
+    && args.payload.attachedEnvironmentId === args.environment.id
+  ) {
     return args.payload;
   }
-  const attachedPayload: ThreadProvisionPayload = {
-    ...args.payload,
-    stage: "environment-attached",
+  const attachedPayload = createEnvironmentAttachedPayload(args.payload, {
     attachedEnvironmentId: args.environment.id,
-    branchSlug: "branchSlug" in args.payload ? args.payload.branchSlug : null,
-  };
+  });
   saveThreadProvisionPayload(deps, {
     threadId: args.thread.id,
     payload: attachedPayload,
@@ -556,12 +729,10 @@ function attachThreadToEnvironment(
 function appendProvisioningStartedEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   args: EnvironmentPayloadThreadArgs,
-): ThreadProvisionPayload {
-  if (
-    args.payload.stage === "environment-provisioning"
-    || args.payload.stage === "workspace-ready"
-  ) {
-    return args.payload;
+): ThreadProvisionProvisionablePayload {
+  const existingPayload = provisioningStartedPayload(args.payload);
+  if (existingPayload) {
+    return existingPayload;
   }
 
   const eventSequence = appendThreadProvisioningEvent(deps, {
@@ -570,13 +741,9 @@ function appendProvisioningStartedEvent(
     status: "active",
     entries: initialProvisioningEntries(args.environment),
   });
-  const updatedPayload: ThreadProvisionPayload = {
-    ...args.payload,
-    stage: "environment-provisioning",
-    attachedEnvironmentId: args.environment.id,
-    branchSlug: "branchSlug" in args.payload ? args.payload.branchSlug : null,
+  const updatedPayload = createEnvironmentProvisioningPayload(args.payload, {
     provisionEventSequence: eventSequence,
-  };
+  });
   saveThreadProvisionPayload(deps, {
     threadId: args.thread.id,
     payload: updatedPayload,
@@ -627,22 +794,18 @@ function createProvisioningEnvironmentWithOperation(
         });
       }
 
-      const attachedPayload: ThreadProvisionPayload = {
-        ...args.payload,
-        stage: "environment-attached",
+      const attachedPayload = createEnvironmentAttachedPayload(args.payload, {
         attachedEnvironmentId: environment.id,
-      };
+      });
       const eventSequence = appendThreadProvisioningEventInTransaction(tx, {
         threadId: args.thread.id,
         environmentId: environment.id,
         status: "active",
         entries: initialProvisioningEntries(environment),
       });
-      const payload: ThreadProvisionEnvironmentProvisioningPayload = {
-        ...attachedPayload,
-        stage: "environment-provisioning",
+      const payload = createEnvironmentProvisioningPayload(attachedPayload, {
         provisionEventSequence: eventSequence,
-      };
+      });
       upsertThreadOperationRecord(tx, {
         threadId: args.thread.id,
         kind: "provision",
@@ -795,6 +958,10 @@ async function ensureEnvironmentRequested(
   deps: ThreadProvisioningDeps,
   args: EnsureEnvironmentRequestedArgs,
 ): Promise<ThreadProvisioningResult> {
+  if (!isAttachablePayload(args.payload)) {
+    throw new Error(`Cannot request environment from ${args.payload.stage} payload`);
+  }
+
   if (args.payload.environmentIntent.type === "reuse") {
     const environment = getEnvironment(
       deps.db,
@@ -944,13 +1111,7 @@ export function requestThreadProvision(
     source: "spawn",
   });
 
-  const payload: ThreadProvisionPayload = {
-    environmentIntent: args.environmentIntent,
-    execution: args.execution,
-    input: args.input,
-    stage: "metadata-pending",
-    titleProvided: args.titleProvided,
-  };
+  const payload = createMetadataPendingPayload(args);
   upsertThreadOperationRecord(deps.db, {
     threadId: args.thread.id,
     kind: "provision",
@@ -973,19 +1134,7 @@ export function requestThreadReprovision(
     source: "tell",
   });
 
-  const payload: ThreadProvisionPayload = {
-    attachedEnvironmentId: args.environment.id,
-    branchSlug: null,
-    environmentIntent: {
-      type: "reuse",
-      environmentId: args.environment.id,
-    },
-    execution: args.execution,
-    input: args.input,
-    provisionEventSequence: args.eventSequence,
-    stage: "environment-provisioning",
-    titleProvided: true,
-  };
+  const payload = createReprovisioningPayload(args);
   upsertThreadOperationRecord(deps.db, {
     threadId: args.thread.id,
     kind: "provision",
@@ -1062,6 +1211,9 @@ async function advanceThreadProvisioningOnce(
       await advanceEnvironmentProvisioning(deps, {
         environmentId: environment.id,
       });
+    }
+    if (!isProvisionablePayload(payload)) {
+      throw new Error(`Cannot start thread from ${payload.stage} payload`);
     }
     await startThreadIfEnvironmentReady(deps, {
       environment: getEnvironment(deps.db, environment.id) ?? environment,
