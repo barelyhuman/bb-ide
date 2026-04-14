@@ -116,8 +116,8 @@ function ThreadLeadingGlyph({
       ) : showUnreadBadge ? (
         <span
           className="size-2 rounded-full bg-primary md:size-1.5"
-          aria-label="Unread completed thread"
-          title="Unread completion"
+          aria-label="Unread thread requires attention"
+          title="Unread thread requires attention"
         />
       ) : null}
     </span>

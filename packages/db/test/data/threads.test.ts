@@ -164,6 +164,54 @@ describe("threads", () => {
     expect(updated?.title).toBe("New title");
   });
 
+  it("preserves read state when renaming a read thread", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_000);
+      const { db, project } = setup();
+      const thread = createThread(db, noopNotifier, {
+        projectId: project.id,
+        providerId: "codex",
+      });
+      updateThread(db, noopNotifier, thread.id, {
+        lastReadAt: thread.updatedAt,
+      });
+
+      vi.setSystemTime(2_000);
+      const updated = updateThread(db, noopNotifier, thread.id, {
+        title: "New title",
+      });
+
+      expect(updated?.title).toBe("New title");
+      expect(updated?.updatedAt).toBe(2_000);
+      expect(updated?.lastReadAt).toBe(2_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps unread threads unread when renaming", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_000);
+      const { db, project } = setup();
+      const thread = createThread(db, noopNotifier, {
+        projectId: project.id,
+        providerId: "codex",
+      });
+
+      vi.setSystemTime(2_000);
+      const updated = updateThread(db, noopNotifier, thread.id, {
+        title: "New title",
+      });
+
+      expect(updated?.updatedAt).toBe(2_000);
+      expect(updated?.lastReadAt).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("deletes a thread", () => {
     const { db, project } = setup();
     const thread = createThread(db, noopNotifier, {
@@ -487,6 +535,75 @@ describe("transitionThreadStatus", () => {
         "active",
       ).status,
     ).toBe("active");
+  });
+
+  it("only attention-worthy status transitions make a read thread unread", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_000);
+      const { db, project } = setup();
+      const activeThread = createThread(db, noopNotifier, {
+        projectId: project.id,
+        providerId: "codex",
+        status: "active",
+      });
+      updateThread(db, noopNotifier, activeThread.id, {
+        lastReadAt: activeThread.updatedAt,
+      });
+
+      vi.setSystemTime(2_000);
+      const idleThread = transitionThreadStatus(
+        db,
+        noopNotifier,
+        activeThread.id,
+        "idle",
+      );
+      expect(idleThread.updatedAt).toBe(2_000);
+      expect(idleThread.lastReadAt).toBe(1_000);
+
+      updateThread(db, noopNotifier, activeThread.id, {
+        lastReadAt: idleThread.updatedAt,
+      });
+      vi.setSystemTime(3_000);
+      const activeAgainThread = transitionThreadStatus(
+        db,
+        noopNotifier,
+        activeThread.id,
+        "active",
+      );
+      expect(activeAgainThread.updatedAt).toBe(3_000);
+      expect(activeAgainThread.lastReadAt).toBe(3_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("preserves read state for non-attention error transitions", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_000);
+      const { db, project } = setup();
+      const createdThread = createThread(db, noopNotifier, {
+        projectId: project.id,
+        providerId: "codex",
+        status: "created",
+      });
+      updateThread(db, noopNotifier, createdThread.id, {
+        lastReadAt: createdThread.updatedAt,
+      });
+
+      vi.setSystemTime(2_000);
+      const erroredThread = transitionThreadStatus(
+        db,
+        noopNotifier,
+        createdThread.id,
+        "error",
+      );
+      expect(erroredThread.updatedAt).toBe(2_000);
+      expect(erroredThread.lastReadAt).toBe(2_000);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("notifies on status change", () => {

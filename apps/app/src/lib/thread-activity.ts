@@ -30,12 +30,12 @@ export function isUnreadDoneThread(thread: ThreadStatusShape): boolean {
   }
 
   switch (thread.status) {
+    case "error":
     case "idle":
       return (thread.lastReadAt ?? 0) < thread.updatedAt
     case "active":
     case "created":
     case "provisioning":
-    case "error":
       return false
     default:
       return assertNever(thread.status)

@@ -30,6 +30,14 @@ describe("thread-activity", () => {
     ).toBe(false)
     expect(
       isUnreadDoneThread({
+        status: "error",
+        updatedAt: 20,
+        lastReadAt: 10,
+        parentThreadId: null,
+      }),
+    ).toBe(true)
+    expect(
+      isUnreadDoneThread({
         status: "active",
         updatedAt: 20,
         lastReadAt: null,

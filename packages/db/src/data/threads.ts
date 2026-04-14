@@ -147,6 +147,32 @@ const THREAD_STATUSES_ALLOWING_ERROR: ThreadStatus[] = [
   "active",
 ];
 
+interface ThreadReadState {
+  lastReadAt: number | null;
+  updatedAt: number;
+}
+
+function isThreadRead(thread: ThreadReadState): boolean {
+  return (thread.lastReadAt ?? 0) >= thread.updatedAt;
+}
+
+interface StatusTransition {
+  currentStatus: ThreadStatus;
+  newStatus: ThreadStatus;
+}
+
+function statusTransitionNeedsAttention(args: StatusTransition): boolean {
+  if (args.currentStatus === "active" && args.newStatus === "idle") {
+    return true;
+  }
+
+  if (args.newStatus !== "error") {
+    return false;
+  }
+
+  return args.currentStatus === "active" || args.currentStatus === "provisioning";
+}
+
 function buildListThreadsFilters(options: ListThreadsOptions) {
   return [
     eq(threads.projectId, options.projectId),
@@ -328,15 +354,24 @@ export function updateThread(
   input: UpdateThreadInput,
 ) {
   const now = Date.now();
+  const existing = db.select().from(threads).where(eq(threads.id, id)).get();
+  if (!existing) {
+    return null;
+  }
+
   const changes: ThreadChangeKind[] = [];
   if ("title" in input) changes.push("title-changed");
   if ("lastReadAt" in input) changes.push("read-state-changed");
 
-  const set: Record<string, unknown> = { updatedAt: now };
+  const set: Partial<typeof threads.$inferInsert> = { updatedAt: now };
   if ("title" in input) set.title = input.title;
   if ("titleFallback" in input) set.titleFallback = input.titleFallback;
   if ("environmentId" in input) set.environmentId = input.environmentId;
-  if ("lastReadAt" in input) set.lastReadAt = input.lastReadAt;
+  if ("lastReadAt" in input) {
+    set.lastReadAt = input.lastReadAt;
+  } else if (isThreadRead(existing)) {
+    set.lastReadAt = now;
+  }
   if ("parentThreadId" in input) set.parentThreadId = input.parentThreadId;
 
   const updated = db.update(threads)
@@ -481,8 +516,19 @@ export function transitionThreadStatus(
   }
 
   const now = Date.now();
+  const set: Partial<typeof threads.$inferInsert> = {
+    status: newStatus,
+    updatedAt: now,
+  };
+  if (
+    isThreadRead(thread)
+    && !statusTransitionNeedsAttention({ currentStatus, newStatus })
+  ) {
+    set.lastReadAt = now;
+  }
+
   const updated = db.update(threads)
-    .set({ status: newStatus, updatedAt: now })
+    .set(set)
     .where(eq(threads.id, id))
     .returning()
     .get();
@@ -501,11 +547,13 @@ export function transitionThreadsToError(
   }
 
   const now = args.now ?? Date.now();
-  const updatedThreads = db.update(threads)
-    .set({
-      status: "error",
-      updatedAt: now,
-    })
+  const eligibleThreads = db.select({
+    id: threads.id,
+    lastReadAt: threads.lastReadAt,
+    status: threads.status,
+    updatedAt: threads.updatedAt,
+  })
+    .from(threads)
     .where(
       and(
         inArray(threads.id, [...args.threadIds]),
@@ -514,12 +562,37 @@ export function transitionThreadsToError(
         isNull(threads.stopRequestedAt),
       ),
     )
-    .returning({ id: threads.id })
     .all();
+  const threadOrderById = new Map(
+    args.threadIds.map((threadId, index) => [threadId, index]),
+  );
+  eligibleThreads.sort((left, right) => {
+    const leftIndex = threadOrderById.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+    const rightIndex = threadOrderById.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+    return leftIndex - rightIndex;
+  });
 
-  for (const thread of updatedThreads) {
+  for (const thread of eligibleThreads) {
+    const set: Partial<typeof threads.$inferInsert> = {
+      status: "error",
+      updatedAt: now,
+    };
+    if (
+      isThreadRead(thread)
+      && !statusTransitionNeedsAttention({
+        currentStatus: thread.status,
+        newStatus: "error",
+      })
+    ) {
+      set.lastReadAt = now;
+    }
+
+    db.update(threads)
+      .set(set)
+      .where(eq(threads.id, thread.id))
+      .run();
     notifier.notifyThread(thread.id, ["status-changed"]);
   }
 
-  return updatedThreads.map((thread) => thread.id);
+  return eligibleThreads.map((thread) => thread.id);
 }
