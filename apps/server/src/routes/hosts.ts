@@ -18,7 +18,7 @@ function resolveJoinServerUrl(
   deps: Pick<AppDeps, "config">,
   requestUrl: string,
 ): string {
-  return deps.config.publicUrl ?? new URL(requestUrl).origin;
+  return deps.config.appUrl ?? new URL(requestUrl).origin;
 }
 
 function resolvePendingHostName(hostId: string): string {

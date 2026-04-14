@@ -172,6 +172,12 @@ export async function main(): Promise<void> {
     log(green("●"), bold("bb is ready"));
     process.stdout.write("\n");
     log(" ", `${dim("app")}     ${cyan(context.serverUrl)}`);
+    if (serverConfig.BB_APP_URL !== "") {
+      log(" ", `${dim("app url")} ${cyan(serverConfig.BB_APP_URL)}`);
+    }
+    if (serverConfig.BB_EXTERNAL_URL !== "") {
+      log(" ", `${dim("external")} ${cyan(serverConfig.BB_EXTERNAL_URL)}`);
+    }
     log(" ", `${dim("data")}    ${context.dataDir}`);
     log(" ", `${dim("db")}      ${context.dbPath}`);
     log(" ", `${dim("logs")}    ${context.logDir}/`);

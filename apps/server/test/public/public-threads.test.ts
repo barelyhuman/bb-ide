@@ -242,10 +242,10 @@ describe("public thread routes", () => {
     }
   });
 
-  it("rejects sandbox thread creation when BB_PUBLIC_URL is not https", async () => {
+  it("rejects sandbox thread creation when BB_EXTERNAL_URL is not https", async () => {
     const harness = await createTestAppHarness({
       githubPat: "test-github-pat",
-      publicUrl: "http://bb.example.test",
+      externalUrl: "http://bb.example.test",
     });
     try {
       const { project } = createProject(harness.db, harness.hub, {
@@ -277,7 +277,7 @@ describe("public thread routes", () => {
       expect(response.status).toBe(409);
       await expect(readJson(response)).resolves.toMatchObject({
         code: "invalid_request",
-        message: "Sandbox provisioning requires BB_PUBLIC_URL to use https",
+        message: "Sandbox provisioning requires BB_EXTERNAL_URL to use https",
       });
       expect(provisionHostMock).not.toHaveBeenCalled();
     } finally {
@@ -1925,10 +1925,10 @@ describe("public thread routes", () => {
     "https://192.168.1.20:3000",
     "https://[fc00::1]:3000",
     "https://[fe80::1]:3000",
-  ])("rejects unreachable sandbox public URLs: %s", async (publicUrl) => {
+  ])("rejects unreachable sandbox external URLs: %s", async (externalUrl) => {
     const harness = await createTestAppHarness({
       githubPat: "test-github-pat",
-      publicUrl,
+      externalUrl,
     });
     try {
       const { host } = seedHostSession(harness.deps);
@@ -1962,7 +1962,7 @@ describe("public thread routes", () => {
       await expect(readJson(response)).resolves.toMatchObject({
         code: "invalid_request",
         message:
-          "Sandbox provisioning requires BB_PUBLIC_URL to be reachable from the internet",
+          "Sandbox provisioning requires BB_EXTERNAL_URL to be reachable from the internet",
       });
       expect(provisionHostMock).not.toHaveBeenCalled();
     } finally {
@@ -1970,10 +1970,10 @@ describe("public thread routes", () => {
     }
   });
 
-  it("rejects sandbox-host threads when BB_PUBLIC_URL is not configured", async () => {
+  it("rejects sandbox-host threads when BB_EXTERNAL_URL is not configured", async () => {
     const harness = await createTestAppHarness({
       githubPat: "test-github-pat",
-      publicUrl: undefined,
+      externalUrl: undefined,
     });
     try {
       const { project } = createProject(harness.db, harness.hub, {
@@ -2005,7 +2005,7 @@ describe("public thread routes", () => {
       expect(response.status).toBe(501);
       await expect(readJson(response)).resolves.toMatchObject({
         code: "not_configured",
-        message: "Sandbox provisioning requires BB_PUBLIC_URL to be configured",
+        message: "Sandbox provisioning requires BB_EXTERNAL_URL to be configured",
       });
       expect(provisionHostMock).not.toHaveBeenCalled();
     } finally {

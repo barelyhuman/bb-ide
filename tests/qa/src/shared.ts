@@ -505,7 +505,7 @@ export async function startQaServer(
       ...process.env,
       BB_DATA_DIR: args.dataDir,
       BB_SERVER_PORT: String(args.port),
-      ...(args.publicUrl ? { BB_PUBLIC_URL: args.publicUrl } : {}),
+      ...(args.publicUrl ? { BB_EXTERNAL_URL: args.publicUrl } : {}),
       ...(args.env ?? {}),
     },
     logPath: args.logPath,

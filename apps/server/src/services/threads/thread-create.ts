@@ -17,7 +17,7 @@ import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import {
   requireNonDestroyedHostWithStatus,
 } from "../lib/entity-lookup.js";
-import { requireReachablePublicServerUrl } from "../hosts/public-server-url.js";
+import { requireReachableExternalServerUrl } from "../hosts/external-server-url.js";
 import { assertSandboxProvisioningConfig } from "../hosts/sandbox-backends.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { buildExecutionOptions } from "./thread-commands.js";
@@ -200,7 +200,7 @@ export async function createThreadFromRequest(
 
   switch (resolvedEnvironment.type) {
     case "sandbox-host": {
-      requireReachablePublicServerUrl(deps.config);
+      requireReachableExternalServerUrl(deps.config);
       assertSandboxProvisioningConfig(
         resolvedEnvironment.sandboxType,
         deps.config,

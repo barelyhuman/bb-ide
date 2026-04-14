@@ -12,13 +12,13 @@ import type {
 } from "@bb/sandbox-host";
 import { ApiError } from "../../errors.js";
 import type { ServerRuntimeConfig } from "../../types.js";
-import { hasConfiguredReachablePublicServerUrl } from "./public-server-url.js";
+import { hasConfiguredReachableExternalServerUrl } from "./external-server-url.js";
 import { hasConfiguredSandboxTemplate } from "./sandbox-config.js";
 import { buildManagedRuntimeEnv } from "./sandbox-runtime-material-snapshot.js";
 
 export type SandboxBackendInfoResolverConfig = Pick<
   ServerRuntimeConfig,
-  "e2bApiKey" | "e2bTemplate" | "githubPat" | "publicUrl"
+  "e2bApiKey" | "e2bTemplate" | "githubPat" | "externalUrl"
 >;
 
 export type SandboxBackendConfig = Pick<
@@ -99,7 +99,7 @@ function isE2BBackendAvailable(config: SandboxBackendInfoResolverConfig): boolea
     config.e2bApiKey !== "" &&
     hasConfiguredSandboxTemplate(config) &&
     config.githubPat !== "" &&
-    hasConfiguredReachablePublicServerUrl(config)
+    hasConfiguredReachableExternalServerUrl(config)
   );
 }
 

@@ -15,7 +15,7 @@ import type { AppDeps, SandboxLifecycleDeps, SandboxWorkSessionDeps } from "../.
 import { ApiError } from "../../errors.js";
 import { requireConnectedHostSession } from "../lib/entity-lookup.js";
 import type { HostLifecycleService } from "./host-lifecycle-service.js";
-import { requireReachablePublicServerUrl } from "./public-server-url.js";
+import { requireReachableExternalServerUrl } from "./external-server-url.js";
 import { createSandboxBackendForId } from "./sandbox-backends.js";
 import { requireSandboxBackendForHost } from "./sandbox-backends.js";
 import { ensureSandboxRuntimeMaterialSynced } from "./sandbox-runtime-material.js";
@@ -245,7 +245,7 @@ export async function ensureSandboxHostSessionReady(
           host.provider
             ? createSandboxBackendForId(host.provider)
             : requireSandboxBackendForHost(host);
-        const serverUrl = requireReachablePublicServerUrl(deps.config);
+        const serverUrl = requireReachableExternalServerUrl(deps.config);
 
         if (host.suspendedAt !== null) {
           if (host.externalId === null) {

@@ -1,7 +1,6 @@
-import { envsafe, port, str, url } from "envsafe";
+import { envsafe, port, url } from "envsafe";
 import { commonConfig } from "./common.js";
 import { DEFAULTS } from "./defaults.js";
-import { validateOptionalUrl } from "./public-url.js";
 
 export { commonConfig };
 
@@ -11,11 +10,6 @@ const rawHostDaemonConfig = envsafe({
     default: DEFAULTS.serverUrl.prod,
     devDefault: DEFAULTS.serverUrl.dev,
   }),
-  BB_PUBLIC_URL: str({
-    desc: "Public URL sandboxes can use to reach the server",
-    default: "",
-    allowEmpty: true,
-  }),
   BB_HOST_DAEMON_PORT: port({
     desc: "Port for the host-daemon local API",
     default: DEFAULTS.hostDaemonPort.prod,
@@ -23,7 +17,4 @@ const rawHostDaemonConfig = envsafe({
   }),
 });
 
-export const hostDaemonConfig = {
-  ...rawHostDaemonConfig,
-  BB_PUBLIC_URL: validateOptionalUrl("BB_PUBLIC_URL", rawHostDaemonConfig.BB_PUBLIC_URL),
-};
+export const hostDaemonConfig = rawHostDaemonConfig;

@@ -83,8 +83,11 @@ const WEB_SOCKET_SHUTDOWN_REASON = "server-shutdown";
 
 function buildAllowedCorsOrigins(deps: AppDeps): Set<string> {
   const allowedOrigins = new Set<string>(LOCAL_APP_ORIGINS);
-  if (deps.config.publicUrl) {
-    allowedOrigins.add(new URL(deps.config.publicUrl).origin);
+  if (deps.config.appUrl) {
+    allowedOrigins.add(new URL(deps.config.appUrl).origin);
+  }
+  if (deps.config.externalUrl) {
+    allowedOrigins.add(new URL(deps.config.externalUrl).origin);
   }
   return allowedOrigins;
 }

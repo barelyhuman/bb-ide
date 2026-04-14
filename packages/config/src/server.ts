@@ -22,8 +22,13 @@ const rawServerConfig = envsafe({
     default: DEFAULTS.hostDaemonPort.prod,
     devDefault: DEFAULTS.hostDaemonPort.dev,
   }),
-  BB_PUBLIC_URL: str({
-    desc: "Public URL sandboxes can use to reach the server",
+  BB_APP_URL: str({
+    desc: "Human-facing app/server base URL used for generated links and allowed browser origins. Does not control which host or port the server binds to.",
+    default: "",
+    allowEmpty: true,
+  }),
+  BB_EXTERNAL_URL: str({
+    desc: "Internet-facing HTTPS base URL used by sandbox hosts and externally reachable auth flows. Does not control which host or port the server binds to.",
     default: "",
     allowEmpty: true,
   }),
@@ -75,6 +80,7 @@ export const serverConfig = {
   ...databaseConfig,
   ...rawServerConfig,
   ...serverPortConfig,
-  BB_PUBLIC_URL: validateOptionalUrl("BB_PUBLIC_URL", rawServerConfig.BB_PUBLIC_URL),
+  BB_APP_URL: validateOptionalUrl("BB_APP_URL", rawServerConfig.BB_APP_URL),
+  BB_EXTERNAL_URL: validateOptionalUrl("BB_EXTERNAL_URL", rawServerConfig.BB_EXTERNAL_URL),
   BB_INFERENCE_MODEL: validateInferenceModel(rawServerConfig.BB_INFERENCE_MODEL),
 };

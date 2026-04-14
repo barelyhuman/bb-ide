@@ -80,7 +80,8 @@ describe("consumer-specific config", () => {
     vi.stubEnv("BB_DATA_DIR", "/tmp/bb-data");
     vi.stubEnv("BB_SERVER_PORT", undefined);
     vi.stubEnv("BB_DATABASE_URL", undefined);
-    vi.stubEnv("BB_PUBLIC_URL", undefined);
+    vi.stubEnv("BB_APP_URL", undefined);
+    vi.stubEnv("BB_EXTERNAL_URL", undefined);
     vi.stubEnv("E2B_API_KEY", undefined);
     vi.stubEnv("E2B_TEMPLATE", undefined);
     vi.stubEnv("BB_GITHUB_PAT", undefined);
@@ -96,7 +97,8 @@ describe("consumer-specific config", () => {
 
     expect(serverConfig.BB_SERVER_PORT).toBe(3334);
     expect(serverConfig.BB_DATABASE_URL).toBe("/tmp/bb-data/bb.db");
-    expect(serverConfig.BB_PUBLIC_URL).toBe("");
+    expect(serverConfig.BB_APP_URL).toBe("");
+    expect(serverConfig.BB_EXTERNAL_URL).toBe("");
     expect(serverConfig.E2B_API_KEY).toBe("");
     expect(serverConfig.E2B_TEMPLATE).toBe("");
     expect(serverConfig.BB_GITHUB_PAT).toBe("");
@@ -109,7 +111,7 @@ describe("consumer-specific config", () => {
 
   it("lets tooling read the server port without validating unrelated server env", async () => {
     vi.stubEnv("NODE_ENV", "development");
-    vi.stubEnv("BB_PUBLIC_URL", "not-a-url");
+    vi.stubEnv("BB_EXTERNAL_URL", "not-a-url");
     vi.stubEnv("BB_SERVER_PORT", undefined);
 
     const { serverPortConfig } =
@@ -123,7 +125,7 @@ describe("consumer-specific config", () => {
   it("lets tooling read the database path without validating unrelated server env", async () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("BB_DATA_DIR", "/tmp/bb-data");
-    vi.stubEnv("BB_PUBLIC_URL", "not-a-url");
+    vi.stubEnv("BB_EXTERNAL_URL", "not-a-url");
     vi.stubEnv("BB_DATABASE_URL", undefined);
 
     const { databaseConfig } =
@@ -148,7 +150,6 @@ describe("consumer-specific config", () => {
   it("requires a valid server URL for the daemon and CLI", async () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("BB_SERVER_URL", "http://localhost:9999");
-    vi.stubEnv("BB_PUBLIC_URL", "https://public.example.test");
 
     const { hostDaemonConfig } = await importFresh<typeof import("../src/host-daemon.js")>(
       "../src/host-daemon.js",
@@ -158,7 +159,6 @@ describe("consumer-specific config", () => {
     );
 
     expect(hostDaemonConfig.BB_SERVER_URL).toBe("http://localhost:9999");
-    expect(hostDaemonConfig.BB_PUBLIC_URL).toBe("https://public.example.test");
     expect(cliConfig.BB_SERVER_URL).toBe("http://localhost:9999");
 
     vi.stubEnv("BB_SERVER_URL", "not-a-url");
@@ -193,9 +193,10 @@ describe("consumer-specific config", () => {
     expect(cliConfig.BB_HOST_DAEMON_PORT).toBe(3999);
   });
 
-  it("allows BB_PUBLIC_URL to be omitted in production server config", async () => {
+  it("allows app and external URLs to be omitted in production server config", async () => {
     vi.stubEnv("NODE_ENV", "production");
-    vi.stubEnv("BB_PUBLIC_URL", undefined);
+    vi.stubEnv("BB_APP_URL", undefined);
+    vi.stubEnv("BB_EXTERNAL_URL", undefined);
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
     vi.stubEnv("ANTHROPIC_API_KEY", "test-anthropic-key");
 
@@ -203,7 +204,34 @@ describe("consumer-specific config", () => {
       "../src/server.js",
     );
 
-    expect(serverConfig.BB_PUBLIC_URL).toBe("");
+    expect(serverConfig.BB_APP_URL).toBe("");
+    expect(serverConfig.BB_EXTERNAL_URL).toBe("");
+  });
+
+  it("validates app and external URLs independently", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("BB_APP_URL", "https://app.example.test");
+    vi.stubEnv("BB_EXTERNAL_URL", "https://external.example.test");
+    vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
+    vi.stubEnv("ANTHROPIC_API_KEY", "test-anthropic-key");
+
+    const { serverConfig } = await importFresh<typeof import("../src/server.js")>(
+      "../src/server.js",
+    );
+
+    expect(serverConfig.BB_APP_URL).toBe("https://app.example.test");
+    expect(serverConfig.BB_EXTERNAL_URL).toBe("https://external.example.test");
+
+    vi.stubEnv("BB_APP_URL", "not-a-url");
+    await expect(
+      importFresh<typeof import("../src/server.js")>("../src/server.js"),
+    ).rejects.toThrow(/BB_APP_URL/u);
+
+    vi.stubEnv("BB_APP_URL", "https://app.example.test");
+    vi.stubEnv("BB_EXTERNAL_URL", "not-a-url");
+    await expect(
+      importFresh<typeof import("../src/server.js")>("../src/server.js"),
+    ).rejects.toThrow(/BB_EXTERNAL_URL/u);
   });
 
   it("reads the dev-env tunnel token from its dedicated config scope", async () => {

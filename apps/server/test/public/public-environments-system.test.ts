@@ -842,9 +842,9 @@ describe("public environment and system routes", () => {
     }
   });
 
-  it("reports sandbox provisioning as disabled when BB_PUBLIC_URL is unset", async () => {
+  it("reports sandbox provisioning as disabled when BB_EXTERNAL_URL is unset", async () => {
     const harness = await createTestAppHarness({
-      publicUrl: undefined,
+      externalUrl: undefined,
     });
     try {
       const response = await harness.app.request("/api/v1/system/config");
@@ -884,10 +884,10 @@ describe("public environment and system routes", () => {
     }
   });
 
-  it("marks sandbox backends unavailable when BB_PUBLIC_URL is unset", async () => {
+  it("marks sandbox backends unavailable when BB_EXTERNAL_URL is unset", async () => {
     const harness = await createTestAppHarness({
       githubPat: "test-github-pat",
-      publicUrl: undefined,
+      externalUrl: undefined,
     });
     try {
       const response = await harness.app.request("/api/v1/system/sandbox-backends");

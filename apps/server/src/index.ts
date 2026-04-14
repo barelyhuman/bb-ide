@@ -33,7 +33,8 @@ async function main(): Promise<void> {
   });
   pendingInteractions.start();
   const sandboxRegistry = createSandboxHostRegistry();
-  const publicUrl = toOptionalString(serverConfig.BB_PUBLIC_URL);
+  const appUrl = toOptionalString(serverConfig.BB_APP_URL);
+  const externalUrl = toOptionalString(serverConfig.BB_EXTERNAL_URL);
 
   const selfDir = dirname(fileURLToPath(import.meta.url));
   const appDistDir = resolve(selfDir, "../../app/dist");
@@ -53,8 +54,11 @@ async function main(): Promise<void> {
     sandboxIdleThresholdMs: serverConfig.BB_SANDBOX_IDLE_THRESHOLD_MS,
   };
 
-  if (publicUrl !== undefined) {
-    runtimeConfig.publicUrl = publicUrl;
+  if (appUrl !== undefined) {
+    runtimeConfig.appUrl = appUrl;
+  }
+  if (externalUrl !== undefined) {
+    runtimeConfig.externalUrl = externalUrl;
   }
 
   const machineAuth = await createMachineAuthService({

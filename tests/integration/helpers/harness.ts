@@ -209,7 +209,8 @@ async function startIntegrationServer(
     hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",
     openAiApiKey: process.env.OPENAI_API_KEY ?? "test-openai-key",
-    publicUrl: "https://bb.example.test",
+    appUrl: "https://bb.example.test",
+    externalUrl: "https://bb.example.test",
     sandboxActivityExtensionDebounceMs: 30_000,
     sandboxIdleThresholdMs: 300_000,
   };

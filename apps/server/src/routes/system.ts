@@ -65,10 +65,14 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
     );
     const parsed = new URL(appOrigin);
     if (parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") {
-      const allowedPublicOrigin = deps.config.publicUrl
-        ? new URL(deps.config.publicUrl).origin
-        : null;
-      if (parsed.origin !== allowedPublicOrigin) {
+      const allowedOrigins = new Set<string>();
+      if (deps.config.appUrl) {
+        allowedOrigins.add(new URL(deps.config.appUrl).origin);
+      }
+      if (deps.config.externalUrl) {
+        allowedOrigins.add(new URL(deps.config.externalUrl).origin);
+      }
+      if (!allowedOrigins.has(parsed.origin)) {
         throw new ApiError(400, "invalid_app_origin", "The provided app origin is not allowed.");
       }
     }

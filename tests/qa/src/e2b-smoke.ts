@@ -98,7 +98,8 @@ async function main(): Promise<void> {
     hostDaemonPort: 3_001,
     inferenceModel: "gpt-5",
     openAiApiKey: "",
-    publicUrl: "https://placeholder.example.test",
+    appUrl: "https://placeholder.example.test",
+    externalUrl: "https://placeholder.example.test",
     sandboxActivityExtensionDebounceMs: 30_000,
     sandboxIdleThresholdMs: 60_000,
   };

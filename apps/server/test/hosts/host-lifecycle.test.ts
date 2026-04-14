@@ -611,7 +611,7 @@ describe("host lifecycle", () => {
         hostId: host.id,
         hostName: host.name,
         progressCallbacks: expect.any(Object),
-        serverUrl: harness.deps.config.publicUrl!,
+        serverUrl: harness.deps.config.externalUrl!,
       }));
       expect(harness.deps.sandboxRegistry.get(host.id)).toBe(resumedSandboxHost);
       expect(sandboxHost.resume).not.toHaveBeenCalled();
