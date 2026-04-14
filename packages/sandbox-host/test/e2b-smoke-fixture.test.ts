@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { loadQaAuthFixture } from "../../../scripts/qa/e2b-smoke/fixture.ts";
+import { loadQaAuthFixture } from "../../../tests/qa/src/e2b-smoke/fixture.js";
 
 const FIXTURE_PATH_ENV_VAR = "BB_CLOUD_AUTH_FIXTURE_PATH";
 

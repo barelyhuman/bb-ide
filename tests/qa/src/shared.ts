@@ -1,4 +1,5 @@
 import { execFile as execFileCallback, spawn } from "node:child_process";
+import type { ChildProcess, ExecFileException } from "node:child_process";
 import { closeSync, openSync, writeSync } from "node:fs";
 import fs from "node:fs/promises";
 import { createServer } from "node:net";
@@ -14,26 +15,145 @@ export const STANDALONE_PARENT_PID_ENV = "BB_STANDALONE_PARENT_PID";
 const STANDALONE_TMP_PREFIX = "bb-standalone-";
 const PROCESS_SCAN_MAX_BUFFER = 10 * 1024 * 1024;
 
+type EnvironmentMap = Record<string, string>;
+
+interface StandaloneStateRuntime {
+  daemonPid: number | null;
+  instanceId: string | null;
+  parentPid: number | null;
+  serverPid: number | null;
+  tmpRoot: string | null;
+}
+
+interface StandaloneState {
+  daemon?: {
+    pid?: number | null;
+  };
+  daemonPid?: number | null;
+  instanceId?: string | null;
+  parentPid?: number | null;
+  paths?: {
+    tmpRoot?: string | null;
+  };
+  server?: {
+    pid?: number | null;
+  };
+  serverPid?: number | null;
+  tmpRoot?: string | null;
+}
+
+interface ProjectCreateRequest {
+  name: string;
+  source: {
+    hostId: string;
+    path: string;
+    type: string;
+  };
+}
+
+interface ProjectCreateResponse {
+  id: string;
+}
+
+interface HostJoinRequest {
+  externalId?: string;
+  hostId?: string;
+  hostType: string;
+  provider?: string;
+}
+
+interface HostJoinResponse {
+  hostId: string;
+  joinCode: string;
+}
+
+interface ConnectedHostResponse {
+  id: string;
+  status: string;
+}
+
+interface SpawnLoggedProcessOptions {
+  args: string[];
+  command: string;
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  logPath: string;
+}
+
+interface StartQuickTunnelArgs {
+  env?: NodeJS.ProcessEnv;
+  logPath: string;
+  maxAttempts?: number;
+  port: number;
+  timeoutMs?: number;
+}
+
+interface StartQuickTunnelResult {
+  process: ChildProcess;
+  publicUrl: string;
+}
+
+interface StartQaServerArgs {
+  dataDir: string;
+  env?: NodeJS.ProcessEnv;
+  logPath: string;
+  port: number;
+  publicUrl?: string;
+  reuseExisting?: boolean;
+}
+
+interface StartQaServerResult {
+  process: ChildProcess | null;
+  reusedExisting: boolean;
+  serverUrl: string;
+}
+
+interface StandaloneProcessInfo {
+  instanceId: string | null;
+  parentPid: number | null;
+  pid: number;
+}
+
+interface CleanupStandaloneResult {
+  instanceId?: string | null;
+  killedPids: number[];
+  removedRoot?: string | null;
+  removedRoots?: string[];
+}
+
+interface LoadDotEnvResult {
+  loaded: EnvironmentMap;
+  path: string | null;
+}
+
+interface WaitForOptions {
+  description: string;
+  intervalMs?: number;
+  timeoutMs: number;
+}
+
 export const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   "../..",
 );
 
-function isNodeError(error) {
+function isNodeError(error: unknown): error is ExecFileException {
   return error instanceof Error;
 }
 
-function shellQuote(value) {
+export function shellQuote(value: string): string {
   return `'${String(value).replaceAll("'", `'\\''`)}'`;
 }
 
-export function buildShellExports(env) {
+export function buildShellExports(env: EnvironmentMap): string {
   return Object.entries(env)
     .map(([key, value]) => `export ${key}=${shellQuote(String(value))}`)
     .join("\n");
 }
 
-export function readStandaloneStateRuntime(state) {
+export function readStandaloneStateRuntime(
+  state: StandaloneState | null,
+): StandaloneStateRuntime {
   return {
     daemonPid: state?.daemon?.pid ?? state?.daemonPid ?? null,
     instanceId: state?.instanceId ?? null,
@@ -43,7 +163,7 @@ export function readStandaloneStateRuntime(state) {
   };
 }
 
-async function resolveProjectEnvCandidates() {
+async function resolveProjectEnvCandidates(): Promise<string[]> {
   const candidates = new Set([path.join(repoRoot, ".env")]);
   const gitMetadataPath = path.join(repoRoot, ".git");
 
@@ -72,7 +192,7 @@ async function resolveProjectEnvCandidates() {
   return [...candidates];
 }
 
-export async function createTestGitRepo(repoDir) {
+export async function createTestGitRepo(repoDir: string): Promise<string> {
   await fs.mkdir(repoDir, { recursive: true });
   await runGit(repoDir, ["init", "--initial-branch", "main"]);
   await runGit(repoDir, ["config", "user.email", "standalone-qa@example.com"]);
@@ -88,7 +208,10 @@ export async function createTestGitRepo(repoDir) {
   return repoDir;
 }
 
-export async function createProject(serverUrl, project) {
+export async function createProject(
+  serverUrl: string,
+  project: ProjectCreateRequest,
+): Promise<ProjectCreateResponse> {
   const response = await fetch(`${serverUrl}/api/v1/projects`, {
     method: "POST",
     headers: {
@@ -104,7 +227,10 @@ export async function createProject(serverUrl, project) {
   return response.json();
 }
 
-export async function createHostJoin(serverUrl, body = { hostType: "persistent" }) {
+export async function createHostJoin(
+  serverUrl: string,
+  body: HostJoinRequest = { hostType: "persistent" },
+): Promise<HostJoinResponse> {
   const response = await fetch(`${serverUrl}/api/v1/hosts/join`, {
     method: "POST",
     headers: {
@@ -120,7 +246,7 @@ export async function createHostJoin(serverUrl, body = { hostType: "persistent" 
   return response.json();
 }
 
-export async function killProcess(pid) {
+export async function killProcess(pid: number | null | undefined): Promise<void> {
   if (!pid) {
     return;
   }
@@ -144,8 +270,8 @@ export async function killProcess(pid) {
   });
 }
 
-export async function loadDotEnv() {
-  const loaded = {};
+export async function loadDotEnv(): Promise<LoadDotEnvResult> {
+  const loaded: EnvironmentMap = {};
 
   for (const candidate of await resolveProjectEnvCandidates()) {
     try {
@@ -184,7 +310,7 @@ export async function loadDotEnv() {
   };
 }
 
-export async function reservePort() {
+export async function reservePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = createServer();
     server.once("error", reject);
@@ -206,15 +332,15 @@ export async function reservePort() {
   });
 }
 
-export function buildLocalServerUrl(port) {
+export function buildLocalServerUrl(port: number): string {
   return `http://127.0.0.1:${port}`;
 }
 
-export async function runGit(cwd, args) {
+export async function runGit(cwd: string, args: string[]): Promise<void> {
   await execFile("git", args, { cwd });
 }
 
-export function spawnLoggedProcess(options) {
+export function spawnLoggedProcess(options: SpawnLoggedProcessOptions): ChildProcess {
   const logFd = openSync(options.logPath, "a");
   try {
     const child = spawn(options.command, options.args, {
@@ -229,19 +355,21 @@ export function spawnLoggedProcess(options) {
   }
 }
 
-function extractQuickTunnelUrl(text) {
+function extractQuickTunnelUrl(text: string): string | null {
   const match = text.match(/https:\/\/[a-z0-9-]+\.trycloudflare\.com/iu);
   return match?.[0] ?? null;
 }
 
-export async function startQuickTunnel(args) {
+export async function startQuickTunnel(
+  args: StartQuickTunnelArgs,
+): Promise<StartQuickTunnelResult> {
   const originUrl = buildLocalServerUrl(args.port);
   const maxAttempts = args.maxAttempts ?? 3;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const logFd = openSync(args.logPath, "a");
     let closed = false;
-    let child;
+    let child: ChildProcess | null = null;
 
     const closeLogFd = () => {
       if (closed) {
@@ -274,10 +402,11 @@ export async function startQuickTunnel(args) {
         },
       );
       child.unref();
+      const tunnelProcess = child;
 
-      let discoveredUrl = null;
+      let discoveredUrl: string | null = null;
 
-      const handleOutput = (chunk) => {
+      const handleOutput = (chunk: Buffer): void => {
         writeSync(logFd, chunk);
         if (discoveredUrl) {
           return;
@@ -288,11 +417,11 @@ export async function startQuickTunnel(args) {
         }
       };
 
-      child.stdout?.on("data", handleOutput);
-      child.stderr?.on("data", handleOutput);
-      child.once("exit", closeLogFd);
+      tunnelProcess.stdout?.on("data", handleOutput);
+      tunnelProcess.stderr?.on("data", handleOutput);
+      tunnelProcess.once("exit", closeLogFd);
 
-      child.once("error", (error) => {
+      tunnelProcess.once("error", (error) => {
         writeSync(logFd, `${String(error)}\n`);
       });
 
@@ -302,10 +431,10 @@ export async function startQuickTunnel(args) {
             if (discoveredUrl) {
               return discoveredUrl;
             }
-            if (child.exitCode !== null) {
-              throw new Error(`cloudflared exited with code ${child.exitCode}`);
+            if (tunnelProcess.exitCode !== null) {
+              throw new Error(`cloudflared exited with code ${tunnelProcess.exitCode}`);
             }
-            if (child.killed) {
+            if (tunnelProcess.killed) {
               throw new Error("cloudflared was killed before producing a public URL");
             }
             return null;
@@ -317,7 +446,7 @@ export async function startQuickTunnel(args) {
         );
 
         return {
-          process: child,
+          process: tunnelProcess,
           publicUrl,
         };
       } catch (error) {
@@ -346,7 +475,7 @@ export async function startQuickTunnel(args) {
   throw new Error(`Failed to start quick tunnel for ${originUrl}`);
 }
 
-async function isServerReady(serverUrl) {
+async function isServerReady(serverUrl: string): Promise<boolean> {
   try {
     const response = await fetch(`${serverUrl}/api/v1/system/config`, {
       signal: AbortSignal.timeout(1_000),
@@ -357,7 +486,9 @@ async function isServerReady(serverUrl) {
   }
 }
 
-export async function startQaServer(args) {
+export async function startQaServer(
+  args: StartQaServerArgs,
+): Promise<StartQaServerResult> {
   const serverUrl = buildLocalServerUrl(args.port);
 
   if (args.reuseExisting && await isServerReady(serverUrl)) {
@@ -399,7 +530,7 @@ export async function startQaServer(args) {
   };
 }
 
-async function readJsonIfExists(filePath) {
+async function readJsonIfExists(filePath: string): Promise<StandaloneState | null> {
   try {
     const raw = await fs.readFile(filePath, "utf8");
     return JSON.parse(raw);
@@ -411,7 +542,7 @@ async function readJsonIfExists(filePath) {
   }
 }
 
-async function listStandaloneTmpRoots() {
+async function listStandaloneTmpRoots(): Promise<string[]> {
   const entries = await fs.readdir(tmpdir(), { withFileTypes: true });
   return entries
     .filter(
@@ -421,7 +552,7 @@ async function listStandaloneTmpRoots() {
     .map((entry) => path.join(tmpdir(), entry.name));
 }
 
-async function listOpenFilePids(targetPath) {
+async function listOpenFilePids(targetPath: string): Promise<number[]> {
   try {
     const { stdout } = await execFile("lsof", ["-t", "+D", targetPath], {
       encoding: "utf8",
@@ -438,18 +569,18 @@ async function listOpenFilePids(targetPath) {
   }
 }
 
-async function listProcessesByInstance(instanceId) {
+async function listProcessesByInstance(instanceId: string): Promise<number[]> {
   return (await listStandaloneProcesses())
     .filter((entry) => entry.instanceId === instanceId)
     .map((entry) => entry.pid);
 }
 
-function readStandaloneEnvValue(command, envName) {
+function readStandaloneEnvValue(command: string, envName: string): string | null {
   const match = new RegExp(`${envName}=([^\\s]+)`, "u").exec(command);
   return match?.[1] ?? null;
 }
 
-async function listStandaloneProcesses() {
+async function listStandaloneProcesses(): Promise<StandaloneProcessInfo[]> {
   const { stdout } = await execFile(
     "ps",
     ["eww", "-Ao", "pid=,command="],
@@ -459,17 +590,17 @@ async function listStandaloneProcesses() {
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)
-    .map((line) => {
+    .flatMap((line): Array<{ command: string; pid: number }> => {
       const match = /^(\d+)\s+(.*)$/u.exec(line);
       if (!match) {
-        return null;
+        return [];
       }
-      return {
+      return [{
         command: match[2],
         pid: Number.parseInt(match[1], 10),
-      };
+      }];
     })
-    .filter((entry) => entry && entry.command.includes(`${STANDALONE_INSTANCE_ENV}=`))
+    .filter((entry) => entry.command.includes(`${STANDALONE_INSTANCE_ENV}=`))
     .map((entry) => {
       const parentPid = Number.parseInt(
         readStandaloneEnvValue(entry.command, STANDALONE_PARENT_PID_ENV) ?? "",
@@ -483,10 +614,12 @@ async function listStandaloneProcesses() {
     });
 }
 
-export async function cleanupStandaloneInstance(state) {
+export async function cleanupStandaloneInstance(
+  state: StandaloneState,
+): Promise<CleanupStandaloneResult> {
   const runtime = readStandaloneStateRuntime(state);
-  const killedPids = new Set();
-  const pidsToKill = new Set([
+  const killedPids = new Set<number>();
+  const pidsToKill = new Set<number | null>([
     runtime.daemonPid,
     runtime.serverPid,
     ...(runtime.instanceId ? await listProcessesByInstance(runtime.instanceId) : []),
@@ -512,9 +645,9 @@ export async function cleanupStandaloneInstance(state) {
   };
 }
 
-export async function cleanupStandaloneOrphans() {
-  const killedPids = new Set();
-  const removedRoots = new Set();
+export async function cleanupStandaloneOrphans(): Promise<CleanupStandaloneResult> {
+  const killedPids = new Set<number>();
+  const removedRoots = new Set<string>();
   const roots = await listStandaloneTmpRoots();
 
   for (const tmpRoot of roots) {
@@ -556,7 +689,15 @@ export async function cleanupStandaloneOrphans() {
   };
 }
 
-export function buildDaemonRestartCommand(args) {
+export function buildDaemonRestartCommand(args: {
+  daemonPid: number | null | undefined;
+  daemonPort: number;
+  dataDir: string;
+  entrypoint: string;
+  logPath: string;
+  parentPid: number;
+  serverUrl: string;
+}): string {
   const shutdownCommand = args.daemonPid
     ? [
         `(kill ${shellQuote(String(args.daemonPid))} >/dev/null 2>&1 || true)`,
@@ -575,7 +716,10 @@ export function buildDaemonRestartCommand(args) {
   return [...shutdownCommand, startCommand].join("; ");
 }
 
-export async function waitFor(check, options) {
+export async function waitFor<TResult>(
+  check: () => Promise<TResult | null | false> | TResult | null | false,
+  options: WaitForOptions,
+): Promise<TResult> {
   const startedAt = Date.now();
 
   while (Date.now() - startedAt <= options.timeoutMs) {
@@ -589,7 +733,9 @@ export async function waitFor(check, options) {
   throw new Error(`Timed out waiting for ${options.description}`);
 }
 
-export async function waitForConnectedHost(serverUrl) {
+export async function waitForConnectedHost(
+  serverUrl: string,
+): Promise<ConnectedHostResponse> {
   return waitFor(
     async () => {
       let response;
@@ -601,7 +747,7 @@ export async function waitForConnectedHost(serverUrl) {
       if (!response.ok) {
         return null;
       }
-      const hosts = await response.json();
+      const hosts: ConnectedHostResponse[] = await response.json();
       return hosts.find((host) => host.status === "connected") ?? null;
     },
     {
@@ -611,7 +757,7 @@ export async function waitForConnectedHost(serverUrl) {
   );
 }
 
-export async function waitForServerReady(serverUrl) {
+export async function waitForServerReady(serverUrl: string): Promise<boolean> {
   return waitFor(
     async () => {
       try {
@@ -628,7 +774,7 @@ export async function waitForServerReady(serverUrl) {
   );
 }
 
-async function isProcessRunning(pid) {
+async function isProcessRunning(pid: number): Promise<boolean> {
   try {
     process.kill(pid, 0);
     return true;

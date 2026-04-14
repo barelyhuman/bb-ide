@@ -5,59 +5,59 @@ import { setTimeout as delay } from "node:timers/promises";
 import {
   deleteSandboxProviderCredentialByProviderId,
   upsertSandboxProviderCredential,
-} from "../../packages/db/src/index.ts";
-import type { DbConnection } from "../../packages/db/src/index.ts";
+} from "../../../packages/db/src/index.js";
+import type { DbConnection } from "../../../packages/db/src/index.js";
 import {
   buildCloudAuthCredentialUpsert,
   createCloudAuthCrypto,
   type ClaudeStoredCredential,
   type CodexStoredCredential,
-} from "../../packages/agent-provider-auth/src/index.ts";
-import { createCloudAuthService } from "../../apps/server/src/services/cloud-auth/service.ts";
-import { createSandboxEnvService } from "../../apps/server/src/services/sandbox-env/service.ts";
-import type { ServerRuntimeConfig } from "../../apps/server/src/types.ts";
-import { initDb } from "../../apps/server/src/db.ts";
-import { buildSandboxRuntimeMaterialSnapshot } from "../../apps/server/src/services/hosts/sandbox-runtime-material-snapshot.ts";
+} from "../../../packages/agent-provider-auth/src/index.js";
+import { createCloudAuthService } from "../../../apps/server/src/services/cloud-auth/service.js";
+import { createSandboxEnvService } from "../../../apps/server/src/services/sandbox-env/service.js";
+import type { ServerRuntimeConfig } from "../../../apps/server/src/types.js";
+import { initDb } from "../../../apps/server/src/db.js";
+import { buildSandboxRuntimeMaterialSnapshot } from "../../../apps/server/src/services/hosts/sandbox-runtime-material-snapshot.js";
 import {
   HOST_AUTH_FILE_NAME,
   HOST_RUNTIME_MATERIAL_FILE_NAME,
   hostAuthStateSchema,
   normalizeServerUrl,
-} from "../../packages/host-daemon-contract/src/index.ts";
+} from "../../../packages/host-daemon-contract/src/index.js";
 import {
   createHostJoinResponseSchema,
   projectResponseSchema,
-} from "../../packages/server-contract/src/index.ts";
+} from "../../../packages/server-contract/src/index.js";
 import {
   availableModelSchema,
   threadSchema,
   type AvailableModel,
   type ThreadStatus,
-} from "../../packages/domain/src/index.ts";
+} from "../../../packages/domain/src/index.js";
 import {
   createSandbox,
   resumeSandbox,
   runSandboxCommand,
   writeSandboxFile,
-} from "../../packages/sandbox-host/src/index.ts";
+} from "../../../packages/sandbox-host/src/index.js";
 import {
   buildHostRuntimeMaterialState,
   hostRuntimeMaterialStateSchema,
-} from "../../packages/host-runtime-material/src/index.ts";
-import { PI_DEFAULT_MODEL_PER_PROVIDER } from "../../packages/agent-providers/src/index.ts";
-import { loadSandboxDaemonArtifacts } from "../../packages/sandbox-host/src/daemon-artifacts.ts";
+} from "../../../packages/host-runtime-material/src/index.js";
+import { PI_DEFAULT_MODEL_PER_PROVIDER } from "../../../packages/agent-providers/src/index.js";
+import { loadSandboxDaemonArtifacts } from "../../../packages/sandbox-host/src/daemon-artifacts.js";
 import {
   SANDBOX_BB_EXECUTABLE_PATH,
   SANDBOX_DATA_DIR,
   SANDBOX_DAEMON_HEALTH_PATH,
   SANDBOX_DAEMON_HEALTH_PORT,
   SANDBOX_DAEMON_HEALTH_RESPONSE,
-} from "../../packages/sandbox-host/src/constants.ts";
+} from "../../../packages/sandbox-host/src/constants.js";
 import {
   buildSandboxDaemonEnv,
   startSandboxDaemon,
-} from "../../packages/sandbox-host/src/provision.ts";
-import { resolveSandboxImageTemplate } from "../../packages/sandbox-image/src/index.ts";
+} from "../../../packages/sandbox-host/src/provision.js";
+import { resolveSandboxImageTemplate } from "../../../packages/sandbox-image/src/index.js";
 import {
   createProject,
   createHostJoin,
@@ -67,13 +67,13 @@ import {
   startQuickTunnel,
   startQaServer,
   waitFor,
-} from "./shared.mjs";
+} from "./shared.js";
 import {
   buildQaAuthCoverageSummary,
   loadQaAuthFixture,
   renderQaAuthCoverageSummary,
   type SmokeQaAuthFixture,
-} from "./e2b-smoke/fixture.ts";
+} from "./e2b-smoke/fixture.js";
 
 const SMOKE_TIMEOUT_MS = 5 * 60 * 1000;
 const INITIAL_SANDBOX_TIMEOUT_MS = 8 * 60 * 1000;

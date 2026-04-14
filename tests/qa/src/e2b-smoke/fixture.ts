@@ -3,10 +3,10 @@ import path from "node:path";
 import {
   getCloudAuthProviderDefinition,
   type StoredCloudAuthCredential,
-} from "../../../packages/agent-provider-auth/src/index.ts";
+} from "../../../../packages/agent-provider-auth/src/index.js";
 
 export const DEFAULT_QA_AUTH_FIXTURE_PATH = "/tmp/bb-oauth-handshakes/credentials.json";
-export const E2B_SMOKE_README_PATH = "scripts/qa/e2b-smoke/README.md";
+export const E2B_SMOKE_README_PATH = "tests/qa/src/e2b-smoke/README.md";
 
 export type SmokeQaAuthProviderId = "claude-code" | "codex";
 
@@ -54,6 +54,30 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function requireFixtureString(
+  record: Record<string, unknown>,
+  fieldName: string,
+  label: string,
+): string {
+  const value = record[fieldName];
+  if (typeof value !== "string") {
+    throw new Error(`Invalid ${label}`);
+  }
+  return value;
+}
+
+function requireFixtureNumber(
+  record: Record<string, unknown>,
+  fieldName: string,
+  label: string,
+): number {
+  const value = record[fieldName];
+  if (typeof value !== "number") {
+    throw new Error(`Invalid ${label}`);
+  }
+  return value;
+}
+
 function parseQaAuthFixture(raw: string): SmokeQaAuthFixture {
   const value = JSON.parse(raw);
   if (!isRecord(value)) {
@@ -93,32 +117,31 @@ function parseQaAuthFixture(raw: string): SmokeQaAuthFixture {
     throw new Error("Invalid cloud auth fixture createdAt");
   }
 
+  const claudeFixture =
+    claude && isRecord(claude)
+      ? {
+          access: requireFixtureString(claude, "access", "Claude auth fixture"),
+          expires: requireFixtureNumber(claude, "expires", "Claude auth fixture"),
+          refresh: requireFixtureString(claude, "refresh", "Claude auth fixture"),
+        }
+      : null;
+  const codexFixture =
+    codex && isRecord(codex)
+      ? {
+          access: requireFixtureString(codex, "access", "Codex auth fixture"),
+          ...(typeof codex.accountId === "string"
+            ? { accountId: codex.accountId }
+            : {}),
+          expires: requireFixtureNumber(codex, "expires", "Codex auth fixture"),
+          ...(typeof codex.idToken === "string" ? { idToken: codex.idToken } : {}),
+          refresh: requireFixtureString(codex, "refresh", "Codex auth fixture"),
+        }
+      : null;
+
   return {
     ...(typeof createdAt === "string" ? { createdAt } : {}),
-    ...(claude && isRecord(claude)
-      ? {
-          claude: {
-            access: claude.access,
-            expires: claude.expires,
-            refresh: claude.refresh,
-          },
-        }
-      : {}),
-    ...(codex && isRecord(codex)
-      ? {
-          "openai-codex": {
-            access: codex.access,
-            ...(typeof codex.accountId === "string"
-              ? { accountId: codex.accountId }
-              : {}),
-            expires: codex.expires,
-            ...(typeof codex.idToken === "string"
-              ? { idToken: codex.idToken }
-              : {}),
-            refresh: codex.refresh,
-          },
-        }
-      : {}),
+    ...(claudeFixture ? { claude: claudeFixture } : {}),
+    ...(codexFixture ? { "openai-codex": codexFixture } : {}),
   };
 }
 
@@ -269,7 +292,7 @@ function buildFixtureFromCredential(
 export function formatQaAuthHelperCommand(
   providerId: SmokeQaAuthProviderId,
 ): string {
-  return `pnpm --filter @bb/sandbox-host exec tsx ../../scripts/qa/e2b-smoke/auth-connect.mts --provider ${providerId}`;
+  return `pnpm --filter @bb/qa auth:e2b-smoke -- --provider ${providerId}`;
 }
 
 export function loadSmokeQaProviderId(input: string): SmokeQaAuthProviderId {
