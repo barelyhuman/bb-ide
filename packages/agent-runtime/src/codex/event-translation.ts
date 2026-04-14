@@ -1,6 +1,7 @@
 import type {
   ThreadEvent,
   ThreadEventContextWindowUsage,
+  ThreadEventItemApprovalStatus,
   ThreadEventItem,
   ThreadEventItemStatus,
   ThreadEventTurnStatus,
@@ -102,6 +103,18 @@ function toItemStatus(status: CodexItemStatus): ThreadEventItemStatus {
   }
 }
 
+function toApprovalStatus(
+  status: CodexItemStatus,
+  eventMethod: "item/started" | "item/completed",
+): ThreadEventItemApprovalStatus {
+  // A started event is not terminal even if Codex includes a terminal-looking
+  // status. Only completed declined items represent a denied approval/policy.
+  if (eventMethod === "item/completed" && status === "declined") {
+    return "denied";
+  }
+  return null;
+}
+
 function translateCodexUserContent(
   content: CodexParsedUserInput,
 ): ThreadEventUserContent {
@@ -156,13 +169,17 @@ function buildDynamicToolCallError(
   return "Dynamic tool call failed";
 }
 
-function translateCodexItem(item: unknown): ThreadEventItem | null {
+function translateCodexItem(
+  item: unknown,
+  eventMethod: "item/started" | "item/completed",
+): ThreadEventItem | null {
   const parsed = codexHandledThreadItemSchema.safeParse(item);
   if (!parsed.success) {
     return null;
   }
 
   const parsedItem: CodexHandledThreadItem = parsed.data;
+  const isStartedEvent = eventMethod === "item/started";
   switch (parsedItem.type) {
     case "agentMessage":
       return { type: "agentMessage", id: parsedItem.id, text: parsedItem.text };
@@ -178,8 +195,8 @@ function translateCodexItem(item: unknown): ThreadEventItem | null {
         id: parsedItem.id,
         command: parsedItem.command,
         cwd: parsedItem.cwd,
-        status: toItemStatus(parsedItem.status),
-        approvalStatus: null,
+        status: isStartedEvent ? "pending" : toItemStatus(parsedItem.status),
+        approvalStatus: toApprovalStatus(parsedItem.status, eventMethod),
         aggregatedOutput: parsedItem.aggregatedOutput ?? undefined,
         exitCode: parsedItem.exitCode ?? undefined,
         durationMs: parsedItem.durationMs ?? undefined,
@@ -196,8 +213,8 @@ function translateCodexItem(item: unknown): ThreadEventItem | null {
             : {}),
           ...(change.diff ? { diff: change.diff } : {}),
         })),
-        status: toItemStatus(parsedItem.status),
-        approvalStatus: null,
+        status: isStartedEvent ? "pending" : toItemStatus(parsedItem.status),
+        approvalStatus: toApprovalStatus(parsedItem.status, eventMethod),
       };
     case "mcpToolCall":
       {
@@ -208,7 +225,7 @@ function translateCodexItem(item: unknown): ThreadEventItem | null {
           server: parsedItem.server,
           tool: parsedItem.tool,
           ...(toolArguments ? { arguments: toolArguments } : {}),
-          status: toItemStatus(parsedItem.status),
+          status: isStartedEvent ? "pending" : toItemStatus(parsedItem.status),
           error: parsedItem.error?.message,
           durationMs: parsedItem.durationMs ?? undefined,
         };
@@ -221,7 +238,7 @@ function translateCodexItem(item: unknown): ThreadEventItem | null {
         id: parsedItem.id,
         tool: parsedItem.tool,
         ...(toolArguments ? { arguments: toolArguments } : {}),
-        status: toItemStatus(parsedItem.status),
+        status: isStartedEvent ? "pending" : toItemStatus(parsedItem.status),
         result,
         error: buildDynamicToolCallError(parsedItem.success, result),
         durationMs: parsedItem.durationMs ?? undefined,
@@ -239,7 +256,7 @@ function translateCodexItem(item: unknown): ThreadEventItem | null {
           ...(parsedItem.model ? { model: parsedItem.model } : {}),
           ...(parsedItem.reasoningEffort ? { reasoningEffort: parsedItem.reasoningEffort } : {}),
         },
-        status: toItemStatus(parsedItem.status),
+        status: isStartedEvent ? "pending" : toItemStatus(parsedItem.status),
         result: parsedItem.agentsStates,
       };
     case "webSearch":
@@ -350,7 +367,10 @@ export function translateCodexEvent(event: unknown): ThreadEvent[] {
       }];
     case "item/started":
     case "item/completed": {
-      const item = translateCodexItem(handledEvent.params.item);
+      const item = translateCodexItem(
+        handledEvent.params.item,
+        handledEvent.method,
+      );
       if (!item) {
         return buildUnhandledCodexEvent({
           rawEvent,

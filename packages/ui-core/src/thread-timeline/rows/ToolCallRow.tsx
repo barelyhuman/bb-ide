@@ -27,7 +27,7 @@ function toolCallActionLabel(
     return "Permission denied:";
   }
   if (message.status === "error") return "Failed";
-  if (message.status === "interrupted") return "Declined";
+  if (message.status === "interrupted") return "Interrupted";
   if (message.status === "pending" || preferRunningLabel) return "Running";
   return "Ran";
 }

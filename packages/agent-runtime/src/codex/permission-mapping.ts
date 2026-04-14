@@ -20,8 +20,11 @@ const codexToPendingInteractionApprovalDecision = {
   accept: "allow_once",
   acceptForSession: "allow_for_session",
   decline: "deny",
+  // bb has one negative approval decision. Codex can distinguish declining
+  // from canceling/dismissing, but both mean "do not run this command" here.
+  cancel: "deny",
 } satisfies Record<
-  Exclude<CodexSimpleCommandApprovalDecision, "cancel">,
+  CodexSimpleCommandApprovalDecision,
   PendingInteractionApprovalDecision
 >;
 
@@ -107,7 +110,7 @@ export function toCodexGrantedPermissionProfile(
 }
 
 function fromCodexCommandApprovalDecision(
-  decision: Exclude<CodexSimpleCommandApprovalDecision, "cancel">,
+  decision: CodexSimpleCommandApprovalDecision,
 ): PendingInteractionApprovalDecision {
   return codexToPendingInteractionApprovalDecision[decision];
 }
@@ -132,10 +135,12 @@ export function parseCodexAvailableDecisions(
 
   const mappedDecisions: PendingInteractionApprovalDecision[] = [];
   for (const decision of decisions) {
-    if (typeof decision !== "string" || decision === "cancel") {
-      throw new ProviderRequestDecodeError(
-        "Command approval request included unsupported provider-specific decisions",
-      );
+    if (typeof decision !== "string") {
+      // Provider-specific amendment decisions are offers to approve while
+      // changing Codex policy. The provider-neutral pending-interaction model
+      // cannot represent those yet, so keep the approval flow usable by
+      // dropping only the unsupported decision instead of rejecting the request.
+      continue;
     }
     mappedDecisions.push(fromCodexCommandApprovalDecision(decision));
   }

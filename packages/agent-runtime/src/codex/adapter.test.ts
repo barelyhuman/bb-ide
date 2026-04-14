@@ -770,6 +770,77 @@ describe("codex provider adapter", () => {
     });
   });
 
+  it("translateEvent item/completed with declined commandExecution maps approval denial", () => {
+    const adapter = createCodexProviderAdapter();
+    const events = adapter.translateEvent(
+      codexEvent("item/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "commandExecution",
+          id: "cmd-1",
+          command: "ls -la",
+          cwd: "/tmp",
+          processId: null,
+          status: "declined",
+          commandActions: [],
+          aggregatedOutput: null,
+          exitCode: null,
+          durationMs: null,
+        },
+      }),
+    );
+
+    expect(events).toContainEqual({
+      type: "item/completed",
+      threadId: "t1",
+      providerThreadId: "t1",
+      turnId: "turn-1",
+      item: expect.objectContaining({
+        type: "commandExecution",
+        id: "cmd-1",
+        status: "interrupted",
+        approvalStatus: "denied",
+      }),
+    });
+  });
+
+  it("translateEvent item/started normalizes commandExecution to pending", () => {
+    const adapter = createCodexProviderAdapter();
+    const events = adapter.translateEvent(
+      codexEvent("item/started", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "commandExecution",
+          id: "cmd-1",
+          command: "ls -la",
+          cwd: "/tmp",
+          processId: null,
+          status: "declined",
+          commandActions: [],
+          aggregatedOutput: null,
+          exitCode: null,
+          durationMs: null,
+        },
+      }),
+    );
+
+    expect(events).toContainEqual({
+      type: "item/started",
+      threadId: "t1",
+      providerThreadId: "t1",
+      turnId: "turn-1",
+      item: expect.objectContaining({
+        type: "commandExecution",
+        id: "cmd-1",
+        command: "ls -la",
+        status: "pending",
+        approvalStatus: null,
+      }),
+    });
+  });
+
   it("translateEvent item/completed with fileChange maps kind correctly", () => {
     const adapter = createCodexProviderAdapter();
     const events = adapter.translateEvent(
@@ -829,6 +900,41 @@ describe("codex provider adapter", () => {
         tool: "search",
         status: "completed",
         durationMs: 200,
+      }),
+    });
+  });
+
+  it("translateEvent item/completed with declined fileChange maps approval denial", () => {
+    const adapter = createCodexProviderAdapter();
+    const events = adapter.translateEvent(
+      codexEvent("item/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "fileChange",
+          id: "edit-1",
+          status: "declined",
+          changes: [
+            {
+              path: "new.txt",
+              kind: { type: "add" },
+              diff: "+hello",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(events).toContainEqual({
+      type: "item/completed",
+      threadId: "t1",
+      providerThreadId: "t1",
+      turnId: "turn-1",
+      item: expect.objectContaining({
+        type: "fileChange",
+        id: "edit-1",
+        status: "interrupted",
+        approvalStatus: "denied",
       }),
     });
   });
@@ -1502,10 +1608,10 @@ describe("codex provider adapter", () => {
     ).toThrowError(ProviderRequestDecodeError);
   });
 
-  it("decodeInteractiveRequest rejects cancel-only command approval decisions", () => {
+  it("decodeInteractiveRequest maps cancel-only command approval decisions to deny", () => {
     const adapter = createCodexProviderAdapter();
     expect(
-      () => adapter.decodeInteractiveRequest?.({
+      adapter.decodeInteractiveRequest?.({
         jsonrpc: "2.0",
         id: 8,
         method: "item/commandExecution/requestApproval",
@@ -1520,7 +1626,11 @@ describe("codex provider adapter", () => {
           availableDecisions: ["cancel"],
         },
       }),
-    ).toThrowError(ProviderRequestDecodeError);
+    ).toMatchObject({
+      payload: {
+        availableDecisions: ["deny"],
+      },
+    });
   });
 
   it("decodeInteractiveRequest rejects unsupported macOS permissions in command session grants", () => {
@@ -1621,10 +1731,10 @@ describe("codex provider adapter", () => {
       })).toThrowError(ProviderRequestDecodeError);
   });
 
-  it("decodeInteractiveRequest rejects unsupported policy-amendment decisions", () => {
+  it("decodeInteractiveRequest filters unsupported policy-amendment decisions", () => {
     const adapter = createCodexProviderAdapter();
     expect(
-      () => adapter.decodeInteractiveRequest?.({
+      adapter.decodeInteractiveRequest?.({
         jsonrpc: "2.0",
         id: 9,
         method: "item/commandExecution/requestApproval",
@@ -1659,7 +1769,45 @@ describe("codex provider adapter", () => {
           ],
         },
       }),
-    ).toThrowError(ProviderRequestDecodeError);
+    ).toMatchObject({
+      payload: {
+        availableDecisions: ["deny"],
+      },
+    });
+  });
+
+  it("decodeInteractiveRequest preserves deny when Codex offers accept plus cancel", () => {
+    const adapter = createCodexProviderAdapter();
+    expect(
+      adapter.decodeInteractiveRequest?.({
+        jsonrpc: "2.0",
+        id: 10,
+        method: "item/commandExecution/requestApproval",
+        params: {
+          threadId: "t1",
+          turnId: "turn-3",
+          itemId: "item-3",
+          reason: "Needs approval",
+          command: "touch denied.txt",
+          cwd: "/tmp/project",
+          commandActions: [],
+          additionalPermissions: null,
+          availableDecisions: [
+            "accept",
+            {
+              acceptWithExecpolicyAmendment: {
+                execpolicy_amendment: ["allow", "touch", "denied.txt"],
+              },
+            },
+            "cancel",
+          ],
+        },
+      }),
+    ).toMatchObject({
+      payload: {
+        availableDecisions: ["allow_once", "deny"],
+      },
+    });
   });
 
   it("decodeInteractiveRequest maps file-change approvals into pending interactions", () => {

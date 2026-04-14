@@ -193,6 +193,14 @@ function getCompletedCommands(events: ThreadEvent[]): string[] {
   return commands;
 }
 
+function hasDeniedCommandExecution(events: ThreadEvent[]): boolean {
+  return events.some((event) =>
+    event.type === "item/completed"
+    && event.item.type === "commandExecution"
+    && event.item.approvalStatus === "denied"
+  );
+}
+
 function resolveDefaultModel(providerId: string, ctx: TestContext): Promise<string | undefined> {
   return ctx.runtime.listModels({ providerId }).then((models) =>
     models.find((model) => model.isDefault)?.model ?? models[0]?.model,
@@ -1340,8 +1348,7 @@ describe("interactive request scenarios", () => {
   it.concurrent("respects user-denied Codex command approvals in readonly ask mode", async () => {
     const ctx = createTestRuntime("codex", {
       onInteractiveRequest: async (request) => {
-        if ( request.payload.subject.kind !== "command"
-        ) {
+        if (request.payload.subject.kind !== "command") {
           throw new Error(`Expected command approval, got ${request.payload.subject.kind}`);
         }
         if (!request.payload.availableDecisions.includes("deny")) {
@@ -1390,6 +1397,7 @@ describe("interactive request scenarios", () => {
 
       expect(ctx.interactiveRequests.some((request) => request.payload.subject.kind === "command",
       )).toBe(true);
+      expect(hasDeniedCommandExecution(ctx.events)).toBe(true);
       expect(existsSync(filePath)).toBe(false);
     } finally {
       await ctx.runtime.shutdown();
