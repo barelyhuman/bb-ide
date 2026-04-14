@@ -38,6 +38,12 @@ interface ManagedSpawnArgs {
   outputBuffer: OutputBuffer;
 }
 
+const readyOutputLabelWidth = "external".length;
+
+function formatReadyOutputRow(label: string, value: string): string {
+  return `${dim(label.padEnd(readyOutputLabelWidth))} ${value}`;
+}
+
 const commandDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(commandDir, "..", "..");
 const repoRoot = resolve(packageRoot, "..", "..");
@@ -171,17 +177,17 @@ export async function main(): Promise<void> {
     process.stdout.write("\n");
     log(green("●"), bold("bb is ready"));
     process.stdout.write("\n");
-    log(" ", `${dim("app")}     ${cyan(context.serverUrl)}`);
+    log(" ", formatReadyOutputRow("app", cyan(context.serverUrl)));
     if (serverConfig.BB_APP_URL !== "") {
-      log(" ", `${dim("app url")} ${cyan(serverConfig.BB_APP_URL)}`);
+      log(" ", formatReadyOutputRow("app url", cyan(serverConfig.BB_APP_URL)));
     }
     if (serverConfig.BB_EXTERNAL_URL !== "") {
-      log(" ", `${dim("external")} ${cyan(serverConfig.BB_EXTERNAL_URL)}`);
+      log(" ", formatReadyOutputRow("external", cyan(serverConfig.BB_EXTERNAL_URL)));
     }
-    log(" ", `${dim("data")}    ${context.dataDir}`);
-    log(" ", `${dim("db")}      ${context.dbPath}`);
-    log(" ", `${dim("logs")}    ${context.logDir}/`);
-    log(" ", `${dim("lock")}    ${context.daemonLockFile}`);
+    log(" ", formatReadyOutputRow("data", context.dataDir));
+    log(" ", formatReadyOutputRow("db", context.dbPath));
+    log(" ", formatReadyOutputRow("logs", `${context.logDir}/`));
+    log(" ", formatReadyOutputRow("lock", context.daemonLockFile));
     process.stdout.write("\n");
     log(" ", dim("Press Ctrl+C to stop"));
 
