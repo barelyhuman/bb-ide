@@ -116,9 +116,9 @@ async function main() {
     });
 
     const cleanupCommand =
-      `pnpm --dir ${shellQuote(repoRoot)} --filter @bb/qa standalone:stop ` +
+      `pnpm --silent --dir ${shellQuote(repoRoot)} --filter @bb/qa standalone:stop ` +
       `--state ${shellQuote(statePath)} && ` +
-      `pnpm --dir ${shellQuote(repoRoot)} --filter @bb/qa standalone:cleanup`;
+      `pnpm --silent --dir ${shellQuote(repoRoot)} --filter @bb/qa standalone:cleanup`;
     const restartDaemonCommand = buildDaemonRestartCommand({
       daemonPid: daemonProcess.pid,
       daemonPort,

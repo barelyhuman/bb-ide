@@ -134,7 +134,7 @@ interface WaitForOptions {
 
 export const repoRoot = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../..",
+  "../../..",
 );
 
 function isNodeError(error: unknown): error is ExecFileException {
@@ -486,6 +486,18 @@ async function isServerReady(serverUrl: string): Promise<boolean> {
   }
 }
 
+async function readLogExcerpt(logPath: string): Promise<string | null> {
+  try {
+    const content = await fs.readFile(logPath, "utf8");
+    return content.slice(-4_000);
+  } catch (error) {
+    if (isNodeError(error) && error.code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+}
+
 export async function startQaServer(
   args: StartQaServerArgs,
 ): Promise<StartQaServerResult> {
@@ -517,8 +529,10 @@ export async function startQaServer(
     await waitForServerReady(serverUrl);
   } catch (error) {
     await killProcess(serverProcess.pid).catch(() => undefined);
+    const logExcerpt = await readLogExcerpt(args.logPath);
+    const logDetails = logExcerpt ? `\n\nLog output:\n${logExcerpt}` : "";
     throw new Error(
-      `Failed to start QA server at ${serverUrl}. See ${args.logPath} for details.`,
+      `Failed to start QA server at ${serverUrl}. See ${args.logPath} for details.${logDetails}`,
       { cause: error instanceof Error ? error : undefined },
     );
   }
