@@ -471,7 +471,7 @@ describe("pending interaction lifecycle", () => {
             },
           }),
         }),
-      ).toThrow("Only session approval decisions with a session grant can grant permissions");
+      ).toThrow("This approval subject and decision cannot grant the requested permissions");
     } finally {
       await harness.cleanup();
     }

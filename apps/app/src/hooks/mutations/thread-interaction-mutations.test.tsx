@@ -33,7 +33,6 @@ function createResolvingInteraction(): PendingInteraction {
     providerRequestId: "request-1",
     status: "resolving",
     payload: {
-      kind: "approval",
       subject: {
         kind: "file_change",
         itemId: "item_1",
@@ -44,7 +43,6 @@ function createResolvingInteraction(): PendingInteraction {
       availableDecisions: ["allow_once", "deny"],
     },
     resolution: {
-      kind: "approval",
       decision: "allow_once",
       grantedPermissions: null,
     },
@@ -76,7 +74,6 @@ describe("useResolveThreadPendingInteraction", () => {
         threadId: "thr_1",
         interactionId: "pi_1",
         resolution: {
-          kind: "approval",
           decision: "allow_once",
           grantedPermissions: null,
         },
@@ -87,7 +84,6 @@ describe("useResolveThreadPendingInteraction", () => {
       "thr_1",
       "pi_1",
       {
-        kind: "approval",
         decision: "allow_once",
         grantedPermissions: null,
       },

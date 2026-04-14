@@ -71,6 +71,7 @@ import { ProviderResponseEncodeError } from "../provider-adapter.js";
 import {
   buildClaudeSessionPermissionUpdates,
   CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+  isClaudeConcreteFileChangeToolName,
   type ClaudePermissionRequestApprovalParams,
   claudePermissionRequestApprovalParamsSchema,
   toClaudePermissionMode,
@@ -127,12 +128,6 @@ function getNestedMessageId(message: unknown): string | undefined {
 }
 
 type ClaudePendingFileChangeItem = Extract<ThreadEventItem, { type: "fileChange" }>;
-
-const CLAUDE_CONCRETE_FILE_CHANGE_TOOL_NAMES = new Set([
-  "Edit",
-  "Write",
-  "NotebookEdit",
-]);
 
 interface ClaudeToolUseTranslationInput {
   callId: string;
@@ -217,7 +212,7 @@ function buildClaudeApprovalSubject(
     }
   }
 
-  if (CLAUDE_CONCRETE_FILE_CHANGE_TOOL_NAMES.has(args.toolName)) {
+  if (isClaudeConcreteFileChangeToolName(args.toolName)) {
     const parsed = claudeFileEditArgsSchema.safeParse(args.input);
     if (parsed.success && (parsed.data.file_path ?? parsed.data.path)) {
       return {
@@ -1060,7 +1055,6 @@ export function createClaudeCodeProviderAdapter(
             providerThreadId: parsed.data.providerThreadId,
             turnId: parsed.data.turnId,
             payload: {
-              kind: "approval",
               subject: buildClaudeApprovalSubject(parsed.data),
               reason: parsed.data.reason,
               availableDecisions: buildClaudeApprovalAvailableDecisions(parsed.data),
@@ -1073,11 +1067,6 @@ export function createClaudeCodeProviderAdapter(
     },
 
     buildInteractiveResponse(args) {
-      if (args.resolution.kind !== "approval") {
-        throw new ProviderResponseEncodeError(
-          "Interactive response kind mismatch for approval",
-        );
-      }
       if (args.resolution.decision === "deny") {
         return {
           kind: "permission_request",

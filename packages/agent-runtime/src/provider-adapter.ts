@@ -155,8 +155,10 @@ export interface ProviderAdapter {
   ): ThreadEvent[];
   decodeToolCallRequest(request: JsonRpcMessage): DecodedToolCallRequest | null;
   decodeInteractiveRequest?(request: JsonRpcMessage): DecodedInteractiveRequest | null;
-  buildInteractiveResponse?(args: {
-    request: DecodedInteractiveRequest;
-    resolution: PendingInteractionResolution;
-  }): JsonValue;
+  buildInteractiveResponse?(args: BuildInteractiveResponseArgs): JsonValue;
+}
+
+export interface BuildInteractiveResponseArgs {
+  request: DecodedInteractiveRequest;
+  resolution: PendingInteractionResolution;
 }

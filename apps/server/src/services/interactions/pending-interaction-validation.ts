@@ -55,15 +55,11 @@ export function pendingInteractionResolutionEquals(
     return left === right;
   }
 
-  if (left.kind !== right.kind) {
-    return false;
-  }
-
   if (left.decision !== right.decision) {
     return false;
   }
   if (left.decision === "deny" || right.decision === "deny") {
-    return left.decision === right.decision;
+    return true;
   }
 
   if (left.grantedPermissions === null || right.grantedPermissions === null) {
@@ -117,7 +113,7 @@ function validateGrantedPermissions(
     throw new ApiError(
       400,
       "invalid_request",
-      "Only session approval decisions with a session grant can grant permissions",
+      "This approval subject and decision cannot grant the requested permissions",
     );
   }
 

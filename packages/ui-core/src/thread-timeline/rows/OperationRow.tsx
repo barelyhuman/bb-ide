@@ -400,7 +400,7 @@ export function OperationRow({
         tone={tone}
       >
         <div className="mt-0.5 space-y-2">
-          {approvalTarget?.kind === "permission_grant" ? (
+          {approvalTarget ? (
             <OperationDetailLines
               lines={[
                 `Permission grant approval`,

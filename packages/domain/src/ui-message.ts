@@ -227,12 +227,10 @@ export interface ViewProvisioningMetadata {
   transcript?: ViewProvisioningTranscriptEntry[];
 }
 
-export type ViewApprovalTarget =
-  {
-    kind: "permission_grant";
-    itemId: string;
-    toolName?: string;
-  };
+export interface ViewApprovalTarget {
+  itemId: string;
+  toolName: string | null;
+}
 
 export interface ViewOperationMessage extends ViewMessageBase {
   kind: "operation";

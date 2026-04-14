@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PendingInteraction } from "@bb/domain";
 import {
-  formatPendingInteractionKindLabel,
   formatPendingInteractionSummary,
 } from "../src/pending-interaction-presentation.js";
 
@@ -25,24 +24,8 @@ function createInteraction(
 }
 
 describe("pending interaction presentation", () => {
-  it("formats kind labels for app and cli surfaces", () => {
-    expect(
-      formatPendingInteractionKindLabel({
-        kind: "approval",
-        surface: "app",
-      }),
-    ).toBe("Approval");
-    expect(
-      formatPendingInteractionKindLabel({
-        kind: "approval",
-        surface: "cli",
-      }),
-    ).toBe("approval");
-  });
-
   it("formats command approval summaries differently per surface", () => {
     const interaction = createInteraction({
-      kind: "approval",
       subject: {
         kind: "command",
         itemId: "item_123",
@@ -71,7 +54,6 @@ describe("pending interaction presentation", () => {
 
   it("formats permission request summaries differently per surface", () => {
     const interaction = createInteraction({
-      kind: "approval",
       subject: {
         kind: "permission_grant",
         itemId: "item_123",

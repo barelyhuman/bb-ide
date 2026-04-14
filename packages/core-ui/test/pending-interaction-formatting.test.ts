@@ -72,13 +72,11 @@ describe("pending interaction formatting", () => {
     );
     expect(
       formatPendingInteractionPermissionResolutionOutcome({
-        kind: "approval",
         decision: "deny",
       }),
     ).toBe("denied");
     expect(
       formatPendingInteractionPermissionResolutionMessage({
-        kind: "approval",
         decision: "allow_for_session",
         grantedPermissions: {
           network: { enabled: true },
@@ -90,7 +88,6 @@ describe("pending interaction formatting", () => {
 
   it("builds session approval resolutions with explicit command session grants", () => {
     const interaction = createInteraction({
-      kind: "approval",
       subject: {
         kind: "command",
         itemId: "item_123",
@@ -109,7 +106,6 @@ describe("pending interaction formatting", () => {
     expect(
       buildPendingInteractionApprovalResolution(interaction, "allow_for_session"),
     ).toEqual({
-      kind: "approval",
       decision: "allow_for_session",
       grantedPermissions: {
         network: { enabled: true },
@@ -120,7 +116,6 @@ describe("pending interaction formatting", () => {
     expect(
       buildPendingInteractionApprovalResolution(interaction, "allow_once"),
     ).toEqual({
-      kind: "approval",
       decision: "allow_once",
       grantedPermissions: null,
     });
@@ -135,7 +130,6 @@ describe("pending interaction formatting", () => {
 
   it("builds approval resolutions with explicit permission-grant permissions", () => {
     const interaction = createInteraction({
-      kind: "approval",
       subject: {
         kind: "permission_grant",
         itemId: "item_123",
@@ -152,7 +146,6 @@ describe("pending interaction formatting", () => {
     expect(
       buildPendingInteractionApprovalResolution(interaction, "allow_once"),
     ).toEqual({
-      kind: "approval",
       decision: "allow_once",
       grantedPermissions: {
         network: { enabled: true },

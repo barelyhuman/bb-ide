@@ -91,9 +91,8 @@ function parseApprovalTarget(
     case "permission_grant": {
       const toolName = metadataStringValue(decoded.metadata, "toolName");
       return {
-        kind: "permission_grant",
         itemId,
-        ...(toolName ? { toolName } : {}),
+        toolName: toolName ?? null,
       };
     }
     default:

@@ -1,12 +1,5 @@
 import { z } from "zod";
 
-export const pendingInteractionKindSchema = z.enum([
-  "approval",
-]);
-export type PendingInteractionKind = z.infer<
-  typeof pendingInteractionKindSchema
->;
-
 export const pendingInteractionStatusSchema = z.enum([
   "pending",
   "resolving",
@@ -195,7 +188,6 @@ export type PendingInteractionApprovalSubject = z.infer<
 >;
 
 export const approvalPendingInteractionPayloadSchema = z.object({
-  kind: z.literal("approval"),
   subject: pendingInteractionApprovalSubjectSchema,
   reason: z.string().nullable(),
   availableDecisions: z.array(pendingInteractionApprovalDecisionSchema).min(1),
@@ -212,17 +204,14 @@ export type PendingInteractionPayload = z.infer<
 export const approvalPendingInteractionResolutionSchema =
   z.discriminatedUnion("decision", [
     z.object({
-      kind: z.literal("approval"),
       decision: z.literal("allow_once"),
       grantedPermissions: pendingInteractionGrantedPermissionProfileSchema.nullable(),
     }),
     z.object({
-      kind: z.literal("approval"),
       decision: z.literal("allow_for_session"),
       grantedPermissions: pendingInteractionGrantedPermissionProfileSchema.nullable(),
     }),
     z.object({
-      kind: z.literal("approval"),
       decision: z.literal("deny"),
     }),
   ]);

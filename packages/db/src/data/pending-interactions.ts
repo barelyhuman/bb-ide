@@ -1,6 +1,5 @@
 import { and, desc, eq, getTableColumns, inArray } from "drizzle-orm";
 import type {
-  PendingInteractionKind,
   PendingInteractionStatus,
 } from "@bb/domain";
 import type { DbConnection, DbTransaction } from "../connection.js";
@@ -18,7 +17,6 @@ type PendingInteractionReadConnection = DbConnection | DbTransaction;
 export type PendingInteractionRow = typeof pendingInteractions.$inferSelect;
 
 export interface CreatePendingInteractionInput {
-  kind: PendingInteractionKind;
   payload: string;
   providerId: string;
   providerRequestId: string;
@@ -158,7 +156,7 @@ export function createPendingInteraction(
       providerThreadId: input.providerThreadId,
       providerRequestId: input.providerRequestId,
       sessionId: input.sessionId,
-      kind: input.kind,
+      kind: "approval",
       status: "pending",
       payload: input.payload,
       resolution: null,

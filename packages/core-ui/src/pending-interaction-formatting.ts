@@ -1,6 +1,5 @@
 import type {
   PendingInteractionApprovalDecision,
-  ApprovalPendingInteractionResolution,
   PendingInteractionCommandAction,
   PendingInteractionGrantablePermissionProfile,
   PendingInteractionGrantedPermissionProfile,
@@ -11,8 +10,6 @@ import type {
 } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 
-export type PendingInteractionPermissionResolutionSummaryArgs =
-  ApprovalPendingInteractionResolution;
 type PendingInteractionPermissionSummaryProfile =
   | PendingInteractionGrantablePermissionProfile
   | PendingInteractionRequestedPermissionProfile;
@@ -262,13 +259,11 @@ export function buildPendingInteractionApprovalResolution(
 ): PendingInteractionResolution {
   if (decision === "deny") {
     return {
-      kind: "approval",
       decision,
     };
   }
 
   return {
-    kind: "approval",
     decision,
     grantedPermissions: getPendingInteractionApprovalGrantedPermissions(
       interaction,
@@ -288,7 +283,7 @@ function hasPendingInteractionGrantedPermissions(
 }
 
 export function formatPendingInteractionPermissionResolutionOutcome(
-  args: PendingInteractionPermissionResolutionSummaryArgs,
+  args: PendingInteractionResolution,
 ): string {
   if (args.decision === "deny") {
     return "denied";
@@ -310,7 +305,7 @@ export function formatPendingInteractionPermissionResolutionOutcome(
 }
 
 export function formatPendingInteractionPermissionResolutionMessage(
-  args: PendingInteractionPermissionResolutionSummaryArgs,
+  args: PendingInteractionResolution,
 ): string {
   if (args.decision === "deny") {
     return "Permission request denied";

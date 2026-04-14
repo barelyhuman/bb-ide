@@ -51,7 +51,6 @@ function createCommandApprovalInteraction(): PendingInteraction {
   return {
     ...createPendingInteractionBase(),
     payload: {
-      kind: "approval",
       subject: {
         kind: "command",
         itemId: "item_1",
@@ -71,7 +70,6 @@ function createResolvingCommandApprovalInteraction(): PendingInteraction {
     ...createCommandApprovalInteraction(),
     status: "resolving",
     resolution: {
-      kind: "approval",
       decision: "allow_for_session",
       grantedPermissions: null,
     },
@@ -82,7 +80,6 @@ function createFileChangeInteraction(): PendingInteraction {
   return {
     ...createPendingInteractionBase(),
     payload: {
-      kind: "approval",
       subject: {
         kind: "file_change",
         itemId: "item_2",
@@ -99,7 +96,6 @@ function createPermissionRequestInteraction(): PendingInteraction {
   return {
     ...createPendingInteractionBase(),
     payload: {
-      kind: "approval",
       subject: {
         kind: "permission_grant",
         itemId: "item_3",
@@ -129,7 +125,6 @@ describe("ThreadPendingInteractionBanner", () => {
       ...createCommandApprovalInteraction(),
       status: "resolving",
       resolution: {
-        kind: "approval",
         decision: "allow_once",
         grantedPermissions: null,
       },
@@ -146,7 +141,6 @@ describe("ThreadPendingInteractionBanner", () => {
         "thr_1",
         "pi_1",
         {
-          kind: "approval",
           decision: "allow_once",
           grantedPermissions: null,
         },
@@ -159,7 +153,6 @@ describe("ThreadPendingInteractionBanner", () => {
       ...createFileChangeInteraction(),
       status: "resolving",
       resolution: {
-        kind: "approval",
         decision: "deny",
       },
     });
@@ -168,7 +161,7 @@ describe("ThreadPendingInteractionBanner", () => {
       interaction: createFileChangeInteraction(),
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "No" }));
+    fireEvent.click(screen.getByRole("button", { name: "Deny" }));
     fireEvent.click(screen.getByRole("button", { name: /Submit/ }));
 
     await waitFor(() => {
@@ -176,7 +169,6 @@ describe("ThreadPendingInteractionBanner", () => {
         "thr_1",
         "pi_1",
         {
-          kind: "approval",
           decision: "deny",
         },
       );
@@ -188,7 +180,6 @@ describe("ThreadPendingInteractionBanner", () => {
       ...createFileChangeInteraction(),
       status: "resolving",
       resolution: {
-        kind: "approval",
         decision: "allow_once",
         grantedPermissions: null,
       },
@@ -205,7 +196,6 @@ describe("ThreadPendingInteractionBanner", () => {
         "thr_1",
         "pi_1",
         {
-          kind: "approval",
           decision: "allow_once",
           grantedPermissions: null,
         },
@@ -218,7 +208,6 @@ describe("ThreadPendingInteractionBanner", () => {
       ...createPermissionRequestInteraction(),
       status: "resolving",
       resolution: {
-        kind: "approval",
         decision: "allow_for_session",
         grantedPermissions: {
           network: null,
@@ -242,7 +231,6 @@ describe("ThreadPendingInteractionBanner", () => {
         "thr_1",
         "pi_1",
         {
-          kind: "approval",
           decision: "allow_for_session",
           grantedPermissions: {
             network: null,

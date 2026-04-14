@@ -70,7 +70,7 @@ function appendPermissionGrantTimelineEvent(
     environmentId: thread?.environmentId ?? null,
     type: "system/operation",
     data: {
-      operation: interaction.payload.kind,
+      operation: "approval",
       status: permissionGrantOperationStatus(interaction),
       operationId: interaction.id,
       message: permissionGrantLifecycleMessage(interaction, subject),

@@ -636,7 +636,6 @@ describe("public thread routes", () => {
       });
 
       createPendingInteraction(harness.db, {
-        kind: "approval",
         payload: "{}",
         providerId: "codex",
         providerRequestId: "request-1",

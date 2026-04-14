@@ -104,6 +104,10 @@ function getClaudeFilePermissionKind(
   return CLAUDE_FILE_PERMISSION_KIND_BY_TOOL_NAME.get(toolName) ?? null;
 }
 
+export function isClaudeConcreteFileChangeToolName(toolName: string): boolean {
+  return getClaudeFilePermissionKind(toolName) === "write";
+}
+
 function getSuggestedDirectories(
   suggestions: ClaudePermissionUpdate[] | undefined,
 ): string[] {

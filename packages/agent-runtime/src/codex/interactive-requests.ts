@@ -2,9 +2,9 @@ import type { CommandExecutionRequestApprovalResponse } from "./generated/codex-
 import type { FileChangeRequestApprovalResponse } from "./generated/codex-app-server/schema/v2/FileChangeRequestApprovalResponse.js";
 import type { PermissionsRequestApprovalResponse } from "./generated/codex-app-server/schema/v2/PermissionsRequestApprovalResponse.js";
 import type {
+  BuildInteractiveResponseArgs,
   DecodedInteractiveRequest,
   JsonRpcMessage,
-  ProviderAdapter,
 } from "../provider-adapter.js";
 import {
   ProviderRequestDecodeError as ProviderRequestDecodeErrorValue,
@@ -23,12 +23,6 @@ import {
   codexPermissionsRequestApprovalParamsSchema,
 } from "./schemas.js";
 
-type BuildCodexInteractiveResponseArgs = Parameters<
-  NonNullable<ProviderAdapter["buildInteractiveResponse"]>
->[0];
-type BuildCodexInteractiveResponseResolution =
-  BuildCodexInteractiveResponseArgs["resolution"];
-
 export type CodexInteractiveResponse =
   | CommandExecutionRequestApprovalResponse
   | FileChangeRequestApprovalResponse
@@ -39,13 +33,11 @@ function assertNever(value: never, message?: string): never {
 }
 
 function requireGrantedPermissions(
-  args: BuildCodexInteractiveResponseResolution,
+  args: Extract<
+    BuildInteractiveResponseArgs["resolution"],
+    { decision: "allow_once" | "allow_for_session" }
+  >,
 ) {
-  if (args.decision === "deny") {
-    throw new ProviderResponseEncodeError(
-      "Denied approval responses do not include granted permissions",
-    );
-  }
   if (args.grantedPermissions === null) {
     throw new ProviderResponseEncodeError(
       "Permission grant approval must include granted permissions",
@@ -83,7 +75,6 @@ export function decodeCodexInteractiveRequest(
         providerThreadId: parsed.data.threadId,
         turnId: parsed.data.turnId,
         payload: {
-          kind: "approval",
           subject: {
             kind: "command",
             itemId: parsed.data.itemId,
@@ -114,7 +105,6 @@ export function decodeCodexInteractiveRequest(
         providerThreadId: parsed.data.threadId,
         turnId: parsed.data.turnId,
         payload: {
-          kind: "approval",
           subject: {
             kind: "file_change",
             itemId: parsed.data.itemId,
@@ -150,7 +140,6 @@ export function decodeCodexInteractiveRequest(
         providerThreadId: parsed.data.threadId,
         turnId: parsed.data.turnId,
         payload: {
-          kind: "approval",
           subject: {
             kind: "permission_grant",
             itemId: parsed.data.itemId,
@@ -168,13 +157,8 @@ export function decodeCodexInteractiveRequest(
 }
 
 export function buildCodexInteractiveResponse(
-  args: BuildCodexInteractiveResponseArgs,
+  args: BuildInteractiveResponseArgs,
 ): CodexInteractiveResponse {
-  if (args.resolution.kind !== "approval") {
-    throw new ProviderResponseEncodeError(
-      "Interactive response kind mismatch for approval",
-    );
-  }
   switch (args.request.payload.subject.kind) {
     case "command": {
       const response: CommandExecutionRequestApprovalResponse = {

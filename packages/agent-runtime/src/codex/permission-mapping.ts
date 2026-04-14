@@ -20,9 +20,8 @@ const codexToPendingInteractionApprovalDecision = {
   accept: "allow_once",
   acceptForSession: "allow_for_session",
   decline: "deny",
-  cancel: "deny",
 } satisfies Record<
-  CodexSimpleCommandApprovalDecision,
+  Exclude<CodexSimpleCommandApprovalDecision, "cancel">,
   PendingInteractionApprovalDecision
 >;
 
@@ -101,6 +100,9 @@ export function toCodexGrantedPermissionProfile(
 function fromCodexCommandApprovalDecision(
   decision: CodexCommandApprovalDecision,
 ): PendingInteractionApprovalDecision | null {
+  if (decision === "cancel") {
+    return null;
+  }
   if (typeof decision === "string") {
     return codexToPendingInteractionApprovalDecision[decision];
   }

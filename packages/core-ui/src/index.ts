@@ -20,15 +20,10 @@ export {
   summarizePendingInteractionRequestedPermissions,
   toGrantedPendingInteractionPermissions,
 } from "./pending-interaction-formatting.js";
-export type {
-  PendingInteractionPermissionResolutionSummaryArgs,
-} from "./pending-interaction-formatting.js";
 export {
-  formatPendingInteractionKindLabel,
   formatPendingInteractionSummary,
 } from "./pending-interaction-presentation.js";
 export type {
-  FormatPendingInteractionKindLabelArgs,
   FormatPendingInteractionSummaryArgs,
   PendingInteractionPresentationSurface,
 } from "./pending-interaction-presentation.js";

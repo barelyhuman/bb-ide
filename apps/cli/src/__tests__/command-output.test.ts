@@ -96,7 +96,6 @@ function makePendingInteraction(
   return {
     createdAt: Date.now(),
     payload: {
-      kind: "approval",
       subject: {
         kind: "command",
         itemId: "item-1",
@@ -125,7 +124,6 @@ function makeCommandApprovalPayload(
   ],
 ): PendingInteraction["payload"] {
   return {
-    kind: "approval",
     subject: {
       kind: "command",
       itemId,
@@ -141,7 +139,6 @@ function makeCommandApprovalPayload(
 
 function makeFileChangeApprovalPayload(itemId: string): PendingInteraction["payload"] {
   return {
-    kind: "approval",
     subject: {
       kind: "file_change",
       itemId,
@@ -155,7 +152,6 @@ function makeFileChangeApprovalPayload(itemId: string): PendingInteraction["payl
 
 function makePermissionGrantApprovalPayload(itemId: string): PendingInteraction["payload"] {
   return {
-    kind: "approval",
     subject: {
       kind: "permission_grant",
       itemId,
@@ -2763,7 +2759,6 @@ describe("CLI JSON output contracts", () => {
         turnId: "turn-show-resolving",
         status: "resolving",
         resolution: {
-          kind: "approval",
           decision: "allow_for_session",
           grantedPermissions: null,
         },
@@ -2818,7 +2813,6 @@ describe("CLI JSON output contracts", () => {
         status: "resolving",
         resolvedAt: null,
         resolution: {
-          kind: "approval",
           decision: "allow_once",
           grantedPermissions: null,
         },
@@ -2853,7 +2847,6 @@ describe("CLI JSON output contracts", () => {
         interactionId: "int-approve",
       },
       json: {
-        kind: "approval",
         decision: "allow_once",
         grantedPermissions: null,
       },
@@ -2893,7 +2886,6 @@ describe("CLI JSON output contracts", () => {
         status: "resolving",
         resolvedAt: null,
         resolution: {
-          kind: "approval",
           decision: "allow_once",
           grantedPermissions: null,
         },
@@ -2929,7 +2921,6 @@ describe("CLI JSON output contracts", () => {
         interactionId: "int-approve-no-session",
       },
       json: {
-        kind: "approval",
         decision: "allow_once",
         grantedPermissions: null,
       },
@@ -3003,7 +2994,6 @@ describe("CLI JSON output contracts", () => {
         status: "resolving",
         resolvedAt: null,
         resolution: {
-          kind: "approval",
           decision: "deny",
         },
       }),
@@ -3037,7 +3027,6 @@ describe("CLI JSON output contracts", () => {
         interactionId: "int-deny",
       },
       json: {
-        kind: "approval",
         decision: "deny",
       },
     });
@@ -3112,7 +3101,6 @@ describe("CLI JSON output contracts", () => {
         status: "resolving",
         resolvedAt: null,
         resolution: {
-          kind: "approval",
           decision: "allow_once",
           grantedPermissions: null,
         },
@@ -3147,7 +3135,6 @@ describe("CLI JSON output contracts", () => {
         interactionId: "int-file-change",
       },
       json: {
-        kind: "approval",
         decision: "allow_once",
         grantedPermissions: null,
       },
@@ -3181,7 +3168,6 @@ describe("CLI JSON output contracts", () => {
         status: "resolving",
         resolvedAt: null,
         resolution: {
-          kind: "approval",
           decision: "allow_for_session",
           grantedPermissions: {
             network: { enabled: true },
@@ -3229,7 +3215,6 @@ describe("CLI JSON output contracts", () => {
         interactionId: "int-permission-grant",
       },
       json: {
-        kind: "approval",
         decision: "allow_for_session",
         grantedPermissions: {
           network: { enabled: true },
@@ -3269,7 +3254,6 @@ describe("CLI JSON output contracts", () => {
         status: "resolving",
         resolvedAt: null,
         resolution: {
-          kind: "approval",
           decision: "allow_once",
           grantedPermissions: {
             network: { enabled: true },
@@ -3319,7 +3303,6 @@ describe("CLI JSON output contracts", () => {
         interactionId: "int-claude-permission-grant",
       },
       json: {
-        kind: "approval",
         decision: "allow_once",
         grantedPermissions: {
           network: { enabled: true },
@@ -3359,7 +3342,6 @@ describe("CLI JSON output contracts", () => {
         status: "resolving",
         resolvedAt: null,
         resolution: {
-          kind: "approval",
           decision: "deny",
         },
       }),
@@ -3394,7 +3376,6 @@ describe("CLI JSON output contracts", () => {
         interactionId: "int-permission-deny",
       },
       json: {
-        kind: "approval",
         decision: "deny",
       },
     });

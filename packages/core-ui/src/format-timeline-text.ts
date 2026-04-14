@@ -260,13 +260,9 @@ function formatOperation(
   lines.push(separator(`Operation: ${msg.title}`, color));
   if (msg.detail) lines.push(dim(`  ${msg.detail}`, color));
   if (verbose && msg.approvalTarget) {
-    switch (msg.approvalTarget.kind) {
-      case "permission_grant":
-        lines.push(`  item: ${msg.approvalTarget.itemId}`);
-        if (msg.approvalTarget.toolName) {
-          lines.push(dim(`  tool: ${msg.approvalTarget.toolName}`, color));
-        }
-        break;
+    lines.push(`  item: ${msg.approvalTarget.itemId}`);
+    if (msg.approvalTarget.toolName) {
+      lines.push(dim(`  tool: ${msg.approvalTarget.toolName}`, color));
     }
   }
   if (

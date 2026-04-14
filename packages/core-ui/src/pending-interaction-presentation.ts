@@ -4,22 +4,6 @@ import { summarizePendingInteractionRequestedPermissions } from "./pending-inter
 
 export type PendingInteractionPresentationSurface = "app" | "cli";
 
-export interface FormatPendingInteractionKindLabelArgs {
-  kind: PendingInteraction["payload"]["kind"];
-  surface: PendingInteractionPresentationSurface;
-}
-
-export function formatPendingInteractionKindLabel(
-  args: FormatPendingInteractionKindLabelArgs,
-): string {
-  switch (args.kind) {
-    case "approval":
-      return args.surface === "app" ? "Approval" : "approval";
-    default:
-      return assertNever(args.kind);
-  }
-}
-
 export interface FormatPendingInteractionSummaryArgs {
   interaction: PendingInteraction;
   surface: PendingInteractionPresentationSurface;

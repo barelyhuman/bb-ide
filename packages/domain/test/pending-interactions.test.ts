@@ -15,7 +15,6 @@ describe("pending interaction schemas", () => {
         providerThreadId: "provider-thread-123",
         providerRequestId: "request-123",
         payload: {
-          kind: "approval",
           subject: {
             kind: "command",
             itemId: "item_123",
@@ -34,7 +33,6 @@ describe("pending interaction schemas", () => {
     ).toMatchObject({
       providerId: "codex",
       payload: {
-        kind: "approval",
         subject: {
           kind: "command",
         },
@@ -52,7 +50,6 @@ describe("pending interaction schemas", () => {
         providerThreadId: "provider-thread-124",
         providerRequestId: "request-124",
         payload: {
-          kind: "approval",
           subject: {
             kind: "file_change",
             itemId: "item_124",
@@ -84,7 +81,6 @@ describe("pending interaction schemas", () => {
         providerRequestId: "request-125",
         status: "resolved",
         payload: {
-          kind: "approval",
           subject: {
             kind: "permission_grant",
             itemId: "item_125",
@@ -100,7 +96,6 @@ describe("pending interaction schemas", () => {
           availableDecisions: ["allow_once", "allow_for_session", "deny"],
         },
         resolution: {
-          kind: "approval",
           decision: "allow_for_session",
           grantedPermissions: {
             network: {
@@ -115,7 +110,6 @@ describe("pending interaction schemas", () => {
       }),
     ).toMatchObject({
       resolution: {
-        kind: "approval",
         decision: "allow_for_session",
       },
     });

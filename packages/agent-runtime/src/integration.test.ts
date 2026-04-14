@@ -212,7 +212,6 @@ function createTempFileName(prefix: string): string {
 }
 
 function expectSemanticApprovalRequest(request: PendingInteractionCreate): void {
-  expect(request.payload.kind).toBe("approval");
   expect(["command", "file_change", "permission_grant"]).toContain(
     request.payload.subject.kind,
   );
@@ -290,7 +289,7 @@ function createTestRuntime(
       if (opts?.onInteractiveRequest) {
         return opts.onInteractiveRequest(req);
       }
-      throw new Error(`Unexpected interactive request: ${req.payload.kind}`);
+      throw new Error(`Unexpected interactive request: ${req.payload.subject.kind}`);
     },
     onStderr: () => {},
   });
@@ -315,29 +314,23 @@ function cleanup(ctx: TestContext): void {
 async function createApprovalResolution(
   request: PendingInteractionCreate,
 ): Promise<PendingInteractionResolution> {
-  switch (request.payload.kind) {
-    case "approval": {
-      return {
-        kind: "approval",
-        decision: request.payload.availableDecisions.includes("allow_for_session")
-          ? "allow_for_session"
-          : "allow_once",
-        grantedPermissions:
-          request.payload.subject.kind === "permission_grant"
-            ? request.payload.subject.permissions
-            : request.payload.subject.kind === "command"
-              || request.payload.subject.kind === "file_change"
-              ? request.payload.subject.sessionGrant
-            : null,
-      };
-    }
-  }
+  return {
+    decision: request.payload.availableDecisions.includes("allow_for_session")
+      ? "allow_for_session"
+      : "allow_once",
+    grantedPermissions:
+      request.payload.subject.kind === "permission_grant"
+        ? request.payload.subject.permissions
+        : request.payload.subject.kind === "command"
+          || request.payload.subject.kind === "file_change"
+        ? request.payload.subject.sessionGrant
+        : null,
+  };
 }
 
 function isWriteApprovalRequest(request: PendingInteractionCreate): boolean {
   return (
-    request.payload.kind === "approval"
-    && (
+    (
       request.payload.subject.kind === "command"
       || request.payload.subject.kind === "file_change"
     )
@@ -932,15 +925,12 @@ describe("interactive request scenarios", () => {
     const expectedLine = getFirstNonEmptyLine(hostsPath);
     const ctx = createTestRuntime("claude-code", {
       onInteractiveRequest: async (request) => {
-        if (
-          request.payload.kind !== "approval"
-          || request.payload.subject.kind !== "permission_grant"
+        if ( request.payload.subject.kind !== "permission_grant"
         ) {
-          throw new Error(`Expected permission grant approval, got ${request.payload.kind}`);
+          throw new Error(`Expected permission grant approval, got ${request.payload.subject.kind}`);
         }
 
         return {
-          kind: "approval",
           decision: "allow_once",
           grantedPermissions: request.payload.subject.permissions,
         };
@@ -982,7 +972,6 @@ describe("interactive request scenarios", () => {
 
       expect(ctx.interactiveRequests).toHaveLength(1);
       expect(ctx.interactiveRequests[0]?.payload).toMatchObject({
-        kind: "approval",
         subject: {
           kind: "permission_grant",
           toolName: "Read",
@@ -1318,9 +1307,7 @@ describe("interactive request scenarios", () => {
         label: "Codex readonly file-change turn/completed",
       });
 
-      const fileChangeApproval = ctx.interactiveRequests.find((request) =>
-        request.payload.kind === "approval"
-        && request.payload.subject.kind === "file_change"
+      const fileChangeApproval = ctx.interactiveRequests.find((request) => request.payload.subject.kind === "file_change"
         && request.payload.availableDecisions.includes("allow_once")
       );
       expect(fileChangeApproval, `Expected a Codex file-change approval; got ${JSON.stringify(
@@ -1328,7 +1315,6 @@ describe("interactive request scenarios", () => {
       )}`).toBeDefined();
       if (
         !fileChangeApproval
-        || fileChangeApproval.payload.kind !== "approval"
         || fileChangeApproval.payload.subject.kind !== "file_change"
       ) {
         throw new Error("Expected a semantic file-change approval");
@@ -1354,17 +1340,14 @@ describe("interactive request scenarios", () => {
   it.concurrent("respects user-denied Codex command approvals in readonly ask mode", async () => {
     const ctx = createTestRuntime("codex", {
       onInteractiveRequest: async (request) => {
-        if (
-          request.payload.kind !== "approval"
-          || request.payload.subject.kind !== "command"
+        if ( request.payload.subject.kind !== "command"
         ) {
-          throw new Error(`Expected command approval, got ${request.payload.kind}`);
+          throw new Error(`Expected command approval, got ${request.payload.subject.kind}`);
         }
         if (!request.payload.availableDecisions.includes("deny")) {
           throw new Error("Codex command approval did not offer deny");
         }
         return {
-          kind: "approval",
           decision: "deny",
         };
       },
@@ -1405,9 +1388,7 @@ describe("interactive request scenarios", () => {
         label: "Codex user-denied turn/completed",
       });
 
-      expect(ctx.interactiveRequests.some((request) =>
-        request.payload.kind === "approval"
-        && request.payload.subject.kind === "command",
+      expect(ctx.interactiveRequests.some((request) => request.payload.subject.kind === "command",
       )).toBe(true);
       expect(existsSync(filePath)).toBe(false);
     } finally {
@@ -1495,9 +1476,7 @@ describe("interactive request scenarios", () => {
         label: "Codex readonly network turn/completed",
       });
 
-      const commandApproval = ctx.interactiveRequests.find((request) =>
-        request.payload.kind === "approval"
-        && request.payload.subject.kind === "command"
+      const commandApproval = ctx.interactiveRequests.find((request) => request.payload.subject.kind === "command"
         && request.payload.availableDecisions.includes("allow_once")
       );
       expect(commandApproval, `Expected a Codex command approval for network access; got ${JSON.stringify(
@@ -1505,7 +1484,6 @@ describe("interactive request scenarios", () => {
       )}`).toBeDefined();
       if (
         !commandApproval
-        || commandApproval.payload.kind !== "approval"
         || commandApproval.payload.subject.kind !== "command"
       ) {
         throw new Error("Expected a semantic command approval");
@@ -1557,16 +1535,13 @@ describe("interactive request scenarios", () => {
         label: "Claude readonly ask turn/completed",
       });
 
-      const commandApproval = ctx.interactiveRequests.find((request) =>
-        request.payload.kind === "approval"
-        && request.payload.subject.kind === "command"
+      const commandApproval = ctx.interactiveRequests.find((request) => request.payload.subject.kind === "command"
         && request.payload.availableDecisions.includes("allow_once")
         && request.payload.availableDecisions.includes("deny")
       );
       expect(commandApproval).toBeDefined();
       if (
         !commandApproval
-        || commandApproval.payload.kind !== "approval"
         || commandApproval.payload.subject.kind !== "command"
       ) {
         throw new Error("Expected a semantic command approval");
@@ -1626,16 +1601,13 @@ describe("interactive request scenarios", () => {
         label: "Claude readonly Write ask turn/completed",
       });
 
-      const fileChangeApproval = ctx.interactiveRequests.find((request) =>
-        request.payload.kind === "approval"
-        && request.payload.subject.kind === "file_change"
+      const fileChangeApproval = ctx.interactiveRequests.find((request) => request.payload.subject.kind === "file_change"
         && request.payload.availableDecisions.includes("allow_once")
         && request.payload.availableDecisions.includes("deny")
       );
       expect(fileChangeApproval).toBeDefined();
       if (
         !fileChangeApproval
-        || fileChangeApproval.payload.kind !== "approval"
         || fileChangeApproval.payload.subject.kind !== "file_change"
       ) {
         throw new Error("Expected a semantic file-change approval");
@@ -1691,9 +1663,7 @@ describe("interactive request scenarios", () => {
 
       const firstRequestCount = ctx.interactiveRequests.length;
       expect(
-        ctx.interactiveRequests.some((request) =>
-          request.payload.kind === "approval"
-          && request.payload.subject.kind === "permission_grant"
+        ctx.interactiveRequests.some((request) => request.payload.subject.kind === "permission_grant"
           && request.payload.subject.toolName === "WebFetch"
           && request.payload.availableDecisions.includes("allow_for_session")
         ),
@@ -1728,11 +1698,7 @@ describe("interactive request scenarios", () => {
   it.concurrent("respects user-denied Claude permission requests in readonly ask mode", async () => {
     const ctx = createTestRuntime("claude-code", {
       onInteractiveRequest: async (request) => {
-        if (request.payload.kind !== "approval") {
-          throw new Error(`Expected approval, got ${request.payload.kind}`);
-        }
         return {
-          kind: "approval",
           decision: "deny",
         };
       },
@@ -1773,9 +1739,7 @@ describe("interactive request scenarios", () => {
         label: "Claude user-denied turn/completed",
       });
 
-      expect(ctx.interactiveRequests.some((request) =>
-        request.payload.kind === "approval"
-        && request.payload.subject.kind === "command",
+      expect(ctx.interactiveRequests.some((request) => request.payload.subject.kind === "command",
       )).toBe(true);
       expect(existsSync(filePath)).toBe(false);
     } finally {

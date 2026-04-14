@@ -251,7 +251,6 @@ describe("host-daemon command schemas", () => {
         providerThreadId: "provider-thread-123",
         providerRequestId: "request-123",
         resolution: {
-          kind: "approval",
           decision: "allow_for_session",
           grantedPermissions: null,
         },
@@ -784,12 +783,13 @@ describe("host-daemon session schemas", () => {
           providerThreadId: "provider-thread-123",
           providerRequestId: "request-123",
           payload: {
-            kind: "approval",
             subject: {
               kind: "command",
               itemId: "item_123",
               command: "git push",
               cwd: "/tmp/project",
+              actions: [],
+              sessionGrant: null,
             },
             reason: "Needs approval",
             availableDecisions: ["allow_once", "deny"],

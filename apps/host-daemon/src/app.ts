@@ -337,7 +337,7 @@ export async function createHostDaemonApp(
             providerThreadId: request.providerThreadId,
             turnId: request.turnId,
             providerRequestId: request.providerRequestId,
-            kind: request.payload.kind,
+            kind: "approval",
           },
           "Failed to forward interactive provider request to server",
         );

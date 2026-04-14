@@ -1421,7 +1421,6 @@ describe("codex provider adapter", () => {
       providerThreadId: "t1",
       turnId: "turn-1",
       payload: {
-        kind: "approval",
         subject: {
           kind: "command",
           itemId: "item-1",
@@ -1465,10 +1464,30 @@ describe("codex provider adapter", () => {
     ).toThrowError(ProviderRequestDecodeError);
   });
 
-  it("decodeInteractiveRequest omits unsupported macOS permissions from command session grants", () => {
+  it("decodeInteractiveRequest rejects cancel-only command approval decisions", () => {
     const adapter = createCodexProviderAdapter();
     expect(
-      adapter.decodeInteractiveRequest?.({
+      () => adapter.decodeInteractiveRequest?.({
+        jsonrpc: "2.0",
+        id: 8,
+        method: "item/commandExecution/requestApproval",
+        params: {
+          threadId: "t1",
+          turnId: "turn-1",
+          itemId: "item-1",
+          reason: "Needs approval",
+          command: "git push",
+          cwd: "/tmp/project",
+          commandActions: [],
+          availableDecisions: ["cancel"],
+        },
+      }),
+    ).toThrowError(ProviderRequestDecodeError);
+  });
+
+  it("decodeInteractiveRequest omits unsupported macOS permissions from command session grants", () => {
+    const adapter = createCodexProviderAdapter();
+    const decoded = adapter.decodeInteractiveRequest?.({
         jsonrpc: "2.0",
         id: 8,
         method: "item/commandExecution/requestApproval",
@@ -1497,25 +1516,23 @@ describe("codex provider adapter", () => {
           },
           availableDecisions: ["accept", "decline", "cancel"],
         },
-      }),
-    ).toMatchObject({
-      payload: {
-        kind: "approval",
-        subject: {
-          kind: "command",
-          sessionGrant: {
-            network: null,
-            fileSystem: null,
-          },
-        },
+      });
+    expect(decoded?.payload.subject).toEqual({
+      kind: "command",
+      itemId: "item-1",
+      command: "osascript -e 'tell app \"Finder\" to activate'",
+      cwd: "/tmp/project",
+      actions: [],
+      sessionGrant: {
+        network: null,
+        fileSystem: null,
       },
     });
   });
 
   it("decodeInteractiveRequest preserves macOS automation none in command approvals", () => {
     const adapter = createCodexProviderAdapter();
-    expect(
-      adapter.decodeInteractiveRequest?.({
+    const decoded = adapter.decodeInteractiveRequest?.({
         jsonrpc: "2.0",
         id: 81,
         method: "item/commandExecution/requestApproval",
@@ -1542,18 +1559,23 @@ describe("codex provider adapter", () => {
           },
           availableDecisions: ["accept", "decline", "cancel"],
         },
-      }),
-    ).toMatchObject({
-      payload: {
-        kind: "approval",
+      });
+    expect(decoded?.payload.subject).toEqual({
+      kind: "command",
+      itemId: "item-1",
+      command: "open -a Finder",
+      cwd: "/tmp/project",
+      actions: [],
+      sessionGrant: {
+        network: null,
+        fileSystem: null,
       },
     });
   });
 
   it("decodeInteractiveRequest omits unsupported macOS automation grants from command session grants", () => {
     const adapter = createCodexProviderAdapter();
-    expect(
-      adapter.decodeInteractiveRequest?.({
+    const decoded = adapter.decodeInteractiveRequest?.({
         jsonrpc: "2.0",
         id: 82,
         method: "item/commandExecution/requestApproval",
@@ -1580,17 +1602,16 @@ describe("codex provider adapter", () => {
           },
           availableDecisions: ["accept", "decline", "cancel"],
         },
-      }),
-    ).toMatchObject({
-      payload: {
-        kind: "approval",
-        subject: {
-          kind: "command",
-          sessionGrant: {
-            network: null,
-            fileSystem: null,
-          },
-        },
+      });
+    expect(decoded?.payload.subject).toEqual({
+      kind: "command",
+      itemId: "item-1",
+      command: "open -a Finder",
+      cwd: "/tmp/project",
+      actions: [],
+      sessionGrant: {
+        network: null,
+        fileSystem: null,
       },
     });
   });
@@ -1636,7 +1657,6 @@ describe("codex provider adapter", () => {
       }),
     ).toMatchObject({
       payload: {
-        kind: "approval",
         availableDecisions: ["deny"],
       },
     });
@@ -1663,7 +1683,6 @@ describe("codex provider adapter", () => {
       providerThreadId: "t1",
       turnId: "turn-file-change",
       payload: {
-        kind: "approval",
         subject: {
           kind: "file_change",
           itemId: "item-file-change",
@@ -1709,7 +1728,6 @@ describe("codex provider adapter", () => {
       providerThreadId: "t1",
       turnId: "turn-permissions",
       payload: {
-        kind: "approval",
         subject: {
           kind: "permission_grant",
           itemId: "item-permissions",
@@ -1738,7 +1756,6 @@ describe("codex provider adapter", () => {
           providerThreadId: "t1",
           turnId: "turn-1",
           payload: {
-            kind: "approval",
             subject: {
               kind: "command",
               itemId: "item-1",
@@ -1752,7 +1769,6 @@ describe("codex provider adapter", () => {
           },
         },
         resolution: {
-          kind: "approval",
           decision: "allow_for_session",
           grantedPermissions: null,
         },
@@ -1772,7 +1788,6 @@ describe("codex provider adapter", () => {
           providerThreadId: "t1",
           turnId: "turn-3",
           payload: {
-            kind: "approval",
             subject: {
               kind: "command",
               itemId: "item-3",
@@ -1786,7 +1801,6 @@ describe("codex provider adapter", () => {
           },
         },
         resolution: {
-          kind: "approval",
           decision: "deny",
         },
       }),
@@ -1805,7 +1819,6 @@ describe("codex provider adapter", () => {
           providerThreadId: "t1",
           turnId: "turn-file-change",
           payload: {
-            kind: "approval",
             subject: {
               kind: "file_change",
               itemId: "item-file-change",
@@ -1817,7 +1830,6 @@ describe("codex provider adapter", () => {
           },
         },
         resolution: {
-          kind: "approval",
           decision: "allow_for_session",
           grantedPermissions: null,
         },
@@ -1837,7 +1849,6 @@ describe("codex provider adapter", () => {
           providerThreadId: "t1",
           turnId: "turn-permissions",
           payload: {
-            kind: "approval",
             subject: {
               kind: "permission_grant",
               itemId: "item-permissions",
@@ -1855,7 +1866,6 @@ describe("codex provider adapter", () => {
           },
         },
         resolution: {
-          kind: "approval",
           decision: "allow_for_session",
           grantedPermissions: {
             network: { enabled: true },

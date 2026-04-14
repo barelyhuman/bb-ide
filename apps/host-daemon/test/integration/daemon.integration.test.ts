@@ -136,7 +136,6 @@ rl.on("line", (line) => {
     pendingInteractive.delete(message.id);
     const decision =
       message.result && message.result.resolution
-      && message.result.resolution.kind === "approval"
         ? message.result.resolution.decision
         : "unknown";
     completeTurn(pending.providerThreadId, pending.turnId, "interactive:" + decision);
@@ -218,7 +217,6 @@ function createInteractiveRequestAdapter(scriptPath: string): ProviderAdapter {
         providerThreadId: params.threadId,
         turnId: params.turnId,
         payload: {
-          kind: "approval",
           subject: {
             kind: "command",
             itemId: params.itemId,
@@ -487,7 +485,6 @@ describe("host daemon integration", () => {
         providerId: "fake",
         providerThreadId: "prov-1",
         payload: {
-          kind: "approval",
           subject: {
             kind: "command",
             itemId: "item-host-daemon",
@@ -507,7 +504,6 @@ describe("host daemon integration", () => {
         providerThreadId: interactiveRequest.interaction.providerThreadId,
         providerRequestId: interactiveRequest.interaction.providerRequestId,
         resolution: {
-          kind: "approval",
           decision: "allow_for_session",
           grantedPermissions: null,
         },

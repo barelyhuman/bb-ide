@@ -455,7 +455,6 @@ describe("claude-code provider adapter", () => {
       providerThreadId: "claude-session-1",
       turnId: "",
       payload: {
-        kind: "approval",
         subject: {
           kind: "permission_grant",
           itemId: "toolu_1",
@@ -498,7 +497,6 @@ describe("claude-code provider adapter", () => {
       }),
     ).toMatchObject({
       payload: {
-        kind: "approval",
         subject: {
           kind: "command",
           itemId: "toolu_bash",
@@ -548,7 +546,6 @@ describe("claude-code provider adapter", () => {
       }),
     ).toMatchObject({
       payload: {
-        kind: "approval",
         subject: {
           kind: "file_change",
           itemId: "toolu_edit",
@@ -602,7 +599,6 @@ describe("claude-code provider adapter", () => {
           providerThreadId: "claude-session-1",
           turnId: "",
           payload: {
-            kind: "approval",
             subject: {
               kind: "permission_grant",
               itemId: "toolu_3",
@@ -617,7 +613,6 @@ describe("claude-code provider adapter", () => {
           },
         },
         resolution: {
-          kind: "approval",
           decision: "allow_for_session",
           grantedPermissions: {
             network: { enabled: true },
@@ -651,7 +646,6 @@ describe("claude-code provider adapter", () => {
           providerThreadId: "claude-session-1",
           turnId: "",
           payload: {
-            kind: "approval",
             subject: {
               kind: "command",
               itemId: "toolu_3b",
@@ -671,7 +665,6 @@ describe("claude-code provider adapter", () => {
           },
         },
         resolution: {
-          kind: "approval",
           decision: "allow_for_session",
           grantedPermissions: {
             network: null,
@@ -707,7 +700,6 @@ describe("claude-code provider adapter", () => {
           providerThreadId: "claude-session-1",
           turnId: "",
           payload: {
-            kind: "approval",
             subject: {
               kind: "file_change",
               itemId: "toolu_3d",
@@ -725,7 +717,6 @@ describe("claude-code provider adapter", () => {
           },
         },
         resolution: {
-          kind: "approval",
           decision: "allow_for_session",
           grantedPermissions: {
             network: null,
@@ -761,7 +752,6 @@ describe("claude-code provider adapter", () => {
           providerThreadId: "claude-session-1",
           turnId: "",
           payload: {
-            kind: "approval",
             subject: {
               kind: "file_change",
               itemId: "toolu_3e",
@@ -773,7 +763,6 @@ describe("claude-code provider adapter", () => {
           },
         },
         resolution: {
-          kind: "approval",
           decision: "allow_for_session",
           grantedPermissions: null,
         },
@@ -793,7 +782,6 @@ describe("claude-code provider adapter", () => {
           providerThreadId: "claude-session-1",
           turnId: "",
           payload: {
-            kind: "approval",
             subject: {
               kind: "command",
               itemId: "toolu_3c",
@@ -807,7 +795,6 @@ describe("claude-code provider adapter", () => {
           },
         },
         resolution: {
-          kind: "approval",
           decision: "allow_once",
           grantedPermissions: null,
         },

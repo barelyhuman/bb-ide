@@ -90,7 +90,6 @@ describe("public thread interaction routes", () => {
           threadId: thread.id,
           status: "pending",
           payload: {
-            kind: "approval",
             subject: {
               kind: "command",
               command: "git push",
@@ -288,7 +287,6 @@ describe("public thread interaction routes", () => {
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            kind: "approval",
             decision: "allow_once",
             grantedPermissions: null,
           }),
@@ -478,7 +476,6 @@ describe("public thread interaction routes", () => {
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            kind: "approval",
             decision: "allow_once",
             grantedPermissions: {
               network: { enabled: true },

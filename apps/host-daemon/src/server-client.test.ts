@@ -19,7 +19,6 @@ function createInteractiveRequest(): PendingInteractionCreate {
     providerThreadId: "provider-thread-123",
     providerRequestId: "request-123",
     payload: {
-      kind: "approval",
       subject: {
         kind: "command",
         itemId: "item-123",

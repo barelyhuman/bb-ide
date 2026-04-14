@@ -51,7 +51,6 @@ export function createCommandApprovalPayload(
   options: CommandApprovalPayloadOptions = {},
 ): ApprovalPayload {
   return {
-    kind: "approval",
     subject: {
       kind: "command",
       itemId: options.itemId ?? "item-command-approval",
@@ -69,7 +68,6 @@ export function createFileChangeApprovalPayload(
   options: FileChangeApprovalPayloadOptions = {},
 ): ApprovalPayload {
   return {
-    kind: "approval",
     subject: {
       kind: "file_change",
       itemId: options.itemId ?? "item-file-change-approval",
@@ -86,7 +84,6 @@ export function createPermissionGrantApprovalPayload(
 ): ApprovalPayload {
   const permissions = options.permissions ?? defaultGrantablePermissions;
   return {
-    kind: "approval",
     subject: {
       kind: "permission_grant",
       itemId: options.itemId ?? "item-permission-grant",
@@ -102,7 +99,6 @@ export function createAllowOnceResolution(
   grantedPermissions: PendingInteractionGrantedPermissionProfile | null = null,
 ): ApprovalPendingInteractionResolution {
   return {
-    kind: "approval",
     decision: "allow_once",
     grantedPermissions,
   };
@@ -112,7 +108,6 @@ export function createAllowForSessionResolution(
   grantedPermissions: PendingInteractionGrantedPermissionProfile | null = null,
 ): ApprovalPendingInteractionResolution {
   return {
-    kind: "approval",
     decision: "allow_for_session",
     grantedPermissions,
   };
@@ -120,7 +115,6 @@ export function createAllowForSessionResolution(
 
 export function createDenyResolution(): ApprovalPendingInteractionResolution {
   return {
-    kind: "approval",
     decision: "deny",
   };
 }

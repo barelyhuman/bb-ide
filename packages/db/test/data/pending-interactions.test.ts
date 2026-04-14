@@ -56,7 +56,6 @@ function setup() {
 
 function commandApprovalPayload(command: string, itemId: string): string {
   return JSON.stringify({
-    kind: "approval",
     subject: {
       kind: "command",
       itemId,
@@ -70,7 +69,6 @@ function commandApprovalPayload(command: string, itemId: string): string {
 
 function fileChangeApprovalPayload(itemId: string): string {
   return JSON.stringify({
-    kind: "approval",
     subject: {
       kind: "file_change",
       itemId,
@@ -91,7 +89,6 @@ describe("pending interactions", () => {
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-1",
       sessionId: "session-1",
-      kind: "approval",
       payload: commandApprovalPayload("git push", "item-1"),
     });
 
@@ -117,7 +114,6 @@ describe("pending interactions", () => {
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-1",
       sessionId: "session-1",
-      kind: "approval",
       payload: commandApprovalPayload("git push", "item-1"),
     });
     const newer = createPendingInteraction(db, {
@@ -127,7 +123,6 @@ describe("pending interactions", () => {
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-2",
       sessionId: "session-1",
-      kind: "approval",
       payload: fileChangeApprovalPayload("item-2"),
     });
 
@@ -139,7 +134,6 @@ describe("pending interactions", () => {
     const resolved = setPendingInteractionResolved(db, {
       id: older.id,
       resolution: JSON.stringify({
-        kind: "approval",
         decision: "allow_for_session",
         grantedPermissions: null,
       }),
@@ -161,7 +155,6 @@ describe("pending interactions", () => {
       providerThreadId: "provider-thread-1",
       providerRequestId: "request-1",
       sessionId: "session-1",
-      kind: "approval",
       payload: commandApprovalPayload("git push", "item-1"),
     });
     createPendingInteraction(db, {
@@ -171,7 +164,6 @@ describe("pending interactions", () => {
       providerThreadId: "provider-thread-2",
       providerRequestId: "request-2",
       sessionId: "session-1",
-      kind: "approval",
       payload: commandApprovalPayload("rm -rf build", "item-2"),
     });
 
@@ -215,7 +207,6 @@ describe("pending interactions", () => {
         providerThreadId: `provider-thread-batched-interrupt-provider-${index}`,
         providerRequestId: `request-batched-interrupt-provider-${index}`,
         sessionId: "session-1",
-        kind: "approval",
         payload: commandApprovalPayload(
           "git push",
           `item-batched-interrupt-provider-${index}`,
@@ -259,7 +250,6 @@ describe("pending interactions", () => {
         providerThreadId: `provider-thread-batched-interrupt-thread-${index}`,
         providerRequestId: `request-batched-interrupt-thread-${index}`,
         sessionId: "session-1",
-        kind: "approval",
         payload: commandApprovalPayload(
           "git push",
           `item-batched-interrupt-thread-${index}`,
@@ -287,7 +277,6 @@ describe("pending interactions", () => {
       providerThreadId: "provider-thread-expire-1",
       providerRequestId: "request-expire-1",
       sessionId: "session-1",
-      kind: "approval",
       payload: commandApprovalPayload("git push", "item-expire-1"),
     });
 
@@ -333,7 +322,6 @@ describe("pending interactions", () => {
         providerThreadId: `provider-thread-batched-${index}`,
         providerRequestId: `request-batched-${index}`,
         sessionId: "session-1",
-        kind: "approval",
         payload: commandApprovalPayload("git push", `item-batched-${index}`),
       });
     }

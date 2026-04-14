@@ -67,8 +67,10 @@ function scopeProviderRequestId(
 function buildDeniedInteractiveResolution(
   payload: PendingInteractionPayload,
 ): PendingInteractionResolution {
+  if (!payload.availableDecisions.includes("deny")) {
+    throw new Error("Interactive request cannot be auto-denied because deny is unavailable");
+  }
   return {
-    kind: payload.kind,
     decision: "deny",
   };
 }

@@ -288,7 +288,6 @@ export class PendingInteractionLifecycle {
           providerThreadId: interaction.providerThreadId,
           providerRequestId: interaction.providerRequestId,
           sessionId: args.sessionId,
-          kind: interaction.payload.kind,
           payload: JSON.stringify(interaction.payload),
         }),
       };

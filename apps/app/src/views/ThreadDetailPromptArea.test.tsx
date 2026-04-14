@@ -62,7 +62,6 @@ function createPendingInteraction(): PendingInteraction {
     providerRequestId: "request-1",
     status: "pending",
     payload: {
-      kind: "approval",
       subject: {
         kind: "permission_grant",
         itemId: "item_1",

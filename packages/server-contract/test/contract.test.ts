@@ -297,12 +297,13 @@ describe("server-contract canonical schemas", () => {
           providerRequestId: "request-123",
           status: "pending",
           payload: {
-            kind: "approval",
             subject: {
               kind: "command",
               itemId: "item_123",
               command: "git push",
               cwd: "/tmp/project",
+              actions: [],
+              sessionGrant: null,
             },
             reason: "Needs approval",
             availableDecisions: ["allow_once", "deny"],
@@ -317,22 +318,18 @@ describe("server-contract canonical schemas", () => {
 
     expect(
       resolvePendingInteractionRequestSchema.parse({
-        kind: "approval",
         decision: "allow_for_session",
         grantedPermissions: null,
       }),
     ).toMatchObject({
-      kind: "approval",
       decision: "allow_for_session",
     });
 
     expect(
       resolvePendingInteractionRequestSchema.parse({
-        kind: "approval",
         decision: "deny",
       }),
     ).toMatchObject({
-      kind: "approval",
       decision: "deny",
     });
 

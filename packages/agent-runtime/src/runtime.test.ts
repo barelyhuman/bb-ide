@@ -138,7 +138,6 @@ describe("createAgentRuntime", () => {
             providerThreadId: params.threadId,
             turnId: params.turnId,
             payload: {
-              kind: "approval",
               subject: {
                 kind: "command",
                 itemId: params.itemId,
@@ -160,7 +159,6 @@ describe("createAgentRuntime", () => {
             providerThreadId: params.threadId,
             turnId: params.turnId,
             payload: {
-              kind: "approval",
               subject: {
                 kind: "file_change",
                 itemId: params.itemId,
@@ -1225,7 +1223,6 @@ rl.on("line", (line) => {
     pendingInteractive.delete(message.id);
     const decision =
       message.result && message.result.resolution
-      && message.result.resolution.kind === "approval"
         ? message.result.resolution.decision
         : "unknown";
     completeTurn(pending.providerThreadId, pending.turnId, "interactive:" + decision);
@@ -1280,7 +1277,7 @@ rl.on("line", (line) => {
       "utf8",
     );
 
-    const requests: Array<{ threadId: string; providerThreadId: string; kind: string }> = [];
+    const requests: Array<{ threadId: string; providerThreadId: string }> = [];
     const events: ThreadEvent[] = [];
     const runtime = createAgentRuntime({
       workspacePath: tmpDir,
@@ -1293,10 +1290,8 @@ rl.on("line", (line) => {
         requests.push({
           threadId: request.threadId,
           providerThreadId: request.providerThreadId,
-          kind: request.payload.kind,
         });
         return {
-          kind: "approval",
           decision: "allow_for_session",
           grantedPermissions: null,
         };
@@ -1331,7 +1326,6 @@ rl.on("line", (line) => {
       {
         threadId: "t1",
         providerThreadId: "prov-1",
-        kind: "approval",
       },
     ]);
     expect(events).toContainEqual(
@@ -1388,7 +1382,6 @@ rl.on("line", (line) => {
     pendingInteractive.delete(message.id);
     const decision =
       message.result && message.result.resolution
-      && message.result.resolution.kind === "approval"
         ? message.result.resolution.decision
         : "unknown";
     completeTurn(pending.providerThreadId, pending.turnId, "interactive:" + decision);
@@ -1459,7 +1452,6 @@ rl.on("line", (line) => {
       onInteractiveRequest: async (request) => {
         requests.push(request.providerRequestId);
         return {
-          kind: "approval",
           decision: "allow_once",
           grantedPermissions: null,
         };
