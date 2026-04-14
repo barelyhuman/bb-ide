@@ -954,7 +954,7 @@ describe("public thread data routes", () => {
 
       expect(createThreadResponse.status).toBe(201);
       const createdThread = threadSchema.parse(await readJson(createThreadResponse));
-      expect(createdThread.status).toBe("created");
+      expect(createdThread.status).toBe("provisioning");
 
       const createDraftResponse = await harness.app.request(
         `/api/v1/threads/${createdThread.id}/drafts`,

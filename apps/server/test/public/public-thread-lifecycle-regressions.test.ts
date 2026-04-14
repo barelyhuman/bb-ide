@@ -235,7 +235,7 @@ describe("public thread lifecycle regressions", () => {
     }
   });
 
-  it("fails reused thread creation when the host is disconnected", async () => {
+  it("leaves reused thread creation provisioning when the host is disconnected", async () => {
     const harness = await createTestAppHarness();
     try {
       const host = seedHost(harness.deps, { id: "host-reuse-disconnected" });
@@ -264,11 +264,12 @@ describe("public thread lifecycle regressions", () => {
         }),
       });
 
-      expect(response.status).toBe(502);
+      expect(response.status).toBe(201);
       await expect(readJson(response)).resolves.toMatchObject({
-        code: "host_disconnected",
+        environmentId: environment.id,
+        status: "provisioning",
       });
-      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(0);
+      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(1);
 
       const queuedCommand = harness.db
         .select()
@@ -327,24 +328,30 @@ describe("public thread lifecycle regressions", () => {
       const firstThreadBody = threadSchema.parse(await readJson(firstThread));
       const secondThreadBody = threadSchema.parse(await readJson(secondThread));
 
-      if (firstThreadBody.status === "created") {
-        completeThreadStart(harness.deps, {
-          threadId: firstThreadBody.id,
-        });
-        transitionThreadStatus(harness.db, harness.deps.hub, firstThreadBody.id, "idle");
-      }
-      if (firstThreadBody.status === "active") {
-        transitionThreadStatus(harness.db, harness.deps.hub, firstThreadBody.id, "idle");
-      }
-      if (secondThreadBody.status === "created") {
-        completeThreadStart(harness.deps, {
-          threadId: secondThreadBody.id,
-        });
-        transitionThreadStatus(harness.db, harness.deps.hub, secondThreadBody.id, "idle");
-      }
-      if (secondThreadBody.status === "active") {
-        transitionThreadStatus(harness.db, harness.deps.hub, secondThreadBody.id, "idle");
-      }
+      const firstStart = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" &&
+          command.threadId === firstThreadBody.id,
+      );
+      const secondStart = await waitForQueuedCommandAfter(
+        harness,
+        firstStart.row.cursor,
+        ({ command }) =>
+          command.type === "thread.start" &&
+          command.threadId === secondThreadBody.id,
+      );
+      expect(secondStart.command).toMatchObject({
+        threadId: secondThreadBody.id,
+      });
+      completeThreadStart(harness.deps, {
+        threadId: firstThreadBody.id,
+      });
+      transitionThreadStatus(harness.db, harness.deps.hub, firstThreadBody.id, "idle");
+      completeThreadStart(harness.deps, {
+        threadId: secondThreadBody.id,
+      });
+      transitionThreadStatus(harness.db, harness.deps.hub, secondThreadBody.id, "idle");
 
       const firstDelete = await harness.app.request(
         `/api/v1/threads/${firstThreadBody.id}`,

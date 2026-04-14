@@ -236,7 +236,7 @@ describe("server integration", () => {
       expect(updatedThread.status).toBe("provisioning");
 
       const environmentGetResponse = await publicClient.environments[":id"].$get({
-        param: { id: thread.environmentId },
+        param: { id: updatedThread.environmentId },
       });
       const environment = await environmentGetResponse.json();
       expect(environment.status).toBe("ready");
@@ -324,6 +324,7 @@ describe("server integration", () => {
         provisionCommand.cursor,
       );
       expect(threadStartCommand.command.type).toBe("thread.start");
+      const environmentId = threadStartCommand.command.environmentId;
       await daemonClient.session["command-result"].$post({
         json: {
           sessionId: session.sessionId,
@@ -365,7 +366,7 @@ describe("server integration", () => {
           sessionId: session.sessionId,
           events: [
             {
-              environmentId: thread.environmentId,
+              environmentId,
               threadId: thread.id,
               sequence: nextSequence,
               createdAt: Date.now(),
@@ -464,6 +465,7 @@ describe("server integration", () => {
         provisionCommand.cursor,
       );
       expect(initialThreadStartCommand.command.type).toBe("thread.start");
+      const environmentId = initialThreadStartCommand.command.environmentId;
 
       await daemonClient.session["command-result"].$post({
         json: {
@@ -484,7 +486,7 @@ describe("server integration", () => {
           sessionId: session.sessionId,
           events: [
             {
-              environmentId: thread.environmentId,
+              environmentId,
               threadId: thread.id,
               sequence: initialNextSequence,
               createdAt: Date.now(),
@@ -496,7 +498,7 @@ describe("server integration", () => {
               },
             },
             {
-              environmentId: thread.environmentId,
+              environmentId,
               threadId: thread.id,
               sequence: initialNextSequence + 1,
               createdAt: Date.now(),
@@ -551,7 +553,7 @@ describe("server integration", () => {
           sessionId: session.sessionId,
           events: [
             {
-              environmentId: thread.environmentId,
+              environmentId,
               threadId: thread.id,
               sequence: nextSequence,
               createdAt: Date.now(),
@@ -563,7 +565,7 @@ describe("server integration", () => {
               },
             },
             {
-              environmentId: thread.environmentId,
+              environmentId,
               threadId: thread.id,
               sequence: nextSequence + 1,
               createdAt: Date.now(),

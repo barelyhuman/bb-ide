@@ -1,8 +1,11 @@
-import { eq } from "drizzle-orm";
+import { and, desc, eq, gt, or } from "drizzle-orm";
 import {
+  events,
   getEnvironment,
+  getEnvironmentOperationByCommandId,
   getHost,
   getThread,
+  getThreadOperation,
   hostDaemonCommands,
   threads,
 } from "@bb/db";
@@ -11,10 +14,17 @@ import {
   hostDaemonCommandSchema,
   type HostDaemonCommandResultReport,
 } from "@bb/host-daemon-contract";
+import {
+  isActiveLifecycleOperationState,
+  type ProvisioningTranscriptEntry,
+  systemThreadProvisioningEventDataSchema,
+} from "@bb/domain";
 import type { AppDeps } from "../types.js";
 import {
   appendThreadProvisioningEvent,
   appendSystemErrorEvent,
+  buildCwdBranchEntries,
+  parseStoredTurnRequestEvent,
 } from "../services/threads/thread-events.js";
 import {
   completeThreadStartForCommand,
@@ -23,7 +33,9 @@ import {
   finalizeStoppedThread,
   hasActiveThreadStartOperationForCommand,
   hasActiveThreadStopOperationForCommand,
+  requestThreadStart,
 } from "../services/threads/thread-lifecycle.js";
+import { isPreStartThreadStatus } from "../services/threads/thread-status.js";
 import {
   advanceEnvironmentCleanup,
   completeEnvironmentDestroyForCommand,
@@ -45,6 +57,7 @@ import {
   tryTransition,
 } from "../services/threads/thread-transitions.js";
 import { advanceThreadProvisioning } from "../services/threads/thread-provisioning.js";
+import { resolvePermissionEscalation } from "../services/threads/thread-runtime-config.js";
 
 export type CommandResultSideEffectsDeps = Pick<
   AppDeps,
@@ -91,11 +104,65 @@ type InteractiveResolveResultReport = Extract<
   HostDaemonCommandResultReport,
   { type: "interactive.resolve" }
 >;
+interface HasStreamedProvisioningTranscriptArgs {
+  deps: CommandResultSideEffectsDeps;
+  threadId: string;
+  afterSequence: number;
+}
+type ParsedStoredTurnRequestEvent = ReturnType<typeof parseStoredTurnRequestEvent>;
+
+const WORKSPACE_PROVISIONING_TRANSCRIPT_KEY_PREFIXES = [
+  "git-",
+  "setup-",
+  "workspace-",
+];
 function isWorkspaceMutationCommand(
   command: ParsedHostDaemonCommand,
   expectedType: WorkspaceMutationResultReport["type"],
 ): command is WorkspaceMutationCommand {
   return "environmentId" in command && command.type === expectedType;
+}
+
+function hasStreamedProvisioningTranscript(
+  args: HasStreamedProvisioningTranscriptArgs,
+): boolean {
+  const rows = args.deps.db
+    .select({ data: events.data })
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, args.threadId),
+        eq(events.type, "system/thread-provisioning"),
+        gt(events.sequence, args.afterSequence),
+      ),
+    )
+    .all();
+
+  return rows.some((row) => {
+    const eventData = systemThreadProvisioningEventDataSchema.parse(
+      JSON.parse(row.data),
+    );
+    return eventData.entries.some(isWorkspaceProvisioningTranscriptEntry);
+  });
+}
+
+function isWorkspaceProvisioningTranscriptEntry(
+  entry: ProvisioningTranscriptEntry,
+): boolean {
+  return WORKSPACE_PROVISIONING_TRANSCRIPT_KEY_PREFIXES.some((prefix) =>
+    entry.key.startsWith(prefix)
+  );
+}
+
+function hasActiveThreadProvisionOperation(
+  deps: Pick<AppDeps, "db">,
+  threadId: string,
+): boolean {
+  const operation = getThreadOperation(deps.db, {
+    threadId,
+    kind: "provision",
+  });
+  return Boolean(operation && isActiveLifecycleOperationState(operation.state));
 }
 
 async function handleProvisionCommandResult(
@@ -111,6 +178,10 @@ async function handleProvisionCommandResult(
   if (!hasActiveEnvironmentProvisionOperationForCommand(deps, {
     commandId: commandRow.id,
   })) {
+    return;
+  }
+  const operation = getEnvironmentOperationByCommandId(deps.db, commandRow.id);
+  if (!operation) {
     return;
   }
   const boundThreads = deps.db
@@ -129,6 +200,116 @@ async function handleProvisionCommandResult(
       defaultBranch: report.result.defaultBranch,
     });
     deps.hub.notifyEnvironment(command.environmentId, ["work-status-changed"]);
+
+    const shouldUseThreadProvisioning =
+      operation.kind === "provision"
+      && boundThreads.some((thread) =>
+        hasActiveThreadProvisionOperation(deps, thread.id)
+      );
+
+    if (!shouldUseThreadProvisioning) {
+      const cwdBranchEntries = buildCwdBranchEntries({
+        path: report.result.path,
+        branchName: report.result.branchName,
+      });
+
+      for (const thread of boundThreads) {
+        if (thread.deletedAt !== null) {
+          await finalizeStoppedThread(deps, { threadId: thread.id });
+          continue;
+        }
+
+        if (thread.archivedAt !== null || thread.stopRequestedAt !== null) {
+          continue;
+        }
+
+        let parsedStartEvent: ParsedStoredTurnRequestEvent | null = null;
+        if (isPreStartThreadStatus(thread.status)) {
+          const startEvent = deps.db
+            .select({
+              data: events.data,
+              sequence: events.sequence,
+              threadId: events.threadId,
+              type: events.type,
+            })
+            .from(events)
+            .where(
+              and(
+                eq(events.threadId, thread.id),
+                or(
+                  eq(events.type, "client/thread/start"),
+                  eq(events.type, "client/turn/requested"),
+                ),
+              ),
+            )
+            .orderBy(desc(events.sequence))
+            .limit(1)
+            .get();
+          parsedStartEvent = startEvent
+            ? parseStoredTurnRequestEvent({
+                data: startEvent.data,
+                sequence: startEvent.sequence,
+                threadId: startEvent.threadId,
+                type: startEvent.type,
+              })
+            : null;
+        }
+
+        const willStartThread = Boolean(parsedStartEvent?.input?.length);
+        const isInitiator = thread.id === command.initiator?.threadId;
+        const hasStreamedTranscript = isInitiator && command.initiator
+          ? hasStreamedProvisioningTranscript({
+              deps,
+              threadId: thread.id,
+              afterSequence: command.initiator.eventSequence,
+            })
+          : false;
+        const entries = hasStreamedTranscript
+          ? []
+          : isInitiator && report.result.transcript.length > 0
+            ? report.result.transcript
+            : cwdBranchEntries;
+        const workspaceReadyEventSequence = appendThreadProvisioningEvent(deps, {
+          threadId: thread.id,
+          environmentId: command.environmentId,
+          status: willStartThread ? "active" : "completed",
+          entries,
+        });
+
+        if (!parsedStartEvent?.input || parsedStartEvent.input.length === 0) {
+          continue;
+        }
+
+        await requestThreadStart(deps, {
+          thread,
+          environment: {
+            id: command.environmentId,
+            hostId: commandRow.hostId,
+            path: report.result.path,
+            workspaceProvisionType: command.workspaceProvisionType,
+          },
+          eventSequence: workspaceReadyEventSequence,
+          input: parsedStartEvent.input,
+          execution: parsedStartEvent.execution,
+          permissionEscalation: resolvePermissionEscalation({
+            thread,
+            initiator: parsedStartEvent.initiator ?? "user",
+          }),
+          projectId: thread.projectId,
+          providerId: thread.providerId,
+        });
+      }
+
+      completeEnvironmentProvisioningForCommand(deps, {
+        commandId: commandRow.id,
+      });
+
+      await advanceEnvironmentCleanup(deps, {
+        environmentId: command.environmentId,
+      });
+
+      return;
+    }
 
     for (const thread of boundThreads) {
       if (thread.deletedAt !== null) {

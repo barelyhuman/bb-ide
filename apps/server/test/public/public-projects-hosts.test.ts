@@ -479,7 +479,7 @@ describe("public project and host routes", () => {
 
       expect(createThreadResponse.status).toBe(201);
       const createdThread = threadSchema.parse(await readJson(createThreadResponse));
-      expect(createdThread.status).toBe("created");
+      expect(createdThread.status).toBe("provisioning");
 
       const queuedStart = await waitForQueuedCommand(
         harness,
@@ -501,7 +501,7 @@ describe("public project and host routes", () => {
       expect(getThread(harness.db, createdThread.id)).toMatchObject({
         deletedAt: expect.any(Number),
         stopRequestedAt: expect.any(Number),
-        status: "created",
+        status: "provisioning",
       });
 
       const queuedStop = await waitForQueuedCommandAfter(

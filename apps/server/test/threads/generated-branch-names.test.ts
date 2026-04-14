@@ -1,3 +1,4 @@
+import { getThread } from "@bb/db";
 import { threadSchema } from "@bb/domain";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -88,11 +89,14 @@ describe("generated managed branch names", () => {
 
       expect(response.status).toBe(201);
       const thread = threadSchema.parse(await readJson(response));
-      expect(thread.title).toBe("Improve Branch Names");
+      expect(thread.title).toBeNull();
 
       const queued = await waitForQueuedCommand(
         harness,
         ({ command }) => command.type === "environment.provision",
+      );
+      expect(getThread(harness.db, thread.id)?.title).toBe(
+        "Improve Branch Names",
       );
       if (queued.command.type !== "environment.provision") {
         throw new Error("Expected environment.provision command");
@@ -251,10 +255,13 @@ describe("generated managed branch names", () => {
 
       expect(response.status).toBe(201);
       const thread = threadSchema.parse(await readJson(response));
-      expect(thread.title).toBe("Invalid Slug Title");
+      expect(thread.title).toBeNull();
       const queued = await waitForQueuedCommand(
         harness,
         ({ command }) => command.type === "environment.provision",
+      );
+      expect(getThread(harness.db, thread.id)?.title).toBe(
+        "Invalid Slug Title",
       );
       if (queued.command.type !== "environment.provision") {
         throw new Error("Expected environment.provision command");

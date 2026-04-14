@@ -1937,7 +1937,7 @@ describe("internal session routes", () => {
 
       expect(createResponse.status).toBe(201);
       const createdThread = threadSchema.parse(await readJson(createResponse));
-      expect(createdThread.status).toBe("created");
+      expect(createdThread.status).toBe("provisioning");
 
       const queuedStart = await waitForQueuedCommand(
         harness,
@@ -1985,7 +1985,7 @@ describe("internal session routes", () => {
       expect(getThread(harness.db, createdThread.id)).toMatchObject({
         deletedAt: expect.any(Number),
         stopRequestedAt: expect.any(Number),
-        status: "created",
+        status: "provisioning",
       });
       expect(
         harness.db
