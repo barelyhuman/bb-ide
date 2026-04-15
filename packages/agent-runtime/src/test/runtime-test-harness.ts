@@ -274,6 +274,9 @@ export function createWarningEventAdapter(scriptPath: string): ProviderAdapter {
           return [];
       }
     },
+    translateAcceptedCommand() {
+      return [];
+    },
     decodeToolCallRequest() {
       return null;
     },
@@ -342,6 +345,9 @@ export function createStartedEventAdapter(scriptPath: string): ProviderAdapter {
           providerThreadId: event.params.thread.id,
         },
       ];
+    },
+    translateAcceptedCommand() {
+      return [];
     },
     decodeToolCallRequest() {
       return null;

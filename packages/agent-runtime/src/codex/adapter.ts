@@ -28,9 +28,12 @@ import type { UserInput as CodexUserInput } from "./generated/codex-app-server/s
 import type { AskForApproval } from "./generated/codex-app-server/schema/v2/AskForApproval.js";
 import { parseModelsResponse } from "./models.js";
 import {
-  buildUserMessageAckItem,
   buildShellEnvironmentPolicyConfig,
 } from "../shared/adapter-utils.js";
+import {
+  buildAcceptedUserMessageEvent,
+  type AcceptedUserMessageState,
+} from "../shared/accepted-user-messages.js";
 import {
   decodeNativeProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
@@ -194,6 +197,21 @@ export function createCodexProviderAdapter(
     supportsServiceTier: providerInfo.capabilities.supportsServiceTier,
     supportedPermissionModes: providerInfo.capabilities.supportedPermissionModes,
   };
+  const acceptedUserMessageStateByThreadId =
+    new Map<string, AcceptedUserMessageState>();
+
+  function getAcceptedUserMessageState(threadId: string): AcceptedUserMessageState {
+    const existing = acceptedUserMessageStateByThreadId.get(threadId);
+    if (existing) {
+      return existing;
+    }
+    const state: AcceptedUserMessageState = {
+      pendingAcceptedUserMessages: [],
+      userMessageCounter: 0,
+    };
+    acceptedUserMessageStateByThreadId.set(threadId, state);
+    return state;
+  }
 
   return {
     id: providerInfo.id,
@@ -207,14 +225,6 @@ export function createCodexProviderAdapter(
     process: {
       command: opts?.processCommand ?? "codex",
       args: opts?.processArgs ?? ["app-server"],
-    },
-
-    buildSyntheticUserMessageAck(args) {
-      // Codex emits provider userMessage items for turn/start, but not for turn/steer.
-      if (args.source !== "turn/steer") {
-        return null;
-      }
-      return buildUserMessageAckItem(args.input, args.itemId);
     },
 
     buildCommand(command: AdapterCommand): JsonRpcMessage | null {
@@ -334,6 +344,20 @@ export function createCodexProviderAdapter(
 
     translateEvent(event: unknown) {
       return translateCodexEvent(event);
+    },
+
+    translateAcceptedCommand({ command }) {
+      if (command.type !== "turn/steer") {
+        return [];
+      }
+      return buildAcceptedUserMessageEvent({
+        input: command.input,
+        itemIdPrefix: "codex-user",
+        providerThreadId: command.providerThreadId ?? command.threadId,
+        state: getAcceptedUserMessageState(command.threadId),
+        threadId: command.threadId,
+        turnId: command.expectedTurnId,
+      });
     },
 
     decodeToolCallRequest(request: JsonRpcMessage): DecodedToolCallRequest | null {

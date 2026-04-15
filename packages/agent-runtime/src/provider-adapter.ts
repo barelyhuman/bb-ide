@@ -10,7 +10,6 @@ import type {
   RuntimePermissionPolicy,
   ServiceTier,
   ThreadEvent,
-  ThreadEventItem,
 } from "@bb/domain";
 
 // ---------------------------------------------------------------------------
@@ -55,6 +54,10 @@ export class ProviderResponseEncodeError extends Error {
 export interface ProviderTranslationContext {
   threadId?: string;
   parentToolCallId?: string;
+}
+
+export interface ProviderAcceptedCommandTranslationArgs {
+  command: AdapterCommand;
 }
 
 export interface ProviderAdapterFactoryOptions {
@@ -162,9 +165,12 @@ export interface ProviderAdapter {
     event: unknown,
     context?: ProviderTranslationContext,
   ): ThreadEvent[];
-  buildSyntheticUserMessageAck?(
-    args: BuildSyntheticUserMessageAckArgs,
-  ): SyntheticUserMessageAckItem | null;
+  /**
+   * Returns normalized events implied by a successful provider command.
+   * Use this for provider protocol gaps where accepted commands do not produce
+   * their own notifications, such as accepted user input missing a userMessage.
+   */
+  translateAcceptedCommand(args: ProviderAcceptedCommandTranslationArgs): ThreadEvent[];
   decodeToolCallRequest(request: JsonRpcMessage): DecodedToolCallRequest | null;
   decodeInteractiveRequest?(request: JsonRpcMessage): DecodedInteractiveRequest | null;
   buildInteractiveResponse?(args: BuildInteractiveResponseArgs): JsonValue;
@@ -174,16 +180,3 @@ export interface BuildInteractiveResponseArgs {
   request: DecodedInteractiveRequest;
   resolution: PendingInteractionResolution;
 }
-
-export interface BuildSyntheticUserMessageAckArgs {
-  input: PromptInput[];
-  itemId: string;
-  source: SyntheticUserMessageAckSource;
-}
-
-export type SyntheticUserMessageAckSource = "turn/start" | "turn/steer";
-
-export type SyntheticUserMessageAckItem = Extract<
-  ThreadEventItem,
-  { type: "userMessage" }
->;

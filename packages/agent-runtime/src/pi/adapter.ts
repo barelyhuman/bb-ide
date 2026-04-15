@@ -33,13 +33,18 @@ import {
 import {
   buildEditDiff,
   buildShellEnvironmentPolicyConfig,
-  buildUserMessageAckItem,
   extractResultText,
   toNonNegativeNumber,
   toOptionalRecord,
   toOptionalString,
   withParentToolCallId,
 } from "../shared/adapter-utils.js";
+import {
+  buildAcceptedUserMessageEvent,
+  drainAcceptedUserMessages,
+  queueAcceptedUserMessage,
+  type AcceptedUserMessageState,
+} from "../shared/accepted-user-messages.js";
 import {
   createProviderTurnStateRegistry,
   finishOpenProviderTurn,
@@ -511,8 +516,16 @@ interface PiTurnState {
   cumulativeTokens: ThreadEventTokenUsageBreakdown;
   openAssistantMessageIdsByScope: Map<string, string>;
   openReasoningItemIdsByScope: Map<string, string>;
+  pendingAcceptedUserMessages: AcceptedUserMessageState["pendingAcceptedUserMessages"];
   reasoningItemCounter: number;
   toolItemsByCallId: Map<string, ThreadEventItem>;
+  userMessageCounter: number;
+}
+
+interface EnsurePiTurnStartedArgs {
+  events: ThreadEvent[];
+  state: PiTurnState;
+  threadId: string;
 }
 
 function buildPiCompactionItemId(turnId: string): string {
@@ -576,11 +589,32 @@ export function createPiProviderAdapter(
       cumulativeTokens: { totalTokens: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 },
       openAssistantMessageIdsByScope: new Map(),
       openReasoningItemIdsByScope: new Map(),
+      pendingAcceptedUserMessages: [],
       reasoningItemCounter: 0,
       toolItemsByCallId: new Map(),
+      userMessageCounter: 0,
     }),
     turnIdPrefix: opts?.turnIdPrefix,
   });
+
+  function ensurePiTurnStarted(args: EnsurePiTurnStartedArgs): string {
+    const hadOpenTurn = args.state.currentTurnId !== undefined;
+    const turnId = turnState.ensureTurnStarted({
+      events: args.events,
+      state: args.state,
+      threadId: args.threadId,
+    });
+    if (!hadOpenTurn) {
+      drainAcceptedUserMessages({
+        events: args.events,
+        providerThreadId: "",
+        state: args.state,
+        threadId: args.threadId,
+        turnId,
+      });
+    }
+    return turnId;
+  }
 
   function translatePiEvent(
     event: unknown,
@@ -672,7 +706,7 @@ export function createPiProviderAdapter(
         if (!piEvent.success) {
           return buildUnexpectedPiSdkEvent(event, context);
         }
-        turnState.ensureTurnStarted({
+        ensurePiTurnStarted({
           events,
           state,
           threadId,
@@ -946,10 +980,6 @@ export function createPiProviderAdapter(
 
     // -- Unified command builder -------------------------------------------
 
-    buildSyntheticUserMessageAck(args) {
-      return buildUserMessageAckItem(args.input, args.itemId);
-    },
-
     buildCommand(command: AdapterCommand): JsonRpcMessage | null {
       switch (command.type) {
         case "initialize":
@@ -1059,6 +1089,52 @@ export function createPiProviderAdapter(
       context?: ProviderTranslationContext,
     ): ThreadEvent[] {
       return translatePiEvent(event, context);
+    },
+
+    translateAcceptedCommand({ command }) {
+      if (
+        command.type === "thread/start" ||
+        command.type === "thread/resume" ||
+        command.type === "thread/stop"
+      ) {
+        const state = turnState.getOrCreate({ threadId: command.threadId });
+        state.pendingAcceptedUserMessages = [];
+        return [];
+      }
+
+      if (command.type === "turn/start") {
+        const state = turnState.getOrCreate({ threadId: command.threadId });
+        const turnId = turnState.getCurrentOrLastTurnId({ state });
+        if (turnId) {
+          return buildAcceptedUserMessageEvent({
+            input: command.input,
+            itemIdPrefix: "pi-user",
+            providerThreadId: command.providerThreadId ?? command.threadId,
+            state,
+            threadId: command.threadId,
+            turnId,
+          });
+        }
+        queueAcceptedUserMessage({
+          input: command.input,
+          itemIdPrefix: "pi-user",
+          state,
+        });
+      }
+
+      if (command.type === "turn/steer") {
+        const state = turnState.getOrCreate({ threadId: command.threadId });
+        return buildAcceptedUserMessageEvent({
+          input: command.input,
+          itemIdPrefix: "pi-user",
+          providerThreadId: command.providerThreadId ?? command.threadId,
+          state,
+          threadId: command.threadId,
+          turnId: command.expectedTurnId,
+        });
+      }
+
+      return [];
     },
 
     parseModelListResult(result: unknown) {

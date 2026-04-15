@@ -34,13 +34,18 @@ import {
 import {
   buildEditDiff,
   buildShellEnvironmentPolicyConfig,
-  buildUserMessageAckItem,
   extractResultText,
   toNonNegativeNumber,
   toOptionalRecord,
   toOptionalString,
   withParentToolCallId,
 } from "../shared/adapter-utils.js";
+import {
+  buildAcceptedUserMessageEvent,
+  drainAcceptedUserMessages,
+  queueAcceptedUserMessage,
+  type AcceptedUserMessageState,
+} from "../shared/accepted-user-messages.js";
 import {
   createProviderTurnStateRegistry,
   finishOpenProviderTurn,
@@ -482,9 +487,11 @@ interface ClaudeTurnState {
   latestRequestContextTokens: number | undefined;
   openAssistantMessageIdsByScope: Map<string, string>;
   openReasoningItemIdsByScope: Map<string, string>;
+  pendingAcceptedUserMessages: AcceptedUserMessageState["pendingAcceptedUserMessages"];
   reasoningItemCounter: number;
   selectedModelContextWindow: number | null;
   toolItemsByCallId: Map<string, ThreadEventItem>;
+  userMessageCounter: number;
 }
 
 interface ClaudeContextWindowUsageArgs {
@@ -515,9 +522,11 @@ export function createClaudeCodeProviderAdapter(
       latestRequestContextTokens: undefined,
       openAssistantMessageIdsByScope: new Map(),
       openReasoningItemIdsByScope: new Map(),
+      pendingAcceptedUserMessages: [],
       reasoningItemCounter: 0,
       selectedModelContextWindow: null,
       toolItemsByCallId: new Map(),
+      userMessageCounter: 0,
     }),
     turnIdPrefix: opts?.turnIdPrefix,
   });
@@ -533,10 +542,21 @@ export function createClaudeCodeProviderAdapter(
   function ensureClaudeTurnStarted(
     args: EnsureProviderTurnStartedArgs<ClaudeTurnState>,
   ): string {
-    if (!args.state.currentTurnId) {
+    const hadOpenTurn = args.state.currentTurnId !== undefined;
+    if (!hadOpenTurn) {
       args.state.latestRequestContextTokens = undefined;
     }
-    return turnState.ensureTurnStarted(args);
+    const turnId = turnState.ensureTurnStarted(args);
+    if (!hadOpenTurn) {
+      drainAcceptedUserMessages({
+        events: args.events,
+        providerThreadId: "",
+        state: args.state,
+        threadId: args.threadId,
+        turnId,
+      });
+    }
+    return turnId;
   }
 
   function translateClaudeEvent(
@@ -915,10 +935,6 @@ export function createClaudeCodeProviderAdapter(
 
     // -- Unified command builder -------------------------------------------
 
-    buildSyntheticUserMessageAck(args) {
-      return buildUserMessageAckItem(args.input, args.itemId);
-    },
-
     buildCommand(command: AdapterCommand): JsonRpcMessage | null {
       switch (command.type) {
         case "initialize":
@@ -1056,6 +1072,52 @@ export function createClaudeCodeProviderAdapter(
       context?: ProviderTranslationContext,
     ): ThreadEvent[] {
       return translateClaudeEvent(event, context);
+    },
+
+    translateAcceptedCommand({ command }) {
+      if (
+        command.type === "thread/start" ||
+        command.type === "thread/resume" ||
+        command.type === "thread/stop"
+      ) {
+        const state = turnState.getOrCreate({ threadId: command.threadId });
+        state.pendingAcceptedUserMessages = [];
+        return [];
+      }
+
+      if (command.type === "turn/start") {
+        const state = turnState.getOrCreate({ threadId: command.threadId });
+        const turnId = turnState.getCurrentOrLastTurnId({ state });
+        if (turnId) {
+          return buildAcceptedUserMessageEvent({
+            input: command.input,
+            itemIdPrefix: "claude-user",
+            providerThreadId: command.providerThreadId ?? "",
+            state,
+            threadId: command.threadId,
+            turnId,
+          });
+        }
+        queueAcceptedUserMessage({
+          input: command.input,
+          itemIdPrefix: "claude-user",
+          state,
+        });
+      }
+
+      if (command.type === "turn/steer") {
+        const state = turnState.getOrCreate({ threadId: command.threadId });
+        return buildAcceptedUserMessageEvent({
+          input: command.input,
+          itemIdPrefix: "claude-user",
+          providerThreadId: command.providerThreadId ?? "",
+          state,
+          threadId: command.threadId,
+          turnId: command.expectedTurnId,
+        });
+      }
+
+      return [];
     },
 
     parseModelListResult(result: unknown) {

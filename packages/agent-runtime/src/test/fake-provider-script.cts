@@ -18,6 +18,7 @@ interface ThreadState {
   activeTurn: ActiveTurn | null;
   providerThreadId: string;
   turnCount: number;
+  userMessageCount: number;
 }
 
 interface TurnPlan {
@@ -90,6 +91,32 @@ function parseInputText(input: unknown): string {
     .join(" ");
 }
 
+function parseUserContent(input: unknown): JsonRecord[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  const content: JsonRecord[] = [];
+  for (const item of input) {
+    if (!isJsonRecord(item)) {
+      continue;
+    }
+    if (item.type === "text" && typeof item.text === "string") {
+      content.push({ type: "text", text: item.text });
+    }
+    if (item.type === "image" && typeof item.url === "string") {
+      content.push({ type: "image", url: item.url });
+    }
+    if (item.type === "localImage" && typeof item.path === "string") {
+      content.push({ type: "localImage", path: item.path });
+    }
+    if (item.type === "localFile" && typeof item.path === "string") {
+      content.push({ type: "localFile", path: item.path });
+    }
+  }
+  return content;
+}
+
 function parseTurnPlan(inputText: string): TurnPlan {
   const delayMatch = /(?:^|\s)delay:(\d+)(?:\s|$)/.exec(inputText);
   const toolMatch = /(?:^|\s)call_tool:([^\s]+)(?:\s|$)/.exec(inputText);
@@ -117,6 +144,32 @@ function clearActiveTurn(thread: ThreadState): void {
     clearTimeout(thread.activeTurn.timer);
   }
   thread.activeTurn = null;
+}
+
+function emitUserMessage(threadId: string, turnId: string, input: unknown): void {
+  const thread = getThreadState(threadId);
+  if (!thread) {
+    return;
+  }
+  const content = parseUserContent(input);
+  if (content.length === 0) {
+    return;
+  }
+  thread.userMessageCount += 1;
+  send({
+    jsonrpc: "2.0",
+    method: "item/completed",
+    params: {
+      threadId,
+      turnId,
+      providerThreadId: thread.providerThreadId,
+      item: {
+        type: "userMessage",
+        id: `user-${thread.userMessageCount}`,
+        content,
+      },
+    },
+  });
 }
 
 function completeTurn(threadId: string, status: string, responseText: string): void {
@@ -194,6 +247,7 @@ function beginTurn(threadId: string, input: unknown): void {
       providerThreadId: thread.providerThreadId,
     },
   });
+  emitUserMessage(threadId, turnId, input);
 
   if (plan.toolName) {
     const toolCallId = nextToolCallId++;
@@ -253,6 +307,7 @@ function startOrResumeThread(message: JsonRecord, mode: "resume" | "start"): voi
     activeTurn: null,
     providerThreadId,
     turnCount: 0,
+    userMessageCount: 0,
   });
 
   send({
@@ -337,6 +392,12 @@ function handleMessage(message: JsonRecord): void {
   }
 
   if (method === "turn/steer") {
+    const params = getParams(message);
+    const threadId = getString(params.threadId, "unknown");
+    const thread = getThreadState(threadId);
+    if (thread?.activeTurn) {
+      emitUserMessage(threadId, thread.activeTurn.turnId, params.input);
+    }
     send({
       jsonrpc: "2.0",
       id: getJsonRpcId(message.id) ?? 0,

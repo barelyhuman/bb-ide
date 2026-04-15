@@ -52,26 +52,40 @@ describe("codex provider adapter", () => {
     expect(adapter.process.args).toEqual(["app-server"]);
   });
 
-  it("synthesizes user-message acks only for steers", () => {
+  it("translates accepted steer results to user-message acks", () => {
     const adapter = createCodexProviderAdapter();
-    if (!adapter.buildSyntheticUserMessageAck) {
-      throw new Error("Expected Codex synthetic ack builder");
-    }
 
-    expect(adapter.buildSyntheticUserMessageAck({
-      input: [{ type: "text", text: "normal turn" }],
-      itemId: "runtime-user-1",
-      source: "turn/start",
-    })).toBeNull();
-    expect(adapter.buildSyntheticUserMessageAck({
-      input: [{ type: "text", text: "steer turn" }],
-      itemId: "runtime-user-2",
-      source: "turn/steer",
-    })).toEqual({
-      type: "userMessage",
-      id: "runtime-user-2",
-      content: [{ type: "text", text: "steer turn" }],
-    });
+    expect(adapter.translateAcceptedCommand({
+      command: {
+        type: "turn/start",
+        threadId: "thread-1",
+        providerThreadId: "provider-thread-1",
+        input: [{ type: "text", text: "normal turn" }],
+        options: fullAdapterOptions,
+      },
+    })).toEqual([]);
+    expect(adapter.translateAcceptedCommand({
+      command: {
+        type: "turn/steer",
+        threadId: "thread-1",
+        providerThreadId: "provider-thread-1",
+        expectedTurnId: "turn-1",
+        input: [{ type: "text", text: "steer turn" }],
+        options: fullAdapterOptions,
+      },
+    })).toEqual([
+      {
+        type: "item/completed",
+        threadId: "thread-1",
+        providerThreadId: "provider-thread-1",
+        turnId: "turn-1",
+        item: {
+          type: "userMessage",
+          id: "codex-user-1",
+          content: [{ type: "text", text: "steer turn" }],
+        },
+      },
+    ]);
   });
 
   // -- buildCommand --------------------------------------------------------

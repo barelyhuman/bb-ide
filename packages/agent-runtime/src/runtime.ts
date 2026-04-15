@@ -4,7 +4,7 @@ import type {
   ThreadEvent,
 } from "@bb/domain";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
-import type { JsonRpcMessage } from "./provider-adapter.js";
+import type { AdapterCommand, JsonRpcMessage } from "./provider-adapter.js";
 import {
   assertProviderSupportsExecutionOptions,
   sameExecutionSettings,
@@ -44,10 +44,6 @@ import {
   resolveThreadIdentityResult,
   threadIdentityResultSchema,
 } from "./thread-identity.js";
-import {
-  createSyntheticUserMessageAckStore,
-  type SyntheticUserMessageAck,
-} from "./synthetic-user-message-acks.js";
 
 interface ReconfigureThreadIfNeededArgs {
   instructions: string | undefined;
@@ -109,18 +105,12 @@ interface EmitRuntimeEventArgs {
   sourceThreadId?: string;
 }
 
-interface EmitSyntheticUserMessageAckArgs {
-  ack: SyntheticUserMessageAck;
+interface EmitAcceptedCommandEventsArgs {
+  command: AdapterCommand;
   proc: ProviderProcess;
   providerId: string;
-  threadId: string;
-  turnId: string;
-}
-
-interface ShouldShiftPendingSyntheticAckForLifecycleArgs {
-  eventType: "turn/completed" | "turn/started";
-  threadId: string;
-  turnId: string;
+  rawMethod: string;
+  sourceThreadId?: string;
 }
 
 /**
@@ -135,7 +125,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   const threadRuntimeConfigs = new Map<string, ThreadRuntimeConfig>();
   const activeTurnIdByThreadId = new Map<string, string>();
   const completedTurnIdsByThreadId = new Map<string, Set<string>>();
-  const syntheticUserMessageAcks = createSyntheticUserMessageAckStore();
 
   function createCaptureId(): string {
     const captureId = `capture-${nextCaptureId}`;
@@ -163,7 +152,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     onProviderThreadDetached: (threadId) => {
       threadIdentityRegistry.clearThread(threadId);
       clearThreadRuntimeConfig(threadId);
-      syntheticUserMessageAcks.clearThread(threadId);
       activeTurnIdByThreadId.delete(threadId);
       completedTurnIdsByThreadId.delete(threadId);
     },
@@ -267,18 +255,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     return completedTurnIdsByThreadId.get(threadId)?.has(turnId) ?? false;
   }
 
-  function shouldShiftPendingSyntheticAckForLifecycle(
-    args: ShouldShiftPendingSyntheticAckForLifecycleArgs,
-  ): boolean {
-    if (!hasCompletedTurn(args.threadId, args.turnId)) {
-      return true;
-    }
-    options.onStderr?.(
-      `Skipping synthetic user ack for ${args.eventType} on already completed turn "${args.turnId}" in thread "${args.threadId}".`,
-    );
-    return false;
-  }
-
   async function reconfigureThreadIfNeeded(
     args: ReconfigureThreadIfNeededArgs,
   ): Promise<void> {
@@ -308,7 +284,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       threadId: args.threadId,
     });
 
-    const command = proc.adapter.buildCommand({
+    const adapterCommand: AdapterCommand = {
       type: "thread/resume",
       threadId: args.threadId,
       cwd: currentConfig.workspacePath,
@@ -321,7 +297,8 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       resumePath: currentConfig.resumePath,
       dynamicTools: currentConfig.dynamicTools,
       instructionMode: currentConfig.instructionMode,
-    });
+    };
+    const command = proc.adapter.buildCommand(adapterCommand);
 
     if (command) {
       const result = await sendJsonRpcRequest({
@@ -338,6 +315,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       if (providerThreadId) {
         recordProviderThreadIdentity(proc, args.threadId, providerThreadId);
       }
+      emitAcceptedCommandEvents({
+        command: adapterCommand,
+        proc,
+        providerId: currentConfig.providerId,
+        rawMethod: command.method,
+        sourceThreadId: args.threadId,
+      });
     }
 
     setThreadRuntimeConfig(args.threadId, {
@@ -395,28 +379,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       });
 
       const activeTurnId = activeTurnIdByThreadId.get(resolvedBbThreadId);
-      if (
-        stampedEvent.type === "turn/completed" &&
-        activeTurnId === undefined &&
-        shouldShiftPendingSyntheticAckForLifecycle({
-          eventType: stampedEvent.type,
-          threadId: resolvedBbThreadId,
-          turnId: stampedEvent.turnId,
-        })
-      ) {
-        const ack = syntheticUserMessageAcks.shiftPending({
-          threadId: resolvedBbThreadId,
-        });
-        if (ack) {
-          emitSyntheticUserMessageAck({
-            ack,
-            proc: args.proc,
-            providerId: args.providerId,
-            threadId: resolvedBbThreadId,
-            turnId: stampedEvent.turnId,
-          });
-        }
-      }
 
       emitRuntimeEvent({
         event: stampedEvent,
@@ -428,26 +390,12 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       });
 
       if (stampedEvent.type === "turn/started") {
-        if (
-          shouldShiftPendingSyntheticAckForLifecycle({
-            eventType: stampedEvent.type,
-            threadId: resolvedBbThreadId,
-            turnId: stampedEvent.turnId,
-          })
-        ) {
+        if (hasCompletedTurn(resolvedBbThreadId, stampedEvent.turnId)) {
+          options.onStderr?.(
+            `Skipping active turn update for replayed turn/started on already completed turn "${stampedEvent.turnId}" in thread "${resolvedBbThreadId}".`,
+          );
+        } else {
           activeTurnIdByThreadId.set(resolvedBbThreadId, stampedEvent.turnId);
-          const ack = syntheticUserMessageAcks.shiftPending({
-            threadId: resolvedBbThreadId,
-          });
-          if (ack) {
-            emitSyntheticUserMessageAck({
-              ack,
-              proc: args.proc,
-              providerId: args.providerId,
-              threadId: resolvedBbThreadId,
-              turnId: stampedEvent.turnId,
-            });
-          }
         }
       }
       if (stampedEvent.type === "turn/completed") {
@@ -473,29 +421,21 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     options.onEvent(args.event);
   }
 
-  function emitSyntheticUserMessageAck(
-    args: EmitSyntheticUserMessageAckArgs,
+  function emitAcceptedCommandEvents(
+    args: EmitAcceptedCommandEventsArgs,
   ): void {
-    const providerThreadId = threadIdentityRegistry.getProviderThreadId(args.threadId);
-    if (!providerThreadId) {
-      throw new Error(
-        `Cannot emit synthetic user message ack for ${args.threadId}; provider thread identity is not resolved.`,
-      );
+    const events = args.proc.adapter.translateAcceptedCommand({
+      command: args.command,
+    });
+    if (events.length === 0) {
+      return;
     }
-    emitRuntimeEvent({
-      event: {
-        type: "item/completed",
-        threadId: args.threadId,
-        providerThreadId,
-        turnId: args.turnId,
-        item: {
-          ...args.ack.item,
-        },
-      },
+    emitTranslatedEvents({
+      events,
       proc: args.proc,
       providerId: args.providerId,
-      rawMethod: "runtime/userMessage/ack",
-      sourceThreadId: args.threadId,
+      rawMethod: `${args.rawMethod}/result`,
+      sourceThreadId: args.sourceThreadId,
     });
   }
 
@@ -635,7 +575,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         threadId,
       });
 
-      const cmd = proc.adapter.buildCommand({
+      const adapterCommand: AdapterCommand = {
         type: "thread/start",
         threadId,
         cwd: options.workspacePath,
@@ -646,7 +586,8 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         }),
         dynamicTools,
         instructionMode,
-      });
+      };
+      const cmd = proc.adapter.buildCommand(adapterCommand);
 
       if (!cmd) {
         throw new Error(`Adapter "${pid}" returned null for thread/start`);
@@ -666,6 +607,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       if (providerThreadId) {
         recordProviderThreadIdentity(proc, threadId, providerThreadId);
       }
+      emitAcceptedCommandEvents({
+        command: adapterCommand,
+        proc,
+        providerId: pid,
+        rawMethod: cmd.method,
+        sourceThreadId: threadId,
+      });
 
       const resolved = await waitForProviderThreadIdentity(proc, threadId, 5000);
       if (!resolved) {
@@ -736,7 +684,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         threadId,
       });
 
-      const cmd = proc.adapter.buildCommand({
+      const adapterCommand: AdapterCommand = {
         type: "thread/resume",
         threadId,
         cwd: options.workspacePath,
@@ -750,7 +698,8 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         resumePath,
         dynamicTools,
         instructionMode,
-      });
+      };
+      const cmd = proc.adapter.buildCommand(adapterCommand);
 
       if (!cmd) {
         const currentProviderThreadId =
@@ -776,6 +725,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         throw new Error(`Provider resume did not return a thread id for ${threadId}`);
       }
       recordProviderThreadIdentity(proc, threadId, resolvedId);
+      emitAcceptedCommandEvents({
+        command: adapterCommand,
+        proc,
+        providerId: pid,
+        rawMethod: cmd.method,
+        sourceThreadId: threadId,
+      });
 
       return { providerThreadId: resolvedId };
     },
@@ -794,7 +750,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         instructions,
       });
 
-      const cmd = proc.adapter.buildCommand({
+      const adapterCommand: AdapterCommand = {
         type: "turn/start",
         threadId,
         providerThreadId: threadIdentityRegistry.getProviderThreadId(threadId),
@@ -804,33 +760,26 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           execOpts,
           instructions,
         }),
-      });
+      };
+      const cmd = proc.adapter.buildCommand(adapterCommand);
 
       if (!cmd) {
         throw new Error(`Adapter "${pid}" returned null for turn/start`);
       }
-      const pendingAck = syntheticUserMessageAcks.queue({
-        buildAck: proc.adapter.buildSyntheticUserMessageAck,
-        input,
-        source: "turn/start",
-        threadId,
+      await sendJsonRpcRequest({
+        child: proc.child,
+        message: cmd,
+        pending: proc.pending,
+        getNextId: () => nextRequestId++,
+        resultSchema: ignoredJsonRpcResultSchema,
       });
-      try {
-        await sendJsonRpcRequest({
-          child: proc.child,
-          message: cmd,
-          pending: proc.pending,
-          getNextId: () => nextRequestId++,
-          resultSchema: ignoredJsonRpcResultSchema,
-        });
-      } catch (error) {
-        // If turn/started already arrived, the ack was shifted and emitted;
-        // cleanup is then intentionally a no-op because emitted events are immutable.
-        if (pendingAck) {
-          syntheticUserMessageAcks.removePending({ ack: pendingAck, threadId });
-        }
-        throw error;
-      }
+      emitAcceptedCommandEvents({
+        command: adapterCommand,
+        proc,
+        providerId: pid,
+        rawMethod: cmd.method,
+        sourceThreadId: threadId,
+      });
     },
 
     async steerTurn({ threadId, expectedTurnId, input, options: execOpts, instructions }) {
@@ -855,7 +804,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         return;
       }
 
-      const cmd = proc.adapter.buildCommand({
+      const adapterCommand: AdapterCommand = {
         type: "turn/steer",
         threadId,
         providerThreadId: threadIdentityRegistry.getProviderThreadId(threadId),
@@ -866,7 +815,8 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           execOpts,
           instructions,
         }),
-      });
+      };
+      const cmd = proc.adapter.buildCommand(adapterCommand);
 
       if (!cmd) {
         throw new Error(`Adapter "${pid}" returned null for turn/steer`);
@@ -878,21 +828,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         getNextId: () => nextRequestId++,
         resultSchema: ignoredJsonRpcResultSchema,
       });
-      const ack = syntheticUserMessageAcks.create({
-        buildAck: proc.adapter.buildSyntheticUserMessageAck,
-        input,
-        source: "turn/steer",
-        threadId,
+      emitAcceptedCommandEvents({
+        command: adapterCommand,
+        proc,
+        providerId: pid,
+        rawMethod: cmd.method,
+        sourceThreadId: threadId,
       });
-      if (ack) {
-        emitSyntheticUserMessageAck({
-          ack,
-          proc,
-          providerId: pid,
-          threadId,
-          turnId: expectedTurnId,
-        });
-      }
     },
 
     async stopThread({ threadId }) {
@@ -905,16 +847,16 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       const activeTurnId = activeTurnIdByThreadId.get(threadId);
       const shouldRestartProvider =
         proc.adapter.threadStopBehavior === "restart-provider";
-      const cmd = proc.adapter.buildCommand({
+      const adapterCommand: AdapterCommand = {
         type: "thread/stop",
         threadId,
         providerThreadId,
         activeTurnId: activeTurnId ?? null,
-      });
+      };
+      const cmd = proc.adapter.buildCommand(adapterCommand);
 
       if (!cmd) {
         if (activeTurnId === undefined) {
-          syntheticUserMessageAcks.clearThread(threadId);
           completedTurnIdsByThreadId.delete(threadId);
           return;
         }
@@ -929,7 +871,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         getNextId: () => nextRequestId++,
         resultSchema: ignoredJsonRpcResultSchema,
       });
-      syntheticUserMessageAcks.clearThread(threadId);
+      emitAcceptedCommandEvents({
+        command: adapterCommand,
+        proc,
+        providerId: pid,
+        rawMethod: cmd.method,
+        sourceThreadId: threadId,
+      });
       activeTurnIdByThreadId.delete(threadId);
       completedTurnIdsByThreadId.delete(threadId);
       if (shouldRestartProvider) {
@@ -944,12 +892,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         throw new Error(`Provider "${pid}" does not support thread rename.`);
       }
 
-      const cmd = proc.adapter.buildCommand({
+      const adapterCommand: AdapterCommand = {
         type: "thread/name/set",
         threadId,
         providerThreadId: threadIdentityRegistry.getProviderThreadId(threadId),
         title,
-      });
+      };
+      const cmd = proc.adapter.buildCommand(adapterCommand);
 
       if (!cmd) {
         throw new Error(`Adapter "${pid}" returned null for thread/name/set`);
@@ -960,6 +909,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         pending: proc.pending,
         getNextId: () => nextRequestId++,
         resultSchema: ignoredJsonRpcResultSchema,
+      });
+      emitAcceptedCommandEvents({
+        command: adapterCommand,
+        proc,
+        providerId: pid,
+        rawMethod: cmd.method,
+        sourceThreadId: threadId,
       });
     },
 
@@ -985,7 +941,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     },
 
     async shutdown() {
-      syntheticUserMessageAcks.clearAll();
       completedTurnIdsByThreadId.clear();
       await providerProcesses.shutdown();
     },
