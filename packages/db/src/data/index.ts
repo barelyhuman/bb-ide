@@ -230,6 +230,7 @@ export {
   appendStoredThreadEventInTransaction,
   findStoredEventRow,
   getHighWaterMarks,
+  getLastStoredTurnLifecycleEvent,
   getLastStoredProviderThreadId,
   getLastStoredTurnId,
   getLastStoredTurnRequestEvent,
@@ -259,6 +260,7 @@ export type {
   PruneResolvedItemDeltasArgs,
   PruneThreadEventsBeforeSequenceArgs,
   StoredEventRow,
+  StoredTurnLifecycleEventRow,
   StoredTurnRequestEventRow,
 } from "./events.js";
 

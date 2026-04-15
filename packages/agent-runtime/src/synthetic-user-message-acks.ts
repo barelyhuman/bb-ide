@@ -2,6 +2,7 @@ import type { PromptInput } from "@bb/domain";
 import type {
   BuildSyntheticUserMessageAckArgs,
   SyntheticUserMessageAckItem,
+  SyntheticUserMessageAckSource,
 } from "./provider-adapter.js";
 
 export type SyntheticUserMessageAckBuilder = (
@@ -16,6 +17,7 @@ export interface SyntheticUserMessageAck {
 export interface CreateSyntheticUserMessageAckArgs {
   buildAck: SyntheticUserMessageAckBuilder | undefined;
   input: PromptInput[];
+  source: SyntheticUserMessageAckSource;
   threadId: string;
 }
 
@@ -64,6 +66,7 @@ export function createSyntheticUserMessageAckStore(): SyntheticUserMessageAckSto
     const item = args.buildAck({
       input: args.input,
       itemId,
+      source: args.source,
     });
     if (!item) {
       return null;

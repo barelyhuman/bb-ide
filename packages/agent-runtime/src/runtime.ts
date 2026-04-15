@@ -105,6 +105,12 @@ function toAdapterOptions(
 
 type ProviderProcess = RuntimeProviderProcess;
 
+interface AssertProviderSupportsExecutionOptionsArgs {
+  adapter: ProviderProcess["adapter"];
+  options: AgentRuntimeExecutionOptions;
+  providerId: string;
+}
+
 interface ThreadRuntimeConfig {
   dynamicTools?: DynamicTool[];
   environmentId: string;
@@ -115,6 +121,30 @@ interface ThreadRuntimeConfig {
   providerId: string;
   resumePath?: string;
   workspacePath: string;
+}
+
+function assertProviderSupportsExecutionOptions(
+  args: AssertProviderSupportsExecutionOptionsArgs,
+): void {
+  if (
+    args.options.serviceTier !== undefined &&
+    args.options.serviceTier !== "default" &&
+    !args.adapter.capabilities.supportsServiceTier
+  ) {
+    throw new Error(
+      `Provider "${args.providerId}" does not support service tiers.`,
+    );
+  }
+
+  if (
+    !args.adapter.capabilities.supportedPermissionModes.includes(
+      args.options.permissionMode,
+    )
+  ) {
+    throw new Error(
+      `Provider "${args.providerId}" does not support permission mode "${args.options.permissionMode}".`,
+    );
+  }
 }
 
 interface ThreadShellEnvironmentArgs {
@@ -643,6 +673,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       await runtime.ensureProvider({ providerId: pid });
 
       const proc = requireProviderProcess(pid);
+      assertProviderSupportsExecutionOptions({
+        adapter: proc.adapter,
+        options: execOpts,
+        providerId: pid,
+      });
       threadIdentityRegistry.registerThreadProvider({
         providerId: pid,
         providerState: proc.identity,
@@ -730,6 +765,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       await runtime.ensureProvider({ providerId: pid });
 
       const proc = requireProviderProcess(pid);
+      assertProviderSupportsExecutionOptions({
+        adapter: proc.adapter,
+        options: execOpts,
+        providerId: pid,
+      });
       threadIdentityRegistry.registerThreadProvider({
         providerId: pid,
         providerState: proc.identity,
@@ -802,6 +842,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     async runTurn({ threadId, input, options: execOpts, instructions }) {
       const pid = resolveProviderForThread(threadId);
       const proc = requireProviderProcess(pid);
+      assertProviderSupportsExecutionOptions({
+        adapter: proc.adapter,
+        options: execOpts,
+        providerId: pid,
+      });
       await reconfigureThreadIfNeeded({
         threadId,
         options: execOpts,
@@ -816,10 +861,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         options: toAdapterOptions(execOpts, instructions, {}),
       });
 
-      if (!cmd) return;
+      if (!cmd) {
+        throw new Error(`Adapter "${pid}" returned null for turn/start`);
+      }
       const pendingAck = syntheticUserMessageAcks.queue({
         buildAck: proc.adapter.buildSyntheticUserMessageAck,
         input,
+        source: "turn/start",
         threadId,
       });
       try {
@@ -843,6 +891,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     async steerTurn({ threadId, expectedTurnId, input, options: execOpts, instructions }) {
       const pid = resolveProviderForThread(threadId);
       const proc = requireProviderProcess(pid);
+      assertProviderSupportsExecutionOptions({
+        adapter: proc.adapter,
+        options: execOpts,
+        providerId: pid,
+      });
       await reconfigureThreadIfNeeded({
         threadId,
         options: execOpts,
@@ -858,7 +911,9 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         options: toAdapterOptions(execOpts, instructions, {}),
       });
 
-      if (!cmd) return;
+      if (!cmd) {
+        throw new Error(`Adapter "${pid}" returned null for turn/steer`);
+      }
       const activeTurnId = activeTurnIdByThreadId.get(threadId);
       if (activeTurnId !== expectedTurnId) {
         throw new Error(
@@ -880,6 +935,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       const ack = syntheticUserMessageAcks.create({
         buildAck: proc.adapter.buildSyntheticUserMessageAck,
         input,
+        source: "turn/steer",
         threadId,
       });
       if (ack) {
@@ -914,7 +970,14 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         activeTurnId,
       });
 
-      if (!cmd) return;
+      if (!cmd) {
+        if (activeTurnId === null) {
+          return;
+        }
+        throw new Error(
+          `Adapter "${pid}" returned null for thread/stop with active turn "${activeTurnId}"`,
+        );
+      }
       await sendJsonRpcRequest({
         child: proc.child,
         message: cmd,
@@ -930,6 +993,9 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     async renameThread({ threadId, title }) {
       const pid = resolveProviderForThread(threadId);
       const proc = requireProviderProcess(pid);
+      if (!proc.adapter.capabilities.supportsRename) {
+        throw new Error(`Provider "${pid}" does not support thread rename.`);
+      }
 
       const cmd = proc.adapter.buildCommand({
         type: "thread/name/set",
@@ -938,7 +1004,9 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         title,
       });
 
-      if (!cmd) return;
+      if (!cmd) {
+        throw new Error(`Adapter "${pid}" returned null for thread/name/set`);
+      }
       await sendJsonRpcRequest({
         child: proc.child,
         message: cmd,

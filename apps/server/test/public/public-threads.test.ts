@@ -2304,6 +2304,74 @@ describe("public thread routes", () => {
     }
   });
 
+  it("does not steer a thread whose latest provider turn is already closed", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/send-without-open-turn",
+      });
+      const activeThread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      seedEvent(harness.deps, {
+        threadId: activeThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-closed-turn",
+        turnId: "turn-closed",
+        sequence: 1,
+        type: "turn/started",
+        data: {},
+      });
+      seedEvent(harness.deps, {
+        threadId: activeThread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-closed-turn",
+        turnId: "turn-closed",
+        sequence: 2,
+        type: "turn/completed",
+        data: { status: "completed" },
+      });
+
+      const steerResponse = await harness.app.request(
+        `/api/v1/threads/${activeThread.id}/send`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            mode: "steer",
+            input: [{ type: "text", text: "Do not attach to old turn" }],
+          }),
+        },
+      );
+
+      expect(steerResponse.status).toBe(409);
+      await expect(readJson(steerResponse)).resolves.toMatchObject({
+        code: "invalid_request",
+        message: "No active turn to steer",
+      });
+      const threadEvents = harness.db
+        .select({ type: events.type })
+        .from(events)
+        .where(eq(events.threadId, activeThread.id))
+        .orderBy(events.sequence)
+        .all();
+      expect(threadEvents.map((event) => event.type)).toEqual([
+        "turn/started",
+        "turn/completed",
+      ]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("does not overwrite project execution defaults after a standard thread send", async () => {
     const harness = await createTestAppHarness();
     try {

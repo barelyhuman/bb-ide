@@ -51,6 +51,11 @@ export interface CompletedStoredTurnRow {
   turnId: string;
 }
 
+export interface StoredTurnLifecycleEventRow {
+  turnId: string;
+  type: "turn/started" | "turn/completed";
+}
+
 /**
  * Insert events with dedup on (threadId, sequence).
  * Uses INSERT OR IGNORE to skip duplicates.
@@ -492,6 +497,37 @@ export function getLastStoredTurnId(
     .limit(1)
     .get();
   return row?.turnId ?? null;
+}
+
+export function getLastStoredTurnLifecycleEvent(
+  db: DbConnection,
+  threadId: string,
+): StoredTurnLifecycleEventRow | null {
+  const row = db
+    .select({ turnId: events.turnId, type: events.type })
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, threadId),
+        inArray(events.type, ["turn/started", "turn/completed"]),
+        isNotNull(events.turnId),
+      ),
+    )
+    .orderBy(desc(events.sequence))
+    .limit(1)
+    .get();
+
+  if (
+    !row?.turnId ||
+    (row.type !== "turn/started" && row.type !== "turn/completed")
+  ) {
+    return null;
+  }
+
+  return {
+    turnId: row.turnId,
+    type: row.type,
+  };
 }
 
 export function getLastStoredProviderThreadId(

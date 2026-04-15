@@ -52,6 +52,28 @@ describe("codex provider adapter", () => {
     expect(adapter.process.args).toEqual(["app-server"]);
   });
 
+  it("synthesizes user-message acks only for steers", () => {
+    const adapter = createCodexProviderAdapter();
+    if (!adapter.buildSyntheticUserMessageAck) {
+      throw new Error("Expected Codex synthetic ack builder");
+    }
+
+    expect(adapter.buildSyntheticUserMessageAck({
+      input: [{ type: "text", text: "normal turn" }],
+      itemId: "runtime-user-1",
+      source: "turn/start",
+    })).toBeNull();
+    expect(adapter.buildSyntheticUserMessageAck({
+      input: [{ type: "text", text: "steer turn" }],
+      itemId: "runtime-user-2",
+      source: "turn/steer",
+    })).toEqual({
+      type: "userMessage",
+      id: "runtime-user-2",
+      content: [{ type: "text", text: "steer turn" }],
+    });
+  });
+
   // -- buildCommand --------------------------------------------------------
 
   it("buildCommand returns codex initialize with experimental API", () => {

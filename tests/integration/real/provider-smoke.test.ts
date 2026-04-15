@@ -38,6 +38,22 @@ type RealProviderExecutionOptions = Pick<
   ThreadExecutionOptions,
   "model" | "reasoningLevel" | "serviceTier"
 >;
+type ProviderSmokeHarness = Awaited<ReturnType<typeof createIntegrationHarness>>;
+
+interface WaitForThreadEventArgs {
+  baselineSequence: number;
+  harness: ProviderSmokeHarness;
+  threadId: string;
+}
+
+interface WaitForUserMessageAckTextArgs extends WaitForThreadEventArgs {
+  text: string;
+}
+
+interface WaitForTurnStartedResult {
+  sequence: number;
+  turnId: string;
+}
 
 // Active-turn waits: enough time to confirm the provider has started a long-running turn.
 const ACTIVE_TIMEOUT_MS = scaleTimeoutMs(15_000);
@@ -108,6 +124,92 @@ function hasCompletedAgentMessageAfter(
       event.type === "item/completed" &&
       event.data.item.type === "agentMessage" &&
       event.data.item.text.trim().length > 0,
+  );
+}
+
+function hasUserMessageAckTextAfter(
+  events: ThreadEventRow[],
+  sequence: number,
+  text: string,
+): boolean {
+  return events.some((event) =>
+    event.seq > sequence &&
+    event.type === "item/completed" &&
+    event.data.item.type === "userMessage" &&
+    event.data.item.content.some((content) =>
+      content.type === "text" && content.text.includes(text),
+    ),
+  );
+}
+
+function findTurnStartedAfter(
+  events: ThreadEventRow[],
+  sequence: number,
+): WaitForTurnStartedResult | null {
+  for (const event of events) {
+    if (event.seq > sequence && event.type === "turn/started") {
+      return {
+        sequence: event.seq,
+        turnId: event.data.turnId,
+      };
+    }
+  }
+  return null;
+}
+
+async function buildThreadDiagnostics(
+  args: WaitForThreadEventArgs,
+): Promise<string> {
+  const [thread, events] = await Promise.all([
+    getThread(args.harness.api, args.threadId),
+    getThreadEvents(args.harness.api, args.threadId),
+  ]);
+  const recentEventTypes = events
+    .slice(-12)
+    .map((event) => event.type)
+    .join(", ");
+  const lastError = [...events]
+    .reverse()
+    .find((event) => event.type === "error" || event.type === "system/error");
+  const lastTurnStarted = [...events]
+    .reverse()
+    .find((event) => event.type === "turn/started");
+  const lastTurnCompleted = [...events]
+    .reverse()
+    .find((event) => event.type === "turn/completed");
+  return `status=${thread.status}; events=${events.length}; recentEventTypes=[${recentEventTypes || "none"}]; lastError=${JSON.stringify(lastError?.data ?? null)}; lastTurnStarted=${JSON.stringify(lastTurnStarted?.data ?? null)}; lastTurnCompleted=${JSON.stringify(lastTurnCompleted?.data ?? null)}`;
+}
+
+async function waitForTurnStartedAfter(
+  args: WaitForThreadEventArgs,
+): Promise<WaitForTurnStartedResult> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt <= ACTIVE_TIMEOUT_MS) {
+    const events = await getThreadEvents(args.harness.api, args.threadId);
+    const turnStarted = findTurnStartedAfter(events, args.baselineSequence);
+    if (turnStarted) {
+      return turnStarted;
+    }
+    await new Promise((resolve) => setTimeout(resolve, REAL_POLL_INTERVAL_MS));
+  }
+  throw new Error(
+    `Timed out waiting for turn/started. Diagnostics: ${await buildThreadDiagnostics(args)}`,
+  );
+}
+
+async function waitForUserMessageAckTextAfter(
+  args: WaitForUserMessageAckTextArgs,
+): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt <= ACTIVE_TIMEOUT_MS) {
+    const events = await getThreadEvents(args.harness.api, args.threadId);
+    if (hasUserMessageAckTextAfter(events, args.baselineSequence, args.text)) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, REAL_POLL_INTERVAL_MS));
+  }
+  throw new Error(
+    `Timed out waiting for user-message ack containing ${JSON.stringify(args.text)}. Diagnostics: ${await buildThreadDiagnostics(args)}`,
   );
 }
 
@@ -327,6 +429,65 @@ describe("real provider end-to-end integration", () => {
           expect(countTurnEvents(events, "turn/completed")).toBeGreaterThanOrEqual(2);
           expect(events.every((event) => event.threadId === thread.id)).toBe(true);
           expectNonEmptyOutput(output, `${providerId} multi-turn output`);
+        } finally {
+          await harness.cleanup();
+        }
+      },
+      TEST_TIMEOUT_MS,
+    );
+
+    it.concurrent(
+      `${providerId} can steer an active turn`,
+      async () => {
+        const { harness, thread } = await createRealThread(providerId, {
+          path: null,
+          type: "unmanaged",
+        });
+
+        try {
+          const baselineEvents = await getThreadEvents(harness.api, thread.id);
+          const baselineSequence = Math.max(
+            0,
+            ...baselineEvents.map((event) => event.seq),
+          );
+          await sendTextMessage(harness.api, thread.id, {
+            execution: getExecutionOptions(providerId),
+            text:
+              "Write a detailed 20 section essay about the history of computing with four sentences per section.",
+          });
+          await waitForTurnStartedAfter({
+            baselineSequence,
+            harness,
+            threadId: thread.id,
+          });
+          const steerBaselineEvents = await getThreadEvents(harness.api, thread.id);
+          const steerBaselineSequence = Math.max(
+            0,
+            ...steerBaselineEvents.map((event) => event.seq),
+          );
+          const steerText = `Steer acknowledgement ${providerId}`;
+          await sendTextMessage(harness.api, thread.id, {
+            execution: getExecutionOptions(providerId),
+            mode: "steer",
+            text: steerText,
+          });
+          await waitForUserMessageAckTextAfter({
+            baselineSequence: steerBaselineSequence,
+            harness,
+            text: steerText,
+            threadId: thread.id,
+          });
+
+          const refreshedThread = await getThread(harness.api, thread.id);
+          if (refreshedThread.status === "active") {
+            await stopThread(harness.api, thread.id);
+            await waitForThreadStatus(
+              harness.api,
+              thread.id,
+              "idle",
+              STOP_TIMEOUT_MS,
+            );
+          }
         } finally {
           await harness.cleanup();
         }

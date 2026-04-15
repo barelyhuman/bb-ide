@@ -12,7 +12,7 @@ import {
   ensureThreadCanQueueStartRequest,
   queueReadyThreadTurnCommand,
 } from "./thread-lifecycle.js";
-import { appendClientTurnEvent, getLastTurnId } from "./thread-events.js";
+import { appendClientTurnEvent, getActiveTurnId } from "./thread-events.js";
 import {
   queueTurnDuringReprovision,
   requireReadyThreadEnvironment,
@@ -43,6 +43,13 @@ async function queueReadyManagerSystemMessage(
   deps: PendingInteractionWorkSessionDeps,
   args: QueueReadyManagerSystemMessageArgs,
 ): Promise<void> {
+  const expectedSteerTurnId = args.thread.status === "active"
+    ? getActiveTurnId(deps, args.thread.id)
+    : null;
+  if (args.thread.status === "active" && expectedSteerTurnId === null) {
+    throw new ApiError(409, "invalid_request", "No active turn to steer");
+  }
+
   const eventSequence = appendClientTurnEvent(deps, {
     threadId: args.thread.id,
     environmentId: args.environment.id,
@@ -59,8 +66,7 @@ async function queueReadyManagerSystemMessage(
   });
 
   if (args.thread.status === "active") {
-    const expectedTurnId = getLastTurnId(deps, args.thread.id);
-    if (!expectedTurnId) {
+    if (expectedSteerTurnId === null) {
       throw new ApiError(409, "invalid_request", "No active turn to steer");
     }
     await queueTurnSteerCommand(deps, {
@@ -69,7 +75,7 @@ async function queueReadyManagerSystemMessage(
       eventSequence,
       execution: args.execution,
       permissionEscalation,
-      expectedTurnId,
+      expectedTurnId: expectedSteerTurnId,
       environment: {
         id: args.environment.id,
         hostId: args.environment.hostId,

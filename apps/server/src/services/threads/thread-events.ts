@@ -3,7 +3,7 @@ import {
   appendStoredThreadEvent,
   appendStoredThreadEventInTransaction,
   getLastStoredProviderThreadId,
-  getLastStoredTurnId,
+  getLastStoredTurnLifecycleEvent,
   getLastStoredTurnRequestEvent,
   type StoredTurnRequestEventRow,
 } from "@bb/db";
@@ -335,11 +335,14 @@ export function appendThreadOwnershipChangeEvent(
   });
 }
 
-export function getLastTurnId(
+export function getActiveTurnId(
   deps: Pick<AppDeps, "db">,
   threadId: string,
 ): string | null {
-  return getLastStoredTurnId(deps.db, threadId);
+  const lifecycleEvent = getLastStoredTurnLifecycleEvent(deps.db, threadId);
+  return lifecycleEvent?.type === "turn/started"
+    ? lifecycleEvent.turnId
+    : null;
 }
 
 export function getLastProviderThreadId(

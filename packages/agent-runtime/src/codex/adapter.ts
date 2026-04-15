@@ -28,6 +28,7 @@ import type { UserInput as CodexUserInput } from "./generated/codex-app-server/s
 import type { AskForApproval } from "./generated/codex-app-server/schema/v2/AskForApproval.js";
 import { parseModelsResponse } from "./models.js";
 import {
+  buildUserMessageAckItem,
   buildShellEnvironmentPolicyConfig,
 } from "../shared/adapter-utils.js";
 import {
@@ -202,6 +203,14 @@ export function createCodexProviderAdapter(
     process: {
       command: opts?.processCommand ?? "codex",
       args: opts?.processArgs ?? ["app-server"],
+    },
+
+    buildSyntheticUserMessageAck(args) {
+      // Codex emits provider userMessage items for turn/start, but not for turn/steer.
+      if (args.source !== "turn/steer") {
+        return null;
+      }
+      return buildUserMessageAckItem(args.input, args.itemId);
     },
 
     buildCommand(command: AdapterCommand): JsonRpcMessage | null {

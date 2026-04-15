@@ -178,7 +178,10 @@ export interface BuildInteractiveResponseArgs {
 export interface BuildSyntheticUserMessageAckArgs {
   input: PromptInput[];
   itemId: string;
+  source: SyntheticUserMessageAckSource;
 }
+
+export type SyntheticUserMessageAckSource = "turn/start" | "turn/steer";
 
 export type SyntheticUserMessageAckItem = Extract<
   ThreadEventItem,

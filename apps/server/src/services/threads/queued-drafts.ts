@@ -25,7 +25,7 @@ import {
 } from "./thread-turn-dispatch.js";
 import {
   appendClientTurnEvent,
-  getLastTurnId,
+  getActiveTurnId,
 } from "./thread-events.js";
 import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import { tryTransition } from "./thread-transitions.js";
@@ -78,8 +78,15 @@ async function sendClaimedDraft(
   const draft = args.draft;
   const queuedMessage = toQueuedMessage(draft);
   const { environment, thread } = requireThreadEnvironment(deps.db, args.threadId);
-  if (resolveQueuedDraftSendMode(thread.status) === "start") {
+  const sendMode = resolveQueuedDraftSendMode(thread.status);
+  if (sendMode === "start") {
     ensureThreadCanQueueStartRequest(deps, thread);
+  }
+  const expectedSteerTurnId = sendMode === "steer"
+    ? getActiveTurnId(deps, thread.id)
+    : null;
+  if (sendMode === "steer" && expectedSteerTurnId === null) {
+    throw new ApiError(409, "invalid_request", "No active turn to steer");
   }
   const execution = await buildExecutionOptions(
     deps,
@@ -122,7 +129,7 @@ async function sendClaimedDraft(
     source: "tell",
   });
 
-  if (resolveQueuedDraftSendMode(thread.status) === "start") {
+  if (sendMode === "start") {
     const queuedMode = await queueReadyThreadTurnCommand(deps, {
       thread,
       input: queuedMessage.content,
@@ -140,8 +147,7 @@ async function sendClaimedDraft(
       tryTransition(deps.db, deps.hub, thread.id, "active");
     }
   } else {
-    const expectedTurnId = getLastTurnId(deps, thread.id);
-    if (!expectedTurnId) {
+    if (expectedSteerTurnId === null) {
       throw new ApiError(409, "invalid_request", "No active turn to steer");
     }
     await queueTurnSteerCommand(deps, {
@@ -150,7 +156,7 @@ async function sendClaimedDraft(
       eventSequence,
       execution,
       permissionEscalation,
-      expectedTurnId,
+      expectedTurnId: expectedSteerTurnId,
       environment: {
         id: readyEnvironment.id,
         hostId: readyEnvironment.hostId,
