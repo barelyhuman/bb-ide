@@ -89,7 +89,7 @@ function defaultThreadInput(text: string): CreateThreadRequest["input"] {
 function defaultModelForProvider(providerId: string): string {
   switch (providerId) {
     case "codex":
-      return "gpt-5";
+      return "gpt-5.4";
     case "claude-code":
       return "claude-haiku-4-5";
     case "pi":

@@ -18,6 +18,13 @@ import {
 const POLL_INTERVAL_MS = 100;
 
 type PublicApiClient = ReturnType<typeof createPublicApiClient>;
+
+interface ThreadStatusFailureContext {
+  currentStatus: ThreadStatus | "unknown";
+  expectedStatus: ThreadStatus;
+  threadId: string;
+}
+
 async function pollUntil<T>(
   check: () => Promise<T | null>,
   expectation: string,
@@ -94,23 +101,83 @@ async function readEnvironment(
   return response.json();
 }
 
+function stringifyEventData(event: ThreadEventRow | undefined): string {
+  return JSON.stringify(event?.data ?? null);
+}
+
+async function buildThreadStatusFailureMessage(
+  api: PublicApiClient,
+  context: ThreadStatusFailureContext,
+): Promise<string> {
+  const events = await readThreadEvents(api, context.threadId);
+  const recentEventTypes = events
+    .slice(-10)
+    .map((event) => event.type)
+    .join(", ");
+  const lastError = [...events]
+    .reverse()
+    .find((event) => event.type === "error" || event.type === "system/error");
+  const lastTurnCompleted = [...events]
+    .reverse()
+    .find((event) => event.type === "turn/completed");
+
+  return [
+    `Thread ${context.threadId} entered ${context.currentStatus} while waiting for ${context.expectedStatus}`,
+    `events=${events.length}`,
+    `recentEventTypes=[${recentEventTypes || "none"}]`,
+    `lastError=${stringifyEventData(lastError)}`,
+    `lastTurnCompleted=${stringifyEventData(lastTurnCompleted)}`,
+  ].join("; ");
+}
+
 export async function waitForThreadStatus(
   api: PublicApiClient,
   threadId: string,
   status: ThreadStatus,
   timeoutMs = 10_000,
 ): Promise<Thread> {
-  let currentStatus = "unknown";
-  return pollUntil(
-    async () => {
-      const thread = await readThread(api, threadId);
-      currentStatus = thread.status;
-      return thread.status === status ? thread : null;
-    },
-    `Timed out waiting for thread ${threadId} to reach status ${status}`,
-    timeoutMs,
-    () => currentStatus,
-  );
+  let currentStatus: ThreadStatus | "unknown" = "unknown";
+  try {
+    return await pollUntil(
+      async () => {
+        const thread = await readThread(api, threadId);
+        currentStatus = thread.status;
+        if (thread.status === "error" && status !== "error") {
+          throw new Error(
+            await buildThreadStatusFailureMessage(api, {
+              currentStatus: thread.status,
+              expectedStatus: status,
+              threadId,
+            }),
+          );
+        }
+        if (
+          thread.status === status
+          && (status !== "idle" || thread.stopRequestedAt === null)
+        ) {
+          return thread;
+        }
+        return null;
+      },
+      `Timed out waiting for thread ${threadId} to reach status ${status}`,
+      timeoutMs,
+      () => currentStatus,
+    );
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message.startsWith(`Timed out waiting for thread ${threadId}`)
+    ) {
+      throw new Error(
+        await buildThreadStatusFailureMessage(api, {
+          currentStatus,
+          expectedStatus: status,
+          threadId,
+        }),
+      );
+    }
+    throw error;
+  }
 }
 
 export async function waitForEvents(

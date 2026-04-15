@@ -1,10 +1,9 @@
 // Real provider end-to-end coverage
 import { execFile as execFileCb } from "node:child_process";
 import fs from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type {
   ThreadEventRow,
   ThreadExecutionOptions,
@@ -40,12 +39,6 @@ type RealProviderExecutionOptions = Pick<
   "model" | "reasoningLevel" | "serviceTier"
 >;
 
-const REAL_PROVIDER_LOCK_PATH = path.join(
-  tmpdir(),
-  "bb-real-provider-tests.lock",
-);
-let realProviderLock: fs.FileHandle | null = null;
-
 // Active-turn waits: enough time to confirm the provider has started a long-running turn.
 const ACTIVE_TIMEOUT_MS = scaleTimeoutMs(15_000);
 const REAL_POLL_INTERVAL_MS = 200;
@@ -58,11 +51,15 @@ const TEST_TIMEOUT_MS = scaleTimeoutMs(120_000);
 // Mixed-provider budget: the all-provider pass runs multiple real-provider turns in one test.
 const MIXED_PROVIDER_TIMEOUT_MS = scaleTimeoutMs(240_000);
 
+// Concurrent real-provider harnesses each install daemon shutdown handlers.
+process.setMaxListeners(Math.max(process.getMaxListeners(), 64));
+
 const FAST_EXECUTION_BY_PROVIDER: Record<
   RealProviderId,
   RealProviderExecutionOptions
 > = {
   codex: {
+    model: "gpt-5.4",
     reasoningLevel: "low",
     serviceTier: "fast",
   },
@@ -81,6 +78,37 @@ function countTurnEvents(
   type: "turn/completed" | "turn/started",
 ): number {
   return events.filter((event) => event.type === type).length;
+}
+
+function findLatestClientTurnRequestSequenceAfter(
+  events: ThreadEventRow[],
+  sequence: number,
+): number | null {
+  const request = [...events]
+    .reverse()
+    .find(
+      (event) =>
+        event.seq > sequence &&
+        (
+          event.type === "client/thread/start" ||
+          event.type === "client/turn/requested" ||
+          event.type === "client/turn/start"
+        ),
+    );
+  return request?.seq ?? null;
+}
+
+function hasCompletedAgentMessageAfter(
+  events: ThreadEventRow[],
+  sequence: number,
+): boolean {
+  return events.some(
+    (event) =>
+      event.seq > sequence &&
+      event.type === "item/completed" &&
+      event.data.item.type === "agentMessage" &&
+      event.data.item.text.trim().length > 0,
+  );
 }
 
 async function pathExists(targetPath: string): Promise<boolean> {
@@ -116,72 +144,6 @@ function getExecutionOptions(
   providerId: RealProviderId,
 ): RealProviderExecutionOptions {
   return FAST_EXECUTION_BY_PROVIDER[providerId];
-}
-
-function isNodeError(error: unknown): error is NodeJS.ErrnoException {
-  return error instanceof Error;
-}
-
-function isProcessAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    if (isNodeError(error) && error.code === "ESRCH") {
-      return false;
-    }
-    throw error;
-  }
-}
-
-async function acquireRealProviderLock(): Promise<void> {
-  while (true) {
-    try {
-      realProviderLock = await fs.open(REAL_PROVIDER_LOCK_PATH, "wx");
-      await realProviderLock.writeFile(
-        JSON.stringify(
-          {
-            cwd: process.cwd(),
-            pid: process.pid,
-            startedAt: Date.now(),
-          },
-          null,
-          2,
-        ),
-        "utf8",
-      );
-      return;
-    } catch (error) {
-      if (!isNodeError(error) || error.code !== "EEXIST") {
-        throw error;
-      }
-
-      const existingLock = await fs
-        .readFile(REAL_PROVIDER_LOCK_PATH, "utf8")
-        .then((raw) => JSON.parse(raw))
-        .catch(() => null);
-      const lockPid =
-        existingLock &&
-        typeof existingLock === "object" &&
-        typeof existingLock.pid === "number"
-          ? existingLock.pid
-          : null;
-
-      if (lockPid && isProcessAlive(lockPid)) {
-        throw new Error(
-          `Real provider integration tests are already running under pid ${lockPid}. Release ${REAL_PROVIDER_LOCK_PATH} before starting another worktree run.`,
-        );
-      }
-
-      await fs.rm(REAL_PROVIDER_LOCK_PATH, { force: true });
-    }
-  }
-}
-
-async function releaseRealProviderLock(): Promise<void> {
-  await realProviderLock?.close().catch(() => undefined);
-  realProviderLock = null;
-  await fs.rm(REAL_PROVIDER_LOCK_PATH, { force: true }).catch(() => undefined);
 }
 
 function expectNonEmptyOutput(
@@ -231,28 +193,33 @@ async function sendAndWaitForIdle(args: {
   text: string;
   harness: Awaited<ReturnType<typeof createIntegrationHarness>>;
 }) {
-  const baselineCompletedTurns = countTurnEvents(
-    await getThreadEvents(args.harness.api, args.threadId),
-    "turn/completed",
-  );
+  const baselineEvents = await getThreadEvents(args.harness.api, args.threadId);
+  const baselineSequence = Math.max(0, ...baselineEvents.map((event) => event.seq));
   await sendTextMessage(args.harness.api, args.threadId, {
     execution: getExecutionOptions(args.providerId),
     text: args.text,
   });
   try {
+    const requestSequence = findLatestClientTurnRequestSequenceAfter(
+      await getThreadEvents(args.harness.api, args.threadId),
+      baselineSequence,
+    );
+    if (requestSequence === null) {
+      throw new Error(
+        `Thread ${args.threadId} did not record a client turn request`,
+      );
+    }
+
     const startedAt = Date.now();
-    let sawNonIdle = false;
+    let reachedIdle = false;
     while (Date.now() - startedAt <= TURN_TIMEOUT_MS) {
       const [thread, events] = await Promise.all([
         getThread(args.harness.api, args.threadId),
         getThreadEvents(args.harness.api, args.threadId),
       ]);
-      if (thread.status !== "idle") {
-        sawNonIdle = true;
-      }
       if (thread.status === "idle") {
-        const completedTurns = countTurnEvents(events, "turn/completed");
-        if (sawNonIdle || completedTurns > baselineCompletedTurns) {
+        if (hasCompletedAgentMessageAfter(events, requestSequence)) {
+          reachedIdle = true;
           break;
         }
       }
@@ -263,20 +230,27 @@ async function sendAndWaitForIdle(args: {
       }
       await new Promise((resolve) => setTimeout(resolve, REAL_POLL_INTERVAL_MS));
     }
+    if (!reachedIdle) {
+      throw new Error(
+        `Timed out waiting for thread ${args.threadId} to return to idle`,
+      );
+    }
   } catch (error) {
     const [thread, events, output, timeline] = await Promise.all([
       getThread(args.harness.api, args.threadId),
       getThreadEvents(args.harness.api, args.threadId),
       getThreadOutput(args.harness.api, args.threadId),
-      getThreadTimeline(args.harness.api, args.threadId),
+      getThreadTimeline(args.harness.api, args.threadId).catch(() => null),
     ]);
     const recentEventTypes = events
       .slice(-10)
       .map((event) => event.type)
       .join(", ");
-    const timelineKinds = timeline.rows
-      .map((row) => (row.kind === "message" ? row.message.kind : row.kind))
-      .join(", ");
+    const timelineKinds = timeline
+      ? timeline.rows
+        .map((row) => (row.kind === "message" ? row.message.kind : row.kind))
+        .join(", ")
+      : "unavailable";
     const outputPreview = output?.trim().slice(0, 160) ?? "";
     const lastError = [...events]
       .reverse()
@@ -297,17 +271,9 @@ async function sendAndWaitForIdle(args: {
   return { events, output };
 }
 
-describe.sequential("real provider end-to-end integration", () => {
-  beforeAll(async () => {
-    await acquireRealProviderLock();
-  }, TEST_TIMEOUT_MS);
-
-  afterAll(async () => {
-    await releaseRealProviderLock();
-  });
-
+describe("real provider end-to-end integration", () => {
   for (const providerId of REAL_PROVIDER_IDS) {
-    it(
+    it.concurrent(
       `${providerId} completes a single turn end-to-end`,
       async () => {
         const { harness, thread } = await createRealThread(providerId, {
@@ -336,7 +302,7 @@ describe.sequential("real provider end-to-end integration", () => {
       TEST_TIMEOUT_MS,
     );
 
-    it(
+    it.concurrent(
       `${providerId} handles a multi-turn thread end-to-end`,
       async () => {
         const { harness, thread } = await createRealThread(providerId, {
@@ -368,7 +334,7 @@ describe.sequential("real provider end-to-end integration", () => {
       TEST_TIMEOUT_MS,
     );
 
-    it(
+    it.concurrent(
       `${providerId} can stop an active turn and recover`,
       async () => {
         const { harness, thread } = await createRealThread(providerId, {
@@ -415,7 +381,7 @@ describe.sequential("real provider end-to-end integration", () => {
       TEST_TIMEOUT_MS,
     );
 
-    it(
+    it.concurrent(
       `${providerId} can interact with a managed workspace`,
       async () => {
         const { harness, environment, thread } = await createRealThread(providerId, {
@@ -477,7 +443,7 @@ describe.sequential("real provider end-to-end integration", () => {
     );
   }
 
-  it(
+  it.concurrent(
     "runs codex and claude-code concurrently in separate environments",
     async () => {
       await assertProviderPrerequisites("codex");
@@ -555,7 +521,7 @@ describe.sequential("real provider end-to-end integration", () => {
     TEST_TIMEOUT_MS,
   );
 
-  it(
+  it.concurrent(
     "runs codex, claude-code, and pi sequentially through the full registry",
     async () => {
       for (const providerId of REAL_PROVIDER_IDS) {
