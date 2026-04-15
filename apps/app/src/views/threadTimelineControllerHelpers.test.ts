@@ -5,6 +5,7 @@ import {
   hasMeaningfulComposerHeightChange,
   hasMeaningfulTimelineContainerResize,
   isTimelineNearBottom,
+  resolveTimelineScrollMode,
   shouldLoadToolGroupMessages,
   shouldShowTimelineScrollToBottom,
 } from "./threadTimelineControllerHelpers";
@@ -115,5 +116,27 @@ describe("threadTimelineControllerHelpers", () => {
         threadId: "thread-1",
       }),
     ).toBe(false);
+  });
+
+  it("preserves reading-history mode during controlled layout reconciliation", () => {
+    expect(
+      resolveTimelineScrollMode({
+        currentMode: "reading_history",
+        isNearBottom: true,
+        preserveReadingHistoryDuringReconcile: true,
+        source: "controlled_reconcile",
+      }),
+    ).toBe("reading_history");
+  });
+
+  it("lets explicit user scroll to bottom leave reading-history mode", () => {
+    expect(
+      resolveTimelineScrollMode({
+        currentMode: "reading_history",
+        isNearBottom: true,
+        preserveReadingHistoryDuringReconcile: true,
+        source: "user_scroll",
+      }),
+    ).toBe("pinned_bottom");
   });
 });

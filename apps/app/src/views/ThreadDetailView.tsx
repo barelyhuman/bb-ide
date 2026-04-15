@@ -207,6 +207,7 @@ export function ThreadDetailView() {
   } = useThreadTimelineController({
     threadId,
     threadDetailRows,
+    threadStatus: thread?.status,
     isSecondaryPanelOpen,
     loadToolGroupMessages: (args) =>
       timelineToolDetails.mutateAsync({

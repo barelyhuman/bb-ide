@@ -1,6 +1,7 @@
 import { DEFAULT_SCROLL_STICK_THRESHOLD_PX } from "@bb/ui-core";
 
 export type TimelineScrollMode = "pinned_bottom" | "reading_history";
+export type TimelineScrollUpdateSource = "user_scroll" | "controlled_reconcile";
 
 export interface TimelineScrollAnchor {
   rowId: string;
@@ -36,6 +37,13 @@ export interface ToolGroupLoadState {
   threadId?: string;
 }
 
+export interface ResolveTimelineScrollModeArgs {
+  currentMode: TimelineScrollMode;
+  isNearBottom: boolean;
+  preserveReadingHistoryDuringReconcile: boolean;
+  source: TimelineScrollUpdateSource;
+}
+
 function getDistanceFromBottom(snapshot: TimelineScrollSnapshot): number {
   return snapshot.scrollHeight - snapshot.scrollTop - snapshot.clientHeight;
 }
@@ -55,6 +63,26 @@ export function shouldShowTimelineScrollToBottom(
   }
 
   return !isTimelineNearBottom(snapshot);
+}
+
+export function resolveTimelineScrollMode({
+  currentMode,
+  isNearBottom,
+  preserveReadingHistoryDuringReconcile,
+  source,
+}: ResolveTimelineScrollModeArgs): TimelineScrollMode {
+  if (source === "user_scroll") {
+    return isNearBottom ? "pinned_bottom" : "reading_history";
+  }
+
+  if (
+    preserveReadingHistoryDuringReconcile &&
+    currentMode === "reading_history"
+  ) {
+    return "reading_history";
+  }
+
+  return isNearBottom ? "pinned_bottom" : "reading_history";
 }
 
 export function captureTimelineScrollAnchorFromViewport({
