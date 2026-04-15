@@ -434,12 +434,21 @@ export function ThreadFollowUpComposer({
                   {environment.environmentLabel ? (
                     <PromptOptionDisplay
                       label="Environment"
-                      value={environment.environmentLabel}
+                      value={
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          <span className="truncate">{environment.environmentLabel}</span>
+                          {environment.environmentHostConnected !== undefined ? (
+                            <HostStatusBadge
+                              connected={environment.environmentHostConnected}
+                              className="translate-y-px"
+                            />
+                          ) : null}
+                        </span>
+                      }
                       icon={environment.environmentIcon}
                       className="h-6"
                     />
-                  ) : null}
-                  {environment.environmentHostConnected !== undefined ? (
+                  ) : environment.environmentHostConnected !== undefined ? (
                     <HostStatusBadge connected={environment.environmentHostConnected} />
                   ) : null}
                 </div>
