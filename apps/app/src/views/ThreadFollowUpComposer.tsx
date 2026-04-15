@@ -1,6 +1,7 @@
 import { type ComponentProps, type ComponentType, type ReactNode, type RefObject } from "react";
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
-import { CornerDownRight, Pencil, Trash2, ChevronDown } from "lucide-react";
+import { CornerDownRight, GitBranch, Pencil, Trash2, ChevronDown } from "lucide-react";
+import { copyToClipboardWithToast } from "@/lib/clipboard";
 import {
   type PermissionMode,
   type ReasoningLevel,
@@ -184,6 +185,7 @@ export interface ComposerCoreProps {
 
 export interface ComposerEnvironmentProps {
   contextWindowUsage?: ComponentProps<typeof ThreadContextWindowIndicator>["usage"];
+  environmentBranchName?: string;
   environmentHostConnected?: boolean;
   environmentIcon?: ComponentType<{ className?: string }>;
   environmentLabel?: ReactNode;
@@ -430,7 +432,7 @@ export function ThreadFollowUpComposer({
           <div className="mt-1 flex items-center justify-between gap-2 pl-[15px] pr-3.5">
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
               {environment.environmentLabel || environment.environmentHostConnected !== undefined ? (
-                <div className="flex min-w-0 items-center pr-1.5">
+                <div className="flex min-w-0 items-center gap-2 pr-1.5">
                   {environment.environmentLabel ? (
                     <PromptOptionDisplay
                       label="Environment"
@@ -446,13 +448,33 @@ export function ThreadFollowUpComposer({
                         </span>
                       }
                       icon={environment.environmentIcon}
-                      className="h-6"
+                      className="h-6 min-w-[80px]"
                     />
                   ) : environment.environmentHostConnected !== undefined ? (
                     <HostStatusBadge connected={environment.environmentHostConnected} />
                   ) : null}
+                  {environment.environmentBranchName ? (
+                    <button
+                      type="button"
+                      className="hidden min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground/75 transition-colors hover:bg-accent hover:text-foreground md:flex"
+                      title={`Copy branch name: ${environment.environmentBranchName}`}
+                      onClick={() => {
+                        const branchName = environment.environmentBranchName;
+                        if (!branchName) return;
+                        void copyToClipboardWithToast(branchName, {
+                          successMessage: "Branch name copied",
+                          errorMessage: "Failed to copy branch name",
+                        });
+                      }}
+                    >
+                      <GitBranch className="size-3.5 shrink-0" />
+                      <span className="truncate">{environment.environmentBranchName}</span>
+                    </button>
+                  ) : null}
                 </div>
               ) : null}
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
               <PromptPermissionModePicker
                 value={execution.permissionMode}
                 options={execution.permissionModeOptions}
@@ -460,10 +482,10 @@ export function ThreadFollowUpComposer({
                 supported={execution.supportsPermissionModeSelection}
                 className="h-6"
               />
+              {environment.contextWindowUsage ? (
+                <ThreadContextWindowIndicator usage={environment.contextWindowUsage} />
+              ) : null}
             </div>
-            {environment.contextWindowUsage ? (
-              <ThreadContextWindowIndicator usage={environment.contextWindowUsage} />
-            ) : null}
           </div>
         ) : null}
       </div>

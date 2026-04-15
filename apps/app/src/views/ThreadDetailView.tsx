@@ -48,7 +48,7 @@ import { useEnvironmentMergeBase } from "./useEnvironmentMergeBase";
 import { useThreadGitActions } from "./useThreadGitActions";
 import { useThreadReadTracking } from "./useThreadReadTracking";
 import { resolveThreadWorkspaceOpenPath } from "./threadWorkspaceOpenButton";
-import { toast } from "sonner";
+import { copyToClipboardWithToast } from "@/lib/clipboard";
 
 export function ThreadDetailView() {
   const { projectId, threadId } = useParams<{
@@ -405,16 +405,10 @@ export function ThreadDetailView() {
     if (!threadBranchName) {
       return;
     }
-    if (typeof navigator === "undefined" || !navigator.clipboard?.writeText) {
-      toast.error("Failed to copy branch name");
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(threadBranchName);
-      toast.success("Branch name copied");
-    } catch {
-      toast.error("Failed to copy branch name");
-    }
+    await copyToClipboardWithToast(threadBranchName, {
+      successMessage: "Branch name copied",
+      errorMessage: "Failed to copy branch name",
+    });
   };
   const threadActionsMenu = (
     <ThreadActionsMenu
@@ -472,6 +466,7 @@ export function ThreadDetailView() {
       canExpandPromptChangeList={canExpandPromptChangeList}
       canUseGitUi={canUseGitUi}
       contextWindowUsage={contextWindowUsage}
+      environmentBranchName={threadBranchName}
       environmentHostConnected={environmentHost ? environmentHost.status === "connected" : undefined}
       environmentIcon={threadEnvironmentIcon ?? undefined}
       environmentLabel={threadEnvironmentValue}

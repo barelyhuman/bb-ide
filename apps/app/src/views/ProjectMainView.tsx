@@ -303,21 +303,19 @@ export function ProjectMainView() {
             />
           }
         />
-        <div className="flex items-center px-3.5">
-          <div className="flex flex-wrap items-center gap-2">
-            <EnvironmentPicker
-              value={effectiveEnvironmentValue}
-              onChange={setEnvironmentSelectionValue}
-              projectId={projectId}
-              sources={projectSources}
-            />
-            <PromptPermissionModePicker
-              value={permissionMode}
-              options={permissionModeOptions}
-              onChange={setPermissionMode}
-              supported={supportsPermissionModeSelection}
-            />
-          </div>
+        <div className="flex items-center justify-between gap-2 px-3.5">
+          <EnvironmentPicker
+            value={effectiveEnvironmentValue}
+            onChange={setEnvironmentSelectionValue}
+            projectId={projectId}
+            sources={projectSources}
+          />
+          <PromptPermissionModePicker
+            value={permissionMode}
+            options={permissionModeOptions}
+            onChange={setPermissionMode}
+            supported={supportsPermissionModeSelection}
+          />
         </div>
       </div>
     </PageShell>
