@@ -31,8 +31,8 @@ export function AppPageHeader({
         className,
       )}
     >
-      <div className="flex h-full items-center gap-1 md:gap-3">
-        <SidebarTrigger className="shrink-0" />
+      <div className="flex h-full items-center gap-1 md:gap-2">
+        <SidebarTrigger className="-ml-2 shrink-0 md:ml-0" />
         {center ? (
           <div className="flex min-w-0 flex-1 items-center gap-2">{center}</div>
         ) : (
