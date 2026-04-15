@@ -15,6 +15,7 @@ import type {
   PromptInput,
   ProviderCapabilities,
   ServiceTier,
+  ThreadEvent,
 } from "@bb/domain";
 import type { ClientRequest as CodexClientRequest } from "./generated/codex-app-server/schema/ClientRequest.js";
 import type { JsonValue } from "./generated/codex-app-server/schema/serde_json/JsonValue.js";
@@ -30,6 +31,10 @@ import { parseModelsResponse } from "./models.js";
 import {
   buildShellEnvironmentPolicyConfig,
 } from "../shared/adapter-utils.js";
+import {
+  buildAcceptedUserMessageEvent,
+  type AcceptedUserMessageState,
+} from "../shared/accepted-user-messages.js";
 import {
   decodeNativeProviderToolCallRequest,
 } from "../shared/provider-tool-call-contract.js";
@@ -193,11 +198,110 @@ export function createCodexProviderAdapter(
     supportsServiceTier: providerInfo.capabilities.supportsServiceTier,
     supportedPermissionModes: providerInfo.capabilities.supportedPermissionModes,
   };
+  const acceptedUserMessageStateByThreadId =
+    new Map<string, AcceptedUserMessageState>();
+  const nativeUserMessageClientRequestSequencesByProviderThreadId =
+    new Map<string, number[]>();
+
+  function getAcceptedUserMessageState(threadId: string): AcceptedUserMessageState {
+    const existing = acceptedUserMessageStateByThreadId.get(threadId);
+    if (existing) {
+      return existing;
+    }
+    const state: AcceptedUserMessageState = {
+      pendingAcceptedUserMessages: [],
+      userMessageCounter: 0,
+    };
+    acceptedUserMessageStateByThreadId.set(threadId, state);
+    return state;
+  }
+
+  function queueNativeUserMessageClientRequestSequence(args: {
+    clientRequestSequence: number | undefined;
+    providerThreadId: string | undefined;
+  }): void {
+    if (
+      args.clientRequestSequence === undefined ||
+      args.providerThreadId === undefined
+    ) {
+      return;
+    }
+    nativeUserMessageClientRequestSequencesByProviderThreadId.set(
+      args.providerThreadId,
+      [
+        ...(nativeUserMessageClientRequestSequencesByProviderThreadId.get(
+          args.providerThreadId,
+        ) ?? []),
+        args.clientRequestSequence,
+      ],
+    );
+  }
+
+  function shiftNativeUserMessageClientRequestSequence(
+    providerThreadId: string,
+  ): number | undefined {
+    const sequences =
+      nativeUserMessageClientRequestSequencesByProviderThreadId.get(
+        providerThreadId,
+      );
+    if (!sequences || sequences.length === 0) {
+      return undefined;
+    }
+    const [clientRequestSequence, ...remainingSequences] = sequences;
+    if (remainingSequences.length === 0) {
+      nativeUserMessageClientRequestSequencesByProviderThreadId.delete(
+        providerThreadId,
+      );
+    } else {
+      nativeUserMessageClientRequestSequencesByProviderThreadId.set(
+        providerThreadId,
+        remainingSequences,
+      );
+    }
+    return clientRequestSequence;
+  }
+
+  function attachAcceptedUserMessageCorrelation(
+    event: ThreadEvent,
+  ): ThreadEvent {
+    if (event.type === "turn/completed") {
+      nativeUserMessageClientRequestSequencesByProviderThreadId.delete(
+        event.providerThreadId,
+      );
+      return event;
+    }
+
+    if (
+      event.type !== "item/completed" ||
+      event.item.type !== "userMessage"
+    ) {
+      return event;
+    }
+
+    const clientRequestSequence = shiftNativeUserMessageClientRequestSequence(
+      event.providerThreadId,
+    );
+    if (clientRequestSequence === undefined) {
+      return event;
+    }
+    return {
+      ...event,
+      item: {
+        ...event.item,
+        clientRequestSequence,
+      },
+    };
+  }
 
   return {
     id: providerInfo.id,
     displayName: providerInfo.displayName,
     capabilities,
+    // The Codex app-server accepts new turns after turn/interrupt, but the
+    // next turn can sit idle for ~30s while the interrupted session drains.
+    // Restarting forces the next command through thread/resume on a fresh
+    // app-server process.
+    threadStopBehavior: "restart-provider",
     process: {
       command: opts?.processCommand ?? "codex",
       args: opts?.processArgs ?? ["app-server"],
@@ -304,12 +408,45 @@ export function createCodexProviderAdapter(
             },
           };
         case "thread/stop":
-          return null;
+          if (command.activeTurnId === null) {
+            return null;
+          }
+          return {
+            jsonrpc: "2.0",
+            method: "turn/interrupt",
+            params: {
+              threadId: command.providerThreadId,
+              turnId: command.activeTurnId,
+            },
+          };
       }
     },
 
     translateEvent(event: unknown) {
-      return translateCodexEvent(event);
+      return translateCodexEvent(event).map(attachAcceptedUserMessageCorrelation);
+    },
+
+    translateAcceptedCommand({ command }) {
+      if (command.type === "turn/start") {
+        queueNativeUserMessageClientRequestSequence({
+          clientRequestSequence: command.clientRequestSequence,
+          providerThreadId: command.providerThreadId,
+        });
+        return [];
+      }
+
+      if (command.type !== "turn/steer") {
+        return [];
+      }
+      return buildAcceptedUserMessageEvent({
+        clientRequestSequence: command.clientRequestSequence,
+        input: command.input,
+        itemIdPrefix: "codex-user",
+        providerThreadId: command.providerThreadId ?? command.threadId,
+        state: getAcceptedUserMessageState(command.threadId),
+        threadId: command.threadId,
+        turnId: command.expectedTurnId,
+      });
     },
 
     decodeToolCallRequest(request: JsonRpcMessage): DecodedToolCallRequest | null {

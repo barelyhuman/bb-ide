@@ -62,6 +62,7 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       await entry.runtime.runTurn({
         threadId: command.threadId,
         input: command.input,
+        clientRequestSequence: command.eventSequence,
         options: command.options,
         instructions: command.resumeContext.instructions,
       });
@@ -74,6 +75,7 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
         threadId: command.threadId,
         expectedTurnId: command.expectedTurnId,
         input: command.input,
+        clientRequestSequence: command.eventSequence,
         options: command.options,
         instructions: command.resumeContext.instructions,
       });
@@ -85,7 +87,10 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
         options.runtimeManager,
       );
       await entry.runtime.stopThread({ threadId: command.threadId });
-      options.runtimeManager.markThreadInactive(
+      // Stop completion finalizes server-side thread state. Flush provider
+      // events first so buffered lifecycle events cannot arrive after that.
+      await options.eventSink?.flush();
+      options.runtimeManager.forgetThread(
         command.environmentId,
         command.threadId,
       );

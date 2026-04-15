@@ -163,16 +163,20 @@ export class PiSdkSession {
     }
   }
 
-  stop(): void {
+  detach(): void {
     if (this.unsubscribe) {
       this.unsubscribe();
       this.unsubscribe = undefined;
     }
+    this.isProcessing = false;
+  }
+
+  stop(): void {
+    this.detach();
     if (this.session) {
       this.session.dispose();
       this.session = undefined;
     }
-    this.isProcessing = false;
   }
 
   private trackProcessingState(event: AgentSessionEvent): void {

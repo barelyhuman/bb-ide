@@ -10,6 +10,7 @@ import {
   listDrafts,
   listManagerThreadNudgesByThread,
   markThreadDeleted,
+  markThreadStopRequested,
   threads,
 } from "@bb/db";
 import { turnRequestEventDataSchema } from "@bb/domain";
@@ -207,6 +208,56 @@ describe("internal event side effects", () => {
           .where(eq(threads.id, thread.id))
           .get()?.status,
       ).toBe("active");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not reactivate a stop-requested thread from a late turn/started event", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-event-stop-requested-start",
+      });
+      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      markThreadStopRequested(harness.db, harness.hub, {
+        threadId: thread.id,
+        requestedAt: 123,
+      });
+
+      const response = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            {
+              environmentId: environment.id,
+              threadId: thread.id,
+              sequence: 1,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/started",
+                threadId: thread.id,
+                providerThreadId: "provider-stop-requested-start",
+                turnId: "turn-stop-requested-start",
+              },
+            },
+          ],
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(getThread(harness.db, thread.id)?.status).toBe("idle");
     } finally {
       await harness.cleanup();
     }

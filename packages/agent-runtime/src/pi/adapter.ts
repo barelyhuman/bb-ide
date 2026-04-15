@@ -40,7 +40,14 @@ import {
   withParentToolCallId,
 } from "../shared/adapter-utils.js";
 import {
+  buildAcceptedUserMessageEvent,
+  drainAcceptedUserMessages,
+  queueAcceptedUserMessage,
+  type AcceptedUserMessageState,
+} from "../shared/accepted-user-messages.js";
+import {
   createProviderTurnStateRegistry,
+  finishOpenProviderTurn,
 } from "../shared/turn-state.js";
 import {
   getOrCreateScopedItemId,
@@ -509,8 +516,16 @@ interface PiTurnState {
   cumulativeTokens: ThreadEventTokenUsageBreakdown;
   openAssistantMessageIdsByScope: Map<string, string>;
   openReasoningItemIdsByScope: Map<string, string>;
+  pendingAcceptedUserMessages: AcceptedUserMessageState["pendingAcceptedUserMessages"];
   reasoningItemCounter: number;
   toolItemsByCallId: Map<string, ThreadEventItem>;
+  userMessageCounter: number;
+}
+
+interface EnsurePiTurnStartedArgs {
+  events: ThreadEvent[];
+  state: PiTurnState;
+  threadId: string;
 }
 
 function buildPiCompactionItemId(turnId: string): string {
@@ -574,11 +589,32 @@ export function createPiProviderAdapter(
       cumulativeTokens: { totalTokens: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 },
       openAssistantMessageIdsByScope: new Map(),
       openReasoningItemIdsByScope: new Map(),
+      pendingAcceptedUserMessages: [],
       reasoningItemCounter: 0,
       toolItemsByCallId: new Map(),
+      userMessageCounter: 0,
     }),
     turnIdPrefix: opts?.turnIdPrefix,
   });
+
+  function ensurePiTurnStarted(args: EnsurePiTurnStartedArgs): string {
+    const hadOpenTurn = args.state.currentTurnId !== undefined;
+    const turnId = turnState.ensureTurnStarted({
+      events: args.events,
+      state: args.state,
+      threadId: args.threadId,
+    });
+    if (!hadOpenTurn) {
+      drainAcceptedUserMessages({
+        events: args.events,
+        providerThreadId: "",
+        state: args.state,
+        threadId: args.threadId,
+        turnId,
+      });
+    }
+    return turnId;
+  }
 
   function translatePiEvent(
     event: unknown,
@@ -670,7 +706,7 @@ export function createPiProviderAdapter(
         if (!piEvent.success) {
           return buildUnexpectedPiSdkEvent(event, context);
         }
-        turnState.ensureTurnStarted({
+        ensurePiTurnStarted({
           events,
           state,
           threadId,
@@ -713,6 +749,10 @@ export function createPiProviderAdapter(
         if (!piEvent.success) {
           return buildUnexpectedPiSdkEvent(event, context);
         }
+        const currentTurnId = state.currentTurnId;
+        if (!currentTurnId) {
+          break;
+        }
         const lastAssistant = findLastAssistantMessage(piEvent.data.messages);
         if (lastAssistant) {
           const text = extractAssistantText(lastAssistant);
@@ -726,35 +766,33 @@ export function createPiProviderAdapter(
               type: "item/completed",
               threadId,
               providerThreadId: "",
-              turnId: state.currentTurnId ?? "",
+              turnId: currentTurnId,
               item: { type: "agentMessage", id: itemId, text },
             });
           }
         }
-        if (state.currentTurnId) {
-          const tokenUsage = extractPiTokenUsage(
-            lastAssistant,
-            state.cumulativeTokens,
-            resolveModelContextWindow,
-          );
-          if (tokenUsage) {
-            events.push({
-              type: "thread/tokenUsage/updated",
-              threadId,
-              providerThreadId: "",
-              turnId: state.currentTurnId,
-              tokenUsage,
-            });
-          }
+        const tokenUsage = extractPiTokenUsage(
+          lastAssistant,
+          state.cumulativeTokens,
+          resolveModelContextWindow,
+        );
+        if (tokenUsage) {
           events.push({
-            type: "turn/completed",
+            type: "thread/tokenUsage/updated",
             threadId,
             providerThreadId: "",
-            turnId: state.currentTurnId,
-            status: "completed",
+            turnId: currentTurnId,
+            tokenUsage,
           });
-          turnState.finishTurn({ state, threadId: stateKey });
         }
+        events.push({
+          type: "turn/completed",
+          threadId,
+          providerThreadId: "",
+          turnId: currentTurnId,
+          status: "completed",
+        });
+        turnState.finishTurn({ state, threadId: stateKey });
         break;
       }
 
@@ -929,6 +967,7 @@ export function createPiProviderAdapter(
     id: providerInfo.id,
     displayName: providerInfo.displayName,
     capabilities,
+    threadStopBehavior: "restart-provider",
     process: {
       command: opts?.processCommand ?? "node",
       args: opts?.processArgs ?? [resolveBridgePath({
@@ -956,6 +995,7 @@ export function createPiProviderAdapter(
             params: {},
           };
         case "thread/start": {
+          finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
           const baseInstructions = command.options?.instructions ?? "";
           const config = buildPiConfig(command.threadId, command.options);
           const finalConfig: Record<string, unknown> = config ? { ...config } : {};
@@ -981,6 +1021,7 @@ export function createPiProviderAdapter(
           };
         }
         case "thread/resume": {
+          finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
           const threadId = command.providerThreadId ?? command.threadId;
           const baseInstructions = command.options?.instructions ?? "";
           const config = buildPiConfig(command.threadId, command.options);
@@ -1028,7 +1069,14 @@ export function createPiProviderAdapter(
             },
           };
         case "thread/stop":
-          return null;
+          finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
+          return {
+            jsonrpc: "2.0",
+            method: "thread/stop",
+            params: {
+              threadId: command.providerThreadId,
+            },
+          };
         case "thread/name/set":
           return null; // Pi doesn't support rename
       }
@@ -1041,6 +1089,55 @@ export function createPiProviderAdapter(
       context?: ProviderTranslationContext,
     ): ThreadEvent[] {
       return translatePiEvent(event, context);
+    },
+
+    translateAcceptedCommand({ command }) {
+      if (
+        command.type === "thread/start" ||
+        command.type === "thread/resume" ||
+        command.type === "thread/stop"
+      ) {
+        const state = turnState.getOrCreate({ threadId: command.threadId });
+        state.pendingAcceptedUserMessages = [];
+        return [];
+      }
+
+      if (command.type === "turn/start") {
+        const state = turnState.getOrCreate({ threadId: command.threadId });
+        const turnId = turnState.getCurrentOrLastTurnId({ state });
+        if (turnId) {
+          return buildAcceptedUserMessageEvent({
+            clientRequestSequence: command.clientRequestSequence,
+            input: command.input,
+            itemIdPrefix: "pi-user",
+            providerThreadId: command.providerThreadId ?? command.threadId,
+            state,
+            threadId: command.threadId,
+            turnId,
+          });
+        }
+        queueAcceptedUserMessage({
+          clientRequestSequence: command.clientRequestSequence,
+          input: command.input,
+          itemIdPrefix: "pi-user",
+          state,
+        });
+      }
+
+      if (command.type === "turn/steer") {
+        const state = turnState.getOrCreate({ threadId: command.threadId });
+        return buildAcceptedUserMessageEvent({
+          clientRequestSequence: command.clientRequestSequence,
+          input: command.input,
+          itemIdPrefix: "pi-user",
+          providerThreadId: command.providerThreadId ?? command.threadId,
+          state,
+          threadId: command.threadId,
+          turnId: command.expectedTurnId,
+        });
+      }
+
+      return [];
     },
 
     parseModelListResult(result: unknown) {

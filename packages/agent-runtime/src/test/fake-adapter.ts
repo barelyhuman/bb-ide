@@ -107,7 +107,11 @@ function buildCommand(command: AdapterCommand): JsonRpcMessage | null {
       return {
         jsonrpc: "2.0",
         method: "thread/stop",
-        params: { threadId: command.threadId },
+        params: {
+          activeTurnId: command.activeTurnId,
+          providerThreadId: command.providerThreadId,
+          threadId: command.threadId,
+        },
       };
     case "thread/name/set":
       return {
@@ -236,6 +240,7 @@ export function createFakeAdapter(
     displayName: options.displayName ?? DEFAULT_DISPLAY_NAME,
     id: options.id ?? DEFAULT_ADAPTER_ID,
     parseModelListResult,
+    threadStopBehavior: "keep-provider",
     process: {
       args: [options.scriptPath ?? fakeProviderScriptPath],
       command: "node",
@@ -245,6 +250,9 @@ export function createFakeAdapter(
         return [];
       }
       return translateEventMessage(event as FakeEventMessage);
+    },
+    translateAcceptedCommand() {
+      return [];
     },
   };
 }

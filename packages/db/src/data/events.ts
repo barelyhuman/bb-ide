@@ -494,6 +494,44 @@ export function getLastStoredTurnId(
   return row?.turnId ?? null;
 }
 
+export function getActiveStoredTurnId(
+  db: DbConnection,
+  threadId: string,
+): string | null {
+  const latestStarted = db
+    .select({ turnId: events.turnId })
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, threadId),
+        eq(events.type, "turn/started"),
+        isNotNull(events.turnId),
+      ),
+    )
+    .orderBy(desc(events.sequence))
+    .limit(1)
+    .get();
+
+  if (!latestStarted?.turnId) {
+    return null;
+  }
+
+  const completed = db
+    .select({ sequence: events.sequence })
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, threadId),
+        eq(events.turnId, latestStarted.turnId),
+        eq(events.type, "turn/completed"),
+      ),
+    )
+    .limit(1)
+    .get();
+
+  return completed ? null : latestStarted.turnId;
+}
+
 export function getLastStoredProviderThreadId(
   db: DbConnection,
   threadId: string,

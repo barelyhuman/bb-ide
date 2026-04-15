@@ -3,18 +3,18 @@ import type {
   InstructionMode,
   ThreadEvent,
 } from "@bb/domain";
-import { z } from "zod";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
-import type {
-  AdapterOptions,
-  JsonRpcMessage,
-} from "./provider-adapter.js";
+import type { AdapterCommand, JsonRpcMessage } from "./provider-adapter.js";
+import {
+  assertProviderSupportsExecutionOptions,
+  sameExecutionSettings,
+  toAdapterOptions,
+} from "./execution-options.js";
 import {
   getJsonRpcStringParam,
   ignoredJsonRpcResultSchema,
   type JsonRpcObject,
   parseJsonRpcLine,
-  sendJsonRpc,
   sendJsonRpcError,
   sendJsonRpcRequest,
   settleJsonRpcResponse,
@@ -36,22 +36,14 @@ import type {
   AgentRuntime,
   AgentRuntimeExecutionOptions,
   AgentRuntimeOptions,
-  AgentRuntimeShellEnvironment,
 } from "./types.js";
 import {
-  resolveAdapterPermissionPolicy,
-} from "./shared/permission-policy.js";
-
-const threadIdentityResultSchema = z.object({
-  providerThreadId: z.string().nullable().optional(),
-  threadId: z.string().nullable().optional(),
-});
-type ThreadIdentityResult = z.infer<typeof threadIdentityResultSchema>;
-
-interface ResolveThreadIdentityResultArgs {
-  result: ThreadIdentityResult;
-  threadId: string;
-}
+  buildThreadShellEnvironment,
+} from "./thread-shell-environment.js";
+import {
+  resolveThreadIdentityResult,
+  threadIdentityResultSchema,
+} from "./thread-identity.js";
 
 interface ReconfigureThreadIfNeededArgs {
   instructions: string | undefined;
@@ -62,38 +54,6 @@ interface ReconfigureThreadIfNeededArgs {
 interface ResolveProviderRequestThreadIdArgs
   extends ResolveRuntimeProviderRequestThreadIdArgs {
   proc: ProviderProcess;
-}
-
-function resolveThreadIdentityResult(
-  args: ResolveThreadIdentityResultArgs,
-): string | undefined {
-  if (args.result.providerThreadId) {
-    return args.result.providerThreadId;
-  }
-  if (args.result.threadId && args.result.threadId !== args.threadId) {
-    return args.result.threadId;
-  }
-  return undefined;
-}
-
-// ---------------------------------------------------------------------------
-// Adapter options helpers
-// ---------------------------------------------------------------------------
-
-function toAdapterOptions(
-  execOpts: AgentRuntimeExecutionOptions,
-  instructions: string | undefined,
-  envVars: Record<string, string>,
-): AdapterOptions {
-  const permissionPolicy = resolveAdapterPermissionPolicy(execOpts);
-  return {
-    model: execOpts.model,
-    serviceTier: execOpts.serviceTier,
-    reasoningLevel: execOpts.reasoningLevel,
-    ...permissionPolicy,
-    instructions,
-    envVars,
-  };
 }
 
 // ---------------------------------------------------------------------------
@@ -112,16 +72,6 @@ interface ThreadRuntimeConfig {
   providerId: string;
   resumePath?: string;
   workspacePath: string;
-}
-
-interface ThreadShellEnvironmentArgs {
-  environmentId: string;
-  projectId?: string;
-  threadId: string;
-}
-
-interface BuildThreadShellEnvironmentArgs extends ThreadShellEnvironmentArgs {
-  baseShellEnv: AgentRuntimeShellEnvironment | undefined;
 }
 
 interface RuntimeParsedMessageArgs {
@@ -147,15 +97,20 @@ interface EmitTranslatedEventsArgs {
   sourceThreadId?: string;
 }
 
-function buildThreadShellEnvironment(
-  args: BuildThreadShellEnvironmentArgs,
-): Record<string, string> {
-  return {
-    ...(args.baseShellEnv ?? {}),
-    ...(args.projectId ? { BB_PROJECT_ID: args.projectId } : {}),
-    BB_THREAD_ID: args.threadId,
-    BB_ENVIRONMENT_ID: args.environmentId,
-  };
+interface EmitRuntimeEventArgs {
+  event: ThreadEvent;
+  proc: ProviderProcess;
+  providerId: string;
+  rawMethod?: string;
+  sourceThreadId?: string;
+}
+
+interface EmitAcceptedCommandEventsArgs {
+  command: AdapterCommand;
+  proc: ProviderProcess;
+  providerId: string;
+  rawMethod: string;
+  sourceThreadId?: string;
 }
 
 /**
@@ -168,6 +123,8 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   let nextCaptureId = 1;
   const threadIdentityRegistry = new RuntimeThreadIdentityRegistry();
   const threadRuntimeConfigs = new Map<string, ThreadRuntimeConfig>();
+  const activeTurnIdByThreadId = new Map<string, string>();
+  const completedTurnIdsByThreadId = new Map<string, Set<string>>();
 
   function createCaptureId(): string {
     const captureId = `capture-${nextCaptureId}`;
@@ -195,11 +152,12 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     onProviderThreadDetached: (threadId) => {
       threadIdentityRegistry.clearThread(threadId);
       clearThreadRuntimeConfig(threadId);
+      activeTurnIdByThreadId.delete(threadId);
+      completedTurnIdsByThreadId.delete(threadId);
     },
     onStderr: options.onStderr,
     workspacePath: options.workspacePath,
   });
-
   function requireProviderProcess(providerId: string): ProviderProcess {
     return providerProcesses.requireProviderProcess(providerId);
   }
@@ -251,19 +209,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     return resolvedThreadId;
   }
 
-  function sameExecutionSettings(
-    left: AgentRuntimeExecutionOptions,
-    right: AgentRuntimeExecutionOptions,
-  ): boolean {
-    return (
-      left.model === right.model &&
-      left.serviceTier === right.serviceTier &&
-      left.reasoningLevel === right.reasoningLevel &&
-      left.permissionMode === right.permissionMode &&
-      left.permissionEscalation === right.permissionEscalation
-    );
-  }
-
   function setThreadRuntimeConfig(
     threadId: string,
     config: ThreadRuntimeConfig,
@@ -299,6 +244,17 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     });
   }
 
+  function recordCompletedTurn(threadId: string, turnId: string): void {
+    const completedTurnIds =
+      completedTurnIdsByThreadId.get(threadId) ?? new Set<string>();
+    completedTurnIds.add(turnId);
+    completedTurnIdsByThreadId.set(threadId, completedTurnIds);
+  }
+
+  function hasCompletedTurn(threadId: string, turnId: string): boolean {
+    return completedTurnIdsByThreadId.get(threadId)?.has(turnId) ?? false;
+  }
+
   async function reconfigureThreadIfNeeded(
     args: ReconfigureThreadIfNeededArgs,
   ): Promise<void> {
@@ -311,7 +267,10 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     const nextInstructions = args.instructions ?? currentConfig.instructions;
 
     if (
-      sameExecutionSettings(currentConfig.options, nextOptions) &&
+      sameExecutionSettings({
+        left: currentConfig.options,
+        right: nextOptions,
+      }) &&
       currentConfig.instructions === nextInstructions
     ) {
       return;
@@ -325,16 +284,21 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       threadId: args.threadId,
     });
 
-    const command = proc.adapter.buildCommand({
+    const adapterCommand: AdapterCommand = {
       type: "thread/resume",
       threadId: args.threadId,
       cwd: currentConfig.workspacePath,
       providerThreadId: threadIdentityRegistry.getProviderThreadId(args.threadId),
-      options: toAdapterOptions(nextOptions, nextInstructions, envVars),
+      options: toAdapterOptions({
+        envVars,
+        execOpts: nextOptions,
+        instructions: nextInstructions,
+      }),
       resumePath: currentConfig.resumePath,
       dynamicTools: currentConfig.dynamicTools,
       instructionMode: currentConfig.instructionMode,
-    });
+    };
+    const command = proc.adapter.buildCommand(adapterCommand);
 
     if (command) {
       const result = await sendJsonRpcRequest({
@@ -351,6 +315,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       if (providerThreadId) {
         recordProviderThreadIdentity(proc, args.threadId, providerThreadId);
       }
+      emitAcceptedCommandEvents({
+        command: adapterCommand,
+        proc,
+        providerId: currentConfig.providerId,
+        rawMethod: command.method,
+        sourceThreadId: args.threadId,
+      });
     }
 
     setThreadRuntimeConfig(args.threadId, {
@@ -407,16 +378,65 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         threadId: resolvedBbThreadId,
       });
 
-      emitCapture({
-        kind: "translated-thread-event",
-        capturedAt: Date.now(),
+      const activeTurnId = activeTurnIdByThreadId.get(resolvedBbThreadId);
+
+      emitRuntimeEvent({
+        event: stampedEvent,
+        proc: args.proc,
         providerId: args.providerId,
         rawCaptureId: args.rawCaptureId,
         rawMethod: args.rawMethod,
-        event: stampedEvent,
+        sourceThreadId: args.sourceThreadId,
       });
-      options.onEvent(stampedEvent);
+
+      if (stampedEvent.type === "turn/started") {
+        if (hasCompletedTurn(resolvedBbThreadId, stampedEvent.turnId)) {
+          options.onStderr?.(
+            `Skipping active turn update for replayed turn/started on already completed turn "${stampedEvent.turnId}" in thread "${resolvedBbThreadId}".`,
+          );
+        } else {
+          activeTurnIdByThreadId.set(resolvedBbThreadId, stampedEvent.turnId);
+        }
+      }
+      if (stampedEvent.type === "turn/completed") {
+        recordCompletedTurn(resolvedBbThreadId, stampedEvent.turnId);
+        if (activeTurnId === stampedEvent.turnId) {
+          activeTurnIdByThreadId.delete(resolvedBbThreadId);
+        }
+      }
     }
+  }
+
+  function emitRuntimeEvent(
+    args: EmitRuntimeEventArgs & { rawCaptureId?: string },
+  ): void {
+    emitCapture({
+      kind: "translated-thread-event",
+      capturedAt: Date.now(),
+      providerId: args.providerId,
+      rawCaptureId: args.rawCaptureId,
+      rawMethod: args.rawMethod,
+      event: args.event,
+    });
+    options.onEvent(args.event);
+  }
+
+  function emitAcceptedCommandEvents(
+    args: EmitAcceptedCommandEventsArgs,
+  ): void {
+    const events = args.proc.adapter.translateAcceptedCommand({
+      command: args.command,
+    });
+    if (events.length === 0) {
+      return;
+    }
+    emitTranslatedEvents({
+      events,
+      proc: args.proc,
+      providerId: args.providerId,
+      rawMethod: `${args.rawMethod}/result`,
+      sourceThreadId: args.sourceThreadId,
+    });
   }
 
   function handleProviderNotification(
@@ -526,6 +546,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       await runtime.ensureProvider({ providerId: pid });
 
       const proc = requireProviderProcess(pid);
+      assertProviderSupportsExecutionOptions({
+        adapter: proc.adapter,
+        options: execOpts,
+        providerId: pid,
+      });
       threadIdentityRegistry.registerThreadProvider({
         providerId: pid,
         providerState: proc.identity,
@@ -550,14 +575,19 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         threadId,
       });
 
-      const cmd = proc.adapter.buildCommand({
+      const adapterCommand: AdapterCommand = {
         type: "thread/start",
         threadId,
         cwd: options.workspacePath,
-        options: toAdapterOptions(execOpts, instructions, envVars),
+        options: toAdapterOptions({
+          envVars,
+          execOpts,
+          instructions,
+        }),
         dynamicTools,
         instructionMode,
-      });
+      };
+      const cmd = proc.adapter.buildCommand(adapterCommand);
 
       if (!cmd) {
         throw new Error(`Adapter "${pid}" returned null for thread/start`);
@@ -577,6 +607,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       if (providerThreadId) {
         recordProviderThreadIdentity(proc, threadId, providerThreadId);
       }
+      emitAcceptedCommandEvents({
+        command: adapterCommand,
+        proc,
+        providerId: pid,
+        rawMethod: cmd.method,
+        sourceThreadId: threadId,
+      });
 
       const resolved = await waitForProviderThreadIdentity(proc, threadId, 5000);
       if (!resolved) {
@@ -613,6 +650,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       await runtime.ensureProvider({ providerId: pid });
 
       const proc = requireProviderProcess(pid);
+      assertProviderSupportsExecutionOptions({
+        adapter: proc.adapter,
+        options: execOpts,
+        providerId: pid,
+      });
       threadIdentityRegistry.registerThreadProvider({
         providerId: pid,
         providerState: proc.identity,
@@ -642,17 +684,22 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         threadId,
       });
 
-      const cmd = proc.adapter.buildCommand({
+      const adapterCommand: AdapterCommand = {
         type: "thread/resume",
         threadId,
         cwd: options.workspacePath,
         providerThreadId:
           providerThreadId ?? threadIdentityRegistry.getProviderThreadId(threadId),
-        options: toAdapterOptions(execOpts, instructions, envVars),
+        options: toAdapterOptions({
+          envVars,
+          execOpts,
+          instructions,
+        }),
         resumePath,
         dynamicTools,
         instructionMode,
-      });
+      };
+      const cmd = proc.adapter.buildCommand(adapterCommand);
 
       if (!cmd) {
         const currentProviderThreadId =
@@ -678,28 +725,54 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         throw new Error(`Provider resume did not return a thread id for ${threadId}`);
       }
       recordProviderThreadIdentity(proc, threadId, resolvedId);
+      emitAcceptedCommandEvents({
+        command: adapterCommand,
+        proc,
+        providerId: pid,
+        rawMethod: cmd.method,
+        sourceThreadId: threadId,
+      });
 
       return { providerThreadId: resolvedId };
     },
 
-    async runTurn({ threadId, input, options: execOpts, instructions }) {
+    async runTurn({
+      threadId,
+      input,
+      clientRequestSequence,
+      options: execOpts,
+      instructions,
+    }) {
       const pid = resolveProviderForThread(threadId);
       const proc = requireProviderProcess(pid);
+      assertProviderSupportsExecutionOptions({
+        adapter: proc.adapter,
+        options: execOpts,
+        providerId: pid,
+      });
       await reconfigureThreadIfNeeded({
         threadId,
         options: execOpts,
         instructions,
       });
 
-      const cmd = proc.adapter.buildCommand({
+      const adapterCommand: AdapterCommand = {
         type: "turn/start",
         threadId,
         providerThreadId: threadIdentityRegistry.getProviderThreadId(threadId),
         input,
-        options: toAdapterOptions(execOpts, instructions, {}),
-      });
+        ...(clientRequestSequence !== undefined ? { clientRequestSequence } : {}),
+        options: toAdapterOptions({
+          envVars: {},
+          execOpts,
+          instructions,
+        }),
+      };
+      const cmd = proc.adapter.buildCommand(adapterCommand);
 
-      if (!cmd) return;
+      if (!cmd) {
+        throw new Error(`Adapter "${pid}" returned null for turn/start`);
+      }
       await sendJsonRpcRequest({
         child: proc.child,
         message: cmd,
@@ -707,62 +780,157 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         getNextId: () => nextRequestId++,
         resultSchema: ignoredJsonRpcResultSchema,
       });
+      emitAcceptedCommandEvents({
+        command: adapterCommand,
+        proc,
+        providerId: pid,
+        rawMethod: cmd.method,
+        sourceThreadId: threadId,
+      });
     },
 
-    async steerTurn({ threadId, expectedTurnId, input, options: execOpts, instructions }) {
+    async steerTurn({
+      threadId,
+      expectedTurnId,
+      input,
+      clientRequestSequence,
+      options: execOpts,
+      instructions,
+    }) {
       const pid = resolveProviderForThread(threadId);
       const proc = requireProviderProcess(pid);
+      assertProviderSupportsExecutionOptions({
+        adapter: proc.adapter,
+        options: execOpts,
+        providerId: pid,
+      });
       await reconfigureThreadIfNeeded({
         threadId,
         options: execOpts,
         instructions,
       });
 
-      const cmd = proc.adapter.buildCommand({
+      const activeTurnId = activeTurnIdByThreadId.get(threadId);
+      if (activeTurnId !== expectedTurnId) {
+        options.onStderr?.(
+          `Ignoring stale steer for thread "${threadId}" on turn "${expectedTurnId}"; active turn is ${activeTurnId ?? "none"}.`,
+        );
+        return;
+      }
+
+      const adapterCommand: AdapterCommand = {
         type: "turn/steer",
         threadId,
         providerThreadId: threadIdentityRegistry.getProviderThreadId(threadId),
         expectedTurnId,
         input,
-        options: toAdapterOptions(execOpts, instructions, {}),
-      });
+        ...(clientRequestSequence !== undefined ? { clientRequestSequence } : {}),
+        options: toAdapterOptions({
+          envVars: {},
+          execOpts,
+          instructions,
+        }),
+      };
+      const cmd = proc.adapter.buildCommand(adapterCommand);
 
-      if (!cmd) return;
-      sendJsonRpc(proc.child, { ...cmd, id: nextRequestId++ });
+      if (!cmd) {
+        throw new Error(`Adapter "${pid}" returned null for turn/steer`);
+      }
+      await sendJsonRpcRequest({
+        child: proc.child,
+        message: cmd,
+        pending: proc.pending,
+        getNextId: () => nextRequestId++,
+        resultSchema: ignoredJsonRpcResultSchema,
+      });
+      emitAcceptedCommandEvents({
+        command: adapterCommand,
+        proc,
+        providerId: pid,
+        rawMethod: cmd.method,
+        sourceThreadId: threadId,
+      });
     },
 
     async stopThread({ threadId }) {
       const pid = resolveProviderForThread(threadId);
       const proc = requireProviderProcess(pid);
-
-      const cmd = proc.adapter.buildCommand({
+      const providerThreadId = threadIdentityRegistry.getProviderThreadId(threadId);
+      if (!providerThreadId) {
+        throw new Error(`No provider thread id available for ${threadId}`);
+      }
+      const activeTurnId = activeTurnIdByThreadId.get(threadId);
+      const shouldRestartProvider =
+        proc.adapter.threadStopBehavior === "restart-provider";
+      const adapterCommand: AdapterCommand = {
         type: "thread/stop",
         threadId,
-      });
+        providerThreadId,
+        activeTurnId: activeTurnId ?? null,
+      };
+      const cmd = proc.adapter.buildCommand(adapterCommand);
 
-      if (cmd) {
-        sendJsonRpc(proc.child, { ...cmd, id: nextRequestId++ });
+      if (!cmd) {
+        if (activeTurnId === undefined) {
+          completedTurnIdsByThreadId.delete(threadId);
+          return;
+        }
+        throw new Error(
+          `Adapter "${pid}" returned null for thread/stop with active turn "${activeTurnId}"`,
+        );
+      }
+      await sendJsonRpcRequest({
+        child: proc.child,
+        message: cmd,
+        pending: proc.pending,
+        getNextId: () => nextRequestId++,
+        resultSchema: ignoredJsonRpcResultSchema,
+      });
+      emitAcceptedCommandEvents({
+        command: adapterCommand,
+        proc,
+        providerId: pid,
+        rawMethod: cmd.method,
+        sourceThreadId: threadId,
+      });
+      activeTurnIdByThreadId.delete(threadId);
+      completedTurnIdsByThreadId.delete(threadId);
+      if (shouldRestartProvider) {
+        await providerProcesses.shutdownProvider({ providerId: pid });
       }
     },
 
     async renameThread({ threadId, title }) {
       const pid = resolveProviderForThread(threadId);
       const proc = requireProviderProcess(pid);
+      if (!proc.adapter.capabilities.supportsRename) {
+        throw new Error(`Provider "${pid}" does not support thread rename.`);
+      }
 
-      const cmd = proc.adapter.buildCommand({
+      const adapterCommand: AdapterCommand = {
         type: "thread/name/set",
         threadId,
         providerThreadId: threadIdentityRegistry.getProviderThreadId(threadId),
         title,
-      });
+      };
+      const cmd = proc.adapter.buildCommand(adapterCommand);
 
-      if (!cmd) return;
+      if (!cmd) {
+        throw new Error(`Adapter "${pid}" returned null for thread/name/set`);
+      }
       await sendJsonRpcRequest({
         child: proc.child,
         message: cmd,
         pending: proc.pending,
         getNextId: () => nextRequestId++,
         resultSchema: ignoredJsonRpcResultSchema,
+      });
+      emitAcceptedCommandEvents({
+        command: adapterCommand,
+        proc,
+        providerId: pid,
+        rawMethod: cmd.method,
+        sourceThreadId: threadId,
       });
     },
 
@@ -788,6 +956,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     },
 
     async shutdown() {
+      completedTurnIdsByThreadId.clear();
       await providerProcesses.shutdown();
     },
   };

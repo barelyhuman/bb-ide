@@ -56,10 +56,16 @@ export interface ProviderTranslationContext {
   parentToolCallId?: string;
 }
 
+export interface ProviderAcceptedCommandTranslationArgs {
+  command: AdapterCommand;
+}
+
 export interface ProviderAdapterFactoryOptions {
   bridgeBundleDir?: string;
   turnIdPrefix?: string;
 }
+
+export type ProviderThreadStopBehavior = "keep-provider" | "restart-provider";
 
 export interface DecodedToolCallRequest {
   requestId: string | number;
@@ -119,6 +125,7 @@ export type AdapterCommand =
       threadId: string;
       providerThreadId?: string;
       input: PromptInput[];
+      clientRequestSequence?: number;
       options: AdapterOptions;
     }
   | {
@@ -127,9 +134,15 @@ export type AdapterCommand =
       providerThreadId?: string;
       expectedTurnId: string;
       input: PromptInput[];
+      clientRequestSequence?: number;
       options: AdapterOptions;
     }
-  | { type: "thread/stop"; threadId: string }
+  | {
+      type: "thread/stop";
+      threadId: string;
+      providerThreadId: string;
+      activeTurnId: string | null;
+    }
   | {
       type: "thread/name/set";
       threadId: string;
@@ -145,6 +158,7 @@ export interface ProviderAdapter {
   id: string;
   displayName: string;
   capabilities: ProviderCapabilities;
+  threadStopBehavior: ProviderThreadStopBehavior;
   process: { command: string; args: string[] };
 
   buildCommand(command: AdapterCommand): JsonRpcMessage | null;
@@ -153,6 +167,12 @@ export interface ProviderAdapter {
     event: unknown,
     context?: ProviderTranslationContext,
   ): ThreadEvent[];
+  /**
+   * Returns normalized events implied by a successful provider command.
+   * Use this for provider protocol gaps where accepted commands do not produce
+   * their own notifications, such as accepted user input missing a userMessage.
+   */
+  translateAcceptedCommand(args: ProviderAcceptedCommandTranslationArgs): ThreadEvent[];
   decodeToolCallRequest(request: JsonRpcMessage): DecodedToolCallRequest | null;
   decodeInteractiveRequest?(request: JsonRpcMessage): DecodedInteractiveRequest | null;
   buildInteractiveResponse?(args: BuildInteractiveResponseArgs): JsonValue;

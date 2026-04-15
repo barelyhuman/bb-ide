@@ -49,7 +49,7 @@ import {
 } from "../../services/threads/thread-lifecycle.js";
 import {
   appendClientTurnEvent,
-  getLastTurnId,
+  requireActiveTurnId,
 } from "../../services/threads/thread-events.js";
 import { resolvePermissionEscalation } from "../../services/threads/thread-runtime-config.js";
 import { tryTransition } from "../../services/threads/thread-transitions.js";
@@ -57,6 +57,9 @@ import { tryTransition } from "../../services/threads/thread-transitions.js";
 function ensureThreadIsWritable(thread: Thread): void {
   if (thread.archivedAt) {
     throw new ApiError(409, "invalid_request", "Thread is archived");
+  }
+  if (thread.stopRequestedAt !== null) {
+    throw new ApiError(409, "invalid_request", "Thread is stopping");
   }
 }
 
@@ -129,6 +132,9 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     if (mode === "start") {
       ensureThreadCanQueueStartRequest(deps, thread);
     }
+    const expectedSteerTurnId = mode === "steer"
+      ? requireActiveTurnId(deps, thread.id)
+      : null;
     const execution = await buildExecutionOptions(
       deps,
       payload,
@@ -185,8 +191,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         tryTransition(deps.db, deps.hub, thread.id, "active");
       }
     } else {
-      const expectedTurnId = getLastTurnId(deps, thread.id);
-      if (!expectedTurnId) {
+      if (expectedSteerTurnId === null) {
         throw new ApiError(409, "invalid_request", "No active turn to steer");
       }
       await queueTurnSteerCommand(deps, {
@@ -195,7 +200,7 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         eventSequence,
         execution,
         permissionEscalation,
-        expectedTurnId,
+        expectedTurnId: expectedSteerTurnId,
         environment: {
           id: readyEnvironment.id,
           hostId: readyEnvironment.hostId,

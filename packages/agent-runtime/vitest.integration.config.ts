@@ -31,7 +31,7 @@ export default defineConfig({
   test: {
     silent: "passed-only",
     name: "@bb/agent-runtime:integration",
-    include: ["src/integration.test.ts"],
+    include: ["src/integration*.test.ts"],
     exclude: ["dist/**", "node_modules/**"],
     testTimeout: 45_000,
     hookTimeout: 10_000,

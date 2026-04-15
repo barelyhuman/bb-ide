@@ -52,6 +52,82 @@ describe("codex provider adapter", () => {
     expect(adapter.process.args).toEqual(["app-server"]);
   });
 
+  it("translates accepted steer results to user-message acks", () => {
+    const adapter = createCodexProviderAdapter();
+
+    expect(adapter.translateAcceptedCommand({
+      command: {
+        type: "turn/start",
+        threadId: "thread-1",
+        providerThreadId: "provider-thread-1",
+        input: [{ type: "text", text: "normal turn" }],
+        options: fullAdapterOptions,
+      },
+    })).toEqual([]);
+    expect(adapter.translateAcceptedCommand({
+      command: {
+        type: "turn/steer",
+        threadId: "thread-1",
+        providerThreadId: "provider-thread-1",
+        expectedTurnId: "turn-1",
+        input: [{ type: "text", text: "steer turn" }],
+        options: fullAdapterOptions,
+      },
+    })).toEqual([
+      {
+        type: "item/completed",
+        threadId: "thread-1",
+        providerThreadId: "provider-thread-1",
+        turnId: "turn-1",
+        item: {
+          type: "userMessage",
+          id: "codex-user-1",
+          content: [{ type: "text", text: "steer turn" }],
+        },
+      },
+    ]);
+  });
+
+  it("attaches client request sequence to native turn user-message acks", () => {
+    const adapter = createCodexProviderAdapter();
+
+    expect(adapter.translateAcceptedCommand({
+      command: {
+        type: "turn/start",
+        threadId: "thread-1",
+        providerThreadId: "provider-thread-1",
+        clientRequestSequence: 42,
+        input: [{ type: "text", text: "normal turn" }],
+        options: fullAdapterOptions,
+      },
+    })).toEqual([]);
+
+    const events = adapter.translateEvent(codexEvent("item/completed", {
+      threadId: "provider-thread-1",
+      turnId: "turn-1",
+      item: {
+        type: "userMessage",
+        id: "provider-user-1",
+        content: [{ type: "text", text: "normal turn", text_elements: [] }],
+      },
+    }));
+
+    expect(events).toEqual([
+      {
+        type: "item/completed",
+        threadId: "provider-thread-1",
+        providerThreadId: "provider-thread-1",
+        turnId: "turn-1",
+        item: {
+          type: "userMessage",
+          id: "provider-user-1",
+          clientRequestSequence: 42,
+          content: [{ type: "text", text: "normal turn" }],
+        },
+      },
+    ]);
+  });
+
   // -- buildCommand --------------------------------------------------------
 
   it("buildCommand returns codex initialize with experimental API", () => {
@@ -291,14 +367,32 @@ describe("codex provider adapter", () => {
     });
   });
 
-  it("buildCommand thread/stop returns null", () => {
+  it("buildCommand thread/stop maps active turns to turn/interrupt", () => {
     const adapter = createCodexProviderAdapter();
-    expect(
-      adapter.buildCommand({
-        type: "thread/stop",
-        threadId: "bb-t1",
-      }),
-    ).toBeNull();
+    const cmd = adapter.buildCommand({
+      type: "thread/stop",
+      threadId: "bb-t1",
+      providerThreadId: "codex-thread-1",
+      activeTurnId: "turn-1",
+    });
+    expect(cmd).toMatchObject({
+      method: "turn/interrupt",
+      params: {
+        threadId: "codex-thread-1",
+        turnId: "turn-1",
+      },
+    });
+  });
+
+  it("buildCommand thread/stop returns null without an active turn id", () => {
+    const adapter = createCodexProviderAdapter();
+    const cmd = adapter.buildCommand({
+      type: "thread/stop",
+      threadId: "bb-t1",
+      providerThreadId: "codex-thread-1",
+      activeTurnId: null,
+    });
+    expect(cmd).toBeNull();
   });
 
   it("buildCommand turn/start includes input and sandbox policy", () => {

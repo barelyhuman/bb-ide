@@ -258,6 +258,9 @@ async function applyEventEffects(
         if (!thread) {
           continue;
         }
+        if (thread.stopRequestedAt !== null) {
+          continue;
+        }
         if (
           isPreStartThreadStatus(thread.status)
           || thread.status === "idle"
