@@ -761,6 +761,218 @@ rl.on("line", (line) => {
     await runtime.shutdown();
   });
 
+  it("emits synthetic provider user acks for Claude Code turns", async () => {
+    const events: ThreadEvent[] = [];
+    const captures: AgentRuntimeCaptureEntry[] = [];
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onCapture: (entry) => captures.push(entry),
+      onEvent: (event) => events.push(event),
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () =>
+        createSharedFakeAdapter({
+          id: "claude-code",
+          scriptPath,
+          syntheticUserMessageAcks: true,
+        }),
+    });
+
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "claude-code",
+      options: fullRuntimeOptions,
+    });
+    await runtime.runTurn({
+      threadId: "t1",
+      input: [{ type: "text", text: "hello" }],
+      options: fullRuntimeOptions,
+    });
+    await wait(100);
+
+    const eventTypes = events.map((event) => event.type);
+    const turnStartedIndex = eventTypes.indexOf("turn/started");
+    const userAckIndex = events.findIndex(
+      (event) => event.type === "item/completed" && event.item.type === "userMessage",
+    );
+    const assistantIndex = events.findIndex(
+      (event) => event.type === "item/completed" && event.item.type === "agentMessage",
+    );
+
+    expect(turnStartedIndex).toBeGreaterThan(-1);
+    expect(userAckIndex).toBeGreaterThan(turnStartedIndex);
+    expect(assistantIndex).toBeGreaterThan(userAckIndex);
+
+    const userAck = events[userAckIndex];
+    expect(userAck?.type).toBe("item/completed");
+    if (userAck?.type !== "item/completed" || userAck.item.type !== "userMessage") {
+      throw new Error("Expected synthetic userMessage ack");
+    }
+    expect(userAck.turnId).toBe("turn-1");
+    expect(userAck.item.content).toEqual([{ type: "text", text: "hello" }]);
+    expect(
+      captures.some(
+        (entry) =>
+          entry.kind === "translated-thread-event" &&
+          entry.rawMethod === "runtime/userMessage/ack",
+      ),
+    ).toBe(true);
+
+    await runtime.shutdown();
+  });
+
+  it("clears pending synthetic user acks when a thread is stopped before turn start", async () => {
+    const events: ThreadEvent[] = [];
+    const noStartScriptPath = join(tmpDir, "no-start-provider.cjs");
+    writeFileSync(
+      noStartScriptPath,
+      `
+const readline = require("node:readline");
+
+let turnCount = 0;
+
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + "\\n");
+}
+
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.method === "initialize") {
+    send({ jsonrpc: "2.0", id: message.id, result: { ok: true } });
+    return;
+  }
+  if (message.method === "thread/start") {
+    send({ jsonrpc: "2.0", id: message.id, result: { providerThreadId: "prov-thread-1" } });
+    send({
+      jsonrpc: "2.0",
+      method: "thread/identity",
+      params: { threadId: message.params.threadId, providerThreadId: "prov-thread-1" },
+    });
+    return;
+  }
+  if (message.method === "turn/start") {
+    turnCount += 1;
+    send({ jsonrpc: "2.0", id: message.id, result: { ok: true } });
+    if (turnCount === 1) {
+      return;
+    }
+    send({
+      jsonrpc: "2.0",
+      method: "turn/started",
+      params: {
+        threadId: message.params.threadId,
+        providerThreadId: "prov-thread-1",
+        turnId: "turn-2",
+      },
+    });
+    return;
+  }
+  if (message.method === "thread/stop") {
+    send({ jsonrpc: "2.0", id: message.id, result: { ok: true } });
+  }
+});
+`,
+      "utf8",
+    );
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: (event) => events.push(event),
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () =>
+        createSharedFakeAdapter({
+          id: "claude-code",
+          scriptPath: noStartScriptPath,
+          syntheticUserMessageAcks: true,
+        }),
+    });
+
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "claude-code",
+      options: fullRuntimeOptions,
+    });
+    await runtime.runTurn({
+      threadId: "t1",
+      input: [{ type: "text", text: "first turn" }],
+      options: fullRuntimeOptions,
+    });
+    await runtime.stopThread({ threadId: "t1" });
+    await runtime.runTurn({
+      threadId: "t1",
+      input: [{ type: "text", text: "second turn" }],
+      options: fullRuntimeOptions,
+    });
+    await wait(100);
+
+    const userAcks = events.filter(
+      (event) => event.type === "item/completed" && event.item.type === "userMessage",
+    );
+    expect(userAcks).toHaveLength(1);
+    const userAck = userAcks[0];
+    expect(userAck?.type).toBe("item/completed");
+    if (userAck?.type !== "item/completed" || userAck.item.type !== "userMessage") {
+      throw new Error("Expected synthetic userMessage ack");
+    }
+    expect(userAck.item.content).toEqual([{ type: "text", text: "second turn" }]);
+
+    await runtime.shutdown();
+  });
+
+  it("emits synthetic provider user acks for Pi steer turns", async () => {
+    const events: ThreadEvent[] = [];
+    const runtime = createAgentRuntime({
+      workspacePath: tmpDir,
+      onEvent: (event) => events.push(event),
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () =>
+        createSharedFakeAdapter({
+          id: "pi",
+          scriptPath,
+          syntheticUserMessageAcks: true,
+        }),
+    });
+
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "pi",
+      options: fullRuntimeOptions,
+    });
+    await runtime.steerTurn({
+      threadId: "t1",
+      expectedTurnId: "turn-active",
+      input: [{ type: "text", text: "steer input" }],
+      options: fullRuntimeOptions,
+    });
+    await wait(100);
+
+    const userAck = events.find(
+      (event) => event.type === "item/completed" && event.item.type === "userMessage",
+    );
+    expect(userAck?.type).toBe("item/completed");
+    if (userAck?.type !== "item/completed" || userAck.item.type !== "userMessage") {
+      throw new Error("Expected synthetic userMessage ack");
+    }
+    expect(userAck.turnId).toBe("turn-active");
+    expect(userAck.item.content).toEqual([{ type: "text", text: "steer input" }]);
+
+    await runtime.shutdown();
+  });
+
   it("runs the initial turn when startThread includes input", async () => {
     const events: ThreadEvent[] = [];
     const runtime = createAgentRuntime({

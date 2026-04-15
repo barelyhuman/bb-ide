@@ -12,12 +12,14 @@ import type {
   ProviderAdapter,
 } from "../provider-adapter.js";
 import { parseAvailableModelList } from "../shared/available-models.js";
+import { buildUserMessageAckItem } from "../shared/adapter-utils.js";
 import { decodeNormalizedProviderToolCallRequest } from "../shared/provider-tool-call-contract.js";
 
 export interface CreateFakeAdapterOptions {
   displayName?: string;
   id?: string;
   scriptPath?: string;
+  syntheticUserMessageAcks?: boolean;
 }
 
 interface FakeEventMessage {
@@ -246,5 +248,12 @@ export function createFakeAdapter(
       }
       return translateEventMessage(event as FakeEventMessage);
     },
+    ...(options.syntheticUserMessageAcks
+      ? {
+          buildSyntheticUserMessageAck(args) {
+            return buildUserMessageAckItem(args.input, args.itemId);
+          },
+        }
+      : {}),
   };
 }

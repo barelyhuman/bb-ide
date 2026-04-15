@@ -108,6 +108,22 @@ function providerUsesRuntimeTurnIds(providerId: string): boolean {
   return providerId === "claude-code" || providerId === "pi";
 }
 
+function getUserMessageAckEvents(
+  events: ThreadEvent[],
+): Array<Extract<ThreadEvent, { type: "item/completed" }>> {
+  return events.filter(
+    (event): event is Extract<ThreadEvent, { type: "item/completed" }> =>
+      event.type === "item/completed" && event.item.type === "userMessage",
+  );
+}
+
+function expectUserMessageAckCount(
+  events: ThreadEvent[],
+  count: number,
+): void {
+  expect(getUserMessageAckEvents(events)).toHaveLength(count);
+}
+
 function expectNoSharedRuntimeTurnIds(
   args: RuntimeRestartTurnIdAssertionArgs,
 ): void {
@@ -427,6 +443,7 @@ for (const providerId of providers) {
 
         expect(ctx.events.some((e) => e.type === "turn/started")).toBe(true);
         expect(ctx.events.some((e) => e.type === "turn/completed")).toBe(true);
+        expectUserMessageAckCount(ctx.events, 1);
 
         // Should have some content (agent message or streamed text)
         const text = getAgentText(ctx.events) || getStreamedText(ctx.events);
@@ -555,6 +572,7 @@ for (const providerId of providers) {
         const turnEnds = ctx.events.filter((e) => e.type === "turn/completed");
         expect(turnStarts.length).toBeGreaterThanOrEqual(2);
         expect(turnEnds.length).toBeGreaterThanOrEqual(2);
+        expectUserMessageAckCount(ctx.events, 2);
       } finally {
         await ctx.runtime.shutdown();
         cleanup(ctx);

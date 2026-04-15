@@ -10,6 +10,7 @@ import type {
   RuntimePermissionPolicy,
   ServiceTier,
   ThreadEvent,
+  ThreadEventItem,
 } from "@bb/domain";
 
 // ---------------------------------------------------------------------------
@@ -153,6 +154,9 @@ export interface ProviderAdapter {
     event: unknown,
     context?: ProviderTranslationContext,
   ): ThreadEvent[];
+  buildSyntheticUserMessageAck?(
+    args: BuildSyntheticUserMessageAckArgs,
+  ): SyntheticUserMessageAckItem | null;
   decodeToolCallRequest(request: JsonRpcMessage): DecodedToolCallRequest | null;
   decodeInteractiveRequest?(request: JsonRpcMessage): DecodedInteractiveRequest | null;
   buildInteractiveResponse?(args: BuildInteractiveResponseArgs): JsonValue;
@@ -162,3 +166,13 @@ export interface BuildInteractiveResponseArgs {
   request: DecodedInteractiveRequest;
   resolution: PendingInteractionResolution;
 }
+
+export interface BuildSyntheticUserMessageAckArgs {
+  input: PromptInput[];
+  itemId: string;
+}
+
+export type SyntheticUserMessageAckItem = Extract<
+  ThreadEventItem,
+  { type: "userMessage" }
+>;

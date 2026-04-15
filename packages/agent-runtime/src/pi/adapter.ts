@@ -33,6 +33,7 @@ import {
 import {
   buildEditDiff,
   buildShellEnvironmentPolicyConfig,
+  buildUserMessageAckItem,
   extractResultText,
   toNonNegativeNumber,
   toOptionalRecord,
@@ -940,6 +941,10 @@ export function createPiProviderAdapter(
     },
 
     // -- Unified command builder -------------------------------------------
+
+    buildSyntheticUserMessageAck(args) {
+      return buildUserMessageAckItem(args.input, args.itemId);
+    },
 
     buildCommand(command: AdapterCommand): JsonRpcMessage | null {
       switch (command.type) {

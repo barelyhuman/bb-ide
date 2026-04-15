@@ -6,7 +6,12 @@
  */
 
 import { z } from "zod";
-import type { ModelReasoningEffort, ThreadEventItem } from "@bb/domain";
+import type {
+  ModelReasoningEffort,
+  PromptInput,
+  ThreadEventItem,
+  ThreadEventUserContent,
+} from "@bb/domain";
 import {
   contentWrapperSchema,
   textBlockSchema,
@@ -36,6 +41,39 @@ export const XHIGH_REASONING_EFFORT: ModelReasoningEffort = {
   reasoningEffort: "xhigh",
   description: "Extra high reasoning effort",
 };
+
+// ---------------------------------------------------------------------------
+// User message ack helpers
+// ---------------------------------------------------------------------------
+
+function toThreadEventUserContent(input: PromptInput[]): ThreadEventUserContent[] {
+  return input.map((item) => {
+    switch (item.type) {
+      case "text":
+        return { type: "text", text: item.text };
+      case "image":
+        return { type: "image", url: item.url };
+      case "localImage":
+        return { type: "localImage", path: item.path };
+      case "localFile":
+        return { type: "localFile", path: item.path };
+    }
+  });
+}
+
+export function buildUserMessageAckItem(
+  input: PromptInput[],
+  itemId: string,
+): Extract<ThreadEventItem, { type: "userMessage" }> | null {
+  if (input.length === 0) {
+    return null;
+  }
+  return {
+    type: "userMessage",
+    id: itemId,
+    content: toThreadEventUserContent(input),
+  };
+}
 
 const shellEnvironmentVariableKeySchema = z.string().regex(
   /^[A-Z_][A-Z0-9_]*$/i,

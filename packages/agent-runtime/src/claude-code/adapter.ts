@@ -34,6 +34,7 @@ import {
 import {
   buildEditDiff,
   buildShellEnvironmentPolicyConfig,
+  buildUserMessageAckItem,
   extractResultText,
   toNonNegativeNumber,
   toOptionalRecord,
@@ -911,6 +912,10 @@ export function createClaudeCodeProviderAdapter(
     },
 
     // -- Unified command builder -------------------------------------------
+
+    buildSyntheticUserMessageAck(args) {
+      return buildUserMessageAckItem(args.input, args.itemId);
+    },
 
     buildCommand(command: AdapterCommand): JsonRpcMessage | null {
       switch (command.type) {
