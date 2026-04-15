@@ -47,7 +47,7 @@ function SplitButton({
       <button
         type="button"
         disabled={disabled}
-        className={cn(base, "rounded-r-none border-r-0 focus-visible:z-10")}
+        className={cn(base, "rounded-r-none border-r-0 pr-0.5 focus-visible:z-10")}
         aria-label={primaryAction.label}
         title={primaryAction.label}
         onClick={primaryAction.onSelect}
@@ -59,7 +59,7 @@ function SplitButton({
           <button
             type="button"
             disabled={disabled}
-            className={cn(base, "rounded-l-none px-1 focus-visible:z-10")}
+            className={cn(base, "rounded-l-none border-l-0 px-1 pl-0.5 focus-visible:z-10")}
             aria-label={triggerLabel}
             title={triggerLabel}
           >
