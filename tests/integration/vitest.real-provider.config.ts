@@ -12,7 +12,9 @@ export default defineConfig({
     alias: workspaceTestAliases,
   },
   test: {
-    fileParallelism: false,
+    // Real-provider files create isolated servers, data dirs, and daemon
+    // instances, so split scenario files can run concurrently.
+    fileParallelism: true,
     globalSetup: ["./global-setup.ts"],
     hookTimeout: Math.ceil(120_000 * timeoutScale),
     include: ["real/**/*.test.ts"],
