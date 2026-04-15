@@ -1,3 +1,4 @@
+import { expect } from "vitest";
 import type {
   PromptInput,
   ProvisioningTranscriptEntry,
@@ -21,6 +22,7 @@ import {
   formatTimelineAsText,
   toViewProjection,
 } from "../src/index.js";
+import type { ThreadEventWithMeta } from "../src/to-view-messages.js";
 
 export interface RenderTimelineFixtureArgs {
   events: ThreadEventRow[];
@@ -162,6 +164,68 @@ export interface TimelineEventFactory {
   turnStarted(args?: ProviderTurnEventOptions): ThreadEventRowOfType<"turn/started">;
   userMessageAck(args: UserMessageAckArgs): ThreadEventRowOfType<"item/completed">;
   webSearchCompleted(args: WebSearchCompletedArgs): ThreadEventRowOfType<"item/completed">;
+}
+
+export function fromRows(rows: ThreadEventRow[]): ThreadEventWithMeta[] {
+  return rows.map((row) => decodeRow(withExplicitApprovalStatus(row)));
+}
+
+export function flattenProjectionMessages(projection: ViewProjection): ViewMessage[] {
+  const messages: ViewMessage[] = [];
+  for (const entry of projection.entries) {
+    if (entry.kind === "message") {
+      messages.push(entry.message);
+      continue;
+    }
+    if (entry.turn.messages) {
+      messages.push(...entry.turn.messages);
+      continue;
+    }
+    if (entry.turn.terminalMessage) {
+      messages.push(entry.turn.terminalMessage);
+    }
+  }
+  return messages;
+}
+
+export function unique<T>(values: T[]): T[] {
+  return [...new Set(values)];
+}
+
+export function assertMonotonicSourceSeq(messages: ViewMessage[]): void {
+  for (let i = 1; i < messages.length; i += 1) {
+    const prev = messages[i - 1];
+    const next = messages[i];
+    expect(prev).toBeDefined();
+    expect(next).toBeDefined();
+    if (!prev || !next) continue;
+    expect(next.sourceSeqStart).toBeGreaterThanOrEqual(prev.sourceSeqStart);
+  }
+}
+
+function withExplicitApprovalStatus(row: ThreadEventRow): ThreadEventRow {
+  if (row.type !== "item/started" && row.type !== "item/completed") {
+    return row;
+  }
+
+  const item = row.data.item;
+  if (item.type !== "commandExecution" && item.type !== "fileChange") {
+    return row;
+  }
+  if (item.approvalStatus !== undefined) {
+    return row;
+  }
+
+  return {
+    ...row,
+    data: {
+      ...row.data,
+      item: {
+        ...item,
+        approvalStatus: null,
+      },
+    },
+  };
 }
 
 const defaultExecution: ResolvedThreadExecutionOptions = {
