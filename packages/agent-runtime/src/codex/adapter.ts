@@ -62,12 +62,27 @@ interface CodexPermissionSettings {
   sandboxPolicy: SandboxPolicy;
 }
 
-type CodexBaseInstructions = ThreadStartParams["baseInstructions"];
+type CodexInstructionCommand = Extract<
+  AdapterCommand,
+  { type: "thread/start" | "thread/resume" }
+>;
 
-function resolveCodexBaseInstructions(
-  instructions: string | undefined,
-): CodexBaseInstructions {
-  return instructions && instructions.trim().length > 0 ? instructions : null;
+interface CodexInstructionOverrides {
+  baseInstructions?: ThreadStartParams["baseInstructions"];
+  developerInstructions?: ThreadStartParams["developerInstructions"];
+}
+
+function resolveCodexInstructionOverrides(
+  command: CodexInstructionCommand,
+): CodexInstructionOverrides {
+  const instructions = command.options.instructions?.trim();
+  if (!instructions) {
+    return {};
+  }
+  if (command.instructionMode === "replace") {
+    return { baseInstructions: instructions };
+  }
+  return { developerInstructions: instructions };
 }
 
 function toWorkspaceWriteCodexSandboxPolicy(): SandboxPolicy {
@@ -365,9 +380,7 @@ export function createCodexProviderAdapter(
             approvalPolicy: permissionSettings.approvalPolicy,
             sandbox: permissionSettings.sandbox,
             cwd: command.cwd,
-            baseInstructions: resolveCodexBaseInstructions(
-              command.options?.instructions,
-            ),
+            ...resolveCodexInstructionOverrides(command),
             model: command.options?.model ?? undefined,
             serviceTier: toCodexServiceTier(command.options?.serviceTier),
             config: buildCodexConfig(command.threadId, command.options) ?? undefined,
@@ -389,9 +402,7 @@ export function createCodexProviderAdapter(
             approvalPolicy: permissionSettings.approvalPolicy,
             sandbox: permissionSettings.sandbox,
             cwd: command.cwd,
-            baseInstructions: resolveCodexBaseInstructions(
-              command.options?.instructions,
-            ),
+            ...resolveCodexInstructionOverrides(command),
             model: command.options?.model ?? undefined,
             serviceTier: toCodexServiceTier(command.options?.serviceTier),
             config: buildCodexConfig(command.threadId, command.options) ?? undefined,

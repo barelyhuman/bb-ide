@@ -1,19 +1,54 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+interface MockPiResourceLoaderOptions {
+  cwd?: string;
+  systemPrompt?: string;
+  appendSystemPromptOverride?: (base: string[]) => string[];
+  noExtensions?: boolean;
+  noSkills?: boolean;
+  noPromptTemplates?: boolean;
+  noThemes?: boolean;
+}
+
+interface MockPiResourceLoader {
+  options: MockPiResourceLoaderOptions;
+  reload: ReturnType<typeof vi.fn>;
+}
+
 const {
   mockCreateAgentSession,
+  mockDefaultResourceLoader,
   mockInMemory,
   mockOpen,
+  mockResourceLoaders,
   mockSettingsInMemory,
-} = vi.hoisted(() => ({
-  mockCreateAgentSession: vi.fn(),
-  mockInMemory: vi.fn((cwd?: string) => ({ kind: "in-memory", cwd })),
-  mockOpen: vi.fn((path: string) => ({ kind: "open", path })),
-  mockSettingsInMemory: vi.fn(() => ({ kind: "settings" })),
-}));
+} = vi.hoisted(() => {
+  const mockResourceLoaders: MockPiResourceLoader[] = [];
+
+  const mockDefaultResourceLoader = vi.fn(function defaultResourceLoader(
+    options: MockPiResourceLoaderOptions,
+  ): MockPiResourceLoader {
+    const resourceLoader = {
+      options,
+      reload: vi.fn(async () => {}),
+    };
+    mockResourceLoaders.push(resourceLoader);
+    return resourceLoader;
+  });
+
+  return {
+    mockCreateAgentSession: vi.fn(),
+    mockDefaultResourceLoader,
+    mockInMemory: vi.fn((cwd?: string) => ({ kind: "in-memory", cwd })),
+    mockOpen: vi.fn((path: string) => ({ kind: "open", path })),
+    mockResourceLoaders,
+    mockSettingsInMemory: vi.fn(() => ({ kind: "settings" })),
+  };
+});
 
 vi.mock("@mariozechner/pi-coding-agent", () => ({
   createAgentSession: mockCreateAgentSession,
+  DefaultResourceLoader: mockDefaultResourceLoader,
   SessionManager: {
     open: mockOpen,
     inMemory: mockInMemory,
@@ -69,6 +104,89 @@ function createControlledPiAgentSession(): ControlledPiAgentSession {
 describe("pi bridge", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockResourceLoaders.length = 0;
+  });
+
+  it("passes appendSystemPrompt through Pi's append override path", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    mockCreateAgentSession.mockImplementation(async () => ({
+      session: createControlledPiAgentSession(),
+    }));
+
+    try {
+      bridge.sendRequest(1, "thread/start", {
+        cwd: "/tmp/worktree",
+        threadId: "thread-append",
+        appendSystemPrompt: "BB append instructions",
+      });
+      await bridge.waitForResponse(1);
+
+      expect(mockResourceLoaders).toHaveLength(1);
+      expect(mockResourceLoaders[0]?.options.systemPrompt).toBeUndefined();
+      expect(mockResourceLoaders[0]?.options.noSkills).toBeUndefined();
+      expect(
+        mockResourceLoaders[0]?.options.appendSystemPromptOverride?.([
+          "Project append instructions",
+        ]),
+      ).toEqual([
+        "Project append instructions",
+        "BB append instructions",
+      ]);
+    } finally {
+      bridge.restore();
+    }
+  });
+
+  it("passes baseInstructions through Pi's replacement system prompt path", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    mockCreateAgentSession.mockImplementation(async () => ({
+      session: createControlledPiAgentSession(),
+    }));
+
+    try {
+      bridge.sendRequest(2, "thread/start", {
+        cwd: "/tmp/worktree",
+        threadId: "thread-replace",
+        baseInstructions: "Replacement prompt",
+      });
+      await bridge.waitForResponse(2);
+
+      expect(mockResourceLoaders).toHaveLength(1);
+      expect(mockResourceLoaders[0]?.options).toMatchObject({
+        cwd: "/tmp/worktree",
+        systemPrompt: "Replacement prompt",
+        noExtensions: true,
+        noSkills: true,
+        noPromptTemplates: true,
+        noThemes: true,
+      });
+      expect(mockResourceLoaders[0]?.options.appendSystemPromptOverride).toBeUndefined();
+    } finally {
+      bridge.restore();
+    }
+  });
+
+  it("rejects requests that combine replacement and append instructions", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    mockCreateAgentSession.mockImplementation(async () => ({
+      session: createControlledPiAgentSession(),
+    }));
+
+    try {
+      bridge.sendRequest(3, "thread/start", {
+        cwd: "/tmp/worktree",
+        threadId: "thread-both",
+        baseInstructions: "Replacement prompt",
+        appendSystemPrompt: "Append prompt",
+      });
+      await bridge.flushWork();
+
+      expect(bridge.hasResponse(3)).toBe(false);
+      expect(mockCreateAgentSession).not.toHaveBeenCalled();
+      expect(mockResourceLoaders).toHaveLength(0);
+    } finally {
+      bridge.restore();
+    }
   });
 
   it("holds thread stop open until the Pi SDK session closes", async () => {

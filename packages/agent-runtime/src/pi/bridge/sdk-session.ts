@@ -21,10 +21,31 @@ export interface PiSdkSessionOptions {
   customTools?: ToolDefinition[];
   sessionFilePath?: string;
   systemPrompt?: string;
+  appendSystemPrompt?: string;
 }
 
 type PiSessionEventHandler = (event: AgentSessionEvent) => void;
 type PiSessionDoneHandler = (error?: unknown) => void;
+type AppendSystemPromptOverride = (base: string[]) => string[];
+
+function assertExclusivePiPromptOverrides(
+  options: PiSdkSessionOptions,
+): void {
+  if (
+    options.systemPrompt !== undefined
+    && options.appendSystemPrompt !== undefined
+  ) {
+    throw new Error(
+      "Pi sessions accept either systemPrompt or appendSystemPrompt, not both",
+    );
+  }
+}
+
+function buildAppendSystemPromptOverride(
+  appendSystemPrompt: string,
+): AppendSystemPromptOverride {
+  return (base) => [...base, appendSystemPrompt];
+}
 
 /**
  * Wraps the Pi programmatic SDK (`@mariozechner/pi-coding-agent`) in a
@@ -55,6 +76,8 @@ export class PiSdkSession {
   }
 
   async start(): Promise<void> {
+    assertExclusivePiPromptOverrides(this.options);
+
     const sessionOptions: CreateAgentSessionOptions = {
       cwd: this.options.cwd,
       sessionManager: this.options.sessionFilePath
@@ -69,15 +92,30 @@ export class PiSdkSession {
       }),
     };
 
-    // Pass custom system prompt (e.g. manager instructions) via ResourceLoader
-    if (this.options.systemPrompt) {
+    const appendSystemPrompt = this.options.appendSystemPrompt?.trim();
+
+    // Pass custom prompt overrides through ResourceLoader. systemPrompt is the
+    // replacement path; appendSystemPrompt layers BB instructions on top of Pi's
+    // normal discovered APPEND_SYSTEM.md prompt. The two are mutually exclusive
+    // in BB's bridge contract and asserted here for direct SDK-session callers.
+    if (this.options.systemPrompt || appendSystemPrompt) {
       const resourceLoader = new DefaultResourceLoader({
         cwd: this.options.cwd,
-        systemPrompt: this.options.systemPrompt,
-        noExtensions: true,
-        noSkills: true,
-        noPromptTemplates: true,
-        noThemes: true,
+        ...(this.options.systemPrompt
+          ? {
+              systemPrompt: this.options.systemPrompt,
+              noExtensions: true,
+              noSkills: true,
+              noPromptTemplates: true,
+              noThemes: true,
+            }
+          : {}),
+        ...(appendSystemPrompt
+          ? {
+              appendSystemPromptOverride:
+                buildAppendSystemPromptOverride(appendSystemPrompt),
+            }
+          : {}),
       });
       await resourceLoader.reload();
       sessionOptions.resourceLoader = resourceLoader;

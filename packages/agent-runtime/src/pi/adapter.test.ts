@@ -79,7 +79,7 @@ describe("pi provider adapter", () => {
 
   // -- buildCommand --------------------------------------------------------
 
-  it("buildCommand thread/start includes threadId and baseInstructions", () => {
+  it("buildCommand thread/start includes threadId and omits instruction overrides when empty", () => {
     const adapter = createPiProviderAdapter();
     const cmd = adapter.buildCommandPlan({
       type: "thread/start",
@@ -96,10 +96,19 @@ describe("pi provider adapter", () => {
         cwd: "/tmp/worktree",
       },
     });
-    expect((cmd as { params: { baseInstructions?: string } }).params.baseInstructions).toBeDefined();
+    expect(cmd).not.toMatchObject({
+      params: {
+        baseInstructions: expect.any(String),
+      },
+    });
+    expect(cmd).not.toMatchObject({
+      params: {
+        appendSystemPrompt: expect.any(String),
+      },
+    });
   });
 
-  it("buildCommand thread/start passes through model, env vars, instructions, reasoning level, and dynamic tools", () => {
+  it("buildCommand thread/start passes through model, env vars, append instructions, reasoning level, and dynamic tools", () => {
     const adapter = createPiProviderAdapter();
     const cmd = adapter.buildCommandPlan({
       type: "thread/start",
@@ -135,7 +144,7 @@ describe("pi provider adapter", () => {
       params: {
         threadId: "bb-thread-1",
         model: "anthropic/claude-sonnet-4-20250514",
-        baseInstructions: expect.stringContaining("Focus on the failing tests first."),
+        appendSystemPrompt: "Focus on the failing tests first.",
         dynamicTools: [{
           name: "bb_test_ping",
           description: "Ping the host",
@@ -149,6 +158,11 @@ describe("pi provider adapter", () => {
         }],
       },
     });
+    expect(cmd).not.toMatchObject({
+      params: {
+        baseInstructions: expect.any(String),
+      },
+    });
     expect((cmd as { params: { config?: Record<string, unknown> } }).params.config).toMatchObject({
       "shell_environment_policy.set.BB_THREAD_ID": "bb-thread-1",
       "shell_environment_policy.set.TEST_VAR": "123",
@@ -159,6 +173,34 @@ describe("pi provider adapter", () => {
         config: {
           "shell_environment_policy.set.BAD.KEY": "ignored",
         },
+      },
+    });
+  });
+
+  it("buildCommand thread/start uses baseInstructions for replace instructions", () => {
+    const adapter = createPiProviderAdapter();
+    const cmd = adapter.buildCommandPlan({
+      type: "thread/start",
+      cwd: "/tmp/worktree",
+      threadId: "bb-thread-replace",
+      input: [{ type: "text", text: "hello" }],
+      instructionMode: "replace",
+      options: {
+        ...fullProviderExecutionContext,
+        instructions: "Replace the provider prompt.",
+      },
+    });
+
+    expect(cmd).toMatchObject({
+      method: "thread/start",
+      params: {
+        threadId: "bb-thread-replace",
+        baseInstructions: "Replace the provider prompt.",
+      },
+    });
+    expect(cmd).not.toMatchObject({
+      params: {
+        appendSystemPrompt: expect.any(String),
       },
     });
   });
@@ -178,6 +220,33 @@ describe("pi provider adapter", () => {
       params: {
         threadId: "pi-session-1",
         cwd: "/tmp/worktree",
+      },
+    });
+  });
+
+  it("buildCommand thread/resume uses appendSystemPrompt for append instructions", () => {
+    const adapter = createPiProviderAdapter();
+    const cmd = adapter.buildCommandPlan({
+      type: "thread/resume",
+      cwd: "/tmp/worktree",
+      threadId: "bb-t1",
+      providerThreadId: "pi-session-1",
+      instructionMode: "append",
+      options: {
+        ...fullProviderExecutionContext,
+        instructions: "Keep responses brief.",
+      },
+    });
+    expect(cmd).toMatchObject({
+      method: "thread/resume",
+      params: {
+        threadId: "pi-session-1",
+        appendSystemPrompt: "Keep responses brief.",
+      },
+    });
+    expect(cmd).not.toMatchObject({
+      params: {
+        baseInstructions: expect.any(String),
       },
     });
   });

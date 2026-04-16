@@ -251,9 +251,10 @@ describe("codex provider adapter", () => {
         approvalPolicy: "never",
         sandbox: "danger-full-access",
         cwd: "/tmp/worktree",
-        baseInstructions: null,
       },
     });
+    expect(JSON.stringify(cmd)).not.toContain("baseInstructions");
+    expect(JSON.stringify(cmd)).not.toContain("developerInstructions");
   });
 
   it("buildCommand thread/start maps workspace-write permissions to on-request approvals", () => {
@@ -343,7 +344,7 @@ describe("codex provider adapter", () => {
     });
   });
 
-  it("buildCommand thread/start passes through model, service tier, env vars, instructions, and dynamic tools", () => {
+  it("buildCommand thread/start appends instructions as developer instructions", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommandPlan({
       type: "thread/start",
@@ -380,7 +381,7 @@ describe("codex provider adapter", () => {
       params: {
         model: "gpt-5.4",
         serviceTier: "fast",
-        baseInstructions: expect.stringContaining("Focus on the failing tests first."),
+        developerInstructions: expect.stringContaining("Focus on the failing tests first."),
         dynamicTools: [{
           name: "bb_test_ping",
           description: "Ping the host",
@@ -403,9 +404,41 @@ describe("codex provider adapter", () => {
     });
     expect(cmd).not.toMatchObject({
       params: {
+        baseInstructions: expect.any(String),
+      },
+    });
+    expect(cmd).not.toMatchObject({
+      params: {
         config: {
           "shell_environment_policy.set.BAD.KEY": "ignored",
         },
+      },
+    });
+  });
+
+  it("buildCommand thread/start replaces instructions as base instructions", () => {
+    const adapter = createCodexProviderAdapter();
+    const cmd = adapter.buildCommandPlan({
+      type: "thread/start",
+      cwd: "/tmp/worktree",
+      threadId: "bb-thread-1",
+      input: [{ type: "text", text: "hello" }],
+      instructionMode: "replace",
+      options: {
+        ...fullProviderExecutionContext,
+        instructions: "Use this as the complete base prompt.",
+      },
+    });
+
+    expect(cmd).toMatchObject({
+      method: "thread/start",
+      params: {
+        baseInstructions: "Use this as the complete base prompt.",
+      },
+    });
+    expect(cmd).not.toMatchObject({
+      params: {
+        developerInstructions: expect.any(String),
       },
     });
   });
@@ -425,7 +458,36 @@ describe("codex provider adapter", () => {
       params: {
         threadId: "codex-uuid-1",
         cwd: "/tmp/worktree",
-        baseInstructions: null,
+      },
+    });
+    expect(JSON.stringify(cmd)).not.toContain("baseInstructions");
+    expect(JSON.stringify(cmd)).not.toContain("developerInstructions");
+  });
+
+  it("buildCommand thread/resume appends instructions as developer instructions", () => {
+    const adapter = createCodexProviderAdapter();
+    const cmd = adapter.buildCommandPlan({
+      type: "thread/resume",
+      cwd: "/tmp/worktree",
+      threadId: "bb-t1",
+      providerThreadId: "codex-uuid-1",
+      instructionMode: "append",
+      options: {
+        ...fullProviderExecutionContext,
+        instructions: "Continue inside bb.",
+      },
+    });
+
+    expect(cmd).toMatchObject({
+      method: "thread/resume",
+      params: {
+        threadId: "codex-uuid-1",
+        developerInstructions: "Continue inside bb.",
+      },
+    });
+    expect(cmd).not.toMatchObject({
+      params: {
+        baseInstructions: expect.any(String),
       },
     });
   });

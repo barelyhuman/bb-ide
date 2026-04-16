@@ -94,6 +94,16 @@ interface PiUnhandledEventArgs {
   parentToolCallId?: string;
 }
 
+type PiInstructionCommand = Extract<
+  AdapterCommand,
+  { type: "thread/start" | "thread/resume" }
+>;
+
+interface PiInstructionOverrides {
+  baseInstructions?: string;
+  appendSystemPrompt?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -131,6 +141,21 @@ function buildUnexpectedPiSdkEvent(
         : {}),
     }),
   ];
+}
+
+function resolvePiInstructionOverrides(
+  command: PiInstructionCommand,
+): PiInstructionOverrides {
+  const instructions = command.options.instructions?.trim();
+  if (!instructions) {
+    return {};
+  }
+
+  if (command.instructionMode === "replace") {
+    return { baseInstructions: instructions };
+  }
+
+  return { appendSystemPrompt: instructions };
 }
 
 function normalizePiContextWindowUsage(
@@ -1002,7 +1027,6 @@ export function createPiProviderAdapter(
           };
         case "thread/start": {
           finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
-          const baseInstructions = command.options?.instructions ?? "";
           const config = buildPiConfig(command.threadId, command.options);
           const finalConfig: Record<string, unknown> = config ? { ...config } : {};
           if (command.options?.reasoningLevel) {
@@ -1019,7 +1043,7 @@ export function createPiProviderAdapter(
             params: {
               threadId: command.threadId,
               cwd: command.cwd,
-              baseInstructions,
+              ...resolvePiInstructionOverrides(command),
               ...(Object.keys(finalConfig).length > 0 ? { config: finalConfig } : {}),
               ...(command.options?.model ? { model: command.options.model } : {}),
               ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
@@ -1029,7 +1053,6 @@ export function createPiProviderAdapter(
         case "thread/resume": {
           finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
           const threadId = command.providerThreadId ?? command.threadId;
-          const baseInstructions = command.options?.instructions ?? "";
           const config = buildPiConfig(command.threadId, command.options);
           const finalConfig: Record<string, unknown> = config ? { ...config } : {};
           if (command.options?.reasoningLevel) {
@@ -1046,7 +1069,7 @@ export function createPiProviderAdapter(
             params: {
               threadId,
               cwd: command.cwd,
-              baseInstructions,
+              ...resolvePiInstructionOverrides(command),
               ...(Object.keys(finalConfig).length > 0 ? { config: finalConfig } : {}),
               ...(command.options?.model ? { model: command.options.model } : {}),
               ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),

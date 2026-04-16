@@ -33,6 +33,55 @@ import { listPiBridgeModels } from "./model-list.js";
 // Command schema — defines what JSON-RPC requests this bridge accepts
 // ---------------------------------------------------------------------------
 
+interface PiInstructionOverrideParams {
+  baseInstructions?: string;
+  appendSystemPrompt?: string;
+}
+
+function hasAtMostOnePiInstructionOverride(
+  params: PiInstructionOverrideParams,
+): boolean {
+  return (
+    params.baseInstructions === undefined
+    || params.appendSystemPrompt === undefined
+  );
+}
+
+const piInstructionOverrideSchemaOptions = {
+  message: "Provide either baseInstructions or appendSystemPrompt, not both",
+  path: ["appendSystemPrompt"],
+};
+
+const piThreadStartParamsSchema = z.object({
+  threadId: z.string().optional(),
+  cwd: z.string(),
+  baseInstructions: z.string().optional(),
+  appendSystemPrompt: z.string().optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
+  model: z.string().optional(),
+  input: z.array(z.unknown()).optional(),
+  dynamicTools: z.array(z.object({
+    name: z.string(),
+    description: z.string(),
+    inputSchema: z.unknown(),
+  })).optional(),
+}).refine(hasAtMostOnePiInstructionOverride, piInstructionOverrideSchemaOptions);
+
+const piThreadResumeParamsSchema = z.object({
+  threadId: z.string(),
+  cwd: z.string(),
+  sessionPath: z.string().optional(),
+  baseInstructions: z.string().optional(),
+  appendSystemPrompt: z.string().optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
+  model: z.string().optional(),
+  dynamicTools: z.array(z.object({
+    name: z.string(),
+    description: z.string(),
+    inputSchema: z.unknown(),
+  })).optional(),
+}).refine(hasAtMostOnePiInstructionOverride, piInstructionOverrideSchemaOptions);
+
 const piCommandSchema = z.discriminatedUnion("method", [
   z.object({
     method: z.literal("initialize"),
@@ -46,35 +95,11 @@ const piCommandSchema = z.discriminatedUnion("method", [
   }),
   z.object({
     method: z.literal("thread/start"),
-    params: z.object({
-      threadId: z.string().optional(),
-      cwd: z.string(),
-      baseInstructions: z.string().optional(),
-      config: z.record(z.string(), z.unknown()).optional(),
-      model: z.string().optional(),
-      input: z.array(z.unknown()).optional(),
-      dynamicTools: z.array(z.object({
-        name: z.string(),
-        description: z.string(),
-        inputSchema: z.unknown(),
-      })).optional(),
-    }),
+    params: piThreadStartParamsSchema,
   }),
   z.object({
     method: z.literal("thread/resume"),
-    params: z.object({
-      threadId: z.string(),
-      cwd: z.string(),
-      sessionPath: z.string().optional(),
-      baseInstructions: z.string().optional(),
-      config: z.record(z.string(), z.unknown()).optional(),
-      model: z.string().optional(),
-      dynamicTools: z.array(z.object({
-        name: z.string(),
-        description: z.string(),
-        inputSchema: z.unknown(),
-      })).optional(),
-    }),
+    params: piThreadResumeParamsSchema,
   }),
   z.object({
     method: z.literal("turn/start"),
@@ -390,6 +415,7 @@ function buildSessionOptions(
     cwd: string;
     model?: string;
     baseInstructions?: string;
+    appendSystemPrompt?: string;
     sessionPath?: string;
   },
   env: NodeJS.ProcessEnv,
@@ -403,6 +429,7 @@ function buildSessionOptions(
     env,
     sessionFilePath,
     systemPrompt: params.baseInstructions,
+    appendSystemPrompt: params.appendSystemPrompt,
   };
 }
 
