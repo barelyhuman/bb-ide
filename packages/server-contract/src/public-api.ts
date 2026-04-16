@@ -42,6 +42,7 @@ import type {
   EnvironmentActionApiError,
   EnvironmentActionRequest,
   EnvironmentActionResponse,
+  EnvironmentPromotionResponse,
   EnvironmentStatusQuery,
   EnvironmentStatusResponse,
   ThreadStorageContentQuery,
@@ -51,6 +52,7 @@ import type {
   ProjectAttachmentUploadForm,
   ProjectFilesQuery,
   ProjectResponse,
+  ProjectSourceWorkspaceStatusResponse,
   SendDraftRequest,
   SendDraftResponse,
   SendMessageRequest,
@@ -117,6 +119,10 @@ export type PublicApiSchema = {
   "/projects/:id/sources/:sourceId": {
     $patch: Endpoint<PathProjectSourceId & { json: UpdateProjectSourceRequest }, ProjectSource>;
     $delete: Endpoint<PathProjectSourceId, { ok: true }>;
+  };
+  "/projects/:id/sources/:sourceId/status": {
+    /** Return git workspace status for a local path project source primary checkout. */
+    $get: Endpoint<PathProjectSourceId, ProjectSourceWorkspaceStatusResponse>;
   };
   "/projects/:id/automations": {
     $get: Endpoint<PathProjectId, Automation[]>;
@@ -194,6 +200,10 @@ export type PublicApiSchema = {
   "/environments/:id/status": {
     /** Get workspace status (git state) for an environment. Proxies to `workspace.status`. */
     $get: Endpoint<PathId & { query: EnvironmentStatusQuery }, EnvironmentStatusResponse>;
+  };
+  "/environments/:id/promotion": {
+    /** Derive current promotion state and server-side action eligibility for an environment. */
+    $get: Endpoint<PathId, EnvironmentPromotionResponse>;
   };
   "/environments/:id/diff": {
     /** Get git diff for an environment's workspace. Proxies to `workspace.diff`. */

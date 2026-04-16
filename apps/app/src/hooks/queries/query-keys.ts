@@ -13,8 +13,10 @@ export const THREAD_STORAGE_FILES_QUERY_KEY = "threadStorageFiles";
 export const THREAD_STORAGE_FILE_PREVIEW_QUERY_KEY = "threadStorageFilePreview";
 export const ENVIRONMENT_QUERY_KEY = "environment";
 export const ENVIRONMENT_WORK_STATUS_QUERY_KEY = "environmentWorkStatus";
+export const ENVIRONMENT_PROMOTION_QUERY_KEY = "environmentPromotion";
 export const ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY = "environmentMergeBaseBranches";
 export const ENVIRONMENT_GIT_DIFF_QUERY_KEY = "environmentGitDiff";
+export const PROJECT_SOURCE_WORKSPACE_STATUS_QUERY_KEY = "projectSourceWorkspaceStatus";
 export const THREAD_TIMELINE_QUERY_KEY = "threadTimeline";
 export const AVAILABLE_MODELS_QUERY_KEY = "availableModels";
 export const SYSTEM_PROVIDERS_QUERY_KEY = "systemProviders";
@@ -48,6 +50,13 @@ export type ProjectFilesQueryKeyPrefix = readonly [
   typeof PROJECT_FILES_QUERY_KEY,
   string,
 ];
+export type ProjectSourceWorkspaceStatusQueryKey = readonly [
+  typeof PROJECT_SOURCE_WORKSPACE_STATUS_QUERY_KEY,
+  string | null | undefined,
+  string | null | undefined,
+];
+export type ProjectSourceWorkspaceStatusQueryKeyPrefix =
+  readonly [typeof PROJECT_SOURCE_WORKSPACE_STATUS_QUERY_KEY];
 export type ThreadsQueryKey = readonly [typeof THREADS_QUERY_KEY];
 export type ThreadListQueryKey = readonly [typeof THREADS_QUERY_KEY, ThreadListQueryFilters?];
 export type ThreadQueryKeyPrefix = readonly [typeof THREAD_QUERY_KEY];
@@ -83,6 +92,14 @@ export type EnvironmentWorkStatusQueryKey = readonly [
 ];
 export type EnvironmentWorkStatusQueryKeyPrefix = readonly [
   typeof ENVIRONMENT_WORK_STATUS_QUERY_KEY,
+  string,
+];
+export type EnvironmentPromotionQueryKey = readonly [
+  typeof ENVIRONMENT_PROMOTION_QUERY_KEY,
+  string | null | undefined,
+];
+export type EnvironmentPromotionQueryKeyPrefix = readonly [
+  typeof ENVIRONMENT_PROMOTION_QUERY_KEY,
   string,
 ];
 export type EnvironmentMergeBaseBranchesQueryKey = readonly [
@@ -173,6 +190,18 @@ export function projectFilesQueryKeyPrefix(
   return [PROJECT_FILES_QUERY_KEY, projectId];
 }
 
+export function projectSourceWorkspaceStatusQueryKey(
+  projectId: string | null | undefined,
+  sourceId: string | null | undefined,
+): ProjectSourceWorkspaceStatusQueryKey {
+  return [PROJECT_SOURCE_WORKSPACE_STATUS_QUERY_KEY, projectId, sourceId];
+}
+
+export function projectSourceWorkspaceStatusQueryKeyPrefix():
+  ProjectSourceWorkspaceStatusQueryKeyPrefix {
+  return [PROJECT_SOURCE_WORKSPACE_STATUS_QUERY_KEY];
+}
+
 export function threadsQueryKey(): ThreadsQueryKey {
   return [THREADS_QUERY_KEY];
 }
@@ -248,6 +277,18 @@ export function environmentWorkStatusQueryKeyPrefix(
   environmentId: string,
 ): EnvironmentWorkStatusQueryKeyPrefix {
   return [ENVIRONMENT_WORK_STATUS_QUERY_KEY, environmentId];
+}
+
+export function environmentPromotionQueryKey(
+  environmentId: string | null | undefined,
+): EnvironmentPromotionQueryKey {
+  return [ENVIRONMENT_PROMOTION_QUERY_KEY, environmentId];
+}
+
+export function environmentPromotionQueryKeyPrefix(
+  environmentId: string,
+): EnvironmentPromotionQueryKeyPrefix {
+  return [ENVIRONMENT_PROMOTION_QUERY_KEY, environmentId];
 }
 
 export function environmentMergeBaseBranchesQueryKey(

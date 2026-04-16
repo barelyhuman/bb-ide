@@ -5,8 +5,10 @@ import type {
   WorkspaceDiffTarget,
   WorkspaceStatus,
 } from "@bb/domain";
+import type { EnvironmentPromotionResponse } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import {
+  environmentPromotionQueryKey,
   environmentGitDiffQueryKey,
   environmentMergeBaseBranchesQueryKey,
   environmentQueryKey,
@@ -78,6 +80,22 @@ export function useEnvironmentWorkStatus(
             environmentId,
           )
         : undefined,
+  });
+}
+
+export function useEnvironmentPromotion(
+  environmentId: string | null | undefined,
+  options?: QueryOptions,
+) {
+  return useQuery<EnvironmentPromotionResponse>({
+    queryKey: environmentPromotionQueryKey(environmentId),
+    queryFn: () =>
+      api.getEnvironmentPromotion(
+        requireEnvironmentId(environmentId, "useEnvironmentPromotion"),
+      ),
+    enabled: (options?.enabled ?? true) && Boolean(environmentId),
+    refetchOnWindowFocus: true,
+    staleTime: 5_000,
   });
 }
 

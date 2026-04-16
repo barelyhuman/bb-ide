@@ -17,6 +17,8 @@ import {
   createPublicApiClient,
   createThreadRequestSchema,
   environmentActionRequestSchema,
+  environmentPromotionResponseSchema,
+  projectSourceWorkspaceStatusResponseSchema,
   resolvePendingInteractionRequestSchema,
   sendMessageRequestSchema,
   threadListResponseSchema,
@@ -257,6 +259,47 @@ describe("server-contract canonical schemas", () => {
     });
 
     expect(
+      projectSourceWorkspaceStatusResponseSchema.parse({
+        sourceId: "src_123",
+        hostId: "host_123",
+        path: "/tmp/project",
+        refreshedAt: 1,
+        workspace: null,
+      }),
+    ).toMatchObject({
+      sourceId: "src_123",
+      workspace: null,
+    });
+
+    expect(
+      environmentPromotionResponseSchema.parse({
+        state: {
+          isPromoted: true,
+          branchName: "bb/test",
+        },
+        actions: {
+          promote: {
+            enabled: false,
+            unavailableReason: "already_promoted",
+          },
+          demote: {
+            enabled: true,
+            unavailableReason: null,
+          },
+        },
+      }),
+    ).toMatchObject({
+      state: {
+        isPromoted: true,
+      },
+      actions: {
+        demote: {
+          enabled: true,
+        },
+      },
+    });
+
+    expect(
       threadListResponseSchema.parse([
         {
           id: "thr_123",
@@ -277,6 +320,8 @@ describe("server-contract canonical schemas", () => {
           createdAt: 1,
           updatedAt: 2,
           hasPendingInteraction: true,
+          environmentHostId: "host_123",
+          environmentBranchName: "bb/test",
           environmentWorkspaceDisplayKind: "managed-worktree",
         },
       ]),
@@ -284,6 +329,8 @@ describe("server-contract canonical schemas", () => {
       {
         id: "thr_123",
         hasPendingInteraction: true,
+        environmentHostId: "host_123",
+        environmentBranchName: "bb/test",
         environmentWorkspaceDisplayKind: "managed-worktree",
       },
     ]);

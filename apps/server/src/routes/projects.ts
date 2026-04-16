@@ -45,6 +45,7 @@ import {
   advanceProjectDeletion,
   requestProjectDeletion,
 } from "../services/projects/project-deletion.js";
+import { readProjectSourceWorkspaceStatus } from "../services/environments/environment-promotion.js";
 
 function buildProjectResponses(deps: AppDeps, projectId?: string): ProjectResponse[] {
   const projects = projectId
@@ -196,6 +197,20 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
       throw new ApiError(404, "invalid_request", "Project source not found");
     }
     return context.json({ ok: true });
+  });
+
+  get("/projects/:id/sources/:sourceId/status", async (context) => {
+    const projectId = context.req.param("id");
+    requirePublicProject(deps.db, projectId);
+    const source = requireProjectSource(deps, {
+      projectId,
+      sourceId: context.req.param("sourceId"),
+    });
+    if (source.type !== "local_path") {
+      throw new ApiError(409, "invalid_request", "Project source is not a local path");
+    }
+
+    return context.json(await readProjectSourceWorkspaceStatus(deps, { source }));
   });
 
   get("/projects/:id/files", projectFilesQuerySchema, async (context, query) => {

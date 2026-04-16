@@ -92,6 +92,8 @@ export interface ListThreadsOptions {
 type ThreadRow = typeof threads.$inferSelect;
 
 export interface ThreadWithPendingInteractionState extends ThreadRow {
+  environmentBranchName: string | null;
+  environmentHostId: string | null;
   hasPendingInteraction: boolean;
   environmentWorkspaceDisplayKind: EnvironmentWorkspaceDisplayKind;
 }
@@ -201,6 +203,8 @@ export function listThreadsWithPendingInteractionState(
   const rows = db
     .select({
       ...getTableColumns(threads),
+      environmentBranchName: environments.branchName,
+      environmentHostId: environments.hostId,
       environmentIsWorktree: environments.isWorktree,
       environmentWorkspaceProvisionType: environments.workspaceProvisionType,
       hostType: hosts.type,
@@ -224,11 +228,15 @@ export function listThreadsWithPendingInteractionState(
   return rows.map(({
     environmentIsWorktree,
     environmentWorkspaceProvisionType,
+    environmentBranchName,
+    environmentHostId,
     hostType,
     pendingInteractionCount,
     ...thread
   }) => ({
     ...thread,
+    environmentBranchName,
+    environmentHostId,
     environmentWorkspaceDisplayKind: resolveEnvironmentWorkspaceDisplayKind({
       environment: {
         isWorktree: environmentIsWorktree,

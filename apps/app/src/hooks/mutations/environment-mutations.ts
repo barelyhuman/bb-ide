@@ -9,6 +9,7 @@ import type { RequestEnvironmentActionMutationRequest } from "./mutation-request
 import {
   getEnvironmentActionInvalidationQueryKeys,
   getEnvironmentWorkspaceStateInvalidationQueryKeys,
+  getPrimaryCheckoutWorkspaceStateInvalidationQueryKeys,
 } from "../queries/query-cache";
 import {
   environmentQueryKey,
@@ -33,6 +34,11 @@ export function useRequestEnvironmentAction() {
         environmentId: variables.id,
       })) {
         queryClient.invalidateQueries({ queryKey });
+      }
+      if (variables.action === "promote" || variables.action === "demote") {
+        for (const queryKey of getPrimaryCheckoutWorkspaceStateInvalidationQueryKeys()) {
+          queryClient.invalidateQueries({ queryKey });
+        }
       }
     },
   });

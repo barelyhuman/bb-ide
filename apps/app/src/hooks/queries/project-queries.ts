@@ -1,7 +1,24 @@
 import { useQuery } from "@tanstack/react-query";
-import type { ProjectResponse, WorkspaceFileListResponse } from "@bb/server-contract";
+import type {
+  ProjectResponse,
+  ProjectSourceWorkspaceStatusResponse,
+  WorkspaceFileListResponse,
+} from "@bb/server-contract";
 import * as api from "@/lib/api";
-import { projectFilesQueryKey, projectsQueryKey } from "./query-keys";
+import {
+  projectFilesQueryKey,
+  projectsQueryKey,
+  projectSourceWorkspaceStatusQueryKey,
+} from "./query-keys";
+
+interface QueryOptions {
+  enabled?: boolean;
+}
+
+interface RequireProjectSourceWorkspaceStatusIdsArgs {
+  projectId: string | null | undefined;
+  sourceId: string | null | undefined;
+}
 
 export function useProjects() {
   return useQuery<ProjectResponse[]>({
@@ -25,5 +42,39 @@ export function useProjectFileSuggestions(
     staleTime: 15_000,
     retry: false,
     refetchOnWindowFocus: false,
+  });
+}
+
+function requireProjectSourceWorkspaceStatusIds({
+  projectId,
+  sourceId,
+}: RequireProjectSourceWorkspaceStatusIdsArgs) {
+  if (!projectId || !sourceId) {
+    throw new Error("useProjectSourceWorkspaceStatus: projectId and sourceId are required when query is enabled");
+  }
+
+  return {
+    projectId,
+    sourceId,
+  };
+}
+
+export function useProjectSourceWorkspaceStatus(
+  projectId: string | null | undefined,
+  sourceId: string | null | undefined,
+  options?: QueryOptions,
+) {
+  return useQuery<ProjectSourceWorkspaceStatusResponse>({
+    queryKey: projectSourceWorkspaceStatusQueryKey(projectId, sourceId),
+    queryFn: () => {
+      const ids = requireProjectSourceWorkspaceStatusIds({
+        projectId,
+        sourceId,
+      });
+      return api.getProjectSourceWorkspaceStatus(ids.projectId, ids.sourceId);
+    },
+    enabled: (options?.enabled ?? true) && Boolean(projectId && sourceId),
+    refetchOnWindowFocus: true,
+    staleTime: 5_000,
   });
 }

@@ -21,6 +21,9 @@ import {
 import {
   ThreadGitActionDialog,
 } from "@/components/thread/ThreadGitActionDialog";
+import {
+  ThreadEnvironmentPromotionDialog,
+} from "@/components/thread/ThreadEnvironmentPromotionDialog";
 import { PageShell } from "@/components/layout/PageShell";
 import { HEADER_ICON_BUTTON_CLASS } from "@/components/layout/AppPageHeader";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
@@ -46,6 +49,7 @@ import { ThreadDetailSecondaryContent } from "./ThreadDetailSecondaryContent";
 import { useThreadStorageViewer } from "./useThreadStorageViewer";
 import { useEnvironmentMergeBase } from "./useEnvironmentMergeBase";
 import { useThreadGitActions } from "./useThreadGitActions";
+import { useThreadEnvironmentPromotionActions } from "./useThreadEnvironmentPromotionActions";
 import { useThreadReadTracking } from "./useThreadReadTracking";
 import { resolveThreadWorkspaceOpenPath } from "./threadWorkspaceOpenButton";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
@@ -217,6 +221,11 @@ export function ThreadDetailView() {
     sendMessage,
     thread,
     workspaceStatus,
+  });
+  const promotionActions = useThreadEnvironmentPromotionActions({
+    environment,
+    requestEnvironmentAction,
+    thread,
   });
 
   const parentThreadId = thread?.parentThreadId;
@@ -412,10 +421,13 @@ export function ThreadDetailView() {
       actionsMenu={threadActionsMenu}
       isManagedThread={Boolean(parentThreadId)}
       isManagerThread={isManagerThread}
+      isPromoted={promotionActions.isPromoted}
       isThreadGitActionPending={gitActions.isThreadGitActionPending}
       onOpenThreadGitAction={gitActions.threadGitActionDialog.onOpen}
+      onOpenThreadPromotionAction={promotionActions.promotionDialog.onOpen}
       onToggleSecondaryPanel={toggleThreadSecondaryPanel}
       threadHeaderGitActions={gitActions.threadHeaderGitActions}
+      threadHeaderPromotionAction={promotionActions.headerAction}
       threadTitle={threadTitle}
       workspaceOpenButton={workspaceOpenButton}
     />
@@ -585,6 +597,14 @@ export function ThreadDetailView() {
           onAskAgentToFix={gitActions.handleAskAgentToFixGitAction}
         />
       ) : null}
+      <ThreadEnvironmentPromotionDialog
+        target={promotionActions.promotionDialog.target}
+        pending={promotionActions.isPromotionActionPending}
+        branchName={promotionActions.branchName}
+        primaryCheckoutPath={promotionActions.primaryCheckoutPath}
+        onOpenChange={promotionActions.promotionDialog.onOpenChange}
+        onSubmit={promotionActions.handlePromotionAction}
+      />
     </>
   );
 }

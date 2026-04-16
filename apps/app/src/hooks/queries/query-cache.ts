@@ -6,12 +6,14 @@ import type {
 import {
   ENVIRONMENT_GIT_DIFF_QUERY_KEY,
   ENVIRONMENT_WORK_STATUS_QUERY_KEY,
+  environmentPromotionQueryKeyPrefix,
   environmentGitDiffQueryKey,
   environmentGitDiffQueryKeyPrefix,
   environmentMergeBaseBranchesQueryKeyPrefix,
   environmentQueryKey,
   environmentWorkStatusQueryKey,
   environmentWorkStatusQueryKeyPrefix,
+  projectSourceWorkspaceStatusQueryKeyPrefix,
   THREADS_QUERY_KEY,
   threadQueryKey,
   threadsQueryKey,
@@ -55,6 +57,7 @@ export function getEnvironmentWorkspaceStateInvalidationQueryKeys({
   return [
     environmentWorkStatusQueryKeyPrefix(environmentId),
     environmentGitDiffQueryKeyPrefix(environmentId),
+    environmentPromotionQueryKeyPrefix(environmentId),
   ];
 }
 
@@ -144,6 +147,12 @@ export function getEnvironmentActionInvalidationQueryKeys({
   ];
 }
 
+export function getPrimaryCheckoutWorkspaceStateInvalidationQueryKeys(): QueryKey[] {
+  return [
+    projectSourceWorkspaceStatusQueryKeyPrefix(),
+  ];
+}
+
 export function getCachedThreadListPlaceholder(
   queryClient: QueryClient,
   threadId: string,
@@ -230,6 +239,8 @@ export function optimisticallyInsertThread(
       queryKey,
       [{
         ...thread,
+        environmentBranchName: null,
+        environmentHostId: null,
         hasPendingInteraction: false,
         environmentWorkspaceDisplayKind: "other",
       }, ...list],

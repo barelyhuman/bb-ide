@@ -36,6 +36,7 @@ interface ThreadRowProps {
   projectId: string
   thread: ThreadListEntry
   isActive: boolean
+  isPromoted?: boolean
   onProjectSelect?: () => void
   onToggleManagerCollapsed?: (threadId: string) => void
   options: ThreadRowOptions
@@ -128,6 +129,7 @@ export function ThreadRow({
   projectId,
   thread,
   isActive,
+  isPromoted = false,
   onProjectSelect,
   onToggleManagerCollapsed,
   options,
@@ -188,6 +190,13 @@ export function ThreadRow({
         />
       )}
       <span className="min-w-0 flex-1 truncate">{threadTitle}</span>
+      {isPromoted ? (
+        <SidebarMenuBadge
+          className="relative z-10 rounded-full bg-sidebar-foreground/10 px-1.5 text-sidebar-foreground/80"
+        >
+          promoted
+        </SidebarMenuBadge>
+      ) : null}
       <span className="flex h-9 shrink-0 items-center justify-end md:h-7">
         {isManager && managedChildCount > 0 ? (
           <span

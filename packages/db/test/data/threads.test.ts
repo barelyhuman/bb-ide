@@ -114,18 +114,21 @@ describe("threads", () => {
       workspaceProvisionType: "unmanaged",
       isGitRepo: true,
       isWorktree: false,
+      branchName: "main",
     });
     const worktreeEnvironment = createEnvironment(db, noopNotifier, {
       projectId: project.id,
       hostId: host.id,
       workspaceProvisionType: "managed-worktree",
       isWorktree: true,
+      branchName: "bb/worktree",
     });
     const sandboxEnvironment = createEnvironment(db, noopNotifier, {
       projectId: project.id,
       hostId: sandboxHost.id,
       workspaceProvisionType: "managed-worktree",
       isWorktree: true,
+      branchName: "bb/sandbox",
     });
     const directThread = createThread(db, noopNotifier, {
       projectId: project.id,
@@ -151,6 +154,30 @@ describe("threads", () => {
     expect(displayKindsByThreadId.get(directThread.id)).toBe("other");
     expect(displayKindsByThreadId.get(worktreeThread.id)).toBe("managed-worktree");
     expect(displayKindsByThreadId.get(sandboxThread.id)).toBe("sandbox");
+
+    const environmentIdentityByThreadId = new Map(
+      listThreadsWithPendingInteractionState(db, { projectId: project.id })
+        .map((thread) => [
+          thread.id,
+          {
+            environmentBranchName: thread.environmentBranchName,
+            environmentHostId: thread.environmentHostId,
+          },
+        ]),
+    );
+
+    expect(environmentIdentityByThreadId.get(directThread.id)).toEqual({
+      environmentBranchName: "main",
+      environmentHostId: host.id,
+    });
+    expect(environmentIdentityByThreadId.get(worktreeThread.id)).toEqual({
+      environmentBranchName: "bb/worktree",
+      environmentHostId: host.id,
+    });
+    expect(environmentIdentityByThreadId.get(sandboxThread.id)).toEqual({
+      environmentBranchName: "bb/sandbox",
+      environmentHostId: sandboxHost.id,
+    });
   });
 
   it("updates thread title", () => {

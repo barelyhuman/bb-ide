@@ -699,6 +699,57 @@ export const environmentActionResponseSchema = z.discriminatedUnion("action", [
 ]);
 export type EnvironmentActionResponse = z.infer<typeof environmentActionResponseSchema>;
 
+export const environmentPromotionStateSchema = z.object({
+  isPromoted: z.boolean(),
+  branchName: z.string().nullable(),
+}).strict();
+export type EnvironmentPromotionState = z.infer<
+  typeof environmentPromotionStateSchema
+>;
+
+export const environmentPromotionUnavailableReasonSchema = z.enum([
+  "already_promoted",
+  "different_host_or_source",
+  "environment_dirty",
+  "environment_not_ready",
+  "environment_status_unavailable",
+  "environment_is_primary_checkout",
+  "local_host_disconnected",
+  "missing_default_branch",
+  "missing_environment_branch",
+  "not_promoted",
+  "primary_checkout_dirty",
+  "primary_checkout_status_unavailable",
+  "unsupported_workspace",
+]);
+export type EnvironmentPromotionUnavailableReason = z.infer<
+  typeof environmentPromotionUnavailableReasonSchema
+>;
+
+export const environmentPromotionActionAvailabilitySchema = z.object({
+  enabled: z.boolean(),
+  unavailableReason: environmentPromotionUnavailableReasonSchema.nullable(),
+}).strict();
+export type EnvironmentPromotionActionAvailability = z.infer<
+  typeof environmentPromotionActionAvailabilitySchema
+>;
+
+export const environmentPromotionActionsSchema = z.object({
+  promote: environmentPromotionActionAvailabilitySchema,
+  demote: environmentPromotionActionAvailabilitySchema,
+}).strict();
+export type EnvironmentPromotionActions = z.infer<
+  typeof environmentPromotionActionsSchema
+>;
+
+export const environmentPromotionResponseSchema = z.object({
+  state: environmentPromotionStateSchema,
+  actions: environmentPromotionActionsSchema,
+}).strict();
+export type EnvironmentPromotionResponse = z.infer<
+  typeof environmentPromotionResponseSchema
+>;
+
 export const environmentActionFailureDetailsSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("commit_failed"),
@@ -772,6 +823,17 @@ export const projectResponseSchema = projectSchema.extend({
   sources: z.array(projectSourceSchema),
 });
 export type ProjectResponse = z.infer<typeof projectResponseSchema>;
+
+export const projectSourceWorkspaceStatusResponseSchema = z.object({
+  sourceId: z.string(),
+  hostId: z.string(),
+  path: z.string(),
+  refreshedAt: z.number(),
+  workspace: workspaceStatusSchema.nullable(),
+});
+export type ProjectSourceWorkspaceStatusResponse = z.infer<
+  typeof projectSourceWorkspaceStatusResponseSchema
+>;
 
 export const systemConfigResponseSchema = z.object({
   githubConnected: z.boolean(),

@@ -8,6 +8,9 @@ import { StatusPill } from "@bb/ui-core";
 import { useIsMobile } from "@/hooks/useMobile";
 import { cn } from "@/lib/utils";
 import type { ThreadGitActionDialogTarget } from "@/components/thread/ThreadGitActionDialog";
+import type {
+  ThreadEnvironmentPromotionDialogTarget,
+} from "@/components/thread/ThreadEnvironmentPromotionDialog";
 
 const THREAD_HEADER_ACTION_BUTTON_CLASS =
   "h-9 rounded-md border-border/70 bg-background/70 px-2 text-xs font-medium text-foreground/85 shadow-none hover:bg-muted/45 hover:text-foreground md:h-8";
@@ -17,14 +20,24 @@ interface ThreadHeaderGitAction {
   target: ThreadGitActionDialogTarget;
 }
 
+interface ThreadHeaderPromotionAction {
+  disabled: boolean;
+  label: string;
+  target: ThreadEnvironmentPromotionDialogTarget;
+  title: string;
+}
+
 interface ThreadDetailHeaderProps {
   actionsMenu: ReactNode;
   isManagedThread: boolean;
   isManagerThread: boolean;
+  isPromoted: boolean;
   isThreadGitActionPending: boolean;
   onOpenThreadGitAction: (target: ThreadGitActionDialogTarget) => void;
+  onOpenThreadPromotionAction: (target: ThreadEnvironmentPromotionDialogTarget) => void;
   onToggleSecondaryPanel: () => void;
   threadHeaderGitActions: ThreadHeaderGitAction[];
+  threadHeaderPromotionAction: ThreadHeaderPromotionAction | null;
   threadTitle: string;
   workspaceOpenButton?: ReactNode;
 }
@@ -33,10 +46,13 @@ export function ThreadDetailHeader({
   actionsMenu,
   isManagedThread,
   isManagerThread,
+  isPromoted,
   isThreadGitActionPending,
   onOpenThreadGitAction,
+  onOpenThreadPromotionAction,
   onToggleSecondaryPanel,
   threadHeaderGitActions,
+  threadHeaderPromotionAction,
   threadTitle,
   workspaceOpenButton,
 }: ThreadDetailHeaderProps) {
@@ -52,12 +68,26 @@ export function ThreadDetailHeader({
       {!isManagerThread && isManagedThread ? (
         <StatusPill variant="outline">managed</StatusPill>
       ) : null}
+      {isPromoted ? <StatusPill variant="outline">promoted</StatusPill> : null}
     </>
   );
 
   const actions = (
     <>
       {workspaceOpenButton}
+      {threadHeaderPromotionAction ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={threadHeaderPromotionAction.disabled}
+          title={threadHeaderPromotionAction.title}
+          className={THREAD_HEADER_ACTION_BUTTON_CLASS}
+          onClick={() => onOpenThreadPromotionAction(threadHeaderPromotionAction.target)}
+        >
+          {threadHeaderPromotionAction.label}
+        </Button>
+      ) : null}
       {primaryAction && secondaryActions.length > 0 ? (
         <SplitButton
           variant="outline"

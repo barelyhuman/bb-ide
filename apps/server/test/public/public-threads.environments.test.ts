@@ -138,14 +138,20 @@ describe("public thread environment routes", () => {
         expect.arrayContaining([
           expect.objectContaining({
             id: directThread.id,
+            environmentHostId: host.id,
+            environmentBranchName: "bb/test",
             environmentWorkspaceDisplayKind: "other",
           }),
           expect.objectContaining({
             id: worktreeThread.id,
+            environmentHostId: host.id,
+            environmentBranchName: "bb/test",
             environmentWorkspaceDisplayKind: "managed-worktree",
           }),
           expect.objectContaining({
             id: sandboxThread.id,
+            environmentHostId: sandboxHost.id,
+            environmentBranchName: "bb/test",
             environmentWorkspaceDisplayKind: "sandbox",
           }),
         ]),

@@ -35,12 +35,21 @@ function createThread(overrides: Partial<ThreadListEntry> = {}): ThreadListEntry
     createdAt: 1,
     updatedAt: 2,
     hasPendingInteraction: false,
+    environmentHostId: null,
+    environmentBranchName: null,
     environmentWorkspaceDisplayKind: "other",
     ...overrides,
   };
 }
 
-function renderThreadRow(thread: ThreadListEntry) {
+interface RenderThreadRowOptions {
+  isPromoted?: boolean;
+}
+
+function renderThreadRow(
+  thread: ThreadListEntry,
+  options: RenderThreadRowOptions = {},
+) {
   const queryClient = createAppQueryClient({
     defaultOptions: {
       mutations: { retry: false },
@@ -62,6 +71,7 @@ function renderThreadRow(thread: ThreadListEntry) {
       projectId="proj_1"
       thread={thread}
       isActive={false}
+      isPromoted={options.isPromoted}
       options={{ kind: "default" }}
     />,
     { wrapper },
@@ -110,5 +120,11 @@ describe("ThreadRow", () => {
     renderThreadRow(createThread({ environmentWorkspaceDisplayKind: "sandbox" }));
 
     expect(screen.getByLabelText("Sandbox environment")).not.toBeNull();
+  });
+
+  it("shows a promoted pill", () => {
+    renderThreadRow(createThread(), { isPromoted: true });
+
+    expect(screen.getByText("promoted")).not.toBeNull();
   });
 });

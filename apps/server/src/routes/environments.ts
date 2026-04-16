@@ -20,6 +20,10 @@ import {
 import { queueCommandAndWait } from "../services/hosts/command-wait.js";
 import { requireSourceForHost } from "../services/threads/thread-create-helpers.js";
 import { generateCommitMessage } from "../services/ai/commit-message.js";
+import {
+  queueEnvironmentDemote,
+  readEnvironmentPromotionResponse,
+} from "../services/environments/environment-promotion.js";
 
 const COMMIT_FALLBACK_MESSAGE = "bb: automated commit";
 const SQUASH_MERGE_FALLBACK_MESSAGE = "bb: squash merge";
@@ -100,6 +104,13 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
     });
     const result = hostDaemonCommandResultSchemaByType["workspace.status"].parse(rawResult);
     return context.json({ workspace: result.workspaceStatus });
+  });
+
+  get("/environments/:id/promotion", async (context) => {
+    const environment = requireEnvironment(deps.db, context.req.param("id"));
+    return context.json(
+      await readEnvironmentPromotionResponse(deps, { environment }),
+    );
   });
 
   get("/environments/:id/diff", environmentDiffQuerySchema, async (context, query) => {
@@ -311,30 +322,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         });
       }
       case "demote": {
-        const source = requireSourceForHost(
-          deps,
-          environment.projectId,
-          environment.hostId,
-        );
-        const mergeBaseBranch = environment.mergeBaseBranch ?? environment.defaultBranch;
-        if (!environment.branchName || !mergeBaseBranch) {
-          throw new ApiError(409, "invalid_request", "Environment cannot be demoted");
-        }
-        await queueCommandAndWait(deps, {
-          hostId: environment.hostId,
-          timeoutMs: COMMAND_TIMEOUT_MS,
-          command: {
-            type: "workspace.demote",
-            environmentId: environment.id,
-            workspaceContext: {
-              workspacePath: environment.path,
-              workspaceProvisionType: environment.workspaceProvisionType,
-            },
-            primaryPath: source.path,
-            defaultBranch: mergeBaseBranch,
-            envBranch: environment.branchName,
-          },
-        });
+        await queueEnvironmentDemote(deps, { environment });
         return context.json({
           ok: true,
           action: "demote",

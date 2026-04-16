@@ -138,4 +138,20 @@ describe("demoteWorkspace", () => {
     // Primary should still be on the env branch
     expect(await primary.currentBranch).toBe("bb/env-test");
   });
+
+  it("fails if source is dirty", async () => {
+    const { primaryRepo, worktreePath } = await createPrimaryAndWorktree();
+    const source = new Workspace(worktreePath);
+    const primary = new Workspace(primaryRepo);
+
+    await promoteWorkspace(source, primary);
+    await fs.writeFile(path.join(worktreePath, "feature.txt"), "dirty source\n", "utf8");
+
+    await expect(
+      demoteWorkspace({ source, primary, defaultBranch: "main", envBranch: "bb/env-test" }),
+    ).rejects.toThrow(/uncommitted changes/u);
+
+    expect(await primary.currentBranch).toBe("bb/env-test");
+    expect(await source.currentBranch).toBeUndefined();
+  });
 });

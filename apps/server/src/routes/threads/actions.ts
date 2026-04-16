@@ -53,6 +53,7 @@ import {
 } from "../../services/threads/thread-events.js";
 import { resolvePermissionEscalation } from "../../services/threads/thread-runtime-config.js";
 import { tryTransition } from "../../services/threads/thread-transitions.js";
+import { demoteEnvironmentIfPromoted } from "../../services/environments/environment-promotion.js";
 
 function ensureThreadIsWritable(thread: Thread): void {
   if (thread.archivedAt) {
@@ -161,6 +162,11 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       return context.json({ ok: true });
     }
     const readyEnvironment = requireReadyThreadEnvironment(environment);
+    if (mode === "start") {
+      await demoteEnvironmentIfPromoted(deps, {
+        environment: readyEnvironment,
+      });
+    }
 
     const eventSequence = appendClientTurnEvent(deps, {
       threadId: thread.id,

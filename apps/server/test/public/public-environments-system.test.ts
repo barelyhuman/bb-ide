@@ -16,6 +16,7 @@ import {
   reportNextRuntimeMaterialSyncSuccess,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
+  waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
 import {
@@ -132,6 +133,110 @@ describe("public environment and system routes", () => {
         .from(hostDaemonCommands)
         .all().length;
       expect(commandCountAfter).toBe(commandCountBefore);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns derived promotion state and separate action availability", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-environment-promotion",
+      });
+      const { project, source } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/environment-promotion",
+      });
+      const sourceEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: source.path,
+        managed: false,
+        workspaceProvisionType: "unmanaged",
+        branchName: "main",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/environment-promotion/.bb-worktrees/thread",
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        branchName: "bb/promoted",
+        defaultBranch: "main",
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/environments/${environment.id}/promotion`,
+      );
+
+      const primaryStatusCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === sourceEnvironment.id,
+      );
+      await reportQueuedCommandSuccess(harness, primaryStatusCommand, {
+        workspaceStatus: {
+          workingTree: {
+            hasUncommittedChanges: false,
+            state: "clean",
+            changedFiles: 0,
+            insertions: 0,
+            deletions: 0,
+            files: [],
+          },
+          branch: {
+            currentBranch: "bb/promoted",
+            defaultBranch: "main",
+          },
+          mergeBase: null,
+        },
+      });
+
+      const environmentStatusCommand = await waitForQueuedCommandAfter(
+        harness,
+        primaryStatusCommand.row.cursor,
+        ({ command }) =>
+          command.type === "workspace.status" &&
+          command.environmentId === environment.id,
+      );
+      await reportQueuedCommandSuccess(harness, environmentStatusCommand, {
+        workspaceStatus: {
+          workingTree: {
+            hasUncommittedChanges: false,
+            state: "clean",
+            changedFiles: 0,
+            insertions: 0,
+            deletions: 0,
+            files: [],
+          },
+          branch: {
+            currentBranch: null,
+            defaultBranch: "main",
+          },
+          mergeBase: null,
+        },
+      });
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        state: {
+          isPromoted: true,
+          branchName: "bb/promoted",
+        },
+        actions: {
+          promote: {
+            enabled: false,
+            unavailableReason: "already_promoted",
+          },
+          demote: {
+            enabled: true,
+            unavailableReason: null,
+          },
+        },
+      });
     } finally {
       await harness.cleanup();
     }
@@ -406,6 +511,7 @@ describe("public environment and system routes", () => {
         managed: true,
         workspaceProvisionType: "managed-worktree",
         branchName: "bb/promote-test",
+        defaultBranch: "trunk",
         mergeBaseBranch: "main",
       });
 
@@ -459,7 +565,7 @@ describe("public environment and system routes", () => {
       expect(demoteCommand.command).toMatchObject({
         workspaceContext: { workspacePath: "/tmp/promote-project/.bb-worktrees/thread", workspaceProvisionType: "managed-worktree" },
         primaryPath: source.path,
-        defaultBranch: "main",
+        defaultBranch: "trunk",
         envBranch: "bb/promote-test",
       });
       await reportQueuedCommandSuccess(harness, demoteCommand, { ok: true });

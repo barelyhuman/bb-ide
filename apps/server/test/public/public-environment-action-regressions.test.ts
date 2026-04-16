@@ -214,27 +214,27 @@ describe("public environment action regressions", () => {
         message: "Environment cannot be demoted",
       });
 
-      const missingMergeBase = seedEnvironment(harness.deps, {
+      const missingDefaultBranch = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
         managed: true,
         workspaceProvisionType: "managed-worktree",
-        path: "/tmp/demote-guard-project/.bb-worktrees/missing-merge-base",
+        path: "/tmp/demote-guard-project/.bb-worktrees/missing-default-branch",
         branchName: "bb/demote-guard",
         defaultBranch: null,
-        mergeBaseBranch: null,
+        mergeBaseBranch: "main",
       });
 
-      const missingMergeBaseResponse = await harness.app.request(
-        `/api/v1/environments/${missingMergeBase.id}/actions`,
+      const missingDefaultBranchResponse = await harness.app.request(
+        `/api/v1/environments/${missingDefaultBranch.id}/actions`,
         {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ action: "demote" }),
         },
       );
-      expect(missingMergeBaseResponse.status).toBe(409);
-      await expect(readJson(missingMergeBaseResponse)).resolves.toMatchObject({
+      expect(missingDefaultBranchResponse.status).toBe(409);
+      await expect(readJson(missingDefaultBranchResponse)).resolves.toMatchObject({
         code: "invalid_request",
         message: "Environment cannot be demoted",
       });

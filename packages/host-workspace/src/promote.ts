@@ -47,6 +47,7 @@ export async function demoteWorkspace(args: {
   envBranch: string;
 }): Promise<void> {
   await assertWorkspaceClean(args.primary, "demote primary");
+  await assertWorkspaceClean(args.source, "demote source");
 
   await args.primary.checkoutBranch(args.defaultBranch);
 

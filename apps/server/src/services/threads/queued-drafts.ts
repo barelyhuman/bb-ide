@@ -7,7 +7,7 @@ import {
   releaseDraftClaim,
 } from "@bb/db";
 import type { Thread, ThreadQueuedMessage } from "@bb/domain";
-import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
+import type { AppDeps, LoggedSandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { toQueuedMessage } from "./drafts.js";
 import { requireThreadEnvironment } from "../lib/entity-lookup.js";
@@ -29,6 +29,7 @@ import {
 } from "./thread-events.js";
 import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import { tryTransition } from "./thread-transitions.js";
+import { demoteEnvironmentIfPromoted } from "../environments/environment-promotion.js";
 
 interface SendQueuedDraftArgs {
   draftId: string;
@@ -69,7 +70,7 @@ function claimDraftForSend(
 }
 
 async function sendClaimedDraft(
-  deps: SandboxWorkSessionDeps,
+  deps: LoggedSandboxWorkSessionDeps,
   args: {
     draft: ClaimedDraft;
     threadId: string;
@@ -115,6 +116,12 @@ async function sendClaimedDraft(
   }
 
   const readyEnvironment = requireReadyThreadEnvironment(environment);
+  if (sendMode === "start") {
+    await demoteEnvironmentIfPromoted(deps, {
+      environment: readyEnvironment,
+    });
+  }
+
   const eventSequence = appendClientTurnEvent(deps, {
     threadId: thread.id,
     environmentId: readyEnvironment.id,
@@ -146,10 +153,10 @@ async function sendClaimedDraft(
         workspaceProvisionType: readyEnvironment.workspaceProvisionType,
       },
     });
-      if (queuedMode === "turn.submit") {
-        tryTransition(deps.db, deps.hub, thread.id, "active");
-      }
-    } else {
+    if (queuedMode === "turn.submit") {
+      tryTransition(deps.db, deps.hub, thread.id, "active");
+    }
+  } else {
     await queueTurnSubmitCommand(deps, {
       thread,
       input: queuedMessage.content,
@@ -174,7 +181,7 @@ async function sendClaimedDraft(
 }
 
 export async function sendQueuedDraft(
-  deps: SandboxWorkSessionDeps,
+  deps: LoggedSandboxWorkSessionDeps,
   args: SendQueuedDraftArgs,
 ): Promise<ThreadQueuedMessage> {
   const draft = claimDraftForSend(deps, args);
@@ -190,7 +197,7 @@ export async function sendQueuedDraft(
 }
 
 export async function sendNextQueuedDraftIfPresent(
-  deps: SandboxWorkSessionDeps,
+  deps: LoggedSandboxWorkSessionDeps,
   args: { threadId: string },
 ): Promise<boolean> {
   const thread = getThread(deps.db, args.threadId);

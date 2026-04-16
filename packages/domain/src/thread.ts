@@ -144,6 +144,8 @@ export type Thread = z.infer<typeof threadSchema>;
 
 export const threadListEntrySchema = threadSchema.extend({
   hasPendingInteraction: z.boolean(),
+  environmentHostId: z.string().nullable(),
+  environmentBranchName: z.string().nullable(),
   environmentWorkspaceDisplayKind: environmentWorkspaceDisplayKindSchema,
 });
 export type ThreadListEntry = z.infer<typeof threadListEntrySchema>;

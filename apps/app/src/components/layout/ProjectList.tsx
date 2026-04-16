@@ -12,7 +12,10 @@ import {
   isLocalPathMissing,
   useLocalPathExistence,
 } from "@/hooks/queries/host-path-queries"
-import { threadListQueryKey } from "@/hooks/queries/query-keys"
+import {
+  projectSourceWorkspaceStatusQueryKey,
+  threadListQueryKey,
+} from "@/hooks/queries/query-keys"
 import { useHostDaemon } from "@/hooks/useHostDaemon"
 import * as api from "@/lib/api"
 import { EmptyState } from "@/components/shared/EmptyState"
@@ -37,6 +40,11 @@ interface ProjectListProps {
   isCreatingProject?: boolean
 }
 
+interface ProjectSourceStatusTarget {
+  projectId: string
+  sourceId: string
+}
+
 export function ProjectList({
   onNewProject,
   onProjectSelect,
@@ -58,6 +66,42 @@ export function ProjectList({
   })
   const { localHostId } = useHostDaemon()
   const location = useLocation()
+
+  const localSourceTargets = useMemo(() => {
+    if (!localHostId || !projects) return []
+    const targets: ProjectSourceStatusTarget[] = []
+    for (const project of projects) {
+      const source = findLocalPathProjectSourceForHost(project.sources, localHostId)
+      if (source) {
+        targets.push({
+          projectId: project.id,
+          sourceId: source.id,
+        })
+      }
+    }
+    return targets
+  }, [localHostId, projects])
+
+  const promotedBranchNamesByProjectId = useQueries({
+    queries: localSourceTargets.map((target) => ({
+      queryKey: projectSourceWorkspaceStatusQueryKey(target.projectId, target.sourceId),
+      queryFn: () => api.getProjectSourceWorkspaceStatus(target.projectId, target.sourceId),
+      staleTime: 5_000,
+      refetchOnWindowFocus: true,
+    })),
+    combine: (results) => {
+      const branchNamesByProjectId = new Map<string, string | null>()
+      for (let index = 0; index < results.length; index += 1) {
+        const target = localSourceTargets[index]
+        if (!target) continue
+        branchNamesByProjectId.set(
+          target.projectId,
+          results[index].data?.workspace?.branch.currentBranch ?? null,
+        )
+      }
+      return branchNamesByProjectId
+    },
+  })
 
   const localPaths = useMemo(() => {
     if (!localHostId || !projects) return []
@@ -160,9 +204,11 @@ export function ProjectList({
                   isCollapsed={collapsedProjectIds.has(project.id)}
                   collapsedManagerIds={collapsedManagerIds}
                   isLocalPathInvalid={isLocalPathInvalid}
+                  localHostId={localHostId}
                   onProjectSelect={onProjectSelect}
                   onToggleProjectCollapsed={toggleProjectCollapsed}
                   onToggleManagerCollapsed={toggleManagerCollapsed}
+                  promotedBranchName={promotedBranchNamesByProjectId.get(project.id) ?? null}
                 />
               )
             })
