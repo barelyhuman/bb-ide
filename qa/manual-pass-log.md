@@ -317,3 +317,38 @@ Validated:
 
 - The corrected mixed-provider runbook prompts, `Say exactly: CLAUDE THREAD` and `Say exactly: PI THREAD`, returned exact outputs for both providers.
 - Both mixed-provider threads reached `idle` in separate managed worktree environments.
+
+## Pi Model Selection Audit
+
+Date: 2026-04-16
+Operator: Codex
+Status: runbook corrected
+
+Model-list check:
+
+- Artifact directory: `/tmp/bb-pi-model-list-check-2026-04-16-103917`
+- Standalone state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-aAIrGn/standalone-state.json`
+- Current runbook selector result after correction: `anthropic/claude-opus-4-6`
+
+Subscription-backed smoke:
+
+- Artifact directory: `/tmp/bb-pi-subscription-smoke-2026-04-16-104215`
+- Standalone state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-6s1E9C/standalone-state.json`
+- Pi thread: `thr_w2jfs9razh`
+- Model: `anthropic/claude-opus-4-6`
+- Output: `PI SUBSCRIPTION OK`
+
+Forced generic-OpenAI error check:
+
+- Artifact directory: `/tmp/bb-pi-forced-openai-error-2026-04-16-104322`
+- Standalone state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-8kmvgi/standalone-state.json`
+- Pi thread: `thr_nj7tfsugyn`
+- Model: `openai/gpt-5.4`
+- Result: thread reached `error`; the event log contained `error` with `No API key found for openai` followed by `turn/completed` with `failed`.
+
+Findings:
+
+- The earlier full-pass log recorded `pi=openai/gpt-5.4`, which is the generic OpenAI API-key provider path.
+- Pi subscription-backed auth material is written for `anthropic` from Claude subscription auth and `openai-codex` from Codex subscription auth.
+- The runbook now prefers subscription-backed Pi models, first `anthropic/claude-opus-4-6`, then `openai-codex/gpt-5.4`, before falling back to generic provider defaults.
+- The Pi bridge now resolves `openai-codex/...` model IDs that it can advertise through model listing, so Codex subscription-backed Pi runs do not silently fall back to the Pi SDK default.

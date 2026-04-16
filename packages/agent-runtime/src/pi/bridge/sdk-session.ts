@@ -295,6 +295,8 @@ function resolveModel(modelStr: string): ReturnType<typeof getModel> | undefined
         return getModel("anthropic", modelId as never);
       case "openai":
         return getModel("openai", modelId as never);
+      case "openai-codex":
+        return getModel("openai-codex", modelId as never);
       case "google":
         return getModel("google", modelId as never);
       default:

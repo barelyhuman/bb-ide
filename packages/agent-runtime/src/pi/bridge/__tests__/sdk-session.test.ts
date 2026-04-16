@@ -10,6 +10,7 @@ const {
   mockCreateAgentSession,
   mockAbort,
   mockDispose,
+  mockGetModel,
 } = vi.hoisted(() => {
   const mockSubscribe = vi.fn(() => () => {});
   const mockPrompt = vi.fn();
@@ -35,6 +36,10 @@ const {
       isStreaming: false,
     },
   }));
+  const mockGetModel = vi.fn((provider: string, modelId: string) => ({
+    id: modelId,
+    provider,
+  }));
 
   return {
     mockGetActiveToolNames,
@@ -45,6 +50,7 @@ const {
     mockCreateAgentSession,
     mockAbort,
     mockDispose,
+    mockGetModel,
   };
 });
 
@@ -60,7 +66,7 @@ vi.mock("@mariozechner/pi-coding-agent", () => ({
 }));
 
 vi.mock("@mariozechner/pi-ai", () => ({
-  getModel: vi.fn(),
+  getModel: mockGetModel,
 }));
 
 import { PiSdkSession } from "../sdk-session.js";
@@ -102,6 +108,29 @@ describe("PiSdkSession", () => {
 
     expect(mockInMemory).toHaveBeenCalledWith("/tmp/project");
     expect(mockOpen).not.toHaveBeenCalled();
+  });
+
+  it("resolves openai-codex subscription models", async () => {
+    const session = new PiSdkSession(
+      {
+        cwd: "/tmp/project",
+        model: "openai-codex/gpt-5.4",
+      },
+      vi.fn(),
+      vi.fn(),
+    );
+
+    await session.start();
+
+    expect(mockGetModel).toHaveBeenCalledWith("openai-codex", "gpt-5.4");
+    expect(mockCreateAgentSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: {
+          id: "gpt-5.4",
+          provider: "openai-codex",
+        },
+      }),
+    );
   });
 
   it("re-activates missing custom tools before later prompts", async () => {

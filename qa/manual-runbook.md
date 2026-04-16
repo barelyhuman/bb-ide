@@ -53,7 +53,17 @@ Resolve current provider models before spawning real-provider threads:
 ```bash
 CODEX_MODEL=$(bb provider models codex --json | jq -er '([.[] | select(.isDefault)][0].model // .[0].model)')
 CLAUDE_MODEL=$(bb provider models claude-code --json | jq -er '([.[] | select(.model == "haiku")][0].model // [.[] | select(.isDefault)][0].model // .[0].model)')
-PI_MODEL=$(bb provider models pi --json | jq -er '([.[] | select(.isDefault)][0].model // .[0].model)')
+PI_MODELS_JSON=$(bb provider models pi --json)
+PI_MODEL=$(printf '%s\n' "$PI_MODELS_JSON" | jq -er '
+  [.[] | select(.model == "anthropic/claude-opus-4-6")][0].model
+  // [.[] | select(.model == "openai-codex/gpt-5.4")][0].model
+  // [.[] | select(.model | startswith("anthropic/")) | select(.isDefault)][0].model
+  // [.[] | select(.model | startswith("openai-codex/")) | select(.isDefault)][0].model
+  // [.[] | select(.model | startswith("anthropic/"))][0].model
+  // [.[] | select(.model | startswith("openai-codex/"))][0].model
+  // [.[] | select(.isDefault)][0].model
+  // .[0].model
+')
 
 printf 'codex: %s\nclaude-code: %s\npi: %s\n' "$CODEX_MODEL" "$CLAUDE_MODEL" "$PI_MODEL"
 ```
@@ -61,6 +71,10 @@ printf 'codex: %s\nclaude-code: %s\npi: %s\n' "$CODEX_MODEL" "$CLAUDE_MODEL" "$P
 For exact-output checks, use prompts in the form `Say exactly: <EXPECTED TEXT>`.
 Avoid phrasing like "reply only in chat with..." because providers can interpret that
 as a behavioral constraint rather than the expected response text.
+
+For Pi checks, prefer subscription-backed models (`anthropic/...` from Claude
+subscription auth, then `openai-codex/...` from Codex subscription auth) over
+generic `openai/...` API-key models.
 
 Teardown:
 
