@@ -4,8 +4,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
-import { createFakeAdapter } from "@bb/agent-runtime/test";
-import type { AgentRuntimeOptions } from "@bb/agent-runtime";
+import {
+  createAgentRuntimeWithAdapters,
+  createFakeAdapter,
+  type ProviderAdapterFactory,
+} from "@bb/agent-runtime/test";
 import type { DbConnection } from "@bb/db";
 import {
   acquireDaemonLock,
@@ -78,7 +81,7 @@ export interface IntegrationHarness {
 }
 
 export interface CreateHarnessOptions {
-  adapterFactory?: AgentRuntimeOptions["adapterFactory"];
+  adapterFactory?: ProviderAdapterFactory;
 }
 
 export type WithHarnessCallback<T> = (harness: IntegrationHarness) => Promise<T>;
@@ -113,7 +116,7 @@ function hasAdapterFactoryOverride(
 
 function resolveAdapterFactory(
   options: CreateHarnessOptions,
-): AgentRuntimeOptions["adapterFactory"] | undefined {
+): ProviderAdapterFactory | undefined {
   if (hasAdapterFactoryOverride(options)) {
     return options.adapterFactory;
   }
@@ -301,8 +304,15 @@ async function startHarnessDaemon(
       hostId: identity.hostId,
       hostType: "persistent",
     });
+    const adapterFactory = resolveAdapterFactory(options);
     const daemonApp = await createHostDaemonApp({
-      adapterFactory: resolveAdapterFactory(options),
+      createRuntime: adapterFactory
+        ? (runtimeOptions) =>
+            createAgentRuntimeWithAdapters({
+              ...runtimeOptions,
+              adapterFactory,
+            })
+        : undefined,
       dataDir,
       hostKey,
       hostId: identity.hostId,

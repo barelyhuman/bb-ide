@@ -91,7 +91,7 @@ describe.sequential("fake provider smoke lifecycle integration", () => {
             displayName: providerId,
             id: providerId,
           });
-          const buildCommand: typeof baseAdapter.buildCommand = (command) => {
+          const buildCommandPlan: typeof baseAdapter.buildCommandPlan = (command) => {
             if (command.type === "thread/start" || command.type === "thread/resume") {
               runtimeConfigCommands.push({
                 commandType: command.type,
@@ -102,11 +102,11 @@ describe.sequential("fake provider smoke lifecycle integration", () => {
                 threadId: command.threadId,
               });
             }
-            return baseAdapter.buildCommand(command);
+            return baseAdapter.buildCommandPlan(command);
           };
           return {
             ...baseAdapter,
-            buildCommand,
+            buildCommandPlan,
           };
         },
       },

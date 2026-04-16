@@ -47,8 +47,8 @@ describe.sequential("fake provider offline queue recovery integration", () => {
       if (!providerThreadId || !environment.path) {
         throw new Error("Expected queued recovery turn to have provider context");
       }
-      const queuedTurnRunCommand = hostDaemonCommandSchema.parse({
-        type: "turn.run",
+      const queuedTurnSubmitCommand = hostDaemonCommandSchema.parse({
+        type: "turn.submit",
         environmentId: environment.id,
         threadId: thread.id,
         options: {
@@ -72,12 +72,13 @@ describe.sequential("fake provider offline queue recovery integration", () => {
           instructionMode: "append",
           dynamicTools: [],
         },
+        target: { mode: "start" },
       });
       queueCommand(harness.db, harness.hub, {
         hostId: harness.hostId,
         sessionId: null,
-        type: queuedTurnRunCommand.type,
-        payload: JSON.stringify(queuedTurnRunCommand),
+        type: queuedTurnSubmitCommand.type,
+        payload: JSON.stringify(queuedTurnSubmitCommand),
       });
 
       await harness.startDaemon();
