@@ -59,6 +59,7 @@ import {
   buildUnhandledProviderEvents,
   createUnhandledProviderEvent,
 } from "../shared/provider-unhandled-event.js";
+import { buildScopedProviderErrorEvents } from "../shared/provider-error-events.js";
 import { parseAvailableModelList } from "../shared/available-models.js";
 import {
   errorEnvelopeSchema,
@@ -503,6 +504,11 @@ interface ClaudeContextWindowUsageArgs {
   message: ClaudeResultMessage | SDKResultMessage;
 }
 
+interface TranslateClaudeErrorEnvelopeArgs {
+  context?: ProviderTranslationContext;
+  detail: string;
+}
+
 const DEFAULT_CLAUDE_CONTEXT_WINDOW = 200_000;
 const LARGE_CLAUDE_CONTEXT_WINDOW = 1_000_000;
 
@@ -561,6 +567,17 @@ export function createClaudeCodeProviderAdapter(
     return turnId;
   }
 
+  function translateClaudeErrorEnvelope(
+    args: TranslateClaudeErrorEnvelopeArgs,
+  ): ThreadEvent[] {
+    return buildScopedProviderErrorEvents({
+      contextThreadId: args.context?.threadId,
+      detail: args.detail,
+      ensureTurnStarted: ensureClaudeTurnStarted,
+      registry: turnState,
+    });
+  }
+
   function translateClaudeEvent(
     event: unknown,
     context?: ProviderTranslationContext,
@@ -601,13 +618,10 @@ export function createClaudeCodeProviderAdapter(
 
     const errorEnvelope = errorEnvelopeSchema.safeParse(event);
     if (errorEnvelope.success) {
-      return [{
-        type: "error",
-        threadId: "",
-        providerThreadId: "",
-        message: "Provider error",
+      return translateClaudeErrorEnvelope({
+        context,
         detail: errorEnvelope.data.params?.message ?? "unknown error",
-      }];
+      });
     }
 
     const envelope = jsonRpcEnvelopeSchema.safeParse(event);

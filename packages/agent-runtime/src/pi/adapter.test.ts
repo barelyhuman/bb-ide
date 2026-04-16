@@ -77,6 +77,42 @@ describe("pi provider adapter", () => {
     ]);
   });
 
+  it("translateEvent completes a failed turn for thread-scoped bridge errors", () => {
+    const adapter = createPiProviderAdapter();
+
+    const events = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "error",
+      params: {
+        message: "No API key found for openai.",
+      },
+    }, { threadId: "bb-thread-1" });
+
+    expect(events).toEqual([
+      {
+        type: "turn/started",
+        threadId: "",
+        providerThreadId: "",
+        turnId: "turn-1",
+      },
+      {
+        type: "error",
+        threadId: "",
+        providerThreadId: "",
+        turnId: "turn-1",
+        message: "Provider error",
+        detail: "No API key found for openai.",
+      },
+      {
+        type: "turn/completed",
+        threadId: "",
+        providerThreadId: "",
+        turnId: "turn-1",
+        status: "failed",
+      },
+    ]);
+  });
+
   // -- buildCommand --------------------------------------------------------
 
   it("buildCommand thread/start includes threadId and omits instruction overrides when empty", () => {

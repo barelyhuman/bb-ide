@@ -57,6 +57,7 @@ import {
   buildUnhandledProviderEvents,
   createUnhandledProviderEvent,
 } from "../shared/provider-unhandled-event.js";
+import { buildScopedProviderErrorEvents } from "../shared/provider-error-events.js";
 import { parseAvailableModelList } from "../shared/available-models.js";
 import {
   errorEnvelopeSchema,
@@ -556,6 +557,11 @@ interface EnsurePiTurnStartedArgs {
   threadId: string;
 }
 
+interface TranslatePiErrorEnvelopeArgs {
+  context?: ProviderTranslationContext;
+  detail: string;
+}
+
 function buildPiCompactionItemId(turnId: string): string {
   return turnId.length > 0
     ? `pi-compaction-${turnId}`
@@ -643,6 +649,17 @@ export function createPiProviderAdapter(
     return turnId;
   }
 
+  function translatePiErrorEnvelope(
+    args: TranslatePiErrorEnvelopeArgs,
+  ): ThreadEvent[] {
+    return buildScopedProviderErrorEvents({
+      contextThreadId: args.context?.threadId,
+      detail: args.detail,
+      ensureTurnStarted: ensurePiTurnStarted,
+      registry: turnState,
+    });
+  }
+
   function translatePiEvent(
     event: unknown,
     context?: ProviderTranslationContext,
@@ -695,13 +712,10 @@ export function createPiProviderAdapter(
 
     const errorEnvelope = errorEnvelopeSchema.safeParse(event);
     if (errorEnvelope.success) {
-      return [{
-        type: "error",
-        threadId: "",
-        providerThreadId: "",
-        message: "Provider error",
+      return translatePiErrorEnvelope({
+        context,
         detail: errorEnvelope.data.params?.message ?? "unknown error",
-      }];
+      });
     }
 
     const envelope = jsonRpcEnvelopeSchema.safeParse(event);

@@ -1137,6 +1137,42 @@ describe("claude-code provider adapter", () => {
     ]);
   });
 
+  it("translateEvent completes a failed turn for thread-scoped bridge errors", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    const events = adapter.translateEvent({
+      jsonrpc: "2.0",
+      method: "error",
+      params: {
+        message: "Claude auth expired",
+      },
+    }, { threadId: "bb-thread-1" });
+
+    expect(events).toEqual([
+      {
+        type: "turn/started",
+        threadId: "",
+        providerThreadId: "",
+        turnId: "turn-1",
+      },
+      {
+        type: "error",
+        threadId: "",
+        providerThreadId: "",
+        turnId: "turn-1",
+        message: "Provider error",
+        detail: "Claude auth expired",
+      },
+      {
+        type: "turn/completed",
+        threadId: "",
+        providerThreadId: "",
+        turnId: "turn-1",
+        status: "failed",
+      },
+    ]);
+  });
+
   it("translateEvent marks Claude result events with is_error as failed", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
