@@ -58,6 +58,10 @@ PI_MODEL=$(bb provider models pi --json | jq -er '([.[] | select(.isDefault)][0]
 printf 'codex: %s\nclaude-code: %s\npi: %s\n' "$CODEX_MODEL" "$CLAUDE_MODEL" "$PI_MODEL"
 ```
 
+For exact-output checks, use prompts in the form `Say exactly: <EXPECTED TEXT>`.
+Avoid phrasing like "reply only in chat with..." because providers can interpret that
+as a behavioral constraint rather than the expected response text.
+
 Teardown:
 
 ```bash
@@ -147,7 +151,7 @@ THREAD_A_ID=$(bb thread spawn \
   --model "$CODEX_MODEL" \
   --reasoning-level low \
   --service-tier fast \
-  --prompt "Reply only in chat with the exact text THREAD A HELLO. Do not modify any files." \
+  --prompt "Say exactly: THREAD A HELLO" \
   --json | jq -r '.id')
 
 bb thread wait "$THREAD_A_ID" --status idle --timeout 120
@@ -164,7 +168,7 @@ THREAD_B_ID=$(bb thread spawn \
   --model "$CODEX_MODEL" \
   --reasoning-level low \
   --service-tier fast \
-  --prompt "Reply only in chat with the exact text THREAD B WORLD. Do not modify any files." \
+  --prompt "Say exactly: THREAD B WORLD" \
   --json | jq -r '.id')
 
 bb thread wait "$THREAD_B_ID" --status idle --timeout 120
@@ -177,10 +181,10 @@ bb thread output "$THREAD_B_ID"
 Alternate follow-ups across the two sibling threads:
 
 ```bash
-bb thread tell "$THREAD_A_ID" "Reply only in chat with FOLLOW UP A. Do not modify files."
+bb thread tell "$THREAD_A_ID" "Say exactly: FOLLOW UP A"
 bb thread wait "$THREAD_A_ID" --status idle --timeout 120
 
-bb thread tell "$THREAD_B_ID" "Reply only in chat with FOLLOW UP B. Do not modify files."
+bb thread tell "$THREAD_B_ID" "Say exactly: FOLLOW UP B"
 bb thread wait "$THREAD_B_ID" --status idle --timeout 120
 
 bb thread output "$THREAD_A_ID"
@@ -193,7 +197,7 @@ Archive thread A and verify thread B still works:
 
 ```bash
 bb thread archive "$THREAD_A_ID"
-bb thread tell "$THREAD_B_ID" "Reply only in chat with STILL WORKING. Do not modify files."
+bb thread tell "$THREAD_B_ID" "Say exactly: STILL WORKING"
 bb thread wait "$THREAD_B_ID" --status idle --timeout 120
 bb thread output "$THREAD_B_ID"
 bb thread unarchive "$THREAD_A_ID"
@@ -257,7 +261,7 @@ bb environment demote "$PROMOTE_ENV_ID"
 Expected result:
 
 - Thread A and B share the same environment ID via implicit same-path reuse.
-- Alternating follow-ups complete and their outputs remain distinct.
+- Alternating follow-ups complete and return the requested exact outputs.
 - Archiving one sibling does not break the other.
 - Mixed-provider threads succeed without event cross-contamination.
 - Promote/demote succeeds on the managed worktree environment.
