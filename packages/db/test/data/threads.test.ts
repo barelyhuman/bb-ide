@@ -147,8 +147,8 @@ describe("threads", () => {
         .map((thread) => [thread.id, thread.environmentWorkspaceDisplayKind]),
     );
 
-    expect(displayKindsByThreadId.get(directThread.id)).toBe("primary-checkout");
-    expect(displayKindsByThreadId.get(worktreeThread.id)).toBe("git-worktree");
+    expect(displayKindsByThreadId.get(directThread.id)).toBe("other");
+    expect(displayKindsByThreadId.get(worktreeThread.id)).toBe("managed-worktree");
     expect(displayKindsByThreadId.get(sandboxThread.id)).toBe("sandbox");
   });
 

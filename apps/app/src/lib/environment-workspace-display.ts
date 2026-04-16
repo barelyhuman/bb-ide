@@ -8,13 +8,19 @@ export function getEnvironmentWorkspaceDisplayIcon(
   switch (kind) {
     case "sandbox":
       return Container;
-    case "git-worktree":
+    case "managed-worktree":
       return FolderGit2;
-    case "primary-checkout":
-      return Monitor;
+    case "unmanaged-worktree":
+      return FolderGit2;
     case "other":
       return null;
   }
+}
+
+export function getEnvironmentWorkspaceLabelIcon(
+  kind: EnvironmentWorkspaceDisplayKind,
+): LucideIcon {
+  return getEnvironmentWorkspaceDisplayIcon(kind) ?? Monitor;
 }
 
 export function getEnvironmentWorkspaceDisplayIconLabel(
@@ -23,10 +29,10 @@ export function getEnvironmentWorkspaceDisplayIconLabel(
   switch (kind) {
     case "sandbox":
       return "Sandbox environment";
-    case "git-worktree":
+    case "managed-worktree":
+      return "Managed worktree environment";
+    case "unmanaged-worktree":
       return "Git worktree environment";
-    case "primary-checkout":
-      return "Primary checkout environment";
     case "other":
       return null;
   }

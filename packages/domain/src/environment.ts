@@ -30,8 +30,8 @@ export type WorkspaceProvisionType = z.infer<typeof workspaceProvisionTypeSchema
 
 export const environmentWorkspaceDisplayKindValues = [
   "sandbox",
-  "git-worktree",
-  "primary-checkout",
+  "managed-worktree",
+  "unmanaged-worktree",
   "other",
 ] as const;
 export const environmentWorkspaceDisplayKindSchema = z.enum(
@@ -43,8 +43,8 @@ export type EnvironmentWorkspaceDisplayKind = z.infer<
 
 export interface ResolveEnvironmentWorkspaceDisplayKindArgs {
   environment: {
-    isGitRepo: boolean | null;
     isWorktree: boolean | null;
+    workspaceProvisionType: WorkspaceProvisionType | null;
   };
   hostType: HostType | null;
 }
@@ -57,12 +57,12 @@ export function resolveEnvironmentWorkspaceDisplayKind({
     return "sandbox";
   }
 
-  if (environment.isWorktree === true) {
-    return "git-worktree";
+  if (environment.workspaceProvisionType === "managed-worktree") {
+    return "managed-worktree";
   }
 
-  if (environment.isGitRepo === true) {
-    return "primary-checkout";
+  if (environment.isWorktree === true) {
+    return "unmanaged-worktree";
   }
 
   return "other";

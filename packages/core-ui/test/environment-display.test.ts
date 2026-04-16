@@ -37,7 +37,7 @@ describe("formatEnvironmentDisplay", () => {
         id: "env_test",
         location: "local",
         mode: "direct",
-        workspaceDisplayKind: "primary-checkout",
+        workspaceDisplayKind: "other",
       });
     });
 
@@ -52,7 +52,7 @@ describe("formatEnvironmentDisplay", () => {
         id: "env_test",
         location: "local",
         mode: "worktree",
-        workspaceDisplayKind: "git-worktree",
+        workspaceDisplayKind: "managed-worktree",
       });
     });
 
@@ -80,7 +80,7 @@ describe("formatEnvironmentDisplay", () => {
         id: "env_test",
         location: "remote",
         mode: "direct",
-        workspaceDisplayKind: "primary-checkout",
+        workspaceDisplayKind: "other",
       });
     });
 
@@ -96,7 +96,7 @@ describe("formatEnvironmentDisplay", () => {
         id: "env_test",
         location: "remote",
         mode: "worktree",
-        workspaceDisplayKind: "git-worktree",
+        workspaceDisplayKind: "unmanaged-worktree",
       });
     });
 

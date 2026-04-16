@@ -138,11 +138,11 @@ describe("public thread environment routes", () => {
         expect.arrayContaining([
           expect.objectContaining({
             id: directThread.id,
-            environmentWorkspaceDisplayKind: "primary-checkout",
+            environmentWorkspaceDisplayKind: "other",
           }),
           expect.objectContaining({
             id: worktreeThread.id,
-            environmentWorkspaceDisplayKind: "git-worktree",
+            environmentWorkspaceDisplayKind: "managed-worktree",
           }),
           expect.objectContaining({
             id: sandboxThread.id,

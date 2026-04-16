@@ -275,14 +275,14 @@ describe("server-contract canonical schemas", () => {
           createdAt: 1,
           updatedAt: 2,
           hasPendingInteraction: true,
-          environmentWorkspaceDisplayKind: "git-worktree",
+          environmentWorkspaceDisplayKind: "managed-worktree",
         },
       ]),
     ).toMatchObject([
       {
         id: "thr_123",
         hasPendingInteraction: true,
-        environmentWorkspaceDisplayKind: "git-worktree",
+        environmentWorkspaceDisplayKind: "managed-worktree",
       },
     ]);
 

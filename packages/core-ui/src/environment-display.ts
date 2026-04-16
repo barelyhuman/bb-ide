@@ -42,7 +42,10 @@ export function formatEnvironmentDisplay({
 }: FormatEnvironmentDisplayArgs): EnvironmentDisplayInfo {
   const mode: EnvironmentDisplayInfo["mode"] = environment.isWorktree ? "worktree" : "direct";
   const workspaceDisplayKind = resolveEnvironmentWorkspaceDisplayKind({
-    environment,
+    environment: {
+      isWorktree: environment.isWorktree,
+      workspaceProvisionType: environment.workspaceProvisionType,
+    },
     hostType: hostType ?? null,
   });
 

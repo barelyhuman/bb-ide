@@ -208,8 +208,8 @@ export function listThreadsWithPendingInteractionState(
   const rows = db
     .select({
       ...getTableColumns(threads),
-      environmentIsGitRepo: environments.isGitRepo,
       environmentIsWorktree: environments.isWorktree,
+      environmentWorkspaceProvisionType: environments.workspaceProvisionType,
       hostType: hosts.type,
       pendingInteractionCount: count(pendingInteractions.id),
     })
@@ -229,8 +229,8 @@ export function listThreadsWithPendingInteractionState(
     .all();
 
   return rows.map(({
-    environmentIsGitRepo,
     environmentIsWorktree,
+    environmentWorkspaceProvisionType,
     hostType,
     pendingInteractionCount,
     ...thread
@@ -238,8 +238,8 @@ export function listThreadsWithPendingInteractionState(
     ...thread,
     environmentWorkspaceDisplayKind: resolveEnvironmentWorkspaceDisplayKind({
       environment: {
-        isGitRepo: environmentIsGitRepo,
         isWorktree: environmentIsWorktree,
+        workspaceProvisionType: environmentWorkspaceProvisionType,
       },
       hostType,
     }),

@@ -18,7 +18,7 @@ import {
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useHosts, useSandboxBackends } from "@/hooks/queries/system-queries";
 import { sandboxHostSupportedAtom } from "@/lib/atoms";
-import { getEnvironmentWorkspaceDisplayIcon } from "@/lib/environment-workspace-display";
+import { getEnvironmentWorkspaceLabelIcon } from "@/lib/environment-workspace-display";
 import { HostStatusBadge, HostStatusDot } from "@/components/HostStatusIndicator";
 import { cn } from "@/lib/utils";
 import {
@@ -146,9 +146,9 @@ export function EnvironmentPicker({
     if (!parsed) return { modeLabel: "Environment", icon: Monitor };
     if (parsed.type === "host") {
       const modeLabel = parsed.mode === "worktree" ? "Worktree" : "Direct";
-      const icon = getEnvironmentWorkspaceDisplayIcon(
-        parsed.mode === "worktree" ? "git-worktree" : "primary-checkout",
-      ) ?? Monitor;
+      const icon = getEnvironmentWorkspaceLabelIcon(
+        parsed.mode === "worktree" ? "managed-worktree" : "other",
+      );
       const host = hosts.find((h) => h.id === parsed.hostId);
       const hostConnected = host?.status === "connected";
       if (isLocalHost(parsed.hostId)) {
@@ -159,7 +159,7 @@ export function EnvironmentPicker({
     const backend = sandboxBackends.find((b) => b.id === parsed.backendId);
     return {
       modeLabel: backend?.displayName ?? "Sandbox",
-      icon: getEnvironmentWorkspaceDisplayIcon("sandbox") ?? Monitor,
+      icon: getEnvironmentWorkspaceLabelIcon("sandbox"),
     };
   }, [value, hosts, sandboxBackends, isLocalHost]);
 
@@ -251,14 +251,14 @@ function HostSectionGroup({
           <>
             <EnvironmentMenuItem
               label="Direct"
-              icon={getEnvironmentWorkspaceDisplayIcon("primary-checkout") ?? Monitor}
+              icon={getEnvironmentWorkspaceLabelIcon("other")}
               itemValue={localValue}
               selectedValue={value}
               onSelect={onChange}
             />
             <EnvironmentMenuItem
               label="Worktree"
-              icon={getEnvironmentWorkspaceDisplayIcon("git-worktree") ?? Monitor}
+              icon={getEnvironmentWorkspaceLabelIcon("managed-worktree")}
               itemValue={worktreeValue}
               selectedValue={value}
               onSelect={onChange}
@@ -302,7 +302,7 @@ function SandboxSection({ backends, hasGitHubSource, projectId, value, onChange 
             <EnvironmentMenuItem
               key={backend.id}
               label={backend.displayName}
-              icon={getEnvironmentWorkspaceDisplayIcon("sandbox") ?? Monitor}
+              icon={getEnvironmentWorkspaceLabelIcon("sandbox")}
               itemValue={encodeSandboxValue(backend.id)}
               selectedValue={value}
               onSelect={onChange}

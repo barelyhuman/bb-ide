@@ -93,8 +93,14 @@ describe("ThreadRow", () => {
     expect(screen.getByLabelText("Pending interaction requires attention")).not.toBeNull();
   });
 
-  it("shows a worktree environment icon", () => {
-    renderThreadRow(createThread({ environmentWorkspaceDisplayKind: "git-worktree" }));
+  it("shows a managed worktree environment icon", () => {
+    renderThreadRow(createThread({ environmentWorkspaceDisplayKind: "managed-worktree" }));
+
+    expect(screen.getByLabelText("Managed worktree environment")).not.toBeNull();
+  });
+
+  it("shows an unmanaged worktree environment icon", () => {
+    renderThreadRow(createThread({ environmentWorkspaceDisplayKind: "unmanaged-worktree" }));
 
     expect(screen.getByLabelText("Git worktree environment")).not.toBeNull();
   });

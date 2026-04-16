@@ -30,7 +30,7 @@ import { findLatestActivityRowId } from "@bb/ui-core";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useWorkspaceOpenTargets } from "@/hooks/useWorkspaceOpenTargets";
 import { useHost } from "@/hooks/queries/system-queries";
-import { getEnvironmentWorkspaceDisplayIcon } from "@/lib/environment-workspace-display";
+import { getEnvironmentWorkspaceLabelIcon } from "@/lib/environment-workspace-display";
 import { useStoredShowAllEvents } from "@/lib/show-all-events-preference";
 import { getGitStatusDisplay } from "@/lib/workspace-status";
 import {
@@ -314,7 +314,7 @@ export function ThreadDetailView() {
       })
     : undefined;
   const threadEnvironmentIcon = threadEnvironmentDisplay
-    ? getEnvironmentWorkspaceDisplayIcon(threadEnvironmentDisplay.workspaceDisplayKind)
+    ? getEnvironmentWorkspaceLabelIcon(threadEnvironmentDisplay.workspaceDisplayKind)
     : null;
   const promptBannerSummary = workspaceChangedFilesSection
     ? `${PROMPT_BANNER_KIND_PREFIX[workspaceChangedFilesSection.kind]} · ${formatChangeSummary(workspaceChangedFilesSection.stats)}`
