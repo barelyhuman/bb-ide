@@ -19,6 +19,25 @@ const ANSI_COLORS: Record<number, string> = {
   15: "var(--ansi-15)",
 };
 
+const ANSI_COLOR_INDEXES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+const BACKGROUND_RESET_STYLE = "background-color:var(--background)";
+const BACKGROUND_RESET_CONTRAST_STYLE = `${BACKGROUND_RESET_STYLE};color:var(--foreground)`;
+
+function addBackgroundContrastColors(html: string): string {
+  let contrastedHtml = html;
+  for (const colorIndex of ANSI_COLOR_INDEXES) {
+    const backgroundStyle = `background-color:var(--ansi-${colorIndex})`;
+    contrastedHtml = contrastedHtml.replaceAll(
+      backgroundStyle,
+      `${backgroundStyle};color:var(--ansi-bg-fg-${colorIndex})`,
+    );
+  }
+  return contrastedHtml.replaceAll(
+    BACKGROUND_RESET_STYLE,
+    BACKGROUND_RESET_CONTRAST_STYLE,
+  );
+}
+
 /**
  * Converts ANSI escape codes to safe HTML.
  */
@@ -31,5 +50,5 @@ export function ansiToHtml(text: string): string {
     stream: false,
     colors: ANSI_COLORS,
   });
-  return converter.toHtml(text);
+  return addBackgroundContrastColors(converter.toHtml(text));
 }

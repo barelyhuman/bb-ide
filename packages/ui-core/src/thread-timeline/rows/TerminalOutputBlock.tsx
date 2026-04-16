@@ -51,7 +51,7 @@ export function TerminalOutputBlock({
         <pre
           ref={outputRef}
           onScroll={handleOutputScroll}
-          className={cn(command && "mt-1.5", maxHeightClassName, "overflow-auto whitespace-pre leading-tight text-muted-foreground")}
+          className={cn(command && "mt-1.5", maxHeightClassName, "overflow-auto whitespace-pre leading-tight text-foreground")}
           dangerouslySetInnerHTML={{ __html: renderedOutput }}
         >
         </pre>
