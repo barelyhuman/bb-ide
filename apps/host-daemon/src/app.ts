@@ -9,6 +9,7 @@ import { createBufferedEnvironmentChangeReporter } from "./environment-change-re
 import { InteractiveRequestRegistry } from "./interactive-request-registry.js";
 import {
   defaultListModels,
+  type ReplayTaskRegistry,
   shutdownDefaultListModelsRuntimes,
 } from "./command-dispatch-support.js";
 import { startLocalApiServer, type LocalApiServer } from "./local-api.js";
@@ -18,6 +19,7 @@ import {
   RuntimeManager,
   type RuntimeManagerOptions,
 } from "./runtime-manager.js";
+import { createReplayCaptureService } from "@bb/replay-capture/writer";
 import { createServerClient } from "./server-client.js";
 import {
   ServerConnection,
@@ -250,6 +252,19 @@ export async function createHostDaemonApp(
     logger: options.logger,
     postEvents: (events) => serverClient.postEvents(events),
   });
+  const replayTasks: ReplayTaskRegistry = new Map();
+  async function abortReplayTasks(): Promise<void> {
+    const tasks = [...replayTasks.values()];
+    for (const task of tasks) {
+      task.abort.abort();
+    }
+    await Promise.allSettled(tasks.map((task) => task.done));
+  }
+  const replayCapture = createReplayCaptureService({
+    dataDir: options.dataDir,
+    enabled: process.env.BB_REPLAY_CAPTURE === "1",
+    logger: options.logger,
+  });
 
   const interactiveRequestRegistry = new InteractiveRequestRegistry({
     registerRequest: (request) => serverClient.registerInteractiveRequest(request),
@@ -268,12 +283,17 @@ export async function createHostDaemonApp(
     createRuntime: options.createRuntime,
     hostWatcher: options.hostWatcher,
     shellEnv: options.runtimeShellEnv,
+    onCapture: (entry) => {
+      replayCapture?.recordRuntimeCaptureEntry(entry);
+    },
     onEvent: ({ environmentId, event }) => {
-      eventBuffer.push({
+      const input = {
         environmentId,
         threadId: event.threadId,
         event,
-      });
+      };
+      replayCapture?.recordThreadEvent(input);
+      eventBuffer.push(input);
     },
     onThreadStorageChanged: ({ environmentId }) => {
       environmentChangeReporter.queue({
@@ -368,6 +388,7 @@ export async function createHostDaemonApp(
   });
 
   const router = new CommandRouter({
+    dataDir: options.dataDir,
     fetchRuntimeMaterial: (version) =>
       serverClient.fetchRuntimeMaterial({ version }),
     readPersistedRuntimeMaterial: () =>
@@ -380,10 +401,13 @@ export async function createHostDaemonApp(
     resolveInteractiveRequest: async (request) => {
       interactiveRequestRegistry.resolve(request);
     },
+    replayTasks,
     threadStorageRootPath,
     logger: options.logger,
     seedThreadHighWaterMark: ({ threadId, sequence }) =>
       eventBuffer.seed({ [threadId]: sequence }),
+    recordReplayCaptureThreadMetadata: (metadata) =>
+      replayCapture?.recordThreadMetadata(metadata),
     eventSink: {
       emit: (event) => eventBuffer.push(event),
       flush: () => eventBuffer.flush(),
@@ -451,13 +475,17 @@ export async function createHostDaemonApp(
     },
     logger: options.logger,
     releaseLock: options.releaseLock,
-    flushEventBuffer: () => eventBuffer.flush(),
+    flushEventBuffer: async () => {
+      await abortReplayTasks();
+      await eventBuffer.flush();
+    },
     shutdownRuntimes: async () => {
       eventBuffer.dispose();
       environmentChangeReporter.dispose();
       await localApi?.close();
       await runtimeManager.shutdownAll();
       await shutdownDefaultListModelsRuntimes();
+      await replayCapture?.drain();
       await connection.shutdown();
     },
     onStart: async () => {

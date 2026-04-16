@@ -2,14 +2,13 @@ import { mkdirSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  createProviderForId,
+  replayRawProviderEvents,
 } from "@bb/agent-runtime";
 import type {
   AgentRuntimeCaptureEntry,
   AgentRuntimeRawProviderEventCaptureEntry,
   AgentRuntimeTranslatedThreadEventCaptureEntry,
 } from "@bb/agent-runtime/capture";
-import { threadEventSchema, type ThreadEvent } from "@bb/domain";
 import { z } from "zod";
 import { buildBundle, writeBundle } from "./capture.js";
 import {
@@ -70,10 +69,6 @@ interface CoverageProviderAccumulator {
   wellKnownToolNames: Set<string>;
 }
 
-const providerAuditThreadIdParamsSchema = z.object({
-  threadId: z.string().optional(),
-}).passthrough();
-
 function isDirectory(path: string): boolean {
   try {
     return statSync(path).isDirectory();
@@ -116,103 +111,15 @@ function loadFixtureBundle(args: {
   };
 }
 
-function getThreadIdFromParams(
-  rawEvent: AgentRuntimeRawProviderEventCaptureEntry["rawEvent"],
-): string | undefined {
-  const parsedParams = providerAuditThreadIdParamsSchema.safeParse(rawEvent.params);
-  return parsedParams.success ? parsedParams.data.threadId : undefined;
-}
-
-interface StampTranslatedEventArgs {
-  event: ThreadEvent;
-  bbThreadId: string;
-  providerThreadId: string | undefined;
-  sourceThreadId: string | undefined;
-}
-
-function resolveStampedProviderThreadId(
-  args: StampTranslatedEventArgs,
-): string | undefined {
-  if (args.providerThreadId) {
-    return args.providerThreadId;
-  }
-
-  if (
-    args.sourceThreadId &&
-    args.sourceThreadId !== args.bbThreadId &&
-    args.event.type !== "thread/identity"
-  ) {
-    return args.sourceThreadId;
-  }
-
-  return "providerThreadId" in args.event
-    ? args.event.providerThreadId
-    : undefined;
-}
-
-function stampTranslatedEvent(args: StampTranslatedEventArgs): ThreadEvent {
-  const providerThreadId = resolveStampedProviderThreadId(args);
-  return threadEventSchema.parse({
-    ...args.event,
-    threadId: args.bbThreadId,
-    ...(
-      providerThreadId !== undefined || "providerThreadId" in args.event
-        ? {
-            providerThreadId,
-          }
-        : {}
-    ),
-  });
-}
-
 function translateRawProviderEvents(args: {
   manifest: ProviderAuditManifest;
   rawProviderEvents: AgentRuntimeRawProviderEventCaptureEntry[];
 }): AgentRuntimeTranslatedThreadEventCaptureEntry[] {
-  const adapter = createProviderForId(args.manifest.providerId);
-  let providerThreadId: string | undefined;
-  const translated: AgentRuntimeTranslatedThreadEventCaptureEntry[] = [];
-
-  for (const rawProviderEvent of args.rawProviderEvents) {
-    const sourceThreadId =
-      rawProviderEvent.sourceThreadId ??
-      getThreadIdFromParams(rawProviderEvent.rawEvent);
-    const events = adapter.translateEvent(rawProviderEvent.rawEvent, {
-      threadId: sourceThreadId,
-    });
-
-    for (const event of events) {
-      const candidateProviderThreadId =
-        event.type === "thread/identity"
-          ? event.providerThreadId
-          : providerThreadId;
-      const stampedEvent = stampTranslatedEvent({
-        event,
-        bbThreadId: args.manifest.threadId,
-        providerThreadId: candidateProviderThreadId,
-        sourceThreadId,
-      });
-
-      if (
-        stampedEvent.type === "thread/identity" &&
-        typeof stampedEvent.providerThreadId === "string" &&
-        stampedEvent.providerThreadId.length > 0
-      ) {
-        providerThreadId = stampedEvent.providerThreadId;
-      }
-
-      translated.push({
-        kind: "translated-thread-event",
-        capturedAt: rawProviderEvent.capturedAt,
-        providerId: rawProviderEvent.providerId,
-        rawCaptureId: rawProviderEvent.captureId,
-        rawMethod: rawProviderEvent.rawEvent.method,
-        event: stampedEvent,
-      });
-    }
-  }
-
-  return translated;
+  return replayRawProviderEvents({
+    bbThreadId: args.manifest.threadId,
+    providerId: args.manifest.providerId,
+    rawProviderEvents: args.rawProviderEvents,
+  });
 }
 
 export function listFixtureBundles(

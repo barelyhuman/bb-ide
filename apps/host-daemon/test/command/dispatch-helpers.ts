@@ -269,8 +269,9 @@ export function createHarness(args: {
     workspaceState,
     workspace,
     /** Default dispatch options with threadStorageRootPath for tests. */
-    dispatchOptions(overrides: { threadStorageRootPath?: string } = {}) {
+    dispatchOptions(overrides: { dataDir?: string; threadStorageRootPath?: string } = {}) {
       return {
+        dataDir: overrides.dataDir ?? "/tmp/bb-test-data",
         eventSink: noopEventSink,
         runtimeManager: manager,
         threadStorageRootPath: overrides.threadStorageRootPath ?? "/tmp/bb-test-thread-storage",

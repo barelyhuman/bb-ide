@@ -13,6 +13,7 @@ import { RuntimeManager } from "./runtime-manager.js";
 type CommandResultReport = Omit<HostDaemonCommandResultReport, "sessionId">;
 
 export interface CommandRouterOptions {
+  dataDir: CommandDispatchOptions["dataDir"];
   fetchRuntimeMaterial: CommandDispatchOptions["fetchRuntimeMaterial"];
   readPersistedRuntimeMaterial: CommandDispatchOptions["readPersistedRuntimeMaterial"];
   persistRuntimeMaterial: CommandDispatchOptions["persistRuntimeMaterial"];
@@ -22,6 +23,8 @@ export interface CommandRouterOptions {
   eventSink: CommandDispatchOptions["eventSink"];
   listModels?: CommandDispatchOptions["listModels"];
   resolveInteractiveRequest?: CommandDispatchOptions["resolveInteractiveRequest"];
+  recordReplayCaptureThreadMetadata?: CommandDispatchOptions["recordReplayCaptureThreadMetadata"];
+  replayTasks?: CommandDispatchOptions["replayTasks"];
   threadStorageRootPath: string;
   logger: Pick<HostDaemonLogger, "warn">;
   now?: () => number;
@@ -147,10 +150,13 @@ export class CommandRouter {
         readPersistedRuntimeMaterial: this.options.readPersistedRuntimeMaterial,
         persistRuntimeMaterial: this.options.persistRuntimeMaterial,
         runtimeManager: this.options.runtimeManager,
+        dataDir: this.options.dataDir,
         seedThreadHighWaterMark: this.options.seedThreadHighWaterMark,
         eventSink: this.options.eventSink,
         listModels: this.options.listModels,
         resolveInteractiveRequest: this.options.resolveInteractiveRequest,
+        recordReplayCaptureThreadMetadata: this.options.recordReplayCaptureThreadMetadata,
+        replayTasks: this.options.replayTasks,
         threadStorageRootPath: this.options.threadStorageRootPath,
       });
       return {

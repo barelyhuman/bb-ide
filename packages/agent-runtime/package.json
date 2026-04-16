@@ -11,6 +11,10 @@
       "import": "./dist/capture.js",
       "types": "./dist/capture.d.ts"
     },
+    "./shared/json-rpc-envelope": {
+      "import": "./dist/shared/json-rpc-envelope.js",
+      "types": "./dist/shared/json-rpc-envelope.d.ts"
+    },
     "./test": {
       "import": "./dist/test/index.js",
       "types": "./dist/test/index.d.ts"

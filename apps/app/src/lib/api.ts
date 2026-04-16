@@ -54,6 +54,9 @@ import type {
   UploadedPromptAttachment,
   UpsertSandboxEnvVarRequest,
   WorkspaceFileListResponse,
+  ReplayCaptureDetail,
+  ReplayRunRequest,
+  ReplayRunResponse,
 } from "@bb/server-contract";
 import { apiClient, toRelativeUrl } from "./api-server";
 import {
@@ -250,6 +253,25 @@ async function postMultipart<T>(
   }
   const text = await res.text();
   return JSON.parse(text) as T;
+}
+
+
+export async function getReplayCapture(id: string): Promise<ReplayCaptureDetail> {
+  return request<ReplayCaptureDetail>(
+    apiClient["development-only"].replay.captures[":id"].$get({ param: { id } }),
+  );
+}
+
+export async function startReplayRun(
+  id: string,
+  req: ReplayRunRequest,
+): Promise<ReplayRunResponse> {
+  return request<ReplayRunResponse>(
+    apiClient["development-only"].replay.captures[":id"].runs.$post({
+      param: { id },
+      json: req,
+    }),
+  );
 }
 
 export async function createProject(req: CreateProjectRequest): Promise<Project> {

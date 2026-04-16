@@ -24,6 +24,7 @@
     "@bb/host-runtime-material": "workspace:*",
     "@bb/logger": "workspace:*",
     "@bb/process-utils": "workspace:*",
+    "@bb/replay-capture": "workspace:*",
     "@bb/sandbox-host": "workspace:*",
     "@bb/sandbox-image": "workspace:*",
     "@bb/secret-storage": "workspace:*",

@@ -27,3 +27,11 @@ export type {
   ProviderRawEventDescription,
   ProviderVisibilityMetadata,
 } from "./provider-visibility.js";
+
+export {
+  createReplayRawProviderEventTranslator,
+  replayRawProviderEvents,
+  type ReplayRawProviderEventTranslator,
+  type ReplayRawProviderEventTranslatorArgs,
+  type ReplayRawProviderEventsArgs,
+} from "./replay-translation.js";

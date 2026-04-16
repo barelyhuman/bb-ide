@@ -20,6 +20,14 @@ export const workspaceTestAliases = {
     repoRoot,
     "packages/agent-runtime/src/test/index.ts",
   ),
+  "@bb/agent-runtime/capture": path.resolve(
+    repoRoot,
+    "packages/agent-runtime/src/capture.ts",
+  ),
+  "@bb/agent-runtime/shared/json-rpc-envelope": path.resolve(
+    repoRoot,
+    "packages/agent-runtime/src/shared/json-rpc-envelope.ts",
+  ),
   "@bb/agent-runtime": path.resolve(
     repoRoot,
     "packages/agent-runtime/src/index.ts",

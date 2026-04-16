@@ -200,6 +200,7 @@ describe("thread command dispatch", () => {
         target: { mode: "start" },
       },
       {
+        dataDir: "/tmp/bb-test-data",
         eventSink: noopEventSink,
         runtimeManager: manager,
         threadStorageRootPath: "/tmp/bb-test-thread-storage",
@@ -234,6 +235,7 @@ describe("thread command dispatch", () => {
         target: { mode: "start" },
       },
       {
+        dataDir: "/tmp/bb-test-data",
         eventSink: noopEventSink,
         runtimeManager: manager,
         threadStorageRootPath: "/tmp/bb-test-thread-storage",
@@ -535,6 +537,7 @@ describe("thread command dispatch", () => {
         target: { mode: "start" },
       },
       {
+        dataDir: "/tmp/bb-test-data",
         eventSink: noopEventSink,
         runtimeManager: manager,
         threadStorageRootPath: "/tmp/bb-test-thread-storage",

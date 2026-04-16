@@ -109,6 +109,7 @@ export interface RuntimeManagerOptions {
   ) => Promise<HostWorkspace>;
   shellEnv?: AgentRuntimeOptions["shellEnv"];
   onEvent?: (args: { environmentId: string; event: ThreadEvent }) => void;
+  onCapture?: AgentRuntimeOptions["onCapture"];
   threadStorageRootPath?: string | null;
   onThreadStorageChanged?: (args: {
     environmentId: string;
@@ -508,6 +509,7 @@ export class RuntimeManager {
         workspacePath: workspace.path,
         shellEnv: this.getShellEnv(),
         bridgeBundleDir: this.options.bridgeBundleDir,
+        onCapture: this.options.onCapture,
         onEvent: (event) => {
           if (event.type === "thread/identity") {
             this.markThreadActive(

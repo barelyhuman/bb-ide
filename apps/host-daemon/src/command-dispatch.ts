@@ -14,6 +14,11 @@ import { listHostFiles, readHostFile } from "./command-handlers/host-files.js";
 import { syncRuntimeMaterial } from "./command-handlers/host-runtime-material.js";
 import { resolveInteractiveRequest } from "./command-handlers/interactive.js";
 import {
+  getReplayCapture,
+  listReplayCaptures,
+  runReplay,
+} from "./command-handlers/replay.js";
+import {
   ensureThreadRuntime,
   handleThreadDeleted,
   startThread,
@@ -33,6 +38,27 @@ export {
   noopEventSink,
   type CommandDispatchOptions,
 } from "./command-dispatch-support.js";
+
+function recordReplayThreadMetadata(
+  command:
+    | Extract<HostDaemonCommand, { type: "thread.start" }>
+    | Extract<HostDaemonCommand, { type: "turn.submit" }>,
+  options: CommandDispatchOptions,
+): void {
+  if (!options.recordReplayCaptureThreadMetadata) {
+    return;
+  }
+  const runtimeContext = command.type === "thread.start"
+    ? command
+    : command.resumeContext;
+  options.recordReplayCaptureThreadMetadata({
+    environmentId: command.environmentId,
+    projectId: runtimeContext.projectId,
+    providerId: runtimeContext.providerId,
+    threadId: command.threadId,
+    title: null,
+  });
+}
 
 function seedThreadHighWaterMarkIfPresent(
   command:
@@ -55,9 +81,11 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
 ): Promise<HostDaemonCommandResult<TCommand["type"]>> {
   switch (command.type) {
     case "thread.start":
+      recordReplayThreadMetadata(command, options);
       seedThreadHighWaterMarkIfPresent(command, options);
       return startThread(command, options) as Promise<HostDaemonCommandResult<TCommand["type"]>>;
     case "turn.submit": {
+      recordReplayThreadMetadata(command, options);
       seedThreadHighWaterMarkIfPresent(command, options);
       const entry = await ensureThreadRuntime(command, options);
       return submitTurn(command, entry) as Promise<
@@ -65,6 +93,11 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       >;
     }
     case "thread.stop": {
+      const replayTask = options.replayTasks?.get(command.threadId);
+      if (replayTask) {
+        replayTask.abort.abort();
+        return {} as HostDaemonCommandResult<TCommand["type"]>;
+      }
       const entry = await requireExistingEnvironment(
         command.environmentId,
         options.runtimeManager,
@@ -92,6 +125,18 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
     }
     case "thread.deleted":
       return handleThreadDeleted(command, options) as Promise<
+        HostDaemonCommandResult<TCommand["type"]>
+      >;
+    case "replay.capture_list":
+      return listReplayCaptures(options) as Promise<
+        HostDaemonCommandResult<TCommand["type"]>
+      >;
+    case "replay.capture_get":
+      return getReplayCapture(command, options) as Promise<
+        HostDaemonCommandResult<TCommand["type"]>
+      >;
+    case "replay.run":
+      return runReplay(command, options) as Promise<
         HostDaemonCommandResult<TCommand["type"]>
       >;
     case "interactive.resolve":

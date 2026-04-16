@@ -10,6 +10,7 @@ import { registerEnvironmentRoutes } from "./routes/environments.js";
 import { registerHostRoutes } from "./routes/hosts.js";
 import { registerProjectRoutes } from "./routes/projects.js";
 import { registerSystemRoutes } from "./routes/system.js";
+import { registerDevelopmentOnlyReplayRoutes } from "./routes/internal-replay.js";
 import { registerThreadRoutes } from "./routes/threads/index.js";
 import { registerInternalCommandRoutes } from "./internal/commands.js";
 import { registerInternalCommandResultRoutes } from "./internal/command-result-route.js";
@@ -148,7 +149,6 @@ export function createApp(deps: AppDeps, options?: CreateAppOptions): ServerApp 
     }
     return next();
   });
-
   const publicApi = new Hono();
   registerProjectRoutes(publicApi, deps);
   registerAutomationRoutes(publicApi, deps);
@@ -156,6 +156,7 @@ export function createApp(deps: AppDeps, options?: CreateAppOptions): ServerApp 
   registerEnvironmentRoutes(publicApi, deps);
   registerThreadRoutes(publicApi, deps);
   registerSystemRoutes(publicApi, deps);
+  registerDevelopmentOnlyReplayRoutes(publicApi, deps);
   app.route("/api/v1", publicApi);
 
   const internalApi = new Hono();

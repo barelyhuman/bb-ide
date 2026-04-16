@@ -876,3 +876,22 @@ export const uploadedPromptAttachmentSchema = z.object({
 });
 export type UploadedPromptAttachment = z.infer<typeof uploadedPromptAttachmentSchema>;
 export type EnvironmentStatusResponse = z.infer<typeof environmentStatusResponseSchema>;
+
+export {
+  replayCaptureDetailSchema,
+  replayCaptureListResponseSchema,
+  replayCaptureHostSummarySchema,
+  replayCaptureSummarySchema,
+  replayRunRequestSchema,
+  replayRunResponseSchema,
+  replaySpeedSchema,
+} from "@bb/replay-capture";
+export type {
+  ReplayCaptureDetail,
+  ReplayCaptureHostSummary,
+  ReplayCaptureListResponse,
+  ReplayCaptureSummary,
+  ReplayRunRequest,
+  ReplayRunResponse,
+  ReplayRunSpeed,
+} from "@bb/replay-capture";

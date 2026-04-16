@@ -13,10 +13,15 @@ import {
   workspaceDiffTargetSchema,
   workspaceStatusSchema,
 } from "@bb/domain";
+import {
+  replayCaptureDaemonListResponseSchema,
+  replayCaptureManifestSchema,
+  replaySpeedSchema,
+} from "@bb/replay-capture";
 import { z } from "zod";
 import { hostRuntimeMaterialSnapshotSchema } from "./local-state.js";
 
-export const HOST_DAEMON_PROTOCOL_VERSION = 9 as const;
+export const HOST_DAEMON_PROTOCOL_VERSION = 10 as const;
 
 export const HOST_DAEMON_COMMAND_TYPES = [
   "thread.start",
@@ -40,6 +45,9 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "workspace.demote",
   "workspace.list_files",
   "workspace.list_branches",
+  "replay.capture_list",
+  "replay.capture_get",
+  "replay.run",
 ] as const;
 export const hostDaemonCommandTypeSchema = z.enum(HOST_DAEMON_COMMAND_TYPES);
 export type HostDaemonCommandType = z.infer<typeof hostDaemonCommandTypeSchema>;
@@ -136,6 +144,21 @@ export const threadRenameCommandSchema = hostDaemonThreadTargetSchema.extend({
 export const threadDeletedCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("thread.deleted"),
 });
+
+export const replayCaptureListCommandSchema = z.object({
+  type: z.literal("replay.capture_list"),
+});
+
+export const replayCaptureGetCommandSchema = z.object({
+  type: z.literal("replay.capture_get"),
+  captureId: z.string().min(1),
+});
+
+export const replayRunCommandSchema = hostDaemonThreadTargetSchema.extend({
+  type: z.literal("replay.run"),
+  captureId: z.string().min(1),
+  speed: replaySpeedSchema,
+}).strict();
 
 export const interactiveResolveCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("interactive.resolve"),
@@ -308,6 +331,9 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   threadStopCommandSchema,
   threadRenameCommandSchema,
   threadDeletedCommandSchema,
+  replayCaptureListCommandSchema,
+  replayCaptureGetCommandSchema,
+  replayRunCommandSchema,
   interactiveResolveCommandSchema,
   hostSyncRuntimeMaterialCommandSchema,
   hostListFilesCommandSchema,
@@ -353,6 +379,9 @@ export const hostDaemonCommandResultSchemaByType = {
   "thread.stop": z.object({}),
   "thread.rename": z.object({}),
   "thread.deleted": z.object({}),
+  "replay.capture_list": replayCaptureDaemonListResponseSchema,
+  "replay.capture_get": replayCaptureManifestSchema,
+  "replay.run": z.object({}),
   "interactive.resolve": z.object({}),
   "host.sync_runtime_material": z.object({
     appliedVersion: z.string().min(1),

@@ -86,6 +86,7 @@ describe("dispatchCommand", () => {
     };
     let resolved = false;
     const dispatchPromise = dispatchCommand(command, {
+      dataDir: "/tmp/bb-data",
       eventSink: {
         emit: vi.fn(),
         flush,
@@ -111,5 +112,38 @@ describe("dispatchCommand", () => {
 
     expect(resolved).toBe(true);
     expect(manager.hasThread("env-1", "thread-1")).toBe(false);
+  });
+
+  it("aborts a replay task before falling through to the runtime thread.stop path", async () => {
+    const manager = new RuntimeManager({
+      createRuntime: () => createRuntime(),
+      provisionWorkspace: async () => createWorkspace(),
+    });
+    const abort = new AbortController();
+    const replayTasks = new Map([
+      ["thread-1", { abort, done: Promise.resolve() }],
+    ]);
+    const command: CommandOf<"thread.stop"> = {
+      type: "thread.stop",
+      environmentId: "env-1",
+      threadId: "thread-1",
+    };
+
+    const result = await dispatchCommand(command, {
+      dataDir: "/tmp/bb-data",
+      eventSink: {
+        emit: vi.fn(),
+        flush: vi.fn(async () => undefined),
+      },
+      fetchRuntimeMaterial: async () => unexpectedWorkspaceCall(),
+      persistRuntimeMaterial: async () => undefined,
+      readPersistedRuntimeMaterial: async () => null,
+      replayTasks,
+      runtimeManager: manager,
+      threadStorageRootPath: "/tmp/bb-thread-storage",
+    });
+
+    expect(result).toEqual({});
+    expect(abort.signal.aborted).toBe(true);
   });
 });

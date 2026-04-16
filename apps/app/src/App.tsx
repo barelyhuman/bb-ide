@@ -7,6 +7,7 @@ import { ProjectArchivedThreadsView } from "./views/ProjectArchivedThreadsView";
 import { AppSettingsView } from "./views/AppSettingsView";
 import { ProjectSettingsView } from "./views/ProjectSettingsView";
 import { ThreadDetailView } from "./views/ThreadDetailView";
+import { InternalReplayView } from "./views/InternalReplayView";
 import { QuickCreateProjectProvider } from "./hooks/useQuickCreateProject";
 import { useWebSocket } from "./hooks/useWebSocket";
 
@@ -16,6 +17,9 @@ function AppRoutes() {
       <Routes>
         <Route path="/" element={<MainView />} />
         <Route path="/settings" element={<AppSettingsView />} />
+        {import.meta.env.DEV ? (
+          <Route path="/development-only/replay/:captureId" element={<InternalReplayView />} />
+        ) : null}
         <Route path="/projects/:projectId" element={<ProjectMainView />} />
         <Route
           path="/projects/:projectId/settings"

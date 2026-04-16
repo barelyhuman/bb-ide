@@ -189,6 +189,7 @@ describe("CommandRouter", () => {
     } as const;
     const reportResult = vi.fn(async () => undefined);
     const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
       fetchRuntimeMaterial: vi.fn(async () => snapshot),
       readPersistedRuntimeMaterial: async () => readRuntimeMaterialState(dataDir),
       persistRuntimeMaterial: async (nextSnapshot) =>
@@ -258,6 +259,7 @@ describe("CommandRouter", () => {
         version: "runtime-version-2",
       });
     const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
       fetchRuntimeMaterial,
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       persistRuntimeMaterial: vi.fn(async () => undefined),
@@ -318,6 +320,7 @@ describe("CommandRouter", () => {
     });
 
     const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       runtimeManager: manager,
@@ -382,6 +385,7 @@ describe("CommandRouter", () => {
     manager.markThreadActive("env-1", "thread-b", "provider-b");
 
     const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       runtimeManager: manager,
@@ -473,6 +477,7 @@ describe("CommandRouter", () => {
     });
     const reported: string[] = [];
     const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       runtimeManager: manager,
@@ -562,6 +567,7 @@ describe("CommandRouter", () => {
     let nowValue = 100;
     const results: Array<{ commandId: string; completedAt: number; ok: boolean }> = [];
     const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       runtimeManager: manager,
@@ -642,6 +648,7 @@ describe("CommandRouter", () => {
     });
 
     const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       runtimeManager: manager,
@@ -696,6 +703,7 @@ describe("CommandRouter", () => {
     let shouldFail = true;
     const reported: string[] = [];
     const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
       fetchRuntimeMaterial: vi.fn(),
       readPersistedRuntimeMaterial: vi.fn(async () => null),
       runtimeManager: manager,

@@ -14,6 +14,7 @@ import type {
   HostRuntimeMaterialSnapshot,
   WorkspaceContext,
 } from "@bb/host-daemon-contract";
+import type { ReplayCaptureThreadMetadata } from "@bb/replay-capture/writer";
 import type { HostRuntimeMaterialState } from "@bb/host-runtime-material";
 import type { InteractiveResolveCommandInput } from "./interactive-request-registry.js";
 import { RuntimeManager, type RuntimeEntry } from "./runtime-manager.js";
@@ -28,12 +29,19 @@ export interface EventSink {
   flush: () => Promise<void>;
 }
 
+export interface ReplayTaskHandle {
+  abort: AbortController;
+  done: Promise<void>;
+}
+export type ReplayTaskRegistry = Map<string, ReplayTaskHandle>;
+
 export const noopEventSink: EventSink = {
   emit: () => undefined,
   flush: async () => undefined,
 };
 
 export interface CommandDispatchOptions {
+  dataDir: string;
   fetchRuntimeMaterial: (
     version: string,
   ) => Promise<HostRuntimeMaterialSnapshot>;
@@ -52,6 +60,8 @@ export interface CommandDispatchOptions {
   resolveInteractiveRequest?: (
     request: InteractiveResolveCommandInput,
   ) => Promise<void>;
+  recordReplayCaptureThreadMetadata?: (metadata: ReplayCaptureThreadMetadata) => void;
+  replayTasks?: ReplayTaskRegistry;
   threadStorageRootPath: string;
 }
 

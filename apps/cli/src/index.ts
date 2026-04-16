@@ -6,6 +6,7 @@ import { registerHostCommands } from "./commands/host.js";
 import { registerManagerCommands } from "./commands/manager.js";
 import { registerProjectCommands } from "./commands/project.js";
 import { registerProviderCommands } from "./commands/provider.js";
+import { registerReplayCommands } from "./commands/replay.js";
 import { registerStatusCommand } from "./commands/status.js";
 import { registerThreadCommands } from "./commands/thread/index.js";
 import { resolveContextSnapshot, resolveServerUrl } from "./context-env.js";
@@ -49,6 +50,7 @@ registerHostCommands(program, getUrl);
 registerProviderCommands(program, getUrl);
 registerManagerCommands(program, getUrl);
 registerThreadCommands(program, getUrl);
+registerReplayCommands(program, getUrl);
 registerEnvironmentCommands(program, getUrl);
 registerGuideCommand(program);
 
