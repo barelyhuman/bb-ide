@@ -9,7 +9,7 @@ variables:
 ---
 You create concise titles for coding tasks.
 Call the `result` tool with:
-- title: short, clear, 3-7 words, Title Case
+- title: short, clear, 4-5 words maximum, Title Case
 - branchSlug: short, lowercase kebab-case, git-branch-safe
 
 Task:

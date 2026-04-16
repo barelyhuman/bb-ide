@@ -15,6 +15,7 @@ import { queueThreadRenameCommand } from "./thread-commands.js";
 import { isPreStartThreadStatus } from "./thread-status.js";
 
 const MIN_TITLE_GENERATION_WORDS = 5;
+const MAX_GENERATED_TITLE_WORDS = 5;
 const MAX_BRANCH_SLUG_LENGTH = 48;
 
 type ThreadMetadataGenerationDeps = Pick<AppDeps, "config" | "logger">;
@@ -86,6 +87,17 @@ export function shouldGenerateThreadTitle(input: PromptInput[]): boolean {
   return text.split(/\s+/u).length >= MIN_TITLE_GENERATION_WORDS;
 }
 
+export function sanitizeGeneratedTitle(value: string): string | null {
+  const words = value
+    .trim()
+    .replace(/\s+/gu, " ")
+    .split(" ")
+    .filter((word) => word.length > 0);
+
+  const title = words.slice(0, MAX_GENERATED_TITLE_WORDS).join(" ");
+  return title.length > 0 ? title : null;
+}
+
 export function sanitizeGeneratedBranchSlug(value: string): string | null {
   const slug = value
     .trim()
@@ -111,7 +123,7 @@ function normalizeGeneratedThreadMetadata(
     return null;
   }
 
-  const title = parsed.title?.trim();
+  const title = parsed.title ? sanitizeGeneratedTitle(parsed.title) : null;
   const branchSlug = parsed.branchSlug
     ? sanitizeGeneratedBranchSlug(parsed.branchSlug)
     : null;

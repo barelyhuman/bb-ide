@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PromptInput } from "@bb/domain";
 import {
   deriveTitleFallback,
+  sanitizeGeneratedTitle,
   shouldGenerateThreadTitle,
 } from "../../src/services/threads/title-generation.js";
 
@@ -35,6 +36,18 @@ describe("thread title generation", () => {
     ];
 
     expect(shouldGenerateThreadTitle(input)).toBe(true);
+  });
+
+  it("limits generated titles to five words", () => {
+    expect(
+      sanitizeGeneratedTitle(
+        "Investigate Extremely Long Generated Thread Title Output",
+      ),
+    ).toBe("Investigate Extremely Long Generated Thread");
+  });
+
+  it("returns null for empty generated titles", () => {
+    expect(sanitizeGeneratedTitle("   ")).toBeNull();
   });
 
   it("keeps fallback derivation independent from title generation eligibility", () => {
