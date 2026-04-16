@@ -34,10 +34,9 @@ afterEach(async () => {
 });
 
 describe("run-host-daemon auto join", () => {
-  it("uses a dedicated default data dir for auto-joined dev hosts", () => {
-    expect(resolveDefaultDataDirName("dev", true)).toBe(".bb-dev-host-daemon");
-    expect(resolveDefaultDataDirName("dev", false)).toBe(".bb-dev");
-    expect(resolveDefaultDataDirName("prod", true)).toBe(".bb");
+  it("resolves the default data dir by mode", () => {
+    expect(resolveDefaultDataDirName("dev")).toBe(".bb-dev");
+    expect(resolveDefaultDataDirName("prod")).toBe(".bb");
   });
 
   it("skips auto join when auth state already exists", async () => {

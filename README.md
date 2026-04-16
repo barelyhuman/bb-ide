@@ -106,7 +106,7 @@ To test an additional host against that dev server, use:
 BB_HOST_ENROLL_KEY=<join-code> pnpm dev:host-daemon
 ```
 
-That runs a second host daemon against the dev server and stores its state under `~/.bb-dev-host-daemon` by default. Provide the join code from the server-side host join flow on first run; after enrollment, the daemon persists its auth state locally.
+That runs a second host daemon against the dev server and stores its state under `~/.bb-dev-extra-host`. Provide the join code from the server-side host join flow on first run; after enrollment, the daemon persists its auth state locally.
 
 ```bash
 pnpm bb --help            # built CLI, targets the default/prod instance

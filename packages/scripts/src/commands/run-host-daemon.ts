@@ -35,26 +35,20 @@ function shouldAutoJoin(): boolean {
   return process.argv.includes("--auto-join");
 }
 
-export function resolveDefaultDataDirName(mode: HostMode, autoJoin: boolean): string {
-  if (mode === "dev" && autoJoin) {
-    return DEFAULTS.dataDir.devHostDaemon;
-  }
+export function resolveDefaultDataDirName(mode: HostMode): string {
   return mode === "dev" ? DEFAULTS.dataDir.dev : DEFAULTS.dataDir.prod;
 }
 
-function resolveDataDir(mode: HostMode, autoJoin: boolean): string {
+function resolveDataDir(mode: HostMode): string {
   return resolveConfiguredDataDir({
-    defaultDirName: resolveDefaultDataDirName(mode, autoJoin),
+    defaultDirName: resolveDefaultDataDirName(mode),
   });
 }
 
-function buildEnv(
-  mode: HostMode,
-  autoJoin: boolean,
-): HostDaemonRuntimeEnvironment {
+function buildEnv(mode: HostMode): HostDaemonRuntimeEnvironment {
   return {
     ...hostDaemonEntrypointConfig,
-    BB_DATA_DIR: resolveDataDir(mode, autoJoin),
+    BB_DATA_DIR: resolveDataDir(mode),
     BB_SERVER_URL: hostDaemonConfig.BB_SERVER_URL,
     NODE_ENV: resolveNodeEnvironment(mode),
   };
@@ -129,7 +123,7 @@ export async function maybeAddAutoJoinEnv(
 export async function main(): Promise<void> {
   const mode = resolveMode();
   const autoJoin = shouldAutoJoin();
-  const env = await maybeAddAutoJoinEnv(buildEnv(mode, autoJoin), autoJoin);
+  const env = await maybeAddAutoJoinEnv(buildEnv(mode), autoJoin);
   process.exitCode = await runScriptProcess({
     args: ["apps/host-daemon/dist/index.js"],
     command: process.execPath,

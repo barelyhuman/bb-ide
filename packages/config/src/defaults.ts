@@ -7,7 +7,7 @@
  * @bb/config uses these as its envsafe default/devDefault values.
  */
 export const DEFAULTS = {
-  dataDir: { prod: ".bb", dev: ".bb-dev", devHostDaemon: ".bb-dev-host-daemon" },
+  dataDir: { prod: ".bb", dev: ".bb-dev" },
   logLevel: { prod: "info", dev: "debug" },
   secretToken: { dev: "dev-secret" },
   serverPort: { prod: 3000, dev: 3334 },

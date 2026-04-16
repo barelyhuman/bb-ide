@@ -17,7 +17,6 @@ import {
 
 interface NamedDataDirs {
   defaultDataDir: string;
-  defaultDevDaemonDataDir: string;
   defaultDevDataDir: string;
 }
 
@@ -28,9 +27,6 @@ function resolveMode(): HostMode {
 function resolveNamedDataDirs(): NamedDataDirs {
   return {
     defaultDataDir: resolveConfiguredDataDir({ defaultDirName: DEFAULTS.dataDir.prod }),
-    defaultDevDaemonDataDir: resolveConfiguredDataDir({
-      defaultDirName: DEFAULTS.dataDir.devHostDaemon,
-    }),
     defaultDevDataDir: resolveConfiguredDataDir({ defaultDirName: DEFAULTS.dataDir.dev }),
   };
 }
@@ -52,7 +48,6 @@ export function resolveResetTargets(args: Set<string>): string[] {
     return uniquePaths([
       dataDirs.defaultDataDir,
       dataDirs.defaultDevDataDir,
-      dataDirs.defaultDevDaemonDataDir,
       resolveResetDataDir(mode),
     ]);
   }
@@ -85,11 +80,11 @@ export function renderHelpText(): string {
     pnpm reset -- [--all] [--yes]
 
   ${dim("Options")}
-    --all   Remove prod, dev, and dev daemon data directories
+    --all   Remove both prod and dev data directories
     --yes   Skip the interactive confirmation prompt
 
   ${dim("Notes")}
-    Removes bb-managed state directories (${dim("~/.bb")}, ${dim("~/.bb-dev")}, ${dim(`~/${DEFAULTS.dataDir.devHostDaemon}`)}).
+    Removes bb-managed state directories (${dim("~/.bb")}, ${dim("~/.bb-dev")}).
     Does not touch provider auth/config managed by other tools.
     Respects BB_DATA_DIR for single-directory resets.
 \n`;
