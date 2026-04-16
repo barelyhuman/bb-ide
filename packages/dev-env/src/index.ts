@@ -1,41 +1,107 @@
-import { spawn } from "node:child_process";
+import { type ChildProcess } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { serve } from "@hono/node-server";
 import { devEnvConfig } from "@bb/config/dev-env";
+import { startCloudflared } from "./cloudflared.js";
+import {
+  createDefaultDevEnvStatusDependencies,
+  createDevEnvStatusApp,
+  createRuntime,
+  type DevEnvRuntime,
+  type DevEnvStatusDependencies,
+} from "./status-api.js";
 
-const { DEV_CLOUDFLARED_TUNNEL_TOKEN: tunnelToken } = devEnvConfig;
-
-if (tunnelToken.length === 0) {
-  console.log("No tunnel token configured, skipping tunnel");
-  process.exit(0);
+interface StatusServer {
+  close(): Promise<void>;
 }
 
-const child = spawn(
-  "cloudflared",
-  ["tunnel", "--no-autoupdate", "run", "--token", tunnelToken],
-  {
-    stdio: "inherit",
-  },
+interface ShutdownArgs {
+  statusServer: StatusServer;
+  tunnel: ChildProcess | null;
+}
+
+type ShutdownSignal = "SIGINT" | "SIGTERM";
+
+const repoRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "..",
+  "..",
 );
 
-const terminateChild = (): void => {
-  child.kill("SIGTERM");
-};
+async function startStatusServer(
+  runtime: DevEnvRuntime,
+  dependencies: DevEnvStatusDependencies,
+): Promise<StatusServer> {
+  const app = createDevEnvStatusApp(runtime, dependencies);
+  const { server } = await new Promise<{
+    server: ReturnType<typeof serve>;
+  }>((resolveServer, rejectServer) => {
+    const startedServer = serve(
+      {
+        fetch: app.fetch,
+        hostname: "127.0.0.1",
+        port: devEnvConfig.BB_DEV_ENV_PORT,
+      },
+      () => resolveServer({ server: startedServer }),
+    );
+    startedServer.on("error", rejectServer);
+  });
 
-process.on("SIGINT", terminateChild);
-process.on("SIGTERM", terminateChild);
+  process.stdout.write(
+    `[dev-env] Status API listening at http://127.0.0.1:${devEnvConfig.BB_DEV_ENV_PORT}\n`,
+  );
 
-child.on("error", (error) => {
-  console.error("Failed to start Cloudflare Tunnel", error);
-  process.exit(1);
-});
+  return {
+    close() {
+      return new Promise<void>((resolveClose, rejectClose) => {
+        server.close((error) => {
+          if (error) {
+            rejectClose(error);
+            return;
+          }
+          resolveClose();
+        });
+      });
+    },
+  };
+}
 
-child.on("exit", (code, signal) => {
-  process.off("SIGINT", terminateChild);
-  process.off("SIGTERM", terminateChild);
+function installShutdownHandlers(args: ShutdownArgs): void {
+  let shuttingDown = false;
+  const shutdown = (signal: ShutdownSignal) => {
+    if (shuttingDown) {
+      return;
+    }
+    shuttingDown = true;
+    void (async () => {
+      args.tunnel?.kill(signal);
+      try {
+        await args.statusServer.close();
+      } finally {
+        process.exit(0);
+      }
+    })();
+  };
 
-  if (signal) {
-    process.exit(0);
-    return;
-  }
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
+}
 
-  process.exit(code ?? 0);
-});
+async function main(): Promise<void> {
+  const dependencies = createDefaultDevEnvStatusDependencies({ repoRoot });
+  const runtime = await createRuntime(dependencies);
+  const tunnel = startCloudflared({
+    tunnelToken: devEnvConfig.DEV_CLOUDFLARED_TUNNEL_TOKEN,
+  });
+  const statusServer = await startStatusServer(runtime, dependencies);
+  installShutdownHandlers({ statusServer, tunnel });
+}
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  void main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

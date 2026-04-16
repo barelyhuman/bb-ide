@@ -1,4 +1,5 @@
-import { envsafe, str } from "envsafe";
+import { envsafe, port, str } from "envsafe";
+import { DEFAULTS } from "./defaults.js";
 
 export const devEnvConfig = envsafe({
   BB_DEV_APP_HOST: str({
@@ -6,6 +7,11 @@ export const devEnvConfig = envsafe({
     default: "",
     allowEmpty: true,
     devDefault: "",
+  }),
+  BB_DEV_ENV_PORT: port({
+    desc: "Development-only localhost port for the bb dev-env helper API.",
+    default: DEFAULTS.devEnvPort,
+    devDefault: DEFAULTS.devEnvPort,
   }),
   DEV_CLOUDFLARED_TUNNEL_TOKEN: str({
     desc: "Cloudflare Tunnel token for exposing the local dev server to E2B sandboxes",

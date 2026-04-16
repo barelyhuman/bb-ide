@@ -12,6 +12,7 @@ export const DEFAULTS = {
   secretToken: { dev: "dev-secret" },
   serverPort: { prod: 3000, dev: 3334 },
   hostDaemonPort: { prod: 3001, dev: 3002 },
+  devEnvPort: 9112,
   serverUrl: { prod: "http://localhost:3000", dev: "http://localhost:3334" },
   inferenceModel: "openai/gpt-4o-mini",
   sandboxActivityExtensionDebounceMs: 30_000,
