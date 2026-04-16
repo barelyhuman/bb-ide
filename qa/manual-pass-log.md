@@ -278,5 +278,42 @@ Residual notes:
 
 - The first Codex smoke attempt failed before the runbook model fix because `gpt-5` is rejected for the local ChatGPT-backed Codex account.
 - The first Pi provider-specific attempt after the old restart command exposed the stuck-provisioning bug as `thr_9mk73wn3af`; after the bridge-error and restart-env fixes, the targeted Pi rerun passed.
-- The mixed Claude worktree thread reached `idle` but returned a generic acknowledgement instead of the exact requested text. The isolated Claude provider-specific pass later returned the exact hello/uppercase responses and created `hello.txt`.
+- The mixed Claude worktree thread reached `idle` but returned a generic acknowledgement instead of the exact requested text. A targeted rerun on 2026-04-16 reproduced this with the old prompt wording; the runbook now uses provider-stable `Say exactly: ...` prompts, and the corrected mixed-provider rerun passed.
 - Host-daemon logs still include expected warnings for unsupported `thread.rename` on `claude-code` and `pi`; these did not block thread completion.
+
+## Mixed Claude Worktree Rerun
+
+Date: 2026-04-16
+Operator: Codex
+Status: passed after runbook prompt clarification
+Standalone workflow: `pnpm qa:standalone:start` / `pnpm qa:standalone:stop`
+
+Old-prompt rerun:
+
+- Artifact directory: `/tmp/bb-mixed-claude-rerun-2026-04-16-080929`
+- Standalone state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-KWCiYE/standalone-state.json`
+- Claude thread: `thr_r2b92bmmtc`
+- Claude environment: `env_c4way45wmx`
+- Pi thread: `thr_89q4rrbrk7`
+- Pi environment: `env_tcydncwyrh`
+
+Investigation:
+
+- The old mixed Claude prompt, `Reply only in chat with CLAUDE THREAD. Do not modify files.`, reproduced the residual issue: Claude reached `idle` but returned a generic acknowledgement instead of `CLAUDE THREAD`.
+- The captured Claude reasoning showed the prompt arrived intact, but Claude interpreted it as a behavioral constraint rather than the requested response text.
+- Supplying a user title did not fix the old prompt wording. Controlled Claude worktree runs with `Say exactly: CLAUDE THREAD` and `Reply with exactly the text CLAUDE THREAD and nothing else. Do not modify files.` both returned the exact text.
+
+Fixed-prompt rerun:
+
+- Artifact directory: `/tmp/bb-mixed-claude-rerun-fixed-prompt-2026-04-16-081317`
+- Standalone state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-qp8qrb/standalone-state.json`
+- Resolved models: `claude-code=haiku`, `pi=openai/gpt-5.4`
+- Claude thread: `thr_8wcamxbmq5`
+- Claude environment: `env_e35pvs46vj`
+- Pi thread: `thr_vi4aw6u2s4`
+- Pi environment: `env_jf2vjqminp`
+
+Validated:
+
+- The corrected mixed-provider runbook prompts, `Say exactly: CLAUDE THREAD` and `Say exactly: PI THREAD`, returned exact outputs for both providers.
+- Both mixed-provider threads reached `idle` in separate managed worktree environments.

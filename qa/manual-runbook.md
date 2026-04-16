@@ -208,7 +208,7 @@ CLAUDE_THREAD_ID=$(bb thread spawn \
   --model "$CLAUDE_MODEL" \
   --reasoning-level low \
   --new-environment worktree \
-  --prompt "Reply only in chat with CLAUDE THREAD. Do not modify files." \
+  --prompt "Say exactly: CLAUDE THREAD" \
   --json | jq -r '.id')
 
 PI_THREAD_ID=$(bb thread spawn \
@@ -217,7 +217,7 @@ PI_THREAD_ID=$(bb thread spawn \
   --model "$PI_MODEL" \
   --reasoning-level low \
   --new-environment worktree \
-  --prompt "Reply only in chat with PI THREAD. Do not modify files." \
+  --prompt "Say exactly: PI THREAD" \
   --json | jq -r '.id')
 
 bb thread wait "$CLAUDE_THREAD_ID" --status idle --timeout 120
