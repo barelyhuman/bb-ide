@@ -1,4 +1,10 @@
 export {
+  buildProviderAuditReplayBuildArtifact,
+  loadProviderAuditReplayBuildArtifact,
+  parseBuildReplayArtifactArgs,
+  writeProviderAuditReplayBuildArtifacts,
+} from "./build-artifacts.js";
+export {
   importFixtureCorpus,
   parseImportFixturesArgs,
 } from "./fixtures.js";
@@ -12,7 +18,9 @@ export {
 } from "./replay.js";
 export {
   buildLadleStoryData,
+  buildLadleStoryDataFromReplay,
   exportLadleStoryData,
+  exportLadleStoryDataFromStoryData,
   parseExportLadleDataArgs,
 } from "./visual-audit.js";
 export {
@@ -20,12 +28,27 @@ export {
   runProviderAuditCapture,
 } from "./capture.js";
 export type {
+  BuildProviderAuditReplayBuildArtifactArgs,
+  LoadProviderAuditReplayBuildArtifactArgs,
+  ProviderAuditReplayBuildArtifact,
+  ProviderAuditReplayBuildContextWindowSnapshot,
+  ProviderAuditReplayBuildContextWindowUsage,
+  ProviderAuditReplayBuildDelegationSnapshot,
+  ProviderAuditReplayBuildSummary,
+  ProviderAuditReplayBuildTokenUsageSummary,
+  ProviderAuditReplayBuildVerboseTimeline,
+  WriteProviderAuditReplayBuildArtifactsArgs,
+  WriteProviderAuditReplayBuildArtifactsResult,
+} from "./build-artifacts.js";
+export type {
   ProviderAuditBundle,
+  ProviderAuditBuildLadleStoryDataArgs,
   ProviderAuditClientRequest,
   ProviderAuditCliArgs,
   ProviderAuditCoverageIssues,
   ProviderAuditExportLadleDataArgs,
   ProviderAuditExportLadleDataResult,
+  ProviderAuditExportLadleStoryDataArgs,
   ProviderAuditFixtureCoverageSummary,
   ProviderAuditFixtureBundle,
   ProviderAuditGitSnapshot,

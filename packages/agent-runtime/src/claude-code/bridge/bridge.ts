@@ -24,7 +24,10 @@ import type {
   PermissionResult,
   SDKMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { PermissionEscalation } from "@bb/domain";
+import type {
+  PendingInteractionGrantedPermissionProfile,
+  PermissionEscalation,
+} from "@bb/domain";
 import { z } from "zod";
 import {
   decodeBridgeJsonRpcResponse,
@@ -115,7 +118,26 @@ interface PendingInteractiveRequest {
   itemId: string;
   kind: "permission_request";
   originalInput: Record<string, unknown>;
+  permissions: PendingInteractionGrantedPermissionProfile;
   resolve: (value: PermissionResult) => void;
+  toolName: string;
+}
+
+interface ClaudeSessionPermissionGrant {
+  permissions: PendingInteractionGrantedPermissionProfile;
+  toolName: string | null;
+}
+
+interface ClaudeSessionPermissionCoverageArgs {
+  grants: ClaudeSessionPermissionGrant[];
+  permissions: PendingInteractionGrantedPermissionProfile;
+  toolName: string;
+}
+
+interface ClaudeSessionPermissionGrantCoverageArgs {
+  grant: ClaudeSessionPermissionGrant;
+  permissions: PendingInteractionGrantedPermissionProfile;
+  toolName: string;
 }
 
 interface ThreadSession {
@@ -127,6 +149,7 @@ interface ThreadSession {
   permissionEscalation: PermissionEscalation | null;
   permissionMode: ClaudePermissionMode;
   providerThreadId?: string;
+  sessionPermissionGrants: ClaudeSessionPermissionGrant[];
 }
 
 interface CloseThreadSessionArgs {
@@ -169,6 +192,96 @@ let toolCallRequestIdCounter = 0;
 // Runtime waits on thread/stop until the SDK stream drains or this timeout
 // forces the session closed. Stop remains a best-effort success boundary.
 const THREAD_STOP_CLOSE_TIMEOUT_MS = 4_000;
+
+function normalizePermissionPath(path: string): string {
+  return resolvePath(path);
+}
+
+function permissionPathCovers(grantPath: string, requestedPath: string): boolean {
+  const normalizedGrantPath = normalizePermissionPath(grantPath);
+  const normalizedRequestedPath = normalizePermissionPath(requestedPath);
+  if (normalizedGrantPath === normalizedRequestedPath) {
+    return true;
+  }
+  const grantPrefix = normalizedGrantPath.endsWith("/")
+    ? normalizedGrantPath
+    : `${normalizedGrantPath}/`;
+  return normalizedRequestedPath.startsWith(grantPrefix);
+}
+
+function permissionPathListCovers(
+  grantedPaths: string[],
+  requestedPaths: string[],
+): boolean {
+  return requestedPaths.every((requestedPath) =>
+    grantedPaths.some((grantedPath) =>
+      permissionPathCovers(grantedPath, requestedPath)
+    )
+  );
+}
+
+function fileSystemPermissionsCover(
+  granted: PendingInteractionGrantedPermissionProfile["fileSystem"],
+  requested: PendingInteractionGrantedPermissionProfile["fileSystem"],
+): boolean {
+  if (requested === null) {
+    return true;
+  }
+  if (granted === null) {
+    return false;
+  }
+  const grantedReadPaths = [...granted.read, ...granted.write];
+  return (
+    permissionPathListCovers(grantedReadPaths, requested.read) &&
+    permissionPathListCovers(granted.write, requested.write)
+  );
+}
+
+function networkPermissionsCover(
+  granted: PendingInteractionGrantedPermissionProfile["network"],
+  requested: PendingInteractionGrantedPermissionProfile["network"],
+): boolean {
+  return requested?.enabled === true ? granted?.enabled === true : true;
+}
+
+function sessionPermissionGrantCovers(
+  args: ClaudeSessionPermissionGrantCoverageArgs,
+): boolean {
+  if (args.grant.toolName !== null && args.grant.toolName !== args.toolName) {
+    return false;
+  }
+  return (
+    networkPermissionsCover(args.grant.permissions.network, args.permissions.network) &&
+    fileSystemPermissionsCover(
+      args.grant.permissions.fileSystem,
+      args.permissions.fileSystem,
+    )
+  );
+}
+
+function hasClaudeSessionPermissionGrant(
+  args: ClaudeSessionPermissionCoverageArgs,
+): boolean {
+  return args.grants.some((grant) =>
+    sessionPermissionGrantCovers({
+      grant,
+      permissions: args.permissions,
+      toolName: args.toolName,
+    })
+  );
+}
+
+function shouldCacheClaudeSessionPermission(
+  response: ClaudeInteractiveResponse,
+): boolean {
+  return (
+    response.behavior === "allow" &&
+    (
+      response.decisionClassification === "user_permanent" ||
+      response.updatedPermissions !== undefined
+    )
+  );
+}
 
 function send(msg: JsonRpcResponse | SdkMessageNotification | BridgeEventNotification | BridgeToolCallRequest): void {
   process.stdout.write(JSON.stringify(msg) + "\n");
@@ -464,6 +577,9 @@ function buildInteractivePermissionResult(
           ...(response.interrupt === undefined
             ? {}
             : { interrupt: response.interrupt }),
+          ...(response.decisionClassification === undefined
+            ? {}
+            : { decisionClassification: response.decisionClassification }),
           toolUseID: pending.itemId,
         };
       }
@@ -473,6 +589,9 @@ function buildInteractivePermissionResult(
         ...(response.updatedPermissions === undefined
           ? {}
           : { updatedPermissions: response.updatedPermissions }),
+        ...(response.decisionClassification === undefined
+          ? {}
+          : { decisionClassification: response.decisionClassification }),
         toolUseID: pending.itemId,
       };
   }
@@ -528,7 +647,9 @@ function createForwardInteractiveRequest(
       itemId: args.toolUseId,
       kind: "permission_request",
       originalInput: args.input,
+      permissions: params.permissions,
       resolve: finish,
+      toolName: args.toolName,
     });
 
     send({
@@ -562,6 +683,22 @@ function createCanUseTool(
       decisionReason: options.decisionReason,
       suggestions,
     };
+    const requestedPermissions = toPendingInteractionPermissionProfile(requestContext);
+    if (
+      hasClaudeSessionPermissionGrant({
+        grants: threadSession.sessionPermissionGrants,
+        permissions: requestedPermissions,
+        toolName,
+      })
+    ) {
+      return {
+        behavior: "allow",
+        updatedInput: input,
+        toolUseID: options.toolUseID,
+        decisionClassification: "user_permanent",
+      };
+    }
+
     const shouldRequestApproval =
       shouldRequestClaudePermissionApproval(requestContext)
       || (options.suggestions?.length ?? 0) > 0;
@@ -690,6 +827,7 @@ async function handleThreadStart(
     permissionEscalation: params.permissionEscalation,
     permissionMode: params.permissionMode,
     providerThreadId,
+    sessionPermissionGrants: [],
   };
   sessions.set(threadIdRef.current, threadSession);
   session.start();
@@ -743,6 +881,7 @@ async function handleThreadResume(
     permissionEscalation: params.permissionEscalation,
     permissionMode: params.permissionMode,
     ...(providerThreadId ? { providerThreadId } : {}),
+    sessionPermissionGrants: [],
   };
   sessions.set(threadId, threadSession);
   session.start(providerThreadId);
@@ -868,8 +1007,16 @@ export function handleLine(line: string): void {
       return;
     }
 
+    const interactiveResponse = parsedResponse.data;
+    if (shouldCacheClaudeSessionPermission(interactiveResponse)) {
+      threadSession.sessionPermissionGrants.push({
+        permissions: pending.permissions,
+        toolName: pending.toolName,
+      });
+    }
+
     pending.resolve(
-      buildInteractivePermissionResult(pending, parsedResponse.data),
+      buildInteractivePermissionResult(pending, interactiveResponse),
     );
     return;
   }

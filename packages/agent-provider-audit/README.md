@@ -30,6 +30,13 @@ That gives us enough data to regenerate:
 - shared React timeline story data
 - audit summaries
 
+The package build materializes the expensive replay-derived data once:
+
+- `build/replay-artifact.json`
+- `.ladle/fixture-story-data.ts`
+
+Both files are generated and ignored by git.
+
 ## Why This Package Exists
 
 The rendering stack has a few seams:
@@ -251,11 +258,10 @@ the full expanded text for deeper debugging.
 
 ## React Visual Audit
 
-Generate replayed story data for the checked-in fixtures:
+Build the package to generate replayed story data for the checked-in fixtures:
 
 ```bash
 pnpm exec turbo run build --filter=@bb/agent-provider-audit
-node ./packages/agent-provider-audit/dist/cli.js export-ladle-data
 ```
 
 That writes a generated module to `packages/agent-provider-audit/.ladle/fixture-story-data.ts`.
@@ -310,11 +316,11 @@ on the shared React timeline rows.
 
 `pnpm exec turbo run test --filter=@bb/agent-provider-audit`
 
-The package test suite does two things:
+The package test suite does three things:
 
-- replays every checked-in fixture and snapshots a compact summary
+- validates the build-generated replay artifact and snapshots a compact summary
 - verifies replay output can be written on demand for inspection
-- verifies fixture-backed React story data can be exported for Ladle
+- verifies build-generated React story data exists for Ladle
 
 The snapshot is intentionally compact. We do not commit full generated outputs back into the corpus.
 
@@ -323,7 +329,7 @@ Automated replay is the baseline, not the whole review:
 - replay tests should pass
 - coverage issues should be zero for the checked-in corpus
 - CLI verbose timeline snapshots should be spot-checked for new or changed fixtures
-- Ladle story data should regenerate cleanly for the full corpus
+- package build should regenerate Ladle story data cleanly for the full corpus
 - when a fixture wave changes rendering semantics, do a real browser pass in Ladle rather than relying only on generated story data
 
 The practical split is:

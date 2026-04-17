@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 
 import { parseCliArgs, runProviderAuditCapture } from "./capture.js";
+import {
+  parseBuildReplayArtifactArgs,
+  writeProviderAuditReplayBuildArtifacts,
+} from "./build-artifacts.js";
 import { importFixtureCorpus, parseImportFixturesArgs } from "./fixtures.js";
 import {
   parseReplayFixturesArgs,
@@ -14,6 +18,22 @@ import {
 
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
+  if (argv[0] === "build-replay-artifact") {
+    const { args } = parseBuildReplayArtifactArgs(argv.slice(1));
+    const result = writeProviderAuditReplayBuildArtifacts(args);
+    console.log(
+      JSON.stringify(
+        {
+          artifactPath: result.artifactPath,
+          fixtureCount: result.fixtureCount,
+          ladleOutputPath: result.ladleOutputPath,
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
   if (argv[0] === "import-fixtures") {
     const { args } = parseImportFixturesArgs(argv.slice(1));
     const result = importFixtureCorpus(args);

@@ -1190,6 +1190,7 @@ export function createClaudeCodeProviderAdapter(
           kind: "permission_request",
           behavior: "deny",
           message: "Permission request denied",
+          decisionClassification: "user_reject",
         };
       }
 
@@ -1200,6 +1201,7 @@ export function createClaudeCodeProviderAdapter(
         return {
           kind: "permission_request",
           behavior: "allow",
+          decisionClassification: "user_temporary",
         };
       }
 
@@ -1213,6 +1215,7 @@ export function createClaudeCodeProviderAdapter(
       return {
         kind: "permission_request",
         behavior: "allow",
+        decisionClassification: "user_permanent",
         ...(updatedPermissions === undefined
           ? {}
           : { updatedPermissions }),

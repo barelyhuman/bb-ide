@@ -1,4 +1,7 @@
-import { getProjectSourceByHost } from "@bb/db";
+import {
+  findEnvironmentByHostPath,
+  getProjectSourceByHost,
+} from "@bb/db";
 import type {
   Environment,
   LocalPathProjectSource,
@@ -301,6 +304,25 @@ export async function readProjectSourceWorkspaceStatus(
   };
 }
 
+async function readExistingProjectSourceWorkspaceStatus(
+  deps: LoggedSandboxWorkSessionDeps,
+  args: ProjectSourceWorkspaceStatusArgs,
+): Promise<WorkspaceStatus | null> {
+  const environment = findEnvironmentByHostPath(
+    deps.db,
+    args.source.hostId,
+    args.source.path,
+  );
+  if (!environment || environment.status !== "ready" || !environment.isGitRepo) {
+    return null;
+  }
+
+  return readWorkspaceStatus(deps, {
+    environment,
+    workspacePath: args.source.path,
+  });
+}
+
 async function readPromotionWorkspaceFacts(
   deps: LoggedSandboxWorkSessionDeps,
   environment: Environment,
@@ -322,6 +344,35 @@ async function readPromotionWorkspaceFacts(
   const environmentStatus = await readEnvironmentWorkspaceStatus(deps, {
     environment,
   });
+  return {
+    eligibilityUnavailableReason: null,
+    environmentStatus,
+    primaryStatus,
+    source: eligibility.source,
+  };
+}
+
+async function readPromotionWorkspaceFactsFromExistingPrimary(
+  deps: LoggedSandboxWorkSessionDeps,
+  environment: Environment,
+): Promise<PromotionWorkspaceFacts> {
+  const source = getLocalPathSourceForEnvironment(deps, environment);
+  const eligibility = getPromotionWorkspaceEligibility({ environment, source });
+  if (eligibility.unavailableReason) {
+    return {
+      eligibilityUnavailableReason: eligibility.unavailableReason,
+      environmentStatus: null,
+      primaryStatus: null,
+      source: eligibility.source,
+    };
+  }
+
+  const primaryStatus = await readExistingProjectSourceWorkspaceStatus(deps, {
+    source: eligibility.source,
+  });
+  const environmentStatus = primaryStatus
+    ? await readEnvironmentWorkspaceStatus(deps, { environment })
+    : null;
   return {
     eligibilityUnavailableReason: null,
     environmentStatus,
@@ -389,7 +440,11 @@ export async function demoteEnvironmentIfPromoted(
   deps: LoggedSandboxWorkSessionDeps,
   args: DemoteEnvironmentArgs,
 ): Promise<void> {
-  const state = await deriveEnvironmentPromotionState(deps, args);
+  const facts = await readPromotionWorkspaceFactsFromExistingPrimary(
+    deps,
+    args.environment,
+  );
+  const state = derivePromotionStateFromFacts(args.environment, facts);
   if (!state.isPromoted) {
     return;
   }

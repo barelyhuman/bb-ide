@@ -415,6 +415,70 @@ describe("public thread lifecycle regressions", () => {
     }
   });
 
+  it("queues a managed worktree follow-up without provisioning the primary checkout when not promoted", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-unpromoted-send",
+      });
+      const { project, source } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/unpromoted-send",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: `${source.path}/.bb-worktrees/thread`,
+        managed: true,
+        workspaceProvisionType: "managed-worktree",
+        branchName: "bb/unpromoted-send",
+        defaultBranch: "main",
+      });
+      const thread = seedThread(harness.deps, {
+        environmentId: environment.id,
+        projectId: project.id,
+        status: "idle",
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/threads/${thread.id}/send`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            mode: "auto",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Continue" }],
+          }),
+        },
+      );
+
+      const startCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" &&
+          command.threadId === thread.id,
+      );
+      expect(startCommand.command).toMatchObject({
+        environmentId: environment.id,
+      });
+
+      const queuedCommandTypes = harness.db
+        .select({ type: hostDaemonCommands.type })
+        .from(hostDaemonCommands)
+        .all()
+        .map((row) => row.type);
+      expect(queuedCommandTypes).not.toContain("environment.provision");
+      expect(queuedCommandTypes).not.toContain("workspace.status");
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({ ok: true });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("demotes a promoted environment before sending a queued draft", async () => {
     const harness = await createTestAppHarness();
     try {

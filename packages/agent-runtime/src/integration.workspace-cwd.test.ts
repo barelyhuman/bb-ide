@@ -17,7 +17,7 @@ import {
   getCompletedCommandOutputs,
   getCompletedCommands,
   newThreadId,
-  resolveDefaultModel,
+  resolveRuntimeOptions,
   turnCompletedCountForThread,
   waitForRuntimeCondition,
 } from "./test/runtime-integration-harness.js";
@@ -43,32 +43,24 @@ for (const providerId of providers) {
 
       try {
         const threadId = newThreadId();
-        const model = await resolveDefaultModel(providerId, ctx);
+        const options = await resolveRuntimeOptions({
+          ctx,
+          providerId,
+          preset: "full",
+        });
         await ctx.runtime.startThread({
           environmentId: "env-1",
           threadId,
           projectId: "test-project",
           providerId,
-          options: {
-            model,
-            serviceTier: "default",
-            reasoningLevel: "medium",
-            permissionMode: "full",
-            permissionEscalation: null,
-          },
+          options,
           instructions:
             "When the user asks you to run exact shell commands, use your shell or command execution tool and preserve the command output.",
         });
 
         await ctx.runtime.runTurn({
           threadId,
-          options: {
-            model,
-            serviceTier: "default",
-            reasoningLevel: "medium",
-            permissionMode: "full",
-            permissionEscalation: null,
-          },
+          options,
           input: [{
             type: "text",
             text:

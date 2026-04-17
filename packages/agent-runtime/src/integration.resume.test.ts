@@ -120,7 +120,7 @@ for (const providerId of providers) {
   });
 }
 
-describe("codex resume scenarios", () => {
+describe.concurrent("codex resume scenarios", () => {
 
   // Resume with dynamic tools
   it("preserves dynamic tools across resume", async () => {

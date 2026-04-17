@@ -1,7 +1,6 @@
 // Real provider active-turn control coverage.
 import { describe, expect, it } from "vitest";
 import {
-  getThread,
   getThreadEvents,
   sendTextMessage,
   stopThread,
@@ -17,13 +16,13 @@ import {
   sendLongRunningTurnAndWaitStarted,
   STOP_TIMEOUT_MS,
   TEST_TIMEOUT_MS,
-  waitForUserMessageAckTextAfter,
+  waitForInputAcceptedAfter,
 } from "./provider-smoke-harness.js";
 
 describe("real provider control integration", () => {
   for (const providerId of REAL_PROVIDER_IDS) {
     it.concurrent(
-      `${providerId} can steer an active turn`,
+      `${providerId} can steer, stop, and recover an active turn`,
       async () => {
         const { harness, thread } = await createRealThread({
           providerId,
@@ -34,7 +33,7 @@ describe("real provider control integration", () => {
         });
 
         try {
-          await sendLongRunningTurnAndWaitStarted({
+          const activeTurn = await sendLongRunningTurnAndWaitStarted({
             providerId,
             harness,
             threadId: thread.id,
@@ -50,47 +49,12 @@ describe("real provider control integration", () => {
             mode: "steer",
             text: steerText,
           });
-          await waitForUserMessageAckTextAfter({
+          const inputAccepted = await waitForInputAcceptedAfter({
             baselineSequence: steerBaselineSequence,
             harness,
-            text: steerText,
             threadId: thread.id,
           });
-
-          const refreshedThread = await getThread(harness.api, thread.id);
-          if (refreshedThread.status === "active") {
-            await stopThread(harness.api, thread.id);
-            await waitForThreadStatus(
-              harness.api,
-              thread.id,
-              "idle",
-              STOP_TIMEOUT_MS,
-            );
-          }
-        } finally {
-          await harness.cleanup();
-        }
-      },
-      TEST_TIMEOUT_MS,
-    );
-
-    it.concurrent(
-      `${providerId} can stop an active turn and recover`,
-      async () => {
-        const { harness, thread } = await createRealThread({
-          providerId,
-          workspace: {
-            path: null,
-            type: "unmanaged",
-          },
-        });
-
-        try {
-          await sendLongRunningTurnAndWaitStarted({
-            providerId,
-            harness,
-            threadId: thread.id,
-          });
+          expect(inputAccepted.turnId).toBe(activeTurn.turnId);
 
           await stopThread(harness.api, thread.id);
           await waitForThreadStatus(
@@ -104,7 +68,7 @@ describe("real provider control integration", () => {
           const { events, output } = await sendAndWaitForIdle({
             providerId,
             threadId: thread.id,
-            text: "Reply with a short confirmation that you are ready for the next task.",
+            text: "Reply with exactly: READY",
             harness,
           });
           expect(countTurnEvents(events, "turn/completed")).toBeGreaterThan(

@@ -51,11 +51,13 @@ interface WaitForThreadEventArgs {
   threadId: string;
 }
 
-interface WaitForUserMessageAckTextArgs extends WaitForThreadEventArgs {
-  text: string;
+export interface WaitForTurnStartedResult {
+  sequence: number;
+  turnId: string;
 }
 
-export interface WaitForTurnStartedResult {
+export interface WaitForInputAcceptedResult {
+  clientRequestSequence: number;
   sequence: number;
   turnId: string;
 }
@@ -103,6 +105,8 @@ export const TEST_TIMEOUT_MS = scaleTimeoutMs(120_000);
 
 // Concurrent real-provider harnesses each install daemon shutdown handlers.
 process.setMaxListeners(Math.max(process.getMaxListeners(), 64));
+
+const providerPrerequisitePromises = new Map<RealProviderId, Promise<void>>();
 
 const FAST_EXECUTION_BY_PROVIDER: Record<
   RealProviderId,
@@ -161,21 +165,6 @@ function hasCompletedAgentMessageAfter(
   );
 }
 
-function hasUserMessageAckTextAfter(
-  events: ThreadEventRow[],
-  sequence: number,
-  text: string,
-): boolean {
-  return events.some((event) =>
-    event.seq > sequence &&
-    event.type === "item/completed" &&
-    event.data.item.type === "userMessage" &&
-    event.data.item.content.some((content) =>
-      content.type === "text" && content.text.includes(text),
-    ),
-  );
-}
-
 function findTurnStartedAfter(
   events: ThreadEventRow[],
   sequence: number,
@@ -188,6 +177,32 @@ function findTurnStartedAfter(
       };
     }
   }
+  return null;
+}
+
+function findInputAcceptedAfter(
+  events: ThreadEventRow[],
+  sequence: number,
+): WaitForInputAcceptedResult | null {
+  const requestSequence = findLatestClientTurnRequestSequenceAfter(events, sequence);
+  if (requestSequence === null) {
+    return null;
+  }
+
+  for (const event of events) {
+    if (
+      event.seq > requestSequence &&
+      event.type === "turn/input/accepted" &&
+      event.data.clientRequestSequence === requestSequence
+    ) {
+      return {
+        clientRequestSequence: requestSequence,
+        sequence: event.seq,
+        turnId: event.data.turnId,
+      };
+    }
+  }
+
   return null;
 }
 
@@ -265,33 +280,34 @@ async function waitForTurnStartedAfter(
   );
 }
 
-export async function waitForUserMessageAckTextAfter(
-  args: WaitForUserMessageAckTextArgs,
-): Promise<void> {
+export async function waitForInputAcceptedAfter(
+  args: WaitForThreadEventArgs,
+): Promise<WaitForInputAcceptedResult> {
   const startedAt = Date.now();
   while (Date.now() - startedAt <= ACTIVE_TIMEOUT_MS) {
     const [thread, events] = await Promise.all([
       getThread(args.harness.api, args.threadId),
       getThreadEvents(args.harness.api, args.threadId),
     ]);
-    if (hasUserMessageAckTextAfter(events, args.baselineSequence, args.text)) {
-      return;
+    const inputAccepted = findInputAcceptedAfter(events, args.baselineSequence);
+    if (inputAccepted) {
+      return inputAccepted;
     }
     const errorEvent = findErrorAfter(events, args.baselineSequence);
     if (thread.status === "error" || errorEvent) {
       throw new Error(
-        `Thread failed before user-message ack containing ${JSON.stringify(args.text)}. Diagnostics: ${await buildThreadDiagnostics(args)}`,
+        `Thread failed before turn/input/accepted. Diagnostics: ${await buildThreadDiagnostics(args)}`,
       );
     }
     if (hasTurnCompletedAfter(events, args.baselineSequence)) {
       throw new Error(
-        `Turn completed before user-message ack containing ${JSON.stringify(args.text)}. Diagnostics: ${await buildThreadDiagnostics(args)}`,
+        `Turn completed before turn/input/accepted. Diagnostics: ${await buildThreadDiagnostics(args)}`,
       );
     }
     await new Promise((resolve) => setTimeout(resolve, REAL_POLL_INTERVAL_MS));
   }
   throw new Error(
-    `Timed out waiting for user-message ack containing ${JSON.stringify(args.text)}. Diagnostics: ${await buildThreadDiagnostics(args)}`,
+    `Timed out waiting for turn/input/accepted. Diagnostics: ${await buildThreadDiagnostics(args)}`,
   );
 }
 
@@ -327,17 +343,42 @@ export async function pathExists(targetPath: string): Promise<boolean> {
 export async function assertProviderPrerequisites(
   providerId: RealProviderId,
 ): Promise<void> {
+  const cached = providerPrerequisitePromises.get(providerId);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = assertProviderPrerequisitesUncached(providerId);
+  providerPrerequisitePromises.set(providerId, promise);
+
+  try {
+    return await promise;
+  } catch (error) {
+    if (providerPrerequisitePromises.get(providerId) === promise) {
+      providerPrerequisitePromises.delete(providerId);
+    }
+    throw error;
+  }
+}
+
+async function assertProviderPrerequisitesUncached(
+  providerId: RealProviderId,
+): Promise<void> {
   await loadProjectEnvFile();
   await assertCliInstalled(providerId === "claude-code" ? "claude" : providerId);
 }
 
 const execFile = promisify(execFileCb);
 
+function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
+  return error instanceof Error && "code" in error;
+}
+
 async function assertCliInstalled(command: string): Promise<void> {
   try {
     await execFile(command, ["--help"]);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+    if (isErrnoException(error) && error.code === "ENOENT") {
       throw new Error(`${command} CLI is not installed or not on PATH`);
     }
     // --help returned non-zero but the binary exists - that's fine.

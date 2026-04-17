@@ -352,3 +352,65 @@ Findings:
 - Pi subscription-backed auth material is written for `anthropic` from Claude subscription auth and `openai-codex` from Codex subscription auth.
 - The runbook now prefers subscription-backed Pi models, first `anthropic/claude-opus-4-7`, then `openai-codex/gpt-5.4`, before falling back to generic provider defaults.
 - The Pi bridge now resolves `openai-codex/...` model IDs that it can advertise through model listing, so Codex subscription-backed Pi runs do not silently fall back to the Pi SDK default.
+
+## Full Standalone Run
+
+Date: 2026-04-17
+Operator: Codex
+Status: passed
+Standalone workflow: `pnpm qa:standalone:start` / `pnpm qa:standalone:stop`
+Run log: `/tmp/bb-manual-qa.log`
+
+Resolved models:
+
+- `codex`: `gpt-5.4`
+- `claude-code`: `claude-haiku-4-5`
+- `pi`: `anthropic/claude-opus-4-7`
+
+Standalone state path: `/var/folders/lr/f3ynv4xj6p77kvx_rz7zgzg00000gn/T/bb-standalone-JFiMJf/standalone-state.json`
+Smoke thread: `thr_g8jasttwje`
+Smoke worktree thread: `thr_z4vetcjt5m`
+Smoke worktree environment: `env_prz2y4znvv`
+
+Shared environment:
+
+- Thread A: `thr_g2gjuapxf6`
+- Thread B: `thr_5i54uhq5nn`
+- Shared environment: `env_zy89756i83`
+
+Mixed-provider worktrees:
+
+- Claude thread: `thr_357wpcs5mm`
+- Claude environment: `env_i4zk3d9zg3`
+- Pi thread: `thr_97fdb877ub`
+- Pi environment: `env_b24b6j2x2v`
+
+Promote/demote:
+
+- Promote thread: `thr_5i6hq6p95j`
+- Promote environment: `env_p2265t35xz`
+- Commit created by QA: `931f2fb90a0e724bed06c7a47de5d9ee1eb65207`
+
+Provider-specific pass:
+
+- Codex chat thread: `thr_qeiis9yda8`
+- Codex worktree thread: `thr_mnp4ktimp2`
+- Claude chat thread: `thr_xdris7rguc`
+- Claude worktree thread: `thr_f48c9rsrsm`
+- Pi chat thread: `thr_hx6kirfb3i`
+- Pi worktree thread: `thr_yhk8fs3r8e`
+
+Validated:
+
+- Smoke unmanaged thread reached `idle`, produced output, accepted a follow-up, and archived/unarchived correctly.
+- Smoke managed worktree reached `idle`; environment status and diff routes returned data.
+- Thread A and Thread B reused the same direct-workspace environment, completed alternating follow-ups, and stayed usable after archiving one sibling.
+- Claude and Pi worktree threads completed in separate managed environments.
+- Managed worktree commit, promote, and demote all succeeded.
+- The server stayed reachable across a graceful daemon restart and a mid-turn daemon restart; the smoke thread recovered and accepted work after restart.
+- Each provider completed hello, uppercase follow-up, active-turn stop, and worktree file-creation checks.
+
+Cleanup:
+
+- The scripted pass completed, then its zsh cleanup trap hit the read-only variable name `status`.
+- Explicit cleanup immediately after the pass succeeded: `pnpm qa:standalone:stop --state ...` killed PIDs `66108` and `66115` and removed the standalone root; `pnpm qa:standalone:cleanup` reported no remaining roots.

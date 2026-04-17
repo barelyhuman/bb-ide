@@ -13,6 +13,10 @@
       "dependsOn": ["bundle", "^build"],
       "outputs": ["dist/**"]
     },
+    "@bb/agent-provider-audit#build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", "build/**", ".ladle/fixture-story-data.ts"]
+    },
     "template:build": {
       "dependsOn": ["build", "^build"],
       "cache": false,

@@ -4,8 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect } from "vitest";
 import type {
+  AvailableModel,
   PendingInteractionCreate,
   PendingInteractionResolution,
+  ReasoningLevel,
   ThreadEvent,
   ToolCallRequest,
   ToolCallResponse,
@@ -121,6 +123,18 @@ export const runtimeOptionsTemplates = {
   "workspace-write-ask": workspaceWriteAskRuntimeOptionsTemplate,
   "workspace-write-deny": workspaceWriteDenyRuntimeOptionsTemplate,
 } satisfies Record<RuntimeOptionsPreset, RuntimeOptionsTemplate>;
+
+const FAST_INTEGRATION_MODELS_BY_PROVIDER: Record<string, readonly string[]> = {
+  codex: ["gpt-5.4"],
+  "claude-code": ["claude-haiku-4-5"],
+  pi: [
+    "openai-codex/gpt-5.4-mini",
+    "anthropic/claude-haiku-4-5",
+  ],
+};
+
+const INTEGRATION_REASONING_LEVEL = "low" satisfies ReasoningLevel;
+const resolvedIntegrationModelPromises = new Map<string, Promise<string>>();
 
 export function turnCompletedCount(events: ThreadEvent[]): number {
   return events.filter((e) => e.type === "turn/completed").length;
@@ -571,13 +585,63 @@ export async function resolveDefaultModel(
   providerId: string,
   ctx: TestContext,
 ): Promise<string> {
+  const cached = resolvedIntegrationModelPromises.get(providerId);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = resolveDefaultModelUncached(providerId, ctx);
+  resolvedIntegrationModelPromises.set(providerId, promise);
+
+  try {
+    return await promise;
+  } catch (error) {
+    if (resolvedIntegrationModelPromises.get(providerId) === promise) {
+      resolvedIntegrationModelPromises.delete(providerId);
+    }
+    throw error;
+  }
+}
+
+async function resolveDefaultModelUncached(
+  providerId: string,
+  ctx: TestContext,
+): Promise<string> {
   const models = await ctx.runtime.listModels({ providerId });
-  const model = models.find((availableModel) => availableModel.isDefault)?.model
-    ?? models[0]?.model;
+  const model = resolveIntegrationModel({
+    models,
+    providerId,
+  });
   if (!model) {
     throw new Error(`Provider "${providerId}" returned no available models`);
   }
   return model;
+}
+
+interface ResolveIntegrationModelArgs {
+  models: AvailableModel[];
+  providerId: string;
+}
+
+function resolveIntegrationModel(args: ResolveIntegrationModelArgs): string | undefined {
+  const preferredModels = FAST_INTEGRATION_MODELS_BY_PROVIDER[args.providerId] ?? [];
+  for (const preferredModel of preferredModels) {
+    const model = args.models.find((availableModel) =>
+      availableModel.model === preferredModel
+    );
+    if (model) {
+      return model.model;
+    }
+  }
+
+  return args.models.find((availableModel) => availableModel.isDefault)?.model
+    ?? args.models[0]?.model;
+}
+
+function resolveIntegrationServiceTier(
+  providerId: string,
+): RuntimeOptionsTemplate["serviceTier"] {
+  return providerId === "codex" ? "fast" : "default";
 }
 
 export async function resolveRuntimeOptions(
@@ -585,6 +649,8 @@ export async function resolveRuntimeOptions(
 ): Promise<AgentRuntimeExecutionOptions> {
   return {
     ...runtimeOptionsTemplates[args.preset],
+    reasoningLevel: INTEGRATION_REASONING_LEVEL,
+    serviceTier: resolveIntegrationServiceTier(args.providerId),
     model: await resolveDefaultModel(args.providerId, args.ctx),
   };
 }

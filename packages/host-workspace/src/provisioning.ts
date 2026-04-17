@@ -4,7 +4,10 @@ import {
   DEFAULT_ENV_SETUP_SCRIPT_NAME,
   type ProvisioningTranscriptEntry,
 } from "@bb/domain";
-import { spawnPortableOutputProcess } from "@bb/process-utils";
+import {
+  spawnPortableOutputProcess,
+  type PortableOutputChildProcess,
+} from "@bb/process-utils";
 import { Workspace } from "./workspace.js";
 import { pathExists, runGit, WorkspaceError, type GitCommandResult } from "./git.js";
 
@@ -55,6 +58,11 @@ interface SetupScriptCommand {
 interface BuildSetupScriptCommandArgs {
   platform: NodeJS.Platform;
   scriptPath: string;
+}
+
+interface KillSetupScriptProcessArgs {
+  child: PortableOutputChildProcess;
+  signal: NodeJS.Signals;
 }
 
 function buildGitHubCloneEnv(sourcePath: string): NodeJS.ProcessEnv | undefined {
@@ -186,6 +194,23 @@ export function buildSetupScriptCommand(
   };
 }
 
+function shouldRunSetupScriptInProcessGroup(): boolean {
+  return process.platform !== "win32";
+}
+
+function killSetupScriptProcess(args: KillSetupScriptProcessArgs): void {
+  if (shouldRunSetupScriptInProcessGroup() && args.child.pid !== undefined) {
+    try {
+      process.kill(-args.child.pid, args.signal);
+      return;
+    } catch {
+      // Fall back to killing the direct child if the process group is gone.
+    }
+  }
+
+  args.child.kill(args.signal);
+}
+
 export async function createWorktree(args: CreateWorkspaceArgs): Promise<{ path: string }> {
   if (await ensureExistingWorkspaceMatches(args.targetPath, args.branchName)) {
     return { path: args.targetPath };
@@ -298,6 +323,7 @@ export async function runSetupScript(
     command: command.command,
     args: command.args,
     cwd: args.workspacePath,
+    detached: shouldRunSetupScriptInProcessGroup(),
   });
 
   const outputChunks: string[] = [];
@@ -318,7 +344,10 @@ export async function runSetupScript(
 
   const timeout = setTimeout(() => {
     timedOut = true;
-    child.kill("SIGKILL");
+    killSetupScriptProcess({
+      child,
+      signal: "SIGKILL",
+    });
   }, timeoutMs);
 
   try {

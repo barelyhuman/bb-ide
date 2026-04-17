@@ -14,7 +14,7 @@ import {
 describe("real provider turn integration", () => {
   for (const providerId of REAL_PROVIDER_IDS) {
     it.concurrent(
-      `${providerId} completes a single turn end-to-end`,
+      `${providerId} completes single and multi-turn threads end-to-end`,
       async () => {
         const { harness, thread } = await createRealThread({
           providerId,
@@ -25,44 +25,26 @@ describe("real provider turn integration", () => {
         });
 
         try {
-          const { events, output } = await sendAndWaitForIdle({
+          const firstTurn = await sendAndWaitForIdle({
             providerId,
             threadId: thread.id,
-            text: "Reply with a short hello in one sentence.",
+            text:
+              "Remember this word for later: orchard. Also reply with a short hello in one sentence.",
             harness,
           });
 
-          expect(countTurnEvents(events, "turn/started")).toBeGreaterThanOrEqual(1);
-          expect(countTurnEvents(events, "turn/completed")).toBeGreaterThanOrEqual(1);
-          expectNonEmptyOutput(output, `${providerId} single-turn output`);
+          expect(countTurnEvents(firstTurn.events, "turn/started"))
+            .toBeGreaterThanOrEqual(1);
+          expect(countTurnEvents(firstTurn.events, "turn/completed"))
+            .toBeGreaterThanOrEqual(1);
+          expectNonEmptyOutput(
+            firstTurn.output,
+            `${providerId} single-turn output`,
+          );
 
           const timeline = await getThreadTimeline(harness.api, thread.id);
           expect(hasAssistantTimelineMessage(timeline)).toBe(true);
-        } finally {
-          await harness.cleanup();
-        }
-      },
-      TEST_TIMEOUT_MS,
-    );
 
-    it.concurrent(
-      `${providerId} handles a multi-turn thread end-to-end`,
-      async () => {
-        const { harness, thread } = await createRealThread({
-          providerId,
-          workspace: {
-            path: null,
-            type: "unmanaged",
-          },
-        });
-
-        try {
-          await sendAndWaitForIdle({
-            providerId,
-            threadId: thread.id,
-            text: "Remember this word for later: orchard.",
-            harness,
-          });
           const { events, output } = await sendAndWaitForIdle({
             providerId,
             threadId: thread.id,

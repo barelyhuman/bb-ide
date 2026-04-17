@@ -667,6 +667,7 @@ describe("claude-code provider adapter", () => {
     ).toEqual({
       kind: "permission_request",
       behavior: "allow",
+      decisionClassification: "user_permanent",
       updatedPermissions: [
         {
           type: "addRules",
@@ -722,6 +723,7 @@ describe("claude-code provider adapter", () => {
     ).toEqual({
       kind: "permission_request",
       behavior: "allow",
+      decisionClassification: "user_permanent",
       updatedPermissions: [
         {
           type: "addDirectories",
@@ -774,6 +776,7 @@ describe("claude-code provider adapter", () => {
     ).toEqual({
       kind: "permission_request",
       behavior: "allow",
+      decisionClassification: "user_permanent",
       updatedPermissions: [
         {
           type: "addDirectories",
@@ -846,6 +849,7 @@ describe("claude-code provider adapter", () => {
     ).toEqual({
       kind: "permission_request",
       behavior: "allow",
+      decisionClassification: "user_temporary",
     });
   });
 

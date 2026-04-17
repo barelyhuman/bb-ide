@@ -63,11 +63,19 @@ function extractRawCommandType(rawCommand: unknown): string | undefined {
 
 type FetchFn = typeof fetch;
 
+export interface CommandResultRetryOptions {
+  maxTimeoutMs: number;
+  minTimeoutMs: number;
+  randomize: boolean;
+  retries: number;
+}
+
 export interface CreateServerClientOptions {
   serverUrl: string;
   hostKey: string;
   logger: HostDaemonLogger;
   getSessionId: () => string;
+  commandResultRetryOptions?: CommandResultRetryOptions;
   fetchFn?: FetchFn;
 }
 
@@ -108,6 +116,12 @@ export interface ServerClient {
 
 const COMMAND_RESULT_RETRIES = 5;
 const INTERACTIVE_REQUEST_REGISTRATION_RETRIES = 5;
+const DEFAULT_COMMAND_RESULT_RETRY_OPTIONS: CommandResultRetryOptions = {
+  maxTimeoutMs: 2_000,
+  minTimeoutMs: 100,
+  randomize: true,
+  retries: COMMAND_RESULT_RETRIES,
+};
 
 function usesSecureRuntimeMaterialTransport(serverUrl: string): boolean {
   const parsed = new URL(serverUrl);
@@ -124,6 +138,8 @@ export function createServerClient(
   options: CreateServerClientOptions,
 ): ServerClient {
   const fetchFn = options.fetchFn ?? fetch;
+  const commandResultRetryOptions =
+    options.commandResultRetryOptions ?? DEFAULT_COMMAND_RESULT_RETRY_OPTIONS;
 
   function requireSessionId(): string {
     const sessionId = options.getSessionId();
@@ -341,10 +357,10 @@ export function createServerClient(
           }
         },
         {
-          retries: COMMAND_RESULT_RETRIES,
-          minTimeout: 100,
-          maxTimeout: 2_000,
-          randomize: true,
+          retries: commandResultRetryOptions.retries,
+          minTimeout: commandResultRetryOptions.minTimeoutMs,
+          maxTimeout: commandResultRetryOptions.maxTimeoutMs,
+          randomize: commandResultRetryOptions.randomize,
           onFailedAttempt(context): void {
             options.logger.warn(
               {

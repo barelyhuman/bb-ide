@@ -3,117 +3,20 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
-import { extractThreadContextWindowUsage } from "@bb/core-ui";
-import type { ViewMessage, ViewProjection } from "@bb/domain";
-import type {
-  ProviderAuditBundle,
-  ProviderAuditReplayFixturesResult,
-} from "../src/types.js";
+import type { ProviderAuditReplayBuildArtifact } from "../src/build-artifacts.js";
+import { loadProviderAuditReplayBuildArtifact } from "../src/build-artifacts.js";
 import {
-  collectCoverageIssues,
   replayFixtures,
-  summarizeFixtureCoverage,
 } from "../src/replay.js";
 import {
-  buildLadleStoryData,
-  exportLadleStoryData,
+  DEFAULT_LADLE_OUTPUT_PATH,
 } from "../src/visual-audit.js";
 
 const TEMP_DIRS: string[] = [];
-const CHECKED_IN_FIXTURE_ROOT = fixtureRoot();
-let checkedInReplay: ProviderAuditReplayFixturesResult;
+let checkedInArtifact: ProviderAuditReplayBuildArtifact;
 
 function fixtureRoot(): string {
   return join(dirname(fileURLToPath(import.meta.url)), "../fixtures");
-}
-
-function countMessageKinds(messages: ViewMessage[]): Record<string, number> {
-  return messages.reduce<Record<string, number>>((counts, message) => {
-    counts[message.kind] = (counts[message.kind] ?? 0) + 1;
-    return counts;
-  }, {});
-}
-
-function flattenProjectionMessages(projection: ViewProjection): ViewMessage[] {
-  const messages: ViewMessage[] = [];
-  for (const entry of projection.entries) {
-    if (entry.kind === "message") {
-      messages.push(entry.message);
-      continue;
-    }
-    if (entry.turn.messages) {
-      messages.push(...entry.turn.messages);
-      continue;
-    }
-    if (entry.turn.terminalMessage) {
-      messages.push(entry.turn.terminalMessage);
-    }
-  }
-  return messages;
-}
-
-function buildTimelinePreview(text: string): string[] {
-  return text
-    .split("\n")
-    .filter((line) => line.trim().length > 0);
-}
-
-function trimTrailingWhitespace(text: string): string {
-  return text
-    .split("\n")
-    .map((line) => line.replace(/[ \t]+$/u, ""))
-    .join("\n");
-}
-
-type TokenUsageTranslatedCapture = Extract<
-  ProviderAuditBundle["translatedCaptures"][number],
-  { event: { type: "thread/tokenUsage/updated" } }
->;
-
-interface TokenUsageSummarySnapshot {
-  tokenUsageEventCount: number;
-  nonNullModelContextWindowCount: number;
-  distinctModelContextWindows: number[];
-}
-
-interface FixtureContextWindowSnapshot {
-  fixture: string;
-  contextWindowUsage: ReturnType<typeof extractThreadContextWindowUsage>;
-  tokenUsageSummary: TokenUsageSummarySnapshot;
-}
-
-function isTokenUsageTranslatedCapture(
-  entry: ProviderAuditBundle["translatedCaptures"][number],
-): entry is TokenUsageTranslatedCapture {
-  return entry.event.type === "thread/tokenUsage/updated";
-}
-
-function buildFixtureContextWindowSnapshot(
-  bundle: ProviderAuditBundle,
-  fixtureId: string,
-): FixtureContextWindowSnapshot {
-  const tokenUsageEvents = bundle.translatedCaptures.filter(
-    isTokenUsageTranslatedCapture,
-  );
-  const distinctModelContextWindows = [
-    ...new Set(
-      tokenUsageEvents
-        .map((entry) => entry.event.tokenUsage.modelContextWindow)
-        .filter((value): value is number => value !== null),
-    ),
-  ].sort((left, right) => left - right);
-
-  return {
-    fixture: fixtureId,
-    contextWindowUsage: extractThreadContextWindowUsage(bundle.threadEventRows),
-    tokenUsageSummary: {
-      tokenUsageEventCount: tokenUsageEvents.length,
-      nonNullModelContextWindowCount: tokenUsageEvents.filter(
-        (entry) => entry.event.tokenUsage.modelContextWindow !== null,
-      ).length,
-      distinctModelContextWindows,
-    },
-  };
 }
 
 afterEach(() => {
@@ -123,83 +26,53 @@ afterEach(() => {
 });
 
 describe("@bb/agent-provider-audit fixture replay", () => {
-  // CI runs this fixture corpus replay alongside many other package tests, and
-  // the shared-machine contention can make the one-time replay setup much
-  // slower than it is locally.
-  beforeAll(
-    () => {
-      checkedInReplay = replayFixtures({
-        fixtureRoot: CHECKED_IN_FIXTURE_ROOT,
-      });
-    },
-    120_000,
-  );
+  beforeAll(() => {
+    checkedInArtifact = loadProviderAuditReplayBuildArtifact();
+  });
 
   it("replays every checked-in fixture into stable summaries", () => {
-    expect(checkedInReplay.fixtures.length).toBeGreaterThan(0);
+    expect(checkedInArtifact.fixtureCount).toBeGreaterThan(0);
 
-    for (const { fixture, bundle } of checkedInReplay.fixtures) {
+    for (const summary of checkedInArtifact.summaries) {
       expect(
-        bundle.auditReport.summary.translatedThreadEventCount,
-        `Expected translated events for ${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`,
+        summary.translatedThreadEventCount,
+        `Expected translated events for ${summary.fixture}`,
       ).toBeGreaterThan(0);
       expect(
-        bundle.auditReport.summary.unexpectedUntranslatedRawEventCount,
-        `Expected zero unexpected untranslated raw events for ${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`,
+        summary.unexpectedUntranslatedRawEventCount,
+        `Expected zero unexpected untranslated raw events for ${summary.fixture}`,
       ).toBe(0);
     }
 
-    const summary = checkedInReplay.fixtures.map(({ fixture, bundle }) => ({
-      fixture: `${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`,
-      rawProviderEventCount: bundle.auditReport.summary.rawProviderEventCount,
-      translatedThreadEventCount:
-        bundle.auditReport.summary.translatedThreadEventCount,
-      viewMessageCount: bundle.auditReport.summary.viewMessageCount,
-      timelineRowCount: bundle.auditReport.summary.timelineRowCount,
-      debugRawEventCount: bundle.auditReport.summary.debugRawEventCount,
-      unexpectedUntranslatedRawEventCount:
-        bundle.auditReport.summary.unexpectedUntranslatedRawEventCount,
-      viewMessageKinds: countMessageKinds(bundle.viewMessages),
-      timelinePreview: buildTimelinePreview(bundle.timelineText),
-    }));
-
-    expect(summary).toMatchSnapshot();
+    expect(checkedInArtifact.summaries).toMatchSnapshot();
   });
 
   it("snapshots verbose CLI timeline output for every fixture", () => {
-    for (const { fixture, bundle } of checkedInReplay.fixtures) {
-      const fixtureId = `${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`;
-      expect(trimTrailingWhitespace(bundle.timelineVerboseText)).toMatchSnapshot(
-        fixtureId,
-      );
+    for (const timeline of checkedInArtifact.verboseTimelines) {
+      expect(timeline.text).toMatchSnapshot(timeline.fixture);
     }
   });
 
   it("summarizes raw-event and tool-call coverage across the checked-in fixtures", () => {
-    expect(summarizeFixtureCoverage(checkedInReplay)).toMatchSnapshot();
+    expect(checkedInArtifact.coverageSummary).toMatchSnapshot();
   });
 
   it("snapshots parsed context-window data for replayed token-usage events", () => {
-    const contextWindowSnapshots = checkedInReplay.fixtures.map(
-      ({ fixture, bundle }) =>
-        buildFixtureContextWindowSnapshot(
-          bundle,
-          `${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`,
-        ),
+    const contextWindowSnapshotRows = checkedInArtifact.contextWindowSnapshots.map(
+      (snapshot) => ({
+        contextWindowUsage: snapshot.contextWindowUsage,
+        fixture: snapshot.fixture,
+        tokenUsageSummary: snapshot.tokenUsageSummary,
+      }),
     );
 
-    expect(contextWindowSnapshots).toMatchSnapshot();
+    expect(contextWindowSnapshotRows).toMatchSnapshot();
   });
 
   it("replayed Pi fixtures preserve model context-window metadata even without bridge-side usage samples", () => {
-    const piSnapshots = checkedInReplay.fixtures
-      .filter(({ fixture }) => fixture.providerId === "pi")
-      .map(({ fixture, bundle }) =>
-        buildFixtureContextWindowSnapshot(
-          bundle,
-          `${fixture.corpusId}/${fixture.providerId}/${fixture.taskId}`,
-        ),
-      );
+    const piSnapshots = checkedInArtifact.contextWindowSnapshots.filter(
+      (snapshot) => snapshot.providerId === "pi",
+    );
 
     expect(piSnapshots.length).toBeGreaterThan(0);
     for (const snapshot of piSnapshots) {
@@ -210,7 +83,7 @@ describe("@bb/agent-provider-audit fixture replay", () => {
   });
 
   it("has no unresolved coverage issues in the checked-in fixtures", () => {
-    expect(collectCoverageIssues(checkedInReplay)).toEqual({
+    expect(checkedInArtifact.coverageIssues).toEqual({
       unexpectedUntranslatedFixtures: [],
       providersWithUnhandledEvents: [],
       unknownRawEventKinds: [],
@@ -252,46 +125,19 @@ describe("@bb/agent-provider-audit fixture replay", () => {
   });
 
   it("replays Claude delegated child activity under the parent delegation", () => {
-    const replayed = replayFixtures({
-      fixtureRoot: fixtureRoot(),
-      corpusId: "excalidraw",
-      providerId: "claude-code",
-      taskId: "search-bugfix",
-    });
-
-    expect(replayed.fixtures).toHaveLength(1);
-    const replay = replayed.fixtures[0];
-    expect(replay).toBeDefined();
-    const delegation = replay?.bundle.viewMessages.find(
-      (message): message is Extract<ViewMessage, { kind: "delegation" }> =>
-        message.kind === "delegation",
+    const delegation = checkedInArtifact.delegationSnapshots.find(
+      (snapshot) => snapshot.fixture === "excalidraw/claude-code/search-bugfix",
     );
 
     expect(delegation).toBeDefined();
-    const childMessages = delegation
-      ? flattenProjectionMessages(delegation.childProjection)
-      : [];
-    expect(childMessages.length).toBeGreaterThan(0);
-    expect(
-      childMessages.some(
-        (child) => child.kind === "tool-exploring" || child.kind === "tool-call",
-      ),
-    ).toBe(true);
+    expect(delegation?.childMessageCount).toBeGreaterThan(0);
+    expect(delegation?.hasChildToolActivity).toBe(true);
   });
 
   it(
     "exports shared React story data for the checked-in fixtures",
     () => {
-      const outputPath = join(
-        mkdtempSync(join(tmpdir(), "provider-audit-ladle-")),
-        "fixture-story-data.ts",
-      );
-      TEMP_DIRS.push(dirname(outputPath));
-
-      const storyData = buildLadleStoryData({
-        fixtureRoot: fixtureRoot(),
-        corpusId: "excalidraw",
-      });
+      const storyData = checkedInArtifact.ladleStoryData;
 
       expect(
         storyData.fixtures.map((fixture) => ({
@@ -302,14 +148,10 @@ describe("@bb/agent-provider-audit fixture replay", () => {
         })),
       ).toMatchSnapshot();
 
-      const exportResult = exportLadleStoryData({
-        fixtureRoot: fixtureRoot(),
-        corpusId: "excalidraw",
-        outputPath,
-      });
-
-      expect(exportResult.fixtureCount).toBe(storyData.fixtures.length);
-      expect(readFileSync(outputPath, "utf8")).toContain("fixtureStoryData");
+      expect(existsSync(DEFAULT_LADLE_OUTPUT_PATH)).toBe(true);
+      expect(readFileSync(DEFAULT_LADLE_OUTPUT_PATH, "utf8")).toContain(
+        "fixtureStoryData",
+      );
     },
     60_000,
   );

@@ -7,7 +7,10 @@ import {
 } from "@bb/host-daemon-contract";
 import type { HostDaemonLogger } from "../../src/logger.js";
 import { dispatchCommand } from "../../src/command-dispatch.js";
-import { createServerClient } from "../../src/server-client.js";
+import {
+  createServerClient,
+  type CommandResultRetryOptions,
+} from "../../src/server-client.js";
 import {
   ServerConnection,
   type ReconnectingWebSocketLike,
@@ -17,6 +20,13 @@ import {
   type TestServer,
 } from "../helpers/test-server.js";
 import { createHarness } from "../command/dispatch-helpers.js";
+
+type ServerConnectionOptions = ConstructorParameters<typeof ServerConnection>[0];
+
+interface CreateConnectionOptions {
+  commandResultRetryOptions?: CommandResultRetryOptions;
+  connectionOverrides?: Partial<ServerConnectionOptions>;
+}
 
 async function waitFor(
   predicate: () => boolean,
@@ -41,7 +51,7 @@ function createLogger(): HostDaemonLogger {
 
 function createConnection(
   testServer: TestServer,
-  overrides: Partial<ConstructorParameters<typeof ServerConnection>[0]> = {},
+  options: CreateConnectionOptions = {},
 ) {
   const sessionState = { value: "" };
   const logger = createLogger();
@@ -50,6 +60,7 @@ function createConnection(
     hostKey: testServer.hostKey,
     logger,
     getSessionId: () => sessionState.value,
+    commandResultRetryOptions: options.commandResultRetryOptions,
   });
 
   const connection = new ServerConnection({
@@ -65,7 +76,7 @@ function createConnection(
     setSession: (session) => {
       sessionState.value = session?.sessionId ?? "";
     },
-    ...overrides,
+    ...options.connectionOverrides,
   });
 
   return { connection, logger, serverClient };
@@ -159,7 +170,9 @@ describe("ServerConnection", () => {
     );
 
     const { connection } = createConnection(testServer, {
-      getActiveThreads: () => harness.manager.listActiveThreads(),
+      connectionOverrides: {
+        getActiveThreads: () => harness.manager.listActiveThreads(),
+      },
     });
 
     await connection.start();
@@ -194,7 +207,9 @@ describe("ServerConnection", () => {
     testServer = await createTestServer();
     const onCommandsAvailable = vi.fn();
     const { connection } = createConnection(testServer, {
-      onCommandsAvailable,
+      connectionOverrides: {
+        onCommandsAvailable,
+      },
     });
 
     await connection.start();
@@ -209,7 +224,9 @@ describe("ServerConnection", () => {
     testServer = await createTestServer();
     const onSessionClose = vi.fn();
     const { connection } = createConnection(testServer, {
-      onSessionClose,
+      connectionOverrides: {
+        onSessionClose,
+      },
     });
 
     await connection.start();
@@ -226,10 +243,12 @@ describe("ServerConnection", () => {
   it("reconnects after the websocket disconnects", async () => {
     testServer = await createTestServer();
     const { connection } = createConnection(testServer, {
-      minReconnectionDelay: 20,
-      maxReconnectionDelay: 20,
-      pollAfterDisconnectMs: 40,
-      pollIntervalMs: 40,
+      connectionOverrides: {
+        minReconnectionDelay: 20,
+        maxReconnectionDelay: 20,
+        pollAfterDisconnectMs: 40,
+        pollIntervalMs: 40,
+      },
     });
 
     await connection.start();
@@ -284,7 +303,14 @@ describe("ServerConnection", () => {
       commandResultFailures: 10,
       commandResultFailureStatus: 500,
     });
-    const { connection, logger, serverClient } = createConnection(testServer);
+    const { connection, logger, serverClient } = createConnection(testServer, {
+      commandResultRetryOptions: {
+        maxTimeoutMs: 1,
+        minTimeoutMs: 1,
+        randomize: false,
+        retries: 5,
+      },
+    });
 
     await connection.start();
 
@@ -385,8 +411,10 @@ describe("ServerConnection", () => {
       },
     ];
     const { connection } = createConnection(testServer, {
-      getActiveThreads: () => activeThreads,
-      protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+      connectionOverrides: {
+        getActiveThreads: () => activeThreads,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+      },
     });
 
     await connection.start();
@@ -401,14 +429,16 @@ describe("ServerConnection", () => {
     let capturedAuthorization: string | undefined;
     let capturedProtocols: string[] | undefined;
     const { connection } = createConnection(testServer, {
-      createWebSocket: (urlProvider, options) => {
-        capturedAuthorization = options.headers?.authorization;
-        capturedProtocols = options.protocols;
-        const socket = new FakeReconnectingWebSocket(urlProvider);
-        queueMicrotask(() => {
-          void socket.open();
-        });
-        return socket;
+      connectionOverrides: {
+        createWebSocket: (urlProvider, options) => {
+          capturedAuthorization = options.headers?.authorization;
+          capturedProtocols = options.protocols;
+          const socket = new FakeReconnectingWebSocket(urlProvider);
+          queueMicrotask(() => {
+            void socket.open();
+          });
+          return socket;
+        },
       },
     });
 
@@ -424,11 +454,13 @@ describe("ServerConnection", () => {
     vi.useFakeTimers();
     testServer = await createTestServer();
     const { connection } = createConnection(testServer, {
-      startupTimeoutMs: 5_000,
-      createWebSocket: (urlProvider) => {
-        const socket = new FakeReconnectingWebSocket(urlProvider);
-        // Never open — simulate a server that never accepts the connection.
-        return socket;
+      connectionOverrides: {
+        startupTimeoutMs: 5_000,
+        createWebSocket: (urlProvider) => {
+          const socket = new FakeReconnectingWebSocket(urlProvider);
+          // Never open — simulate a server that never accepts the connection.
+          return socket;
+        },
       },
     });
 
@@ -444,22 +476,24 @@ describe("ServerConnection", () => {
     testServer = await createTestServer();
     let attempt = 0;
     const { connection, logger } = createConnection(testServer, {
-      createWebSocket: (urlProvider) => {
-        const socket = new FakeReconnectingWebSocket(urlProvider);
-        queueMicrotask(() => {
-          attempt += 1;
-          if (attempt === 1) {
-            // First attempt: close before open.
-            socket.disconnect();
-            // Simulate partysocket reconnecting on the same instance.
-            queueMicrotask(() => {
+      connectionOverrides: {
+        createWebSocket: (urlProvider) => {
+          const socket = new FakeReconnectingWebSocket(urlProvider);
+          queueMicrotask(() => {
+            attempt += 1;
+            if (attempt === 1) {
+              // First attempt: close before open.
+              socket.disconnect();
+              // Simulate partysocket reconnecting on the same instance.
+              queueMicrotask(() => {
+                void socket.open();
+              });
+            } else {
               void socket.open();
-            });
-          } else {
-            void socket.open();
-          }
-        });
-        return socket;
+            }
+          });
+          return socket;
+        },
       },
     });
 
@@ -479,16 +513,18 @@ describe("ServerConnection", () => {
     const onCommandsAvailable = vi.fn();
     const sockets: FakeReconnectingWebSocket[] = [];
     const { connection } = createConnection(testServer, {
-      onCommandsAvailable,
-      pollAfterDisconnectMs: 5_000,
-      pollIntervalMs: 10_000,
-      createWebSocket: (urlProvider) => {
-        const socket = new FakeReconnectingWebSocket(urlProvider);
-        sockets.push(socket);
-        queueMicrotask(() => {
-          void socket.open();
-        });
-        return socket;
+      connectionOverrides: {
+        onCommandsAvailable,
+        pollAfterDisconnectMs: 5_000,
+        pollIntervalMs: 10_000,
+        createWebSocket: (urlProvider) => {
+          const socket = new FakeReconnectingWebSocket(urlProvider);
+          sockets.push(socket);
+          queueMicrotask(() => {
+            void socket.open();
+          });
+          return socket;
+        },
       },
     });
 

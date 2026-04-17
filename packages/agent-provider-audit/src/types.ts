@@ -360,9 +360,18 @@ export interface ProviderAuditLadleStoryData {
   fixtures: ProviderAuditLadleFixture[];
 }
 
+export interface ProviderAuditBuildLadleStoryDataArgs {
+  replayed: ProviderAuditReplayFixturesResult;
+}
+
 export interface ProviderAuditExportLadleDataArgs
   extends ProviderAuditReplayFixturesArgs {
   outputPath: string;
+}
+
+export interface ProviderAuditExportLadleStoryDataArgs {
+  outputPath: string;
+  storyData: ProviderAuditLadleStoryData;
 }
 
 export interface ProviderAuditExportLadleDataResult {

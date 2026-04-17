@@ -4,8 +4,10 @@ import { fileURLToPath } from "node:url";
 import { findLatestActivityRowId } from "@bb/ui-core";
 import { replayFixtures } from "./replay.js";
 import type {
+  ProviderAuditBuildLadleStoryDataArgs,
   ProviderAuditExportLadleDataArgs,
   ProviderAuditExportLadleDataResult,
+  ProviderAuditExportLadleStoryDataArgs,
   ProviderAuditLadleFixture,
   ProviderAuditLadleStoryData,
   ProviderAuditReplayFixtureResult,
@@ -19,7 +21,7 @@ const DEFAULT_FIXTURE_ROOT = resolve(
   fileURLToPath(new URL("../fixtures", import.meta.url)),
 );
 
-const DEFAULT_LADLE_OUTPUT_PATH = resolve(
+export const DEFAULT_LADLE_OUTPUT_PATH = resolve(
   fileURLToPath(new URL("../.ladle/fixture-story-data.ts", import.meta.url)),
 );
 
@@ -44,8 +46,14 @@ export function buildLadleStoryData(
   args: ProviderAuditExportLadleDataArgs,
 ): ProviderAuditLadleStoryData {
   const replayed = replayFixtures(args);
+  return buildLadleStoryDataFromReplay({ replayed });
+}
+
+export function buildLadleStoryDataFromReplay(
+  args: ProviderAuditBuildLadleStoryDataArgs,
+): ProviderAuditLadleStoryData {
   return {
-    fixtures: replayed.fixtures.map((fixture) => toLadleFixture(fixture)),
+    fixtures: args.replayed.fixtures.map((fixture) => toLadleFixture(fixture)),
   };
 }
 
@@ -61,12 +69,21 @@ function serializeLadleStoryDataModule(data: ProviderAuditLadleStoryData): strin
 export function exportLadleStoryData(
   args: ProviderAuditExportLadleDataArgs,
 ): ProviderAuditExportLadleDataResult {
+  const storyData = buildLadleStoryData(args);
+  return exportLadleStoryDataFromStoryData({
+    outputPath: args.outputPath,
+    storyData,
+  });
+}
+
+export function exportLadleStoryDataFromStoryData(
+  args: ProviderAuditExportLadleStoryDataArgs,
+): ProviderAuditExportLadleDataResult {
   const outputPath = resolve(args.outputPath);
-  const data = buildLadleStoryData(args);
   mkdirSync(dirname(outputPath), { recursive: true });
-  writeFileSync(outputPath, serializeLadleStoryDataModule(data));
+  writeFileSync(outputPath, serializeLadleStoryDataModule(args.storyData));
   return {
-    fixtureCount: data.fixtures.length,
+    fixtureCount: args.storyData.fixtures.length,
     outputPath,
   };
 }

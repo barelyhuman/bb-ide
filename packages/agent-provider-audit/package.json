@@ -15,11 +15,11 @@
     "dist"
   ],
   "scripts": {
-    "build": "rimraf dist tsconfig.tsbuildinfo && tsc",
-    "clean": "rimraf dist tsconfig.tsbuildinfo",
+    "build": "rimraf dist build .ladle/fixture-story-data.ts tsconfig.tsbuildinfo && tsc && node ./dist/cli.js build-replay-artifact",
+    "clean": "rimraf dist build .ladle/fixture-story-data.ts tsconfig.tsbuildinfo",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
-    "ladle:prepare": "pnpm exec turbo run build --filter=@bb/agent-provider-audit --filter=@bb/ui-core --filter=@bb/core-ui --filter=@bb/domain --filter=@bb/agent-runtime && node ./dist/cli.js export-ladle-data --output ./.ladle/fixture-story-data.ts",
+    "ladle:prepare": "pnpm exec turbo run build --filter=@bb/agent-provider-audit",
     "ladle": "pnpm run ladle:prepare && ladle serve",
     "ladle:build": "pnpm run ladle:prepare && ladle build"
   },

@@ -195,6 +195,12 @@ export type ClaudePermissionRequestApprovalParams = z.infer<
   typeof claudePermissionRequestApprovalParamsSchema
 >;
 
+const claudePermissionDecisionClassificationSchema = z.enum([
+  "user_temporary",
+  "user_permanent",
+  "user_reject",
+]);
+
 const claudePermissionApprovalResponseSchema = z.discriminatedUnion(
   "behavior",
   [
@@ -202,12 +208,14 @@ const claudePermissionApprovalResponseSchema = z.discriminatedUnion(
       kind: z.literal("permission_request"),
       behavior: z.literal("allow"),
       updatedPermissions: z.array(claudePermissionUpdateSchema).optional(),
+      decisionClassification: claudePermissionDecisionClassificationSchema.optional(),
     }),
     z.object({
       kind: z.literal("permission_request"),
       behavior: z.literal("deny"),
       message: z.string(),
       interrupt: z.boolean().optional(),
+      decisionClassification: claudePermissionDecisionClassificationSchema.optional(),
     }),
   ],
 );

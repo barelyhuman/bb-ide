@@ -17,6 +17,7 @@ import {
 } from "../helpers/test-server.js";
 
 const tempDirs: string[] = [];
+const INTERACTIVE_PROVIDER_TEST_TIMEOUT_MS = 15_000;
 
 interface InteractiveRequestParams {
   command: string;
@@ -540,7 +541,7 @@ describe("host daemon integration", () => {
       await harness.daemon.shutdown("test");
       await harness.server.close();
     }
-  });
+  }, INTERACTIVE_PROVIDER_TEST_TIMEOUT_MS);
 
   it("reopens the session after websocket disconnects and resumes fetching pending commands", async () => {
     const harness = await setupDaemonHarness();

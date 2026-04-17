@@ -143,7 +143,7 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
 });
 
 
-describe("multi-provider resume scenarios", () => {
+describe.concurrent("multi-provider resume scenarios", () => {
 
   // Matrix test: multiple threads, multiple providers, with resume
   it("handles multiple threads across providers with resume", async () => {

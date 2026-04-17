@@ -207,7 +207,7 @@ export function useThreadTimelineController({
     modeRef.current = nextMode;
     timelineScrollAnchorRef.current =
       nextMode === "pinned_bottom" ? null : captureTimelineScrollAnchor(container);
-  }, []);
+  }, [setShowScrollToBottom]);
 
   const reconcileScrollPosition = useCallback(() => {
     const container = containerElement;
@@ -318,7 +318,7 @@ export function useThreadTimelineController({
         scheduleReconcile("request_jump_to_bottom_timeout");
       }, 180);
     }
-  }, [containerElement, scheduleReconcile]);
+  }, [containerElement, scheduleReconcile, setShowScrollToBottom]);
 
   const handleLoadToolGroupMessages = useCallback(
     (entry: TimelineToolGroupRow) => {

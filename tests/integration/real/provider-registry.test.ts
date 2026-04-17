@@ -17,7 +17,8 @@ describe("real provider registry integration", () => {
         const { harness, thread } = await createRealThread({
           providerId,
           workspace: {
-            type: "managed-worktree",
+            path: null,
+            type: "unmanaged",
           },
         });
 
