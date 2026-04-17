@@ -11,10 +11,10 @@ import {
   getEnvironmentWorkspaceStateInvalidationQueryKeys,
   getPrimaryCheckoutWorkspaceStateInvalidationQueryKeys,
 } from "../queries/query-cache";
-import {
-  environmentQueryKey,
-} from "../queries/query-keys";
-type UpdateEnvironmentMutationRequest = { id: string } & UpdateEnvironmentRequest;
+import { environmentQueryKey } from "../queries/query-keys";
+type UpdateEnvironmentMutationRequest = {
+  id: string;
+} & UpdateEnvironmentRequest;
 
 export function useRequestEnvironmentAction() {
   const queryClient = useQueryClient();

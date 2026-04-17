@@ -95,15 +95,17 @@ export function upsertLifecycleOperationRecord<
   const existing = store.get(db, identity);
 
   if (existing) {
-    return store.updateState(db, {
-      identity,
-      payload: input.payload,
-      state: "requested",
-      commandId: null,
-      queuedAt: null,
-      completedAt: null,
-      failureReason: null,
-    }) ?? existing;
+    return (
+      store.updateState(db, {
+        identity,
+        payload: input.payload,
+        state: "requested",
+        commandId: null,
+        queuedAt: null,
+        completedAt: null,
+        failureReason: null,
+      }) ?? existing
+    );
   }
 
   return store.insertRequested(db, {

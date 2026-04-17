@@ -30,9 +30,10 @@ export function formatPendingInteractionSummary(
   }
 
   if (surface === "app") {
-    const requestedPermissionSummary = summarizePendingInteractionRequestedPermissions(
-      interaction.payload.subject.permissions,
-    );
+    const requestedPermissionSummary =
+      summarizePendingInteractionRequestedPermissions(
+        interaction.payload.subject.permissions,
+      );
     if (requestedPermissionSummary.length > 0) {
       return requestedPermissionSummary.join(" . ");
     }

@@ -6,9 +6,7 @@ import {
   openSession,
   upsertHost,
 } from "@bb/db";
-import {
-  markHostSuspended,
-} from "@bb/db/internal-lifecycle";
+import { markHostSuspended } from "@bb/db/internal-lifecycle";
 import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -212,7 +210,10 @@ describe("host lifecycle", () => {
         provider: "e2b",
         type: "ephemeral",
       });
-      const host = createMockSandboxHost(hostRow.id, hostRow.externalId ?? undefined);
+      const host = createMockSandboxHost(
+        hostRow.id,
+        hostRow.externalId ?? undefined,
+      );
       harness.deps.sandboxRegistry.set(hostRow.id, host);
 
       await destroyHost(harness.deps, hostRow.id);
@@ -245,9 +246,12 @@ describe("host lifecycle", () => {
 
       await destroyHost(harness.deps, host.id);
 
-      expect(resumeSandboxMock).toHaveBeenCalledWith("sandbox-uncached-destroy", {
-        apiKey: undefined,
-      });
+      expect(resumeSandboxMock).toHaveBeenCalledWith(
+        "sandbox-uncached-destroy",
+        {
+          apiKey: undefined,
+        },
+      );
       expect(resumedSandbox.kill).toHaveBeenCalledTimes(1);
       expect(getHost(harness.db, host.id)).toMatchObject({
         destroyedAt: expect.any(Number),
@@ -309,7 +313,9 @@ describe("host lifecycle", () => {
       const cachedHost = createMockSandboxHost("host-missing");
       harness.deps.sandboxRegistry.set("host-missing", cachedHost);
 
-      await expect(destroyHost(harness.deps, "host-missing")).resolves.toBeUndefined();
+      await expect(
+        destroyHost(harness.deps, "host-missing"),
+      ).resolves.toBeUndefined();
 
       expect(harness.deps.sandboxRegistry.get("host-missing")).toBeUndefined();
       expect(cachedHost.destroy).not.toHaveBeenCalled();
@@ -377,24 +383,26 @@ describe("host lifecycle", () => {
       const firstProgressEvents: string[] = [];
       const secondProgressEvents: string[] = [];
 
-      provisionHostMock.mockImplementation(async (args: ProvisionHostMockArgs) => {
-        setTimeout(() => {
-          args.progressCallbacks?.onProgress?.({
-            stage: "host",
-            status: "started",
-          });
-        }, 10);
-        setTimeout(() => {
-          args.progressCallbacks?.onSandboxCreated?.({
-            externalId: sandboxHost.externalId,
-          });
-          args.progressCallbacks?.onProgress?.({
-            stage: "host",
-            status: "completed",
-          });
-        }, 20);
-        return sandboxHost;
-      });
+      provisionHostMock.mockImplementation(
+        async (args: ProvisionHostMockArgs) => {
+          setTimeout(() => {
+            args.progressCallbacks?.onProgress?.({
+              stage: "host",
+              status: "started",
+            });
+          }, 10);
+          setTimeout(() => {
+            args.progressCallbacks?.onSandboxCreated?.({
+              externalId: sandboxHost.externalId,
+            });
+            args.progressCallbacks?.onProgress?.({
+              stage: "host",
+              status: "completed",
+            });
+          }, 20);
+          return sandboxHost;
+        },
+      );
 
       setTimeout(() => {
         openSession(harness.db, harness.hub, {
@@ -439,7 +447,8 @@ describe("host lifecycle", () => {
       const queuedRuntimeSync = await waitForQueuedCommand(
         harness,
         ({ command, row }) =>
-          row.hostId === host.id && command.type === "host.sync_runtime_material",
+          row.hostId === host.id &&
+          command.type === "host.sync_runtime_material",
       );
       const reportResponse = await reportQueuedCommandSuccess(
         harness,
@@ -485,7 +494,10 @@ describe("host lifecycle", () => {
         provider: "e2b",
         type: "ephemeral",
       });
-      const sandboxHost = createMockSandboxHost(host.id, host.externalId ?? undefined);
+      const sandboxHost = createMockSandboxHost(
+        host.id,
+        host.externalId ?? undefined,
+      );
       harness.deps.sandboxRegistry.set(host.id, sandboxHost);
 
       await markSandboxActivity(harness.deps, {
@@ -508,8 +520,14 @@ describe("host lifecycle", () => {
         lastActivityAt: 35_000,
       });
       expect(sandboxHost.extendTimeout).toHaveBeenCalledTimes(2);
-      expect(sandboxHost.extendTimeout).toHaveBeenNthCalledWith(1, 15 * 60 * 1000);
-      expect(sandboxHost.extendTimeout).toHaveBeenNthCalledWith(2, 15 * 60 * 1000);
+      expect(sandboxHost.extendTimeout).toHaveBeenNthCalledWith(
+        1,
+        15 * 60 * 1000,
+      );
+      expect(sandboxHost.extendTimeout).toHaveBeenNthCalledWith(
+        2,
+        15 * 60 * 1000,
+      );
     } finally {
       await harness.cleanup();
     }
@@ -525,15 +543,22 @@ describe("host lifecycle", () => {
         provider: "e2b",
         type: "ephemeral",
       });
-      const sandboxHost = createMockSandboxHost(host.id, host.externalId ?? undefined);
-      sandboxHost.extendTimeout.mockRejectedValueOnce(new Error("extend failed"));
+      const sandboxHost = createMockSandboxHost(
+        host.id,
+        host.externalId ?? undefined,
+      );
+      sandboxHost.extendTimeout.mockRejectedValueOnce(
+        new Error("extend failed"),
+      );
       harness.deps.sandboxRegistry.set(host.id, sandboxHost);
 
-      await expect(markSandboxActivity(harness.deps, {
-        at: 10_000,
-        hostId: host.id,
-        source: "events",
-      })).resolves.toBeUndefined();
+      await expect(
+        markSandboxActivity(harness.deps, {
+          at: 10_000,
+          hostId: host.id,
+          source: "events",
+        }),
+      ).resolves.toBeUndefined();
 
       expect(getHost(harness.db, host.id)).toMatchObject({
         lastActivityAt: 10_000,
@@ -556,7 +581,10 @@ describe("host lifecycle", () => {
         provider: "e2b",
         type: "ephemeral",
       });
-      const sandboxHost = createMockSandboxHost(host.id, host.externalId ?? undefined);
+      const sandboxHost = createMockSandboxHost(
+        host.id,
+        host.externalId ?? undefined,
+      );
       harness.deps.sandboxRegistry.set(host.id, sandboxHost);
       const resumedSandboxHost = createMockSandboxHost(
         host.id,
@@ -588,7 +616,8 @@ describe("host lifecycle", () => {
       const queuedRuntimeSync = await waitForQueuedCommand(
         harness,
         ({ command, row }) =>
-          row.hostId === host.id && command.type === "host.sync_runtime_material",
+          row.hostId === host.id &&
+          command.type === "host.sync_runtime_material",
       );
       const reportResponse = await reportQueuedCommandSuccess(
         harness,
@@ -605,15 +634,19 @@ describe("host lifecycle", () => {
 
       await readyPromise;
 
-      expect(resumeHostMock).toHaveBeenCalledWith(expect.objectContaining({
-        apiKey: "test-e2b-api-key",
-        externalId: "sandbox-suspended-cached",
-        hostId: host.id,
-        hostName: host.name,
-        progressCallbacks: expect.any(Object),
-        serverUrl: harness.deps.config.externalUrl!,
-      }));
-      expect(harness.deps.sandboxRegistry.get(host.id)).toBe(resumedSandboxHost);
+      expect(resumeHostMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          apiKey: "test-e2b-api-key",
+          externalId: "sandbox-suspended-cached",
+          hostId: host.id,
+          hostName: host.name,
+          progressCallbacks: expect.any(Object),
+          serverUrl: harness.deps.config.externalUrl!,
+        }),
+      );
+      expect(harness.deps.sandboxRegistry.get(host.id)).toBe(
+        resumedSandboxHost,
+      );
       expect(sandboxHost.resume).not.toHaveBeenCalled();
       expect(getHost(harness.db, host.id)).toMatchObject({
         suspendedAt: null,
@@ -633,7 +666,10 @@ describe("host lifecycle", () => {
         provider: "e2b",
         type: "ephemeral",
       });
-      const sandboxHost = createMockSandboxHost(host.id, host.externalId ?? undefined);
+      const sandboxHost = createMockSandboxHost(
+        host.id,
+        host.externalId ?? undefined,
+      );
       harness.deps.sandboxRegistry.set(host.id, sandboxHost);
       openSession(harness.db, harness.hub, {
         heartbeatIntervalMs: 5_000,
@@ -650,10 +686,12 @@ describe("host lifecycle", () => {
         lastActivityAt: 1_000,
       });
 
-      await expect(maybeSuspendIdleSandbox(harness.deps, {
-        hostId: host.id,
-        now: 400_000,
-      })).resolves.toBe(true);
+      await expect(
+        maybeSuspendIdleSandbox(harness.deps, {
+          hostId: host.id,
+          now: 400_000,
+        }),
+      ).resolves.toBe(true);
 
       expect(sandboxHost.suspend).toHaveBeenCalledTimes(1);
       expect(getActiveSession(harness.db, host.id)).toBeNull();
@@ -675,7 +713,10 @@ describe("host lifecycle", () => {
         provider: "e2b",
         type: "ephemeral",
       });
-      const sandboxHost = createMockSandboxHost(host.id, host.externalId ?? undefined);
+      const sandboxHost = createMockSandboxHost(
+        host.id,
+        host.externalId ?? undefined,
+      );
       harness.deps.sandboxRegistry.set(host.id, sandboxHost);
       const session = openSession(harness.db, harness.hub, {
         heartbeatIntervalMs: 5_000,
@@ -691,29 +732,34 @@ describe("host lifecycle", () => {
         hostId: host.id,
         lastActivityAt: 1_000,
       });
-      harness.db.insert(hostDaemonCommands).values({
-        id: "hcmd_idle_pending_command",
-        hostId: host.id,
-        sessionId: session.id,
-        cursor: 1,
-        type: "host.list_files",
-        payload: JSON.stringify({
+      harness.db
+        .insert(hostDaemonCommands)
+        .values({
+          id: "hcmd_idle_pending_command",
+          hostId: host.id,
+          sessionId: session.id,
+          cursor: 1,
           type: "host.list_files",
-          limit: 10,
-          path: "/tmp",
-        }),
-        state: "pending",
-        retryCount: 0,
-        resultPayload: null,
-        createdAt: 1_500,
-        fetchedAt: null,
-        completedAt: null,
-      }).run();
+          payload: JSON.stringify({
+            type: "host.list_files",
+            limit: 10,
+            path: "/tmp",
+          }),
+          state: "pending",
+          retryCount: 0,
+          resultPayload: null,
+          createdAt: 1_500,
+          fetchedAt: null,
+          completedAt: null,
+        })
+        .run();
 
-      await expect(maybeSuspendIdleSandbox(harness.deps, {
-        hostId: host.id,
-        now: 400_000,
-      })).resolves.toBe(false);
+      await expect(
+        maybeSuspendIdleSandbox(harness.deps, {
+          hostId: host.id,
+          now: 400_000,
+        }),
+      ).resolves.toBe(false);
 
       expect(sandboxHost.suspend).not.toHaveBeenCalled();
       expect(getHost(harness.db, host.id)?.suspendedAt).toBeNull();
@@ -765,7 +811,8 @@ describe("host lifecycle", () => {
       const queuedRuntimeSync = await waitForQueuedCommand(
         harness,
         ({ command, row }) =>
-          row.hostId === host.id && command.type === "host.sync_runtime_material",
+          row.hostId === host.id &&
+          command.type === "host.sync_runtime_material",
       );
 
       expect(queuedRuntimeSync.command).toMatchObject({

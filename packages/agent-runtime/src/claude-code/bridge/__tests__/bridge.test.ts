@@ -11,10 +11,7 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
   tool: vi.fn((_name, _desc, _schema, handler) => handler),
 }));
 
-import {
-  buildSessionOptions,
-  handleLine,
-} from "../bridge.js";
+import { buildSessionOptions, handleLine } from "../bridge.js";
 import { listClaudeCodeBridgeModels } from "../model-list.js";
 import { createBridgeJsonRpcTestHarness } from "../../../test/bridge-json-rpc-test-helpers.js";
 
@@ -60,7 +57,8 @@ describe("bridge", () => {
           {
             value: "default",
             displayName: "Default (recommended)",
-            description: "Opus 4.7 with 1M context [NEW] · Most capable for complex work",
+            description:
+              "Opus 4.7 with 1M context [NEW] · Most capable for complex work",
             supportsEffort: true,
             supportedEffortLevels: ["low", "medium", "high", "xhigh", "max"],
           },
@@ -205,15 +203,19 @@ describe("bridge", () => {
       throw new Error("Expected readonly ask PreToolUse hook");
     }
     await expect(
-      askHook({
-        hook_event_name: "PreToolUse",
-        tool_name: "Bash",
-        tool_input: {},
-        tool_use_id: "tool-1",
-        session_id: "session-1",
-        transcript_path: "/tmp/transcript.jsonl",
-        cwd: "/tmp/worktree",
-      }, "tool-1", { signal: new AbortController().signal }),
+      askHook(
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: {},
+          tool_use_id: "tool-1",
+          session_id: "session-1",
+          transcript_path: "/tmp/transcript.jsonl",
+          cwd: "/tmp/worktree",
+        },
+        "tool-1",
+        { signal: new AbortController().signal },
+      ),
     ).resolves.toMatchObject({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
@@ -226,15 +228,19 @@ describe("bridge", () => {
       throw new Error("Expected readonly PreToolUse hook");
     }
     await expect(
-      preToolUseHook({
-        hook_event_name: "PreToolUse",
-        tool_name: "Bash",
-        tool_input: {},
-        tool_use_id: "tool-1",
-        session_id: "session-1",
-        transcript_path: "/tmp/transcript.jsonl",
-        cwd: "/tmp/worktree",
-      }, "tool-1", { signal: new AbortController().signal }),
+      preToolUseHook(
+        {
+          hook_event_name: "PreToolUse",
+          tool_name: "Bash",
+          tool_input: {},
+          tool_use_id: "tool-1",
+          session_id: "session-1",
+          transcript_path: "/tmp/transcript.jsonl",
+          cwd: "/tmp/worktree",
+        },
+        "tool-1",
+        { signal: new AbortController().signal },
+      ),
     ).resolves.toMatchObject({
       hookSpecificOutput: {
         hookEventName: "PreToolUse",

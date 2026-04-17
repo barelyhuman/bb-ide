@@ -1,14 +1,8 @@
 /** Provider integration tests using createAgentRuntime. */
 
-import {
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import {
-  dirname,
-  join,
-} from "node:path";
+import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   cleanup,
@@ -26,7 +20,6 @@ const providers = ["codex", "claude-code", "pi"];
 
 for (const providerId of providers) {
   describe.concurrent(`${providerId} provider`, () => {
-
     it("starts turns in the workspace cwd and still allows cd outside it", async () => {
       const ctx = createTestRuntime(providerId, {
         onInteractiveRequest: createApprovalResolution,
@@ -38,7 +31,11 @@ for (const providerId of providers) {
       const parentDir = dirname(ctx.tmpDir);
       const parentMarkerPath = join(parentDir, parentMarkerName);
 
-      writeFileSync(join(ctx.tmpDir, workspaceMarkerName), workspaceToken, "utf8");
+      writeFileSync(
+        join(ctx.tmpDir, workspaceMarkerName),
+        workspaceToken,
+        "utf8",
+      );
       writeFileSync(parentMarkerPath, parentToken, "utf8");
 
       try {
@@ -61,13 +58,15 @@ for (const providerId of providers) {
         await ctx.runtime.runTurn({
           threadId,
           options,
-          input: [{
-            type: "text",
-            text:
-              `Run these two shell commands exactly as written, in order, from the current working directory: `
-              + `\`pwd && cat ${workspaceMarkerName}\` and \`cd .. && pwd && cat ${parentMarkerName}\`. `
-              + "Do not use absolute paths. After both commands finish, reply with exactly DONE.",
-          }],
+          input: [
+            {
+              type: "text",
+              text:
+                `Run these two shell commands exactly as written, in order, from the current working directory: ` +
+                `\`pwd && cat ${workspaceMarkerName}\` and \`cd .. && pwd && cat ${parentMarkerName}\`. ` +
+                "Do not use absolute paths. After both commands finish, reply with exactly DONE.",
+            },
+          ],
         });
 
         await waitForRuntimeCondition({
@@ -76,11 +75,9 @@ for (const providerId of providers) {
           predicate: () => {
             const outputs = getCompletedCommandOutputs(ctx.events);
             return (
-              (
-                outputs.includes(workspaceToken)
-                && outputs.includes(parentToken)
-              )
-              || turnCompletedCountForThread(ctx.events, threadId) > 0
+              (outputs.includes(workspaceToken) &&
+                outputs.includes(parentToken)) ||
+              turnCompletedCountForThread(ctx.events, threadId) > 0
             );
           },
           timeoutMs: 60_000,
@@ -93,9 +90,15 @@ for (const providerId of providers) {
         expect(outputs).toContain(parentDir);
         expect(outputs).toContain(workspaceToken);
         expect(outputs).toContain(parentToken);
-        expect(commands.some((command) => command.includes(workspaceMarkerName))).toBe(true);
-        expect(commands.some((command) => command.includes(parentMarkerName))).toBe(true);
-        expect(commands.some((command) => command.includes("cd .."))).toBe(true);
+        expect(
+          commands.some((command) => command.includes(workspaceMarkerName)),
+        ).toBe(true);
+        expect(
+          commands.some((command) => command.includes(parentMarkerName)),
+        ).toBe(true);
+        expect(commands.some((command) => command.includes("cd .."))).toBe(
+          true,
+        );
       } finally {
         await ctx.runtime.shutdown();
         rmSync(parentMarkerPath, { force: true });

@@ -1,7 +1,4 @@
-import {
-  getCommand,
-  reportCommandResult,
-} from "@bb/db";
+import { getCommand, reportCommandResult } from "@bb/db";
 import type { HostDaemonCommandResultReport } from "@bb/host-daemon-contract";
 import {
   handleCommandResultSideEffects,

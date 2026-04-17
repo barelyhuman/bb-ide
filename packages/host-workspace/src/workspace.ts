@@ -159,19 +159,39 @@ function resolveWorkspaceFileStatusKind(args: {
   if (args.status === "??") {
     return "??";
   }
-  if (args.indexStatus === "U" || args.worktreeStatus === "U" || args.status.includes("U")) {
+  if (
+    args.indexStatus === "U" ||
+    args.worktreeStatus === "U" ||
+    args.status.includes("U")
+  ) {
     return "U";
   }
-  if (args.indexStatus === "R" || args.worktreeStatus === "R" || args.status.includes("R")) {
+  if (
+    args.indexStatus === "R" ||
+    args.worktreeStatus === "R" ||
+    args.status.includes("R")
+  ) {
     return "R";
   }
-  if (args.indexStatus === "C" || args.worktreeStatus === "C" || args.status.includes("C")) {
+  if (
+    args.indexStatus === "C" ||
+    args.worktreeStatus === "C" ||
+    args.status.includes("C")
+  ) {
     return "C";
   }
-  if (args.indexStatus === "A" || args.worktreeStatus === "A" || args.status.includes("A")) {
+  if (
+    args.indexStatus === "A" ||
+    args.worktreeStatus === "A" ||
+    args.status.includes("A")
+  ) {
     return "A";
   }
-  if (args.indexStatus === "D" || args.worktreeStatus === "D" || args.status.includes("D")) {
+  if (
+    args.indexStatus === "D" ||
+    args.worktreeStatus === "D" ||
+    args.status.includes("D")
+  ) {
     return "D";
   }
   return "M";
@@ -200,10 +220,17 @@ function resolveWorkspaceState(args: {
   hasTrackedChanges: boolean;
   hasUntracked: boolean;
 }): WorkspaceStatus["workingTree"]["state"] {
-  if (!args.hasTrackedChanges && !args.hasUntracked && !args.hasCommittedChanges) {
+  if (
+    !args.hasTrackedChanges &&
+    !args.hasUntracked &&
+    !args.hasCommittedChanges
+  ) {
     return "clean";
   }
-  if ((args.hasTrackedChanges || args.hasUntracked) && args.hasCommittedChanges) {
+  if (
+    (args.hasTrackedChanges || args.hasUntracked) &&
+    args.hasCommittedChanges
+  ) {
     return "dirty_and_committed_unmerged";
   }
   if (args.hasUntracked && !args.hasTrackedChanges) {
@@ -216,9 +243,7 @@ function resolveWorkspaceState(args: {
 }
 
 function parseNullSeparatedLines(output: string): string[] {
-  return output
-    .split("\0")
-    .filter((value) => value.length > 0);
+  return output.split("\0").filter((value) => value.length > 0);
 }
 
 function parseNonEmptyLines(output: string): string[] {
@@ -335,15 +360,16 @@ export class Workspace {
     await ensureGitRepo(this.path);
 
     const mergeBaseBranch = options.mergeBaseBranch;
-    const [statusOutput, diffOutput, currentBranch, defaultBranch] = await Promise.all([
-      runGit(
-        ["status", "--porcelain=v1", "--branch", "--untracked-files=all"],
-        { cwd: this.path },
-      ),
-      readHeadNumstat(this.path),
-      this.currentBranch,
-      readDefaultBranch(this.path),
-    ]);
+    const [statusOutput, diffOutput, currentBranch, defaultBranch] =
+      await Promise.all([
+        runGit(
+          ["status", "--porcelain=v1", "--branch", "--untracked-files=all"],
+          { cwd: this.path },
+        ),
+        readHeadNumstat(this.path),
+        this.currentBranch,
+        readDefaultBranch(this.path),
+      ]);
 
     const entries = parsePorcelainEntries(statusOutput.stdout);
     const workingTreeSummary = summarizeNumstat(diffOutput);
@@ -353,7 +379,8 @@ export class Workspace {
     const mergeBaseData = mergeBaseBranch
       ? await this.readMergeBaseStatus(mergeBaseBranch)
       : null;
-    const hasCommittedChanges = mergeBaseData?.hasCommittedUnmergedChanges ?? false;
+    const hasCommittedChanges =
+      mergeBaseData?.hasCommittedUnmergedChanges ?? false;
     const state = resolveWorkspaceState({
       hasCommittedChanges,
       hasTrackedChanges,
@@ -400,13 +427,18 @@ export class Workspace {
 
     const [refs, remoteHead] = await Promise.all([
       runGit(
-        ["for-each-ref", "--format=%(refname)%00%(objectname)", "refs/heads", "refs/remotes"],
+        [
+          "for-each-ref",
+          "--format=%(refname)%00%(objectname)",
+          "refs/heads",
+          "refs/remotes",
+        ],
         { cwd: this.path },
       ),
-      runGit(
-        ["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"],
-        { cwd: this.path, allowFailure: true },
-      ),
+      runGit(["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"], {
+        cwd: this.path,
+        allowFailure: true,
+      }),
     ]);
 
     return JSON.stringify({
@@ -570,26 +602,36 @@ export class Workspace {
     await runGit(args, { cwd: this.path });
   }
 
-  async squashMergeInto(options: SquashMergeOptions): Promise<SquashMergeResult> {
+  async squashMergeInto(
+    options: SquashMergeOptions,
+  ): Promise<SquashMergeResult> {
     await ensureGitRepo(this.path);
 
     const sourceBranch = await this.currentBranch;
     if (!sourceBranch) {
-      throw new WorkspaceError("detached_head", "Cannot squash merge from a detached workspace");
+      throw new WorkspaceError(
+        "detached_head",
+        "Cannot squash merge from a detached workspace",
+      );
     }
 
     const target = await this.resolveSquashMergeTarget(options.targetBranch);
     const tempDir = await createTempDir("bb-squash-");
-    const worktreeCountBefore = await runGit(["worktree", "list", "--porcelain"], {
-      cwd: this.path,
-    });
+    const worktreeCountBefore = await runGit(
+      ["worktree", "list", "--porcelain"],
+      {
+        cwd: this.path,
+      },
+    );
 
     try {
       await runGit(["worktree", "add", "--detach", tempDir, target.baseRef], {
         cwd: this.path,
       });
       await runGit(["merge", "--squash", sourceBranch], { cwd: tempDir });
-      await runGit(["commit", "--no-verify", "-m", options.commitMessage], { cwd: tempDir });
+      await runGit(["commit", "--no-verify", "-m", options.commitMessage], {
+        cwd: tempDir,
+      });
       const commitSha = await revParse(tempDir, "HEAD");
       await this.publishSquashMergeCommit({
         targetBranch: options.targetBranch,
@@ -617,12 +659,17 @@ export class Workspace {
         countWorktrees(worktreeCountBefore.stdout) !==
         countWorktrees(worktreeCountAfter.stdout)
       ) {
-        throw new WorkspaceError("worktree_cleanup_failed", "Temporary worktree cleanup failed");
+        throw new WorkspaceError(
+          "worktree_cleanup_failed",
+          "Temporary worktree cleanup failed",
+        );
       }
     }
   }
 
-  private async resolveSquashMergeTarget(targetBranch: string): Promise<SquashMergeTarget> {
+  private async resolveSquashMergeTarget(
+    targetBranch: string,
+  ): Promise<SquashMergeTarget> {
     const localRef = `refs/heads/${targetBranch}`;
     if (await hasRef(this.path, localRef)) {
       return {
@@ -649,7 +696,9 @@ export class Workspace {
   private async publishSquashMergeCommit(
     args: PublishSquashMergeCommitArgs,
   ): Promise<void> {
-    const checkedOutTargetPath = await this.findWorktreePathForBranch(args.targetBranch);
+    const checkedOutTargetPath = await this.findWorktreePathForBranch(
+      args.targetBranch,
+    );
     if (checkedOutTargetPath !== null) {
       if (await hasUncommittedChanges(checkedOutTargetPath)) {
         throw new WorkspaceError(
@@ -688,7 +737,9 @@ export class Workspace {
     }
   }
 
-  private async findWorktreePathForBranch(branchName: string): Promise<string | null> {
+  private async findWorktreePathForBranch(
+    branchName: string,
+  ): Promise<string | null> {
     const entries = await this.listWorktrees();
     const branchRef = `refs/heads/${branchName}`;
     return entries.find((entry) => entry.branchRef === branchRef)?.path ?? null;
@@ -706,17 +757,23 @@ export class Workspace {
     maxDiffBytes?: number;
     maxFileListBytes?: number;
   }): Promise<DiffSummary> {
-    const [rawDiff, shortstat, rawFiles] = await this.readDiffArtifacts(args.target);
+    const [rawDiff, shortstat, rawFiles] = await this.readDiffArtifacts(
+      args.target,
+    );
 
     const diffTruncated =
-      typeof args.maxDiffBytes === "number" && rawDiff.length > args.maxDiffBytes;
+      typeof args.maxDiffBytes === "number" &&
+      rawDiff.length > args.maxDiffBytes;
     const fileTruncated =
-      typeof args.maxFileListBytes === "number" && rawFiles.length > args.maxFileListBytes;
+      typeof args.maxFileListBytes === "number" &&
+      rawFiles.length > args.maxFileListBytes;
     const truncated = diffTruncated || fileTruncated;
 
     return {
       diff: diffTruncated ? rawDiff.slice(0, args.maxDiffBytes) : rawDiff,
-      files: fileTruncated ? rawFiles.slice(0, args.maxFileListBytes) : rawFiles,
+      files: fileTruncated
+        ? rawFiles.slice(0, args.maxFileListBytes)
+        : rawFiles,
       shortstat,
       truncated,
     };
@@ -741,7 +798,8 @@ export class Workspace {
       .split("\n")
       .filter(Boolean)
       .map((line) => {
-        const [sha, shortSha, subject, authorName, authoredAt] = line.split("\u001f");
+        const [sha, shortSha, subject, authorName, authoredAt] =
+          line.split("\u001f");
         return {
           sha,
           shortSha,
@@ -752,43 +810,55 @@ export class Workspace {
       });
   }
 
-  private async readMergeBaseStatus(mergeBaseBranch: string): Promise<WorkspaceStatus["mergeBase"]> {
-    const [mergeBaseRef, aheadBehindCounts, commits, nameStatus, numstat] = await Promise.all([
-      readMergeBaseRef(this.path, mergeBaseBranch),
-      runGit(
-        [
-          "rev-list",
-          // Ignore patch-equivalent commits so squash-merged branches are not still ahead.
-          "--cherry-pick",
-          "--left-right",
-          "--count",
-          `${mergeBaseBranch}...HEAD`,
-        ],
-        { cwd: this.path },
-      ),
-      this.readPatchUniqueCommitSummaries(mergeBaseBranch),
-      runGit(
-        ["diff", "--no-ext-diff", "--name-status", "-z", `${mergeBaseBranch}...HEAD`],
-        { cwd: this.path, allowFailure: true },
-      ),
-      runGit(
-        ["diff", "--no-ext-diff", "--numstat", `${mergeBaseBranch}...HEAD`],
-        { cwd: this.path, allowFailure: true },
-      ),
-    ]);
+  private async readMergeBaseStatus(
+    mergeBaseBranch: string,
+  ): Promise<WorkspaceStatus["mergeBase"]> {
+    const [mergeBaseRef, aheadBehindCounts, commits, nameStatus, numstat] =
+      await Promise.all([
+        readMergeBaseRef(this.path, mergeBaseBranch),
+        runGit(
+          [
+            "rev-list",
+            // Ignore patch-equivalent commits so squash-merged branches are not still ahead.
+            "--cherry-pick",
+            "--left-right",
+            "--count",
+            `${mergeBaseBranch}...HEAD`,
+          ],
+          { cwd: this.path },
+        ),
+        this.readPatchUniqueCommitSummaries(mergeBaseBranch),
+        runGit(
+          [
+            "diff",
+            "--no-ext-diff",
+            "--name-status",
+            "-z",
+            `${mergeBaseBranch}...HEAD`,
+          ],
+          { cwd: this.path, allowFailure: true },
+        ),
+        runGit(
+          ["diff", "--no-ext-diff", "--numstat", `${mergeBaseBranch}...HEAD`],
+          { cwd: this.path, allowFailure: true },
+        ),
+      ]);
     const [behindCount, aheadCount] = aheadBehindCounts.stdout
       .trim()
       .split(/\s+/)
       .map((value) => Number.parseInt(value, 10));
     let normalizedAheadCount = Number.isFinite(aheadCount) ? aheadCount : 0;
-    const normalizedBehindCount = Number.isFinite(behindCount) ? behindCount : 0;
+    const normalizedBehindCount = Number.isFinite(behindCount)
+      ? behindCount
+      : 0;
     let effectiveCommits = commits;
-    let effectiveFiles: WorkspaceFileStatus[] = nameStatus.exitCode === 0
-      ? parseNameStatusEntries(nameStatus.stdout).map((entry) => ({
-          path: entry.path,
-          status: mapNameStatusLetter(entry.status),
-        }))
-      : [];
+    let effectiveFiles: WorkspaceFileStatus[] =
+      nameStatus.exitCode === 0
+        ? parseNameStatusEntries(nameStatus.stdout).map((entry) => ({
+            path: entry.path,
+            status: mapNameStatusLetter(entry.status),
+          }))
+        : [];
     const mergeBaseSummary =
       numstat.exitCode === 0
         ? summarizeNumstat(numstat.stdout)
@@ -801,7 +871,10 @@ export class Workspace {
     // appears ahead AND the base has advanced since the fork point — if the
     // base hasn't moved, no squash could exist there.
     if (normalizedAheadCount > 0 && normalizedBehindCount > 0 && mergeBaseRef) {
-      const squashMerged = await this.detectSquashMerge(mergeBaseRef, mergeBaseBranch);
+      const squashMerged = await this.detectSquashMerge(
+        mergeBaseRef,
+        mergeBaseBranch,
+      );
       if (squashMerged) {
         normalizedAheadCount = 0;
         effectiveCommits = [];
@@ -863,7 +936,9 @@ export class Workspace {
       // effectively merged.
       return true;
     }
-    const branchPatchId = parsePatchId(branchPatchIdResult.stdout.split("\n")[0]);
+    const branchPatchId = parsePatchId(
+      branchPatchIdResult.stdout.split("\n")[0],
+    );
     if (!branchPatchId) {
       return false;
     }
@@ -886,12 +961,17 @@ export class Workspace {
       .some((line) => parsePatchId(line) === branchPatchId);
   }
 
-  private async readDiffArtifacts(target: WorkspaceDiffTarget): Promise<[string, string, string]> {
+  private async readDiffArtifacts(
+    target: WorkspaceDiffTarget,
+  ): Promise<[string, string, string]> {
     switch (target.type) {
       case "uncommitted":
         return this.readUncommittedDiffArtifacts();
       case "branch_committed": {
-        const mergeBaseRef = await readMergeBaseRef(this.path, target.mergeBaseBranch);
+        const mergeBaseRef = await readMergeBaseRef(
+          this.path,
+          target.mergeBaseBranch,
+        );
         if (!mergeBaseRef) {
           return ["", "", ""];
         }
@@ -902,7 +982,10 @@ export class Workspace {
         );
       }
       case "all": {
-        const mergeBaseRef = await readMergeBaseRef(this.path, target.mergeBaseBranch);
+        const mergeBaseRef = await readMergeBaseRef(
+          this.path,
+          target.mergeBaseBranch,
+        );
         if (!mergeBaseRef) {
           return ["", "", ""];
         }
@@ -914,9 +997,12 @@ export class Workspace {
       }
       case "commit": {
         const [diff, shortstat, files] = await Promise.all([
-          runGit(["show", "--format=", "--no-ext-diff", "--binary", target.sha], {
-            cwd: this.path,
-          }),
+          runGit(
+            ["show", "--format=", "--no-ext-diff", "--binary", target.sha],
+            {
+              cwd: this.path,
+            },
+          ),
           runGit(["show", "--format=", "--shortstat", target.sha], {
             cwd: this.path,
           }),
@@ -991,7 +1077,8 @@ export class Workspace {
       ];
     }
 
-    const untrackedArtifacts = await this.readUntrackedDiffArtifacts(untrackedPaths);
+    const untrackedArtifacts =
+      await this.readUntrackedDiffArtifacts(untrackedPaths);
     const combinedNumstat = joinDiffArtifactLines([
       args.numstat,
       ...untrackedArtifacts.map((artifact) => artifact.numstat),
@@ -1012,7 +1099,9 @@ export class Workspace {
     ];
   }
 
-  private async readUntrackedDiffArtifacts(relativePaths: string[]): Promise<DiffArtifacts[]> {
+  private async readUntrackedDiffArtifacts(
+    relativePaths: string[],
+  ): Promise<DiffArtifacts[]> {
     const artifacts: DiffArtifacts[] = [];
 
     for (
@@ -1020,21 +1109,36 @@ export class Workspace {
       index < relativePaths.length;
       index += UNTRACKED_DIFF_BATCH_SIZE
     ) {
-      const batchPaths = relativePaths.slice(index, index + UNTRACKED_DIFF_BATCH_SIZE);
+      const batchPaths = relativePaths.slice(
+        index,
+        index + UNTRACKED_DIFF_BATCH_SIZE,
+      );
       artifacts.push(
-        ...await Promise.all(
-          batchPaths.map((relativePath) => this.readUntrackedDiffArtifact(relativePath)),
-        ),
+        ...(await Promise.all(
+          batchPaths.map((relativePath) =>
+            this.readUntrackedDiffArtifact(relativePath),
+          ),
+        )),
       );
     }
 
     return artifacts;
   }
 
-  private async readUntrackedDiffArtifact(relativePath: string): Promise<DiffArtifacts> {
+  private async readUntrackedDiffArtifact(
+    relativePath: string,
+  ): Promise<DiffArtifacts> {
     const [diff, numstat, files] = await Promise.all([
       runGit(
-        ["diff", "--no-index", "--no-ext-diff", "--binary", "--", "/dev/null", relativePath],
+        [
+          "diff",
+          "--no-index",
+          "--no-ext-diff",
+          "--binary",
+          "--",
+          "/dev/null",
+          relativePath,
+        ],
         { cwd: this.path, allowFailure: true },
       ),
       runGit(
@@ -1042,7 +1146,14 @@ export class Workspace {
         { cwd: this.path, allowFailure: true },
       ),
       runGit(
-        ["diff", "--no-index", "--name-status", "--", "/dev/null", relativePath],
+        [
+          "diff",
+          "--no-index",
+          "--name-status",
+          "--",
+          "/dev/null",
+          relativePath,
+        ],
         { cwd: this.path, allowFailure: true },
       ),
     ]);
@@ -1054,7 +1165,9 @@ export class Workspace {
     };
   }
 
-  private async readUncommittedDiffArtifacts(): Promise<[string, string, string]> {
+  private async readUncommittedDiffArtifacts(): Promise<
+    [string, string, string]
+  > {
     return this.readDiffArtifactsIncludingUntracked({
       diffArgs: ["HEAD", "--"],
       filesArgs: ["HEAD", "--"],

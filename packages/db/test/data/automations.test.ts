@@ -46,7 +46,8 @@ function createScheduleAutomation(args: {
     name: "Daily sync",
     enabled: true,
     triggerType: "schedule",
-    triggerConfig: "{\"triggerType\":\"schedule\",\"cron\":\"0 8 * * 1-5\",\"timezone\":\"UTC\"}",
+    triggerConfig:
+      '{"triggerType":"schedule","cron":"0 8 * * 1-5","timezone":"UTC"}',
     action: JSON.stringify({
       actionType: "scheduled-thread",
       threadRequest: {
@@ -160,22 +161,28 @@ describe("automations", () => {
       now: now - 120_000,
     });
 
-    const firstAdvanced = db.transaction((tx) =>
-      advanceAutomationAfterRunInTransaction(tx, {
-        automationId: automation.id,
-        expectedNextRunAt: automation.nextRunAt,
-        nextRunAt: now + 60_000,
-        now,
-      }), { behavior: "immediate" });
+    const firstAdvanced = db.transaction(
+      (tx) =>
+        advanceAutomationAfterRunInTransaction(tx, {
+          automationId: automation.id,
+          expectedNextRunAt: automation.nextRunAt,
+          nextRunAt: now + 60_000,
+          now,
+        }),
+      { behavior: "immediate" },
+    );
     expect(firstAdvanced).toBe(true);
 
-    const secondAdvanced = db.transaction((tx) =>
-      advanceAutomationAfterRunInTransaction(tx, {
-        automationId: automation.id,
-        expectedNextRunAt: automation.nextRunAt,
-        nextRunAt: now + 120_000,
-        now: now + 1,
-      }), { behavior: "immediate" });
+    const secondAdvanced = db.transaction(
+      (tx) =>
+        advanceAutomationAfterRunInTransaction(tx, {
+          automationId: automation.id,
+          expectedNextRunAt: automation.nextRunAt,
+          nextRunAt: now + 120_000,
+          now: now + 1,
+        }),
+      { behavior: "immediate" },
+    );
     expect(secondAdvanced).toBe(false);
 
     const restored = restoreAutomationAfterFailedRun(db, noopNotifier, {

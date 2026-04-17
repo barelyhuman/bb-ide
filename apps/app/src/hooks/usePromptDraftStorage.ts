@@ -1,5 +1,8 @@
 import { useCallback, useMemo, useSyncExternalStore } from "react";
-import type { PromptDraftAttachment, PromptDraftState } from "@/lib/prompt-draft";
+import type {
+  PromptDraftAttachment,
+  PromptDraftState,
+} from "@/lib/prompt-draft";
 import {
   arePromptDraftStatesEqual,
   emptyPromptDraftState,
@@ -101,7 +104,10 @@ function subscribePromptDraft(
   };
 }
 
-function writePromptDraft(storageKey: string | null, value: PromptDraftState): void {
+function writePromptDraft(
+  storageKey: string | null,
+  value: PromptDraftState,
+): void {
   if (!storageKey || typeof window === "undefined") return;
 
   // Keep all prompt composer mounts in sync, including late async completions from
@@ -129,7 +135,11 @@ function restorePromptDraftIfEmpty(
   storageKey: string | null,
   value: PromptDraftState,
 ): boolean {
-  if (!storageKey || typeof window === "undefined" || isPromptDraftEmpty(value)) {
+  if (
+    !storageKey ||
+    typeof window === "undefined" ||
+    isPromptDraftEmpty(value)
+  ) {
     return false;
   }
 
@@ -183,80 +193,103 @@ export function usePromptDraftStorage(scope: PromptDraftScope) {
     return readPromptDraft(storageKey);
   }, [storageKey]);
 
-  const setText = useCallback((nextText: string) => {
-    writePromptDraft(storageKey, {
-      ...readPromptDraft(storageKey),
-      text: nextText,
-    });
-  }, [storageKey]);
+  const setText = useCallback(
+    (nextText: string) => {
+      writePromptDraft(storageKey, {
+        ...readPromptDraft(storageKey),
+        text: nextText,
+      });
+    },
+    [storageKey],
+  );
 
-  const appendText = useCallback((chunk: string) => {
-    const normalizedChunk = chunk.replace(/\s+/g, " ").trim();
-    if (normalizedChunk.length === 0) return;
+  const appendText = useCallback(
+    (chunk: string) => {
+      const normalizedChunk = chunk.replace(/\s+/g, " ").trim();
+      if (normalizedChunk.length === 0) return;
 
-    const currentDraft = readPromptDraft(storageKey);
-    const trimmedCurrent = currentDraft.text.trimEnd();
-    const nextText =
-      trimmedCurrent.length === 0
-        ? normalizedChunk
-        : `${trimmedCurrent} ${normalizedChunk}`;
-    writePromptDraft(storageKey, {
-      ...currentDraft,
-      text: nextText,
-    });
-  }, [storageKey]);
+      const currentDraft = readPromptDraft(storageKey);
+      const trimmedCurrent = currentDraft.text.trimEnd();
+      const nextText =
+        trimmedCurrent.length === 0
+          ? normalizedChunk
+          : `${trimmedCurrent} ${normalizedChunk}`;
+      writePromptDraft(storageKey, {
+        ...currentDraft,
+        text: nextText,
+      });
+    },
+    [storageKey],
+  );
 
-  const addAttachment = useCallback((attachment: PromptDraftAttachment) => {
-    const currentDraft = readPromptDraft(storageKey);
-    const alreadyExists = currentDraft.attachments.some(
-      (existingAttachment) => existingAttachment.path === attachment.path,
-    );
-    if (alreadyExists) return;
+  const addAttachment = useCallback(
+    (attachment: PromptDraftAttachment) => {
+      const currentDraft = readPromptDraft(storageKey);
+      const alreadyExists = currentDraft.attachments.some(
+        (existingAttachment) => existingAttachment.path === attachment.path,
+      );
+      if (alreadyExists) return;
 
-    writePromptDraft(storageKey, {
-      ...currentDraft,
-      attachments: [...currentDraft.attachments, attachment],
-    });
-  }, [storageKey]);
+      writePromptDraft(storageKey, {
+        ...currentDraft,
+        attachments: [...currentDraft.attachments, attachment],
+      });
+    },
+    [storageKey],
+  );
 
-  const removeAttachment = useCallback((path: string) => {
-    const currentDraft = readPromptDraft(storageKey);
-    const nextAttachments = currentDraft.attachments.filter(
-      (attachment) => attachment.path !== path,
-    );
-    if (nextAttachments.length === currentDraft.attachments.length) {
-      return;
-    }
+  const removeAttachment = useCallback(
+    (path: string) => {
+      const currentDraft = readPromptDraft(storageKey);
+      const nextAttachments = currentDraft.attachments.filter(
+        (attachment) => attachment.path !== path,
+      );
+      if (nextAttachments.length === currentDraft.attachments.length) {
+        return;
+      }
 
-    writePromptDraft(storageKey, {
-      ...currentDraft,
-      attachments: nextAttachments,
-    });
-  }, [storageKey]);
+      writePromptDraft(storageKey, {
+        ...currentDraft,
+        attachments: nextAttachments,
+      });
+    },
+    [storageKey],
+  );
 
   const clear = useCallback(() => {
     setDraftAndPersist(EMPTY_PROMPT_DRAFT);
   }, [setDraftAndPersist]);
 
-  const clearIfCurrentMatches = useCallback((expectedDraft: PromptDraftState): boolean => {
-    if (!arePromptDraftStatesEqual(readPromptDraft(storageKey), expectedDraft)) {
-      return false;
-    }
+  const clearIfCurrentMatches = useCallback(
+    (expectedDraft: PromptDraftState): boolean => {
+      if (
+        !arePromptDraftStatesEqual(readPromptDraft(storageKey), expectedDraft)
+      ) {
+        return false;
+      }
 
-    setDraftAndPersist(EMPTY_PROMPT_DRAFT);
-    return true;
-  }, [setDraftAndPersist, storageKey]);
+      setDraftAndPersist(EMPTY_PROMPT_DRAFT);
+      return true;
+    },
+    [setDraftAndPersist, storageKey],
+  );
 
-  const setAttachments = useCallback((attachments: PromptDraftAttachment[]) => {
-    writePromptDraft(storageKey, {
-      ...readPromptDraft(storageKey),
-      attachments,
-    });
-  }, [storageKey]);
+  const setAttachments = useCallback(
+    (attachments: PromptDraftAttachment[]) => {
+      writePromptDraft(storageKey, {
+        ...readPromptDraft(storageKey),
+        attachments,
+      });
+    },
+    [storageKey],
+  );
 
-  const restoreIfEmpty = useCallback((nextDraft: PromptDraftState) => {
-    restorePromptDraftIfEmpty(storageKey, nextDraft);
-  }, [storageKey]);
+  const restoreIfEmpty = useCallback(
+    (nextDraft: PromptDraftState) => {
+      restorePromptDraftIfEmpty(storageKey, nextDraft);
+    },
+    [storageKey],
+  );
 
   return {
     storageKey,

@@ -70,9 +70,9 @@ describe("archive-codex-tmp-bb-sessions", () => {
     expect(() => parseArchiveTmpBbSessionsArgs(["--wat"], {}, "/tmp")).toThrow(
       "Unknown option: --wat",
     );
-    expect(() => parseArchiveTmpBbSessionsArgs(["--pattern"], {}, "/tmp")).toThrow(
-      "Missing value for --pattern",
-    );
+    expect(() =>
+      parseArchiveTmpBbSessionsArgs(["--pattern"], {}, "/tmp"),
+    ).toThrow("Missing value for --pattern");
     expect(() =>
       parseArchiveTmpBbSessionsArgs(["--concurrency", "0"], {}, "/tmp"),
     ).toThrow("--concurrency must be a positive integer");
@@ -121,7 +121,9 @@ describe("archive-codex-tmp-bb-sessions", () => {
     const rows = parseThreadPreviewRows(
       [
         ["thr_1", "2026-04-15 13:40:15", "/tmp/bb-integ-one"].join(separator),
-        ["thr_2", "2026-04-15 13:39:51", "/tmp/bb-integration-two"].join(separator),
+        ["thr_2", "2026-04-15 13:39:51", "/tmp/bb-integration-two"].join(
+          separator,
+        ),
       ].join("\n"),
     );
 

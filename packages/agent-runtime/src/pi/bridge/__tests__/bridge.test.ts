@@ -78,10 +78,11 @@ interface ControlledPiAgentSession {
 
 function createControlledPiAgentSession(): ControlledPiAgentSession {
   let finishAbort: (() => void) | undefined;
-  const abort = vi.fn(() =>
-    new Promise<void>((resolve) => {
-      finishAbort = resolve;
-    })
+  const abort = vi.fn(
+    () =>
+      new Promise<void>((resolve) => {
+        finishAbort = resolve;
+      }),
   );
   return {
     abort,
@@ -128,10 +129,7 @@ describe("pi bridge", () => {
         mockResourceLoaders[0]?.options.appendSystemPromptOverride?.([
           "Project append instructions",
         ]),
-      ).toEqual([
-        "Project append instructions",
-        "BB append instructions",
-      ]);
+      ).toEqual(["Project append instructions", "BB append instructions"]);
     } finally {
       bridge.restore();
     }
@@ -160,7 +158,9 @@ describe("pi bridge", () => {
         noPromptTemplates: true,
         noThemes: true,
       });
-      expect(mockResourceLoaders[0]?.options.appendSystemPromptOverride).toBeUndefined();
+      expect(
+        mockResourceLoaders[0]?.options.appendSystemPromptOverride,
+      ).toBeUndefined();
     } finally {
       bridge.restore();
     }

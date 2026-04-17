@@ -24,4 +24,3 @@ export function resolveThreadWorkspaceOpenPath(
 
   return args.environment.path;
 }
-

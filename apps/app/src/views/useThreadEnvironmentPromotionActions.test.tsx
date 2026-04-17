@@ -98,7 +98,9 @@ function makeProjectResponse(): ProjectResponse {
   };
 }
 
-function makePromotionResponse(isPromoted: boolean): EnvironmentPromotionResponse {
+function makePromotionResponse(
+  isPromoted: boolean,
+): EnvironmentPromotionResponse {
   return {
     state: {
       isPromoted,
@@ -135,18 +137,22 @@ function makeHostDaemonSnapshot(): HostDaemonSnapshot {
 function makeRequestEnvironmentAction(): RequestEnvironmentActionMutationLike {
   return {
     isPending: false,
-    mutateAsync: vi.fn(async (): Promise<EnvironmentActionResponse> => ({
-      action: "promote",
-      message: "Promoted",
-      ok: true,
-    })),
+    mutateAsync: vi.fn(
+      async (): Promise<EnvironmentActionResponse> => ({
+        action: "promote",
+        message: "Promoted",
+        ok: true,
+      }),
+    ),
   };
 }
 
 beforeEach(() => {
   vi.mocked(useHostDaemon).mockReturnValue(makeHostDaemonSnapshot());
   vi.mocked(api.listProjects).mockResolvedValue([makeProjectResponse()]);
-  vi.mocked(api.getEnvironmentPromotion).mockResolvedValue(makePromotionResponse(false));
+  vi.mocked(api.getEnvironmentPromotion).mockResolvedValue(
+    makePromotionResponse(false),
+  );
 });
 
 afterEach(() => {
@@ -202,7 +208,8 @@ describe("useThreadEnvironmentPromotionActions", () => {
     expect(result.current.headerAction).toMatchObject({
       disabled: true,
       label: "Promote",
-      title: "Promotion is only available for local worktree environments on this host.",
+      title:
+        "Promotion is only available for local worktree environments on this host.",
     });
   });
 

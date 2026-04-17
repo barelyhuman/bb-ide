@@ -108,10 +108,12 @@ describe("thread context window usage helpers", () => {
   it("formats compact token labels and usage percentages", () => {
     expect(formatCompactTokenCount(258400)).toBe("258k");
     expect(formatCompactTokenCount(999)).toBe("999");
-    expect(calculateContextWindowUsagePercent({
-      usedTokens: 32000,
-      modelContextWindow: 258400,
-      estimated: false,
-    })).toBe(12);
+    expect(
+      calculateContextWindowUsagePercent({
+        usedTokens: 32000,
+        modelContextWindow: 258400,
+        estimated: false,
+      }),
+    ).toBe(12);
   });
 });

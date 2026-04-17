@@ -24,7 +24,12 @@ describe.sequential("fake provider managed crash recovery integration", () => {
       await sendTextMessage(harness.api, thread.id, {
         text: "before managed crash",
       });
-      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+      await waitForThreadStatus(
+        harness.api,
+        thread.id,
+        "idle",
+        TURN_TIMEOUT_MS,
+      );
 
       await harness.crashDaemon();
       await waitForHostDisconnected(
@@ -39,7 +44,12 @@ describe.sequential("fake provider managed crash recovery integration", () => {
       await sendTextMessage(harness.api, thread.id, {
         text: "after managed crash",
       });
-      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+      await waitForThreadStatus(
+        harness.api,
+        thread.id,
+        "idle",
+        TURN_TIMEOUT_MS,
+      );
 
       expect(await getThreadOutput(harness.api, thread.id)).toContain(
         "after managed crash",

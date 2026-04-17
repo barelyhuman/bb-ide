@@ -152,8 +152,12 @@ describe("public environment action regressions", () => {
   it("rejects legacy environment action payloads that still send threadId", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-thread-target" });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-thread-target",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -185,7 +189,9 @@ describe("public environment action regressions", () => {
   it("rejects demote when the environment branch or merge base branch is missing", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-demote-guard" });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-demote-guard",
+      });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
         path: "/tmp/demote-guard-project",
@@ -234,7 +240,9 @@ describe("public environment action regressions", () => {
         },
       );
       expect(missingDefaultBranchResponse.status).toBe(409);
-      await expect(readJson(missingDefaultBranchResponse)).resolves.toMatchObject({
+      await expect(
+        readJson(missingDefaultBranchResponse),
+      ).resolves.toMatchObject({
         code: "invalid_request",
         message: "Environment cannot be demoted",
       });

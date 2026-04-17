@@ -17,18 +17,20 @@ describe("prompt draft helpers", () => {
   });
 
   it("parses structured drafts with attachments", () => {
-    const parsed = parsePromptDraftStorage(JSON.stringify({
-      text: "Review",
-      attachments: [
-        {
-          type: "localImage",
-          path: "/tmp/image.png",
-          name: "image.png",
-          sizeBytes: 12,
-          mimeType: "image/png",
-        },
-      ],
-    }));
+    const parsed = parsePromptDraftStorage(
+      JSON.stringify({
+        text: "Review",
+        attachments: [
+          {
+            type: "localImage",
+            path: "/tmp/image.png",
+            name: "image.png",
+            sizeBytes: 12,
+            mimeType: "image/png",
+          },
+        ],
+      }),
+    );
 
     expect(parsed).toEqual({
       text: "Review",
@@ -50,18 +52,20 @@ describe("prompt draft helpers", () => {
 
   it("detects whether a draft has any submittable state", () => {
     expect(isPromptDraftEmpty(emptyPromptDraftState())).toBe(true);
-    expect(isPromptDraftEmpty({
-      text: "",
-      attachments: [
-        {
-          type: "localFile",
-          path: "/tmp/spec.md",
-          name: "spec.md",
-          sizeBytes: 42,
-          mimeType: "text/markdown",
-        },
-      ],
-    })).toBe(false);
+    expect(
+      isPromptDraftEmpty({
+        text: "",
+        attachments: [
+          {
+            type: "localFile",
+            path: "/tmp/spec.md",
+            name: "spec.md",
+            sizeBytes: 42,
+            mimeType: "text/markdown",
+          },
+        ],
+      }),
+    ).toBe(false);
   });
 
   it("maps draft text and attachments to prompt input list", () => {

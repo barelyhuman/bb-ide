@@ -1,11 +1,4 @@
-import {
-  and,
-  count,
-  desc,
-  eq,
-  isNotNull,
-  or,
-} from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, or } from "drizzle-orm";
 import {
   events,
   hostDaemonCommands,
@@ -59,9 +52,7 @@ function parseQueuedCommand(
   };
 }
 
-export function listQueuedCommands(
-  db: DbConnection,
-): QueuedCommand[] {
+export function listQueuedCommands(db: DbConnection): QueuedCommand[] {
   return db
     .select()
     .from(hostDaemonCommands)
@@ -142,23 +133,14 @@ export function readLatestProviderThreadId(
       .select({ providerThreadId: events.providerThreadId })
       .from(events)
       .where(
-        and(
-          eq(events.threadId, threadId),
-          isNotNull(events.providerThreadId),
-        ),
+        and(eq(events.threadId, threadId), isNotNull(events.providerThreadId)),
       )
       .orderBy(desc(events.sequence))
       .limit(1)
-      .get()
-      ?.providerThreadId ?? null
+      .get()?.providerThreadId ?? null
   );
 }
 
-export function countStoredThreads(
-  db: DbConnection,
-): number {
-  return db
-    .select({ count: count() })
-    .from(threads)
-    .get()?.count ?? 0;
+export function countStoredThreads(db: DbConnection): number {
+  return db.select({ count: count() }).from(threads).get()?.count ?? 0;
 }

@@ -100,7 +100,9 @@ export function remapReplayThreadEvent(
 }
 
 export function replayEventTurnId(event: ThreadEvent): string | null {
-  return "turnId" in event && typeof event.turnId === "string" ? event.turnId : null;
+  return "turnId" in event && typeof event.turnId === "string"
+    ? event.turnId
+    : null;
 }
 
 export function replayTerminalIdentifiers(
@@ -112,7 +114,9 @@ export function replayTerminalIdentifiers(
   };
 }
 
-export async function waitForReplayTime(args: WaitForReplayTimeArgs): Promise<void> {
+export async function waitForReplayTime(
+  args: WaitForReplayTimeArgs,
+): Promise<void> {
   throwIfAborted(args.signal);
   if (args.relativeMs < args.timing.previousRelativeMs) {
     throw new ReplayCaptureReadError(
@@ -120,7 +124,8 @@ export async function waitForReplayTime(args: WaitForReplayTimeArgs): Promise<vo
       "Replay event timing moved backwards",
     );
   }
-  const delayMs = (args.relativeMs - args.timing.previousRelativeMs) / args.timing.speed;
+  const delayMs =
+    (args.relativeMs - args.timing.previousRelativeMs) / args.timing.speed;
   args.timing.previousRelativeMs = args.relativeMs;
   if (delayMs <= 0) {
     return;

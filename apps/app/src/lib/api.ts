@@ -1,7 +1,4 @@
-import {
-  extractErrorMessage,
-  toRecord,
-} from "@bb/core-ui";
+import { extractErrorMessage, toRecord } from "@bb/core-ui";
 import type { CloudAuthProviderId } from "@bb/agent-providers";
 import type {
   AvailableModel,
@@ -136,7 +133,10 @@ function deriveHttpErrorMessage(
     return statusText || "Request failed";
   }
 
-  return (extractErrorMessage(normalized, ERROR_EXTRACT_OPTS) ?? statusText) || "Request failed";
+  return (
+    (extractErrorMessage(normalized, ERROR_EXTRACT_OPTS) ?? statusText) ||
+    "Request failed"
+  );
 }
 
 function parseHttpErrorBody(
@@ -201,7 +201,9 @@ async function requestVoid(responsePromise: Promise<Response>): Promise<void> {
   await requestResponse(responsePromise);
 }
 
-async function requestResponse(responsePromise: Promise<Response>): Promise<Response> {
+async function requestResponse(
+  responsePromise: Promise<Response>,
+): Promise<Response> {
   const res = await responsePromise;
   if (!res.ok) {
     await throwHttpError(res);
@@ -222,7 +224,9 @@ export async function loadFilePreview(
   const contentBytes = new Uint8Array(await response.arrayBuffer());
   return buildFilePreview({
     contentBytes,
-    mimeType: normalizeFilePreviewMimeType(response.headers.get("content-type")),
+    mimeType: normalizeFilePreviewMimeType(
+      response.headers.get("content-type"),
+    ),
     name: target.name,
     path: target.path,
     url: target.url,
@@ -255,10 +259,13 @@ async function postMultipart<T>(
   return JSON.parse(text) as T;
 }
 
-
-export async function getReplayCapture(id: string): Promise<ReplayCaptureDetail> {
+export async function getReplayCapture(
+  id: string,
+): Promise<ReplayCaptureDetail> {
   return request<ReplayCaptureDetail>(
-    apiClient["development-only"].replay.captures[":id"].$get({ param: { id } }),
+    apiClient["development-only"].replay.captures[":id"].$get({
+      param: { id },
+    }),
   );
 }
 
@@ -274,7 +281,9 @@ export async function startReplayRun(
   );
 }
 
-export async function createProject(req: CreateProjectRequest): Promise<Project> {
+export async function createProject(
+  req: CreateProjectRequest,
+): Promise<Project> {
   return request<Project>(apiClient.projects.$post({ json: req }));
 }
 
@@ -297,7 +306,9 @@ export async function updateProject(
   id: string,
   req: UpdateProjectRequest,
 ): Promise<Project> {
-  return request<Project>(apiClient.projects[":id"].$patch({ param: { id }, json: req }));
+  return request<Project>(
+    apiClient.projects[":id"].$patch({ param: { id }, json: req }),
+  );
 }
 
 export async function listProjects(): Promise<ProjectResponse[]> {
@@ -313,7 +324,10 @@ export async function addProjectSource(
   req: CreateProjectSourceRequest,
 ): Promise<ProjectSource> {
   return request<ProjectSource>(
-    apiClient.projects[":id"].sources.$post({ param: { id: projectId }, json: req }),
+    apiClient.projects[":id"].sources.$post({
+      param: { id: projectId },
+      json: req,
+    }),
   );
 }
 
@@ -375,7 +389,6 @@ export async function uploadPromptAttachment(
   );
 }
 
-
 export async function transcribeVoiceInput(
   file: File,
   prompt?: string,
@@ -390,15 +403,15 @@ export async function transcribeVoiceInput(
   );
 }
 
-
-
 export async function createThread(req: CreateThreadRequest): Promise<Thread> {
-  return request<Thread>(apiClient.threads.$post({
-    json: {
-      ...req,
-      origin: "app",
-    },
-  }));
+  return request<Thread>(
+    apiClient.threads.$post({
+      json: {
+        ...req,
+        origin: "app",
+      },
+    }),
+  );
 }
 
 export interface ThreadListFilters {
@@ -413,16 +426,21 @@ export async function listThreads(
   signal?: AbortSignal,
 ): Promise<ThreadListResponse> {
   return request<ThreadListResponse>(
-    apiClient.threads.$get({
-      query: {
-        projectId: filters.projectId,
-        ...(filters.type ? { type: filters.type } : {}),
-        ...(filters.parentThreadId ? { parentThreadId: filters.parentThreadId } : {}),
-        ...(filters.archived !== undefined
-          ? { archived: String(filters.archived) as "true" | "false" }
-          : {}),
+    apiClient.threads.$get(
+      {
+        query: {
+          projectId: filters.projectId,
+          ...(filters.type ? { type: filters.type } : {}),
+          ...(filters.parentThreadId
+            ? { parentThreadId: filters.parentThreadId }
+            : {}),
+          ...(filters.archived !== undefined
+            ? { archived: String(filters.archived) as "true" | "false" }
+            : {}),
+        },
       },
-    }, requestOptions(signal)),
+      requestOptions(signal),
+    ),
   );
 }
 
@@ -456,19 +474,28 @@ export async function updateThread(
   id: string,
   req: UpdateThreadRequest,
 ): Promise<Thread> {
-  return request<Thread>(apiClient.threads[":id"].$patch({ param: { id }, json: req }));
+  return request<Thread>(
+    apiClient.threads[":id"].$patch({ param: { id }, json: req }),
+  );
 }
 
 export async function getThreadDefaultExecutionOptions(
   id: string,
 ): Promise<ResolvedThreadExecutionOptions | null> {
   return request<ResolvedThreadExecutionOptions | null>(
-    apiClient.threads[":id"]["default-execution-options"].$get({ param: { id } }),
+    apiClient.threads[":id"]["default-execution-options"].$get({
+      param: { id },
+    }),
   );
 }
 
-export async function sendThreadMessage(id: string, req: SendMessageRequest): Promise<void> {
-  await requestVoid(apiClient.threads[":id"].send.$post({ param: { id }, json: req }));
+export async function sendThreadMessage(
+  id: string,
+  req: SendMessageRequest,
+): Promise<void> {
+  await requestVoid(
+    apiClient.threads[":id"].send.$post({ param: { id }, json: req }),
+  );
 }
 
 export async function createThreadDraft(
@@ -480,7 +507,9 @@ export async function createThreadDraft(
   );
 }
 
-export async function listThreadDrafts(id: string): Promise<ThreadDraftListResponse> {
+export async function listThreadDrafts(
+  id: string,
+): Promise<ThreadDraftListResponse> {
   return request<ThreadDraftListResponse>(
     apiClient.threads[":id"].drafts.$get({ param: { id } }),
   );
@@ -551,7 +580,9 @@ export async function archiveThread(
 }
 
 export async function unarchiveThread(id: string): Promise<void> {
-  await requestVoid(apiClient.threads[":id"].unarchive.$post({ param: { id } }));
+  await requestVoid(
+    apiClient.threads[":id"].unarchive.$post({ param: { id } }),
+  );
 }
 
 export async function deleteThread(id: string): Promise<void> {
@@ -559,22 +590,30 @@ export async function deleteThread(id: string): Promise<void> {
 }
 
 export async function markThreadRead(id: string): Promise<Thread> {
-  return request<Thread>(apiClient.threads[":id"].read.$post({ param: { id } }));
+  return request<Thread>(
+    apiClient.threads[":id"].read.$post({ param: { id } }),
+  );
 }
 
 export async function markThreadUnread(id: string): Promise<Thread> {
-  return request<Thread>(apiClient.threads[":id"].unread.$post({ param: { id } }));
+  return request<Thread>(
+    apiClient.threads[":id"].unread.$post({ param: { id } }),
+  );
 }
 
 export async function getEnvironment(id: string): Promise<Environment> {
-  return request<Environment>(apiClient.environments[":id"].$get({ param: { id } }));
+  return request<Environment>(
+    apiClient.environments[":id"].$get({ param: { id } }),
+  );
 }
 
 export async function updateEnvironment(
   id: string,
   req: UpdateEnvironmentRequest,
 ): Promise<Environment> {
-  return request<Environment>(apiClient.environments[":id"].$patch({ param: { id }, json: req }));
+  return request<Environment>(
+    apiClient.environments[":id"].$patch({ param: { id }, json: req }),
+  );
 }
 
 export async function getEnvironmentWorkStatus(
@@ -600,7 +639,9 @@ export async function getEnvironmentPromotion(
   );
 }
 
-export async function getEnvironmentDiffBranches(id: string): Promise<string[]> {
+export async function getEnvironmentDiffBranches(
+  id: string,
+): Promise<string[]> {
   return request<string[]>(
     apiClient.environments[":id"].diff.branches.$get({ param: { id } }),
   );
@@ -624,7 +665,9 @@ export async function getThreadTimeline(
     apiClient.threads[":id"].timeline.$get({
       param: { id },
       query: {
-        ...(includeToolGroupMessages ? { includeToolGroupMessages: "true" } : {}),
+        ...(includeToolGroupMessages
+          ? { includeToolGroupMessages: "true" }
+          : {}),
         ...(includeAllEvents ? { showAllManagerEvents: "true" } : {}),
       },
     }),
@@ -702,7 +745,9 @@ export async function getAvailableModels(
 }
 
 export async function listSystemProviders(): Promise<SystemProviderInfo[]> {
-  return request<SystemProviderInfo[]>(apiClient.system.providers.$get({ query: {} }));
+  return request<SystemProviderInfo[]>(
+    apiClient.system.providers.$get({ query: {} }),
+  );
 }
 
 export async function listHosts(): Promise<Host[]> {
@@ -717,7 +762,9 @@ export async function updateHost(
   id: string,
   req: { name: string },
 ): Promise<Host> {
-  return request<Host>(apiClient.hosts[":id"].$patch({ param: { id }, json: req }));
+  return request<Host>(
+    apiClient.hosts[":id"].$patch({ param: { id }, json: req }),
+  );
 }
 
 export async function deleteHost(id: string): Promise<void> {
@@ -725,11 +772,15 @@ export async function deleteHost(id: string): Promise<void> {
 }
 
 export async function listSandboxBackends(): Promise<SandboxBackendInfo[]> {
-  return request<SandboxBackendInfo[]>(apiClient.system["sandbox-backends"].$get());
+  return request<SandboxBackendInfo[]>(
+    apiClient.system["sandbox-backends"].$get(),
+  );
 }
 
 export async function getCloudAuthSettings(): Promise<CloudAuthSettingsResponse> {
-  return request<CloudAuthSettingsResponse>(apiClient.system["cloud-auth"].$get());
+  return request<CloudAuthSettingsResponse>(
+    apiClient.system["cloud-auth"].$get(),
+  );
 }
 
 export async function startCloudAuthConnection(

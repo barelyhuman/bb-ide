@@ -1,20 +1,20 @@
-import * as React from "react"
-import * as DialogPrimitive from "@radix-ui/react-dialog"
-import { Slot } from "@radix-ui/react-slot"
-import { X } from "lucide-react"
+import * as React from "react";
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { Slot } from "@radix-ui/react-slot";
+import { X } from "lucide-react";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 import {
   DrawerDescription as DrawerDescriptionPrimitive,
   DrawerTitle as DrawerTitlePrimitive,
-} from "@/components/ui/drawer"
+} from "@/components/ui/drawer";
 import {
   type ResponsiveOverlayContextValue,
   useResponsiveRoot,
   MobileTrigger,
   ResponsiveDrawerShell,
   stripRadixContentProps,
-} from "@/components/ui/responsive-overlay"
+} from "@/components/ui/responsive-overlay";
 
 // ---------------------------------------------------------------------------
 // Context — separate instance from DropdownMenu / Popover.
@@ -25,10 +25,10 @@ const ResponsiveDialogContext =
     isMobile: false,
     open: false,
     onOpenChange: () => {},
-  })
+  });
 
 function useResponsiveDialog() {
-  return React.useContext(ResponsiveDialogContext)
+  return React.useContext(ResponsiveDialogContext);
 }
 
 // ---------------------------------------------------------------------------
@@ -41,7 +41,7 @@ function Dialog({
   onOpenChange: controlledOnChange,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  const ctx = useResponsiveRoot(controlledOpen, controlledOnChange)
+  const ctx = useResponsiveRoot(controlledOpen, controlledOnChange);
 
   const body = ctx.isMobile ? (
     children
@@ -53,13 +53,13 @@ function Dialog({
     >
       {children}
     </DialogPrimitive.Root>
-  )
+  );
 
   return (
     <ResponsiveDialogContext.Provider value={ctx}>
       {body}
     </ResponsiveDialogContext.Provider>
-  )
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -70,7 +70,7 @@ const DialogTrigger = React.forwardRef<
   HTMLButtonElement,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Trigger>
 >(({ asChild, children, ...props }, ref) => {
-  const { isMobile, open, onOpenChange } = useResponsiveDialog()
+  const { isMobile, open, onOpenChange } = useResponsiveDialog();
 
   if (isMobile) {
     return (
@@ -84,52 +84,59 @@ const DialogTrigger = React.forwardRef<
       >
         {children}
       </MobileTrigger>
-    )
+    );
   }
 
   return (
     <DialogPrimitive.Trigger ref={ref} asChild={asChild} {...props}>
       {children}
     </DialogPrimitive.Trigger>
-  )
-})
-DialogTrigger.displayName = "DialogTrigger"
+  );
+});
+DialogTrigger.displayName = "DialogTrigger";
 
 // ---------------------------------------------------------------------------
 // Close — closes the dialog/drawer. Works in both modes.
 // ---------------------------------------------------------------------------
 
 interface DialogCloseProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  asChild?: boolean
+  asChild?: boolean;
 }
 
 const DialogClose = React.forwardRef<HTMLButtonElement, DialogCloseProps>(
   ({ asChild, onClick, children, ...props }, ref) => {
-    const { isMobile, onOpenChange } = useResponsiveDialog()
+    const { isMobile, onOpenChange } = useResponsiveDialog();
 
     if (isMobile) {
-      const Comp = asChild ? Slot : "button"
-      const handleClick: React.MouseEventHandler<HTMLButtonElement> = (event) => {
-        onClick?.(event)
+      const Comp = asChild ? Slot : "button";
+      const handleClick: React.MouseEventHandler<HTMLButtonElement> = (
+        event,
+      ) => {
+        onClick?.(event);
         if (!event.defaultPrevented) {
-          onOpenChange(false)
+          onOpenChange(false);
         }
-      }
+      };
       return (
         <Comp ref={ref} onClick={handleClick} {...props}>
           {children}
         </Comp>
-      )
+      );
     }
 
     return (
-      <DialogPrimitive.Close ref={ref} asChild={asChild} onClick={onClick} {...props}>
+      <DialogPrimitive.Close
+        ref={ref}
+        asChild={asChild}
+        onClick={onClick}
+        {...props}
+      >
         {children}
       </DialogPrimitive.Close>
-    )
+    );
   },
-)
-DialogClose.displayName = "DialogClose"
+);
+DialogClose.displayName = "DialogClose";
 
 // ---------------------------------------------------------------------------
 // Overlay — desktop only. Kept for backwards compatibility; the drawer
@@ -148,8 +155,8 @@ const DialogOverlay = React.forwardRef<
     )}
     {...props}
   />
-))
-DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
+));
+DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 // ---------------------------------------------------------------------------
 // Content
@@ -159,10 +166,10 @@ const DialogContent = React.forwardRef<
   HTMLDivElement,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
 >(({ className, children, ...props }, ref) => {
-  const { isMobile, open, onOpenChange } = useResponsiveDialog()
+  const { isMobile, open, onOpenChange } = useResponsiveDialog();
 
   if (isMobile) {
-    const domProps = stripRadixContentProps(props)
+    const domProps = stripRadixContentProps(props);
     return (
       <ResponsiveDrawerShell open={open} onOpenChange={onOpenChange}>
         <div
@@ -176,7 +183,7 @@ const DialogContent = React.forwardRef<
           {children}
         </div>
       </ResponsiveDrawerShell>
-    )
+    );
   }
 
   return (
@@ -197,9 +204,9 @@ const DialogContent = React.forwardRef<
         </DialogPrimitive.Close>
       </DialogPrimitive.Content>
     </DialogPrimitive.Portal>
-  )
-})
-DialogContent.displayName = "DialogContent"
+  );
+});
+DialogContent.displayName = "DialogContent";
 
 // ---------------------------------------------------------------------------
 // Header / Footer — layout primitives, unchanged.
@@ -216,8 +223,8 @@ const DialogHeader = ({
     )}
     {...props}
   />
-)
-DialogHeader.displayName = "DialogHeader"
+);
+DialogHeader.displayName = "DialogHeader";
 
 const DialogFooter = ({
   className,
@@ -230,8 +237,8 @@ const DialogFooter = ({
     )}
     {...props}
   />
-)
-DialogFooter.displayName = "DialogFooter"
+);
+DialogFooter.displayName = "DialogFooter";
 
 // ---------------------------------------------------------------------------
 // Title / Description — render through the drawer's primitives on mobile so
@@ -242,33 +249,38 @@ const DialogTitle = React.forwardRef<
   HTMLHeadingElement,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Title>
 >(({ className, ...props }, ref) => {
-  const { isMobile } = useResponsiveDialog()
-  const Comp = isMobile ? DrawerTitlePrimitive : DialogPrimitive.Title
+  const { isMobile } = useResponsiveDialog();
+  const Comp = isMobile ? DrawerTitlePrimitive : DialogPrimitive.Title;
   return (
     <Comp
       ref={ref}
-      className={cn("text-lg font-semibold leading-none tracking-tight", className)}
+      className={cn(
+        "text-lg font-semibold leading-none tracking-tight",
+        className,
+      )}
       {...props}
     />
-  )
-})
-DialogTitle.displayName = "DialogTitle"
+  );
+});
+DialogTitle.displayName = "DialogTitle";
 
 const DialogDescription = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Description>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Description>
 >(({ className, ...props }, ref) => {
-  const { isMobile } = useResponsiveDialog()
-  const Comp = isMobile ? DrawerDescriptionPrimitive : DialogPrimitive.Description
+  const { isMobile } = useResponsiveDialog();
+  const Comp = isMobile
+    ? DrawerDescriptionPrimitive
+    : DialogPrimitive.Description;
   return (
     <Comp
       ref={ref}
       className={cn("text-sm text-muted-foreground", className)}
       {...props}
     />
-  )
-})
-DialogDescription.displayName = DialogPrimitive.Description.displayName
+  );
+});
+DialogDescription.displayName = DialogPrimitive.Description.displayName;
 
 export {
   Dialog,
@@ -280,4 +292,4 @@ export {
   DialogFooter,
   DialogTitle,
   DialogDescription,
-}
+};

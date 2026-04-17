@@ -3,14 +3,15 @@ import { PanelBottom, PanelRight } from "lucide-react";
 import { useIsSecondaryPanelOpen } from "@/lib/thread-secondary-panel";
 import { Button } from "@/components/ui/button";
 import { SplitButton } from "@/components/ui/split-button";
-import { AppPageHeader, HEADER_ICON_BUTTON_CLASS } from "@/components/layout/AppPageHeader";
+import {
+  AppPageHeader,
+  HEADER_ICON_BUTTON_CLASS,
+} from "@/components/layout/AppPageHeader";
 import { StatusPill } from "@bb/ui-core";
 import { useIsMobile } from "@/hooks/useMobile";
 import { cn } from "@/lib/utils";
 import type { ThreadGitActionDialogTarget } from "@/components/thread/ThreadGitActionDialog";
-import type {
-  ThreadEnvironmentPromotionDialogTarget,
-} from "@/components/thread/ThreadEnvironmentPromotionDialog";
+import type { ThreadEnvironmentPromotionDialogTarget } from "@/components/thread/ThreadEnvironmentPromotionDialog";
 
 const THREAD_HEADER_ACTION_BUTTON_CLASS =
   "h-9 rounded-md border-border/70 bg-background/70 px-2 text-xs font-medium text-foreground/85 shadow-none hover:bg-muted/45 hover:text-foreground md:h-8";
@@ -34,7 +35,9 @@ interface ThreadDetailHeaderProps {
   isPromoted: boolean;
   isThreadGitActionPending: boolean;
   onOpenThreadGitAction: (target: ThreadGitActionDialogTarget) => void;
-  onOpenThreadPromotionAction: (target: ThreadEnvironmentPromotionDialogTarget) => void;
+  onOpenThreadPromotionAction: (
+    target: ThreadEnvironmentPromotionDialogTarget,
+  ) => void;
   onToggleSecondaryPanel: () => void;
   threadHeaderGitActions: ThreadHeaderGitAction[];
   threadHeaderPromotionAction: ThreadHeaderPromotionAction | null;
@@ -64,7 +67,9 @@ export function ThreadDetailHeader({
   const center = (
     <>
       <p className="truncate text-sm font-semibold">{threadTitle}</p>
-      {isManagerThread ? <StatusPill variant="outline">manager</StatusPill> : null}
+      {isManagerThread ? (
+        <StatusPill variant="outline">manager</StatusPill>
+      ) : null}
       {!isManagerThread && isManagedThread ? (
         <StatusPill variant="outline">managed</StatusPill>
       ) : null}
@@ -83,7 +88,9 @@ export function ThreadDetailHeader({
           disabled={threadHeaderPromotionAction.disabled}
           title={threadHeaderPromotionAction.title}
           className={THREAD_HEADER_ACTION_BUTTON_CLASS}
-          onClick={() => onOpenThreadPromotionAction(threadHeaderPromotionAction.target)}
+          onClick={() =>
+            onOpenThreadPromotionAction(threadHeaderPromotionAction.target)
+          }
         >
           {threadHeaderPromotionAction.label}
         </Button>
@@ -126,8 +133,12 @@ export function ThreadDetailHeader({
             ? "bg-accent/35 text-foreground hover:bg-accent/45"
             : "text-muted-foreground hover:bg-accent/45 hover:text-foreground",
         )}
-        aria-label={isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"}
-        title={isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"}
+        aria-label={
+          isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"
+        }
+        title={
+          isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"
+        }
         onClick={onToggleSecondaryPanel}
       >
         <SecondaryPanelIcon />

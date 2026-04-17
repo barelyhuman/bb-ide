@@ -28,9 +28,7 @@ import {
   requirePublicThread,
   requirePublicThreadEnvironment,
 } from "../../services/lib/entity-lookup.js";
-import {
-  queueThreadRenameCommand,
-} from "../../services/threads/thread-commands.js";
+import { queueThreadRenameCommand } from "../../services/threads/thread-commands.js";
 import {
   finalizeStoppedThread,
   requestThreadStopIfNeeded,
@@ -83,7 +81,8 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
       projectId: query.projectId,
       ...(query.type ? { type: query.type } : {}),
       ...(query.parentThreadId ? { parentThreadId: query.parentThreadId } : {}),
-      archived: query.archived === undefined ? undefined : query.archived === "true",
+      archived:
+        query.archived === undefined ? undefined : query.archived === "true",
     });
     return context.json(threads satisfies ThreadListEntry[]);
   });
@@ -130,7 +129,10 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
       }
     }
 
-    if ("parentThreadId" in payload && payload.parentThreadId !== thread.parentThreadId) {
+    if (
+      "parentThreadId" in payload &&
+      payload.parentThreadId !== thread.parentThreadId
+    ) {
       appendThreadOwnershipChangeEvent(deps, {
         threadId: updated.id,
         environmentId: updated.environmentId,
@@ -165,7 +167,10 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
   });
 
   del("/threads/:id", async (context) => {
-    const { environment, thread } = requirePublicThreadEnvironment(deps.db, context.req.param("id"));
+    const { environment, thread } = requirePublicThreadEnvironment(
+      deps.db,
+      context.req.param("id"),
+    );
     markThreadDeleted(deps.db, deps.hub, { threadId: thread.id });
     requestThreadStopIfNeeded(deps, thread, environment);
     await finalizeStoppedThread(deps, {

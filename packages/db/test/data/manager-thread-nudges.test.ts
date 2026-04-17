@@ -91,12 +91,16 @@ describe("manager thread nudges", () => {
       nextFireAt: now + 60_000,
     });
 
-    expect(listDueManagerThreadNudges(db, { now, limit: 1 }).map((nudge) => nudge.id)).toEqual([
-      due.id,
-    ]);
+    expect(
+      listDueManagerThreadNudges(db, { now, limit: 1 }).map(
+        (nudge) => nudge.id,
+      ),
+    ).toEqual([due.id]);
     expect(deleteManagerThreadNudge(db, noopNotifier, due.id)).toBe(true);
     expect(deleteManagerThreadNudge(db, noopNotifier, due.id)).toBe(false);
-    expect(deleteManagerThreadNudgesForThread(db, noopNotifier, thread.id)).toBe(1);
+    expect(
+      deleteManagerThreadNudgesForThread(db, noopNotifier, thread.id),
+    ).toBe(1);
   });
 
   it("does not advance a nudge after it is disabled", () => {
@@ -113,13 +117,16 @@ describe("manager thread nudges", () => {
     });
 
     updateManagerThreadNudge(db, noopNotifier, nudge.id, { enabled: false });
-    const advanced = db.transaction((tx) =>
-      advanceManagerThreadNudgeAfterFireInTransaction(tx, {
-        expectedNextFireAt: nudge.nextFireAt,
-        nextFireAt: now + 60_000,
-        nudgeId: nudge.id,
-        now,
-      }), { behavior: "immediate" });
+    const advanced = db.transaction(
+      (tx) =>
+        advanceManagerThreadNudgeAfterFireInTransaction(tx, {
+          expectedNextFireAt: nudge.nextFireAt,
+          nextFireAt: now + 60_000,
+          nudgeId: nudge.id,
+          now,
+        }),
+      { behavior: "immediate" },
+    );
 
     expect(advanced).toBe(false);
     expect(getManagerThreadNudge(db, nudge.id)).toMatchObject({

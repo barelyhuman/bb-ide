@@ -180,7 +180,7 @@ describe("InteractiveRequestRegistry", () => {
         providerThreadId: request.providerThreadId,
         resolution: createCommandApprovalResolution(),
         threadId: request.threadId,
-      })
+      }),
     ).toThrowError(InteractiveRequestRegistryError);
   });
 

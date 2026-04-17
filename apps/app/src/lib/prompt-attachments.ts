@@ -2,7 +2,9 @@ import type { PromptInput, ViewUserMessage } from "@bb/domain";
 
 type PromptAttachmentCounts = NonNullable<ViewUserMessage["attachments"]>;
 
-export function collectPromptAttachments(input: PromptInput[]): PromptAttachmentCounts | undefined {
+export function collectPromptAttachments(
+  input: PromptInput[],
+): PromptAttachmentCounts | undefined {
   let webImages = 0;
   let localImages = 0;
   let localFiles = 0;

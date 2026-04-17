@@ -26,7 +26,13 @@ export interface SandboxFileOptions {
 
 export interface RunSandboxCommandOptions extends Pick<
   CommandStartOpts,
-  "cwd" | "envs" | "onStderr" | "onStdout" | "requestTimeoutMs" | "timeoutMs" | "user"
+  | "cwd"
+  | "envs"
+  | "onStderr"
+  | "onStdout"
+  | "requestTimeoutMs"
+  | "timeoutMs"
+  | "user"
 > {}
 
 export interface StartBackgroundProcessOptions extends RunSandboxCommandOptions {}
@@ -40,19 +46,16 @@ export interface SandboxHost {
   extendTimeout(timeoutMs: number): Promise<void>;
 }
 
-export const sandboxHostProgressStageValues = [
-  "host",
-  "daemon-start",
-] as const;
+export const sandboxHostProgressStageValues = ["host", "daemon-start"] as const;
 export type SandboxHostProgressStage =
-  typeof sandboxHostProgressStageValues[number];
+  (typeof sandboxHostProgressStageValues)[number];
 
 export const sandboxHostProgressStatusValues = [
   "started",
   "completed",
 ] as const;
 export type SandboxHostProgressStatus =
-  typeof sandboxHostProgressStatusValues[number];
+  (typeof sandboxHostProgressStatusValues)[number];
 
 export interface SandboxHostProgressEvent {
   externalId?: string;

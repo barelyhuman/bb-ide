@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  normalizePendingInteractionRequestedPermissionProfile,
-} from "./pending-interaction-normalization.js";
+import { normalizePendingInteractionRequestedPermissionProfile } from "./pending-interaction-normalization.js";
 
 describe("pending interaction normalization", () => {
   it("normalizes requested permission profiles to explicit nulls and arrays", () => {

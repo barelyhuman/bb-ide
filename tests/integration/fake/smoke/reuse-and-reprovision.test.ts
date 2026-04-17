@@ -32,7 +32,10 @@ import {
 describe.sequential("fake provider smoke reuse integration", () => {
   it("moves a thread to error and records failure events when environment provisioning fails", () =>
     withHarness(async (harness) => {
-      const project = await createProjectFixture(harness, "Provision Failure Smoke");
+      const project = await createProjectFixture(
+        harness,
+        "Provision Failure Smoke",
+      );
       const missingPath = path.join(
         path.dirname(harness.repoDir),
         `missing-provision-${randomUUID()}`,
@@ -79,7 +82,10 @@ describe.sequential("fake provider smoke reuse integration", () => {
 
   it("reuses the same unmanaged environment when two host threads target the same path", () =>
     withHarness(async (harness) => {
-      const project = await createProjectFixture(harness, "Implicit Reuse Smoke");
+      const project = await createProjectFixture(
+        harness,
+        "Implicit Reuse Smoke",
+      );
       const firstThread = await createReadyThread(harness, {
         projectId: project.id,
         workspace: {
@@ -97,9 +103,13 @@ describe.sequential("fake provider smoke reuse integration", () => {
         },
       });
 
-      expect(secondThread.thread.environmentId).toBe(firstThread.thread.environmentId);
+      expect(secondThread.thread.environmentId).toBe(
+        firstThread.thread.environmentId,
+      );
       expect(secondThread.environment.id).toBe(firstThread.environment.id);
-      expect(countProvisionCommands(harness)).toBe(provisionCountBeforeSecondThread);
+      expect(countProvisionCommands(harness)).toBe(
+        provisionCountBeforeSecondThread,
+      );
     }));
 
   it("creates a reuse thread without provisioning a second environment", () =>
@@ -137,7 +147,10 @@ describe.sequential("fake provider smoke reuse integration", () => {
       );
 
       const output = await getThreadOutput(harness.api, reusedThread.thread.id);
-      const reusedEnvironment = await getEnvironment(harness.api, environment.id);
+      const reusedEnvironment = await getEnvironment(
+        harness.api,
+        environment.id,
+      );
       expect(reusedEnvironment.id).toBe(environment.id);
       expect(output).toContain("reuse environment");
     }));
@@ -149,7 +162,10 @@ describe.sequential("fake provider smoke reuse integration", () => {
         "#!/bin/sh\nsleep 2\n",
         "utf8",
       );
-      const project = await createProjectFixture(harness, "Managed Reprovision Conflict");
+      const project = await createProjectFixture(
+        harness,
+        "Managed Reprovision Conflict",
+      );
       const { environment, thread } = await createReadyThread(harness, {
         projectId: project.id,
         workspace: { type: "managed-worktree" },
@@ -168,7 +184,11 @@ describe.sequential("fake provider smoke reuse integration", () => {
           command.command.environmentId === environment.id,
         DEFAULT_TIMEOUT_MS,
       );
-      await waitForCommandsDrained(harness.db, harness.hostId, DEFAULT_TIMEOUT_MS);
+      await waitForCommandsDrained(
+        harness.db,
+        harness.hostId,
+        DEFAULT_TIMEOUT_MS,
+      );
       await waitForPathRemoval(originalWorkspacePath, DEFAULT_TIMEOUT_MS);
 
       await unarchiveThread(harness.api, thread.id);
@@ -196,13 +216,19 @@ describe.sequential("fake provider smoke reuse integration", () => {
       });
       expect(countProvisionCommands(harness)).toBe(provisionCountBefore + 1);
 
-      const reloadingEnvironment = await getEnvironment(harness.api, environment.id);
+      const reloadingEnvironment = await getEnvironment(
+        harness.api,
+        environment.id,
+      );
       expect(reloadingEnvironment.status).toBe("provisioning");
     }));
 
   it("rejects reprovision attempts for unmanaged environments", () =>
     withHarness(async (harness) => {
-      const project = await createProjectFixture(harness, "Unmanaged Reprovision Rejected");
+      const project = await createProjectFixture(
+        harness,
+        "Unmanaged Reprovision Rejected",
+      );
       const { environment, thread } = await createReadyThread(harness, {
         projectId: project.id,
         workspace: {

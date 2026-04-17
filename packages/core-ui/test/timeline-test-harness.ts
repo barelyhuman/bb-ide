@@ -166,31 +166,69 @@ interface ManagerUserMessageArgs extends EventFactoryRowOptions {
 }
 
 export interface TimelineEventFactory {
-  assistantCompleted(args: AssistantCompletedArgs): ThreadEventRowOfType<"item/completed">;
-  clientThreadStart(args: ClientThreadStartArgs): ThreadEventRowOfType<"client/thread/start">;
-  clientTurnRequested(args: ClientTurnRequestedArgs): ThreadEventRowOfType<"client/turn/requested">;
-  commandCompleted(args: CommandCompletedArgs): ThreadEventRowOfType<"item/completed">;
-  fileChangeCompleted(args: FileChangeCompletedArgs): ThreadEventRowOfType<"item/completed">;
-  inputAccepted(args: InputAcceptedArgs): ThreadEventRowOfType<"turn/input/accepted">;
-  managerUserMessage(args: ManagerUserMessageArgs): ThreadEventRowOfType<"system/manager/user_message">;
-  permissionGrantLifecycle(args?: PermissionGrantLifecycleArgs): ThreadEventRowOfType<"system/permissionGrant/lifecycle">;
-  providerUserMessage(args: ProviderUserMessageArgs): ThreadEventRowOfType<"item/completed">;
-  reasoningCompleted(args: ReasoningCompletedArgs): ThreadEventRowOfType<"item/completed">;
-  reasoningDelta(args: ReasoningDeltaArgs): ThreadEventRowOfType<"item/reasoning/textDelta">;
+  assistantCompleted(
+    args: AssistantCompletedArgs,
+  ): ThreadEventRowOfType<"item/completed">;
+  clientThreadStart(
+    args: ClientThreadStartArgs,
+  ): ThreadEventRowOfType<"client/thread/start">;
+  clientTurnRequested(
+    args: ClientTurnRequestedArgs,
+  ): ThreadEventRowOfType<"client/turn/requested">;
+  commandCompleted(
+    args: CommandCompletedArgs,
+  ): ThreadEventRowOfType<"item/completed">;
+  fileChangeCompleted(
+    args: FileChangeCompletedArgs,
+  ): ThreadEventRowOfType<"item/completed">;
+  inputAccepted(
+    args: InputAcceptedArgs,
+  ): ThreadEventRowOfType<"turn/input/accepted">;
+  managerUserMessage(
+    args: ManagerUserMessageArgs,
+  ): ThreadEventRowOfType<"system/manager/user_message">;
+  permissionGrantLifecycle(
+    args?: PermissionGrantLifecycleArgs,
+  ): ThreadEventRowOfType<"system/permissionGrant/lifecycle">;
+  providerUserMessage(
+    args: ProviderUserMessageArgs,
+  ): ThreadEventRowOfType<"item/completed">;
+  reasoningCompleted(
+    args: ReasoningCompletedArgs,
+  ): ThreadEventRowOfType<"item/completed">;
+  reasoningDelta(
+    args: ReasoningDeltaArgs,
+  ): ThreadEventRowOfType<"item/reasoning/textDelta">;
   systemError(args: SystemErrorArgs): ThreadEventRowOfType<"system/error">;
-  threadProvisioning(args: ThreadProvisioningArgs): ThreadEventRowOfType<"system/thread-provisioning">;
-  toolCallCompleted(args: ToolCallCompletedArgs): ThreadEventRowOfType<"item/completed">;
-  turnCompleted(args?: ProviderTurnEventOptions & { status?: "completed" | "failed" | "interrupted" }): ThreadEventRowOfType<"turn/completed">;
-  turnPlanUpdated(args: TurnPlanUpdatedArgs): ThreadEventRowOfType<"turn/plan/updated">;
-  turnStarted(args?: ProviderTurnEventOptions): ThreadEventRowOfType<"turn/started">;
-  webSearchCompleted(args: WebSearchCompletedArgs): ThreadEventRowOfType<"item/completed">;
+  threadProvisioning(
+    args: ThreadProvisioningArgs,
+  ): ThreadEventRowOfType<"system/thread-provisioning">;
+  toolCallCompleted(
+    args: ToolCallCompletedArgs,
+  ): ThreadEventRowOfType<"item/completed">;
+  turnCompleted(
+    args?: ProviderTurnEventOptions & {
+      status?: "completed" | "failed" | "interrupted";
+    },
+  ): ThreadEventRowOfType<"turn/completed">;
+  turnPlanUpdated(
+    args: TurnPlanUpdatedArgs,
+  ): ThreadEventRowOfType<"turn/plan/updated">;
+  turnStarted(
+    args?: ProviderTurnEventOptions,
+  ): ThreadEventRowOfType<"turn/started">;
+  webSearchCompleted(
+    args: WebSearchCompletedArgs,
+  ): ThreadEventRowOfType<"item/completed">;
 }
 
 export function fromRows(rows: ThreadEventRow[]): ThreadEventWithMeta[] {
   return rows.map((row) => decodeRow(withExplicitApprovalStatus(row)));
 }
 
-export function flattenProjectionMessages(projection: ViewProjection): ViewMessage[] {
+export function flattenProjectionMessages(
+  projection: ViewProjection,
+): ViewMessage[] {
   const messages: ViewMessage[] = [];
   for (const entry of projection.entries) {
     if (entry.kind === "message") {
@@ -277,7 +315,10 @@ export function createTimelineEventFactory(
 
   function providerFields(args: ProviderTurnEventOptions | undefined) {
     return {
-      providerThreadId: args?.providerThreadId ?? defaults.providerThreadId ?? "provider-thread-1",
+      providerThreadId:
+        args?.providerThreadId ??
+        defaults.providerThreadId ??
+        "provider-thread-1",
       turnId: args?.turnId ?? defaults.turnId ?? "turn-1",
     };
   }
@@ -402,7 +443,9 @@ export function createTimelineEventFactory(
           providerId: args.providerId ?? "codex",
           providerRequestId: args.providerRequestId ?? "request-123",
           status: args.status ?? "pending",
-          message: args.message ?? `Waiting for approval to grant ${args.toolName ?? "Bash"}`,
+          message:
+            args.message ??
+            `Waiting for approval to grant ${args.toolName ?? "Bash"}`,
           subject: {
             kind: "permission_grant",
             itemId: args.itemId ?? "item_123",

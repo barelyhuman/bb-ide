@@ -4,8 +4,6 @@ import { toViewMessages } from "../src/to-view-messages.js";
 import { fromRows } from "./timeline-test-harness.js";
 
 describe("toViewMessages debug projection", () => {
-
-
   it("classifies duplicate-event types but does not emit debug rows for them", () => {
     const events: ThreadEventRow[] = [
       {
@@ -21,10 +19,11 @@ describe("toViewMessages debug projection", () => {
       },
     ];
 
-    const withDebug = toViewMessages(fromRows(events), { includeDebugRawEvents: true });
+    const withDebug = toViewMessages(fromRows(events), {
+      includeDebugRawEvents: true,
+    });
     expect(withDebug).toEqual([]);
   });
-
 
   it("drops turn/task lifecycle duplicates in debug mode", () => {
     const events: ThreadEventRow[] = [
@@ -76,10 +75,11 @@ describe("toViewMessages debug projection", () => {
       },
     ];
 
-    const withDebug = toViewMessages(fromRows(events), { includeDebugRawEvents: true });
+    const withDebug = toViewMessages(fromRows(events), {
+      includeDebugRawEvents: true,
+    });
     expect(withDebug).toEqual([]);
   });
-
 
   it("drops structural item/started noise in debug mode", () => {
     const events: ThreadEventRow[] = [
@@ -109,10 +109,11 @@ describe("toViewMessages debug projection", () => {
       },
     ];
 
-    const withDebug = toViewMessages(fromRows(events), { includeDebugRawEvents: true });
+    const withDebug = toViewMessages(fromRows(events), {
+      includeDebugRawEvents: true,
+    });
     expect(withDebug).toEqual([]);
   });
-
 
   it("drops empty completed placeholder items in debug mode", () => {
     const events: ThreadEventRow[] = [
@@ -142,7 +143,9 @@ describe("toViewMessages debug projection", () => {
       },
     ];
 
-    const withDebug = toViewMessages(fromRows(events), { includeDebugRawEvents: true });
+    const withDebug = toViewMessages(fromRows(events), {
+      includeDebugRawEvents: true,
+    });
     expect(withDebug).toEqual([]);
   });
 });

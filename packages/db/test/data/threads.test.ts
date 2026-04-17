@@ -35,7 +35,10 @@ function setup() {
     name: "test-host",
     type: "persistent",
   });
-  const { project } = createProject(db, noopNotifier, { name: "test-project", source: { type: "local_path", hostId: host.id, path: "/tmp/test" } });
+  const { project } = createProject(db, noopNotifier, {
+    name: "test-project",
+    source: { type: "local_path", hostId: host.id, path: "/tmp/test" },
+  });
   return { db, host, project };
 }
 
@@ -59,8 +62,14 @@ describe("threads", () => {
 
   it("lists threads by project", () => {
     const { db, project } = setup();
-    createThread(db, noopNotifier, { projectId: project.id, providerId: "codex" });
-    createThread(db, noopNotifier, { projectId: project.id, providerId: "codex" });
+    createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+    createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
     expect(listThreads(db, { projectId: project.id })).toHaveLength(2);
   });
 
@@ -70,8 +79,14 @@ describe("threads", () => {
       name: "other-project",
       source: { type: "local_path", hostId: host.id, path: "/tmp/other" },
     });
-    createThread(db, noopNotifier, { projectId: project.id, providerId: "codex" });
-    createThread(db, noopNotifier, { projectId: otherProject.id, providerId: "codex" });
+    createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+    createThread(db, noopNotifier, {
+      projectId: otherProject.id,
+      providerId: "codex",
+    });
 
     expect(listThreads(db, { projectId: project.id })).toHaveLength(1);
     expect(listThreads(db, { projectId: otherProject.id })).toHaveLength(1);
@@ -96,10 +111,18 @@ describe("threads", () => {
     });
     archiveThread(db, noopNotifier, child.id);
 
-    expect(listThreads(db, { projectId: project.id, type: "manager" })).toHaveLength(2);
-    expect(listThreads(db, { projectId: project.id, parentThreadId: parent.id })).toHaveLength(1);
-    expect(listThreads(db, { projectId: project.id, archived: true })).toHaveLength(1);
-    expect(listThreads(db, { projectId: project.id, archived: false })).toHaveLength(2);
+    expect(
+      listThreads(db, { projectId: project.id, type: "manager" }),
+    ).toHaveLength(2);
+    expect(
+      listThreads(db, { projectId: project.id, parentThreadId: parent.id }),
+    ).toHaveLength(1);
+    expect(
+      listThreads(db, { projectId: project.id, archived: true }),
+    ).toHaveLength(1);
+    expect(
+      listThreads(db, { projectId: project.id, archived: false }),
+    ).toHaveLength(2);
   });
 
   it("lists thread environment workspace display kind without per-thread lookups", () => {
@@ -147,23 +170,27 @@ describe("threads", () => {
     });
 
     const displayKindsByThreadId = new Map(
-      listThreadsWithPendingInteractionState(db, { projectId: project.id })
-        .map((thread) => [thread.id, thread.environmentWorkspaceDisplayKind]),
+      listThreadsWithPendingInteractionState(db, { projectId: project.id }).map(
+        (thread) => [thread.id, thread.environmentWorkspaceDisplayKind],
+      ),
     );
 
     expect(displayKindsByThreadId.get(directThread.id)).toBe("other");
-    expect(displayKindsByThreadId.get(worktreeThread.id)).toBe("managed-worktree");
+    expect(displayKindsByThreadId.get(worktreeThread.id)).toBe(
+      "managed-worktree",
+    );
     expect(displayKindsByThreadId.get(sandboxThread.id)).toBe("sandbox");
 
     const environmentIdentityByThreadId = new Map(
-      listThreadsWithPendingInteractionState(db, { projectId: project.id })
-        .map((thread) => [
+      listThreadsWithPendingInteractionState(db, { projectId: project.id }).map(
+        (thread) => [
           thread.id,
           {
             environmentBranchName: thread.environmentBranchName,
             environmentHostId: thread.environmentHostId,
           },
-        ]),
+        ],
+      ),
     );
 
     expect(environmentIdentityByThreadId.get(directThread.id)).toEqual({
@@ -345,7 +372,9 @@ describe("threads", () => {
     archiveThread(db, noopNotifier, archivedThread.id);
     markThreadDeleted(db, noopNotifier, { threadId: deletedThread.id });
 
-    expect(countLiveThreadsInEnvironment(db, { environmentId: environment.id })).toBe(1);
+    expect(
+      countLiveThreadsInEnvironment(db, { environmentId: environment.id }),
+    ).toBe(1);
     expect(
       countLiveThreadsInEnvironment(db, {
         environmentId: environment.id,
@@ -385,10 +414,12 @@ describe("threads", () => {
       providerId: "codex",
     });
 
-    expect(listThreadEnvironmentAssignmentsOnHost(db, {
-      hostId: host.id,
-      threadIds: [matchingThread.id],
-    })).toEqual([
+    expect(
+      listThreadEnvironmentAssignmentsOnHost(db, {
+        hostId: host.id,
+        threadIds: [matchingThread.id],
+      }),
+    ).toEqual([
       {
         threadId: matchingThread.id,
         environmentId: environment.id,
@@ -440,12 +471,16 @@ describe("threads", () => {
       activeThread.id,
       stoppingThread.id,
     ]);
-    expect(hasPendingThreadShutdownInEnvironment(db, {
-      environmentId: environment.id,
-    })).toBe(true);
-    expect(hasPendingThreadShutdownInEnvironment(db, {
-      environmentId: otherEnvironment.id,
-    })).toBe(false);
+    expect(
+      hasPendingThreadShutdownInEnvironment(db, {
+        environmentId: environment.id,
+      }),
+    ).toBe(true);
+    expect(
+      hasPendingThreadShutdownInEnvironment(db, {
+        environmentId: otherEnvironment.id,
+      }),
+    ).toBe(false);
   });
 });
 
@@ -463,7 +498,12 @@ describe("transitionThreadStatus", () => {
     expect(t1.status).toBe("idle");
 
     // idle → provisioning
-    const t2 = transitionThreadStatus(db, noopNotifier, thread.id, "provisioning");
+    const t2 = transitionThreadStatus(
+      db,
+      noopNotifier,
+      thread.id,
+      "provisioning",
+    );
     expect(t2.status).toBe("provisioning");
 
     // provisioning → idle
@@ -495,7 +535,12 @@ describe("transitionThreadStatus", () => {
       status: "created",
     });
 
-    const updated = transitionThreadStatus(db, noopNotifier, thread.id, "error");
+    const updated = transitionThreadStatus(
+      db,
+      noopNotifier,
+      thread.id,
+      "error",
+    );
     expect(updated.status).toBe("error");
   });
 
@@ -539,8 +584,16 @@ describe("transitionThreadStatus", () => {
       "idle",
       "error",
     ]);
-    expect(ALLOWED_TRANSITIONS.provisioning).toEqual(["active", "idle", "error"]);
-    expect(ALLOWED_TRANSITIONS.idle).toEqual(["provisioning", "active", "error"]);
+    expect(ALLOWED_TRANSITIONS.provisioning).toEqual([
+      "active",
+      "idle",
+      "error",
+    ]);
+    expect(ALLOWED_TRANSITIONS.idle).toEqual([
+      "provisioning",
+      "active",
+      "error",
+    ]);
     expect(ALLOWED_TRANSITIONS.active).toEqual(["idle", "error"]);
     expect(ALLOWED_TRANSITIONS.error).toEqual(["active", "idle"]);
   });
@@ -559,15 +612,12 @@ describe("transitionThreadStatus", () => {
     });
 
     expect(
-      transitionThreadStatus(db, noopNotifier, createdThread.id, "active").status,
+      transitionThreadStatus(db, noopNotifier, createdThread.id, "active")
+        .status,
     ).toBe("active");
     expect(
-      transitionThreadStatus(
-        db,
-        noopNotifier,
-        provisioningThread.id,
-        "active",
-      ).status,
+      transitionThreadStatus(db, noopNotifier, provisioningThread.id, "active")
+        .status,
     ).toBe("active");
   });
 
@@ -728,7 +778,11 @@ describe("transitionThreadsToError", () => {
     expect(getThread(db, deletedThread.id)?.status).toBe("idle");
     expect(getThread(db, stopPendingThread.id)?.status).toBe("active");
     expect(spy.notifyThread).toHaveBeenCalledTimes(2);
-    expect(spy.notifyThread).toHaveBeenCalledWith(createdThread.id, ["status-changed"]);
-    expect(spy.notifyThread).toHaveBeenCalledWith(activeThread.id, ["status-changed"]);
+    expect(spy.notifyThread).toHaveBeenCalledWith(createdThread.id, [
+      "status-changed",
+    ]);
+    expect(spy.notifyThread).toHaveBeenCalledWith(activeThread.id, [
+      "status-changed",
+    ]);
   });
 });

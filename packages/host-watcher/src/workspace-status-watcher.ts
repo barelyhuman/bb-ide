@@ -73,13 +73,21 @@ async function resolveWatchRootPath(rootPath: string): Promise<string> {
 
 export class WorkspaceStatusWatcher {
   private readonly changedPaths = new Set<string>();
-  private readonly changeKinds = new Set<WorkspaceStatusChangeEvent["changeKinds"][number]>();
+  private readonly changeKinds = new Set<
+    WorkspaceStatusChangeEvent["changeKinds"][number]
+  >();
   private disposed = false;
   private metadataRetryAttempt = 0;
   private metadataStartRetryTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly retryAttempts = new Map<string, number>();
-  private readonly retryTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private readonly subscriptions = new Map<string, ParcelWatcherAsyncSubscription>();
+  private readonly retryTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
+  private readonly subscriptions = new Map<
+    string,
+    ParcelWatcherAsyncSubscription
+  >();
   private readonly warnedRootPaths = new Set<string>();
   private readonly changeScheduler;
 
@@ -184,14 +192,17 @@ export class WorkspaceStatusWatcher {
       return;
     }
     this.metadataRetryAttempt += 1;
-    this.metadataStartRetryTimer = setTimeout(() => {
-      this.metadataStartRetryTimer = null;
-      this.startMetadataWatchSubscriptions();
-    }, calculateExponentialBackoffDelay({
-      attempt: this.metadataRetryAttempt,
-      baseDelayMs: this.args.retryDelayMs,
-      maxDelayMs: this.args.maxRetryDelayMs,
-    }));
+    this.metadataStartRetryTimer = setTimeout(
+      () => {
+        this.metadataStartRetryTimer = null;
+        this.startMetadataWatchSubscriptions();
+      },
+      calculateExponentialBackoffDelay({
+        attempt: this.metadataRetryAttempt,
+        baseDelayMs: this.args.retryDelayMs,
+        maxDelayMs: this.args.maxRetryDelayMs,
+      }),
+    );
   }
 
   private scheduleWatchRetry(spec: WatchSubscriptionSpec): void {
@@ -204,17 +215,20 @@ export class WorkspaceStatusWatcher {
     }
     const retryAttempt = (this.retryAttempts.get(spec.rootPath) ?? 0) + 1;
     this.retryAttempts.set(spec.rootPath, retryAttempt);
-    const retryTimer = setTimeout(() => {
-      this.retryTimers.delete(spec.rootPath);
-      if (this.disposed) {
-        return;
-      }
-      this.startWatchSubscription(spec);
-    }, calculateExponentialBackoffDelay({
-      attempt: retryAttempt,
-      baseDelayMs: this.args.retryDelayMs,
-      maxDelayMs: this.args.maxRetryDelayMs,
-    }));
+    const retryTimer = setTimeout(
+      () => {
+        this.retryTimers.delete(spec.rootPath);
+        if (this.disposed) {
+          return;
+        }
+        this.startWatchSubscription(spec);
+      },
+      calculateExponentialBackoffDelay({
+        attempt: retryAttempt,
+        baseDelayMs: this.args.retryDelayMs,
+        maxDelayMs: this.args.maxRetryDelayMs,
+      }),
+    );
     this.retryTimers.set(spec.rootPath, retryTimer);
   }
 
@@ -303,7 +317,7 @@ export class WorkspaceStatusWatcher {
   ): Promise<void> {
     try {
       const resolvedMetadataSpecs =
-        metadataSpecs ?? await resolveMetadataWatchSpecs(this.args.cwd);
+        metadataSpecs ?? (await resolveMetadataWatchSpecs(this.args.cwd));
       if (this.disposed) {
         return;
       }

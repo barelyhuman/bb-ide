@@ -56,7 +56,9 @@ export function sameExecutionSettings(
   );
 }
 
-export function toProviderExecutionContext(args: ToProviderExecutionContextArgs): ProviderExecutionContext {
+export function toProviderExecutionContext(
+  args: ToProviderExecutionContextArgs,
+): ProviderExecutionContext {
   const permissionPolicy = resolveAdapterPermissionPolicy(args.execOpts);
   return {
     model: args.execOpts.model,

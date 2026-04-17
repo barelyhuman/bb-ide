@@ -14,7 +14,8 @@ export function ArchiveTimestampAction({
   buttonLabel?: string;
   threadType?: ThreadType;
 }) {
-  const resolvedLabel = buttonLabel ?? `Unarchive ${threadTypeLabel(threadType ?? "standard")}`;
+  const resolvedLabel =
+    buttonLabel ?? `Unarchive ${threadTypeLabel(threadType ?? "standard")}`;
   return (
     <Button
       type="button"

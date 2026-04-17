@@ -18,7 +18,8 @@ describe("importFixtureCorpus", () => {
         fixtureRoot,
         sourceRoot,
         corpusId: "../escape",
-      })).toThrow("Invalid corpus id");
+      }),
+    ).toThrow("Invalid corpus id");
   });
 
   it("allows corpus ids inside the fixture root", () => {
@@ -32,6 +33,7 @@ describe("importFixtureCorpus", () => {
         fixtureRoot,
         sourceRoot,
         corpusId: "excalidraw",
-      })).not.toThrow();
+      }),
+    ).not.toThrow();
   });
 });

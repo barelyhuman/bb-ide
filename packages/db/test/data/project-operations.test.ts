@@ -98,9 +98,7 @@ describe("project operations", () => {
       commandId: command.id,
       queuedAt: 777,
     });
-    expect(getProjectOperationByCommandId(db, command.id)?.id).toBe(
-      queued?.id,
-    );
+    expect(getProjectOperationByCommandId(db, command.id)?.id).toBe(queued?.id);
     expect(failed).toMatchObject({
       state: "failed",
       failureReason: "environment destroy failed",

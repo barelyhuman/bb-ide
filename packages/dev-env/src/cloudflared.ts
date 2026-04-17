@@ -4,7 +4,9 @@ interface StartCloudflaredArgs {
   tunnelToken: string;
 }
 
-export function startCloudflared(args: StartCloudflaredArgs): ChildProcess | null {
+export function startCloudflared(
+  args: StartCloudflaredArgs,
+): ChildProcess | null {
   if (args.tunnelToken.length === 0) {
     console.log("No tunnel token configured, skipping tunnel");
     return null;

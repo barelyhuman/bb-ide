@@ -56,7 +56,9 @@ export function usePromptMentions(
   const [query, setQuery] = useState<string | null>(null);
   const [debouncedNonNull] = useDebounceValue(query, FILE_MENTION_DEBOUNCE_MS);
   const debouncedQuery = query === null ? null : debouncedNonNull;
-  const [staleSuggestions, setStaleSuggestions] = useState<PromptMentionSuggestion[]>([]);
+  const [staleSuggestions, setStaleSuggestions] = useState<
+    PromptMentionSuggestion[]
+  >([]);
 
   const search = useProjectFileSuggestions(
     projectId,
@@ -106,7 +108,9 @@ export function usePromptMentions(
 
         const leftTitle = left.title?.trim().toLowerCase() ?? "";
         const rightTitle = right.title?.trim().toLowerCase() ?? "";
-        return leftTitle.localeCompare(rightTitle) || left.id.localeCompare(right.id);
+        return (
+          leftTitle.localeCompare(rightTitle) || left.id.localeCompare(right.id)
+        );
       })
       .slice(0, FILE_MENTION_LIMIT)
       .map<PromptMentionSuggestion>((thread) => ({
@@ -117,30 +121,30 @@ export function usePromptMentions(
         title: thread.title ?? thread.titleFallback ?? undefined,
         threadType: thread.type,
       }));
-  }, [
-    currentThreadId,
-    threadSuggestionMode,
-    threadsQuery.data,
-    trimmedQuery,
-  ]);
+  }, [currentThreadId, threadSuggestionMode, threadsQuery.data, trimmedQuery]);
   const nextSuggestions = useMemo(
     () =>
-      [...threadSuggestions, ...fileSuggestions].slice(
-        0,
-        FILE_MENTION_LIMIT,
-      ),
+      [...threadSuggestions, ...fileSuggestions].slice(0, FILE_MENTION_LIMIT),
     [fileSuggestions, threadSuggestions],
   );
-  const suggestions = hasQuery ? (nextSuggestions.length > 0 ? nextSuggestions : staleSuggestions) : [];
+  const suggestions = hasQuery
+    ? nextSuggestions.length > 0
+      ? nextSuggestions
+      : staleSuggestions
+    : [];
 
   useEffect(() => {
     if (!hasQuery) {
-      setStaleSuggestions((previous) => (previous.length === 0 ? previous : []));
+      setStaleSuggestions((previous) =>
+        previous.length === 0 ? previous : [],
+      );
       return;
     }
     if (search.data) {
       setStaleSuggestions((previous) =>
-        areSuggestionsEqual(previous, nextSuggestions) ? previous : nextSuggestions,
+        areSuggestionsEqual(previous, nextSuggestions)
+          ? previous
+          : nextSuggestions,
       );
     }
   }, [hasQuery, nextSuggestions, search.data]);

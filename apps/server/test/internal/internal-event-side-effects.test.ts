@@ -47,7 +47,9 @@ describe("internal event side effects", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-resilience",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -64,7 +66,10 @@ describe("internal event side effects", () => {
 
       const originalNotifyThread = harness.hub.notifyThread.bind(harness.hub);
       harness.hub.notifyThread = (threadId, changes) => {
-        if (threadId === renamedThread.id && changes.includes("title-changed")) {
+        if (
+          threadId === renamedThread.id &&
+          changes.includes("title-changed")
+        ) {
           throw new Error("title notification failed");
         }
         originalNotifyThread(threadId, changes);
@@ -126,7 +131,9 @@ describe("internal event side effects", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-auto-send",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -202,11 +209,8 @@ describe("internal event side effects", () => {
       });
       expect(getDraft(harness.db, draft.id)).toBeNull();
       expect(
-        harness.db
-          .select()
-          .from(threads)
-          .where(eq(threads.id, thread.id))
-          .get()?.status,
+        harness.db.select().from(threads).where(eq(threads.id, thread.id)).get()
+          ?.status,
       ).toBe("active");
     } finally {
       await harness.cleanup();
@@ -219,7 +223,9 @@ describe("internal event side effects", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-stop-requested-start",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -272,7 +278,9 @@ describe("internal event side effects", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-manager-notify-failure",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const childEnvironment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -315,7 +323,12 @@ describe("internal event side effects", () => {
       });
       const draft = seedDraft(harness.deps, {
         threadId: childThread.id,
-        content: [{ type: "text", text: "Queued follow-up after failed manager notify" }],
+        content: [
+          {
+            type: "text",
+            text: "Queued follow-up after failed manager notify",
+          },
+        ],
         model: "gpt-5",
         serviceTier: "default",
       });
@@ -381,7 +394,9 @@ describe("internal event side effects", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-manager-follow-up",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -436,8 +451,8 @@ describe("internal event side effects", () => {
       const preferencesReadCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "host.read_file"
-          && command.path === managerPreferencesPath,
+          command.type === "host.read_file" &&
+          command.path === managerPreferencesPath,
       );
       const readResponse = await reportQueuedCommandError(
         harness,
@@ -455,7 +470,8 @@ describe("internal event side effects", () => {
         harness,
         preferencesReadCommand.row.cursor,
         ({ command }) =>
-          command.type === "turn.submit" && command.threadId === managerThread.id,
+          command.type === "turn.submit" &&
+          command.threadId === managerThread.id,
       );
       expect(queuedCommand.command).toMatchObject({
         environmentId: environment.id,
@@ -498,7 +514,9 @@ describe("internal event side effects", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-deleted-manager-follow-up",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -553,13 +571,10 @@ describe("internal event side effects", () => {
       });
 
       expect(response.status).toBe(200);
-      expect(
-        harness.db
-          .select()
-          .from(hostDaemonCommands)
-          .all(),
-      ).toEqual([]);
-      expect(getThread(harness.db, managerThread.id)?.deletedAt).toBeTypeOf("number");
+      expect(harness.db.select().from(hostDaemonCommands).all()).toEqual([]);
+      expect(getThread(harness.db, managerThread.id)?.deletedAt).toBeTypeOf(
+        "number",
+      );
       expect(getThread(harness.db, childThread.id)?.status).toBe("idle");
     } finally {
       await harness.cleanup();
@@ -572,7 +587,9 @@ describe("internal event side effects", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-manager-failed-follow-up",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -627,8 +644,8 @@ describe("internal event side effects", () => {
       const preferencesReadCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "host.read_file"
-          && command.path === managerPreferencesPath,
+          command.type === "host.read_file" &&
+          command.path === managerPreferencesPath,
       );
       const readResponse = await reportQueuedCommandError(
         harness,
@@ -646,7 +663,8 @@ describe("internal event side effects", () => {
         harness,
         preferencesReadCommand.row.cursor,
         ({ command }) =>
-          command.type === "turn.submit" && command.threadId === managerThread.id,
+          command.type === "turn.submit" &&
+          command.threadId === managerThread.id,
       );
       expect(queuedCommand.command).toMatchObject({
         environmentId: environment.id,
@@ -689,7 +707,9 @@ describe("internal event side effects", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-manager-interrupted-follow-up",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -744,8 +764,8 @@ describe("internal event side effects", () => {
       const preferencesReadCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "host.read_file"
-          && command.path === managerPreferencesPath,
+          command.type === "host.read_file" &&
+          command.path === managerPreferencesPath,
       );
       const readResponse = await reportQueuedCommandError(
         harness,
@@ -763,7 +783,8 @@ describe("internal event side effects", () => {
         harness,
         preferencesReadCommand.row.cursor,
         ({ command }) =>
-          command.type === "turn.submit" && command.threadId === managerThread.id,
+          command.type === "turn.submit" &&
+          command.threadId === managerThread.id,
       );
       expect(queuedCommand.command).toMatchObject({
         environmentId: environment.id,
@@ -806,7 +827,9 @@ describe("internal event side effects", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-event-manager-reprovision-follow-up",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const managerEnvironment = seedEnvironment(harness.deps, {
         hostId: host.id,
         managed: true,
@@ -868,7 +891,9 @@ describe("internal event side effects", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-manager-sync",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -908,36 +933,33 @@ describe("internal event side effects", () => {
       const queued = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "host.read_file" &&
-          command.path === asyncPath,
+          command.type === "host.read_file" && command.path === asyncPath,
       );
-      const readResponse = await reportQueuedCommandSuccess(
-        harness,
-        queued,
-        {
-          path: asyncPath,
-          content: [
-            "---",
-            "timezone: America/Los_Angeles",
-            "schedules:",
-            '  - name: daily-recap',
-            '    cron: "0 8 * * 1-5"',
-            "---",
-            "",
-            "## daily-recap",
-            "Summarize yesterday's work.",
-          ].join("\n"),
-          contentEncoding: "utf8",
-          mimeType: "text/markdown",
-          sizeBytes: 111,
-        },
-      );
+      const readResponse = await reportQueuedCommandSuccess(harness, queued, {
+        path: asyncPath,
+        content: [
+          "---",
+          "timezone: America/Los_Angeles",
+          "schedules:",
+          "  - name: daily-recap",
+          '    cron: "0 8 * * 1-5"',
+          "---",
+          "",
+          "## daily-recap",
+          "Summarize yesterday's work.",
+        ].join("\n"),
+        contentEncoding: "utf8",
+        mimeType: "text/markdown",
+        sizeBytes: 111,
+      });
       expect(readResponse.status).toBe(200);
 
       const response = await responsePromise;
       expect(response.status).toBe(200);
       expect(
-        listManagerThreadNudgesByThread(harness.db, thread.id).map((nudge) => nudge.name),
+        listManagerThreadNudgesByThread(harness.db, thread.id).map(
+          (nudge) => nudge.name,
+        ),
       ).toEqual(["daily-recap"]);
     } finally {
       await harness.cleanup();
@@ -950,7 +972,9 @@ describe("internal event side effects", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-auto-archive",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         managed: true,
@@ -986,7 +1010,8 @@ describe("internal event side effects", () => {
         environmentId: environment.id,
         status: "active",
       });
-      harness.db.update(threads)
+      harness.db
+        .update(threads)
         .set({ automationId: automation.id })
         .where(eq(threads.id, thread.id))
         .run();
@@ -1016,50 +1041,50 @@ describe("internal event side effects", () => {
 
       expect(response.status).toBe(200);
       expect(
-        harness.db
-          .select()
-          .from(threads)
-          .where(eq(threads.id, thread.id))
-          .get()?.archivedAt,
+        harness.db.select().from(threads).where(eq(threads.id, thread.id)).get()
+          ?.archivedAt,
       ).toBeTypeOf("number");
-      expect(getEnvironment(harness.db, environment.id)?.cleanupRequestedAt).toBeTypeOf("number");
+      expect(
+        getEnvironment(harness.db, environment.id)?.cleanupRequestedAt,
+      ).toBeTypeOf("number");
 
       deleteAutomation(harness.db, harness.hub, automation.id);
-      harness.db.update(threads)
+      harness.db
+        .update(threads)
         .set({ archivedAt: null, status: "active" })
         .where(eq(threads.id, thread.id))
         .run();
 
-      const secondResponse = await harness.app.request("/internal/session/events", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          events: [
-            {
-              environmentId: environment.id,
-              threadId: thread.id,
-              sequence: 2,
-              createdAt: Date.now(),
-              event: {
-                type: "turn/completed",
+      const secondResponse = await harness.app.request(
+        "/internal/session/events",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            events: [
+              {
+                environmentId: environment.id,
                 threadId: thread.id,
-                providerThreadId: "provider-auto-archive",
-                turnId: "turn-auto-archive-2",
-                status: "completed",
+                sequence: 2,
+                createdAt: Date.now(),
+                event: {
+                  type: "turn/completed",
+                  threadId: thread.id,
+                  providerThreadId: "provider-auto-archive",
+                  turnId: "turn-auto-archive-2",
+                  status: "completed",
+                },
               },
-            },
-          ],
-        }),
-      });
+            ],
+          }),
+        },
+      );
 
       expect(secondResponse.status).toBe(200);
       expect(
-        harness.db
-          .select()
-          .from(threads)
-          .where(eq(threads.id, thread.id))
-          .get()?.archivedAt,
+        harness.db.select().from(threads).where(eq(threads.id, thread.id)).get()
+          ?.archivedAt,
       ).toBeNull();
     } finally {
       await harness.cleanup();
@@ -1072,7 +1097,9 @@ describe("internal event side effects", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-no-auto-archive",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1106,7 +1133,8 @@ describe("internal event side effects", () => {
         environmentId: environment.id,
         status: "active",
       });
-      harness.db.update(threads)
+      harness.db
+        .update(threads)
         .set({ automationId: automation.id })
         .where(eq(threads.id, thread.id))
         .run();
@@ -1136,11 +1164,8 @@ describe("internal event side effects", () => {
 
       expect(response.status).toBe(200);
       expect(
-        harness.db
-          .select()
-          .from(threads)
-          .where(eq(threads.id, thread.id))
-          .get()?.archivedAt,
+        harness.db.select().from(threads).where(eq(threads.id, thread.id)).get()
+          ?.archivedAt,
       ).toBeNull();
     } finally {
       await harness.cleanup();
@@ -1153,7 +1178,9 @@ describe("internal event side effects", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-completed-dedupe",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1213,11 +1240,14 @@ describe("internal event side effects", () => {
         ],
       });
 
-      const firstResponse = await harness.app.request("/internal/session/events", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: requestBody,
-      });
+      const firstResponse = await harness.app.request(
+        "/internal/session/events",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: requestBody,
+        },
+      );
       expect(firstResponse.status).toBe(200);
 
       const queuedCommand = await waitForQueuedCommand(
@@ -1227,26 +1257,23 @@ describe("internal event side effects", () => {
       );
       expect(queuedCommand.command.type).toBe("turn.submit");
 
-      const duplicateResponse = await harness.app.request("/internal/session/events", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: requestBody,
-      });
+      const duplicateResponse = await harness.app.request(
+        "/internal/session/events",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: requestBody,
+        },
+      );
       expect(duplicateResponse.status).toBe(200);
 
-      expect(
-        harness.db
-          .select()
-          .from(hostDaemonCommands)
-          .all(),
-      ).toHaveLength(1);
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
+        1,
+      );
       expect(listDrafts(harness.db, thread.id)).toHaveLength(1);
       expect(
-        harness.db
-          .select()
-          .from(threads)
-          .where(eq(threads.id, thread.id))
-          .get()?.status,
+        harness.db.select().from(threads).where(eq(threads.id, thread.id)).get()
+          ?.status,
       ).toBe("active");
     } finally {
       await harness.cleanup();
@@ -1259,7 +1286,9 @@ describe("internal event side effects", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-event-completed-mixed-batch",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1315,28 +1344,31 @@ describe("internal event side effects", () => {
         serviceTier: "default",
       });
 
-      const firstResponse = await harness.app.request("/internal/session/events", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          events: [
-            {
-              environmentId: environment.id,
-              threadId: threadA.id,
-              sequence: 3,
-              createdAt: Date.now(),
-              event: {
-                type: "turn/completed",
+      const firstResponse = await harness.app.request(
+        "/internal/session/events",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            events: [
+              {
+                environmentId: environment.id,
                 threadId: threadA.id,
-                providerThreadId: `provider-${threadA.id}`,
-                turnId: `turn-${threadA.id}`,
-                status: "completed",
+                sequence: 3,
+                createdAt: Date.now(),
+                event: {
+                  type: "turn/completed",
+                  threadId: threadA.id,
+                  providerThreadId: `provider-${threadA.id}`,
+                  turnId: `turn-${threadA.id}`,
+                  status: "completed",
+                },
               },
-            },
-          ],
-        }),
-      });
+            ],
+          }),
+        },
+      );
       expect(firstResponse.status).toBe(200);
 
       const firstQueuedCommand = await waitForQueuedCommand(
@@ -1345,41 +1377,44 @@ describe("internal event side effects", () => {
           command.type === "turn.submit" && command.threadId === threadA.id,
       );
 
-      const mixedResponse = await harness.app.request("/internal/session/events", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          events: [
-            {
-              environmentId: environment.id,
-              threadId: threadA.id,
-              sequence: 3,
-              createdAt: Date.now(),
-              event: {
-                type: "turn/completed",
+      const mixedResponse = await harness.app.request(
+        "/internal/session/events",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            events: [
+              {
+                environmentId: environment.id,
                 threadId: threadA.id,
-                providerThreadId: `provider-${threadA.id}`,
-                turnId: `turn-${threadA.id}`,
-                status: "completed",
+                sequence: 3,
+                createdAt: Date.now(),
+                event: {
+                  type: "turn/completed",
+                  threadId: threadA.id,
+                  providerThreadId: `provider-${threadA.id}`,
+                  turnId: `turn-${threadA.id}`,
+                  status: "completed",
+                },
               },
-            },
-            {
-              environmentId: environment.id,
-              threadId: threadB.id,
-              sequence: 3,
-              createdAt: Date.now(),
-              event: {
-                type: "turn/completed",
+              {
+                environmentId: environment.id,
                 threadId: threadB.id,
-                providerThreadId: `provider-${threadB.id}`,
-                turnId: `turn-${threadB.id}`,
-                status: "completed",
+                sequence: 3,
+                createdAt: Date.now(),
+                event: {
+                  type: "turn/completed",
+                  threadId: threadB.id,
+                  providerThreadId: `provider-${threadB.id}`,
+                  turnId: `turn-${threadB.id}`,
+                  status: "completed",
+                },
               },
-            },
-          ],
-        }),
-      });
+            ],
+          }),
+        },
+      );
       expect(mixedResponse.status).toBe(200);
 
       await waitForQueuedCommandAfter(
@@ -1391,12 +1426,9 @@ describe("internal event side effects", () => {
 
       expect(listDrafts(harness.db, threadA.id)).toHaveLength(1);
       expect(listDrafts(harness.db, threadB.id)).toHaveLength(0);
-      expect(
-        harness.db
-          .select()
-          .from(hostDaemonCommands)
-          .all(),
-      ).toHaveLength(2);
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
+        2,
+      );
     } finally {
       await harness.cleanup();
     }
@@ -1429,24 +1461,27 @@ describe("internal event side effects", () => {
         inputText: "Initial manager task",
         model: "gpt-5.4",
       });
-      const pending = harness.deps.pendingInteractions.registerPendingInteraction({
-        interaction: {
-          threadId: managerThread.id,
-          turnId: "turn-manager-awaiting-interaction",
-          providerId: "codex",
-          providerThreadId: "provider-manager-awaiting-interaction",
-          providerRequestId: "request-manager-awaiting-interaction",
-          payload: createCommandApprovalPayload({
-            itemId: "item-manager-awaiting-interaction",
-            reason: "Approve command",
-            command: "git push",
-            cwd: "/tmp/project",
-          }),
-        },
-        sessionId: "session-1",
-      });
+      const pending =
+        harness.deps.pendingInteractions.registerPendingInteraction({
+          interaction: {
+            threadId: managerThread.id,
+            turnId: "turn-manager-awaiting-interaction",
+            providerId: "codex",
+            providerThreadId: "provider-manager-awaiting-interaction",
+            providerRequestId: "request-manager-awaiting-interaction",
+            payload: createCommandApprovalPayload({
+              itemId: "item-manager-awaiting-interaction",
+              reason: "Approve command",
+              command: "git push",
+              cwd: "/tmp/project",
+            }),
+          },
+          sessionId: "session-1",
+        });
       if (pending.outcome === "rejected") {
-        throw new Error(`Expected pending interaction registration to succeed: ${pending.reason}`);
+        throw new Error(
+          `Expected pending interaction registration to succeed: ${pending.reason}`,
+        );
       }
       const existingManagerTurnRequestCount = harness.db
         .select({ data: events.data, type: events.type })
@@ -1454,13 +1489,11 @@ describe("internal event side effects", () => {
         .where(eq(events.threadId, managerThread.id))
         .orderBy(events.sequence)
         .all()
-        .filter((row) => row.type === "client/turn/requested")
-        .length;
+        .filter((row) => row.type === "client/turn/requested").length;
       const existingQueuedCommandCount = harness.db
         .select()
         .from(hostDaemonCommands)
-        .all()
-        .length;
+        .all().length;
 
       const queued = await queueManagerSystemMessage(harness.deps, {
         managerThreadId: managerThread.id,
@@ -1476,12 +1509,9 @@ describe("internal event side effects", () => {
         .all()
         .filter((row) => row.type === "client/turn/requested");
       expect(managerTurnRequests).toHaveLength(existingManagerTurnRequestCount);
-      expect(
-        harness.db
-          .select()
-          .from(hostDaemonCommands)
-          .all(),
-      ).toHaveLength(existingQueuedCommandCount);
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
+        existingQueuedCommandCount,
+      );
     } finally {
       await harness.cleanup();
     }

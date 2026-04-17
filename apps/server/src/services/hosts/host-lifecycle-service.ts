@@ -20,7 +20,10 @@ export function createHostLifecycleService(): HostLifecycleService {
   const hostReadyDeduper = createAsyncDeduper<string, void>();
   const hostSuspendDeduper = createAsyncDeduper<string, boolean>();
   const nextSandboxTimeoutExtensionAt = new Map<string, number>();
-  const pendingReadyProgressCallbacks = new Map<string, Set<SandboxHostProgressCallbacks>>();
+  const pendingReadyProgressCallbacks = new Map<
+    string,
+    Set<SandboxHostProgressCallbacks>
+  >();
 
   return {
     dispose() {

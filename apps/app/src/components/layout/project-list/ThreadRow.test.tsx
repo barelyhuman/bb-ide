@@ -15,7 +15,9 @@ vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));
 
-function createThread(overrides: Partial<ThreadListEntry> = {}): ThreadListEntry {
+function createThread(
+  overrides: Partial<ThreadListEntry> = {},
+): ThreadListEntry {
   return {
     id: "thr_1",
     projectId: "proj_1",
@@ -95,29 +97,41 @@ describe("ThreadRow", () => {
   });
 
   it("shows the pending interaction dot for managed child threads", () => {
-    renderThreadRow(createThread({
-      id: "thr_child",
-      parentThreadId: "thr_parent",
-      hasPendingInteraction: true,
-    }));
+    renderThreadRow(
+      createThread({
+        id: "thr_child",
+        parentThreadId: "thr_parent",
+        hasPendingInteraction: true,
+      }),
+    );
 
-    expect(screen.getByLabelText("Pending interaction requires attention")).not.toBeNull();
+    expect(
+      screen.getByLabelText("Pending interaction requires attention"),
+    ).not.toBeNull();
   });
 
   it("shows a managed worktree environment icon", () => {
-    renderThreadRow(createThread({ environmentWorkspaceDisplayKind: "managed-worktree" }));
+    renderThreadRow(
+      createThread({ environmentWorkspaceDisplayKind: "managed-worktree" }),
+    );
 
-    expect(screen.getByLabelText("Managed worktree environment")).not.toBeNull();
+    expect(
+      screen.getByLabelText("Managed worktree environment"),
+    ).not.toBeNull();
   });
 
   it("shows an unmanaged worktree environment icon", () => {
-    renderThreadRow(createThread({ environmentWorkspaceDisplayKind: "unmanaged-worktree" }));
+    renderThreadRow(
+      createThread({ environmentWorkspaceDisplayKind: "unmanaged-worktree" }),
+    );
 
     expect(screen.getByLabelText("Git worktree environment")).not.toBeNull();
   });
 
   it("shows a sandbox environment icon", () => {
-    renderThreadRow(createThread({ environmentWorkspaceDisplayKind: "sandbox" }));
+    renderThreadRow(
+      createThread({ environmentWorkspaceDisplayKind: "sandbox" }),
+    );
 
     expect(screen.getByLabelText("Sandbox environment")).not.toBeNull();
   });

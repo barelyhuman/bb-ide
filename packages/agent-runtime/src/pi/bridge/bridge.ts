@@ -51,8 +51,8 @@ function hasAtMostOnePiInstructionOverride(
   params: PiInstructionOverrideParams,
 ): boolean {
   return (
-    params.baseInstructions === undefined
-    || params.appendSystemPrompt === undefined
+    params.baseInstructions === undefined ||
+    params.appendSystemPrompt === undefined
   );
 }
 
@@ -63,37 +63,55 @@ const piInstructionOverrideSchemaOptions = {
 
 const piReasoningLevelSchema = z.enum(reasoningLevelValues);
 
-const piThreadStartParamsSchema = z.object({
-  threadId: z.string().optional(),
-  cwd: z.string(),
-  baseInstructions: z.string().optional(),
-  appendSystemPrompt: z.string().optional(),
-  config: z.record(z.string(), z.unknown()).optional(),
-  model: z.string().optional(),
-  reasoningLevel: piReasoningLevelSchema.optional(),
-  input: z.array(z.unknown()).optional(),
-  dynamicTools: z.array(z.object({
-    name: z.string(),
-    description: z.string(),
-    inputSchema: z.unknown(),
-  })).optional(),
-}).refine(hasAtMostOnePiInstructionOverride, piInstructionOverrideSchemaOptions);
+const piThreadStartParamsSchema = z
+  .object({
+    threadId: z.string().optional(),
+    cwd: z.string(),
+    baseInstructions: z.string().optional(),
+    appendSystemPrompt: z.string().optional(),
+    config: z.record(z.string(), z.unknown()).optional(),
+    model: z.string().optional(),
+    reasoningLevel: piReasoningLevelSchema.optional(),
+    input: z.array(z.unknown()).optional(),
+    dynamicTools: z
+      .array(
+        z.object({
+          name: z.string(),
+          description: z.string(),
+          inputSchema: z.unknown(),
+        }),
+      )
+      .optional(),
+  })
+  .refine(
+    hasAtMostOnePiInstructionOverride,
+    piInstructionOverrideSchemaOptions,
+  );
 
-const piThreadResumeParamsSchema = z.object({
-  threadId: z.string(),
-  cwd: z.string(),
-  sessionPath: z.string().optional(),
-  baseInstructions: z.string().optional(),
-  appendSystemPrompt: z.string().optional(),
-  config: z.record(z.string(), z.unknown()).optional(),
-  model: z.string().optional(),
-  reasoningLevel: piReasoningLevelSchema.optional(),
-  dynamicTools: z.array(z.object({
-    name: z.string(),
-    description: z.string(),
-    inputSchema: z.unknown(),
-  })).optional(),
-}).refine(hasAtMostOnePiInstructionOverride, piInstructionOverrideSchemaOptions);
+const piThreadResumeParamsSchema = z
+  .object({
+    threadId: z.string(),
+    cwd: z.string(),
+    sessionPath: z.string().optional(),
+    baseInstructions: z.string().optional(),
+    appendSystemPrompt: z.string().optional(),
+    config: z.record(z.string(), z.unknown()).optional(),
+    model: z.string().optional(),
+    reasoningLevel: piReasoningLevelSchema.optional(),
+    dynamicTools: z
+      .array(
+        z.object({
+          name: z.string(),
+          description: z.string(),
+          inputSchema: z.unknown(),
+        }),
+      )
+      .optional(),
+  })
+  .refine(
+    hasAtMostOnePiInstructionOverride,
+    piInstructionOverrideSchemaOptions,
+  );
 
 const piCommandSchema = z.discriminatedUnion("method", [
   z.object({
@@ -142,7 +160,9 @@ const piCommandSchema = z.discriminatedUnion("method", [
 
 export type PiCommand = z.infer<typeof piCommandSchema>;
 
-function decodePiJsonRpcRequest(raw: unknown): (PiCommand & { jsonrpc: "2.0"; id: string | number }) | null {
+function decodePiJsonRpcRequest(
+  raw: unknown,
+): (PiCommand & { jsonrpc: "2.0"; id: string | number }) | null {
   const envelope = jsonRpcEnvelopeSchema.safeParse(raw);
   if (!envelope.success) return null;
 
@@ -213,7 +233,13 @@ let toolCallRequestIdCounter = 0;
 // timeout forces disposal. Stop remains a best-effort success boundary.
 const THREAD_STOP_CLOSE_TIMEOUT_MS = 4_000;
 
-function send(msg: JsonRpcResponse | SdkEventNotification | BridgeEventNotification | BridgeToolCallRequest): void {
+function send(
+  msg:
+    | JsonRpcResponse
+    | SdkEventNotification
+    | BridgeEventNotification
+    | BridgeToolCallRequest,
+): void {
   process.stdout.write(JSON.stringify(msg) + "\n");
 }
 
@@ -234,9 +260,8 @@ function toContextWindowUsagePayload(
 
   return {
     usedTokens: contextUsage.tokens ?? null,
-    modelContextWindow: contextUsage.contextWindow > 0
-      ? contextUsage.contextWindow
-      : null,
+    modelContextWindow:
+      contextUsage.contextWindow > 0 ? contextUsage.contextWindow : null,
     estimated: true,
   };
 }
@@ -276,16 +301,18 @@ function getCurrentThreadSession(
   // Runtime treats stop as a terminal boundary for pending acks and active turn
   // state, so callbacks from a stopping session must not leak stale SDK events.
   if (
-    !threadSession
-    || threadSession.stopping
-    || threadSession.sessionSerial !== args.sessionSerial
+    !threadSession ||
+    threadSession.stopping ||
+    threadSession.sessionSerial !== args.sessionSerial
   ) {
     return undefined;
   }
   return threadSession;
 }
 
-function createOnPiEvent(args: CreateSessionCallbackArgs): (event: AgentSessionEvent) => void {
+function createOnPiEvent(
+  args: CreateSessionCallbackArgs,
+): (event: AgentSessionEvent) => void {
   return (event: AgentSessionEvent) => {
     const threadSession = getCurrentThreadSession({
       sessionSerial: args.sessionSerial,
@@ -303,7 +330,9 @@ function createOnPiEvent(args: CreateSessionCallbackArgs): (event: AgentSessionE
   };
 }
 
-function createOnSessionDone(args: CreateSessionCallbackArgs): (error?: unknown) => void {
+function createOnSessionDone(
+  args: CreateSessionCallbackArgs,
+): (error?: unknown) => void {
   return (error?: unknown) => {
     if (!error) return;
     const threadSession = getCurrentThreadSession({
@@ -312,8 +341,7 @@ function createOnSessionDone(args: CreateSessionCallbackArgs): (error?: unknown)
     });
     if (!threadSession) return;
 
-    const message =
-      error instanceof Error ? error.message : String(error);
+    const message = error instanceof Error ? error.message : String(error);
 
     send({
       jsonrpc: "2.0",
@@ -351,7 +379,9 @@ function createForwardToolCall(threadId: string): ToolCallForwarder {
   };
 }
 
-function findSessionByPendingToolCall(id: string | number): ThreadSession | undefined {
+function findSessionByPendingToolCall(
+  id: string | number,
+): ThreadSession | undefined {
   for (const session of sessions.values()) {
     if (session.pendingToolCalls.has(id)) return session;
   }
@@ -397,12 +427,14 @@ async function closeThreadSession(args: CloseThreadSessionArgs): Promise<void> {
 async function closeThreadSessionsGracefully(message: string): Promise<void> {
   await Promise.all(
     Array.from(sessions.keys()).map((threadId) =>
-      closeThreadSession({ message, threadId })
+      closeThreadSession({ message, threadId }),
     ),
   );
 }
 
-function extractEnvOverrides(config: Record<string, unknown> | undefined): Record<string, string> {
+function extractEnvOverrides(
+  config: Record<string, unknown> | undefined,
+): Record<string, string> {
   const envOverrides: Record<string, string> = {};
   if (config) {
     for (const [key, value] of Object.entries(config)) {
@@ -418,7 +450,9 @@ function extractEnvOverrides(config: Record<string, unknown> | undefined): Recor
   return envOverrides;
 }
 
-function buildSessionEnv(envOverrides: Record<string, string>): NodeJS.ProcessEnv {
+function buildSessionEnv(
+  envOverrides: Record<string, string>,
+): NodeJS.ProcessEnv {
   return {
     ...process.env,
     ...envOverrides,
@@ -430,7 +464,10 @@ function buildSessionOptions(
   env: NodeJS.ProcessEnv,
   threadId: string,
 ): PiSdkSessionOptions {
-  const sessionFilePath = resolvePiSessionFilePath(threadId, params.sessionPath);
+  const sessionFilePath = resolvePiSessionFilePath(
+    threadId,
+    params.sessionPath,
+  );
 
   return {
     cwd: params.cwd,
@@ -476,7 +513,9 @@ function sanitizeSessionKey(threadId: string): string {
   return threadId.replace(/[^A-Za-z0-9._-]/g, "_");
 }
 
-async function handleRequest(request: PiCommand & { id: string | number }): Promise<void> {
+async function handleRequest(
+  request: PiCommand & { id: string | number },
+): Promise<void> {
   switch (request.method) {
     case "initialize":
       sendResult(request.id, { ok: true });
@@ -502,8 +541,14 @@ async function handleRequest(request: PiCommand & { id: string | number }): Prom
   }
 }
 
-type ThreadStartParams = Extract<PiCommand, { method: "thread/start" }>["params"];
-type ThreadResumeParams = Extract<PiCommand, { method: "thread/resume" }>["params"];
+type ThreadStartParams = Extract<
+  PiCommand,
+  { method: "thread/start" }
+>["params"];
+type ThreadResumeParams = Extract<
+  PiCommand,
+  { method: "thread/resume" }
+>["params"];
 type TurnStartParams = Extract<PiCommand, { method: "turn/start" }>["params"];
 type TurnSteerParams = Extract<PiCommand, { method: "turn/steer" }>["params"];
 type ThreadStopParams = Extract<PiCommand, { method: "thread/stop" }>["params"];
@@ -519,8 +564,12 @@ function buildPiSessionParams(
     ...("sessionPath" in params && params.sessionPath
       ? { sessionPath: params.sessionPath }
       : {}),
-    ...(params.baseInstructions ? { baseInstructions: params.baseInstructions } : {}),
-    ...(params.appendSystemPrompt ? { appendSystemPrompt: params.appendSystemPrompt } : {}),
+    ...(params.baseInstructions
+      ? { baseInstructions: params.baseInstructions }
+      : {}),
+    ...(params.appendSystemPrompt
+      ? { appendSystemPrompt: params.appendSystemPrompt }
+      : {}),
     ...(params.reasoningLevel ? { thinkingLevel: params.reasoningLevel } : {}),
   };
 }
@@ -530,9 +579,12 @@ async function handleModelList(
   params: ModelListParams,
 ): Promise<void> {
   try {
-    sendResult(id, await listPiBridgeModels({
-      selectedModel: params.selectedModel,
-    }));
+    sendResult(
+      id,
+      await listPiBridgeModels({
+        selectedModel: params.selectedModel,
+      }),
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     sendError(id, -32000, message);
@@ -648,7 +700,10 @@ async function handleTurnStart(
     return;
   }
 
-  void threadSession.session.prompt(text, images.length > 0 ? images : undefined);
+  void threadSession.session.prompt(
+    text,
+    images.length > 0 ? images : undefined,
+  );
   sendResult(id, { threadId: params.threadId });
 }
 
@@ -668,7 +723,10 @@ async function handleTurnSteer(
     return;
   }
 
-  void threadSession.session.steer(text, images.length > 0 ? images : undefined);
+  void threadSession.session.steer(
+    text,
+    images.length > 0 ? images : undefined,
+  );
   sendResult(id, { threadId: params.threadId });
 }
 
@@ -690,13 +748,19 @@ interface ExtractedInput {
 function mimeTypeFromExtension(filePath: string): string {
   const ext = extname(filePath).toLowerCase();
   switch (ext) {
-    case ".png": return "image/png";
+    case ".png":
+      return "image/png";
     case ".jpg":
-    case ".jpeg": return "image/jpeg";
-    case ".gif": return "image/gif";
-    case ".webp": return "image/webp";
-    case ".svg": return "image/svg+xml";
-    default: return "image/png";
+    case ".jpeg":
+      return "image/jpeg";
+    case ".gif":
+      return "image/gif";
+    case ".webp":
+      return "image/webp";
+    case ".svg":
+      return "image/svg+xml";
+    default:
+      return "image/png";
   }
 }
 
@@ -773,8 +837,10 @@ export function handleLine(line: string): void {
 
 function isMainModule(): boolean {
   const entryPoint = process.argv[1];
-  return entryPoint !== undefined
-    && import.meta.url === pathToFileURL(resolve(entryPoint)).href;
+  return (
+    entryPoint !== undefined &&
+    import.meta.url === pathToFileURL(resolve(entryPoint)).href
+  );
 }
 
 if (isMainModule()) {
@@ -783,9 +849,10 @@ if (isMainModule()) {
   rl.on("close", () => {
     // Stdin close is a process shutdown boundary; wait briefly for per-thread
     // abort/dispose so SDK work does not continue while the bridge exits.
-    void closeThreadSessionsGracefully("Pi bridge shutting down while tool call was pending")
-      .finally(() => {
-        process.exit(0);
-      });
+    void closeThreadSessionsGracefully(
+      "Pi bridge shutting down while tool call was pending",
+    ).finally(() => {
+      process.exit(0);
+    });
   });
 }

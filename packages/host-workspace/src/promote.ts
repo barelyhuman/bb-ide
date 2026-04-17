@@ -28,7 +28,11 @@ export async function promoteWorkspace(
   await assertWorkspaceClean(primary, "promote primary");
 
   const branch = await source.currentBranch;
-  if (!branch) throw new WorkspaceError("detached_head", "source has no branch (detached HEAD)");
+  if (!branch)
+    throw new WorkspaceError(
+      "detached_head",
+      "source has no branch (detached HEAD)",
+    );
 
   // Detach source HEAD to free the branch (same-host worktree constraint)
   await source.detachHead();

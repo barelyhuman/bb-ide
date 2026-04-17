@@ -21,23 +21,33 @@ describe("extractShellCommandFromString", () => {
   });
 
   it("unwraps bash -c 'command'", () => {
-    expect(extractShellCommandFromString("bash -c 'echo hello'")).toBe("echo hello");
+    expect(extractShellCommandFromString("bash -c 'echo hello'")).toBe(
+      "echo hello",
+    );
   });
 
   it("unwraps /usr/bin/bash -c command", () => {
-    expect(extractShellCommandFromString("/usr/bin/bash -c echo hello")).toBe("echo hello");
+    expect(extractShellCommandFromString("/usr/bin/bash -c echo hello")).toBe(
+      "echo hello",
+    );
   });
 
   it("unwraps zsh -lc 'command'", () => {
-    expect(extractShellCommandFromString("zsh -lc 'git status'")).toBe("git status");
+    expect(extractShellCommandFromString("zsh -lc 'git status'")).toBe(
+      "git status",
+    );
   });
 
   it("preserves command when shell is not a known wrapper", () => {
-    expect(extractShellCommandFromString("fish -c 'echo hello'")).toBe("fish -c 'echo hello'");
+    expect(extractShellCommandFromString("fish -c 'echo hello'")).toBe(
+      "fish -c 'echo hello'",
+    );
   });
 
   it("unwraps double-quoted shell args", () => {
-    expect(extractShellCommandFromString('bash -c "echo hello"')).toBe("echo hello");
+    expect(extractShellCommandFromString('bash -c "echo hello"')).toBe(
+      "echo hello",
+    );
   });
 
   it("applies POSIX double-quote unescaping when unwrapping a double-quoted wrapper", () => {
@@ -61,7 +71,9 @@ describe("isExploringIntent / isExploringCall", () => {
   });
 
   it("classifies unknown as not exploring", () => {
-    expect(isExploringIntent({ type: "unknown", cmd: "something" })).toBe(false);
+    expect(isExploringIntent({ type: "unknown", cmd: "something" })).toBe(
+      false,
+    );
   });
 
   it("isExploringCall returns false for empty parsedCmd", () => {
@@ -69,7 +81,9 @@ describe("isExploringIntent / isExploringCall", () => {
   });
 
   it("isExploringCall returns true when all intents are exploring", () => {
-    expect(isExploringCall({ parsedCmd: [{ type: "read", cmd: "Read x" }] })).toBe(true);
+    expect(
+      isExploringCall({ parsedCmd: [{ type: "read", cmd: "Read x" }] }),
+    ).toBe(true);
   });
 
   it("isExploringCall returns false when any intent is not exploring", () => {
@@ -211,7 +225,7 @@ describe("tokenizeShellWords", () => {
     // `\"` inside double quotes is a literal `"`.
     expect(tokenizeShellWords(`echo "say \\"hi\\""`)).toEqual([
       { value: "echo", quoted: false },
-      { value: "say \"hi\"", quoted: true },
+      { value: 'say "hi"', quoted: true },
     ]);
   });
 
@@ -248,7 +262,11 @@ describe("tokenizeShellWords", () => {
 
 describe("parseShellCommandIntents", () => {
   it("returns empty array for commands without exploring intent", () => {
-    expect(parseShellCommandIntents("corepack yarn test:app packages/excalidraw/tests/search.test.tsx --watch=false")).toEqual([]);
+    expect(
+      parseShellCommandIntents(
+        "corepack yarn test:app packages/excalidraw/tests/search.test.tsx --watch=false",
+      ),
+    ).toEqual([]);
   });
 
   it("classifies sed reads with the concrete shell tool name", () => {
@@ -313,13 +331,11 @@ describe("parseShellCommandIntents", () => {
 
   it("classifies find pipelines as list_files instead of reads", () => {
     expect(
-      parseShellCommandIntents(
-        'find . -maxdepth 3 -type f | head -20',
-      ),
+      parseShellCommandIntents("find . -maxdepth 3 -type f | head -20"),
     ).toEqual([
       {
         type: "list_files",
-        cmd: 'find . -maxdepth 3 -type f | head -20',
+        cmd: "find . -maxdepth 3 -type f | head -20",
         path: ".",
       },
     ]);
@@ -374,7 +390,9 @@ describe("parseShellCommandIntents", () => {
   });
 
   it("does not classify sed -i as a read", () => {
-    expect(parseShellCommandIntents("sed -i 's/foo/bar/' src/app.ts")).toEqual([]);
+    expect(parseShellCommandIntents("sed -i 's/foo/bar/' src/app.ts")).toEqual(
+      [],
+    );
   });
 
   it("does not classify tee-based writes as reads", () => {
@@ -487,42 +505,40 @@ describe("parseShellCommandIntents", () => {
 
   it("detects sed -i variants with bundled flags or long form", () => {
     expect(parseShellCommandIntents("sed -i.bak 's/a/b/' file.ts")).toEqual([]);
-    expect(parseShellCommandIntents("sed --in-place 's/a/b/' file.ts")).toEqual([]);
+    expect(parseShellCommandIntents("sed --in-place 's/a/b/' file.ts")).toEqual(
+      [],
+    );
     expect(
       parseShellCommandIntents("sed --in-place=.bak 's/a/b/' file.ts"),
     ).toEqual([]);
   });
 
   it("treats leading env assignments as prefix, not the command", () => {
-    expect(
-      parseShellCommandIntents("FOO=1 BAR=2 cat packages/foo.ts"),
-    ).toEqual([
-      {
-        type: "read",
-        cmd: "FOO=1 BAR=2 cat packages/foo.ts",
-        name: "cat",
-        path: "packages/foo.ts",
-      },
-    ]);
+    expect(parseShellCommandIntents("FOO=1 BAR=2 cat packages/foo.ts")).toEqual(
+      [
+        {
+          type: "read",
+          cmd: "FOO=1 BAR=2 cat packages/foo.ts",
+          name: "cat",
+          path: "packages/foo.ts",
+        },
+      ],
+    );
   });
 
   it("treats `cat << EOF` heredoc with a space delimiter as a write", () => {
-    expect(
-      parseShellCommandIntents("cat << EOF\nbody line\nEOF"),
-    ).toEqual([]);
+    expect(parseShellCommandIntents("cat << EOF\nbody line\nEOF")).toEqual([]);
   });
 
   it("treats `cat <<-EOF` tab-strip heredoc as a write", () => {
-    expect(
-      parseShellCommandIntents("cat <<-EOF\nbody\nEOF"),
-    ).toEqual([]);
+    expect(parseShellCommandIntents("cat <<-EOF\nbody\nEOF")).toEqual([]);
   });
 
   it("does not treat here-strings as writes or as positional paths", () => {
-    expect(parseShellCommandIntents("grep foo <<<\"input string\"")).toEqual([
+    expect(parseShellCommandIntents('grep foo <<<"input string"')).toEqual([
       {
         type: "search",
-        cmd: "grep foo <<<\"input string\"",
+        cmd: 'grep foo <<<"input string"',
         query: "foo",
         path: null,
       },
@@ -622,7 +638,9 @@ describe("parseShellCommandIntents", () => {
 
   it("preserves backslashes before non-special characters inside double quotes", () => {
     expect(
-      parseShellCommandIntents(`rg "Keyboard\\.keyDown\\|Keyboard\\.keyPress" src/`),
+      parseShellCommandIntents(
+        `rg "Keyboard\\.keyDown\\|Keyboard\\.keyPress" src/`,
+      ),
     ).toEqual([
       {
         type: "search",
@@ -651,15 +669,21 @@ describe("formatToolCallCommand", () => {
   });
 
   it("formats Read with file path", () => {
-    expect(formatToolCallCommand("Read", { file_path: "/foo.ts" })).toBe("Read /foo.ts");
+    expect(formatToolCallCommand("Read", { file_path: "/foo.ts" })).toBe(
+      "Read /foo.ts",
+    );
   });
 
   it("formats Bash with command", () => {
-    expect(formatToolCallCommand("Bash", { command: "npm test" })).toBe("npm test");
+    expect(formatToolCallCommand("Bash", { command: "npm test" })).toBe(
+      "npm test",
+    );
   });
 
   it("formats lowercase bash with command", () => {
-    expect(formatToolCallCommand("bash", { command: "npm test" })).toBe("npm test");
+    expect(formatToolCallCommand("bash", { command: "npm test" })).toBe(
+      "npm test",
+    );
   });
 
   it("formats TodoWrite with todo counts and active step", () => {
@@ -702,7 +726,8 @@ describe("formatToolCallCommand", () => {
     expect(
       formatToolCallCommand("spawnAgent", {
         receiverThreadIds: ["thread-2"],
-        prompt: "Inspect the docs directory in the current workspace and report the file names.",
+        prompt:
+          "Inspect the docs directory in the current workspace and report the file names.",
       }),
     ).toBe(
       "spawnAgent 1 agent: Inspect the docs directory in the current workspace and report the file names.",
@@ -745,7 +770,9 @@ describe("formatToolCallOutput", () => {
   });
 
   it("preserves non-specialized outputs", () => {
-    expect(formatToolCallOutput("ToolSearch", "alpha.md\nbeta.md")).toBe("alpha.md\nbeta.md");
+    expect(formatToolCallOutput("ToolSearch", "alpha.md\nbeta.md")).toBe(
+      "alpha.md\nbeta.md",
+    );
   });
 
   it("preserves Agent report outputs after stripping metadata", () => {

@@ -13,7 +13,7 @@ const WEEKDAY_ORDER = [
   "sun",
 ] as const;
 
-type WeekdayName = typeof WEEKDAY_ORDER[number];
+type WeekdayName = (typeof WEEKDAY_ORDER)[number];
 
 interface ScheduleAtTimeArgs {
   cron: string;
@@ -134,13 +134,11 @@ function toMinuteOfDay(time: string): number {
   return hour * 60 + minute;
 }
 
-function assertMinimumGapWithinSortedPoints(
-  args: {
-    cycleLengthMinutes: number;
-    points: number[];
-    wrapAround: boolean;
-  },
-): void {
+function assertMinimumGapWithinSortedPoints(args: {
+  cycleLengthMinutes: number;
+  points: number[];
+  wrapAround: boolean;
+}): void {
   if (args.points.length <= 1) {
     return;
   }
@@ -185,7 +183,10 @@ function toWeeklyOccurrencePoints(
 }
 
 function parseCronFieldParts(field: string): string[] {
-  return field.split(",").map((part) => part.trim()).filter((part) => part.length > 0);
+  return field
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
 }
 
 function parseSingleNumberField(
@@ -219,7 +220,9 @@ function parseNumberListField(
     min: number;
   },
 ): number[] {
-  const values = parseCronFieldParts(field).map((part) => parseSingleNumberField(part, args) ?? 0);
+  const values = parseCronFieldParts(field).map(
+    (part) => parseSingleNumberField(part, args) ?? 0,
+  );
   if (values.length === 0 || new Set(values).size !== values.length) {
     throw new ScheduleValidationError("Unsupported cron expression");
   }
@@ -237,7 +240,11 @@ function parseHourField(field: string): ParsedHourField {
   const stepMatch = /^\*\/(?<step>\d+)$/u.exec(field);
   if (stepMatch?.groups?.step) {
     const intervalHours = Number(stepMatch.groups.step);
-    if (!Number.isInteger(intervalHours) || intervalHours < 1 || intervalHours > 24) {
+    if (
+      !Number.isInteger(intervalHours) ||
+      intervalHours < 1 ||
+      intervalHours > 24
+    ) {
       throw new ScheduleValidationError("Unsupported cron expression");
     }
     return {
@@ -261,8 +268,11 @@ function parseWeekdayField(field: string): WeekdayName[] {
   for (const part of parseCronFieldParts(field)) {
     const rangeMatch = /^(?<start>\d+)-(?<end>\d+)$/u.exec(part);
     if (rangeMatch?.groups?.start && rangeMatch.groups.end) {
-      const start = parseSingleNumberField(rangeMatch.groups.start, { max: 7, min: 0 }) ?? 0;
-      const end = parseSingleNumberField(rangeMatch.groups.end, { max: 7, min: 0 }) ?? 0;
+      const start =
+        parseSingleNumberField(rangeMatch.groups.start, { max: 7, min: 0 }) ??
+        0;
+      const end =
+        parseSingleNumberField(rangeMatch.groups.end, { max: 7, min: 0 }) ?? 0;
       if (start > end) {
         throw new ScheduleValidationError("Unsupported cron expression");
       }
@@ -291,18 +301,19 @@ function toWeekdayName(value: number): WeekdayName {
   return weekday;
 }
 
-function buildTimes(
-  args: {
-    hours: number[];
-    minutes: number[];
-  },
-): string[] {
+function buildTimes(args: { hours: number[]; minutes: number[] }): string[] {
   return args.hours
-    .flatMap((hour) => args.minutes.map((minute) => toTimeOfDayString({
-      hour,
-      minute,
-    })))
-    .sort((left, right) => compareNumbers(toMinuteOfDay(left), toMinuteOfDay(right)));
+    .flatMap((hour) =>
+      args.minutes.map((minute) =>
+        toTimeOfDayString({
+          hour,
+          minute,
+        }),
+      ),
+    )
+    .sort((left, right) =>
+      compareNumbers(toMinuteOfDay(left), toMinuteOfDay(right)),
+    );
 }
 
 function extractRepresentableTimeSets(times: string[]): {
@@ -359,9 +370,7 @@ function toCronWeekdayField(weekdays: readonly WeekdayName[]): string {
   return cronValues.join(",");
 }
 
-function validateParsedScheduleDefinition(
-  schedule: ScheduleDefinition,
-): void {
+function validateParsedScheduleDefinition(schedule: ScheduleDefinition): void {
   switch (schedule.kind) {
     case "hourly":
       return;
@@ -401,7 +410,8 @@ export function parseCronScheduleDefinition(
     throw new ScheduleValidationError("Invalid cron expression");
   }
 
-  const [minuteField, hourField, dayOfMonthField, monthField, dayOfWeekField] = fields;
+  const [minuteField, hourField, dayOfMonthField, monthField, dayOfWeekField] =
+    fields;
   if (monthField !== "*") {
     throw new ScheduleValidationError("Unsupported cron expression");
   }
@@ -451,7 +461,10 @@ export function parseCronScheduleDefinition(
     if (parsedHourField.kind === "interval") {
       throw new ScheduleValidationError("Unsupported cron expression");
     }
-    const dayOfMonth = parseSingleNumberField(dayOfMonthField, { max: 31, min: 1 });
+    const dayOfMonth = parseSingleNumberField(dayOfMonthField, {
+      max: 31,
+      min: 1,
+    });
     if (dayOfMonth === null) {
       throw new ScheduleValidationError("Unsupported cron expression");
     }
@@ -474,7 +487,8 @@ export function serializeScheduleDefinitionAsCron(
 ): string {
   switch (schedule.kind) {
     case "hourly": {
-      const hourField = schedule.intervalHours === 1 ? "*" : `*/${schedule.intervalHours}`;
+      const hourField =
+        schedule.intervalHours === 1 ? "*" : `*/${schedule.intervalHours}`;
       return `${schedule.minute} ${hourField} * * *`;
     }
     case "daily": {
@@ -503,13 +517,11 @@ function parseScheduleExpressionSet(expressionSet: string): string[] {
     .filter((expression) => expression.length > 0);
 }
 
-function computeNextScheduledTimeFromExpressions(
-  args: {
-    expressions: readonly string[];
-    now: number;
-    timezone: string;
-  },
-): number {
+function computeNextScheduledTimeFromExpressions(args: {
+  expressions: readonly string[];
+  now: number;
+  timezone: string;
+}): number {
   let nextRunAt: number | null = null;
 
   for (const expression of args.expressions) {
@@ -517,29 +529,29 @@ function computeNextScheduledTimeFromExpressions(
       cron: expression,
       now: args.now,
       timezone: args.timezone,
-    }).next().getTime();
+    })
+      .next()
+      .getTime();
     if (nextRunAt === null || candidate < nextRunAt) {
       nextRunAt = candidate;
     }
   }
 
   if (nextRunAt === null) {
-    throw new ScheduleValidationError("Schedule must include at least one occurrence");
+    throw new ScheduleValidationError(
+      "Schedule must include at least one occurrence",
+    );
   }
 
   return nextRunAt;
 }
 
-export function validateScheduleDefinition(
-  args: CronScheduleArgs,
-): void {
+export function validateScheduleDefinition(args: CronScheduleArgs): void {
   assertValidTimezone(args.timezone);
   validateParsedScheduleDefinition(parseCronScheduleDefinition(args));
 }
 
-export function computeNextScheduledTime(
-  args: ScheduleAtTimeArgs,
-): number {
+export function computeNextScheduledTime(args: ScheduleAtTimeArgs): number {
   validateScheduleDefinition({
     cron: args.cron,
     timezone: args.timezone,
@@ -548,7 +560,9 @@ export function computeNextScheduledTime(
     cron: args.cron,
     now: args.now,
     timezone: args.timezone,
-  }).next().getTime();
+  })
+    .next()
+    .getTime();
 }
 
 export function computeNextScheduledTimeForExpressionSet(

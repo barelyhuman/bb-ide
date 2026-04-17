@@ -16,7 +16,9 @@ describe("public sandbox env var routes", () => {
         value: "secret-openai-key",
       });
 
-      const response = await harness.app.request("/api/v1/system/sandbox-env-vars");
+      const response = await harness.app.request(
+        "/api/v1/system/sandbox-env-vars",
+      );
 
       expect(response.status).toBe(200);
       const body = sandboxEnvVarsResponseSchema.parse(await readJson(response));
@@ -58,9 +60,9 @@ describe("public sandbox env var routes", () => {
       expect(created).toMatchObject({
         name: "ANTHROPIC_API_KEY",
       });
-      expect((await harness.deps.sandboxEnv.resolveRuntimeEnv()).ANTHROPIC_API_KEY).toBe(
-        "anthropic-secret-1",
-      );
+      expect(
+        (await harness.deps.sandboxEnv.resolveRuntimeEnv()).ANTHROPIC_API_KEY,
+      ).toBe("anthropic-secret-1");
 
       const updateResponse = await harness.app.request(
         "/api/v1/system/sandbox-env-vars",
@@ -80,9 +82,9 @@ describe("public sandbox env var routes", () => {
       const updated = sandboxEnvVarSchema.parse(await readJson(updateResponse));
       expect(updated.createdAt).toBe(created.createdAt);
       expect(updated.updatedAt).toBeGreaterThanOrEqual(created.updatedAt);
-      expect((await harness.deps.sandboxEnv.resolveRuntimeEnv()).ANTHROPIC_API_KEY).toBe(
-        "anthropic-secret-2",
-      );
+      expect(
+        (await harness.deps.sandboxEnv.resolveRuntimeEnv()).ANTHROPIC_API_KEY,
+      ).toBe("anthropic-secret-2");
 
       const deleteResponse = await harness.app.request(
         "/api/v1/system/sandbox-env-vars/ANTHROPIC_API_KEY",

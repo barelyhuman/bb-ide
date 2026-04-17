@@ -51,10 +51,11 @@ describe("app sandbox env vars", () => {
       encryptedValue: "ciphertext-a",
       name: "ANTHROPIC_API_KEY",
     });
-    expect(listAppSandboxEnvVars(db).map((record) => record.name).sort()).toEqual([
-      "ANTHROPIC_API_KEY",
-      "PI_API_TOKEN",
-    ]);
+    expect(
+      listAppSandboxEnvVars(db)
+        .map((record) => record.name)
+        .sort(),
+    ).toEqual(["ANTHROPIC_API_KEY", "PI_API_TOKEN"]);
 
     expect(deleteAppSandboxEnvVar(db, "ANTHROPIC_API_KEY")).toBe(true);
     expect(deleteAppSandboxEnvVar(db, "ANTHROPIC_API_KEY")).toBe(false);

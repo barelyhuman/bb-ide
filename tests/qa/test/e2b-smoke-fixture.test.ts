@@ -7,17 +7,21 @@ import { loadQaAuthFixture } from "../src/e2b-smoke/fixture.js";
 
 const FIXTURE_PATH_ENV_VAR = "BB_CLOUD_AUTH_FIXTURE_PATH";
 const persistedClaudeFixtureSchema = z.object({
-  claude: z.object({
-    access: z.string(),
-    refresh: z.string(),
-  }).optional(),
+  claude: z
+    .object({
+      access: z.string(),
+      refresh: z.string(),
+    })
+    .optional(),
 });
 const persistedCodexFixtureSchema = z.object({
-  "openai-codex": z.object({
-    access: z.string(),
-    idToken: z.string(),
-    refresh: z.string(),
-  }).optional(),
+  "openai-codex": z
+    .object({
+      access: z.string(),
+      idToken: z.string(),
+      refresh: z.string(),
+    })
+    .optional(),
 });
 
 describe("e2b smoke auth fixture", () => {
@@ -176,10 +180,9 @@ describe("e2b smoke auth fixture", () => {
       );
       process.env[FIXTURE_PATH_ENV_VAR] = fixturePath;
       globalThis.fetch = vi.fn<typeof fetch>().mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({ error: "invalid_grant" }),
-          { status: 400 },
-        ),
+        new Response(JSON.stringify({ error: "invalid_grant" }), {
+          status: 400,
+        }),
       );
 
       await expect(loadQaAuthFixture()).rejects.toThrow(
@@ -244,10 +247,9 @@ describe("e2b smoke auth fixture", () => {
           ),
         )
         .mockResolvedValueOnce(
-          new Response(
-            JSON.stringify({ error: "invalid_grant" }),
-            { status: 400 },
-          ),
+          new Response(JSON.stringify({ error: "invalid_grant" }), {
+            status: 400,
+          }),
         );
 
       await expect(loadQaAuthFixture()).rejects.toThrow(

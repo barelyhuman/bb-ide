@@ -1,9 +1,11 @@
 import { useEffect } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
-import {
-  assertNever,
-} from "@bb/core-ui";
-import type { EnvironmentChangeKind, Thread, ThreadChangeKind } from "@bb/domain";
+import { assertNever } from "@bb/core-ui";
+import type {
+  EnvironmentChangeKind,
+  Thread,
+  ThreadChangeKind,
+} from "@bb/domain";
 import { createBufferedEnvironmentInvalidator } from "./buffered-environment-invalidator";
 import { wsManager } from "../lib/ws";
 import {
@@ -53,9 +55,8 @@ const WORKSPACE_STATE_CHANGE_KINDS: readonly EnvironmentChangeKind[] = [
   "status-changed",
   "work-status-changed",
 ];
-const REF_DERIVED_WORKSPACE_STATE_CHANGE_KINDS: readonly EnvironmentChangeKind[] = [
-  "git-refs-changed",
-];
+const REF_DERIVED_WORKSPACE_STATE_CHANGE_KINDS: readonly EnvironmentChangeKind[] =
+  ["git-refs-changed"];
 const BRANCH_LIST_CHANGE_KINDS: readonly EnvironmentChangeKind[] = [
   "environment-created",
   "environment-deleted",
@@ -73,7 +74,9 @@ interface ThreadChangeFlags {
   statusChanged: boolean;
 }
 
-function toThreadChangeFlags(changes: readonly ThreadChangeKind[]): ThreadChangeFlags {
+function toThreadChangeFlags(
+  changes: readonly ThreadChangeKind[],
+): ThreadChangeFlags {
   const flags: ThreadChangeFlags = {
     interactionsChanged: false,
     listChanged: false,
@@ -183,7 +186,7 @@ function environmentChangeKindsIncludePersistedEnvironment(
   changeKinds: readonly EnvironmentChangeKind[],
 ): boolean {
   return changeKinds.some((changeKind) =>
-    PERSISTED_ENVIRONMENT_CHANGE_KINDS.includes(changeKind)
+    PERSISTED_ENVIRONMENT_CHANGE_KINDS.includes(changeKind),
   );
 }
 
@@ -191,7 +194,7 @@ function environmentChangeKindsIncludeWorkspaceState(
   changeKinds: readonly EnvironmentChangeKind[],
 ): boolean {
   return changeKinds.some((changeKind) =>
-    WORKSPACE_STATE_CHANGE_KINDS.includes(changeKind)
+    WORKSPACE_STATE_CHANGE_KINDS.includes(changeKind),
   );
 }
 
@@ -199,7 +202,7 @@ function environmentChangeKindsIncludeRefDerivedWorkspaceState(
   changeKinds: readonly EnvironmentChangeKind[],
 ): boolean {
   return changeKinds.some((changeKind) =>
-    REF_DERIVED_WORKSPACE_STATE_CHANGE_KINDS.includes(changeKind)
+    REF_DERIVED_WORKSPACE_STATE_CHANGE_KINDS.includes(changeKind),
   );
 }
 
@@ -207,7 +210,7 @@ function environmentChangeKindsIncludeBranchList(
   changeKinds: readonly EnvironmentChangeKind[],
 ): boolean {
   return changeKinds.some((changeKind) =>
-    BRANCH_LIST_CHANGE_KINDS.includes(changeKind)
+    BRANCH_LIST_CHANGE_KINDS.includes(changeKind),
   );
 }
 
@@ -233,7 +236,8 @@ export function useWebSocket(): void {
       debounceMs: ENVIRONMENT_INVALIDATION_DEBOUNCE_MS,
       flushChangedEnvironmentIds: (changedEnvironments) => {
         for (const { changeKinds, environmentId } of changedEnvironments) {
-          const includeWorkspaceState = environmentChangeKindsIncludeWorkspaceState(changeKinds);
+          const includeWorkspaceState =
+            environmentChangeKindsIncludeWorkspaceState(changeKinds);
 
           if (environmentChangeKindsIncludePersistedEnvironment(changeKinds)) {
             for (const queryKey of getEnvironmentRecordInvalidationQueryKeys({
@@ -243,9 +247,11 @@ export function useWebSocket(): void {
             }
           }
           if (includeWorkspaceState) {
-            for (const queryKey of getEnvironmentWorkspaceStateInvalidationQueryKeys({
-              environmentId,
-            })) {
+            for (const queryKey of getEnvironmentWorkspaceStateInvalidationQueryKeys(
+              {
+                environmentId,
+              },
+            )) {
               queryClient.invalidateQueries({ queryKey });
             }
           }
@@ -253,19 +259,19 @@ export function useWebSocket(): void {
             !includeWorkspaceState &&
             environmentChangeKindsIncludeRefDerivedWorkspaceState(changeKinds)
           ) {
-            for (
-              const queryKey of getCachedEnvironmentRefWorkspaceStateInvalidationQueryKeys(
-                queryClient,
-                { environmentId },
-              )
-            ) {
+            for (const queryKey of getCachedEnvironmentRefWorkspaceStateInvalidationQueryKeys(
+              queryClient,
+              { environmentId },
+            )) {
               queryClient.invalidateQueries({ exact: true, queryKey });
             }
           }
           if (environmentChangeKindsIncludeBranchList(changeKinds)) {
-            for (const queryKey of getEnvironmentBranchListInvalidationQueryKeys({
-              environmentId,
-            })) {
+            for (const queryKey of getEnvironmentBranchListInvalidationQueryKeys(
+              {
+                environmentId,
+              },
+            )) {
               queryClient.invalidateQueries({ queryKey });
             }
           }
@@ -296,7 +302,10 @@ export function useWebSocket(): void {
     let debounceTimer: ReturnType<typeof setTimeout> | null = null;
     let maxWaitTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const mergeThreadChanges = (threadId: string, changes: readonly ThreadChangeKind[]) => {
+    const mergeThreadChanges = (
+      threadId: string,
+      changes: readonly ThreadChangeKind[],
+    ) => {
       let entry = changedThreadKinds.get(threadId);
       if (!entry) {
         entry = new Set<ThreadChangeKind>();
@@ -326,7 +335,9 @@ export function useWebSocket(): void {
         queryClient.invalidateQueries({ queryKey: allThreadQueryKeyPrefix() });
       }
       if (shouldInvalidateAllThreadDrafts) {
-        queryClient.invalidateQueries({ queryKey: allThreadDraftsQueryKeyPrefix() });
+        queryClient.invalidateQueries({
+          queryKey: allThreadDraftsQueryKeyPrefix(),
+        });
       }
       if (shouldInvalidateAllThreadPendingInteractions) {
         queryClient.invalidateQueries({
@@ -334,7 +345,9 @@ export function useWebSocket(): void {
         });
       }
       if (shouldInvalidateAllThreadTimeline) {
-        queryClient.invalidateQueries({ queryKey: allThreadTimelineQueryKeyPrefix() });
+        queryClient.invalidateQueries({
+          queryKey: allThreadTimelineQueryKeyPrefix(),
+        });
       }
 
       const now = Date.now();
@@ -354,32 +367,41 @@ export function useWebSocket(): void {
           queryClient.invalidateQueries({
             queryKey: threadPendingInteractionsQueryKey(id),
           });
-          void queryClient.fetchQuery({
-            queryKey: threadPendingInteractionsQueryKey(id),
-            queryFn: ({ signal }) =>
-              api.listThreadPendingInteractions(id, signal),
-          }).then((interactions) => {
-            updateCachedThreadListPendingInteractionState(
-              queryClient,
-              id,
-              interactions.length > 0,
-            );
-          }).catch(() => {
-            queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-          });
+          void queryClient
+            .fetchQuery({
+              queryKey: threadPendingInteractionsQueryKey(id),
+              queryFn: ({ signal }) =>
+                api.listThreadPendingInteractions(id, signal),
+            })
+            .then((interactions) => {
+              updateCachedThreadListPendingInteractionState(
+                queryClient,
+                id,
+                interactions.length > 0,
+              );
+            })
+            .catch(() => {
+              queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
+            });
         }
         if (flags.timelineChanged) {
           if (flags.statusChanged) {
-            queryClient.invalidateQueries({ queryKey: threadTimelineQueryKeyPrefix(id) });
+            queryClient.invalidateQueries({
+              queryKey: threadTimelineQueryKeyPrefix(id),
+            });
             lastTimelineRefetchAtByThread.set(id, now);
           } else {
             const lastRefetchAt = lastTimelineRefetchAtByThread.get(id) ?? 0;
-            const cachedThread = queryClient.getQueryData<Thread>(threadQueryKey(id));
+            const cachedThread = queryClient.getQueryData<Thread>(
+              threadQueryKey(id),
+            );
             if (
               shouldBypassTimelineEventThrottle(cachedThread?.status) ||
               now - lastRefetchAt >= TIMELINE_EVENT_REFETCH_INTERVAL_MS
             ) {
-              queryClient.invalidateQueries({ queryKey: threadTimelineQueryKeyPrefix(id) });
+              queryClient.invalidateQueries({
+                queryKey: threadTimelineQueryKeyPrefix(id),
+              });
               lastTimelineRefetchAtByThread.set(id, now);
             }
           }
@@ -435,14 +457,17 @@ export function useWebSocket(): void {
             for (const change of message.changes) {
               globalChangeKinds.add(change);
             }
-            const globalFlags = toThreadChangeFlags(Array.from(globalChangeKinds));
+            const globalFlags = toThreadChangeFlags(
+              Array.from(globalChangeKinds),
+            );
             if (globalFlags.listChanged) {
               shouldInvalidateThreads = true;
               shouldInvalidateStatus = true;
             }
             shouldInvalidateAllThreadsById = globalFlags.threadChanged;
             shouldInvalidateAllThreadDrafts = globalFlags.queueChanged;
-            shouldInvalidateAllThreadPendingInteractions = globalFlags.interactionsChanged;
+            shouldInvalidateAllThreadPendingInteractions =
+              globalFlags.interactionsChanged;
             shouldInvalidateAllThreadTimeline = globalFlags.timelineChanged;
           }
           if (shouldFlushThreadChangesImmediately(message.changes)) {
@@ -460,7 +485,9 @@ export function useWebSocket(): void {
           queryClient.invalidateQueries({ queryKey: hostsQueryKey() });
           queryClient.invalidateQueries({ queryKey: allHostQueryKeyPrefix() });
           queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
-          queryClient.invalidateQueries({ queryKey: systemProvidersQueryKey() });
+          queryClient.invalidateQueries({
+            queryKey: systemProvidersQueryKey(),
+          });
           queryClient.invalidateQueries({
             queryKey: allAvailableModelsQueryKeyPrefix(),
           });

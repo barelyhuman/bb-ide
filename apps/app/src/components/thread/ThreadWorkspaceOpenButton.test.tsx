@@ -1,11 +1,15 @@
 // @vitest-environment jsdom
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { WorkspaceOpenTarget } from "@bb/host-daemon-contract";
 import {
-  WORKSPACE_OPEN_TARGET_STORAGE_KEY,
-} from "@/lib/workspace-open-target-preference";
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import type { WorkspaceOpenTarget } from "@bb/host-daemon-contract";
+import { WORKSPACE_OPEN_TARGET_STORAGE_KEY } from "@/lib/workspace-open-target-preference";
 import { ThreadWorkspaceOpenButton } from "./ThreadWorkspaceOpenButton";
 
 const TARGETS: WorkspaceOpenTarget[] = [
@@ -56,7 +60,9 @@ describe("ThreadWorkspaceOpenButton", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Open workspace in VS Code" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open workspace in VS Code" }),
+    );
 
     await waitFor(() => {
       expect(onOpenWorkspace).toHaveBeenCalledWith("vscode");
@@ -81,7 +87,9 @@ describe("ThreadWorkspaceOpenButton", () => {
     await waitFor(() => {
       expect(onOpenWorkspace).toHaveBeenCalledWith("finder");
     });
-    expect(window.localStorage.getItem(WORKSPACE_OPEN_TARGET_STORAGE_KEY)).toBe("finder");
+    expect(window.localStorage.getItem(WORKSPACE_OPEN_TARGET_STORAGE_KEY)).toBe(
+      "finder",
+    );
   });
 
   it("falls back when the stored preference is unavailable without rewriting it", async () => {
@@ -95,11 +103,15 @@ describe("ThreadWorkspaceOpenButton", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Open workspace in VS Code" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open workspace in VS Code" }),
+    );
 
     await waitFor(() => {
       expect(onOpenWorkspace).toHaveBeenCalledWith("vscode");
     });
-    expect(window.localStorage.getItem(WORKSPACE_OPEN_TARGET_STORAGE_KEY)).toBe("cursor");
+    expect(window.localStorage.getItem(WORKSPACE_OPEN_TARGET_STORAGE_KEY)).toBe(
+      "cursor",
+    );
   });
 });

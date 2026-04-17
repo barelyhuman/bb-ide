@@ -1,11 +1,11 @@
-import { useEffect, useId, useState, type FormEvent } from "react"
+import { useEffect, useId, useState, type FormEvent } from "react";
 import {
   deriveProjectNameFromPath,
   getProjectPathValidationMessage,
   normalizeProjectPathInput,
-} from "@bb/domain"
-import type { HostPlatform } from "@bb/host-daemon-contract"
-import { Button } from "@/components/ui/button"
+} from "@bb/domain";
+import type { HostPlatform } from "@bb/host-daemon-contract";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -13,36 +13,36 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 export type ProjectPathDialogTarget =
   | {
-      kind: "create"
+      kind: "create";
     }
   | {
-      kind: "update"
-      projectId: string
-      projectName: string
-      currentPath: string
+      kind: "update";
+      projectId: string;
+      projectName: string;
+      currentPath: string;
     }
   | {
-      kind: "add-source"
-      projectId: string
-      projectName: string
-    }
+      kind: "add-source";
+      projectId: string;
+      projectName: string;
+    };
 
 export type ProjectPathDialogSubmitHandler = (
   target: ProjectPathDialogTarget,
   path: string,
-) => Promise<void> | void
+) => Promise<void> | void;
 
 interface ProjectPathDialogProps {
-  target: ProjectPathDialogTarget | null
-  pending?: boolean
-  platform: HostPlatform | null
-  onOpenChange: (open: boolean) => void
-  onSubmit: ProjectPathDialogSubmitHandler
+  target: ProjectPathDialogTarget | null;
+  pending?: boolean;
+  platform: HostPlatform | null;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: ProjectPathDialogSubmitHandler;
 }
 
 export function ProjectPathDialog({
@@ -66,56 +66,56 @@ export function ProjectPathDialog({
         ) : null}
       </DialogContent>
     </Dialog>
-  )
+  );
 }
 
 interface ProjectPathDialogContentProps {
-  target: ProjectPathDialogTarget
-  pending: boolean
-  platform: HostPlatform | null
-  onSubmit: ProjectPathDialogSubmitHandler
+  target: ProjectPathDialogTarget;
+  pending: boolean;
+  platform: HostPlatform | null;
+  onSubmit: ProjectPathDialogSubmitHandler;
 }
 
 interface PlatformCopy {
-  description: string
-  placeholder: string
+  description: string;
+  placeholder: string;
 }
 
 function getDialogTitle(kind: ProjectPathDialogTarget["kind"]): string {
   switch (kind) {
     case "create":
-      return "Create project"
+      return "Create project";
     case "update":
-      return "Update project path"
+      return "Update project path";
     case "add-source":
-      return "Add project source"
+      return "Add project source";
   }
 }
 
 function getDialogSubmitLabel(kind: ProjectPathDialogTarget["kind"]): string {
   switch (kind) {
     case "create":
-      return "Create project"
+      return "Create project";
     case "update":
-      return "Save path"
+      return "Save path";
     case "add-source":
-      return "Add source"
+      return "Add source";
   }
 }
 
 function getPlatformCopy(platform: HostPlatform | null): PlatformCopy {
-  const placeholder = "/path/to/project"
+  const placeholder = "/path/to/project";
   if (platform === "wsl") {
     return {
       description:
         "Enter an absolute path to the project folder. Use /mnt/c/... to point at a Windows checkout.",
       placeholder,
-    }
+    };
   }
   return {
     description: "Enter an absolute path to the project folder.",
     placeholder,
-  }
+  };
 }
 
 function ProjectPathDialogContent({
@@ -124,40 +124,46 @@ function ProjectPathDialogContent({
   platform,
   onSubmit,
 }: ProjectPathDialogContentProps) {
-  const inputId = useId()
+  const inputId = useId();
   const [pathValue, setPathValue] = useState(
     target.kind === "update" ? target.currentPath : "",
-  )
-  const [validationMessage, setValidationMessage] = useState<string | null>(null)
-  const derivedProjectName = deriveProjectNameFromPath(pathValue)
-  const copy = getPlatformCopy(platform)
+  );
+  const [validationMessage, setValidationMessage] = useState<string | null>(
+    null,
+  );
+  const derivedProjectName = deriveProjectNameFromPath(pathValue);
+  const copy = getPlatformCopy(platform);
   const placeholder =
     target.kind === "update"
       ? target.currentPath || copy.placeholder
-      : copy.placeholder
+      : copy.placeholder;
 
   useEffect(() => {
-    setValidationMessage(null)
-  }, [pathValue])
+    setValidationMessage(null);
+  }, [pathValue]);
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (pending) return
+    event.preventDefault();
+    if (pending) return;
 
-    const normalizedPath = normalizeProjectPathInput(pathValue)
-    const pathValidationMessage = getProjectPathValidationMessage(normalizedPath)
+    const normalizedPath = normalizeProjectPathInput(pathValue);
+    const pathValidationMessage =
+      getProjectPathValidationMessage(normalizedPath);
     if (pathValidationMessage) {
-      setValidationMessage(pathValidationMessage)
-      return
+      setValidationMessage(pathValidationMessage);
+      return;
     }
 
-    if (target.kind === "create" && !deriveProjectNameFromPath(normalizedPath)) {
-      setValidationMessage("Could not derive a project name from that path.")
-      return
+    if (
+      target.kind === "create" &&
+      !deriveProjectNameFromPath(normalizedPath)
+    ) {
+      setValidationMessage("Could not derive a project name from that path.");
+      return;
     }
 
-    void onSubmit(target, normalizedPath)
-  }
+    void onSubmit(target, normalizedPath);
+  };
 
   return (
     <>
@@ -175,12 +181,15 @@ function ProjectPathDialogContent({
             disabled={pending}
             placeholder={placeholder}
             onChange={(event) => {
-              setPathValue(event.target.value)
+              setPathValue(event.target.value);
             }}
           />
           {target.kind === "create" && derivedProjectName ? (
             <p className="text-sm text-muted-foreground">
-              Project name: <span className="font-medium text-foreground">{derivedProjectName}</span>
+              Project name:{" "}
+              <span className="font-medium text-foreground">
+                {derivedProjectName}
+              </span>
             </p>
           ) : null}
           {validationMessage ? (
@@ -194,5 +203,5 @@ function ProjectPathDialogContent({
         </DialogFooter>
       </form>
     </>
-  )
+  );
 }

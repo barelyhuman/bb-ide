@@ -25,9 +25,7 @@ import {
   parseRuntimeMaterialOperationPayload,
   resetRuntimeMaterialOperationToRequested,
 } from "./sandbox-runtime-material-operation.js";
-import {
-  buildSandboxRuntimeMaterialSnapshot,
-} from "./sandbox-runtime-material-snapshot.js";
+import { buildSandboxRuntimeMaterialSnapshot } from "./sandbox-runtime-material-snapshot.js";
 
 const DEFAULT_RUNTIME_MATERIAL_SYNC_TIMEOUT_MS = 60_000;
 
@@ -47,32 +45,31 @@ export async function requestSandboxRuntimeMaterialSync(
 
   const desiredSnapshot = await buildSandboxRuntimeMaterialSnapshot(deps);
   const existingOperation = getRuntimeMaterialOperation(deps, args.hostId);
-  const existingPayload =
-    existingOperation
-      ? parseRuntimeMaterialOperationPayload(existingOperation.payload)
-      : null;
+  const existingPayload = existingOperation
+    ? parseRuntimeMaterialOperationPayload(existingOperation.payload)
+    : null;
 
   if (
-    existingOperation
-    && existingOperation.state === "completed"
-    && existingPayload
-    && existingPayload.desiredVersion === desiredSnapshot.version
-    && hasDesiredRuntimeMaterialApplied(existingPayload)
+    existingOperation &&
+    existingOperation.state === "completed" &&
+    existingPayload &&
+    existingPayload.desiredVersion === desiredSnapshot.version &&
+    hasDesiredRuntimeMaterialApplied(existingPayload)
   ) {
     return desiredSnapshot;
   }
 
   if (
-    existingOperation === null
-    && isEmptyHostRuntimeMaterialSnapshot(desiredSnapshot)
+    existingOperation === null &&
+    isEmptyHostRuntimeMaterialSnapshot(desiredSnapshot)
   ) {
     return desiredSnapshot;
   }
 
   if (
-    existingOperation
-    && existingPayload
-    && existingPayload.desiredVersion === desiredSnapshot.version
+    existingOperation &&
+    existingPayload &&
+    existingPayload.desiredVersion === desiredSnapshot.version
   ) {
     return desiredSnapshot;
   }
@@ -102,15 +99,15 @@ export function advanceSandboxRuntimeMaterialSync(
 
   const payload = parseRuntimeMaterialOperationPayload(operation.payload);
   if (
-    operation.state === "completed"
-    && hasDesiredRuntimeMaterialApplied(payload)
+    operation.state === "completed" &&
+    hasDesiredRuntimeMaterialApplied(payload)
   ) {
     return null;
   }
 
   if (
-    isActiveLifecycleOperationState(operation.state)
-    && hasQueuedRuntimeMaterialCommand(deps, operation.commandId)
+    isActiveLifecycleOperationState(operation.state) &&
+    hasQueuedRuntimeMaterialCommand(deps, operation.commandId)
   ) {
     return operation.commandId;
   }
@@ -159,8 +156,8 @@ export async function ensureSandboxRuntimeMaterialSynced(
 
   const payload = parseRuntimeMaterialOperationPayload(operation.payload);
   if (
-    operation.state === "completed"
-    && hasDesiredRuntimeMaterialApplied(payload)
+    operation.state === "completed" &&
+    hasDesiredRuntimeMaterialApplied(payload)
   ) {
     return desiredSnapshot;
   }

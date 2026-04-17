@@ -3,10 +3,7 @@ import { execFile as execFileCb } from "node:child_process";
 import fs from "node:fs/promises";
 import { promisify } from "node:util";
 import { expect } from "vitest";
-import type {
-  ThreadEventRow,
-  ThreadExecutionOptions,
-} from "@bb/domain";
+import type { ThreadEventRow, ThreadExecutionOptions } from "@bb/domain";
 import type { ThreadTimelineResponse } from "@bb/server-contract";
 import {
   getThread,
@@ -42,8 +39,9 @@ type RealProviderExecutionOptions = Pick<
   "model" | "reasoningLevel" | "serviceTier"
 >;
 
-export type ProviderSmokeHarness =
-  Awaited<ReturnType<typeof createIntegrationHarness>>;
+export type ProviderSmokeHarness = Awaited<
+  ReturnType<typeof createIntegrationHarness>
+>;
 
 interface WaitForThreadEventArgs {
   baselineSequence: number;
@@ -143,11 +141,9 @@ function findLatestClientTurnRequestSequenceAfter(
     .find(
       (event) =>
         event.seq > sequence &&
-        (
-          event.type === "client/thread/start" ||
+        (event.type === "client/thread/start" ||
           event.type === "client/turn/requested" ||
-          event.type === "client/turn/start"
-        ),
+          event.type === "client/turn/start"),
     );
   return request?.seq ?? null;
 }
@@ -184,7 +180,10 @@ function findInputAcceptedAfter(
   events: ThreadEventRow[],
   sequence: number,
 ): WaitForInputAcceptedResult | null {
-  const requestSequence = findLatestClientTurnRequestSequenceAfter(events, sequence);
+  const requestSequence = findLatestClientTurnRequestSequenceAfter(
+    events,
+    sequence,
+  );
   if (requestSequence === null) {
     return null;
   }
@@ -210,18 +209,21 @@ function findErrorAfter(
   events: ThreadEventRow[],
   sequence: number,
 ): ThreadEventRow | null {
-  return events.find((event) =>
-    event.seq > sequence &&
-    (event.type === "error" || event.type === "system/error")
-  ) ?? null;
+  return (
+    events.find(
+      (event) =>
+        event.seq > sequence &&
+        (event.type === "error" || event.type === "system/error"),
+    ) ?? null
+  );
 }
 
 function hasTurnCompletedAfter(
   events: ThreadEventRow[],
   sequence: number,
 ): boolean {
-  return events.some((event) =>
-    event.seq > sequence && event.type === "turn/completed"
+  return events.some(
+    (event) => event.seq > sequence && event.type === "turn/completed",
   );
 }
 
@@ -233,10 +235,7 @@ async function buildThreadDiagnostics(
     getThreadEvents(args.harness.api, args.threadId),
     getThreadOutput(args.harness.api, args.threadId).catch(() => null),
   ]);
-  const recentEvents = events
-    .slice(-12)
-    .map(describeThreadEvent)
-    .join(" | ");
+  const recentEvents = events.slice(-12).map(describeThreadEvent).join(" | ");
   const lastError = [...events]
     .reverse()
     .find((event) => event.type === "error" || event.type === "system/error");
@@ -321,8 +320,7 @@ export async function sendLongRunningTurnAndWaitStarted(
   );
   await sendTextMessage(args.harness.api, args.threadId, {
     execution: getExecutionOptions(args.providerId),
-    text:
-      "Write a detailed 20 section essay about the history of computing with four sentences per section.",
+    text: "Write a detailed 20 section essay about the history of computing with four sentences per section.",
   });
   return waitForTurnStartedAfter({
     baselineSequence,
@@ -365,7 +363,9 @@ async function assertProviderPrerequisitesUncached(
   providerId: RealProviderId,
 ): Promise<void> {
   await loadProjectEnvFile();
-  await assertCliInstalled(providerId === "claude-code" ? "claude" : providerId);
+  await assertCliInstalled(
+    providerId === "claude-code" ? "claude" : providerId,
+  );
 }
 
 const execFile = promisify(execFileCb);
@@ -431,7 +431,10 @@ export async function createRealThread(args: CreateRealThreadArgs) {
 
 export async function sendAndWaitForIdle(args: SendAndWaitForIdleArgs) {
   const baselineEvents = await getThreadEvents(args.harness.api, args.threadId);
-  const baselineSequence = Math.max(0, ...baselineEvents.map((event) => event.seq));
+  const baselineSequence = Math.max(
+    0,
+    ...baselineEvents.map((event) => event.seq),
+  );
   await sendTextMessage(args.harness.api, args.threadId, {
     execution: getExecutionOptions(args.providerId),
     text: args.text,
@@ -470,7 +473,9 @@ export async function sendAndWaitForIdle(args: SendAndWaitForIdleArgs) {
           `Thread ${args.threadId} entered error before reaching idle`,
         );
       }
-      await new Promise((resolve) => setTimeout(resolve, REAL_POLL_INTERVAL_MS));
+      await new Promise((resolve) =>
+        setTimeout(resolve, REAL_POLL_INTERVAL_MS),
+      );
     }
     if (!reachedIdle) {
       throw new Error(
@@ -484,14 +489,11 @@ export async function sendAndWaitForIdle(args: SendAndWaitForIdleArgs) {
       getThreadOutput(args.harness.api, args.threadId),
       getThreadTimeline(args.harness.api, args.threadId).catch(() => null),
     ]);
-    const recentEvents = events
-      .slice(-10)
-      .map(describeThreadEvent)
-      .join(" | ");
+    const recentEvents = events.slice(-10).map(describeThreadEvent).join(" | ");
     const timelineKinds = timeline
       ? timeline.rows
-        .map((row) => (row.kind === "message" ? row.message.kind : row.kind))
-        .join(", ")
+          .map((row) => (row.kind === "message" ? row.message.kind : row.kind))
+          .join(", ")
       : "unavailable";
     const outputPreview = output?.trim().slice(0, 160) ?? "";
     const lastError = [...events]

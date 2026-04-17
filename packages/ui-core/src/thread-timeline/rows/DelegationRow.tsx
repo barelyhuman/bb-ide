@@ -33,7 +33,10 @@ interface NestedRenderOptions {
 interface NestedToolGroupProps {
   entry: TimelineToolGroupRow;
   preferOngoingLabels?: boolean;
-  renderMessage: (message: ViewMessage, options?: NestedRenderOptions) => ReactNode;
+  renderMessage: (
+    message: ViewMessage,
+    options?: NestedRenderOptions,
+  ) => ReactNode;
 }
 
 interface NestedRowOngoingLabelInput {
@@ -111,7 +114,10 @@ export function DelegationRow({
   message: ViewDelegationMessage;
   initialExpanded?: boolean;
   preferOngoingLabels?: boolean;
-  renderMessage: (message: ViewMessage, options?: NestedRenderOptions) => ReactNode;
+  renderMessage: (
+    message: ViewMessage,
+    options?: NestedRenderOptions,
+  ) => ReactNode;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const nestedRows = useMemo(
@@ -149,9 +155,15 @@ export function DelegationRow({
           )}
           onToggle={onToggle}
         >
-          <div className={cn("overflow-auto rounded-md border border-border/60 bg-background/40", EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS)}>
+          <div
+            className={cn(
+              "overflow-auto rounded-md border border-border/60 bg-background/40",
+              EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS,
+            )}
+          >
             {nestedRows.map((row, index) => {
-              const isLastRow = index === nestedRows.length - 1 && !message.output;
+              const isLastRow =
+                index === nestedRows.length - 1 && !message.output;
               const shouldAutoExpand = isLastRow && isWorking;
               const rowPreferOngoingLabels = shouldPreferNestedOngoingLabels({
                 latestActivityRowId: nestedLatestActivityRowId,

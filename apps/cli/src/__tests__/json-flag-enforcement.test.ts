@@ -11,7 +11,10 @@ import { registerThreadCommands } from "../commands/thread/index.js";
 // Commands intentionally excluded from --json requirement
 const EXCLUDED_COMMANDS = new Set<string>();
 
-function collectLeafCommands(cmd: Command, prefix = ""): Array<{ path: string; cmd: Command }> {
+function collectLeafCommands(
+  cmd: Command,
+  prefix = "",
+): Array<{ path: string; cmd: Command }> {
   const results: Array<{ path: string; cmd: Command }> = [];
   for (const sub of cmd.commands) {
     const fullPath = prefix ? `${prefix} ${sub.name()}` : sub.name();

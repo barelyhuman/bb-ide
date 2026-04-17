@@ -28,15 +28,9 @@ import type { ThreadStartParams } from "./generated/codex-app-server/schema/v2/T
 import type { UserInput as CodexUserInput } from "./generated/codex-app-server/schema/v2/UserInput.js";
 import type { AskForApproval } from "./generated/codex-app-server/schema/v2/AskForApproval.js";
 import { parseModelsResponse } from "./models.js";
-import {
-  buildShellEnvironmentPolicyConfig,
-} from "../shared/adapter-utils.js";
-import {
-  buildAcceptedUserMessageEvent,
-} from "../shared/accepted-user-messages.js";
-import {
-  decodeNativeProviderToolCallRequest,
-} from "../shared/provider-tool-call-contract.js";
+import { buildShellEnvironmentPolicyConfig } from "../shared/adapter-utils.js";
+import { buildAcceptedUserMessageEvent } from "../shared/accepted-user-messages.js";
+import { decodeNativeProviderToolCallRequest } from "../shared/provider-tool-call-contract.js";
 import { resolveAdapterPermissionPolicy } from "../shared/permission-policy.js";
 import type {
   AdapterCommand,
@@ -143,7 +137,9 @@ function toCodexPermissionSettings(
 export type CodexEvent = CodexServerNotification;
 
 export type CodexCommand = DistributiveOmit<CodexClientRequest, "id">;
-type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
+type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
+  ? Omit<T, K>
+  : never;
 
 function toCodexServiceTier(tier: ServiceTier | undefined): "fast" | undefined {
   return tier === "fast" ? "fast" : undefined;
@@ -159,7 +155,11 @@ function toCodexUserInput(input: PromptInput[]): CodexUserInput[] {
       case "localImage":
         return { type: "localImage", path: chunk.path };
       case "localFile":
-        return { type: "text", text: `[Attached file: ${chunk.path}]`, text_elements: [] };
+        return {
+          type: "text",
+          text: `[Attached file: ${chunk.path}]`,
+          text_elements: [],
+        };
     }
   });
 }
@@ -172,7 +172,9 @@ function buildCodexConfig(
   if (threadId) {
     config["shell_environment_policy.set.BB_THREAD_ID"] = threadId;
   }
-  const shellEnvironmentConfig = buildShellEnvironmentPolicyConfig(options?.envVars);
+  const shellEnvironmentConfig = buildShellEnvironmentPolicyConfig(
+    options?.envVars,
+  );
   if (shellEnvironmentConfig) {
     Object.assign(config, shellEnvironmentConfig);
   }
@@ -214,10 +216,13 @@ export function createCodexProviderAdapter(
   const capabilities: ProviderCapabilities = {
     supportsRename: providerInfo.capabilities.supportsRename,
     supportsServiceTier: providerInfo.capabilities.supportsServiceTier,
-    supportedPermissionModes: providerInfo.capabilities.supportedPermissionModes,
+    supportedPermissionModes:
+      providerInfo.capabilities.supportedPermissionModes,
   };
-  const nativeTurnStartClientRequestSequencesByProviderThreadId =
-    new Map<string, number[]>();
+  const nativeTurnStartClientRequestSequencesByProviderThreadId = new Map<
+    string,
+    number[]
+  >();
 
   function queueNativeTurnStartClientRequestSequence(args: {
     clientRequestSequence: number | undefined;
@@ -383,10 +388,13 @@ export function createCodexProviderAdapter(
             ...resolveCodexInstructionOverrides(command),
             model: command.options?.model ?? undefined,
             serviceTier: toCodexServiceTier(command.options?.serviceTier),
-            config: buildCodexConfig(command.threadId, command.options) ?? undefined,
+            config:
+              buildCodexConfig(command.threadId, command.options) ?? undefined,
             experimentalRawEvents: false,
             persistExtendedHistory: false,
-            ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
+            ...(dynamicTools && dynamicTools.length > 0
+              ? { dynamicTools }
+              : {}),
           };
           return {
             kind: "request",
@@ -405,9 +413,12 @@ export function createCodexProviderAdapter(
             ...resolveCodexInstructionOverrides(command),
             model: command.options?.model ?? undefined,
             serviceTier: toCodexServiceTier(command.options?.serviceTier),
-            config: buildCodexConfig(command.threadId, command.options) ?? undefined,
+            config:
+              buildCodexConfig(command.threadId, command.options) ?? undefined,
             persistExtendedHistory: false,
-            ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
+            ...(dynamicTools && dynamicTools.length > 0
+              ? { dynamicTools }
+              : {}),
           };
           return {
             kind: "request",
@@ -476,7 +487,9 @@ export function createCodexProviderAdapter(
     },
 
     translateEvent(event: ProviderRuntimeEvent) {
-      return translateCodexEvent(event).flatMap(attachAcceptedUserMessageCorrelation);
+      return translateCodexEvent(event).flatMap(
+        attachAcceptedUserMessageCorrelation,
+      );
     },
 
     translateAcceptedCommand({ command }) {
@@ -491,7 +504,9 @@ export function createCodexProviderAdapter(
       });
     },
 
-    decodeToolCallRequest(request: ProviderInboundRequest): DecodedToolCallRequest | null {
+    decodeToolCallRequest(
+      request: ProviderInboundRequest,
+    ): DecodedToolCallRequest | null {
       if (typeof request.id !== "string" && typeof request.id !== "number") {
         return null;
       }

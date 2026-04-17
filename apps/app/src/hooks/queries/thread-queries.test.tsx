@@ -57,24 +57,25 @@ describe("useThreadPendingInteractions", () => {
     ]);
 
     const { wrapper } = createQueryClientTestHarness();
-    const { result } = renderHook(
-      () => useThreadPendingInteractions("thr_1"),
-      { wrapper },
-    );
+    const { result } = renderHook(() => useThreadPendingInteractions("thr_1"), {
+      wrapper,
+    });
 
     await waitFor(() => {
       expect(result.current.data?.[0]?.id).toBe("pi_1");
     });
 
-    expect(api.listThreadPendingInteractions).toHaveBeenCalledWith("thr_1", expect.anything());
+    expect(api.listThreadPendingInteractions).toHaveBeenCalledWith(
+      "thr_1",
+      expect.anything(),
+    );
   });
 
   it("stays disabled without a thread id", () => {
     const { wrapper } = createQueryClientTestHarness();
-    const { result } = renderHook(
-      () => useThreadPendingInteractions(""),
-      { wrapper },
-    );
+    const { result } = renderHook(() => useThreadPendingInteractions(""), {
+      wrapper,
+    });
 
     expect(result.current.fetchStatus).toBe("idle");
     expect(api.listThreadPendingInteractions).not.toHaveBeenCalled();

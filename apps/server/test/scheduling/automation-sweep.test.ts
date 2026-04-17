@@ -32,7 +32,9 @@ describe("automation sweep", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-automation-run",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -104,7 +106,9 @@ describe("automation sweep", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-automation-defaults",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -171,7 +175,9 @@ describe("automation sweep", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-automation-invalid-config",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -184,10 +190,12 @@ describe("automation sweep", () => {
         enabled: true,
         triggerType: "schedule",
         triggerConfig: JSON.stringify(
-          createScheduleTrigger(createDailySchedule({
-            times: ["08:00"],
-            timezone: "Mars/Olympus",
-          })),
+          createScheduleTrigger(
+            createDailySchedule({
+              times: ["08:00"],
+              timezone: "Mars/Olympus",
+            }),
+          ),
         ),
         action: JSON.stringify({
           actionType: "scheduled-thread",
@@ -237,7 +245,9 @@ describe("automation sweep", () => {
           .where(eq(threads.automationId, runnableAutomation.id))
           .all(),
       ).toHaveLength(1);
-      expect(getAutomation(harness.db, runnableAutomation.id)?.runCount).toBe(1);
+      expect(getAutomation(harness.db, runnableAutomation.id)?.runCount).toBe(
+        1,
+      );
     } finally {
       await harness.cleanup();
     }
@@ -249,7 +259,9 @@ describe("automation sweep", () => {
       const host = seedHost(harness.deps, {
         id: "host-automation-offline",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -289,7 +301,9 @@ describe("automation sweep", () => {
           .where(eq(threads.automationId, automation.id))
           .all(),
       ).toHaveLength(0);
-      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(0);
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
+        0,
+      );
 
       const updatedAutomation = getAutomation(harness.db, automation.id);
       expect(updatedAutomation?.lastRunAt).toBeGreaterThanOrEqual(now);
@@ -306,7 +320,9 @@ describe("automation sweep", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-automation-disabled",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -346,7 +362,9 @@ describe("automation sweep", () => {
           .where(eq(threads.automationId, automation.id))
           .all(),
       ).toHaveLength(0);
-      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(0);
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
+        0,
+      );
       expect(getAutomation(harness.db, automation.id)).toMatchObject({
         enabled: false,
         lastRunAt: null,
@@ -364,7 +382,9 @@ describe("automation sweep", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-automation-dedupe",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -400,7 +420,8 @@ describe("automation sweep", () => {
         status: "idle",
         title: "Existing automation thread",
       });
-      harness.db.update(threads)
+      harness.db
+        .update(threads)
         .set({ automationId: automation.id })
         .where(eq(threads.id, existingThread.id))
         .run();
@@ -414,7 +435,9 @@ describe("automation sweep", () => {
           .where(eq(threads.automationId, automation.id))
           .all(),
       ).toHaveLength(1);
-      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(0);
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
+        0,
+      );
 
       const updatedAutomation = getAutomation(harness.db, automation.id);
       expect(updatedAutomation?.runCount).toBe(1);
@@ -430,7 +453,9 @@ describe("automation sweep", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-automation-archived-run",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -466,7 +491,8 @@ describe("automation sweep", () => {
         status: "idle",
         title: "Archived automation thread",
       });
-      harness.db.update(threads)
+      harness.db
+        .update(threads)
         .set({
           archivedAt: now - 10,
           automationId: automation.id,
@@ -482,7 +508,9 @@ describe("automation sweep", () => {
         .where(eq(threads.automationId, automation.id))
         .all();
       expect(createdThreads).toHaveLength(2);
-      expect(createdThreads.filter((thread) => thread.archivedAt === null)).toHaveLength(1);
+      expect(
+        createdThreads.filter((thread) => thread.archivedAt === null),
+      ).toHaveLength(1);
     } finally {
       await harness.cleanup();
     }
@@ -494,7 +522,9 @@ describe("automation sweep", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-automation-rollback",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const now = Date.now();
       const automation = createAutomation(harness.db, harness.hub, {
         projectId: project.id,
@@ -538,7 +568,9 @@ describe("automation sweep", () => {
           .where(eq(threads.automationId, automation.id))
           .all(),
       ).toHaveLength(0);
-      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(0);
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
+        0,
+      );
       expect(restoredAutomation).toMatchObject({
         lastRunAt: null,
         runCount: 0,
@@ -553,7 +585,9 @@ describe("automation sweep", () => {
           .where(eq(threads.automationId, automation.id))
           .all(),
       ).toHaveLength(0);
-      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(0);
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
+        0,
+      );
       expect(getAutomation(harness.db, automation.id)?.nextRunAt).toBe(
         restoredAutomation?.nextRunAt,
       );

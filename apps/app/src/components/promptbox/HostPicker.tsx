@@ -55,9 +55,7 @@ export function HostPicker({
             <Monitor className="size-3.5 shrink-0" />
             <span className="truncate">{label}</span>
             {isLocal ? <LocalhostBadge /> : null}
-            {selectedHost ? (
-              <HostStatusBadge connected={isConnected} />
-            ) : null}
+            {selectedHost ? <HostStatusBadge connected={isConnected} /> : null}
           </span>
           <ChevronDown className="size-3.5 text-muted-foreground" />
         </Button>

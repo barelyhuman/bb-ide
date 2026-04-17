@@ -11,11 +11,10 @@ export const environmentStatusValues = [
 export const environmentStatusSchema = z.enum(environmentStatusValues);
 export type EnvironmentStatus = z.infer<typeof environmentStatusSchema>;
 
-export const environmentCleanupModeValues = [
-  "force",
-  "safe",
-] as const;
-export const environmentCleanupModeSchema = z.enum(environmentCleanupModeValues);
+export const environmentCleanupModeValues = ["force", "safe"] as const;
+export const environmentCleanupModeSchema = z.enum(
+  environmentCleanupModeValues,
+);
 export type EnvironmentCleanupMode = z.infer<
   typeof environmentCleanupModeSchema
 >;
@@ -26,7 +25,9 @@ export const WORKSPACE_PROVISION_TYPES = [
   "managed-clone",
 ] as const;
 export const workspaceProvisionTypeSchema = z.enum(WORKSPACE_PROVISION_TYPES);
-export type WorkspaceProvisionType = z.infer<typeof workspaceProvisionTypeSchema>;
+export type WorkspaceProvisionType = z.infer<
+  typeof workspaceProvisionTypeSchema
+>;
 
 export const environmentWorkspaceDisplayKindValues = [
   "sandbox",
@@ -79,7 +80,9 @@ export const discoveredWorkspacePropertiesSchema = z.object({
   branchName: z.string().nullable(),
   defaultBranch: z.string().nullable(),
 });
-export type DiscoveredWorkspaceProperties = z.infer<typeof discoveredWorkspacePropertiesSchema>;
+export type DiscoveredWorkspaceProperties = z.infer<
+  typeof discoveredWorkspacePropertiesSchema
+>;
 
 export const environmentSchema = z.object({
   id: z.string(),

@@ -20,13 +20,16 @@ export async function transcribeVoiceInput(args: {
     formData.set("prompt", args.prompt.trim());
   }
 
-  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${args.openAiApiKey}`,
+  const response = await fetch(
+    "https://api.openai.com/v1/audio/transcriptions",
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${args.openAiApiKey}`,
+      },
+      body: formData,
     },
-    body: formData,
-  });
+  );
 
   const payload = await response.json().catch(() => null);
   if (!response.ok) {

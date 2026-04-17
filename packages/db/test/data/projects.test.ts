@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { createConnection } from "../../src/connection.js";
 import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
-import { createProject, listProjects, listPublicProjects } from "../../src/data/projects.js";
+import {
+  createProject,
+  listProjects,
+  listPublicProjects,
+} from "../../src/data/projects.js";
 import { upsertHost } from "../../src/data/hosts.js";
 import { upsertProjectOperationRecord } from "../../src/data/project-operations.js";
 

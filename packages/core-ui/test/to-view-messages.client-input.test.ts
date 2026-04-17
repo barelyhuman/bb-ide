@@ -7,7 +7,9 @@ import {
   fromRows,
 } from "./timeline-test-harness.js";
 
-function userMessages(messages: ViewMessage[]): Extract<ViewMessage, { kind: "user" }>[] {
+function userMessages(
+  messages: ViewMessage[],
+): Extract<ViewMessage, { kind: "user" }>[] {
   return messages.filter(
     (message): message is Extract<ViewMessage, { kind: "user" }> =>
       message.kind === "user",
@@ -150,9 +152,11 @@ describe("toViewMessages client input projection", () => {
       event.turnCompleted({ turnId: "turn-1" }),
     ];
 
-    const users = userMessages(toViewMessages(fromRows(events), {
-      threadStatus: "idle",
-    }));
+    const users = userMessages(
+      toViewMessages(fromRows(events), {
+        threadStatus: "idle",
+      }),
+    );
 
     expect(users.map((user) => [user.text, user.turnId])).toEqual([
       ["First request", "turn-1"],
@@ -173,9 +177,13 @@ describe("toViewMessages client input projection", () => {
       }),
     ];
 
-    expect(userMessages(toViewMessages(fromRows(events), {
-      threadStatus: "idle",
-    }))).toEqual([]);
+    expect(
+      userMessages(
+        toViewMessages(fromRows(events), {
+          threadStatus: "idle",
+        }),
+      ),
+    ).toEqual([]);
   });
 
   it("renders the first thread prompt from client/turn/requested", () => {
@@ -224,13 +232,19 @@ describe("toViewMessages client input projection", () => {
       }),
     ];
 
-    const users = userMessages(toViewMessages(fromRows(events), {
-      threadStatus: "idle",
-    }));
+    const users = userMessages(
+      toViewMessages(fromRows(events), {
+        threadStatus: "idle",
+      }),
+    );
 
     expect(users).toHaveLength(1);
-    expect(users[0]?.attachments?.imageUrls).toEqual(["https://example.com/a.png"]);
-    expect(users[0]?.attachments?.localImagePaths).toEqual(["/tmp/local-a.png"]);
+    expect(users[0]?.attachments?.imageUrls).toEqual([
+      "https://example.com/a.png",
+    ]);
+    expect(users[0]?.attachments?.localImagePaths).toEqual([
+      "/tmp/local-a.png",
+    ]);
     expect(users[0]?.attachments?.localFilePaths).toEqual(["/tmp/notes.md"]);
   });
 
@@ -245,7 +259,9 @@ describe("toViewMessages client input projection", () => {
       }),
     ];
 
-    expect(toViewMessages(fromRows(events), { threadStatus: "idle" })).toEqual([]);
+    expect(toViewMessages(fromRows(events), { threadStatus: "idle" })).toEqual(
+      [],
+    );
 
     const projected = toViewMessages(fromRows(events), {
       includeInternalSystemMessages: true,
@@ -261,19 +277,22 @@ describe("toViewMessages client input projection", () => {
       threadId: "thread-1",
       turnId: "turn-1",
     });
-    const projected = toViewMessages(fromRows([
-      event.assistantCompleted({
-        itemId: "assistant-1",
-        text: "internal manager chatter",
-      }),
-      event.managerUserMessage({
-        text: "Visible manager update",
-        turnId: "turn-1",
-      }),
-    ]), {
-      threadStatus: "idle",
-      threadType: "manager",
-    });
+    const projected = toViewMessages(
+      fromRows([
+        event.assistantCompleted({
+          itemId: "assistant-1",
+          text: "internal manager chatter",
+        }),
+        event.managerUserMessage({
+          text: "Visible manager update",
+          turnId: "turn-1",
+        }),
+      ]),
+      {
+        threadStatus: "idle",
+        threadType: "manager",
+      },
+    );
 
     expect(projected).toHaveLength(1);
     expect(projected[0]?.kind).toBe("assistant-text");
@@ -310,7 +329,7 @@ describe("toViewMessages client input projection", () => {
       toViewProjection(fromRows(events), {
         threadStatus: "active",
         turnMessageDetail: "summary",
-      })
+      }),
     ).toThrow(/turnId/);
   });
 });

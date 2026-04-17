@@ -48,9 +48,7 @@ describe("requireHostId", () => {
   });
 
   it("throws when host ID is null", () => {
-    expect(() => requireHostId(null)).toThrow(
-      "Cannot reach local host daemon",
-    );
+    expect(() => requireHostId(null)).toThrow("Cannot reach local host daemon");
   });
 
   it("throws when host ID is empty string", () => {

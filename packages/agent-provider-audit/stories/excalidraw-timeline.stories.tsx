@@ -1,8 +1,5 @@
 import type { Story } from "@ladle/react";
-import {
-  ConversationTimeline,
-  ThreadTimelineRows,
-} from "@bb/ui-core";
+import { ConversationTimeline, ThreadTimelineRows } from "@bb/ui-core";
 import { fixtureStoryData } from "../.ladle/fixture-story-data";
 
 const EMPTY_LOADING_IDS = new Set<string>();
@@ -11,7 +8,9 @@ const EMPTY_TOOL_GROUP_MESSAGES: Record<string, never[]> = {};
 type FixtureStoryId = string;
 
 function findFixture(fixtureId: FixtureStoryId) {
-  const fixture = fixtureStoryData.fixtures.find((candidate) => candidate.id === fixtureId);
+  const fixture = fixtureStoryData.fixtures.find(
+    (candidate) => candidate.id === fixtureId,
+  );
   if (!fixture) {
     throw new Error(`Missing fixture story data for ${fixtureId}`);
   }
@@ -27,9 +26,12 @@ function FixtureTimeline({ fixtureId }: { fixtureId: FixtureStoryId }) {
         <p className="font-mono text-xs text-muted-foreground">
           {fixture.providerId} / {fixture.taskId}
         </p>
-        <h1 className="text-lg font-semibold text-foreground">{fixture.scenarioDescription}</h1>
+        <h1 className="text-lg font-semibold text-foreground">
+          {fixture.scenarioDescription}
+        </h1>
         <p className="text-sm text-muted-foreground">
-          {fixture.viewMessageCount} messages across {fixture.timelineRowCount} rows
+          {fixture.viewMessageCount} messages across {fixture.timelineRowCount}{" "}
+          rows
         </p>
       </header>
       <ConversationTimeline className="gap-2">
@@ -83,9 +85,7 @@ export const CodexExplanation = createFixtureStory(
 export const CodexFeature = createFixtureStory(
   "excalidraw/codex/search-feature",
 );
-export const CodexBugfix = createFixtureStory(
-  "excalidraw/codex/search-bugfix",
-);
+export const CodexBugfix = createFixtureStory("excalidraw/codex/search-bugfix");
 export const CodexCollabStartupExplanation = createFixtureStory(
   "excalidraw/codex/collab-startup-explanation",
 );
@@ -102,12 +102,8 @@ export const CodexShareWebCompat = createFixtureStory(
 export const PiExplanation = createFixtureStory(
   "excalidraw/pi/ttd-explanation",
 );
-export const PiFeature = createFixtureStory(
-  "excalidraw/pi/search-feature",
-);
-export const PiBugfix = createFixtureStory(
-  "excalidraw/pi/search-bugfix",
-);
+export const PiFeature = createFixtureStory("excalidraw/pi/search-feature");
+export const PiBugfix = createFixtureStory("excalidraw/pi/search-bugfix");
 export const PiCollabStartupExplanation = createFixtureStory(
   "excalidraw/pi/collab-startup-explanation",
 );

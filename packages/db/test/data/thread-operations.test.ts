@@ -2,9 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createConnection } from "../../src/connection.js";
 import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
-import {
-  createThread,
-} from "../../src/data/threads.js";
+import { createThread } from "../../src/data/threads.js";
 import { queueCommand } from "../../src/data/commands.js";
 import {
   getThreadOperation,
@@ -107,9 +105,7 @@ describe("thread operations", () => {
       commandId: command.id,
       queuedAt: 333,
     });
-    expect(getThreadOperationByCommandId(db, command.id)?.id).toBe(
-      queued?.id,
-    );
+    expect(getThreadOperationByCommandId(db, command.id)?.id).toBe(queued?.id);
     expect(completed).toMatchObject({
       state: "completed",
       completedAt: 444,

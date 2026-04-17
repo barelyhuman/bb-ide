@@ -11,7 +11,10 @@ type GrantedPendingInteractionResolution = Extract<
   { decision: "allow_once" | "allow_for_session" }
 >;
 
-function stringSetEquals(left: readonly string[], right: readonly string[]): boolean {
+function stringSetEquals(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
   const leftSet = new Set(left);
   const rightSet = new Set(right);
   if (leftSet.size !== rightSet.size) {
@@ -34,8 +37,8 @@ function permissionProfileEquals(
   }
 
   return (
-    stringSetEquals(left.fileSystem.read, right.fileSystem.read)
-    && stringSetEquals(left.fileSystem.write, right.fileSystem.write)
+    stringSetEquals(left.fileSystem.read, right.fileSystem.read) &&
+    stringSetEquals(left.fileSystem.write, right.fileSystem.write)
   );
 }
 
@@ -46,7 +49,10 @@ function grantedResolutionEquals(
   if (left.grantedPermissions === null || right.grantedPermissions === null) {
     return left.grantedPermissions === right.grantedPermissions;
   }
-  return permissionProfileEquals(left.grantedPermissions, right.grantedPermissions);
+  return permissionProfileEquals(
+    left.grantedPermissions,
+    right.grantedPermissions,
+  );
 }
 
 function hasGrantedPermissions(
@@ -57,8 +63,8 @@ function hasGrantedPermissions(
   }
 
   return (
-    (permissions.fileSystem?.read.length ?? 0) > 0
-    || (permissions.fileSystem?.write.length ?? 0) > 0
+    (permissions.fileSystem?.read.length ?? 0) > 0 ||
+    (permissions.fileSystem?.write.length ?? 0) > 0
   );
 }
 
@@ -74,9 +80,14 @@ export function pendingInteractionResolutionEquals(
     case "deny":
       return right.decision === "deny";
     case "allow_once":
-      return right.decision === "allow_once" && grantedResolutionEquals(left, right);
+      return (
+        right.decision === "allow_once" && grantedResolutionEquals(left, right)
+      );
     case "allow_for_session":
-      return right.decision === "allow_for_session" && grantedResolutionEquals(left, right);
+      return (
+        right.decision === "allow_for_session" &&
+        grantedResolutionEquals(left, right)
+      );
   }
 }
 
@@ -106,8 +117,8 @@ function getRequestedPermissions(
     return null;
   }
   if (
-    interaction.payload.subject.kind === "command"
-    || interaction.payload.subject.kind === "file_change"
+    interaction.payload.subject.kind === "command" ||
+    interaction.payload.subject.kind === "file_change"
   ) {
     return interaction.payload.subject.sessionGrant;
   }
@@ -138,8 +149,8 @@ function validateGrantedPermissions(
 
   if (permissions.network !== null) {
     if (
-      requestedPermissions.network?.enabled !== true
-      || permissions.network.enabled !== true
+      requestedPermissions.network?.enabled !== true ||
+      permissions.network.enabled !== true
     ) {
       throw new ApiError(
         400,
@@ -180,8 +191,8 @@ function validateCommandOrFileChangeSessionGrant(
   permissions: PendingInteractionGrantedPermissionProfile,
 ): void {
   if (
-    interaction.payload.subject.kind !== "command"
-    && interaction.payload.subject.kind !== "file_change"
+    interaction.payload.subject.kind !== "command" &&
+    interaction.payload.subject.kind !== "file_change"
   ) {
     return;
   }
@@ -225,11 +236,9 @@ export function validatePendingInteractionResolution(
         "Allowed permission-grant resolutions must include granted permissions",
       );
     } else if (
-      resolution.decision === "allow_for_session"
-      && (
-        interaction.payload.subject.kind === "command"
-        || interaction.payload.subject.kind === "file_change"
-      )
+      resolution.decision === "allow_for_session" &&
+      (interaction.payload.subject.kind === "command" ||
+        interaction.payload.subject.kind === "file_change")
     ) {
       throw new ApiError(
         400,

@@ -4,16 +4,13 @@ import {
   reasoningLevelValues,
 } from "@bb/domain";
 import { z } from "zod";
-import {
-  jsonRpcEnvelopeSchema,
-} from "../../shared/bridge-tool-calls.js";
-import {
-  claudePermissionModeSchema,
-} from "../interactive-contract.js";
+import { jsonRpcEnvelopeSchema } from "../../shared/bridge-tool-calls.js";
+import { claudePermissionModeSchema } from "../interactive-contract.js";
 
 const bridgeInstructionModeSchema = z.enum(instructionModeValues);
-const bridgePermissionEscalationSchema =
-  z.enum(permissionEscalationValues).nullable();
+const bridgePermissionEscalationSchema = z
+  .enum(permissionEscalationValues)
+  .nullable();
 const bridgeReasoningLevelSchema = z.enum(reasoningLevelValues);
 
 const dynamicToolSchema = z.object({

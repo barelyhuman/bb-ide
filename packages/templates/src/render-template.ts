@@ -1,5 +1,8 @@
 import Handlebars from "handlebars";
-import type { TemplateId, TemplateVariables } from "./generated/templates.generated.js";
+import type {
+  TemplateId,
+  TemplateVariables,
+} from "./generated/templates.generated.js";
 import { type TemplateMetadata, templateRegistry } from "./registry.js";
 
 let partialsRegistered = false;
@@ -16,7 +19,9 @@ const compiledTemplateCache = new Map<
   HandlebarsTemplateDelegate<TemplateVariables[TemplateId]>
 >();
 
-function getCompiledTemplate<TTemplateId extends TemplateId>(templateId: TTemplateId) {
+function getCompiledTemplate<TTemplateId extends TemplateId>(
+  templateId: TTemplateId,
+) {
   const cached = compiledTemplateCache.get(templateId);
   if (cached) {
     return cached as HandlebarsTemplateDelegate<TemplateVariables[TTemplateId]>;
@@ -26,7 +31,10 @@ function getCompiledTemplate<TTemplateId extends TemplateId>(templateId: TTempla
     templateRegistry[templateId].body,
     { noEscape: true },
   );
-  compiledTemplateCache.set(templateId, compiled as HandlebarsTemplateDelegate<TemplateVariables[TemplateId]>);
+  compiledTemplateCache.set(
+    templateId,
+    compiled as HandlebarsTemplateDelegate<TemplateVariables[TemplateId]>,
+  );
   return compiled;
 }
 
@@ -44,5 +52,7 @@ export function getTemplateMetadata(templateId: TemplateId): TemplateMetadata {
 }
 
 export function listTemplates(): TemplateMetadata[] {
-  return Object.values(templateRegistry).map(({ body: _body, ...metadata }) => metadata);
+  return Object.values(templateRegistry).map(
+    ({ body: _body, ...metadata }) => metadata,
+  );
 }

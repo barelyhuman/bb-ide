@@ -9,7 +9,9 @@ interface RawEventArgs {
   sourceThreadId?: string;
 }
 
-function rawEvent(args: RawEventArgs): AgentRuntimeRawProviderEventCaptureEntry {
+function rawEvent(
+  args: RawEventArgs,
+): AgentRuntimeRawProviderEventCaptureEntry {
   return {
     kind: "raw-provider-event",
     capturedAt: 1_000,
@@ -109,9 +111,15 @@ describe("replayRawProviderEvents", () => {
       ],
     });
 
-    const identity = translated.find((entry) => entry.event.type === "thread/identity");
-    const turnStarted = translated.find((entry) => entry.event.type === "turn/started");
-    const unscoped = translated.find((entry) => entry.rawCaptureId === "raw-unscoped");
+    const identity = translated.find(
+      (entry) => entry.event.type === "thread/identity",
+    );
+    const turnStarted = translated.find(
+      (entry) => entry.event.type === "turn/started",
+    );
+    const unscoped = translated.find(
+      (entry) => entry.rawCaptureId === "raw-unscoped",
+    );
 
     expect(identity?.event).toMatchObject({
       type: "thread/identity",

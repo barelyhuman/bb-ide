@@ -322,10 +322,7 @@ export {
   heartbeatSession,
   listConnectedHostIds,
 } from "./sessions.js";
-export type {
-  GetCurrentSessionArgs,
-  OpenSessionInput,
-} from "./sessions.js";
+export type { GetCurrentSessionArgs, OpenSessionInput } from "./sessions.js";
 
 export {
   claimDraft,

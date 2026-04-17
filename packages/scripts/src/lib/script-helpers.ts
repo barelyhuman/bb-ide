@@ -8,10 +8,7 @@ import {
 } from "@bb/process-utils";
 import pc from "picocolors";
 import { createTurboBuildCommand } from "./dev-restart-utils.js";
-import {
-  toExitCode,
-  waitForProcessExit,
-} from "./process-helpers.js";
+import { toExitCode, waitForProcessExit } from "./process-helpers.js";
 
 type OutputChunk = Buffer | string;
 

@@ -21,10 +21,7 @@ import {
   systemProvidersQueryKey,
 } from "./query-keys";
 
-function requireQueryId(
-  id: HostQueryId,
-  hookName: string,
-): string {
+function requireQueryId(id: HostQueryId, hookName: string): string {
   if (!id) {
     throw new Error(`${hookName}: hostId is required when query is enabled`);
   }
@@ -49,9 +46,15 @@ export function useHost(hostId: HostQueryId) {
   });
 }
 
-export function useAvailableModels(providerId?: string, selectedModel?: string) {
+export function useAvailableModels(
+  providerId?: string,
+  selectedModel?: string,
+) {
   return useQuery<AvailableModel[]>({
-    queryKey: availableModelsQueryKey(providerId ?? null, selectedModel ?? null),
+    queryKey: availableModelsQueryKey(
+      providerId ?? null,
+      selectedModel ?? null,
+    ),
     queryFn: () => api.getAvailableModels(providerId, selectedModel),
     staleTime: 60_000,
   });
@@ -89,7 +92,8 @@ export function useCloudAuthAttempt(
 ) {
   return useQuery<CloudAuthAttemptResponse>({
     queryKey: cloudAuthAttemptQueryKey(attemptId),
-    queryFn: () => api.getCloudAuthAttempt(requireQueryId(attemptId, "useCloudAuthAttempt")),
+    queryFn: () =>
+      api.getCloudAuthAttempt(requireQueryId(attemptId, "useCloudAuthAttempt")),
     enabled: enabled && Boolean(attemptId),
     refetchInterval: (query) =>
       query.state.data?.status === "pending" ? 1_000 : false,

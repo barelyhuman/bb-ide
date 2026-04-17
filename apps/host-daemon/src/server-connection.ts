@@ -53,7 +53,8 @@ export class ServerConnection {
 
   constructor(private readonly options: ServerConnectionOptions) {
     this.sessionCloseHandler = options.onSessionClose;
-    this.createWebSocket = options.createWebSocket ?? createDefaultReconnectingWebSocket;
+    this.createWebSocket =
+      options.createWebSocket ?? createDefaultReconnectingWebSocket;
     this.minReconnectionDelay =
       options.minReconnectionDelay ?? DEFAULT_MIN_RECONNECTION_DELAY;
     this.maxReconnectionDelay =

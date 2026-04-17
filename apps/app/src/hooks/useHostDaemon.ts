@@ -47,7 +47,10 @@ export function useHostDaemon() {
   // active session.  Checking for any connected persistent host avoids that.
   const connectedPersistentHost = useMemo(() => {
     if (!hosts) return null;
-    return hosts.find((h) => h.type === "persistent" && h.status === "connected") ?? null;
+    return (
+      hosts.find((h) => h.type === "persistent" && h.status === "connected") ??
+      null
+    );
   }, [hosts]);
 
   const hasConnectedPersistentHost = connectedPersistentHost !== null;

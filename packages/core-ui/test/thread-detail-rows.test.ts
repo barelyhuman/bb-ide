@@ -14,10 +14,15 @@ import type {
 
 type TimelineMessageRow = Extract<TimelineRow, { kind: "message" }>;
 type TimelineToolGroupRow = Extract<TimelineRow, { kind: "tool-group" }>;
-type ViewAssistantTextMessage = Extract<ViewMessage, { kind: "assistant-text" }>;
+type ViewAssistantTextMessage = Extract<
+  ViewMessage,
+  { kind: "assistant-text" }
+>;
 type ViewErrorMessage = Extract<ViewMessage, { kind: "error" }>;
 
-function expectToolGroupRow(row: TimelineRow | undefined): TimelineToolGroupRow {
+function expectToolGroupRow(
+  row: TimelineRow | undefined,
+): TimelineToolGroupRow {
   expect(row?.kind).toBe("tool-group");
   if (!row || row.kind !== "tool-group") {
     throw new Error("Expected a tool-group row");
@@ -43,7 +48,9 @@ function expectAssistantTextMessage(
   return message;
 }
 
-function expectErrorMessage(message: ViewMessage | undefined): ViewErrorMessage {
+function expectErrorMessage(
+  message: ViewMessage | undefined,
+): ViewErrorMessage {
   expect(message?.kind).toBe("error");
   if (!message || message.kind !== "error") {
     throw new Error("Expected an error message");
@@ -71,12 +78,16 @@ function provisioningOperation(
     opType: "thread-provisioning",
     title,
     status,
-    ...((options?.environmentId ||
-    (options?.transcript && options.transcript.length > 0))
+    ...(options?.environmentId ||
+    (options?.transcript && options.transcript.length > 0)
       ? {
           provisioning: {
-            ...(options?.environmentId ? { environmentId: options.environmentId } : {}),
-            ...((options?.transcript && options.transcript.length > 0) ? { transcript: options.transcript } : {}),
+            ...(options?.environmentId
+              ? { environmentId: options.environmentId }
+              : {}),
+            ...(options?.transcript && options.transcript.length > 0
+              ? { transcript: options.transcript }
+              : {}),
           },
         }
       : {}),
@@ -93,9 +104,10 @@ function getTurnStatus(messages: ViewMessage[]): ViewTurnStatus {
     return "error";
   }
   if (
-    messages.some((message) =>
-      "status" in message &&
-      (message.status === "pending" || message.status === "streaming")
+    messages.some(
+      (message) =>
+        "status" in message &&
+        (message.status === "pending" || message.status === "streaming"),
     )
   ) {
     return "pending";
@@ -107,9 +119,15 @@ function projectionTurnFromMessages(
   turnId: string,
   messages: ViewMessage[],
 ): ViewTurn {
-  const sourceSeqStart = Math.min(...messages.map((message) => message.sourceSeqStart));
-  const sourceSeqEnd = Math.max(...messages.map((message) => message.sourceSeqEnd));
-  const startedAt = Math.min(...messages.map((message) => getStartedAt(message)));
+  const sourceSeqStart = Math.min(
+    ...messages.map((message) => message.sourceSeqStart),
+  );
+  const sourceSeqEnd = Math.max(
+    ...messages.map((message) => message.sourceSeqEnd),
+  );
+  const startedAt = Math.min(
+    ...messages.map((message) => getStartedAt(message)),
+  );
   const createdAt = Math.max(...messages.map((message) => message.createdAt));
   const status = getTurnStatus(messages);
   return {
@@ -173,10 +191,14 @@ function buildRowsFromMessages(
   return buildTimelineRows(projectionFromMessages(messages), options);
 }
 
-function getOperationRows(messages: ViewMessage[]): Array<Extract<ViewMessage, { kind: "operation" }>> {
+function getOperationRows(
+  messages: ViewMessage[],
+): Array<Extract<ViewMessage, { kind: "operation" }>> {
   return buildRowsFromMessages(messages)
-    .filter((row): row is Extract<TimelineRow, { kind: "message" }> =>
-      row.kind === "message" && row.message.kind === "operation")
+    .filter(
+      (row): row is Extract<TimelineRow, { kind: "message" }> =>
+        row.kind === "message" && row.message.kind === "operation",
+    )
     .map((row) => row.message);
 }
 
@@ -217,10 +239,9 @@ describe("buildTimelineRows projection turn lifecycle", () => {
       },
     ]);
 
-    expect(rows.map((row) => row.kind === "message" ? row.message.id : row.id)).toEqual([
-      "command-waiting",
-      "command-completed",
-    ]);
+    expect(
+      rows.map((row) => (row.kind === "message" ? row.message.id : row.id)),
+    ).toEqual(["command-waiting", "command-completed"]);
     const approvalRow = expectMessageRow(rows[0]);
     expect(approvalRow.message).toMatchObject({
       kind: "tool-call",
@@ -247,9 +268,9 @@ describe("buildTimelineRows projection turn lifecycle", () => {
       },
     ]);
 
-    expect(rows.map((row) => row.kind === "message" ? row.message.id : row.id)).toEqual([
-      "command-denied",
-    ]);
+    expect(
+      rows.map((row) => (row.kind === "message" ? row.message.id : row.id)),
+    ).toEqual(["command-denied"]);
     const deniedRow = expectMessageRow(rows[0]);
     expect(deniedRow.message).toMatchObject({
       kind: "tool-call",
@@ -462,9 +483,7 @@ describe("buildTimelineRows projection turn lifecycle", () => {
       "message",
     ]);
     const toolGroup = expectToolGroupRow(rows[0]);
-    expect(toolGroup.messages.map((message) => message.id)).toEqual([
-      "tool-1",
-    ]);
+    expect(toolGroup.messages.map((message) => message.id)).toEqual(["tool-1"]);
     const terminalRow = expectMessageRow(rows[1]);
     expect(terminalRow.message.id).toBe("assistant-1");
     const operationRow = expectMessageRow(rows[2]);
@@ -565,9 +584,7 @@ describe("buildTimelineRows projection turn lifecycle", () => {
     expect(expectMessageRow(rows[0]).message.id).toBe("tool-1");
     expect(expectMessageRow(rows[1]).message.id).toBe("user-1");
     const toolGroup = expectToolGroupRow(rows[2]);
-    expect(toolGroup.messages.map((message) => message.id)).toEqual([
-      "tool-2",
-    ]);
+    expect(toolGroup.messages.map((message) => message.id)).toEqual(["tool-2"]);
     expect(expectMessageRow(rows[3]).message.id).toBe("assistant-1");
   });
 });
@@ -609,7 +626,11 @@ describe("buildTimelineRows tool group collapsing", () => {
       },
     ]);
 
-    expect(rows.map((row) => row.kind)).toEqual(["message", "tool-group", "message"]);
+    expect(rows.map((row) => row.kind)).toEqual([
+      "message",
+      "tool-group",
+      "message",
+    ]);
   });
 
   it("collapses delegation and tasks rows into a tool group before the final assistant text", () => {
@@ -707,7 +728,8 @@ describe("buildTimelineRows tool group collapsing", () => {
         turnId: "turn-1",
         toolName: "exec_command",
         callId: "call-1",
-        command: "rg -n focusIndex packages/excalidraw/components/SearchMenu.tsx",
+        command:
+          "rg -n focusIndex packages/excalidraw/components/SearchMenu.tsx",
         status: "completed",
       },
       {
@@ -723,7 +745,11 @@ describe("buildTimelineRows tool group collapsing", () => {
       },
     ]);
 
-    expect(rows.map((row) => row.kind)).toEqual(["message", "tool-group", "message"]);
+    expect(rows.map((row) => row.kind)).toEqual([
+      "message",
+      "tool-group",
+      "message",
+    ]);
     const toolGroup = expectToolGroupRow(rows[1]);
     expect(toolGroup.messages.map((message) => message.kind)).toEqual([
       "assistant-text",
@@ -1048,8 +1074,10 @@ describe("buildTimelineRows tool group collapsing", () => {
       "tool-group",
       "message",
     ]);
-    const toolGroups = rows.filter((row): row is Extract<TimelineRow, { kind: "tool-group" }> =>
-      row.kind === "tool-group");
+    const toolGroups = rows.filter(
+      (row): row is Extract<TimelineRow, { kind: "tool-group" }> =>
+        row.kind === "tool-group",
+    );
     expect(toolGroups).toHaveLength(2);
     expect(toolGroups[0]?.turnId).toBe("turn-1");
     expect(toolGroups[1]?.turnId).toBe("turn-2");
@@ -1256,7 +1284,12 @@ describe("buildTimelineRows tool group collapsing", () => {
 
     // assistant-1 is the last terminal; only user-1 precedes it, but user messages are ungroupable,
     // so no group forms. Everything after the terminal stays standalone too.
-    expect(rows.map((row) => row.kind)).toEqual(["message", "message", "message", "message"]);
+    expect(rows.map((row) => row.kind)).toEqual([
+      "message",
+      "message",
+      "message",
+      "message",
+    ]);
     expect(expectMessageRow(rows[0]).message.kind).toBe("user");
     expect(expectMessageRow(rows[1]).message.kind).toBe("assistant-text");
     expect(expectMessageRow(rows[2]).message.kind).toBe("tool-call");
@@ -1303,12 +1336,15 @@ describe("buildTimelineRows tool group collapsing", () => {
 
     // assistant-1 is the last terminal; only user-1 precedes it (ungroupable), so no group forms.
     // tool-1 is after the terminal and stays standalone.
-    expect(rows.map((row) => row.kind)).toEqual(["message", "message", "message"]);
+    expect(rows.map((row) => row.kind)).toEqual([
+      "message",
+      "message",
+      "message",
+    ]);
     expect(expectMessageRow(rows[0]).message.kind).toBe("user");
     expect(expectMessageRow(rows[1]).message.kind).toBe("assistant-text");
     expect(expectMessageRow(rows[2]).message.kind).toBe("tool-call");
   });
-
 });
 
 describe("buildTimelineRows reconnect error collapsing", () => {
@@ -1419,36 +1455,69 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
   it("collapses multiple provisioning events into one operation row", () => {
     const rows = getOperationRows([
       provisioningOperation(1, "Provisioning thread", "pending", undefined, {
-        transcript: [{ type: "step", key: "provision", text: "Creating worktree", status: "started" }],
+        transcript: [
+          {
+            type: "step",
+            key: "provision",
+            text: "Creating worktree",
+            status: "started",
+          },
+        ],
       }),
       provisioningOperation(2, "Provisioning thread", "pending", undefined, {
-        transcript: [{ type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" }],
+        transcript: [
+          {
+            type: "step",
+            key: "setup",
+            text: "Running .bb-env-setup.sh",
+            status: "started",
+          },
+        ],
       }),
       provisioningOperation(3, "Provisioning thread", "pending", undefined, {
-        transcript: [{ type: "step", key: "setup", text: ".bb-env-setup.sh finished", status: "completed" }],
+        transcript: [
+          {
+            type: "step",
+            key: "setup",
+            text: ".bb-env-setup.sh finished",
+            status: "completed",
+          },
+        ],
       }),
       provisioningOperation(4, "Provisioned thread", "completed", undefined, {
-        transcript: [{ type: "step", key: "provision", text: "Created worktree", status: "completed" }],
+        transcript: [
+          {
+            type: "step",
+            key: "provision",
+            text: "Created worktree",
+            status: "completed",
+          },
+        ],
       }),
     ]);
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("thread-provisioning");
     expect(rows[0]?.title).toBe("Provisioned thread");
-    const envEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "provision");
+    const envEntry = rows[0]?.provisioning?.transcript?.find(
+      (e) => e.key === "provision",
+    );
     expect(envEntry).toBeDefined();
     if (envEntry?.type === "step") {
       expect(envEntry.text).toBe("Creating worktree");
     }
-    const setupEntries = rows[0]?.provisioning?.transcript?.filter((e) => e.key === "setup");
+    const setupEntries = rows[0]?.provisioning?.transcript?.filter(
+      (e) => e.key === "setup",
+    );
     expect(setupEntries?.map((entry) => entry.text)).toEqual([
       "Running .bb-env-setup.sh",
       ".bb-env-setup.sh finished",
     ]);
-    expect(setupEntries?.map((entry) => (entry.type === "step" ? entry.status : undefined))).toEqual([
-      "started",
-      "completed",
-    ]);
+    expect(
+      setupEntries?.map((entry) =>
+        entry.type === "step" ? entry.status : undefined,
+      ),
+    ).toEqual(["started", "completed"]);
     expect(rows[0]?.sourceSeqStart).toBe(1);
     expect(rows[0]?.sourceSeqEnd).toBe(4);
     expect(rows[0]?.detail).toBeUndefined();
@@ -1457,17 +1526,33 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
   it("keeps completed provisioning rows fully structured", () => {
     const rows = getOperationRows([
       provisioningOperation(1, "Provisioning thread", "pending", undefined, {
-        transcript: [{ type: "step", key: "provision", text: "Provisioning thread", status: "started" }],
+        transcript: [
+          {
+            type: "step",
+            key: "provision",
+            text: "Provisioning thread",
+            status: "started",
+          },
+        ],
       }),
       provisioningOperation(2, "Provisioned thread", "completed", undefined, {
-        transcript: [{ type: "step", key: "provision", text: "Provisioning thread", status: "started" }],
+        transcript: [
+          {
+            type: "step",
+            key: "provision",
+            text: "Provisioning thread",
+            status: "started",
+          },
+        ],
       }),
     ]);
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("thread-provisioning");
     expect(rows[0]?.title).toBe("Provisioned thread");
-    const envEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "provision");
+    const envEntry = rows[0]?.provisioning?.transcript?.find(
+      (e) => e.key === "provision",
+    );
     expect(envEntry).toBeDefined();
     if (envEntry?.type === "step") {
       expect(envEntry.text).toBe("Provisioning thread");
@@ -1478,18 +1563,46 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
   it("keeps a stable merged provisioning id as new lifecycle updates arrive", () => {
     const startedRows = getOperationRows([
       provisioningOperation(1, "Provisioning thread", "pending", undefined, {
-        transcript: [{ type: "step", key: "provision", text: "Creating worktree", status: "started" }],
+        transcript: [
+          {
+            type: "step",
+            key: "provision",
+            text: "Creating worktree",
+            status: "started",
+          },
+        ],
       }),
     ]);
     const mergedRows = getOperationRows([
       provisioningOperation(1, "Provisioning thread", "pending", undefined, {
-        transcript: [{ type: "step", key: "provision", text: "Creating worktree", status: "started" }],
+        transcript: [
+          {
+            type: "step",
+            key: "provision",
+            text: "Creating worktree",
+            status: "started",
+          },
+        ],
       }),
       provisioningOperation(2, "Provisioning thread", "pending", undefined, {
-        transcript: [{ type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" }],
+        transcript: [
+          {
+            type: "step",
+            key: "setup",
+            text: "Running .bb-env-setup.sh",
+            status: "started",
+          },
+        ],
       }),
       provisioningOperation(3, "Provisioning thread", "pending", undefined, {
-        transcript: [{ type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" }],
+        transcript: [
+          {
+            type: "step",
+            key: "setup",
+            text: "Running .bb-env-setup.sh",
+            status: "started",
+          },
+        ],
       }),
     ]);
 
@@ -1502,31 +1615,55 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
   it("preserves transcript entries when collapsing provisioning rows", () => {
     const rows = getOperationRows([
       provisioningOperation(1, "Provisioning thread", "pending", undefined, {
-        transcript: [{ type: "step", key: "provision", text: "Creating worktree", status: "started" }],
+        transcript: [
+          {
+            type: "step",
+            key: "provision",
+            text: "Creating worktree",
+            status: "started",
+          },
+        ],
       }),
       provisioningOperation(2, "Provisioning thread", "pending", undefined, {
-        transcript: [{ type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" }],
+        transcript: [
+          {
+            type: "step",
+            key: "setup",
+            text: "Running .bb-env-setup.sh",
+            status: "started",
+          },
+        ],
       }),
       provisioningOperation(3, "Provisioning thread", "pending", undefined, {
-        transcript: [{ type: "output", key: "setup-out-1", text: "+ pnpm install" }],
+        transcript: [
+          { type: "output", key: "setup-out-1", text: "+ pnpm install" },
+        ],
       }),
       provisioningOperation(4, "Provisioning thread", "pending", undefined, {
-        transcript: [{ type: "output", key: "setup-out-2", text: "Done in 3.2s" }],
+        transcript: [
+          { type: "output", key: "setup-out-2", text: "Done in 3.2s" },
+        ],
       }),
     ]);
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("thread-provisioning");
     expect(rows[0]?.title).toBe("Provisioning thread");
-    const envEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "provision");
+    const envEntry = rows[0]?.provisioning?.transcript?.find(
+      (e) => e.key === "provision",
+    );
     expect(envEntry).toBeDefined();
     if (envEntry?.type === "step") {
       expect(envEntry.text).toBe("Creating worktree");
     }
-    const setupEntry = rows[0]?.provisioning?.transcript?.find((e) => e.key === "setup");
+    const setupEntry = rows[0]?.provisioning?.transcript?.find(
+      (e) => e.key === "setup",
+    );
     expect(setupEntry).toBeDefined();
     expect(setupEntry?.text).toBe("Running .bb-env-setup.sh");
-    const outputEntries = rows[0]?.provisioning?.transcript?.filter((e) => e.type === "output");
+    const outputEntries = rows[0]?.provisioning?.transcript?.filter(
+      (e) => e.type === "output",
+    );
     expect(outputEntries).toHaveLength(2);
     expect(rows[0]?.detail).toBeUndefined();
   });
@@ -1535,12 +1672,22 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
     const rows = getOperationRows([
       provisioningOperation(1, "Provisioning thread", "pending", undefined, {
         transcript: [
-          { type: "step", key: "provision", text: "Provisioning thread", status: "started" },
+          {
+            type: "step",
+            key: "provision",
+            text: "Provisioning thread",
+            status: "started",
+          },
         ],
       }),
       provisioningOperation(2, "Provisioning thread", "pending", undefined, {
         transcript: [
-          { type: "step", key: "session", text: "Starting agent session", status: "started" },
+          {
+            type: "step",
+            key: "session",
+            text: "Starting agent session",
+            status: "started",
+          },
         ],
       }),
     ]);
@@ -1548,22 +1695,31 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("thread-provisioning");
     expect(rows[0]?.title).toBe("Provisioning thread");
-    expect(rows[0]?.provisioning?.transcript?.map((entry) => entry.key)).toEqual([
-      "provision",
-      "session",
-    ]);
+    expect(
+      rows[0]?.provisioning?.transcript?.map((entry) => entry.key),
+    ).toEqual(["provision", "session"]);
   });
 
   it("keeps one provisioning row when user interruption lands mid-provisioning", () => {
     const rows = buildRowsFromMessages([
       provisioningOperation(1, "Provisioning thread", "pending", undefined, {
         transcript: [
-          { type: "step", key: "provision", text: "Provisioning thread", status: "started" },
+          {
+            type: "step",
+            key: "provision",
+            text: "Provisioning thread",
+            status: "started",
+          },
         ],
       }),
       provisioningOperation(2, "Provisioning thread", "pending", undefined, {
         transcript: [
-          { type: "step", key: "session", text: "Starting agent session", status: "started" },
+          {
+            type: "step",
+            key: "session",
+            text: "Starting agent session",
+            status: "started",
+          },
         ],
       }),
       {
@@ -1578,11 +1734,22 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
         title: "Stopped by user",
         status: "interrupted",
       },
-      provisioningOperation(4, "Provisioning thread failed", "error", undefined, {
-        transcript: [
-          { type: "step", key: "session", text: "Agent session failed", status: "failed" },
-        ],
-      }),
+      provisioningOperation(
+        4,
+        "Provisioning thread failed",
+        "error",
+        undefined,
+        {
+          transcript: [
+            {
+              type: "step",
+              key: "session",
+              text: "Agent session failed",
+              status: "failed",
+            },
+          ],
+        },
+      ),
       {
         kind: "error",
         id: "error-5",
@@ -1593,7 +1760,10 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
         rawType: "system/error",
         message: "Provisioning thread failed",
       },
-    ]).filter((row): row is Extract<TimelineRow, { kind: "message" }> => row.kind === "message");
+    ]).filter(
+      (row): row is Extract<TimelineRow, { kind: "message" }> =>
+        row.kind === "message",
+    );
 
     expect(rows).toHaveLength(3);
     expect(rows[0]?.message.kind).toBe("operation");
@@ -1614,68 +1784,126 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
     const rows = getOperationRows([
       provisioningOperation(1, "Provisioning thread", "pending", undefined, {
         transcript: [
-          { type: "step", key: "provision", text: "Creating worktree", status: "started" },
-          { type: "step", key: "worktree", text: "Created worktree", status: "completed" },
+          {
+            type: "step",
+            key: "provision",
+            text: "Creating worktree",
+            status: "started",
+          },
+          {
+            type: "step",
+            key: "worktree",
+            text: "Created worktree",
+            status: "completed",
+          },
         ],
       }),
       provisioningOperation(2, "Provisioning thread", "pending", undefined, {
         transcript: [
-          { type: "step", key: "branch", text: "Using branch: feature/test (abcdef1)", status: "completed" },
-          { type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" },
+          {
+            type: "step",
+            key: "branch",
+            text: "Using branch: feature/test (abcdef1)",
+            status: "completed",
+          },
+          {
+            type: "step",
+            key: "setup",
+            text: "Running .bb-env-setup.sh",
+            status: "started",
+          },
         ],
       }),
       provisioningOperation(3, "Provisioning thread", "pending", undefined, {
         transcript: [
-          { type: "step", key: "session", text: "Agent session ready", status: "completed" },
+          {
+            type: "step",
+            key: "session",
+            text: "Agent session ready",
+            status: "completed",
+          },
         ],
       }),
     ]);
 
     expect(rows).toHaveLength(1);
     expect(rows[0]?.opType).toBe("thread-provisioning");
-    expect(rows[0]?.provisioning?.transcript?.map((entry) => entry.key)).toEqual([
-      "provision",
-      "worktree",
-      "branch",
-      "setup",
-      "session",
-    ]);
+    expect(
+      rows[0]?.provisioning?.transcript?.map((entry) => entry.key),
+    ).toEqual(["provision", "worktree", "branch", "setup", "session"]);
   });
 
   it("preserves transcript entries with the same key", () => {
     const rows = getOperationRows([
       provisioningOperation(1, "Provisioning thread", "pending", undefined, {
-        transcript: [{ type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" }],
+        transcript: [
+          {
+            type: "step",
+            key: "setup",
+            text: "Running .bb-env-setup.sh",
+            status: "started",
+          },
+        ],
       }),
       provisioningOperation(2, "Provisioning thread", "pending", undefined, {
-        transcript: [{ type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" }],
+        transcript: [
+          {
+            type: "step",
+            key: "setup",
+            text: "Running .bb-env-setup.sh",
+            status: "started",
+          },
+        ],
       }),
       provisioningOperation(3, "Provisioned thread", "completed", undefined, {
-        transcript: [{ type: "step", key: "setup", text: ".bb-env-setup.sh finished", status: "completed" }],
+        transcript: [
+          {
+            type: "step",
+            key: "setup",
+            text: ".bb-env-setup.sh finished",
+            status: "completed",
+          },
+        ],
       }),
     ]);
 
     expect(rows).toHaveLength(1);
-    const setupEntries = rows[0]?.provisioning?.transcript?.filter((e) => e.key === "setup");
+    const setupEntries = rows[0]?.provisioning?.transcript?.filter(
+      (e) => e.key === "setup",
+    );
     expect(setupEntries?.map((entry) => entry.text)).toEqual([
       "Running .bb-env-setup.sh",
       "Running .bb-env-setup.sh",
       ".bb-env-setup.sh finished",
     ]);
-    expect(setupEntries?.map((entry) => (entry.type === "step" ? entry.status : undefined))).toEqual([
-      "started",
-      "started",
-      "completed",
-    ]);
+    expect(
+      setupEntries?.map((entry) =>
+        entry.type === "step" ? entry.status : undefined,
+      ),
+    ).toEqual(["started", "started", "completed"]);
   });
 
   it("collapses two provisioning updates into a single completed row", () => {
     const rows = getOperationRows([
       provisioningOperation(1, "Provisioning thread", "pending", undefined, {
-        transcript: [{ type: "step", key: "setup", text: "Running .bb-env-setup.sh", status: "started" }],
+        transcript: [
+          {
+            type: "step",
+            key: "setup",
+            text: "Running .bb-env-setup.sh",
+            status: "started",
+          },
+        ],
       }),
       provisioningOperation(2, "Provisioned thread", "completed", undefined, {
-        transcript: [{ type: "step", key: "setup", text: ".bb-env-setup.sh finished", status: "completed" }],
+        transcript: [
+          {
+            type: "step",
+            key: "setup",
+            text: ".bb-env-setup.sh finished",
+            status: "completed",
+          },
+        ],
       }),
     ]);
 
@@ -1684,15 +1912,18 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
     expect(rows[0]?.title).toBe("Provisioned thread");
     expect(rows[0]?.sourceSeqStart).toBe(1);
     expect(rows[0]?.sourceSeqEnd).toBe(2);
-    const setupEntries = rows[0]?.provisioning?.transcript?.filter((e) => e.key === "setup");
+    const setupEntries = rows[0]?.provisioning?.transcript?.filter(
+      (e) => e.key === "setup",
+    );
     expect(setupEntries?.map((entry) => entry.text)).toEqual([
       "Running .bb-env-setup.sh",
       ".bb-env-setup.sh finished",
     ]);
-    expect(setupEntries?.map((entry) => (entry.type === "step" ? entry.status : undefined))).toEqual([
-      "started",
-      "completed",
-    ]);
+    expect(
+      setupEntries?.map((entry) =>
+        entry.type === "step" ? entry.status : undefined,
+      ),
+    ).toEqual(["started", "completed"]);
     expect(rows[0]?.detail).toBeUndefined();
   });
 
@@ -1702,13 +1933,34 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
     // must still produce "completed" when the final provisioning event succeeded.
     const rows = getOperationRows([
       provisioningOperation(1, "Provisioning thread", "error", undefined, {
-        transcript: [{ type: "step", key: "provision", text: "Waiting for workspace", status: "started" }],
+        transcript: [
+          {
+            type: "step",
+            key: "provision",
+            text: "Waiting for workspace",
+            status: "started",
+          },
+        ],
       }),
       provisioningOperation(2, "Provisioning thread", "error", undefined, {
-        transcript: [{ type: "step", key: "git-clone", text: "git clone ...", status: "completed" }],
+        transcript: [
+          {
+            type: "step",
+            key: "git-clone",
+            text: "git clone ...",
+            status: "completed",
+          },
+        ],
       }),
       provisioningOperation(3, "Provisioned thread", "completed", undefined, {
-        transcript: [{ type: "step", key: "branch", text: "Using branch: main", status: "completed" }],
+        transcript: [
+          {
+            type: "step",
+            key: "branch",
+            text: "Using branch: main",
+            status: "completed",
+          },
+        ],
       }),
     ]);
 
@@ -1721,11 +1973,26 @@ describe("buildTimelineRows provisioning operation collapsing", () => {
   it("shows completed when a completed provisioning event is followed by stale interrupted updates", () => {
     const rows = getOperationRows([
       provisioningOperation(1, "Provisioned thread", "completed", undefined, {
-        transcript: [{ type: "step", key: "branch", text: "Using branch: main", status: "completed" }],
+        transcript: [
+          {
+            type: "step",
+            key: "branch",
+            text: "Using branch: main",
+            status: "completed",
+          },
+        ],
       }),
-      provisioningOperation(2, "Provisioning thread", "interrupted", undefined, {
-        transcript: [{ type: "output", key: "setup-out-1", text: "Done in 8.4s" }],
-      }),
+      provisioningOperation(
+        2,
+        "Provisioning thread",
+        "interrupted",
+        undefined,
+        {
+          transcript: [
+            { type: "output", key: "setup-out-1", text: "Done in 8.4s" },
+          ],
+        },
+      ),
     ]);
 
     expect(rows).toHaveLength(1);

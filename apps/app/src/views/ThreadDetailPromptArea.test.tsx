@@ -1,11 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import type {
-  AvailableModel,
-  PendingInteraction,
-  Thread,
-} from "@bb/domain";
+import type { AvailableModel, PendingInteraction, Thread } from "@bb/domain";
 import type { SystemProviderInfo } from "@bb/server-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "@/lib/api";
@@ -177,7 +173,9 @@ describe("ThreadDetailPromptArea", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getAllByText("Need network access").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Need network access").length).toBeGreaterThan(
+        0,
+      );
     });
     expect(screen.queryByTitle("Submit (Enter)")).toBeNull();
   });

@@ -384,7 +384,6 @@ rl.on("line", (line) => {
 
       await runtime.shutdown();
     });
-
   });
 
   describe("turn execution and thread commands", () => {
@@ -407,7 +406,11 @@ rl.on("line", (line) => {
         providerId: "fake",
         options: fullRuntimeOptions,
       });
-      await runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "hello" }], options: fullRuntimeOptions });
+      await runtime.runTurn({
+        threadId: "t1",
+        input: [{ type: "text", text: "hello" }],
+        options: fullRuntimeOptions,
+      });
       await wait(100);
 
       expect(events.some((e) => e.type === "turn/started")).toBe(true);
@@ -489,8 +492,9 @@ rl.on("line", (line) => {
       });
       await wait(100);
 
-      expect(events.filter((event) => event.type === "turn/started"))
-        .toHaveLength(1);
+      expect(
+        events.filter((event) => event.type === "turn/started"),
+      ).toHaveLength(1);
       await runtime.shutdown();
     });
 
@@ -543,9 +547,13 @@ rl.on("line", (line) => {
       });
       await wait(100);
 
-      expect(events.some((event) => event.type === "thread/identity")).toBe(true);
+      expect(events.some((event) => event.type === "thread/identity")).toBe(
+        true,
+      );
       expect(events.some((event) => event.type === "turn/started")).toBe(false);
-      expect(events.some((event) => event.type === "turn/completed")).toBe(false);
+      expect(events.some((event) => event.type === "turn/completed")).toBe(
+        false,
+      );
 
       await runtime.runTurn({
         threadId: "t1",
@@ -555,7 +563,9 @@ rl.on("line", (line) => {
       await wait(100);
 
       expect(events.some((event) => event.type === "turn/started")).toBe(true);
-      expect(events.some((event) => event.type === "turn/completed")).toBe(true);
+      expect(events.some((event) => event.type === "turn/completed")).toBe(
+        true,
+      );
       await runtime.shutdown();
     });
 
@@ -582,7 +592,11 @@ rl.on("line", (line) => {
       expect(providerThreadId).toBe("old-prov-123");
 
       // Should be able to run a turn on the resumed thread
-      await runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "after resume" }], options: fullRuntimeOptions });
+      await runtime.runTurn({
+        threadId: "t1",
+        input: [{ type: "text", text: "after resume" }],
+        options: fullRuntimeOptions,
+      });
       await wait(100);
       expect(events.some((e) => e.type === "turn/completed")).toBe(true);
       await runtime.shutdown();
@@ -675,8 +689,9 @@ rl.on("line", (line) => {
         turnId: "turn-1",
       });
 
-      await expect(runtime.stopThread({ threadId: "t1" }))
-        .rejects.toThrow(/stop command failed to build/);
+      await expect(runtime.stopThread({ threadId: "t1" })).rejects.toThrow(
+        /stop command failed to build/,
+      );
 
       await runtime.steerTurn({
         threadId: "t1",
@@ -685,7 +700,9 @@ rl.on("line", (line) => {
         options: fullRuntimeOptions,
       });
 
-      expect(builtCommands.some((command) => command.type === "turn/steer")).toBe(true);
+      expect(
+        builtCommands.some((command) => command.type === "turn/steer"),
+      ).toBe(true);
 
       await runtime.shutdown();
     });
@@ -705,7 +722,8 @@ rl.on("line", (line) => {
           buildCommandPlan(command): ProviderCommandPlan {
             const plan = adapter.buildCommandPlan(command);
             if (command.type === "thread/stop" && plan.kind === "request") {
-              const processEffect: ProviderCommandProcessEffect = "restart-provider";
+              const processEffect: ProviderCommandProcessEffect =
+                "restart-provider";
               return { ...plan, processEffect };
             }
             return plan;
@@ -912,7 +930,6 @@ rl.on("line", (line) => {
       });
       await runtime.shutdown();
     });
-
   });
 
   describe("models", () => {
@@ -933,7 +950,6 @@ rl.on("line", (line) => {
       expect(models[0].isDefault).toBe(true);
       await runtime.shutdown();
     });
-
   });
 
   describe("errors", () => {
@@ -949,10 +965,13 @@ rl.on("line", (line) => {
       });
 
       await expect(
-        runtime.runTurn({ threadId: "nonexistent", input: [{ type: "text", text: "hi" }], options: fullRuntimeOptions }),
+        runtime.runTurn({
+          threadId: "nonexistent",
+          input: [{ type: "text", text: "hi" }],
+          options: fullRuntimeOptions,
+        }),
       ).rejects.toThrow('No provider associated with thread "nonexistent"');
       await runtime.shutdown();
     });
-
   });
 });

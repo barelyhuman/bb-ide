@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -6,18 +6,18 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
 
 export interface HostDeleteDialogTarget {
-  id: string
-  name: string
+  id: string;
+  name: string;
 }
 
 interface HostDeleteDialogProps {
-  target: HostDeleteDialogTarget | null
-  pending: boolean
-  onOpenChange: (open: boolean) => void
-  onDelete: (hostId: string) => void
+  target: HostDeleteDialogTarget | null;
+  pending: boolean;
+  onOpenChange: (open: boolean) => void;
+  onDelete: (hostId: string) => void;
 }
 
 export function HostDeleteDialog({
@@ -43,8 +43,8 @@ export function HostDeleteDialog({
             variant="destructive"
             disabled={!target || pending}
             onClick={() => {
-              if (!target) return
-              onDelete(target.id)
+              if (!target) return;
+              onDelete(target.id);
             }}
           >
             Remove host
@@ -52,5 +52,5 @@ export function HostDeleteDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

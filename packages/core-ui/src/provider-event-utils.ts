@@ -32,7 +32,9 @@ export function deriveThreadTitleFromInput(
  * Extract agent message text from a persisted item/completed event.
  * Returns undefined if the event is not an agent message completion.
  */
-export function outputFromThreadEvent(event: ThreadEventRow): string | undefined {
+export function outputFromThreadEvent(
+  event: ThreadEventRow,
+): string | undefined {
   if (!isThreadEventRowOfType(event, "item/completed")) return undefined;
   const item = event.data.item;
   if (item.type !== "agentMessage") return undefined;

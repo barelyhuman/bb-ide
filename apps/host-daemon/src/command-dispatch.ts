@@ -25,8 +25,15 @@ import {
   submitTurn,
 } from "./command-handlers/thread.js";
 import { WorkspaceError } from "@bb/host-workspace";
-import { demoteWorkspace, promoteWorkspace, squashMerge } from "./command-handlers/workspace.js";
-import { listBranches, listWorkspaceFiles } from "./command-handlers/workspace-files.js";
+import {
+  demoteWorkspace,
+  promoteWorkspace,
+  squashMerge,
+} from "./command-handlers/workspace.js";
+import {
+  listBranches,
+  listWorkspaceFiles,
+} from "./command-handlers/workspace-files.js";
 
 /** System stability caps — applied when the server doesn't specify its own. */
 const SYSTEM_MAX_DIFF_BYTES = 2 * 1024 * 1024; // 2 MB
@@ -48,9 +55,8 @@ function recordReplayThreadMetadata(
   if (!options.recordReplayCaptureThreadMetadata) {
     return;
   }
-  const runtimeContext = command.type === "thread.start"
-    ? command
-    : command.resumeContext;
+  const runtimeContext =
+    command.type === "thread.start" ? command : command.resumeContext;
   options.recordReplayCaptureThreadMetadata({
     environmentId: command.environmentId,
     projectId: runtimeContext.projectId,
@@ -83,7 +89,9 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
     case "thread.start":
       recordReplayThreadMetadata(command, options);
       seedThreadHighWaterMarkIfPresent(command, options);
-      return startThread(command, options) as Promise<HostDaemonCommandResult<TCommand["type"]>>;
+      return startThread(command, options) as Promise<
+        HostDaemonCommandResult<TCommand["type"]>
+      >;
     case "turn.submit": {
       recordReplayThreadMetadata(command, options);
       seedThreadHighWaterMarkIfPresent(command, options);
@@ -176,7 +184,10 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
         await options.runtimeManager.destroyEnvironment(command.environmentId);
       } catch (error) {
         // Treat already-missing workspaces as successful destroy (idempotent retry).
-        if (error instanceof WorkspaceError && error.code === "path_not_found") {
+        if (
+          error instanceof WorkspaceError &&
+          error.code === "path_not_found"
+        ) {
           return {} as HostDaemonCommandResult<TCommand["type"]>;
         }
         throw error;
@@ -184,7 +195,10 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       return {} as HostDaemonCommandResult<TCommand["type"]>;
     }
     case "workspace.status": {
-      const entry = await requireWorkspaceEnvironment(command, options.runtimeManager);
+      const entry = await requireWorkspaceEnvironment(
+        command,
+        options.runtimeManager,
+      );
       return {
         workspaceStatus: await entry.workspace.getStatus({
           mergeBaseBranch: command.mergeBaseBranch,
@@ -192,17 +206,24 @@ export async function dispatchCommand<TCommand extends HostDaemonCommand>(
       } as HostDaemonCommandResult<TCommand["type"]>;
     }
     case "workspace.diff": {
-      const entry = await requireWorkspaceEnvironment(command, options.runtimeManager);
+      const entry = await requireWorkspaceEnvironment(
+        command,
+        options.runtimeManager,
+      );
       return {
         diff: await entry.workspace.getDiff({
           target: command.target,
           maxDiffBytes: command.maxDiffBytes ?? SYSTEM_MAX_DIFF_BYTES,
-          maxFileListBytes: command.maxFileListBytes ?? SYSTEM_MAX_FILE_LIST_BYTES,
+          maxFileListBytes:
+            command.maxFileListBytes ?? SYSTEM_MAX_FILE_LIST_BYTES,
         }),
       } as HostDaemonCommandResult<TCommand["type"]>;
     }
     case "workspace.commit": {
-      const entry = await requireWorkspaceEnvironment(command, options.runtimeManager);
+      const entry = await requireWorkspaceEnvironment(
+        command,
+        options.runtimeManager,
+      );
       return entry.workspace.commit({
         message: command.message,
         noVerify: true,

@@ -23,12 +23,7 @@ import {
 import { createTestAppHarness } from "../helpers/test-app.js";
 import { waitForThreadEnvironment } from "./public-thread-assertions.js";
 import { createTestGitRepo } from "./public-thread-git-fixtures.js";
-import {
-  beforeEach,
-  describe,
-  expect,
-  it,
-} from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 
 describe("public thread creation routes", () => {
@@ -36,7 +31,6 @@ describe("public thread creation routes", () => {
     provisionHostMock.mockReset();
     resumeHostMock.mockReset();
   });
-
 
   it("creates unmanaged host threads and queues environment provisioning", async () => {
     const harness = await createTestAppHarness();
@@ -56,7 +50,9 @@ describe("public thread creation routes", () => {
           projectId: project.id,
           providerId: "codex",
           model: "gpt-5",
-          input: [{ type: "text", text: "Inspect the default source workspace" }],
+          input: [
+            { type: "text", text: "Inspect the default source workspace" },
+          ],
           environment: {
             type: "host",
             hostId: host.id,
@@ -95,7 +91,6 @@ describe("public thread creation routes", () => {
       await harness.cleanup();
     }
   });
-
 
   it("creates host threads while the host is offline and leaves provisioning requested", async () => {
     const harness = await createTestAppHarness();
@@ -140,13 +135,17 @@ describe("public thread creation routes", () => {
         status: "provisioning",
         workspaceProvisionType: "unmanaged",
       });
-      expect(getEnvironmentOperation(harness.db, {
-        environmentId: environments[0]!.id,
-        kind: "provision",
-      })).toMatchObject({
+      expect(
+        getEnvironmentOperation(harness.db, {
+          environmentId: environments[0]!.id,
+          kind: "provision",
+        }),
+      ).toMatchObject({
         state: "requested",
       });
-      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(1);
+      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(
+        1,
+      );
       expect(
         harness.db
           .select()
@@ -158,7 +157,6 @@ describe("public thread creation routes", () => {
       await harness.cleanup();
     }
   });
-
 
   it("fails host thread creation when the host is destroyed", async () => {
     const harness = await createTestAppHarness();
@@ -186,7 +184,9 @@ describe("public thread creation routes", () => {
           projectId: project.id,
           providerId: "codex",
           model: "gpt-5",
-          input: [{ type: "text", text: "Create this thread on a destroyed host" }],
+          input: [
+            { type: "text", text: "Create this thread on a destroyed host" },
+          ],
           environment: {
             type: "host",
             hostId: destroyedHost.id,
@@ -202,13 +202,14 @@ describe("public thread creation routes", () => {
       await expect(readJson(response)).resolves.toMatchObject({
         code: "host_not_found",
       });
-      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(0);
+      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(
+        0,
+      );
       expect(listEnvironments(harness.db, project.id)).toHaveLength(0);
     } finally {
       await harness.cleanup();
     }
   });
-
 
   it("creates managed-worktree threads and queues managed provisioning", async () => {
     const harness = await createTestAppHarness();
@@ -256,13 +257,11 @@ describe("public thread creation routes", () => {
       });
       expect(queued.command).toHaveProperty("targetPath");
       expect(queued.command).toHaveProperty("branchName");
-
     } finally {
       await repo.cleanup();
       await harness.cleanup();
     }
   });
-
 
   it("creates managed-worktree threads on a non-default host using that host's source", async () => {
     const harness = await createTestAppHarness();
@@ -331,7 +330,6 @@ describe("public thread creation routes", () => {
     }
   });
 
-
   it("returns 409 when the requested host has no configured project source", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -375,7 +373,6 @@ describe("public thread creation routes", () => {
       await harness.cleanup();
     }
   });
-
 
   it("creates unmanaged threads with an explicit path even when the host has no project source", async () => {
     const harness = await createTestAppHarness();

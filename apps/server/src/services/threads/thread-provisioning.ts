@@ -31,9 +31,7 @@ import {
 import { SANDBOX_DATA_DIR } from "@bb/sandbox-host";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
-import {
-  advanceEnvironmentProvisioning,
-} from "../environments/environment-provisioning.js";
+import { advanceEnvironmentProvisioning } from "../environments/environment-provisioning.js";
 import {
   buildDirectEnvironmentProvisionRequest,
   buildSandboxHostEnvironmentProvisionRequest,
@@ -237,7 +235,9 @@ interface BuildEnvironmentProvisionRequestArgs {
 }
 
 interface CreateProvisioningEnvironmentWithOperationArgs {
-  buildRequest: (args: BuildEnvironmentProvisionRequestArgs) =>
+  buildRequest: (
+    args: BuildEnvironmentProvisionRequestArgs,
+  ) =>
     | ReturnType<typeof buildDirectEnvironmentProvisionRequest>
     | ReturnType<typeof buildSandboxHostEnvironmentProvisionRequest>;
   environmentInput: CreateEnvironmentInput;
@@ -470,7 +470,10 @@ function provisionablePayloadForWorkspaceReady(
 
 function provisioningStartedPayload(
   payload: ThreadProvisionProvisionablePayload,
-): ThreadProvisionEnvironmentProvisioningPayload | ThreadProvisionWorkspaceReadyPayload | null {
+):
+  | ThreadProvisionEnvironmentProvisioningPayload
+  | ThreadProvisionWorkspaceReadyPayload
+  | null {
   switch (payload.stage) {
     case "environment-attached":
       return null;
@@ -562,9 +565,12 @@ function ensureWorkspaceReadyEvent(
       if (!isAttachablePayload(payload)) {
         return null;
       }
-      const provisionablePayload = provisionablePayloadForWorkspaceReady(payload, {
-        attachedEnvironmentId: args.environmentId,
-      });
+      const provisionablePayload = provisionablePayloadForWorkspaceReady(
+        payload,
+        {
+          attachedEnvironmentId: args.environmentId,
+        },
+      );
 
       const eventSequence = appendThreadProvisioningEventInTransaction(tx, {
         threadId: args.threadId,
@@ -575,9 +581,11 @@ function ensureWorkspaceReadyEvent(
       upsertThreadOperationRecord(tx, {
         threadId: args.threadId,
         kind: "provision",
-        payload: JSON.stringify(createWorkspaceReadyPayload(provisionablePayload, {
-          workspaceReadyEventSequence: eventSequence,
-        })),
+        payload: JSON.stringify(
+          createWorkspaceReadyPayload(provisionablePayload, {
+            workspaceReadyEventSequence: eventSequence,
+          }),
+        ),
       });
       return eventSequence;
     },
@@ -628,7 +636,9 @@ function hasActiveEnvironmentProvisionOperation(
       environmentId: environment.id,
       kind,
     });
-    return Boolean(operation && isActiveLifecycleOperationState(operation.state));
+    return Boolean(
+      operation && isActiveLifecycleOperationState(operation.state),
+    );
   });
 }
 
@@ -641,8 +651,8 @@ async function resolveMetadataIfNeeded(
   }
 
   const needsBranch =
-    args.payload.environmentIntent.type === "direct-managed"
-    || args.payload.environmentIntent.type === "sandbox-managed";
+    args.payload.environmentIntent.type === "direct-managed" ||
+    args.payload.environmentIntent.type === "sandbox-managed";
   if (!needsBranch) {
     if (!args.payload.titleProvided) {
       void inferThreadMetadata(deps, {
@@ -652,31 +662,37 @@ async function resolveMetadataIfNeeded(
         input: args.payload.input,
         threadId: args.thread.id,
         writeTranscript: false,
-      }).then((metadata) => {
-        if (!metadata.titleApplied || !metadata.title) {
-          return;
-        }
-        const titledThread = getThread(deps.db, args.thread.id);
-        const environment = titledThread?.environmentId
-          ? getEnvironment(deps.db, titledThread.environmentId)
-          : null;
-        if (!titledThread || !environment || titledThread.status !== "active") {
-          return;
-        }
-        queueThreadRenameCommand(deps, {
-          environment: {
-            id: environment.id,
-            hostId: environment.hostId,
-          },
-          threadId: titledThread.id,
-          title: metadata.title,
+      })
+        .then((metadata) => {
+          if (!metadata.titleApplied || !metadata.title) {
+            return;
+          }
+          const titledThread = getThread(deps.db, args.thread.id);
+          const environment = titledThread?.environmentId
+            ? getEnvironment(deps.db, titledThread.environmentId)
+            : null;
+          if (
+            !titledThread ||
+            !environment ||
+            titledThread.status !== "active"
+          ) {
+            return;
+          }
+          queueThreadRenameCommand(deps, {
+            environment: {
+              id: environment.id,
+              hostId: environment.hostId,
+            },
+            threadId: titledThread.id,
+            title: metadata.title,
+          });
+        })
+        .catch((error) => {
+          deps.logger.warn(
+            { err: error, threadId: args.thread.id },
+            "Failed to generate thread title",
+          );
         });
-      }).catch((error) => {
-        deps.logger.warn(
-          { err: error, threadId: args.thread.id },
-          "Failed to generate thread title",
-        );
-      });
     }
     const resolvedPayload = createEnvironmentPendingPayload(args.payload, {
       branchSlug: null,
@@ -718,8 +734,8 @@ function attachThreadToEnvironment(
     });
   }
   if (
-    isProvisionablePayload(args.payload)
-    && args.payload.attachedEnvironmentId === args.environment.id
+    isProvisionablePayload(args.payload) &&
+    args.payload.attachedEnvironmentId === args.environment.id
   ) {
     return args.payload;
   }
@@ -768,7 +784,10 @@ function createProvisioningEnvironmentWithOperation(
         threadId: args.thread.id,
         kind: "provision",
       });
-      if (!activeOperation || !isActiveLifecycleOperationState(activeOperation.state)) {
+      if (
+        !activeOperation ||
+        !isActiveLifecycleOperationState(activeOperation.state)
+      ) {
         throw new Error("Thread provision operation is no longer active");
       }
       const activePayload = parseJsonWithSchema(
@@ -794,7 +813,11 @@ function createProvisioningEnvironmentWithOperation(
       if (args.hostInput) {
         upsertHost(tx, deps.hub, args.hostInput);
       }
-      const environment = createEnvironment(tx, deps.hub, args.environmentInput);
+      const environment = createEnvironment(
+        tx,
+        deps.hub,
+        args.environmentInput,
+      );
       if (args.thread.environmentId !== environment.id) {
         updateThread(tx, deps.hub, args.thread.id, {
           environmentId: environment.id,
@@ -966,7 +989,9 @@ async function ensureEnvironmentRequested(
   args: EnsureEnvironmentRequestedArgs,
 ): Promise<ThreadProvisioningResult> {
   if (!isAttachablePayload(args.payload)) {
-    throw new Error(`Cannot request environment from ${args.payload.stage} payload`);
+    throw new Error(
+      `Cannot request environment from ${args.payload.stage} payload`,
+    );
   }
 
   if (args.payload.environmentIntent.type === "reuse") {
@@ -987,7 +1012,8 @@ async function ensureEnvironmentRequested(
         failThreadProvisioning(deps, {
           thread: args.thread,
           environmentId: environment.id,
-          detail: "Environment is provisioning without an active provision operation",
+          detail:
+            "Environment is provisioning without an active provision operation",
         });
         return { environment, payload };
       }
@@ -1013,7 +1039,9 @@ async function ensureEnvironmentRequested(
   }
 
   if (args.payload.stage !== "environment-pending") {
-    throw new Error(`Cannot request environment from ${args.payload.stage} payload`);
+    throw new Error(
+      `Cannot request environment from ${args.payload.stage} payload`,
+    );
   }
 
   switch (args.payload.environmentIntent.type) {
@@ -1258,6 +1286,6 @@ export async function advanceThreadProvisioning(
   args: AdvanceThreadProvisioningArgs,
 ): Promise<void> {
   await threadProvisionAdvanceDeduper.run(args.threadId, () =>
-    advanceThreadProvisioningOnce(deps, args)
+    advanceThreadProvisioningOnce(deps, args),
   );
 }

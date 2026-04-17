@@ -13,8 +13,17 @@ import {
 } from "./exec-lifecycle.js";
 import { parseFileEditFromItemEvent } from "./file-edit-parsing.js";
 import { parseWebSearchLifecycleEvent } from "./web-search-lifecycle.js";
-import { parseOperationMessage, finalizeOperationMessage } from "./parse-operation-message.js";
-import { parseErrorMessage, isDuplicateEventType, isIgnoredItemStartEvent, isIgnoredItemCompletedEvent, appendDebugEvent } from "./parse-error-message.js";
+import {
+  parseOperationMessage,
+  finalizeOperationMessage,
+} from "./parse-operation-message.js";
+import {
+  parseErrorMessage,
+  isDuplicateEventType,
+  isIgnoredItemStartEvent,
+  isIgnoredItemCompletedEvent,
+  appendDebugEvent,
+} from "./parse-error-message.js";
 import { isIgnoredNoiseType } from "./timeline-noise-events.js";
 import {
   compactTaskMessages,
@@ -29,7 +38,10 @@ import {
   type ThreadEventWithMeta,
 } from "./build-view-projection.js";
 export type { ThreadEventWithMeta } from "./build-view-projection.js";
-import { parseTaskMessage, shouldSuppressLowValueToolCall } from "./task-message-parsing.js";
+import {
+  parseTaskMessage,
+  shouldSuppressLowValueToolCall,
+} from "./task-message-parsing.js";
 import {
   shouldPreservePendingMessages,
   parseUserFromClientRequest,
@@ -118,7 +130,10 @@ function createProjectionState(): ProjectionState {
   };
 }
 
-const PROVIDER_THREAD_DELEGATION_TOOL_NAMES = new Set(["spawnAgent", "resumeAgent"]);
+const PROVIDER_THREAD_DELEGATION_TOOL_NAMES = new Set([
+  "spawnAgent",
+  "resumeAgent",
+]);
 const PROVIDER_THREAD_CHILD_INTERACTION_TOOL_NAMES = new Set([
   "sendInput",
   "wait",
@@ -196,7 +211,9 @@ function finalizePendingMessages(
   state: ProjectionState,
   options: ToViewMessagesOptions | undefined,
 ): void {
-  const shouldPreservePending = shouldPreservePendingMessages(options?.threadStatus);
+  const shouldPreservePending = shouldPreservePendingMessages(
+    options?.threadStatus,
+  );
   const shouldFinalizeBufferedAssistants =
     options?.threadStatus !== undefined && !shouldPreservePending;
   if (shouldPreservePending) {
@@ -250,7 +267,9 @@ function buildFlatViewMessages(
     const eventParentToolCallId =
       explicitEventParentToolCallId ??
       (eventProviderThreadId
-        ? state.delegationParentToolCallIdsByProviderThreadId.get(eventProviderThreadId)
+        ? state.delegationParentToolCallIdsByProviderThreadId.get(
+            eventProviderThreadId,
+          )
         : undefined);
 
     const compactionTurnFinalization = getCompactionTurnFinalization(decoded);
@@ -265,7 +284,10 @@ function buildFlatViewMessages(
       });
     }
 
-    if (state.openAssistantByTurn.size > 0 && isTerminalAssistantFlushEvent(eventType)) {
+    if (
+      state.openAssistantByTurn.size > 0 &&
+      isTerminalAssistantFlushEvent(eventType)
+    ) {
       flushBufferedAssistantMessages(state);
     }
 
@@ -294,17 +316,21 @@ function buildFlatViewMessages(
     }
 
     // Extract itemId from decoded for delta/final event grouping
-    const decodedItemId = (decoded.type === "item/agentMessage/delta" ||
+    const decodedItemId =
+      decoded.type === "item/agentMessage/delta" ||
       decoded.type === "item/reasoning/summaryTextDelta" ||
-      decoded.type === "item/reasoning/textDelta")
-      ? decoded.itemId
-      : (decoded.type === "item/completed" && (decoded.item.type === "agentMessage" || decoded.item.type === "reasoning"))
-        ? decoded.item.id
-        : undefined;
+      decoded.type === "item/reasoning/textDelta"
+        ? decoded.itemId
+        : decoded.type === "item/completed" &&
+            (decoded.item.type === "agentMessage" ||
+              decoded.item.type === "reasoning")
+          ? decoded.item.id
+          : undefined;
 
-    const assistantDelta = options?.threadType === "manager"
-      ? null
-      : parseAssistantDeltaText(decoded);
+    const assistantDelta =
+      options?.threadType === "manager"
+        ? null
+        : parseAssistantDeltaText(decoded);
     if (assistantDelta) {
       const turnKeyPrefix = eventParentToolCallId
         ? `parent:${eventParentToolCallId}:`
@@ -361,9 +387,10 @@ function buildFlatViewMessages(
       continue;
     }
 
-    const assistantFinal = options?.threadType === "manager"
-      ? null
-      : parseAssistantFinalText(decoded);
+    const assistantFinal =
+      options?.threadType === "manager"
+        ? null
+        : parseAssistantFinalText(decoded);
     if (assistantFinal) {
       const turnKeyPrefix = eventParentToolCallId
         ? `parent:${eventParentToolCallId}:`
@@ -407,7 +434,11 @@ function buildFlatViewMessages(
         flushToolActivityBeforeNonToolMessage(state);
         state.messages.push({
           kind: "assistant-text",
-          id: messageId(decoded.threadId, "assistant", `${primaryTurnKey}:${meta.seq}`),
+          id: messageId(
+            decoded.threadId,
+            "assistant",
+            `${primaryTurnKey}:${meta.seq}`,
+          ),
           threadId: decoded.threadId,
           sourceSeqStart: meta.seq,
           sourceSeqEnd: meta.seq,
@@ -427,9 +458,10 @@ function buildFlatViewMessages(
       continue;
     }
 
-    const reasoningDelta = options?.threadType === "manager"
-      ? null
-      : parseReasoningDeltaText(decoded);
+    const reasoningDelta =
+      options?.threadType === "manager"
+        ? null
+        : parseReasoningDeltaText(decoded);
     if (reasoningDelta) {
       const turnKeyPrefix = eventParentToolCallId
         ? `parent:${eventParentToolCallId}:`
@@ -485,9 +517,10 @@ function buildFlatViewMessages(
       continue;
     }
 
-    const reasoningFinal = options?.threadType === "manager"
-      ? null
-      : parseReasoningFinalText(decoded);
+    const reasoningFinal =
+      options?.threadType === "manager"
+        ? null
+        : parseReasoningFinalText(decoded);
     if (reasoningFinal) {
       const turnKeyPrefix = eventParentToolCallId
         ? `parent:${eventParentToolCallId}:`
@@ -520,7 +553,11 @@ function buildFlatViewMessages(
         flushToolActivityBeforeNonToolMessage(state);
         state.messages.push({
           kind: "assistant-reasoning",
-          id: messageId(decoded.threadId, "reasoning", `${primaryTurnKey}:${meta.seq}`),
+          id: messageId(
+            decoded.threadId,
+            "reasoning",
+            `${primaryTurnKey}:${meta.seq}`,
+          ),
           threadId: decoded.threadId,
           sourceSeqStart: meta.seq,
           sourceSeqEnd: meta.seq,
@@ -584,10 +621,14 @@ function buildFlatViewMessages(
       ) {
         const inferredParentToolCallId = toolCallReceiverThreadIds
           .map((receiverThreadId) =>
-            state.delegationParentToolCallIdsByProviderThreadId.get(receiverThreadId),
+            state.delegationParentToolCallIdsByProviderThreadId.get(
+              receiverThreadId,
+            ),
           )
-          .find((parentToolCallId): parentToolCallId is string =>
-            typeof parentToolCallId === "string" && parentToolCallId.length > 0,
+          .find(
+            (parentToolCallId): parentToolCallId is string =>
+              typeof parentToolCallId === "string" &&
+              parentToolCallId.length > 0,
           );
         if (inferredParentToolCallId) {
           toolCallEvent.call.parentToolCallId = inferredParentToolCallId;
@@ -605,11 +646,28 @@ function buildFlatViewMessages(
         }
       }
       if (toolCallEvent.kind === "begin") {
-        onExecBegin(state, meta, decoded.threadId, eventTurnId, toolCallEvent.call);
+        onExecBegin(
+          state,
+          meta,
+          decoded.threadId,
+          eventTurnId,
+          toolCallEvent.call,
+        );
       } else if (toolCallEvent.kind === "output") {
-        onExecOutput(state, meta, toolCallEvent.call, toolCallEvent.appendOutput);
+        onExecOutput(
+          state,
+          meta,
+          toolCallEvent.call,
+          toolCallEvent.appendOutput,
+        );
       } else {
-        onExecEnd(state, meta, decoded.threadId, eventTurnId, toolCallEvent.call);
+        onExecEnd(
+          state,
+          meta,
+          decoded.threadId,
+          eventTurnId,
+          toolCallEvent.call,
+        );
       }
       continue;
     }
@@ -620,9 +678,21 @@ function buildFlatViewMessages(
     );
     if (webSearchEvent) {
       if (webSearchEvent.kind === "begin") {
-        onWebSearchBegin(state, meta, decoded.threadId, eventTurnId, webSearchEvent);
+        onWebSearchBegin(
+          state,
+          meta,
+          decoded.threadId,
+          eventTurnId,
+          webSearchEvent,
+        );
       } else {
-        onWebSearchEnd(state, meta, decoded.threadId, eventTurnId, webSearchEvent);
+        onWebSearchEnd(
+          state,
+          meta,
+          decoded.threadId,
+          eventTurnId,
+          webSearchEvent,
+        );
       }
       continue;
     }
@@ -676,9 +746,9 @@ function buildFlatViewMessages(
     if (includeDebugRawEvents) {
       const debugReason = isDuplicateEventType(eventType)
         ? "duplicate-event"
-        : (isIgnoredNoiseType(eventType) ||
+        : isIgnoredNoiseType(eventType) ||
             isIgnoredItemStartEvent(decoded) ||
-            isIgnoredItemCompletedEvent(decoded))
+            isIgnoredItemCompletedEvent(decoded)
           ? "ignored-noise"
           : "unhandled";
 
@@ -687,12 +757,7 @@ function buildFlatViewMessages(
       }
 
       flushToolActivityBeforeNonToolMessage(state);
-      appendDebugEvent(
-        state.messages,
-        decoded,
-        meta,
-        debugReason,
-      );
+      appendDebugEvent(state.messages, decoded, meta, debugReason);
     }
   }
 
@@ -715,9 +780,7 @@ export function toViewMessages(
   events: ThreadEventWithMeta[] | undefined,
   options?: ToViewMessagesOptions,
 ): ViewMessage[] {
-  return normalizeSemanticViewMessages(
-    buildFlatViewMessages(events, options),
-  );
+  return normalizeSemanticViewMessages(buildFlatViewMessages(events, options));
 }
 
 export function toViewProjection(

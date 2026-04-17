@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -6,18 +6,18 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
 
 export interface ProjectDeleteDialogTarget {
-  id: string
-  name: string
+  id: string;
+  name: string;
 }
 
 interface ProjectDeleteDialogProps {
-  target: ProjectDeleteDialogTarget | null
-  pending: boolean
-  onOpenChange: (open: boolean) => void
-  onDelete: (projectId: string) => void
+  target: ProjectDeleteDialogTarget | null;
+  pending: boolean;
+  onOpenChange: (open: boolean) => void;
+  onDelete: (projectId: string) => void;
 }
 
 export function ProjectDeleteDialog({
@@ -43,8 +43,8 @@ export function ProjectDeleteDialog({
             variant="destructive"
             disabled={!target || pending}
             onClick={() => {
-              if (!target) return
-              onDelete(target.id)
+              if (!target) return;
+              onDelete(target.id);
             }}
           >
             Remove project
@@ -52,5 +52,5 @@ export function ProjectDeleteDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

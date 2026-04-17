@@ -14,11 +14,12 @@ import {
   toViewMessages,
   toViewProjection,
 } from "@bb/core-ui";
-import {
-  buildThreadEvent,
-  buildThreadEventRow,
+import { buildThreadEvent, buildThreadEventRow } from "@bb/domain";
+import type {
+  ThreadEventRow,
+  ToolCallRequest,
+  ToolCallResponse,
 } from "@bb/domain";
-import type { ThreadEventRow, ToolCallRequest, ToolCallResponse } from "@bb/domain";
 import type { RuntimeThreadExecutionOptions } from "@bb/domain";
 import type {
   ProviderAuditBundle,
@@ -54,7 +55,8 @@ type ProviderAuditResolvedExecutionOptions = RuntimeThreadExecutionOptions;
 const BUILT_IN_SCENARIOS: Record<string, ProviderAuditScenario> = {
   "excalidraw-ttd-explanation": {
     id: "excalidraw-ttd-explanation",
-    description: "Provider-neutral explanation task against the real Excalidraw repo",
+    description:
+      "Provider-neutral explanation task against the real Excalidraw repo",
     workspaceMode: "repo",
     turns: [
       "I'm trying to understand Excalidraw's text-to-diagram flow before changing it. Please trace the flow from the dialog UI through chat history/state updates to the code that turns the final response into scene updates. Call out the main files, the key types, and any tricky state transitions or failure cases. Keep it grounded in the current codebase with specific file references.",
@@ -63,7 +65,8 @@ const BUILT_IN_SCENARIOS: Record<string, ProviderAuditScenario> = {
   },
   "excalidraw-search-feature": {
     id: "excalidraw-search-feature",
-    description: "Provider-neutral feature task against the real Excalidraw repo",
+    description:
+      "Provider-neutral feature task against the real Excalidraw repo",
     workspaceMode: "repo",
     turns: [
       "Add a small result summary to the canvas search sidebar: show `N results` when there are matches, show a clear `No matches found` empty state when the query is non-empty and there are none, and keep the existing keyboard navigation behavior intact. Update the relevant tests and validate the focused test file.",
@@ -72,7 +75,8 @@ const BUILT_IN_SCENARIOS: Record<string, ProviderAuditScenario> = {
   },
   "excalidraw-search-bugfix": {
     id: "excalidraw-search-bugfix",
-    description: "Provider-neutral bug-fix task against the real Excalidraw repo",
+    description:
+      "Provider-neutral bug-fix task against the real Excalidraw repo",
     workspaceMode: "repo",
     turns: [
       "There's a usability bug in the canvas search sidebar: if I navigate to a later match and then change the query so fewer matches remain, focus can end up pointing at nothing. Fix it so a query change resets focus to the first match when matches exist, and add a regression test validating the behavior.",
@@ -153,8 +157,7 @@ const BUILT_IN_SCENARIOS: Record<string, ProviderAuditScenario> = {
           contentItems: [
             {
               type: "inputText",
-              text:
-                "High-level map for the command and search area:\n- packages/excalidraw/actions/ contains the registered action definitions and action metadata\n- packages/excalidraw/actions/register.ts and manager.tsx hold action registration and dispatch\n- packages/excalidraw/components/CommandPalette/ contains command palette item shaping, gating, and search UI\n- packages/excalidraw/components/App.tsx wires ActionManager and command palette setup\n- tests around actions and command/search behavior live under packages/excalidraw/tests and adjacent action test files",
+              text: "High-level map for the command and search area:\n- packages/excalidraw/actions/ contains the registered action definitions and action metadata\n- packages/excalidraw/actions/register.ts and manager.tsx hold action registration and dispatch\n- packages/excalidraw/components/CommandPalette/ contains command palette item shaping, gating, and search UI\n- packages/excalidraw/components/App.tsx wires ActionManager and command palette setup\n- tests around actions and command/search behavior live under packages/excalidraw/tests and adjacent action test files",
             },
           ],
         },
@@ -193,8 +196,7 @@ const BUILT_IN_SCENARIOS: Record<string, ProviderAuditScenario> = {
           contentItems: [
             {
               type: "inputText",
-              text:
-                "High-level map for the share and collaboration area:\n- excalidraw-app/share/ contains the app-level share dialog and platform-specific share handling\n- excalidraw-app/data/ contains collaboration link helpers and room/share link data helpers\n- excalidraw-app/collab/ contains collaboration startup and room session wiring\n- packages/excalidraw contains shared share triggers, clipboard helpers, and command/search UI pieces\n- app-level and package-level tests cover share, collaboration, and command/search behavior",
+              text: "High-level map for the share and collaboration area:\n- excalidraw-app/share/ contains the app-level share dialog and platform-specific share handling\n- excalidraw-app/data/ contains collaboration link helpers and room/share link data helpers\n- excalidraw-app/collab/ contains collaboration startup and room session wiring\n- packages/excalidraw contains shared share triggers, clipboard helpers, and command/search UI pieces\n- app-level and package-level tests cover share, collaboration, and command/search behavior",
             },
           ],
         },
@@ -345,7 +347,9 @@ function getGitStatusLines(workspacePath: string): string[] | null {
   }
 }
 
-function getGitSnapshot(workspacePath: string): ProviderAuditGitSnapshot | null {
+function getGitSnapshot(
+  workspacePath: string,
+): ProviderAuditGitSnapshot | null {
   const headSha = getGitSha(workspacePath);
   const statusLines = getGitStatusLines(workspacePath);
   if (headSha === null || statusLines === null) {
@@ -429,10 +433,10 @@ function applyScenarioOverride(
   return {
     ...scenario,
     ...(override.turns ? { turns: override.turns.slice() } : {}),
-    ...(override.execution
-      ? { execution: { ...override.execution } }
+    ...(override.execution ? { execution: { ...override.execution } } : {}),
+    ...(override.workspaceMode
+      ? { workspaceMode: override.workspaceMode }
       : {}),
-    ...(override.workspaceMode ? { workspaceMode: override.workspaceMode } : {}),
     ...(override.workspaceFiles
       ? { workspaceFiles: cloneWorkspaceFiles(override.workspaceFiles) }
       : {}),
@@ -636,13 +640,15 @@ function buildThreadEventRows(args: {
       }
       return left.index - right.index;
     })
-    .map((entry, index) => buildThreadEventRow({
-      id: entry.row.id,
-      threadId: entry.row.threadId,
-      seq: index + 1,
-      createdAt: entry.row.createdAt,
-      event: buildThreadEvent(entry.row),
-    }));
+    .map((entry, index) =>
+      buildThreadEventRow({
+        id: entry.row.id,
+        threadId: entry.row.threadId,
+        seq: index + 1,
+        createdAt: entry.row.createdAt,
+        event: buildThreadEvent(entry.row),
+      }),
+    );
 }
 
 function buildRawEventKindSummaries(
@@ -655,8 +661,13 @@ function buildRawEventKindSummaries(
     return [];
   }
 
-  const visibility = getProviderVisibilityMetadata(rawProviderEvents[0].providerId);
-  const countsByKindAndClassification = new Map<string, ProviderAuditRawEventKindSummary>();
+  const visibility = getProviderVisibilityMetadata(
+    rawProviderEvents[0].providerId,
+  );
+  const countsByKindAndClassification = new Map<
+    string,
+    ProviderAuditRawEventKindSummary
+  >();
 
   for (const entry of rawProviderEvents) {
     const parsedRawEvent = visibility.parseRawEvent(entry.rawEvent);
@@ -696,7 +707,9 @@ function buildUntranslatedRawProviderEvents(
     return [];
   }
 
-  const visibility = getProviderVisibilityMetadata(rawProviderEvents[0].providerId);
+  const visibility = getProviderVisibilityMetadata(
+    rawProviderEvents[0].providerId,
+  );
   const translatedCountByRawCaptureId = new Map<string, number>();
   for (const entry of translatedCaptures) {
     if (!entry.rawCaptureId) continue;
@@ -731,12 +744,18 @@ function buildObservedToolCalls(
     return [];
   }
 
-  const visibility = getProviderVisibilityMetadata(rawProviderEvents[0].providerId);
-  const countsByToolKey = new Map<string, ProviderAuditObservedToolCallSummary>();
+  const visibility = getProviderVisibilityMetadata(
+    rawProviderEvents[0].providerId,
+  );
+  const countsByToolKey = new Map<
+    string,
+    ProviderAuditObservedToolCallSummary
+  >();
 
   for (const entry of rawProviderEvents) {
     const parsedRawEvent = visibility.parseRawEvent(entry.rawEvent);
-    const observedToolCalls = visibility.extractObservedToolCallsFromParsed(parsedRawEvent);
+    const observedToolCalls =
+      visibility.extractObservedToolCallsFromParsed(parsedRawEvent);
     for (const observedToolCall of observedToolCalls) {
       const existing = countsByToolKey.get(observedToolCall.key);
       if (existing) {
@@ -805,9 +824,10 @@ function buildAuditReport(args: {
     args.rawProviderEvents,
     args.translatedCaptures,
   );
-  const unexpectedUntranslatedRawProviderEvents = untranslatedRawProviderEvents.filter(
-    (entry) => entry.classification !== "noise",
-  );
+  const unexpectedUntranslatedRawProviderEvents =
+    untranslatedRawProviderEvents.filter(
+      (entry) => entry.classification !== "noise",
+    );
   const debugRawEvents = buildDebugRawEvents(args.auditViewMessages);
   const observedToolCalls = buildObservedToolCalls(args.rawProviderEvents);
   const normalizedRawEventCount = rawEventKinds
@@ -830,7 +850,10 @@ function buildAuditReport(args: {
     .reduce((total, entry) => total + entry.count, 0);
   const wellKnownToolNames =
     args.rawProviderEvents.length > 0
-      ? [...getProviderVisibilityMetadata(args.rawProviderEvents[0].providerId).wellKnownToolNames]
+      ? [
+          ...getProviderVisibilityMetadata(args.rawProviderEvents[0].providerId)
+            .wellKnownToolNames,
+        ]
       : [];
   const attentionNeeded: string[] = [];
 
@@ -845,7 +868,9 @@ function buildAuditReport(args: {
     );
   }
   if (args.toolCallResults.some((entry) => entry.success === false)) {
-    attentionNeeded.push("At least one provider tool call failed in the runtime hook");
+    attentionNeeded.push(
+      "At least one provider tool call failed in the runtime hook",
+    );
   }
   if (unknownObservedToolCallCount > 0) {
     attentionNeeded.push(
@@ -876,7 +901,9 @@ function buildAuditReport(args: {
     rawProviderMethods: [
       ...new Set(args.rawProviderEvents.map((entry) => entry.rawEvent.method)),
     ],
-    rawProviderEventKinds: [...new Set(rawEventKinds.map((entry) => entry.kind))],
+    rawProviderEventKinds: [
+      ...new Set(rawEventKinds.map((entry) => entry.kind)),
+    ],
     rawEventKinds,
     translatedEventTypes: [
       ...new Set(args.translatedCaptures.map((entry) => entry.event.type)),
@@ -887,8 +914,9 @@ function buildAuditReport(args: {
     toolCalls: {
       requestCount: args.toolCallRequests.length,
       resultCount: args.toolCallResults.length,
-      failedCount: args.toolCallResults.filter((entry) => entry.success === false)
-        .length,
+      failedCount: args.toolCallResults.filter(
+        (entry) => entry.success === false,
+      ).length,
     },
     wellKnownToolNames,
     observedToolCalls,
@@ -902,10 +930,15 @@ function buildAuditReport(args: {
 }
 
 function writeJson(outputDir: string, fileName: string, value: object): void {
-  writeFileSync(join(outputDir, fileName), JSON.stringify(value, null, 2) + "\n");
+  writeFileSync(
+    join(outputDir, fileName),
+    JSON.stringify(value, null, 2) + "\n",
+  );
 }
 
-function cloneCaptureEntry(entry: AgentRuntimeCaptureEntry): AgentRuntimeCaptureEntry {
+function cloneCaptureEntry(
+  entry: AgentRuntimeCaptureEntry,
+): AgentRuntimeCaptureEntry {
   return structuredClone(entry);
 }
 
@@ -1037,31 +1070,41 @@ export function buildBundle(args: {
   model?: string;
 }): ProviderAuditBundle {
   const rawProviderEvents = args.captures.filter(
-    (entry): entry is Extract<
+    (
+      entry,
+    ): entry is Extract<
       AgentRuntimeCaptureEntry,
       { kind: "raw-provider-event" }
     > => entry.kind === "raw-provider-event",
   );
   const translatedCaptures = args.captures.filter(
-    (entry): entry is Extract<
+    (
+      entry,
+    ): entry is Extract<
       AgentRuntimeCaptureEntry,
       { kind: "translated-thread-event" }
     > => entry.kind === "translated-thread-event",
   );
   const toolCallRequests = args.captures.filter(
-    (entry): entry is Extract<
+    (
+      entry,
+    ): entry is Extract<
       AgentRuntimeCaptureEntry,
       { kind: "tool-call-request" }
     > => entry.kind === "tool-call-request",
   );
   const toolCallResults = args.captures.filter(
-    (entry): entry is Extract<
+    (
+      entry,
+    ): entry is Extract<
       AgentRuntimeCaptureEntry,
       { kind: "tool-call-result" }
     > => entry.kind === "tool-call-result",
   );
   const providerStderr = args.captures.filter(
-    (entry): entry is Extract<
+    (
+      entry,
+    ): entry is Extract<
       AgentRuntimeCaptureEntry,
       { kind: "provider-stderr" }
     > => entry.kind === "provider-stderr",
@@ -1140,25 +1183,41 @@ export function buildBundle(args: {
 export function writeBundle(bundle: ProviderAuditBundle): void {
   mkdirSync(bundle.manifest.outputDir, { recursive: true });
   writeJson(bundle.manifest.outputDir, "manifest.json", bundle.manifest);
-  writeJson(bundle.manifest.outputDir, "client-requests.json", bundle.clientRequests);
+  writeJson(
+    bundle.manifest.outputDir,
+    "client-requests.json",
+    bundle.clientRequests,
+  );
   writeJson(
     bundle.manifest.outputDir,
     "raw-provider-events.json",
     bundle.rawProviderEvents,
   );
-  writeJson(bundle.manifest.outputDir, "thread-events.json", bundle.threadEvents);
+  writeJson(
+    bundle.manifest.outputDir,
+    "thread-events.json",
+    bundle.threadEvents,
+  );
   writeJson(
     bundle.manifest.outputDir,
     "thread-event-rows.json",
     bundle.threadEventRows,
   );
-  writeJson(bundle.manifest.outputDir, "view-messages.json", bundle.viewMessages);
+  writeJson(
+    bundle.manifest.outputDir,
+    "view-messages.json",
+    bundle.viewMessages,
+  );
   writeJson(
     bundle.manifest.outputDir,
     "view-messages.audit.json",
     bundle.auditViewMessages,
   );
-  writeJson(bundle.manifest.outputDir, "timeline-rows.json", bundle.timelineRows);
+  writeJson(
+    bundle.manifest.outputDir,
+    "timeline-rows.json",
+    bundle.timelineRows,
+  );
   writeJson(bundle.manifest.outputDir, "audit-report.json", bundle.auditReport);
   writeFileSync(
     join(bundle.manifest.outputDir, "timeline.txt"),
@@ -1174,7 +1233,8 @@ export async function runProviderAuditCapture(
   args: ProviderAuditCliArgs,
 ): Promise<ProviderAuditRunResult> {
   const scenario = resolveScenario(args);
-  const outputDir = args.outputDir ?? defaultOutputDir(args.providerId, args.scenarioId);
+  const outputDir =
+    args.outputDir ?? defaultOutputDir(args.providerId, args.scenarioId);
   const threadId = args.threadId ?? DEFAULT_THREAD_ID;
   const projectId = args.projectId ?? DEFAULT_PROJECT_ID;
   const preparedWorkspace = prepareScenarioWorkspace({
@@ -1195,7 +1255,10 @@ export async function runProviderAuditCapture(
         "--git-reset-ref can only be used with repo-backed scenarios",
       );
     }
-    resetGitWorkspaceToRef(preparedWorkspace.runtimeWorkspacePath, args.gitResetRef);
+    resetGitWorkspaceToRef(
+      preparedWorkspace.runtimeWorkspacePath,
+      args.gitResetRef,
+    );
   }
   const runtimeWorkspaceGitStart = getGitSnapshot(
     preparedWorkspace.runtimeWorkspacePath,
@@ -1271,7 +1334,10 @@ export async function runProviderAuditCapture(
     };
   } finally {
     if (args.gitResetRef) {
-      resetGitWorkspaceToRef(preparedWorkspace.runtimeWorkspacePath, args.gitResetRef);
+      resetGitWorkspaceToRef(
+        preparedWorkspace.runtimeWorkspacePath,
+        args.gitResetRef,
+      );
     }
   }
 }

@@ -10,9 +10,11 @@ export function buildSquashMergeConflictFollowUpInstruction(
     conflictFiles?: string[];
   },
 ): string {
-  const conflictFiles = options?.conflictFiles?.filter((file) => file.trim().length > 0) ?? [];
+  const conflictFiles =
+    options?.conflictFiles?.filter((file) => file.trim().length > 0) ?? [];
   const mergeBaseBranch = request.options.mergeBaseBranch.trim();
-  const conflictFilesText = conflictFiles.length > 0 ? conflictFiles.join(", ") : undefined;
+  const conflictFilesText =
+    conflictFiles.length > 0 ? conflictFiles.join(", ") : undefined;
 
   return renderTemplate("threadOperationSquashMergeConflictFollowUp", {
     mergeBaseBranch,
@@ -46,11 +48,9 @@ export function buildSquashMergeCommitFailureFollowUpInstruction(
   }
 }
 
-export function buildCommitFailureFollowUpInstruction(
-  options?: {
-    errorMessage?: string;
-  },
-): string {
+export function buildCommitFailureFollowUpInstruction(options?: {
+  errorMessage?: string;
+}): string {
   const errorMessage = options?.errorMessage?.trim() || undefined;
 
   return renderTemplate("threadOperationCommitFailureFollowUp", {

@@ -1,8 +1,5 @@
 import { createInterface } from "node:readline/promises";
-import {
-  reasoningLevelSchema,
-  type ReasoningLevel,
-} from "@bb/domain";
+import { reasoningLevelSchema, type ReasoningLevel } from "@bb/domain";
 import type {
   CommitActionResponse,
   SquashMergeActionResponse,
@@ -60,7 +57,9 @@ export function printEnvironmentGitOperationResult(
   console.log(`${result.message} [${flags.join(", ")}]`);
 }
 
-export async function confirmDestructiveAction(message: string): Promise<boolean> {
+export async function confirmDestructiveAction(
+  message: string,
+): Promise<boolean> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     throw new Error(
       "Refusing destructive action without an interactive terminal. Re-run with --yes to confirm.",

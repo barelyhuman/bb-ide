@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useId, useMemo, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  type FormEvent,
+} from "react";
 import type { ReasoningLevel, Thread } from "@bb/domain";
 import type { SystemProviderInfo } from "@bb/server-contract";
 import { findLocalPathProjectSourceForHost } from "@bb/domain";
@@ -15,14 +22,21 @@ import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/shared/FormError";
 import { Input } from "@/components/ui/input";
 import { useHireProjectManager } from "@/hooks/mutations/project-mutations";
-import { useAvailableModels, useHosts, useSystemProviders } from "@/hooks/queries/system-queries";
+import {
+  useAvailableModels,
+  useHosts,
+  useSystemProviders,
+} from "@/hooks/queries/system-queries";
 import { useProjects } from "@/hooks/queries/project-queries";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { formatModelLabel } from "@/hooks/useThreadCreationOptions";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { getProviderIconInfo } from "@/lib/provider-icon";
 import { PromptProviderModelPicker } from "@/components/promptbox/PromptProviderModelPicker";
-import { PromptOptionPicker, type PromptOption } from "@/components/promptbox/PromptOptionPicker";
+import {
+  PromptOptionPicker,
+  type PromptOption,
+} from "@/components/promptbox/PromptOptionPicker";
 import { HostPicker } from "@/components/promptbox/HostPicker";
 import {
   resolvePreferredManagerModel,
@@ -66,34 +80,37 @@ export function HireManagerModal({
   const [managerName, setManagerName] = useState("");
   const [selectedProviderId, setSelectedProviderId] = useState<string>("");
   const [selectedModel, setSelectedModel] = useState<string>("");
-  const [selectedReasoningLevel, setSelectedReasoningLevel] = useState<ReasoningLevel | "">("");
+  const [selectedReasoningLevel, setSelectedReasoningLevel] = useState<
+    ReasoningLevel | ""
+  >("");
   const [selectedHostId, setSelectedHostId] = useState<string>("");
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const effectiveProviderId = providers.some((provider) => provider.id === selectedProviderId)
+  const effectiveProviderId = providers.some(
+    (provider) => provider.id === selectedProviderId,
+  )
     ? selectedProviderId
     : resolvePreferredManagerProviderId(providers);
 
   const hasMultipleProviders = providers.length >= 2;
 
   const modelsQuery = useAvailableModels(effectiveProviderId || undefined);
-  const models = useMemo(
-    () => modelsQuery.data ?? [],
-    [modelsQuery.data],
-  );
+  const models = useMemo(() => modelsQuery.data ?? [], [modelsQuery.data]);
 
   const selectedModelData = useMemo(
     () => models.find((m) => m.model === selectedModel),
     [models, selectedModel],
   );
 
-  const reasoningOptions = useMemo((): readonly PromptOption<ReasoningLevel>[] => {
-    if (!selectedModelData?.supportedReasoningEfforts?.length) return [];
-    return selectedModelData.supportedReasoningEfforts.map((effort) => ({
-      value: effort.reasoningEffort,
-      label: REASONING_LABELS[effort.reasoningEffort] ?? effort.reasoningEffort,
-    }));
-  }, [selectedModelData]);
+  const reasoningOptions =
+    useMemo((): readonly PromptOption<ReasoningLevel>[] => {
+      if (!selectedModelData?.supportedReasoningEfforts?.length) return [];
+      return selectedModelData.supportedReasoningEfforts.map((effort) => ({
+        value: effort.reasoningEffort,
+        label:
+          REASONING_LABELS[effort.reasoningEffort] ?? effort.reasoningEffort,
+      }));
+    }, [selectedModelData]);
 
   const providerOptions = useMemo(
     (): readonly PromptOption<string>[] =>
@@ -109,7 +126,10 @@ export function HireManagerModal({
     (): readonly PromptOption<string>[] =>
       models.map((model) => ({
         value: model.model,
-        label: formatModelLabel(model.displayName || model.model, effectiveProviderId),
+        label: formatModelLabel(
+          model.displayName || model.model,
+          effectiveProviderId,
+        ),
       })),
     [effectiveProviderId, models],
   );
@@ -128,13 +148,15 @@ export function HireManagerModal({
 
   // Reset reasoning level when model changes.
   useEffect(() => {
-    setSelectedReasoningLevel(resolvePreferredManagerReasoningLevel(selectedModelData));
+    setSelectedReasoningLevel(
+      resolvePreferredManagerReasoningLevel(selectedModelData),
+    );
   }, [selectedModelData]);
   const effectiveReasoningLevel = reasoningOptions.some(
     (option) => option.value === selectedReasoningLevel,
   )
     ? selectedReasoningLevel
-    : reasoningOptions[0]?.value ?? "";
+    : (reasoningOptions[0]?.value ?? "");
 
   // Auto-select the first connected host that has a source for this project.
   const eligibleHosts = useMemo(
@@ -148,7 +170,10 @@ export function HireManagerModal({
   );
 
   useEffect(() => {
-    if (eligibleHosts.length > 0 && !eligibleHosts.some((h) => h.id === selectedHostId)) {
+    if (
+      eligibleHosts.length > 0 &&
+      !eligibleHosts.some((h) => h.id === selectedHostId)
+    ) {
       const local = eligibleHosts.find((h) => isLocalHost(h.id));
       setSelectedHostId(local?.id ?? eligibleHosts[0]!.id);
     }
@@ -166,54 +191,64 @@ export function HireManagerModal({
 
   const hireManager = useHireProjectManager();
 
-  const handleHire = useCallback(async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!projectId || isPending) return;
-    if (!effectiveProviderId || !selectedModel || !effectiveReasoningLevel) {
-      setError("Manager provider, model, and reasoning level are required");
-      return;
-    }
-    if (!selectedHostId) {
-      setError("A host is required");
-      return;
-    }
-    setIsPending(true);
-    setError(null);
-    try {
-      const trimmedManagerName = managerName.trim();
-      const thread = await hireManager.mutateAsync({
-        projectId,
-        ...(trimmedManagerName ? { name: trimmedManagerName } : {}),
-        providerId: effectiveProviderId,
-        model: selectedModel,
-        reasoningLevel: effectiveReasoningLevel,
-        environment: { type: "host", hostId: selectedHostId },
-      });
-      onHired(thread);
-      onClose();
-    } catch (err) {
-      setError(getMutationErrorMessage({
-        error: err,
-        fallbackMessage: "Failed to hire manager.",
-      }));
-    } finally {
-      setIsPending(false);
-    }
-  }, [
-    hireManager,
-    isPending,
-    managerName,
-    onClose,
-    onHired,
-    projectId,
-    selectedModel,
-    selectedHostId,
-    effectiveProviderId,
-    effectiveReasoningLevel,
-  ]);
+  const handleHire = useCallback(
+    async (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (!projectId || isPending) return;
+      if (!effectiveProviderId || !selectedModel || !effectiveReasoningLevel) {
+        setError("Manager provider, model, and reasoning level are required");
+        return;
+      }
+      if (!selectedHostId) {
+        setError("A host is required");
+        return;
+      }
+      setIsPending(true);
+      setError(null);
+      try {
+        const trimmedManagerName = managerName.trim();
+        const thread = await hireManager.mutateAsync({
+          projectId,
+          ...(trimmedManagerName ? { name: trimmedManagerName } : {}),
+          providerId: effectiveProviderId,
+          model: selectedModel,
+          reasoningLevel: effectiveReasoningLevel,
+          environment: { type: "host", hostId: selectedHostId },
+        });
+        onHired(thread);
+        onClose();
+      } catch (err) {
+        setError(
+          getMutationErrorMessage({
+            error: err,
+            fallbackMessage: "Failed to hire manager.",
+          }),
+        );
+      } finally {
+        setIsPending(false);
+      }
+    },
+    [
+      hireManager,
+      isPending,
+      managerName,
+      onClose,
+      onHired,
+      projectId,
+      selectedModel,
+      selectedHostId,
+      effectiveProviderId,
+      effectiveReasoningLevel,
+    ],
+  );
 
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => { if (!isOpen) onClose(); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) onClose();
+      }}
+    >
       <DialogContent className="max-w-[34rem] gap-0 overflow-hidden border-border/80 bg-background p-0 shadow-xl">
         <DialogHeader className="px-6 pt-5 pb-3">
           <DialogTitle>Hire Manager</DialogTitle>
@@ -265,7 +300,9 @@ export function HireManagerModal({
                   ) : null}
                 </div>
               ) : (
-                <span className="text-muted-foreground text-sm">Loading models…</span>
+                <span className="text-muted-foreground text-sm">
+                  Loading models…
+                </span>
               )}
             </DetailRow>
             <DetailRow label="Host" valueClassName="min-w-0" className="py-1">

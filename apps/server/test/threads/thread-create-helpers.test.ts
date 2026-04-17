@@ -55,4 +55,3 @@ describe("buildManagedBranchName", () => {
     expect(a).not.toBe(b);
   });
 });
-

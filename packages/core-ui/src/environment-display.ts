@@ -40,7 +40,9 @@ export function formatEnvironmentDisplay({
   hostType,
   hostProvider,
 }: FormatEnvironmentDisplayArgs): EnvironmentDisplayInfo {
-  const mode: EnvironmentDisplayInfo["mode"] = environment.isWorktree ? "worktree" : "direct";
+  const mode: EnvironmentDisplayInfo["mode"] = environment.isWorktree
+    ? "worktree"
+    : "direct";
   const workspaceDisplayKind = resolveEnvironmentWorkspaceDisplayKind({
     environment: {
       isWorktree: environment.isWorktree,
@@ -66,7 +68,9 @@ export function formatEnvironmentDisplay({
     };
   }
 
-  const location: EnvironmentDisplayInfo["location"] = isLocalHost ? "local" : "remote";
+  const location: EnvironmentDisplayInfo["location"] = isLocalHost
+    ? "local"
+    : "remote";
 
   return {
     modeLabel,

@@ -9,7 +9,12 @@ import {
   type PortableOutputChildProcess,
 } from "@bb/process-utils";
 import { Workspace } from "./workspace.js";
-import { pathExists, runGit, WorkspaceError, type GitCommandResult } from "./git.js";
+import {
+  pathExists,
+  runGit,
+  WorkspaceError,
+  type GitCommandResult,
+} from "./git.js";
 
 type ProgressCallback = (entry: ProvisioningTranscriptEntry) => void;
 type EmitStepArgs = {
@@ -65,7 +70,9 @@ interface KillSetupScriptProcessArgs {
   signal: NodeJS.Signals;
 }
 
-function buildGitHubCloneEnv(sourcePath: string): NodeJS.ProcessEnv | undefined {
+function buildGitHubCloneEnv(
+  sourcePath: string,
+): NodeJS.ProcessEnv | undefined {
   const githubToken = process.env[GITHUB_TOKEN_ENV_KEY]?.trim();
   if (!githubToken) {
     return undefined;
@@ -78,7 +85,10 @@ function buildGitHubCloneEnv(sourcePath: string): NodeJS.ProcessEnv | undefined 
     return undefined;
   }
 
-  if (sourceUrl.protocol !== "https:" || sourceUrl.hostname !== GITHUB_HOSTNAME) {
+  if (
+    sourceUrl.protocol !== "https:" ||
+    sourceUrl.hostname !== GITHUB_HOSTNAME
+  ) {
     return undefined;
   }
 
@@ -126,7 +136,12 @@ function emitCwd(args: {
   keySuffix: string;
   cwd: string;
 }): void {
-  emitStep({ onProgress: args.onProgress, key: `workspace-${args.keySuffix}`, text: `Using workspace: ${args.cwd}`, status: "completed" });
+  emitStep({
+    onProgress: args.onProgress,
+    key: `workspace-${args.keySuffix}`,
+    text: `Using workspace: ${args.cwd}`,
+    status: "completed",
+  });
 }
 
 function emitGitOutput(
@@ -155,7 +170,10 @@ async function ensureExistingWorkspaceMatches(
 
   const workspace = new Workspace(targetPath);
   if (!(await workspace.isGitRepo)) {
-    throw new WorkspaceError("path_exists", `Target path exists but is not a git repo: ${targetPath}`);
+    throw new WorkspaceError(
+      "path_exists",
+      `Target path exists but is not a git repo: ${targetPath}`,
+    );
   }
 
   if ((await workspace.currentBranch) !== branchName) {
@@ -168,11 +186,15 @@ async function ensureExistingWorkspaceMatches(
   return true;
 }
 
-async function ensureWorkspaceParentDirectory(targetPath: string): Promise<void> {
+async function ensureWorkspaceParentDirectory(
+  targetPath: string,
+): Promise<void> {
   await fs.mkdir(path.dirname(targetPath), { recursive: true });
 }
 
-async function resolveSetupScriptPath(workspacePath: string): Promise<string | null> {
+async function resolveSetupScriptPath(
+  workspacePath: string,
+): Promise<string | null> {
   const scriptPath = path.join(workspacePath, DEFAULT_ENV_SETUP_SCRIPT_NAME);
   return (await pathExists(scriptPath)) ? scriptPath : null;
 }
@@ -211,7 +233,9 @@ function killSetupScriptProcess(args: KillSetupScriptProcessArgs): void {
   args.child.kill(args.signal);
 }
 
-export async function createWorktree(args: CreateWorkspaceArgs): Promise<{ path: string }> {
+export async function createWorktree(
+  args: CreateWorkspaceArgs,
+): Promise<{ path: string }> {
   if (await ensureExistingWorkspaceMatches(args.targetPath, args.branchName)) {
     return { path: args.targetPath };
   }
@@ -222,15 +246,32 @@ export async function createWorktree(args: CreateWorkspaceArgs): Promise<{ path:
   const commandText = `git ${gitArgs.join(" ")}`;
 
   const worktreeStartedAt = Date.now();
-  emitStep({ onProgress: args.onProgress, key: "git-worktree-started", text: "Creating worktree", status: "started", startedAt: worktreeStartedAt });
+  emitStep({
+    onProgress: args.onProgress,
+    key: "git-worktree-started",
+    text: "Creating worktree",
+    status: "started",
+    startedAt: worktreeStartedAt,
+  });
   emitOutput(args.onProgress, "git-worktree-command", commandText);
   let worktreeCreated = false;
   try {
     const result = await runGit(gitArgs, { cwd: args.sourcePath });
     emitGitOutput(args.onProgress, "git-worktree", result);
-    emitStep({ onProgress: args.onProgress, key: "git-worktree-completed", text: "Created worktree", status: "completed", startedAt: worktreeStartedAt, metadata: { durationMs: Date.now() - worktreeStartedAt } });
+    emitStep({
+      onProgress: args.onProgress,
+      key: "git-worktree-completed",
+      text: "Created worktree",
+      status: "completed",
+      startedAt: worktreeStartedAt,
+      metadata: { durationMs: Date.now() - worktreeStartedAt },
+    });
     worktreeCreated = true;
-    emitCwd({ onProgress: args.onProgress, keySuffix: "target", cwd: args.targetPath });
+    emitCwd({
+      onProgress: args.onProgress,
+      keySuffix: "target",
+      cwd: args.targetPath,
+    });
     await runSetupScript({
       workspacePath: args.targetPath,
       timeoutMs: args.timeoutMs,
@@ -239,14 +280,23 @@ export async function createWorktree(args: CreateWorkspaceArgs): Promise<{ path:
     return { path: args.targetPath };
   } catch (error) {
     if (!worktreeCreated) {
-      emitStep({ onProgress: args.onProgress, key: "git-worktree-failed", text: "Worktree setup failed", status: "failed", startedAt: worktreeStartedAt, metadata: { durationMs: Date.now() - worktreeStartedAt } });
+      emitStep({
+        onProgress: args.onProgress,
+        key: "git-worktree-failed",
+        text: "Worktree setup failed",
+        status: "failed",
+        startedAt: worktreeStartedAt,
+        metadata: { durationMs: Date.now() - worktreeStartedAt },
+      });
     }
     await removeWorktree({ path: args.targetPath, force: true });
     throw error;
   }
 }
 
-export async function createClone(args: CreateWorkspaceArgs): Promise<{ path: string }> {
+export async function createClone(
+  args: CreateWorkspaceArgs,
+): Promise<{ path: string }> {
   if (await ensureExistingWorkspaceMatches(args.targetPath, args.branchName)) {
     return { path: args.targetPath };
   }
@@ -260,7 +310,13 @@ export async function createClone(args: CreateWorkspaceArgs): Promise<{ path: st
   const cloneEnv = buildGitHubCloneEnv(args.sourcePath);
 
   const cloneStartedAt = Date.now();
-  emitStep({ onProgress: args.onProgress, key: "git-clone-started", text: "Cloning repository", status: "started", startedAt: cloneStartedAt });
+  emitStep({
+    onProgress: args.onProgress,
+    key: "git-clone-started",
+    text: "Cloning repository",
+    status: "started",
+    startedAt: cloneStartedAt,
+  });
   emitOutput(args.onProgress, "git-clone-command", cloneText);
   let cloneCompleted = false;
   let checkoutCompleted = false;
@@ -271,16 +327,40 @@ export async function createClone(args: CreateWorkspaceArgs): Promise<{ path: st
       ...(cloneEnv ? { env: cloneEnv } : {}),
     });
     emitGitOutput(args.onProgress, "git-clone", cloneResult);
-    emitStep({ onProgress: args.onProgress, key: "git-clone-completed", text: "Cloned repository", status: "completed", startedAt: cloneStartedAt, metadata: { durationMs: Date.now() - cloneStartedAt } });
+    emitStep({
+      onProgress: args.onProgress,
+      key: "git-clone-completed",
+      text: "Cloned repository",
+      status: "completed",
+      startedAt: cloneStartedAt,
+      metadata: { durationMs: Date.now() - cloneStartedAt },
+    });
     cloneCompleted = true;
 
-    emitCwd({ onProgress: args.onProgress, keySuffix: "target", cwd: args.targetPath });
+    emitCwd({
+      onProgress: args.onProgress,
+      keySuffix: "target",
+      cwd: args.targetPath,
+    });
     checkoutStartedAt = Date.now();
-    emitStep({ onProgress: args.onProgress, key: "git-checkout-started", text: "Checking out branch", status: "started", startedAt: checkoutStartedAt });
+    emitStep({
+      onProgress: args.onProgress,
+      key: "git-checkout-started",
+      text: "Checking out branch",
+      status: "started",
+      startedAt: checkoutStartedAt,
+    });
     emitOutput(args.onProgress, "git-checkout-command", checkoutText);
     const checkoutResult = await runGit(checkoutArgs, { cwd: args.targetPath });
     emitGitOutput(args.onProgress, "git-checkout", checkoutResult);
-    emitStep({ onProgress: args.onProgress, key: "git-checkout-completed", text: "Checked out branch", status: "completed", startedAt: checkoutStartedAt, metadata: { durationMs: Date.now() - checkoutStartedAt } });
+    emitStep({
+      onProgress: args.onProgress,
+      key: "git-checkout-completed",
+      text: "Checked out branch",
+      status: "completed",
+      startedAt: checkoutStartedAt,
+      metadata: { durationMs: Date.now() - checkoutStartedAt },
+    });
     checkoutCompleted = true;
 
     await runSetupScript({
@@ -291,10 +371,24 @@ export async function createClone(args: CreateWorkspaceArgs): Promise<{ path: st
     return { path: args.targetPath };
   } catch (error) {
     if (!cloneCompleted) {
-      emitStep({ onProgress: args.onProgress, key: "git-clone-failed", text: "Clone failed", status: "failed", startedAt: cloneStartedAt, metadata: { durationMs: Date.now() - cloneStartedAt } });
+      emitStep({
+        onProgress: args.onProgress,
+        key: "git-clone-failed",
+        text: "Clone failed",
+        status: "failed",
+        startedAt: cloneStartedAt,
+        metadata: { durationMs: Date.now() - cloneStartedAt },
+      });
     } else if (!checkoutCompleted) {
       const failedAt = checkoutStartedAt ?? Date.now();
-      emitStep({ onProgress: args.onProgress, key: "git-checkout-failed", text: "Checkout failed", status: "failed", startedAt: failedAt, metadata: { durationMs: Date.now() - failedAt } });
+      emitStep({
+        onProgress: args.onProgress,
+        key: "git-checkout-failed",
+        text: "Checkout failed",
+        status: "failed",
+        startedAt: failedAt,
+        metadata: { durationMs: Date.now() - failedAt },
+      });
     }
     await removeDirectory({ path: args.targetPath });
     throw error;
@@ -315,7 +409,13 @@ export async function runSetupScript(
   });
   const commandText = command.text;
   const startedAt = Date.now();
-  emitStep({ onProgress: args.onProgress, key: "setup-started", text: "Running .bb-env-setup.sh", status: "started", startedAt });
+  emitStep({
+    onProgress: args.onProgress,
+    key: "setup-started",
+    text: "Running .bb-env-setup.sh",
+    status: "started",
+    startedAt,
+  });
   emitOutput(args.onProgress, "setup-command", commandText);
 
   const { timeoutMs } = args;
@@ -362,7 +462,14 @@ export async function runSetupScript(
     const output = outputChunks.join("");
     const durationMs = Date.now() - startedAt;
     if (timedOut) {
-      emitStep({ onProgress: args.onProgress, key: "setup-failed", text: ".bb-env-setup.sh failed", status: "failed", startedAt, metadata: { durationMs } });
+      emitStep({
+        onProgress: args.onProgress,
+        key: "setup-failed",
+        text: ".bb-env-setup.sh failed",
+        status: "failed",
+        startedAt,
+        metadata: { durationMs },
+      });
       throw new WorkspaceError(
         "setup_script_failed",
         `Setup script timed out after ${timeoutMs}ms: ${scriptPath}`,
@@ -370,7 +477,14 @@ export async function runSetupScript(
     }
 
     if (result.signal) {
-      emitStep({ onProgress: args.onProgress, key: "setup-failed", text: ".bb-env-setup.sh failed", status: "failed", startedAt, metadata: { durationMs } });
+      emitStep({
+        onProgress: args.onProgress,
+        key: "setup-failed",
+        text: ".bb-env-setup.sh failed",
+        status: "failed",
+        startedAt,
+        metadata: { durationMs },
+      });
       throw new WorkspaceError(
         "setup_script_failed",
         `Setup script exited via signal ${result.signal}: ${scriptPath}`,
@@ -378,14 +492,28 @@ export async function runSetupScript(
     }
 
     if ((result.exitCode ?? 0) !== 0) {
-      emitStep({ onProgress: args.onProgress, key: "setup-failed", text: ".bb-env-setup.sh failed", status: "failed", startedAt, metadata: { durationMs } });
+      emitStep({
+        onProgress: args.onProgress,
+        key: "setup-failed",
+        text: ".bb-env-setup.sh failed",
+        status: "failed",
+        startedAt,
+        metadata: { durationMs },
+      });
       throw new WorkspaceError(
         "setup_script_failed",
         `Setup script failed with exit code ${result.exitCode}: ${scriptPath}`,
       );
     }
 
-    emitStep({ onProgress: args.onProgress, key: "setup-completed", text: ".bb-env-setup.sh finished", status: "completed", startedAt, metadata: { durationMs } });
+    emitStep({
+      onProgress: args.onProgress,
+      key: "setup-completed",
+      text: ".bb-env-setup.sh finished",
+      status: "completed",
+      startedAt,
+      metadata: { durationMs },
+    });
     return { ran: true, exitCode: result.exitCode ?? 0, output };
   } finally {
     clearTimeout(timeout);
@@ -399,13 +527,16 @@ export async function removeWorktree(args: RemoveWorktreeArgs): Promise<void> {
 
   const force = args.force !== false;
   const workspacePath = path.resolve(args.path);
-  const commonDirResult = await runGit(
-    ["rev-parse", "--git-common-dir"],
-    { cwd: workspacePath, allowFailure: true },
-  );
+  const commonDirResult = await runGit(["rev-parse", "--git-common-dir"], {
+    cwd: workspacePath,
+    allowFailure: true,
+  });
 
   if (commonDirResult.exitCode === 0) {
-    const commonDir = path.resolve(workspacePath, commonDirResult.stdout.trim());
+    const commonDir = path.resolve(
+      workspacePath,
+      commonDirResult.stdout.trim(),
+    );
     await runGit(
       [
         "--git-dir",

@@ -69,25 +69,28 @@ describe("internal authorization regressions", () => {
         }),
       });
 
-      const response = await harness.app.request("/internal/session/command-result", {
-        method: "POST",
-        headers: internalAuthHeaders(harness, { hostId: hostA.host.id }),
-        body: JSON.stringify({
-          sessionId: hostA.session.id,
-          commandId: command.id,
-          completedAt: Date.now(),
-          type: "environment.provision",
-          ok: true,
-          result: {
-            path: "/tmp/cross-host-command",
-            branchName: "bb/cross-host",
-            defaultBranch: "main",
-            isGitRepo: true,
-            isWorktree: false,
-            transcript: [],
-          },
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness, { hostId: hostA.host.id }),
+          body: JSON.stringify({
+            sessionId: hostA.session.id,
+            commandId: command.id,
+            completedAt: Date.now(),
+            type: "environment.provision",
+            ok: true,
+            result: {
+              path: "/tmp/cross-host-command",
+              branchName: "bb/cross-host",
+              defaultBranch: "main",
+              isGitRepo: true,
+              isWorktree: false,
+              transcript: [],
+            },
+          }),
+        },
+      );
 
       expect(response.status).toBe(404);
       await expect(readJson(response)).resolves.toMatchObject({
@@ -104,9 +107,13 @@ describe("internal authorization regressions", () => {
         state: "pending",
         resultPayload: null,
       });
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe("provisioning");
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+        "provisioning",
+      );
       expect(getThread(harness.db, thread.id)?.status).toBe("provisioning");
-      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(1);
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
+        1,
+      );
     } finally {
       await harness.cleanup();
     }
@@ -236,7 +243,9 @@ describe("internal authorization regressions", () => {
   it("rejects reusing an environment from a different project", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-reuse-check" });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-reuse-check",
+      });
       const { project: projectA } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
         path: "/tmp/project-a",
@@ -258,7 +267,9 @@ describe("internal authorization regressions", () => {
           projectId: projectA.id,
           providerId: "codex",
           model: "gpt-5",
-          input: [{ type: "text", text: "Reuse the other project environment" }],
+          input: [
+            { type: "text", text: "Reuse the other project environment" },
+          ],
           environment: {
             type: "reuse",
             environmentId: environment.id,

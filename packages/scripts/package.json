@@ -37,7 +37,9 @@
       "types": "./dist/commands/archive-codex-tmp-bb-sessions.d.ts"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "rimraf dist tsconfig.tsbuildinfo && tsc",
     "clean": "rimraf dist tsconfig.tsbuildinfo",

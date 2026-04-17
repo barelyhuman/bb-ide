@@ -2,10 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
-import {
-  authApiKeys,
-  authUsers,
-} from "@bb/db";
+import { authApiKeys, authUsers } from "@bb/db";
 import { afterEach, describe, expect, it } from "vitest";
 import { initDb } from "../src/db.js";
 import { createMachineAuthService } from "../src/services/machine-auth.js";
@@ -90,7 +87,8 @@ describe("machine auth service", () => {
       hostId,
       hostType: "persistent",
     });
-    const verifiedBeforeRotate = await harness.machineAuth.verifyDaemonHostKey(issuedKey);
+    const verifiedBeforeRotate =
+      await harness.machineAuth.verifyDaemonHostKey(issuedKey);
 
     expect(verifiedBeforeRotate).not.toBeNull();
 
@@ -100,8 +98,12 @@ describe("machine auth service", () => {
       hostType: "persistent",
     });
 
-    await expect(harness.machineAuth.verifyDaemonHostKey(issuedKey)).resolves.toBeNull();
-    await expect(harness.machineAuth.verifyDaemonHostKey(rotatedKey)).resolves.toMatchObject({
+    await expect(
+      harness.machineAuth.verifyDaemonHostKey(issuedKey),
+    ).resolves.toBeNull();
+    await expect(
+      harness.machineAuth.verifyDaemonHostKey(rotatedKey),
+    ).resolves.toMatchObject({
       metadata: {
         hostId,
         hostType: "persistent",
@@ -135,9 +137,15 @@ describe("machine auth service", () => {
     if (!reenrolled) {
       throw new Error("Expected reenrollment to succeed");
     }
-    await expect(harness.machineAuth.verifyDaemonHostKey(olderKey)).resolves.toBeNull();
-    await expect(harness.machineAuth.verifyDaemonHostKey(staleKey)).resolves.toBeNull();
-    await expect(harness.machineAuth.verifyDaemonHostKey(reenrolled.hostKey)).resolves.toMatchObject({
+    await expect(
+      harness.machineAuth.verifyDaemonHostKey(olderKey),
+    ).resolves.toBeNull();
+    await expect(
+      harness.machineAuth.verifyDaemonHostKey(staleKey),
+    ).resolves.toBeNull();
+    await expect(
+      harness.machineAuth.verifyDaemonHostKey(reenrolled.hostKey),
+    ).resolves.toMatchObject({
       metadata: {
         hostId,
         hostType: "persistent",

@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, renderHook } from "@testing-library/react";
-import type { Environment, PromptInput, Thread, WorkspaceStatus } from "@bb/domain";
+import type {
+  Environment,
+  PromptInput,
+  Thread,
+  WorkspaceStatus,
+} from "@bb/domain";
 import type { EnvironmentActionResponse } from "@bb/server-contract";
 import {
   makeWorkspaceMergeBase,
@@ -122,8 +127,7 @@ function createRequestEnvironmentActionMutation(
   return {
     isPending: options.isPending ?? false,
     mutateAsync:
-      options.mutateAsync ??
-      vi.fn(async () => makeCommitActionResponse()),
+      options.mutateAsync ?? vi.fn(async () => makeCommitActionResponse()),
   };
 }
 
@@ -132,9 +136,7 @@ function createSendMessageMutation(
 ): SendMessageMutationLike {
   return {
     isPending: options.isPending ?? false,
-    mutateAsync:
-      options.mutateAsync ??
-      vi.fn(async () => undefined),
+    mutateAsync: options.mutateAsync ?? vi.fn(async () => undefined),
   };
 }
 

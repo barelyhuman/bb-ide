@@ -1,11 +1,7 @@
 import { authApiKeys, getHost } from "@bb/db";
 import { eq } from "drizzle-orm";
-import {
-  hostDaemonEnrollResponseSchema,
-} from "@bb/host-daemon-contract";
-import {
-  createHostJoinResponseSchema,
-} from "@bb/server-contract";
+import { hostDaemonEnrollResponseSchema } from "@bb/host-daemon-contract";
+import { createHostJoinResponseSchema } from "@bb/server-contract";
 import { describe, expect, it } from "vitest";
 import { readJson } from "./helpers/json.js";
 import { createTestAppHarness } from "./helpers/test-app.js";
@@ -90,18 +86,21 @@ describe("host join and enroll routes", () => {
         await readJson(joinResponse),
       );
 
-      const enrollResponse = await harness.app.request("/internal/hosts/enroll", {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${joinBody.joinCode}`,
-          "content-type": "application/json",
+      const enrollResponse = await harness.app.request(
+        "/internal/hosts/enroll",
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${joinBody.joinCode}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            hostId: joinBody.hostId,
+            hostName: "real-host-name",
+            hostType: "persistent",
+          }),
         },
-        body: JSON.stringify({
-          hostId: joinBody.hostId,
-          hostName: "real-host-name",
-          hostType: "persistent",
-        }),
-      });
+      );
 
       expect(enrollResponse.status).toBe(201);
       const enrollBody = hostDaemonEnrollResponseSchema.parse(
@@ -116,18 +115,21 @@ describe("host join and enroll routes", () => {
         name: "real-host-name",
       });
 
-      const replayResponse = await harness.app.request("/internal/hosts/enroll", {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${joinBody.joinCode}`,
-          "content-type": "application/json",
+      const replayResponse = await harness.app.request(
+        "/internal/hosts/enroll",
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${joinBody.joinCode}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            hostId: joinBody.hostId,
+            hostName: "real-host-name",
+            hostType: "persistent",
+          }),
         },
-        body: JSON.stringify({
-          hostId: joinBody.hostId,
-          hostName: "real-host-name",
-          hostType: "persistent",
-        }),
-      });
+      );
 
       expect(replayResponse.status).toBe(401);
     } finally {
@@ -176,63 +178,75 @@ describe("host join and enroll routes", () => {
     const harness = await createTestAppHarness();
 
     try {
-      const firstJoinResponse = await harness.app.request("/api/v1/hosts/join", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
+      const firstJoinResponse = await harness.app.request(
+        "/api/v1/hosts/join",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            hostId: "host_reissue_join",
+            hostType: "persistent",
+          }),
         },
-        body: JSON.stringify({
-          hostId: "host_reissue_join",
-          hostType: "persistent",
-        }),
-      });
+      );
       const firstJoinBody = createHostJoinResponseSchema.parse(
         await readJson(firstJoinResponse),
       );
 
-      const secondJoinResponse = await harness.app.request("/api/v1/hosts/join", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
+      const secondJoinResponse = await harness.app.request(
+        "/api/v1/hosts/join",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            hostId: "host_reissue_join",
+            hostType: "persistent",
+          }),
         },
-        body: JSON.stringify({
-          hostId: "host_reissue_join",
-          hostType: "persistent",
-        }),
-      });
+      );
       const secondJoinBody = createHostJoinResponseSchema.parse(
         await readJson(secondJoinResponse),
       );
 
       expect(secondJoinBody.joinCode).not.toBe(firstJoinBody.joinCode);
 
-      const firstEnrollResponse = await harness.app.request("/internal/hosts/enroll", {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${firstJoinBody.joinCode}`,
-          "content-type": "application/json",
+      const firstEnrollResponse = await harness.app.request(
+        "/internal/hosts/enroll",
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${firstJoinBody.joinCode}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            hostId: firstJoinBody.hostId,
+            hostName: "stale-join-host",
+            hostType: "persistent",
+          }),
         },
-        body: JSON.stringify({
-          hostId: firstJoinBody.hostId,
-          hostName: "stale-join-host",
-          hostType: "persistent",
-        }),
-      });
+      );
 
       expect(firstEnrollResponse.status).toBe(401);
 
-      const secondEnrollResponse = await harness.app.request("/internal/hosts/enroll", {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${secondJoinBody.joinCode}`,
-          "content-type": "application/json",
+      const secondEnrollResponse = await harness.app.request(
+        "/internal/hosts/enroll",
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${secondJoinBody.joinCode}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            hostId: secondJoinBody.hostId,
+            hostName: "fresh-join-host",
+            hostType: "persistent",
+          }),
         },
-        body: JSON.stringify({
-          hostId: secondJoinBody.hostId,
-          hostName: "fresh-join-host",
-          hostType: "persistent",
-        }),
-      });
+      );
 
       expect(secondEnrollResponse.status).toBe(201);
     } finally {
@@ -278,18 +292,21 @@ describe("host join and enroll routes", () => {
         .where(eq(authApiKeys.id, issuedKey?.id ?? ""))
         .run();
 
-      const enrollResponse = await harness.app.request("/internal/hosts/enroll", {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${joinBody.joinCode}`,
-          "content-type": "application/json",
+      const enrollResponse = await harness.app.request(
+        "/internal/hosts/enroll",
+        {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${joinBody.joinCode}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            hostId: joinBody.hostId,
+            hostName: "expired-host",
+            hostType: "persistent",
+          }),
         },
-        body: JSON.stringify({
-          hostId: joinBody.hostId,
-          hostName: "expired-host",
-          hostType: "persistent",
-        }),
-      });
+      );
 
       expect(enrollResponse.status).toBe(401);
     } finally {
@@ -327,7 +344,9 @@ describe("host join and enroll routes", () => {
       });
 
       expect(response.status).toBe(409);
-      expect(getHost(harness.db, "host_type_conflict")?.type).toBe("persistent");
+      expect(getHost(harness.db, "host_type_conflict")?.type).toBe(
+        "persistent",
+      );
     } finally {
       await harness.cleanup();
     }

@@ -24,9 +24,7 @@ import type {
   SystemThreadProvisioningStatus,
   Thread,
 } from "@bb/domain";
-import {
-  type HostDaemonCommand,
-} from "@bb/host-daemon-contract";
+import { type HostDaemonCommand } from "@bb/host-daemon-contract";
 import type { SandboxHostProgressEvent } from "@bb/sandbox-host";
 import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
@@ -81,8 +79,7 @@ export interface EnvironmentProvisioningCommandMutationArgs {
   commandId: string;
 }
 
-export interface FailEnvironmentProvisioningForCommandArgs
-  extends EnvironmentProvisioningCommandMutationArgs {
+export interface FailEnvironmentProvisioningForCommandArgs extends EnvironmentProvisioningCommandMutationArgs {
   failureReason: string;
 }
 
@@ -113,10 +110,7 @@ function listLiveEnvironmentThreads(
     })
     .from(threads)
     .where(
-      and(
-        eq(threads.environmentId, environmentId),
-        isNull(threads.deletedAt),
-      ),
+      and(eq(threads.environmentId, environmentId), isNull(threads.deletedAt)),
     )
     .all();
 }
@@ -131,10 +125,10 @@ function appendThreadProvisioningEventToEnvironmentThreads(
   },
 ): void {
   const liveThreads =
-    args.threads
+    args.threads ??
     // Refresh the thread list for in-progress broadcasts so reuse threads that
     // attach mid-provision receive subsequent transcript updates.
-    ?? listLiveEnvironmentThreads(deps, args.environmentId);
+    listLiveEnvironmentThreads(deps, args.environmentId);
 
   for (const thread of liveThreads) {
     appendThreadProvisioningEvent(deps, {
@@ -217,7 +211,9 @@ function isActiveProvisionOperationState(
 function getActiveProvisionOperation(
   deps: Pick<AppDeps, "db">,
   environmentId: string,
-): (EnvironmentOperationRow & { kind: EnvironmentProvisionOperationKind }) | null {
+):
+  | (EnvironmentOperationRow & { kind: EnvironmentProvisionOperationKind })
+  | null {
   for (const kind of ["reprovision", "provision"] as const) {
     const operation = getEnvironmentOperation(deps.db, {
       environmentId,
@@ -240,9 +236,9 @@ function getActiveProvisionOperationByCommandId(
 ) {
   const operation = getEnvironmentOperationByCommandId(deps.db, commandId);
   if (
-    !operation
-    || (operation.kind !== "provision" && operation.kind !== "reprovision")
-    || !isActiveProvisionOperationState(operation.state)
+    !operation ||
+    (operation.kind !== "provision" && operation.kind !== "reprovision") ||
+    !isActiveProvisionOperationState(operation.state)
   ) {
     return null;
   }
@@ -259,8 +255,10 @@ function hasQueuedProvisionCommand(
   }
 
   const command = getCommand(deps.db, commandId);
-  return command !== null
-    && (command.state === "pending" || command.state === "fetched");
+  return (
+    command !== null &&
+    (command.state === "pending" || command.state === "fetched")
+  );
 }
 
 export function completeEnvironmentProvisioning(
@@ -290,7 +288,10 @@ export function completeEnvironmentProvisioningForCommand(
   deps: Pick<AppDeps, "db">,
   args: EnvironmentProvisioningCommandMutationArgs,
 ): boolean {
-  const operation = getActiveProvisionOperationByCommandId(deps, args.commandId);
+  const operation = getActiveProvisionOperationByCommandId(
+    deps,
+    args.commandId,
+  );
   if (!operation) {
     return false;
   }
@@ -306,7 +307,10 @@ export function failEnvironmentProvisioningForCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: FailEnvironmentProvisioningForCommandArgs,
 ): boolean {
-  const operation = getActiveProvisionOperationByCommandId(deps, args.commandId);
+  const operation = getActiveProvisionOperationByCommandId(
+    deps,
+    args.commandId,
+  );
   if (!operation) {
     return false;
   }
@@ -319,9 +323,9 @@ export function failEnvironmentProvisioningForCommand(
 
   const environment = getEnvironment(deps.db, operation.environmentId);
   if (
-    environment
-    && environment.status !== "destroyed"
-    && environment.status !== "error"
+    environment &&
+    environment.status !== "destroyed" &&
+    environment.status !== "error"
   ) {
     setEnvironmentStatus(deps.db, deps.hub, operation.environmentId, {
       status: "error",
@@ -348,9 +352,9 @@ export function failEnvironmentProvisioning(
 
   const environment = getEnvironment(deps.db, args.environmentId);
   if (
-    environment
-    && environment.status !== "destroyed"
-    && environment.status !== "error"
+    environment &&
+    environment.status !== "destroyed" &&
+    environment.status !== "error"
   ) {
     setEnvironmentStatus(deps.db, deps.hub, environment.id, {
       status: "error",
@@ -518,7 +522,6 @@ async function bootstrapSandboxProvisioning(
     if (host && host.destroyedAt === null) {
       await destroyHost(deps, host.id).catch(() => undefined);
     }
-
   }
 }
 
@@ -624,7 +627,10 @@ export async function queueManagedEnvironmentReprovision(
     );
   }
 
-  const activeOperation = getActiveProvisionOperation(deps, args.environment.id);
+  const activeOperation = getActiveProvisionOperation(
+    deps,
+    args.environment.id,
+  );
   if (activeOperation) {
     return MANAGED_REPROVISION_IN_PROGRESS;
   }

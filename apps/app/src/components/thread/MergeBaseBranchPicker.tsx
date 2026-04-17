@@ -1,14 +1,12 @@
-import {
-  useDeferredValue,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
 export function getMergeBaseBranchCandidates({
@@ -53,7 +51,9 @@ export function MergeBaseBranchPicker({
     if (normalizedQuery.length === 0) {
       return options;
     }
-    return options.filter((branch) => branch.toLowerCase().includes(normalizedQuery));
+    return options.filter((branch) =>
+      branch.toLowerCase().includes(normalizedQuery),
+    );
   }, [normalizedQuery, options]);
   const enterSelection =
     filteredOptions.find((branch) => branch === value) ?? filteredOptions[0];
@@ -160,7 +160,11 @@ export function MergeBaseBranchPicker({
                   {branch}
                 </span>
                 <Check
-                  className={branch === value ? "size-5 shrink-0 opacity-100 md:size-4" : "size-5 shrink-0 opacity-0 md:size-4"}
+                  className={
+                    branch === value
+                      ? "size-5 shrink-0 opacity-100 md:size-4"
+                      : "size-5 shrink-0 opacity-0 md:size-4"
+                  }
                 />
               </button>
             ))

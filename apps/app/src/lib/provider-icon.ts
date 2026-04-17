@@ -1,12 +1,15 @@
-import { getBuiltInAgentProviderInfo, isAgentProviderId } from "@bb/agent-providers"
-import type { ComponentType } from "react"
-import { ClaudeIcon } from "@/components/icons/ClaudeIcon"
-import { OpenAiIcon } from "@/components/icons/OpenAiIcon"
-import { PiIcon } from "@/components/icons/PiIcon"
+import {
+  getBuiltInAgentProviderInfo,
+  isAgentProviderId,
+} from "@bb/agent-providers";
+import type { ComponentType } from "react";
+import { ClaudeIcon } from "@/components/icons/ClaudeIcon";
+import { OpenAiIcon } from "@/components/icons/OpenAiIcon";
+import { PiIcon } from "@/components/icons/PiIcon";
 
 interface ProviderIconInfo {
-  icon: ComponentType<{ className?: string }>
-  ariaLabel: string
+  icon: ComponentType<{ className?: string }>;
+  ariaLabel: string;
 }
 
 /**
@@ -18,9 +21,9 @@ export function getProviderIconInfo(
 ): ProviderIconInfo | undefined {
   const providerInfo = isAgentProviderId(providerId)
     ? getBuiltInAgentProviderInfo(providerId)
-    : null
+    : null;
   if (!providerInfo) {
-    return undefined
+    return undefined;
   }
 
   switch (providerId) {
@@ -28,18 +31,18 @@ export function getProviderIconInfo(
       return {
         icon: OpenAiIcon,
         ariaLabel: providerInfo.displayName,
-      }
+      };
     case "claude-code":
       return {
         icon: ClaudeIcon,
         ariaLabel: providerInfo.displayName,
-      }
+      };
     case "pi":
       return {
         icon: PiIcon,
         ariaLabel: providerInfo.displayName,
-      }
+      };
     default:
-      return undefined
+      return undefined;
   }
 }

@@ -32,7 +32,13 @@ describe("parseExecLifecycleEvent", () => {
       type: "item/started" as const,
       threadId: "t-1",
       turnId: "turn-1",
-      item: { type: "commandExecution" as const, id: "call-1", command: "echo hello", cwd: "/tmp", status: "pending" as const },
+      item: {
+        type: "commandExecution" as const,
+        id: "call-1",
+        command: "echo hello",
+        cwd: "/tmp",
+        status: "pending" as const,
+      },
     };
     const result = parseExecLifecycleEvent(decoded, meta);
     expect(result?.kind).toBe("begin");
@@ -45,7 +51,14 @@ describe("parseExecLifecycleEvent", () => {
       type: "item/completed" as const,
       threadId: "t-1",
       turnId: "turn-1",
-      item: { type: "commandExecution" as const, id: "call-1", command: "echo hello", cwd: "/tmp", status: "completed" as const, exitCode: 0 },
+      item: {
+        type: "commandExecution" as const,
+        id: "call-1",
+        command: "echo hello",
+        cwd: "/tmp",
+        status: "completed" as const,
+        exitCode: 0,
+      },
     };
     const result = parseExecLifecycleEvent(decoded, meta);
     expect(result?.kind).toBe("end");
@@ -57,7 +70,14 @@ describe("parseExecLifecycleEvent", () => {
       type: "item/completed" as const,
       threadId: "t-1",
       turnId: "turn-1",
-      item: { type: "commandExecution" as const, id: "call-1", command: "false", cwd: "/tmp", status: "completed" as const, exitCode: 1 },
+      item: {
+        type: "commandExecution" as const,
+        id: "call-1",
+        command: "false",
+        cwd: "/tmp",
+        status: "completed" as const,
+        exitCode: 1,
+      },
     };
     const result = parseExecLifecycleEvent(decoded, meta);
     expect(result?.call.status).toBe("error");
@@ -81,7 +101,12 @@ describe("parseExecLifecycleEvent", () => {
       type: "item/started" as const,
       threadId: "t-1",
       turnId: "turn-1",
-      item: { type: "agentMessage" as const, id: "msg-1", text: "hello", status: "pending" as const },
+      item: {
+        type: "agentMessage" as const,
+        id: "msg-1",
+        text: "hello",
+        status: "pending" as const,
+      },
     };
     expect(parseExecLifecycleEvent(decoded, meta)).toBeNull();
   });
@@ -94,7 +119,8 @@ describe("parseExecLifecycleEvent", () => {
       item: {
         type: "commandExecution" as const,
         id: "call-2",
-        command: "sed -n '1,260p' packages/excalidraw/components/SearchMenu.tsx",
+        command:
+          "sed -n '1,260p' packages/excalidraw/components/SearchMenu.tsx",
         cwd: "/tmp",
         status: "completed" as const,
         exitCode: 0,

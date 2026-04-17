@@ -95,7 +95,15 @@ describe("parsePorcelainEntries", () => {
 
 describe("parseNameStatusEntries", () => {
   it("parses add, modify, and delete entries", () => {
-    const output = ["A", "src/new.ts", "M", "src/existing.ts", "D", "src/old.ts", ""].join("\0");
+    const output = [
+      "A",
+      "src/new.ts",
+      "M",
+      "src/existing.ts",
+      "D",
+      "src/old.ts",
+      "",
+    ].join("\0");
     expect(parseNameStatusEntries(output)).toEqual([
       { path: "src/new.ts", status: "A" },
       { path: "src/existing.ts", status: "M" },
@@ -104,7 +112,15 @@ describe("parseNameStatusEntries", () => {
   });
 
   it("takes the new path for rename and copy entries", () => {
-    const output = ["R100", "src/old.ts", "src/new.ts", "C75", "src/base.ts", "src/copy.ts", ""].join("\0");
+    const output = [
+      "R100",
+      "src/old.ts",
+      "src/new.ts",
+      "C75",
+      "src/base.ts",
+      "src/copy.ts",
+      "",
+    ].join("\0");
     expect(parseNameStatusEntries(output)).toEqual([
       { path: "src/new.ts", status: "R" },
       { path: "src/copy.ts", status: "C" },
@@ -120,9 +136,13 @@ describe("parseNameStatusEntries", () => {
 
   it("interleaves regular and rename entries correctly", () => {
     const output = [
-      "M", "src/a.ts",
-      "R090", "src/b-old.ts", "src/b-new.ts",
-      "A", "src/c.ts",
+      "M",
+      "src/a.ts",
+      "R090",
+      "src/b-old.ts",
+      "src/b-new.ts",
+      "A",
+      "src/c.ts",
       "",
     ].join("\0");
     expect(parseNameStatusEntries(output)).toEqual([
@@ -147,7 +167,9 @@ describe("parseNameStatusEntries", () => {
 describe("summarizeNumstat", () => {
   it("totals changed files, insertions, and deletions", () => {
     expect(
-      summarizeNumstat(["10\t4\tREADME.md", "-\t-\tbinary.dat", "2\t0\tsrc/app.ts"].join("\n")),
+      summarizeNumstat(
+        ["10\t4\tREADME.md", "-\t-\tbinary.dat", "2\t0\tsrc/app.ts"].join("\n"),
+      ),
     ).toEqual({
       changedFiles: 3,
       insertions: 12,

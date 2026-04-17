@@ -63,35 +63,43 @@ describe("schedule helpers", () => {
 
   it("rejects daily schedules that run less than five minutes apart across midnight", () => {
     expect(() =>
-      validateScheduleDefinition(createDailySchedule({
-        times: ["00:01", "23:58"],
-      })))
-      .toThrow(ScheduleValidationError);
+      validateScheduleDefinition(
+        createDailySchedule({
+          times: ["00:01", "23:58"],
+        }),
+      ),
+    ).toThrow(ScheduleValidationError);
   });
 
   it("rejects weekly schedules that run less than five minutes apart across adjacent days", () => {
     expect(() =>
-      validateScheduleDefinition(createWeeklySchedule({
-        times: ["00:01", "23:58"],
-        weekdays: ["mon", "tue"],
-      })))
-      .toThrow(ScheduleValidationError);
+      validateScheduleDefinition(
+        createWeeklySchedule({
+          times: ["00:01", "23:58"],
+          weekdays: ["mon", "tue"],
+        }),
+      ),
+    ).toThrow(ScheduleValidationError);
   });
 
   it("accepts hourly schedules without sampled cron iteration", () => {
     expect(() =>
-      validateScheduleDefinition(createHourlySchedule({
-        intervalHours: 2,
-        minute: 15,
-      })))
-      .not.toThrow();
+      validateScheduleDefinition(
+        createHourlySchedule({
+          intervalHours: 2,
+          minute: 15,
+        }),
+      ),
+    ).not.toThrow();
   });
 
   it("parses supported weekly cron schedules into the internal subset model", () => {
-    expect(parseCronScheduleDefinition({
-      cron: "0 8 * * 1-5",
-      timezone: "UTC",
-    })).toEqual({
+    expect(
+      parseCronScheduleDefinition({
+        cron: "0 8 * * 1-5",
+        timezone: "UTC",
+      }),
+    ).toEqual({
       kind: "weekly",
       times: ["08:00"],
       timezone: "UTC",
@@ -100,10 +108,12 @@ describe("schedule helpers", () => {
   });
 
   it("supports cron schedules with multiple daily times", () => {
-    expect(parseCronScheduleDefinition({
-      cron: "0,30 9,17 * * *",
-      timezone: "UTC",
-    })).toEqual({
+    expect(
+      parseCronScheduleDefinition({
+        cron: "0,30 9,17 * * *",
+        timezone: "UTC",
+      }),
+    ).toEqual({
       kind: "daily",
       times: ["09:00", "09:30", "17:00", "17:30"],
       timezone: "UTC",
@@ -115,7 +125,7 @@ describe("schedule helpers", () => {
       parseCronScheduleDefinition({
         cron: "*/5 8 * * *",
         timezone: "UTC",
-      }))
-      .toThrow(ScheduleValidationError);
+      }),
+    ).toThrow(ScheduleValidationError);
   });
 });

@@ -1,8 +1,5 @@
 import { eq } from "drizzle-orm";
-import {
-  getEnvironment,
-  hostDaemonCommands,
-} from "@bb/db";
+import { getEnvironment, hostDaemonCommands } from "@bb/db";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../../src/errors.js";
 import {
@@ -45,25 +42,33 @@ describe("environment reprovisioning", () => {
         environmentId: environment.id,
       });
 
-      const firstAttempt = await queueManagedEnvironmentReprovision(harness.deps, {
-        environment,
-        projectId: thread.projectId,
-        provisionEventSequence: 1,
-        threadId: thread.id,
-      });
-      const secondAttempt = await queueManagedEnvironmentReprovision(harness.deps, {
-        environment,
-        projectId: thread.projectId,
-        provisionEventSequence: 2,
-        threadId: thread.id,
-      });
+      const firstAttempt = await queueManagedEnvironmentReprovision(
+        harness.deps,
+        {
+          environment,
+          projectId: thread.projectId,
+          provisionEventSequence: 1,
+          threadId: thread.id,
+        },
+      );
+      const secondAttempt = await queueManagedEnvironmentReprovision(
+        harness.deps,
+        {
+          environment,
+          projectId: thread.projectId,
+          provisionEventSequence: 2,
+          threadId: thread.id,
+        },
+      );
 
       expect(firstAttempt).toMatchObject({
         status: MANAGED_REPROVISION_QUEUED,
         eventSequence: expect.any(Number),
       });
       expect(secondAttempt).toBe(MANAGED_REPROVISION_IN_PROGRESS);
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe("provisioning");
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+        "provisioning",
+      );
       const queued = await waitForQueuedCommand(
         harness,
         ({ command }) => command.type === "environment.provision",
@@ -76,9 +81,7 @@ describe("environment reprovisioning", () => {
         harness.db
           .select()
           .from(hostDaemonCommands)
-          .where(
-            eq(hostDaemonCommands.type, "environment.provision"),
-          )
+          .where(eq(hostDaemonCommands.type, "environment.provision"))
           .all(),
       ).toHaveLength(1);
     } finally {
@@ -181,9 +184,7 @@ describe("environment reprovisioning", () => {
         harness.db
           .select()
           .from(hostDaemonCommands)
-          .where(
-            eq(hostDaemonCommands.type, "environment.provision"),
-          )
+          .where(eq(hostDaemonCommands.type, "environment.provision"))
           .all(),
       ).toHaveLength(0);
     } finally {

@@ -77,7 +77,9 @@ describe("public thread interaction routes", () => {
         session.id,
       );
       if (registered.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${registered.reason}`,
+        );
       }
 
       const listResponse = await harness.app.request(
@@ -236,7 +238,9 @@ describe("public thread interaction routes", () => {
         session.id,
       );
       if (commandApproval.outcome === "rejected") {
-        throw new Error(`Expected command interaction registration to succeed: ${commandApproval.reason}`);
+        throw new Error(
+          `Expected command interaction registration to succeed: ${commandApproval.reason}`,
+        );
       }
 
       const invalidCommandResolution = await harness.app.request(
@@ -271,7 +275,8 @@ describe("public thread interaction routes", () => {
       expect(malformedBodyResponse.status).toBe(400);
       await expect(readJson(malformedBodyResponse)).resolves.toEqual({
         code: "invalid_request",
-        message: "Invalid discriminator value. Expected 'allow_once' | 'allow_for_session' | 'deny'",
+        message:
+          "Invalid discriminator value. Expected 'allow_once' | 'allow_for_session' | 'deny'",
       });
 
       harness.deps.pendingInteractions.interruptPendingInteraction({
@@ -344,7 +349,9 @@ describe("public thread interaction routes", () => {
         session.id,
       );
       if (permissionRequest.outcome === "rejected") {
-        throw new Error(`Expected permission interaction registration to succeed: ${permissionRequest.reason}`);
+        throw new Error(
+          `Expected permission interaction registration to succeed: ${permissionRequest.reason}`,
+        );
       }
 
       const grantResponse = await harness.app.request(
@@ -354,13 +361,15 @@ describe("public thread interaction routes", () => {
           headers: {
             "content-type": "application/json",
           },
-          body: JSON.stringify(createAllowForSessionResolution({
-            network: { enabled: true },
-            fileSystem: {
-              read: ["/tmp/project/README.md"],
-              write: [],
-            },
-          })),
+          body: JSON.stringify(
+            createAllowForSessionResolution({
+              network: { enabled: true },
+              fileSystem: {
+                read: ["/tmp/project/README.md"],
+                write: [],
+              },
+            }),
+          ),
         },
       );
       expect(grantResponse.status).toBe(200);
@@ -409,7 +418,9 @@ describe("public thread interaction routes", () => {
         session.id,
       );
       if (deniedPermissionRequest.outcome === "rejected") {
-        throw new Error(`Expected permission interaction registration to succeed: ${deniedPermissionRequest.reason}`);
+        throw new Error(
+          `Expected permission interaction registration to succeed: ${deniedPermissionRequest.reason}`,
+        );
       }
 
       const denyResponse = await harness.app.request(
@@ -465,7 +476,9 @@ describe("public thread interaction routes", () => {
         session.id,
       );
       if (invalidPermissionRequest.outcome === "rejected") {
-        throw new Error(`Expected permission interaction registration to succeed: ${invalidPermissionRequest.reason}`);
+        throw new Error(
+          `Expected permission interaction registration to succeed: ${invalidPermissionRequest.reason}`,
+        );
       }
 
       const invalidGrantResponse = await harness.app.request(
@@ -490,7 +503,8 @@ describe("public thread interaction routes", () => {
       expect(invalidGrantResponse.status).toBe(400);
       await expect(readJson(invalidGrantResponse)).resolves.toEqual({
         code: "invalid_request",
-        message: "Granted network permissions must be a subset of the requested permissions",
+        message:
+          "Granted network permissions must be a subset of the requested permissions",
       });
     } finally {
       await harness.cleanup();
@@ -534,7 +548,9 @@ describe("public thread interaction routes", () => {
         session.id,
       );
       if (commandApproval.outcome === "rejected") {
-        throw new Error(`Expected command interaction registration to succeed: ${commandApproval.reason}`);
+        throw new Error(
+          `Expected command interaction registration to succeed: ${commandApproval.reason}`,
+        );
       }
 
       const resolveResponse = await harness.app.request(
@@ -556,7 +572,8 @@ describe("public thread interaction routes", () => {
       expect(resolveResponse.status).toBe(400);
       await expect(readJson(resolveResponse)).resolves.toEqual({
         code: "invalid_request",
-        message: "Invalid discriminator value. Expected 'allow_once' | 'allow_for_session' | 'deny'",
+        message:
+          "Invalid discriminator value. Expected 'allow_once' | 'allow_for_session' | 'deny'",
       });
     } finally {
       await harness.cleanup();
@@ -608,7 +625,9 @@ describe("public thread interaction routes", () => {
         session.id,
       );
       if (pending.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${pending.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${pending.reason}`,
+        );
       }
 
       const sendResponse = await harness.app.request(
@@ -627,7 +646,8 @@ describe("public thread interaction routes", () => {
       expect(sendResponse.status).toBe(409);
       await expect(readJson(sendResponse)).resolves.toEqual({
         code: "awaiting_user_interaction",
-        message: "Thread is awaiting user interaction. Resolve the pending interaction before sending another prompt.",
+        message:
+          "Thread is awaiting user interaction. Resolve the pending interaction before sending another prompt.",
       });
 
       const draftSendResponse = await harness.app.request(
@@ -643,7 +663,8 @@ describe("public thread interaction routes", () => {
       expect(draftSendResponse.status).toBe(409);
       await expect(readJson(draftSendResponse)).resolves.toEqual({
         code: "awaiting_user_interaction",
-        message: "Thread is awaiting user interaction. Resolve the pending interaction before sending another prompt.",
+        message:
+          "Thread is awaiting user interaction. Resolve the pending interaction before sending another prompt.",
       });
     } finally {
       await harness.cleanup();
@@ -694,8 +715,7 @@ describe("public thread interaction routes", () => {
       const queued = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "turn.submit" &&
-          command.threadId === thread.id,
+          command.type === "turn.submit" && command.threadId === thread.id,
       );
       expect(queued.command.options).toMatchObject({
         permissionMode: "full",
@@ -740,7 +760,9 @@ describe("public thread interaction routes", () => {
         session.id,
       );
       if (fileChange.outcome === "rejected") {
-        throw new Error(`Expected file-change interaction registration to succeed: ${fileChange.reason}`);
+        throw new Error(
+          `Expected file-change interaction registration to succeed: ${fileChange.reason}`,
+        );
       }
 
       const fileChangeResponse = await harness.app.request(
@@ -759,7 +781,6 @@ describe("public thread interaction routes", () => {
         status: "resolving",
         resolution: createAllowOnceResolution(),
       });
-
     } finally {
       await harness.cleanup();
     }
@@ -813,7 +834,9 @@ describe("public thread interaction routes", () => {
         session.id,
       );
       if (registered.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${registered.reason}`,
+        );
       }
 
       harness.deps.pendingInteractions.resolvePendingInteraction({
@@ -908,7 +931,9 @@ describe("public thread interaction routes", () => {
         session.id,
       );
       if (registered.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${registered.reason}`,
+        );
       }
 
       harness.deps.pendingInteractions.resolvePendingInteraction({
@@ -1002,7 +1027,9 @@ describe("public thread interaction routes", () => {
         session.id,
       );
       if (registered.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${registered.reason}`,
+        );
       }
 
       const timelineResponse = await harness.app.request(
@@ -1070,7 +1097,9 @@ describe("public thread interaction routes", () => {
         session.id,
       );
       if (registered.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${registered.reason}`,
+        );
       }
 
       const timelineResponse = await harness.app.request(

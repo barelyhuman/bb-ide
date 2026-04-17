@@ -55,10 +55,12 @@ export interface BuildFilePreviewArgs extends FilePreviewTarget {
 }
 
 function isKnownTextMimeType(mimeType: string): boolean {
-  return mimeType.startsWith("text/") ||
+  return (
+    mimeType.startsWith("text/") ||
     mimeType.endsWith("+json") ||
     mimeType.endsWith("+xml") ||
-    UTF8_TEXT_MIME_TYPES.has(mimeType);
+    UTF8_TEXT_MIME_TYPES.has(mimeType)
+  );
 }
 
 function decodeUtf8Text(contentBytes: Uint8Array): string | null {
@@ -82,9 +84,7 @@ export function normalizeFilePreviewMimeType(value: string | null): string {
     : DEFAULT_FILE_PREVIEW_MIME_TYPE;
 }
 
-export function buildFilePreview(
-  args: BuildFilePreviewArgs,
-): FilePreview {
+export function buildFilePreview(args: BuildFilePreviewArgs): FilePreview {
   const base = {
     mimeType: args.mimeType,
     name: args.name,

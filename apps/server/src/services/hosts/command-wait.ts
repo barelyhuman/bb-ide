@@ -27,7 +27,9 @@ export interface WaitForQueuedCommandResultArgs {
   timeoutMs: number;
 }
 
-function isCompletedCommandResult(value: unknown): value is CompletedCommandResult {
+function isCompletedCommandResult(
+  value: unknown,
+): value is CompletedCommandResult {
   if (value == null || typeof value !== "object") {
     return false;
   }
@@ -68,7 +70,11 @@ export async function waitForQueuedCommandResult(
       args.timeoutMs,
     );
   } catch {
-    throw new ApiError(504, "command_timeout", "Timed out waiting for command result");
+    throw new ApiError(
+      504,
+      "command_timeout",
+      "Timed out waiting for command result",
+    );
   }
 
   if (!isCompletedCommandResult(completed)) {

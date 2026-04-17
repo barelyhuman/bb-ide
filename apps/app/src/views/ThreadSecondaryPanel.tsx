@@ -1,9 +1,4 @@
-import {
-  type CSSProperties,
-  type ReactNode,
-  memo,
-  useMemo,
-} from "react";
+import { type CSSProperties, type ReactNode, memo, useMemo } from "react";
 import { useAtomValue } from "jotai";
 import {
   Check,
@@ -21,10 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { FileDiff as DiffView } from "@pierre/diffs/react";
-import {
-  Panel,
-  PanelResizeHandle,
-} from "react-resizable-panels";
+import { Panel, PanelResizeHandle } from "react-resizable-panels";
 import { useIntersectionObserver } from "usehooks-ts";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -35,9 +27,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import {
-  type ThreadSecondaryPanel as ThreadSecondaryPanelTab,
-} from "@/lib/thread-secondary-panel";
+import { type ThreadSecondaryPanel as ThreadSecondaryPanelTab } from "@/lib/thread-secondary-panel";
 import {
   formatGitDiffFileLabel,
   getOpenableGitDiffPath,
@@ -45,7 +35,10 @@ import {
   type ParsedGitDiffFile,
 } from "./threadDetailGitDiff";
 import { usePreferredTheme } from "@/hooks/useTheme";
-import { useActiveSecondaryPanel, useIsSecondaryPanelOpen } from "@/lib/thread-secondary-panel";
+import {
+  useActiveSecondaryPanel,
+  useIsSecondaryPanelOpen,
+} from "@/lib/thread-secondary-panel";
 import { useGitDiffPanelState } from "./useGitDiffPanelState";
 import { useResponsiveGitDiffPanelDisplay } from "./useResponsiveGitDiffPanelDisplay";
 import {
@@ -170,7 +163,9 @@ function GitDiffSelector({
             <span
               className="flex min-w-0 items-baseline gap-2"
               title={
-                option.monoPrefix ? `${option.monoPrefix} ${option.label}` : option.label
+                option.monoPrefix
+                  ? `${option.monoPrefix} ${option.label}`
+                  : option.label
               }
             >
               {option.monoPrefix ? (
@@ -234,9 +229,18 @@ const GitDiffFileCard = memo(function GitDiffFileCard({
   onOpenFile,
 }: GitDiffFileCardProps) {
   const { isStuck: isHeaderStuck, sentinelRef } = useIsStuck();
-  const fileDiffStats = useMemo(() => summarizeGitDiffFile(fileDiff), [fileDiff]);
-  const fileDiffLabel = useMemo(() => formatGitDiffFileLabel(fileDiff), [fileDiff]);
-  const openablePath = useMemo(() => getOpenableGitDiffPath(fileDiff), [fileDiff]);
+  const fileDiffStats = useMemo(
+    () => summarizeGitDiffFile(fileDiff),
+    [fileDiff],
+  );
+  const fileDiffLabel = useMemo(
+    () => formatGitDiffFileLabel(fileDiff),
+    [fileDiff],
+  );
+  const openablePath = useMemo(
+    () => getOpenableGitDiffPath(fileDiff),
+    [fileDiff],
+  );
   const canOpenFile = Boolean(openablePath);
   const diffViewOptions = useMemo(
     () => ({ ...gitDiffViewOptions, disableFileHeader: true }),
@@ -285,10 +289,7 @@ const GitDiffFileCard = memo(function GitDiffFileCard({
                 {fileDiffLabel}
               </button>
             ) : (
-              <span
-                className="block min-w-0 truncate"
-                title={fileDiffLabel}
-              >
+              <span className="block min-w-0 truncate" title={fileDiffLabel}>
                 {fileDiffLabel}
               </span>
             )}
@@ -314,14 +315,8 @@ const GitDiffFileCard = memo(function GitDiffFileCard({
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <div
-                className="w-full max-w-full"
-                style={GIT_DIFF_VIEW_STYLE}
-              >
-                <DiffView
-                  fileDiff={fileDiff}
-                  options={diffViewOptions}
-                />
+              <div className="w-full max-w-full" style={GIT_DIFF_VIEW_STYLE}>
+                <DiffView fileDiff={fileDiff} options={diffViewOptions} />
               </div>
             </div>
           )}
@@ -414,7 +409,9 @@ export function ThreadSecondaryPanel({
   const loadingGitDiffFileKeys = useAtomValue(gitDiffLoadingFileKeysAtom);
   const areAllGitDiffFilesCollapsed =
     hasParsedGitDiffFiles &&
-    parsedGitDiffFileEntries.every(({ key }) => collapsedGitDiffFileKeys.has(key));
+    parsedGitDiffFileEntries.every(({ key }) =>
+      collapsedGitDiffFileKeys.has(key),
+    );
   const preferredTheme = usePreferredTheme();
   const gitDiffViewOptions = useMemo(
     () => ({
@@ -434,7 +431,9 @@ export function ThreadSecondaryPanel({
         !isMobile && [
           "transition-[transform,opacity,background-color]",
           THREAD_SECONDARY_PANEL_TRANSITION_CLASS,
-          isOpen ? "opacity-100" : "pointer-events-none translate-x-[8%] opacity-0",
+          isOpen
+            ? "opacity-100"
+            : "pointer-events-none translate-x-[8%] opacity-0",
         ],
       )}
     >
@@ -545,10 +544,14 @@ export function ThreadSecondaryPanel({
                   onClick={toggleAllGitDiffFilesCollapsed}
                   disabled={!hasParsedGitDiffFiles || isGitDiffLoading}
                   aria-label={
-                    areAllGitDiffFilesCollapsed ? "Expand all files" : "Collapse all files"
+                    areAllGitDiffFilesCollapsed
+                      ? "Expand all files"
+                      : "Collapse all files"
                   }
                   title={
-                    areAllGitDiffFilesCollapsed ? "Expand all files" : "Collapse all files"
+                    areAllGitDiffFilesCollapsed
+                      ? "Expand all files"
+                      : "Collapse all files"
                   }
                 >
                   {areAllGitDiffFilesCollapsed ? (
@@ -623,10 +626,11 @@ export function ThreadSecondaryPanel({
                 <div className="space-y-2">
                   {parsedGitDiffFileEntries.map(({ key, fileDiff }) => {
                     const isCollapsed = collapsedGitDiffFileKeys.has(key);
-                    const hasQueuedFileRender = queuedGitDiffFileRenderKeys.has(key);
+                    const hasQueuedFileRender =
+                      queuedGitDiffFileRenderKeys.has(key);
                     const isRendering =
                       !hasQueuedFileRender || loadingGitDiffFileKeys.has(key);
-    
+
                     return (
                       <GitDiffFileCard
                         key={key}
@@ -668,11 +672,11 @@ export function ThreadSecondaryPanel({
             </p>
           )
         ) : isThreadStoragePanelActive ? (
-          threadStorageContent ?? (
+          (threadStorageContent ?? (
             <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
               No thread storage available.
             </p>
-          )
+          ))
         ) : (
           metadataContent
         )}
@@ -686,7 +690,10 @@ export function ThreadSecondaryPanel({
 
   return (
     <>
-      <SecondaryPanelResizeHandle isOpen={isOpen} onDragging={handleSecondaryPanelDragging} />
+      <SecondaryPanelResizeHandle
+        isOpen={isOpen}
+        onDragging={handleSecondaryPanelDragging}
+      />
       <Panel
         ref={resizablePanelRef}
         id="thread-detail-secondary-panel"

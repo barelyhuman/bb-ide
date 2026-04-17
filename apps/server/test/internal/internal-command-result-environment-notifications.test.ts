@@ -1,9 +1,5 @@
-import {
-  queueCommand,
-} from "@bb/db";
-import type {
-  HostDaemonCommandResultByType,
-} from "@bb/host-daemon-contract";
+import { queueCommand } from "@bb/db";
+import type { HostDaemonCommandResultByType } from "@bb/host-daemon-contract";
 import { describe, expect, it, vi } from "vitest";
 import { internalAuthHeaders } from "../helpers/commands.js";
 import { queueEnvironmentProvisionLifecycleCommand } from "../helpers/lifecycle-commands.js";
@@ -122,7 +118,9 @@ describe("internal command result environment notifications", () => {
         const { host, session } = seedHostSession(harness.deps, {
           id: `host-${commandType}`,
         });
-        const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+        const { project } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+        });
         const environment = seedEnvironment(harness.deps, {
           hostId: host.id,
           projectId: project.id,
@@ -146,25 +144,27 @@ describe("internal command result environment notifications", () => {
           type: commandType,
         });
 
-        const response = await harness.app.request("/internal/session/command-result", {
-          body: JSON.stringify({
-            commandId: command.id,
-            completedAt: Date.now(),
-            cursor: command.cursor,
-            ok: true,
-            result,
-            sessionId: session.id,
-            type: commandType,
-          }),
-          headers: internalAuthHeaders(harness),
-          method: "POST",
-        });
+        const response = await harness.app.request(
+          "/internal/session/command-result",
+          {
+            body: JSON.stringify({
+              commandId: command.id,
+              completedAt: Date.now(),
+              cursor: command.cursor,
+              ok: true,
+              result,
+              sessionId: session.id,
+              type: commandType,
+            }),
+            headers: internalAuthHeaders(harness),
+            method: "POST",
+          },
+        );
 
         expect(response.status).toBe(200);
-        expect(notifyEnvironmentSpy).toHaveBeenCalledWith(
-          environment.id,
-          ["work-status-changed"],
-        );
+        expect(notifyEnvironmentSpy).toHaveBeenCalledWith(environment.id, [
+          "work-status-changed",
+        ]);
       } finally {
         await harness.cleanup();
       }
@@ -177,7 +177,9 @@ describe("internal command result environment notifications", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-provision-notify",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -206,19 +208,22 @@ describe("internal command result environment notifications", () => {
         transcript: [],
       };
 
-      const response = await harness.app.request("/internal/session/command-result", {
-        body: JSON.stringify({
-          commandId: command.id,
-          completedAt: Date.now(),
-          cursor: command.cursor,
-          ok: true,
-          result,
-          sessionId: session.id,
-          type: "environment.provision",
-        }),
-        headers: internalAuthHeaders(harness),
-        method: "POST",
-      });
+      const response = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          body: JSON.stringify({
+            commandId: command.id,
+            completedAt: Date.now(),
+            cursor: command.cursor,
+            ok: true,
+            result,
+            sessionId: session.id,
+            type: "environment.provision",
+          }),
+          headers: internalAuthHeaders(harness),
+          method: "POST",
+        },
+      );
 
       expect(response.status).toBe(200);
       expect(notifyEnvironmentSpy.mock.calls).toContainEqual([

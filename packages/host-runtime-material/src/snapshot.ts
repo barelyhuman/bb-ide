@@ -4,7 +4,9 @@ import type { HostRuntimeMaterialSnapshot } from "@bb/host-daemon-contract";
 function toStableEnvEntries(
   env: Record<string, string>,
 ): Array<readonly [string, string]> {
-  return Object.entries(env).sort(([left], [right]) => left.localeCompare(right));
+  return Object.entries(env).sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
 }
 
 function toStableFiles(

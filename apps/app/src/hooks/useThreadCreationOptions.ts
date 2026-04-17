@@ -1,5 +1,12 @@
 import { useAtom } from "jotai";
-import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ComponentType,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type {
   PermissionMode,
   ProviderInfo,
@@ -98,11 +105,18 @@ interface ResolvePermissionModeSelectionArgs {
 }
 
 function isReasoningLevel(value: unknown): value is ReasoningLevel {
-  return value === "low" || value === "medium" || value === "high" || value === "xhigh";
+  return (
+    value === "low" ||
+    value === "medium" ||
+    value === "high" ||
+    value === "xhigh"
+  );
 }
 
 function isPermissionMode(value: unknown): value is PermissionMode {
-  return value === "readonly" || value === "workspace-write" || value === "full";
+  return (
+    value === "readonly" || value === "workspace-write" || value === "full"
+  );
 }
 
 function isServiceTier(value: unknown): value is ServiceTier {
@@ -113,9 +127,8 @@ function isStoredServiceTier(value: string): value is StoredServiceTier {
   return value === "" || isServiceTier(value);
 }
 
-const storedServiceTierStorage = createLocalStorageEnumStorage<StoredServiceTier>(
-  isStoredServiceTier,
-);
+const storedServiceTierStorage =
+  createLocalStorageEnumStorage<StoredServiceTier>(isStoredServiceTier);
 const reasoningLevelStorage = createLocalStorageEnumStorage<ReasoningLevel>(
   (value): value is ReasoningLevel => isReasoningLevel(value),
 );
@@ -132,11 +145,12 @@ const modelAtomFamily = createProjectScopedStorageAtomFamily(
   "",
   rawStringLocalStorage,
 );
-const serviceTierAtomFamily = createProjectScopedStorageAtomFamily<StoredServiceTier>(
-  SERVICE_TIER_STORAGE_KEY,
-  "",
-  storedServiceTierStorage,
-);
+const serviceTierAtomFamily =
+  createProjectScopedStorageAtomFamily<StoredServiceTier>(
+    SERVICE_TIER_STORAGE_KEY,
+    "",
+    storedServiceTierStorage,
+  );
 const reasoningLevelAtomFamily = createProjectScopedStorageAtomFamily(
   REASONING_STORAGE_KEY,
   "medium",
@@ -211,9 +225,11 @@ function syncUntouchedThreadPromptSelections({
   }
   if (
     !touchedFields.has("environmentSelectionValue") &&
-    currentSelections.environmentSelectionValue !== nextSelections.environmentSelectionValue
+    currentSelections.environmentSelectionValue !==
+      nextSelections.environmentSelectionValue
   ) {
-    updatedSelections.environmentSelectionValue = nextSelections.environmentSelectionValue;
+    updatedSelections.environmentSelectionValue =
+      nextSelections.environmentSelectionValue;
     changed = true;
   }
 
@@ -270,7 +286,9 @@ export function formatModelLabel(value: string, providerId?: string): string {
   return label;
 }
 
-export function useThreadCreationOptions(options?: UsePromptModelReasoningOptions) {
+export function useThreadCreationOptions(
+  options?: UsePromptModelReasoningOptions,
+) {
   const {
     initialEnvironmentSelectionValue,
     initialModel,
@@ -297,21 +315,23 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
   const [storedPermissionMode, setStoredPermissionMode] = useAtom(
     permissionModeAtomFamily(projectId),
   );
-  const [storedEnvironmentSelectionValue, setStoredEnvironmentSelectionValue] = useAtom(
-    environmentSelectionAtomFamily(projectId),
-  );
-  const [threadSelections, setThreadSelections] = useState<ThreadPromptSelections>(() =>
-    getInitialThreadPromptSelections({
-      initialEnvironmentSelectionValue,
-      initialModel,
-      initialProviderId,
-      initialPermissionMode,
-      initialReasoningLevel,
-      initialServiceTier,
-    }),
-  );
+  const [storedEnvironmentSelectionValue, setStoredEnvironmentSelectionValue] =
+    useAtom(environmentSelectionAtomFamily(projectId));
+  const [threadSelections, setThreadSelections] =
+    useState<ThreadPromptSelections>(() =>
+      getInitialThreadPromptSelections({
+        initialEnvironmentSelectionValue,
+        initialModel,
+        initialProviderId,
+        initialPermissionMode,
+        initialReasoningLevel,
+        initialServiceTier,
+      }),
+    );
   const touchedThreadFieldsRef = useRef<Set<ThreadPromptField>>(new Set());
-  const threadResetKeyRef = useRef<string | number | null | undefined>(resetKey);
+  const threadResetKeyRef = useRef<string | number | null | undefined>(
+    resetKey,
+  );
 
   // --- Provider selection ---
   const providersQuery = useSystemProviders();
@@ -319,15 +339,25 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
   const hasMultipleProviders = providers.length >= 2;
 
   const rawSelectedProviderId =
-    scope === "new-thread" ? storedProviderId : threadSelections.selectedProviderId;
+    scope === "new-thread"
+      ? storedProviderId
+      : threadSelections.selectedProviderId;
   const rawSelectedModel =
-    scope === "new-thread" ? storedSelectedModel : threadSelections.selectedModel;
+    scope === "new-thread"
+      ? storedSelectedModel
+      : threadSelections.selectedModel;
   const rawServiceTier =
-    scope === "new-thread" ? storedServiceTier || undefined : threadSelections.serviceTier;
+    scope === "new-thread"
+      ? storedServiceTier || undefined
+      : threadSelections.serviceTier;
   const rawReasoningLevel =
-    scope === "new-thread" ? storedReasoningLevel : threadSelections.reasoningLevel;
+    scope === "new-thread"
+      ? storedReasoningLevel
+      : threadSelections.reasoningLevel;
   const rawPermissionMode =
-    scope === "new-thread" ? storedPermissionMode : threadSelections.permissionMode;
+    scope === "new-thread"
+      ? storedPermissionMode
+      : threadSelections.permissionMode;
   const rawEnvironmentSelectionValue =
     scope === "new-thread"
       ? storedEnvironmentSelectionValue
@@ -371,24 +401,20 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
     activeProviderCapabilities?.supportsServiceTier ?? false;
   const supportedPermissionModes: readonly PermissionMode[] =
     activeProviderCapabilities?.supportedPermissionModes ?? ["full"];
-  const supportsPermissionModeSelection =
-    supportedPermissionModes.length > 1;
+  const supportsPermissionModeSelection = supportedPermissionModes.length > 1;
 
-  const serviceTierSupportByProvider = useMemo(
-    () => {
-      const supportByProvider: Record<string, boolean> = {};
-      for (const provider of providers) {
-        supportByProvider[provider.id] = provider.capabilities.supportsServiceTier;
-      }
-      return supportByProvider;
-    },
-    [providers],
-  );
+  const serviceTierSupportByProvider = useMemo(() => {
+    const supportByProvider: Record<string, boolean> = {};
+    for (const provider of providers) {
+      supportByProvider[provider.id] =
+        provider.capabilities.supportsServiceTier;
+    }
+    return supportByProvider;
+  }, [providers]);
 
   const availableModels = useMemo(
     () =>
-      availableModelsQuery.data &&
-      availableModelsQuery.data.length > 0
+      availableModelsQuery.data && availableModelsQuery.data.length > 0
         ? availableModelsQuery.data
         : [],
     [availableModelsQuery.data],
@@ -400,14 +426,20 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
     if (availableModels.some((model) => model.model === rawSelectedModel)) {
       return rawSelectedModel;
     }
-    return availableModels.find((model) => model.isDefault)?.model ?? availableModels[0].model;
+    return (
+      availableModels.find((model) => model.isDefault)?.model ??
+      availableModels[0].model
+    );
   }, [availableModels, rawSelectedModel]);
 
   const modelOptions = useMemo(
     (): PromptOption<string>[] =>
       availableModels.map((model) => ({
         value: model.model,
-        label: formatModelLabel(model.displayName || model.model, effectiveProviderId),
+        label: formatModelLabel(
+          model.displayName || model.model,
+          effectiveProviderId,
+        ),
       })),
     [availableModels, effectiveProviderId],
   );
@@ -480,11 +512,13 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
       setThreadSelections(nextSelections);
       return;
     }
-    setThreadSelections((currentSelections) => syncUntouchedThreadPromptSelections({
-      currentSelections,
-      nextSelections,
-      touchedFields: touchedThreadFieldsRef.current,
-    }));
+    setThreadSelections((currentSelections) =>
+      syncUntouchedThreadPromptSelections({
+        currentSelections,
+        nextSelections,
+        touchedFields: touchedThreadFieldsRef.current,
+      }),
+    );
   }, [
     initialEnvironmentSelectionValue,
     initialModel,
@@ -503,11 +537,13 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
         return;
       }
       touchedThreadFieldsRef.current.add("selectedProviderId");
-      setThreadSelections((currentSelections) => updateThreadPromptSelections({
-        currentSelections,
-        field: "selectedProviderId",
-        value,
-      }));
+      setThreadSelections((currentSelections) =>
+        updateThreadPromptSelections({
+          currentSelections,
+          field: "selectedProviderId",
+          value,
+        }),
+      );
       // Don't eagerly reset the model here — the effect that watches
       // derived values will fall back to the default if the current
       // selection isn't in the new provider's model list.
@@ -515,73 +551,99 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
     [scope, setStoredProviderId],
   );
 
-  const setSelectedModel = useCallback((value: string) => {
-    if (scope === "new-thread") {
-      setStoredSelectedModel(value);
-      return;
-    }
-    touchedThreadFieldsRef.current.add("selectedModel");
-    setThreadSelections((currentSelections) => updateThreadPromptSelections({
-      currentSelections,
-      field: "selectedModel",
-      value,
-    }));
-  }, [scope, setStoredSelectedModel]);
-  const setServiceTier = useCallback((value: ServiceTier | undefined) => {
-    if (scope === "new-thread") {
-      setStoredServiceTier(value ?? "");
-      return;
-    }
-    touchedThreadFieldsRef.current.add("serviceTier");
-    setThreadSelections((currentSelections) => updateThreadPromptSelections({
-      currentSelections,
-      field: "serviceTier",
-      value,
-    }));
-  }, [scope, setStoredServiceTier]);
-  const setReasoningLevel = useCallback((value: ReasoningLevel) => {
-    if (scope === "new-thread") {
-      setStoredReasoningLevel(value);
-      return;
-    }
-    touchedThreadFieldsRef.current.add("reasoningLevel");
-    setThreadSelections((currentSelections) => updateThreadPromptSelections({
-      currentSelections,
-      field: "reasoningLevel",
-      value,
-    }));
-  }, [scope, setStoredReasoningLevel]);
-  const setPermissionMode = useCallback((value: PermissionMode) => {
-    if (scope === "new-thread") {
-      setStoredPermissionMode(value);
-      return;
-    }
-    touchedThreadFieldsRef.current.add("permissionMode");
-    setThreadSelections((currentSelections) => updateThreadPromptSelections({
-      currentSelections,
-      field: "permissionMode",
-      value,
-    }));
-  }, [scope, setStoredPermissionMode]);
-  const setEnvironmentSelectionValue = useCallback((value: string) => {
-    if (scope === "new-thread") {
-      setStoredEnvironmentSelectionValue(value);
-      return;
-    }
-    touchedThreadFieldsRef.current.add("environmentSelectionValue");
-    setThreadSelections((currentSelections) => updateThreadPromptSelections({
-      currentSelections,
-      field: "environmentSelectionValue",
-      value,
-    }));
-  }, [scope, setStoredEnvironmentSelectionValue]);
+  const setSelectedModel = useCallback(
+    (value: string) => {
+      if (scope === "new-thread") {
+        setStoredSelectedModel(value);
+        return;
+      }
+      touchedThreadFieldsRef.current.add("selectedModel");
+      setThreadSelections((currentSelections) =>
+        updateThreadPromptSelections({
+          currentSelections,
+          field: "selectedModel",
+          value,
+        }),
+      );
+    },
+    [scope, setStoredSelectedModel],
+  );
+  const setServiceTier = useCallback(
+    (value: ServiceTier | undefined) => {
+      if (scope === "new-thread") {
+        setStoredServiceTier(value ?? "");
+        return;
+      }
+      touchedThreadFieldsRef.current.add("serviceTier");
+      setThreadSelections((currentSelections) =>
+        updateThreadPromptSelections({
+          currentSelections,
+          field: "serviceTier",
+          value,
+        }),
+      );
+    },
+    [scope, setStoredServiceTier],
+  );
+  const setReasoningLevel = useCallback(
+    (value: ReasoningLevel) => {
+      if (scope === "new-thread") {
+        setStoredReasoningLevel(value);
+        return;
+      }
+      touchedThreadFieldsRef.current.add("reasoningLevel");
+      setThreadSelections((currentSelections) =>
+        updateThreadPromptSelections({
+          currentSelections,
+          field: "reasoningLevel",
+          value,
+        }),
+      );
+    },
+    [scope, setStoredReasoningLevel],
+  );
+  const setPermissionMode = useCallback(
+    (value: PermissionMode) => {
+      if (scope === "new-thread") {
+        setStoredPermissionMode(value);
+        return;
+      }
+      touchedThreadFieldsRef.current.add("permissionMode");
+      setThreadSelections((currentSelections) =>
+        updateThreadPromptSelections({
+          currentSelections,
+          field: "permissionMode",
+          value,
+        }),
+      );
+    },
+    [scope, setStoredPermissionMode],
+  );
+  const setEnvironmentSelectionValue = useCallback(
+    (value: string) => {
+      if (scope === "new-thread") {
+        setStoredEnvironmentSelectionValue(value);
+        return;
+      }
+      touchedThreadFieldsRef.current.add("environmentSelectionValue");
+      setThreadSelections((currentSelections) =>
+        updateThreadPromptSelections({
+          currentSelections,
+          field: "environmentSelectionValue",
+          value,
+        }),
+      );
+    },
+    [scope, setStoredEnvironmentSelectionValue],
+  );
 
   return {
     selectedProviderId: effectiveProviderId,
     setSelectedProviderId,
     providerOptions,
     hasMultipleProviders,
-    selectedProviderDisplayName: selectedProviderInfo?.displayName ?? effectiveProviderId,
+    selectedProviderDisplayName:
+      selectedProviderInfo?.displayName ?? effectiveProviderId,
     selectedModel,
     setSelectedModel,
     serviceTier,
@@ -596,7 +658,7 @@ export function useThreadCreationOptions(options?: UsePromptModelReasoningOption
     modelOptions,
     reasoningOptions,
     permissionModeOptions: PERMISSION_MODE_OPTIONS.filter((option) =>
-      supportedPermissionModes.includes(option.value)
+      supportedPermissionModes.includes(option.value),
     ),
     supportsPermissionModeSelection,
     supportsServiceTier,

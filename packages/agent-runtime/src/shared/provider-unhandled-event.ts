@@ -8,15 +8,10 @@ import {
   type ProviderRawEvent,
   type ThreadEvent,
 } from "@bb/domain";
-import type {
-  ProviderUnhandledEvent,
-} from "@bb/domain";
+import type { ProviderUnhandledEvent } from "@bb/domain";
 import type { ProviderVisibilityMetadata } from "../provider-visibility.js";
 import type { JsonRpcMessage } from "../runtime-json-rpc.js";
-import {
-  getStringProperty,
-  isRecord,
-} from "./provider-visibility-helpers.js";
+import { getStringProperty, isRecord } from "./provider-visibility-helpers.js";
 
 export interface CreateUnhandledProviderEventArgs {
   providerId: string;
@@ -38,9 +33,7 @@ export interface BuildUnhandledProviderEventsArgs {
   parentToolCallId?: string;
 }
 
-function toProviderRawEvent(
-  rawEvent: JsonRpcMessage,
-): ProviderRawEvent {
+function toProviderRawEvent(rawEvent: JsonRpcMessage): ProviderRawEvent {
   const parsed = providerRawEventSchema.safeParse(rawEvent);
   if (parsed.success) {
     return parsed.data;
@@ -51,7 +44,8 @@ function toProviderRawEvent(
     ...(rawEvent.id !== undefined ? { id: rawEvent.id } : {}),
     method: rawEvent.method,
     params: {
-      serializationError: "Provider raw event params were not JSON-serializable.",
+      serializationError:
+        "Provider raw event params were not JSON-serializable.",
     },
   };
 }
@@ -85,7 +79,9 @@ export function createUnhandledProviderEvent(
     rawType: args.rawType,
     rawEvent: toProviderRawEvent(args.rawEvent),
     ...(turnId ? { turnId } : {}),
-    ...(args.parentToolCallId ? { parentToolCallId: args.parentToolCallId } : {}),
+    ...(args.parentToolCallId
+      ? { parentToolCallId: args.parentToolCallId }
+      : {}),
   };
 }
 
@@ -93,7 +89,8 @@ export function buildUnhandledProviderEvents(
   args: BuildUnhandledProviderEventsArgs,
 ): ThreadEvent[] {
   const parsedRawEvent = args.visibilityMetadata.parseRawEvent(args.rawEvent);
-  const description = args.visibilityMetadata.describeParsedRawEvent(parsedRawEvent);
+  const description =
+    args.visibilityMetadata.describeParsedRawEvent(parsedRawEvent);
   if (description.coverage !== "unknown") {
     return [];
   }

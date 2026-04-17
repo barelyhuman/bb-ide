@@ -20,7 +20,6 @@ import {
 } from "./shared.js";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
 
-
 function splitNonEmptyLines(value: string | undefined): string[] {
   if (!value) return [];
   return value
@@ -32,9 +31,10 @@ function splitNonEmptyLines(value: string | undefined): string[] {
 function formatProvisioningTranscriptEntry(
   entry: ViewProvisioningTranscriptEntry,
 ): string | undefined {
-  const durationMs = typeof entry.metadata?.durationMs === "number"
-    ? entry.metadata.durationMs
-    : undefined;
+  const durationMs =
+    typeof entry.metadata?.durationMs === "number"
+      ? entry.metadata.durationMs
+      : undefined;
   if (
     durationMs !== undefined &&
     (entry.status === "completed" || entry.status === "failed")
@@ -57,7 +57,9 @@ function extractPromptSections(detailText: string | undefined): {
   }
 
   const operationDetailText = normalizedDetail.slice(0, promptStart).trim();
-  const promptText = normalizedDetail.slice(promptStart + promptLabel.length).trim();
+  const promptText = normalizedDetail
+    .slice(promptStart + promptLabel.length)
+    .trim();
   return {
     ...(operationDetailText ? { operationDetailText } : {}),
     ...(promptText ? { promptText } : {}),
@@ -68,7 +70,9 @@ function assertNeverOperationKind(value: never): never {
   throw new Error(`Unexpected thread operation kind: ${String(value)}`);
 }
 
-function isShimmeringOperationStatus(status: ViewThreadOperationStatus): boolean {
+function isShimmeringOperationStatus(
+  status: ViewThreadOperationStatus,
+): boolean {
   switch (status) {
     case "requested":
     case "queued":
@@ -93,7 +97,9 @@ function isPendingOperation(message: ViewOperationMessage): boolean {
   return false;
 }
 
-function getOperationTone(message: ViewOperationMessage): "default" | "destructive" {
+function getOperationTone(
+  message: ViewOperationMessage,
+): "default" | "destructive" {
   return message.status === "error" ? "destructive" : "default";
 }
 
@@ -110,7 +116,9 @@ function StaticOperationRow({
     <div className="group w-full" style={{ overflowAnchor: "none" }}>
       <div className="mr-auto w-full">
         <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
-          <div className={cx("py-0.5", getStaticEventToneClass(tone), className)}>
+          <div
+            className={cx("py-0.5", getStaticEventToneClass(tone), className)}
+          >
             {summaryContent}
           </div>
         </div>
@@ -166,7 +174,12 @@ function OperationDetailLines({
 }) {
   const baseLineClassName = "font-mono text-xs text-foreground/80";
   return (
-    <ExpandableDetailScrollArea className="mt-0.5 space-y-0.5" maxHeightClassName={maxHeightClassName} scrollRef={scrollRef} onScroll={onScroll}>
+    <ExpandableDetailScrollArea
+      className="mt-0.5 space-y-0.5"
+      maxHeightClassName={maxHeightClassName}
+      scrollRef={scrollRef}
+      onScroll={onScroll}
+    >
       {lines.map((line, index) => {
         const key = `${line}:${index}`;
         if (truncateLines) {
@@ -198,21 +211,50 @@ function buildProvisioningSummary(
   const isPending = isPendingOperation(message);
   switch (message.title) {
     case "Environment setup completed":
-      return <EventTitle prefix="Environment setup" emphasis="completed" tone={tone} />;
+      return (
+        <EventTitle
+          prefix="Environment setup"
+          emphasis="completed"
+          tone={tone}
+        />
+      );
     case "Environment setup failed":
-      return <EventTitle prefix="Environment setup" emphasis="failed" tone={tone} />;
+      return (
+        <EventTitle prefix="Environment setup" emphasis="failed" tone={tone} />
+      );
     case "Environment setup interrupted":
-      return <EventTitle prefix="Environment setup" emphasis="interrupted" tone={tone} />;
+      return (
+        <EventTitle
+          prefix="Environment setup"
+          emphasis="interrupted"
+          tone={tone}
+        />
+      );
     case "Environment setup started":
     case "Environment setup running":
     case "Environment setup...":
-      return <EventTitle prefix="Environment setup" tone={tone} shimmerPrefix={isPending} />;
+      return (
+        <EventTitle
+          prefix="Environment setup"
+          tone={tone}
+          shimmerPrefix={isPending}
+        />
+      );
     default:
       switch (message.status) {
         case "completed":
-          return <EventTitle prefix="Provisioned" detail="thread" tone={tone} />;
+          return (
+            <EventTitle prefix="Provisioned" detail="thread" tone={tone} />
+          );
         case "error":
-          return <EventTitle prefix="Provisioning" detail="thread" emphasis="failed" tone={tone} />;
+          return (
+            <EventTitle
+              prefix="Provisioning"
+              detail="thread"
+              emphasis="failed"
+              tone={tone}
+            />
+          );
         case "interrupted":
           return (
             <EventTitle
@@ -237,24 +279,28 @@ function buildProvisioningSummary(
   }
 }
 
-function buildProvisioningTranscript(
-  message: ViewOperationMessage,
-): {
+function buildProvisioningTranscript(message: ViewOperationMessage): {
   lines: string[];
 } {
   const provisioning = message.provisioning;
   const transcriptLines = provisioning?.transcript
     ?.map((entry) => formatProvisioningTranscriptEntry(entry))
     .filter((line): line is string => Boolean(line));
-  const lines = transcriptLines && transcriptLines.length > 0 ? transcriptLines : [];
+  const lines =
+    transcriptLines && transcriptLines.length > 0 ? transcriptLines : [];
   // Operation rows advance createdAt as provisioning transcript updates arrive,
   // so createdAt - startedAt reflects the elapsed provisioning time.
-  if (message.status !== "pending" && message.startedAt !== undefined && message.createdAt >= message.startedAt) {
-    const label = message.status === "completed"
-      ? "Provisioned thread"
-      : message.status === "error"
-        ? "Provisioning thread failed"
-        : "Provisioning thread interrupted";
+  if (
+    message.status !== "pending" &&
+    message.startedAt !== undefined &&
+    message.createdAt >= message.startedAt
+  ) {
+    const label =
+      message.status === "completed"
+        ? "Provisioned thread"
+        : message.status === "error"
+          ? "Provisioning thread failed"
+          : "Provisioning thread interrupted";
     lines.push(
       `${label} (${durationToCompactString(message.createdAt - message.startedAt)})`,
     );
@@ -283,19 +329,46 @@ function buildOperationSummary(
       const action = metadataAction ?? "transfer";
       switch (metadata.status) {
         case "completed":
-          return <EventTitle prefix={`Ownership ${action}`} detail="completed" tone={tone} />;
+          return (
+            <EventTitle
+              prefix={`Ownership ${action}`}
+              detail="completed"
+              tone={tone}
+            />
+          );
         case "failed":
-          return <EventTitle prefix={`Ownership ${action}`} emphasis="failed" tone={tone} />;
+          return (
+            <EventTitle
+              prefix={`Ownership ${action}`}
+              emphasis="failed"
+              tone={tone}
+            />
+          );
         case "started":
         case "running":
-          return <EventTitle prefix={`Ownership ${action}`} detail="in progress" tone={tone} shimmerPrefix />;
+          return (
+            <EventTitle
+              prefix={`Ownership ${action}`}
+              detail="in progress"
+              tone={tone}
+              shimmerPrefix
+            />
+          );
         default:
-          return <EventTitle prefix={`Ownership ${action}`} detail={metadata.rawStatus} tone={tone} />;
+          return (
+            <EventTitle
+              prefix={`Ownership ${action}`}
+              detail={metadata.rawStatus}
+              tone={tone}
+            />
+          );
       }
     }
     case "other": {
       const label = capitalizeFirst(metadata.rawOperation.replace(/_/g, " "));
-      return <EventTitle prefix={label} detail={metadata.rawStatus} tone={tone} />;
+      return (
+        <EventTitle prefix={label} detail={metadata.rawStatus} tone={tone} />
+      );
     }
   }
 
@@ -308,10 +381,23 @@ function buildCompactionSummary(
   tone: "default" | "destructive",
 ): ReactNode {
   if (message.status === "pending") {
-    return <EventTitle prefix="Compacting" detail="context" tone={tone} shimmerPrefix />;
+    return (
+      <EventTitle
+        prefix="Compacting"
+        detail="context"
+        tone={tone}
+        shimmerPrefix
+      />
+    );
   }
   if (message.status === "interrupted") {
-    return <EventTitle prefix="Context compaction" emphasis="interrupted" tone={tone} />;
+    return (
+      <EventTitle
+        prefix="Context compaction"
+        emphasis="interrupted"
+        tone={tone}
+      />
+    );
   }
   return <span>{message.title}</span>;
 }
@@ -328,11 +414,16 @@ export function OperationRow({
   initialExpanded?: boolean;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
-  const { elementRef: provisioningScrollRef, handleScroll: handleProvisioningScroll } =
-    useStickyBottomAutoScroll<HTMLDivElement>({
-      isExpanded,
-      scrollDep: message.opType === "thread-provisioning" ? message.provisioning?.transcript : undefined,
-    });
+  const {
+    elementRef: provisioningScrollRef,
+    handleScroll: handleProvisioningScroll,
+  } = useStickyBottomAutoScroll<HTMLDivElement>({
+    isExpanded,
+    scrollDep:
+      message.opType === "thread-provisioning"
+        ? message.provisioning?.transcript
+        : undefined,
+  });
   const tone = getOperationTone(message);
   if (message.opType === "plan-updated") {
     const detailLines = splitNonEmptyLines(message.detail);
@@ -372,7 +463,12 @@ export function OperationRow({
         tone={tone}
       >
         <div className="mt-0.5 space-y-2">
-          <OperationDetailLines lines={lines} truncateLines scrollRef={provisioningScrollRef} onScroll={handleProvisioningScroll} />
+          <OperationDetailLines
+            lines={lines}
+            truncateLines
+            scrollRef={provisioningScrollRef}
+            onScroll={handleProvisioningScroll}
+          />
           {additionalDetailLines.length > 0 ? (
             <OperationDetailLines lines={additionalDetailLines} />
           ) : null}
@@ -382,7 +478,9 @@ export function OperationRow({
   }
 
   if (message.opType === "operation") {
-    const { operationDetailText, promptText } = extractPromptSections(message.detail);
+    const { operationDetailText, promptText } = extractPromptSections(
+      message.detail,
+    );
     const summaryContent = buildOperationSummary(message, tone);
     if (!operationDetailText && !promptText) {
       return <StaticOperationRow summaryContent={summaryContent} tone={tone} />;
@@ -397,7 +495,9 @@ export function OperationRow({
       >
         <div className="mt-0.5 space-y-2">
           {operationDetailText ? (
-            <OperationDetailLines lines={splitNonEmptyLines(operationDetailText)} />
+            <OperationDetailLines
+              lines={splitNonEmptyLines(operationDetailText)}
+            />
           ) : null}
           {promptText ? (
             <EventCodeBlock maxHeightClassName={EVENT_DETAIL_MAX_HEIGHT_CLASS}>
@@ -410,9 +510,10 @@ export function OperationRow({
   }
 
   const detailLines = splitNonEmptyLines(message.detail);
-  const summaryContent = message.opType === "compaction"
-    ? buildCompactionSummary(message, tone)
-    : buildGenericSummary(message.title);
+  const summaryContent =
+    message.opType === "compaction"
+      ? buildCompactionSummary(message, tone)
+      : buildGenericSummary(message.title);
 
   if (detailLines.length === 0) {
     return <StaticOperationRow summaryContent={summaryContent} tone={tone} />;

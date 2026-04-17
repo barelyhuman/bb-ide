@@ -4,12 +4,12 @@ import {
   getThreadOutput,
   sendTextMessage,
 } from "../../helpers/api.js";
-import { waitForHostConnected, waitForThreadStatus } from "../../helpers/assertions.js";
-import { withHarness } from "../../helpers/harness.js";
 import {
-  listQueuedCommands,
-  readSessionRow,
-} from "../../helpers/queries.js";
+  waitForHostConnected,
+  waitForThreadStatus,
+} from "../../helpers/assertions.js";
+import { withHarness } from "../../helpers/harness.js";
+import { listQueuedCommands, readSessionRow } from "../../helpers/queries.js";
 import {
   assertMonotonicSequences,
   createRecoveryThread,
@@ -29,7 +29,12 @@ describe.sequential("fake provider session continuity integration", () => {
       await sendTextMessage(harness.api, thread.id, {
         text: "cursor first turn",
       });
-      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+      await waitForThreadStatus(
+        harness.api,
+        thread.id,
+        "idle",
+        TURN_TIMEOUT_MS,
+      );
 
       const commandsBefore = listQueuedCommands(harness.db);
       const eventsBefore = await getThreadEvents(harness.api, thread.id);
@@ -44,7 +49,12 @@ describe.sequential("fake provider session continuity integration", () => {
       await sendTextMessage(harness.api, thread.id, {
         text: "cursor second turn",
       });
-      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+      await waitForThreadStatus(
+        harness.api,
+        thread.id,
+        "idle",
+        TURN_TIMEOUT_MS,
+      );
 
       const commandsAfter = listQueuedCommands(harness.db);
       const newCommands = commandsAfter.slice(commandsBefore.length);
@@ -52,7 +62,8 @@ describe.sequential("fake provider session continuity integration", () => {
       expect(newCommands.length).toBeGreaterThan(0);
       expect(
         newCommands.every(
-          (command) => command.state === "success" && command.completedAt !== null,
+          (command) =>
+            command.state === "success" && command.completedAt !== null,
         ),
       ).toBe(true);
       expect(eventsAfter.length).toBeGreaterThan(eventsBefore.length);
@@ -73,7 +84,12 @@ describe.sequential("fake provider session continuity integration", () => {
       await sendTextMessage(harness.api, thread.id, {
         text: "before session rotation",
       });
-      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+      await waitForThreadStatus(
+        harness.api,
+        thread.id,
+        "idle",
+        TURN_TIMEOUT_MS,
+      );
 
       await harness.restartDaemon("old-session-restart");
       await waitForHostConnected(harness.api, RECOVERY_TIMEOUT_MS);
@@ -81,7 +97,9 @@ describe.sequential("fake provider session continuity integration", () => {
       const oldSession = readSessionRow(harness.db, oldSessionId);
       expect(oldSession?.status).toBe("closed");
 
-      const staleResultResponse = await harness.internal.session["command-result"].$post({
+      const staleResultResponse = await harness.internal.session[
+        "command-result"
+      ].$post({
         json: {
           commandId: "cmd_stale",
           completedAt: Date.now(),
@@ -98,7 +116,12 @@ describe.sequential("fake provider session continuity integration", () => {
       await sendTextMessage(harness.api, thread.id, {
         text: "after stale session rejection",
       });
-      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+      await waitForThreadStatus(
+        harness.api,
+        thread.id,
+        "idle",
+        TURN_TIMEOUT_MS,
+      );
       expect(await getThreadOutput(harness.api, thread.id)).toContain(
         "after stale session rejection",
       );

@@ -41,10 +41,7 @@ export {
   DEFAULT_SCROLL_STICK_THRESHOLD_PX,
   getScrollAnimationBehavior,
 } from "./scroll.js";
-export {
-  EventCodeBlock,
-  type EventCodeBlockProps,
-} from "./event-content.js";
+export { EventCodeBlock, type EventCodeBlockProps } from "./event-content.js";
 export { ConversationEntry } from "./thread-timeline/ConversationEntry.js";
 export { ExpandableLine } from "./thread-timeline/rows/ExpandableLine.js";
 export type { ExpandableLineProps } from "./thread-timeline/rows/ExpandableLine.js";

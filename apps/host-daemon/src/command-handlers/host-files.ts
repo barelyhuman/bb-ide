@@ -11,10 +11,7 @@ export async function listHostFiles(
   command: CommandOf<"host.list_files">,
 ): Promise<HostDaemonCommandResult<"host.list_files">> {
   if (!path.isAbsolute(command.path)) {
-    throw new CommandDispatchError(
-      "invalid_path",
-      "Path must be absolute",
-    );
+    throw new CommandDispatchError("invalid_path", "Path must be absolute");
   }
 
   try {
@@ -40,17 +37,11 @@ export async function readHostFile(
   command: CommandOf<"host.read_file">,
 ): Promise<HostDaemonCommandResult<"host.read_file">> {
   if (!path.isAbsolute(command.path)) {
-    throw new CommandDispatchError(
-      "invalid_path",
-      "Path must be absolute",
-    );
+    throw new CommandDispatchError("invalid_path", "Path must be absolute");
   }
 
   if (!path.isAbsolute(command.rootPath)) {
-    throw new CommandDispatchError(
-      "invalid_path",
-      "rootPath must be absolute",
-    );
+    throw new CommandDispatchError("invalid_path", "rootPath must be absolute");
   }
 
   return readFileForTransport({

@@ -13,32 +13,40 @@ import {
   TURN_TIMEOUT_MS,
 } from "./shared.js";
 
-describe.sequential("fake provider idle-error reconciliation integration", () => {
-  it("does not revive an idle thread that was manually marked errored before reconnect", () =>
-    withHarness(async (harness) => {
-      const { thread } = await createRecoveryThread(
-        harness,
-        "Reconciliation Idle Error",
-      );
+describe.sequential(
+  "fake provider idle-error reconciliation integration",
+  () => {
+    it("does not revive an idle thread that was manually marked errored before reconnect", () =>
+      withHarness(async (harness) => {
+        const { thread } = await createRecoveryThread(
+          harness,
+          "Reconciliation Idle Error",
+        );
 
-      await sendTextMessage(harness.api, thread.id, {
-        text: "reconciliation baseline",
-      });
-      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+        await sendTextMessage(harness.api, thread.id, {
+          text: "reconciliation baseline",
+        });
+        await waitForThreadStatus(
+          harness.api,
+          thread.id,
+          "idle",
+          TURN_TIMEOUT_MS,
+        );
 
-      await harness.shutdownDaemon("reconciliation-stop");
-      await waitForHostDisconnected(
-        harness.api,
-        harness.hostId,
-        RECOVERY_TIMEOUT_MS,
-      );
+        await harness.shutdownDaemon("reconciliation-stop");
+        await waitForHostDisconnected(
+          harness.api,
+          harness.hostId,
+          RECOVERY_TIMEOUT_MS,
+        );
 
-      transitionThreadStatus(harness.db, harness.hub, thread.id, "error");
+        transitionThreadStatus(harness.db, harness.hub, thread.id, "error");
 
-      await harness.startDaemon();
-      await waitForHostConnected(harness.api, RECOVERY_TIMEOUT_MS);
+        await harness.startDaemon();
+        await waitForHostConnected(harness.api, RECOVERY_TIMEOUT_MS);
 
-      const afterReconnect = await getThread(harness.api, thread.id);
-      expect(afterReconnect.status).toBe("error");
-    }));
-});
+        const afterReconnect = await getThread(harness.api, thread.id);
+        expect(afterReconnect.status).toBe("error");
+      }));
+  },
+);

@@ -1,52 +1,58 @@
 // @vitest-environment jsdom
 
-import { Suspense, useEffect, type ReactNode } from "react"
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react"
-import type { Host } from "@bb/domain"
+import { Suspense, useEffect, type ReactNode } from "react";
 import {
-  openRequestSchema,
-} from "@bb/host-daemon-contract"
-import type { HostDaemonStatusSnapshot } from "@/lib/api-host-daemon"
-import { createQueryClientTestHarness } from "@/test/queryClientTestHarness"
-import { resetFakeReconnectingWebSockets } from "@/test/fake-reconnecting-websocket"
-import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils"
-import { afterEach, describe, expect, it, vi } from "vitest"
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import type { Host } from "@bb/domain";
+import { openRequestSchema } from "@bb/host-daemon-contract";
+import type { HostDaemonStatusSnapshot } from "@/lib/api-host-daemon";
+import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
+import { resetFakeReconnectingWebSockets } from "@/test/fake-reconnecting-websocket";
+import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("partysocket/ws", async () => {
-  const { FakeReconnectingWebSocket: FakeSocket } = await import("@/test/fake-reconnecting-websocket")
+  const { FakeReconnectingWebSocket: FakeSocket } =
+    await import("@/test/fake-reconnecting-websocket");
   return {
     default: FakeSocket,
-  }
-})
+  };
+});
 
 interface HostOverrides extends Partial<Host> {}
 
 interface HostDaemonFetchState {
-  daemonStatus: HostDaemonStatusSnapshot | null
-  hostDaemonPort: number | null
-  hosts: Host[]
-  pickedFolderPath: string | null
+  daemonStatus: HostDaemonStatusSnapshot | null;
+  hostDaemonPort: number | null;
+  hosts: Host[];
+  pickedFolderPath: string | null;
 }
 
 interface HostDaemonSnapshot {
-  hasConnectedPersistentHost: boolean
-  hasDaemon: boolean
-  isLocalHost: (hostId: string | null | undefined) => boolean
-  localHost: Host | null
-  localHostId: string | null
-  openPath: ((path: string) => Promise<void>) | null
-  pickFolder: (() => Promise<string | null>) | null
-  supportsNativeFolderPicker: boolean
-  platform: "darwin" | "linux" | "wsl" | "unknown" | null
+  hasConnectedPersistentHost: boolean;
+  hasDaemon: boolean;
+  isLocalHost: (hostId: string | null | undefined) => boolean;
+  localHost: Host | null;
+  localHostId: string | null;
+  openPath: ((path: string) => Promise<void>) | null;
+  pickFolder: (() => Promise<string | null>) | null;
+  supportsNativeFolderPicker: boolean;
+  platform: "darwin" | "linux" | "wsl" | "unknown" | null;
 }
 
 interface HostDaemonModules {
-  FakeReconnectingWebSocket: typeof import("@/test/fake-reconnecting-websocket").FakeReconnectingWebSocket
-  useHostDaemon: () => HostDaemonSnapshot
+  FakeReconnectingWebSocket: typeof import("@/test/fake-reconnecting-websocket").FakeReconnectingWebSocket;
+  useHostDaemon: () => HostDaemonSnapshot;
   wsManager: {
-    connect(): void
-    disconnect(): void
-  }
+    connect(): void;
+    disconnect(): void;
+  };
 }
 
 function makeHost(overrides: HostOverrides = {}): Host {
@@ -59,52 +65,68 @@ function makeHost(overrides: HostOverrides = {}): Host {
     type: "persistent",
     updatedAt: 1,
     ...overrides,
-  }
+  };
 }
 
 function createSuspenseWrapper() {
-  const { wrapper: baseWrapper } = createQueryClientTestHarness()
+  const { wrapper: baseWrapper } = createQueryClientTestHarness();
 
   return ({ children }: { children: ReactNode }) =>
     baseWrapper({
-      children: (
-        <Suspense fallback={null}>
-          {children}
-        </Suspense>
-      ),
-    })
+      children: <Suspense fallback={null}>{children}</Suspense>,
+    });
 }
 
-function createHostDaemonProbe(useHostDaemon: HostDaemonModules["useHostDaemon"]) {
+function createHostDaemonProbe(
+  useHostDaemon: HostDaemonModules["useHostDaemon"],
+) {
   return function HostDaemonProbe({
     onSnapshot,
   }: {
-    onSnapshot: (snapshot: HostDaemonSnapshot) => void
+    onSnapshot: (snapshot: HostDaemonSnapshot) => void;
   }) {
-    const value = useHostDaemon()
+    const value = useHostDaemon();
 
     useEffect(() => {
-      onSnapshot(value)
-    }, [onSnapshot, value])
+      onSnapshot(value);
+    }, [onSnapshot, value]);
 
     return (
       <div>
         <div data-testid="local-host-id">{value.localHostId ?? "null"}</div>
         <div data-testid="host-name">{value.localHost?.name ?? "none"}</div>
         <div data-testid="has-daemon">{String(value.hasDaemon)}</div>
-        <div data-testid="is-connected">{String(value.hasConnectedPersistentHost)}</div>
-        <div data-testid="supports-folder-picker">{String(value.supportsNativeFolderPicker)}</div>
-        <div data-testid="is-local-host-1">{String(value.isLocalHost("host-1"))}</div>
-        <div data-testid="is-local-host-2">{String(value.isLocalHost("host-2"))}</div>
-        <button disabled={value.openPath == null} onClick={() => { void value.openPath?.("/tmp/file.txt") }}>
+        <div data-testid="is-connected">
+          {String(value.hasConnectedPersistentHost)}
+        </div>
+        <div data-testid="supports-folder-picker">
+          {String(value.supportsNativeFolderPicker)}
+        </div>
+        <div data-testid="is-local-host-1">
+          {String(value.isLocalHost("host-1"))}
+        </div>
+        <div data-testid="is-local-host-2">
+          {String(value.isLocalHost("host-2"))}
+        </div>
+        <button
+          disabled={value.openPath == null}
+          onClick={() => {
+            void value.openPath?.("/tmp/file.txt");
+          }}
+        >
           open path
         </button>
-        <button disabled={value.pickFolder == null} onClick={() => { void value.pickFolder?.() }}>
+        <button
+          disabled={value.pickFolder == null}
+          onClick={() => {
+            void value.pickFolder?.();
+          }}
+        >
           pick folder
         </button>
       </div>
-    )
-  }
+    );
+  };
 }
 
 function installHostDaemonFetchRoutes(
@@ -114,12 +136,13 @@ function installHostDaemonFetchRoutes(
   installFetchRoutes([
     {
       pathname: "/api/v1/system/config",
-      handler: async () => jsonResponse({
-        githubConnected: false,
-        hostDaemonPort: state.hostDaemonPort,
-        sandboxHostSupported: false,
-        voiceTranscriptionEnabled: false,
-      }),
+      handler: async () =>
+        jsonResponse({
+          githubConnected: false,
+          hostDaemonPort: state.hostDaemonPort,
+          sandboxHostSupported: false,
+          voiceTranscriptionEnabled: false,
+        }),
     },
     {
       pathname: "/api/v1/hosts",
@@ -138,45 +161,47 @@ function installHostDaemonFetchRoutes(
       pathname: "/open-path",
       port: 4123,
       handler: async (request) => {
-        const parsedBody = openRequestSchema.parse(await request.json())
-        openPathRequests.push(parsedBody.path)
-        return jsonResponse({})
+        const parsedBody = openRequestSchema.parse(await request.json());
+        openPathRequests.push(parsedBody.path);
+        return jsonResponse({});
       },
     },
     {
       method: "POST",
       pathname: "/pick-folder",
       port: 4123,
-      handler: async () => jsonResponse({
-        path: state.pickedFolderPath,
-      }),
+      handler: async () =>
+        jsonResponse({
+          path: state.pickedFolderPath,
+        }),
     },
-  ])
+  ]);
 }
 
 async function importFreshHostDaemonModules(): Promise<HostDaemonModules> {
-  vi.resetModules()
+  vi.resetModules();
 
-  const [{ useHostDaemon }, { wsManager }, { FakeReconnectingWebSocket }] = await Promise.all([
-    import("./useHostDaemon"),
-    import("@/lib/ws"),
-    import("@/test/fake-reconnecting-websocket"),
-  ])
+  const [{ useHostDaemon }, { wsManager }, { FakeReconnectingWebSocket }] =
+    await Promise.all([
+      import("./useHostDaemon"),
+      import("@/lib/ws"),
+      import("@/test/fake-reconnecting-websocket"),
+    ]);
 
   return {
     FakeReconnectingWebSocket,
     useHostDaemon,
     wsManager,
-  }
+  };
 }
 
 afterEach(() => {
-  cleanup()
-  resetFakeReconnectingWebSockets()
-  vi.resetModules()
-  vi.restoreAllMocks()
-  vi.unstubAllGlobals()
-})
+  cleanup();
+  resetFakeReconnectingWebSockets();
+  vi.resetModules();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 describe("useHostDaemon", () => {
   it("exposes the local host and bound daemon actions when the daemon is available", async () => {
@@ -191,39 +216,50 @@ describe("useHostDaemon", () => {
       hostDaemonPort: 4123,
       hosts: [makeHost()],
       pickedFolderPath: "/picked/path",
-    }
-    const openPathRequests: string[] = []
-    installHostDaemonFetchRoutes(state, openPathRequests)
+    };
+    const openPathRequests: string[] = [];
+    installHostDaemonFetchRoutes(state, openPathRequests);
 
-    const latestSnapshot: { current: HostDaemonSnapshot | null } = { current: null }
-    const { useHostDaemon } = await importFreshHostDaemonModules()
-    const HostDaemonProbe = createHostDaemonProbe(useHostDaemon)
+    const latestSnapshot: { current: HostDaemonSnapshot | null } = {
+      current: null,
+    };
+    const { useHostDaemon } = await importFreshHostDaemonModules();
+    const HostDaemonProbe = createHostDaemonProbe(useHostDaemon);
 
     await act(async () => {
-      render(<HostDaemonProbe onSnapshot={(snapshot) => { latestSnapshot.current = snapshot }} />, {
-        wrapper: createSuspenseWrapper(),
-      })
-    })
+      render(
+        <HostDaemonProbe
+          onSnapshot={(snapshot) => {
+            latestSnapshot.current = snapshot;
+          }}
+        />,
+        {
+          wrapper: createSuspenseWrapper(),
+        },
+      );
+    });
 
     await waitFor(() => {
-      expect(screen.getByTestId("local-host-id").textContent).toBe("host-1")
-    })
+      expect(screen.getByTestId("local-host-id").textContent).toBe("host-1");
+    });
 
-    expect(screen.getByTestId("host-name").textContent).toBe("Local Host")
-    expect(screen.getByTestId("has-daemon").textContent).toBe("true")
-    expect(screen.getByTestId("is-connected").textContent).toBe("true")
-    expect(screen.getByTestId("supports-folder-picker").textContent).toBe("true")
-    expect(screen.getByTestId("is-local-host-1").textContent).toBe("true")
-    expect(screen.getByTestId("is-local-host-2").textContent).toBe("false")
-    expect(latestSnapshot.current?.localHost).toEqual(makeHost())
+    expect(screen.getByTestId("host-name").textContent).toBe("Local Host");
+    expect(screen.getByTestId("has-daemon").textContent).toBe("true");
+    expect(screen.getByTestId("is-connected").textContent).toBe("true");
+    expect(screen.getByTestId("supports-folder-picker").textContent).toBe(
+      "true",
+    );
+    expect(screen.getByTestId("is-local-host-1").textContent).toBe("true");
+    expect(screen.getByTestId("is-local-host-2").textContent).toBe("false");
+    expect(latestSnapshot.current?.localHost).toEqual(makeHost());
 
-    fireEvent.click(screen.getByRole("button", { name: "open path" }))
-    fireEvent.click(screen.getByRole("button", { name: "pick folder" }))
+    fireEvent.click(screen.getByRole("button", { name: "open path" }));
+    fireEvent.click(screen.getByRole("button", { name: "pick folder" }));
 
     await waitFor(() => {
-      expect(openPathRequests).toEqual(["/tmp/file.txt"])
-    })
-  })
+      expect(openPathRequests).toEqual(["/tmp/file.txt"]);
+    });
+  });
 
   it("returns null actions when the daemon or local host id is unavailable", async () => {
     const state: HostDaemonFetchState = {
@@ -231,31 +267,52 @@ describe("useHostDaemon", () => {
       hostDaemonPort: null,
       hosts: [],
       pickedFolderPath: null,
-    }
-    installHostDaemonFetchRoutes(state, [])
+    };
+    installHostDaemonFetchRoutes(state, []);
 
-    const latestSnapshot: { current: HostDaemonSnapshot | null } = { current: null }
-    const { useHostDaemon } = await importFreshHostDaemonModules()
-    const HostDaemonProbe = createHostDaemonProbe(useHostDaemon)
+    const latestSnapshot: { current: HostDaemonSnapshot | null } = {
+      current: null,
+    };
+    const { useHostDaemon } = await importFreshHostDaemonModules();
+    const HostDaemonProbe = createHostDaemonProbe(useHostDaemon);
 
     await act(async () => {
-      render(<HostDaemonProbe onSnapshot={(snapshot) => { latestSnapshot.current = snapshot }} />, {
-        wrapper: createSuspenseWrapper(),
-      })
-    })
+      render(
+        <HostDaemonProbe
+          onSnapshot={(snapshot) => {
+            latestSnapshot.current = snapshot;
+          }}
+        />,
+        {
+          wrapper: createSuspenseWrapper(),
+        },
+      );
+    });
 
-    expect((await screen.findByTestId("local-host-id")).textContent).toBe("null")
-    expect(screen.getByTestId("host-name").textContent).toBe("none")
-    expect(screen.getByTestId("has-daemon").textContent).toBe("false")
-    expect(screen.getByTestId("is-connected").textContent).toBe("false")
-    expect(screen.getByTestId("supports-folder-picker").textContent).toBe("false")
-    expect(screen.getByTestId("is-local-host-1").textContent).toBe("false")
-    expect(screen.getByRole("button", { name: "open path" }).hasAttribute("disabled")).toBe(true)
-    expect(screen.getByRole("button", { name: "pick folder" }).hasAttribute("disabled")).toBe(true)
-    expect(latestSnapshot.current?.localHost).toBeNull()
-    expect(latestSnapshot.current?.openPath).toBeNull()
-    expect(latestSnapshot.current?.pickFolder).toBeNull()
-  })
+    expect((await screen.findByTestId("local-host-id")).textContent).toBe(
+      "null",
+    );
+    expect(screen.getByTestId("host-name").textContent).toBe("none");
+    expect(screen.getByTestId("has-daemon").textContent).toBe("false");
+    expect(screen.getByTestId("is-connected").textContent).toBe("false");
+    expect(screen.getByTestId("supports-folder-picker").textContent).toBe(
+      "false",
+    );
+    expect(screen.getByTestId("is-local-host-1").textContent).toBe("false");
+    expect(
+      screen
+        .getByRole("button", { name: "open path" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expect(
+      screen
+        .getByRole("button", { name: "pick folder" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expect(latestSnapshot.current?.localHost).toBeNull();
+    expect(latestSnapshot.current?.openPath).toBeNull();
+    expect(latestSnapshot.current?.pickFolder).toBeNull();
+  });
 
   it("re-probes daemon capabilities after websocket reconnects", async () => {
     const state: HostDaemonFetchState = {
@@ -269,37 +326,42 @@ describe("useHostDaemon", () => {
       hostDaemonPort: 4123,
       hosts: [makeHost()],
       pickedFolderPath: null,
-    }
-    installHostDaemonFetchRoutes(state, [])
+    };
+    installHostDaemonFetchRoutes(state, []);
 
-    const { FakeReconnectingWebSocket, useHostDaemon, wsManager } = await importFreshHostDaemonModules()
-    const HostDaemonProbe = createHostDaemonProbe(useHostDaemon)
+    const { FakeReconnectingWebSocket, useHostDaemon, wsManager } =
+      await importFreshHostDaemonModules();
+    const HostDaemonProbe = createHostDaemonProbe(useHostDaemon);
 
     await act(async () => {
       render(<HostDaemonProbe onSnapshot={() => {}} />, {
         wrapper: createSuspenseWrapper(),
-      })
-    })
+      });
+    });
 
-    expect((await screen.findByTestId("supports-folder-picker")).textContent).toBe("false")
+    expect(
+      (await screen.findByTestId("supports-folder-picker")).textContent,
+    ).toBe("false");
 
-    wsManager.connect()
-    const socket = FakeReconnectingWebSocket.latest()
-    socket.open()
-    socket.close()
+    wsManager.connect();
+    const socket = FakeReconnectingWebSocket.latest();
+    socket.open();
+    socket.close();
     state.daemonStatus = {
       connected: true,
       hostId: "host-1",
       serverUrl: "http://localhost:3334",
       supportsNativeFolderPicker: true,
       platform: "linux",
-    }
-    socket.open()
+    };
+    socket.open();
 
     await waitFor(() => {
-      expect(screen.getByTestId("supports-folder-picker").textContent).toBe("true")
-    })
+      expect(screen.getByTestId("supports-folder-picker").textContent).toBe(
+        "true",
+      );
+    });
 
-    wsManager.disconnect()
-  })
-})
+    wsManager.disconnect();
+  });
+});

@@ -93,8 +93,16 @@ describe("createAgentRuntime multi-thread routing", () => {
 
     // Run turns concurrently
     await Promise.all([
-      runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "thread 1" }], options: fullRuntimeOptions }),
-      runtime.runTurn({ threadId: "t2", input: [{ type: "text", text: "thread 2" }], options: fullRuntimeOptions }),
+      runtime.runTurn({
+        threadId: "t1",
+        input: [{ type: "text", text: "thread 1" }],
+        options: fullRuntimeOptions,
+      }),
+      runtime.runTurn({
+        threadId: "t2",
+        input: [{ type: "text", text: "thread 2" }],
+        options: fullRuntimeOptions,
+      }),
     ]);
     await Promise.all([
       waitForThreadTurnCompleted({
@@ -113,10 +121,12 @@ describe("createAgentRuntime multi-thread routing", () => {
 
     // Both threads should have turn/completed events with correct threadIds
     const t1Completed = events.filter(
-      (e) => e.type === "turn/completed" && "threadId" in e && e.threadId === "t1",
+      (e) =>
+        e.type === "turn/completed" && "threadId" in e && e.threadId === "t1",
     );
     const t2Completed = events.filter(
-      (e) => e.type === "turn/completed" && "threadId" in e && e.threadId === "t2",
+      (e) =>
+        e.type === "turn/completed" && "threadId" in e && e.threadId === "t2",
     );
     expect(t1Completed.length).toBe(1);
     expect(t2Completed.length).toBe(1);
@@ -278,8 +288,16 @@ describe("createAgentRuntime multi-thread routing", () => {
     });
 
     await Promise.all([
-      runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "from t1" }], options: fullRuntimeOptions }),
-      runtime.runTurn({ threadId: "t2", input: [{ type: "text", text: "from t2" }], options: fullRuntimeOptions }),
+      runtime.runTurn({
+        threadId: "t1",
+        input: [{ type: "text", text: "from t1" }],
+        options: fullRuntimeOptions,
+      }),
+      runtime.runTurn({
+        threadId: "t2",
+        input: [{ type: "text", text: "from t2" }],
+        options: fullRuntimeOptions,
+      }),
     ]);
     await Promise.all([
       waitForThreadTurnCompleted({
@@ -589,8 +607,16 @@ rl.on("line", (line) => {
     });
 
     await Promise.all([
-      runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "from a" }], options: fullRuntimeOptions }),
-      runtime.runTurn({ threadId: "t2", input: [{ type: "text", text: "from b" }], options: fullRuntimeOptions }),
+      runtime.runTurn({
+        threadId: "t1",
+        input: [{ type: "text", text: "from a" }],
+        options: fullRuntimeOptions,
+      }),
+      runtime.runTurn({
+        threadId: "t2",
+        input: [{ type: "text", text: "from b" }],
+        options: fullRuntimeOptions,
+      }),
     ]);
     await Promise.all([
       waitForThreadTurnCompleted({
@@ -635,7 +661,11 @@ rl.on("line", (line) => {
       providerId: "fake",
       options: fullRuntimeOptions,
     });
-    await runtime1.runTurn({ threadId: "t1", input: [{ type: "text", text: "first runtime" }], options: fullRuntimeOptions });
+    await runtime1.runTurn({
+      threadId: "t1",
+      input: [{ type: "text", text: "first runtime" }],
+      options: fullRuntimeOptions,
+    });
     await waitForThreadTurnCompleted({
       events: events1,
       providerId: "fake",
@@ -677,4 +707,5 @@ rl.on("line", (line) => {
 
     expect(events2.some((e) => e.type === "turn/completed")).toBe(true);
     await runtime2.shutdown();
-  });});
+  });
+});

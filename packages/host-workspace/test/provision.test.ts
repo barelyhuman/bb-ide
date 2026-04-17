@@ -34,7 +34,9 @@ async function initRepo(opts?: { setupScript?: string }): Promise<string> {
 
 afterEach(async () => {
   await Promise.all(
-    tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
+    tempDirs
+      .splice(0)
+      .map((dir) => fs.rm(dir, { recursive: true, force: true })),
   );
 });
 
@@ -43,7 +45,10 @@ describe("provisionWorkspace", () => {
     it("provisions an unmanaged git repo and discovers properties", async () => {
       const repoPath = await initRepo();
 
-      const ws = await provisionWorkspace({ workspaceProvisionType: "unmanaged", path: repoPath });
+      const ws = await provisionWorkspace({
+        workspaceProvisionType: "unmanaged",
+        path: repoPath,
+      });
 
       expect(ws.path).toBe(repoPath);
       expect(ws.managed).toBe(false);
@@ -55,7 +60,10 @@ describe("provisionWorkspace", () => {
     it("provisions an unmanaged non-git directory", async () => {
       const dirPath = await makeTempDir("bb-provision-nongit-");
 
-      const ws = await provisionWorkspace({ workspaceProvisionType: "unmanaged", path: dirPath });
+      const ws = await provisionWorkspace({
+        workspaceProvisionType: "unmanaged",
+        path: dirPath,
+      });
 
       expect(ws.managed).toBe(false);
       expect(ws.isGitRepo).toBe(false);
@@ -66,9 +74,14 @@ describe("provisionWorkspace", () => {
       const repoPath = await initRepo();
       const parentDir = await makeTempDir("bb-provision-wt-parent-");
       const wtPath = path.join(parentDir, "wt");
-      await runGit(["worktree", "add", "-B", "feature", wtPath], { cwd: repoPath });
+      await runGit(["worktree", "add", "-B", "feature", wtPath], {
+        cwd: repoPath,
+      });
 
-      const ws = await provisionWorkspace({ workspaceProvisionType: "unmanaged", path: wtPath });
+      const ws = await provisionWorkspace({
+        workspaceProvisionType: "unmanaged",
+        path: wtPath,
+      });
 
       expect(ws.isGitRepo).toBe(true);
       expect(ws.isWorktree).toBe(true);
@@ -76,13 +89,19 @@ describe("provisionWorkspace", () => {
 
     it("throws for non-existent path", async () => {
       await expect(
-        provisionWorkspace({ workspaceProvisionType: "unmanaged", path: "/tmp/does-not-exist-bb" }),
+        provisionWorkspace({
+          workspaceProvisionType: "unmanaged",
+          path: "/tmp/does-not-exist-bb",
+        }),
       ).rejects.toThrow(/does not exist/u);
     });
 
     it("destroy() is a no-op for unmanaged workspaces", async () => {
       const repoPath = await initRepo();
-      const ws = await provisionWorkspace({ workspaceProvisionType: "unmanaged", path: repoPath });
+      const ws = await provisionWorkspace({
+        workspaceProvisionType: "unmanaged",
+        path: repoPath,
+      });
 
       await ws.destroy();
 
@@ -158,7 +177,9 @@ describe("provisionWorkspace", () => {
     });
 
     it("rolls back on setup script failure", async () => {
-      const repoPath = await initRepo({ setupScript: "echo failing >&2\nexit 1\n" });
+      const repoPath = await initRepo({
+        setupScript: "echo failing >&2\nexit 1\n",
+      });
       const parentDir = await makeTempDir("bb-provision-mwt-fail-");
       const targetPath = path.join(parentDir, "env");
 
@@ -238,7 +259,9 @@ describe("provisionWorkspace", () => {
     });
 
     it("rolls back on setup script failure", async () => {
-      const repoPath = await initRepo({ setupScript: "echo failing >&2\nexit 1\n" });
+      const repoPath = await initRepo({
+        setupScript: "echo failing >&2\nexit 1\n",
+      });
       const parentDir = await makeTempDir("bb-provision-mc-fail-");
       const targetPath = path.join(parentDir, "clone");
 
@@ -259,7 +282,10 @@ describe("provisionWorkspace", () => {
   describe("HostWorkspace git operations", () => {
     it("delegates git operations to the underlying Workspace", async () => {
       const repoPath = await initRepo();
-      const ws = await provisionWorkspace({ workspaceProvisionType: "unmanaged", path: repoPath });
+      const ws = await provisionWorkspace({
+        workspaceProvisionType: "unmanaged",
+        path: repoPath,
+      });
 
       // getStatus
       const status = await ws.getStatus();
@@ -267,7 +293,10 @@ describe("provisionWorkspace", () => {
 
       // commit
       await fs.writeFile(path.join(repoPath, "new.txt"), "data\n", "utf8");
-      const result = await ws.commit({ message: "Test commit", noVerify: false });
+      const result = await ws.commit({
+        message: "Test commit",
+        noVerify: false,
+      });
       expect(result.commitSha).toBeTruthy();
 
       // reset
@@ -307,7 +336,11 @@ describe("provisionWorkspace", () => {
       });
 
       // Add commit on env branch
-      await fs.writeFile(path.join(targetPath, "feature.txt"), "work\n", "utf8");
+      await fs.writeFile(
+        path.join(targetPath, "feature.txt"),
+        "work\n",
+        "utf8",
+      );
       await env.commit({ message: "Feature work", noVerify: false });
 
       // Promote
@@ -318,7 +351,9 @@ describe("provisionWorkspace", () => {
       // Demote — need a workspace that's on the env branch still
       // After promote, env is detached. demote expects envBranch from ws.currentBranch.
       // This means demote can't work on a detached env. Let's test the error case.
-      await expect(env.demote({ primary, defaultBranch: "main" })).rejects.toThrow(/no branch/u);
+      await expect(
+        env.demote({ primary, defaultBranch: "main" }),
+      ).rejects.toThrow(/no branch/u);
     });
   });
 
@@ -327,9 +362,14 @@ describe("provisionWorkspace", () => {
       const repoPath = await initRepo();
       const parentDir = await makeTempDir("bb-reconnect-wt-parent-");
       const wtPath = path.join(parentDir, "wt");
-      await runGit(["worktree", "add", "-B", "feature", wtPath], { cwd: repoPath });
+      await runGit(["worktree", "add", "-B", "feature", wtPath], {
+        cwd: repoPath,
+      });
 
-      const ws = await provisionWorkspace({ workspaceProvisionType: "reconnect-managed-worktree", path: wtPath });
+      const ws = await provisionWorkspace({
+        workspaceProvisionType: "reconnect-managed-worktree",
+        path: wtPath,
+      });
 
       expect(ws.path).toBe(wtPath);
       expect(ws.managed).toBe(true);
@@ -339,7 +379,10 @@ describe("provisionWorkspace", () => {
 
     it("throws path_not_found for non-existent path", async () => {
       await expect(
-        provisionWorkspace({ workspaceProvisionType: "reconnect-managed-worktree", path: "/tmp/does-not-exist-reconnect-wt" }),
+        provisionWorkspace({
+          workspaceProvisionType: "reconnect-managed-worktree",
+          path: "/tmp/does-not-exist-reconnect-wt",
+        }),
       ).rejects.toThrow("path does not exist");
     });
   });
@@ -348,7 +391,10 @@ describe("provisionWorkspace", () => {
     it("reconnects to an existing clone with managed=true", async () => {
       const repoPath = await initRepo();
 
-      const ws = await provisionWorkspace({ workspaceProvisionType: "reconnect-managed-clone", path: repoPath });
+      const ws = await provisionWorkspace({
+        workspaceProvisionType: "reconnect-managed-clone",
+        path: repoPath,
+      });
 
       expect(ws.path).toBe(repoPath);
       expect(ws.managed).toBe(true);
@@ -358,7 +404,10 @@ describe("provisionWorkspace", () => {
 
     it("throws path_not_found for non-existent path", async () => {
       await expect(
-        provisionWorkspace({ workspaceProvisionType: "reconnect-managed-clone", path: "/tmp/does-not-exist-reconnect-clone" }),
+        provisionWorkspace({
+          workspaceProvisionType: "reconnect-managed-clone",
+          path: "/tmp/does-not-exist-reconnect-clone",
+        }),
       ).rejects.toThrow("path does not exist");
     });
   });

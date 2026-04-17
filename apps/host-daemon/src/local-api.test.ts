@@ -39,16 +39,22 @@ describe("local API server", () => {
   it("resolves native folder picker support from one shared helper", () => {
     const providedPicker = async () => "/tmp/project";
 
-    expect(resolveNativeFolderPicker({
-      pickFolder: providedPicker,
-      platform: "linux",
-    })).toBe(providedPicker);
-    expect(resolveNativeFolderPicker({
-      platform: "darwin",
-    })).not.toBeNull();
-    expect(resolveNativeFolderPicker({
-      platform: "linux",
-    })).toBeNull();
+    expect(
+      resolveNativeFolderPicker({
+        pickFolder: providedPicker,
+        platform: "linux",
+      }),
+    ).toBe(providedPicker);
+    expect(
+      resolveNativeFolderPicker({
+        platform: "darwin",
+      }),
+    ).not.toBeNull();
+    expect(
+      resolveNativeFolderPicker({
+        platform: "linux",
+      }),
+    ).toBeNull();
   });
 
   it("serves host identity and status over localhost", async () => {
@@ -58,7 +64,9 @@ describe("local API server", () => {
       serverUrl: "http://server.test",
       getConnected: () => true,
     });
-    const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
+    const client = createHostDaemonLocalClient(
+      `http://localhost:${server.port}`,
+    );
 
     const statusResponse = await client.status.$get();
 
@@ -66,9 +74,10 @@ describe("local API server", () => {
       hostId: "host-1",
       connected: true,
       serverUrl: "http://server.test",
-      supportsNativeFolderPicker: resolveNativeFolderPicker({
-        platform: process.platform,
-      }) !== null,
+      supportsNativeFolderPicker:
+        resolveNativeFolderPicker({
+          platform: process.platform,
+        }) !== null,
       platform: resolveHostPlatform(),
     });
     const healthResponse = await client.health.$get();
@@ -86,7 +95,9 @@ describe("local API server", () => {
       openPath,
       pickFolder,
     });
-    const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
+    const client = createHostDaemonLocalClient(
+      `http://localhost:${server.port}`,
+    );
 
     const statusResponse = await client.status.$get();
     await client["open-path"].$post({ json: { path: "/tmp" } });
@@ -115,7 +126,9 @@ describe("local API server", () => {
         serverUrl: "http://server.test",
         getConnected: () => true,
       });
-      const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
+      const client = createHostDaemonLocalClient(
+        `http://localhost:${server.port}`,
+      );
 
       const response = await client.paths.exist.$post({
         json: { paths: [existingDir, existingFile, missing] },
@@ -152,7 +165,9 @@ describe("local API server", () => {
         serverUrl: "http://server.test",
         getConnected: () => true,
       });
-      const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
+      const client = createHostDaemonLocalClient(
+        `http://localhost:${server.port}`,
+      );
 
       const response = await client.paths.exist.$post({
         json: { paths: [inaccessible, reachable] },
@@ -178,7 +193,9 @@ describe("local API server", () => {
       serverUrl: "http://server.test",
       getConnected: () => true,
     });
-    const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
+    const client = createHostDaemonLocalClient(
+      `http://localhost:${server.port}`,
+    );
 
     const dir = await mkdtemp(path.join(tmpdir(), "bb-path-exists-dedup-"));
     try {
@@ -189,7 +206,10 @@ describe("local API server", () => {
         existence: { [dir]: true },
       });
 
-      const oversizedPaths = Array.from({ length: 201 }, (_, i) => `${dir}/p${i}`);
+      const oversizedPaths = Array.from(
+        { length: 201 },
+        (_, i) => `${dir}/p${i}`,
+      );
       const oversizedResponse = await client.paths.exist.$post({
         json: { paths: oversizedPaths },
       });
@@ -222,7 +242,9 @@ describe("local API server", () => {
       listWorkspaceOpenTargets,
       openWorkspace,
     });
-    const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
+    const client = createHostDaemonLocalClient(
+      `http://localhost:${server.port}`,
+    );
 
     const targetsResponse = await client["workspace-open-targets"].$get();
     await client["open-workspace"].$post({
@@ -255,7 +277,9 @@ describe("local API server", () => {
       getConnected: () => true,
       openWorkspace,
     });
-    const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
+    const client = createHostDaemonLocalClient(
+      `http://localhost:${server.port}`,
+    );
 
     const response = await client["open-workspace"].$post({
       json: {
@@ -282,7 +306,9 @@ describe("local API server", () => {
       serverUrl: "http://server.test",
       getConnected: () => true,
     });
-    const client = createHostDaemonLocalClient(`http://localhost:${server.port}`);
+    const client = createHostDaemonLocalClient(
+      `http://localhost:${server.port}`,
+    );
 
     const statusResponse = await client.status.$get();
     const status = await statusResponse.json();
@@ -309,7 +335,9 @@ describe("local API server", () => {
     expect(healthResponse.status).toBe(200);
     expect(await healthResponse.text()).toBe("bb-host-daemon");
 
-    const client = createHostDaemonLocalClient(`http://127.0.0.1:${server.port}`);
+    const client = createHostDaemonLocalClient(
+      `http://127.0.0.1:${server.port}`,
+    );
     const statusResponse = await client.status.$get();
     expect(statusResponse.status).toBe(404);
   });

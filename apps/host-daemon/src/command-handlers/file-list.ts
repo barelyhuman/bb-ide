@@ -19,7 +19,7 @@ export function finalizeListedFiles(
   if (args.query) {
     const lowerQuery = args.query.toLowerCase();
     filePaths = filePaths.filter((filePath) =>
-      filePath.toLowerCase().includes(lowerQuery)
+      filePath.toLowerCase().includes(lowerQuery),
     );
   }
 

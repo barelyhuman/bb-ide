@@ -15,51 +15,67 @@ interface ProviderModelsCommandOptions {
   selectedModel?: string;
 }
 
-export function registerProviderCommands(program: Command, getUrl: () => string): void {
-  const provider = program.command("provider").description("Inspect available providers and models");
+export function registerProviderCommands(
+  program: Command,
+  getUrl: () => string,
+): void {
+  const provider = program
+    .command("provider")
+    .description("Inspect available providers and models");
 
   provider
     .command("list")
     .description("List available providers")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (opts: ProviderListCommandOptions) => {
-      const client = createClient(getUrl());
-      const providers = await unwrap<SystemProviderInfo[]>(
-        client.api.v1.system.providers.$get({ query: {} }),
-      );
-      if (outputJson(opts, providers)) return;
-      if (providers.length === 0) {
-        console.log("No providers available");
-        return;
-      }
-      printProviderTable(providers);
-    }));
+    .action(
+      action(async (opts: ProviderListCommandOptions) => {
+        const client = createClient(getUrl());
+        const providers = await unwrap<SystemProviderInfo[]>(
+          client.api.v1.system.providers.$get({ query: {} }),
+        );
+        if (outputJson(opts, providers)) return;
+        if (providers.length === 0) {
+          console.log("No providers available");
+          return;
+        }
+        printProviderTable(providers);
+      }),
+    );
 
   provider
     .command("models [providerId]")
     .description("List available models for a provider")
     .option("--json", "Print machine-readable JSON output")
-    .option("--selected-model <model>", "Include a selected-only model if it matches")
-    .action(action(async (
-      providerId: string | undefined,
-      opts: ProviderModelsCommandOptions,
-    ) => {
-      const client = createClient(getUrl());
-      const models = await unwrap<AvailableModel[]>(
-        client.api.v1.system.models.$get({
-          query: {
-            ...(providerId ? { providerId } : {}),
-            ...(opts.selectedModel ? { selectedModel: opts.selectedModel } : {}),
-          },
-        }),
-      );
-      if (outputJson(opts, models)) return;
-      if (models.length === 0) {
-        console.log("No models available");
-        return;
-      }
-      printModelTable(models, providerId);
-    }));
+    .option(
+      "--selected-model <model>",
+      "Include a selected-only model if it matches",
+    )
+    .action(
+      action(
+        async (
+          providerId: string | undefined,
+          opts: ProviderModelsCommandOptions,
+        ) => {
+          const client = createClient(getUrl());
+          const models = await unwrap<AvailableModel[]>(
+            client.api.v1.system.models.$get({
+              query: {
+                ...(providerId ? { providerId } : {}),
+                ...(opts.selectedModel
+                  ? { selectedModel: opts.selectedModel }
+                  : {}),
+              },
+            }),
+          );
+          if (outputJson(opts, models)) return;
+          if (models.length === 0) {
+            console.log("No models available");
+            return;
+          }
+          printModelTable(models, providerId);
+        },
+      ),
+    );
 }
 
 function printProviderTable(providers: SystemProviderInfo[]): void {

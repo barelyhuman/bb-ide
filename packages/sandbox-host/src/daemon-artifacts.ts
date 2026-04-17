@@ -34,7 +34,13 @@ function resolveWorkspaceRoot(): string {
 }
 
 function resolveHostDaemonDistPath(fileName: string): string {
-  return resolve(resolveWorkspaceRoot(), "apps", "host-daemon", "dist", fileName);
+  return resolve(
+    resolveWorkspaceRoot(),
+    "apps",
+    "host-daemon",
+    "dist",
+    fileName,
+  );
 }
 
 function resolveClaudeCodeCliPath(): string {
@@ -61,7 +67,8 @@ function resolvePiPackageManifestPath(): string {
   );
 }
 
-let sandboxDaemonArtifactsPromise: Promise<SandboxDaemonArtifacts> | null = null;
+let sandboxDaemonArtifactsPromise: Promise<SandboxDaemonArtifacts> | null =
+  null;
 
 async function readBundleArtifact(
   artifact: LocalSandboxDaemonArtifact,
@@ -103,21 +110,23 @@ export async function loadSandboxDaemonArtifacts(): Promise<SandboxDaemonArtifac
         localPath: resolvePiPackageManifestPath(),
       }),
     ])
-      .then(([
-        bbCli,
-        claudeCodeCli,
-        daemon,
-        claudeCodeBridge,
-        piBridge,
-        piPackageManifest,
-      ]) => ({
-        bbCli,
-        claudeCodeCli,
-        claudeCodeBridge,
-        daemon,
-        piPackageManifest,
-        piBridge,
-      }))
+      .then(
+        ([
+          bbCli,
+          claudeCodeCli,
+          daemon,
+          claudeCodeBridge,
+          piBridge,
+          piPackageManifest,
+        ]) => ({
+          bbCli,
+          claudeCodeCli,
+          claudeCodeBridge,
+          daemon,
+          piPackageManifest,
+          piBridge,
+        }),
+      )
       .catch((error: unknown) => {
         sandboxDaemonArtifactsPromise = null;
         throw error;

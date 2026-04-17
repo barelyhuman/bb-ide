@@ -6,9 +6,11 @@ import type {
 } from "./capture-types.js";
 import { createProviderForId } from "./provider-registry.js";
 
-const rawProviderThreadIdParamsSchema = z.object({
-  threadId: z.string().optional(),
-}).passthrough();
+const rawProviderThreadIdParamsSchema = z
+  .object({
+    threadId: z.string().optional(),
+  })
+  .passthrough();
 
 export interface ReplayRawProviderEventsArgs {
   bbThreadId: string;
@@ -37,7 +39,9 @@ interface StampTranslatedEventArgs {
 function getThreadIdFromParams(
   rawEvent: AgentRuntimeRawProviderEventCaptureEntry["rawEvent"],
 ): string | undefined {
-  const parsedParams = rawProviderThreadIdParamsSchema.safeParse(rawEvent.params);
+  const parsedParams = rawProviderThreadIdParamsSchema.safeParse(
+    rawEvent.params,
+  );
   return parsedParams.success ? parsedParams.data.threadId : undefined;
 }
 
@@ -132,6 +136,6 @@ export function replayRawProviderEvents(
 ): AgentRuntimeTranslatedThreadEventCaptureEntry[] {
   const translator = createReplayRawProviderEventTranslator(args);
   return args.rawProviderEvents.flatMap((rawProviderEvent) =>
-    translator.translate(rawProviderEvent)
+    translator.translate(rawProviderEvent),
   );
 }

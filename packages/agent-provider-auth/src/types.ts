@@ -30,9 +30,7 @@ export interface EncryptedCloudAuthCredentialRecord {
   providerId: string;
 }
 
-export interface EncryptedCloudAuthCredentialUpsert
-  extends EncryptedCloudAuthCredentialRecord
-{
+export interface EncryptedCloudAuthCredentialUpsert extends EncryptedCloudAuthCredentialRecord {
   label: string | null;
   lastErrorMessage: string | null;
   lastRefreshedAt: number | null;

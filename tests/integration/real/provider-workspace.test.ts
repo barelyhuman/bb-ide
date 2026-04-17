@@ -46,8 +46,7 @@ describe("real provider workspace integration", () => {
           expect(branches.length).toBeGreaterThan(0);
 
           await sendTextMessage(harness.api, thread.id, {
-            text:
-              "Create a file named hello.txt in the workspace with the content hello world if tool use is available. Then briefly summarize what you did.",
+            text: "Create a file named hello.txt in the workspace with the content hello world if tool use is available. Then briefly summarize what you did.",
             execution: getExecutionOptions(providerId),
           });
           await waitForThreadStatus(

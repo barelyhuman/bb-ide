@@ -1,6 +1,17 @@
-import { type ComponentProps, type ComponentType, type ReactNode, type RefObject } from "react";
+import {
+  type ComponentProps,
+  type ComponentType,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
-import { CornerDownRight, GitBranch, Pencil, Trash2, ChevronDown } from "lucide-react";
+import {
+  CornerDownRight,
+  GitBranch,
+  Pencil,
+  Trash2,
+  ChevronDown,
+} from "lucide-react";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
 import {
   type PermissionMode,
@@ -62,12 +73,16 @@ function QueuedFollowUpList({
       className="mb-2 overflow-hidden rounded-md border border-border/60 bg-muted/25"
     >
       <div className="flex items-center justify-between px-2.5 pb-1 pt-2.5">
-        <p className="text-xs text-muted-foreground">Queued ({queuedMessages.length})</p>
+        <p className="text-xs text-muted-foreground">
+          Queued ({queuedMessages.length})
+        </p>
       </div>
       <ul>
         {queuedMessages.map((queuedMessage, index) => {
           const preview = formatQueuedFollowUpPreview(queuedMessage.content);
-          const attachmentCount = countQueuedMessageAttachments(queuedMessage.content);
+          const attachmentCount = countQueuedMessageAttachments(
+            queuedMessage.content,
+          );
           const isProcessing = processingMessageId === queuedMessage.id;
           return (
             <li key={queuedMessage.id} className="px-2.5 py-0.5">
@@ -77,12 +92,17 @@ function QueuedFollowUpList({
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-center gap-1 text-xs leading-4">
-                    <p className="min-w-0 truncate text-foreground" title={preview}>
+                    <p
+                      className="min-w-0 truncate text-foreground"
+                      title={preview}
+                    >
                       {preview}
                     </p>
                     {attachmentCount > 0 ? (
                       <>
-                        <span className="shrink-0 text-muted-foreground">.</span>
+                        <span className="shrink-0 text-muted-foreground">
+                          .
+                        </span>
                         <span className="shrink-0 text-muted-foreground">
                           {attachmentCount === 1
                             ? "1 attachment"
@@ -92,8 +112,12 @@ function QueuedFollowUpList({
                     ) : null}
                     {isProcessing ? (
                       <>
-                        <span className="shrink-0 text-muted-foreground">.</span>
-                        <span className="shrink-0 text-muted-foreground">Sending...</span>
+                        <span className="shrink-0 text-muted-foreground">
+                          .
+                        </span>
+                        <span className="shrink-0 text-muted-foreground">
+                          Sending...
+                        </span>
                       </>
                     ) : null}
                   </div>
@@ -186,7 +210,9 @@ export interface ComposerCoreProps {
 }
 
 export interface ComposerEnvironmentProps {
-  contextWindowUsage?: ComponentProps<typeof ThreadContextWindowIndicator>["usage"];
+  contextWindowUsage?: ComponentProps<
+    typeof ThreadContextWindowIndicator
+  >["usage"];
   environmentBranchName?: string;
   environmentHostConnected?: boolean;
   environmentIcon?: ComponentType<{ className?: string }>;
@@ -257,9 +283,9 @@ export function ThreadFollowUpComposer({
   });
   const canSelectPromptBannerMergeBase = Boolean(
     banner.showBranchComparisonUi &&
-      banner.promptBannerMergeBaseBranch &&
-      banner.onPromptBannerMergeBaseBranchChange &&
-      promptBannerMergeBaseCandidates.length > 0,
+    banner.promptBannerMergeBaseBranch &&
+    banner.onPromptBannerMergeBaseBranchChange &&
+    promptBannerMergeBaseCandidates.length > 0,
   );
 
   return (
@@ -270,7 +296,8 @@ export function ThreadFollowUpComposer({
           <div
             className={cn(
               "mb-2 rounded-md border border-border/60 bg-muted/40 px-3 py-1.5 text-xs text-muted-foreground",
-              !banner.isDiffPanelActive && "cursor-pointer transition-colors hover:bg-muted/55",
+              !banner.isDiffPanelActive &&
+                "cursor-pointer transition-colors hover:bg-muted/55",
             )}
             onClick={banner.onPromptGitStatsBannerClick}
           >
@@ -296,7 +323,8 @@ export function ThreadFollowUpComposer({
                 <span className="truncate">{banner.promptBannerSummary}</span>
               )}
               {banner.showBranchComparisonUi ? (
-                canSelectPromptBannerMergeBase && banner.promptBannerMergeBaseBranch ? (
+                canSelectPromptBannerMergeBase &&
+                banner.promptBannerMergeBaseBranch ? (
                   <div
                     className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground/90"
                     onClick={(event) => {
@@ -312,7 +340,9 @@ export function ThreadFollowUpComposer({
                       onChange={(branch) => {
                         banner.onPromptBannerMergeBaseBranchChange?.(branch);
                       }}
-                      onOpenChange={banner.onPromptBannerMergeBaseBranchPickerOpenChange}
+                      onOpenChange={
+                        banner.onPromptBannerMergeBaseBranchPickerOpenChange
+                      }
                       className="max-w-[10rem] text-muted-foreground/90"
                     />
                   </div>
@@ -353,8 +383,14 @@ export function ThreadFollowUpComposer({
         ) : null}
         <QueuedFollowUpList
           queuedMessages={queue.queuedMessages}
-          sendDisabled={!composer.canSendFollowUp || composer.isFollowUpSubmitting || queue.isQueueMutationPending}
-          actionDisabled={composer.isFollowUpSubmitting || queue.isQueueMutationPending}
+          sendDisabled={
+            !composer.canSendFollowUp ||
+            composer.isFollowUpSubmitting ||
+            queue.isQueueMutationPending
+          }
+          actionDisabled={
+            composer.isFollowUpSubmitting || queue.isQueueMutationPending
+          }
           processingMessageId={composer.processingQueuedMessageId}
           onSendImmediately={queue.onSendQueuedImmediately}
           onEdit={queue.onEditQueuedMessage}
@@ -367,12 +403,15 @@ export function ThreadFollowUpComposer({
           placeholder={composer.promptPlaceholder}
           autoFocus
           submission={{
-            onStop: composer.threadStatus === "active" ? composer.onStop : undefined,
+            onStop:
+              composer.threadStatus === "active" ? composer.onStop : undefined,
             isSubmitting: composer.isFollowUpSubmitting,
-            disabled: !composer.canSendFollowUp || composer.isFollowUpSubmitting,
-            title: composer.threadStatus === "active"
-              ? "Queue follow-up (Enter)"
-              : "Submit (Enter)",
+            disabled:
+              !composer.canSendFollowUp || composer.isFollowUpSubmitting,
+            title:
+              composer.threadStatus === "active"
+                ? "Queue follow-up (Enter)"
+                : "Submit (Enter)",
             isRunning: composer.threadStatus === "active",
             mode: "enter",
           }}
@@ -429,15 +468,19 @@ export function ThreadFollowUpComposer({
         {environment.environmentLabel || environment.contextWindowUsage ? (
           <div className="mt-1 flex items-center justify-between gap-2 pl-[15px] pr-3.5">
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-              {environment.environmentLabel || environment.environmentHostConnected !== undefined ? (
+              {environment.environmentLabel ||
+              environment.environmentHostConnected !== undefined ? (
                 <div className="flex min-w-0 items-center gap-2 pr-1.5">
                   {environment.environmentLabel ? (
                     <PromptOptionDisplay
                       label="Environment"
                       value={
                         <span className="flex min-w-0 items-center gap-1.5">
-                          <span className="truncate">{environment.environmentLabel}</span>
-                          {environment.environmentHostConnected !== undefined ? (
+                          <span className="truncate">
+                            {environment.environmentLabel}
+                          </span>
+                          {environment.environmentHostConnected !==
+                          undefined ? (
                             <HostStatusBadge
                               connected={environment.environmentHostConnected}
                               className="translate-y-px"
@@ -449,7 +492,9 @@ export function ThreadFollowUpComposer({
                       className="h-6 min-w-[80px]"
                     />
                   ) : environment.environmentHostConnected !== undefined ? (
-                    <HostStatusBadge connected={environment.environmentHostConnected} />
+                    <HostStatusBadge
+                      connected={environment.environmentHostConnected}
+                    />
                   ) : null}
                   {environment.environmentBranchName ? (
                     <button
@@ -466,7 +511,9 @@ export function ThreadFollowUpComposer({
                       }}
                     >
                       <GitBranch className="size-3.5 shrink-0" />
-                      <span className="truncate">{environment.environmentBranchName}</span>
+                      <span className="truncate">
+                        {environment.environmentBranchName}
+                      </span>
                     </button>
                   ) : null}
                 </div>
@@ -481,7 +528,9 @@ export function ThreadFollowUpComposer({
                 className="h-6"
               />
               {environment.contextWindowUsage ? (
-                <ThreadContextWindowIndicator usage={environment.contextWindowUsage} />
+                <ThreadContextWindowIndicator
+                  usage={environment.contextWindowUsage}
+                />
               ) : null}
             </div>
           </div>

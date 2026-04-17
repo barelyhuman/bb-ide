@@ -101,7 +101,9 @@ describe("pending interactions", () => {
         sessionId: "session-1",
       })?.id,
     ).toBe(created.id);
-    expect(getActivePendingInteractionForThread(db, thread.id)?.id).toBe(created.id);
+    expect(getActivePendingInteractionForThread(db, thread.id)?.id).toBe(
+      created.id,
+    );
   });
 
   it("lists pending interactions newest first and transitions them to resolved", () => {
@@ -126,10 +128,11 @@ describe("pending interactions", () => {
       payload: fileChangeApprovalPayload("item-2"),
     });
 
-    expect(listPendingInteractionsByThread(db, { threadId: thread.id }).map((row) => row.id)).toEqual([
-      newer.id,
-      older.id,
-    ]);
+    expect(
+      listPendingInteractionsByThread(db, { threadId: thread.id }).map(
+        (row) => row.id,
+      ),
+    ).toEqual([newer.id, older.id]);
 
     const resolved = setPendingInteractionResolved(db, {
       id: older.id,
@@ -179,7 +182,9 @@ describe("pending interactions", () => {
       status: "interrupted",
       statusReason: "Provider exited",
     });
-    expect(getActivePendingInteractionForThread(db, siblingThread.id)?.status).toBe("pending");
+    expect(
+      getActivePendingInteractionForThread(db, siblingThread.id)?.status,
+    ).toBe("pending");
   });
 
   it("chunks provider-thread interrupts to stay under SQLite variable limits", () => {
@@ -281,7 +286,9 @@ describe("pending interactions", () => {
     });
 
     expect(
-      listPendingInteractionsByStatus(db, { statuses: ["pending"] }).map((row) => row.id),
+      listPendingInteractionsByStatus(db, { statuses: ["pending"] }).map(
+        (row) => row.id,
+      ),
     ).toEqual([created.id]);
 
     const expired = setPendingInteractionExpired(db, {
@@ -294,7 +301,9 @@ describe("pending interactions", () => {
       status: "expired",
       statusReason: "Timed out",
     });
-    expect(listPendingInteractionsByStatus(db, { statuses: ["pending"] })).toHaveLength(0);
+    expect(
+      listPendingInteractionsByStatus(db, { statuses: ["pending"] }),
+    ).toHaveLength(0);
   });
 
   it("chunks pending-thread lookups to stay under SQLite variable limits", () => {

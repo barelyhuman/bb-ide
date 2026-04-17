@@ -86,9 +86,13 @@ export function useSendThreadMessage() {
         mode,
       }),
     onMutate: async (variables) => {
-      await queryClient.cancelQueries({ queryKey: threadQueryKey(variables.id) });
+      await queryClient.cancelQueries({
+        queryKey: threadQueryKey(variables.id),
+      });
 
-      const previousThread = queryClient.getQueryData<Thread>(threadQueryKey(variables.id));
+      const previousThread = queryClient.getQueryData<Thread>(
+        threadQueryKey(variables.id),
+      );
       const optimisticCreatedAt = Date.now();
 
       updateCachedThread(queryClient, variables.id, (thread) => ({
@@ -106,7 +110,10 @@ export function useSendThreadMessage() {
         return;
       }
 
-      queryClient.setQueryData<Thread>(threadQueryKey(variables.id), context.previousThread);
+      queryClient.setQueryData<Thread>(
+        threadQueryKey(variables.id),
+        context.previousThread,
+      );
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
@@ -116,7 +123,9 @@ export function useSendThreadMessage() {
         queryClient.invalidateQueries({ queryKey });
       }
       if (wsManager.getConnectionState() !== "connected") {
-        queryClient.invalidateQueries({ queryKey: threadQueryKey(variables.id) });
+        queryClient.invalidateQueries({
+          queryKey: threadQueryKey(variables.id),
+        });
         queryClient.invalidateQueries({
           queryKey: threadTimelineQueryKeyPrefix(variables.id),
         });
@@ -152,7 +161,9 @@ export function useCreateThreadDraft() {
       }),
     onSuccess: (_queuedMessage, variables) => {
       queryClient.invalidateQueries({ queryKey: threadQueryKey(variables.id) });
-      queryClient.invalidateQueries({ queryKey: threadDraftsQueryKey(variables.id) });
+      queryClient.invalidateQueries({
+        queryKey: threadDraftsQueryKey(variables.id),
+      });
     },
   });
 }
@@ -172,8 +183,12 @@ export function useSendThreadDraft() {
       api.sendThreadDraft(id, queuedMessageId),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: threadQueryKey(variables.id) });
-      queryClient.invalidateQueries({ queryKey: threadDraftsQueryKey(variables.id) });
-      queryClient.invalidateQueries({ queryKey: threadTimelineQueryKeyPrefix(variables.id) });
+      queryClient.invalidateQueries({
+        queryKey: threadDraftsQueryKey(variables.id),
+      });
+      queryClient.invalidateQueries({
+        queryKey: threadTimelineQueryKeyPrefix(variables.id),
+      });
       queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
       queryClient.invalidateQueries({ queryKey: statusQueryKey() });
       for (const queryKey of getPrimaryCheckoutWorkspaceStateInvalidationQueryKeys()) {
@@ -191,13 +206,13 @@ export function useDeleteThreadDraft() {
       errorMessage: "Failed to delete queued follow-up.",
       showErrorToast: false,
     },
-    mutationFn: ({
-      id,
-      queuedMessageId,
-    }: DeleteThreadDraftMutationRequest) => api.deleteThreadDraft(id, queuedMessageId),
+    mutationFn: ({ id, queuedMessageId }: DeleteThreadDraftMutationRequest) =>
+      api.deleteThreadDraft(id, queuedMessageId),
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: threadQueryKey(variables.id) });
-      queryClient.invalidateQueries({ queryKey: threadDraftsQueryKey(variables.id) });
+      queryClient.invalidateQueries({
+        queryKey: threadDraftsQueryKey(variables.id),
+      });
     },
   });
 }

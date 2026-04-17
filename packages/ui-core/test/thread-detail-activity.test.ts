@@ -9,7 +9,10 @@ import {
 function baseMessage(
   id: string,
   sourceSeq: number,
-): Pick<ViewMessage, "id" | "threadId" | "sourceSeqStart" | "sourceSeqEnd" | "createdAt"> {
+): Pick<
+  ViewMessage,
+  "id" | "threadId" | "sourceSeqStart" | "sourceSeqEnd" | "createdAt"
+> {
   return {
     id,
     threadId: "thread-1",
@@ -49,7 +52,9 @@ describe("threadDetailActivity", () => {
 
     const latestActivityRowId = findLatestActivityRowId(rows);
     expect(latestActivityRowId).toBe("group-1");
-    expect(shouldHighlightLatestActivity(rows, latestActivityRowId)).toBe(false);
+    expect(shouldHighlightLatestActivity(rows, latestActivityRowId)).toBe(
+      false,
+    );
   });
 
   it("highlights latest activity when it is the trailing row", () => {
@@ -220,5 +225,4 @@ describe("threadDetailActivity", () => {
 
     expect(findLatestActivityMessageId(messages)).toBe("provisioning-1");
   });
-
 });

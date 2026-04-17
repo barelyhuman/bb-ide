@@ -8,15 +8,19 @@ import {
 } from "@bb/host-daemon-contract";
 import { z } from "zod";
 
-const persistedRuntimeMaterialFileSchema = z.object({
-  managedBy: z.string().trim().min(1),
-  path: z.string().trim().min(1),
-}).strict();
+const persistedRuntimeMaterialFileSchema = z
+  .object({
+    managedBy: z.string().trim().min(1),
+    path: z.string().trim().min(1),
+  })
+  .strict();
 
-export const hostRuntimeMaterialStateSchema = z.object({
-  files: z.array(persistedRuntimeMaterialFileSchema),
-  version: hostRuntimeMaterialSnapshotSchema.shape.version,
-}).strict();
+export const hostRuntimeMaterialStateSchema = z
+  .object({
+    files: z.array(persistedRuntimeMaterialFileSchema),
+    version: hostRuntimeMaterialSnapshotSchema.shape.version,
+  })
+  .strict();
 
 export type HostRuntimeMaterialState = z.infer<
   typeof hostRuntimeMaterialStateSchema

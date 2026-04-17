@@ -88,9 +88,11 @@ export async function runScriptProcess(
   request: ScriptProcessRequest,
 ): Promise<number> {
   const child = spawnScriptProcess(request);
-  const removeSignalForwarding = installTerminationSignalForwarding((signal) => {
-    killProcessIfRunning(child, signal);
-  });
+  const removeSignalForwarding = installTerminationSignalForwarding(
+    (signal) => {
+      killProcessIfRunning(child, signal);
+    },
+  );
 
   try {
     const result = await waitForProcessExit(child);

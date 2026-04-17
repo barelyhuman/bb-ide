@@ -38,7 +38,10 @@ describe("real provider control integration", () => {
             harness,
             threadId: thread.id,
           });
-          const steerBaselineEvents = await getThreadEvents(harness.api, thread.id);
+          const steerBaselineEvents = await getThreadEvents(
+            harness.api,
+            thread.id,
+          );
           const steerBaselineSequence = Math.max(
             0,
             ...steerBaselineEvents.map((event) => event.seq),
@@ -64,7 +67,10 @@ describe("real provider control integration", () => {
             STOP_TIMEOUT_MS,
           );
 
-          const beforeRecoveryEvents = await getThreadEvents(harness.api, thread.id);
+          const beforeRecoveryEvents = await getThreadEvents(
+            harness.api,
+            thread.id,
+          );
           const { events, output } = await sendAndWaitForIdle({
             providerId,
             threadId: thread.id,

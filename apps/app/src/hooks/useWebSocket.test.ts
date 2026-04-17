@@ -32,10 +32,7 @@ interface ConnectedEvent {
   reconnected: boolean;
 }
 
-type WebSocketConnectionState =
-  | "connecting"
-  | "connected"
-  | "reconnecting";
+type WebSocketConnectionState = "connecting" | "connected" | "reconnecting";
 
 interface ChangedMessage {
   changes: string[];
@@ -155,7 +152,9 @@ describe("shouldFlushThreadChangesImmediately", () => {
   });
 
   it("does not fast-flush pure timeline appends", () => {
-    expect(shouldFlushThreadChangesImmediately(["events-appended"])).toBe(false);
+    expect(shouldFlushThreadChangesImmediately(["events-appended"])).toBe(
+      false,
+    );
   });
 });
 
@@ -266,11 +265,26 @@ describe("useWebSocket", () => {
     vi.useFakeTimers();
     const { queryClient, wrapper } = createQueryClientTestHarness();
     const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
-    const plainWorkStatusQueryKey = environmentWorkStatusQueryKey("env-1", null);
-    const mergeBaseWorkStatusQueryKey = environmentWorkStatusQueryKey("env-1", "main");
-    const mergeBaseBranchesQueryKey = environmentMergeBaseBranchesQueryKey("env-1");
-    const branchGitDiffQueryKey = environmentGitDiffQueryKey("env-1", "all", "main");
-    const commitGitDiffQueryKey = environmentGitDiffQueryKey("env-1", "commit", "abc123");
+    const plainWorkStatusQueryKey = environmentWorkStatusQueryKey(
+      "env-1",
+      null,
+    );
+    const mergeBaseWorkStatusQueryKey = environmentWorkStatusQueryKey(
+      "env-1",
+      "main",
+    );
+    const mergeBaseBranchesQueryKey =
+      environmentMergeBaseBranchesQueryKey("env-1");
+    const branchGitDiffQueryKey = environmentGitDiffQueryKey(
+      "env-1",
+      "all",
+      "main",
+    );
+    const commitGitDiffQueryKey = environmentGitDiffQueryKey(
+      "env-1",
+      "commit",
+      "abc123",
+    );
 
     queryClient.setQueryData(plainWorkStatusQueryKey, null);
     queryClient.setQueryData(mergeBaseWorkStatusQueryKey, null);
@@ -320,11 +334,21 @@ describe("useWebSocket", () => {
     expect(invalidateQueries).not.toHaveBeenCalledWith({
       queryKey: environmentQueryKey("env-1"),
     });
-    expect(queryClient.getQueryState(plainWorkStatusQueryKey)?.isInvalidated).not.toBe(true);
-    expect(queryClient.getQueryState(mergeBaseWorkStatusQueryKey)?.isInvalidated).toBe(true);
-    expect(queryClient.getQueryState(mergeBaseBranchesQueryKey)?.isInvalidated).toBe(true);
-    expect(queryClient.getQueryState(branchGitDiffQueryKey)?.isInvalidated).toBe(true);
-    expect(queryClient.getQueryState(commitGitDiffQueryKey)?.isInvalidated).not.toBe(true);
+    expect(
+      queryClient.getQueryState(plainWorkStatusQueryKey)?.isInvalidated,
+    ).not.toBe(true);
+    expect(
+      queryClient.getQueryState(mergeBaseWorkStatusQueryKey)?.isInvalidated,
+    ).toBe(true);
+    expect(
+      queryClient.getQueryState(mergeBaseBranchesQueryKey)?.isInvalidated,
+    ).toBe(true);
+    expect(
+      queryClient.getQueryState(branchGitDiffQueryKey)?.isInvalidated,
+    ).toBe(true);
+    expect(
+      queryClient.getQueryState(commitGitDiffQueryKey)?.isInvalidated,
+    ).not.toBe(true);
   });
 
   it("invalidates persisted environment, workspace, and branch queries for metadata changes", () => {

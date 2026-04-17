@@ -197,7 +197,10 @@ function normalizePermissionPath(path: string): string {
   return resolvePath(path);
 }
 
-function permissionPathCovers(grantPath: string, requestedPath: string): boolean {
+function permissionPathCovers(
+  grantPath: string,
+  requestedPath: string,
+): boolean {
   const normalizedGrantPath = normalizePermissionPath(grantPath);
   const normalizedRequestedPath = normalizePermissionPath(requestedPath);
   if (normalizedGrantPath === normalizedRequestedPath) {
@@ -215,8 +218,8 @@ function permissionPathListCovers(
 ): boolean {
   return requestedPaths.every((requestedPath) =>
     grantedPaths.some((grantedPath) =>
-      permissionPathCovers(grantedPath, requestedPath)
-    )
+      permissionPathCovers(grantedPath, requestedPath),
+    ),
   );
 }
 
@@ -251,7 +254,10 @@ function sessionPermissionGrantCovers(
     return false;
   }
   return (
-    networkPermissionsCover(args.grant.permissions.network, args.permissions.network) &&
+    networkPermissionsCover(
+      args.grant.permissions.network,
+      args.permissions.network,
+    ) &&
     fileSystemPermissionsCover(
       args.grant.permissions.fileSystem,
       args.permissions.fileSystem,
@@ -267,7 +273,7 @@ function hasClaudeSessionPermissionGrant(
       grant,
       permissions: args.permissions,
       toolName: args.toolName,
-    })
+    }),
   );
 }
 
@@ -276,14 +282,18 @@ function shouldCacheClaudeSessionPermission(
 ): boolean {
   return (
     response.behavior === "allow" &&
-    (
-      response.decisionClassification === "user_permanent" ||
-      response.updatedPermissions !== undefined
-    )
+    (response.decisionClassification === "user_permanent" ||
+      response.updatedPermissions !== undefined)
   );
 }
 
-function send(msg: JsonRpcResponse | SdkMessageNotification | BridgeEventNotification | BridgeToolCallRequest): void {
+function send(
+  msg:
+    | JsonRpcResponse
+    | SdkMessageNotification
+    | BridgeEventNotification
+    | BridgeToolCallRequest,
+): void {
   process.stdout.write(JSON.stringify(msg) + "\n");
 }
 
@@ -291,11 +301,7 @@ function sendResult(id: string | number, result: unknown): void {
   send({ jsonrpc: "2.0", id, result });
 }
 
-function sendError(
-  id: string | number,
-  code: number,
-  message: string,
-): void {
+function sendError(id: string | number, code: number, message: string): void {
   send({ jsonrpc: "2.0", id, error: { code, message } });
 }
 
@@ -328,9 +334,9 @@ function getCurrentThreadSession(
 ): ThreadSession | undefined {
   const threadSession = sessions.get(args.threadId);
   if (
-    !threadSession
-    || threadSession.closing
-    || threadSession.sessionSerial !== args.sessionSerial
+    !threadSession ||
+    threadSession.closing ||
+    threadSession.sessionSerial !== args.sessionSerial
   ) {
     return undefined;
   }
@@ -348,8 +354,8 @@ function createOnSdkMessage(
     if (!threadSession) return;
     const providerThreadId = message.session_id?.trim() ?? "";
     if (
-      providerThreadId.length > 0
-      && threadSession.providerThreadId !== providerThreadId
+      providerThreadId.length > 0 &&
+      threadSession.providerThreadId !== providerThreadId
     ) {
       threadSession.providerThreadId = providerThreadId;
       sendThreadIdentity(args.threadIdRef.current, providerThreadId);
@@ -369,8 +375,7 @@ function createOnSdkDone(
     });
     if (!threadSession) return;
 
-    const message =
-      error instanceof Error ? error.message : String(error);
+    const message = error instanceof Error ? error.message : String(error);
 
     send({
       jsonrpc: "2.0",
@@ -397,7 +402,8 @@ function createForwardToolCall(threadIdRef: ThreadIdRef): ToolCallForwarder {
         method: "item/tool/call",
         params: {
           threadId: threadIdRef.current,
-          providerThreadId: threadSession.providerThreadId ?? threadIdRef.current,
+          providerThreadId:
+            threadSession.providerThreadId ?? threadIdRef.current,
           turnId: "",
           callId: `call-${requestId}`,
           tool: toolName,
@@ -408,7 +414,9 @@ function createForwardToolCall(threadIdRef: ThreadIdRef): ToolCallForwarder {
   };
 }
 
-function findSessionByPendingToolCall(id: string | number): ThreadSession | undefined {
+function findSessionByPendingToolCall(
+  id: string | number,
+): ThreadSession | undefined {
   for (const session of sessions.values()) {
     if (session.pendingToolCalls.has(id)) return session;
   }
@@ -493,12 +501,14 @@ async function closeThreadSession(args: CloseThreadSessionArgs): Promise<void> {
 async function closeThreadSessionsGracefully(message: string): Promise<void> {
   await Promise.all(
     Array.from(sessions.keys()).map((threadId) =>
-      closeThreadSession({ graceful: true, message, threadId })
+      closeThreadSession({ graceful: true, message, threadId }),
     ),
   );
 }
 
-function extractEnvOverrides(config: Record<string, unknown> | undefined): Record<string, string> {
+function extractEnvOverrides(
+  config: Record<string, unknown> | undefined,
+): Record<string, string> {
   const envOverrides: Record<string, string> = {};
   if (config) {
     for (const [key, value] of Object.entries(config)) {
@@ -514,7 +524,9 @@ function extractEnvOverrides(config: Record<string, unknown> | undefined): Recor
   return envOverrides;
 }
 
-function buildSessionEnv(envOverrides: Record<string, string>): NodeJS.ProcessEnv {
+function buildSessionEnv(
+  envOverrides: Record<string, string>,
+): NodeJS.ProcessEnv {
   return {
     ...process.env,
     ...envOverrides,
@@ -600,71 +612,71 @@ function buildInteractivePermissionResult(
 function createForwardInteractiveRequest(
   threadIdRef: ThreadIdRef,
 ): (args: ForwardInteractiveRequestArgs) => Promise<PermissionResult> {
-  return (args) => new Promise<PermissionResult>((resolve) => {
-    const threadSession = sessions.get(threadIdRef.current);
-    if (!threadSession) {
-      resolve({
-        behavior: "deny",
-        message: "Thread session not found",
-        toolUseID: args.toolUseId,
-      });
-      return;
-    }
-
-    let params: ClaudePermissionRequestApprovalParams;
-    try {
-      params = buildInteractiveRequestParams(args);
-    } catch (error) {
-      resolve({
-        behavior: "deny",
-        message: error instanceof Error ? error.message : String(error),
-        toolUseID: args.toolUseId,
-      });
-      return;
-    }
-
-    toolCallRequestIdCounter += 1;
-    const requestId = toolCallRequestIdCounter;
-
-    const finish = (result: PermissionResult): void => {
-      args.signal.removeEventListener("abort", onAbort);
-      resolve(result);
-    };
-
-    const onAbort = (): void => {
-      if (!threadSession.pendingInteractiveRequests.delete(requestId)) {
+  return (args) =>
+    new Promise<PermissionResult>((resolve) => {
+      const threadSession = sessions.get(threadIdRef.current);
+      if (!threadSession) {
+        resolve({
+          behavior: "deny",
+          message: "Thread session not found",
+          toolUseID: args.toolUseId,
+        });
         return;
       }
-      finish({
-        behavior: "deny",
-        message: "Interactive request cancelled",
-        toolUseID: args.toolUseId,
+
+      let params: ClaudePermissionRequestApprovalParams;
+      try {
+        params = buildInteractiveRequestParams(args);
+      } catch (error) {
+        resolve({
+          behavior: "deny",
+          message: error instanceof Error ? error.message : String(error),
+          toolUseID: args.toolUseId,
+        });
+        return;
+      }
+
+      toolCallRequestIdCounter += 1;
+      const requestId = toolCallRequestIdCounter;
+
+      const finish = (result: PermissionResult): void => {
+        args.signal.removeEventListener("abort", onAbort);
+        resolve(result);
+      };
+
+      const onAbort = (): void => {
+        if (!threadSession.pendingInteractiveRequests.delete(requestId)) {
+          return;
+        }
+        finish({
+          behavior: "deny",
+          message: "Interactive request cancelled",
+          toolUseID: args.toolUseId,
+        });
+      };
+
+      args.signal.addEventListener("abort", onAbort, { once: true });
+      threadSession.pendingInteractiveRequests.set(requestId, {
+        itemId: args.toolUseId,
+        kind: "permission_request",
+        originalInput: args.input,
+        permissions: params.permissions,
+        resolve: finish,
+        toolName: args.toolName,
       });
-    };
 
-    args.signal.addEventListener("abort", onAbort, { once: true });
-    threadSession.pendingInteractiveRequests.set(requestId, {
-      itemId: args.toolUseId,
-      kind: "permission_request",
-      originalInput: args.input,
-      permissions: params.permissions,
-      resolve: finish,
-      toolName: args.toolName,
+      send({
+        jsonrpc: "2.0",
+        id: requestId,
+        method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+        params,
+      });
     });
-
-    send({
-      jsonrpc: "2.0",
-      id: requestId,
-      method: CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
-      params,
-    });
-  });
 }
 
-function createCanUseTool(
-  threadIdRef: ThreadIdRef,
-): CanUseTool {
-  const forwardInteractiveRequest = createForwardInteractiveRequest(threadIdRef);
+function createCanUseTool(threadIdRef: ThreadIdRef): CanUseTool {
+  const forwardInteractiveRequest =
+    createForwardInteractiveRequest(threadIdRef);
 
   return async (toolName, input, options) => {
     const threadSession = sessions.get(threadIdRef.current);
@@ -683,7 +695,8 @@ function createCanUseTool(
       decisionReason: options.decisionReason,
       suggestions,
     };
-    const requestedPermissions = toPendingInteractionPermissionProfile(requestContext);
+    const requestedPermissions =
+      toPendingInteractionPermissionProfile(requestContext);
     if (
       hasClaudeSessionPermissionGrant({
         grants: threadSession.sessionPermissionGrants,
@@ -700,8 +713,8 @@ function createCanUseTool(
     }
 
     const shouldRequestApproval =
-      shouldRequestClaudePermissionApproval(requestContext)
-      || (options.suggestions?.length ?? 0) > 0;
+      shouldRequestClaudePermissionApproval(requestContext) ||
+      (options.suggestions?.length ?? 0) > 0;
 
     if (!shouldRequestApproval) {
       return {
@@ -720,25 +733,23 @@ function createCanUseTool(
     }
 
     if (
-      shouldAutoDenyInteractiveRequest(threadSession)
-      || threadSession.permissionMode === "dontAsk"
+      shouldAutoDenyInteractiveRequest(threadSession) ||
+      threadSession.permissionMode === "dontAsk"
     ) {
-      const policyMessage = threadSession.permissionMode === "acceptEdits"
-        ? buildWorkspaceWriteDenialMessage()
-        : buildReadonlyDenialMessage();
+      const policyMessage =
+        threadSession.permissionMode === "acceptEdits"
+          ? buildWorkspaceWriteDenialMessage()
+          : buildReadonlyDenialMessage();
       return {
         behavior: "deny",
-        message:
-          options.decisionReason
-          ?? policyMessage,
+        message: options.decisionReason ?? policyMessage,
         toolUseID: options.toolUseID,
       };
     }
 
     return forwardInteractiveRequest({
       threadId: threadIdRef.current,
-      providerThreadId:
-        threadSession.providerThreadId ?? threadIdRef.current,
+      providerThreadId: threadSession.providerThreadId ?? threadIdRef.current,
       toolName,
       toolUseId: options.toolUseID,
       input,
@@ -889,10 +900,7 @@ async function handleThreadResume(
   sendResult(id, { threadId, providerThreadId: providerThreadId ?? null });
 }
 
-function handleTurnStart(
-  id: string | number,
-  params: TurnStartParams,
-): void {
+function handleTurnStart(id: string | number, params: TurnStartParams): void {
   const threadSession = sessions.get(params.threadId);
   if (!threadSession || threadSession.closing) {
     sendError(id, -32000, "No active session");
@@ -909,10 +917,7 @@ function handleTurnStart(
   sendResult(id, { threadId: params.threadId });
 }
 
-function handleTurnSteer(
-  id: string | number,
-  params: TurnSteerParams,
-): void {
+function handleTurnSteer(id: string | number, params: TurnSteerParams): void {
   const threadSession = sessions.get(params.threadId);
   if (!threadSession || threadSession.closing) {
     sendError(id, -32000, "No active session");
@@ -1044,13 +1049,17 @@ function shutdownGracefully(message: string): void {
 
 function isMainModule(): boolean {
   const entryPoint = process.argv[1];
-  return entryPoint !== undefined
-    && import.meta.url === pathToFileURL(resolvePath(entryPoint)).href;
+  return (
+    entryPoint !== undefined &&
+    import.meta.url === pathToFileURL(resolvePath(entryPoint)).href
+  );
 }
 
 if (isMainModule()) {
   process.once("SIGTERM", () => {
-    shutdownGracefully("Bridge shutting down while awaiting permission approval");
+    shutdownGracefully(
+      "Bridge shutting down while awaiting permission approval",
+    );
   });
 
   process.once("SIGINT", () => {

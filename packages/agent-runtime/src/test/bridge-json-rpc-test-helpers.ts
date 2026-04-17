@@ -65,7 +65,7 @@ const bridgeJsonRpcValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
     z.null(),
     z.array(bridgeJsonRpcValueSchema),
     z.record(z.string(), bridgeJsonRpcValueSchema),
-  ])
+  ]),
 );
 
 const bridgeJsonRpcOutputSchema: z.ZodType<BridgeJsonRpcOutputMessage> =
@@ -75,11 +75,13 @@ const bridgeJsonRpcOutputSchema: z.ZodType<BridgeJsonRpcOutputMessage> =
     method: z.string().optional(),
     params: bridgeJsonRpcValueSchema.optional(),
     result: bridgeJsonRpcValueSchema.optional(),
-    error: z.object({
-      code: z.number(),
-      message: z.string(),
-      data: bridgeJsonRpcValueSchema.optional(),
-    }).optional(),
+    error: z
+      .object({
+        code: z.number(),
+        message: z.string(),
+        data: bridgeJsonRpcValueSchema.optional(),
+      })
+      .optional(),
   });
 
 function waitForNextBridgeTick(): Promise<void> {
@@ -90,9 +92,10 @@ export function captureBridgeJsonRpcOutput(): CapturedBridgeJsonRpcOutput {
   const messages: BridgeJsonRpcOutputMessage[] = [];
   const writeSpy = vi.spyOn(process.stdout, "write");
   writeSpy.mockImplementation((buffer: string | Uint8Array) => {
-    const text = typeof buffer === "string"
-      ? buffer
-      : Buffer.from(buffer).toString("utf8");
+    const text =
+      typeof buffer === "string"
+        ? buffer
+        : Buffer.from(buffer).toString("utf8");
     for (const line of text.split("\n")) {
       if (line.trim().length > 0) {
         messages.push(bridgeJsonRpcOutputSchema.parse(JSON.parse(line)));
@@ -111,12 +114,14 @@ export function captureBridgeJsonRpcOutput(): CapturedBridgeJsonRpcOutput {
 export function sendBridgeJsonRpcRequest(
   args: SendBridgeJsonRpcRequestArgs,
 ): void {
-  args.handleLine(JSON.stringify({
-    jsonrpc: "2.0",
-    id: args.id,
-    method: args.method,
-    params: args.params,
-  }));
+  args.handleLine(
+    JSON.stringify({
+      jsonrpc: "2.0",
+      id: args.id,
+      method: args.method,
+      params: args.params,
+    }),
+  );
 }
 
 export async function waitForBridgeJsonRpcResponse(
@@ -131,9 +136,7 @@ export async function waitForBridgeJsonRpcResponse(
     }
     await waitForNextBridgeTick();
   }
-  throw new Error(
-    `Timed out waiting for JSON-RPC response ${String(args.id)}`,
-  );
+  throw new Error(`Timed out waiting for JSON-RPC response ${String(args.id)}`);
 }
 
 export async function flushBridgeJsonRpcWork(): Promise<void> {

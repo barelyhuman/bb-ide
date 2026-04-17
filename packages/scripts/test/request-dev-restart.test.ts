@@ -18,12 +18,18 @@ async function makeTempDir(prefix: string): Promise<string> {
 afterEach(async () => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
-  await Promise.all(tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })));
+  await Promise.all(
+    tempDirs
+      .splice(0)
+      .map((dir) => fs.rm(dir, { recursive: true, force: true })),
+  );
 });
 
 describe("request-dev-restart", () => {
   it("rejects invalid restart targets", () => {
-    expect(() => parseTarget("nope")).toThrow('Expected one of: "both", "server", "host-daemon"');
+    expect(() => parseTarget("nope")).toThrow(
+      'Expected one of: "both", "server", "host-daemon"',
+    );
   });
 
   it("reads a valid running supervisor pid", async () => {
@@ -31,7 +37,11 @@ describe("request-dev-restart", () => {
     vi.stubEnv("BB_DATA_DIR", dataDir);
     const serviceDir = path.join(dataDir, "dev-supervisors");
     await fs.mkdir(serviceDir, { recursive: true });
-    await fs.writeFile(path.join(serviceDir, "server.pid"), `${process.pid}\n`, "utf8");
+    await fs.writeFile(
+      path.join(serviceDir, "server.pid"),
+      `${process.pid}\n`,
+      "utf8",
+    );
 
     await expect(readRunningSupervisorPid("server")).resolves.toBe(process.pid);
   });

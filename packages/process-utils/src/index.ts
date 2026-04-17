@@ -12,7 +12,7 @@ export interface PortableSpawnRequest {
   stdio?: StdioOptions;
 }
 
-export type PortableChildProcess = ChildProcess
+export type PortableChildProcess = ChildProcess;
 
 export interface PortablePipedSpawnRequest {
   command: string;

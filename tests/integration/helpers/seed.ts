@@ -44,9 +44,7 @@ export async function createTestFile(
   return options.filePath;
 }
 
-export async function runGit(
-  options: RunGitOptions,
-): Promise<string> {
+export async function runGit(options: RunGitOptions): Promise<string> {
   const result = await execFile("git", options.args, {
     cwd: options.cwd,
   });

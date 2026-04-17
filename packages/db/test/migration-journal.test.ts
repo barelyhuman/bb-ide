@@ -4,7 +4,13 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const journalPath = resolve(__dirname, "..", "drizzle", "meta", "_journal.json");
+const journalPath = resolve(
+  __dirname,
+  "..",
+  "drizzle",
+  "meta",
+  "_journal.json",
+);
 
 interface JournalEntry {
   idx: number;

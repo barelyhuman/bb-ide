@@ -211,10 +211,10 @@ describe("createAgentRuntime command contracts", () => {
       threadId: "t1",
       turnId: "turn-1",
     });
-    await expect(runtime.stopThread({ threadId: "t1" }))
-      .rejects.toThrow(/returned no provider request for thread\/stop with active turn/);
+    await expect(runtime.stopThread({ threadId: "t1" })).rejects.toThrow(
+      /returned no provider request for thread\/stop with active turn/,
+    );
 
     await runtime.shutdown();
   });
-
 });

@@ -13,16 +13,18 @@ import {
 const tempDirs: string[] = [];
 
 async function makeTempDir(): Promise<string> {
-  const tempDir = await mkdtemp(path.join(os.tmpdir(), "bb-cloud-auth-storage-"));
+  const tempDir = await mkdtemp(
+    path.join(os.tmpdir(), "bb-cloud-auth-storage-"),
+  );
   tempDirs.push(tempDir);
   return tempDir;
 }
 
 afterEach(async () => {
   await Promise.all(
-    tempDirs.splice(0).map((tempDir) =>
-      rm(tempDir, { force: true, recursive: true })
-    ),
+    tempDirs
+      .splice(0)
+      .map((tempDir) => rm(tempDir, { force: true, recursive: true })),
   );
 });
 

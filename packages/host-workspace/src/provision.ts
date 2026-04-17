@@ -17,12 +17,7 @@ import {
   removeWorktree,
   removeDirectory,
 } from "./provisioning.js";
-import {
-  detectGitRepo,
-  pathExists,
-  runGit,
-  WorkspaceError,
-} from "./git.js";
+import { detectGitRepo, pathExists, runGit, WorkspaceError } from "./git.js";
 
 // ---------------------------------------------------------------------------
 // Options (discriminated union on workspaceProvisionType from @bb/domain)
@@ -225,14 +220,19 @@ class ProvisionedHostWorkspace implements HostWorkspace {
     envBranch?: string;
   }): Promise<void> {
     const primaryWs = new Workspace(args.primary.path);
-    const branch = args.envBranch ?? await this.ws.currentBranch;
+    const branch = args.envBranch ?? (await this.ws.currentBranch);
     if (!branch) {
       throw new WorkspaceError(
         "detached_head",
         "Cannot demote: workspace has no branch (detached HEAD)",
       );
     }
-    await demoteWorkspace({ source: this.ws, primary: primaryWs, defaultBranch: args.defaultBranch, envBranch: branch });
+    await demoteWorkspace({
+      source: this.ws,
+      primary: primaryWs,
+      defaultBranch: args.defaultBranch,
+      envBranch: branch,
+    });
   }
 
   destroy(): Promise<void> {
@@ -318,9 +318,7 @@ async function provisionWorktree(
   });
 }
 
-async function provisionClone(
-  opts: ManagedCloneOpts,
-): Promise<HostWorkspace> {
+async function provisionClone(opts: ManagedCloneOpts): Promise<HostWorkspace> {
   const { path: wsPath } = await createClone({
     sourcePath: opts.sourcePath,
     targetPath: opts.targetPath,
@@ -364,11 +362,15 @@ async function reconnectManaged(
 async function reconnectManagedWorktree(
   opts: ReconnectManagedWorktreeOpts,
 ): Promise<HostWorkspace> {
-  return reconnectManaged(opts.path, () => removeWorktree({ path: opts.path, force: true }));
+  return reconnectManaged(opts.path, () =>
+    removeWorktree({ path: opts.path, force: true }),
+  );
 }
 
 async function reconnectManagedClone(
   opts: ReconnectManagedCloneOpts,
 ): Promise<HostWorkspace> {
-  return reconnectManaged(opts.path, () => removeDirectory({ path: opts.path }));
+  return reconnectManaged(opts.path, () =>
+    removeDirectory({ path: opts.path }),
+  );
 }

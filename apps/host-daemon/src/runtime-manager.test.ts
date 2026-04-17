@@ -6,14 +6,8 @@ import type {
   WatchWorkspaceArgs,
   WorkspaceWatchError,
 } from "@bb/host-watcher";
-import type {
-  HostWorkspace,
-  ProvisionWorkspaceArgs,
-} from "@bb/host-workspace";
-import {
-  makeWorkspaceMergeBase,
-  makeWorkspaceStatus,
-} from "@bb/test-helpers";
+import type { HostWorkspace, ProvisionWorkspaceArgs } from "@bb/host-workspace";
+import { makeWorkspaceMergeBase, makeWorkspaceStatus } from "@bb/test-helpers";
 import { describe, expect, it, vi } from "vitest";
 import { RuntimeManager } from "./runtime-manager.js";
 
@@ -77,9 +71,7 @@ function getProvisionWorkspacePath(args: ProvisionWorkspaceArgs): string {
   }
 }
 
-function createFakeWorkspace(
-  path: string,
-) {
+function createFakeWorkspace(path: string) {
   const status: GetStatusResult = makeWorkspaceStatus({
     mergeBase: makeWorkspaceMergeBase(),
   });
@@ -98,9 +90,7 @@ function createFakeWorkspace(
     managed: false,
     isGitRepo: true,
     isWorktree: false,
-    getCurrentBranch: vi.fn(
-      async (..._args: GetCurrentBranchArgs) => "main",
-    ),
+    getCurrentBranch: vi.fn(async (..._args: GetCurrentBranchArgs) => "main"),
     getHeadSha: vi.fn(async () => "commit-1"),
     getLocalStateFingerprint: vi.fn(async () => {
       if (localStateFingerprintError) {
@@ -156,17 +146,17 @@ function createFakeWorkspace(
   return workspace;
 }
 
-function createFakeHostWatcher(args: {
-  watchThreadStorageRootImplementation?: WatchThreadStorageRootImplementation;
-  watchWorkspaceImplementation?: WatchWorkspaceImplementation;
-} = {}) {
+function createFakeHostWatcher(
+  args: {
+    watchThreadStorageRootImplementation?: WatchThreadStorageRootImplementation;
+    watchWorkspaceImplementation?: WatchWorkspaceImplementation;
+  } = {},
+) {
   const watchWorkspace = vi.fn<WatchWorkspaceImplementation>(
-    args.watchWorkspaceImplementation ??
-      ((_args) => () => undefined),
+    args.watchWorkspaceImplementation ?? ((_args) => () => undefined),
   );
   const watchThreadStorageRoot = vi.fn<WatchThreadStorageRootImplementation>(
-    args.watchThreadStorageRootImplementation ??
-      ((_args) => () => undefined),
+    args.watchThreadStorageRootImplementation ?? ((_args) => () => undefined),
   );
   const hostWatcher = {
     watchWorkspace,
@@ -183,14 +173,16 @@ function createFakeHostWatcher(args: {
 function createFakeRuntime() {
   return {
     ensureProvider: vi.fn(async (_args: EnsureProviderArgs) => undefined),
-    startThread: vi.fn(
-      async (_args: StartThreadArgs) => ({ providerThreadId: "provider-1" }),
-    ),
-    resumeThread: vi.fn(
-      async (_args: ResumeThreadArgs) => ({ providerThreadId: "provider-1" }),
-    ),
+    startThread: vi.fn(async (_args: StartThreadArgs) => ({
+      providerThreadId: "provider-1",
+    })),
+    resumeThread: vi.fn(async (_args: ResumeThreadArgs) => ({
+      providerThreadId: "provider-1",
+    })),
     runTurn: vi.fn(async (_args: RunTurnArgs) => undefined),
-    steerTurn: vi.fn(async (_args: SteerTurnArgs) => ({ status: "steered" as const })),
+    steerTurn: vi.fn(async (_args: SteerTurnArgs) => ({
+      status: "steered" as const,
+    })),
     stopThread: vi.fn(async (_args: StopThreadArgs) => undefined),
     renameThread: vi.fn(async (_args: RenameThreadArgs) => undefined),
     listModels: vi.fn(async (_args: ListModelsArgs) => []),
@@ -200,8 +192,8 @@ function createFakeRuntime() {
 }
 
 function createProvisionWorkspaceMock(path: string) {
-  return vi.fn(
-    async (..._args: ProvisionWorkspaceMockArgs) => createFakeWorkspace(path),
+  return vi.fn(async (..._args: ProvisionWorkspaceMockArgs) =>
+    createFakeWorkspace(path),
   );
 }
 
@@ -320,7 +312,9 @@ describe("RuntimeManager", () => {
     });
     const provisionWorkspace = vi.fn(
       async (...args: ProvisionWorkspaceMockArgs) => {
-        const workspace = createFakeWorkspace(getProvisionWorkspacePath(args[0]));
+        const workspace = createFakeWorkspace(
+          getProvisionWorkspacePath(args[0]),
+        );
         workspaces.push(workspace);
         return workspace;
       },
@@ -338,9 +332,15 @@ describe("RuntimeManager", () => {
       environmentId: "env-active",
       workspacePath: "/tmp/env-active",
     });
-    manager.markThreadActive("env-active", "thr-active", "provider-thread-active");
+    manager.markThreadActive(
+      "env-active",
+      "thr-active",
+      "provider-thread-active",
+    );
 
-    await expect(manager.evictIdleEnvironments()).resolves.toEqual(["env-idle"]);
+    await expect(manager.evictIdleEnvironments()).resolves.toEqual([
+      "env-idle",
+    ]);
 
     expect(manager.get("env-idle")).toBeUndefined();
     expect(manager.get("env-active")).toBeDefined();
@@ -382,9 +382,8 @@ describe("RuntimeManager", () => {
     const runtime = createFakeRuntime();
     const manager = new RuntimeManager({
       hostWatcher,
-      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-1").mockResolvedValue(
-        workspace,
-      ),
+      provisionWorkspace:
+        createProvisionWorkspaceMock("/tmp/env-1").mockResolvedValue(workspace),
       createRuntime: vi.fn(() => runtime),
     });
 
@@ -413,9 +412,10 @@ describe("RuntimeManager", () => {
     const onWorkspaceStatusChanged = vi.fn();
     const manager = new RuntimeManager({
       hostWatcher,
-      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-watch").mockResolvedValue(
-        workspace,
-      ),
+      provisionWorkspace:
+        createProvisionWorkspaceMock("/tmp/env-watch").mockResolvedValue(
+          workspace,
+        ),
       createRuntime: vi.fn(() => createFakeRuntime()),
       onWorkspaceStatusChanged,
     });
@@ -465,9 +465,10 @@ describe("RuntimeManager", () => {
     const onWorkspaceStatusChanged = vi.fn();
     const manager = new RuntimeManager({
       hostWatcher,
-      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-watch").mockResolvedValue(
-        workspace,
-      ),
+      provisionWorkspace:
+        createProvisionWorkspaceMock("/tmp/env-watch").mockResolvedValue(
+          workspace,
+        ),
       createRuntime: vi.fn(() => createFakeRuntime()),
       onWorkspaceStatusChanged,
     });
@@ -502,9 +503,10 @@ describe("RuntimeManager", () => {
     const onWorkspaceStatusChanged = vi.fn();
     const manager = new RuntimeManager({
       hostWatcher,
-      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-watch").mockResolvedValue(
-        workspace,
-      ),
+      provisionWorkspace:
+        createProvisionWorkspaceMock("/tmp/env-watch").mockResolvedValue(
+          workspace,
+        ),
       createRuntime: vi.fn(() => createFakeRuntime()),
       onWorkspaceStatusChanged,
     });
@@ -543,9 +545,10 @@ describe("RuntimeManager", () => {
     const onWorkspaceStatusChanged = vi.fn();
     const manager = new RuntimeManager({
       hostWatcher,
-      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-watch").mockResolvedValue(
-        workspace,
-      ),
+      provisionWorkspace:
+        createProvisionWorkspaceMock("/tmp/env-watch").mockResolvedValue(
+          workspace,
+        ),
       createRuntime: vi.fn(() => createFakeRuntime()),
       onWorkspaceStatusChanged,
     });
@@ -585,9 +588,10 @@ describe("RuntimeManager", () => {
     const onWorkspaceStatusWatchError = vi.fn();
     const manager = new RuntimeManager({
       hostWatcher,
-      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-watch").mockResolvedValue(
-        workspace,
-      ),
+      provisionWorkspace:
+        createProvisionWorkspaceMock("/tmp/env-watch").mockResolvedValue(
+          workspace,
+        ),
       createRuntime: vi.fn(() => createFakeRuntime()),
       onWorkspaceStatusChanged,
       onWorkspaceStatusWatchError,
@@ -649,9 +653,10 @@ describe("RuntimeManager", () => {
     const onWorkspaceStatusWatchError = vi.fn();
     const manager = new RuntimeManager({
       hostWatcher,
-      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-watch").mockResolvedValue(
-        workspace,
-      ),
+      provisionWorkspace:
+        createProvisionWorkspaceMock("/tmp/env-watch").mockResolvedValue(
+          workspace,
+        ),
       createRuntime: vi.fn(() => createFakeRuntime()),
       onWorkspaceStatusChanged,
       onWorkspaceStatusWatchError,
@@ -712,9 +717,10 @@ describe("RuntimeManager", () => {
     const onWorkspaceStatusWatchError = vi.fn();
     const manager = new RuntimeManager({
       hostWatcher,
-      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-watch").mockResolvedValue(
-        workspace,
-      ),
+      provisionWorkspace:
+        createProvisionWorkspaceMock("/tmp/env-watch").mockResolvedValue(
+          workspace,
+        ),
       createRuntime: vi.fn(() => createFakeRuntime()),
       onWorkspaceStatusWatchError,
     });
@@ -992,9 +998,10 @@ describe("RuntimeManager", () => {
       | undefined;
     const manager = new RuntimeManager({
       hostWatcher,
-      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-exit").mockResolvedValue(
-        workspace,
-      ),
+      provisionWorkspace:
+        createProvisionWorkspaceMock("/tmp/env-exit").mockResolvedValue(
+          workspace,
+        ),
       createRuntime: vi.fn((options) => {
         onProcessExit = options.onProcessExit;
         return runtime;
@@ -1039,9 +1046,10 @@ describe("RuntimeManager", () => {
       | undefined;
     const manager = new RuntimeManager({
       hostWatcher,
-      provisionWorkspace: createProvisionWorkspaceMock("/tmp/env-shared").mockResolvedValue(
-        workspace,
-      ),
+      provisionWorkspace:
+        createProvisionWorkspaceMock("/tmp/env-shared").mockResolvedValue(
+          workspace,
+        ),
       createRuntime: vi.fn((options) => {
         onProcessExit = options.onProcessExit;
         return runtime;

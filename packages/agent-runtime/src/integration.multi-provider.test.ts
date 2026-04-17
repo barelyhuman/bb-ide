@@ -130,21 +130,23 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
         });
 
         // Verify events came from both threads
-        const codexEvents = ctx.events.filter((e) => "threadId" in e && e.threadId === codexThread);
-        const claudeEvents = ctx.events.filter((e) => "threadId" in e && e.threadId === claudeThread);
+        const codexEvents = ctx.events.filter(
+          (e) => "threadId" in e && e.threadId === codexThread,
+        );
+        const claudeEvents = ctx.events.filter(
+          (e) => "threadId" in e && e.threadId === claudeThread,
+        );
         expect(codexEvents.length).toBeGreaterThan(0);
         expect(claudeEvents.length).toBeGreaterThan(0);
       } finally {
         await ctx.runtime.shutdown();
         cleanup(ctx);
       }
-  }, 45_000);
+    }, 45_000);
+  });
 });
-});
-
 
 describe.concurrent("multi-provider resume scenarios", () => {
-
   // Matrix test: multiple threads, multiple providers, with resume
   it("handles multiple threads across providers with resume", async () => {
     // Runtime 1: start threads on codex and claude-code, remember different words
@@ -190,12 +192,22 @@ describe.concurrent("multi-provider resume scenarios", () => {
       await Promise.all([
         ctx1.runtime.runTurn({
           threadId: codexThreadId1,
-          input: [{ type: "text", text: "Remember the fruit APPLE. Just confirm you will remember it." }],
+          input: [
+            {
+              type: "text",
+              text: "Remember the fruit APPLE. Just confirm you will remember it.",
+            },
+          ],
           options: codexOptions,
         }),
         ctx1.runtime.runTurn({
           threadId: claudeThreadId1,
-          input: [{ type: "text", text: "Remember the fruit ORANGE. Just confirm you will remember it." }],
+          input: [
+            {
+              type: "text",
+              text: "Remember the fruit ORANGE. Just confirm you will remember it.",
+            },
+          ],
           options: claudeOptions,
         }),
       ]);
@@ -210,7 +222,10 @@ describe.concurrent("multi-provider resume scenarios", () => {
       // Capture providerThreadIds from identity events if needed
       if (!codexProviderThreadId) {
         const identityEvent = ctx1.events.find(
-          (e) => e.type === "thread/identity" && "threadId" in e && e.threadId === codexThreadId1,
+          (e) =>
+            e.type === "thread/identity" &&
+            "threadId" in e &&
+            e.threadId === codexThreadId1,
         );
         if (identityEvent && identityEvent.type === "thread/identity") {
           codexProviderThreadId = identityEvent.providerThreadId;
@@ -218,7 +233,10 @@ describe.concurrent("multi-provider resume scenarios", () => {
       }
       if (!claudeProviderThreadId) {
         const identityEvent = ctx1.events.find(
-          (e) => e.type === "thread/identity" && "threadId" in e && e.threadId === claudeThreadId1,
+          (e) =>
+            e.type === "thread/identity" &&
+            "threadId" in e &&
+            e.threadId === claudeThreadId1,
         );
         if (identityEvent && identityEvent.type === "thread/identity") {
           claudeProviderThreadId = identityEvent.providerThreadId;
@@ -254,12 +272,22 @@ describe.concurrent("multi-provider resume scenarios", () => {
         await Promise.all([
           ctx2.runtime.runTurn({
             threadId: codexThreadId2,
-            input: [{ type: "text", text: "What fruit did I ask you to remember? Reply with just the fruit name." }],
+            input: [
+              {
+                type: "text",
+                text: "What fruit did I ask you to remember? Reply with just the fruit name.",
+              },
+            ],
             options: codexOptions,
           }),
           ctx2.runtime.runTurn({
             threadId: claudeThreadId2,
-            input: [{ type: "text", text: "What fruit did I ask you to remember? Reply with just the fruit name." }],
+            input: [
+              {
+                type: "text",
+                text: "What fruit did I ask you to remember? Reply with just the fruit name.",
+              },
+            ],
             options: claudeOptions,
           }),
         ]);
@@ -271,8 +299,14 @@ describe.concurrent("multi-provider resume scenarios", () => {
           label: "both resumed threads turn/completed",
         });
 
-        const codexText = getThreadText(ctx2.events, codexThreadId2).toUpperCase();
-        const claudeText = getThreadText(ctx2.events, claudeThreadId2).toUpperCase();
+        const codexText = getThreadText(
+          ctx2.events,
+          codexThreadId2,
+        ).toUpperCase();
+        const claudeText = getThreadText(
+          ctx2.events,
+          claudeThreadId2,
+        ).toUpperCase();
         expect(codexText).toContain("APPLE");
         expect(claudeText).toContain("ORANGE");
       } finally {

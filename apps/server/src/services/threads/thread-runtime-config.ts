@@ -3,11 +3,7 @@ import {
   getBuiltInAgentProviderInfo,
   isAgentProviderId,
 } from "@bb/agent-providers";
-import {
-  getDefaultProjectSource,
-  getProject,
-  getThread,
-} from "@bb/db";
+import { getDefaultProjectSource, getProject, getThread } from "@bb/db";
 import type {
   DynamicTool,
   InstructionMode,
@@ -109,7 +105,9 @@ export interface ResolvedThreadRuntimeCommandConfig {
   workspaceProvisionType: WorkspaceProvisionType;
 }
 
-function requireWorkspacePath(environment: ThreadRuntimeCommandEnvironment): string {
+function requireWorkspacePath(
+  environment: ThreadRuntimeCommandEnvironment,
+): string {
   if (!environment.path) {
     throw new ApiError(409, "invalid_request", "Environment is not ready");
   }
@@ -134,7 +132,8 @@ async function readManagerPreferences(
         rootPath: args.threadStoragePath,
       },
     });
-    const result = hostDaemonCommandResultSchemaByType["host.read_file"].parse(rawResult);
+    const result =
+      hostDaemonCommandResultSchemaByType["host.read_file"].parse(rawResult);
     if (result.contentEncoding !== "utf8") {
       throw new ApiError(
         502,
@@ -175,9 +174,9 @@ export function resolvePermissionEscalation(
   args: ResolvePermissionEscalationArgs,
 ): PermissionEscalation {
   if (
-    args.initiator === "system"
-    || args.thread.parentThreadId !== null
-    || args.thread.type === "manager"
+    args.initiator === "system" ||
+    args.thread.parentThreadId !== null ||
+    args.thread.type === "manager"
   ) {
     return "deny";
   }
@@ -254,10 +253,10 @@ export async function resolveThreadRuntimeCommandConfig(
       workspaceProvisionType,
     };
   }
-  const threadStoragePath = await requireThreadStoragePath(
-    deps,
-    { hostId: args.environment.hostId, threadId: args.thread.id },
-  );
+  const threadStoragePath = await requireThreadStoragePath(deps, {
+    hostId: args.environment.hostId,
+    threadId: args.thread.id,
+  });
 
   const managerPreferencesContent = args.isThreadCreation
     ? NO_MANAGER_PREFERENCES

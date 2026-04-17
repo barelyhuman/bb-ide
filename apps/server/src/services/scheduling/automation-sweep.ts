@@ -113,16 +113,13 @@ async function runAutomation(
     return;
   }
 
-  const decision: ClaimAutomationScheduledRunResult = claimAutomationScheduledRun(
-    deps.db,
-    deps.hub,
-    {
+  const decision: ClaimAutomationScheduledRunResult =
+    claimAutomationScheduledRun(deps.db, deps.hub, {
       automationId: automation.id,
       expectedNextRunAt: automation.nextRunAt,
       hostId: executionContext.hostId,
       nextRunAt: executionContext.nextRunAt,
-    },
-  );
+    });
 
   if (!decision.advanced) {
     return;
@@ -186,14 +183,11 @@ export async function sweepDueAutomations(
   const now = args.now ?? Date.now();
   let after: DueAutomationCursor | undefined;
   while (true) {
-    const dueAutomations = listDueAutomations(
-      deps.db,
-      {
-        now,
-        after,
-        limit: DUE_AUTOMATION_BATCH_SIZE,
-      },
-    );
+    const dueAutomations = listDueAutomations(deps.db, {
+      now,
+      after,
+      limit: DUE_AUTOMATION_BATCH_SIZE,
+    });
     for (const automation of dueAutomations) {
       try {
         await runAutomation(deps, automation, now);

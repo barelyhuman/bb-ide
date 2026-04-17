@@ -114,7 +114,9 @@ describe("nudge sweep", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-nudge-run",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -141,14 +143,17 @@ describe("nudge sweep", () => {
       const readPreferences = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "host.read_file" &&
-          command.path === preferencesPath,
+          command.type === "host.read_file" && command.path === preferencesPath,
       );
       expect(readPreferences.command.type).toBe("host.read_file");
-      const preferencesResponse = await reportQueuedCommandError(harness, readPreferences, {
-        errorCode: "ENOENT",
-        errorMessage: "File not found",
-      });
+      const preferencesResponse = await reportQueuedCommandError(
+        harness,
+        readPreferences,
+        {
+          errorCode: "ENOENT",
+          errorMessage: "File not found",
+        },
+      );
       expect(preferencesResponse.status).toBe(200);
 
       await sweepPromise;
@@ -156,8 +161,7 @@ describe("nudge sweep", () => {
       const queuedTurnSubmit = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "turn.submit" &&
-          command.threadId === thread.id,
+          command.type === "turn.submit" && command.threadId === thread.id,
       );
       expect(queuedTurnSubmit.command.input).toEqual([
         {
@@ -166,11 +170,8 @@ describe("nudge sweep", () => {
         },
       ]);
       expect(
-        harness.db
-          .select()
-          .from(threads)
-          .where(eq(threads.id, thread.id))
-          .get()?.status,
+        harness.db.select().from(threads).where(eq(threads.id, thread.id)).get()
+          ?.status,
       ).toBe("active");
 
       const updatedNudge = getManagerThreadNudge(harness.db, nudge.id);
@@ -191,7 +192,10 @@ describe("nudge sweep", () => {
         provider: "e2b",
         type: "ephemeral",
       });
-      const sandboxHost = createMockSandboxHost(host.id, host.externalId ?? undefined);
+      const sandboxHost = createMockSandboxHost(
+        host.id,
+        host.externalId ?? undefined,
+      );
       harness.deps.sandboxRegistry.set(host.id, sandboxHost);
       const resumedSandboxHost = createMockSandboxHost(
         host.id,
@@ -203,7 +207,9 @@ describe("nudge sweep", () => {
         suspendedAt: 1_000,
       });
 
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -247,13 +253,16 @@ describe("nudge sweep", () => {
       const readPreferences = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "host.read_file"
-          && command.path === preferencesPath,
+          command.type === "host.read_file" && command.path === preferencesPath,
       );
-      const preferencesResponse = await reportQueuedCommandError(harness, readPreferences, {
-        errorCode: "ENOENT",
-        errorMessage: "File not found",
-      });
+      const preferencesResponse = await reportQueuedCommandError(
+        harness,
+        readPreferences,
+        {
+          errorCode: "ENOENT",
+          errorMessage: "File not found",
+        },
+      );
       expect(preferencesResponse.status).toBe(200);
 
       await sweepPromise;
@@ -263,8 +272,7 @@ describe("nudge sweep", () => {
       const queuedTurnSubmit = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "turn.submit"
-          && command.threadId === thread.id,
+          command.type === "turn.submit" && command.threadId === thread.id,
       );
       expect(queuedTurnSubmit.command.input).toEqual([
         {
@@ -283,7 +291,9 @@ describe("nudge sweep", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-nudge-pending",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -305,7 +315,8 @@ describe("nudge sweep", () => {
         nextFireAt: now - 1,
       });
 
-      harness.db.insert(hostDaemonCommands)
+      harness.db
+        .insert(hostDaemonCommands)
         .values({
           id: "cmd_pending_turn_submit",
           hostId: host.id,
@@ -347,7 +358,9 @@ describe("nudge sweep", () => {
 
       await sweepDueNudges(harness.deps, { now });
 
-      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(1);
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
+        1,
+      );
       const updatedNudge = getManagerThreadNudge(harness.db, nudge.id);
       expect(updatedNudge?.lastFiredAt).toBe(now);
       expect(updatedNudge?.nextFireAt).toBeGreaterThan(now);
@@ -362,7 +375,9 @@ describe("nudge sweep", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-nudge-disabled",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -386,7 +401,9 @@ describe("nudge sweep", () => {
 
       await sweepDueNudges(harness.deps, { now });
 
-      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(0);
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
+        0,
+      );
       expect(getManagerThreadNudge(harness.db, nudge.id)).toMatchObject({
         enabled: false,
         lastFiredAt: null,
@@ -403,7 +420,9 @@ describe("nudge sweep", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-nudge-archived",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -424,7 +443,8 @@ describe("nudge sweep", () => {
         enabled: true,
         nextFireAt: now - 1,
       });
-      harness.db.update(threads)
+      harness.db
+        .update(threads)
         .set({ archivedAt: now, updatedAt: now })
         .where(eq(threads.id, thread.id))
         .run();
@@ -432,7 +452,9 @@ describe("nudge sweep", () => {
       await sweepDueNudges(harness.deps, { now });
 
       expect(getManagerThreadNudge(harness.db, nudge.id)).toBeNull();
-      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(0);
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
+        0,
+      );
     } finally {
       await harness.cleanup();
     }
@@ -444,7 +466,9 @@ describe("nudge sweep", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-nudge-non-idle",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -465,18 +489,23 @@ describe("nudge sweep", () => {
         enabled: true,
         nextFireAt: now - 1,
       });
-      harness.db.update(threads)
+      harness.db
+        .update(threads)
         .set({ status: "active", updatedAt: now })
         .where(eq(threads.id, thread.id))
         .run();
 
       await sweepDueNudges(harness.deps, { now });
 
-      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(0);
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
+        0,
+      );
       expect(getManagerThreadNudge(harness.db, nudge.id)).toMatchObject({
         lastFiredAt: now,
       });
-      expect(getManagerThreadNudge(harness.db, nudge.id)?.nextFireAt).toBeGreaterThan(now);
+      expect(
+        getManagerThreadNudge(harness.db, nudge.id)?.nextFireAt,
+      ).toBeGreaterThan(now);
     } finally {
       await harness.cleanup();
     }
@@ -488,7 +517,9 @@ describe("nudge sweep", () => {
       const host = seedHost(harness.deps, {
         id: "host-nudge-offline",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -512,7 +543,9 @@ describe("nudge sweep", () => {
 
       await sweepDueNudges(harness.deps, { now });
 
-      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(0);
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
+        0,
+      );
       const updatedNudge = getManagerThreadNudge(harness.db, nudge.id);
       expect(updatedNudge?.lastFiredAt).toBe(now);
       expect(updatedNudge?.nextFireAt).toBeGreaterThan(now);
@@ -527,7 +560,9 @@ describe("nudge sweep", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-nudge-lost-race",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -554,7 +589,8 @@ describe("nudge sweep", () => {
         harness,
         ({ command }) =>
           command.type === "host.read_file" &&
-          command.path === `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}/PREFERENCES.md`,
+          command.path ===
+            `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}/PREFERENCES.md`,
       );
 
       const externallyAdvancedNextFireAt = now + 60_000;
@@ -562,10 +598,14 @@ describe("nudge sweep", () => {
         nextFireAt: externallyAdvancedNextFireAt,
       });
 
-      const preferencesResponse = await reportQueuedCommandError(harness, readPreferences, {
-        errorCode: "ENOENT",
-        errorMessage: "File not found",
-      });
+      const preferencesResponse = await reportQueuedCommandError(
+        harness,
+        readPreferences,
+        {
+          errorCode: "ENOENT",
+          errorMessage: "File not found",
+        },
+      );
       expect(preferencesResponse.status).toBe(200);
 
       await sweepPromise;

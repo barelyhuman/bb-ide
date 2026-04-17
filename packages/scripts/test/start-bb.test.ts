@@ -2,7 +2,9 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-async function importFreshStartBb(): Promise<typeof import("../src/commands/start-bb.js")> {
+async function importFreshStartBb(): Promise<
+  typeof import("../src/commands/start-bb.js")
+> {
   vi.resetModules();
   return import("../src/commands/start-bb.js");
 }

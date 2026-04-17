@@ -45,12 +45,16 @@ type EndpointInput<E> = E extends Endpoint<infer I, any, any, any> ? I : never;
 
 /** Extract `T` from `{ json: T }` in the Endpoint's Input, or `never`. */
 type JsonBody<I> = "json" extends keyof I
-  ? I extends { json: infer J } ? J : never
+  ? I extends { json: infer J }
+    ? J
+    : never
   : never;
 
 /** Extract `T` from `{ query: T }` in the Endpoint's Input, or `never`. */
 type QueryInput<I> = "query" extends keyof I
-  ? I extends { query?: infer Q } ? Q : never
+  ? I extends { query?: infer Q }
+    ? Q
+    : never
   : never;
 
 type RouteInputForMethod<MKey extends MethodKey, I> = MKey extends "$get"
@@ -71,11 +75,12 @@ type HandlerReturn = Response | Promise<Response>;
  * are both legal but `c.json(A, 409)` is not — TypeScript checks the tuple
  * as a whole, preserving the output↔status pairing.
  */
-type TypedJsonArgs<E> = E extends Endpoint<any, infer O, infer S extends ContentfulStatusCode, any>
-  ? 200 extends S
-    ? [data: O] | [data: O, status: S]
-    : [data: O, status: S]
-  : never;
+type TypedJsonArgs<E> =
+  E extends Endpoint<any, infer O, infer S extends ContentfulStatusCode, any>
+    ? 200 extends S
+      ? [data: O] | [data: O, status: S]
+      : [data: O, status: S]
+    : never;
 
 /**
  * A Context with a constrained `json()` method.
@@ -83,10 +88,9 @@ type TypedJsonArgs<E> = E extends Endpoint<any, infer O, infer S extends Content
  * For union endpoints, `json()` accepts a union of argument tuples —
  * one per Endpoint member — so the output↔status pairing is preserved.
  */
-type TypedContext<E, Path extends string> =
-  Omit<Context<{}, Path>, "json"> & {
-    json: (...args: TypedJsonArgs<E>) => Response;
-  };
+type TypedContext<E, Path extends string> = Omit<Context<{}, Path>, "json"> & {
+  json: (...args: TypedJsonArgs<E>) => Response;
+};
 
 /** Handler that receives context only (no request body). */
 type NoBodyHandler<E, Path extends string> = (
@@ -121,7 +125,11 @@ type TypedRegister<Schema, MKey extends MethodKey> = <
 >(
   ...args: [Input] extends [never]
     ? [path: Path, handler: NoBodyHandler<E, Path>]
-    : [path: Path, schema: ZodType<Input>, handler: WithInputHandler<E, Input, Path>]
+    : [
+        path: Path,
+        schema: ZodType<Input>,
+        handler: WithInputHandler<E, Input, Path>,
+      ]
 ) => void;
 
 // ---------------------------------------------------------------------------
@@ -137,7 +145,8 @@ export function typedRoutes<Schema>(
   app: Hono<any, any, any>,
   options?: TypedRoutesOptions,
 ) {
-  const makeError = options?.onValidationError ?? ((msg: string) => new Error(msg));
+  const makeError =
+    options?.onValidationError ?? ((msg: string) => new Error(msg));
 
   function register(
     method: HttpMethod,
@@ -179,10 +188,30 @@ export function typedRoutes<Schema>(
   }
 
   return {
-    get: ((...args: [string, ...any[]]) => register("get", "query", args[0], args[1], args[2])) as TypedRegister<Schema, "$get">,
-    post: ((...args: [string, ...any[]]) => register("post", "json", args[0], args[1], args[2])) as TypedRegister<Schema, "$post">,
-    patch: ((...args: [string, ...any[]]) => register("patch", "json", args[0], args[1], args[2])) as TypedRegister<Schema, "$patch">,
-    del: ((...args: [string, ...any[]]) => register("delete", "json", args[0], args[1], args[2])) as TypedRegister<Schema, "$delete">,
-    put: ((...args: [string, ...any[]]) => register("put", "json", args[0], args[1], args[2])) as TypedRegister<Schema, "$put">,
+    get: ((...args: [string, ...any[]]) =>
+      register("get", "query", args[0], args[1], args[2])) as TypedRegister<
+      Schema,
+      "$get"
+    >,
+    post: ((...args: [string, ...any[]]) =>
+      register("post", "json", args[0], args[1], args[2])) as TypedRegister<
+      Schema,
+      "$post"
+    >,
+    patch: ((...args: [string, ...any[]]) =>
+      register("patch", "json", args[0], args[1], args[2])) as TypedRegister<
+      Schema,
+      "$patch"
+    >,
+    del: ((...args: [string, ...any[]]) =>
+      register("delete", "json", args[0], args[1], args[2])) as TypedRegister<
+      Schema,
+      "$delete"
+    >,
+    put: ((...args: [string, ...any[]]) =>
+      register("put", "json", args[0], args[1], args[2])) as TypedRegister<
+      Schema,
+      "$put"
+    >,
   };
 }

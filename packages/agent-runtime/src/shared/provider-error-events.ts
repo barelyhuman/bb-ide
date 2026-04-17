@@ -16,18 +16,18 @@ export interface BuildScopedProviderErrorEventsArgs<
 
 export function buildScopedProviderErrorEvents<
   TState extends ProviderTurnState,
->(
-  args: BuildScopedProviderErrorEventsArgs<TState>,
-): ThreadEvent[] {
+>(args: BuildScopedProviderErrorEventsArgs<TState>): ThreadEvent[] {
   const events: ThreadEvent[] = [];
   const stateKey = args.contextThreadId;
-  const state = stateKey ? args.registry.getOrCreate({ threadId: stateKey }) : null;
+  const state = stateKey
+    ? args.registry.getOrCreate({ threadId: stateKey })
+    : null;
   const turnId = state
     ? args.ensureTurnStarted({
-      events,
-      state,
-      threadId: "",
-    })
+        events,
+        state,
+        threadId: "",
+      })
     : undefined;
 
   events.push({

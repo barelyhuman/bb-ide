@@ -1,9 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
-import {
-  deleteSandboxProviderCredentialByProviderId,
-} from "@bb/db";
+import { deleteSandboxProviderCredentialByProviderId } from "@bb/db";
 import type { ServerRuntimeConfig } from "../../../apps/server/src/types.js";
 import { buildSandboxRuntimeMaterialSnapshot } from "../../../apps/server/src/services/hosts/sandbox-runtime-material-snapshot.js";
 import {
@@ -116,8 +114,8 @@ async function main(): Promise<void> {
     console.log(line);
   }
   if (
-    process.env.BB_E2B_SMOKE_REQUIRE_FULL_AUTH === "1"
-    && !authCoverageSummary.hasFullSubscriptionCoverage
+    process.env.BB_E2B_SMOKE_REQUIRE_FULL_AUTH === "1" &&
+    !authCoverageSummary.hasFullSubscriptionCoverage
   ) {
     throw new Error(
       "BB_E2B_SMOKE_REQUIRE_FULL_AUTH=1 but the local cloud-auth fixture is missing Claude or Codex subscription coverage. Acquire the missing credentials with the commands printed above, then rerun the smoke.",
@@ -245,12 +243,12 @@ async function main(): Promise<void> {
       await assertSandboxFileContains(
         sandbox,
         SMOKE_CLAUDE_PATH,
-        "\"refreshToken\": \"\"",
+        '"refreshToken": ""',
       );
       await assertSandboxFileContains(
         sandbox,
         SMOKE_PI_AUTH_PATH,
-        "\"anthropic\"",
+        '"anthropic"',
       );
     }
 
@@ -259,22 +257,18 @@ async function main(): Promise<void> {
       await assertSandboxFileContains(
         sandbox,
         SMOKE_CODEX_PATH,
-        "\"refresh_token\": \"\"",
+        '"refresh_token": ""',
       );
+      await assertSandboxFileContains(sandbox, SMOKE_CODEX_PATH, '"id_token":');
       await assertSandboxFileContains(
         sandbox,
-        SMOKE_CODEX_PATH,
-        "\"id_token\":",
+        SMOKE_PI_AUTH_PATH,
+        '"openai-codex"',
       );
       await assertSandboxFileContains(
         sandbox,
         SMOKE_PI_AUTH_PATH,
-        "\"openai-codex\"",
-      );
-      await assertSandboxFileContains(
-        sandbox,
-        SMOKE_PI_AUTH_PATH,
-        "\"refresh\": \"\"",
+        '"refresh": ""',
       );
     }
 
@@ -282,10 +276,12 @@ async function main(): Promise<void> {
     await waitForExtendedSandboxTimeout(sandbox);
     const extendedSandboxInfo = await sandbox.getInfo();
     if (
-      extendedSandboxInfo.endAt.getTime()
-      <= daemonBootstrapSandboxInfo.endAt.getTime()
+      extendedSandboxInfo.endAt.getTime() <=
+      daemonBootstrapSandboxInfo.endAt.getTime()
     ) {
-      throw new Error("Sandbox timeout did not extend past the bootstrap expiration");
+      throw new Error(
+        "Sandbox timeout did not extend past the bootstrap expiration",
+      );
     }
 
     console.log("Checking bundled bb CLI");
@@ -327,12 +323,17 @@ async function main(): Promise<void> {
     const sharedPiAnthropicModel = authFixture?.claude
       ? requirePiDefaultModel(piModels, "anthropic")
       : null;
-    const sharedPiOpenaiCodexModel = requirePiDefaultModel(piModels, "openai-codex");
+    const sharedPiOpenaiCodexModel = requirePiDefaultModel(
+      piModels,
+      "openai-codex",
+    );
     const resumedPiModel = choosePreferredModel("pi", piModels, [
       "openai-codex/",
     ]);
 
-    console.log(`Running shared-environment Codex thread with model ${codexModel.model}`);
+    console.log(
+      `Running shared-environment Codex thread with model ${codexModel.model}`,
+    );
     const sharedCodexThread = await runSmokeProviderTurn(localServerUrl, {
       environment: buildHostWorkspaceEnvironment(
         smokeHost.hostId,
@@ -345,11 +346,15 @@ async function main(): Promise<void> {
     });
     sharedEnvironmentId = sharedCodexThread.environmentId;
     if (!sharedEnvironmentId) {
-      throw new Error("Expected the shared Codex thread to create an environment");
+      throw new Error(
+        "Expected the shared Codex thread to create an environment",
+      );
     }
 
     if (claudeModel) {
-      console.log(`Running shared-environment Claude thread with model ${claudeModel.model}`);
+      console.log(
+        `Running shared-environment Claude thread with model ${claudeModel.model}`,
+      );
       await runSmokeProviderTurn(localServerUrl, {
         environment: buildReuseEnvironment(sharedEnvironmentId),
         expectedToken: SMOKE_PROVIDER_OUTPUT_TOKENS.sharedClaude,
@@ -396,7 +401,9 @@ async function main(): Promise<void> {
     });
     codexEnvironmentId = codexThread.environmentId;
     if (!codexEnvironmentId) {
-      throw new Error("Expected the initial Codex thread to create an environment");
+      throw new Error(
+        "Expected the initial Codex thread to create an environment",
+      );
     }
 
     if (claudeModel) {
@@ -412,7 +419,9 @@ async function main(): Promise<void> {
         providerId: "claude-code",
       });
       if (!claudeThread.environmentId) {
-        throw new Error("Expected the initial Claude thread to create an environment");
+        throw new Error(
+          "Expected the initial Claude thread to create an environment",
+        );
       }
     }
 
@@ -429,14 +438,23 @@ async function main(): Promise<void> {
     });
     piEnvironmentId = initialPiThread.environmentId;
     if (!piEnvironmentId) {
-      throw new Error("Expected the initial Pi thread to create an environment");
+      throw new Error(
+        "Expected the initial Pi thread to create an environment",
+      );
     }
 
     console.log("Waiting for server-driven idle suspension");
-    await waitForHostStatus(localServerUrl, smokeHost.hostId, "suspended", 120_000);
+    await waitForHostStatus(
+      localServerUrl,
+      smokeHost.hostId,
+      "suspended",
+      120_000,
+    );
     const pausedSandboxInfo = await sandbox.getInfo();
     if (pausedSandboxInfo.state !== "paused") {
-      throw new Error(`Expected paused sandbox after idle suspend, got ${pausedSandboxInfo.state}`);
+      throw new Error(
+        `Expected paused sandbox after idle suspend, got ${pausedSandboxInfo.state}`,
+      );
     }
 
     if (authFixture?.claude) {
@@ -467,16 +485,20 @@ async function main(): Promise<void> {
       providerId: "codex",
     });
     if (
-      createdThread.status !== "created"
-      && createdThread.status !== "provisioning"
+      createdThread.status !== "created" &&
+      createdThread.status !== "provisioning"
     ) {
-      throw new Error(`Unexpected resumed thread status: ${createdThread.status}`);
+      throw new Error(
+        `Unexpected resumed thread status: ${createdThread.status}`,
+      );
     }
 
     await waitForHostStatus(localServerUrl, smokeHost.hostId, "connected");
     const runningSandboxInfo = await sandbox.getInfo();
     if (runningSandboxInfo.state !== "running") {
-      throw new Error(`Expected running sandbox after resume, got ${runningSandboxInfo.state}`);
+      throw new Error(
+        `Expected running sandbox after resume, got ${runningSandboxInfo.state}`,
+      );
     }
 
     console.log("Connecting to the resumed sandbox");
@@ -492,7 +514,10 @@ async function main(): Promise<void> {
     const resumedRuntimeSnapshot = await buildSandboxRuntimeMaterialSnapshot(
       runtimeMaterialContext,
     );
-    await waitForPersistedRuntimeMaterial(resumedSandbox, resumedRuntimeSnapshot);
+    await waitForPersistedRuntimeMaterial(
+      resumedSandbox,
+      resumedRuntimeSnapshot,
+    );
     if (authFixture?.claude) {
       await assertSandboxFileAbsent(resumedSandbox, SMOKE_CLAUDE_PATH);
     }
@@ -500,14 +525,16 @@ async function main(): Promise<void> {
       await assertSandboxFileContains(
         resumedSandbox,
         SMOKE_PI_AUTH_PATH,
-        "\"openai-codex\"",
+        '"openai-codex"',
       );
       const piAuthResult = await runSandboxCommand(
         resumedSandbox,
         `cat ${toSandboxShellPath(SMOKE_PI_AUTH_PATH)}`,
       );
-      if (piAuthResult.stdout.includes("\"anthropic\"")) {
-        throw new Error("Pi auth file still contains the removed Claude credential");
+      if (piAuthResult.stdout.includes('"anthropic"')) {
+        throw new Error(
+          "Pi auth file still contains the removed Claude credential",
+        );
       }
     } else {
       await assertSandboxFileAbsent(resumedSandbox, SMOKE_PI_AUTH_PATH);
@@ -517,7 +544,9 @@ async function main(): Promise<void> {
       `cat ${shellQuote(SANDBOX_HOST_RUNTIME_MATERIAL_PATH)}`,
     );
     if (resumedRuntimeMaterial.stdout.includes(SMOKE_SANDBOX_ENV_NAME)) {
-      throw new Error("Runtime material still contains the removed sandbox env var");
+      throw new Error(
+        "Runtime material still contains the removed sandbox env var",
+      );
     }
 
     if (authFixture?.["openai-codex"]) {
@@ -525,33 +554,44 @@ async function main(): Promise<void> {
       await assertSandboxFileContains(
         resumedSandbox,
         SMOKE_CODEX_PATH,
-        "\"refresh_token\": \"\"",
+        '"refresh_token": ""',
       );
       await assertSandboxFileContains(
         resumedSandbox,
         SMOKE_CODEX_PATH,
-        "\"id_token\":",
+        '"id_token":',
       );
       const codexResult = await runSandboxCommand(
         resumedSandbox,
         `cat ${toSandboxShellPath(SMOKE_CODEX_PATH)}`,
       );
       if (codexResult.stdout.includes(STALE_CODEX_ACCESS_TOKEN)) {
-        throw new Error("Codex auth file still contains the stale access token");
+        throw new Error(
+          "Codex auth file still contains the stale access token",
+        );
       }
     }
 
     console.log("Waiting for resumed Codex thread output");
     await waitForThreadIdle(localServerUrl, createdThread.id);
-    const resumedCodexOutput = await fetchThreadOutput(localServerUrl, createdThread.id);
-    if (!resumedCodexOutput.output?.includes(SMOKE_PROVIDER_OUTPUT_TOKENS.codexResume)) {
+    const resumedCodexOutput = await fetchThreadOutput(
+      localServerUrl,
+      createdThread.id,
+    );
+    if (
+      !resumedCodexOutput.output?.includes(
+        SMOKE_PROVIDER_OUTPUT_TOKENS.codexResume,
+      )
+    ) {
       throw new Error(
         `Unexpected resumed Codex output: ${resumedCodexOutput.output ?? "(no output)"}`,
       );
     }
 
     if (authFixture?.["openai-codex"]) {
-      console.log(`Running live Pi thread after resume with model ${resumedPiModel.model}`);
+      console.log(
+        `Running live Pi thread after resume with model ${resumedPiModel.model}`,
+      );
       if (!piEnvironmentId) {
         throw new Error("Expected a reusable Pi environment ID before resume");
       }

@@ -37,7 +37,9 @@ function permissionGrantLifecycleMessage(
       if (interaction.resolution === null) {
         return "Interaction resolved";
       }
-      return formatPendingInteractionPermissionResolutionMessage(interaction.resolution);
+      return formatPendingInteractionPermissionResolutionMessage(
+        interaction.resolution,
+      );
     case "interrupted":
       return interaction.statusReason ?? "Interaction interrupted";
     case "expired":
@@ -89,7 +91,10 @@ function appendApprovalItemEvent(
 function appendApprovalSubjectItemEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   interaction: PendingInteraction,
-  subject: Exclude<PendingInteractionApprovalSubject, { kind: "permission_grant" }>,
+  subject: Exclude<
+    PendingInteractionApprovalSubject,
+    { kind: "permission_grant" }
+  >,
   status: ApprovalTimelineItemStatus,
   approvalStatus: ThreadEventItemApprovalStatus,
 ): void {
@@ -140,7 +145,10 @@ function appendPermissionGrantLifecycleTimelineEvent(
 function appendItemLifecycleTimelineEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   interaction: PendingInteraction,
-  subject: Exclude<PendingInteractionApprovalSubject, { kind: "permission_grant" }>,
+  subject: Exclude<
+    PendingInteractionApprovalSubject,
+    { kind: "permission_grant" }
+  >,
 ): void {
   switch (interaction.status) {
     case "pending":

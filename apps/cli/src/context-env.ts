@@ -58,7 +58,9 @@ export function requireProjectId(flagValue?: string): string {
 export function requireThreadId(flagValue?: string): string {
   const threadId = resolveThreadId(flagValue);
   if (threadId) return threadId;
-  throw new Error("Missing thread context. Pass <threadId> or set BB_THREAD_ID.");
+  throw new Error(
+    "Missing thread context. Pass <threadId> or set BB_THREAD_ID.",
+  );
 }
 
 export interface ResolvedId {
@@ -76,11 +78,15 @@ export interface ThreadSelfTargetOptions {
  * flag nor the environment variable provides a value (useful for optional
  * project filters like thread list).
  */
-export function resolveProjectIdWithLabel(flagValue?: string): ResolvedId | undefined {
+export function resolveProjectIdWithLabel(
+  flagValue?: string,
+): ResolvedId | undefined {
   const fromFlag = trimToUndefined(flagValue);
-  if (fromFlag) return { id: validateId(fromFlag, "--project flag"), source: "arg" };
+  if (fromFlag)
+    return { id: validateId(fromFlag, "--project flag"), source: "arg" };
   const fromEnv = trimToUndefined(process.env.BB_PROJECT_ID);
-  if (fromEnv) return { id: validateId(fromEnv, "BB_PROJECT_ID"), source: "env" };
+  if (fromEnv)
+    return { id: validateId(fromEnv, "BB_PROJECT_ID"), source: "env" };
   return undefined;
 }
 
@@ -104,10 +110,14 @@ export function requireProjectIdWithLabel(flagValue?: string): ResolvedId {
  */
 export function requireThreadIdWithLabel(positionalId?: string): ResolvedId {
   const fromArg = trimToUndefined(positionalId);
-  if (fromArg) return { id: validateId(fromArg, "<threadId> argument"), source: "arg" };
+  if (fromArg)
+    return { id: validateId(fromArg, "<threadId> argument"), source: "arg" };
   const fromEnv = trimToUndefined(process.env.BB_THREAD_ID);
-  if (fromEnv) return { id: validateId(fromEnv, "BB_THREAD_ID"), source: "env" };
-  throw new Error("Missing thread context. Pass <threadId> or set BB_THREAD_ID.");
+  if (fromEnv)
+    return { id: validateId(fromEnv, "BB_THREAD_ID"), source: "env" };
+  throw new Error(
+    "Missing thread context. Pass <threadId> or set BB_THREAD_ID.",
+  );
 }
 
 /**
@@ -126,7 +136,10 @@ export function requireThreadIdWithLabelOrSelf(
     throw new Error("Cannot combine a thread ID argument with --self.");
   }
   if (positionalId) {
-    return { id: validateId(positionalId, "<threadId> argument"), source: "arg" };
+    return {
+      id: validateId(positionalId, "<threadId> argument"),
+      source: "arg",
+    };
   }
   if (opts.self) {
     const envThreadId = resolveThreadId();

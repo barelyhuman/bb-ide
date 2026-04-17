@@ -19,7 +19,9 @@ describe("internal event and tool-call routes", () => {
       const firstCreatedAt = 1_700_000_000_000;
       const duplicateCreatedAt = firstCreatedAt + 50;
       const { host, session } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -82,7 +84,9 @@ describe("internal event and tool-call routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -130,11 +134,8 @@ describe("internal event and tool-call routes", () => {
 
       expect(response.status).toBe(200);
       expect(
-        harness.db
-          .select()
-          .from(threads)
-          .where(eq(threads.id, thread.id))
-          .get()?.status,
+        harness.db.select().from(threads).where(eq(threads.id, thread.id)).get()
+          ?.status,
       ).toBe("idle");
     } finally {
       await harness.cleanup();
@@ -159,7 +160,9 @@ describe("internal event and tool-call routes", () => {
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         dataDir: "/tmp/bb-test-data",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -196,7 +199,9 @@ describe("internal event and tool-call routes", () => {
       });
 
       expect(response.status).toBe(200);
-      expect(getHost(harness.db, host.id)?.lastActivityAt).toEqual(expect.any(Number));
+      expect(getHost(harness.db, host.id)?.lastActivityAt).toEqual(
+        expect.any(Number),
+      );
     } finally {
       await harness.cleanup();
     }
@@ -206,7 +211,9 @@ describe("internal event and tool-call routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -248,26 +255,29 @@ describe("internal event and tool-call routes", () => {
         ],
       });
 
-      const firstResponse = await harness.app.request("/internal/session/events", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: requestBody,
-      });
+      const firstResponse = await harness.app.request(
+        "/internal/session/events",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: requestBody,
+        },
+      );
       expect(firstResponse.status).toBe(200);
 
-      const duplicateResponse = await harness.app.request("/internal/session/events", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: requestBody,
-      });
+      const duplicateResponse = await harness.app.request(
+        "/internal/session/events",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: requestBody,
+        },
+      );
       expect(duplicateResponse.status).toBe(200);
 
       expect(
-        harness.db
-          .select()
-          .from(threads)
-          .where(eq(threads.id, thread.id))
-          .get()?.status,
+        harness.db.select().from(threads).where(eq(threads.id, thread.id)).get()
+          ?.status,
       ).toBe("idle");
       expect(
         harness.db
@@ -299,7 +309,9 @@ describe("internal event and tool-call routes", () => {
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         dataDir: "/tmp/bb-test-data",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -310,26 +322,33 @@ describe("internal event and tool-call routes", () => {
         type: "manager",
       });
 
-      const response = await harness.app.request("/internal/session/tool-call", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          threadId: managerThread.id,
-          providerThreadId: "provider-manager-unsupported-tool",
-          turnId: "turn-1",
-          callId: "call-1",
-          tool: "spawn_thread",
-          arguments: {},
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/tool-call",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            threadId: managerThread.id,
+            providerThreadId: "provider-manager-unsupported-tool",
+            turnId: "turn-1",
+            callId: "call-1",
+            tool: "spawn_thread",
+            arguments: {},
+          }),
+        },
+      );
 
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toMatchObject({
         success: false,
-        contentItems: [{ type: "inputText", text: "Unsupported tool: spawn_thread" }],
+        contentItems: [
+          { type: "inputText", text: "Unsupported tool: spawn_thread" },
+        ],
       });
-      expect(getHost(harness.db, host.id)?.lastActivityAt).toEqual(expect.any(Number));
+      expect(getHost(harness.db, host.id)?.lastActivityAt).toEqual(
+        expect.any(Number),
+      );
 
       const childThreads = harness.db
         .select()
@@ -346,7 +365,9 @@ describe("internal event and tool-call routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -357,21 +378,24 @@ describe("internal event and tool-call routes", () => {
         type: "manager",
       });
 
-      const response = await harness.app.request("/internal/session/tool-call", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          threadId: managerThread.id,
-          providerThreadId: "provider-manager-message-user",
-          turnId: "turn-2",
-          callId: "call-2",
-          tool: "message_user",
-          arguments: {
-            text: "Need input from the user",
-          },
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/tool-call",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            threadId: managerThread.id,
+            providerThreadId: "provider-manager-message-user",
+            turnId: "turn-2",
+            callId: "call-2",
+            tool: "message_user",
+            arguments: {
+              text: "Need input from the user",
+            },
+          }),
+        },
+      );
 
       expect(response.status).toBe(200);
       const storedEvents = harness.db.select().from(events).all();

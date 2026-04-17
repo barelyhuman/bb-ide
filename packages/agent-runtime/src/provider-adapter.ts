@@ -142,7 +142,10 @@ export type AdapterCommand =
       title: string;
     };
 
-export type TurnStartAdapterCommand = Extract<AdapterCommand, { type: "turn/start" }>;
+export type TurnStartAdapterCommand = Extract<
+  AdapterCommand,
+  { type: "turn/start" }
+>;
 
 export interface PreparedProviderCommandDispatch {
   rollback(): void;
@@ -183,10 +186,18 @@ export interface ProviderAdapter {
    * Use this for provider protocol gaps where accepted commands do not produce
    * their own notifications, such as accepted user input missing a userMessage.
    */
-  translateAcceptedCommand(args: ProviderAcceptedCommandTranslationArgs): ThreadEvent[];
-  decodeToolCallRequest(request: ProviderInboundRequest): DecodedToolCallRequest | null;
-  decodeInteractiveRequest?(request: ProviderInboundRequest): DecodedInteractiveRequest | null;
-  buildInteractiveResponse?(args: BuildInteractiveResponseArgs): ProviderInteractiveResponse;
+  translateAcceptedCommand(
+    args: ProviderAcceptedCommandTranslationArgs,
+  ): ThreadEvent[];
+  decodeToolCallRequest(
+    request: ProviderInboundRequest,
+  ): DecodedToolCallRequest | null;
+  decodeInteractiveRequest?(
+    request: ProviderInboundRequest,
+  ): DecodedInteractiveRequest | null;
+  buildInteractiveResponse?(
+    args: BuildInteractiveResponseArgs,
+  ): ProviderInteractiveResponse;
 }
 
 export interface BuildInteractiveResponseArgs {

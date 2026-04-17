@@ -47,7 +47,9 @@ describe("sessions", () => {
 
     const active = getActiveSession(db, host.id);
     expect(active?.id).toBe(session.id);
-    expect(getActiveSessionById(db, { sessionId: session.id })?.id).toBe(session.id);
+    expect(getActiveSessionById(db, { sessionId: session.id })?.id).toBe(
+      session.id,
+    );
   });
 
   it("closes a session", () => {
@@ -126,11 +128,7 @@ describe("sessions", () => {
       leaseTimeoutMs: 30_000,
     });
 
-    const updated = heartbeatSession(
-      db,
-      session.id,
-      Date.now() + 45_000,
-    );
+    const updated = heartbeatSession(db, session.id, Date.now() + 45_000);
     expect(updated?.lastHeartbeatAt).toBeTypeOf("number");
     expect(updated?.leaseExpiresAt).toBeGreaterThan(Date.now());
   });

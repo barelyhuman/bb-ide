@@ -53,7 +53,8 @@ describe("CloudAuthSettingsSection", () => {
         isLoading={false}
         notices={{
           codex: "Connection saved.",
-          "claude-code": "Connection removed. The next sandbox sync will delete its auth material.",
+          "claude-code":
+            "Connection removed. The next sandbox sync will delete its auth material.",
         }}
         onCancel={() => undefined}
         onConnect={() => undefined}
@@ -110,7 +111,9 @@ describe("CloudAuthSettingsSection", () => {
     expect(onDisconnect).toHaveBeenCalledWith("codex");
     expect(onConnect).toHaveBeenCalledWith("claude-code");
     // Connected providers show Disconnect, missing providers show Connect
-    expect(screen.getAllByRole("button", { name: "Disconnect" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Disconnect" })).toHaveLength(
+      1,
+    );
     expect(screen.getAllByRole("button", { name: "Connect" })).toHaveLength(1);
   });
 });

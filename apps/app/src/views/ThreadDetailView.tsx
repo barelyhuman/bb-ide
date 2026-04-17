@@ -9,7 +9,10 @@ import {
 } from "../hooks/mutations/thread-state-mutations";
 import { useSendThreadMessage } from "../hooks/mutations/thread-runtime-mutations";
 import { useUpdateEnvironment } from "../hooks/mutations/environment-mutations";
-import { useEnvironment, useEnvironmentWorkStatus } from "../hooks/queries/environment-queries";
+import {
+  useEnvironment,
+  useEnvironmentWorkStatus,
+} from "../hooks/queries/environment-queries";
 import {
   getLatestPendingInteraction,
   useThread,
@@ -18,12 +21,8 @@ import {
   useThreadTimelineToolDetails,
   useThreads,
 } from "../hooks/queries/thread-queries";
-import {
-  ThreadGitActionDialog,
-} from "@/components/thread/ThreadGitActionDialog";
-import {
-  ThreadEnvironmentPromotionDialog,
-} from "@/components/thread/ThreadEnvironmentPromotionDialog";
+import { ThreadGitActionDialog } from "@/components/thread/ThreadGitActionDialog";
+import { ThreadEnvironmentPromotionDialog } from "@/components/thread/ThreadEnvironmentPromotionDialog";
 import { PageShell } from "@/components/layout/PageShell";
 import { HEADER_ICON_BUTTON_CLASS } from "@/components/layout/AppPageHeader";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
@@ -66,14 +65,22 @@ export function ThreadDetailView() {
     threadId: string;
   }>();
   useThreadSecondaryPanelUrlSync();
-  const { data: thread, isLoading, error } = useThread(threadId ?? "", {
+  const {
+    data: thread,
+    isLoading,
+    error,
+  } = useThread(threadId ?? "", {
     refetchOnMount: "always",
   });
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
-  const { data: pendingInteractions = [] } = useThreadPendingInteractions(thread?.id ?? "");
-  const hasPendingInteraction = getLatestPendingInteraction(pendingInteractions) !== null;
+  const { data: pendingInteractions = [] } = useThreadPendingInteractions(
+    thread?.id ?? "",
+  );
+  const hasPendingInteraction =
+    getLatestPendingInteraction(pendingInteractions) !== null;
   const isManagerThread = thread?.type === "manager";
-  const [storedShowAllEvents, setStoredShowAllEvents] = useStoredShowAllEvents();
+  const [storedShowAllEvents, setStoredShowAllEvents] =
+    useStoredShowAllEvents();
   const showAllEvents = isManagerThread ? storedShowAllEvents : false;
   const {
     isThreadStorageFilePreviewLoading,
@@ -86,25 +93,32 @@ export function ThreadDetailView() {
     threadId,
     threadType: thread?.type,
   });
-  const handleShowAllEventsChange = useCallback((checked: boolean) => {
-    if (!isManagerThread) {
-      return;
-    }
+  const handleShowAllEventsChange = useCallback(
+    (checked: boolean) => {
+      if (!isManagerThread) {
+        return;
+      }
 
-    setStoredShowAllEvents(checked);
-  }, [isManagerThread, setStoredShowAllEvents]);
+      setStoredShowAllEvents(checked);
+    },
+    [isManagerThread, setStoredShowAllEvents],
+  );
   const { data: allProjectThreads } = useThreads({ projectId });
   const managerThreads = useMemo(
-    () => (allProjectThreads ?? []).filter((candidate) => candidate.type === "manager"),
+    () =>
+      (allProjectThreads ?? []).filter(
+        (candidate) => candidate.type === "manager",
+      ),
     [allProjectThreads],
   );
-  const { data: timeline, isLoading: timelineLoading, error: timelineError } = useThreadTimeline(
-    threadId ?? "",
-    {
-      refetchOnMount: "always",
-      includeAllEvents: showAllEvents,
-    },
-  );
+  const {
+    data: timeline,
+    isLoading: timelineLoading,
+    error: timelineError,
+  } = useThreadTimeline(threadId ?? "", {
+    refetchOnMount: "always",
+    includeAllEvents: showAllEvents,
+  });
   const timelineToolDetails = useThreadTimelineToolDetails();
   const sendMessage = useSendThreadMessage();
   const requestEnvironmentAction = useRequestEnvironmentAction();
@@ -113,7 +127,10 @@ export function ThreadDetailView() {
   const updateEnvironment = useUpdateEnvironment();
   const updateThread = useUpdateThread();
   const captureTimelineScrollPositionRef = useRef<() => void>(() => {});
-  const threadDetailRows = useMemo(() => timeline?.rows ?? [], [timeline?.rows]);
+  const threadDetailRows = useMemo(
+    () => timeline?.rows ?? [],
+    [timeline?.rows],
+  );
   const activeThinking = timeline?.activeThinking ?? null;
   const contextWindowUsage = timeline?.contextWindowUsage ?? undefined;
   const latestActivityRowId = useMemo(
@@ -152,28 +169,27 @@ export function ThreadDetailView() {
   );
   const workStatus = workStatusQuery.data;
   const workspaceStatusError = workStatusQuery.error;
-  const workspaceStatus =
-    workspaceStatusError ? undefined : (workStatus ?? undefined);
+  const workspaceStatus = workspaceStatusError
+    ? undefined
+    : (workStatus ?? undefined);
   const workspaceWorkingTree = workspaceStatus?.workingTree;
   const workspaceBranch = workspaceStatus?.branch;
   const workspaceChangedFilesSection = useMemo(
     () => selectWorkspaceChangedFilesSection(workspaceStatus),
     [workspaceStatus],
   );
-  const {
-    isLocalHost,
-    openPath,
-  } = useHostDaemon();
-  const threadEnvironmentIsLocal = environment ? isLocalHost(environment.hostId) : false;
+  const { isLocalHost, openPath } = useHostDaemon();
+  const threadEnvironmentIsLocal = environment
+    ? isLocalHost(environment.hostId)
+    : false;
   const { openWorkspace, workspaceOpenTargets } = useWorkspaceOpenTargets({
     enabled: Boolean(
-      environment &&
-        threadEnvironmentIsLocal &&
-        environment.status === "ready",
+      environment && threadEnvironmentIsLocal && environment.status === "ready",
     ),
   });
   const { data: environmentHost } = useHost(environment?.hostId);
-  const isThreadTimelinePending = timelineLoading && threadDetailRows.length === 0;
+  const isThreadTimelinePending =
+    timelineLoading && threadDetailRows.length === 0;
   const {
     captureTimelineScrollPosition,
     handleLoadToolGroupMessages,
@@ -238,7 +254,9 @@ export function ThreadDetailView() {
       return [];
     }
 
-    const options: Array<{ value: string; label: string }> = [{ value: "none", label: "None" }];
+    const options: Array<{ value: string; label: string }> = [
+      { value: "none", label: "None" },
+    ];
     const seen = new Set<string>(["none"]);
     const addOption = (value: string | undefined, label: string) => {
       if (!value || value === thread.id || seen.has(value)) {
@@ -248,7 +266,10 @@ export function ThreadDetailView() {
       options.push({ value, label });
     };
 
-    addOption(parentThreadId ?? undefined, parentThreadDisplayName ?? "Manager");
+    addOption(
+      parentThreadId ?? undefined,
+      parentThreadDisplayName ?? "Manager",
+    );
     for (const manager of managerThreads) {
       addOption(manager.id, manager.title?.trim() ? manager.title : "Manager");
     }
@@ -265,21 +286,27 @@ export function ThreadDetailView() {
   const selectedManagerOption = managerSelectorOptions.find(
     (option) => option.value === managerSelectorValue,
   );
-  const handleAssignManager = useCallback((nextParentThreadId: string | null) => {
-    if (!thread || updateThread.isPending) {
-      return;
-    }
+  const handleAssignManager = useCallback(
+    (nextParentThreadId: string | null) => {
+      if (!thread || updateThread.isPending) {
+        return;
+      }
 
-    updateThread.mutate({
-      id: thread.id,
-      parentThreadId: nextParentThreadId,
-    });
-  }, [thread, updateThread]);
-  const handleThreadStoragePathToggle = useCallback((path: string) => {
-    setSelectedThreadStoragePath((currentPath) =>
-      currentPath === path ? null : path,
-    );
-  }, [setSelectedThreadStoragePath]);
+      updateThread.mutate({
+        id: thread.id,
+        parentThreadId: nextParentThreadId,
+      });
+    },
+    [thread, updateThread],
+  );
+  const handleThreadStoragePathToggle = useCallback(
+    (path: string) => {
+      setSelectedThreadStoragePath((currentPath) =>
+        currentPath === path ? null : path,
+      );
+    },
+    [setSelectedThreadStoragePath],
+  );
 
   if (!projectId || !threadId) {
     return (
@@ -291,7 +318,9 @@ export function ThreadDetailView() {
   if (isLoading) {
     return (
       <PageShell contentClassName="min-h-full items-center justify-center">
-        <p className="py-12 text-center text-sm text-muted-foreground">Loading...</p>
+        <p className="py-12 text-center text-sm text-muted-foreground">
+          Loading...
+        </p>
       </PageShell>
     );
   }
@@ -323,7 +352,9 @@ export function ThreadDetailView() {
       })
     : undefined;
   const threadEnvironmentIcon = threadEnvironmentDisplay
-    ? getEnvironmentWorkspaceLabelIcon(threadEnvironmentDisplay.workspaceDisplayKind)
+    ? getEnvironmentWorkspaceLabelIcon(
+        threadEnvironmentDisplay.workspaceDisplayKind,
+      )
     : null;
   const promptBannerSummary = workspaceChangedFilesSection
     ? `${PROMPT_BANNER_KIND_PREFIX[workspaceChangedFilesSection.kind]} · ${formatChangeSummary(workspaceChangedFilesSection.stats)}`
@@ -336,45 +367,51 @@ export function ThreadDetailView() {
   const threadEnvironmentType =
     threadEnvironmentDisplay?.modeLabel ??
     (environment ? "environment" : undefined);
-  const threadEnvironmentValue: ReactNode | undefined = threadEnvironmentDisplay
-    ? threadEnvironmentDisplay.hostLabel && threadEnvironmentDisplay.location === "remote"
-      ? (
-          <>
-            {threadEnvironmentDisplay.modeLabel}
-            <span className="text-muted-foreground/60"> · {threadEnvironmentDisplay.hostLabel}</span>
-          </>
-        )
-      : threadEnvironmentDisplay.modeLabel
-    : undefined;
+  const threadEnvironmentValue: ReactNode | undefined =
+    threadEnvironmentDisplay ? (
+      threadEnvironmentDisplay.hostLabel &&
+      threadEnvironmentDisplay.location === "remote" ? (
+        <>
+          {threadEnvironmentDisplay.modeLabel}
+          <span className="text-muted-foreground/60">
+            {" "}
+            · {threadEnvironmentDisplay.hostLabel}
+          </span>
+        </>
+      ) : (
+        threadEnvironmentDisplay.modeLabel
+      )
+    ) : undefined;
   const threadEnvironmentModeLabel = threadEnvironmentDisplay?.modeLabel;
   const threadBranchName = workspaceBranch?.currentBranch ?? undefined;
   const isWorkspaceDeleted = environment?.status === "destroyed";
   const showWorkspaceStatus =
     canUseGitUi &&
-    (Boolean(workspaceStatus) || Boolean(workspaceStatusError) || isWorkspaceDeleted) &&
+    (Boolean(workspaceStatus) ||
+      Boolean(workspaceStatusError) ||
+      isWorkspaceDeleted) &&
     !(thread.archivedAt != null && environment?.managed !== true);
-  const threadGitStatusDisplay = getGitStatusDisplay(
-    workspaceStatus,
-    {
-      mergeBaseBranch,
-      showBranchComparison: showBranchComparisonUi,
-      error: workspaceStatusError,
-      workspaceDeleted: isWorkspaceDeleted,
-    },
-  );
-  const threadGitStatusLabelClass = workspaceWorkingTree?.state === "untracked"
-    ? "text-muted-foreground"
-    : "text-foreground";
-  const showThreadChangedFiles = canUseGitUi && workspaceChangedFilesSection !== null;
+  const threadGitStatusDisplay = getGitStatusDisplay(workspaceStatus, {
+    mergeBaseBranch,
+    showBranchComparison: showBranchComparisonUi,
+    error: workspaceStatusError,
+    workspaceDeleted: isWorkspaceDeleted,
+  });
+  const threadGitStatusLabelClass =
+    workspaceWorkingTree?.state === "untracked"
+      ? "text-muted-foreground"
+      : "text-foreground";
+  const showThreadChangedFiles =
+    canUseGitUi && workspaceChangedFilesSection !== null;
   const showThreadMetadata = Boolean(
     isManagerThread ||
     parentThreadId ||
-      (!isManagerThread && threadEnvironmentType) ||
-      (!isManagerThread && threadBranchName) ||
-      (!isManagerThread && showMergeBase) ||
-      showWorkspaceStatus ||
-      showThreadChangedFiles ||
-      thread.archivedAt != null,
+    (!isManagerThread && threadEnvironmentType) ||
+    (!isManagerThread && threadBranchName) ||
+    (!isManagerThread && showMergeBase) ||
+    showWorkspaceStatus ||
+    showThreadChangedFiles ||
+    thread.archivedAt != null,
   );
   const threadTitle = getThreadDisplayTitle(thread);
   const handleCopyThreadBranch = async () => {
@@ -438,7 +475,9 @@ export function ThreadDetailView() {
       canUseGitUi={canUseGitUi}
       contextWindowUsage={contextWindowUsage}
       environmentBranchName={threadBranchName}
-      environmentHostConnected={environmentHost ? environmentHost.status === "connected" : undefined}
+      environmentHostConnected={
+        environmentHost ? environmentHost.status === "connected" : undefined
+      }
       environmentIcon={threadEnvironmentIcon ?? undefined}
       environmentLabel={threadEnvironmentValue}
       isEnvironmentActionPending={requestEnvironmentAction.isPending}
@@ -464,21 +503,22 @@ export function ThreadDetailView() {
       workspaceStatus={workspaceStatus}
     />
   );
-  const threadStorage = thread.type === "manager"
-    ? {
-        filePreview: threadStorageFilePreview,
-        fileError:
-          threadStorageFilePreviewError instanceof Error
-            ? threadStorageFilePreviewError
-            : threadStorageFilePreviewError
-              ? new Error("Failed to load thread storage file")
-              : null,
-        files: threadStorageFiles?.files,
-        isFileLoading: isThreadStorageFilePreviewLoading,
-        onTogglePath: handleThreadStoragePathToggle,
-        selectedPath: selectedThreadStoragePath,
-      }
-    : undefined;
+  const threadStorage =
+    thread.type === "manager"
+      ? {
+          filePreview: threadStorageFilePreview,
+          fileError:
+            threadStorageFilePreviewError instanceof Error
+              ? threadStorageFilePreviewError
+              : threadStorageFilePreviewError
+                ? new Error("Failed to load thread storage file")
+                : null,
+          files: threadStorageFiles?.files,
+          isFileLoading: isThreadStorageFilePreviewLoading,
+          onTogglePath: handleThreadStoragePathToggle,
+          selectedPath: selectedThreadStoragePath,
+        }
+      : undefined;
 
   return (
     <>
@@ -513,7 +553,9 @@ export function ThreadDetailView() {
           threadEnvironmentModeLabel,
           threadEnvironmentType,
           threadEnvironmentValue,
-          threadHostConnected: environmentHost ? environmentHost.status === "connected" : undefined,
+          threadHostConnected: environmentHost
+            ? environmentHost.status === "connected"
+            : undefined,
           threadHostIsLocal: environment ? threadEnvironmentIsLocal : undefined,
           threadHostName: environmentHost?.name,
           threadGitStatusDisplay,
@@ -523,7 +565,8 @@ export function ThreadDetailView() {
           unarchivePending:
             unarchiveThread.isPending &&
             unarchiveThread.variables?.id === thread.id,
-          updateThreadPending: updateThread.isPending || updateEnvironment.isPending,
+          updateThreadPending:
+            updateThread.isPending || updateEnvironment.isPending,
           workspaceStatusFiles: workspaceChangedFilesSection?.files,
           workspaceStatusFilesLabel: workspaceChangedFilesSection?.label,
         }}
@@ -558,8 +601,7 @@ export function ThreadDetailView() {
           projectId,
           scrollRef: setContainerRef,
           showOngoingIndicator:
-            thread.status === "active" &&
-            !isThreadTimelinePending,
+            thread.status === "active" && !isThreadTimelinePending,
           ongoingIndicatorLabel: hasPendingInteraction
             ? "Waiting for approval"
             : undefined,

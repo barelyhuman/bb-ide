@@ -94,7 +94,9 @@ export function shouldPreferOngoingLabelsForRow(
   }
 }
 
-export function findLatestActivityMessageId(messages: ViewMessage[]): string | null {
+export function findLatestActivityMessageId(
+  messages: ViewMessage[],
+): string | null {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (!message) continue;

@@ -1,15 +1,9 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { PatchDiff } from "@pierre/diffs/react";
 import type { ViewFileEditMessage } from "@bb/domain";
-import {
-  CollapsibleHeader,
-  ExpandablePanel,
-} from "../../disclosure.js";
+import { CollapsibleHeader, ExpandablePanel } from "../../disclosure.js";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
-import {
-  EventTitle,
-  getEventHeaderToneClass,
-} from "./shared.js";
+import { EventTitle, getEventHeaderToneClass } from "./shared.js";
 import type { ThreadTimelineTheme } from "../types.js";
 
 type FileChangeAction = "created" | "deleted" | "renamed" | "edited";
@@ -28,11 +22,15 @@ function fileNameFromPath(path: string): string {
   return candidate && candidate.length > 0 ? candidate : path;
 }
 
-function fileChangeIdentity(change: ViewFileEditMessage["changes"][number]): string {
+function fileChangeIdentity(
+  change: ViewFileEditMessage["changes"][number],
+): string {
   return (change.movePath ?? change.path).replaceAll("\\", "/");
 }
 
-function formatFileChangeName(change: ViewFileEditMessage["changes"][number]): string {
+function formatFileChangeName(
+  change: ViewFileEditMessage["changes"][number],
+): string {
   const sourceName = fileNameFromPath(change.path);
   if (!change.movePath) return sourceName;
   const destinationName = fileNameFromPath(change.movePath);
@@ -63,7 +61,9 @@ function normalizeToken(value: string | undefined): string {
   return value.toLowerCase().replaceAll(/[^a-z0-9]/g, "");
 }
 
-function fileChangeAction(change: ViewFileEditMessage["changes"][number]): FileChangeAction {
+function fileChangeAction(
+  change: ViewFileEditMessage["changes"][number],
+): FileChangeAction {
   if (change.movePath) return "renamed";
   const token = normalizeToken(change.kind);
   if (token.includes("add") || token.includes("create")) return "created";
@@ -78,7 +78,10 @@ function fileChangeActionLabel(action: FileChangeAction): string {
   return "Edited";
 }
 
-function diffStats(change: ViewFileEditMessage["changes"][number]): { added: number; removed: number } {
+function diffStats(change: ViewFileEditMessage["changes"][number]): {
+  added: number;
+  removed: number;
+} {
   const diff = change.diff;
   if (!diff) return { added: 0, removed: 0 };
   let added = 0;
@@ -158,11 +161,10 @@ function getPatchBodyLines(diff: string | undefined): string[] {
   return splitPatchLines(diff).filter((line) => !isPatchMetadataLine(line));
 }
 
-function ensurePrefixedBodyLines(
-  lines: string[],
-  prefix: "+" | "-",
-): string[] {
-  return lines.map((line) => (line.startsWith(prefix) ? line : `${prefix}${line}`));
+function ensurePrefixedBodyLines(lines: string[], prefix: "+" | "-"): string[] {
+  return lines.map((line) =>
+    line.startsWith(prefix) ? line : `${prefix}${line}`,
+  );
 }
 
 function toSyntheticPatch(
@@ -212,7 +214,9 @@ function getRenderablePatch(
     const trimmedPatch = patch.trimEnd();
     if (
       trimmedPatch.startsWith("diff --git") ||
-      (trimmedPatch.includes("--- ") && trimmedPatch.includes("+++ ") && trimmedPatch.includes("@@"))
+      (trimmedPatch.includes("--- ") &&
+        trimmedPatch.includes("+++ ") &&
+        trimmedPatch.includes("@@"))
     ) {
       return {
         patch,
@@ -220,7 +224,9 @@ function getRenderablePatch(
       };
     }
     if (patch.includes("@@")) {
-      const normalizedPath = change.path.replaceAll("\\", "/").replace(/^\/+/, "");
+      const normalizedPath = change.path
+        .replaceAll("\\", "/")
+        .replace(/^\/+/, "");
       return {
         patch: `--- a/${normalizedPath}\n+++ b/${normalizedPath}\n${patch.trimEnd()}\n`,
         disableLineNumbers: false,
@@ -283,14 +289,21 @@ export function FileEditRow({
     }),
     [themeType],
   );
-  const { names: collapsedFileNames, totalUniqueFiles, extraCount } = useMemo(
+  const {
+    names: collapsedFileNames,
+    totalUniqueFiles,
+    extraCount,
+  } = useMemo(
     () => summarizeChangedFileNames(message.changes, 3),
     [message.changes],
   );
   const uniqueFileCount = totalUniqueFiles;
-  const collapsedFileLabelBase = collapsedFileNames.length > 0 ? collapsedFileNames.join(", ") : "file";
+  const collapsedFileLabelBase =
+    collapsedFileNames.length > 0 ? collapsedFileNames.join(", ") : "file";
   const collapsedFileLabel =
-    extraCount > 0 ? `${collapsedFileLabelBase} +${extraCount} more` : collapsedFileLabelBase;
+    extraCount > 0
+      ? `${collapsedFileLabelBase} +${extraCount} more`
+      : collapsedFileLabelBase;
   const collapsedStats = useMemo(
     () =>
       message.changes.reduce(
@@ -302,10 +315,11 @@ export function FileEditRow({
           };
         },
         { added: 0, removed: 0 },
-    ),
+      ),
     [message.changes],
   );
-  const preferApplyingLabel = preferOngoingLabels && message.status === "completed";
+  const preferApplyingLabel =
+    preferOngoingLabels && message.status === "completed";
   const actionLabel = useMemo(() => {
     if (message.approvalStatus === "waiting_for_approval") {
       return "Waiting for approval to edit";
@@ -322,7 +336,12 @@ export function FileEditRow({
     const hasMixed = actions.some((action) => action !== first);
     if (hasMixed || !first) return "Changed";
     return fileChangeActionLabel(first);
-  }, [message.approvalStatus, message.changes, message.status, preferApplyingLabel]);
+  }, [
+    message.approvalStatus,
+    message.changes,
+    message.status,
+    preferApplyingLabel,
+  ]);
   const isApplying =
     message.approvalStatus !== "denied" &&
     (message.status === "pending" || preferApplyingLabel);
@@ -342,7 +361,9 @@ export function FileEditRow({
         hasDiffs ? (
           <>
             <span className="text-emerald-600">+{collapsedStats.added}</span>{" "}
-            <span className="text-destructive/80">-{collapsedStats.removed}</span>
+            <span className="text-destructive/80">
+              -{collapsedStats.removed}
+            </span>
           </>
         ) : undefined
       }
@@ -352,13 +373,16 @@ export function FileEditRow({
   );
   const isAggregatedChanges = message.changes.length > 1;
   const changeKeys = useMemo(
-    () => message.changes.map((change, index) => `${fileChangeIdentity(change)}:${index}`),
+    () =>
+      message.changes.map(
+        (change, index) => `${fileChangeIdentity(change)}:${index}`,
+      ),
     [message.changes],
   );
   const lastChangeKey = changeKeys[changeKeys.length - 1];
-  const [changeExpansionOverrides, setChangeExpansionOverrides] = useState<Record<string, boolean>>(
-    {},
-  );
+  const [changeExpansionOverrides, setChangeExpansionOverrides] = useState<
+    Record<string, boolean>
+  >({});
 
   useEffect(() => {
     const validKeys = new Set(changeKeys);
@@ -366,7 +390,8 @@ export function FileEditRow({
       const nextOverrides = Object.fromEntries(
         Object.entries(currentOverrides).filter(([key]) => validKeys.has(key)),
       );
-      return Object.keys(nextOverrides).length === Object.keys(currentOverrides).length
+      return Object.keys(nextOverrides).length ===
+        Object.keys(currentOverrides).length
         ? currentOverrides
         : nextOverrides;
     });
@@ -390,14 +415,16 @@ export function FileEditRow({
               const fileName = fileNameFromPath(change.path);
               const renderablePatch = getRenderablePatch(change);
               const plainDiff = getPlainDiffFallback(change, renderablePatch);
-              const changeKey = changeKeys[index] ?? `${fileChangeIdentity(change)}:${index}`;
+              const changeKey =
+                changeKeys[index] ?? `${fileChangeIdentity(change)}:${index}`;
               const isChangeExpanded =
                 !isAggregatedChanges ||
                 changeExpansionOverrides[changeKey] ||
                 (changeExpansionOverrides[changeKey] === undefined &&
                   isExpanded &&
                   changeKey === lastChangeKey);
-              const changeHeaderToneClass = getEventHeaderToneClass(isChangeExpanded);
+              const changeHeaderToneClass =
+                getEventHeaderToneClass(isChangeExpanded);
               const hasChangeStats = stats.added > 0 || stats.removed > 0;
               const changeSummaryContent = (
                 <span className="inline-flex min-w-0 items-center gap-2 font-mono text-xs text-foreground/90">
@@ -407,7 +434,9 @@ export function FileEditRow({
                   {hasChangeStats ? (
                     <span className="shrink-0">
                       <span className="text-emerald-600">+{stats.added}</span>{" "}
-                      <span className="text-destructive/80">-{stats.removed}</span>
+                      <span className="text-destructive/80">
+                        -{stats.removed}
+                      </span>
                     </span>
                   ) : null}
                 </span>
@@ -448,8 +477,12 @@ export function FileEditRow({
                           </span>
                           {hasChangeStats ? (
                             <span className="shrink-0 font-mono text-xs">
-                              <span className="text-emerald-600">+{stats.added}</span>{" "}
-                              <span className="text-destructive/80">-{stats.removed}</span>
+                              <span className="text-emerald-600">
+                                +{stats.added}
+                              </span>{" "}
+                              <span className="text-destructive/80">
+                                -{stats.removed}
+                              </span>
                             </span>
                           ) : null}
                         </div>
@@ -464,7 +497,8 @@ export function FileEditRow({
                                 patch={renderablePatch.patch}
                                 options={{
                                   ...diffViewOptions,
-                                  disableLineNumbers: renderablePatch.disableLineNumbers,
+                                  disableLineNumbers:
+                                    renderablePatch.disableLineNumbers,
                                 }}
                               />
                             </div>

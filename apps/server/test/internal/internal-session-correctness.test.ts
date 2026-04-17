@@ -1,12 +1,7 @@
 import { setTimeout as sleep } from "node:timers/promises";
 import { WebSocket } from "ws";
 import { eq } from "drizzle-orm";
-import {
-  getHost,
-  getThread,
-  hostDaemonSessions,
-  listEvents,
-} from "@bb/db";
+import { getHost, getThread, hostDaemonSessions, listEvents } from "@bb/db";
 import { systemErrorEventDataSchema } from "@bb/domain";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
@@ -17,7 +12,10 @@ import {
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../src/errors.js";
 import { DAEMON_DISCONNECT_GRACE_MS } from "../../src/constants.js";
-import { onDaemonSocketClose, validateDaemonWebSocket } from "../../src/ws/daemon-protocol.js";
+import {
+  onDaemonSocketClose,
+  validateDaemonWebSocket,
+} from "../../src/ws/daemon-protocol.js";
 import { internalAuthHeaders } from "../helpers/commands.js";
 import {
   seedEnvironment,
@@ -60,7 +58,9 @@ async function waitForCloseDetails(
   });
 }
 
-async function waitForUpgradeRejectionStatus(socket: WebSocket): Promise<number> {
+async function waitForUpgradeRejectionStatus(
+  socket: WebSocket,
+): Promise<number> {
   return new Promise((resolve, reject) => {
     const cleanup = () => {
       socket.off("unexpected-response", onUnexpectedResponse);
@@ -68,7 +68,10 @@ async function waitForUpgradeRejectionStatus(socket: WebSocket): Promise<number>
       socket.off("error", onError);
     };
 
-    const onUnexpectedResponse = (_request: unknown, response: { statusCode?: number }) => {
+    const onUnexpectedResponse = (
+      _request: unknown,
+      response: { statusCode?: number },
+    ) => {
       cleanup();
       resolve(response.statusCode ?? 0);
     };
@@ -89,9 +92,11 @@ async function waitForUpgradeRejectionStatus(socket: WebSocket): Promise<number>
   });
 }
 
-function createDaemonWebSocket(
-  args: { hostKey: string; serverBaseUrl: string; sessionId: string },
-): WebSocket {
+function createDaemonWebSocket(args: {
+  hostKey: string;
+  serverBaseUrl: string;
+  sessionId: string;
+}): WebSocket {
   return new WebSocket(
     `${args.serverBaseUrl.replace("http", "ws")}/internal/ws?sessionId=${encodeURIComponent(args.sessionId)}`,
     buildHostDaemonWebSocketProtocols(),
@@ -176,10 +181,7 @@ describe("internal session correctness", () => {
     const server = await startTestServer();
     try {
       const hostKey = createTestDaemonHostKey({ hostId: "host-heartbeat" });
-      const daemonClient = createHostDaemonClient(
-        server.baseUrl,
-        hostKey,
-      );
+      const daemonClient = createHostDaemonClient(server.baseUrl, hostKey);
       const sessionResponse = await daemonClient.session.open.$post({
         json: {
           hostId: "host-heartbeat",
@@ -232,11 +234,10 @@ describe("internal session correctness", () => {
   it("closes the daemon websocket with 1008 on malformed messages", async () => {
     const server = await startTestServer();
     try {
-      const hostKey = createTestDaemonHostKey({ hostId: "host-malformed-heartbeat" });
-      const daemonClient = createHostDaemonClient(
-        server.baseUrl,
-        hostKey,
-      );
+      const hostKey = createTestDaemonHostKey({
+        hostId: "host-malformed-heartbeat",
+      });
+      const daemonClient = createHostDaemonClient(server.baseUrl, hostKey);
       const sessionResponse = await daemonClient.session.open.$post({
         json: {
           hostId: "host-malformed-heartbeat",
@@ -273,11 +274,10 @@ describe("internal session correctness", () => {
   it("closes the daemon websocket with 1008 on invalid heartbeat payloads", async () => {
     const server = await startTestServer();
     try {
-      const hostKey = createTestDaemonHostKey({ hostId: "host-invalid-heartbeat" });
-      const daemonClient = createHostDaemonClient(
-        server.baseUrl,
-        hostKey,
-      );
+      const hostKey = createTestDaemonHostKey({
+        hostId: "host-invalid-heartbeat",
+      });
+      const daemonClient = createHostDaemonClient(server.baseUrl, hostKey);
       const sessionResponse = await daemonClient.session.open.$post({
         json: {
           hostId: "host-invalid-heartbeat",
@@ -360,11 +360,10 @@ describe("internal session correctness", () => {
   it("closes the daemon websocket with 1008 when the session is no longer active", async () => {
     const server = await startTestServer();
     try {
-      const hostKey = createTestDaemonHostKey({ hostId: "host-inactive-session" });
-      const daemonClient = createHostDaemonClient(
-        server.baseUrl,
-        hostKey,
-      );
+      const hostKey = createTestDaemonHostKey({
+        hostId: "host-inactive-session",
+      });
+      const daemonClient = createHostDaemonClient(server.baseUrl, hostKey);
       const sessionResponse = await daemonClient.session.open.$post({
         json: {
           hostId: "host-inactive-session",
@@ -389,7 +388,11 @@ describe("internal session correctness", () => {
       // Close the session in the DB so the next heartbeat finds it inactive.
       server.db
         .update(hostDaemonSessions)
-        .set({ status: "closed", closedAt: Date.now(), closeReason: "replaced" })
+        .set({
+          status: "closed",
+          closedAt: Date.now(),
+          closeReason: "replaced",
+        })
         .where(eq(hostDaemonSessions.id, session.sessionId))
         .run();
 
@@ -496,33 +499,38 @@ describe("internal session correctness", () => {
         environmentId: environment.id,
       });
 
-      const registered = harness.deps.pendingInteractions.registerPendingInteraction({
-        interaction: {
-          threadId: thread.id,
-          turnId: "turn-disconnect-pending-interaction",
-          providerId: "codex",
-          providerThreadId: "provider-thread-disconnect-pending-interaction",
-          providerRequestId: "request-disconnect-pending-interaction",
-          payload: createCommandApprovalPayload({
-            itemId: "item-disconnect-pending-interaction",
-            reason: "Needs approval",
-            command: "git push",
-            cwd: "/tmp/project",
-          }),
-        },
-        sessionId: session.id,
-      });
+      const registered =
+        harness.deps.pendingInteractions.registerPendingInteraction({
+          interaction: {
+            threadId: thread.id,
+            turnId: "turn-disconnect-pending-interaction",
+            providerId: "codex",
+            providerThreadId: "provider-thread-disconnect-pending-interaction",
+            providerRequestId: "request-disconnect-pending-interaction",
+            payload: createCommandApprovalPayload({
+              itemId: "item-disconnect-pending-interaction",
+              reason: "Needs approval",
+              command: "git push",
+              cwd: "/tmp/project",
+            }),
+          },
+          sessionId: session.id,
+        });
       if (registered.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${registered.reason}`,
+        );
       }
 
       onDaemonSocketClose(harness.deps, session.id);
       await vi.advanceTimersByTimeAsync(DAEMON_DISCONNECT_GRACE_MS);
 
-      const interrupted = harness.deps.pendingInteractions.getThreadInteraction({
-        threadId: thread.id,
-        interactionId: registered.interaction.id,
-      });
+      const interrupted = harness.deps.pendingInteractions.getThreadInteraction(
+        {
+          threadId: thread.id,
+          interactionId: registered.interaction.id,
+        },
+      );
       expect(interrupted).toMatchObject({
         status: "interrupted",
         statusReason:
@@ -558,7 +566,10 @@ describe("internal session correctness", () => {
 
       const response = await harness.app.request("/internal/session/open", {
         method: "POST",
-        headers: internalAuthHeaders(harness, { hostId: host.id, hostType: host.type }),
+        headers: internalAuthHeaders(harness, {
+          hostId: host.id,
+          hostType: host.type,
+        }),
         body: JSON.stringify({
           hostId: host.id,
           instanceId: "instance-2",
@@ -608,29 +619,35 @@ describe("internal session correctness", () => {
         environmentId: environment.id,
       });
 
-      const registered = harness.deps.pendingInteractions.registerPendingInteraction({
-        interaction: {
-          threadId: thread.id,
-          turnId: "turn-session-restart-interaction",
-          providerId: "codex",
-          providerThreadId: "provider-thread-session-restart-interaction",
-          providerRequestId: "request-session-restart-interaction",
-          payload: createCommandApprovalPayload({
-            itemId: "item-session-restart-interaction",
-            reason: "Needs approval",
-            command: "git push",
-            cwd: "/tmp/project",
-          }),
-        },
-        sessionId: session.id,
-      });
+      const registered =
+        harness.deps.pendingInteractions.registerPendingInteraction({
+          interaction: {
+            threadId: thread.id,
+            turnId: "turn-session-restart-interaction",
+            providerId: "codex",
+            providerThreadId: "provider-thread-session-restart-interaction",
+            providerRequestId: "request-session-restart-interaction",
+            payload: createCommandApprovalPayload({
+              itemId: "item-session-restart-interaction",
+              reason: "Needs approval",
+              command: "git push",
+              cwd: "/tmp/project",
+            }),
+          },
+          sessionId: session.id,
+        });
       if (registered.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${registered.reason}`,
+        );
       }
 
       const response = await harness.app.request("/internal/session/open", {
         method: "POST",
-        headers: internalAuthHeaders(harness, { hostId: host.id, hostType: host.type }),
+        headers: internalAuthHeaders(harness, {
+          hostId: host.id,
+          hostType: host.type,
+        }),
         body: JSON.stringify({
           hostId: host.id,
           instanceId: "instance-restarted",
@@ -643,10 +660,12 @@ describe("internal session correctness", () => {
       });
 
       expect(response.status).toBe(201);
-      const interrupted = harness.deps.pendingInteractions.getThreadInteraction({
-        threadId: thread.id,
-        interactionId: registered.interaction.id,
-      });
+      const interrupted = harness.deps.pendingInteractions.getThreadInteraction(
+        {
+          threadId: thread.id,
+          interactionId: registered.interaction.id,
+        },
+      );
       expect(interrupted).toMatchObject({
         status: "interrupted",
         statusReason:

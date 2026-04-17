@@ -199,16 +199,19 @@ describe("thread runtime config", () => {
         type: "manager",
       });
 
-      const runtimeConfig = await resolveThreadRuntimeCommandConfig(harness.deps, {
-        thread: managerThread,
-        environment: {
-          hostId: environment.hostId,
-          id: environment.id,
-          path: environment.path,
-          workspaceProvisionType: environment.workspaceProvisionType,
+      const runtimeConfig = await resolveThreadRuntimeCommandConfig(
+        harness.deps,
+        {
+          thread: managerThread,
+          environment: {
+            hostId: environment.hostId,
+            id: environment.id,
+            path: environment.path,
+            workspaceProvisionType: environment.workspaceProvisionType,
+          },
+          isThreadCreation: true,
         },
-        isThreadCreation: true,
-      });
+      );
 
       expect(runtimeConfig.instructions).toContain(
         "Project root: `/tmp/runtime-project-root`",
@@ -246,15 +249,18 @@ describe("thread runtime config", () => {
       const threadStoragePath = `/tmp/bb-host-data/${hostId}/thread-storage/${managerThread.id}`;
       const preferencesPath = `${threadStoragePath}/PREFERENCES.md`;
 
-      const runtimeConfigPromise = resolveThreadRuntimeCommandConfig(harness.deps, {
-        thread: managerThread,
-        environment: {
-          hostId: environment.hostId,
-          id: environment.id,
-          path: environment.path,
-          workspaceProvisionType: environment.workspaceProvisionType,
+      const runtimeConfigPromise = resolveThreadRuntimeCommandConfig(
+        harness.deps,
+        {
+          thread: managerThread,
+          environment: {
+            hostId: environment.hostId,
+            id: environment.id,
+            path: environment.path,
+            workspaceProvisionType: environment.workspaceProvisionType,
+          },
         },
-      });
+      );
 
       const queued = await waitForQueuedCommand(
         harness,
@@ -319,15 +325,18 @@ describe("thread runtime config", () => {
       const threadStoragePath = `/tmp/bb-host-data/${hostId}/thread-storage/${managerThread.id}`;
       const preferencesPath = `${threadStoragePath}/PREFERENCES.md`;
 
-      const runtimeConfigPromise = resolveThreadRuntimeCommandConfig(harness.deps, {
-        thread: managerThread,
-        environment: {
-          hostId: environment.hostId,
-          id: environment.id,
-          path: environment.path,
-          workspaceProvisionType: environment.workspaceProvisionType,
+      const runtimeConfigPromise = resolveThreadRuntimeCommandConfig(
+        harness.deps,
+        {
+          thread: managerThread,
+          environment: {
+            hostId: environment.hostId,
+            id: environment.id,
+            path: environment.path,
+            workspaceProvisionType: environment.workspaceProvisionType,
+          },
         },
-      });
+      );
 
       const queued = await waitForQueuedCommand(
         harness,
@@ -351,5 +360,4 @@ describe("thread runtime config", () => {
       await harness.cleanup();
     }
   });
-
 });

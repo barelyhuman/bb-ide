@@ -43,7 +43,11 @@ export function ConversationTimeline({
   children,
   className,
 }: ConversationTimelineProps) {
-  return <div className={cx("flex min-w-0 flex-col gap-1", className)}>{children}</div>;
+  return (
+    <div className={cx("flex min-w-0 flex-col gap-1", className)}>
+      {children}
+    </div>
+  );
 }
 
 export interface ConversationEmptyStateProps {

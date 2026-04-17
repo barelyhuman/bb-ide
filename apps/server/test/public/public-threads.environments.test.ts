@@ -21,12 +21,7 @@ import {
   seedThread,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
-import {
-  beforeEach,
-  describe,
-  expect,
-  it,
-} from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 
 describe("public thread environment routes", () => {
@@ -34,7 +29,6 @@ describe("public thread environment routes", () => {
     provisionHostMock.mockReset();
     resumeHostMock.mockReset();
   });
-
 
   it("includes hasPendingInteraction in thread list responses", async () => {
     const harness = await createTestAppHarness();
@@ -84,7 +78,6 @@ describe("public thread environment routes", () => {
       await harness.cleanup();
     }
   });
-
 
   it("includes environmentWorkspaceDisplayKind in thread list responses", async () => {
     const harness = await createTestAppHarness();
@@ -161,7 +154,6 @@ describe("public thread environment routes", () => {
     }
   });
 
-
   it("reuses the ready unmanaged environment for the default source path", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -186,7 +178,9 @@ describe("public thread environment routes", () => {
           projectId: project.id,
           providerId: "codex",
           model: "gpt-5",
-          input: [{ type: "text", text: "Reuse the existing direct workspace" }],
+          input: [
+            { type: "text", text: "Reuse the existing direct workspace" },
+          ],
           environment: {
             type: "host",
             hostId: host.id,
@@ -213,7 +207,10 @@ describe("public thread environment routes", () => {
           command.threadId === createdThread.id,
       );
       expect(queuedStart.command).toMatchObject({
-        workspaceContext: { workspacePath: source.path, workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: source.path,
+          workspaceProvisionType: "unmanaged",
+        },
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -237,7 +234,6 @@ describe("public thread environment routes", () => {
       await harness.cleanup();
     }
   });
-
 
   it("attaches new threads to an in-flight unmanaged environment without reprovisioning", async () => {
     const harness = await createTestAppHarness();
@@ -263,7 +259,9 @@ describe("public thread environment routes", () => {
           projectId: project.id,
           providerId: "codex",
           model: "gpt-5",
-          input: [{ type: "text", text: "Wait for the existing provisioning flow" }],
+          input: [
+            { type: "text", text: "Wait for the existing provisioning flow" },
+          ],
           environment: {
             type: "host",
             hostId: host.id,
@@ -288,12 +286,13 @@ describe("public thread environment routes", () => {
     }
   });
 
-
   it("reuses an existing environment when requested", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -326,7 +325,6 @@ describe("public thread environment routes", () => {
       await harness.cleanup();
     }
   });
-
 
   it("fails managed reprovision send when the host is disconnected", async () => {
     const harness = await createTestAppHarness();

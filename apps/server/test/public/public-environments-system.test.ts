@@ -359,7 +359,10 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(statusCommand.command).toMatchObject({
-        workspaceContext: { workspacePath: "/tmp/environment-details/worktree", workspaceProvisionType: "managed-worktree" },
+        workspaceContext: {
+          workspacePath: "/tmp/environment-details/worktree",
+          workspaceProvisionType: "managed-worktree",
+        },
         mergeBaseBranch: "main",
       });
       await reportQueuedCommandSuccess(harness, statusCommand, {
@@ -401,7 +404,10 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(diffCommand.command).toMatchObject({
-        workspaceContext: { workspacePath: "/tmp/environment-details/worktree", workspaceProvisionType: "managed-worktree" },
+        workspaceContext: {
+          workspacePath: "/tmp/environment-details/worktree",
+          workspaceProvisionType: "managed-worktree",
+        },
         target: { type: "all", mergeBaseBranch: "main" },
       });
       await reportQueuedCommandSuccess(harness, diffCommand, {
@@ -431,7 +437,10 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(branchesCommand.command).toMatchObject({
-        workspaceContext: { workspacePath: "/tmp/environment-details/worktree", workspaceProvisionType: "managed-worktree" },
+        workspaceContext: {
+          workspacePath: "/tmp/environment-details/worktree",
+          workspaceProvisionType: "managed-worktree",
+        },
       });
       await reportQueuedCommandSuccess(harness, branchesCommand, {
         branches: ["main", "bb/details"],
@@ -485,7 +494,9 @@ describe("public environment and system routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -555,7 +566,10 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(commitCommand.command).toMatchObject({
-        workspaceContext: { workspacePath: "/tmp/test-environment", workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: "/tmp/test-environment",
+          workspaceProvisionType: "unmanaged",
+        },
         message: "bb: automated commit",
       });
       await reportQueuedCommandSuccess(harness, commitCommand, {
@@ -613,7 +627,10 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(promoteCommand.command).toMatchObject({
-        workspaceContext: { workspacePath: "/tmp/promote-project/.bb-worktrees/thread", workspaceProvisionType: "managed-worktree" },
+        workspaceContext: {
+          workspacePath: "/tmp/promote-project/.bb-worktrees/thread",
+          workspaceProvisionType: "managed-worktree",
+        },
         primaryPath: source.path,
       });
       await reportQueuedCommandSuccess(harness, promoteCommand, { ok: true });
@@ -643,7 +660,10 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(demoteCommand.command).toMatchObject({
-        workspaceContext: { workspacePath: "/tmp/promote-project/.bb-worktrees/thread", workspaceProvisionType: "managed-worktree" },
+        workspaceContext: {
+          workspacePath: "/tmp/promote-project/.bb-worktrees/thread",
+          workspaceProvisionType: "managed-worktree",
+        },
         primaryPath: source.path,
         defaultBranch: "trunk",
         envBranch: "bb/promote-test",
@@ -665,7 +685,9 @@ describe("public environment and system routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -740,7 +762,10 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(mergeCommand.command).toMatchObject({
-        workspaceContext: { workspacePath: "/tmp/test-environment", workspaceProvisionType: "managed-worktree" },
+        workspaceContext: {
+          workspacePath: "/tmp/test-environment",
+          workspaceProvisionType: "managed-worktree",
+        },
         targetBranch: "main",
         commitMessage: "bb: squash merge",
       });
@@ -766,7 +791,9 @@ describe("public environment and system routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -823,7 +850,9 @@ describe("public environment and system routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -894,7 +923,9 @@ describe("public environment and system routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1042,7 +1073,9 @@ describe("public environment and system routes", () => {
       githubPat: "test-github-pat",
     });
     try {
-      const response = await harness.app.request("/api/v1/system/sandbox-backends");
+      const response = await harness.app.request(
+        "/api/v1/system/sandbox-backends",
+      );
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toEqual([
         {
@@ -1067,7 +1100,9 @@ describe("public environment and system routes", () => {
       externalUrl: undefined,
     });
     try {
-      const response = await harness.app.request("/api/v1/system/sandbox-backends");
+      const response = await harness.app.request(
+        "/api/v1/system/sandbox-backends",
+      );
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toEqual([
         {
@@ -1223,7 +1258,11 @@ describe("public environment and system routes", () => {
               capabilities: {
                 supportsRename: true,
                 supportsServiceTier: true,
-                supportedPermissionModes: ["full", "workspace-write", "readonly"],
+                supportedPermissionModes: [
+                  "full",
+                  "workspace-write",
+                  "readonly",
+                ],
               },
               available: true,
             },
@@ -1291,7 +1330,11 @@ describe("public environment and system routes", () => {
               capabilities: {
                 supportsRename: true,
                 supportsServiceTier: true,
-                supportedPermissionModes: ["full", "workspace-write", "readonly"],
+                supportedPermissionModes: [
+                  "full",
+                  "workspace-write",
+                  "readonly",
+                ],
               },
               available: true,
             },

@@ -3,9 +3,7 @@ import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { projects, projectOperations, projectSources } from "../schema.js";
 import { createProjectId, createProjectSourceId } from "../ids.js";
-import {
-  toProjectSource,
-} from "./project-sources.js";
+import { toProjectSource } from "./project-sources.js";
 
 export interface CreateProjectLocalPathSourceInput {
   type: "local_path";
@@ -54,7 +52,8 @@ export function createProject(
         type: input.source.type,
         hostId: input.source.type === "local_path" ? input.source.hostId : null,
         path: input.source.type === "local_path" ? input.source.path : null,
-        repoUrl: input.source.type === "github_repo" ? input.source.repoUrl : null,
+        repoUrl:
+          input.source.type === "github_repo" ? input.source.repoUrl : null,
         isDefault: true,
         createdAt: now,
         updatedAt: now,
@@ -102,7 +101,8 @@ export function updateProject(
   input: UpdateProjectInput,
 ) {
   const now = Date.now();
-  const updated = db.update(projects)
+  const updated = db
+    .update(projects)
     .set({ ...input, updatedAt: now })
     .where(eq(projects.id, id))
     .returning()

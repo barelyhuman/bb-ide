@@ -51,11 +51,14 @@ function createFakeWorkspace(path: string): FakeWorkspace {
     isWorktree: false,
     getCurrentBranch: vi.fn(async () => "main"),
     getHeadSha: vi.fn(async () => "commit-1"),
-    getLocalStateFingerprint: vi.fn(
-      async () => JSON.stringify({ currentBranch: "main", headSha: "commit-1" }),
+    getLocalStateFingerprint: vi.fn(async () =>
+      JSON.stringify({ currentBranch: "main", headSha: "commit-1" }),
     ),
     getSharedGitRefsFingerprint: vi.fn(async () =>
-      JSON.stringify({ refs: [["refs/heads/main", "commit-1"]], remoteHead: null }),
+      JSON.stringify({
+        refs: [["refs/heads/main", "commit-1"]],
+        remoteHead: null,
+      }),
     ),
     getStatus: vi.fn(async () => ({
       workingTree: {
@@ -108,7 +111,9 @@ function createFakeRuntime(): AgentRuntime {
       providerThreadId: providerThreadId ?? "provider-resumed",
     })),
     runTurn: vi.fn(async (_args: RunTurnArgs) => undefined),
-    steerTurn: vi.fn(async (_args: SteerTurnArgs) => ({ status: "steered" as const })),
+    steerTurn: vi.fn(async (_args: SteerTurnArgs) => ({
+      status: "steered" as const,
+    })),
     stopThread: vi.fn(async (_args: StopThreadArgs) => undefined),
     renameThread: vi.fn(async (_args: RenameThreadArgs) => undefined),
     listModels: vi.fn(async () => []),
@@ -128,7 +133,10 @@ function createStandardRuntimeCommandContext(args: {
   workspacePath: string;
 }) {
   return {
-    workspaceContext: { workspacePath: args.workspacePath, workspaceProvisionType: "unmanaged" as const },
+    workspaceContext: {
+      workspacePath: args.workspacePath,
+      workspaceProvisionType: "unmanaged" as const,
+    },
     projectId: "project-1",
     providerId: "fake",
     ...(args.providerThreadId
@@ -151,9 +159,9 @@ describe("CommandRouter", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await Promise.all(
-      tempDirs.splice(0).map((tempDir) =>
-        fs.rm(tempDir, { force: true, recursive: true })
-      ),
+      tempDirs
+        .splice(0)
+        .map((tempDir) => fs.rm(tempDir, { force: true, recursive: true })),
     );
   });
 
@@ -191,7 +199,8 @@ describe("CommandRouter", () => {
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
       fetchRuntimeMaterial: vi.fn(async () => snapshot),
-      readPersistedRuntimeMaterial: async () => readRuntimeMaterialState(dataDir),
+      readPersistedRuntimeMaterial: async () =>
+        readRuntimeMaterialState(dataDir),
       persistRuntimeMaterial: async (nextSnapshot) =>
         writeRuntimeMaterialState(dataDir, nextSnapshot),
       reportResult,
@@ -307,7 +316,10 @@ describe("CommandRouter", () => {
 
   it("serializes workspace commands per environment", async () => {
     const workspace = createFakeWorkspace("/tmp/env-1");
-    const commitDeferred = createDeferred<{ commitSha: string; commitSubject: string }>();
+    const commitDeferred = createDeferred<{
+      commitSha: string;
+      commitSubject: string;
+    }>();
     workspace.commit.mockReturnValueOnce(commitDeferred.promise);
 
     const manager = new RuntimeManager({
@@ -335,7 +347,10 @@ describe("CommandRouter", () => {
         command: {
           type: "workspace.commit",
           environmentId: "env-1",
-          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" as const },
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged" as const,
+          },
           message: "Commit",
         },
       },
@@ -345,7 +360,10 @@ describe("CommandRouter", () => {
         command: {
           type: "workspace.status",
           environmentId: "env-1",
-          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" as const },
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged" as const,
+          },
           mergeBaseBranch: "main",
         },
       },
@@ -408,10 +426,13 @@ describe("CommandRouter", () => {
             serviceTier: "default" as const,
             reasoningLevel: "medium" as const,
             permissionMode: "full" as const,
-      permissionEscalation: null,
+            permissionEscalation: null,
           },
           resumeContext: {
-            workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" as const },
+            workspaceContext: {
+              workspacePath: "/tmp/env-1",
+              workspaceProvisionType: "unmanaged" as const,
+            },
             projectId: "project-1",
             providerId: "fake",
             providerThreadId: "provider-a",
@@ -436,10 +457,13 @@ describe("CommandRouter", () => {
             serviceTier: "default" as const,
             reasoningLevel: "medium" as const,
             permissionMode: "full" as const,
-      permissionEscalation: null,
+            permissionEscalation: null,
           },
           resumeContext: {
-            workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" as const },
+            workspaceContext: {
+              workspacePath: "/tmp/env-1",
+              workspaceProvisionType: "unmanaged" as const,
+            },
             projectId: "project-1",
             providerId: "fake",
             providerThreadId: "provider-b",
@@ -565,7 +589,11 @@ describe("CommandRouter", () => {
       createRuntime: vi.fn(() => runtime),
     });
     let nowValue = 100;
-    const results: Array<{ commandId: string; completedAt: number; ok: boolean }> = [];
+    const results: Array<{
+      commandId: string;
+      completedAt: number;
+      ok: boolean;
+    }> = [];
     const router = new CommandRouter({
       dataDir: "/tmp/bb-test-data",
       fetchRuntimeMaterial: vi.fn(),
@@ -618,7 +646,9 @@ describe("CommandRouter", () => {
     nowValue = 200;
     success.resolve({ providerThreadId: "provider-1" });
     await vi.waitFor(() => {
-      expect(results.some((result) => result.commandId === "success")).toBe(true);
+      expect(results.some((result) => result.commandId === "success")).toBe(
+        true,
+      );
     });
 
     nowValue = 300;

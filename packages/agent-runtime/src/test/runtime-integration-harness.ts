@@ -24,10 +24,19 @@ import {
   type RuntimeWaitPredicate,
 } from "./runtime-wait-helpers.js";
 
-export type ThreadIdentityEvent = Extract<ThreadEvent, { type: "thread/identity" }>;
+export type ThreadIdentityEvent = Extract<
+  ThreadEvent,
+  { type: "thread/identity" }
+>;
 export type TurnStartedEvent = Extract<ThreadEvent, { type: "turn/started" }>;
-export type InputAcceptedEvent = Extract<ThreadEvent, { type: "turn/input/accepted" }>;
-export type ErrorThreadEvent = Extract<ThreadEvent, { type: "error" | "system/error" }>;
+export type InputAcceptedEvent = Extract<
+  ThreadEvent,
+  { type: "turn/input/accepted" }
+>;
+export type ErrorThreadEvent = Extract<
+  ThreadEvent,
+  { type: "error" | "system/error" }
+>;
 export type WaitPredicate = RuntimeWaitPredicate;
 export type WaitFailureDescription = RuntimeWaitFailureDescription;
 export type WaitForConditionOptions = RuntimeWaitConditionOptions;
@@ -66,7 +75,10 @@ export interface InteractiveRequestWaitArgs extends ThreadWaitArgs {
   count: number;
 }
 
-export type RuntimeOptionsTemplate = Omit<AgentRuntimeExecutionOptions, "model">;
+export type RuntimeOptionsTemplate = Omit<
+  AgentRuntimeExecutionOptions,
+  "model"
+>;
 
 export type RuntimeOptionsPreset =
   | "full"
@@ -127,10 +139,7 @@ export const runtimeOptionsTemplates = {
 const FAST_INTEGRATION_MODELS_BY_PROVIDER: Record<string, readonly string[]> = {
   codex: ["gpt-5.4"],
   "claude-code": ["claude-haiku-4-5"],
-  pi: [
-    "openai-codex/gpt-5.4-mini",
-    "anthropic/claude-haiku-4-5",
-  ],
+  pi: ["openai-codex/gpt-5.4-mini", "anthropic/claude-haiku-4-5"],
 };
 
 const INTEGRATION_REASONING_LEVEL = "low" satisfies ReasoningLevel;
@@ -190,8 +199,8 @@ export function getEventsForThread(
   events: ThreadEvent[],
   threadId: string,
 ): ThreadEvent[] {
-  return events.filter((event) =>
-    "threadId" in event && event.threadId === threadId,
+  return events.filter(
+    (event) => "threadId" in event && event.threadId === threadId,
   );
 }
 
@@ -213,7 +222,9 @@ export function findInputAcceptedForThread(
   threadId: string,
   clientRequestSequence: number,
 ): InputAcceptedEvent | null {
-  const event = getInputAcceptedEvents(getEventsForThread(events, threadId)).find(
+  const event = getInputAcceptedEvents(
+    getEventsForThread(events, threadId),
+  ).find(
     (inputAcceptedEvent) =>
       inputAcceptedEvent.clientRequestSequence === clientRequestSequence,
   );
@@ -225,23 +236,27 @@ export function hasInputAcceptedForThread(
   threadId: string,
   clientRequestSequence: number,
 ): boolean {
-  return findInputAcceptedForThread(events, threadId, clientRequestSequence) !== null;
+  return (
+    findInputAcceptedForThread(events, threadId, clientRequestSequence) !== null
+  );
 }
 
 export function turnStartedCountForThread(
   events: ThreadEvent[],
   threadId: string,
 ): number {
-  return getEventsForThread(events, threadId)
-    .filter((event) => event.type === "turn/started").length;
+  return getEventsForThread(events, threadId).filter(
+    (event) => event.type === "turn/started",
+  ).length;
 }
 
 export function turnCompletedCountForThread(
   events: ThreadEvent[],
   threadId: string,
 ): number {
-  return getEventsForThread(events, threadId)
-    .filter((event) => event.type === "turn/completed").length;
+  return getEventsForThread(events, threadId).filter(
+    (event) => event.type === "turn/completed",
+  ).length;
 }
 
 export function getAgentTextAfterIndex(
@@ -259,7 +274,9 @@ export function isThreadIdentityEvent(
   return event.type === "thread/identity" && event.threadId === threadId;
 }
 
-export function resolveProviderThreadId(args: ResolveProviderThreadIdArgs): string {
+export function resolveProviderThreadId(
+  args: ResolveProviderThreadIdArgs,
+): string {
   if (args.fallbackProviderThreadId) {
     return args.fallbackProviderThreadId;
   }
@@ -294,7 +311,11 @@ export function expectNoSharedRuntimeTurnIds(
 export function getAgentText(events: ThreadEvent[]): string {
   const texts: string[] = [];
   for (const e of events) {
-    if (e.type === "item/completed" && e.item.type === "agentMessage" && e.item.text) {
+    if (
+      e.type === "item/completed" &&
+      e.item.type === "agentMessage" &&
+      e.item.text
+    ) {
       texts.push(e.item.text);
     }
   }
@@ -312,36 +333,38 @@ export function getStreamedText(events: ThreadEvent[]): string {
 }
 
 export function getThreadText(events: ThreadEvent[], threadId: string): string {
-  const threadEvents = events.filter((event) =>
-    "threadId" in event && event.threadId === threadId,
+  const threadEvents = events.filter(
+    (event) => "threadId" in event && event.threadId === threadId,
   );
   return getAgentText(threadEvents) || getStreamedText(threadEvents);
 }
 
 export function describeEventsForFailure(events: ThreadEvent[]): string {
-  return events.map((event) => {
-    const threadId = "threadId" in event ? event.threadId : "no-thread";
-    if (event.type === "item/completed") {
-      if (event.item.type === "toolCall") {
-        const error = event.item.error ? ` error=${event.item.error}` : "";
-        return `${threadId} ${event.type}:${event.item.type}:${event.item.tool}:${event.item.status}${error}`;
+  return events
+    .map((event) => {
+      const threadId = "threadId" in event ? event.threadId : "no-thread";
+      if (event.type === "item/completed") {
+        if (event.item.type === "toolCall") {
+          const error = event.item.error ? ` error=${event.item.error}` : "";
+          return `${threadId} ${event.type}:${event.item.type}:${event.item.tool}:${event.item.status}${error}`;
+        }
+        if (event.item.type === "commandExecution") {
+          return `${threadId} ${event.type}:${event.item.type}:${event.item.status}:${event.item.approvalStatus}`;
+        }
+        if (event.item.type === "fileChange") {
+          return `${threadId} ${event.type}:${event.item.type}:${event.item.status}:${event.item.approvalStatus}`;
+        }
+        return `${threadId} ${event.type}:${event.item.type}`;
       }
-      if (event.item.type === "commandExecution") {
-        return `${threadId} ${event.type}:${event.item.type}:${event.item.status}:${event.item.approvalStatus}`;
+      if (event.type === "item/started") {
+        return `${threadId} ${event.type}:${event.item.type}`;
       }
-      if (event.item.type === "fileChange") {
-        return `${threadId} ${event.type}:${event.item.type}:${event.item.status}:${event.item.approvalStatus}`;
+      if (event.type === "error") {
+        return `${threadId} ${event.type}:${event.message}${event.detail ? ` ${event.detail}` : ""}`;
       }
-      return `${threadId} ${event.type}:${event.item.type}`;
-    }
-    if (event.type === "item/started") {
-      return `${threadId} ${event.type}:${event.item.type}`;
-    }
-    if (event.type === "error") {
-      return `${threadId} ${event.type}:${event.message}${event.detail ? ` ${event.detail}` : ""}`;
-    }
-    return `${threadId} ${event.type}`;
-  }).join("\n");
+      return `${threadId} ${event.type}`;
+    })
+    .join("\n");
 }
 
 export function previewText(value: string): string {
@@ -356,7 +379,9 @@ export function isErrorEvent(event: ThreadEvent): event is ErrorThreadEvent {
   return event.type === "error" || event.type === "system/error";
 }
 
-export function findLatestErrorEvent(events: ThreadEvent[]): ErrorThreadEvent | null {
+export function findLatestErrorEvent(
+  events: ThreadEvent[],
+): ErrorThreadEvent | null {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
     if (event && isErrorEvent(event)) {
@@ -371,7 +396,9 @@ export function formatErrorEvent(event: ErrorThreadEvent): string {
   return `${event.type}: ${event.message}${detail}`;
 }
 
-export function formatInteractiveRequest(request: PendingInteractionCreate): string {
+export function formatInteractiveRequest(
+  request: PendingInteractionCreate,
+): string {
   const { subject } = request.payload;
   switch (subject.kind) {
     case "command":
@@ -383,7 +410,9 @@ export function formatInteractiveRequest(request: PendingInteractionCreate): str
   }
 }
 
-export function describeRuntimeDiagnostics(args: RuntimeDiagnosticsArgs): string {
+export function describeRuntimeDiagnostics(
+  args: RuntimeDiagnosticsArgs,
+): string {
   const events = args.threadId
     ? getEventsForThread(args.ctx.events, args.threadId)
     : args.ctx.events;
@@ -391,7 +420,9 @@ export function describeRuntimeDiagnostics(args: RuntimeDiagnosticsArgs): string
     ? args.ctx.toolCalls.filter((request) => request.threadId === args.threadId)
     : args.ctx.toolCalls;
   const relevantInteractiveRequests = args.threadId
-    ? args.ctx.interactiveRequests.filter((request) => request.threadId === args.threadId)
+    ? args.ctx.interactiveRequests.filter(
+        (request) => request.threadId === args.threadId,
+      )
     : args.ctx.interactiveRequests;
   const recentEvents = events.slice(-12);
   const latestError = findLatestErrorEvent(events);
@@ -413,7 +444,9 @@ export function describeRuntimeDiagnostics(args: RuntimeDiagnosticsArgs): string
   ].join("\n");
 }
 
-export function failOnRuntimeError(args: RuntimeDiagnosticsArgs): string | null {
+export function failOnRuntimeError(
+  args: RuntimeDiagnosticsArgs,
+): string | null {
   const events = args.threadId
     ? getEventsForThread(args.ctx.events, args.threadId)
     : args.ctx.events;
@@ -424,7 +457,9 @@ export function failOnRuntimeError(args: RuntimeDiagnosticsArgs): string | null 
   return `${formatErrorEvent(latestError)}\n${describeRuntimeDiagnostics(args)}`;
 }
 
-export function waitForRuntimeCondition(args: RuntimeConditionWaitArgs): Promise<void> {
+export function waitForRuntimeCondition(
+  args: RuntimeConditionWaitArgs,
+): Promise<void> {
   return waitForRuntimeConditionUnsafe(args.predicate, {
     describeFailure: () => describeRuntimeDiagnostics(args),
     failFast: () => failOnRuntimeError(args),
@@ -434,7 +469,9 @@ export function waitForRuntimeCondition(args: RuntimeConditionWaitArgs): Promise
   });
 }
 
-export function waitForTurnCompletedCount(args: TurnCompletedCountWaitArgs): Promise<void> {
+export function waitForTurnCompletedCount(
+  args: TurnCompletedCountWaitArgs,
+): Promise<void> {
   return waitForRuntimeCondition({
     ctx: args.ctx,
     label: args.label,
@@ -443,7 +480,9 @@ export function waitForTurnCompletedCount(args: TurnCompletedCountWaitArgs): Pro
   });
 }
 
-export function waitForThreadTurnCompleted(args: ThreadWaitArgs): Promise<void> {
+export function waitForThreadTurnCompleted(
+  args: ThreadWaitArgs,
+): Promise<void> {
   return waitForSharedThreadTurnCompleted({
     describeFailure: () => describeRuntimeDiagnostics(args),
     events: args.ctx.events,
@@ -461,10 +500,8 @@ export function waitForThreadTurnCompletedCount(
   return waitForRuntimeCondition({
     ctx: args.ctx,
     label: args.label,
-    predicate: () => turnCompletedCountForThread(
-      args.ctx.events,
-      args.threadId,
-    ) >= args.count,
+    predicate: () =>
+      turnCompletedCountForThread(args.ctx.events, args.threadId) >= args.count,
     threadId: args.threadId,
     timeoutMs: args.timeoutMs,
   });
@@ -487,8 +524,8 @@ export function hasToolCallForThread(
   threadId: string,
   toolName: string,
 ): boolean {
-  return ctx.toolCalls.some((request) =>
-    request.threadId === threadId && request.tool === toolName,
+  return ctx.toolCalls.some(
+    (request) => request.threadId === threadId && request.tool === toolName,
   );
 }
 
@@ -496,11 +533,14 @@ export function interactiveRequestCountForThread(
   ctx: TestContext,
   threadId: string,
 ): number {
-  return ctx.interactiveRequests.filter((request) => request.threadId === threadId)
-    .length;
+  return ctx.interactiveRequests.filter(
+    (request) => request.threadId === threadId,
+  ).length;
 }
 
-export function waitForToolCallBeforeTurnCompletion(args: ToolCallWaitArgs): Promise<void> {
+export function waitForToolCallBeforeTurnCompletion(
+  args: ToolCallWaitArgs,
+): Promise<void> {
   return waitForRuntimeConditionUnsafe(
     () => hasToolCallForThread(args.ctx, args.threadId, args.toolName),
     {
@@ -526,7 +566,8 @@ export function waitForInteractiveRequestBeforeTurnCompletion(
   args: InteractiveRequestWaitArgs,
 ): Promise<void> {
   return waitForRuntimeConditionUnsafe(
-    () => interactiveRequestCountForThread(args.ctx, args.threadId) >= args.count,
+    () =>
+      interactiveRequestCountForThread(args.ctx, args.threadId) >= args.count,
     {
       describeFailure: () => describeRuntimeDiagnostics(args),
       failFast: () => {
@@ -550,9 +591,9 @@ export function getCompletedCommandOutputs(events: ThreadEvent[]): string {
   const outputs: string[] = [];
   for (const event of events) {
     if (
-      event.type === "item/completed"
-      && event.item.type === "commandExecution"
-      && event.item.aggregatedOutput
+      event.type === "item/completed" &&
+      event.item.type === "commandExecution" &&
+      event.item.aggregatedOutput
     ) {
       outputs.push(event.item.aggregatedOutput);
     }
@@ -564,8 +605,8 @@ export function getCompletedCommands(events: ThreadEvent[]): string[] {
   const commands: string[] = [];
   for (const event of events) {
     if (
-      event.type === "item/completed"
-      && event.item.type === "commandExecution"
+      event.type === "item/completed" &&
+      event.item.type === "commandExecution"
     ) {
       commands.push(event.item.command);
     }
@@ -574,10 +615,11 @@ export function getCompletedCommands(events: ThreadEvent[]): string[] {
 }
 
 export function hasDeniedCommandExecution(events: ThreadEvent[]): boolean {
-  return events.some((event) =>
-    event.type === "item/completed"
-    && event.item.type === "commandExecution"
-    && event.item.approvalStatus === "denied"
+  return events.some(
+    (event) =>
+      event.type === "item/completed" &&
+      event.item.type === "commandExecution" &&
+      event.item.approvalStatus === "denied",
   );
 }
 
@@ -623,19 +665,24 @@ interface ResolveIntegrationModelArgs {
   providerId: string;
 }
 
-function resolveIntegrationModel(args: ResolveIntegrationModelArgs): string | undefined {
-  const preferredModels = FAST_INTEGRATION_MODELS_BY_PROVIDER[args.providerId] ?? [];
+function resolveIntegrationModel(
+  args: ResolveIntegrationModelArgs,
+): string | undefined {
+  const preferredModels =
+    FAST_INTEGRATION_MODELS_BY_PROVIDER[args.providerId] ?? [];
   for (const preferredModel of preferredModels) {
-    const model = args.models.find((availableModel) =>
-      availableModel.model === preferredModel
+    const model = args.models.find(
+      (availableModel) => availableModel.model === preferredModel,
     );
     if (model) {
       return model.model;
     }
   }
 
-  return args.models.find((availableModel) => availableModel.isDefault)?.model
-    ?? args.models[0]?.model;
+  return (
+    args.models.find((availableModel) => availableModel.isDefault)?.model ??
+    args.models[0]?.model
+  );
 }
 
 function resolveIntegrationServiceTier(
@@ -667,7 +714,9 @@ export function createTempFileName(prefix: string): string {
   return `${prefix}-${randomUUID().replaceAll("-", "")}.txt`;
 }
 
-export function expectSemanticApprovalRequest(request: PendingInteractionCreate): void {
+export function expectSemanticApprovalRequest(
+  request: PendingInteractionCreate,
+): void {
   expect(["command", "file_change", "permission_grant"]).toContain(
     request.payload.subject.kind,
   );
@@ -718,7 +767,9 @@ export function createTestRuntime(
   providerId: string,
   opts?: CreateTestRuntimeOptions,
 ): TestContext {
-  const tmpDir = opts?.workspacePath ?? mkdtempSync(join(tmpdir(), `bb-integ-${providerId}-`));
+  const tmpDir =
+    opts?.workspacePath ??
+    mkdtempSync(join(tmpdir(), `bb-integ-${providerId}-`));
   const ownsTmpDir = !opts?.workspacePath;
   const events: ThreadEvent[] = [];
   const toolCalls: ToolCallRequest[] = [];
@@ -745,7 +796,9 @@ export function createTestRuntime(
       if (opts?.onInteractiveRequest) {
         return opts.onInteractiveRequest(req);
       }
-      throw new Error(`Unexpected interactive request: ${req.payload.subject.kind}`);
+      throw new Error(
+        `Unexpected interactive request: ${req.payload.subject.kind}`,
+      );
     },
     onStderr: () => {},
   });
@@ -777,24 +830,26 @@ export async function createApprovalResolution(
     grantedPermissions:
       request.payload.subject.kind === "permission_grant"
         ? request.payload.subject.permissions
-        : request.payload.subject.kind === "command"
-          || request.payload.subject.kind === "file_change"
-        ? request.payload.subject.sessionGrant
-        : null,
+        : request.payload.subject.kind === "command" ||
+            request.payload.subject.kind === "file_change"
+          ? request.payload.subject.sessionGrant
+          : null,
   };
 }
 
-export function isWriteApprovalRequest(request: PendingInteractionCreate): boolean {
+export function isWriteApprovalRequest(
+  request: PendingInteractionCreate,
+): boolean {
   return (
-    (
-      request.payload.subject.kind === "command"
-      || request.payload.subject.kind === "file_change"
-    )
-    && request.payload.availableDecisions.includes("allow_once")
+    (request.payload.subject.kind === "command" ||
+      request.payload.subject.kind === "file_change") &&
+    request.payload.availableDecisions.includes("allow_once")
   );
 }
 
-export function expectWriteApprovalRequest(requests: PendingInteractionCreate[]): void {
+export function expectWriteApprovalRequest(
+  requests: PendingInteractionCreate[],
+): void {
   expect(
     requests.some(isWriteApprovalRequest),
     `Expected a command or file-change approval with allow_once; got ${JSON.stringify(

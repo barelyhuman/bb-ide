@@ -37,13 +37,19 @@ describe("sandbox host registry", () => {
     vi.useFakeTimers();
     const registry = createSandboxHostRegistry();
 
-    for (let index = 0; index <= SANDBOX_HOST_REGISTRY_MAX_ENTRIES; index += 1) {
+    for (
+      let index = 0;
+      index <= SANDBOX_HOST_REGISTRY_MAX_ENTRIES;
+      index += 1
+    ) {
       registry.set(`host-${index}`, createMockSandboxHost(`host-${index}`));
       vi.advanceTimersByTime(1);
     }
 
     expect(registry.get("host-0")).toBeUndefined();
-    expect(registry.get(`host-${SANDBOX_HOST_REGISTRY_MAX_ENTRIES}`)).toMatchObject({
+    expect(
+      registry.get(`host-${SANDBOX_HOST_REGISTRY_MAX_ENTRIES}`),
+    ).toMatchObject({
       hostId: `host-${SANDBOX_HOST_REGISTRY_MAX_ENTRIES}`,
     });
   });
@@ -99,7 +105,10 @@ describe("sandbox host registry", () => {
     }
     resolveLoad(refreshedHost);
 
-    const [firstHost, secondHost] = await Promise.all([firstRefresh, secondRefresh]);
+    const [firstHost, secondHost] = await Promise.all([
+      firstRefresh,
+      secondRefresh,
+    ]);
     expect(firstHost).toBe(refreshedHost);
     expect(secondHost).toBe(refreshedHost);
     expect(registry.get(staleHost.hostId)).toBe(refreshedHost);
@@ -114,9 +123,8 @@ describe("sandbox host registry", () => {
       vi.advanceTimersByTime(1);
     }
 
-    const loadedHost = await registry.getOrCreate(
-      "host-loaded",
-      async () => createMockSandboxHost("host-loaded"),
+    const loadedHost = await registry.getOrCreate("host-loaded", async () =>
+      createMockSandboxHost("host-loaded"),
     );
 
     expect(loadedHost.hostId).toBe("host-loaded");

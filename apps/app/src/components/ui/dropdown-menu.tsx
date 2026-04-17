@@ -1,28 +1,29 @@
-import * as React from "react"
-import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu"
-import { Check, ChevronRight, Circle } from "lucide-react"
+import * as React from "react";
+import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
+import { Check, ChevronRight, Circle } from "lucide-react";
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/lib/utils";
 import {
   type ResponsiveOverlayContextValue,
   useResponsiveRoot,
   MobileTrigger,
   ResponsiveDrawerShell,
   stripRadixContentProps,
-} from "@/components/ui/responsive-overlay"
+} from "@/components/ui/responsive-overlay";
 
 // ---------------------------------------------------------------------------
 // Context — separate instance from Popover to avoid cross-contamination
 // ---------------------------------------------------------------------------
 
-const ResponsiveMenuContext = React.createContext<ResponsiveOverlayContextValue>({
-  isMobile: false,
-  open: false,
-  onOpenChange: () => {},
-})
+const ResponsiveMenuContext =
+  React.createContext<ResponsiveOverlayContextValue>({
+    isMobile: false,
+    open: false,
+    onOpenChange: () => {},
+  });
 
 function useResponsiveMenu() {
-  return React.useContext(ResponsiveMenuContext)
+  return React.useContext(ResponsiveMenuContext);
 }
 
 // ---------------------------------------------------------------------------
@@ -35,14 +36,14 @@ function DropdownMenu({
   onOpenChange: controlledOnChange,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
-  const ctx = useResponsiveRoot(controlledOpen, controlledOnChange)
+  const ctx = useResponsiveRoot(controlledOpen, controlledOnChange);
 
   if (ctx.isMobile) {
     return (
       <ResponsiveMenuContext.Provider value={ctx}>
         {children}
       </ResponsiveMenuContext.Provider>
-    )
+    );
   }
 
   return (
@@ -55,7 +56,7 @@ function DropdownMenu({
         {children}
       </ResponsiveMenuContext.Provider>
     </DropdownMenuPrimitive.Root>
-  )
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -66,7 +67,7 @@ const DropdownMenuTrigger = React.forwardRef<
   HTMLButtonElement,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Trigger>
 >(({ asChild, children, ...props }, ref) => {
-  const { isMobile, open, onOpenChange } = useResponsiveMenu()
+  const { isMobile, open, onOpenChange } = useResponsiveMenu();
 
   if (isMobile) {
     return (
@@ -80,16 +81,16 @@ const DropdownMenuTrigger = React.forwardRef<
       >
         {children}
       </MobileTrigger>
-    )
+    );
   }
 
   return (
     <DropdownMenuPrimitive.Trigger ref={ref} asChild={asChild} {...props}>
       {children}
     </DropdownMenuPrimitive.Trigger>
-  )
-})
-DropdownMenuTrigger.displayName = "DropdownMenuTrigger"
+  );
+});
+DropdownMenuTrigger.displayName = "DropdownMenuTrigger";
 
 // ---------------------------------------------------------------------------
 // Content
@@ -99,13 +100,13 @@ const DropdownMenuContent = React.forwardRef<
   HTMLDivElement,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Content> & {
     /** Title announced by screen readers when the mobile drawer opens. */
-    mobileTitle?: string
+    mobileTitle?: string;
   }
 >(({ className, sideOffset = 4, children, mobileTitle, ...props }, ref) => {
-  const { isMobile, open, onOpenChange } = useResponsiveMenu()
+  const { isMobile, open, onOpenChange } = useResponsiveMenu();
 
   if (isMobile) {
-    const domProps = stripRadixContentProps(props)
+    const domProps = stripRadixContentProps(props);
     return (
       <ResponsiveDrawerShell
         open={open}
@@ -124,7 +125,7 @@ const DropdownMenuContent = React.forwardRef<
           {children}
         </div>
       </ResponsiveDrawerShell>
-    )
+    );
   }
 
   return (
@@ -141,9 +142,9 @@ const DropdownMenuContent = React.forwardRef<
         {children}
       </DropdownMenuPrimitive.Content>
     </DropdownMenuPrimitive.Portal>
-  )
-})
-DropdownMenuContent.displayName = "DropdownMenuContent"
+  );
+});
+DropdownMenuContent.displayName = "DropdownMenuContent";
 
 // ---------------------------------------------------------------------------
 // Item
@@ -154,63 +155,76 @@ DropdownMenuContent.displayName = "DropdownMenuContent"
  * preventDefault() / read defaultPrevented without a synthetic shim.
  */
 function createSelectEvent(): Event {
-  return new Event("select", { cancelable: true })
+  return new Event("select", { cancelable: true });
 }
 
 const DropdownMenuItem = React.forwardRef<
   React.ComponentRef<typeof DropdownMenuPrimitive.Item>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & {
-    inset?: boolean
+    inset?: boolean;
   }
->(({ className, inset, onSelect, disabled, textValue: _textValue, children, ...domProps }, ref) => {
-  const { isMobile, onOpenChange } = useResponsiveMenu()
+>(
+  (
+    {
+      className,
+      inset,
+      onSelect,
+      disabled,
+      textValue: _textValue,
+      children,
+      ...domProps
+    },
+    ref,
+  ) => {
+    const { isMobile, onOpenChange } = useResponsiveMenu();
 
-  if (isMobile) {
+    if (isMobile) {
+      return (
+        <button
+          ref={ref as React.RefCallback<HTMLButtonElement> | null}
+          type="button"
+          role="menuitem"
+          disabled={disabled}
+          aria-disabled={disabled || undefined}
+          className={cn(
+            "relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-2 text-left text-xs outline-none transition-colors focus:bg-accent focus:text-accent-foreground active:bg-accent active:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0",
+            inset && "pl-8",
+            className,
+          )}
+          data-disabled={disabled ? "" : undefined}
+          onClick={() => {
+            if (disabled) return;
+            const event = createSelectEvent();
+            onSelect?.(event);
+            if (!event.defaultPrevented) {
+              onOpenChange(false);
+            }
+          }}
+        >
+          {children}
+        </button>
+      );
+    }
+
     return (
-      <button
-        ref={ref as React.RefCallback<HTMLButtonElement> | null}
-        type="button"
-        role="menuitem"
-        disabled={disabled}
-        aria-disabled={disabled || undefined}
+      <DropdownMenuPrimitive.Item
+        ref={ref}
         className={cn(
-          "relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-2 text-left text-xs outline-none transition-colors focus:bg-accent focus:text-accent-foreground active:bg-accent active:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0",
+          "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-[0.3125rem] text-xs outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0",
           inset && "pl-8",
           className,
         )}
-        data-disabled={disabled ? "" : undefined}
-        onClick={() => {
-          if (disabled) return
-          const event = createSelectEvent()
-          onSelect?.(event)
-          if (!event.defaultPrevented) {
-            onOpenChange(false)
-          }
-        }}
+        disabled={disabled}
+        onSelect={onSelect}
+        textValue={_textValue}
+        {...domProps}
       >
         {children}
-      </button>
-    )
-  }
-
-  return (
-    <DropdownMenuPrimitive.Item
-      ref={ref}
-      className={cn(
-        "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-[0.3125rem] text-xs outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0",
-        inset && "pl-8",
-        className,
-      )}
-      disabled={disabled}
-      onSelect={onSelect}
-      textValue={_textValue}
-      {...domProps}
-    >
-      {children}
-    </DropdownMenuPrimitive.Item>
-  )
-})
-DropdownMenuItem.displayName = "DropdownMenuItem"
+      </DropdownMenuPrimitive.Item>
+    );
+  },
+);
+DropdownMenuItem.displayName = "DropdownMenuItem";
 
 // ---------------------------------------------------------------------------
 // CheckboxItem
@@ -219,70 +233,86 @@ DropdownMenuItem.displayName = "DropdownMenuItem"
 const DropdownMenuCheckboxItem = React.forwardRef<
   React.ComponentRef<typeof DropdownMenuPrimitive.CheckboxItem>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.CheckboxItem>
->(({ className, children, checked, onSelect, onCheckedChange, disabled, textValue: _textValue, ...domProps }, ref) => {
-  const { isMobile, onOpenChange } = useResponsiveMenu()
+>(
+  (
+    {
+      className,
+      children,
+      checked,
+      onSelect,
+      onCheckedChange,
+      disabled,
+      textValue: _textValue,
+      ...domProps
+    },
+    ref,
+  ) => {
+    const { isMobile, onOpenChange } = useResponsiveMenu();
 
-  if (isMobile) {
+    if (isMobile) {
+      return (
+        <button
+          ref={ref as React.RefCallback<HTMLButtonElement> | null}
+          type="button"
+          role="menuitemcheckbox"
+          aria-checked={
+            checked === "indeterminate" ? "mixed" : checked === true
+          }
+          disabled={disabled}
+          aria-disabled={disabled || undefined}
+          className={cn(
+            "relative flex w-full cursor-default select-none items-center rounded-sm py-2 pl-2 pr-8 text-left text-xs outline-none transition-colors focus:bg-accent focus:text-accent-foreground active:bg-accent active:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+            className,
+          )}
+          data-disabled={disabled ? "" : undefined}
+          onClick={() => {
+            if (disabled) return;
+            const event = createSelectEvent();
+            onSelect?.(event);
+            // Radix semantics: preventDefault() on onSelect prevents the menu
+            // from closing but does NOT prevent the checked state from toggling.
+            // Indeterminate toggles to true (matching Radix behavior).
+            onCheckedChange?.(checked === "indeterminate" ? true : !checked);
+            if (!event.defaultPrevented) {
+              onOpenChange(false);
+            }
+          }}
+        >
+          <span className="absolute right-2 flex h-5 w-5 items-center justify-center md:h-3.5 md:w-3.5">
+            {(checked === true || checked === "indeterminate") && (
+              <Check className="h-5 w-5 md:h-3.5 md:w-3.5" />
+            )}
+          </span>
+          {children}
+        </button>
+      );
+    }
+
     return (
-      <button
-        ref={ref as React.RefCallback<HTMLButtonElement> | null}
-        type="button"
-        role="menuitemcheckbox"
-        aria-checked={checked === "indeterminate" ? "mixed" : checked === true}
-        disabled={disabled}
-        aria-disabled={disabled || undefined}
+      <DropdownMenuPrimitive.CheckboxItem
+        ref={ref}
         className={cn(
-          "relative flex w-full cursor-default select-none items-center rounded-sm py-2 pl-2 pr-8 text-left text-xs outline-none transition-colors focus:bg-accent focus:text-accent-foreground active:bg-accent active:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+          "relative flex cursor-default select-none items-center rounded-sm py-[0.3125rem] pl-2 pr-8 text-xs outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
           className,
         )}
-        data-disabled={disabled ? "" : undefined}
-        onClick={() => {
-          if (disabled) return
-          const event = createSelectEvent()
-          onSelect?.(event)
-          // Radix semantics: preventDefault() on onSelect prevents the menu
-          // from closing but does NOT prevent the checked state from toggling.
-          // Indeterminate toggles to true (matching Radix behavior).
-          onCheckedChange?.(checked === "indeterminate" ? true : !checked)
-          if (!event.defaultPrevented) {
-            onOpenChange(false)
-          }
-        }}
+        checked={checked}
+        onSelect={onSelect}
+        onCheckedChange={onCheckedChange}
+        disabled={disabled}
+        textValue={_textValue}
+        {...domProps}
       >
         <span className="absolute right-2 flex h-5 w-5 items-center justify-center md:h-3.5 md:w-3.5">
-          {(checked === true || checked === "indeterminate") && (
+          <DropdownMenuPrimitive.ItemIndicator>
             <Check className="h-5 w-5 md:h-3.5 md:w-3.5" />
-          )}
+          </DropdownMenuPrimitive.ItemIndicator>
         </span>
         {children}
-      </button>
-    )
-  }
-
-  return (
-    <DropdownMenuPrimitive.CheckboxItem
-      ref={ref}
-      className={cn(
-        "relative flex cursor-default select-none items-center rounded-sm py-[0.3125rem] pl-2 pr-8 text-xs outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
-        className,
-      )}
-      checked={checked}
-      onSelect={onSelect}
-      onCheckedChange={onCheckedChange}
-      disabled={disabled}
-      textValue={_textValue}
-      {...domProps}
-    >
-      <span className="absolute right-2 flex h-5 w-5 items-center justify-center md:h-3.5 md:w-3.5">
-        <DropdownMenuPrimitive.ItemIndicator>
-          <Check className="h-5 w-5 md:h-3.5 md:w-3.5" />
-        </DropdownMenuPrimitive.ItemIndicator>
-      </span>
-      {children}
-    </DropdownMenuPrimitive.CheckboxItem>
-  )
-})
-DropdownMenuCheckboxItem.displayName = "DropdownMenuCheckboxItem"
+      </DropdownMenuPrimitive.CheckboxItem>
+    );
+  },
+);
+DropdownMenuCheckboxItem.displayName = "DropdownMenuCheckboxItem";
 
 // ---------------------------------------------------------------------------
 // RadioGroup + RadioItem
@@ -295,39 +325,39 @@ function DropdownMenuRadioGroup({
   children,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.RadioGroup>) {
-  const { isMobile } = useResponsiveMenu()
+  const { isMobile } = useResponsiveMenu();
 
   if (isMobile) {
     if (process.env.NODE_ENV === "development") {
       console.warn(
         "DropdownMenuRadioGroup is not supported on mobile. " +
           "Add a mobile fallback or use DropdownMenuItem with manual check rendering.",
-      )
+      );
     }
-    return null
+    return null;
   }
 
   return (
     <DropdownMenuPrimitive.RadioGroup {...props}>
       {children}
     </DropdownMenuPrimitive.RadioGroup>
-  )
+  );
 }
 
 const DropdownMenuRadioItem = React.forwardRef<
   React.ComponentRef<typeof DropdownMenuPrimitive.RadioItem>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.RadioItem>
 >(({ className, children, ...props }, ref) => {
-  const { isMobile } = useResponsiveMenu()
+  const { isMobile } = useResponsiveMenu();
 
   if (isMobile) {
     if (process.env.NODE_ENV === "development") {
       console.warn(
         "DropdownMenuRadioItem is not supported on mobile. " +
           "Add a mobile fallback or use DropdownMenuItem with manual check rendering.",
-      )
+      );
     }
-    return null
+    return null;
   }
 
   return (
@@ -346,9 +376,9 @@ const DropdownMenuRadioItem = React.forwardRef<
       </span>
       {children}
     </DropdownMenuPrimitive.RadioItem>
-  )
-})
-DropdownMenuRadioItem.displayName = DropdownMenuPrimitive.RadioItem.displayName
+  );
+});
+DropdownMenuRadioItem.displayName = DropdownMenuPrimitive.RadioItem.displayName;
 
 // ---------------------------------------------------------------------------
 // Label
@@ -357,10 +387,10 @@ DropdownMenuRadioItem.displayName = DropdownMenuPrimitive.RadioItem.displayName
 const DropdownMenuLabel = React.forwardRef<
   HTMLDivElement,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Label> & {
-    inset?: boolean
+    inset?: boolean;
   }
 >(({ className, inset, children, ...props }, ref) => {
-  const { isMobile } = useResponsiveMenu()
+  const { isMobile } = useResponsiveMenu();
 
   if (isMobile) {
     return (
@@ -374,7 +404,7 @@ const DropdownMenuLabel = React.forwardRef<
       >
         {children}
       </div>
-    )
+    );
   }
 
   return (
@@ -389,9 +419,9 @@ const DropdownMenuLabel = React.forwardRef<
     >
       {children}
     </DropdownMenuPrimitive.Label>
-  )
-})
-DropdownMenuLabel.displayName = "DropdownMenuLabel"
+  );
+});
+DropdownMenuLabel.displayName = "DropdownMenuLabel";
 
 // ---------------------------------------------------------------------------
 // Separator
@@ -401,7 +431,7 @@ const DropdownMenuSeparator = React.forwardRef<
   HTMLHRElement,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Separator>
 >(({ className, ...props }, ref) => {
-  const { isMobile } = useResponsiveMenu()
+  const { isMobile } = useResponsiveMenu();
 
   if (isMobile) {
     return (
@@ -409,7 +439,7 @@ const DropdownMenuSeparator = React.forwardRef<
         ref={ref as React.RefCallback<HTMLHRElement> | null}
         className={cn("-mx-1 my-1 h-px border-0 bg-muted", className)}
       />
-    )
+    );
   }
 
   return (
@@ -418,9 +448,9 @@ const DropdownMenuSeparator = React.forwardRef<
       className={cn("-mx-1 my-1 h-px bg-muted", className)}
       {...props}
     />
-  )
-})
-DropdownMenuSeparator.displayName = "DropdownMenuSeparator"
+  );
+});
+DropdownMenuSeparator.displayName = "DropdownMenuSeparator";
 
 // ---------------------------------------------------------------------------
 // Group
@@ -430,36 +460,36 @@ const DropdownMenuGroup = React.forwardRef<
   HTMLDivElement,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Group>
 >(({ children, ...props }, ref) => {
-  const { isMobile } = useResponsiveMenu()
+  const { isMobile } = useResponsiveMenu();
 
   if (isMobile) {
     return (
       <div ref={ref} role="group" {...props}>
         {children}
       </div>
-    )
+    );
   }
 
   return (
     <DropdownMenuPrimitive.Group ref={ref} {...props}>
       {children}
     </DropdownMenuPrimitive.Group>
-  )
-})
-DropdownMenuGroup.displayName = "DropdownMenuGroup"
+  );
+});
+DropdownMenuGroup.displayName = "DropdownMenuGroup";
 
 // ---------------------------------------------------------------------------
 // Sub-menu components (desktop-only, no callers on mobile)
 // ---------------------------------------------------------------------------
 
-const DropdownMenuPortal = DropdownMenuPrimitive.Portal
+const DropdownMenuPortal = DropdownMenuPrimitive.Portal;
 
-const DropdownMenuSub = DropdownMenuPrimitive.Sub
+const DropdownMenuSub = DropdownMenuPrimitive.Sub;
 
 const DropdownMenuSubTrigger = React.forwardRef<
   React.ComponentRef<typeof DropdownMenuPrimitive.SubTrigger>,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubTrigger> & {
-    inset?: boolean
+    inset?: boolean;
   }
 >(({ className, inset, children, ...props }, ref) => (
   <DropdownMenuPrimitive.SubTrigger
@@ -474,8 +504,9 @@ const DropdownMenuSubTrigger = React.forwardRef<
     {children}
     <ChevronRight className="ml-auto" />
   </DropdownMenuPrimitive.SubTrigger>
-))
-DropdownMenuSubTrigger.displayName = DropdownMenuPrimitive.SubTrigger.displayName
+));
+DropdownMenuSubTrigger.displayName =
+  DropdownMenuPrimitive.SubTrigger.displayName;
 
 const DropdownMenuSubContent = React.forwardRef<
   React.ComponentRef<typeof DropdownMenuPrimitive.SubContent>,
@@ -489,8 +520,9 @@ const DropdownMenuSubContent = React.forwardRef<
     )}
     {...props}
   />
-))
-DropdownMenuSubContent.displayName = DropdownMenuPrimitive.SubContent.displayName
+));
+DropdownMenuSubContent.displayName =
+  DropdownMenuPrimitive.SubContent.displayName;
 
 // ---------------------------------------------------------------------------
 // Shortcut (plain span, no responsive branching needed)
@@ -505,9 +537,9 @@ const DropdownMenuShortcut = ({
       className={cn("ml-auto text-xs tracking-widest opacity-60", className)}
       {...props}
     />
-  )
-}
-DropdownMenuShortcut.displayName = "DropdownMenuShortcut"
+  );
+};
+DropdownMenuShortcut.displayName = "DropdownMenuShortcut";
 
 // ---------------------------------------------------------------------------
 // Exports
@@ -529,4 +561,4 @@ export {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuRadioGroup,
-}
+};

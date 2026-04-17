@@ -57,8 +57,10 @@ interface PiOAuthCredential {
 
 type PiAuthFile = Record<string, PiOAuthCredential>;
 
-type ClaudeResolvedCredential = CloudAuthResolvedCredential<ClaudeStoredCredential>;
-type CodexResolvedCredential = CloudAuthResolvedCredential<CodexStoredCredential>;
+type ClaudeResolvedCredential =
+  CloudAuthResolvedCredential<ClaudeStoredCredential>;
+type CodexResolvedCredential =
+  CloudAuthResolvedCredential<CodexStoredCredential>;
 
 interface RuntimeMaterialAccumulator {
   env: Record<string, string>;
@@ -198,7 +200,10 @@ function appendRuntimeConsumerMaterial(
 ): void {
   switch (args.runtimeProviderId) {
     case "claude-code":
-      if (args.authConsumerId !== "claude-code" || !isClaudeResolvedCredential(args.credential)) {
+      if (
+        args.authConsumerId !== "claude-code" ||
+        !isClaudeResolvedCredential(args.credential)
+      ) {
         throw new Error(
           `Runtime consumer ${args.runtimeProviderId}/${args.authConsumerId} requires a Claude credential`,
         );
@@ -206,7 +211,10 @@ function appendRuntimeConsumerMaterial(
       args.accumulator.files.push(buildClaudeCredentialsFile(args.credential));
       return;
     case "codex":
-      if (args.authConsumerId !== "codex" || !isCodexResolvedCredential(args.credential)) {
+      if (
+        args.authConsumerId !== "codex" ||
+        !isCodexResolvedCredential(args.credential)
+      ) {
         throw new Error(
           `Runtime consumer ${args.runtimeProviderId}/${args.authConsumerId} requires a Codex credential`,
         );
@@ -254,7 +262,8 @@ export function buildCloudAuthRuntimeMaterial(
   };
 
   for (const credential of args.credentials) {
-    for (const consumer of getCloudAuthProvider(credential.providerId).runtimeConsumers) {
+    for (const consumer of getCloudAuthProvider(credential.providerId)
+      .runtimeConsumers) {
       appendRuntimeConsumerMaterial({
         accumulator,
         authConsumerId: consumer.authConsumerId,

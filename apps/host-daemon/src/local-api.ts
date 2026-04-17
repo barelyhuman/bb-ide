@@ -27,8 +27,12 @@ import {
 const execFileAsync = promisify(execFile);
 
 export type OpenPathHandler = (path: string) => Promise<void>;
-export type WorkspaceOpenTargetListHandler = () => Promise<WorkspaceOpenTarget[]>;
-export type WorkspaceOpenHandler = (request: OpenWorkspaceRequest) => Promise<void>;
+export type WorkspaceOpenTargetListHandler = () => Promise<
+  WorkspaceOpenTarget[]
+>;
+export type WorkspaceOpenHandler = (
+  request: OpenWorkspaceRequest,
+) => Promise<void>;
 
 export interface StartLocalApiServerOptions {
   hostId: string;
@@ -121,14 +125,18 @@ export async function startLocalApiServer(
 
   post("/paths/exist", pathsExistRequestSchema, async (c, payload) => {
     const entries = await Promise.all(
-      payload.paths.map(async (path) => [path, await pathExists(path)] as const),
+      payload.paths.map(
+        async (path) => [path, await pathExists(path)] as const,
+      ),
     );
     return c.json({ existence: Object.fromEntries(entries) });
   });
 
   get("/workspace-open-targets", async (c) =>
     c.json({
-      targets: await (options.listWorkspaceOpenTargets ?? listWorkspaceOpenTargets)(),
+      targets: await (
+        options.listWorkspaceOpenTargets ?? listWorkspaceOpenTargets
+      )(),
     }),
   );
 

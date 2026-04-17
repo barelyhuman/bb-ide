@@ -1,5 +1,5 @@
-import { useId, useState, type FormEvent } from "react"
-import { Button } from "@/components/ui/button"
+import { useId, useState, type FormEvent } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -7,19 +7,19 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 export interface HostRenameDialogTarget {
-  id: string
-  currentName: string
+  id: string;
+  currentName: string;
 }
 
 interface HostRenameDialogProps {
-  target: HostRenameDialogTarget | null
-  pending: boolean
-  onOpenChange: (open: boolean) => void
-  onRename: (hostId: string, name: string) => void
+  target: HostRenameDialogTarget | null;
+  pending: boolean;
+  onOpenChange: (open: boolean) => void;
+  onRename: (hostId: string, name: string) => void;
 }
 
 export function HostRenameDialog({
@@ -41,7 +41,7 @@ export function HostRenameDialog({
         ) : null}
       </DialogContent>
     </Dialog>
-  )
+  );
 }
 
 function HostRenameDialogContent({
@@ -49,26 +49,28 @@ function HostRenameDialogContent({
   pending,
   onRename,
 }: {
-  target: HostRenameDialogTarget
-  pending: boolean
-  onRename: (hostId: string, name: string) => void
+  target: HostRenameDialogTarget;
+  pending: boolean;
+  onRename: (hostId: string, name: string) => void;
 }) {
-  const inputId = useId()
-  const [nextName, setNextName] = useState(target.currentName)
-  const [validationMessage, setValidationMessage] = useState<string | null>(null)
+  const inputId = useId();
+  const [nextName, setNextName] = useState(target.currentName);
+  const [validationMessage, setValidationMessage] = useState<string | null>(
+    null,
+  );
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (pending) return
+    event.preventDefault();
+    if (pending) return;
 
-    const trimmedName = nextName.trim()
+    const trimmedName = nextName.trim();
     if (!trimmedName) {
-      setValidationMessage("Host name cannot be empty.")
-      return
+      setValidationMessage("Host name cannot be empty.");
+      return;
     }
 
-    onRename(target.id, trimmedName)
-  }
+    onRename(target.id, trimmedName);
+  };
 
   return (
     <>
@@ -85,9 +87,9 @@ function HostRenameDialogContent({
             autoFocus
             disabled={pending}
             onChange={(event) => {
-              setNextName(event.target.value)
+              setNextName(event.target.value);
               if (validationMessage) {
-                setValidationMessage(null)
+                setValidationMessage(null);
               }
             }}
           />
@@ -102,5 +104,5 @@ function HostRenameDialogContent({
         </DialogFooter>
       </form>
     </>
-  )
+  );
 }

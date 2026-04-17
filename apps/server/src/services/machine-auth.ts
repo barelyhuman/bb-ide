@@ -3,14 +3,8 @@ import { sql } from "drizzle-orm";
 import { betterAuth } from "better-auth";
 import { apiKey } from "@better-auth/api-key";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
-import {
-  authApiKeys,
-  authUsers,
-  type DbConnection,
-} from "@bb/db";
-import {
-  normalizeServerUrl,
-} from "@bb/host-daemon-contract";
+import { authApiKeys, authUsers, type DbConnection } from "@bb/db";
+import { normalizeServerUrl } from "@bb/host-daemon-contract";
 import { hostTypeSchema, type HostType } from "@bb/domain";
 import { readOrCreateSecretFile } from "@bb/secret-storage";
 import { z } from "zod";
@@ -30,12 +24,16 @@ const machineAuthSchema = {
   user: authUsers,
 };
 
-const machineCredentialMetadataSchema = z.object({
-  hostId: z.string().min(1),
-  hostType: hostTypeSchema,
-}).strict();
+const machineCredentialMetadataSchema = z
+  .object({
+    hostId: z.string().min(1),
+    hostType: hostTypeSchema,
+  })
+  .strict();
 
-export type MachineCredentialMetadata = z.infer<typeof machineCredentialMetadataSchema>;
+export type MachineCredentialMetadata = z.infer<
+  typeof machineCredentialMetadataSchema
+>;
 
 export interface BuildJoinCommandArgs {
   hostId: string;
@@ -102,7 +100,9 @@ export interface MachineAuthService {
   ensureReady(): Promise<void>;
   enrollHost(args: EnrollHostArgs): Promise<EnrollHostResult | null>;
   issueDaemonHostKey(args: IssueDaemonHostKeyArgs): Promise<string>;
-  issueHostEnrollKey(args: IssueHostEnrollKeyArgs): Promise<IssueHostEnrollKeyResult>;
+  issueHostEnrollKey(
+    args: IssueHostEnrollKeyArgs,
+  ): Promise<IssueHostEnrollKeyResult>;
   pruneExpiredKeys(): Promise<void>;
   rotateDaemonHostKey(args: RotateDaemonHostKeyArgs): Promise<string>;
   verifyDaemonHostKey(token: string): Promise<VerifyMachineKeyResult | null>;
@@ -122,7 +122,9 @@ function quoteShellValue(value: string): string {
   return `'${value.replace(/'/gu, `'\"'\"'`)}'`;
 }
 
-function parseCredentialMetadata(raw: unknown): MachineCredentialMetadata | null {
+function parseCredentialMetadata(
+  raw: unknown,
+): MachineCredentialMetadata | null {
   const parsed = machineCredentialMetadataSchema.safeParse(raw);
   return parsed.success ? parsed.data : null;
 }
@@ -341,9 +343,7 @@ export async function createMachineAuthService(
         LOCAL_JOIN_COMMAND,
       ].join(" ");
     },
-    async disableMachineKey(
-      disableArgs: DisableMachineKeyArgs,
-    ): Promise<void> {
+    async disableMachineKey(disableArgs: DisableMachineKeyArgs): Promise<void> {
       await disableMachineKey(disableArgs);
     },
     async ensureReady(): Promise<void> {
@@ -444,7 +444,9 @@ export async function createMachineAuthService(
       await disableMachineKey({ keyId });
       return nextHostKey.key;
     },
-    async verifyDaemonHostKey(token: string): Promise<VerifyMachineKeyResult | null> {
+    async verifyDaemonHostKey(
+      token: string,
+    ): Promise<VerifyMachineKeyResult | null> {
       return verifyKey({
         configId: DAEMON_HOST_CONFIG_ID,
         token,

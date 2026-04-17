@@ -12,8 +12,7 @@ export interface CreateAcceptedUserMessageArgs {
   clientRequestSequence?: number;
 }
 
-export interface BuildAcceptedUserMessageEventArgs
-  extends CreateAcceptedUserMessageArgs {
+export interface BuildAcceptedUserMessageEventArgs extends CreateAcceptedUserMessageArgs {
   providerThreadId: string;
   threadId: string;
   turnId: string;
@@ -51,13 +50,15 @@ export function buildAcceptedUserMessageEvent(
   if (!accepted) {
     return [];
   }
-  return [{
-    type: "turn/input/accepted",
-    threadId: args.threadId,
-    providerThreadId: args.providerThreadId,
-    turnId: args.turnId,
-    clientRequestSequence: accepted.clientRequestSequence,
-  }];
+  return [
+    {
+      type: "turn/input/accepted",
+      threadId: args.threadId,
+      providerThreadId: args.providerThreadId,
+      turnId: args.turnId,
+      clientRequestSequence: accepted.clientRequestSequence,
+    },
+  ];
 }
 
 export function queueAcceptedUserMessage<

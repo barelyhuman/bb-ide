@@ -20,27 +20,31 @@ export function registerInternalCommandResultRoutes(
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
   });
 
-  post("/session/command-result", hostDaemonCommandResultReportSchema, async (context, payload) => {
-    const daemon = getAuthenticatedDaemon(context);
-    const session = requireAuthorizedActiveSession(deps.db, {
-      hostId: daemon.hostId,
-      sessionId: payload.sessionId,
-    });
-    const command = getCommand(deps.db, payload.commandId);
-    if (!command || command.hostId !== session.hostId) {
-      throw new ApiError(404, "command_not_found", "Command not found");
-    }
+  post(
+    "/session/command-result",
+    hostDaemonCommandResultReportSchema,
+    async (context, payload) => {
+      const daemon = getAuthenticatedDaemon(context);
+      const session = requireAuthorizedActiveSession(deps.db, {
+        hostId: daemon.hostId,
+        sessionId: payload.sessionId,
+      });
+      const command = getCommand(deps.db, payload.commandId);
+      if (!command || command.hostId !== session.hostId) {
+        throw new ApiError(404, "command_not_found", "Command not found");
+      }
 
-    void markSandboxActivity(deps, {
-      hostId: session.hostId,
-      source: "command-result",
-    });
-    const updatedCommand = await handleCommandResult(deps, payload);
+      void markSandboxActivity(deps, {
+        hostId: session.hostId,
+        source: "command-result",
+      });
+      const updatedCommand = await handleCommandResult(deps, payload);
 
-    if (!updatedCommand) {
-      throw new ApiError(404, "command_not_found", "Command not found");
-    }
+      if (!updatedCommand) {
+        throw new ApiError(404, "command_not_found", "Command not found");
+      }
 
-    return context.json({ ok: true });
-  });
+      return context.json({ ok: true });
+    },
+  );
 }

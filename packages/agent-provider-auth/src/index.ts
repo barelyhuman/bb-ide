@@ -1,9 +1,5 @@
-export {
-  createCloudAuthCrypto,
-} from "./crypto.js";
-export {
-  buildCloudAuthRuntimeMaterial,
-} from "./runtime-material.js";
+export { createCloudAuthCrypto } from "./crypto.js";
+export { buildCloudAuthRuntimeMaterial } from "./runtime-material.js";
 export {
   buildCloudAuthCredentialUpsert,
   deserializeCloudAuthCredential,
@@ -18,6 +14,4 @@ export {
   type CodexStoredCredential,
   type StoredCloudAuthCredential,
 } from "./provider-definitions.js";
-export type {
-  CloudAuthResolvedCredential,
-} from "./types.js";
+export type { CloudAuthResolvedCredential } from "./types.js";

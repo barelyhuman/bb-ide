@@ -60,22 +60,32 @@ function printCaptureTable(captures: ReplayCaptureHostSummary[]): void {
     console.log("No replay captures found.");
     return;
   }
-  console.log(renderBorderlessTable(
-    {
-      head: ["Capture", "Host", "Provider", "Project", "Thread", "Raw events", "Captured"],
-      colWidths: [28, 16, 16, 18, 18, 10, 26],
-      trimTrailingWhitespace: true,
-    },
-    captures.map((capture) => [
-      capture.captureId,
-      capture.hostId,
-      capture.providerId,
-      capture.projectId,
-      capture.threadId,
-      String(capture.eventCounts.rawProviderEvents),
-      formatDate(capture.capturedAt),
-    ]),
-  ));
+  console.log(
+    renderBorderlessTable(
+      {
+        head: [
+          "Capture",
+          "Host",
+          "Provider",
+          "Project",
+          "Thread",
+          "Raw events",
+          "Captured",
+        ],
+        colWidths: [28, 16, 16, 18, 18, 10, 26],
+        trimTrailingWhitespace: true,
+      },
+      captures.map((capture) => [
+        capture.captureId,
+        capture.hostId,
+        capture.providerId,
+        capture.projectId,
+        capture.threadId,
+        String(capture.eventCounts.rawProviderEvents),
+        formatDate(capture.capturedAt),
+      ]),
+    ),
+  );
 }
 
 function printCaptureDetail(capture: ReplayCaptureDetail): void {
@@ -87,7 +97,9 @@ function printCaptureDetail(capture: ReplayCaptureDetail): void {
   console.log(`Original thread: ${capture.threadId}`);
   console.log(`Provider thread: ${capture.providerThreadId ?? "<unknown>"}`);
   console.log(`Captured: ${formatDate(capture.capturedAt)}`);
-  console.log(`Completed: ${capture.completedAt ? formatDate(capture.completedAt) : "<pending>"}`);
+  console.log(
+    `Completed: ${capture.completedAt ? formatDate(capture.completedAt) : "<pending>"}`,
+  );
   console.log(`Raw provider events: ${capture.eventCounts.rawProviderEvents}`);
   console.log(`Replay URL: ${replayUrl(capture.captureId)}`);
 }
@@ -102,61 +114,75 @@ export function registerReplayCommands(
   program: Command,
   getUrl: () => string,
 ): void {
-  const replay = program.command("replay").description("Manage dev replay captures");
+  const replay = program
+    .command("replay")
+    .description("Manage dev replay captures");
 
   replay
     .command("list")
     .description("List dev replay captures")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (opts: ReplayListOptions) => {
-      const client = createClient(getUrl());
-      const result = await unwrap<ReplayCaptureListResponse>(
-        client.api.v1["development-only"].replay.captures.$get(),
-      );
-      if (outputJson(opts, result)) return;
-      printCaptureTable(result.captures);
-    }));
+    .action(
+      action(async (opts: ReplayListOptions) => {
+        const client = createClient(getUrl());
+        const result = await unwrap<ReplayCaptureListResponse>(
+          client.api.v1["development-only"].replay.captures.$get(),
+        );
+        if (outputJson(opts, result)) return;
+        printCaptureTable(result.captures);
+      }),
+    );
 
   replay
     .command("show <captureId>")
     .description("Show a dev replay capture")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (captureId: string, opts: ReplayShowOptions) => {
-      const client = createClient(getUrl());
-      const result = await unwrap<ReplayCaptureDetail>(
-        client.api.v1["development-only"].replay.captures[":id"].$get({
-          param: { id: captureId },
-        }),
-      );
-      if (outputJson(opts, result)) return;
-      printCaptureDetail(result);
-    }));
+    .action(
+      action(async (captureId: string, opts: ReplayShowOptions) => {
+        const client = createClient(getUrl());
+        const result = await unwrap<ReplayCaptureDetail>(
+          client.api.v1["development-only"].replay.captures[":id"].$get({
+            param: { id: captureId },
+          }),
+        );
+        if (outputJson(opts, result)) return;
+        printCaptureDetail(result);
+      }),
+    );
 
   replay
     .command("run <captureId>")
     .description("Start a new replay thread from a capture")
     .option("--json", "Print machine-readable JSON output")
-    .option("--speed <n>", "Replay speed multiplier: 0.5, 1, 2, 5, or 10", String(DEFAULT_REPLAY_SPEED))
-    .action(action(async (captureId: string, opts: ReplayRunOptions) => {
-      const client = createClient(getUrl());
-      const speed = parseSpeed(opts.speed);
-      const result = await unwrap<ReplayRunResponse>(
-        client.api.v1["development-only"].replay.captures[":id"].runs.$post({
-          param: { id: captureId },
-          json: { speed },
-        }),
-      );
-      if (outputJson(opts, result)) return;
-      printReplayRun(result);
-    }));
+    .option(
+      "--speed <n>",
+      "Replay speed multiplier: 0.5, 1, 2, 5, or 10",
+      String(DEFAULT_REPLAY_SPEED),
+    )
+    .action(
+      action(async (captureId: string, opts: ReplayRunOptions) => {
+        const client = createClient(getUrl());
+        const speed = parseSpeed(opts.speed);
+        const result = await unwrap<ReplayRunResponse>(
+          client.api.v1["development-only"].replay.captures[":id"].runs.$post({
+            param: { id: captureId },
+            json: { speed },
+          }),
+        );
+        if (outputJson(opts, result)) return;
+        printReplayRun(result);
+      }),
+    );
 
   replay
     .command("open <captureId>")
     .description("Print the app URL for a replay capture")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (captureId: string, opts: ReplayOpenOptions) => {
-      const payload: ReplayOpenPayload = { url: replayUrl(captureId) };
-      if (outputJson(opts, payload)) return;
-      console.log(payload.url);
-    }));
+    .action(
+      action(async (captureId: string, opts: ReplayOpenOptions) => {
+        const payload: ReplayOpenPayload = { url: replayUrl(captureId) };
+        if (outputJson(opts, payload)) return;
+        console.log(payload.url);
+      }),
+    );
 }

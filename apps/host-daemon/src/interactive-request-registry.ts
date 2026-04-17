@@ -2,9 +2,7 @@ import type {
   PendingInteractionCreate,
   PendingInteractionResolution,
 } from "@bb/domain";
-import type {
-  HostDaemonInteractiveRequestResponse,
-} from "@bb/host-daemon-contract";
+import type { HostDaemonInteractiveRequestResponse } from "@bb/host-daemon-contract";
 
 const DELIVERED_INTERACTIVE_REQUEST_TOMBSTONE_TTL_MS = 5 * 60 * 1000;
 
@@ -76,7 +74,11 @@ function buildInteractiveRequestKey(
 function buildDeliveredTombstoneKey(
   request: Pick<
     InteractiveResolveCommandInput,
-    "interactionId" | "providerId" | "providerRequestId" | "providerThreadId" | "threadId"
+    | "interactionId"
+    | "providerId"
+    | "providerRequestId"
+    | "providerThreadId"
+    | "threadId"
   >,
 ): string {
   return [
@@ -93,7 +95,10 @@ export class InteractiveRequestRegistry {
     string,
     DeliveredInteractiveRequestTombstone
   >();
-  private readonly pendingEntries = new Map<string, PendingInteractiveRequestEntry>();
+  private readonly pendingEntries = new Map<
+    string,
+    PendingInteractiveRequestEntry
+  >();
 
   constructor(private readonly options: InteractiveRequestRegistryOptions) {}
 
@@ -106,12 +111,16 @@ export class InteractiveRequestRegistry {
       return existing.promise;
     }
 
-    let resolveEntry: (resolution: PendingInteractionResolution) => void = () => {};
+    let resolveEntry: (
+      resolution: PendingInteractionResolution,
+    ) => void = () => {};
     let rejectEntry: (error: Error) => void = () => {};
-    const promise = new Promise<PendingInteractionResolution>((resolve, reject) => {
-      resolveEntry = resolve;
-      rejectEntry = reject;
-    });
+    const promise = new Promise<PendingInteractionResolution>(
+      (resolve, reject) => {
+        resolveEntry = resolve;
+        rejectEntry = reject;
+      },
+    );
     const entry: PendingInteractiveRequestEntry = {
       interactionId: null,
       promise,
@@ -130,10 +139,7 @@ export class InteractiveRequestRegistry {
       }
 
       entry.interactionId = response.interactionId;
-      if (
-        response.status !== "pending"
-        && response.status !== "resolving"
-      ) {
+      if (response.status !== "pending" && response.status !== "resolving") {
         this.pendingEntries.delete(key);
         entry.reject(
           new Error(
@@ -143,9 +149,8 @@ export class InteractiveRequestRegistry {
       }
     } catch (error) {
       this.pendingEntries.delete(key);
-      const registrationError = error instanceof Error
-        ? error
-        : new Error(String(error));
+      const registrationError =
+        error instanceof Error ? error : new Error(String(error));
       this.options.onRegistrationFailure?.({
         error: registrationError,
         request,
@@ -171,8 +176,8 @@ export class InteractiveRequestRegistry {
       );
     }
     if (
-      entry.interactionId !== null
-      && entry.interactionId !== request.interactionId
+      entry.interactionId !== null &&
+      entry.interactionId !== request.interactionId
     ) {
       throw new InteractiveRequestRegistryError(
         "interactive_request_mismatch",
@@ -189,8 +194,8 @@ export class InteractiveRequestRegistry {
     const threadIds = new Set(args.threadIds);
     for (const [key, entry] of this.pendingEntries) {
       if (
-        entry.request.providerId !== args.providerId
-        || !threadIds.has(entry.request.threadId)
+        entry.request.providerId !== args.providerId ||
+        !threadIds.has(entry.request.threadId)
       ) {
         continue;
       }

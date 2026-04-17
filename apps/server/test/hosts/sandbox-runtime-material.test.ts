@@ -3,7 +3,10 @@ import {
   createCloudAuthCrypto,
   type StoredCloudAuthCredential,
 } from "@bb/agent-provider-auth";
-import { buildHostRuntimeMaterialState, replaceManagedRuntimeFiles } from "@bb/host-runtime-material";
+import {
+  buildHostRuntimeMaterialState,
+  replaceManagedRuntimeFiles,
+} from "@bb/host-runtime-material";
 import {
   getCommand,
   getHostOperation,
@@ -165,9 +168,12 @@ describe("sandbox runtime material", () => {
         dataDir: "/tmp/bb-test-data",
       });
 
-      const desiredSnapshot = await requestSandboxRuntimeMaterialSync(harness.deps, {
-        hostId: host.id,
-      });
+      const desiredSnapshot = await requestSandboxRuntimeMaterialSync(
+        harness.deps,
+        {
+          hostId: host.id,
+        },
+      );
       const queuedCommandId = advanceSandboxRuntimeMaterialSync(harness.deps, {
         hostId: host.id,
       });
@@ -185,14 +191,20 @@ describe("sandbox runtime material", () => {
       );
       expect(completed).toBe(true);
 
-      const requestedSnapshot = await requestSandboxRuntimeMaterialSync(harness.deps, {
-        hostId: host.id,
-      });
+      const requestedSnapshot = await requestSandboxRuntimeMaterialSync(
+        harness.deps,
+        {
+          hostId: host.id,
+        },
+      );
       expect(requestedSnapshot).toEqual(desiredSnapshot);
 
-      const requeuedCommandId = advanceSandboxRuntimeMaterialSync(harness.deps, {
-        hostId: host.id,
-      });
+      const requeuedCommandId = advanceSandboxRuntimeMaterialSync(
+        harness.deps,
+        {
+          hostId: host.id,
+        },
+      );
       expect(requeuedCommandId).toBeNull();
 
       const operation = getHostOperation(harness.db, {
@@ -239,9 +251,12 @@ describe("sandbox runtime material", () => {
       const queuedRuntimeSync = await waitForQueuedCommand(
         harness,
         ({ command, row }) =>
-          row.hostId === host.id && command.type === "host.sync_runtime_material",
+          row.hostId === host.id &&
+          command.type === "host.sync_runtime_material",
       );
-      const desiredSnapshot = await buildSandboxRuntimeMaterialSnapshot(harness.deps);
+      const desiredSnapshot = await buildSandboxRuntimeMaterialSnapshot(
+        harness.deps,
+      );
       expect(queuedRuntimeSync.command).toMatchObject({
         type: "host.sync_runtime_material",
         version: desiredSnapshot.version,
@@ -262,9 +277,7 @@ describe("sandbox runtime material", () => {
       );
       expect(reportResponse.status).toBe(200);
 
-      await expect(ensurePromise).resolves.toEqual(
-        desiredSnapshot,
-      );
+      await expect(ensurePromise).resolves.toEqual(desiredSnapshot);
     } finally {
       await harness.cleanup();
     }
@@ -343,7 +356,8 @@ describe("sandbox runtime material", () => {
       const queuedRuntimeSync = await waitForQueuedCommand(
         harness,
         ({ command, row }) =>
-          row.hostId === host.id && command.type === "host.sync_runtime_material",
+          row.hostId === host.id &&
+          command.type === "host.sync_runtime_material",
       );
 
       const reportResponse = await reportQueuedCommandSuccess(
@@ -473,22 +487,26 @@ describe("sandbox runtime material", () => {
       const claudeFile = snapshot.files.find(
         (file) => file.path === "~/.claude/.credentials.json",
       );
-      expect(claudeFile?.contents).toContain("\"accessToken\": \"claude-access-token\"");
-      expect(claudeFile?.contents).toContain("\"refreshToken\": \"\"");
+      expect(claudeFile?.contents).toContain(
+        '"accessToken": "claude-access-token"',
+      );
+      expect(claudeFile?.contents).toContain('"refreshToken": ""');
 
       const codexFile = snapshot.files.find(
         (file) => file.path === "~/.codex/auth.json",
       );
-      expect(codexFile?.contents).toContain("\"access_token\": \"codex-access-token\"");
-      expect(codexFile?.contents).toContain("\"refresh_token\": \"\"");
-      expect(codexFile?.contents).toContain("\"id_token\": \"codex-id-token\"");
+      expect(codexFile?.contents).toContain(
+        '"access_token": "codex-access-token"',
+      );
+      expect(codexFile?.contents).toContain('"refresh_token": ""');
+      expect(codexFile?.contents).toContain('"id_token": "codex-id-token"');
 
       const piFile = snapshot.files.find(
         (file) => file.path === "~/.pi/agent/auth.json",
       );
-      expect(piFile?.contents).toContain("\"anthropic\"");
-      expect(piFile?.contents).toContain("\"openai-codex\"");
-      expect(piFile?.contents).toContain("\"refresh\": \"\"");
+      expect(piFile?.contents).toContain('"anthropic"');
+      expect(piFile?.contents).toContain('"openai-codex"');
+      expect(piFile?.contents).toContain('"refresh": ""');
     } finally {
       await harness.cleanup();
     }
@@ -518,7 +536,9 @@ describe("sandbox runtime material", () => {
         updatedAt: 1_800_000_100_100,
       });
 
-      const initialSnapshot = await buildSandboxRuntimeMaterialSnapshot(harness.deps);
+      const initialSnapshot = await buildSandboxRuntimeMaterialSnapshot(
+        harness.deps,
+      );
       const homedirMock = vi.spyOn(os, "homedir").mockReturnValue(homeDir);
       try {
         await replaceManagedRuntimeFiles({
@@ -527,13 +547,15 @@ describe("sandbox runtime material", () => {
         });
         await expect(
           fs.readFile(path.join(homeDir, ".codex", "auth.json"), "utf8"),
-        ).resolves.toContain("\"access_token\": \"codex-access-token\"");
+        ).resolves.toContain('"access_token": "codex-access-token"');
 
         await harness.deps.cloudAuth.disconnectProvider({
           providerId: "codex",
         });
 
-        const nextSnapshot = await buildSandboxRuntimeMaterialSnapshot(harness.deps);
+        const nextSnapshot = await buildSandboxRuntimeMaterialSnapshot(
+          harness.deps,
+        );
         expect(nextSnapshot.files).toEqual([]);
 
         await replaceManagedRuntimeFiles({

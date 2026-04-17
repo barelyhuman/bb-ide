@@ -1,7 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  createCommandFetchLoop,
-} from "./app.js";
+import { createCommandFetchLoop } from "./app.js";
 
 function createLogger() {
   return {

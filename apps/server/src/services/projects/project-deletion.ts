@@ -10,7 +10,10 @@ import {
 } from "@bb/db";
 import { upsertProjectOperationRecord } from "@bb/db/internal-lifecycle";
 import type { Environment } from "@bb/domain";
-import type { AppDeps, PendingInteractionWorkSessionDeps } from "../../types.js";
+import type {
+  AppDeps,
+  PendingInteractionWorkSessionDeps,
+} from "../../types.js";
 import { deleteProjectAttachments } from "./attachments.js";
 import {
   advanceEnvironmentCleanup,
@@ -29,10 +32,12 @@ function isProjectDeletionActive(
   deps: Pick<AppDeps, "db">,
   projectId: string,
 ): boolean {
-  return getProjectOperation(deps.db, {
-    projectId,
-    kind: "delete",
-  }) !== null;
+  return (
+    getProjectOperation(deps.db, {
+      projectId,
+      kind: "delete",
+    }) !== null
+  );
 }
 
 async function advanceProjectThreadsForDeletion(
@@ -57,7 +62,7 @@ async function advanceProjectThreadsForDeletion(
 
   for (const thread of projectThreads) {
     const environment = thread.environmentId
-      ? args.environmentsById.get(thread.environmentId) ?? null
+      ? (args.environmentsById.get(thread.environmentId) ?? null)
       : null;
 
     if (thread.deletedAt === null) {
@@ -86,11 +91,9 @@ function hasRemainingProjectThreads(
   );
 }
 
-function hasRemainingManagedEnvironments(
-  environments: Environment[],
-): boolean {
-  return environments.some((environment) =>
-    environment.managed && environment.status !== "destroyed"
+function hasRemainingManagedEnvironments(environments: Environment[]): boolean {
+  return environments.some(
+    (environment) => environment.managed && environment.status !== "destroyed",
   );
 }
 
@@ -147,8 +150,8 @@ export async function advanceProjectDeletion(
 
   const refreshedEnvironments = listEnvironments(deps.db, args.projectId);
   if (
-    hasRemainingProjectThreads(deps, args.projectId)
-    || hasRemainingManagedEnvironments(refreshedEnvironments)
+    hasRemainingProjectThreads(deps, args.projectId) ||
+    hasRemainingManagedEnvironments(refreshedEnvironments)
   ) {
     return false;
   }

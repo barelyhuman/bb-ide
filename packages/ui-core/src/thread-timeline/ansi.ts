@@ -19,7 +19,9 @@ const ANSI_COLORS: Record<number, string> = {
   15: "var(--ansi-15)",
 };
 
-const ANSI_COLOR_INDEXES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15];
+const ANSI_COLOR_INDEXES = [
+  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15,
+];
 const BACKGROUND_RESET_STYLE = "background-color:var(--background)";
 const BACKGROUND_RESET_CONTRAST_STYLE = `${BACKGROUND_RESET_STYLE};color:var(--foreground)`;
 

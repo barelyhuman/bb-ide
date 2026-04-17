@@ -25,10 +25,12 @@ const servicePackageNames: Record<DevServiceName, string> = {
 };
 
 const turboDryRunSchema = z.object({
-  tasks: z.array(z.object({
-    hash: z.string().min(1),
-    taskId: z.string().min(1),
-  })),
+  tasks: z.array(
+    z.object({
+      hash: z.string().min(1),
+      taskId: z.string().min(1),
+    }),
+  ),
 });
 
 function findJsonObject(rawOutput: string): FindJsonObjectResult {
@@ -47,13 +49,13 @@ function findJsonObject(rawOutput: string): FindJsonObjectResult {
         escaped = false;
       } else if (character === "\\") {
         escaped = true;
-      } else if (character === "\"") {
+      } else if (character === '"') {
         inString = false;
       }
       continue;
     }
 
-    if (character === "\"") {
+    if (character === '"') {
       inString = true;
     } else if (character === "{") {
       depth += 1;
@@ -74,11 +76,13 @@ function extractJsonObject(rawOutput: string): string {
 }
 
 export function parseTurboFingerprint(rawOutput: string): string {
-  const parsed = turboDryRunSchema.parse(JSON.parse(extractJsonObject(rawOutput)));
+  const parsed = turboDryRunSchema.parse(
+    JSON.parse(extractJsonObject(rawOutput)),
+  );
 
   const hash = createHash("sha256");
   for (const task of parsed.tasks.sort((left, right) =>
-    left.taskId.localeCompare(right.taskId)
+    left.taskId.localeCompare(right.taskId),
   )) {
     hash.update(task.taskId);
     hash.update("\0");

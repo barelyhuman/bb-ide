@@ -89,7 +89,9 @@ describe("RuntimeThreadIdentityRegistry", () => {
       }),
     ).toBeUndefined();
 
-    const singleThreadState = registry.createProviderState({ providerId: "claude-code" });
+    const singleThreadState = registry.createProviderState({
+      providerId: "claude-code",
+    });
     registry.registerThreadProvider({
       providerId: "claude-code",
       providerState: singleThreadState,

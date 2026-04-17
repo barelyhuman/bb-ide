@@ -45,7 +45,9 @@ function toolCallMessage(args: ToolCallFixtureArgs): ViewToolCallMessage {
     sourceSeqEnd: args.seq,
     createdAt: args.seq * 10,
     ...(args.turnId ? { turnId: args.turnId } : {}),
-    ...(args.parentToolCallId ? { parentToolCallId: args.parentToolCallId } : {}),
+    ...(args.parentToolCallId
+      ? { parentToolCallId: args.parentToolCallId }
+      : {}),
     toolName: args.toolName,
     callId: args.callId,
     command: args.toolName,
@@ -53,7 +55,9 @@ function toolCallMessage(args: ToolCallFixtureArgs): ViewToolCallMessage {
   };
 }
 
-function assistantMessage(args: AssistantFixtureArgs): ViewAssistantTextMessage {
+function assistantMessage(
+  args: AssistantFixtureArgs,
+): ViewAssistantTextMessage {
   return {
     kind: "assistant-text",
     id: args.id,
@@ -62,21 +66,27 @@ function assistantMessage(args: AssistantFixtureArgs): ViewAssistantTextMessage 
     sourceSeqEnd: args.seq,
     createdAt: args.seq * 10,
     ...(args.turnId ? { turnId: args.turnId } : {}),
-    ...(args.parentToolCallId ? { parentToolCallId: args.parentToolCallId } : {}),
+    ...(args.parentToolCallId
+      ? { parentToolCallId: args.parentToolCallId }
+      : {}),
     text: args.text,
     status: "completed",
   };
 }
 
 function projectionTurn(args: TurnFixtureArgs): ViewTurn {
-  const sourceSeqStart = args.sourceSeqStart ??
+  const sourceSeqStart =
+    args.sourceSeqStart ??
     Math.min(...args.messages.map((message) => message.sourceSeqStart));
-  const sourceSeqEnd = args.sourceSeqEnd ??
+  const sourceSeqEnd =
+    args.sourceSeqEnd ??
     Math.max(...args.messages.map((message) => message.sourceSeqEnd));
   const startedAt = Math.min(
     ...args.messages.map((message) => message.startedAt ?? message.createdAt),
   );
-  const createdAt = Math.max(...args.messages.map((message) => message.createdAt));
+  const createdAt = Math.max(
+    ...args.messages.map((message) => message.createdAt),
+  );
   return {
     turnId: args.turnId,
     threadId: "thread-1",
@@ -198,10 +208,9 @@ describe("normalizeSemanticViewProjection", () => {
       ),
     );
 
-    expect(projectionMessages(normalized).map((message) => message.id)).toEqual([
-      "tool-1",
-      "assistant-1",
-    ]);
+    expect(projectionMessages(normalized).map((message) => message.id)).toEqual(
+      ["tool-1", "assistant-1"],
+    );
   });
 
   it("keeps sibling delegation children isolated", () => {
@@ -252,12 +261,14 @@ describe("normalizeSemanticViewProjection", () => {
     const normalizedFirstDelegation = onlyDelegation(rootMessages[0]!);
     const normalizedSecondDelegation = onlyDelegation(rootMessages[1]!);
     expect(
-      projectionMessages(normalizedFirstDelegation.childProjection)
-        .map((message) => message.id),
+      projectionMessages(normalizedFirstDelegation.childProjection).map(
+        (message) => message.id,
+      ),
     ).toEqual(["assistant-1"]);
     expect(
-      projectionMessages(normalizedSecondDelegation.childProjection)
-        .map((message) => message.id),
+      projectionMessages(normalizedSecondDelegation.childProjection).map(
+        (message) => message.id,
+      ),
     ).toEqual(["assistant-2"]);
   });
 
@@ -302,7 +313,9 @@ describe("normalizeSemanticViewProjection", () => {
       ),
     );
 
-    const normalizedLevelOne = onlyDelegation(projectionMessages(normalized)[0]!);
+    const normalizedLevelOne = onlyDelegation(
+      projectionMessages(normalized)[0]!,
+    );
     const normalizedLevelTwo = onlyDelegation(
       projectionMessages(normalizedLevelOne.childProjection)[0]!,
     );
@@ -310,12 +323,21 @@ describe("normalizeSemanticViewProjection", () => {
       projectionMessages(normalizedLevelTwo.childProjection)[0]!,
     );
 
-    expect(projectionMessages(normalizedLevelOne.childProjection).map((message) => message.id))
-      .toEqual(["delegate-2"]);
-    expect(projectionMessages(normalizedLevelTwo.childProjection).map((message) => message.id))
-      .toEqual(["delegate-3"]);
-    expect(projectionMessages(normalizedLevelThree.childProjection).map((message) => message.id))
-      .toEqual(["assistant-1"]);
+    expect(
+      projectionMessages(normalizedLevelOne.childProjection).map(
+        (message) => message.id,
+      ),
+    ).toEqual(["delegate-2"]);
+    expect(
+      projectionMessages(normalizedLevelTwo.childProjection).map(
+        (message) => message.id,
+      ),
+    ).toEqual(["delegate-3"]);
+    expect(
+      projectionMessages(normalizedLevelThree.childProjection).map(
+        (message) => message.id,
+      ),
+    ).toEqual(["assistant-1"]);
   });
 });
 

@@ -19,7 +19,6 @@ const providers = ["codex", "claude-code", "pi"];
 
 for (const providerId of providers) {
   describe.concurrent(`${providerId} provider`, () => {
-
     // 9. Resumes a thread across process lifetimes.
     it("resumes a thread across process lifetimes", async () => {
       const ctx1 = createTestRuntime(providerId);
@@ -46,7 +45,12 @@ for (const providerId of providers) {
 
         await ctx1.runtime.runTurn({
           threadId: firstThreadId,
-          input: [{ type: "text", text: "Remember the secret word STRAWBERRY. Just confirm you will remember it." }],
+          input: [
+            {
+              type: "text",
+              text: "Remember the secret word STRAWBERRY. Just confirm you will remember it.",
+            },
+          ],
           options,
         });
 
@@ -74,7 +78,9 @@ for (const providerId of providers) {
         ctx1Shutdown = true;
 
         // Create a new runtime and attempt to resume in the same workspace.
-        const ctx2 = createTestRuntime(providerId, { workspacePath: ctx1.tmpDir });
+        const ctx2 = createTestRuntime(providerId, {
+          workspacePath: ctx1.tmpDir,
+        });
         const threadId = newThreadId();
 
         try {
@@ -88,7 +94,12 @@ for (const providerId of providers) {
 
           await ctx2.runtime.runTurn({
             threadId,
-            input: [{ type: "text", text: "What was the secret word I told you to remember? Reply with just the word." }],
+            input: [
+              {
+                type: "text",
+                text: "What was the secret word I told you to remember? Reply with just the word.",
+              },
+            ],
             options,
           });
 
@@ -121,7 +132,6 @@ for (const providerId of providers) {
 }
 
 describe.concurrent("codex resume scenarios", () => {
-
   // Resume with dynamic tools
   it("preserves dynamic tools across resume", async () => {
     const providerId = "codex";
@@ -131,7 +141,8 @@ describe.concurrent("codex resume scenarios", () => {
     const dynamicTools = [
       {
         name: "bb_test_ping",
-        description: "Returns a test ping response. Always call this tool when asked to use it.",
+        description:
+          "Returns a test ping response. Always call this tool when asked to use it.",
         inputSchema: {
           type: "object" as const,
           properties: {},
@@ -149,7 +160,10 @@ describe.concurrent("codex resume scenarios", () => {
             success: true,
           };
         }
-        return { contentItems: [{ type: "inputText" as const, text: "unknown" }], success: false };
+        return {
+          contentItems: [{ type: "inputText" as const, text: "unknown" }],
+          success: false,
+        };
       },
     });
 
@@ -175,7 +189,9 @@ describe.concurrent("codex resume scenarios", () => {
 
       await ctx1.runtime.runTurn({
         threadId: firstThreadId,
-        input: [{ type: "text", text: "Call the bb_test_ping tool right now." }],
+        input: [
+          { type: "text", text: "Call the bb_test_ping tool right now." },
+        ],
         options,
       });
 
@@ -195,7 +211,9 @@ describe.concurrent("codex resume scenarios", () => {
       });
 
       if (!providerThreadId) {
-        const identityEvent = ctx1.events.find((e) => e.type === "thread/identity");
+        const identityEvent = ctx1.events.find(
+          (e) => e.type === "thread/identity",
+        );
         if (identityEvent && identityEvent.type === "thread/identity") {
           providerThreadId = identityEvent.providerThreadId;
         }
@@ -218,7 +236,10 @@ describe.concurrent("codex resume scenarios", () => {
             success: true,
           };
         }
-        return { contentItems: [{ type: "inputText" as const, text: "unknown" }], success: false };
+        return {
+          contentItems: [{ type: "inputText" as const, text: "unknown" }],
+          success: false,
+        };
       },
     });
 
@@ -240,7 +261,9 @@ describe.concurrent("codex resume scenarios", () => {
 
       await ctx2.runtime.runTurn({
         threadId,
-        input: [{ type: "text", text: "Call the bb_test_ping tool again right now." }],
+        input: [
+          { type: "text", text: "Call the bb_test_ping tool again right now." },
+        ],
         options,
       });
 
@@ -258,7 +281,6 @@ describe.concurrent("codex resume scenarios", () => {
       cleanup(ctx2);
     }
   }, 45_000);
-
 
   // Memory across resumes
   it("recalls information after resume", async () => {
@@ -287,7 +309,12 @@ describe.concurrent("codex resume scenarios", () => {
 
       await ctx1.runtime.runTurn({
         threadId: firstThreadId,
-        input: [{ type: "text", text: "Remember the word STRAWBERRY. Just confirm you will remember it." }],
+        input: [
+          {
+            type: "text",
+            text: "Remember the word STRAWBERRY. Just confirm you will remember it.",
+          },
+        ],
         options,
       });
 
@@ -299,7 +326,9 @@ describe.concurrent("codex resume scenarios", () => {
       });
 
       if (!providerThreadId) {
-        const identityEvent = ctx1.events.find((e) => e.type === "thread/identity");
+        const identityEvent = ctx1.events.find(
+          (e) => e.type === "thread/identity",
+        );
         if (identityEvent && identityEvent.type === "thread/identity") {
           providerThreadId = identityEvent.providerThreadId;
         }
@@ -329,7 +358,12 @@ describe.concurrent("codex resume scenarios", () => {
 
       await ctx2.runtime.runTurn({
         threadId,
-        input: [{ type: "text", text: "What was the word I asked you to remember? Reply with just the word." }],
+        input: [
+          {
+            type: "text",
+            text: "What was the word I asked you to remember? Reply with just the word.",
+          },
+        ],
         options,
       });
 
@@ -348,7 +382,6 @@ describe.concurrent("codex resume scenarios", () => {
     }
   }, 45_000);
 
-
   // Memory + dynamic tools across runtime shutdown
   it("preserves memory and dynamic tools across runtime restart", async () => {
     const providerId = "codex";
@@ -358,7 +391,8 @@ describe.concurrent("codex resume scenarios", () => {
     const dynamicTools = [
       {
         name: "bb_test_ping",
-        description: "Returns a test ping response. Always call this tool when asked to use it.",
+        description:
+          "Returns a test ping response. Always call this tool when asked to use it.",
         inputSchema: {
           type: "object" as const,
           properties: {},
@@ -376,7 +410,10 @@ describe.concurrent("codex resume scenarios", () => {
             success: true,
           };
         }
-        return { contentItems: [{ type: "inputText" as const, text: "unknown" }], success: false };
+        return {
+          contentItems: [{ type: "inputText" as const, text: "unknown" }],
+          success: false,
+        };
       },
     });
 
@@ -426,7 +463,9 @@ describe.concurrent("codex resume scenarios", () => {
       });
 
       if (!providerThreadId) {
-        const identityEvent = ctx1.events.find((e) => e.type === "thread/identity");
+        const identityEvent = ctx1.events.find(
+          (e) => e.type === "thread/identity",
+        );
         if (identityEvent && identityEvent.type === "thread/identity") {
           providerThreadId = identityEvent.providerThreadId;
         }
@@ -449,7 +488,10 @@ describe.concurrent("codex resume scenarios", () => {
             success: true,
           };
         }
-        return { contentItems: [{ type: "inputText" as const, text: "unknown" }], success: false };
+        return {
+          contentItems: [{ type: "inputText" as const, text: "unknown" }],
+          success: false,
+        };
       },
     });
 

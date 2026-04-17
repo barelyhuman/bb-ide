@@ -1,8 +1,5 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
-import type {
-  Thread,
-  ThreadListEntry,
-} from "@bb/domain";
+import type { Thread, ThreadListEntry } from "@bb/domain";
 import {
   ENVIRONMENT_GIT_DIFF_QUERY_KEY,
   ENVIRONMENT_WORK_STATUS_QUERY_KEY,
@@ -38,7 +35,11 @@ function getThreadListFiltersFromQueryKey(
     return undefined;
   }
 
-  if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) {
+  if (
+    typeof candidate !== "object" ||
+    candidate === null ||
+    Array.isArray(candidate)
+  ) {
     return undefined;
   }
 
@@ -64,9 +65,7 @@ export function getEnvironmentWorkspaceStateInvalidationQueryKeys({
 export function getEnvironmentBranchListInvalidationQueryKeys({
   environmentId,
 }: EnvironmentInvalidationParams): QueryKey[] {
-  return [
-    environmentMergeBaseBranchesQueryKeyPrefix(environmentId),
-  ];
+  return [environmentMergeBaseBranchesQueryKeyPrefix(environmentId)];
 }
 
 function isEnvironmentWorkStatusQueryKeyForEnvironment(
@@ -130,7 +129,9 @@ export function getCachedEnvironmentRefWorkspaceStateInvalidationQueryKeys(
     queryKey: environmentGitDiffQueryKeyPrefix(environmentId),
   })) {
     if (isRefDerivedEnvironmentGitDiffQueryKey(queryKey, environmentId)) {
-      queryKeys.push(environmentGitDiffQueryKey(environmentId, queryKey[2], queryKey[3]));
+      queryKeys.push(
+        environmentGitDiffQueryKey(environmentId, queryKey[2], queryKey[3]),
+      );
     }
   }
 
@@ -148,9 +149,7 @@ export function getEnvironmentActionInvalidationQueryKeys({
 }
 
 export function getPrimaryCheckoutWorkspaceStateInvalidationQueryKeys(): QueryKey[] {
-  return [
-    projectSourceWorkspaceStatusQueryKeyPrefix(),
-  ];
+  return [projectSourceWorkspaceStatusQueryKeyPrefix()];
 }
 
 export function getCachedThreadListPlaceholder(
@@ -235,16 +234,16 @@ export function optimisticallyInsertThread(
       continue;
     }
 
-    queryClient.setQueryData<ThreadListEntry[]>(
-      queryKey,
-      [{
+    queryClient.setQueryData<ThreadListEntry[]>(queryKey, [
+      {
         ...thread,
         environmentBranchName: null,
         environmentHostId: null,
         hasPendingInteraction: false,
         environmentWorkspaceDisplayKind: "other",
-      }, ...list],
-    );
+      },
+      ...list,
+    ]);
   }
 }
 
@@ -265,9 +264,7 @@ export function updateCachedThreadListPendingInteractionState(
     queryClient.setQueryData<ThreadListEntry[]>(
       queryKey,
       list.map((thread) =>
-        thread.id === threadId
-          ? { ...thread, hasPendingInteraction }
-          : thread
+        thread.id === threadId ? { ...thread, hasPendingInteraction } : thread,
       ),
     );
   }

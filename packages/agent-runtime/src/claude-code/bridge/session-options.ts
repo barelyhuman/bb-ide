@@ -37,8 +37,8 @@ function buildReadonlyHooks(
   params: BuildSessionOptionsArgs,
 ): Options["hooks"] | undefined {
   if (
-    params.permissionMode !== "default"
-    && params.permissionMode !== "dontAsk"
+    params.permissionMode !== "default" &&
+    params.permissionMode !== "dontAsk"
   ) {
     return undefined;
   }
@@ -56,8 +56,8 @@ function buildReadonlyHooks(
         hooks: [
           async (input) => {
             if (
-              input.hook_event_name !== "PreToolUse"
-              || READONLY_ALLOWED_TOOLS.has(input.tool_name)
+              input.hook_event_name !== "PreToolUse" ||
+              READONLY_ALLOWED_TOOLS.has(input.tool_name)
             ) {
               return { continue: true };
             }

@@ -1,4 +1,6 @@
-export function toOptionalString(value: string | null | undefined): string | undefined {
+export function toOptionalString(
+  value: string | null | undefined,
+): string | undefined {
   if (value == null) {
     return undefined;
   }

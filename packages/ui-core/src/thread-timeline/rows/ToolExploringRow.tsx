@@ -28,7 +28,8 @@ export function ToolExploringRow({
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
   const detailLines = useMemo(
-    () => buildExploringDetailLines(message.calls, { readPathStyle: "basename" }),
+    () =>
+      buildExploringDetailLines(message.calls, { readPathStyle: "basename" }),
     [message.calls],
   );
   const { elementRef: detailRef, handleScroll: handleDetailScroll } =
@@ -36,7 +37,10 @@ export function ToolExploringRow({
       isExpanded,
       scrollDep: detailLines,
     });
-  const counts = useMemo(() => summarizeExploringCounts(message.calls), [message.calls]);
+  const counts = useMemo(
+    () => summarizeExploringCounts(message.calls),
+    [message.calls],
+  );
   const hasDetails = detailLines.length > 0;
   const isExploring = message.status === "pending" || preferOngoingLabels;
   const summaryLabel = formatExploringCountsLabel(counts);
@@ -48,10 +52,7 @@ export function ToolExploringRow({
       shimmerPrefix
     />
   ) : (
-    <EventTitle
-      prefix="Explored"
-      emphasis={summaryLabel || "workspace"}
-    />
+    <EventTitle prefix="Explored" emphasis={summaryLabel || "workspace"} />
   );
   const headerToneClass = getEventHeaderToneClass(isExpanded);
 

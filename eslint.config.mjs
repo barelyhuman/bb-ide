@@ -9,12 +9,14 @@ const noBlockingChildProcessRules = {
         {
           name: "node:child_process",
           importNames: ["spawnSync", "execSync", "execFileSync"],
-          message: "Use async child_process APIs instead of blocking sync variants.",
+          message:
+            "Use async child_process APIs instead of blocking sync variants.",
         },
         {
           name: "child_process",
           importNames: ["spawnSync", "execSync", "execFileSync"],
-          message: "Use async child_process APIs instead of blocking sync variants.",
+          message:
+            "Use async child_process APIs instead of blocking sync variants.",
         },
       ],
     },
@@ -24,7 +26,8 @@ const noBlockingChildProcessRules = {
     {
       selector:
         "CallExpression[callee.name='spawnSync'], CallExpression[callee.name='execSync'], CallExpression[callee.name='execFileSync']",
-      message: "Use async child_process APIs instead of blocking sync variants.",
+      message:
+        "Use async child_process APIs instead of blocking sync variants.",
     },
   ],
 };
@@ -104,10 +107,7 @@ export default [
   },
   {
     files: ["apps/server/src/**/*.ts"],
-    ignores: [
-      "**/*.test.ts",
-      "**/__tests__/**",
-    ],
+    ignores: ["**/*.test.ts", "**/__tests__/**"],
     rules: serverNoWorkspaceAccessRules,
   },
 ];

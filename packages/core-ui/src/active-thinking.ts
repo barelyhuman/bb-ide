@@ -1,7 +1,4 @@
-import type {
-  TimelineActiveThinking,
-  ViewMessage,
-} from "@bb/domain";
+import type { TimelineActiveThinking, ViewMessage } from "@bb/domain";
 import { flattenViewMessagesDeep } from "./projection-flatten.js";
 
 type ViewAssistantReasoningMessage = Extract<
@@ -12,7 +9,9 @@ type ViewAssistantReasoningMessage = Extract<
 function isStreamingReasoningMessage(
   message: ViewMessage,
 ): message is ViewAssistantReasoningMessage {
-  return message.kind === "assistant-reasoning" && message.status === "streaming";
+  return (
+    message.kind === "assistant-reasoning" && message.status === "streaming"
+  );
 }
 
 function isNewerReasoningMessage(

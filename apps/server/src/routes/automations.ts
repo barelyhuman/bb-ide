@@ -36,9 +36,7 @@ import {
   computeNextScheduledTime,
   validateScheduleDefinition,
 } from "../services/scheduling/schedule-helpers.js";
-import {
-  requirePublicProject,
-} from "../services/lib/entity-lookup.js";
+import { requirePublicProject } from "../services/lib/entity-lookup.js";
 import { resolveStableThreadRequestEnvironment } from "../services/threads/thread-request-eligibility.js";
 
 interface BuildAutomationConfigUpdateInputArgs {
@@ -78,9 +76,7 @@ function requireProjectAutomation(
   return automation;
 }
 
-function resolveNextRunAtForCreate(
-  payload: CreateAutomationValues,
-) {
+function resolveNextRunAtForCreate(payload: CreateAutomationValues) {
   validateScheduleDefinition(payload.trigger);
   if (!payload.enabled) {
     return null;
@@ -88,9 +84,7 @@ function resolveNextRunAtForCreate(
   return computeScheduledNextRunAt(payload.trigger);
 }
 
-function computeScheduledNextRunAt(
-  trigger: AutomationScheduleTrigger,
-) {
+function computeScheduledNextRunAt(trigger: AutomationScheduleTrigger) {
   return computeNextScheduledTime({
     cron: trigger.cron,
     now: Date.now(),
@@ -113,14 +107,15 @@ function resolveCreateAutomationValues(
 function buildAutomationConfigUpdateInput(
   args: BuildAutomationConfigUpdateInputArgs,
 ) {
-  const nextTrigger = args.payload.trigger
-    ?? parseAutomationTriggerConfig(args.current.triggerConfig);
+  const nextTrigger =
+    args.payload.trigger ??
+    parseAutomationTriggerConfig(args.current.triggerConfig);
   if (args.payload.trigger !== undefined) {
     validateScheduleDefinition(args.payload.trigger);
   }
   const shouldRecomputeNextRunAt =
-    args.current.enabled
-    && (args.payload.trigger !== undefined || args.current.nextRunAt === null);
+    args.current.enabled &&
+    (args.payload.trigger !== undefined || args.current.nextRunAt === null);
   const nextRunAt = shouldRecomputeNextRunAt
     ? computeScheduledNextRunAt(nextTrigger)
     : undefined;
@@ -235,68 +230,74 @@ export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
       hostIds: [...hostIds],
       environmentIds: [...environmentIds],
     });
-    const responses = parsedAutomations.flatMap(({ automation, parsedDefinition }) => {
-      try {
-        if (parsedDefinition === null) {
+    const responses = parsedAutomations.flatMap(
+      ({ automation, parsedDefinition }) => {
+        try {
+          if (parsedDefinition === null) {
+            deps.logger.warn(
+              {
+                automationId: automation.id,
+                projectId,
+              },
+              "Skipping malformed automation row in list response",
+            );
+            return [];
+          }
+          return [
+            toAutomationResponseWithProjectData(
+              automation,
+              parsedDefinition,
+              projectData,
+            ),
+          ];
+        } catch (error) {
           deps.logger.warn(
             {
               automationId: automation.id,
+              err: error,
               projectId,
             },
             "Skipping malformed automation row in list response",
           );
           return [];
         }
-        return [
-          toAutomationResponseWithProjectData(
-            automation,
-            parsedDefinition,
-            projectData,
-          ),
-        ];
-      } catch (error) {
-        deps.logger.warn(
-          {
-            automationId: automation.id,
-            err: error,
-            projectId,
-          },
-          "Skipping malformed automation row in list response",
-        );
-        return [];
-      }
-    });
+      },
+    );
     return context.json(responses);
   });
 
-  post("/projects/:id/automations", createAutomationRequestSchema, (context, payload) => {
-    const projectId = context.req.param("id");
-    requirePublicProject(deps.db, projectId);
+  post(
+    "/projects/:id/automations",
+    createAutomationRequestSchema,
+    (context, payload) => {
+      const projectId = context.req.param("id");
+      requirePublicProject(deps.db, projectId);
 
-    try {
-      const values = resolveCreateAutomationValues(payload);
-      validateAutomationActionProjectScope(deps, {
-        action: values.action,
-        projectId,
-      });
-      const automation = createAutomation(deps.db, deps.hub, {
-        projectId,
-        name: values.name,
-        enabled: values.enabled,
-        triggerType: values.trigger.triggerType,
-        triggerConfig: serializeAutomationTrigger(values.trigger),
-        action: serializeAutomationAction(values.action),
-        autoArchive: values.autoArchive,
-        nextRunAt: resolveNextRunAtForCreate(values),
-      });
-      return context.json(toAutomationResponse(deps, automation), 201);
-    } catch (error) {
-      if (error instanceof ScheduleValidationError) {
-        throw new ApiError(400, "invalid_request", error.message);
+      try {
+        const values = resolveCreateAutomationValues(payload);
+        validateAutomationActionProjectScope(deps, {
+          action: values.action,
+          projectId,
+        });
+        const automation = createAutomation(deps.db, deps.hub, {
+          projectId,
+          name: values.name,
+          enabled: values.enabled,
+          triggerType: values.trigger.triggerType,
+          triggerConfig: serializeAutomationTrigger(values.trigger),
+          action: serializeAutomationAction(values.action),
+          autoArchive: values.autoArchive,
+          nextRunAt: resolveNextRunAtForCreate(values),
+        });
+        return context.json(toAutomationResponse(deps, automation), 201);
+      } catch (error) {
+        if (error instanceof ScheduleValidationError) {
+          throw new ApiError(400, "invalid_request", error.message);
+        }
+        throw error;
       }
-      throw error;
-    }
-  });
+    },
+  );
 
   patch(
     "/projects/:id/automations/:automationId",
@@ -316,7 +317,8 @@ export function registerAutomationRoutes(app: Hono, deps: AppDeps): void {
               payload,
             })
           : (() => {
-              const nextAction = payload.action ?? parseAutomationAction(current.action);
+              const nextAction =
+                payload.action ?? parseAutomationAction(current.action);
               validateAutomationActionProjectScope(deps, {
                 action: nextAction,
                 projectId,

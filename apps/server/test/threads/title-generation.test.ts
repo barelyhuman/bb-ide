@@ -18,11 +18,15 @@ describe("thread title generation", () => {
     expect(shouldGenerateThreadTitle([textInput("fix")])).toBe(false);
     expect(shouldGenerateThreadTitle([textInput("fix bug")])).toBe(false);
     expect(shouldGenerateThreadTitle([textInput("fix the bug")])).toBe(false);
-    expect(shouldGenerateThreadTitle([textInput("fix the login bug")])).toBe(false);
+    expect(shouldGenerateThreadTitle([textInput("fix the login bug")])).toBe(
+      false,
+    );
   });
 
   it("generates titles for inputs with at least five words", () => {
-    expect(shouldGenerateThreadTitle([textInput("fix the flaky login bug")])).toBe(true);
+    expect(
+      shouldGenerateThreadTitle([textInput("fix the flaky login bug")]),
+    ).toBe(true);
   });
 
   it("counts words across text input parts and ignores attachments", () => {

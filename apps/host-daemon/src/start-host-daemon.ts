@@ -1,15 +1,9 @@
 import { randomUUID } from "node:crypto";
-import {
-  commonConfig,
-  hostDaemonConfig,
-} from "@bb/config/host-daemon";
+import { commonConfig, hostDaemonConfig } from "@bb/config/host-daemon";
 import type { HostType, ToolCallRequest, ToolCallResponse } from "@bb/domain";
 import { createHostWatcher, type HostWatcher } from "@bb/host-watcher";
 import { createLogger } from "@bb/logger";
-import {
-  type CreateHostDaemonAppOptions,
-  createHostDaemonApp,
-} from "./app.js";
+import { type CreateHostDaemonAppOptions, createHostDaemonApp } from "./app.js";
 import {
   readHostAuthState,
   resolveServerUrl,
@@ -77,10 +71,12 @@ export async function startHostDaemon(
     }
 
     const hostType =
-      persistedAuth?.hostType ??
-      options.hostType ??
-      "persistent";
-    if (persistedAuth && options.hostType && persistedAuth.hostType !== options.hostType) {
+      persistedAuth?.hostType ?? options.hostType ?? "persistent";
+    if (
+      persistedAuth &&
+      options.hostType &&
+      persistedAuth.hostType !== options.hostType
+    ) {
       throw new Error(
         `Configured host type ${options.hostType} does not match persisted auth state ${persistedAuth.hostType}`,
       );
@@ -122,9 +118,9 @@ export async function startHostDaemon(
 
     const localApiConfig = enableLocalApi
       ? resolveHostDaemonLocalApiConfig({
-        hostType,
-        localApi: options.localApi,
-      })
+          hostType,
+          localApi: options.localApi,
+        })
       : null;
     const bbExecutableDirectory =
       options.bbExecutableDirectory ??

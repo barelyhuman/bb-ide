@@ -1,6 +1,8 @@
 import { parsePatchFiles } from "@pierre/diffs";
 
-export type ParsedGitDiffFile = ReturnType<typeof parsePatchFiles>[number]["files"][number];
+export type ParsedGitDiffFile = ReturnType<
+  typeof parsePatchFiles
+>[number]["files"][number];
 
 interface GitDiffStats {
   files: number;

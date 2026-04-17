@@ -6,28 +6,27 @@ const [, , command, ...args] = process.argv;
 const commandConfig = {
   "auth:e2b-smoke": {
     packageScript: "auth:e2b-smoke",
-    turboChecks: [
-      ["typecheck", "--filter=@bb/qa"],
-    ],
+    turboChecks: [["typecheck", "--filter=@bb/qa"]],
   },
   "standalone:start": {
     packageScript: "standalone:start",
     turboChecks: [
-      ["build", "--filter=@bb/server", "--filter=@bb/host-daemon", "--filter=@bb/cli"],
+      [
+        "build",
+        "--filter=@bb/server",
+        "--filter=@bb/host-daemon",
+        "--filter=@bb/cli",
+      ],
       ["typecheck", "--filter=@bb/qa"],
     ],
   },
   "standalone:stop": {
     packageScript: "standalone:stop",
-    turboChecks: [
-      ["typecheck", "--filter=@bb/qa"],
-    ],
+    turboChecks: [["typecheck", "--filter=@bb/qa"]],
   },
   "standalone:cleanup": {
     packageScript: "standalone:cleanup",
-    turboChecks: [
-      ["typecheck", "--filter=@bb/qa"],
-    ],
+    turboChecks: [["typecheck", "--filter=@bb/qa"]],
   },
 };
 

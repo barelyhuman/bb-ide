@@ -34,7 +34,9 @@ export function ConversationMarkdown({
     null,
   );
   const currentImageUrl =
-    expandedImageIndex !== null ? (imageUrls[expandedImageIndex] ?? null) : null;
+    expandedImageIndex !== null
+      ? (imageUrls[expandedImageIndex] ?? null)
+      : null;
 
   const showPreviousImage = useCallback(() => {
     setExpandedImageIndex((currentIndex) => {
@@ -106,10 +108,16 @@ export function ConversationMarkdown({
               return <>{children}</>;
             },
             p({ children }: ComponentPropsWithoutRef<"p"> & ExtraProps) {
-              return <p className="mb-2 last:mb-0 text-foreground">{children}</p>;
+              return (
+                <p className="mb-2 last:mb-0 text-foreground">{children}</p>
+              );
             },
             ul({ children }: ComponentPropsWithoutRef<"ul"> & ExtraProps) {
-              return <ul className="mb-2 list-disc pl-5 text-foreground">{children}</ul>;
+              return (
+                <ul className="mb-2 list-disc pl-5 text-foreground">
+                  {children}
+                </ul>
+              );
             },
             ol({ children }: ComponentPropsWithoutRef<"ol"> & ExtraProps) {
               return (
@@ -130,7 +138,9 @@ export function ConversationMarkdown({
                 </blockquote>
               );
             },
-            table({ children }: ComponentPropsWithoutRef<"table"> & ExtraProps) {
+            table({
+              children,
+            }: ComponentPropsWithoutRef<"table"> & ExtraProps) {
               return (
                 <div className="my-2 overflow-x-auto">
                   <table className="min-w-full border border-border/80">
@@ -139,7 +149,9 @@ export function ConversationMarkdown({
                 </div>
               );
             },
-            thead({ children }: ComponentPropsWithoutRef<"thead"> & ExtraProps) {
+            thead({
+              children,
+            }: ComponentPropsWithoutRef<"thead"> & ExtraProps) {
               return <thead className="bg-muted/40">{children}</thead>;
             },
             th({ children }: ComponentPropsWithoutRef<"th"> & ExtraProps) {
@@ -150,7 +162,11 @@ export function ConversationMarkdown({
               );
             },
             td({ children }: ComponentPropsWithoutRef<"td"> & ExtraProps) {
-              return <td className="border border-border/80 px-2 py-1">{children}</td>;
+              return (
+                <td className="border border-border/80 px-2 py-1">
+                  {children}
+                </td>
+              );
             },
             a({
               children,

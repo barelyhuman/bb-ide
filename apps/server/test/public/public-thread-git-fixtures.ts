@@ -31,10 +31,20 @@ async function runGitCommand(args: GitCommandArgs): Promise<void> {
 
 export async function createTestGitRepo(): Promise<TestGitRepo> {
   const repoPath = await mkdtemp(path.join(tmpdir(), "bb-server-thread-repo-"));
-  await runGitCommand({ cwd: repoPath, args: ["init", "--initial-branch=main"] });
-  await writeFile(path.join(repoPath, "README.md"), "# thread test repo\n", "utf8");
+  await runGitCommand({
+    cwd: repoPath,
+    args: ["init", "--initial-branch=main"],
+  });
+  await writeFile(
+    path.join(repoPath, "README.md"),
+    "# thread test repo\n",
+    "utf8",
+  );
   await runGitCommand({ cwd: repoPath, args: ["add", "README.md"] });
-  await runGitCommand({ cwd: repoPath, args: ["commit", "-m", "Initial commit"] });
+  await runGitCommand({
+    cwd: repoPath,
+    args: ["commit", "-m", "Initial commit"],
+  });
 
   return {
     path: repoPath,

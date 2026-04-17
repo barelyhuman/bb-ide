@@ -1,8 +1,8 @@
-import path from "path"
-import { defineConfig } from "vitest/config"
-import react from "@vitejs/plugin-react"
-import tailwindcss from "@tailwindcss/vite"
-import { workspaceTestAliases } from "../../vitest.workspace-aliases"
+import path from "path";
+import { defineConfig } from "vitest/config";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import { workspaceTestAliases } from "../../vitest.workspace-aliases";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -18,4 +18,4 @@ export default defineConfig({
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     setupFiles: ["src/test/setup.ts"],
   },
-})
+});

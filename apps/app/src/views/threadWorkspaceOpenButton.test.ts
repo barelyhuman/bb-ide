@@ -91,4 +91,3 @@ describe("resolveThreadWorkspaceOpenPath", () => {
     ).toBeNull();
   });
 });
-

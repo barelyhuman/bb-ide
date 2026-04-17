@@ -104,7 +104,9 @@ function getTimelineViewportRows(
     .filter((row): row is TimelineViewportRow => row !== null);
 }
 
-function captureTimelineScrollAnchor(container: HTMLDivElement): TimelineScrollAnchor | null {
+function captureTimelineScrollAnchor(
+  container: HTMLDivElement,
+): TimelineScrollAnchor | null {
   const containerRect = container.getBoundingClientRect();
 
   return captureTimelineScrollAnchorFromViewport({
@@ -148,7 +150,10 @@ function restoreAnchorPosition(
 }
 
 function scrollContainerToBottom(container: HTMLDivElement): void {
-  container.scrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+  container.scrollTop = Math.max(
+    0,
+    container.scrollHeight - container.clientHeight,
+  );
 }
 
 export function useThreadTimelineController({
@@ -163,10 +168,11 @@ export function useThreadTimelineController({
   const [toolGroupMessagesById, setToolGroupMessagesById] = useState<
     Record<string, ViewMessage[]>
   >({});
-  const [containerElement, setContainerElement] = useState<HTMLDivElement | null>(
-    null,
+  const [containerElement, setContainerElement] =
+    useState<HTMLDivElement | null>(null);
+  const setShowScrollToBottom = useSetAtom(
+    threadTimelineShowScrollToBottomAtom,
   );
-  const setShowScrollToBottom = useSetAtom(threadTimelineShowScrollToBottomAtom);
   const containerRef = useRef<HTMLDivElement>(null!);
   const promptComposerRef = useRef<HTMLDivElement>(null!);
   const modeRef = useRef<TimelineScrollMode>("pinned_bottom");
@@ -183,31 +189,36 @@ export function useThreadTimelineController({
   } | null>(null);
   const postJumpTimeoutRef = useRef<number | null>(null);
 
-  const syncScrollState = useCallback(({
-    container,
-    preserveReadingHistoryDuringReconcile,
-    source,
-  }: SyncScrollStateArgs) => {
-    const snapshot = {
-      clientHeight: container.clientHeight,
-      scrollHeight: container.scrollHeight,
-      scrollTop: container.scrollTop,
-    };
-    const nextMode = resolveTimelineScrollMode({
-      currentMode: modeRef.current,
-      isNearBottom: isTimelineNearBottom(snapshot),
+  const syncScrollState = useCallback(
+    ({
+      container,
       preserveReadingHistoryDuringReconcile,
       source,
-    });
-    setShowScrollToBottom((current) => {
-      const next = shouldShowTimelineScrollToBottom(snapshot);
-      return current === next ? current : next;
-    });
+    }: SyncScrollStateArgs) => {
+      const snapshot = {
+        clientHeight: container.clientHeight,
+        scrollHeight: container.scrollHeight,
+        scrollTop: container.scrollTop,
+      };
+      const nextMode = resolveTimelineScrollMode({
+        currentMode: modeRef.current,
+        isNearBottom: isTimelineNearBottom(snapshot),
+        preserveReadingHistoryDuringReconcile,
+        source,
+      });
+      setShowScrollToBottom((current) => {
+        const next = shouldShowTimelineScrollToBottom(snapshot);
+        return current === next ? current : next;
+      });
 
-    modeRef.current = nextMode;
-    timelineScrollAnchorRef.current =
-      nextMode === "pinned_bottom" ? null : captureTimelineScrollAnchor(container);
-  }, [setShowScrollToBottom]);
+      modeRef.current = nextMode;
+      timelineScrollAnchorRef.current =
+        nextMode === "pinned_bottom"
+          ? null
+          : captureTimelineScrollAnchor(container);
+    },
+    [setShowScrollToBottom],
+  );
 
   const reconcileScrollPosition = useCallback(() => {
     const container = containerElement;
@@ -276,26 +287,33 @@ export function useThreadTimelineController({
   const handleTimelineScroll = useCallback(() => {
     const container = containerElement;
     if (!container) return;
-    const hasRecentUserScrollIntent = Date.now() < userScrollIntentUntilRef.current;
+    const hasRecentUserScrollIntent =
+      Date.now() < userScrollIntentUntilRef.current;
     syncScrollState({
       container,
       preserveReadingHistoryDuringReconcile:
         !hasRecentUserScrollIntent &&
         (pendingReasonsRef.current.size > 0 ||
           Date.now() < layoutTransitionUntilRef.current),
-      source: hasRecentUserScrollIntent ? "user_scroll" : "controlled_reconcile",
+      source: hasRecentUserScrollIntent
+        ? "user_scroll"
+        : "controlled_reconcile",
     });
   }, [containerElement, syncScrollState]);
 
   const markUserScrollIntent = useCallback(() => {
-    userScrollIntentUntilRef.current = Date.now() + USER_SCROLL_INTENT_WINDOW_MS;
+    userScrollIntentUntilRef.current =
+      Date.now() + USER_SCROLL_INTENT_WINDOW_MS;
   }, []);
 
-  const handleTimelineKeyDown = useCallback((event: KeyboardEvent) => {
-    if (TIMELINE_SCROLL_INTENT_KEYS.has(event.key)) {
-      markUserScrollIntent();
-    }
-  }, [markUserScrollIntent]);
+  const handleTimelineKeyDown = useCallback(
+    (event: KeyboardEvent) => {
+      if (TIMELINE_SCROLL_INTENT_KEYS.has(event.key)) {
+        markUserScrollIntent();
+      }
+    },
+    [markUserScrollIntent],
+  );
 
   const scrollToBottom = useCallback(() => {
     const container = containerElement;
@@ -358,7 +376,12 @@ export function useThreadTimelineController({
           });
         });
     },
-    [loadToolGroupMessages, loadingToolGroupIds, threadId, toolGroupMessagesById],
+    [
+      loadToolGroupMessages,
+      loadingToolGroupIds,
+      threadId,
+      toolGroupMessagesById,
+    ],
   );
 
   useEffect(() => {
@@ -407,11 +430,7 @@ export function useThreadTimelineController({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [
-    reconcileScrollPosition,
-    scheduleReconcile,
-    threadStatus,
-  ]);
+  }, [reconcileScrollPosition, scheduleReconcile, threadStatus]);
 
   useLayoutEffect(() => {
     const container = containerElement;
@@ -438,8 +457,12 @@ export function useThreadTimelineController({
       return;
     }
 
-    container.addEventListener("wheel", markUserScrollIntent, { passive: true });
-    container.addEventListener("touchmove", markUserScrollIntent, { passive: true });
+    container.addEventListener("wheel", markUserScrollIntent, {
+      passive: true,
+    });
+    container.addEventListener("touchmove", markUserScrollIntent, {
+      passive: true,
+    });
     container.addEventListener("keydown", handleTimelineKeyDown);
 
     return () => {
@@ -475,8 +498,10 @@ export function useThreadTimelineController({
   useResizeObserver({
     ref: containerRef,
     onResize: ({ width, height }) => {
-      const nextWidth = width ?? containerRef.current?.getBoundingClientRect().width;
-      const nextHeight = height ?? containerRef.current?.getBoundingClientRect().height;
+      const nextWidth =
+        width ?? containerRef.current?.getBoundingClientRect().width;
+      const nextHeight =
+        height ?? containerRef.current?.getBoundingClientRect().height;
       if (nextWidth === undefined || nextHeight === undefined) {
         return;
       }
@@ -501,7 +526,8 @@ export function useThreadTimelineController({
   useResizeObserver({
     ref: promptComposerRef,
     onResize: ({ height }) => {
-      const nextHeight = height ?? promptComposerRef.current?.getBoundingClientRect().height;
+      const nextHeight =
+        height ?? promptComposerRef.current?.getBoundingClientRect().height;
       if (nextHeight === undefined) {
         return;
       }
@@ -520,7 +546,10 @@ export function useThreadTimelineController({
         window.cancelAnimationFrame(scheduledFrameRef.current);
         scheduledFrameRef.current = null;
       }
-      if (postJumpTimeoutRef.current !== null && typeof window !== "undefined") {
+      if (
+        postJumpTimeoutRef.current !== null &&
+        typeof window !== "undefined"
+      ) {
         window.clearTimeout(postJumpTimeoutRef.current);
         postJumpTimeoutRef.current = null;
       }

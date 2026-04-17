@@ -199,13 +199,10 @@ export async function syncManagerThreadSchedules(
         rootPath: threadStoragePath,
       },
     });
-    const result = hostDaemonCommandResultSchemaByType["host.read_file"].parse(rawResult);
+    const result =
+      hostDaemonCommandResultSchemaByType["host.read_file"].parse(rawResult);
     if (result.contentEncoding !== "utf8") {
-      throw new ApiError(
-        502,
-        "invalid_request",
-        "ASYNC.md must be UTF-8 text",
-      );
+      throw new ApiError(502, "invalid_request", "ASYNC.md must be UTF-8 text");
     }
     sizeBytes = result.sizeBytes;
     content = result.content;
@@ -222,7 +219,10 @@ export async function syncManagerThreadSchedules(
   }
 
   const contentSizeBytes = Buffer.byteLength(content, "utf8");
-  if (sizeBytes > MAX_ASYNC_FILE_BYTES || contentSizeBytes > MAX_ASYNC_FILE_BYTES) {
+  if (
+    sizeBytes > MAX_ASYNC_FILE_BYTES ||
+    contentSizeBytes > MAX_ASYNC_FILE_BYTES
+  ) {
     deps.logger.warn(
       {
         contentSizeBytes,

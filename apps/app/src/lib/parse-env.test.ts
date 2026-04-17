@@ -12,7 +12,9 @@ describe("parseEnvContent", () => {
   });
 
   it("skips empty lines and comments", () => {
-    const result = parseEnvContent("# comment\n\nFOO=bar\n  # another\nBAZ=qux\n");
+    const result = parseEnvContent(
+      "# comment\n\nFOO=bar\n  # another\nBAZ=qux\n",
+    );
     expect(result.entries).toEqual([
       { name: "FOO", value: "bar" },
       { name: "BAZ", value: "qux" },
@@ -32,7 +34,9 @@ describe("parseEnvContent", () => {
 
   it("preserves inline # comments inside quoted values", () => {
     const result = parseEnvContent('FOO="bar # not a comment"');
-    expect(result.entries).toEqual([{ name: "FOO", value: "bar # not a comment" }]);
+    expect(result.entries).toEqual([
+      { name: "FOO", value: "bar # not a comment" },
+    ]);
   });
 
   it("strips inline comments from unquoted values", () => {
@@ -41,7 +45,9 @@ describe("parseEnvContent", () => {
   });
 
   it("handles values with equals signs", () => {
-    const result = parseEnvContent("DATABASE_URL=postgres://user:pass@host/db?opt=1");
+    const result = parseEnvContent(
+      "DATABASE_URL=postgres://user:pass@host/db?opt=1",
+    );
     expect(result.entries).toEqual([
       { name: "DATABASE_URL", value: "postgres://user:pass@host/db?opt=1" },
     ]);

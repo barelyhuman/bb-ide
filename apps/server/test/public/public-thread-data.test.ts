@@ -1,5 +1,12 @@
 import { and, eq } from "drizzle-orm";
-import { createDraftId, environments, events, getDraft, getThread, queuedThreadMessages } from "@bb/db";
+import {
+  createDraftId,
+  environments,
+  events,
+  getDraft,
+  getThread,
+  queuedThreadMessages,
+} from "@bb/db";
 import { threadSchema, type TimelineRow } from "@bb/domain";
 import {
   threadDraftListResponseSchema,
@@ -45,7 +52,9 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -77,9 +86,9 @@ describe("public thread data routes", () => {
       await expect(readJson(timelineResponse)).resolves.toEqual(
         expect.objectContaining({
           rows: expect.arrayContaining([
-          expect.objectContaining({
-            kind: "message",
-          }),
+            expect.objectContaining({
+              kind: "message",
+            }),
           ]),
         }),
       );
@@ -105,7 +114,9 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -208,7 +219,9 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -234,7 +247,9 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -327,7 +342,9 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -383,7 +400,9 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -443,7 +462,9 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -522,7 +543,9 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -593,7 +616,9 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -610,7 +635,9 @@ describe("public thread data routes", () => {
         },
       );
       expect(readResponse.status).toBe(200);
-      const readThread = threadReadResponseSchema.parse(await readJson(readResponse));
+      const readThread = threadReadResponseSchema.parse(
+        await readJson(readResponse),
+      );
       expect(readThread.lastReadAt).toBeTypeOf("number");
       const threadAfterRead = getThread(harness.db, thread.id);
       expect(threadAfterRead?.lastReadAt).toBeTypeOf("number");
@@ -628,7 +655,9 @@ describe("public thread data routes", () => {
       });
       const threadAfterUnread = getThread(harness.db, thread.id);
       expect(threadAfterUnread?.lastReadAt).toBeNull();
-      expect(threadAfterUnread?.latestAttentionAt).toBe(thread.latestAttentionAt);
+      expect(threadAfterUnread?.latestAttentionAt).toBe(
+        thread.latestAttentionAt,
+      );
     } finally {
       await harness.cleanup();
     }
@@ -638,7 +667,9 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -710,7 +741,9 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -736,27 +769,33 @@ describe("public thread data routes", () => {
         serviceTier: "fast",
       });
 
-      const response = await harness.app.request(`/api/v1/threads/${thread.id}/drafts`);
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/drafts`,
+      );
 
       expect(response.status).toBe(200);
-      const drafts = threadDraftListResponseSchema.parse(await readJson(response));
+      const drafts = threadDraftListResponseSchema.parse(
+        await readJson(response),
+      );
       expect(drafts).toHaveLength(2);
-      expect(drafts).toEqual(expect.arrayContaining([
-        expect.objectContaining({
-          content: [{ type: "text", text: "First queued draft" }],
-          model: "gpt-5",
-          reasoningLevel: "medium",
-          permissionMode: "full",
-          serviceTier: "default",
-        }),
-        expect.objectContaining({
-          content: [{ type: "text", text: "Second queued draft" }],
-          model: "gpt-5",
-          reasoningLevel: "high",
-          permissionMode: "full",
-          serviceTier: "fast",
-        }),
-      ]));
+      expect(drafts).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            content: [{ type: "text", text: "First queued draft" }],
+            model: "gpt-5",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            serviceTier: "default",
+          }),
+          expect.objectContaining({
+            content: [{ type: "text", text: "Second queued draft" }],
+            model: "gpt-5",
+            reasoningLevel: "high",
+            permissionMode: "full",
+            serviceTier: "fast",
+          }),
+        ]),
+      );
     } finally {
       await harness.cleanup();
     }
@@ -766,7 +805,9 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -830,7 +871,9 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -861,7 +904,7 @@ describe("public thread data routes", () => {
         },
       );
       expect(createResponse.status).toBe(201);
-      const createdDraft = await readJson(createResponse) as {
+      const createdDraft = (await readJson(createResponse)) as {
         id: string;
         model?: string;
         serviceTier?: string;
@@ -945,25 +988,30 @@ describe("public thread data routes", () => {
         path: "/tmp/draft-created-thread-send",
       });
 
-      const createThreadResponse = await harness.app.request("/api/v1/threads", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          projectId: project.id,
-          providerId: "codex",
-          model: "gpt-5",
-          input: [{ type: "text", text: "Initial start request" }],
-          environment: {
-            type: "reuse",
-            environmentId: environment.id,
+      const createThreadResponse = await harness.app.request(
+        "/api/v1/threads",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
           },
-        }),
-      });
+          body: JSON.stringify({
+            projectId: project.id,
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Initial start request" }],
+            environment: {
+              type: "reuse",
+              environmentId: environment.id,
+            },
+          }),
+        },
+      );
 
       expect(createThreadResponse.status).toBe(201);
-      const createdThread = threadSchema.parse(await readJson(createThreadResponse));
+      const createdThread = threadSchema.parse(
+        await readJson(createThreadResponse),
+      );
       expect(createdThread.status).toBe("provisioning");
 
       const createDraftResponse = await harness.app.request(
@@ -979,7 +1027,9 @@ describe("public thread data routes", () => {
         },
       );
       expect(createDraftResponse.status).toBe(201);
-      const createdDraft = draftIdResponseSchema.parse(await readJson(createDraftResponse));
+      const createdDraft = draftIdResponseSchema.parse(
+        await readJson(createDraftResponse),
+      );
 
       const sendResponse = await harness.app.request(
         `/api/v1/threads/${createdThread.id}/drafts/${createdDraft.id}/send`,
@@ -1133,7 +1183,8 @@ describe("public thread data routes", () => {
         path: "/tmp/project-source",
         status: "provisioning",
       });
-      harness.db.update(environments)
+      harness.db
+        .update(environments)
         .set({
           path: null,
           status: "provisioning",
@@ -1194,8 +1245,7 @@ describe("public thread data routes", () => {
       });
       const pngBytes = Uint8Array.from([137, 80, 78, 71]);
       const threadStorageRoot = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
-      const threadStorageFilePath =
-        `${threadStorageRoot}/images/diagram.png`;
+      const threadStorageFilePath = `${threadStorageRoot}/images/diagram.png`;
 
       const filePromise = harness.app.request(
         `/api/v1/threads/${thread.id}/thread-storage/content?path=${encodeURIComponent("images/diagram.png")}`,
@@ -1222,7 +1272,9 @@ describe("public thread data routes", () => {
       expect(fileResponse.headers.get("content-type")).toBe("image/png");
       expect(fileResponse.headers.get("x-bb-content-encoding")).toBeNull();
       expect(fileResponse.headers.get("x-bb-size-bytes")).toBeNull();
-      expect(new Uint8Array(await fileResponse.arrayBuffer())).toEqual(pngBytes);
+      expect(new Uint8Array(await fileResponse.arrayBuffer())).toEqual(
+        pngBytes,
+      );
     } finally {
       await harness.cleanup();
     }
@@ -1232,7 +1284,9 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1257,10 +1311,14 @@ describe("public thread data routes", () => {
         path: `${threadStorageRoot}/notes/secrets`,
         rootPath: threadStorageRoot,
       });
-      const fileErrorResponse = await reportQueuedCommandError(harness, fileCommand, {
-        errorCode: "invalid_path",
-        errorMessage: "Path escapes read root",
-      });
+      const fileErrorResponse = await reportQueuedCommandError(
+        harness,
+        fileCommand,
+        {
+          errorCode: "invalid_path",
+          errorMessage: "Path escapes read root",
+        },
+      );
       expect(fileErrorResponse.status).toBe(200);
 
       const fileResponse = await filePromise;
@@ -1279,7 +1337,9 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1297,10 +1357,14 @@ describe("public thread data routes", () => {
         harness,
         ({ command }) => command.type === "host.list_files",
       );
-      const filesErrorResponse = await reportQueuedCommandError(harness, filesCommand, {
-        errorCode: "ENOENT",
-        errorMessage: "Path does not exist",
-      });
+      const filesErrorResponse = await reportQueuedCommandError(
+        harness,
+        filesCommand,
+        {
+          errorCode: "ENOENT",
+          errorMessage: "Path does not exist",
+        },
+      );
       expect(filesErrorResponse.status).toBe(200);
 
       const filesResponse = await filesPromise;
@@ -1318,7 +1382,9 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1336,10 +1402,14 @@ describe("public thread data routes", () => {
         harness,
         ({ command }) => command.type === "host.read_file",
       );
-      const fileErrorResponse = await reportQueuedCommandError(harness, fileCommand, {
-        errorCode: "file_too_large",
-        errorMessage: "File exceeds limit",
-      });
+      const fileErrorResponse = await reportQueuedCommandError(
+        harness,
+        fileCommand,
+        {
+          errorCode: "file_too_large",
+          errorMessage: "File exceeds limit",
+        },
+      );
       expect(fileErrorResponse.status).toBe(200);
 
       const fileResponse = await filePromise;
@@ -1358,7 +1428,9 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1369,7 +1441,8 @@ describe("public thread data routes", () => {
       });
       const now = Date.now();
       const draftId = createDraftId();
-      const draft = harness.db.insert(queuedThreadMessages)
+      const draft = harness.db
+        .insert(queuedThreadMessages)
         .values({
           id: draftId,
           threadId: thread.id,
@@ -1410,7 +1483,9 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1441,7 +1516,9 @@ describe("public thread data routes", () => {
         `/api/v1/threads/${thread.id}/events/wait?type=item/completed&waitMs=1000`,
       );
       expect(response.status).toBe(200);
-      const body = threadEventWaitResponseSchema.parse(await readJson(response));
+      const body = threadEventWaitResponseSchema.parse(
+        await readJson(response),
+      );
       expect(body.type).toBe("item/completed");
       expect(body.seq).toBe(2);
     } finally {
@@ -1453,7 +1530,9 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1484,7 +1563,9 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1530,7 +1611,9 @@ describe("public thread data routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1552,5 +1635,4 @@ describe("public thread data routes", () => {
       await harness.cleanup();
     }
   });
-
 });

@@ -4,9 +4,7 @@ import {
   queueCommandInTransaction,
   transitionThreadStatus,
 } from "@bb/db";
-import type {
-  DbTransaction,
-} from "@bb/db";
+import type { DbTransaction } from "@bb/db";
 import type {
   PromptInput,
   ProjectExecutionDefaults,
@@ -16,10 +14,11 @@ import type {
   Thread,
   WorkspaceProvisionType,
 } from "@bb/domain";
+import type { CreateThreadRequest } from "@bb/server-contract";
 import type {
-  CreateThreadRequest,
-} from "@bb/server-contract";
-import type { HostDaemonCommand, TurnSubmitTarget } from "@bb/host-daemon-contract";
+  HostDaemonCommand,
+  TurnSubmitTarget,
+} from "@bb/host-daemon-contract";
 import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
@@ -102,7 +101,10 @@ export type PreparedTurnSubmitCommandPayload = Omit<
   Extract<HostDaemonCommand, { type: "turn.submit" }>,
   "eventSequence"
 >;
-type PreparedTurnSubmitCommandBuildArgs = Omit<TurnSubmitCommandPayloadArgs, "eventSequence">;
+type PreparedTurnSubmitCommandBuildArgs = Omit<
+  TurnSubmitCommandPayloadArgs,
+  "eventSequence"
+>;
 
 interface RuntimeExecutionOptionsArgs {
   execution: ResolvedThreadExecutionOptions;
@@ -173,8 +175,12 @@ export async function buildExecutionOptions(
     requestedExecution: {
       ...(request.model ? { model: request.model } : {}),
       ...(request.serviceTier ? { serviceTier: request.serviceTier } : {}),
-      ...(request.reasoningLevel ? { reasoningLevel: request.reasoningLevel } : {}),
-      ...(request.permissionMode ? { permissionMode: request.permissionMode } : {}),
+      ...(request.reasoningLevel
+        ? { reasoningLevel: request.reasoningLevel }
+        : {}),
+      ...(request.permissionMode
+        ? { permissionMode: request.permissionMode }
+        : {}),
       source,
     },
     threadId: args.threadId,

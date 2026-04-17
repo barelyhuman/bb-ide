@@ -15,20 +15,20 @@ export function useThreadStorageViewer({
   threadType,
 }: UseThreadStorageViewerParams) {
   const isManagerThread = threadType === "manager";
-  const [selectedThreadStoragePath, setSelectedThreadStoragePath] =
-    useState<string | null>(null);
-  const { data: threadStorageFiles } = useThreadStorageFiles(
-    threadId ?? "",
-    {
-      enabled: isManagerThread,
-    },
-  );
+  const [selectedThreadStoragePath, setSelectedThreadStoragePath] = useState<
+    string | null
+  >(null);
+  const { data: threadStorageFiles } = useThreadStorageFiles(threadId ?? "", {
+    enabled: isManagerThread,
+  });
   const effectiveThreadStoragePath = useMemo(() => {
     if (!isManagerThread) {
       return null;
     }
 
-    return selectedThreadStoragePath ?? threadStorageFiles?.files?.[0]?.path ?? null;
+    return (
+      selectedThreadStoragePath ?? threadStorageFiles?.files?.[0]?.path ?? null
+    );
   }, [isManagerThread, threadStorageFiles?.files, selectedThreadStoragePath]);
   const {
     data: threadStorageFilePreview,

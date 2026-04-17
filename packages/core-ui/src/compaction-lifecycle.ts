@@ -8,7 +8,10 @@ export interface CompactionLifecycleEvent {
   detail?: string;
 }
 
-export function getCompactionKey(decoded: ThreadEvent, meta: EventMeta): string {
+export function getCompactionKey(
+  decoded: ThreadEvent,
+  meta: EventMeta,
+): string {
   if (decoded.type === "thread/compacted") {
     return decoded.turnId;
   }

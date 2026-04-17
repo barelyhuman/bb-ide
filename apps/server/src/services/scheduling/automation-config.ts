@@ -97,9 +97,7 @@ const legacyAutomationScheduleTriggerSchema = z.object({
   schedule: legacyScheduleDefinitionSchema,
 });
 
-export function parseAutomationTriggerConfig(
-  triggerConfig: string,
-) {
+export function parseAutomationTriggerConfig(triggerConfig: string) {
   const parsed = parseJsonValue(triggerConfig);
   const nextTrigger = automationScheduleTriggerSchema.safeParse(parsed);
   if (nextTrigger.success) {
@@ -114,9 +112,7 @@ export function parseAutomationTriggerConfig(
   } satisfies AutomationScheduleTrigger;
 }
 
-export function parseAutomationAction(
-  action: string,
-) {
+export function parseAutomationAction(action: string) {
   return parseJsonWithSchema(action, automationActionSchema);
 }
 
@@ -341,14 +337,10 @@ export function toAutomationResponseWithProjectData(
   });
 }
 
-export function serializeAutomationTrigger(
-  trigger: AutomationScheduleTrigger,
-) {
+export function serializeAutomationTrigger(trigger: AutomationScheduleTrigger) {
   return JSON.stringify(trigger);
 }
 
-export function serializeAutomationAction(
-  action: AutomationAction,
-) {
+export function serializeAutomationAction(action: AutomationAction) {
   return JSON.stringify(action);
 }

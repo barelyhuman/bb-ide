@@ -3,9 +3,7 @@ import type {
   PendingInteractionGrantedPermissionProfile,
   PendingInteractionGrantablePermissionProfile,
 } from "@bb/domain";
-import type {
-  ResolvedAdapterPermissionPolicy,
-} from "../shared/permission-policy.js";
+import type { ResolvedAdapterPermissionPolicy } from "../shared/permission-policy.js";
 
 export const CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD =
   "item/permissions/requestApproval";
@@ -63,13 +61,17 @@ const claudeFileSystemPermissionsInputSchema = z.object({
   write: z.array(z.string()),
 });
 
-const claudeRequestedPermissionProfileInputSchema = z.object({
-  network: claudeNetworkPermissionsInputSchema.nullable().optional(),
-  fileSystem: claudeFileSystemPermissionsInputSchema.nullable().optional(),
-}).transform((value): PendingInteractionGrantablePermissionProfile => ({
-  network: value.network ?? null,
-  fileSystem: value.fileSystem ?? null,
-}));
+const claudeRequestedPermissionProfileInputSchema = z
+  .object({
+    network: claudeNetworkPermissionsInputSchema.nullable().optional(),
+    fileSystem: claudeFileSystemPermissionsInputSchema.nullable().optional(),
+  })
+  .transform(
+    (value): PendingInteractionGrantablePermissionProfile => ({
+      network: value.network ?? null,
+      fileSystem: value.fileSystem ?? null,
+    }),
+  );
 interface ClaudePermissionRequestProfileArgs {
   blockedPath: string | undefined;
   suggestions: ClaudePermissionUpdate[] | undefined;
@@ -93,10 +95,7 @@ const CLAUDE_FILE_PERMISSION_KIND_BY_TOOL_NAME = new Map<
   ["Bash", "read_write"],
 ]);
 
-const CLAUDE_NETWORK_PERMISSION_TOOL_NAMES = new Set([
-  "WebFetch",
-  "WebSearch",
-]);
+const CLAUDE_NETWORK_PERMISSION_TOOL_NAMES = new Set(["WebFetch", "WebSearch"]);
 
 function getClaudeFilePermissionKind(
   toolName: string,
@@ -112,7 +111,7 @@ function getSuggestedDirectories(
   suggestions: ClaudePermissionUpdate[] | undefined,
 ): string[] {
   return (suggestions ?? []).flatMap((suggestion) =>
-    suggestion.type === "addDirectories" ? suggestion.directories : []
+    suggestion.type === "addDirectories" ? suggestion.directories : [],
   );
 }
 
@@ -175,9 +174,9 @@ export function shouldRequestClaudePermissionApproval(
   args: ShouldRequestClaudePermissionApprovalArgs,
 ): boolean {
   return (
-    args.blockedPath !== undefined
-    || args.decisionReason !== undefined
-    || (args.suggestions?.length ?? 0) > 0
+    args.blockedPath !== undefined ||
+    args.decisionReason !== undefined ||
+    (args.suggestions?.length ?? 0) > 0
   );
 }
 
@@ -208,19 +207,22 @@ const claudePermissionApprovalResponseSchema = z.discriminatedUnion(
       kind: z.literal("permission_request"),
       behavior: z.literal("allow"),
       updatedPermissions: z.array(claudePermissionUpdateSchema).optional(),
-      decisionClassification: claudePermissionDecisionClassificationSchema.optional(),
+      decisionClassification:
+        claudePermissionDecisionClassificationSchema.optional(),
     }),
     z.object({
       kind: z.literal("permission_request"),
       behavior: z.literal("deny"),
       message: z.string(),
       interrupt: z.boolean().optional(),
-      decisionClassification: claudePermissionDecisionClassificationSchema.optional(),
+      decisionClassification:
+        claudePermissionDecisionClassificationSchema.optional(),
     }),
   ],
 );
 
-export const claudeInteractiveResponseSchema = claudePermissionApprovalResponseSchema;
+export const claudeInteractiveResponseSchema =
+  claudePermissionApprovalResponseSchema;
 export type ClaudeInteractiveResponse = z.infer<
   typeof claudeInteractiveResponseSchema
 >;
@@ -248,10 +250,7 @@ export function buildClaudeSessionPermissionUpdates(
     });
   }
 
-  if (
-    args.toolName
-    && args.permissions.network?.enabled === true
-  ) {
+  if (args.toolName && args.permissions.network?.enabled === true) {
     updates.push({
       type: "addRules",
       rules: [{ toolName: args.toolName }],

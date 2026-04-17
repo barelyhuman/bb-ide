@@ -10,9 +10,7 @@ import type {
   ToolCallRequest,
 } from "@bb/domain";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
-import type {
-  ProviderAdapter,
-} from "./provider-adapter.js";
+import type { ProviderAdapter } from "./provider-adapter.js";
 import {
   type JsonRpcMessage,
   ProviderResponseEncodeError,
@@ -85,13 +83,17 @@ function handleToolCallProviderRequest(
   const providerId = args.providerProcess.adapter.id;
   let toolCallReq: ReturnType<ProviderAdapter["decodeToolCallRequest"]>;
   try {
-    toolCallReq = args.providerProcess.adapter.decodeToolCallRequest(args.rawRequest);
+    toolCallReq = args.providerProcess.adapter.decodeToolCallRequest(
+      args.rawRequest,
+    );
   } catch (error) {
-    if (sendProviderRequestDecodeErrorIfKnown({
-      child: args.providerProcess.child,
-      error,
-      id: args.parsedId,
-    })) {
+    if (
+      sendProviderRequestDecodeErrorIfKnown({
+        child: args.providerProcess.child,
+        error,
+        id: args.parsedId,
+      })
+    ) {
       return true;
     }
     throw error;
@@ -117,7 +119,9 @@ function handleToolCallProviderRequest(
     turnId: toolCallReq.turnId,
     callId: toolCallReq.callId,
     tool: toolCallReq.tool,
-    ...(toolCallReq.arguments !== undefined ? { arguments: toolCallReq.arguments } : {}),
+    ...(toolCallReq.arguments !== undefined
+      ? { arguments: toolCallReq.arguments }
+      : {}),
   };
   const captureId = args.createCaptureId();
   args.emitCapture({
@@ -129,37 +133,40 @@ function handleToolCallProviderRequest(
     rawRequest: args.rawRequest,
     request: scopedToolCallReq,
   });
-  void args.onToolCall(scopedToolCallReq).then((response) => {
-    args.emitCapture({
-      kind: "tool-call-result",
-      capturedAt: Date.now(),
-      providerId,
-      requestCaptureId: captureId,
-      requestId: scopedToolCallReq.requestId,
-      success: true,
-      response,
+  void args
+    .onToolCall(scopedToolCallReq)
+    .then((response) => {
+      args.emitCapture({
+        kind: "tool-call-result",
+        capturedAt: Date.now(),
+        providerId,
+        requestCaptureId: captureId,
+        requestId: scopedToolCallReq.requestId,
+        success: true,
+        response,
+      });
+      sendJsonRpcResult({
+        child: args.providerProcess.child,
+        id: args.parsedId,
+        result: response,
+      });
+    })
+    .catch((err) => {
+      args.emitCapture({
+        kind: "tool-call-result",
+        capturedAt: Date.now(),
+        providerId,
+        requestCaptureId: captureId,
+        requestId: scopedToolCallReq.requestId,
+        success: false,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+      sendJsonRpcError({
+        child: args.providerProcess.child,
+        id: args.parsedId,
+        message: err instanceof Error ? err.message : String(err),
+      });
     });
-    sendJsonRpcResult({
-      child: args.providerProcess.child,
-      id: args.parsedId,
-      result: response,
-    });
-  }).catch((err) => {
-    args.emitCapture({
-      kind: "tool-call-result",
-      capturedAt: Date.now(),
-      providerId,
-      requestCaptureId: captureId,
-      requestId: scopedToolCallReq.requestId,
-      success: false,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    sendJsonRpcError({
-      child: args.providerProcess.child,
-      id: args.parsedId,
-      message: err instanceof Error ? err.message : String(err),
-    });
-  });
   return true;
 }
 
@@ -167,7 +174,8 @@ function handleInteractiveProviderRequest(
   args: HandleRuntimeProviderRequestArgs,
 ): boolean {
   const providerId = args.providerProcess.adapter.id;
-  const decodeInteractiveRequest = args.providerProcess.adapter.decodeInteractiveRequest;
+  const decodeInteractiveRequest =
+    args.providerProcess.adapter.decodeInteractiveRequest;
   if (!decodeInteractiveRequest) {
     return false;
   }
@@ -176,11 +184,13 @@ function handleInteractiveProviderRequest(
   try {
     interactiveReq = decodeInteractiveRequest(args.rawRequest);
   } catch (error) {
-    if (sendProviderRequestDecodeErrorIfKnown({
-      child: args.providerProcess.child,
-      error,
-      id: args.parsedId,
-    })) {
+    if (
+      sendProviderRequestDecodeErrorIfKnown({
+        child: args.providerProcess.child,
+        error,
+        id: args.parsedId,
+      })
+    ) {
       return true;
     }
     throw error;
@@ -206,7 +216,8 @@ function handleInteractiveProviderRequest(
     });
     return true;
   }
-  const buildInteractiveResponse = args.providerProcess.adapter.buildInteractiveResponse;
+  const buildInteractiveResponse =
+    args.providerProcess.adapter.buildInteractiveResponse;
 
   const scopedInteractiveReq: PendingInteractionCreate = {
     threadId: resolvedThreadId,
@@ -234,11 +245,13 @@ function handleInteractiveProviderRequest(
   if (
     (executionOptions
       ? shouldAutoDenyInteractiveRequest(executionOptions)
-      : false)
-    || !args.onInteractiveRequest
+      : false) ||
+    !args.onInteractiveRequest
   ) {
     try {
-      const resolution = buildDeniedInteractiveResolution(interactiveReq.payload);
+      const resolution = buildDeniedInteractiveResolution(
+        interactiveReq.payload,
+      );
       const result = buildInteractiveResponse({
         request: interactiveReq,
         resolution,
@@ -285,50 +298,53 @@ function handleInteractiveProviderRequest(
     return true;
   }
 
-  void args.onInteractiveRequest(scopedInteractiveReq).then((resolution) => {
-    args.emitCapture({
-      kind: "interactive-result",
-      capturedAt: Date.now(),
-      providerId,
-      requestCaptureId: captureId,
-      requestId: scopedInteractiveReq.providerRequestId,
-      success: true,
-      resolution,
-    });
-    const result = buildInteractiveResponse({
-      request: interactiveReq,
-      resolution,
-    });
-    sendJsonRpcResult({
-      child: args.providerProcess.child,
-      id: args.parsedId,
-      result,
-    });
-  }).catch((err) => {
-    args.emitCapture({
-      kind: "interactive-result",
-      capturedAt: Date.now(),
-      providerId,
-      requestCaptureId: captureId,
-      requestId: scopedInteractiveReq.providerRequestId,
-      success: false,
-      errorMessage: err instanceof Error ? err.message : String(err),
-    });
-    if (
-      sendProviderResponseEncodeErrorIfKnown({
+  void args
+    .onInteractiveRequest(scopedInteractiveReq)
+    .then((resolution) => {
+      args.emitCapture({
+        kind: "interactive-result",
+        capturedAt: Date.now(),
+        providerId,
+        requestCaptureId: captureId,
+        requestId: scopedInteractiveReq.providerRequestId,
+        success: true,
+        resolution,
+      });
+      const result = buildInteractiveResponse({
+        request: interactiveReq,
+        resolution,
+      });
+      sendJsonRpcResult({
         child: args.providerProcess.child,
-        error: err,
         id: args.parsedId,
-      })
-    ) {
-      return;
-    }
-    sendJsonRpcError({
-      child: args.providerProcess.child,
-      id: args.parsedId,
-      message: err instanceof Error ? err.message : String(err),
+        result,
+      });
+    })
+    .catch((err) => {
+      args.emitCapture({
+        kind: "interactive-result",
+        capturedAt: Date.now(),
+        providerId,
+        requestCaptureId: captureId,
+        requestId: scopedInteractiveReq.providerRequestId,
+        success: false,
+        errorMessage: err instanceof Error ? err.message : String(err),
+      });
+      if (
+        sendProviderResponseEncodeErrorIfKnown({
+          child: args.providerProcess.child,
+          error: err,
+          id: args.parsedId,
+        })
+      ) {
+        return;
+      }
+      sendJsonRpcError({
+        child: args.providerProcess.child,
+        id: args.parsedId,
+        message: err instanceof Error ? err.message : String(err),
+      });
     });
-  });
   return true;
 }
 

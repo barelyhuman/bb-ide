@@ -80,7 +80,8 @@ export function createAutomation(
   input: CreateAutomationInput,
 ) {
   const now = Date.now();
-  const automation = db.insert(automations)
+  const automation = db
+    .insert(automations)
     .values({
       id: createAutomationId(),
       projectId: input.projectId,
@@ -105,18 +106,17 @@ export function createAutomation(
 
 export function getAutomation(db: DbConnection, automationId: string) {
   return (
-    db.select()
+    db
+      .select()
       .from(automations)
       .where(eq(automations.id, automationId))
       .get() ?? null
   );
 }
 
-export function listAutomations(
-  db: DbConnection,
-  projectId: string,
-) {
-  return db.select()
+export function listAutomations(db: DbConnection, projectId: string) {
+  return db
+    .select()
     .from(automations)
     .where(eq(automations.projectId, projectId))
     .orderBy(desc(automations.createdAt))
@@ -139,7 +139,8 @@ export function listDueAutomations(
     createdAtColumn: automations.createdAt,
     idColumn: automations.id,
   });
-  const query = db.select()
+  const query = db
+    .select()
     .from(automations)
     .where(
       and(
@@ -164,14 +165,21 @@ export function updateAutomation(
     return null;
   }
 
-  const updated = db.update(automations)
+  const updated = db
+    .update(automations)
     .set({
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
-      ...(input.triggerType !== undefined ? { triggerType: input.triggerType } : {}),
-      ...(input.triggerConfig !== undefined ? { triggerConfig: input.triggerConfig } : {}),
+      ...(input.triggerType !== undefined
+        ? { triggerType: input.triggerType }
+        : {}),
+      ...(input.triggerConfig !== undefined
+        ? { triggerConfig: input.triggerConfig }
+        : {}),
       ...(input.action !== undefined ? { action: input.action } : {}),
-      ...(input.autoArchive !== undefined ? { autoArchive: input.autoArchive } : {}),
+      ...(input.autoArchive !== undefined
+        ? { autoArchive: input.autoArchive }
+        : {}),
       ...(input.nextRunAt !== undefined ? { nextRunAt: input.nextRunAt } : {}),
       ...(input.lastRunAt !== undefined ? { lastRunAt: input.lastRunAt } : {}),
       ...(input.runCount !== undefined ? { runCount: input.runCount } : {}),
@@ -208,7 +216,8 @@ export function hasOpenAutomationThread(
   db: AutomationReadConnection,
   automationId: string,
 ) {
-  const row = db.select({ id: threads.id })
+  const row = db
+    .select({ id: threads.id })
     .from(threads)
     .where(
       and(
@@ -228,7 +237,8 @@ export function advanceAutomationAfterRunInTransaction(
   args: AdvanceAutomationAfterRunArgs,
 ) {
   const now = args.now ?? Date.now();
-  const result = db.update(automations)
+  const result = db
+    .update(automations)
     .set({
       nextRunAt: args.nextRunAt,
       lastRunAt: now,
@@ -254,7 +264,8 @@ export function restoreAutomationAfterFailedRun(
   args: RestoreAutomationAfterFailedRunArgs & { projectId: string },
 ) {
   const now = args.now ?? Date.now();
-  const result = db.update(automations)
+  const result = db
+    .update(automations)
     .set({
       nextRunAt: args.restoredNextRunAt,
       lastRunAt: args.restoredLastRunAt,
@@ -284,68 +295,70 @@ export function claimAutomationScheduledRun(
   notifier: DbNotifier,
   args: ClaimAutomationScheduledRunArgs,
 ): ClaimAutomationScheduledRunResult {
-  const result = db.transaction((tx) => {
-    const current = tx.select()
-      .from(automations)
-      .where(eq(automations.id, args.automationId))
-      .get();
+  const result = db.transaction(
+    (tx) => {
+      const current = tx
+        .select()
+        .from(automations)
+        .where(eq(automations.id, args.automationId))
+        .get();
 
-    if (
-      !current ||
-      !current.enabled ||
-      current.triggerType !== "schedule" ||
-      current.nextRunAt !== args.expectedNextRunAt ||
-      current.nextRunAt === null
-    ) {
-      return {
-        advanced: false,
-        reason: "lost-race",
-        shouldCreateThread: false,
-      } satisfies ClaimAutomationScheduledRunResult;
-    }
+      if (
+        !current ||
+        !current.enabled ||
+        current.triggerType !== "schedule" ||
+        current.nextRunAt !== args.expectedNextRunAt ||
+        current.nextRunAt === null
+      ) {
+        return {
+          advanced: false,
+          reason: "lost-race",
+          shouldCreateThread: false,
+        } satisfies ClaimAutomationScheduledRunResult;
+      }
 
-    const hostConnected =
-      args.hostId === null ||
-      getActiveSession(tx, args.hostId) !== null;
-    const shouldCreateThread =
-      hostConnected &&
-      !hasOpenAutomationThread(tx, args.automationId);
-    const advanced = advanceAutomationAfterRunInTransaction(tx, {
-      automationId: args.automationId,
-      expectedNextRunAt: current.nextRunAt,
-      nextRunAt: args.nextRunAt,
-    });
+      const hostConnected =
+        args.hostId === null || getActiveSession(tx, args.hostId) !== null;
+      const shouldCreateThread =
+        hostConnected && !hasOpenAutomationThread(tx, args.automationId);
+      const advanced = advanceAutomationAfterRunInTransaction(tx, {
+        automationId: args.automationId,
+        expectedNextRunAt: current.nextRunAt,
+        nextRunAt: args.nextRunAt,
+      });
 
-    if (!advanced) {
-      return {
-        advanced: false,
-        reason: "lost-race",
-        shouldCreateThread: false,
-      } satisfies ClaimAutomationScheduledRunResult;
-    }
+      if (!advanced) {
+        return {
+          advanced: false,
+          reason: "lost-race",
+          shouldCreateThread: false,
+        } satisfies ClaimAutomationScheduledRunResult;
+      }
 
-    if (!hostConnected) {
+      if (!hostConnected) {
+        return {
+          advanced: true,
+          reason: "host-disconnected",
+          shouldCreateThread: false,
+        } satisfies ClaimAutomationScheduledRunResult;
+      }
+
+      if (!shouldCreateThread) {
+        return {
+          advanced: true,
+          reason: "open-thread",
+          shouldCreateThread: false,
+        } satisfies ClaimAutomationScheduledRunResult;
+      }
+
       return {
         advanced: true,
-        reason: "host-disconnected",
-        shouldCreateThread: false,
+        reason: "run",
+        shouldCreateThread: true,
       } satisfies ClaimAutomationScheduledRunResult;
-    }
-
-    if (!shouldCreateThread) {
-      return {
-        advanced: true,
-        reason: "open-thread",
-        shouldCreateThread: false,
-      } satisfies ClaimAutomationScheduledRunResult;
-    }
-
-    return {
-      advanced: true,
-      reason: "run",
-      shouldCreateThread: true,
-    } satisfies ClaimAutomationScheduledRunResult;
-  }, { behavior: "immediate" });
+    },
+    { behavior: "immediate" },
+  );
 
   if (result.advanced) {
     const automation = getAutomation(db, args.automationId);

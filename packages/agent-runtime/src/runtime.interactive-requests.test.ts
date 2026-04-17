@@ -149,7 +149,8 @@ rl.on("line", (line) => {
           grantedPermissions: null,
         };
       },
-      adapterFactory: () => createInteractiveRequestAdapter(interactiveScriptPath),
+      adapterFactory: () =>
+        createInteractiveRequestAdapter(interactiveScriptPath),
     });
 
     await runtime.startThread({
@@ -168,12 +169,12 @@ rl.on("line", (line) => {
       events,
       label: "interactive request handled",
       predicate: () =>
-        requests.length === 1
-        && events.some(
+        requests.length === 1 &&
+        events.some(
           (event) =>
-            event.type === "item/completed"
-            && event.item.type === "agentMessage"
-            && event.item.text === "interactive:allow_for_session",
+            event.type === "item/completed" &&
+            event.item.type === "agentMessage" &&
+            event.item.text === "interactive:allow_for_session",
         ),
       providerId: "fake",
       runtime,
@@ -314,7 +315,8 @@ rl.on("line", (line) => {
           grantedPermissions: null,
         };
       },
-      adapterFactory: () => createInteractiveRequestAdapter(interactiveScriptPath),
+      adapterFactory: () =>
+        createInteractiveRequestAdapter(interactiveScriptPath),
     });
 
     await runtime.startThread({
@@ -350,7 +352,10 @@ rl.on("line", (line) => {
   });
 
   it("sends JSON-RPC error back when onInteractiveRequest throws", async () => {
-    const interactiveScriptPath = join(tmpDir, "interactive-error-provider.cjs");
+    const interactiveScriptPath = join(
+      tmpDir,
+      "interactive-error-provider.cjs",
+    );
     writeFileSync(
       interactiveScriptPath,
       `
@@ -463,7 +468,8 @@ rl.on("line", (line) => {
       onInteractiveRequest: async () => {
         throw new Error("Interaction failed");
       },
-      adapterFactory: () => createInteractiveRequestAdapter(interactiveScriptPath),
+      adapterFactory: () =>
+        createInteractiveRequestAdapter(interactiveScriptPath),
     });
 
     await runtime.startThread({
@@ -490,7 +496,10 @@ rl.on("line", (line) => {
   });
 
   it("responds to unsupported interactive requests with a JSON-RPC error instead of dropping them", async () => {
-    const unsupportedScriptPath = join(tmpDir, "unsupported-interactive-provider.cjs");
+    const unsupportedScriptPath = join(
+      tmpDir,
+      "unsupported-interactive-provider.cjs",
+    );
     writeFileSync(
       unsupportedScriptPath,
       `
@@ -597,7 +606,8 @@ rl.on("line", (line) => {
         contentItems: [{ type: "inputText", text: "ok" }],
         success: true,
       }),
-      adapterFactory: () => createInteractiveRequestAdapter(unsupportedScriptPath),
+      adapterFactory: () =>
+        createInteractiveRequestAdapter(unsupportedScriptPath),
     });
 
     await runtime.startThread({
@@ -609,7 +619,9 @@ rl.on("line", (line) => {
     });
     await runtime.runTurn({
       threadId: "t1",
-      input: [{ type: "text", text: "trigger unsupported interactive request" }],
+      input: [
+        { type: "text", text: "trigger unsupported interactive request" },
+      ],
       options: fullRuntimeOptions,
     });
     await waitForThreadAgentMessageText({
@@ -722,7 +734,8 @@ rl.on("line", (line) => {
         contentItems: [{ type: "inputText", text: "ok" }],
         success: true,
       }),
-      adapterFactory: () => createInvalidInteractiveRequestAdapter(invalidScriptPath),
+      adapterFactory: () =>
+        createInvalidInteractiveRequestAdapter(invalidScriptPath),
     });
 
     await runtime.startThread({
@@ -756,5 +769,4 @@ rl.on("line", (line) => {
     );
     await runtime.shutdown();
   });
-
 });

@@ -1,7 +1,4 @@
-import {
-  getEnvironment,
-  getThread,
-} from "@bb/db";
+import { getEnvironment, getThread } from "@bb/db";
 import { expect } from "vitest";
 import type { createTestAppHarness } from "../helpers/test-app.js";
 
@@ -16,7 +13,8 @@ export async function waitForAssertion(assertion: AssertionFn): Promise<void> {
       assertion();
       return;
     } catch (error) {
-      lastMessage = error instanceof Error ? error.message : "Condition not met";
+      lastMessage =
+        error instanceof Error ? error.message : "Condition not met";
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
   }

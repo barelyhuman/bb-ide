@@ -27,9 +27,9 @@ export function applyTurnCompletedEvent(
   } else if (payload.status === "interrupted") {
     nextStatus = "idle";
   } else if (
-    isPreStartThreadStatus(thread.status)
-    || thread.status === "active"
-    || thread.status === "error"
+    isPreStartThreadStatus(thread.status) ||
+    thread.status === "active" ||
+    thread.status === "error"
   ) {
     nextStatus = "idle";
   }

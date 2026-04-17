@@ -61,15 +61,15 @@ describe("pending interaction formatting", () => {
   });
 
   it("formats approval outcomes and timeline messages consistently", () => {
-    expect(formatPendingInteractionApprovalResolutionOutcome("allow_for_session")).toBe(
-      "approved for this session",
-    );
-    expect(formatPendingInteractionCommandApprovalResolutionMessage("deny")).toBe(
-      "Command denied",
-    );
-    expect(formatPendingInteractionFileChangeApprovalResolutionMessage("allow_once")).toBe(
-      "File changes approved",
-    );
+    expect(
+      formatPendingInteractionApprovalResolutionOutcome("allow_for_session"),
+    ).toBe("approved for this session");
+    expect(
+      formatPendingInteractionCommandApprovalResolutionMessage("deny"),
+    ).toBe("Command denied");
+    expect(
+      formatPendingInteractionFileChangeApprovalResolutionMessage("allow_once"),
+    ).toBe("File changes approved");
     expect(
       formatPendingInteractionPermissionResolutionOutcome({
         decision: "deny",
@@ -104,7 +104,10 @@ describe("pending interaction formatting", () => {
     });
 
     expect(
-      buildPendingInteractionApprovalResolution(interaction, "allow_for_session"),
+      buildPendingInteractionApprovalResolution(
+        interaction,
+        "allow_for_session",
+      ),
     ).toEqual({
       decision: "allow_for_session",
       grantedPermissions: {

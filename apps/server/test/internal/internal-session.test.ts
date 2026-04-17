@@ -198,8 +198,8 @@ describe("internal session routes", () => {
       const queuedRuntimeSync = await waitForQueuedCommand(
         harness,
         ({ command, row }) =>
-          row.hostId === host.id
-          && command.type === "host.sync_runtime_material",
+          row.hostId === host.id &&
+          command.type === "host.sync_runtime_material",
       );
       const response = await Promise.race([
         responsePromise,
@@ -207,7 +207,9 @@ describe("internal session routes", () => {
       ]);
       expect(response).not.toBeNull();
       if (!response) {
-        throw new Error("Expected session.open to return before runtime sync completed");
+        throw new Error(
+          "Expected session.open to return before runtime sync completed",
+        );
       }
       expect(response.status).toBe(201);
       expect(readyResolved).toBe(false);
@@ -255,7 +257,9 @@ describe("internal session routes", () => {
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         dataDir: "/tmp/bb-test-data",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -311,7 +315,9 @@ describe("internal session routes", () => {
         },
       );
       expect(timeoutResponse.status).toBe(204);
-      expect(getHost(harness.db, host.id)?.lastActivityAt).toBe(fetchedActivityAt);
+      expect(getHost(harness.db, host.id)?.lastActivityAt).toBe(
+        fetchedActivityAt,
+      );
     } finally {
       await harness.cleanup();
     }
@@ -346,27 +352,32 @@ describe("internal session routes", () => {
         }),
       });
 
-      const response = await harness.app.request("/internal/session/command-result", {
-        method: "POST",
-        headers: internalAuthHeaders(harness, {
-          hostId: host.id,
-          hostType: "ephemeral",
-        }),
-        body: JSON.stringify({
-          sessionId: session.id,
-          commandId: command.id,
-          completedAt: Date.now(),
-          type: "host.list_files",
-          ok: true,
-          result: {
-            files: [],
-            truncated: false,
-          },
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness, {
+            hostId: host.id,
+            hostType: "ephemeral",
+          }),
+          body: JSON.stringify({
+            sessionId: session.id,
+            commandId: command.id,
+            completedAt: Date.now(),
+            type: "host.list_files",
+            ok: true,
+            result: {
+              files: [],
+              truncated: false,
+            },
+          }),
+        },
+      );
 
       expect(response.status).toBe(200);
-      expect(getHost(harness.db, host.id)?.lastActivityAt).toEqual(expect.any(Number));
+      expect(getHost(harness.db, host.id)?.lastActivityAt).toEqual(
+        expect.any(Number),
+      );
     } finally {
       await harness.cleanup();
     }
@@ -430,24 +441,27 @@ describe("internal session routes", () => {
         environmentId: environment.id,
       });
 
-      const registered = harness.deps.pendingInteractions.registerPendingInteraction({
-        interaction: {
-          threadId: thread.id,
-          turnId: "turn-replace-interaction-session",
-          providerId: "codex",
-          providerThreadId: "provider-thread-replace-interaction-session",
-          providerRequestId: "request-replace-interaction-session",
-          payload: createCommandApprovalPayload({
-            itemId: "item-replace-interaction-session",
-            reason: "Approve command",
-            command: "git push",
-            cwd: "/tmp/project",
-          }),
-        },
-        sessionId: existing.session.id,
-      });
+      const registered =
+        harness.deps.pendingInteractions.registerPendingInteraction({
+          interaction: {
+            threadId: thread.id,
+            turnId: "turn-replace-interaction-session",
+            providerId: "codex",
+            providerThreadId: "provider-thread-replace-interaction-session",
+            providerRequestId: "request-replace-interaction-session",
+            payload: createCommandApprovalPayload({
+              itemId: "item-replace-interaction-session",
+              reason: "Approve command",
+              command: "git push",
+              cwd: "/tmp/project",
+            }),
+          },
+          sessionId: existing.session.id,
+        });
       if (registered.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${registered.reason}`,
+        );
       }
 
       const response = await harness.app.request("/internal/session/open", {
@@ -503,12 +517,18 @@ describe("internal session routes", () => {
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         dataDir: "/tmp/bb-test-data",
       });
-      const initialSnapshot = await requestSandboxRuntimeMaterialSync(harness.deps, {
-        hostId: host.id,
-      });
-      const initialRuntimeSync = advanceSandboxRuntimeMaterialSync(harness.deps, {
-        hostId: host.id,
-      });
+      const initialSnapshot = await requestSandboxRuntimeMaterialSync(
+        harness.deps,
+        {
+          hostId: host.id,
+        },
+      );
+      const initialRuntimeSync = advanceSandboxRuntimeMaterialSync(
+        harness.deps,
+        {
+          hostId: host.id,
+        },
+      );
       if (!initialRuntimeSync) {
         throw new Error("Expected initial runtime sync command to be queued");
       }
@@ -580,12 +600,18 @@ describe("internal session routes", () => {
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         dataDir: "/tmp/bb-test-data",
       });
-      const initialSnapshot = await requestSandboxRuntimeMaterialSync(harness.deps, {
-        hostId: host.id,
-      });
-      const initialRuntimeSync = advanceSandboxRuntimeMaterialSync(harness.deps, {
-        hostId: host.id,
-      });
+      const initialSnapshot = await requestSandboxRuntimeMaterialSync(
+        harness.deps,
+        {
+          hostId: host.id,
+        },
+      );
+      const initialRuntimeSync = advanceSandboxRuntimeMaterialSync(
+        harness.deps,
+        {
+          hostId: host.id,
+        },
+      );
       if (!initialRuntimeSync) {
         throw new Error("Expected initial runtime sync command to be queued");
       }
@@ -627,16 +653,19 @@ describe("internal session routes", () => {
           .where(eq(hostDaemonCommands.id, initialRuntimeSync))
           .get()?.cursor ?? 0,
         ({ command, row }) =>
-          row.hostId === host.id && command.type === "host.sync_runtime_material",
+          row.hostId === host.id &&
+          command.type === "host.sync_runtime_material",
       );
       expect(requeuedRuntimeSync.command).toMatchObject({
         type: "host.sync_runtime_material",
         version: initialSnapshot.version,
       });
-      expect(getHostOperation(harness.db, {
-        hostId: host.id,
-        kind: "sync_runtime_material",
-      })).toMatchObject({
+      expect(
+        getHostOperation(harness.db, {
+          hostId: host.id,
+          kind: "sync_runtime_material",
+        }),
+      ).toMatchObject({
         commandId: requeuedRuntimeSync.row.id,
         state: "queued",
       });
@@ -652,7 +681,9 @@ describe("internal session routes", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-results",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
 
       const successEnvironment = seedEnvironment(harness.deps, {
         hostId: host.id,
@@ -682,38 +713,44 @@ describe("internal session routes", () => {
         },
         titleProvided: true,
       });
-      const successCommand = queueEnvironmentProvisionLifecycleCommand(harness, {
-        hostId: host.id,
-        sessionId: session.id,
-        environmentId: successEnvironment.id,
-        command: {
-          type: "environment.provision",
-          environmentId: successEnvironment.id,
-          initiator: { threadId: successThread.id, eventSequence: 0 },
-          workspaceProvisionType: "unmanaged",
-          path: "/tmp/provision-success",
-        },
-      });
-
-      const successResponse = await harness.app.request("/internal/session/command-result", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
+      const successCommand = queueEnvironmentProvisionLifecycleCommand(
+        harness,
+        {
+          hostId: host.id,
           sessionId: session.id,
-          commandId: successCommand.id,
-          completedAt: successCompletedAt,
-          type: "environment.provision",
-          ok: true,
-          result: {
+          environmentId: successEnvironment.id,
+          command: {
+            type: "environment.provision",
+            environmentId: successEnvironment.id,
+            initiator: { threadId: successThread.id, eventSequence: 0 },
+            workspaceProvisionType: "unmanaged",
             path: "/tmp/provision-success",
-            branchName: "bb/success",
-            defaultBranch: "main",
-            isGitRepo: true,
-            isWorktree: false,
-            transcript: [],
           },
-        }),
-      });
+        },
+      );
+
+      const successResponse = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            commandId: successCommand.id,
+            completedAt: successCompletedAt,
+            type: "environment.provision",
+            ok: true,
+            result: {
+              path: "/tmp/provision-success",
+              branchName: "bb/success",
+              defaultBranch: "main",
+              isGitRepo: true,
+              isWorktree: false,
+              transcript: [],
+            },
+          }),
+        },
+      );
       expect(successResponse.status).toBe(200);
       expect(
         harness.db
@@ -722,8 +759,12 @@ describe("internal session routes", () => {
           .where(eq(hostDaemonCommands.id, successCommand.id))
           .get()?.completedAt,
       ).toBe(successCompletedAt);
-      expect(getEnvironment(harness.db, successEnvironment.id)?.status).toBe("ready");
-      expect(getThread(harness.db, successThread.id)?.status).toBe("provisioning");
+      expect(getEnvironment(harness.db, successEnvironment.id)?.status).toBe(
+        "ready",
+      );
+      expect(getThread(harness.db, successThread.id)?.status).toBe(
+        "provisioning",
+      );
       const threadStartCommand = await waitForQueuedCommandAfter(
         harness,
         successCommand.cursor,
@@ -733,7 +774,10 @@ describe("internal session routes", () => {
       );
       expect(threadStartCommand.command).toMatchObject({
         environmentId: successEnvironment.id,
-        workspaceContext: { workspacePath: "/tmp/provision-success", workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: "/tmp/provision-success",
+          workspaceProvisionType: "unmanaged",
+        },
       });
 
       const failureEnvironment = seedEnvironment(harness.deps, {
@@ -747,34 +791,42 @@ describe("internal session routes", () => {
         environmentId: failureEnvironment.id,
         status: "provisioning",
       });
-      const failureCommand = queueEnvironmentProvisionLifecycleCommand(harness, {
-        hostId: host.id,
-        sessionId: session.id,
-        environmentId: failureEnvironment.id,
-        command: {
-          type: "environment.provision",
-          environmentId: failureEnvironment.id,
-          initiator: { threadId: failureThread.id, eventSequence: 0 },
-          workspaceProvisionType: "unmanaged",
-          path: "/tmp/provision-failure",
-        },
-      });
-
-      const failureResponse = await harness.app.request("/internal/session/command-result", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
+      const failureCommand = queueEnvironmentProvisionLifecycleCommand(
+        harness,
+        {
+          hostId: host.id,
           sessionId: session.id,
-          commandId: failureCommand.id,
-          completedAt: Date.now(),
-          type: "environment.provision",
-          ok: false,
-          errorCode: "provision_failed",
-          errorMessage: "git clone failed",
-        }),
-      });
+          environmentId: failureEnvironment.id,
+          command: {
+            type: "environment.provision",
+            environmentId: failureEnvironment.id,
+            initiator: { threadId: failureThread.id, eventSequence: 0 },
+            workspaceProvisionType: "unmanaged",
+            path: "/tmp/provision-failure",
+          },
+        },
+      );
+
+      const failureResponse = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            commandId: failureCommand.id,
+            completedAt: Date.now(),
+            type: "environment.provision",
+            ok: false,
+            errorCode: "provision_failed",
+            errorMessage: "git clone failed",
+          }),
+        },
+      );
       expect(failureResponse.status).toBe(200);
-      expect(getEnvironment(harness.db, failureEnvironment.id)?.status).toBe("error");
+      expect(getEnvironment(harness.db, failureEnvironment.id)?.status).toBe(
+        "error",
+      );
       expect(getThread(harness.db, failureThread.id)?.status).toBe("error");
       const failureEvent = harness.db
         .select()
@@ -783,12 +835,12 @@ describe("internal session routes", () => {
         .all()
         .find((event) => event.type === "system/error");
       expect(failureEvent).toBeTruthy();
-      expect(
-        failureEvent ? JSON.parse(failureEvent.data) : null,
-      ).toMatchObject({
-        code: "thread_provisioning_failed",
-        detail: "git clone failed",
-      });
+      expect(failureEvent ? JSON.parse(failureEvent.data) : null).toMatchObject(
+        {
+          code: "thread_provisioning_failed",
+          detail: "git clone failed",
+        },
+      );
     } finally {
       await harness.cleanup();
     }
@@ -837,9 +889,12 @@ describe("internal session routes", () => {
       const queuedRuntimeSync = await waitForQueuedCommand(
         harness,
         ({ command, row }) =>
-          row.hostId === host.id && command.type === "host.sync_runtime_material",
+          row.hostId === host.id &&
+          command.type === "host.sync_runtime_material",
       );
-      const desiredSnapshot = await buildSandboxRuntimeMaterialSnapshot(harness.deps);
+      const desiredSnapshot = await buildSandboxRuntimeMaterialSnapshot(
+        harness.deps,
+      );
       expect(queuedRuntimeSync.command).toMatchObject({
         type: "host.sync_runtime_material",
         version: desiredSnapshot.version,
@@ -873,7 +928,9 @@ describe("internal session routes", () => {
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         dataDir: "/tmp/bb-test-data",
       });
-      const desiredSnapshot = await buildSandboxRuntimeMaterialSnapshot(harness.deps);
+      const desiredSnapshot = await buildSandboxRuntimeMaterialSnapshot(
+        harness.deps,
+      );
 
       const response = await harness.app.request(
         `/internal/session/runtime-material?sessionId=${session.id}&version=${desiredSnapshot.version}`,
@@ -913,7 +970,9 @@ describe("internal session routes", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-transcript",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -959,41 +1018,72 @@ describe("internal session routes", () => {
       });
 
       const transcriptEntries = [
-        { type: "step", key: "workspace-source", text: "Using workspace: /tmp/transcript-source", status: "completed" },
-        { type: "output", key: "git-worktree-command", text: "git worktree add -B bb/transcript /tmp/transcript-test" },
-        { type: "step", key: "workspace-target", text: "Using workspace: /tmp/transcript-test", status: "completed" },
-        { type: "step", key: "workspace-branch", text: "Using branch: bb/transcript (abc1234)", status: "completed" },
+        {
+          type: "step",
+          key: "workspace-source",
+          text: "Using workspace: /tmp/transcript-source",
+          status: "completed",
+        },
+        {
+          type: "output",
+          key: "git-worktree-command",
+          text: "git worktree add -B bb/transcript /tmp/transcript-test",
+        },
+        {
+          type: "step",
+          key: "workspace-target",
+          text: "Using workspace: /tmp/transcript-test",
+          status: "completed",
+        },
+        {
+          type: "step",
+          key: "workspace-branch",
+          text: "Using branch: bb/transcript (abc1234)",
+          status: "completed",
+        },
       ];
-      const response = await harness.app.request("/internal/session/command-result", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          commandId: command.id,
-          cursor: command.cursor,
-          completedAt: Date.now(),
-          type: "environment.provision",
-          ok: true,
-          result: {
-            path: "/tmp/transcript-test",
-            branchName: "bb/transcript",
-            defaultBranch: "main",
-            isGitRepo: true,
-            isWorktree: true,
-            transcript: transcriptEntries,
-          },
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            commandId: command.id,
+            cursor: command.cursor,
+            completedAt: Date.now(),
+            type: "environment.provision",
+            ok: true,
+            result: {
+              path: "/tmp/transcript-test",
+              branchName: "bb/transcript",
+              defaultBranch: "main",
+              isGitRepo: true,
+              isWorktree: true,
+              transcript: transcriptEntries,
+            },
+          }),
+        },
+      );
       expect(response.status).toBe(200);
 
       const transcriptEvents = harness.db
         .select({ data: events.data })
         .from(events)
-        .where(and(eq(events.threadId, thread.id), eq(events.type, "system/thread-provisioning")))
+        .where(
+          and(
+            eq(events.threadId, thread.id),
+            eq(events.type, "system/thread-provisioning"),
+          ),
+        )
         .all()
-        .map((row) => systemThreadProvisioningEventDataSchema.parse(JSON.parse(row.data)))
+        .map((row) =>
+          systemThreadProvisioningEventDataSchema.parse(JSON.parse(row.data)),
+        )
         .filter((eventData) =>
-          eventData.entries.some((entry) => entry.key === "git-worktree-command")
+          eventData.entries.some(
+            (entry) => entry.key === "git-worktree-command",
+          ),
         );
       expect(transcriptEvents).toHaveLength(1);
       expect(transcriptEvents[0]?.status).toBe("active");
@@ -1009,7 +1099,9 @@ describe("internal session routes", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-streamed-transcript",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         managed: true,
@@ -1031,7 +1123,12 @@ describe("internal session routes", () => {
           status: "active",
           environmentId: environment.id,
           entries: [
-            { type: "step", key: "git-worktree-started", text: "Creating worktree", status: "started" },
+            {
+              type: "step",
+              key: "git-worktree-started",
+              text: "Creating worktree",
+              status: "started",
+            },
           ],
         },
       });
@@ -1051,40 +1148,56 @@ describe("internal session routes", () => {
         },
       });
 
-      const response = await harness.app.request("/internal/session/command-result", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          commandId: command.id,
-          cursor: command.cursor,
-          completedAt: Date.now(),
-          type: "environment.provision",
-          ok: true,
-          result: {
-            path: "/tmp/streamed-transcript",
-            branchName: "bb/streamed-transcript",
-            defaultBranch: "main",
-            isGitRepo: true,
-            isWorktree: true,
-            transcript: [
-              { type: "output", key: "git-worktree-command", text: "git worktree add -B bb/streamed-transcript /tmp/streamed-transcript" },
-            ],
-          },
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            commandId: command.id,
+            cursor: command.cursor,
+            completedAt: Date.now(),
+            type: "environment.provision",
+            ok: true,
+            result: {
+              path: "/tmp/streamed-transcript",
+              branchName: "bb/streamed-transcript",
+              defaultBranch: "main",
+              isGitRepo: true,
+              isWorktree: true,
+              transcript: [
+                {
+                  type: "output",
+                  key: "git-worktree-command",
+                  text: "git worktree add -B bb/streamed-transcript /tmp/streamed-transcript",
+                },
+              ],
+            },
+          }),
+        },
+      );
       expect(response.status).toBe(200);
 
       const provisioningEvents = harness.db
         .select({ data: events.data })
         .from(events)
-        .where(and(eq(events.threadId, thread.id), eq(events.type, "system/thread-provisioning")))
+        .where(
+          and(
+            eq(events.threadId, thread.id),
+            eq(events.type, "system/thread-provisioning"),
+          ),
+        )
         .all()
-        .map((row) => systemThreadProvisioningEventDataSchema.parse(JSON.parse(row.data)));
+        .map((row) =>
+          systemThreadProvisioningEventDataSchema.parse(JSON.parse(row.data)),
+        );
 
       expect(
         provisioningEvents.some((eventData) =>
-          eventData.entries.some((entry) => entry.key === "git-worktree-command")
+          eventData.entries.some(
+            (entry) => entry.key === "git-worktree-command",
+          ),
         ),
       ).toBe(false);
       expect(provisioningEvents).toEqual(
@@ -1106,7 +1219,9 @@ describe("internal session routes", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-workspace-ready-once",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         managed: true,
@@ -1157,11 +1272,18 @@ describe("internal session routes", () => {
       const workspaceReadyEvents = harness.db
         .select({ data: events.data })
         .from(events)
-        .where(and(eq(events.threadId, thread.id), eq(events.type, "system/thread-provisioning")))
+        .where(
+          and(
+            eq(events.threadId, thread.id),
+            eq(events.type, "system/thread-provisioning"),
+          ),
+        )
         .all()
-        .map((row) => systemThreadProvisioningEventDataSchema.parse(JSON.parse(row.data)))
+        .map((row) =>
+          systemThreadProvisioningEventDataSchema.parse(JSON.parse(row.data)),
+        )
         .filter((eventData) =>
-          eventData.entries.some((entry) => entry.key === "workspace-path")
+          eventData.entries.some((entry) => entry.key === "workspace-path"),
         );
       expect(workspaceReadyEvents).toHaveLength(1);
     } finally {
@@ -1175,7 +1297,9 @@ describe("internal session routes", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-reprovision-start",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1212,41 +1336,47 @@ describe("internal session routes", () => {
         },
         initiator: "user",
       });
-      const provisionCommand = queueEnvironmentProvisionLifecycleCommand(harness, {
-        hostId: host.id,
-        sessionId: session.id,
-        environmentId: environment.id,
-        command: {
-          type: "environment.provision",
-          environmentId: environment.id,
-          initiator: { threadId: thread.id, eventSequence: 0 },
-          workspaceProvisionType: "managed-worktree",
-          targetPath: "/tmp/reprovision-start",
-          sourcePath: "/tmp/reprovision-source",
-          branchName: "bb/reprovision-start",
-          setupTimeoutMs: 900000,
-        },
-      });
-
-      const response = await harness.app.request("/internal/session/command-result", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
+      const provisionCommand = queueEnvironmentProvisionLifecycleCommand(
+        harness,
+        {
+          hostId: host.id,
           sessionId: session.id,
-          commandId: provisionCommand.id,
-          completedAt: Date.now(),
-          type: "environment.provision",
-          ok: true,
-          result: {
-            path: "/tmp/reprovision-start",
+          environmentId: environment.id,
+          command: {
+            type: "environment.provision",
+            environmentId: environment.id,
+            initiator: { threadId: thread.id, eventSequence: 0 },
+            workspaceProvisionType: "managed-worktree",
+            targetPath: "/tmp/reprovision-start",
+            sourcePath: "/tmp/reprovision-source",
             branchName: "bb/reprovision-start",
-            defaultBranch: "main",
-            isGitRepo: true,
-            isWorktree: true,
-            transcript: [],
+            setupTimeoutMs: 900000,
           },
-        }),
-      });
+        },
+      );
+
+      const response = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            commandId: provisionCommand.id,
+            completedAt: Date.now(),
+            type: "environment.provision",
+            ok: true,
+            result: {
+              path: "/tmp/reprovision-start",
+              branchName: "bb/reprovision-start",
+              defaultBranch: "main",
+              isGitRepo: true,
+              isWorktree: true,
+              transcript: [],
+            },
+          }),
+        },
+      );
 
       expect(response.status).toBe(200);
       const queuedRestart = await waitForQueuedCommandAfter(
@@ -1282,7 +1412,9 @@ describe("internal session routes", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-reprovision-malformed",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1351,41 +1483,47 @@ describe("internal session routes", () => {
         },
         initiator: "user",
       });
-      const provisionCommand = queueEnvironmentProvisionLifecycleCommand(harness, {
-        hostId: host.id,
-        sessionId: session.id,
-        environmentId: environment.id,
-        command: {
-          type: "environment.provision",
-          environmentId: environment.id,
-          initiator: { threadId: thread.id, eventSequence: 0 },
-          workspaceProvisionType: "managed-worktree",
-          targetPath: "/tmp/reprovision-malformed",
-          sourcePath: "/tmp/reprovision-malformed-source",
-          branchName: "bb/reprovision-malformed",
-          setupTimeoutMs: 900000,
-        },
-      });
-
-      const response = await harness.app.request("/internal/session/command-result", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
+      const provisionCommand = queueEnvironmentProvisionLifecycleCommand(
+        harness,
+        {
+          hostId: host.id,
           sessionId: session.id,
-          commandId: provisionCommand.id,
-          completedAt: Date.now(),
-          type: "environment.provision",
-          ok: true,
-          result: {
-            path: "/tmp/reprovision-malformed",
+          environmentId: environment.id,
+          command: {
+            type: "environment.provision",
+            environmentId: environment.id,
+            initiator: { threadId: thread.id, eventSequence: 0 },
+            workspaceProvisionType: "managed-worktree",
+            targetPath: "/tmp/reprovision-malformed",
+            sourcePath: "/tmp/reprovision-malformed-source",
             branchName: "bb/reprovision-malformed",
-            defaultBranch: "main",
-            isGitRepo: true,
-            isWorktree: true,
-            transcript: [],
+            setupTimeoutMs: 900000,
           },
-        }),
-      });
+        },
+      );
+
+      const response = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            commandId: provisionCommand.id,
+            completedAt: Date.now(),
+            type: "environment.provision",
+            ok: true,
+            result: {
+              path: "/tmp/reprovision-malformed",
+              branchName: "bb/reprovision-malformed",
+              defaultBranch: "main",
+              isGitRepo: true,
+              isWorktree: true,
+              transcript: [],
+            },
+          }),
+        },
+      );
 
       expect(response.status).toBe(200);
       const followupCommands = harness.db
@@ -1414,7 +1552,9 @@ describe("internal session routes", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-reprovision-filter",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1483,85 +1623,137 @@ describe("internal session routes", () => {
         source: "tell",
         target: { kind: "new-turn" },
       });
-      const provisionCommand = queueEnvironmentProvisionLifecycleCommand(harness, {
-        hostId: host.id,
-        sessionId: session.id,
-        environmentId: environment.id,
-        command: {
-          type: "environment.provision",
-          environmentId: environment.id,
-          initiator: { threadId: provisioningThread.id, eventSequence: 0 },
-          workspaceProvisionType: "managed-worktree",
-          targetPath: "/tmp/reprovision-filter",
-          sourcePath: "/tmp/reprovision-filter-source",
-          branchName: "bb/reprovision-filter",
-          setupTimeoutMs: 900000,
-        },
-      });
-
-      const response = await harness.app.request("/internal/session/command-result", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
+      const provisionCommand = queueEnvironmentProvisionLifecycleCommand(
+        harness,
+        {
+          hostId: host.id,
           sessionId: session.id,
-          commandId: provisionCommand.id,
-          completedAt: Date.now(),
-          type: "environment.provision",
-          ok: true,
-          result: {
-            path: "/tmp/reprovision-filter",
+          environmentId: environment.id,
+          command: {
+            type: "environment.provision",
+            environmentId: environment.id,
+            initiator: { threadId: provisioningThread.id, eventSequence: 0 },
+            workspaceProvisionType: "managed-worktree",
+            targetPath: "/tmp/reprovision-filter",
+            sourcePath: "/tmp/reprovision-filter-source",
             branchName: "bb/reprovision-filter",
-            defaultBranch: "main",
-            isGitRepo: true,
-            isWorktree: true,
-            transcript: [
-              { type: "step", key: "workspace-source", text: "Using workspace: /tmp/reprovision-filter-source", status: "completed" },
-              { type: "output", key: "git-worktree-command", text: "git worktree add -B bb/reprovision-filter /tmp/reprovision-filter" },
-              { type: "step", key: "workspace-target", text: "Using workspace: /tmp/reprovision-filter", status: "completed" },
-              { type: "step", key: "workspace-branch", text: "Using branch: bb/reprovision-filter (abc1234)", status: "completed" },
-            ],
+            setupTimeoutMs: 900000,
           },
-        }),
-      });
+        },
+      );
+
+      const response = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            commandId: provisionCommand.id,
+            completedAt: Date.now(),
+            type: "environment.provision",
+            ok: true,
+            result: {
+              path: "/tmp/reprovision-filter",
+              branchName: "bb/reprovision-filter",
+              defaultBranch: "main",
+              isGitRepo: true,
+              isWorktree: true,
+              transcript: [
+                {
+                  type: "step",
+                  key: "workspace-source",
+                  text: "Using workspace: /tmp/reprovision-filter-source",
+                  status: "completed",
+                },
+                {
+                  type: "output",
+                  key: "git-worktree-command",
+                  text: "git worktree add -B bb/reprovision-filter /tmp/reprovision-filter",
+                },
+                {
+                  type: "step",
+                  key: "workspace-target",
+                  text: "Using workspace: /tmp/reprovision-filter",
+                  status: "completed",
+                },
+                {
+                  type: "step",
+                  key: "workspace-branch",
+                  text: "Using branch: bb/reprovision-filter (abc1234)",
+                  status: "completed",
+                },
+              ],
+            },
+          }),
+        },
+      );
 
       expect(response.status).toBe(200);
-      expect(getThread(harness.db, provisioningThread.id)?.status).toBe("provisioning");
+      expect(getThread(harness.db, provisioningThread.id)?.status).toBe(
+        "provisioning",
+      );
       expect(getThread(harness.db, idleSibling.id)?.status).toBe("idle");
-      expect(getThread(harness.db, archivedSibling.id)?.archivedAt).toBeTypeOf("number");
-      expect(getThread(harness.db, stopRequestedSibling.id)?.stopRequestedAt).toBeTypeOf("number");
+      expect(getThread(harness.db, archivedSibling.id)?.archivedAt).toBeTypeOf(
+        "number",
+      );
+      expect(
+        getThread(harness.db, stopRequestedSibling.id)?.stopRequestedAt,
+      ).toBeTypeOf("number");
 
       // Initiator gets the full daemon transcript because no streamed transcript was already appended.
       const initiatorEvents = harness.db
         .select({ data: events.data })
         .from(events)
-        .where(and(eq(events.threadId, provisioningThread.id), eq(events.type, "system/thread-provisioning")))
+        .where(
+          and(
+            eq(events.threadId, provisioningThread.id),
+            eq(events.type, "system/thread-provisioning"),
+          ),
+        )
         .all()
-        .map((row) => systemThreadProvisioningEventDataSchema.parse(JSON.parse(row.data)))
+        .map((row) =>
+          systemThreadProvisioningEventDataSchema.parse(JSON.parse(row.data)),
+        )
         .filter((eventData) =>
-          eventData.entries.some((entry) => entry.key === "git-worktree-command")
+          eventData.entries.some(
+            (entry) => entry.key === "git-worktree-command",
+          ),
         );
       expect(initiatorEvents).toHaveLength(1);
       expect(initiatorEvents[0].entries).toHaveLength(4);
       expect(initiatorEvents[0].entries).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ key: "git-worktree-command" }),
-          expect.objectContaining({ key: "workspace-branch", text: "Using branch: bb/reprovision-filter (abc1234)" }),
+          expect.objectContaining({
+            key: "workspace-branch",
+            text: "Using branch: bb/reprovision-filter (abc1234)",
+          }),
         ]),
       );
       // Sibling gets its own concise workspace summary, not the initiator's daemon transcript.
       const siblingEvents = harness.db
         .select({ data: events.data })
         .from(events)
-        .where(and(eq(events.threadId, idleSibling.id), eq(events.type, "system/thread-provisioning")))
+        .where(
+          and(
+            eq(events.threadId, idleSibling.id),
+            eq(events.type, "system/thread-provisioning"),
+          ),
+        )
         .all()
-        .map((row) => systemThreadProvisioningEventDataSchema.parse(JSON.parse(row.data)));
+        .map((row) =>
+          systemThreadProvisioningEventDataSchema.parse(JSON.parse(row.data)),
+        );
       expect(
         siblingEvents.some((eventData) =>
-          eventData.entries.some((entry) => entry.key === "git-worktree-command")
+          eventData.entries.some(
+            (entry) => entry.key === "git-worktree-command",
+          ),
         ),
       ).toBe(false);
       const siblingWorkspaceEvents = siblingEvents.filter((eventData) =>
-        eventData.entries.some((entry) => entry.key === "workspace-path")
+        eventData.entries.some((entry) => entry.key === "workspace-path"),
       );
       expect(siblingWorkspaceEvents).toHaveLength(1);
       expect(siblingWorkspaceEvents[0].status).toBe("completed");
@@ -1569,13 +1761,22 @@ describe("internal session routes", () => {
       expect(siblingWorkspaceEvents[0].entries).toHaveLength(2);
       expect(siblingWorkspaceEvents[0].entries).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ key: "workspace-path", text: "Using workspace: /tmp/reprovision-filter" }),
-          expect.objectContaining({ key: "workspace-branch", text: "Using branch: bb/reprovision-filter" }),
+          expect.objectContaining({
+            key: "workspace-path",
+            text: "Using workspace: /tmp/reprovision-filter",
+          }),
+          expect.objectContaining({
+            key: "workspace-branch",
+            text: "Using branch: bb/reprovision-filter",
+          }),
         ]),
       );
 
       const queuedStarts = harness.db
-        .select({ cursor: hostDaemonCommands.cursor, payload: hostDaemonCommands.payload })
+        .select({
+          cursor: hostDaemonCommands.cursor,
+          payload: hostDaemonCommands.payload,
+        })
         .from(hostDaemonCommands)
         .where(eq(hostDaemonCommands.type, "thread.start"))
         .all()
@@ -1589,10 +1790,12 @@ describe("internal session routes", () => {
         const skippedEvents = harness.db
           .select({ data: events.data })
           .from(events)
-          .where(and(
-            eq(events.threadId, skippedThread.id),
-            eq(events.type, "system/thread-provisioning"),
-          ))
+          .where(
+            and(
+              eq(events.threadId, skippedThread.id),
+              eq(events.type, "system/thread-provisioning"),
+            ),
+          )
           .all();
         expect(skippedEvents).toHaveLength(0);
         expect(
@@ -1610,7 +1813,9 @@ describe("internal session routes", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-reconcile",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1658,7 +1863,9 @@ describe("internal session routes", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-reconcile-deleted",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1689,7 +1896,9 @@ describe("internal session routes", () => {
 
       expect(response.status).toBe(201);
       expect(getThread(harness.db, thread.id)).toBeNull();
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroying");
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+        "destroying",
+      );
 
       const destroyCommand = await waitForQueuedCommand(
         harness,
@@ -1711,7 +1920,9 @@ describe("internal session routes", () => {
         name: "Test Host",
         type: "persistent",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1749,7 +1960,9 @@ describe("internal session routes", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-finalize-stop-interaction",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1763,24 +1976,27 @@ describe("internal session routes", () => {
         threadId: thread.id,
       });
 
-      const interaction = harness.deps.pendingInteractions.registerPendingInteraction({
-        interaction: {
-          threadId: thread.id,
-          turnId: "turn-stop-interaction",
-          providerId: "codex",
-          providerThreadId: "provider-thread-stop-interaction",
-          providerRequestId: "request-stop-interaction",
-          payload: createCommandApprovalPayload({
-            itemId: "item-stop-interaction",
-            reason: "Approve command",
-            command: "git push",
-            cwd: "/tmp/project",
-          }),
-        },
-        sessionId: "session-1",
-      });
+      const interaction =
+        harness.deps.pendingInteractions.registerPendingInteraction({
+          interaction: {
+            threadId: thread.id,
+            turnId: "turn-stop-interaction",
+            providerId: "codex",
+            providerThreadId: "provider-thread-stop-interaction",
+            providerRequestId: "request-stop-interaction",
+            payload: createCommandApprovalPayload({
+              itemId: "item-stop-interaction",
+              reason: "Approve command",
+              command: "git push",
+              cwd: "/tmp/project",
+            }),
+          },
+          sessionId: "session-1",
+        });
       if (interaction.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${interaction.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${interaction.reason}`,
+        );
       }
 
       expect(
@@ -1809,7 +2025,9 @@ describe("internal session routes", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-reconcile-deleted-provisioning",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1852,7 +2070,9 @@ describe("internal session routes", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-reconcile-stop-pending",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1903,7 +2123,9 @@ describe("internal session routes", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-reconcile-archived-force-cleanup",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -1941,19 +2163,22 @@ describe("internal session routes", () => {
           command.type === "thread.stop" && command.threadId === thread.id,
       );
 
-      const reconnectResponse = await harness.app.request("/internal/session/open", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          activeThreads: [],
-          dataDir: "/tmp/reconcile-archived-force-cleanup",
-          hostId: host.id,
-          hostName: "Reconcile Archived Force Cleanup Host",
-          hostType: "persistent",
-          instanceId: "instance-reconcile-archived-force-cleanup",
-          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
-        }),
-      });
+      const reconnectResponse = await harness.app.request(
+        "/internal/session/open",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            activeThreads: [],
+            dataDir: "/tmp/reconcile-archived-force-cleanup",
+            hostId: host.id,
+            hostName: "Reconcile Archived Force Cleanup Host",
+            hostType: "persistent",
+            instanceId: "instance-reconcile-archived-force-cleanup",
+            protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+          }),
+        },
+      );
 
       expect(reconnectResponse.status).toBe(201);
       expect(getThread(harness.db, thread.id)?.stopRequestedAt).toBeNull();
@@ -1969,7 +2194,9 @@ describe("internal session routes", () => {
       expect(destroyCommand.command).toMatchObject({
         environmentId: environment.id,
       });
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroying");
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+        "destroying",
+      );
     } finally {
       await harness.cleanup();
     }
@@ -1981,7 +2208,9 @@ describe("internal session routes", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-reconcile-deleted-active",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -2009,7 +2238,9 @@ describe("internal session routes", () => {
 
       expect(response.status).toBe(201);
       expect(getThread(harness.db, thread.id)?.deletedAt).toBeTypeOf("number");
-      expect(getThread(harness.db, thread.id)?.stopRequestedAt).toBeTypeOf("number");
+      expect(getThread(harness.db, thread.id)?.stopRequestedAt).toBeTypeOf(
+        "number",
+      );
 
       const stopCommand = await waitForQueuedCommand(
         harness,
@@ -2065,8 +2296,8 @@ describe("internal session routes", () => {
       const queuedStart = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "thread.start"
-          && command.threadId === createdThread.id,
+          command.type === "thread.start" &&
+          command.threadId === createdThread.id,
       );
 
       const deleteResponse = await harness.app.request(
@@ -2082,27 +2313,30 @@ describe("internal session routes", () => {
         harness,
         queuedStart.row.cursor,
         ({ command }) =>
-          command.type === "thread.stop"
-          && command.threadId === createdThread.id,
+          command.type === "thread.stop" &&
+          command.threadId === createdThread.id,
       );
       expect(queuedStop.command).toMatchObject({
         environmentId: environment.id,
         threadId: createdThread.id,
       });
 
-      const reconnectResponse = await harness.app.request("/internal/session/open", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          hostId: host.id,
-          instanceId: "instance-reconcile-created-start-pending",
-          hostName: "Reconcile Created Start Pending Host",
-          hostType: "persistent",
-          dataDir: "/tmp/reconcile-created-start-pending",
-          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
-          activeThreads: [],
-        }),
-      });
+      const reconnectResponse = await harness.app.request(
+        "/internal/session/open",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            hostId: host.id,
+            instanceId: "instance-reconcile-created-start-pending",
+            hostName: "Reconcile Created Start Pending Host",
+            hostType: "persistent",
+            dataDir: "/tmp/reconcile-created-start-pending",
+            protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+            activeThreads: [],
+          }),
+        },
+      );
 
       expect(reconnectResponse.status).toBe(201);
       expect(getThread(harness.db, createdThread.id)).toMatchObject({
@@ -2128,7 +2362,9 @@ describe("internal session routes", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-stop-finalize-delete",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -2157,22 +2393,27 @@ describe("internal session routes", () => {
         },
       });
 
-      const response = await harness.app.request("/internal/session/command-result", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          commandId: stopCommand.id,
-          completedAt: Date.now(),
-          type: "thread.stop",
-          ok: true,
-          result: {},
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            commandId: stopCommand.id,
+            completedAt: Date.now(),
+            type: "thread.stop",
+            ok: true,
+            result: {},
+          }),
+        },
+      );
 
       expect(response.status).toBe(200);
       expect(getThread(harness.db, thread.id)).toBeNull();
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroying");
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+        "destroying",
+      );
 
       const destroyCommand = await waitForQueuedCommand(
         harness,
@@ -2216,21 +2457,26 @@ describe("internal session routes", () => {
         },
       });
 
-      const response = await harness.app.request("/internal/session/command-result", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          commandId: destroyCommand.id,
-          completedAt: Date.now(),
-          type: "environment.destroy",
-          ok: true,
-          result: {},
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            commandId: destroyCommand.id,
+            completedAt: Date.now(),
+            type: "environment.destroy",
+            ok: true,
+            result: {},
+          }),
+        },
+      );
 
       expect(response.status).toBe(200);
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroyed");
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+        "destroyed",
+      );
     } finally {
       await harness.cleanup();
     }
@@ -2276,38 +2522,44 @@ describe("internal session routes", () => {
         requestMethod: "thread/start",
         source: "spawn",
       });
-      const provisionCommand = queueEnvironmentProvisionLifecycleCommand(harness, {
-        hostId: host.id,
-        sessionId: session.id,
-        environmentId: environment.id,
-        command: {
-          type: "environment.provision",
-          environmentId: environment.id,
-          workspaceProvisionType: "unmanaged",
-          path: "/tmp/target",
-          initiator: null,
-        },
-      });
-
-      const response = await harness.app.request("/internal/session/command-result", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
+      const provisionCommand = queueEnvironmentProvisionLifecycleCommand(
+        harness,
+        {
+          hostId: host.id,
           sessionId: session.id,
-          commandId: provisionCommand.id,
-          completedAt: Date.now(),
-          type: "environment.provision",
-          ok: true,
-          result: {
+          environmentId: environment.id,
+          command: {
+            type: "environment.provision",
+            environmentId: environment.id,
+            workspaceProvisionType: "unmanaged",
             path: "/tmp/target",
-            isGitRepo: true,
-            isWorktree: false,
-            branchName: "bb/provision-deleted",
-            defaultBranch: "main",
-            transcript: [],
+            initiator: null,
           },
-        }),
-      });
+        },
+      );
+
+      const response = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            commandId: provisionCommand.id,
+            completedAt: Date.now(),
+            type: "environment.provision",
+            ok: true,
+            result: {
+              path: "/tmp/target",
+              isGitRepo: true,
+              isWorktree: false,
+              branchName: "bb/provision-deleted",
+              defaultBranch: "main",
+              transcript: [],
+            },
+          }),
+        },
+      );
 
       expect(response.status).toBe(200);
       expect(getThread(harness.db, thread.id)).toBeNull();
@@ -2370,22 +2622,27 @@ describe("internal session routes", () => {
         },
       });
 
-      const response = await harness.app.request("/internal/session/command-result", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          commandId: destroyCommand.id,
-          completedAt: Date.now(),
-          type: "environment.destroy",
-          ok: true,
-          result: {},
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            commandId: destroyCommand.id,
+            completedAt: Date.now(),
+            type: "environment.destroy",
+            ok: true,
+            result: {},
+          }),
+        },
+      );
 
       expect(response.status).toBe(200);
       expect(cachedHost.destroy).toHaveBeenCalledTimes(1);
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroyed");
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+        "destroyed",
+      );
       expect(getHost(harness.db, host.id)).toMatchObject({
         destroyedAt: expect.any(Number),
       });
@@ -2424,21 +2681,26 @@ describe("internal session routes", () => {
         }),
       });
 
-      const response = await harness.app.request("/internal/session/command-result", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          commandId: destroyCommand.id,
-          completedAt: Date.now(),
-          type: "environment.destroy",
-          ok: true,
-          result: {},
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/command-result",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            commandId: destroyCommand.id,
+            completedAt: Date.now(),
+            type: "environment.destroy",
+            ok: true,
+            result: {},
+          }),
+        },
+      );
 
       expect(response.status).toBe(200);
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe("provisioning");
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+        "provisioning",
+      );
     } finally {
       await harness.cleanup();
     }

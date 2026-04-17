@@ -29,7 +29,9 @@ async function makeTempDir(prefix: string): Promise<string> {
 afterEach(async () => {
   vi.restoreAllMocks();
   await Promise.all(
-    tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
+    tempDirs
+      .splice(0)
+      .map((dir) => fs.rm(dir, { recursive: true, force: true })),
   );
 });
 
@@ -68,14 +70,21 @@ describe("run-host-daemon auto join", () => {
   it("reuses a persisted host ID when requesting join material", async () => {
     const dataDir = await makeTempDir("bb-run-host-daemon-");
     const persistedHostId = "host_persisted";
-    await fs.writeFile(path.join(dataDir, HOST_ID_FILE_NAME), `${persistedHostId}\n`);
+    await fs.writeFile(
+      path.join(dataDir, HOST_ID_FILE_NAME),
+      `${persistedHostId}\n`,
+    );
 
     const requests: RecordedFetchRequest[] = [];
     vi.stubGlobal(
       "fetch",
       async (input: TestFetchInput, init?: RequestInit): Promise<Response> => {
         const url =
-          input instanceof Request ? input.url : input instanceof URL ? input.toString() : input;
+          input instanceof Request
+            ? input.url
+            : input instanceof URL
+              ? input.toString()
+              : input;
         requests.push({
           body: typeof init?.body === "string" ? init.body : null,
           url,
@@ -130,7 +139,11 @@ describe("run-host-daemon auto join", () => {
       "fetch",
       async (input: TestFetchInput, init?: RequestInit): Promise<Response> => {
         const url =
-          input instanceof Request ? input.url : input instanceof URL ? input.toString() : input;
+          input instanceof Request
+            ? input.url
+            : input instanceof URL
+              ? input.toString()
+              : input;
         requests.push({
           body: typeof init?.body === "string" ? init.body : null,
           url,
@@ -174,21 +187,22 @@ describe("run-host-daemon auto join", () => {
   it("surfaces join request failures", async () => {
     const dataDir = await makeTempDir("bb-run-host-daemon-");
 
-    vi.stubGlobal(
-      "fetch",
-      async (input: TestFetchInput): Promise<Response> => {
-        const url =
-          input instanceof Request ? input.url : input instanceof URL ? input.toString() : input;
-        if (url.endsWith("/health")) {
-          return new Response("", { status: 200 });
-        }
+    vi.stubGlobal("fetch", async (input: TestFetchInput): Promise<Response> => {
+      const url =
+        input instanceof Request
+          ? input.url
+          : input instanceof URL
+            ? input.toString()
+            : input;
+      if (url.endsWith("/health")) {
+        return new Response("", { status: 200 });
+      }
 
-        return new Response("nope", {
-          status: 500,
-          statusText: "Internal Server Error",
-        });
-      },
-    );
+      return new Response("nope", {
+        status: 500,
+        statusText: "Internal Server Error",
+      });
+    });
 
     await expect(
       maybeAddAutoJoinEnv(

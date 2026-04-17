@@ -69,7 +69,8 @@ function getDialogCopy(target: ThreadGitActionDialogTarget) {
     case "commit_and_squash_merge":
       return {
         title: "Commit and squash merge",
-        description: "Commit the current workspace changes, then squash merge this branch.",
+        description:
+          "Commit the current workspace changes, then squash merge this branch.",
         submitLabel: "Commit + squash merge",
         showCommitControls: true,
         showMergeBase: true,
@@ -107,7 +108,10 @@ export function ThreadGitActionDialog({
   onSquashMerge,
   onAskAgentToFix,
 }: ThreadGitActionDialogProps) {
-  const dialogCopy = useMemo(() => (target ? getDialogCopy(target) : null), [target]);
+  const dialogCopy = useMemo(
+    () => (target ? getDialogCopy(target) : null),
+    [target],
+  );
 
   return (
     <Dialog open={target !== null} onOpenChange={onOpenChange}>
@@ -163,7 +167,9 @@ function ThreadGitActionDialogContent({
   target: ThreadGitActionDialogTarget;
 }) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [askAgentInput, setAskAgentInput] = useState<PromptInput[] | null>(null);
+  const [askAgentInput, setAskAgentInput] = useState<PromptInput[] | null>(
+    null,
+  );
   const dialogCopy = getDialogCopy(target);
   const mergeBaseCandidates = getMergeBaseBranchCandidates({
     mergeBaseBranch,
@@ -179,7 +185,9 @@ function ThreadGitActionDialogContent({
     dialogCopy.showMergeBase &&
     showMergeBaseDetails === true &&
     (canSelectMergeBase || Boolean(selectedMergeBaseBranch));
-  const shouldShowChangedFilesRow = Boolean(changedFiles && changedFiles.length > 0);
+  const shouldShowChangedFilesRow = Boolean(
+    changedFiles && changedFiles.length > 0,
+  );
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -222,10 +230,12 @@ function ThreadGitActionDialogContent({
           ? error.askAgentInput
           : null,
       );
-      setErrorMessage(getMutationErrorMessage({
-        error,
-        fallbackMessage: "Failed to start git action.",
-      }));
+      setErrorMessage(
+        getMutationErrorMessage({
+          error,
+          fallbackMessage: "Failed to start git action.",
+        }),
+      );
     }
   };
 
@@ -246,7 +256,10 @@ function ThreadGitActionDialogContent({
         <DialogDescription>{dialogCopy.description}</DialogDescription>
       </DialogHeader>
       <form className="space-y-5 px-6 pt-3 pb-5" onSubmit={handleSubmit}>
-        {branchName || gitStatusLabel || canShowMergeBase || shouldShowChangedFilesRow ? (
+        {branchName ||
+        gitStatusLabel ||
+        canShowMergeBase ||
+        shouldShowChangedFilesRow ? (
           <DetailCard className="border-border/70 bg-muted/20">
             {branchName ? (
               <DetailRow label="Branch" valueClassName="min-w-0 truncate">
@@ -259,7 +272,9 @@ function ThreadGitActionDialogContent({
               <DetailRow label="Git status" valueClassName="min-w-0">
                 <div
                   className="flex min-w-0 items-baseline gap-2 whitespace-nowrap"
-                  title={[gitStatusLabel, gitStatusSummary].filter(Boolean).join(" ")}
+                  title={[gitStatusLabel, gitStatusSummary]
+                    .filter(Boolean)
+                    .join(" ")}
                 >
                   <span className="shrink-0 font-medium">{gitStatusLabel}</span>
                   {gitStatusSummary ? (
@@ -282,7 +297,10 @@ function ThreadGitActionDialogContent({
                     className="max-w-full"
                   />
                 ) : (
-                  <span className="block truncate" title={selectedMergeBaseBranch}>
+                  <span
+                    className="block truncate"
+                    title={selectedMergeBaseBranch}
+                  >
                     {selectedMergeBaseBranch}
                   </span>
                 )}
@@ -318,7 +336,9 @@ function ThreadGitActionDialogContent({
           )}
           <Button
             type="submit"
-            disabled={pending || (dialogCopy.showMergeBase && !selectedMergeBaseBranch)}
+            disabled={
+              pending || (dialogCopy.showMergeBase && !selectedMergeBaseBranch)
+            }
           >
             {pending ? <Loader2 className="size-4 animate-spin" /> : null}
             {dialogCopy.submitLabel}

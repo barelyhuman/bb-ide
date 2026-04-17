@@ -34,9 +34,13 @@ function isFileEditMessage(
   return message.kind === "file-edit";
 }
 
-function getGroupDurationMs(messages: readonly Pick<ViewMessage, "createdAt" | "startedAt">[]): number | undefined {
+function getGroupDurationMs(
+  messages: readonly Pick<ViewMessage, "createdAt" | "startedAt">[],
+): number | undefined {
   if (messages.length === 0) return undefined;
-  const startedAt = Math.min(...messages.map((message) => getMessageStartedAt(message)));
+  const startedAt = Math.min(
+    ...messages.map((message) => getMessageStartedAt(message)),
+  );
   const endedAt = Math.max(...messages.map((message) => message.createdAt));
   const durationMs = endedAt - startedAt;
   return durationMs > 0 ? durationMs : undefined;
@@ -71,7 +75,9 @@ function mergeStatus<T extends TerminalStatus>(left: T, right: T): T {
 function parseReconnectAttempt(
   message: Extract<ViewMessage, { kind: "error" }>,
 ): ReconnectAttempt | null {
-  const match = message.message.trim().match(/^Reconnecting\.\.\.\s+(\d+)\/(\d+)$/);
+  const match = message.message
+    .trim()
+    .match(/^Reconnecting\.\.\.\s+(\d+)\/(\d+)$/);
   if (!match) return null;
 
   const attempt = Number.parseInt(match[1] ?? "", 10);
@@ -86,7 +92,9 @@ function parseReconnectAttempt(
   return { attempt, total };
 }
 
-function mergeConsecutiveReconnectErrors(messages: ViewMessage[]): ViewMessage[] {
+function mergeConsecutiveReconnectErrors(
+  messages: ViewMessage[],
+): ViewMessage[] {
   const merged: ViewMessage[] = [];
   let active: Extract<ViewMessage, { kind: "error" }> | null = null;
   let activeReconnect: ReconnectAttempt | null = null;
@@ -137,7 +145,10 @@ function mergeConsecutiveReconnectErrors(messages: ViewMessage[]): ViewMessage[]
         sourceSeqStart: Math.min(active.sourceSeqStart, message.sourceSeqStart),
         sourceSeqEnd: Math.max(active.sourceSeqEnd, message.sourceSeqEnd),
         createdAt: Math.max(active.createdAt, message.createdAt),
-        startedAt: Math.min(getMessageStartedAt(active), getMessageStartedAt(message)),
+        startedAt: Math.min(
+          getMessageStartedAt(active),
+          getMessageStartedAt(message),
+        ),
         turnId: active.turnId ?? message.turnId,
       };
       activeReconnect = reconnect;
@@ -204,10 +215,16 @@ function mergeConsecutiveToolActivityMessages(
 
     if (isToolExploringMessage(active) && isToolExploringMessage(message)) {
       active.calls = [...active.calls, ...message.calls];
-      active.sourceSeqStart = Math.min(active.sourceSeqStart, message.sourceSeqStart);
+      active.sourceSeqStart = Math.min(
+        active.sourceSeqStart,
+        message.sourceSeqStart,
+      );
       active.sourceSeqEnd = Math.max(active.sourceSeqEnd, message.sourceSeqEnd);
       active.createdAt = Math.max(active.createdAt, message.createdAt);
-      active.startedAt = Math.min(getMessageStartedAt(active), getMessageStartedAt(message));
+      active.startedAt = Math.min(
+        getMessageStartedAt(active),
+        getMessageStartedAt(message),
+      );
       if (!active.turnId && message.turnId) {
         active.turnId = message.turnId;
       }
@@ -223,10 +240,16 @@ function mergeConsecutiveToolActivityMessages(
         ...active.changes,
         ...message.changes.map((change) => ({ ...change })),
       ];
-      active.sourceSeqStart = Math.min(active.sourceSeqStart, message.sourceSeqStart);
+      active.sourceSeqStart = Math.min(
+        active.sourceSeqStart,
+        message.sourceSeqStart,
+      );
       active.sourceSeqEnd = Math.max(active.sourceSeqEnd, message.sourceSeqEnd);
       active.createdAt = Math.max(active.createdAt, message.createdAt);
-      active.startedAt = Math.min(getMessageStartedAt(active), getMessageStartedAt(message));
+      active.startedAt = Math.min(
+        getMessageStartedAt(active),
+        getMessageStartedAt(message),
+      );
       if (!active.turnId && message.turnId) {
         active.turnId = message.turnId;
       }
@@ -298,7 +321,9 @@ function getGroupMessageStatus(
 type IndexedTurnMessage = IndexedTimelineMessage;
 
 function isLossyActiveTurn(messages: IndexedTurnMessage[]): boolean {
-  return messages.some(({ message }) => getGroupMessageStatus(message) === "pending");
+  return messages.some(
+    ({ message }) => getGroupMessageStatus(message) === "pending",
+  );
 }
 
 interface BuildTurnToolGroupRowArgs {
@@ -311,7 +336,8 @@ interface BuildTurnToolGroupRowArgs {
 
 function prepareTimelineMessages(messages: ViewMessage[]): ViewMessage[] {
   const visibleMessages = toTimelineVisibleMessages(messages);
-  const provisioningMergedMessages = mergeProvisioningOperations(visibleMessages);
+  const provisioningMergedMessages =
+    mergeProvisioningOperations(visibleMessages);
   const reconnectMergedMessages = mergeConsecutiveReconnectErrors(
     provisioningMergedMessages,
   );
@@ -391,7 +417,7 @@ function buildTurnToolGroupRow(
 
 function buildPendingTurnRows(turn: ViewTurn): TimelineRow[] {
   return prepareTimelineMessages(turn.messages ?? []).map((message) =>
-    toMessageRow(message)
+    toMessageRow(message),
   );
 }
 
@@ -403,13 +429,15 @@ function buildTerminalTurnRows(
   if (!turn.messages) {
     const rows: TimelineRow[] = [];
     if (turn.summaryCount > 0) {
-      rows.push(buildTurnToolGroupRow({
-        durationMs: turn.durationMs,
-        includeToolGroupMessages,
-        messages: [],
-        summaryCount: turn.summaryCount,
-        turn,
-      }));
+      rows.push(
+        buildTurnToolGroupRow({
+          durationMs: turn.durationMs,
+          includeToolGroupMessages,
+          messages: [],
+          summaryCount: turn.summaryCount,
+          turn,
+        }),
+      );
     }
     if (turn.terminalMessage) {
       rows.push(toMessageRow(turn.terminalMessage));
@@ -425,8 +453,8 @@ function buildTerminalTurnRows(
 
   const collapsedMessageIndices = new Set<number>();
   const groupedTurnMessages = collapseAll
-    ? indexedMessages.filter(({ message }) =>
-        !isTimelineUngroupableMessage(message)
+    ? indexedMessages.filter(
+        ({ message }) => !isTimelineUngroupableMessage(message),
       )
     : getGroupedTerminalTurnMessages(indexedMessages);
   const collapsedByFirstIndex = new Map<number, ViewMessage[]>();
@@ -445,15 +473,17 @@ function buildTerminalTurnRows(
   for (const [index, message] of mergedMessages.entries()) {
     const collapseGroup = collapsedByFirstIndex.get(index);
     if (collapseGroup) {
-      rows.push(buildTurnToolGroupRow({
-        durationMs: collapseAll
-          ? getGroupDurationMs(collapseGroup)
-          : turn.durationMs ?? getGroupDurationMs(collapseGroup),
-        includeToolGroupMessages,
-        messages: collapseGroup,
-        summaryCount: getToolGroupSummaryCount(collapseGroup),
-        turn,
-      }));
+      rows.push(
+        buildTurnToolGroupRow({
+          durationMs: collapseAll
+            ? getGroupDurationMs(collapseGroup)
+            : (turn.durationMs ?? getGroupDurationMs(collapseGroup)),
+          includeToolGroupMessages,
+          messages: collapseGroup,
+          summaryCount: getToolGroupSummaryCount(collapseGroup),
+          turn,
+        }),
+      );
     }
     if (collapsedMessageIndices.has(index)) {
       continue;
@@ -487,7 +517,7 @@ export function buildTimelineRows(
     }
     rows.push(
       ...prepareTimelineMessages(standaloneMessages).map((message) =>
-        toMessageRow(message)
+        toMessageRow(message),
       ),
     );
     standaloneMessages.length = 0;

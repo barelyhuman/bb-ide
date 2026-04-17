@@ -2,12 +2,13 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { AgentRuntime } from "@bb/agent-runtime";
-import type { AvailableModel, DynamicTool, ThreadExecutionOptions } from "@bb/domain";
-import { makeWorkspaceMergeBase, makeWorkspaceStatus } from "@bb/test-helpers";
 import type {
-  HostWorkspace,
-  ProvisionWorkspaceArgs,
-} from "@bb/host-workspace";
+  AvailableModel,
+  DynamicTool,
+  ThreadExecutionOptions,
+} from "@bb/domain";
+import { makeWorkspaceMergeBase, makeWorkspaceStatus } from "@bb/test-helpers";
+import type { HostWorkspace, ProvisionWorkspaceArgs } from "@bb/host-workspace";
 import { RuntimeManager } from "../../src/runtime-manager.js";
 import { listFilesRecursively } from "../../src/command-handlers/file-list.js";
 import { noopEventSink } from "../../src/command-dispatch-support.js";
@@ -104,7 +105,10 @@ export function createFakeWorkspace(pathname: string) {
       state.resetCount += 1;
     },
     async fetch() {},
-    async squashMerge(options: { targetBranch: string; commitMessage: string }) {
+    async squashMerge(options: {
+      targetBranch: string;
+      commitMessage: string;
+    }) {
       return {
         merged: true,
         commitSha: `merge-${options.targetBranch}`,
@@ -186,7 +190,9 @@ export function createFakeRuntime() {
       state.resumedOptions = args.options;
       state.resumedInstructions = args.instructions;
       state.resumedProviderThreadId = args.providerThreadId;
-      return { providerThreadId: args.providerThreadId ?? `provider-${args.threadId}` };
+      return {
+        providerThreadId: args.providerThreadId ?? `provider-${args.threadId}`,
+      };
     },
     async runTurn(args: {
       clientRequestSequence?: number;
@@ -238,11 +244,13 @@ export function createFakeRuntime() {
   };
 }
 
-export function createHarness(args: {
-  workspacePath?: string;
-  currentBranch?: string;
-  isWorktree?: boolean;
-} = {}) {
+export function createHarness(
+  args: {
+    workspacePath?: string;
+    currentBranch?: string;
+    isWorktree?: boolean;
+  } = {},
+) {
   const { workspace, state: workspaceState } = createFakeWorkspace(
     args.workspacePath ?? "/tmp/env-1",
   );
@@ -269,12 +277,15 @@ export function createHarness(args: {
     workspaceState,
     workspace,
     /** Default dispatch options with threadStorageRootPath for tests. */
-    dispatchOptions(overrides: { dataDir?: string; threadStorageRootPath?: string } = {}) {
+    dispatchOptions(
+      overrides: { dataDir?: string; threadStorageRootPath?: string } = {},
+    ) {
       return {
         dataDir: overrides.dataDir ?? "/tmp/bb-test-data",
         eventSink: noopEventSink,
         runtimeManager: manager,
-        threadStorageRootPath: overrides.threadStorageRootPath ?? "/tmp/bb-test-thread-storage",
+        threadStorageRootPath:
+          overrides.threadStorageRootPath ?? "/tmp/bb-test-thread-storage",
       };
     },
   };
@@ -288,6 +299,8 @@ export async function makeTempDir(prefix: string): Promise<string> {
 
 export async function cleanupTempDirs(): Promise<void> {
   await Promise.all(
-    tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
+    tempDirs
+      .splice(0)
+      .map((dir) => fs.rm(dir, { recursive: true, force: true })),
   );
 }

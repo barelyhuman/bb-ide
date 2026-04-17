@@ -1,8 +1,5 @@
 import { and, eq, inArray } from "drizzle-orm";
-import type {
-  LifecycleOperationState,
-  ThreadOperationKind,
-} from "@bb/domain";
+import type { LifecycleOperationState, ThreadOperationKind } from "@bb/domain";
 import { createThreadOperationId } from "../ids.js";
 import { threadOperations } from "../schema.js";
 import {
@@ -56,16 +53,18 @@ function getThreadOperationRecord(
   db: ThreadOperationReadConnection,
   args: GetThreadOperationArgs,
 ): ThreadOperationRow | null {
-  return db
-    .select()
-    .from(threadOperations)
-    .where(
-      and(
-        eq(threadOperations.threadId, args.threadId),
-        eq(threadOperations.kind, args.kind),
-      ),
-    )
-    .get() ?? null;
+  return (
+    db
+      .select()
+      .from(threadOperations)
+      .where(
+        and(
+          eq(threadOperations.threadId, args.threadId),
+          eq(threadOperations.kind, args.kind),
+        ),
+      )
+      .get() ?? null
+  );
 }
 
 function updateThreadOperationStateRecord(
@@ -74,28 +73,30 @@ function updateThreadOperationStateRecord(
 ): ThreadOperationRow | null {
   const now = Date.now();
 
-  return db
-    .update(threadOperations)
-    .set({
-      state: args.state,
-      payload: args.payload,
-      commandId: args.commandId,
-      queuedAt: args.queuedAt,
-      completedAt: args.completedAt,
-      failureReason: args.failureReason,
-      updatedAt: now,
-    })
-    .where(
-      and(
-        eq(threadOperations.threadId, args.threadId),
-        eq(threadOperations.kind, args.kind),
-        args.allowedCurrentStates
-          ? inArray(threadOperations.state, [...args.allowedCurrentStates])
-          : undefined,
-      ),
-    )
-    .returning()
-    .get() ?? null;
+  return (
+    db
+      .update(threadOperations)
+      .set({
+        state: args.state,
+        payload: args.payload,
+        commandId: args.commandId,
+        queuedAt: args.queuedAt,
+        completedAt: args.completedAt,
+        failureReason: args.failureReason,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(threadOperations.threadId, args.threadId),
+          eq(threadOperations.kind, args.kind),
+          args.allowedCurrentStates
+            ? inArray(threadOperations.state, [...args.allowedCurrentStates])
+            : undefined,
+        ),
+      )
+      .returning()
+      .get() ?? null
+  );
 }
 
 const threadOperationStore: LifecycleOperationStore<
@@ -176,11 +177,13 @@ export function getThreadOperationByCommandId(
   db: ThreadOperationReadConnection,
   commandId: string,
 ): ThreadOperationRow | null {
-  return db
-    .select()
-    .from(threadOperations)
-    .where(eq(threadOperations.commandId, commandId))
-    .get() ?? null;
+  return (
+    db
+      .select()
+      .from(threadOperations)
+      .where(eq(threadOperations.commandId, commandId))
+      .get() ?? null
+  );
 }
 
 export function upsertThreadOperationRecord(

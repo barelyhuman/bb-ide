@@ -4,7 +4,9 @@ import type {
   ViewTimelineEntry,
 } from "@bb/domain";
 
-function getProjectionEntryMessages(entry: ViewTimelineEntry): readonly ViewMessage[] {
+function getProjectionEntryMessages(
+  entry: ViewTimelineEntry,
+): readonly ViewMessage[] {
   if (entry.kind === "message") {
     return [entry.message];
   }

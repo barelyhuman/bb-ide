@@ -145,7 +145,9 @@ export function hasMeaningfulComposerHeightChange(
   previousHeight: number | null,
   nextHeight: number,
 ): boolean {
-  return previousHeight !== null && Math.abs(previousHeight - nextHeight) >= 0.5;
+  return (
+    previousHeight !== null && Math.abs(previousHeight - nextHeight) >= 0.5
+  );
 }
 
 export function shouldLoadToolGroupMessages(

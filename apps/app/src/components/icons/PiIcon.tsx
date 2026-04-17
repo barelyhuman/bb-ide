@@ -9,7 +9,8 @@ export function PiIcon({ className }: { className?: string }) {
     >
       <title>Pi</title>
       {/* P shape: outer boundary clockwise, inner hole counter-clockwise */}
-      <path d="
+      <path
+        d="
         M165.29 165.29
         H517.36
         V400
@@ -24,9 +25,10 @@ export function PiIcon({ className }: { className?: string }) {
         H400
         V282.65
         Z
-      " />
+      "
+      />
       {/* i dot */}
       <path d="M517.36 400 H634.72 V634.72 H517.36 Z" />
     </svg>
-  )
+  );
 }

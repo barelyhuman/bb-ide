@@ -2,9 +2,18 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  bold, cyan, dim, green, red, yellow,
-  log, beginStep, endStep,
-  waitForHealth, build, createOutputBuffer,
+  bold,
+  cyan,
+  dim,
+  green,
+  red,
+  yellow,
+  log,
+  beginStep,
+  endStep,
+  waitForHealth,
+  build,
+  createOutputBuffer,
 } from "../lib/script-helpers.js";
 import { commonConfig } from "@bb/config/common";
 import { hostDaemonEntrypointConfig } from "@bb/config/host-daemon-entrypoint";
@@ -16,7 +25,10 @@ import {
   toExitCode,
   waitForProcessExit,
 } from "../lib/process-helpers.js";
-import { resolveNodeEnvironment, resolveScriptMode } from "../lib/script-config.js";
+import {
+  resolveNodeEnvironment,
+  resolveScriptMode,
+} from "../lib/script-config.js";
 
 interface StartHostDaemonContext {
   authFile: string;
@@ -36,7 +48,9 @@ interface EnrollmentRequirements {
 const commandDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(commandDir, "..", "..");
 const repoRoot = resolve(packageRoot, "..", "..");
-const runHostDaemonCommandPath = fileURLToPath(new URL("./run-host-daemon.js", import.meta.url));
+const runHostDaemonCommandPath = fileURLToPath(
+  new URL("./run-host-daemon.js", import.meta.url),
+);
 
 export function resolveStartHostDaemonContext(): StartHostDaemonContext {
   const dataDir = commonConfig.BB_DATA_DIR;
@@ -68,26 +82,39 @@ export async function main(): Promise<void> {
 
   process.stdout.write(`\n  ${bold("bb host-daemon")}\n\n`);
 
-  if (!(await build({
-    dataDir: context.dataDir,
-    repoRoot,
-    turboFilters: ["@bb/host-daemon", "@bb/cli"],
-  }))) {
+  if (
+    !(await build({
+      dataDir: context.dataDir,
+      repoRoot,
+      turboFilters: ["@bb/host-daemon", "@bb/cli"],
+    }))
+  ) {
     return;
   }
 
   if (existsSync(context.daemonLockDir)) {
     log(yellow("!"), "Daemon lock is held — another instance may be running");
     log(" ", dim(`lock: ${context.daemonLockDir}`));
-    log(" ", dim("Remove it manually if the previous process exited uncleanly."));
+    log(
+      " ",
+      dim("Remove it manually if the previous process exited uncleanly."),
+    );
     process.stdout.write("\n");
   }
 
   if (!enrollment.enrolled && !enrollment.enrollKey) {
-    endStep(red("✗"), `Not enrolled — set BB_HOST_ENROLL_KEY to join ${context.serverUrl}`);
+    endStep(
+      red("✗"),
+      `Not enrolled — set BB_HOST_ENROLL_KEY to join ${context.serverUrl}`,
+    );
     process.stdout.write("\n");
     log(" ", dim("Required env vars for first-time enrollment:"));
-    log(" ", dim("  BB_SERVER_URL          (optional) Override the default bb server URL"));
+    log(
+      " ",
+      dim(
+        "  BB_SERVER_URL          (optional) Override the default bb server URL",
+      ),
+    );
     log(" ", dim("  BB_HOST_ENROLL_KEY     Enroll key from the server"));
     log(" ", dim("  BB_HOST_ID             (optional) Preferred host ID"));
     process.stdout.write("\n");
@@ -95,7 +122,9 @@ export async function main(): Promise<void> {
     return;
   }
 
-  beginStep(enrollment.enrolled ? "Starting daemon" : "Enrolling and starting daemon");
+  beginStep(
+    enrollment.enrolled ? "Starting daemon" : "Enrolling and starting daemon",
+  );
 
   const outputBuffer = createOutputBuffer();
   const daemonProcess = spawnScriptProcess({
@@ -131,7 +160,10 @@ export async function main(): Promise<void> {
 
   try {
     try {
-      await waitForHealth(`http://localhost:${context.daemonPort}/health`, daemonProcess);
+      await waitForHealth(
+        `http://localhost:${context.daemonPort}/health`,
+        daemonProcess,
+      );
     } catch {
       endStep(red("✗"), "Host daemon failed to start");
       log(" ", dim(`lock: ${context.daemonLockDir}`));

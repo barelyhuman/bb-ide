@@ -14,7 +14,9 @@ const DIFF_WORKER_POOL_MIN_SIZE = 1;
 
 function getDiffWorkerPoolSize(): number {
   const hardwareConcurrency =
-    typeof navigator !== "undefined" ? navigator.hardwareConcurrency : undefined;
+    typeof navigator !== "undefined"
+      ? navigator.hardwareConcurrency
+      : undefined;
   if (hardwareConcurrency === undefined || hardwareConcurrency <= 2) {
     return DIFF_WORKER_POOL_MIN_SIZE;
   }
@@ -51,5 +53,5 @@ createRoot(document.getElementById("root")!).render(
       </WorkerPoolContextProvider>
       <Toaster position="bottom-right" />
     </QueryClientProvider>
-  </StrictMode>
+  </StrictMode>,
 );

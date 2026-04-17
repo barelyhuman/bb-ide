@@ -41,7 +41,9 @@ export function parseTarget(value: string): RestartTarget {
   throw new Error('Expected one of: "both", "server", "host-daemon"');
 }
 
-export async function readRunningSupervisorPid(serviceName: string): Promise<number> {
+export async function readRunningSupervisorPid(
+  serviceName: string,
+): Promise<number> {
   const pidPath = resolveSupervisorPidPath(serviceName);
   return readRunningPid({
     pidPath,
@@ -61,16 +63,23 @@ async function runBuild(filters: string[]): Promise<boolean> {
   return exitCode === 0;
 }
 
-export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
+export async function main(
+  argv: string[] = process.argv.slice(2),
+): Promise<void> {
   const target = parseTarget(argv[0] ?? "both");
   const targetConfig = restartTargets[target];
   const supervisorPids = new Map<string, number>();
 
   for (const serviceName of targetConfig.services) {
-    supervisorPids.set(serviceName, await readRunningSupervisorPid(serviceName));
+    supervisorPids.set(
+      serviceName,
+      await readRunningSupervisorPid(serviceName),
+    );
   }
 
-  process.stdout.write(`[dev] Building ${targetConfig.label} before restart.\n`);
+  process.stdout.write(
+    `[dev] Building ${targetConfig.label} before restart.\n`,
+  );
   const buildSucceeded = await runBuild(targetConfig.filters);
   if (!buildSucceeded) {
     process.exitCode = 1;
@@ -88,7 +97,8 @@ if (
   resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   void main().catch((error) => {
-    const message = error instanceof Error ? error.stack ?? error.message : String(error);
+    const message =
+      error instanceof Error ? (error.stack ?? error.message) : String(error);
     process.stderr.write(`${message}\n`);
     process.exitCode = 1;
   });

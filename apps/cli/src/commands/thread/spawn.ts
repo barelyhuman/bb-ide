@@ -65,10 +65,14 @@ export function buildSpawnEnvironment(args: {
     if (newEnvironmentKind.startsWith("sandbox/")) {
       const sandboxType = newEnvironmentKind.slice("sandbox/".length);
       if (!sandboxType) {
-        throw new Error("Missing sandbox type after 'sandbox/'. Example: sandbox/e2b.");
+        throw new Error(
+          "Missing sandbox type after 'sandbox/'. Example: sandbox/e2b.",
+        );
       }
       if (args.explicitHost) {
-        throw new Error("Cannot combine --host with sandbox environments. Sandbox environments provision their own hosts.");
+        throw new Error(
+          "Cannot combine --host with sandbox environments. Sandbox environments provision their own hosts.",
+        );
       }
       return { type: "sandbox-host", sandboxType };
     }
@@ -147,66 +151,68 @@ export function registerSpawnCommand(
       "--no-context-parent-thread",
       "Do not default parent thread context to BB_THREAD_ID",
     )
-    .action(action(async (opts: ThreadSpawnCommandOptions) => {
-      const client = createClient(getUrl());
-      if (opts.parentThread && opts.contextParentThread === false) {
-        throw new Error(
-          "Cannot combine --parent-thread with --no-context-parent-thread.",
-        );
-      }
+    .action(
+      action(async (opts: ThreadSpawnCommandOptions) => {
+        const client = createClient(getUrl());
+        if (opts.parentThread && opts.contextParentThread === false) {
+          throw new Error(
+            "Cannot combine --parent-thread with --no-context-parent-thread.",
+          );
+        }
 
-      const projectId = requireProjectId(opts.project);
-      const environmentValue = resolveEnvironmentId(opts.environment);
-      let hostId: string | null = opts.host ?? null;
-      if (!hostId) {
-        hostId = await fetchLocalHostId();
-      }
-      const environment = buildSpawnEnvironment({
-        environmentValue,
-        newEnvironmentKind: opts.newEnvironment,
-        hostId,
-        explicitHost: !!opts.host,
-      });
-      const reasoningLevel = parseReasoningLevel(opts.reasoningLevel);
-      const serviceTier = parseServiceTier(opts.serviceTier);
-      const permissionMode = parsePermissionMode(opts.permissionMode);
-      const parentThreadId =
-        opts.parentThread ??
-        (opts.contextParentThread === false ? undefined : resolveThreadId());
+        const projectId = requireProjectId(opts.project);
+        const environmentValue = resolveEnvironmentId(opts.environment);
+        let hostId: string | null = opts.host ?? null;
+        if (!hostId) {
+          hostId = await fetchLocalHostId();
+        }
+        const environment = buildSpawnEnvironment({
+          environmentValue,
+          newEnvironmentKind: opts.newEnvironment,
+          hostId,
+          explicitHost: !!opts.host,
+        });
+        const reasoningLevel = parseReasoningLevel(opts.reasoningLevel);
+        const serviceTier = parseServiceTier(opts.serviceTier);
+        const permissionMode = parsePermissionMode(opts.permissionMode);
+        const parentThreadId =
+          opts.parentThread ??
+          (opts.contextParentThread === false ? undefined : resolveThreadId());
 
-      let thread: Thread;
-      try {
-        thread = await unwrap<Thread>(
-          client.api.v1.threads.$post({
-            json: {
-              origin: "cli",
-              projectId,
-              ...(opts.provider ? { providerId: opts.provider } : {}),
-              ...(opts.model ? { model: opts.model } : {}),
-              input: [{ type: "text", text: opts.prompt }],
-              ...(reasoningLevel ? { reasoningLevel } : {}),
-              ...(opts.title ? { title: opts.title } : {}),
-              ...(serviceTier ? { serviceTier } : {}),
-              ...(permissionMode ? { permissionMode } : {}),
-              environment,
-              ...(parentThreadId ? { parentThreadId } : {}),
-            },
-          }),
-        );
-      } catch (err: unknown) {
-        throw prependErrorContext("Failed to create thread", err);
-      }
+        let thread: Thread;
+        try {
+          thread = await unwrap<Thread>(
+            client.api.v1.threads.$post({
+              json: {
+                origin: "cli",
+                projectId,
+                ...(opts.provider ? { providerId: opts.provider } : {}),
+                ...(opts.model ? { model: opts.model } : {}),
+                input: [{ type: "text", text: opts.prompt }],
+                ...(reasoningLevel ? { reasoningLevel } : {}),
+                ...(opts.title ? { title: opts.title } : {}),
+                ...(serviceTier ? { serviceTier } : {}),
+                ...(permissionMode ? { permissionMode } : {}),
+                environment,
+                ...(parentThreadId ? { parentThreadId } : {}),
+              },
+            }),
+          );
+        } catch (err: unknown) {
+          throw prependErrorContext("Failed to create thread", err);
+        }
 
-      if (outputJson(opts, thread)) return;
-      console.log(`Thread spawned: ${thread.id}`);
-      if (
-        thread.parentThreadId &&
-        thread.parentThreadId === resolveThreadId()
-      ) {
-        console.log("You will be notified when this thread is done.");
-      }
-      printThread(thread);
-    }));
+        if (outputJson(opts, thread)) return;
+        console.log(`Thread spawned: ${thread.id}`);
+        if (
+          thread.parentThreadId &&
+          thread.parentThreadId === resolveThreadId()
+        ) {
+          console.log("You will be notified when this thread is done.");
+        }
+        printThread(thread);
+      }),
+    );
 }
 
 function printThread(thread: Thread): void {

@@ -5,9 +5,7 @@ import {
   getThread,
 } from "@bb/db";
 import type { HostDaemonCommand } from "@bb/host-daemon-contract";
-import type {
-  LocalPathProjectSource,
-} from "@bb/domain";
+import type { LocalPathProjectSource } from "@bb/domain";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import type { ThreadCreateServiceRequest } from "./thread-create-request.js";
@@ -81,26 +79,24 @@ export type EnvironmentProvisionCommandArgs =
 export function buildEnvironmentProvisionCommand(
   args: EnvironmentProvisionCommandArgs,
 ): Extract<HostDaemonCommand, { type: "environment.provision" }> {
-  return (
-    args.workspaceProvisionType === "unmanaged"
-      ? {
-          type: "environment.provision" as const,
-          environmentId: args.environmentId,
-          initiator: args.initiator,
-          workspaceProvisionType: args.workspaceProvisionType,
-          path: args.path,
-        }
-      : {
-          type: "environment.provision" as const,
-          environmentId: args.environmentId,
-          initiator: args.initiator,
-          workspaceProvisionType: args.workspaceProvisionType,
-          sourcePath: args.sourcePath,
-          targetPath: args.targetPath,
-          branchName: args.branchName,
-          setupTimeoutMs: args.setupTimeoutMs,
-        }
-  );
+  return args.workspaceProvisionType === "unmanaged"
+    ? {
+        type: "environment.provision" as const,
+        environmentId: args.environmentId,
+        initiator: args.initiator,
+        workspaceProvisionType: args.workspaceProvisionType,
+        path: args.path,
+      }
+    : {
+        type: "environment.provision" as const,
+        environmentId: args.environmentId,
+        initiator: args.initiator,
+        workspaceProvisionType: args.workspaceProvisionType,
+        sourcePath: args.sourcePath,
+        targetPath: args.targetPath,
+        branchName: args.branchName,
+        setupTimeoutMs: args.setupTimeoutMs,
+      };
 }
 
 export function createThreadRecord(
@@ -124,10 +120,7 @@ export function createThreadRecord(
   });
 }
 
-export function getThreadSafe(
-  deps: Pick<AppDeps, "db">,
-  threadId: string,
-) {
+export function getThreadSafe(deps: Pick<AppDeps, "db">, threadId: string) {
   const thread = getThread(deps.db, threadId);
   if (!thread) {
     throw new ApiError(500, "internal_error", "Thread was not created");

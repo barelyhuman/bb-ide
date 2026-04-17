@@ -41,8 +41,13 @@ interface ManagerDeleteCommandOptions {
   json?: boolean;
 }
 
-export function registerManagerCommands(program: Command, getUrl: () => string): void {
-  const manager = program.command("manager").description("Manage project managers");
+export function registerManagerCommands(
+  program: Command,
+  getUrl: () => string,
+): void {
+  const manager = program
+    .command("manager")
+    .description("Manage project managers");
 
   manager
     .command("hire [projectId]")
@@ -59,114 +64,144 @@ export function registerManagerCommands(program: Command, getUrl: () => string):
       "--model <model>",
       "Model ID for the manager. Omit to use the project's remembered manager default for the resolved provider",
     )
-    .option("--reasoning-level <level>", "Reasoning level (low, medium, high, xhigh)")
+    .option(
+      "--reasoning-level <level>",
+      "Reasoning level (low, medium, high, xhigh)",
+    )
     .option("--permission-mode <mode>", MANAGED_PERMISSION_MODE_HELP)
     .option("--host <id>", "Host ID (defaults to local host)")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (
-      projectIdArg: string | undefined,
-      opts: ManagerHireCommandOptions,
-    ) => {
-      const client = createClient(getUrl());
-      const resolvedProject = requireProjectIdWithLabel(projectIdArg ?? opts.project);
-      const projectId = resolvedProject.id;
-      printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
-      const reasoningLevel = parseReasoningLevel(opts.reasoningLevel);
-      const permissionMode = parsePermissionMode(opts.permissionMode);
-      let hostId: string | undefined = opts.host;
-      if (!hostId) {
-        hostId = (await fetchLocalHostId()) ?? undefined;
-        if (!hostId) {
-          throw new Error(
-            "Cannot auto-detect host ID (daemon unreachable). Pass --host <id> explicitly.",
+    .action(
+      action(
+        async (
+          projectIdArg: string | undefined,
+          opts: ManagerHireCommandOptions,
+        ) => {
+          const client = createClient(getUrl());
+          const resolvedProject = requireProjectIdWithLabel(
+            projectIdArg ?? opts.project,
           );
-        }
-      }
-      const thread = await unwrap<Thread>(
-        client.api.v1.projects[":id"].managers.$post({
-          param: { id: projectId },
-          json: {
-            origin: "cli",
-            ...(opts.name ? { name: opts.name } : {}),
-            ...(opts.provider ? { providerId: opts.provider } : {}),
-            ...(opts.model ? { model: opts.model } : {}),
-            environment: { type: "host", hostId },
-            ...(reasoningLevel ? { reasoningLevel } : {}),
-            ...(permissionMode ? { permissionMode } : {}),
-          },
-        }),
-      );
-      if (outputJson(opts, thread)) return;
-      console.log(`Manager hired: ${thread.id}`);
-      printManagerThread(thread);
-    }));
+          const projectId = resolvedProject.id;
+          printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
+          const reasoningLevel = parseReasoningLevel(opts.reasoningLevel);
+          const permissionMode = parsePermissionMode(opts.permissionMode);
+          let hostId: string | undefined = opts.host;
+          if (!hostId) {
+            hostId = (await fetchLocalHostId()) ?? undefined;
+            if (!hostId) {
+              throw new Error(
+                "Cannot auto-detect host ID (daemon unreachable). Pass --host <id> explicitly.",
+              );
+            }
+          }
+          const thread = await unwrap<Thread>(
+            client.api.v1.projects[":id"].managers.$post({
+              param: { id: projectId },
+              json: {
+                origin: "cli",
+                ...(opts.name ? { name: opts.name } : {}),
+                ...(opts.provider ? { providerId: opts.provider } : {}),
+                ...(opts.model ? { model: opts.model } : {}),
+                environment: { type: "host", hostId },
+                ...(reasoningLevel ? { reasoningLevel } : {}),
+                ...(permissionMode ? { permissionMode } : {}),
+              },
+            }),
+          );
+          if (outputJson(opts, thread)) return;
+          console.log(`Manager hired: ${thread.id}`);
+          printManagerThread(thread);
+        },
+      ),
+    );
 
   manager
     .command("list [projectId]")
     .description("List managers for a project")
     .option("--project <id>", "Project ID (defaults to BB_PROJECT_ID)")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (
-      projectIdArg: string | undefined,
-      opts: ManagerListCommandOptions,
-    ) => {
-      const client = createClient(getUrl());
-      const resolvedProject = requireProjectIdWithLabel(projectIdArg ?? opts.project);
-      const projectId = resolvedProject.id;
-      printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
-      const managers = await unwrap<Thread[]>(
-        client.api.v1.threads.$get({
-          query: { projectId, type: "manager" },
-        }),
-      );
-      if (outputJson(opts, managers)) return;
-      if (managers.length === 0) {
-        console.log("No managers hired");
-        return;
-      }
-      printThreadsTable(managers);
-    }));
+    .action(
+      action(
+        async (
+          projectIdArg: string | undefined,
+          opts: ManagerListCommandOptions,
+        ) => {
+          const client = createClient(getUrl());
+          const resolvedProject = requireProjectIdWithLabel(
+            projectIdArg ?? opts.project,
+          );
+          const projectId = resolvedProject.id;
+          printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
+          const managers = await unwrap<Thread[]>(
+            client.api.v1.threads.$get({
+              query: { projectId, type: "manager" },
+            }),
+          );
+          if (outputJson(opts, managers)) return;
+          if (managers.length === 0) {
+            console.log("No managers hired");
+            return;
+          }
+          printThreadsTable(managers);
+        },
+      ),
+    );
 
   manager
     .command("status <id>")
     .description("Show manager status and managed threads")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (id: string, opts: ManagerStatusCommandOptions) => {
-      const client = createClient(getUrl());
-      const managerThreadId = id;
-      const managerThread = await getManagerThreadById(client, managerThreadId);
-      const managedThreads = await listManagedThreads(client, managerThread.projectId, managerThreadId);
-      if (outputJson(opts, { manager: managerThread, managedThreads })) return;
-      printManagerThread(managerThread);
-      printManagedThreadTable(managedThreads);
-    }));
+    .action(
+      action(async (id: string, opts: ManagerStatusCommandOptions) => {
+        const client = createClient(getUrl());
+        const managerThreadId = id;
+        const managerThread = await getManagerThreadById(
+          client,
+          managerThreadId,
+        );
+        const managedThreads = await listManagedThreads(
+          client,
+          managerThread.projectId,
+          managerThreadId,
+        );
+        if (outputJson(opts, { manager: managerThread, managedThreads }))
+          return;
+        printManagerThread(managerThread);
+        printManagedThreadTable(managedThreads);
+      }),
+    );
 
   manager
     .command("delete <id>")
     .description("Delete a manager permanently")
     .option("--yes", "Skip the confirmation prompt")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (id: string, opts: ManagerDeleteCommandOptions) => {
-      const client = createClient(getUrl());
-      const managerThreadId = id;
-      const managerThread = await getManagerThreadById(client, managerThreadId);
-      if (!opts.yes) {
-        const confirmed = await confirmDestructiveAction(
-          `Delete manager "${managerThread.title ?? managerThread.id}" permanently? This cannot be undone.`,
+    .action(
+      action(async (id: string, opts: ManagerDeleteCommandOptions) => {
+        const client = createClient(getUrl());
+        const managerThreadId = id;
+        const managerThread = await getManagerThreadById(
+          client,
+          managerThreadId,
         );
-        if (!confirmed) {
-          console.log(`Manager ${managerThreadId} deletion cancelled`);
-          return;
+        if (!opts.yes) {
+          const confirmed = await confirmDestructiveAction(
+            `Delete manager "${managerThread.title ?? managerThread.id}" permanently? This cannot be undone.`,
+          );
+          if (!confirmed) {
+            console.log(`Manager ${managerThreadId} deletion cancelled`);
+            return;
+          }
         }
-      }
-      await unwrap<{ ok: boolean }>(
-        client.api.v1.threads[":id"].$delete({
-          param: { id: managerThreadId },
-        }),
-      );
-      if (outputJson(opts, { ok: true, managerId: managerThreadId })) return;
-      console.log(`Manager ${managerThreadId} deleted`);
-    }));
+        await unwrap<{ ok: boolean }>(
+          client.api.v1.threads[":id"].$delete({
+            param: { id: managerThreadId },
+          }),
+        );
+        if (outputJson(opts, { ok: true, managerId: managerThreadId })) return;
+        console.log(`Manager ${managerThreadId} deleted`);
+      }),
+    );
 }
 
 async function getThreadById(

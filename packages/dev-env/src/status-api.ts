@@ -80,19 +80,22 @@ async function computeStatus(
   dependencies: DevEnvStatusDependencies,
   runtime: DevEnvRuntime,
 ): Promise<DevEnvStatus> {
-  const services = await Promise.all(devServiceNameValues.map(async (serviceName) => {
-    const fingerprint = await dependencies.computeServiceFingerprint(serviceName);
-    const baselineFingerprint = runtime.baselineFingerprints.get(serviceName);
-    if (!baselineFingerprint) {
-      throw new Error(`Missing ${serviceName} baseline fingerprint`);
-    }
-    return {
-      baselineFingerprint,
-      changed: baselineFingerprint !== fingerprint,
-      fingerprint,
-      serviceName,
-    };
-  }));
+  const services = await Promise.all(
+    devServiceNameValues.map(async (serviceName) => {
+      const fingerprint =
+        await dependencies.computeServiceFingerprint(serviceName);
+      const baselineFingerprint = runtime.baselineFingerprints.get(serviceName);
+      if (!baselineFingerprint) {
+        throw new Error(`Missing ${serviceName} baseline fingerprint`);
+      }
+      return {
+        baselineFingerprint,
+        changed: baselineFingerprint !== fingerprint,
+        fingerprint,
+        serviceName,
+      };
+    }),
+  );
 
   const fingerprintHash = createHash("sha256");
   for (const service of services) {
@@ -113,20 +116,25 @@ async function updateBaselines(
   runtime: DevEnvRuntime,
   target: RestartTarget,
 ): Promise<void> {
-  await Promise.all(servicesForTarget(target).map(async (serviceName) => {
-    runtime.baselineFingerprints.set(
-      serviceName,
-      await dependencies.computeServiceFingerprint(serviceName),
-    );
-  }));
+  await Promise.all(
+    servicesForTarget(target).map(async (serviceName) => {
+      runtime.baselineFingerprints.set(
+        serviceName,
+        await dependencies.computeServiceFingerprint(serviceName),
+      );
+    }),
+  );
 }
 
-async function parseRestartRequestBody(context: Context): Promise<RestartRequestBody> {
+async function parseRestartRequestBody(
+  context: Context,
+): Promise<RestartRequestBody> {
   try {
     return restartRequestBodySchema.parse(await context.req.json());
   } catch {
     throw new HTTPException(400, {
-      message: 'Expected JSON body with target "both", "server", or "host-daemon"',
+      message:
+        'Expected JSON body with target "both", "server", or "host-daemon"',
     });
   }
 }
@@ -154,12 +162,14 @@ export async function createRuntime(
   dependencies: DevEnvStatusDependencies,
 ): Promise<DevEnvRuntime> {
   const baselineFingerprints = new Map<DevServiceName, string>();
-  await Promise.all(devServiceNameValues.map(async (serviceName) => {
-    baselineFingerprints.set(
-      serviceName,
-      await dependencies.computeServiceFingerprint(serviceName),
-    );
-  }));
+  await Promise.all(
+    devServiceNameValues.map(async (serviceName) => {
+      baselineFingerprints.set(
+        serviceName,
+        await dependencies.computeServiceFingerprint(serviceName),
+      );
+    }),
+  );
   return { baselineFingerprints };
 }
 
@@ -171,7 +181,7 @@ export function createDevEnvStatusApp(
 
   app.get("/health", (context) => context.text("ok"));
   app.get("/status", async (context) =>
-    context.json(await computeStatus(dependencies, runtime))
+    context.json(await computeStatus(dependencies, runtime)),
   );
   app.post("/restart", async (context) => {
     const body = await parseRestartRequestBody(context);

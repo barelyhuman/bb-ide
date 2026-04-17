@@ -91,48 +91,58 @@ describe("expired commands", () => {
         threadId: args.threadId,
       }),
     },
-  ])("reports expired $type results with the original command type", async ({ type, buildPayload }) => {
-    const harness = await createTestAppHarness();
-    try {
-      const host = seedHost(harness.deps, { id: `host-expired-${type}` });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: `/tmp/${type.replace(".", "-")}`,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "created",
-      });
-      const command = queueCommand(harness.db, harness.hub, {
-        hostId: host.id,
-        type,
-        payload: JSON.stringify(buildPayload({
+  ])(
+    "reports expired $type results with the original command type",
+    async ({ type, buildPayload }) => {
+      const harness = await createTestAppHarness();
+      try {
+        const host = seedHost(harness.deps, { id: `host-expired-${type}` });
+        const { project } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+        });
+        const environment = seedEnvironment(harness.deps, {
+          hostId: host.id,
+          projectId: project.id,
+          path: `/tmp/${type.replace(".", "-")}`,
+        });
+        const thread = seedThread(harness.deps, {
+          projectId: project.id,
           environmentId: environment.id,
-          threadId: thread.id,
-          workspacePath: environment.path ?? `/tmp/${thread.id}`,
-          workspaceProvisionType: environment.workspaceProvisionType,
-        })),
-      });
+          status: "created",
+        });
+        const command = queueCommand(harness.db, harness.hub, {
+          hostId: host.id,
+          type,
+          payload: JSON.stringify(
+            buildPayload({
+              environmentId: environment.id,
+              threadId: thread.id,
+              workspacePath: environment.path ?? `/tmp/${thread.id}`,
+              workspaceProvisionType: environment.workspaceProvisionType,
+            }),
+          ),
+        });
 
-      const resultPromise = harness.hub.waitForCommandResult(command.id, 1_000);
-      await handleExpiredCommands(harness.deps, {
-        commandIds: [command.id],
-      });
+        const resultPromise = harness.hub.waitForCommandResult(
+          command.id,
+          1_000,
+        );
+        await handleExpiredCommands(harness.deps, {
+          commandIds: [command.id],
+        });
 
-      await expect(resultPromise).resolves.toMatchObject({
-        commandId: command.id,
-        errorCode: "command_expired",
-        errorMessage: "Command expired after retry",
-        ok: false,
-        type,
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
+        await expect(resultPromise).resolves.toMatchObject({
+          commandId: command.id,
+          errorCode: "command_expired",
+          errorMessage: "Command expired after retry",
+          ok: false,
+          type,
+        });
+      } finally {
+        await harness.cleanup();
+      }
+    },
+  );
 
   it("marks runtime material sync operations failed when their command expires", async () => {
     const harness = await createTestAppHarness({
@@ -166,10 +176,12 @@ describe("expired commands", () => {
         ok: false,
         type: "host.sync_runtime_material",
       });
-      expect(getHostOperation(harness.db, {
-        hostId: host.id,
-        kind: "sync_runtime_material",
-      })).toMatchObject({
+      expect(
+        getHostOperation(harness.db, {
+          hostId: host.id,
+          kind: "sync_runtime_material",
+        }),
+      ).toMatchObject({
         commandId,
         failureReason: "Command expired after retry",
         state: "failed",

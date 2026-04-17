@@ -56,22 +56,31 @@ export function useHoverPopover({
     }, closeDelayMs);
 
     return clearCloseTimeout;
-  }, [clearCloseTimeout, closeDelayMs, isMobile, isPointerOverContent, isPointerOverTrigger]);
+  }, [
+    clearCloseTimeout,
+    closeDelayMs,
+    isMobile,
+    isPointerOverContent,
+    isPointerOverTrigger,
+  ]);
 
   useEffect(() => clearCloseTimeout, [clearCloseTimeout]);
 
-  const handleOpenChange = useCallback((nextOpen: boolean) => {
-    if (nextOpen) {
-      clearCloseTimeout();
-      setOpen(true);
-      return;
-    }
+  const handleOpenChange = useCallback(
+    (nextOpen: boolean) => {
+      if (nextOpen) {
+        clearCloseTimeout();
+        setOpen(true);
+        return;
+      }
 
-    setIsPointerOverTrigger(false);
-    setIsPointerOverContent(false);
-    clearCloseTimeout();
-    setOpen(false);
-  }, [clearCloseTimeout]);
+      setIsPointerOverTrigger(false);
+      setIsPointerOverContent(false);
+      clearCloseTimeout();
+      setOpen(false);
+    },
+    [clearCloseTimeout],
+  );
 
   const emptyHoverProps = {
     onPointerEnter: () => {},

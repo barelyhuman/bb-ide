@@ -4,7 +4,10 @@ import {
   replaceManagedRuntimeFiles,
   resolveRuntimeMaterialEnv,
 } from "@bb/host-runtime-material";
-import type { CommandDispatchOptions, CommandOf } from "../command-dispatch-support.js";
+import type {
+  CommandDispatchOptions,
+  CommandOf,
+} from "../command-dispatch-support.js";
 
 export async function syncRuntimeMaterial(
   command: CommandOf<"host.sync_runtime_material">,

@@ -1,5 +1,9 @@
 import { buildToolGroupSummaryParts } from "@bb/core-ui";
-import type { TimelineRow, TimelineToolGroupRow, ViewMessage } from "@bb/domain";
+import type {
+  TimelineRow,
+  TimelineToolGroupRow,
+  ViewMessage,
+} from "@bb/domain";
 import { ExpandablePanel } from "../disclosure.js";
 import { ConversationEntry } from "./ConversationEntry.js";
 import { useLatestInitialExpanded } from "./latestInitialExpanded.js";
@@ -103,7 +107,9 @@ function ToolGroupEntry({
                   key={message.id}
                   message={message}
                   projectId={projectId}
-                  initialExpanded={isSingleItem || (initialExpanded && isLatestMessage)}
+                  initialExpanded={
+                    isSingleItem || (initialExpanded && isLatestMessage)
+                  }
                   preferOngoingLabels={preferOngoingLabels && isLatestMessage}
                   resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
                   themeType={themeType}

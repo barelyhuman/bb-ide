@@ -3,9 +3,7 @@ import type { AgentRuntime } from "../types.js";
 
 export type RuntimeWaitPredicate = () => boolean;
 export type RuntimeWaitFailureDescription = () => string | null | undefined;
-export type RuntimeWaitConditionConfig =
-  | number
-  | RuntimeWaitConditionOptions;
+export type RuntimeWaitConditionConfig = number | RuntimeWaitConditionOptions;
 export type RuntimeThreadEventPredicate = (event: ThreadEvent) => boolean;
 export type RuntimeErrorEvent = Extract<
   ThreadEvent,
@@ -50,8 +48,7 @@ export interface RuntimeThreadTurnStartedWaitArgs extends RuntimeFailureContext 
   turnId?: string;
 }
 
-export interface RuntimeThreadTurnCompletedWaitArgs
-  extends RuntimeFailureContext {
+export interface RuntimeThreadTurnCompletedWaitArgs extends RuntimeFailureContext {
   events: ThreadEvent[];
   label?: string;
   threadId: string;
@@ -59,8 +56,7 @@ export interface RuntimeThreadTurnCompletedWaitArgs
   turnId?: string;
 }
 
-export interface RuntimeThreadAgentMessageWaitArgs
-  extends RuntimeFailureContext {
+export interface RuntimeThreadAgentMessageWaitArgs extends RuntimeFailureContext {
   events: ThreadEvent[];
   label?: string;
   text: string;
@@ -112,7 +108,9 @@ function findLatestRuntimeErrorEvent(
 
 function formatRuntimeEvent(event: ThreadEvent): string {
   const providerThreadId =
-    "providerThreadId" in event ? ` providerThreadId=${event.providerThreadId}` : "";
+    "providerThreadId" in event
+      ? ` providerThreadId=${event.providerThreadId}`
+      : "";
   const turnId = "turnId" in event ? ` turnId=${event.turnId}` : "";
   return `${event.threadId} ${event.type}${providerThreadId}${turnId}`;
 }
@@ -124,7 +122,9 @@ function describeRuntimeFailure(args: RuntimeFailureContext): string | null {
     lines.push(customFailure);
   }
   if (args.runtime) {
-    lines.push(`runningProviders=[${args.runtime.listRunningProviders().join(",")}]`);
+    lines.push(
+      `runningProviders=[${args.runtime.listRunningProviders().join(",")}]`,
+    );
   }
   if (args.events) {
     const scopedEvents = args.threadId
@@ -182,7 +182,9 @@ export async function waitForRuntimeConditionUnsafe(
 
   const failureDetail = options.describeFailure?.();
   const detail = failureDetail ? `\n${failureDetail}` : "";
-  throw new Error(`Timed out after ${timeoutMs}ms waiting for ${label}${detail}`);
+  throw new Error(
+    `Timed out after ${timeoutMs}ms waiting for ${label}${detail}`,
+  );
 }
 
 export async function waitForRuntimeState(

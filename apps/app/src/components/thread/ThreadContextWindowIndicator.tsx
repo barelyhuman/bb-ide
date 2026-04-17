@@ -27,21 +27,21 @@ export function ThreadContextWindowIndicator({
   const leftPercent = Math.max(0, 100 - usedPercent);
   const visualPercent = Math.min(Math.max(usedPercent, 0), 100);
 
-  const toneClass = usedPercent >= 90
-    ? "text-destructive/75"
-    : usedPercent >= 75
-      ? "text-warning/75"
-      : "text-muted-foreground/60";
+  const toneClass =
+    usedPercent >= 90
+      ? "text-destructive/75"
+      : usedPercent >= 75
+        ? "text-warning/75"
+        : "text-muted-foreground/60";
 
   const usedTokensLabel = formatCompactTokenCount(usage.usedTokens);
   const windowTokensLabel = formatCompactTokenCount(usage.modelContextWindow);
-  const title = usage.estimated ? "Estimated context window usage" : "Context window usage";
+  const title = usage.estimated
+    ? "Estimated context window usage"
+    : "Context window usage";
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={handleOpenChange}
-    >
+    <Popover open={open} onOpenChange={handleOpenChange}>
       <PopoverTrigger asChild>
         <button
           type="button"
@@ -81,8 +81,12 @@ export function ThreadContextWindowIndicator({
           <p className="text-muted-foreground">
             {usage.estimated ? "Estimated context window:" : "Context window:"}
           </p>
-          <p className="font-medium">{usedPercent}% used ({leftPercent}% left)</p>
-          <p className="font-medium">{usedTokensLabel} / {windowTokensLabel} tokens used</p>
+          <p className="font-medium">
+            {usedPercent}% used ({leftPercent}% left)
+          </p>
+          <p className="font-medium">
+            {usedTokensLabel} / {windowTokensLabel} tokens used
+          </p>
         </div>
       </PopoverContent>
     </Popover>

@@ -12,7 +12,11 @@ describe("run-cli", () => {
     const execution = resolveCliExecution(["thread", "list"]);
 
     expect(execution.command).toBe(process.execPath);
-    expect(execution.args).toEqual(["apps/cli/dist/index.js", "thread", "list"]);
+    expect(execution.args).toEqual([
+      "apps/cli/dist/index.js",
+      "thread",
+      "list",
+    ]);
   });
 
   it("runs the built CLI in production mode", () => {

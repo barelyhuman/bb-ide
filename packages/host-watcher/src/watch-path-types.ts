@@ -2,9 +2,7 @@ export interface PathChangeEvent {
   changedPaths: string[];
 }
 
-export type PathChangeCallback = (
-  event: PathChangeEvent,
-) => void;
+export type PathChangeCallback = (event: PathChangeEvent) => void;
 
 export interface PathChangeWatchError {
   message: string;

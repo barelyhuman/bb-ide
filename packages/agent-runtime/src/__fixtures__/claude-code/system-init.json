@@ -8,10 +8,17 @@
   "betas": ["context-1m-2025-08-07"],
   "claude_code_version": "1.0.22",
   "cwd": "/Users/developer/project",
-  "tools": ["Bash", "Edit", "Read", "Write", "Glob", "Grep", "WebSearch", "Agent"],
-  "mcp_servers": [
-    { "name": "filesystem", "status": "connected" }
+  "tools": [
+    "Bash",
+    "Edit",
+    "Read",
+    "Write",
+    "Glob",
+    "Grep",
+    "WebSearch",
+    "Agent"
   ],
+  "mcp_servers": [{ "name": "filesystem", "status": "connected" }],
   "model": "claude-sonnet-4-6",
   "permissionMode": "default",
   "slash_commands": ["/help", "/clear", "/compact", "/cost"],

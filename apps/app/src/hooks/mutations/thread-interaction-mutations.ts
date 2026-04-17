@@ -29,11 +29,7 @@ export function useResolveThreadPendingInteraction() {
       interactionId,
       resolution,
     }: ResolveThreadPendingInteractionMutationRequest): Promise<PendingInteraction> =>
-      api.resolveThreadPendingInteraction(
-        threadId,
-        interactionId,
-        resolution,
-      ),
+      api.resolveThreadPendingInteraction(threadId, interactionId, resolution),
     onSuccess: (interaction, variables) => {
       queryClient.invalidateQueries({
         queryKey: threadPendingInteractionsQueryKey(variables.threadId),

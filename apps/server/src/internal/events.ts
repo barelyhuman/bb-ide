@@ -153,9 +153,10 @@ async function queueManagedThreadTurnNotificationBestEffort(
   }
 }
 
-function resolveProviderIdentifiers(
-  event: HostDaemonEventEnvelope["event"],
-): { providerThreadId: string | null; turnId: string | null } {
+function resolveProviderIdentifiers(event: HostDaemonEventEnvelope["event"]): {
+  providerThreadId: string | null;
+  turnId: string | null;
+} {
   switch (event.type) {
     case "thread/started":
     case "client/thread/start":
@@ -267,9 +268,9 @@ async function applyEventEffects(
           continue;
         }
         if (
-          isPreStartThreadStatus(thread.status)
-          || thread.status === "idle"
-          || thread.status === "error"
+          isPreStartThreadStatus(thread.status) ||
+          thread.status === "idle" ||
+          thread.status === "error"
         ) {
           tryTransition(deps.db, deps.hub, thread.id, "active");
         }
@@ -425,11 +426,10 @@ function resolveActivePruneCandidates(
       continue;
     }
 
-    const previousSequence = latestPrunableSequenceByThreadId.get(entry.threadId);
-    if (
-      previousSequence === undefined ||
-      entry.sequence > previousSequence
-    ) {
+    const previousSequence = latestPrunableSequenceByThreadId.get(
+      entry.threadId,
+    );
+    if (previousSequence === undefined || entry.sequence > previousSequence) {
       latestPrunableSequenceByThreadId.set(entry.threadId, entry.sequence);
     }
   }
@@ -501,58 +501,65 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
   });
 
-  post("/session/events", hostDaemonEventBatchRequestSchema, async (context, payload) => {
-    const daemon = getAuthenticatedDaemon(context);
-    const session = requireAuthorizedActiveSession(deps.db, {
-      hostId: daemon.hostId,
-      sessionId: payload.sessionId,
-    });
-    const { canonicalEnvironmentIds } = validateAndResolveCanonicalEventBatchEnvironments(deps, {
-      hostId: session.hostId,
-      events: payload.events,
-    });
-    if (payload.events.length > 0) {
-      void markSandboxActivity(deps, {
-        hostId: session.hostId,
-        source: "events",
+  post(
+    "/session/events",
+    hostDaemonEventBatchRequestSchema,
+    async (context, payload) => {
+      const daemon = getAuthenticatedDaemon(context);
+      const session = requireAuthorizedActiveSession(deps.db, {
+        hostId: daemon.hostId,
+        sessionId: payload.sessionId,
       });
-    }
-
-    const insertResult = insertEvents(
-      deps.db,
-      deps.hub,
-      payload.events.map((entry, index) => {
-        const environmentId = canonicalEnvironmentIds[index];
-        if (!environmentId) {
-          throw new Error("Missing canonical environment for validated event");
-        }
-        return toStoredEvent({
-          envelope: entry,
-          environmentId,
+      const { canonicalEnvironmentIds } =
+        validateAndResolveCanonicalEventBatchEnvironments(deps, {
+          hostId: session.hostId,
+          events: payload.events,
         });
-      }),
-    );
+      if (payload.events.length > 0) {
+        void markSandboxActivity(deps, {
+          hostId: session.hostId,
+          source: "events",
+        });
+      }
 
-    await applyEventEffects(
-      deps,
-      resolveEventsToApply({
-        db: deps.db,
+      const insertResult = insertEvents(
+        deps.db,
+        deps.hub,
+        payload.events.map((entry, index) => {
+          const environmentId = canonicalEnvironmentIds[index];
+          if (!environmentId) {
+            throw new Error(
+              "Missing canonical environment for validated event",
+            );
+          }
+          return toStoredEvent({
+            envelope: entry,
+            environmentId,
+          });
+        }),
+      );
+
+      await applyEventEffects(
+        deps,
+        resolveEventsToApply({
+          db: deps.db,
+          events: payload.events,
+          insertedEventIndexes: insertResult.insertedInputIndexes,
+        }),
+      );
+      for (const candidate of resolveActivePruneCandidates({
         events: payload.events,
         insertedEventIndexes: insertResult.insertedInputIndexes,
-      }),
-    );
-    for (const candidate of resolveActivePruneCandidates({
-      events: payload.events,
-      insertedEventIndexes: insertResult.insertedInputIndexes,
-    })) {
-      maybePruneActiveThreadEventHistory(deps, candidate);
-    }
+      })) {
+        maybePruneActiveThreadEventHistory(deps, candidate);
+      }
 
-    return context.json({
-      threadHighWaterMarks: getHighWaterMarks(
-        deps.db,
-        payload.events.map((event) => event.threadId),
-      ),
-    });
-  });
+      return context.json({
+        threadHighWaterMarks: getHighWaterMarks(
+          deps.db,
+          payload.events.map((event) => event.threadId),
+        ),
+      });
+    },
+  );
 }

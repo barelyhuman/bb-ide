@@ -35,7 +35,9 @@ function toLadleFixture(
     taskId: replayedFixture.fixture.taskId,
     scenarioDescription: replayedFixture.fixture.manifest.scenarioDescription,
     threadStatus: "idle",
-    latestActivityRowId: findLatestActivityRowId(replayedFixture.bundle.timelineRows),
+    latestActivityRowId: findLatestActivityRowId(
+      replayedFixture.bundle.timelineRows,
+    ),
     timelineRowCount: replayedFixture.bundle.timelineRows.length,
     viewMessageCount: replayedFixture.bundle.viewMessages.length,
     timelineRows: replayedFixture.bundle.timelineRows,
@@ -57,7 +59,9 @@ export function buildLadleStoryDataFromReplay(
   };
 }
 
-function serializeLadleStoryDataModule(data: ProviderAuditLadleStoryData): string {
+function serializeLadleStoryDataModule(
+  data: ProviderAuditLadleStoryData,
+): string {
   return [
     'import type { ProviderAuditLadleStoryData } from "../src/types.js";',
     "",

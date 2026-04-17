@@ -7,6 +7,7 @@ Allow users to extend bb with custom providers, environments, and lifecycle hook
 ## Scope
 
 **v1 (MVP):**
+
 - Extension discovery and loading from `.bb/extensions/` and `~/.bb/extensions/`
 - `registerProvider()` — plug custom provider adapters into the provider registry alongside the built-in `codex`, `claude-code`, and `pi` providers
 - `registerEnvironment()` — plug custom environment definitions into the `EnvironmentRegistry` alongside the built-in `local` and `docker` kinds
@@ -14,11 +15,13 @@ Allow users to extend bb with custom providers, environments, and lifecycle hook
 - TypeScript extensions loaded without compilation (via jiti or tsx)
 
 **v1.5 (fast follow):**
+
 - Lifecycle event hooks (`on("thread:spawn")`, `on("turn:complete")`, etc.)
 - `registerTool()` — custom tools surfaced through `ProviderToolHost` and available to agents
 - Extension-scoped configuration via `.bb/extensions/<name>/config.json`
 
 **Not v1:**
+
 - npm/git package distribution
 - UI extensions (custom tabs, panels)
 - Hot reload
@@ -56,9 +59,15 @@ export default function (bb: ExtensionAPI) {
         squash_merge: false,
       },
     },
-    create(context) { /* ... */ },
-    restore(state, context) { /* ... */ },
-    isState(value): value is E2BState { /* ... */ },
+    create(context) {
+      /* ... */
+    },
+    restore(state, context) {
+      /* ... */
+    },
+    isState(value): value is E2BState {
+      /* ... */
+    },
   });
 }
 ```
@@ -67,12 +76,12 @@ export default function (bb: ExtensionAPI) {
 
 Extensions are auto-discovered from two locations:
 
-| Location | Scope |
-|---|---|
-| `.bb/extensions/*.ts` | Project-local |
-| `.bb/extensions/*/index.ts` | Project-local (directory) |
-| `~/.bb/extensions/*.ts` | Global (all projects) |
-| `~/.bb/extensions/*/index.ts` | Global (directory) |
+| Location                      | Scope                     |
+| ----------------------------- | ------------------------- |
+| `.bb/extensions/*.ts`         | Project-local             |
+| `.bb/extensions/*/index.ts`   | Project-local (directory) |
+| `~/.bb/extensions/*.ts`       | Global (all projects)     |
+| `~/.bb/extensions/*/index.ts` | Global (directory)        |
 
 **Loading order:** Global extensions first, then project-local. Project-local can override global (e.g., a project-local provider with the same ID wins).
 
@@ -115,7 +124,11 @@ function createGeminiAdapter(): ProviderAdapter {
         method: "thread/start",
         params: withExecutionOptions(
           withThreadEnvironmentPolicy(
-            { baseInstructions: resolveBaseInstructions(req.developerInstructions) },
+            {
+              baseInstructions: resolveBaseInstructions(
+                req.developerInstructions,
+              ),
+            },
             context,
           ),
           req,
@@ -140,7 +153,9 @@ function createGeminiAdapter(): ProviderAdapter {
         ),
       };
     },
-    interpretNotification(notification: ProviderNotification): ProviderNotificationResult {
+    interpretNotification(
+      notification: ProviderNotification,
+    ): ProviderNotificationResult {
       const normalized = normalizeProviderEventType(notification.method);
       let status;
       if (normalized === "turn/started") status = "active" as const;
@@ -154,7 +169,8 @@ function createGeminiAdapter(): ProviderAdapter {
     outputFromEvent: () => undefined,
     listModels: async () => [],
     deriveThreadTitle: (input) => deriveThreadTitleFromInput(input),
-    inactiveSessionErrorMessage: (id) => `No active Gemini session for thread ${id}`,
+    inactiveSessionErrorMessage: (id) =>
+      `No active Gemini session for thread ${id}`,
   };
 }
 
@@ -210,8 +226,10 @@ const e2bDefinition: EnvironmentDefinition<E2BState> = {
   },
   isState(value: unknown): value is E2BState {
     return (
-      !!value && typeof value === "object" &&
-      "sandboxId" in value && typeof (value as any).sandboxId === "string"
+      !!value &&
+      typeof value === "object" &&
+      "sandboxId" in value &&
+      typeof (value as any).sandboxId === "string"
     );
   },
 };
@@ -266,10 +284,15 @@ examples/extensions/
 ### Step 1: Define the `ExtensionAPI` type in `@bb/core`
 
 In `packages/core/src/`:
+
 1. Create an `extension-api.ts` file defining the `ExtensionAPI` interface:
+
    ```typescript
    import type { ProviderAdapter } from "./runtime-contracts.js";
-   import type { SystemEnvironmentInfo, ProviderCapabilities } from "./api-types.js";
+   import type {
+     SystemEnvironmentInfo,
+     ProviderCapabilities,
+   } from "./api-types.js";
 
    export interface ExtensionProviderRegistration extends ProviderAdapter {
      // id is widened to string (not restricted to ThreadProviderId)
@@ -288,6 +311,7 @@ In `packages/core/src/`:
      registerEnvironment(definition: ExtensionEnvironmentRegistration): void;
    }
    ```
+
 2. Export `ExtensionAPI` from the package index
 
 ### Step 2: Widen `ThreadProviderId` for extension providers
@@ -307,6 +331,7 @@ The built-in provider IDs are a closed union (`"codex" | "claude-code" | "pi"`) 
    - Collect registered providers and environment definitions
    - Wrap each load in try/catch with error logging; skip broken extensions
 3. The `ExtensionAPI` implementation accumulates registrations into arrays:
+
    ```typescript
    const extensionProviders: ProviderAdapter[] = [];
    const extensionEnvironmentDefinitions: EnvironmentDefinition<unknown>[] = [];

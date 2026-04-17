@@ -28,15 +28,18 @@ describe("internal environment change route", () => {
       const before = getEnvironment(harness.db, environment.id);
       const notifyEnvironmentSpy = vi.spyOn(harness.hub, "notifyEnvironment");
 
-      const response = await harness.app.request("/internal/session/environment-change", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          environmentId: environment.id,
-          change: "work-status-changed",
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/environment-change",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            environmentId: environment.id,
+            change: "work-status-changed",
+          }),
+        },
+      );
 
       expect(response.status).toBe(200);
       expect(notifyEnvironmentSpy).toHaveBeenCalledWith(environment.id, [
@@ -65,15 +68,18 @@ describe("internal environment change route", () => {
       });
       const notifyEnvironmentSpy = vi.spyOn(harness.hub, "notifyEnvironment");
 
-      const response = await harness.app.request("/internal/session/environment-change", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          environmentId: environment.id,
-          change: "thread-storage-changed",
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/environment-change",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            environmentId: environment.id,
+            change: "thread-storage-changed",
+          }),
+        },
+      );
 
       expect(response.status).toBe(200);
       expect(notifyEnvironmentSpy).toHaveBeenCalledWith(environment.id, [
@@ -101,15 +107,18 @@ describe("internal environment change route", () => {
       });
       const notifyEnvironmentSpy = vi.spyOn(harness.hub, "notifyEnvironment");
 
-      const response = await harness.app.request("/internal/session/environment-change", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          environmentId: environment.id,
-          change: "git-refs-changed",
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/environment-change",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            environmentId: environment.id,
+            change: "git-refs-changed",
+          }),
+        },
+      );
 
       expect(response.status).toBe(200);
       expect(notifyEnvironmentSpy).toHaveBeenCalledWith(environment.id, [
@@ -136,15 +145,18 @@ describe("internal environment change route", () => {
       });
       const notifyEnvironmentSpy = vi.spyOn(harness.hub, "notifyEnvironment");
 
-      const response = await harness.app.request("/internal/session/environment-change", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: hostA.session.id,
-          environmentId: environment.id,
-          change: "work-status-changed",
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/environment-change",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: hostA.session.id,
+            environmentId: environment.id,
+            change: "work-status-changed",
+          }),
+        },
+      );
 
       expect(response.status).toBe(403);
       await expect(readJson(response)).resolves.toMatchObject({
@@ -164,15 +176,18 @@ describe("internal environment change route", () => {
       });
       const notifyEnvironmentSpy = vi.spyOn(harness.hub, "notifyEnvironment");
 
-      const response = await harness.app.request("/internal/session/environment-change", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          environmentId: "env-missing",
-          change: "work-status-changed",
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/environment-change",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            environmentId: "env-missing",
+            change: "work-status-changed",
+          }),
+        },
+      );
 
       expect(response.status).toBe(404);
       await expect(readJson(response)).resolves.toMatchObject({
@@ -192,15 +207,18 @@ describe("internal environment change route", () => {
       });
       const notifyEnvironmentSpy = vi.spyOn(harness.hub, "notifyEnvironment");
 
-      const response = await harness.app.request("/internal/session/environment-change", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          environmentId: "env-1",
-          change: "status-changed",
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/environment-change",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            environmentId: "env-1",
+            change: "status-changed",
+          }),
+        },
+      );
 
       expect(response.status).toBe(400);
       await expect(readJson(response)).resolves.toMatchObject({

@@ -6,18 +6,9 @@
  */
 
 import { z } from "zod";
-import type {
-  ModelReasoningEffort,
-  ThreadEventItem,
-} from "@bb/domain";
-import {
-  contentWrapperSchema,
-  textBlockSchema,
-} from "./tool-arg-schemas.js";
-import {
-  getStringProperty,
-  isRecord,
-} from "./provider-visibility-helpers.js";
+import type { ModelReasoningEffort, ThreadEventItem } from "@bb/domain";
+import { contentWrapperSchema, textBlockSchema } from "./tool-arg-schemas.js";
+import { getStringProperty, isRecord } from "./provider-visibility-helpers.js";
 
 // ---------------------------------------------------------------------------
 // Reasoning effort constants
@@ -40,9 +31,9 @@ export const XHIGH_REASONING_EFFORT: ModelReasoningEffort = {
   description: "Extra high reasoning effort",
 };
 
-const shellEnvironmentVariableKeySchema = z.string().regex(
-  /^[A-Z_][A-Z0-9_]*$/i,
-);
+const shellEnvironmentVariableKeySchema = z
+  .string()
+  .regex(/^[A-Z_][A-Z0-9_]*$/i);
 
 // ---------------------------------------------------------------------------
 // Diff helpers
@@ -60,31 +51,31 @@ export function buildEditDiff(
   const normalizedPath = filePath.replace(/\\/g, "/").replace(/^\/+/, "");
   if (oldString === undefined && newString !== undefined) {
     const newLines = newString.split("\n").map((line) => `+${line}`);
-    return [
-      "--- /dev/null",
-      `+++ b/${normalizedPath}`,
-      ...newLines,
-    ].join("\n") + "\n";
+    return (
+      ["--- /dev/null", `+++ b/${normalizedPath}`, ...newLines].join("\n") +
+      "\n"
+    );
   }
 
   if (oldString !== undefined && newString === undefined) {
     const oldLines = oldString.split("\n").map((line) => `-${line}`);
-    return [
-      `--- a/${normalizedPath}`,
-      "+++ /dev/null",
-      ...oldLines,
-    ].join("\n") + "\n";
+    return (
+      [`--- a/${normalizedPath}`, "+++ /dev/null", ...oldLines].join("\n") +
+      "\n"
+    );
   }
 
   if (oldString !== undefined && newString !== undefined) {
     const oldLines = oldString.split("\n").map((line) => `-${line}`);
     const newLines = newString.split("\n").map((line) => `+${line}`);
-    return [
-      `--- a/${normalizedPath}`,
-      `+++ b/${normalizedPath}`,
-      ...oldLines,
-      ...newLines,
-    ].join("\n") + "\n";
+    return (
+      [
+        `--- a/${normalizedPath}`,
+        `+++ b/${normalizedPath}`,
+        ...oldLines,
+        ...newLines,
+      ].join("\n") + "\n"
+    );
   }
   return undefined;
 }
@@ -188,7 +179,10 @@ export function extractResultText(content: unknown): string {
 function describeToolReferenceBlocks(blocks: unknown[]): string | null {
   const toolNames: string[] = [];
   for (const block of blocks) {
-    if (!isRecord(block) || getStringProperty(block, "type") !== "tool_reference") {
+    if (
+      !isRecord(block) ||
+      getStringProperty(block, "type") !== "tool_reference"
+    ) {
       return null;
     }
 
@@ -199,9 +193,7 @@ function describeToolReferenceBlocks(blocks: unknown[]): string | null {
     toolNames.push(toolName);
   }
 
-  return toolNames.length > 0
-    ? `Matched tools: ${toolNames.join(", ")}`
-    : null;
+  return toolNames.length > 0 ? `Matched tools: ${toolNames.join(", ")}` : null;
 }
 
 function describeResultContentBlock(block: unknown): string | null {

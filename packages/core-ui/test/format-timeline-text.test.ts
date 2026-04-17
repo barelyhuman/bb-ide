@@ -21,9 +21,10 @@ function getTurnStatus(messages: ViewMessage[]): ViewTurnStatus {
     return "error";
   }
   if (
-    messages.some((message) =>
-      "status" in message &&
-      (message.status === "pending" || message.status === "streaming")
+    messages.some(
+      (message) =>
+        "status" in message &&
+        (message.status === "pending" || message.status === "streaming"),
     )
   ) {
     return "pending";
@@ -35,9 +36,15 @@ function projectionTurnFromMessages(
   turnId: string,
   messages: ViewMessage[],
 ): ViewTurn {
-  const sourceSeqStart = Math.min(...messages.map((message) => message.sourceSeqStart));
-  const sourceSeqEnd = Math.max(...messages.map((message) => message.sourceSeqEnd));
-  const startedAt = Math.min(...messages.map((message) => getStartedAt(message)));
+  const sourceSeqStart = Math.min(
+    ...messages.map((message) => message.sourceSeqStart),
+  );
+  const sourceSeqEnd = Math.max(
+    ...messages.map((message) => message.sourceSeqEnd),
+  );
+  const startedAt = Math.min(
+    ...messages.map((message) => getStartedAt(message)),
+  );
   const createdAt = Math.max(...messages.map((message) => message.createdAt));
   const status = getTurnStatus(messages);
   return {
@@ -104,21 +111,24 @@ function formatMessagesAsText(
 
 describe("formatTimelineAsText", () => {
   it("renders command approval state on tool-call rows", () => {
-    const text = formatMessagesAsText([
-      {
-        kind: "tool-call",
-        id: "approval-1",
-        threadId: "t1",
-        sourceSeqStart: 1,
-        sourceSeqEnd: 1,
-        createdAt: 1,
-        toolName: "exec_command",
-        callId: "item-1",
-        command: "git push",
-        status: "pending",
-        approvalStatus: "waiting_for_approval",
-      },
-    ], { verbose: true });
+    const text = formatMessagesAsText(
+      [
+        {
+          kind: "tool-call",
+          id: "approval-1",
+          threadId: "t1",
+          sourceSeqStart: 1,
+          sourceSeqEnd: 1,
+          createdAt: 1,
+          toolName: "exec_command",
+          callId: "item-1",
+          command: "git push",
+          status: "pending",
+          approvalStatus: "waiting_for_approval",
+        },
+      ],
+      { verbose: true },
+    );
 
     expect(text).toContain("Waiting for approval to run git push");
     expect(text).toContain("git push");
@@ -185,14 +195,28 @@ describe("formatTimelineAsText", () => {
           {
             callId: "c1",
             command: "Read /src/main.ts",
-            parsedCmd: [{ type: "read", cmd: "Read /src/main.ts", name: "Read", path: "/src/main.ts" }],
+            parsedCmd: [
+              {
+                type: "read",
+                cmd: "Read /src/main.ts",
+                name: "Read",
+                path: "/src/main.ts",
+              },
+            ],
             output: "file contents here...",
             status: "completed",
           },
           {
             callId: "c2",
             command: "Grep 'bug' in /src",
-            parsedCmd: [{ type: "search", cmd: "Grep 'bug' in /src", query: "bug", path: "/src" }],
+            parsedCmd: [
+              {
+                type: "search",
+                cmd: "Grep 'bug' in /src",
+                query: "bug",
+                path: "/src",
+              },
+            ],
             output: "found 3 matches",
             status: "completed",
           },
@@ -205,7 +229,10 @@ describe("formatTimelineAsText", () => {
     expect(minimal).not.toContain("Read main.ts");
     expect(minimal).not.toContain("Search bug in /src");
 
-    const verbose = formatMessagesAsText(messages, { color: false, verbose: true });
+    const verbose = formatMessagesAsText(messages, {
+      color: false,
+      verbose: true,
+    });
     expect(verbose).toContain("Explored 1 file, 1 search");
     expect(verbose).toContain("Read /src/main.ts");
     expect(verbose).toContain("Search bug in /src");
@@ -259,7 +286,11 @@ describe("formatTimelineAsText", () => {
         createdAt: 1,
         callId: "call-1",
         changes: [
-          { path: "/src/auth.ts", kind: "update", diff: "+  if (!user) return null;" },
+          {
+            path: "/src/auth.ts",
+            kind: "update",
+            diff: "+  if (!user) return null;",
+          },
         ],
         status: "completed",
       },
@@ -270,7 +301,10 @@ describe("formatTimelineAsText", () => {
     expect(minimal).toContain("/src/auth.ts");
     expect(minimal).not.toContain("if (!user)"); // diff hidden in minimal
 
-    const verbose = formatMessagesAsText(messages, { color: false, verbose: true });
+    const verbose = formatMessagesAsText(messages, {
+      color: false,
+      verbose: true,
+    });
     expect(verbose).toContain("if (!user)"); // diff shown in verbose
   });
 
@@ -310,7 +344,10 @@ describe("formatTimelineAsText", () => {
     const minimal = formatMessagesAsText(messages, { color: false });
     expect(minimal).toBe("");
 
-    const verbose = formatMessagesAsText(messages, { color: false, verbose: true });
+    const verbose = formatMessagesAsText(messages, {
+      color: false,
+      verbose: true,
+    });
     expect(verbose).toBe("");
   });
 
@@ -365,7 +402,10 @@ describe("formatTimelineAsText", () => {
     expect(minimal).toContain("Tests pass.");
     expect(minimal).not.toContain("npm test");
 
-    const verbose = formatMessagesAsText(messages, { color: false, verbose: true });
+    const verbose = formatMessagesAsText(messages, {
+      color: false,
+      verbose: true,
+    });
     expect(verbose).toContain("Worked on 2 items");
     expect(verbose).toContain("npm test");
     expect(verbose).toContain("npm run lint");
@@ -481,7 +521,10 @@ describe("formatTimelineAsText", () => {
     expect(minimal).toContain("Subagent Explore: Inspect the docs tree");
     expect(minimal).toContain("## Findings");
 
-    const verbose = formatMessagesAsText(messages, { color: false, verbose: true });
+    const verbose = formatMessagesAsText(messages, {
+      color: false,
+      verbose: true,
+    });
     expect(verbose).toContain("Subagent Explore: Inspect the docs tree");
     expect(verbose).toContain("## Findings");
     expect(verbose).toContain("- alpha");

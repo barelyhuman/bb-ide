@@ -28,9 +28,7 @@ export function AuthCallbackView() {
           )}
           <h1 className="text-sm font-semibold">{content.title}</h1>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          {content.message}
-        </p>
+        <p className="mt-1 text-xs text-muted-foreground">{content.message}</p>
       </div>
     </div>
   );

@@ -35,7 +35,9 @@ export const threadContextWindowUsageSchema = z.object({
   modelContextWindow: z.number(),
   estimated: z.boolean(),
 });
-export type ThreadContextWindowUsage = z.infer<typeof threadContextWindowUsageSchema>;
+export type ThreadContextWindowUsage = z.infer<
+  typeof threadContextWindowUsageSchema
+>;
 
 // --- Thread creation: environment + workspace discriminated unions ---
 
@@ -116,10 +118,22 @@ export type AutomationThreadRequest = z.infer<
   typeof automationThreadRequestSchema
 >;
 
-export const automationNameSchema = z.string().min(1).max(AUTOMATION_NAME_MAX_LENGTH);
-export const scheduleCronSchema = z.string().min(1).max(SCHEDULE_CRON_MAX_LENGTH);
-export const scheduleNameSchema = z.string().min(1).max(SCHEDULE_NAME_MAX_LENGTH);
-export const scheduleTimezoneSchema = z.string().min(1).max(SCHEDULE_TIMEZONE_MAX_LENGTH);
+export const automationNameSchema = z
+  .string()
+  .min(1)
+  .max(AUTOMATION_NAME_MAX_LENGTH);
+export const scheduleCronSchema = z
+  .string()
+  .min(1)
+  .max(SCHEDULE_CRON_MAX_LENGTH);
+export const scheduleNameSchema = z
+  .string()
+  .min(1)
+  .max(SCHEDULE_NAME_MAX_LENGTH);
+export const scheduleTimezoneSchema = z
+  .string()
+  .min(1)
+  .max(SCHEDULE_TIMEZONE_MAX_LENGTH);
 export const automationScheduleTriggerSchema = z.object({
   triggerType: z.literal("schedule"),
   cron: scheduleCronSchema,
@@ -179,11 +193,15 @@ export const createAutomationRequestSchema = z.object({
   action: automationActionSchema,
   autoArchive: z.boolean().optional(),
 });
-export type CreateAutomationRequest = z.infer<typeof createAutomationRequestSchema>;
+export type CreateAutomationRequest = z.infer<
+  typeof createAutomationRequestSchema
+>;
 
-export const updateAutomationEnabledRequestSchema = z.object({
-  enabled: z.boolean(),
-}).strict();
+export const updateAutomationEnabledRequestSchema = z
+  .object({
+    enabled: z.boolean(),
+  })
+  .strict();
 export type UpdateAutomationEnabledRequest = z.infer<
   typeof updateAutomationEnabledRequestSchema
 >;
@@ -213,7 +231,9 @@ export const updateAutomationRequestSchema = z.union([
   updateAutomationEnabledRequestSchema,
   updateAutomationConfigRequestSchema,
 ]);
-export type UpdateAutomationRequest = z.infer<typeof updateAutomationRequestSchema>;
+export type UpdateAutomationRequest = z.infer<
+  typeof updateAutomationRequestSchema
+>;
 
 export const sendMessageRequestSchema = z.object({
   input: z.array(promptInputSchema).min(1),
@@ -260,7 +280,9 @@ export type ResolvePendingInteractionRequest = z.infer<
 >;
 
 export const threadDraftListResponseSchema = z.array(threadQueuedMessageSchema);
-export type ThreadDraftListResponse = z.infer<typeof threadDraftListResponseSchema>;
+export type ThreadDraftListResponse = z.infer<
+  typeof threadDraftListResponseSchema
+>;
 
 export const archiveThreadRequestSchema = z.object({
   force: z.boolean(),
@@ -274,9 +296,7 @@ export const updateThreadRequestSchema = z
   })
   .partial()
   .refine(
-    (value) =>
-      value.title !== undefined ||
-      value.parentThreadId !== undefined,
+    (value) => value.title !== undefined || value.parentThreadId !== undefined,
     "At least one field must be provided",
   );
 export type UpdateThreadRequest = z.infer<typeof updateThreadRequestSchema>;
@@ -284,7 +304,9 @@ export type UpdateThreadRequest = z.infer<typeof updateThreadRequestSchema>;
 export const updateEnvironmentRequestSchema = z.object({
   mergeBaseBranch: z.string().min(1).nullable(),
 });
-export type UpdateEnvironmentRequest = z.infer<typeof updateEnvironmentRequestSchema>;
+export type UpdateEnvironmentRequest = z.infer<
+  typeof updateEnvironmentRequestSchema
+>;
 
 const localProjectPathRequestSchema = z
   .string()
@@ -303,22 +325,28 @@ const localProjectPathRequestSchema = z
     });
   });
 
-const createLocalPathProjectSourceRequestSchema = z.object({
-  hostId: z.string().min(1),
-  type: z.literal("local_path"),
-  path: localProjectPathRequestSchema,
-}).strict();
+const createLocalPathProjectSourceRequestSchema = z
+  .object({
+    hostId: z.string().min(1),
+    type: z.literal("local_path"),
+    path: localProjectPathRequestSchema,
+  })
+  .strict();
 
-const createGitHubRepoProjectSourceRequestSchema = z.object({
-  type: z.literal("github_repo"),
-  repoUrl: z.string().url(),
-}).strict();
+const createGitHubRepoProjectSourceRequestSchema = z
+  .object({
+    type: z.literal("github_repo"),
+    repoUrl: z.string().url(),
+  })
+  .strict();
 
 export const createProjectSourceRequestSchema = z.discriminatedUnion("type", [
   createLocalPathProjectSourceRequestSchema,
   createGitHubRepoProjectSourceRequestSchema,
 ]);
-export type CreateProjectSourceRequest = z.infer<typeof createProjectSourceRequestSchema>;
+export type CreateProjectSourceRequest = z.infer<
+  typeof createProjectSourceRequestSchema
+>;
 
 export const createProjectRequestSchema = z.object({
   name: z.string().min(1),
@@ -326,17 +354,21 @@ export const createProjectRequestSchema = z.object({
 });
 export type CreateProjectRequest = z.infer<typeof createProjectRequestSchema>;
 
-const persistentHostJoinRequestSchema = z.object({
-  hostId: z.string().min(1).optional(),
-  hostType: z.literal("persistent").optional(),
-}).strict();
+const persistentHostJoinRequestSchema = z
+  .object({
+    hostId: z.string().min(1).optional(),
+    hostType: z.literal("persistent").optional(),
+  })
+  .strict();
 
-const ephemeralHostJoinRequestSchema = z.object({
-  externalId: z.string().min(1),
-  hostId: z.string().min(1).optional(),
-  hostType: z.literal("ephemeral"),
-  provider: z.string().min(1),
-}).strict();
+const ephemeralHostJoinRequestSchema = z
+  .object({
+    externalId: z.string().min(1),
+    hostId: z.string().min(1).optional(),
+    hostType: z.literal("ephemeral"),
+    provider: z.string().min(1),
+  })
+  .strict();
 
 export const createHostJoinRequestSchema = z.union([
   persistentHostJoinRequestSchema,
@@ -350,7 +382,9 @@ export const createHostJoinResponseSchema = z.object({
   joinCode: z.string().min(1),
   joinCommand: z.string().min(1),
 });
-export type CreateHostJoinResponse = z.infer<typeof createHostJoinResponseSchema>;
+export type CreateHostJoinResponse = z.infer<
+  typeof createHostJoinResponseSchema
+>;
 
 export const updateHostRequestSchema = z
   .object({
@@ -371,7 +405,9 @@ export const managerHostEnvironmentSchema = z.object({
 export const managerEnvironmentArgsSchema = z.discriminatedUnion("type", [
   managerHostEnvironmentSchema,
 ]);
-export type ManagerEnvironmentArgs = z.infer<typeof managerEnvironmentArgsSchema>;
+export type ManagerEnvironmentArgs = z.infer<
+  typeof managerEnvironmentArgsSchema
+>;
 
 export const createManagerThreadRequestSchema = z.object({
   name: z.string().min(1).optional(),
@@ -387,10 +423,12 @@ export type CreateManagerThreadRequest = z.infer<
   typeof createManagerThreadRequestSchema
 >;
 
-export const projectFilesQuerySchema = z.object({
-  query: z.string().min(1),
-  limit: z.string().regex(/^\d+$/),
-}).partial();
+export const projectFilesQuerySchema = z
+  .object({
+    query: z.string().min(1),
+    limit: z.string().regex(/^\d+$/),
+  })
+  .partial();
 export type ProjectFilesQuery = z.infer<typeof projectFilesQuerySchema>;
 
 export const projectAttachmentContentQuerySchema = z.object({
@@ -414,7 +452,9 @@ const mergeBaseBranchQuerySchema = z
 export const environmentStatusQuerySchema = z.object({
   mergeBaseBranch: mergeBaseBranchQuerySchema.optional(),
 });
-export type EnvironmentStatusQuery = z.infer<typeof environmentStatusQuerySchema>;
+export type EnvironmentStatusQuery = z.infer<
+  typeof environmentStatusQuerySchema
+>;
 
 export const environmentDiffQuerySchema = z.discriminatedUnion("target", [
   z.object({
@@ -443,10 +483,12 @@ export const threadListQuerySchema = z.object({
 });
 export type ThreadListQuery = z.infer<typeof threadListQuerySchema>;
 
-export const threadTimelineQuerySchema = z.object({
-  showAllManagerEvents: z.enum(["true", "false"]),
-  includeToolGroupMessages: z.enum(["true", "false"]),
-}).partial();
+export const threadTimelineQuerySchema = z
+  .object({
+    showAllManagerEvents: z.enum(["true", "false"]),
+    includeToolGroupMessages: z.enum(["true", "false"]),
+  })
+  .partial();
 export type ThreadTimelineQuery = z.infer<typeof threadTimelineQuerySchema>;
 
 export const timelineToolDetailsQuerySchema = z.object({
@@ -458,10 +500,12 @@ export type TimelineToolDetailsQuery = z.infer<
   typeof timelineToolDetailsQuerySchema
 >;
 
-export const threadEventsQuerySchema = z.object({
-  afterSeq: z.string().regex(/^\d+$/),
-  limit: z.string().regex(/^\d+$/),
-}).partial();
+export const threadEventsQuerySchema = z
+  .object({
+    afterSeq: z.string().regex(/^\d+$/),
+    limit: z.string().regex(/^\d+$/),
+  })
+  .partial();
 export type ThreadEventsQuery = z.infer<typeof threadEventsQuerySchema>;
 
 export const threadEventWaitQuerySchema = z.object({
@@ -471,10 +515,12 @@ export const threadEventWaitQuerySchema = z.object({
 });
 export type ThreadEventWaitQuery = z.infer<typeof threadEventWaitQuerySchema>;
 
-export const threadStorageFilesQuerySchema = z.object({
-  query: z.string().min(1),
-  limit: z.string().regex(/^\d+$/),
-}).partial();
+export const threadStorageFilesQuerySchema = z
+  .object({
+    query: z.string().min(1),
+    limit: z.string().regex(/^\d+$/),
+  })
+  .partial();
 export type ThreadStorageFilesQuery = z.infer<
   typeof threadStorageFilesQuerySchema
 >;
@@ -486,18 +532,22 @@ export type ThreadStorageContentQuery = z.infer<
   typeof threadStorageContentQuerySchema
 >;
 
-export const systemModelsQuerySchema = z.object({
-  providerId: z.string().min(1),
-  hostId: z.string().min(1),
-  environmentId: z.string().min(1),
-  selectedModel: z.string().min(1),
-}).partial();
+export const systemModelsQuerySchema = z
+  .object({
+    providerId: z.string().min(1),
+    hostId: z.string().min(1),
+    environmentId: z.string().min(1),
+    selectedModel: z.string().min(1),
+  })
+  .partial();
 export type SystemModelsQuery = z.infer<typeof systemModelsQuerySchema>;
 
-export const systemProvidersQuerySchema = z.object({
-  hostId: z.string().min(1),
-  environmentId: z.string().min(1),
-}).partial();
+export const systemProvidersQuerySchema = z
+  .object({
+    hostId: z.string().min(1),
+    environmentId: z.string().min(1),
+  })
+  .partial();
 export type SystemProvidersQuery = z.infer<typeof systemProvidersQuerySchema>;
 
 export const cloudAuthConnectionStatusSchema = z.enum([
@@ -515,48 +565,60 @@ export const cloudAuthAttemptStatusSchema = z.enum([
   "failed",
   "pending",
 ]);
-export type CloudAuthAttemptStatus = z.infer<typeof cloudAuthAttemptStatusSchema>;
+export type CloudAuthAttemptStatus = z.infer<
+  typeof cloudAuthAttemptStatusSchema
+>;
 
-export const cloudAuthConnectionSchema = z.object({
-  providerId: cloudAuthProviderIdSchema,
-  displayName: z.string().min(1),
-  status: cloudAuthConnectionStatusSchema,
-  label: z.string().nullable(),
-  connectedAt: z.number().nullable(),
-  expiresAt: z.number().nullable(),
-  lastRefreshedAt: z.number().nullable(),
-  errorMessage: z.string().nullable(),
-}).strict();
+export const cloudAuthConnectionSchema = z
+  .object({
+    providerId: cloudAuthProviderIdSchema,
+    displayName: z.string().min(1),
+    status: cloudAuthConnectionStatusSchema,
+    label: z.string().nullable(),
+    connectedAt: z.number().nullable(),
+    expiresAt: z.number().nullable(),
+    lastRefreshedAt: z.number().nullable(),
+    errorMessage: z.string().nullable(),
+  })
+  .strict();
 export type CloudAuthConnection = z.infer<typeof cloudAuthConnectionSchema>;
 
-export const cloudAuthSettingsResponseSchema = z.object({
-  connections: z.array(cloudAuthConnectionSchema),
-}).strict();
+export const cloudAuthSettingsResponseSchema = z
+  .object({
+    connections: z.array(cloudAuthConnectionSchema),
+  })
+  .strict();
 export type CloudAuthSettingsResponse = z.infer<
   typeof cloudAuthSettingsResponseSchema
 >;
 
-export const cloudAuthConnectRequestSchema = z.object({
-  appOrigin: z.string().url(),
-}).strict();
+export const cloudAuthConnectRequestSchema = z
+  .object({
+    appOrigin: z.string().url(),
+  })
+  .strict();
 export type CloudAuthConnectRequest = z.infer<
   typeof cloudAuthConnectRequestSchema
 >;
 
-export const cloudAuthConnectResponseSchema = z.object({
-  attemptId: z.string().min(1),
-  authorizationUrl: z.string().url(),
-}).strict();
+export const cloudAuthConnectResponseSchema = z
+  .object({
+    attemptId: z.string().min(1),
+    authorizationUrl: z.string().url(),
+  })
+  .strict();
 export type CloudAuthConnectResponse = z.infer<
   typeof cloudAuthConnectResponseSchema
 >;
 
-export const cloudAuthAttemptResponseSchema = z.object({
-  attemptId: z.string().min(1),
-  providerId: cloudAuthProviderIdSchema,
-  status: cloudAuthAttemptStatusSchema,
-  errorMessage: z.string().nullable(),
-}).strict();
+export const cloudAuthAttemptResponseSchema = z
+  .object({
+    attemptId: z.string().min(1),
+    providerId: cloudAuthProviderIdSchema,
+    status: cloudAuthAttemptStatusSchema,
+    errorMessage: z.string().nullable(),
+  })
+  .strict();
 export type CloudAuthAttemptResponse = z.infer<
   typeof cloudAuthAttemptResponseSchema
 >;
@@ -568,22 +630,30 @@ export const sandboxEnvVarNameSchema = z
   .regex(/^[A-Za-z_][A-Za-z0-9_]*$/);
 export type SandboxEnvVarName = z.infer<typeof sandboxEnvVarNameSchema>;
 
-export const sandboxEnvVarSchema = z.object({
-  name: sandboxEnvVarNameSchema,
-  createdAt: z.number(),
-  updatedAt: z.number(),
-}).strict();
+export const sandboxEnvVarSchema = z
+  .object({
+    name: sandboxEnvVarNameSchema,
+    createdAt: z.number(),
+    updatedAt: z.number(),
+  })
+  .strict();
 export type SandboxEnvVar = z.infer<typeof sandboxEnvVarSchema>;
 
-export const sandboxEnvVarsResponseSchema = z.object({
-  envVars: z.array(sandboxEnvVarSchema),
-}).strict();
-export type SandboxEnvVarsResponse = z.infer<typeof sandboxEnvVarsResponseSchema>;
+export const sandboxEnvVarsResponseSchema = z
+  .object({
+    envVars: z.array(sandboxEnvVarSchema),
+  })
+  .strict();
+export type SandboxEnvVarsResponse = z.infer<
+  typeof sandboxEnvVarsResponseSchema
+>;
 
-export const upsertSandboxEnvVarRequestSchema = z.object({
-  name: sandboxEnvVarNameSchema,
-  value: z.string().max(16_384),
-}).strict();
+export const upsertSandboxEnvVarRequestSchema = z
+  .object({
+    name: sandboxEnvVarNameSchema,
+    value: z.string().max(16_384),
+  })
+  .strict();
 export type UpsertSandboxEnvVarRequest = z.infer<
   typeof upsertSandboxEnvVarRequestSchema
 >;
@@ -607,29 +677,37 @@ export const updateProjectRequestSchema = z
   );
 export type UpdateProjectRequest = z.infer<typeof updateProjectRequestSchema>;
 
-const updateLocalPathProjectSourceRequestSchema = z.object({
-  type: z.literal("local_path"),
-  path: localProjectPathRequestSchema.optional(),
-  isDefault: z.literal(true).optional(),
-}).strict();
+const updateLocalPathProjectSourceRequestSchema = z
+  .object({
+    type: z.literal("local_path"),
+    path: localProjectPathRequestSchema.optional(),
+    isDefault: z.literal(true).optional(),
+  })
+  .strict();
 
-const updateGitHubRepoProjectSourceRequestSchema = z.object({
-  type: z.literal("github_repo"),
-  repoUrl: z.string().url().optional(),
-  isDefault: z.literal(true).optional(),
-}).strict();
+const updateGitHubRepoProjectSourceRequestSchema = z
+  .object({
+    type: z.literal("github_repo"),
+    repoUrl: z.string().url().optional(),
+    isDefault: z.literal(true).optional(),
+  })
+  .strict();
 
-export const updateProjectSourceRequestSchema = z.discriminatedUnion("type", [
-  updateLocalPathProjectSourceRequestSchema,
-  updateGitHubRepoProjectSourceRequestSchema,
-]).refine(
-  (value) =>
-    ("path" in value && value.path !== undefined) ||
-    ("repoUrl" in value && value.repoUrl !== undefined) ||
-    value.isDefault !== undefined,
-  "At least one field besides type must be provided",
-);
-export type UpdateProjectSourceRequest = z.infer<typeof updateProjectSourceRequestSchema>;
+export const updateProjectSourceRequestSchema = z
+  .discriminatedUnion("type", [
+    updateLocalPathProjectSourceRequestSchema,
+    updateGitHubRepoProjectSourceRequestSchema,
+  ])
+  .refine(
+    (value) =>
+      ("path" in value && value.path !== undefined) ||
+      ("repoUrl" in value && value.repoUrl !== undefined) ||
+      value.isDefault !== undefined,
+    "At least one field besides type must be provided",
+  );
+export type UpdateProjectSourceRequest = z.infer<
+  typeof updateProjectSourceRequestSchema
+>;
 
 export const environmentActionTypeSchema = z.enum([
   "promote",
@@ -639,27 +717,39 @@ export const environmentActionTypeSchema = z.enum([
 ]);
 export type EnvironmentActionType = z.infer<typeof environmentActionTypeSchema>;
 
-export const squashMergeOptionsSchema = z.object({
-  mergeBaseBranch: z.string().min(1),
-}).strict();
+export const squashMergeOptionsSchema = z
+  .object({
+    mergeBaseBranch: z.string().min(1),
+  })
+  .strict();
 export type SquashMergeOptions = z.infer<typeof squashMergeOptionsSchema>;
 
 export const environmentActionRequestSchema = z.discriminatedUnion("action", [
-  z.object({
-    action: z.literal("promote"),
-  }).strict(),
-  z.object({
-    action: z.literal("demote"),
-  }).strict(),
-  z.object({
-    action: z.literal("commit"),
-  }).strict(),
-  z.object({
-    action: z.literal("squash_merge"),
-    options: squashMergeOptionsSchema,
-  }).strict(),
+  z
+    .object({
+      action: z.literal("promote"),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("demote"),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("commit"),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("squash_merge"),
+      options: squashMergeOptionsSchema,
+    })
+    .strict(),
 ]);
-export type EnvironmentActionRequest = z.infer<typeof environmentActionRequestSchema>;
+export type EnvironmentActionRequest = z.infer<
+  typeof environmentActionRequestSchema
+>;
 
 export const commitActionResponseSchema = z.object({
   ok: z.literal(true),
@@ -677,7 +767,9 @@ export const squashMergeActionResponseSchema = z.object({
   message: z.string(),
   commitSha: z.string().min(1),
 });
-export type SquashMergeActionResponse = z.infer<typeof squashMergeActionResponseSchema>;
+export type SquashMergeActionResponse = z.infer<
+  typeof squashMergeActionResponseSchema
+>;
 
 const promoteActionResponseSchema = z.object({
   ok: z.literal(true),
@@ -697,12 +789,16 @@ export const environmentActionResponseSchema = z.discriminatedUnion("action", [
   commitActionResponseSchema,
   squashMergeActionResponseSchema,
 ]);
-export type EnvironmentActionResponse = z.infer<typeof environmentActionResponseSchema>;
+export type EnvironmentActionResponse = z.infer<
+  typeof environmentActionResponseSchema
+>;
 
-export const environmentPromotionStateSchema = z.object({
-  isPromoted: z.boolean(),
-  branchName: z.string().nullable(),
-}).strict();
+export const environmentPromotionStateSchema = z
+  .object({
+    isPromoted: z.boolean(),
+    branchName: z.string().nullable(),
+  })
+  .strict();
 export type EnvironmentPromotionState = z.infer<
   typeof environmentPromotionStateSchema
 >;
@@ -727,51 +823,64 @@ export type EnvironmentPromotionUnavailableReason = z.infer<
   typeof environmentPromotionUnavailableReasonSchema
 >;
 
-export const environmentPromotionActionAvailabilitySchema = z.object({
-  enabled: z.boolean(),
-  unavailableReason: environmentPromotionUnavailableReasonSchema.nullable(),
-}).strict();
+export const environmentPromotionActionAvailabilitySchema = z
+  .object({
+    enabled: z.boolean(),
+    unavailableReason: environmentPromotionUnavailableReasonSchema.nullable(),
+  })
+  .strict();
 export type EnvironmentPromotionActionAvailability = z.infer<
   typeof environmentPromotionActionAvailabilitySchema
 >;
 
-export const environmentPromotionActionsSchema = z.object({
-  promote: environmentPromotionActionAvailabilitySchema,
-  demote: environmentPromotionActionAvailabilitySchema,
-}).strict();
+export const environmentPromotionActionsSchema = z
+  .object({
+    promote: environmentPromotionActionAvailabilitySchema,
+    demote: environmentPromotionActionAvailabilitySchema,
+  })
+  .strict();
 export type EnvironmentPromotionActions = z.infer<
   typeof environmentPromotionActionsSchema
 >;
 
-export const environmentPromotionResponseSchema = z.object({
-  state: environmentPromotionStateSchema,
-  actions: environmentPromotionActionsSchema,
-}).strict();
+export const environmentPromotionResponseSchema = z
+  .object({
+    state: environmentPromotionStateSchema,
+    actions: environmentPromotionActionsSchema,
+  })
+  .strict();
 export type EnvironmentPromotionResponse = z.infer<
   typeof environmentPromotionResponseSchema
 >;
 
-export const environmentActionFailureDetailsSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("commit_failed"),
-    errorMessage: z.string(),
-  }),
-  z.object({
-    kind: z.literal("squash_merge_conflict"),
-    conflictFiles: z.array(z.string()),
-  }),
-  z.object({
-    kind: z.literal("squash_merge_commit_failed"),
-    stage: z.enum(["prep_commit", "squash_commit"]),
-    errorMessage: z.string(),
-  }),
-]);
-export type EnvironmentActionFailureDetails = z.infer<typeof environmentActionFailureDetailsSchema>;
+export const environmentActionFailureDetailsSchema = z.discriminatedUnion(
+  "kind",
+  [
+    z.object({
+      kind: z.literal("commit_failed"),
+      errorMessage: z.string(),
+    }),
+    z.object({
+      kind: z.literal("squash_merge_conflict"),
+      conflictFiles: z.array(z.string()),
+    }),
+    z.object({
+      kind: z.literal("squash_merge_commit_failed"),
+      stage: z.enum(["prep_commit", "squash_commit"]),
+      errorMessage: z.string(),
+    }),
+  ],
+);
+export type EnvironmentActionFailureDetails = z.infer<
+  typeof environmentActionFailureDetailsSchema
+>;
 
 export const environmentActionApiErrorSchema = apiErrorSchema.extend({
   details: environmentActionFailureDetailsSchema.optional(),
 });
-export type EnvironmentActionApiError = z.infer<typeof environmentActionApiErrorSchema>;
+export type EnvironmentActionApiError = z.infer<
+  typeof environmentActionApiErrorSchema
+>;
 
 export const timelineToolDetailsRequestSchema = z.object({
   turnId: z.string(),
@@ -779,19 +888,25 @@ export const timelineToolDetailsRequestSchema = z.object({
   sourceSeqEnd: z.number(),
   showAllManagerEvents: z.boolean().optional(),
 });
-export type TimelineToolDetailsRequest = z.infer<typeof timelineToolDetailsRequestSchema>;
+export type TimelineToolDetailsRequest = z.infer<
+  typeof timelineToolDetailsRequestSchema
+>;
 
 export const timelineToolDetailsResponseSchema = z.object({
   messages: z.array(viewMessageSchema),
 });
-export type TimelineToolDetailsResponse = z.infer<typeof timelineToolDetailsResponseSchema>;
+export type TimelineToolDetailsResponse = z.infer<
+  typeof timelineToolDetailsResponseSchema
+>;
 
 export const threadTimelineResponseSchema = z.object({
   rows: z.array(timelineRowSchema),
   activeThinking: timelineActiveThinkingSchema.nullable(),
   contextWindowUsage: threadContextWindowUsageSchema.optional(),
 });
-export type ThreadTimelineResponse = z.infer<typeof threadTimelineResponseSchema>;
+export type ThreadTimelineResponse = z.infer<
+  typeof threadTimelineResponseSchema
+>;
 
 // SystemProviderInfo is the same shape as ProviderInfo from domain.
 // Re-export with the API-facing name for backward compatibility.
@@ -806,7 +921,9 @@ export type { SandboxBackendInfo as SystemSandboxBackendInfo } from "@bb/domain"
 export const systemVoiceTranscriptionResponseSchema = z.object({
   text: z.string(),
 });
-export type SystemVoiceTranscriptionResponse = z.infer<typeof systemVoiceTranscriptionResponseSchema>;
+export type SystemVoiceTranscriptionResponse = z.infer<
+  typeof systemVoiceTranscriptionResponseSchema
+>;
 
 export const workspaceFileSchema = z.object({
   path: z.string(),
@@ -818,7 +935,9 @@ export const workspaceFileListResponseSchema = z.object({
   files: z.array(workspaceFileSchema),
   truncated: z.boolean(),
 });
-export type WorkspaceFileListResponse = z.infer<typeof workspaceFileListResponseSchema>;
+export type WorkspaceFileListResponse = z.infer<
+  typeof workspaceFileListResponseSchema
+>;
 
 export const projectResponseSchema = projectSchema.extend({
   sources: z.array(projectSourceSchema),
@@ -875,8 +994,12 @@ export const uploadedPromptAttachmentSchema = z.object({
   mimeType: z.string().optional(),
   sizeBytes: z.number(),
 });
-export type UploadedPromptAttachment = z.infer<typeof uploadedPromptAttachmentSchema>;
-export type EnvironmentStatusResponse = z.infer<typeof environmentStatusResponseSchema>;
+export type UploadedPromptAttachment = z.infer<
+  typeof uploadedPromptAttachmentSchema
+>;
+export type EnvironmentStatusResponse = z.infer<
+  typeof environmentStatusResponseSchema
+>;
 
 export {
   replayCaptureDetailSchema,

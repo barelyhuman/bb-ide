@@ -59,7 +59,10 @@ const KEEP_RECENT_BY_MODE: Record<ThreadEventPruningMode, number> = {
 const agePrunableThreadEventTypeSet = new Set<ThreadEventType>(
   AGE_PRUNABLE_THREAD_EVENT_TYPES,
 );
-const activeThreadPruneStateByThreadId = new Map<string, ActiveThreadPruneState>();
+const activeThreadPruneStateByThreadId = new Map<
+  string,
+  ActiveThreadPruneState
+>();
 
 export function isAgePrunableThreadEventType(
   eventType: ThreadEventType,
@@ -90,20 +93,16 @@ export function pruneThreadEventHistory(
       sequenceCutoff,
       types: GENERIC_AGE_PRUNABLE_THREAD_EVENT_TYPES,
     });
-  const removedResolvedItemDeltas = pruneResolvedItemDeltas(
-    deps.db,
-    {
-      threadId: args.threadId,
-    },
-  );
+  const removedResolvedItemDeltas = pruneResolvedItemDeltas(deps.db, {
+    threadId: args.threadId,
+  });
 
   return {
     latestSequence,
     removedAgePrunableEvents,
     removedResolvedItemDeltas,
     sequenceCutoff,
-    totalRemoved:
-      removedAgePrunableEvents + removedResolvedItemDeltas,
+    totalRemoved: removedAgePrunableEvents + removedResolvedItemDeltas,
   };
 }
 

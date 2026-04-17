@@ -138,7 +138,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function toFakeEventMessage(event: ProviderRuntimeEvent): FakeEventMessage | null {
+function toFakeEventMessage(
+  event: ProviderRuntimeEvent,
+): FakeEventMessage | null {
   if (typeof event.method !== "string" || !isRecord(event.params)) {
     return null;
   }

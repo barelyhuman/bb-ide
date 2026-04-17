@@ -45,7 +45,9 @@ function formatComparisonSummary(
 }
 
 function joinStatusSummary(parts: Array<string | null>): string {
-  const filteredParts = parts.filter((part) => part !== null && part.length > 0);
+  const filteredParts = parts.filter(
+    (part) => part !== null && part.length > 0,
+  );
   return filteredParts.join(" • ");
 }
 
@@ -60,7 +62,8 @@ export function getGitStatusDisplay(
 ): ThreadGitStatusDisplay {
   if (!status) {
     const isPathNotFound =
-      options?.error instanceof HttpError && options.error.code === "path_not_found";
+      options?.error instanceof HttpError &&
+      options.error.code === "path_not_found";
     if (options?.workspaceDeleted || isPathNotFound) {
       return {
         label: "Deleted",
@@ -73,7 +76,8 @@ export function getGitStatusDisplay(
     };
   }
 
-  const resolvedMergeBaseBranch = options?.mergeBaseBranch ?? status.mergeBase?.mergeBaseBranch;
+  const resolvedMergeBaseBranch =
+    options?.mergeBaseBranch ?? status.mergeBase?.mergeBaseBranch;
   const comparisonSummary = options?.showBranchComparison
     ? formatComparisonSummary(status, resolvedMergeBaseBranch)
     : null;
@@ -87,7 +91,10 @@ export function getGitStatusDisplay(
 
   switch (status.workingTree.state) {
     case "clean": {
-      if ((status.mergeBase?.aheadCount ?? 0) > 0 && (status.mergeBase?.behindCount ?? 0) > 0) {
+      if (
+        (status.mergeBase?.aheadCount ?? 0) > 0 &&
+        (status.mergeBase?.behindCount ?? 0) > 0
+      ) {
         return {
           label: "Diverged",
           summary: comparisonSummary ?? "Branch has diverged.",
@@ -129,7 +136,10 @@ export function getGitStatusDisplay(
         ]),
       };
     case "committed_unmerged":
-      if ((status.mergeBase?.aheadCount ?? 0) > 0 && (status.mergeBase?.behindCount ?? 0) > 0) {
+      if (
+        (status.mergeBase?.aheadCount ?? 0) > 0 &&
+        (status.mergeBase?.behindCount ?? 0) > 0
+      ) {
         return {
           label: "Diverged",
           summary: comparisonSummary ?? "Branch has diverged.",
@@ -167,7 +177,10 @@ export function workspaceStatusDescription(
 
   switch (status.workingTree.state) {
     case "clean": {
-      if ((status.mergeBase?.aheadCount ?? 0) > 0 && (status.mergeBase?.behindCount ?? 0) > 0) {
+      if (
+        (status.mergeBase?.aheadCount ?? 0) > 0 &&
+        (status.mergeBase?.behindCount ?? 0) > 0
+      ) {
         return "No local file changes, but this branch has diverged from its merge base.";
       }
       if ((status.mergeBase?.aheadCount ?? 0) > 0) {
@@ -186,7 +199,10 @@ export function workspaceStatusDescription(
     case "dirty_uncommitted":
       return "You have local changes that have not been committed yet.";
     case "committed_unmerged":
-      if ((status.mergeBase?.aheadCount ?? 0) > 0 && (status.mergeBase?.behindCount ?? 0) > 0) {
+      if (
+        (status.mergeBase?.aheadCount ?? 0) > 0 &&
+        (status.mergeBase?.behindCount ?? 0) > 0
+      ) {
         return "You have local commits waiting to be merged, and this branch is also behind its merge base.";
       }
       if ((status.mergeBase?.behindCount ?? 0) > 0) {

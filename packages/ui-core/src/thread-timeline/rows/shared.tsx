@@ -39,7 +39,9 @@ export function getEventHeaderToneClass(
     : "text-muted-foreground/90 transition-colors group-hover:text-foreground/90 group-focus-within:text-foreground/90";
 }
 
-export function getStaticEventToneClass(tone: EventTitleTone = "default"): string {
+export function getStaticEventToneClass(
+  tone: EventTitleTone = "default",
+): string {
   if (tone === "destructive") return "text-destructive/90";
   return "text-muted-foreground/90";
 }
@@ -79,23 +81,39 @@ export function EventTitle({
     tone === "destructive" ? "text-destructive" : "text-foreground/95";
   const suffixToneClass =
     tone === "destructive" ? "text-destructive/80" : "text-muted-foreground/75";
-  const prefixContent = shimmerPrefix ? <OngoingEventLabel>{prefix}</OngoingEventLabel> : prefix;
+  const prefixContent = shimmerPrefix ? (
+    <OngoingEventLabel>{prefix}</OngoingEventLabel>
+  ) : (
+    prefix
+  );
 
   return (
     <span className={cx("inline-flex min-w-0 items-center gap-1.5", className)}>
-      <span className={cx("shrink-0", prefixToneClass, prefixClassName)}>{prefixContent}</span>
+      <span className={cx("shrink-0", prefixToneClass, prefixClassName)}>
+        {prefixContent}
+      </span>
       {detail !== undefined ? (
-        <span className={cx("min-w-0 truncate", detailToneClass, detailClassName)}>{detail}</span>
+        <span
+          className={cx("min-w-0 truncate", detailToneClass, detailClassName)}
+        >
+          {detail}
+        </span>
       ) : null}
       {emphasis !== undefined ? (
         <EmphasisTag
-          className={cx("truncate font-semibold not-italic", emphasisToneClass, emphasisClassName)}
+          className={cx(
+            "truncate font-semibold not-italic",
+            emphasisToneClass,
+            emphasisClassName,
+          )}
         >
           {emphasis}
         </EmphasisTag>
       ) : null}
       {suffix !== undefined ? (
-        <span className={cx("shrink-0", suffixToneClass, suffixClassName)}>{suffix}</span>
+        <span className={cx("shrink-0", suffixToneClass, suffixClassName)}>
+          {suffix}
+        </span>
       ) : null}
     </span>
   );

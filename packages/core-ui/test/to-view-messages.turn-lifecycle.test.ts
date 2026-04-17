@@ -9,7 +9,6 @@ import {
 } from "./timeline-test-harness.js";
 
 describe("toViewProjection turn lifecycle", () => {
-
   it("fails loudly when a turn has duplicate turn/started lifecycle events", () => {
     const events: ThreadEventRow[] = [
       {
@@ -40,10 +39,9 @@ describe("toViewProjection turn lifecycle", () => {
       toViewProjection(fromRows(events), {
         threadStatus: "active",
         turnMessageDetail: "summary",
-      })
+      }),
     ).toThrow(/duplicate turn\/started for turn-1/);
   });
-
 
   it("uses turn/completed as the authoritative completed state in summary mode", () => {
     const events: ThreadEventRow[] = [
@@ -127,7 +125,6 @@ describe("toViewProjection turn lifecycle", () => {
     expect(entry.turn.terminalMessage?.kind).toBe("assistant-text");
   });
 
-
   it("keeps zero duration on completed turns instead of dropping it", () => {
     const events: ThreadEventRow[] = [
       {
@@ -185,7 +182,6 @@ describe("toViewProjection turn lifecycle", () => {
     expect(entry.turn.durationMs).toBe(0);
   });
 
-
   it("keeps pending turn messages present even when current messages are terminal", () => {
     const events: ThreadEventRow[] = [
       {
@@ -231,7 +227,6 @@ describe("toViewProjection turn lifecycle", () => {
     expect(entry.turn.messages).toHaveLength(1);
     expect(entry.turn.messages?.[0]?.kind).toBe("assistant-text");
   });
-
 
   it("keeps summary turn messages when messages after the terminal need standalone rows", () => {
     const events: ThreadEventRow[] = [
@@ -325,7 +320,6 @@ describe("toViewProjection turn lifecycle", () => {
     ]);
   });
 
-
   it("summarizes completed tool-only turns without retaining full messages", () => {
     const events: ThreadEventRow[] = [
       {
@@ -389,7 +383,6 @@ describe("toViewProjection turn lifecycle", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.kind).toBe("tool-group");
   });
-
 
   it("retains completed no-terminal turns when they contain standalone-only messages", () => {
     const events: ThreadEventRow[] = [
@@ -459,7 +452,6 @@ describe("toViewProjection turn lifecycle", () => {
     ]);
   });
 
-
   it("rejects turn-scoped messages that do not have turn lifecycle events", () => {
     const events: ThreadEventRow[] = [
       {
@@ -484,7 +476,7 @@ describe("toViewProjection turn lifecycle", () => {
       toViewProjection(fromRows(events), {
         threadStatus: "idle",
         turnMessageDetail: "summary",
-      })
+      }),
     ).toThrow(/without turn\/started/);
   });
 });

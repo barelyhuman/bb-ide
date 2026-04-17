@@ -50,9 +50,7 @@ import {
   hasActiveSandboxRuntimeMaterialSyncOperationForCommand,
 } from "../services/hosts/sandbox-runtime-material-operation.js";
 import { queueThreadRenameCommand } from "../services/threads/thread-commands.js";
-import {
-  tryTransition,
-} from "../services/threads/thread-transitions.js";
+import { tryTransition } from "../services/threads/thread-transitions.js";
 import {
   advanceThreadProvisioning,
   recordThreadProvisionWorkspaceReady,
@@ -73,9 +71,7 @@ export type CommandResultSideEffectsDeps = Pick<
   | "sandboxRegistry"
 >;
 
-function parseCommand(
-  commandRow: typeof hostDaemonCommands.$inferSelect,
-) {
+function parseCommand(commandRow: typeof hostDaemonCommands.$inferSelect) {
   return hostDaemonCommandSchema.parse(JSON.parse(commandRow.payload));
 }
 
@@ -177,7 +173,10 @@ function hasActiveThreadProvisionOperation(
 
 async function handleProvisionCommandResult(
   deps: CommandResultSideEffectsDeps,
-  report: Extract<HostDaemonCommandResultReport, { type: "environment.provision" }>,
+  report: Extract<
+    HostDaemonCommandResultReport,
+    { type: "environment.provision" }
+  >,
   commandRow: typeof hostDaemonCommands.$inferSelect,
 ): Promise<void> {
   const command = parseCommand(commandRow);
@@ -185,9 +184,11 @@ async function handleProvisionCommandResult(
     return;
   }
 
-  if (!hasActiveEnvironmentProvisionOperationForCommand(deps, {
-    commandId: commandRow.id,
-  })) {
+  if (
+    !hasActiveEnvironmentProvisionOperationForCommand(deps, {
+      commandId: commandRow.id,
+    })
+  ) {
     return;
   }
   const boundThreads = deps.db
@@ -197,14 +198,19 @@ async function handleProvisionCommandResult(
     .all();
 
   if (report.ok) {
-    applyProvisionedEnvironmentRecord(deps.db, deps.hub, command.environmentId, {
-      path: report.result.path,
-      status: "ready",
-      isGitRepo: report.result.isGitRepo,
-      isWorktree: report.result.isWorktree,
-      branchName: report.result.branchName,
-      defaultBranch: report.result.defaultBranch,
-    });
+    applyProvisionedEnvironmentRecord(
+      deps.db,
+      deps.hub,
+      command.environmentId,
+      {
+        path: report.result.path,
+        status: "ready",
+        isGitRepo: report.result.isGitRepo,
+        isWorktree: report.result.isWorktree,
+        branchName: report.result.branchName,
+        defaultBranch: report.result.defaultBranch,
+      },
+    );
     deps.hub.notifyEnvironment(command.environmentId, ["work-status-changed"]);
 
     const cwdBranchEntries = buildCwdBranchEntries({
@@ -223,13 +229,14 @@ async function handleProvisionCommandResult(
       }
 
       const isInitiator = thread.id === command.initiator?.threadId;
-      const hasStreamedTranscript = isInitiator && command.initiator
-        ? hasStreamedProvisioningTranscript({
-            deps,
-            threadId: thread.id,
-            afterSequence: command.initiator.eventSequence,
-          })
-        : false;
+      const hasStreamedTranscript =
+        isInitiator && command.initiator
+          ? hasStreamedProvisioningTranscript({
+              deps,
+              threadId: thread.id,
+              afterSequence: command.initiator.eventSequence,
+            })
+          : false;
       const entries = hasStreamedTranscript
         ? []
         : isInitiator && report.result.transcript.length > 0
@@ -287,7 +294,10 @@ async function handleEnvironmentDestroyResult(
     AppDeps,
     "config" | "db" | "hostLifecycle" | "hub" | "logger" | "sandboxRegistry"
   >,
-  report: Extract<HostDaemonCommandResultReport, { type: "environment.destroy" }>,
+  report: Extract<
+    HostDaemonCommandResultReport,
+    { type: "environment.destroy" }
+  >,
   commandRow: typeof hostDaemonCommands.$inferSelect,
 ): Promise<void> {
   const command = parseCommand(commandRow);
@@ -295,9 +305,11 @@ async function handleEnvironmentDestroyResult(
     return;
   }
 
-  if (!hasActiveEnvironmentDestroyOperationForCommand(deps, {
-    commandId: commandRow.id,
-  })) {
+  if (
+    !hasActiveEnvironmentDestroyOperationForCommand(deps, {
+      commandId: commandRow.id,
+    })
+  ) {
     return;
   }
   const environment = getEnvironment(deps.db, command.environmentId);
@@ -313,9 +325,11 @@ async function handleEnvironmentDestroyResult(
   if (!environment || environment.status !== "destroying") {
     return;
   }
-  if (!completeEnvironmentDestroyForCommand(deps, {
-    commandId: commandRow.id,
-  })) {
+  if (
+    !completeEnvironmentDestroyForCommand(deps, {
+      commandId: commandRow.id,
+    })
+  ) {
     return;
   }
 
@@ -348,9 +362,11 @@ function handleThreadStartResult(
     return;
   }
 
-  if (!hasActiveThreadStartOperationForCommand(deps, {
-    commandId: commandRow.id,
-  })) {
+  if (
+    !hasActiveThreadStartOperationForCommand(deps, {
+      commandId: commandRow.id,
+    })
+  ) {
     return;
   }
   const thread = getThread(deps.db, command.threadId);
@@ -422,9 +438,11 @@ function handleThreadStopResult(
     return Promise.resolve();
   }
 
-  if (!hasActiveThreadStopOperationForCommand(deps, {
-    commandId: commandRow.id,
-  })) {
+  if (
+    !hasActiveThreadStopOperationForCommand(deps, {
+      commandId: commandRow.id,
+    })
+  ) {
     return Promise.resolve();
   }
 
@@ -448,10 +466,7 @@ function handleThreadCommandFailure(
   commandRow: typeof hostDaemonCommands.$inferSelect,
 ): void {
   const command = parseCommand(commandRow);
-  if (
-    command.type !== "thread.start" &&
-    command.type !== "turn.submit"
-  ) {
+  if (command.type !== "thread.start" && command.type !== "turn.submit") {
     return;
   }
   const thread = getThread(deps.db, command.threadId);
@@ -530,9 +545,11 @@ function handleSandboxRuntimeMaterialResult(
   >,
   commandRow: typeof hostDaemonCommands.$inferSelect,
 ): void {
-  if (!hasActiveSandboxRuntimeMaterialSyncOperationForCommand(deps, {
-    commandId: commandRow.id,
-  })) {
+  if (
+    !hasActiveSandboxRuntimeMaterialSyncOperationForCommand(deps, {
+      commandId: commandRow.id,
+    })
+  ) {
     return;
   }
 

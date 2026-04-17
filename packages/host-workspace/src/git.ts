@@ -106,9 +106,13 @@ export async function runGit(
 
     const stderr = trimOutput(execError?.stderr ?? "");
     const detail = stderr ? `: ${stderr}` : "";
-    throw new WorkspaceError("git_command_failed", `git ${args.join(" ")} failed${detail}`, {
-      cause: error,
-    });
+    throw new WorkspaceError(
+      "git_command_failed",
+      `git ${args.join(" ")} failed${detail}`,
+      {
+        cause: error,
+      },
+    );
   }
 }
 
@@ -180,10 +184,10 @@ export async function pathExists(targetPath: string): Promise<boolean> {
 }
 
 export async function detectGitRepo(cwd: string): Promise<boolean> {
-  const result = await runGit(
-    ["rev-parse", "--is-inside-work-tree"],
-    { cwd, allowFailure: true },
-  );
+  const result = await runGit(["rev-parse", "--is-inside-work-tree"], {
+    cwd,
+    allowFailure: true,
+  });
   return result.exitCode === 0 && trimOutput(result.stdout) === "true";
 }
 
@@ -192,18 +196,23 @@ export async function ensureGitRepo(cwd: string): Promise<void> {
     return;
   }
 
-  throw new WorkspaceError("not_git_repo", `Path is not a git repository: ${cwd}`);
+  throw new WorkspaceError(
+    "not_git_repo",
+    `Path is not a git repository: ${cwd}`,
+  );
 }
 
-export async function getCurrentBranch(cwd: string): Promise<string | undefined> {
+export async function getCurrentBranch(
+  cwd: string,
+): Promise<string | undefined> {
   if (!(await detectGitRepo(cwd))) {
     return undefined;
   }
 
-  const result = await runGit(
-    ["symbolic-ref", "--quiet", "--short", "HEAD"],
-    { cwd, allowFailure: true },
-  );
+  const result = await runGit(["symbolic-ref", "--quiet", "--short", "HEAD"], {
+    cwd,
+    allowFailure: true,
+  });
   if (result.exitCode !== 0) {
     return undefined;
   }
@@ -321,7 +330,9 @@ function parsePorcelainPathToken(
 
 function parsePorcelainPath(rawPath: string): string {
   const sourcePath = parsePorcelainPathToken(rawPath, 0);
-  if (rawPath.slice(sourcePath.nextIndex, sourcePath.nextIndex + 4) !== " -> ") {
+  if (
+    rawPath.slice(sourcePath.nextIndex, sourcePath.nextIndex + 4) !== " -> "
+  ) {
     return sourcePath.value;
   }
   return parsePorcelainPathToken(rawPath, sourcePath.nextIndex + 4).value;
@@ -401,15 +412,19 @@ export function summarizeNumstat(output: string): {
 
       return {
         changedFiles: summary.changedFiles + 1,
-        insertions: summary.insertions + (Number.isFinite(insertions) ? insertions : 0),
-        deletions: summary.deletions + (Number.isFinite(deletions) ? deletions : 0),
+        insertions:
+          summary.insertions + (Number.isFinite(insertions) ? insertions : 0),
+        deletions:
+          summary.deletions + (Number.isFinite(deletions) ? deletions : 0),
       };
     },
     { changedFiles: 0, insertions: 0, deletions: 0 },
   );
 }
 
-export async function readDefaultBranch(cwd: string): Promise<string | undefined> {
+export async function readDefaultBranch(
+  cwd: string,
+): Promise<string | undefined> {
   await ensureGitRepo(cwd);
 
   const originHead = await runGit(
@@ -442,10 +457,10 @@ export async function readDefaultBranch(cwd: string): Promise<string | undefined
 
 export async function hasRef(cwd: string, ref: string): Promise<boolean> {
   await ensureGitRepo(cwd);
-  const result = await runGit(
-    ["show-ref", "--verify", "--quiet", ref],
-    { cwd, allowFailure: true },
-  );
+  const result = await runGit(["show-ref", "--verify", "--quiet", ref], {
+    cwd,
+    allowFailure: true,
+  });
   return result.exitCode === 0;
 }
 
@@ -454,10 +469,10 @@ export async function readMergeBaseRef(
   ref: string,
 ): Promise<string | undefined> {
   await ensureGitRepo(cwd);
-  const result = await runGit(
-    ["merge-base", ref, "HEAD"],
-    { cwd, allowFailure: true },
-  );
+  const result = await runGit(["merge-base", ref, "HEAD"], {
+    cwd,
+    allowFailure: true,
+  });
   if (result.exitCode !== 0) {
     return undefined;
   }

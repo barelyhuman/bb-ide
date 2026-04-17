@@ -56,7 +56,9 @@ function isJsonRecord(value: unknown): value is JsonRecord {
 }
 
 function getJsonRpcId(value: unknown): JsonRpcId | undefined {
-  return typeof value === "string" || typeof value === "number" ? value : undefined;
+  return typeof value === "string" || typeof value === "number"
+    ? value
+    : undefined;
 }
 
 function getString(value: unknown, fallback = ""): string {
@@ -146,7 +148,11 @@ function clearActiveTurn(thread: ThreadState): void {
   thread.activeTurn = null;
 }
 
-function emitUserMessage(threadId: string, turnId: string, input: unknown): void {
+function emitUserMessage(
+  threadId: string,
+  turnId: string,
+  input: unknown,
+): void {
   const thread = getThreadState(threadId);
   if (!thread) {
     return;
@@ -172,7 +178,11 @@ function emitUserMessage(threadId: string, turnId: string, input: unknown): void
   });
 }
 
-function completeTurn(threadId: string, status: string, responseText: string): void {
+function completeTurn(
+  threadId: string,
+  status: string,
+  responseText: string,
+): void {
   const thread = getThreadState(threadId);
   if (!thread || !thread.activeTurn) {
     return;
@@ -209,7 +219,11 @@ function completeTurn(threadId: string, status: string, responseText: string): v
   });
 }
 
-function scheduleTurnCompletion(threadId: string, responseText: string, delayMs: number): void {
+function scheduleTurnCompletion(
+  threadId: string,
+  responseText: string,
+  delayMs: number,
+): void {
   const thread = getThreadState(threadId);
   if (!thread || !thread.activeTurn) {
     return;
@@ -295,12 +309,16 @@ function startTurn(message: JsonRecord): void {
   beginTurn(threadId, params.input);
 }
 
-function startOrResumeThread(message: JsonRecord, mode: "resume" | "start"): void {
+function startOrResumeThread(
+  message: JsonRecord,
+  mode: "resume" | "start",
+): void {
   const params = getParams(message);
   const threadId = getString(params.threadId, "unknown");
   const providerThreadId =
     mode === "resume"
-      ? getString(params.providerThreadId) || `resumed-${nextProviderThreadId++}`
+      ? getString(params.providerThreadId) ||
+        `resumed-${nextProviderThreadId++}`
       : `prov-${nextProviderThreadId++}`;
 
   threads.set(threadId, {

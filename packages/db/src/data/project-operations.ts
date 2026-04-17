@@ -1,8 +1,5 @@
 import { and, eq, inArray } from "drizzle-orm";
-import type {
-  LifecycleOperationState,
-  ProjectOperationKind,
-} from "@bb/domain";
+import type { LifecycleOperationState, ProjectOperationKind } from "@bb/domain";
 import { createProjectOperationId } from "../ids.js";
 import { projectOperations } from "../schema.js";
 import {
@@ -56,16 +53,18 @@ function getProjectOperationRecord(
   db: ProjectOperationReadConnection,
   args: GetProjectOperationArgs,
 ): ProjectOperationRow | null {
-  return db
-    .select()
-    .from(projectOperations)
-    .where(
-      and(
-        eq(projectOperations.projectId, args.projectId),
-        eq(projectOperations.kind, args.kind),
-      ),
-    )
-    .get() ?? null;
+  return (
+    db
+      .select()
+      .from(projectOperations)
+      .where(
+        and(
+          eq(projectOperations.projectId, args.projectId),
+          eq(projectOperations.kind, args.kind),
+        ),
+      )
+      .get() ?? null
+  );
 }
 
 function updateProjectOperationStateRecord(
@@ -74,28 +73,30 @@ function updateProjectOperationStateRecord(
 ): ProjectOperationRow | null {
   const now = Date.now();
 
-  return db
-    .update(projectOperations)
-    .set({
-      state: args.state,
-      payload: args.payload,
-      commandId: args.commandId,
-      queuedAt: args.queuedAt,
-      completedAt: args.completedAt,
-      failureReason: args.failureReason,
-      updatedAt: now,
-    })
-    .where(
-      and(
-        eq(projectOperations.projectId, args.projectId),
-        eq(projectOperations.kind, args.kind),
-        args.allowedCurrentStates
-          ? inArray(projectOperations.state, [...args.allowedCurrentStates])
-          : undefined,
-      ),
-    )
-    .returning()
-    .get() ?? null;
+  return (
+    db
+      .update(projectOperations)
+      .set({
+        state: args.state,
+        payload: args.payload,
+        commandId: args.commandId,
+        queuedAt: args.queuedAt,
+        completedAt: args.completedAt,
+        failureReason: args.failureReason,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(projectOperations.projectId, args.projectId),
+          eq(projectOperations.kind, args.kind),
+          args.allowedCurrentStates
+            ? inArray(projectOperations.state, [...args.allowedCurrentStates])
+            : undefined,
+        ),
+      )
+      .returning()
+      .get() ?? null
+  );
 }
 
 const projectOperationStore: LifecycleOperationStore<
@@ -174,11 +175,13 @@ export function getProjectOperationByCommandId(
   db: ProjectOperationReadConnection,
   commandId: string,
 ): ProjectOperationRow | null {
-  return db
-    .select()
-    .from(projectOperations)
-    .where(eq(projectOperations.commandId, commandId))
-    .get() ?? null;
+  return (
+    db
+      .select()
+      .from(projectOperations)
+      .where(eq(projectOperations.commandId, commandId))
+      .get() ?? null
+  );
 }
 
 export function upsertProjectOperationRecord(

@@ -57,7 +57,10 @@ describe.sequential("fake provider smoke lifecycle integration", () => {
 
   it("creates a managed worktree and registers it as a git worktree", () =>
     withHarness(async (harness) => {
-      const project = await createProjectFixture(harness, "Managed Worktree Smoke");
+      const project = await createProjectFixture(
+        harness,
+        "Managed Worktree Smoke",
+      );
       const { environment } = await createReadyThread(harness, {
         projectId: project.id,
         workspace: { type: "managed-worktree" },
@@ -91,8 +94,13 @@ describe.sequential("fake provider smoke lifecycle integration", () => {
             displayName: providerId,
             id: providerId,
           });
-          const buildCommandPlan: typeof baseAdapter.buildCommandPlan = (command) => {
-            if (command.type === "thread/start" || command.type === "thread/resume") {
+          const buildCommandPlan: typeof baseAdapter.buildCommandPlan = (
+            command,
+          ) => {
+            if (
+              command.type === "thread/start" ||
+              command.type === "thread/resume"
+            ) {
               runtimeConfigCommands.push({
                 commandType: command.type,
                 dynamicToolNames: (command.dynamicTools ?? [])
@@ -112,21 +120,28 @@ describe.sequential("fake provider smoke lifecycle integration", () => {
       },
       async (harness) => {
         const project = await createProjectFixture(harness, "Manager Smoke");
-        const { environment: sourceEnvironment } = await createReadyThread(harness, {
-          projectId: project.id,
-          workspace: {
-            type: "unmanaged",
-            path: harness.repoDir,
+        const { environment: sourceEnvironment } = await createReadyThread(
+          harness,
+          {
+            projectId: project.id,
+            workspace: {
+              type: "unmanaged",
+              path: harness.repoDir,
+            },
           },
-        });
+        );
 
-        const managerThread = await createManagerThread(harness.api, project.id, {
-          model: "fake-model",
-          providerId: "fake",
-          reasoningLevel: "high",
-          name: "Project manager",
-          environment: { type: "host", hostId: harness.hostId },
-        });
+        const managerThread = await createManagerThread(
+          harness.api,
+          project.id,
+          {
+            model: "fake-model",
+            providerId: "fake",
+            reasoningLevel: "high",
+            name: "Project manager",
+            environment: { type: "host", hostId: harness.hostId },
+          },
+        );
         expect(managerThread.type).toBe("manager");
         expect(managerThread.environmentId).toBe(sourceEnvironment.id);
 
@@ -160,7 +175,9 @@ describe.sequential("fake provider smoke lifecycle integration", () => {
           "(file does not exist)",
         );
         expect(managerRuntimeCommand?.instructions).toContain(managerThread.id);
-        expect(managerRuntimeCommand?.instructions).toContain(managerEnvironment.path);
+        expect(managerRuntimeCommand?.instructions).toContain(
+          managerEnvironment.path,
+        );
       },
     );
   });
@@ -185,7 +202,12 @@ describe.sequential("fake provider smoke lifecycle integration", () => {
         "active",
         ACTIVE_TURN_TIMEOUT_MS,
       );
-      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+      await waitForThreadStatus(
+        harness.api,
+        thread.id,
+        "idle",
+        TURN_TIMEOUT_MS,
+      );
 
       await waitForEventType(
         harness.api,
@@ -203,15 +225,22 @@ describe.sequential("fake provider smoke lifecycle integration", () => {
       const events = await getThreadEvents(harness.api, thread.id);
       assertMonotonicSequences(events);
       expect(events.some((event) => event.type === "turn/started")).toBe(true);
-      expect(events.some((event) => event.type === "turn/completed")).toBe(true);
+      expect(events.some((event) => event.type === "turn/completed")).toBe(
+        true,
+      );
       expect(events.every((event) => event.threadId === thread.id)).toBe(true);
 
-      const storedTurnEvents = readStoredTurnEvents(harness.db, thread.id).filter(
+      const storedTurnEvents = readStoredTurnEvents(
+        harness.db,
+        thread.id,
+      ).filter(
         (event) =>
           event.type === "turn/started" || event.type === "turn/completed",
       );
       expect(storedTurnEvents.length).toBeGreaterThanOrEqual(2);
-      expect(storedTurnEvents.every((event) => Boolean(event.turnId))).toBe(true);
+      expect(storedTurnEvents.every((event) => Boolean(event.turnId))).toBe(
+        true,
+      );
 
       const timeline = await getThreadTimeline(harness.api, thread.id);
       const output = await getThreadOutput(harness.api, thread.id);
@@ -230,8 +259,12 @@ describe.sequential("fake provider smoke lifecycle integration", () => {
         },
       });
       const baselineEvents = await getThreadEvents(harness.api, thread.id);
-      const baselineStartedCount = baselineEvents.filter((event) => event.type === "turn/started").length;
-      const baselineCompletedCount = baselineEvents.filter((event) => event.type === "turn/completed").length;
+      const baselineStartedCount = baselineEvents.filter(
+        (event) => event.type === "turn/started",
+      ).length;
+      const baselineCompletedCount = baselineEvents.filter(
+        (event) => event.type === "turn/completed",
+      ).length;
       const baselineTurnIds = new Set(
         readStoredTurnEvents(harness.db, thread.id)
           .map((event) => event.turnId)
@@ -241,21 +274,31 @@ describe.sequential("fake provider smoke lifecycle integration", () => {
       await sendTextMessage(harness.api, thread.id, {
         text: "first turn",
       });
-      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+      await waitForThreadStatus(
+        harness.api,
+        thread.id,
+        "idle",
+        TURN_TIMEOUT_MS,
+      );
 
       await sendTextMessage(harness.api, thread.id, {
         mode: "auto",
         text: "second turn",
       });
-      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+      await waitForThreadStatus(
+        harness.api,
+        thread.id,
+        "idle",
+        TURN_TIMEOUT_MS,
+      );
 
       const events = await getThreadEvents(harness.api, thread.id);
-      expect(events.filter((event) => event.type === "turn/started")).toHaveLength(
-        baselineStartedCount + 2,
-      );
-      expect(events.filter((event) => event.type === "turn/completed")).toHaveLength(
-        baselineCompletedCount + 2,
-      );
+      expect(
+        events.filter((event) => event.type === "turn/started"),
+      ).toHaveLength(baselineStartedCount + 2);
+      expect(
+        events.filter((event) => event.type === "turn/completed"),
+      ).toHaveLength(baselineCompletedCount + 2);
 
       const turnIds = new Set(
         readStoredTurnEvents(harness.db, thread.id)
@@ -286,9 +329,15 @@ describe.sequential("fake provider smoke lifecycle integration", () => {
         ACTIVE_TURN_TIMEOUT_MS,
       );
       await stopThread(harness.api, thread.id);
-      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
-      const interruptedEvents = (await getThreadEvents(harness.api, thread.id))
-        .filter((event) => event.type === "system/thread/interrupted");
+      await waitForThreadStatus(
+        harness.api,
+        thread.id,
+        "idle",
+        TURN_TIMEOUT_MS,
+      );
+      const interruptedEvents = (
+        await getThreadEvents(harness.api, thread.id)
+      ).filter((event) => event.type === "system/thread/interrupted");
       const latestInterruptedEvent = interruptedEvents.at(-1);
       expect(latestInterruptedEvent?.data.reason).toBe("user");
     }));

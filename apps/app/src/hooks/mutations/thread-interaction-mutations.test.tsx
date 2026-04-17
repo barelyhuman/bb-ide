@@ -64,10 +64,9 @@ describe("useResolveThreadPendingInteraction", () => {
     const { queryClient, wrapper } = createQueryClientTestHarness();
     const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
 
-    const { result } = renderHook(
-      () => useResolveThreadPendingInteraction(),
-      { wrapper },
-    );
+    const { result } = renderHook(() => useResolveThreadPendingInteraction(), {
+      wrapper,
+    });
 
     await act(async () => {
       await result.current.mutateAsync({

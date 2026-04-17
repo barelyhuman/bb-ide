@@ -1,11 +1,13 @@
-import type { Thread, ThreadType } from "@bb/domain"
+import type { Thread, ThreadType } from "@bb/domain";
 
-export function getThreadDisplayTitle(thread: Pick<Thread, "id" | "title" | "titleFallback">): string {
-  if (thread.title && thread.title.trim().length > 0) return thread.title
+export function getThreadDisplayTitle(
+  thread: Pick<Thread, "id" | "title" | "titleFallback">,
+): string {
+  if (thread.title && thread.title.trim().length > 0) return thread.title;
   if (thread.titleFallback && thread.titleFallback.trim().length > 0) {
-    return thread.titleFallback
+    return thread.titleFallback;
   }
-  return `Thread ${thread.id.slice(0, 8)}`
+  return `Thread ${thread.id.slice(0, 8)}`;
 }
 
 /**
@@ -13,5 +15,5 @@ export function getThreadDisplayTitle(thread: Pick<Thread, "id" | "title" | "tit
  * Manager threads are called "manager"; standard threads are called "thread".
  */
 export function threadTypeLabel(type: ThreadType): string {
-  return type === "manager" ? "manager" : "thread"
+  return type === "manager" ? "manager" : "thread";
 }

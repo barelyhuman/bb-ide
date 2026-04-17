@@ -71,9 +71,7 @@ function writeJsonFile(filePath: string, value: object): void {
   writeFileSync(filePath, JSON.stringify(value, null, 2) + "\n");
 }
 
-function resolveFixtureCorpusRoot(
-  args: ResolveFixtureCorpusRootArgs,
-): string {
+function resolveFixtureCorpusRoot(args: ResolveFixtureCorpusRootArgs): string {
   const fixtureRoot = resolve(args.fixtureRoot);
   const candidate = resolve(fixtureRoot, args.corpusId);
   const relativePath = relative(fixtureRoot, candidate);
@@ -131,8 +129,8 @@ function sanitizeTextContent(
   }
 
   let nextContent = content;
-  for (const replacement of replacements.sort((left, right) =>
-    right.from.length - left.from.length,
+  for (const replacement of replacements.sort(
+    (left, right) => right.from.length - left.from.length,
   )) {
     nextContent = nextContent.split(replacement.from).join(replacement.to);
   }
@@ -160,7 +158,9 @@ function readDirNames(path: string): string[] {
   return Array.from(new Set(readdirSync(path)));
 }
 
-function findBundlePaths(sourceRoot: string): ProviderAuditFixtureBundlePaths[] {
+function findBundlePaths(
+  sourceRoot: string,
+): ProviderAuditFixtureBundlePaths[] {
   const entries = readDirNames(sourceRoot);
   return entries
     .map((entryName) => resolve(sourceRoot, entryName))
@@ -221,7 +221,10 @@ function writeFixtureBundle(args: {
 }): void {
   mkdirSync(args.destinationBundleDir, { recursive: true });
 
-  writeJsonFile(join(args.destinationBundleDir, "manifest.json"), args.manifest);
+  writeJsonFile(
+    join(args.destinationBundleDir, "manifest.json"),
+    args.manifest,
+  );
 
   const clientRequestsContent = sanitizeTextContent(
     JSON.stringify(args.clientRequests, null, 2) + "\n",

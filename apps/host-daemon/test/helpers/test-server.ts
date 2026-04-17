@@ -1,4 +1,8 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
 import { Hono } from "hono";
 import {
   HOST_DAEMON_WEBSOCKET_PROTOCOL,
@@ -194,12 +198,11 @@ export async function createTestServer(
         !completedCommandIds.has(command.id),
     );
 
-    const availableRawEntries = [...rawCommands.entries()]
-      .filter(
-        ([cursor, rawCommand]) =>
-          !fetchedRawCommandCursors.has(cursor) &&
-          !completedCommandIds.has(getRawCommandId(rawCommand) ?? ""),
-      );
+    const availableRawEntries = [...rawCommands.entries()].filter(
+      ([cursor, rawCommand]) =>
+        !fetchedRawCommandCursors.has(cursor) &&
+        !completedCommandIds.has(getRawCommandId(rawCommand) ?? ""),
+    );
 
     const allCommands = [
       ...available.sort((left, right) => left.cursor - right.cursor),
@@ -309,22 +312,27 @@ export async function createTestServer(
       return;
     }
 
-    websocketServer.handleUpgrade(request, socket, head, (websocket: WebSocket) => {
-      activeSockets.add(websocket);
-      websocket.on("message", (data: RawData) => {
-        const message = hostDaemonDaemonWsMessageSchema.parse(
-          JSON.parse(data.toString("utf8")),
-        );
-        heartbeats.push({
-          sessionId: url.searchParams.get("sessionId") ?? "",
-          message,
+    websocketServer.handleUpgrade(
+      request,
+      socket,
+      head,
+      (websocket: WebSocket) => {
+        activeSockets.add(websocket);
+        websocket.on("message", (data: RawData) => {
+          const message = hostDaemonDaemonWsMessageSchema.parse(
+            JSON.parse(data.toString("utf8")),
+          );
+          heartbeats.push({
+            sessionId: url.searchParams.get("sessionId") ?? "",
+            message,
+          });
         });
-      });
-      websocket.on("close", () => {
-        activeSockets.delete(websocket);
-      });
-      websocketServer.emit("connection", websocket, request);
-    });
+        websocket.on("close", () => {
+          activeSockets.delete(websocket);
+        });
+        websocketServer.emit("connection", websocket, request);
+      },
+    );
   });
 
   await new Promise<void>((resolve) => {
@@ -366,7 +374,9 @@ export async function createTestServer(
       return cursor;
     },
     sendWebSocketMessage(message: HostDaemonServerWsMessage): void {
-      const encoded = JSON.stringify(hostDaemonServerWsMessageSchema.parse(message));
+      const encoded = JSON.stringify(
+        hostDaemonServerWsMessageSchema.parse(message),
+      );
       for (const socket of activeSockets) {
         socket.send(encoded);
       }

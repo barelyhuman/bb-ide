@@ -2,12 +2,12 @@ import { Command } from "commander";
 import type { Thread } from "@bb/domain";
 import { action } from "../../action.js";
 import { createClient, unwrap } from "../../client.js";
-import { requireProjectIdWithLabel, resolveThreadId } from "../../context-env.js";
-import { renderBorderlessTable } from "../../table.js";
 import {
-  outputJson,
-  printContextLabel,
-} from "../helpers.js";
+  requireProjectIdWithLabel,
+  resolveThreadId,
+} from "../../context-env.js";
+import { renderBorderlessTable } from "../../table.js";
+import { outputJson, printContextLabel } from "../helpers.js";
 import { statusText } from "./helpers.js";
 
 interface ThreadListCommandOptions {
@@ -24,31 +24,36 @@ export function registerListCommand(
   parent
     .command("list")
     .description("List threads")
-    .option("--project <id>", "Filter by project ID (defaults to BB_PROJECT_ID)")
+    .option(
+      "--project <id>",
+      "Filter by project ID (defaults to BB_PROJECT_ID)",
+    )
     .option("--parent-thread <id>", "Filter by managing parent thread ID")
     .option("--archived", "Show only archived threads")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (opts: ThreadListCommandOptions) => {
-      const client = createClient(getUrl());
-      const resolvedProject = requireProjectIdWithLabel(opts.project);
-      printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
-      const projectId = resolvedProject.id;
-      const parentThreadId = resolveThreadId(opts.parentThread);
-      const query = {
-        projectId,
-        ...(parentThreadId ? { parentThreadId } : {}),
-        ...(opts.archived ? { archived: "true" as const } : {}),
-      };
-      const threads = await unwrap<Thread[]>(
-        client.api.v1.threads.$get({ query }),
-      );
-      if (outputJson(opts, threads)) return;
-      if (threads.length === 0) {
-        console.log("No threads found");
-        return;
-      }
-      printThreadTable(threads);
-    }));
+    .action(
+      action(async (opts: ThreadListCommandOptions) => {
+        const client = createClient(getUrl());
+        const resolvedProject = requireProjectIdWithLabel(opts.project);
+        printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
+        const projectId = resolvedProject.id;
+        const parentThreadId = resolveThreadId(opts.parentThread);
+        const query = {
+          projectId,
+          ...(parentThreadId ? { parentThreadId } : {}),
+          ...(opts.archived ? { archived: "true" as const } : {}),
+        };
+        const threads = await unwrap<Thread[]>(
+          client.api.v1.threads.$get({ query }),
+        );
+        if (outputJson(opts, threads)) return;
+        if (threads.length === 0) {
+          console.log("No threads found");
+          return;
+        }
+        printThreadTable(threads);
+      }),
+    );
 }
 
 function printThreadTable(threads: Thread[]): void {

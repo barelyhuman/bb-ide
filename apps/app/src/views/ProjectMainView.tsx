@@ -5,7 +5,10 @@ import {
   PromptExecutionControls,
   PromptPermissionModePicker,
 } from "@/components/promptbox/PromptExecutionControls";
-import { EnvironmentPicker, parseEnvironmentValue } from "@/components/promptbox/EnvironmentPicker";
+import {
+  EnvironmentPicker,
+  parseEnvironmentValue,
+} from "@/components/promptbox/EnvironmentPicker";
 import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { PageShell } from "@/components/layout/PageShell";
 import { useUploadPromptAttachment } from "@/hooks/mutations/project-mutations";
@@ -43,7 +46,8 @@ export function ProjectMainView() {
     [promptDraft.attachments, promptDraft.text],
   );
   const projectMainZenModeStorageKey = useMemo(
-    () => getProjectScopedStorageKey(PROJECT_MAIN_ZEN_MODE_STORAGE_KEY, projectId),
+    () =>
+      getProjectScopedStorageKey(PROJECT_MAIN_ZEN_MODE_STORAGE_KEY, projectId),
     [projectId],
   );
   const {
@@ -78,7 +82,10 @@ export function ProjectMainView() {
 
   // Fall back to local host direct if no value is stored yet
   const effectiveEnvironmentValue = useMemo(() => {
-    if (environmentSelectionValue && parseEnvironmentValue(environmentSelectionValue)) {
+    if (
+      environmentSelectionValue &&
+      parseEnvironmentValue(environmentSelectionValue)
+    ) {
       return environmentSelectionValue;
     }
     if (localHostId) {
@@ -87,7 +94,9 @@ export function ProjectMainView() {
     return "";
   }, [environmentSelectionValue, localHostId]);
 
-  const selectedEnvironment = useMemo((): CreateThreadRequest["environment"] | null => {
+  const selectedEnvironment = useMemo(():
+    | CreateThreadRequest["environment"]
+    | null => {
     if (!projectId) return null;
     const parsed = parseEnvironmentValue(effectiveEnvironmentValue);
     if (!parsed) return null;
@@ -124,7 +133,10 @@ export function ProjectMainView() {
         label: project.name,
       })) ?? [];
 
-    if (projectId && !knownOptions.some((option) => option.value === projectId)) {
+    if (
+      projectId &&
+      !knownOptions.some((option) => option.value === projectId)
+    ) {
       knownOptions.unshift({
         value: projectId,
         label: projectsLoading ? "Loading project…" : projectId,
@@ -135,10 +147,13 @@ export function ProjectMainView() {
   }, [projectId, projects, projectsLoading]);
 
   const selectedThreadModel = activeModel?.model ?? selectedModel;
-  const handleProjectChange = useCallback((nextProjectId: string) => {
-    if (nextProjectId === projectId) return;
-    navigate(`/projects/${nextProjectId}`);
-  }, [navigate, projectId]);
+  const handleProjectChange = useCallback(
+    (nextProjectId: string) => {
+      if (nextProjectId === projectId) return;
+      navigate(`/projects/${nextProjectId}`);
+    },
+    [navigate, projectId],
+  );
 
   const shouldFocusPrompt =
     typeof location.state === "object" &&
@@ -158,26 +173,31 @@ export function ProjectMainView() {
     return () => window.cancelAnimationFrame(handle);
   }, [location.key, shouldFocusPrompt]);
 
-  const handleAttachFiles = useCallback(async (files: File[]) => {
-    if (!projectId || files.length === 0) return;
+  const handleAttachFiles = useCallback(
+    async (files: File[]) => {
+      if (!projectId || files.length === 0) return;
 
-    setAttachmentError(null);
-    for (const file of files) {
-      try {
-        const uploaded = await uploadPromptAttachment.mutateAsync({
-          projectId,
-          file,
-        });
-        promptDraft.addAttachment(uploaded);
-      } catch (err) {
-        setAttachmentError(getMutationErrorMessage({
-          error: err,
-          fallbackMessage: "Attachment upload failed.",
-        }));
-        break;
+      setAttachmentError(null);
+      for (const file of files) {
+        try {
+          const uploaded = await uploadPromptAttachment.mutateAsync({
+            projectId,
+            file,
+          });
+          promptDraft.addAttachment(uploaded);
+        } catch (err) {
+          setAttachmentError(
+            getMutationErrorMessage({
+              error: err,
+              fallbackMessage: "Attachment upload failed.",
+            }),
+          );
+          break;
+        }
       }
-    }
-  }, [projectId, promptDraft, uploadPromptAttachment]);
+    },
+    [projectId, promptDraft, uploadPromptAttachment],
+  );
 
   if (!projectId) {
     return (

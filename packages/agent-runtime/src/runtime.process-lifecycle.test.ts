@@ -80,7 +80,11 @@ describe("createAgentRuntime process lifecycle", () => {
     });
     // This should reject because the provider returns a -32601 error
     await expect(
-      runtime2.runTurn({ threadId: "t1", input: [{ type: "text", text: "hi" }], options: fullRuntimeOptions }),
+      runtime2.runTurn({
+        threadId: "t1",
+        input: [{ type: "text", text: "hi" }],
+        options: fullRuntimeOptions,
+      }),
     ).rejects.toThrow("Method not found");
     await runtime.shutdown();
     await runtime2.shutdown();
@@ -245,7 +249,11 @@ describe("createAgentRuntime process lifecycle", () => {
     });
 
     await expect(
-      runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "hi" }], options: fullRuntimeOptions }),
+      runtime.runTurn({
+        threadId: "t1",
+        input: [{ type: "text", text: "hi" }],
+        options: fullRuntimeOptions,
+      }),
     ).rejects.toThrow(/exited|not running|no provider associated/i);
     await runtime.shutdown();
   });
@@ -295,7 +303,11 @@ describe("createAgentRuntime process lifecycle", () => {
 
     // runTurn sends the request but the provider crashes without responding
     await expect(
-      runtime.runTurn({ threadId: "t1", input: [{ type: "text", text: "hi" }], options: fullRuntimeOptions }),
+      runtime.runTurn({
+        threadId: "t1",
+        input: [{ type: "text", text: "hi" }],
+        options: fullRuntimeOptions,
+      }),
     ).rejects.toThrow(/exited unexpectedly/i);
     await runtime.shutdown();
   });
@@ -335,5 +347,4 @@ describe("createAgentRuntime process lifecycle", () => {
   });
 
   // ---- Multi-thread ----
-
 });

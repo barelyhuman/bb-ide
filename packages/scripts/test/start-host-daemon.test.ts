@@ -2,7 +2,9 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-async function importFreshStartHostDaemon(): Promise<typeof import("../src/commands/start-host-daemon.js")> {
+async function importFreshStartHostDaemon(): Promise<
+  typeof import("../src/commands/start-host-daemon.js")
+> {
   vi.resetModules();
   return import("../src/commands/start-host-daemon.js");
 }
@@ -14,7 +16,8 @@ afterEach(() => {
 describe("start-host-daemon", () => {
   it("uses production defaults when NODE_ENV=production", async () => {
     vi.stubEnv("NODE_ENV", "production");
-    const { resolveStartHostDaemonContext } = await importFreshStartHostDaemon();
+    const { resolveStartHostDaemonContext } =
+      await importFreshStartHostDaemon();
 
     const context = resolveStartHostDaemonContext();
 
@@ -25,7 +28,8 @@ describe("start-host-daemon", () => {
 
   it("uses development defaults consistently when NODE_ENV=development", async () => {
     vi.stubEnv("NODE_ENV", "development");
-    const { resolveStartHostDaemonContext } = await importFreshStartHostDaemon();
+    const { resolveStartHostDaemonContext } =
+      await importFreshStartHostDaemon();
 
     const context = resolveStartHostDaemonContext();
 
@@ -39,7 +43,8 @@ describe("start-host-daemon", () => {
     vi.stubEnv("BB_DATA_DIR", "~/host-daemon-data");
     vi.stubEnv("BB_SERVER_URL", "https://server.example.test");
     vi.stubEnv("BB_HOST_DAEMON_PORT", "4445");
-    const { resolveStartHostDaemonContext } = await importFreshStartHostDaemon();
+    const { resolveStartHostDaemonContext } =
+      await importFreshStartHostDaemon();
 
     const context = resolveStartHostDaemonContext();
 

@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { Thread } from "@bb/domain";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -60,7 +67,8 @@ function makeArchiveForceRequiredError(): HttpError {
   return new HttpError({
     body: { code: "archive_confirmation_required" },
     code: "archive_confirmation_required",
-    message: "Archiving this thread would clean up a workspace that contains work.",
+    message:
+      "Archiving this thread would clean up a workspace that contains work.",
     status: 409,
   });
 }
@@ -107,13 +115,21 @@ describe("ThreadActionsProvider", () => {
     });
 
     let actions: ReturnType<typeof useThreadActions> | null = null;
-    renderWithProvider(<HookProbe onReady={(a) => { actions = a; }} />);
+    renderWithProvider(
+      <HookProbe
+        onReady={(a) => {
+          actions = a;
+        }}
+      />,
+    );
 
     act(() => {
       actions!.requestRename(thread);
     });
 
-    const input = (await screen.findByLabelText(/thread name/i)) as HTMLInputElement;
+    const input = (await screen.findByLabelText(
+      /thread name/i,
+    )) as HTMLInputElement;
     fireEvent.change(input, { target: { value: "Renamed thread" } });
     fireEvent.submit(input.closest("form")!);
 
@@ -130,17 +146,27 @@ describe("ThreadActionsProvider", () => {
 
   it("opens a force-confirmation when the server rejects a soft archive", async () => {
     const thread = makeThread();
-    vi.mocked(api.archiveThread).mockRejectedValueOnce(makeArchiveForceRequiredError());
+    vi.mocked(api.archiveThread).mockRejectedValueOnce(
+      makeArchiveForceRequiredError(),
+    );
 
     let actions: ReturnType<typeof useThreadActions> | null = null;
-    renderWithProvider(<HookProbe onReady={(a) => { actions = a; }} />);
+    renderWithProvider(
+      <HookProbe
+        onReady={(a) => {
+          actions = a;
+        }}
+      />,
+    );
 
     act(() => {
       actions!.toggleArchive(thread);
     });
 
     await waitFor(() => {
-      expect(api.archiveThread).toHaveBeenCalledWith(thread.id, { force: false });
+      expect(api.archiveThread).toHaveBeenCalledWith(thread.id, {
+        force: false,
+      });
     });
 
     expect(
@@ -155,17 +181,27 @@ describe("ThreadActionsProvider", () => {
       .mockResolvedValueOnce(undefined);
 
     let actions: ReturnType<typeof useThreadActions> | null = null;
-    renderWithProvider(<HookProbe onReady={(a) => { actions = a; }} />);
+    renderWithProvider(
+      <HookProbe
+        onReady={(a) => {
+          actions = a;
+        }}
+      />,
+    );
 
     act(() => {
       actions!.toggleArchive(thread);
     });
 
-    const forceButton = await screen.findByRole("button", { name: /archive anyway/i });
+    const forceButton = await screen.findByRole("button", {
+      name: /archive anyway/i,
+    });
     fireEvent.click(forceButton);
 
     await waitFor(() => {
-      expect(api.archiveThread).toHaveBeenLastCalledWith(thread.id, { force: true });
+      expect(api.archiveThread).toHaveBeenLastCalledWith(thread.id, {
+        force: true,
+      });
     });
   });
 
@@ -174,7 +210,13 @@ describe("ThreadActionsProvider", () => {
     vi.mocked(api.unarchiveThread).mockResolvedValue(undefined);
 
     let actions: ReturnType<typeof useThreadActions> | null = null;
-    renderWithProvider(<HookProbe onReady={(a) => { actions = a; }} />);
+    renderWithProvider(
+      <HookProbe
+        onReady={(a) => {
+          actions = a;
+        }}
+      />,
+    );
 
     act(() => {
       actions!.toggleArchive(thread);
@@ -187,8 +229,16 @@ describe("ThreadActionsProvider", () => {
   });
 
   it("toggleRead picks mark-read vs mark-unread based on last-read state", async () => {
-    const unreadThread = makeThread({ id: "thread-unread", lastReadAt: 2, latestAttentionAt: 10 });
-    const readThread = makeThread({ id: "thread-read", lastReadAt: 10, latestAttentionAt: 10 });
+    const unreadThread = makeThread({
+      id: "thread-unread",
+      lastReadAt: 2,
+      latestAttentionAt: 10,
+    });
+    const readThread = makeThread({
+      id: "thread-read",
+      lastReadAt: 10,
+      latestAttentionAt: 10,
+    });
     vi.mocked(api.markThreadRead).mockResolvedValue(
       makeThread({ id: unreadThread.id, lastReadAt: 10 }),
     );
@@ -197,7 +247,13 @@ describe("ThreadActionsProvider", () => {
     );
 
     let actions: ReturnType<typeof useThreadActions> | null = null;
-    renderWithProvider(<HookProbe onReady={(a) => { actions = a; }} />);
+    renderWithProvider(
+      <HookProbe
+        onReady={(a) => {
+          actions = a;
+        }}
+      />,
+    );
 
     act(() => {
       actions!.toggleRead(unreadThread);
@@ -215,7 +271,13 @@ describe("ThreadActionsProvider", () => {
     vi.mocked(api.archiveThread).mockRejectedValueOnce(new Error("Boom"));
 
     let actions: ReturnType<typeof useThreadActions> | null = null;
-    renderWithProvider(<HookProbe onReady={(a) => { actions = a; }} />);
+    renderWithProvider(
+      <HookProbe
+        onReady={(a) => {
+          actions = a;
+        }}
+      />,
+    );
 
     act(() => {
       actions!.toggleArchive(thread);
@@ -231,7 +293,13 @@ describe("ThreadActionsProvider", () => {
     vi.mocked(api.deleteThread).mockResolvedValue(undefined);
 
     let actions: ReturnType<typeof useThreadActions> | null = null;
-    renderWithProvider(<HookProbe onReady={(a) => { actions = a; }} />);
+    renderWithProvider(
+      <HookProbe
+        onReady={(a) => {
+          actions = a;
+        }}
+      />,
+    );
 
     act(() => {
       actions!.requestDelete(thread);

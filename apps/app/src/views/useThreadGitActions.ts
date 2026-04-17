@@ -54,14 +54,20 @@ interface ThreadHeaderGitAction {
 function toEnvironmentActionFailureDetails(
   error: unknown,
 ): EnvironmentActionFailureDetails | undefined {
-  if (!(error instanceof HttpError) || typeof error.body !== "object" || error.body === null) {
+  if (
+    !(error instanceof HttpError) ||
+    typeof error.body !== "object" ||
+    error.body === null
+  ) {
     return undefined;
   }
   if (!("details" in error.body)) {
     return undefined;
   }
 
-  const result = environmentActionFailureDetailsSchema.safeParse(error.body.details);
+  const result = environmentActionFailureDetailsSchema.safeParse(
+    error.body.details,
+  );
   return result.success ? result.data : undefined;
 }
 
@@ -167,7 +173,8 @@ export function useThreadGitActions({
     const actions: ThreadHeaderGitAction[] = [];
 
     const hasUncommitted = workspaceWorkingTree?.hasUncommittedChanges === true;
-    const hasUnmerged = workspaceMergeBase?.hasCommittedUnmergedChanges === true;
+    const hasUnmerged =
+      workspaceMergeBase?.hasCommittedUnmergedChanges === true;
 
     if (isDirectThreadEnvironment) {
       if (hasUncommitted) {
@@ -218,41 +225,45 @@ export function useThreadGitActions({
     }
   }, [requestEnvironmentAction, thread]);
 
-  const handleSquashMergeThread = useCallback(async ({
-    mergeBaseBranch,
-  }: SquashMergeThreadParams) => {
-    const attachedEnvironmentId = thread?.environmentId;
-    if (!thread || !attachedEnvironmentId) {
-      return;
-    }
+  const handleSquashMergeThread = useCallback(
+    async ({ mergeBaseBranch }: SquashMergeThreadParams) => {
+      const attachedEnvironmentId = thread?.environmentId;
+      if (!thread || !attachedEnvironmentId) {
+        return;
+      }
 
-    try {
-      await requestEnvironmentAction.mutateAsync({
-        id: attachedEnvironmentId,
-        action: "squash_merge",
-        options: {
+      try {
+        await requestEnvironmentAction.mutateAsync({
+          id: attachedEnvironmentId,
+          action: "squash_merge",
+          options: {
+            mergeBaseBranch,
+          },
+        });
+      } catch (nextError) {
+        throw toThreadGitActionDialogError({
+          error: nextError,
           mergeBaseBranch,
-        },
-      });
-    } catch (nextError) {
-      throw toThreadGitActionDialogError({
-        error: nextError,
-        mergeBaseBranch,
-      });
-    }
-  }, [requestEnvironmentAction, thread]);
+        });
+      }
+    },
+    [requestEnvironmentAction, thread],
+  );
 
-  const handleAskAgentToFixGitAction = useCallback(async (input: PromptInput[]) => {
-    if (!thread) {
-      return;
-    }
+  const handleAskAgentToFixGitAction = useCallback(
+    async (input: PromptInput[]) => {
+      if (!thread) {
+        return;
+      }
 
-    await sendMessage.mutateAsync({
-      id: thread.id,
-      input,
-      mode: "auto",
-    });
-  }, [sendMessage, thread]);
+      await sendMessage.mutateAsync({
+        id: thread.id,
+        input,
+        mode: "auto",
+      });
+    },
+    [sendMessage, thread],
+  );
 
   return {
     handleAskAgentToFixGitAction,

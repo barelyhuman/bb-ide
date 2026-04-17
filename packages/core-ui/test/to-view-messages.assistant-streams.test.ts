@@ -4,7 +4,6 @@ import { toViewMessages } from "../src/to-view-messages.js";
 import { fromRows } from "./timeline-test-harness.js";
 
 describe("toViewMessages assistant streams", () => {
-
   it("projects flat event data with the same output as raw events", () => {
     const events: ThreadEventRow[] = [
       {
@@ -25,7 +24,9 @@ describe("toViewMessages assistant streams", () => {
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), { threadStatus: "idle" });
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "idle",
+    });
     expect(projected).toHaveLength(1);
     expect(projected[0]?.kind).toBe("assistant-text");
     if (projected[0]?.kind === "assistant-text") {
@@ -33,7 +34,6 @@ describe("toViewMessages assistant streams", () => {
       expect(projected[0].turnId).toBe("turn-1");
     }
   });
-
 
   it("deduplicates repeated completed assistant final messages for the same item id", () => {
     const events: ThreadEventRow[] = [
@@ -71,7 +71,9 @@ describe("toViewMessages assistant streams", () => {
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), { threadStatus: "idle" });
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "idle",
+    });
     const assistantMessages = projected.filter(
       (message): message is Extract<ViewMessage, { kind: "assistant-text" }> =>
         message.kind === "assistant-text",
@@ -80,7 +82,6 @@ describe("toViewMessages assistant streams", () => {
     expect(assistantMessages).toHaveLength(1);
     expect(assistantMessages[0]?.text).toBe("Hello");
   });
-
 
   it("reconciles streamed assistant text with a later final message that uses a different item id key", () => {
     const events: ThreadEventRow[] = [
@@ -114,7 +115,9 @@ describe("toViewMessages assistant streams", () => {
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), { threadStatus: "idle" });
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "idle",
+    });
     const assistantMessages = projected.filter(
       (message): message is Extract<ViewMessage, { kind: "assistant-text" }> =>
         message.kind === "assistant-text",
@@ -124,7 +127,6 @@ describe("toViewMessages assistant streams", () => {
     expect(assistantMessages[0]?.text).toBe("PONG");
     expect(assistantMessages[0]?.status).toBe("completed");
   });
-
 
   it("finalizes streaming assistant and reasoning messages when thread is idle", () => {
     const events: ThreadEventRow[] = [
@@ -158,13 +160,17 @@ describe("toViewMessages assistant streams", () => {
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), { threadStatus: "idle" });
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "idle",
+    });
     const assistant = projected.find(
       (message): message is Extract<ViewMessage, { kind: "assistant-text" }> =>
         message.kind === "assistant-text",
     );
     const reasoning = projected.find(
-      (message): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
+      (
+        message,
+      ): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
         message.kind === "assistant-reasoning",
     );
 
@@ -181,7 +187,6 @@ describe("toViewMessages assistant streams", () => {
       ),
     ).toBe(false);
   });
-
 
   it("keeps assistant text buffered while reasoning continues streaming on active threads", () => {
     const events: ThreadEventRow[] = [
@@ -215,13 +220,17 @@ describe("toViewMessages assistant streams", () => {
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), { threadStatus: "active" });
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "active",
+    });
     const assistant = projected.find(
       (message): message is Extract<ViewMessage, { kind: "assistant-text" }> =>
         message.kind === "assistant-text",
     );
     const reasoning = projected.find(
-      (message): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
+      (
+        message,
+      ): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
         message.kind === "assistant-reasoning",
     );
 
@@ -230,7 +239,6 @@ describe("toViewMessages assistant streams", () => {
     expect(reasoning?.status).toBe("streaming");
     expect(reasoning?.startedAt).toBe(2);
   });
-
 
   it("preserves startedAt for assistant and reasoning streams after completion", () => {
     const events: ThreadEventRow[] = [
@@ -311,13 +319,17 @@ describe("toViewMessages assistant streams", () => {
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), { threadStatus: "idle" });
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "idle",
+    });
     const assistant = projected.find(
       (message): message is Extract<ViewMessage, { kind: "assistant-text" }> =>
         message.kind === "assistant-text",
     );
     const reasoning = projected.find(
-      (message): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
+      (
+        message,
+      ): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
         message.kind === "assistant-reasoning",
     );
 
@@ -326,7 +338,6 @@ describe("toViewMessages assistant streams", () => {
     expect(reasoning?.startedAt).toBe(30);
     expect(reasoning?.createdAt).toBe(45);
   });
-
 
   it("renders completed assistant text immediately even while the thread is active", () => {
     const events: ThreadEventRow[] = [
@@ -349,7 +360,9 @@ describe("toViewMessages assistant streams", () => {
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), { threadStatus: "active" });
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "active",
+    });
 
     const assistant = projected.find(
       (message): message is Extract<ViewMessage, { kind: "assistant-text" }> =>
@@ -359,7 +372,6 @@ describe("toViewMessages assistant streams", () => {
     expect(assistant?.text).toBe("Final answer");
     expect(assistant?.status).toBe("completed");
   });
-
 
   it("flushes buffered assistant text when the turn completes even if thread status is still active", () => {
     const events: ThreadEventRow[] = [
@@ -392,7 +404,9 @@ describe("toViewMessages assistant streams", () => {
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), { threadStatus: "active" });
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "active",
+    });
     const assistant = projected.find(
       (message): message is Extract<ViewMessage, { kind: "assistant-text" }> =>
         message.kind === "assistant-text",
@@ -401,7 +415,6 @@ describe("toViewMessages assistant streams", () => {
     expect(assistant?.text).toBe("Partial reply");
     expect(assistant?.status).toBe("completed");
   });
-
 
   it("flushes buffered assistant text before interruption markers on idle threads", () => {
     const events: ThreadEventRow[] = [
@@ -434,7 +447,9 @@ describe("toViewMessages assistant streams", () => {
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), { threadStatus: "idle" });
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "idle",
+    });
 
     expect(projected[0]?.kind).toBe("assistant-text");
     if (projected[0]?.kind === "assistant-text") {
@@ -447,7 +462,6 @@ describe("toViewMessages assistant streams", () => {
       expect(projected[1].status).toBe("interrupted");
     }
   });
-
 
   it("ignores trailing assistant deltas that arrive after completion", () => {
     const events: ThreadEventRow[] = [
@@ -484,7 +498,9 @@ describe("toViewMessages assistant streams", () => {
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), { threadStatus: "idle" });
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "idle",
+    });
     const assistants = projected.filter(
       (message): message is Extract<ViewMessage, { kind: "assistant-text" }> =>
         message.kind === "assistant-text",
@@ -494,7 +510,6 @@ describe("toViewMessages assistant streams", () => {
     expect(assistants[0]?.text).toBe("Final answer");
     expect(assistants[0]?.status).toBe("completed");
   });
-
 
   it("ignores trailing reasoning deltas that arrive after completion", () => {
     const events: ThreadEventRow[] = [
@@ -532,9 +547,13 @@ describe("toViewMessages assistant streams", () => {
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), { threadStatus: "idle" });
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "idle",
+    });
     const reasoning = projected.filter(
-      (message): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
+      (
+        message,
+      ): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
         message.kind === "assistant-reasoning",
     );
 
@@ -542,7 +561,6 @@ describe("toViewMessages assistant streams", () => {
     expect(reasoning[0]?.text).toBe("Final reasoning");
     expect(reasoning[0]?.status).toBe("completed");
   });
-
 
   it("treats raw reasoning text deltas as reasoning stream updates", () => {
     const events: ThreadEventRow[] = [
@@ -563,9 +581,13 @@ describe("toViewMessages assistant streams", () => {
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), { threadStatus: "active" });
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "active",
+    });
     const reasoning = projected.find(
-      (message): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
+      (
+        message,
+      ): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
         message.kind === "assistant-reasoning",
     );
 
@@ -573,7 +595,6 @@ describe("toViewMessages assistant streams", () => {
     expect(reasoning?.text).toContain("raw-reasoning");
     expect(reasoning?.status).toBe("streaming");
   });
-
 
   it("keeps assistant-side items from earlier and later assistant responses", () => {
     const events: ThreadEventRow[] = [

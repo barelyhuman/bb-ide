@@ -24,7 +24,9 @@ export function InternalReplayView() {
         speed: DEFAULT_REPLAY_SPEED,
       }),
     onSuccess: (result) => {
-      navigate(`/projects/${result.projectId}/threads/${result.replayThreadId}`);
+      navigate(
+        `/projects/${result.projectId}/threads/${result.replayThreadId}`,
+      );
     },
   });
 
@@ -33,10 +35,13 @@ export function InternalReplayView() {
   return (
     <PageShell contentClassName="mx-auto w-full max-w-3xl gap-6 py-8">
       <div className="space-y-2">
-        <p className="text-sm font-medium text-muted-foreground">Development replay</p>
+        <p className="text-sm font-medium text-muted-foreground">
+          Development replay
+        </p>
         <h1 className="text-2xl font-semibold tracking-tight">{captureId}</h1>
         <p className="text-sm text-muted-foreground">
-          Create a fresh thread and stream this capture through the current host daemon replay path.
+          Create a fresh thread and stream this capture through the current host
+          daemon replay path.
         </p>
       </div>
 
@@ -71,14 +76,19 @@ export function InternalReplayView() {
             </div>
             <div>
               <dt className="text-muted-foreground">Raw provider events</dt>
-              <dd className="font-medium">{capture.eventCounts.rawProviderEvents}</dd>
+              <dd className="font-medium">
+                {capture.eventCounts.rawProviderEvents}
+              </dd>
             </div>
           </dl>
 
           <div className="flex flex-wrap gap-3">
             <Button
               onClick={() => startReplay.mutate()}
-              disabled={startReplay.isPending || capture.eventCounts.rawProviderEvents === 0}
+              disabled={
+                startReplay.isPending ||
+                capture.eventCounts.rawProviderEvents === 0
+              }
             >
               Start replay
             </Button>

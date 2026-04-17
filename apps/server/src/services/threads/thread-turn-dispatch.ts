@@ -67,16 +67,19 @@ export async function queueTurnDuringReprovision(
     return false;
   }
 
-  if (
-    !args.environment.managed ||
-    args.environment.status === "provisioning"
-  ) {
+  if (!args.environment.managed || args.environment.status === "provisioning") {
     throw new ApiError(409, "invalid_request", "Environment is not ready");
   }
-  if (hasActiveManagedEnvironmentProvision(args.deps, {
-    environmentId: args.environment.id,
-  })) {
-    throw new ApiError(409, "invalid_request", "Environment is already provisioning");
+  if (
+    hasActiveManagedEnvironmentProvision(args.deps, {
+      environmentId: args.environment.id,
+    })
+  ) {
+    throw new ApiError(
+      409,
+      "invalid_request",
+      "Environment is already provisioning",
+    );
   }
   await ensureHostSessionReadyForWork(args.deps, {
     hostId: args.environment.hostId,
@@ -99,14 +102,21 @@ export async function queueTurnDuringReprovision(
     ],
   });
 
-  const reprovisionResult = await queueManagedEnvironmentReprovision(args.deps, {
-    environment: args.environment,
-    projectId: args.thread.projectId,
-    provisionEventSequence,
-    threadId: args.thread.id,
-  });
+  const reprovisionResult = await queueManagedEnvironmentReprovision(
+    args.deps,
+    {
+      environment: args.environment,
+      projectId: args.thread.projectId,
+      provisionEventSequence,
+      threadId: args.thread.id,
+    },
+  );
   if (reprovisionResult === MANAGED_REPROVISION_IN_PROGRESS) {
-    throw new ApiError(409, "invalid_request", "Environment is already provisioning");
+    throw new ApiError(
+      409,
+      "invalid_request",
+      "Environment is already provisioning",
+    );
   }
   if (reprovisionResult.status !== MANAGED_REPROVISION_QUEUED) {
     throw new ApiError(500, "internal_error", "Unexpected reprovision result");

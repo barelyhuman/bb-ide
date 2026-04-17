@@ -37,9 +37,7 @@ interface SyncWithReadFileErrorArgs extends StartSyncArgs {
   errorMessage: string;
 }
 
-async function startSync(
-  args: StartSyncArgs,
-) {
+async function startSync(args: StartSyncArgs) {
   const syncPromise = syncManagerThreadSchedules(args.harness.deps, {
     threadId: args.threadId,
   });
@@ -47,8 +45,7 @@ async function startSync(
   const queued = await waitForQueuedCommand(
     args.harness,
     ({ command }) =>
-      command.type === "host.read_file" &&
-      command.path === asyncPath,
+      command.type === "host.read_file" && command.path === asyncPath,
   );
   return {
     asyncPath,
@@ -61,17 +58,13 @@ async function syncWithFileContent(
   args: SyncWithFileContentArgs,
 ): Promise<void> {
   const { asyncPath, queued, syncPromise } = await startSync(args);
-  const response = await reportQueuedCommandSuccess(
-    args.harness,
-    queued,
-    {
-      path: asyncPath,
-      content: args.content,
-      contentEncoding: "utf8",
-      mimeType: "text/markdown",
-      sizeBytes: args.content.length,
-    },
-  );
+  const response = await reportQueuedCommandSuccess(args.harness, queued, {
+    path: asyncPath,
+    content: args.content,
+    contentEncoding: "utf8",
+    mimeType: "text/markdown",
+    sizeBytes: args.content.length,
+  });
   expect(response.status).toBe(200);
   await syncPromise;
 }
@@ -95,7 +88,9 @@ describe("manager schedule sync", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-sync-valid",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -169,7 +164,9 @@ describe("manager schedule sync", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-sync-delete",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -198,7 +195,9 @@ describe("manager schedule sync", () => {
         threadId: thread.id,
       });
 
-      expect(listManagerThreadNudgesByThread(harness.db, thread.id)).toHaveLength(0);
+      expect(
+        listManagerThreadNudgesByThread(harness.db, thread.id),
+      ).toHaveLength(0);
     } finally {
       await harness.cleanup();
     }
@@ -210,7 +209,9 @@ describe("manager schedule sync", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-sync-malformed",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -240,7 +241,9 @@ describe("manager schedule sync", () => {
       });
 
       expect(
-        listManagerThreadNudgesByThread(harness.db, thread.id).map((nudge) => nudge.name),
+        listManagerThreadNudgesByThread(harness.db, thread.id).map(
+          (nudge) => nudge.name,
+        ),
       ).toEqual(["existing-reminder"]);
     } finally {
       await harness.cleanup();
@@ -253,7 +256,9 @@ describe("manager schedule sync", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-sync-js-delimiter",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -283,7 +288,9 @@ describe("manager schedule sync", () => {
       });
 
       expect(
-        listManagerThreadNudgesByThread(harness.db, thread.id).map((nudge) => nudge.name),
+        listManagerThreadNudgesByThread(harness.db, thread.id).map(
+          (nudge) => nudge.name,
+        ),
       ).toEqual(["existing-reminder"]);
     } finally {
       await harness.cleanup();
@@ -296,7 +303,9 @@ describe("manager schedule sync", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-sync-oversized",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -327,7 +336,9 @@ describe("manager schedule sync", () => {
       });
 
       expect(
-        listManagerThreadNudgesByThread(harness.db, thread.id).map((nudge) => nudge.name),
+        listManagerThreadNudgesByThread(harness.db, thread.id).map(
+          (nudge) => nudge.name,
+        ),
       ).toEqual(["keep-existing"]);
     } finally {
       await harness.cleanup();
@@ -340,7 +351,9 @@ describe("manager schedule sync", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-sync-byte-length",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -368,22 +381,20 @@ describe("manager schedule sync", () => {
         threadId: thread.id,
       });
 
-      const response = await reportQueuedCommandSuccess(
-        harness,
-        queued,
-        {
-          path: asyncPath,
-          content: oversizedContent,
-          contentEncoding: "utf8",
-          mimeType: "text/markdown",
-          sizeBytes: 1,
-        },
-      );
+      const response = await reportQueuedCommandSuccess(harness, queued, {
+        path: asyncPath,
+        content: oversizedContent,
+        contentEncoding: "utf8",
+        mimeType: "text/markdown",
+        sizeBytes: 1,
+      });
       expect(response.status).toBe(200);
       await syncPromise;
 
       expect(
-        listManagerThreadNudgesByThread(harness.db, thread.id).map((nudge) => nudge.name),
+        listManagerThreadNudgesByThread(harness.db, thread.id).map(
+          (nudge) => nudge.name,
+        ),
       ).toEqual(["keep-existing"]);
     } finally {
       await harness.cleanup();
@@ -396,7 +407,9 @@ describe("manager schedule sync", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-sync-missing",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -426,7 +439,9 @@ describe("manager schedule sync", () => {
         errorMessage: "File not found",
       });
 
-      expect(listManagerThreadNudgesByThread(harness.db, thread.id)).toHaveLength(0);
+      expect(
+        listManagerThreadNudgesByThread(harness.db, thread.id),
+      ).toHaveLength(0);
     } finally {
       await harness.cleanup();
     }
@@ -438,7 +453,9 @@ describe("manager schedule sync", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-sync-invalid-cron",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -468,7 +485,9 @@ describe("manager schedule sync", () => {
       });
 
       expect(
-        listManagerThreadNudgesByThread(harness.db, thread.id).map((nudge) => nudge.name),
+        listManagerThreadNudgesByThread(harness.db, thread.id).map(
+          (nudge) => nudge.name,
+        ),
       ).toEqual(["valid-recap"]);
     } finally {
       await harness.cleanup();
@@ -481,7 +500,9 @@ describe("manager schedule sync", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-sync-limit",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -493,19 +514,17 @@ describe("manager schedule sync", () => {
         status: "idle",
         type: "manager",
       });
-      const schedules = Array.from({ length: 21 }, (_, index) => [
-        `  - cron: "${index} 8 * * *"`,
-        `    name: schedule-${index + 1}`,
-      ].join("\n")).join("\n");
+      const schedules = Array.from({ length: 21 }, (_, index) =>
+        [
+          `  - cron: "${index} 8 * * *"`,
+          `    name: schedule-${index + 1}`,
+        ].join("\n"),
+      ).join("\n");
 
       await syncWithFileContent({
-        content: [
-          "---",
-          "timezone: UTC",
-          "schedules:",
-          schedules,
-          "---",
-        ].join("\n"),
+        content: ["---", "timezone: UTC", "schedules:", schedules, "---"].join(
+          "\n",
+        ),
         harness,
         hostId: host.id,
         threadId: thread.id,
@@ -525,7 +544,9 @@ describe("manager schedule sync", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-manager-sync-min-interval",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -555,7 +576,9 @@ describe("manager schedule sync", () => {
       });
 
       expect(
-        listManagerThreadNudgesByThread(harness.db, thread.id).map((nudge) => nudge.name),
+        listManagerThreadNudgesByThread(harness.db, thread.id).map(
+          (nudge) => nudge.name,
+        ),
       ).toEqual(["valid-recap"]);
     } finally {
       await harness.cleanup();

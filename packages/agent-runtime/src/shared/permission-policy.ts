@@ -1,7 +1,4 @@
-import type {
-  PermissionEscalation,
-  RuntimePermissionPolicy,
-} from "@bb/domain";
+import type { PermissionEscalation, RuntimePermissionPolicy } from "@bb/domain";
 
 export type ResolvedAdapterPermissionPolicy = RuntimePermissionPolicy;
 

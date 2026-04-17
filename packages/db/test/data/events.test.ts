@@ -33,8 +33,14 @@ import { upsertHost } from "../../src/data/hosts.js";
 function setup() {
   const db = createConnection(":memory:");
   migrate(db);
-  const host = upsertHost(db, noopNotifier, { name: "test-host", type: "persistent" });
-  const { project } = createProject(db, noopNotifier, { name: "test-project", source: { type: "local_path", hostId: host.id, path: "/tmp/test" } });
+  const host = upsertHost(db, noopNotifier, {
+    name: "test-host",
+    type: "persistent",
+  });
+  const { project } = createProject(db, noopNotifier, {
+    name: "test-project",
+    source: { type: "local_path", hostId: host.id, path: "/tmp/test" },
+  });
   const thread = createThread(db, noopNotifier, {
     projectId: project.id,
     providerId: "codex",
@@ -240,22 +246,26 @@ describe("events", () => {
       },
     ]);
 
-    expect(listStoredEventRows(db, {
-      afterSequence: 1,
-      limit: 1,
-      threadId: thread.id,
-    })).toMatchObject([
+    expect(
+      listStoredEventRows(db, {
+        afterSequence: 1,
+        limit: 1,
+        threadId: thread.id,
+      }),
+    ).toMatchObject([
       {
         sequence: 2,
         type: "system/error",
       },
     ]);
 
-    expect(findStoredEventRow(db, {
-      afterSequence: 1,
-      threadId: thread.id,
-      type: "system/error",
-    })).toMatchObject({
+    expect(
+      findStoredEventRow(db, {
+        afterSequence: 1,
+        threadId: thread.id,
+        type: "system/error",
+      }),
+    ).toMatchObject({
       sequence: 2,
       type: "system/error",
     });
@@ -278,7 +288,9 @@ describe("events", () => {
         type: "item/completed",
         itemId: "msg_1",
         itemKind: "agentMessage",
-        data: JSON.stringify({ item: { id: "msg_1", type: "agentMessage", text: "assistant output" } }),
+        data: JSON.stringify({
+          item: { id: "msg_1", type: "agentMessage", text: "assistant output" },
+        }),
       },
       {
         threadId: thread.id,
@@ -297,7 +309,9 @@ describe("events", () => {
       },
     ]);
 
-    expect(getLatestThreadOutputEventRow(db, { threadId: thread.id })).toMatchObject({
+    expect(
+      getLatestThreadOutputEventRow(db, { threadId: thread.id }),
+    ).toMatchObject({
       sequence: 2,
       itemKind: "agentMessage",
       type: "item/completed",
@@ -321,11 +335,15 @@ describe("events", () => {
         type: "item/completed",
         itemId: "msg_1",
         itemKind: "agentMessage",
-        data: JSON.stringify({ item: { id: "msg_1", type: "agentMessage", text: "" } }),
+        data: JSON.stringify({
+          item: { id: "msg_1", type: "agentMessage", text: "" },
+        }),
       },
     ]);
 
-    expect(getLatestThreadOutputEventRow(db, { threadId: thread.id })).toMatchObject({
+    expect(
+      getLatestThreadOutputEventRow(db, { threadId: thread.id }),
+    ).toMatchObject({
       sequence: 1,
       type: "system/manager/user_message",
     });
@@ -364,20 +382,26 @@ describe("events", () => {
       },
     ]);
 
-    expect(listStoredEventRowsInRange(db, {
-      seqEnd: 2,
-      seqStart: 1,
-      threadId: thread.id,
-    })).toHaveLength(2);
+    expect(
+      listStoredEventRowsInRange(db, {
+        seqEnd: 2,
+        seqStart: 1,
+        threadId: thread.id,
+      }),
+    ).toHaveLength(2);
 
-    expect(listRecentStoredEventRows(db, {
-      excludedTypes: ["system/error"],
-      threadId: thread.id,
-    }).map((row) => row.sequence)).toEqual([2, 3]);
+    expect(
+      listRecentStoredEventRows(db, {
+        excludedTypes: ["system/error"],
+        threadId: thread.id,
+      }).map((row) => row.sequence),
+    ).toEqual([2, 3]);
 
-    expect(listContextWindowUsageRows(db, {
-      threadId: thread.id,
-    }).map((row) => row.sequence)).toEqual([2, 3]);
+    expect(
+      listContextWindowUsageRows(db, {
+        threadId: thread.id,
+      }).map((row) => row.sequence),
+    ).toEqual([2, 3]);
   });
 
   it("appends stored thread events and exposes the latest thread runtime markers", () => {
@@ -403,17 +427,20 @@ describe("events", () => {
       },
     });
 
-    const secondSequence = db.transaction((tx) =>
-      appendStoredThreadEventInTransaction(tx, {
-        threadId: thread.id,
-        turnId: "turn_1",
-        providerThreadId: "provider_thr_1",
-        type: "turn/started",
-        data: {
-          providerThreadId: "provider_thr_1",
+    const secondSequence = db.transaction(
+      (tx) =>
+        appendStoredThreadEventInTransaction(tx, {
+          threadId: thread.id,
           turnId: "turn_1",
-        },
-      }), { behavior: "immediate" });
+          providerThreadId: "provider_thr_1",
+          type: "turn/started",
+          data: {
+            providerThreadId: "provider_thr_1",
+            turnId: "turn_1",
+          },
+        }),
+      { behavior: "immediate" },
+    );
 
     expect(firstSequence).toBe(1);
     expect(secondSequence).toBe(2);
@@ -503,9 +530,27 @@ describe("events", () => {
     });
 
     insertEvents(db, noopNotifier, [
-      { threadId: thread.id, sequence: 1, type: "system/error", ...emptyItemFields, data: "{}" },
-      { threadId: thread.id, sequence: 5, type: "system/error", ...emptyItemFields, data: "{}" },
-      { threadId: thread2.id, sequence: 3, type: "system/error", ...emptyItemFields, data: "{}" },
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "system/error",
+        ...emptyItemFields,
+        data: "{}",
+      },
+      {
+        threadId: thread.id,
+        sequence: 5,
+        type: "system/error",
+        ...emptyItemFields,
+        data: "{}",
+      },
+      {
+        threadId: thread2.id,
+        sequence: 3,
+        type: "system/error",
+        ...emptyItemFields,
+        data: "{}",
+      },
     ]);
 
     const hwm = getHighWaterMarks(db);
@@ -521,8 +566,20 @@ describe("events", () => {
     });
 
     insertEvents(db, noopNotifier, [
-      { threadId: thread.id, sequence: 10, type: "system/error", ...emptyItemFields, data: "{}" },
-      { threadId: thread2.id, sequence: 3, type: "system/error", ...emptyItemFields, data: "{}" },
+      {
+        threadId: thread.id,
+        sequence: 10,
+        type: "system/error",
+        ...emptyItemFields,
+        data: "{}",
+      },
+      {
+        threadId: thread2.id,
+        sequence: 3,
+        type: "system/error",
+        ...emptyItemFields,
+        data: "{}",
+      },
     ]);
 
     const hwm = getHighWaterMarks(db, [thread.id]);
@@ -534,9 +591,27 @@ describe("events", () => {
     const { db, thread } = setup();
 
     insertEvents(db, noopNotifier, [
-      { threadId: thread.id, sequence: 1, type: "system/error", ...emptyItemFields, data: "{}" },
-      { threadId: thread.id, sequence: 2, type: "system/error", ...emptyItemFields, data: "{}" },
-      { threadId: thread.id, sequence: 3, type: "system/error", ...emptyItemFields, data: "{}" },
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "system/error",
+        ...emptyItemFields,
+        data: "{}",
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        type: "system/error",
+        ...emptyItemFields,
+        data: "{}",
+      },
+      {
+        threadId: thread.id,
+        sequence: 3,
+        type: "system/error",
+        ...emptyItemFields,
+        data: "{}",
+      },
     ]);
 
     const after1 = listEvents(db, { threadId: thread.id, afterSequence: 1 });
@@ -548,8 +623,20 @@ describe("events", () => {
     const { db, thread } = setup();
 
     insertEvents(db, noopNotifier, [
-      { threadId: thread.id, sequence: 2, type: "system/error", ...emptyItemFields, data: "{}" },
-      { threadId: thread.id, sequence: 5, type: "system/error", ...emptyItemFields, data: "{}" },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        type: "system/error",
+        ...emptyItemFields,
+        data: "{}",
+      },
+      {
+        threadId: thread.id,
+        sequence: 5,
+        type: "system/error",
+        ...emptyItemFields,
+        data: "{}",
+      },
     ]);
 
     expect(getLatestThreadSequence(db, { threadId: thread.id })).toBe(5);
@@ -559,11 +646,41 @@ describe("events", () => {
     const { db, thread } = setup();
 
     insertEvents(db, noopNotifier, [
-      { threadId: thread.id, sequence: 1, type: "thread/tokenUsage/updated", ...emptyItemFields, data: "{}" },
-      { threadId: thread.id, sequence: 2, type: "thread/tokenUsage/updated", ...emptyItemFields, data: "{}" },
-      { threadId: thread.id, sequence: 3, type: "thread/tokenUsage/updated", ...emptyItemFields, data: "{}" },
-      { threadId: thread.id, sequence: 4, type: "thread/tokenUsage/updated", ...emptyItemFields, data: "{}" },
-      { threadId: thread.id, sequence: 5, type: "thread/tokenUsage/updated", ...emptyItemFields, data: "{}" },
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "thread/tokenUsage/updated",
+        ...emptyItemFields,
+        data: "{}",
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        type: "thread/tokenUsage/updated",
+        ...emptyItemFields,
+        data: "{}",
+      },
+      {
+        threadId: thread.id,
+        sequence: 3,
+        type: "thread/tokenUsage/updated",
+        ...emptyItemFields,
+        data: "{}",
+      },
+      {
+        threadId: thread.id,
+        sequence: 4,
+        type: "thread/tokenUsage/updated",
+        ...emptyItemFields,
+        data: "{}",
+      },
+      {
+        threadId: thread.id,
+        sequence: 5,
+        type: "thread/tokenUsage/updated",
+        ...emptyItemFields,
+        data: "{}",
+      },
     ]);
 
     const latestSequence = getLatestThreadSequence(db, { threadId: thread.id });
@@ -574,7 +691,9 @@ describe("events", () => {
     });
 
     expect(removed).toBe(3);
-    expect(listEvents(db, { threadId: thread.id }).map((event) => event.sequence)).toEqual([4, 5]);
+    expect(
+      listEvents(db, { threadId: thread.id }).map((event) => event.sequence),
+    ).toEqual([4, 5]);
   });
 
   it("prunes token-usage rows before a sequence cutoff but keeps the latest totals row and latest context row", () => {
@@ -629,7 +748,9 @@ describe("events", () => {
     });
 
     expect(removed).toBe(2);
-    expect(listEvents(db, { threadId: thread.id }).map((event) => event.sequence)).toEqual([1, 4]);
+    expect(
+      listEvents(db, { threadId: thread.id }).map((event) => event.sequence),
+    ).toEqual([1, 4]);
   });
 
   it("prunes context-window rows before a sequence cutoff but keeps the latest usage row and latest context row", () => {
@@ -684,7 +805,9 @@ describe("events", () => {
     });
 
     expect(removed).toBe(2);
-    expect(listEvents(db, { threadId: thread.id }).map((event) => event.sequence)).toEqual([1, 4]);
+    expect(
+      listEvents(db, { threadId: thread.id }).map((event) => event.sequence),
+    ).toEqual([1, 4]);
   });
 
   it("prunes resolved assistant deltas but preserves the first delta row", () => {
@@ -736,7 +859,9 @@ describe("events", () => {
     });
 
     expect(removed).toBe(2);
-    expect(listEvents(db, { threadId: thread.id }).map((event) => event.sequence)).toEqual([1, 4]);
+    expect(
+      listEvents(db, { threadId: thread.id }).map((event) => event.sequence),
+    ).toEqual([1, 4]);
   });
 
   it("keeps unresolved assistant deltas", () => {
@@ -766,7 +891,9 @@ describe("events", () => {
     });
 
     expect(removed).toBe(0);
-    expect(listEvents(db, { threadId: thread.id }).map((event) => event.sequence)).toEqual([1, 2]);
+    expect(
+      listEvents(db, { threadId: thread.id }).map((event) => event.sequence),
+    ).toEqual([1, 2]);
   });
 
   it("prunes resolved reasoning deltas but preserves the first delta row per stream type", () => {
@@ -827,7 +954,9 @@ describe("events", () => {
     });
 
     expect(removed).toBe(2);
-    expect(listEvents(db, { threadId: thread.id }).map((event) => event.sequence)).toEqual([1, 3, 5]);
+    expect(
+      listEvents(db, { threadId: thread.id }).map((event) => event.sequence),
+    ).toEqual([1, 3, 5]);
   });
 
   it("keeps unresolved reasoning deltas", () => {
@@ -857,7 +986,9 @@ describe("events", () => {
     });
 
     expect(removed).toBe(0);
-    expect(listEvents(db, { threadId: thread.id }).map((event) => event.sequence)).toEqual([1, 2]);
+    expect(
+      listEvents(db, { threadId: thread.id }).map((event) => event.sequence),
+    ).toEqual([1, 2]);
   });
 
   it("pruning is scoped to the target thread", () => {
@@ -905,8 +1036,12 @@ describe("events", () => {
     });
 
     expect(removed).toBe(1);
-    expect(listEvents(db, { threadId: thread.id }).map((event) => event.sequence)).toEqual([2]);
-    expect(listEvents(db, { threadId: thread2.id }).map((event) => event.sequence)).toEqual([1, 2]);
+    expect(
+      listEvents(db, { threadId: thread.id }).map((event) => event.sequence),
+    ).toEqual([2]);
+    expect(
+      listEvents(db, { threadId: thread2.id }).map((event) => event.sequence),
+    ).toEqual([1, 2]);
   });
 
   it("notifies on events-appended per thread", () => {
@@ -926,8 +1061,20 @@ describe("events", () => {
     };
 
     insertEvents(db, spy, [
-      { threadId: thread.id, sequence: 1, type: "system/error", ...emptyItemFields, data: "{}" },
-      { threadId: thread2.id, sequence: 1, type: "system/error", ...emptyItemFields, data: "{}" },
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "system/error",
+        ...emptyItemFields,
+        data: "{}",
+      },
+      {
+        threadId: thread2.id,
+        sequence: 1,
+        type: "system/error",
+        ...emptyItemFields,
+        data: "{}",
+      },
     ]);
 
     expect(spy.notifyThread).toHaveBeenCalledWith(thread.id, [

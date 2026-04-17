@@ -1,8 +1,6 @@
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
 import type { RuntimeManager } from "../runtime-manager.js";
-import {
-  requireWorkspaceEnvironment,
-} from "../command-dispatch-support.js";
+import { requireWorkspaceEnvironment } from "../command-dispatch-support.js";
 import type { CommandOf } from "../command-dispatch-support.js";
 import { finalizeListedFiles } from "./file-list.js";
 

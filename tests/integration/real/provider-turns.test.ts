@@ -28,15 +28,16 @@ describe("real provider turn integration", () => {
           const firstTurn = await sendAndWaitForIdle({
             providerId,
             threadId: thread.id,
-            text:
-              "Remember this word for later: orchard. Also reply with a short hello in one sentence.",
+            text: "Remember this word for later: orchard. Also reply with a short hello in one sentence.",
             harness,
           });
 
-          expect(countTurnEvents(firstTurn.events, "turn/started"))
-            .toBeGreaterThanOrEqual(1);
-          expect(countTurnEvents(firstTurn.events, "turn/completed"))
-            .toBeGreaterThanOrEqual(1);
+          expect(
+            countTurnEvents(firstTurn.events, "turn/started"),
+          ).toBeGreaterThanOrEqual(1);
+          expect(
+            countTurnEvents(firstTurn.events, "turn/completed"),
+          ).toBeGreaterThanOrEqual(1);
           expectNonEmptyOutput(
             firstTurn.output,
             `${providerId} single-turn output`,
@@ -52,8 +53,12 @@ describe("real provider turn integration", () => {
             harness,
           });
 
-          expect(countTurnEvents(events, "turn/completed")).toBeGreaterThanOrEqual(2);
-          expect(events.every((event) => event.threadId === thread.id)).toBe(true);
+          expect(
+            countTurnEvents(events, "turn/completed"),
+          ).toBeGreaterThanOrEqual(2);
+          expect(events.every((event) => event.threadId === thread.id)).toBe(
+            true,
+          );
           expectNonEmptyOutput(output, `${providerId} multi-turn output`);
         } finally {
           await harness.cleanup();

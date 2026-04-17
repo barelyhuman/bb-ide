@@ -2,10 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  readRunningPid,
-  writePidFile,
-} from "../src/lib/pid-file.js";
+import { readRunningPid, writePidFile } from "../src/lib/pid-file.js";
 
 const tempDirs: string[] = [];
 
@@ -18,7 +15,9 @@ async function makeTempDir(prefix: string): Promise<string> {
 afterEach(async () => {
   vi.restoreAllMocks();
   await Promise.all(
-    tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
+    tempDirs
+      .splice(0)
+      .map((dir) => fs.rm(dir, { recursive: true, force: true })),
   );
 });
 
@@ -40,10 +39,12 @@ describe("pid-file helpers", () => {
     const pidPath = path.join(tempDir, "server.pid");
     await fs.writeFile(pidPath, "not-a-pid\n", "utf8");
 
-    await expect(readRunningPid({
-      pidPath,
-      serviceName: "server",
-    })).rejects.toThrow(`Invalid PID file for server: ${pidPath}`);
+    await expect(
+      readRunningPid({
+        pidPath,
+        serviceName: "server",
+      }),
+    ).rejects.toThrow(`Invalid PID file for server: ${pidPath}`);
     await expect(fs.access(pidPath)).rejects.toThrow();
   });
 });

@@ -78,7 +78,9 @@ localHostIdRefreshTickAtom.onMount = (setRefreshTick) => {
 };
 
 /** The local machine's host ID, or null if no daemon is reachable. */
-export const localHostStatusAtom = atom<Promise<HostDaemonStatusSnapshot | null>>(async (get) => {
+export const localHostStatusAtom = atom<
+  Promise<HostDaemonStatusSnapshot | null>
+>(async (get) => {
   get(localHostIdRefreshTickAtom);
   const config = await get(systemConfigAtom);
   if (!config.hostDaemonPort) return null;
@@ -95,7 +97,9 @@ export const localHostIdAtom = atom<Promise<string | null>>(async (get) => {
 });
 
 /** Workspace open targets available through the local host daemon. */
-export const localWorkspaceOpenTargetsAtom = atom<Promise<WorkspaceOpenTarget[]>>(async (get) => {
+export const localWorkspaceOpenTargetsAtom = atom<
+  Promise<WorkspaceOpenTarget[]>
+>(async (get) => {
   const localHostStatus = await get(localHostStatusAtom);
   if (!localHostStatus?.connected) {
     return [];

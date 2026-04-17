@@ -22,15 +22,10 @@ import type {
   ThreadEventTokenUsageBreakdown,
 } from "@bb/domain";
 import { jsonValueSchema, toPositiveNumber } from "@bb/domain";
-import {
-  decodeNormalizedProviderToolCallRequest,
-} from "../shared/provider-tool-call-contract.js";
+import { decodeNormalizedProviderToolCallRequest } from "../shared/provider-tool-call-contract.js";
 import { resolveAdapterPermissionPolicy } from "../shared/permission-policy.js";
 import { resolveBridgePath } from "../shared/bridge-path.js";
-import {
-  bashArgsSchema,
-  textBlockSchema,
-} from "../shared/tool-arg-schemas.js";
+import { bashArgsSchema, textBlockSchema } from "../shared/tool-arg-schemas.js";
 import {
   buildEditDiff,
   buildShellEnvironmentPolicyConfig,
@@ -141,7 +136,10 @@ function getNestedMessageId(message: unknown): string | undefined {
   return parsed.success ? parsed.data.id : undefined;
 }
 
-type ClaudePendingFileChangeItem = Extract<ThreadEventItem, { type: "fileChange" }>;
+type ClaudePendingFileChangeItem = Extract<
+  ThreadEventItem,
+  { type: "fileChange" }
+>;
 
 interface ClaudeBashCommand {
   command: string;
@@ -192,20 +190,18 @@ function buildClaudeFileChangeItem(
   }
   const newText = args.new_string ?? args.content;
 
-  const diff = buildEditDiff(
-    filePath,
-    args.old_string,
-    newText,
-  );
+  const diff = buildEditDiff(filePath, args.old_string, newText);
 
   return {
     type: "fileChange",
     id: "",
-    changes: [{
-      path: filePath,
-      kind: args.old_string === undefined ? "add" : "update",
-      ...(diff ? { diff } : {}),
-    }],
+    changes: [
+      {
+        path: filePath,
+        kind: args.old_string === undefined ? "add" : "update",
+        ...(diff ? { diff } : {}),
+      },
+    ],
     status: "pending",
     approvalStatus: null,
   };
@@ -214,10 +210,12 @@ function buildClaudeFileChangeItem(
 function hasClaudeSessionPermissionUpdate(
   args: ClaudePermissionRequestApprovalParams,
 ): boolean {
-  return buildClaudeSessionPermissionUpdates({
-    permissions: args.permissions,
-    toolName: args.toolName,
-  }) !== undefined;
+  return (
+    buildClaudeSessionPermissionUpdates({
+      permissions: args.permissions,
+      toolName: args.toolName,
+    }) !== undefined
+  );
 }
 
 function buildClaudeApprovalAvailableDecisions(
@@ -239,10 +237,12 @@ function buildClaudeApprovalSubject(
         itemId: args.itemId,
         command: bashCommand.command,
         cwd: bashCommand.cwd,
-        actions: [{
-          type: "unknown",
-          command: bashCommand.command,
-        }],
+        actions: [
+          {
+            type: "unknown",
+            command: bashCommand.command,
+          },
+        ],
         sessionGrant: args.permissions,
       };
     }
@@ -311,14 +311,17 @@ function translateClaudeToolUseItem(
       if (!bashCommand) {
         return withParentToolCallId(baseToolCall, input.parentToolCallId);
       }
-      return withParentToolCallId({
-        type: "commandExecution",
-        id: input.callId,
-        command: bashCommand.command,
-        cwd: bashCommand.cwd ?? "",
-        status: "pending",
-        approvalStatus: null,
-      }, input.parentToolCallId);
+      return withParentToolCallId(
+        {
+          type: "commandExecution",
+          id: input.callId,
+          command: bashCommand.command,
+          cwd: bashCommand.cwd ?? "",
+          status: "pending",
+          approvalStatus: null,
+        },
+        input.parentToolCallId,
+      );
     }
     case "Edit":
     case "Write": {
@@ -328,31 +331,41 @@ function translateClaudeToolUseItem(
       }
       const fileChangeItem = buildClaudeFileChangeItem(parsed.data);
       if (!fileChangeItem) {
-        return withParentToolCallId({
-          ...baseToolCall,
-          arguments: parsed.data,
-        }, input.parentToolCallId);
+        return withParentToolCallId(
+          {
+            ...baseToolCall,
+            arguments: parsed.data,
+          },
+          input.parentToolCallId,
+        );
       }
-      return withParentToolCallId({
-        ...fileChangeItem,
-        id: input.callId,
-      }, input.parentToolCallId);
+      return withParentToolCallId(
+        {
+          ...fileChangeItem,
+          id: input.callId,
+        },
+        input.parentToolCallId,
+      );
     }
     case "WebSearch":
     case "WebFetch": {
       const parsed = claudeWebSearchArgsSchema.safeParse(input.args);
       const query = parsed.success
-        ? (toOptionalString(parsed.data.query) ?? toOptionalString(parsed.data.url))
+        ? (toOptionalString(parsed.data.query) ??
+          toOptionalString(parsed.data.url))
         : undefined;
       if (!query) {
         return withParentToolCallId(baseToolCall, input.parentToolCallId);
       }
-      return withParentToolCallId({
-        type: "webSearch",
-        id: input.callId,
-        query,
-        ...(input.toolName === "WebFetch" ? { action: "fetch" } : {}),
-      }, input.parentToolCallId);
+      return withParentToolCallId(
+        {
+          type: "webSearch",
+          id: input.callId,
+          query,
+          ...(input.toolName === "WebFetch" ? { action: "fetch" } : {}),
+        },
+        input.parentToolCallId,
+      );
     }
     default:
       return withParentToolCallId(baseToolCall, input.parentToolCallId);
@@ -370,90 +383,117 @@ function translateClaudeToolResultItem(
   if (startedItem) {
     switch (startedItem.type) {
       case "commandExecution":
-        return withParentToolCallId({
-          type: "commandExecution",
-          id: input.callId,
-          command: startedItem.command,
-          cwd: startedItem.cwd,
-          aggregatedOutput: outputText,
-          exitCode: bashExitCode,
-          status: itemStatus,
-          approvalStatus: startedItem.approvalStatus,
-        }, input.parentToolCallId ?? startedItem.parentToolCallId);
+        return withParentToolCallId(
+          {
+            type: "commandExecution",
+            id: input.callId,
+            command: startedItem.command,
+            cwd: startedItem.cwd,
+            aggregatedOutput: outputText,
+            exitCode: bashExitCode,
+            status: itemStatus,
+            approvalStatus: startedItem.approvalStatus,
+          },
+          input.parentToolCallId ?? startedItem.parentToolCallId,
+        );
       case "fileChange":
-        return withParentToolCallId({
-          type: "fileChange",
-          id: input.callId,
-          changes: startedItem.changes,
-          status: itemStatus,
-          approvalStatus: startedItem.approvalStatus,
-        }, input.parentToolCallId ?? startedItem.parentToolCallId);
+        return withParentToolCallId(
+          {
+            type: "fileChange",
+            id: input.callId,
+            changes: startedItem.changes,
+            status: itemStatus,
+            approvalStatus: startedItem.approvalStatus,
+          },
+          input.parentToolCallId ?? startedItem.parentToolCallId,
+        );
       case "webSearch":
-        return withParentToolCallId({
-          type: "webSearch",
-          id: input.callId,
-          query: startedItem.query,
-          ...(startedItem.action ? { action: startedItem.action } : {}),
-          ...(outputText ? { outputText } : {}),
-        }, input.parentToolCallId ?? startedItem.parentToolCallId);
+        return withParentToolCallId(
+          {
+            type: "webSearch",
+            id: input.callId,
+            query: startedItem.query,
+            ...(startedItem.action ? { action: startedItem.action } : {}),
+            ...(outputText ? { outputText } : {}),
+          },
+          input.parentToolCallId ?? startedItem.parentToolCallId,
+        );
       case "toolCall":
-        return withParentToolCallId({
-          type: "toolCall",
-          id: input.callId,
-          tool: startedItem.tool,
-          arguments: startedItem.arguments,
-          status: itemStatus,
-          result: outputText,
-        }, input.parentToolCallId ?? startedItem.parentToolCallId);
+        return withParentToolCallId(
+          {
+            type: "toolCall",
+            id: input.callId,
+            tool: startedItem.tool,
+            arguments: startedItem.arguments,
+            status: itemStatus,
+            result: outputText,
+          },
+          input.parentToolCallId ?? startedItem.parentToolCallId,
+        );
       default:
         break;
     }
   }
 
-  const fallbackToolCall = withParentToolCallId({
-    type: "toolCall",
-    id: input.callId,
-    tool: input.toolName ?? "unknown",
-    status: itemStatus,
-    result: outputText,
-  }, input.parentToolCallId);
+  const fallbackToolCall = withParentToolCallId(
+    {
+      type: "toolCall",
+      id: input.callId,
+      tool: input.toolName ?? "unknown",
+      status: itemStatus,
+      result: outputText,
+    },
+    input.parentToolCallId,
+  );
 
   switch (input.toolName) {
     case "Bash":
-      return withParentToolCallId({
-        type: "commandExecution",
-        id: input.callId,
-        command: "",
-        cwd: "",
-        aggregatedOutput: outputText,
-        exitCode: bashExitCode,
-        status: itemStatus,
-        approvalStatus: null,
-      }, input.parentToolCallId);
+      return withParentToolCallId(
+        {
+          type: "commandExecution",
+          id: input.callId,
+          command: "",
+          cwd: "",
+          aggregatedOutput: outputText,
+          exitCode: bashExitCode,
+          status: itemStatus,
+          approvalStatus: null,
+        },
+        input.parentToolCallId,
+      );
     case "Edit":
     case "Write":
-      return withParentToolCallId({
-        type: "fileChange",
-        id: input.callId,
-        changes: [],
-        status: itemStatus,
-        approvalStatus: null,
-      }, input.parentToolCallId);
+      return withParentToolCallId(
+        {
+          type: "fileChange",
+          id: input.callId,
+          changes: [],
+          status: itemStatus,
+          approvalStatus: null,
+        },
+        input.parentToolCallId,
+      );
     case "WebSearch":
-      return withParentToolCallId({
-        type: "webSearch",
-        id: input.callId,
-        query: "",
-        ...(outputText ? { outputText } : {}),
-      }, input.parentToolCallId);
+      return withParentToolCallId(
+        {
+          type: "webSearch",
+          id: input.callId,
+          query: "",
+          ...(outputText ? { outputText } : {}),
+        },
+        input.parentToolCallId,
+      );
     case "WebFetch":
-      return withParentToolCallId({
-        type: "webSearch",
-        id: input.callId,
-        query: "",
-        action: "fetch",
-        ...(outputText ? { outputText } : {}),
-      }, input.parentToolCallId);
+      return withParentToolCallId(
+        {
+          type: "webSearch",
+          id: input.callId,
+          query: "",
+          action: "fetch",
+          ...(outputText ? { outputText } : {}),
+        },
+        input.parentToolCallId,
+      );
     default:
       return fallbackToolCall;
   }
@@ -463,7 +503,9 @@ function translateClaudeToolResultItem(
 // Claude Code–specific helpers
 // ---------------------------------------------------------------------------
 
-function buildClaudeCodeConfig(envVars?: Record<string, string>): Record<string, unknown> | undefined {
+function buildClaudeCodeConfig(
+  envVars?: Record<string, string>,
+): Record<string, unknown> | undefined {
   const config = buildShellEnvironmentPolicyConfig(envVars);
   return config ? { ...config } : undefined;
 }
@@ -519,7 +561,8 @@ export function createClaudeCodeProviderAdapter(
   const capabilities: ProviderCapabilities = {
     supportsRename: providerInfo.capabilities.supportsRename,
     supportsServiceTier: providerInfo.capabilities.supportsServiceTier,
-    supportedPermissionModes: providerInfo.capabilities.supportedPermissionModes,
+    supportedPermissionModes:
+      providerInfo.capabilities.supportedPermissionModes,
   };
 
   const turnState = createProviderTurnStateRegistry<ClaudeTurnState>({
@@ -527,7 +570,13 @@ export function createClaudeCodeProviderAdapter(
       assistantMessageCounter: 0,
       counter: 0,
       currentTurnId: undefined,
-      cumulativeTokens: { totalTokens: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 },
+      cumulativeTokens: {
+        totalTokens: 0,
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        reasoningOutputTokens: 0,
+      },
       latestRequestContextTokens: undefined,
       openAssistantMessageIdsByScope: new Map(),
       openReasoningItemIdsByScope: new Map(),
@@ -544,7 +593,8 @@ export function createClaudeCodeProviderAdapter(
     model: string,
   ): void {
     const state = turnState.getOrCreate({ threadId });
-    state.selectedModelContextWindow = resolveClaudeModelContextWindowHint(model);
+    state.selectedModelContextWindow =
+      resolveClaudeModelContextWindowHint(model);
   }
 
   function ensureClaudeTurnStarted(
@@ -586,10 +636,10 @@ export function createClaudeCodeProviderAdapter(
     if (sdkEnvelope.success) {
       const sdkMessage = sdkEnvelope.data.params.message;
       const nestedParentToolCallId = getNestedParentToolUseId(sdkMessage);
-      const parentToolCallId =
-        nestedParentToolCallId
-          ? nestedParentToolCallId
-          : sdkEnvelope.data.params.parent_tool_use_id ?? context?.parentToolCallId;
+      const parentToolCallId = nestedParentToolCallId
+        ? nestedParentToolCallId
+        : (sdkEnvelope.data.params.parent_tool_use_id ??
+          context?.parentToolCallId);
       const translated = translateClaudeEvent(sdkMessage, {
         ...context,
         ...(parentToolCallId ? { parentToolCallId } : {}),
@@ -728,12 +778,15 @@ export function createClaudeCodeProviderAdapter(
             threadId,
             providerThreadId: "",
             turnId,
-            item: withParentToolCallId({
-              type: "reasoning",
-              id: itemId,
-              summary: [],
-              content: [thinkingBlock.text],
-            }, parentToolCallId),
+            item: withParentToolCallId(
+              {
+                type: "reasoning",
+                id: itemId,
+                summary: [],
+                content: [thinkingBlock.text],
+              },
+              parentToolCallId,
+            ),
           });
         }
 
@@ -868,9 +921,12 @@ export function createClaudeCodeProviderAdapter(
         }
         const message = parsedMessage.data;
         if (state.currentTurnId) {
-          const resultErrorText = message.is_error && "result" in message && typeof message.result === "string"
-            ? message.result
-            : null;
+          const resultErrorText =
+            message.is_error &&
+            "result" in message &&
+            typeof message.result === "string"
+              ? message.result
+              : null;
           const contextWindowUsage = extractClaudeContextWindowUsage({
             fallbackModelContextWindow: state.selectedModelContextWindow,
             latestRequestContextTokens: state.latestRequestContextTokens,
@@ -880,7 +936,8 @@ export function createClaudeCodeProviderAdapter(
             contextWindowUsage !== undefined &&
             contextWindowUsage.modelContextWindow !== null
           ) {
-            state.selectedModelContextWindow = contextWindowUsage.modelContextWindow;
+            state.selectedModelContextWindow =
+              contextWindowUsage.modelContextWindow;
           }
           const tokenUsage = extractTokenUsage(message, state.cumulativeTokens);
           if (contextWindowUsage) {
@@ -944,12 +1001,14 @@ export function createClaudeCodeProviderAdapter(
     capabilities,
     process: {
       command: opts?.processCommand ?? "node",
-      args: opts?.processArgs ?? [resolveBridgePath({
-        bridgeBundleDir: opts?.bridgeBundleDir,
-        bundleFileName: "bb-claude-code-bridge.mjs",
-        importMetaUrl: import.meta.url,
-        bridgeRelativePath: "bridge/bridge.js",
-      })],
+      args: opts?.processArgs ?? [
+        resolveBridgePath({
+          bridgeBundleDir: opts?.bridgeBundleDir,
+          bundleFileName: "bb-claude-code-bridge.mjs",
+          importMetaUrl: import.meta.url,
+          bridgeRelativePath: "bridge/bridge.js",
+        }),
+      ],
     },
 
     // -- Unified command builder -------------------------------------------
@@ -971,7 +1030,10 @@ export function createClaudeCodeProviderAdapter(
               : {},
           };
         case "thread/start": {
-          finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
+          finishOpenProviderTurn({
+            registry: turnState,
+            threadId: command.threadId,
+          });
           const baseInstructions = command.options?.instructions ?? "";
           if (command.options?.model) {
             setClaudeModelContextWindowHint(
@@ -985,7 +1047,9 @@ export function createClaudeCodeProviderAdapter(
             description: t.description,
             inputSchema: jsonValueSchema.parse(t.inputSchema),
           }));
-          const permissionPolicy = resolveAdapterPermissionPolicy(command.options);
+          const permissionPolicy = resolveAdapterPermissionPolicy(
+            command.options,
+          );
           return {
             kind: "request",
             method: "thread/start",
@@ -997,16 +1061,23 @@ export function createClaudeCodeProviderAdapter(
               permissionMode: toClaudePermissionMode(permissionPolicy),
               permissionEscalation: permissionPolicy.permissionEscalation,
               ...(config ? { config } : {}),
-              ...(command.options?.model ? { model: command.options.model } : {}),
+              ...(command.options?.model
+                ? { model: command.options.model }
+                : {}),
               ...(command.options?.reasoningLevel
                 ? { reasoningLevel: command.options.reasoningLevel }
                 : {}),
-              ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
+              ...(dynamicTools && dynamicTools.length > 0
+                ? { dynamicTools }
+                : {}),
             },
           };
         }
         case "thread/resume": {
-          finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
+          finishOpenProviderTurn({
+            registry: turnState,
+            threadId: command.threadId,
+          });
           const baseInstructions = command.options?.instructions ?? "";
           if (command.options?.model) {
             setClaudeModelContextWindowHint(
@@ -1020,7 +1091,9 @@ export function createClaudeCodeProviderAdapter(
             description: t.description,
             inputSchema: jsonValueSchema.parse(t.inputSchema),
           }));
-          const permissionPolicy = resolveAdapterPermissionPolicy(command.options);
+          const permissionPolicy = resolveAdapterPermissionPolicy(
+            command.options,
+          );
           return {
             kind: "request",
             method: "thread/resume",
@@ -1033,11 +1106,15 @@ export function createClaudeCodeProviderAdapter(
               permissionMode: toClaudePermissionMode(permissionPolicy),
               permissionEscalation: permissionPolicy.permissionEscalation,
               ...(resumeConfig ? { config: resumeConfig } : {}),
-              ...(command.options?.model ? { model: command.options.model } : {}),
+              ...(command.options?.model
+                ? { model: command.options.model }
+                : {}),
               ...(command.options?.reasoningLevel
                 ? { reasoningLevel: command.options.reasoningLevel }
                 : {}),
-              ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
+              ...(dynamicTools && dynamicTools.length > 0
+                ? { dynamicTools }
+                : {}),
             },
           };
         }
@@ -1055,7 +1132,9 @@ export function createClaudeCodeProviderAdapter(
               threadId: command.threadId,
               providerThreadId: command.providerThreadId ?? null,
               input: command.input,
-              ...(command.options?.model ? { model: command.options.model } : {}),
+              ...(command.options?.model
+                ? { model: command.options.model }
+                : {}),
             },
           };
         case "turn/steer":
@@ -1070,7 +1149,10 @@ export function createClaudeCodeProviderAdapter(
             },
           };
         case "thread/stop":
-          finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
+          finishOpenProviderTurn({
+            registry: turnState,
+            threadId: command.threadId,
+          });
           return {
             kind: "request",
             method: "thread/stop",
@@ -1140,7 +1222,9 @@ export function createClaudeCodeProviderAdapter(
 
     // -- Tool call codec ---------------------------------------------------
 
-    decodeToolCallRequest(request: ProviderInboundRequest): DecodedToolCallRequest | null {
+    decodeToolCallRequest(
+      request: ProviderInboundRequest,
+    ): DecodedToolCallRequest | null {
       if (typeof request.id !== "string" && typeof request.id !== "number") {
         return null;
       }
@@ -1175,7 +1259,9 @@ export function createClaudeCodeProviderAdapter(
             payload: {
               subject: buildClaudeApprovalSubject(parsed.data),
               reason: parsed.data.reason,
-              availableDecisions: buildClaudeApprovalAvailableDecisions(parsed.data),
+              availableDecisions: buildClaudeApprovalAvailableDecisions(
+                parsed.data,
+              ),
             },
           };
         }
@@ -1216,12 +1302,9 @@ export function createClaudeCodeProviderAdapter(
         kind: "permission_request",
         behavior: "allow",
         decisionClassification: "user_permanent",
-        ...(updatedPermissions === undefined
-          ? {}
-          : { updatedPermissions }),
+        ...(updatedPermissions === undefined ? {} : { updatedPermissions }),
       };
     },
-
   };
 }
 
@@ -1263,17 +1346,13 @@ function parseMessageContent(
   return parsed.success ? (parsed.data.content ?? []) : [];
 }
 
-function buildClaudeCompactionItemId(
-  turnId: string,
-): string {
+function buildClaudeCompactionItemId(turnId: string): string {
   return turnId.length > 0
     ? `claude-compaction-${turnId}`
     : "claude-compaction";
 }
 
-function createClaudeReasoningItemId(
-  state: ClaudeTurnState,
-): string {
+function createClaudeReasoningItemId(state: ClaudeTurnState): string {
   state.reasoningItemCounter += 1;
   return `claude-reasoning-${state.reasoningItemCounter}`;
 }
@@ -1362,14 +1441,18 @@ function extractAssistantText(
   return joined.length > 0 ? joined : undefined;
 }
 
-
 function extractToolUses(
   message: ClaudeAssistantMessage,
 ): ClaudeToolUseBlockData[] {
   const uses: ClaudeToolUseBlockData[] = [];
   for (const block of parseMessageContent(message)) {
     const tool = toolUseBlockSchema.safeParse(block);
-    if (tool.success) uses.push({ id: tool.data.id, name: tool.data.name, input: tool.data.input });
+    if (tool.success)
+      uses.push({
+        id: tool.data.id,
+        name: tool.data.name,
+        input: tool.data.input,
+      });
   }
   return uses;
 }
@@ -1414,7 +1497,10 @@ function extractStreamThinkingDelta(
     return undefined;
   }
   return parsed.data.content_block.thinking.length > 0
-    ? { contentIndex: parsed.data.index, delta: parsed.data.content_block.thinking }
+    ? {
+        contentIndex: parsed.data.index,
+        delta: parsed.data.content_block.thinking,
+      }
     : undefined;
 }
 
@@ -1496,7 +1582,9 @@ function extractTokenUsage(
 function extractClaudeContextWindowUsage(
   args: ClaudeContextWindowUsageArgs,
 ): ThreadEventContextWindowUsage | undefined {
-  const parsedModelUsage = claudeModelUsageSchema.safeParse(args.message.modelUsage);
+  const parsedModelUsage = claudeModelUsageSchema.safeParse(
+    args.message.modelUsage,
+  );
   const modelContextWindow = parsedModelUsage.success
     ? extractModelContextWindow(parsedModelUsage.data)
     : args.fallbackModelContextWindow;
@@ -1516,7 +1604,9 @@ function extractClaudeContextWindowUsage(
 function extractClaudeRequestContextTokens(
   message: ClaudeAssistantMessage,
 ): number | null {
-  const parsedMessage = claudeAssistantUsageMessageSchema.safeParse(message.message);
+  const parsedMessage = claudeAssistantUsageMessageSchema.safeParse(
+    message.message,
+  );
   if (!parsedMessage.success || !parsedMessage.data.usage) {
     return null;
   }
@@ -1530,7 +1620,9 @@ function toTokenUsageBreakdown(
   const inputTokens = toNonNegativeNumber(usage.input_tokens);
   const outputTokens = toNonNegativeNumber(usage.output_tokens);
   const cacheReadTokens = toNonNegativeNumber(usage.cache_read_input_tokens);
-  const cacheCreationTokens = toNonNegativeNumber(usage.cache_creation_input_tokens);
+  const cacheCreationTokens = toNonNegativeNumber(
+    usage.cache_creation_input_tokens,
+  );
   const cachedInputTokens = cacheReadTokens + cacheCreationTokens;
 
   return {
@@ -1542,9 +1634,7 @@ function toTokenUsageBreakdown(
   };
 }
 
-function toClaudeCurrentContextTokens(
-  usage: ClaudeSdkUsage,
-): number | null {
+function toClaudeCurrentContextTokens(usage: ClaudeSdkUsage): number | null {
   return (
     toNonNegativeNumber(usage.input_tokens) +
     toNonNegativeNumber(usage.cache_read_input_tokens) +

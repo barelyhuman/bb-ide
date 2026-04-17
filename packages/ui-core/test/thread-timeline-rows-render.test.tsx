@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { TimelineMessageRow, TimelineToolGroupRow, ViewUserMessage } from "@bb/domain";
+import type {
+  TimelineMessageRow,
+  TimelineToolGroupRow,
+  ViewUserMessage,
+} from "@bb/domain";
 import { ThreadTimelineRows } from "../src/thread-timeline/ThreadTimelineRows.js";
 
 const MULTILINE_USER_MESSAGE = `I think we should change the EnvironmentWorkspaceDisplayKind type, the icons and labels to be:

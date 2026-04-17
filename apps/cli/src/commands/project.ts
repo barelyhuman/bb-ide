@@ -9,10 +9,7 @@ import { action } from "../action.js";
 import { createClient, unwrap } from "../client.js";
 import { fetchLocalHostId } from "../daemon.js";
 import { renderBorderlessTable } from "../table.js";
-import {
-  confirmDestructiveAction,
-  outputJson,
-} from "./helpers.js";
+import { confirmDestructiveAction, outputJson } from "./helpers.js";
 
 interface ProjectListCommandOptions {
   json?: boolean;
@@ -114,7 +111,9 @@ function requireProjectSource(
 ): ProjectSource {
   const source = project.sources.find((candidate) => candidate.id === sourceId);
   if (!source) {
-    throw new Error(`Project source ${sourceId} not found on project ${project.id}.`);
+    throw new Error(
+      `Project source ${sourceId} not found on project ${project.id}.`,
+    );
   }
   return source;
 }
@@ -162,39 +161,56 @@ function buildDefaultProjectSourceUpdateRequest(
     : { isDefault: true, type: "github_repo" };
 }
 
-function printProjectSource(source: ProjectSource, localHostId: string | null): void {
+function printProjectSource(
+  source: ProjectSource,
+  localHostId: string | null,
+): void {
   if (source.type === "local_path") {
-    const local = localHostId && source.hostId === localHostId ? " (local)" : "";
+    const local =
+      localHostId && source.hostId === localHostId ? " (local)" : "";
     const defaultMarker = source.isDefault ? " [default]" : "";
-    console.log(`${source.id}  ${source.hostId}${local}  ${source.type}  ${source.path}${defaultMarker}`);
+    console.log(
+      `${source.id}  ${source.hostId}${local}  ${source.type}  ${source.path}${defaultMarker}`,
+    );
     return;
   }
 
   const defaultMarker = source.isDefault ? " [default]" : "";
-  console.log(`${source.id}  ${source.type}  ${source.repoUrl}${defaultMarker}`);
+  console.log(
+    `${source.id}  ${source.type}  ${source.repoUrl}${defaultMarker}`,
+  );
 }
 
-export function registerProjectCommands(program: Command, getUrl: () => string): void {
-  const project = program.command("project").description("Inspect and manage projects");
-  const source = project.command("source").description("Manage project sources");
+export function registerProjectCommands(
+  program: Command,
+  getUrl: () => string,
+): void {
+  const project = program
+    .command("project")
+    .description("Inspect and manage projects");
+  const source = project
+    .command("source")
+    .description("Manage project sources");
 
   project
     .command("list")
     .description("List projects")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (opts: ProjectListCommandOptions) => {
-      const client = createClient(getUrl());
-      const projects = await unwrap<ProjectResponse[]>(
-        client.api.v1.projects.$get(),
-      );
-      if (outputJson(opts, projects)) return;
-      if (projects.length === 0) {
-        console.log("No projects found");
-        return;
-      }
-      const localHostId = await fetchLocalHostId();
-      printProjectTable(projects, localHostId);
-    }));
+    .action(
+      action(async (opts: ProjectListCommandOptions) => {
+        const client = createClient(getUrl());
+        const projects = await unwrap<ProjectResponse[]>(
+          client.api.v1.projects.$get(),
+        );
+        if (outputJson(opts, projects)) return;
+        if (projects.length === 0) {
+          console.log("No projects found");
+          return;
+        }
+        const localHostId = await fetchLocalHostId();
+        printProjectTable(projects, localHostId);
+      }),
+    );
 
   project
     .command("create")
@@ -202,131 +218,147 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
     .requiredOption("--name <name>", "Project name")
     .option("--root <path>", "Project source path")
     .option("--repo-url <url>", "GitHub repository source URL")
-    .option("--host <id>", "Host ID for the project source (auto-detected from daemon if omitted)")
+    .option(
+      "--host <id>",
+      "Host ID for the project source (auto-detected from daemon if omitted)",
+    )
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (opts: ProjectCreateCommandOptions) => {
-      const client = createClient(getUrl());
-      const source = await buildProjectSourceFromOptions({
-        host: opts.host,
-        path: opts.root,
-        repoUrl: opts.repoUrl,
-      });
-      const created = await unwrap<ProjectResponse>(
-        client.api.v1.projects.$post({
-          json: {
-            name: opts.name,
-            source,
-          },
-        }),
-      );
-      if (outputJson(opts, created)) return;
-      console.log(`Project created: ${created.id}`);
-      const localHostId = await fetchLocalHostId();
-      printProject(created, localHostId);
-    }));
+    .action(
+      action(async (opts: ProjectCreateCommandOptions) => {
+        const client = createClient(getUrl());
+        const source = await buildProjectSourceFromOptions({
+          host: opts.host,
+          path: opts.root,
+          repoUrl: opts.repoUrl,
+        });
+        const created = await unwrap<ProjectResponse>(
+          client.api.v1.projects.$post({
+            json: {
+              name: opts.name,
+              source,
+            },
+          }),
+        );
+        if (outputJson(opts, created)) return;
+        console.log(`Project created: ${created.id}`);
+        const localHostId = await fetchLocalHostId();
+        printProject(created, localHostId);
+      }),
+    );
 
   project
     .command("show <id>")
     .description("Show project details")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (id: string, opts: ProjectShowCommandOptions) => {
-      const client = createClient(getUrl());
-      const found = await unwrap<ProjectResponse>(
-        client.api.v1.projects[":id"].$get({
-          param: { id },
-        }),
-      );
-      if (outputJson(opts, found)) return;
-      const localHostId = await fetchLocalHostId();
-      printProject(found, localHostId);
-    }));
+    .action(
+      action(async (id: string, opts: ProjectShowCommandOptions) => {
+        const client = createClient(getUrl());
+        const found = await unwrap<ProjectResponse>(
+          client.api.v1.projects[":id"].$get({
+            param: { id },
+          }),
+        );
+        if (outputJson(opts, found)) return;
+        const localHostId = await fetchLocalHostId();
+        printProject(found, localHostId);
+      }),
+    );
 
   project
     .command("update <id>")
     .description("Update a project")
     .option("--name <name>", "Set the project name")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (id: string, opts: ProjectUpdateCommandOptions) => {
-      const client = createClient(getUrl());
-      if (!opts.name) {
-        throw new Error(
-          "No changes requested. Provide --name.",
+    .action(
+      action(async (id: string, opts: ProjectUpdateCommandOptions) => {
+        const client = createClient(getUrl());
+        if (!opts.name) {
+          throw new Error("No changes requested. Provide --name.");
+        }
+        const body: ProjectUpdateBody = { name: opts.name };
+        const updated = await unwrap<ProjectResponse>(
+          client.api.v1.projects[":id"].$patch({
+            param: { id },
+            json: body,
+          }),
         );
-      }
-      const body: ProjectUpdateBody = { name: opts.name };
-      const updated = await unwrap<ProjectResponse>(
-        client.api.v1.projects[":id"].$patch({
-          param: { id },
-          json: body,
-        }),
-      );
-      if (outputJson(opts, updated)) return;
-      console.log(`Project ${updated.id} updated`);
-      const localHostId = await fetchLocalHostId();
-      printProject(updated, localHostId);
-    }));
+        if (outputJson(opts, updated)) return;
+        console.log(`Project ${updated.id} updated`);
+        const localHostId = await fetchLocalHostId();
+        printProject(updated, localHostId);
+      }),
+    );
 
   project
     .command("delete <id>")
     .description("Delete a project and all its threads")
     .option("--yes", "Skip confirmation prompt")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (id: string, opts: ProjectDeleteCommandOptions) => {
-      const client = createClient(getUrl());
-      if (!opts.yes) {
-        const confirmed = await confirmDestructiveAction(
-          `Delete project ${id} and all its threads?`,
-        );
-        if (!confirmed) {
-          console.log("Aborted.");
-          return;
+    .action(
+      action(async (id: string, opts: ProjectDeleteCommandOptions) => {
+        const client = createClient(getUrl());
+        if (!opts.yes) {
+          const confirmed = await confirmDestructiveAction(
+            `Delete project ${id} and all its threads?`,
+          );
+          if (!confirmed) {
+            console.log("Aborted.");
+            return;
+          }
         }
-      }
-      await unwrap<{ ok: boolean }>(
-        client.api.v1.projects[":id"].$delete({
-          param: { id },
-        }),
-      );
-      if (outputJson(opts, { ok: true, id })) return;
-      console.log(`Project ${id} deleted`);
-    }));
+        await unwrap<{ ok: boolean }>(
+          client.api.v1.projects[":id"].$delete({
+            param: { id },
+          }),
+        );
+        if (outputJson(opts, { ok: true, id })) return;
+        console.log(`Project ${id} deleted`);
+      }),
+    );
 
   source
     .command("add <projectId>")
     .description("Add a source to a project")
     .option("--path <path>", "Local path source")
     .option("--repo-url <url>", "GitHub repository source URL")
-    .option("--host <id>", "Host ID for a local path source (auto-detected from daemon if omitted)")
+    .option(
+      "--host <id>",
+      "Host ID for a local path source (auto-detected from daemon if omitted)",
+    )
     .option("--default", "Mark the new source as default")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (projectId: string, opts: ProjectSourceAddCommandOptions) => {
-      const client = createClient(getUrl());
-      const createPayload = await buildProjectSourceFromOptions({
-        host: opts.host,
-        path: opts.path,
-        repoUrl: opts.repoUrl,
-      });
-      const created = await unwrap<ProjectSource>(
-        client.api.v1.projects[":id"].sources.$post({
-          param: { id: projectId },
-          json: createPayload,
-        }),
-      );
-
-      const sourceResponse = opts.default
-        ? await unwrap<ProjectSource>(
-            client.api.v1.projects[":id"].sources[":sourceId"].$patch({
-              param: { id: projectId, sourceId: created.id },
-              json: buildDefaultProjectSourceUpdateRequest(created),
+    .action(
+      action(
+        async (projectId: string, opts: ProjectSourceAddCommandOptions) => {
+          const client = createClient(getUrl());
+          const createPayload = await buildProjectSourceFromOptions({
+            host: opts.host,
+            path: opts.path,
+            repoUrl: opts.repoUrl,
+          });
+          const created = await unwrap<ProjectSource>(
+            client.api.v1.projects[":id"].sources.$post({
+              param: { id: projectId },
+              json: createPayload,
             }),
-          )
-        : created;
+          );
 
-      if (outputJson(opts, sourceResponse)) return;
-      console.log(`Project source added: ${sourceResponse.id}`);
-      const localHostId = await fetchLocalHostId();
-      printProjectSource(sourceResponse, localHostId);
-    }));
+          const sourceResponse = opts.default
+            ? await unwrap<ProjectSource>(
+                client.api.v1.projects[":id"].sources[":sourceId"].$patch({
+                  param: { id: projectId, sourceId: created.id },
+                  json: buildDefaultProjectSourceUpdateRequest(created),
+                }),
+              )
+            : created;
+
+          if (outputJson(opts, sourceResponse)) return;
+          console.log(`Project source added: ${sourceResponse.id}`);
+          const localHostId = await fetchLocalHostId();
+          printProjectSource(sourceResponse, localHostId);
+        },
+      ),
+    );
 
   source
     .command("update <projectId> <sourceId>")
@@ -335,66 +367,79 @@ export function registerProjectCommands(program: Command, getUrl: () => string):
     .option("--repo-url <url>", "New GitHub repository URL for a GitHub source")
     .option("--default", "Mark this source as default")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (
-      projectId: string,
-      sourceId: string,
-      opts: ProjectSourceUpdateCommandOptions,
-    ) => {
-      const client = createClient(getUrl());
-      const project = await unwrap<ProjectResponse>(
-        client.api.v1.projects[":id"].$get({
-          param: { id: projectId },
-        }),
-      );
-      const existingSource = requireProjectSource(project, sourceId);
-      const updatePayload = buildProjectSourceUpdateRequest(existingSource, opts);
-      const updated = await unwrap<ProjectSource>(
-        client.api.v1.projects[":id"].sources[":sourceId"].$patch({
-          param: { id: projectId, sourceId },
-          json: updatePayload,
-        }),
-      );
+    .action(
+      action(
+        async (
+          projectId: string,
+          sourceId: string,
+          opts: ProjectSourceUpdateCommandOptions,
+        ) => {
+          const client = createClient(getUrl());
+          const project = await unwrap<ProjectResponse>(
+            client.api.v1.projects[":id"].$get({
+              param: { id: projectId },
+            }),
+          );
+          const existingSource = requireProjectSource(project, sourceId);
+          const updatePayload = buildProjectSourceUpdateRequest(
+            existingSource,
+            opts,
+          );
+          const updated = await unwrap<ProjectSource>(
+            client.api.v1.projects[":id"].sources[":sourceId"].$patch({
+              param: { id: projectId, sourceId },
+              json: updatePayload,
+            }),
+          );
 
-      if (outputJson(opts, updated)) return;
-      console.log(`Project source updated: ${updated.id}`);
-      const localHostId = await fetchLocalHostId();
-      printProjectSource(updated, localHostId);
-    }));
+          if (outputJson(opts, updated)) return;
+          console.log(`Project source updated: ${updated.id}`);
+          const localHostId = await fetchLocalHostId();
+          printProjectSource(updated, localHostId);
+        },
+      ),
+    );
 
   source
     .command("delete <projectId> <sourceId>")
     .description("Delete a project source")
     .option("--yes", "Skip confirmation prompt")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (
-      projectId: string,
-      sourceId: string,
-      opts: ProjectSourceDeleteCommandOptions,
-    ) => {
-      const client = createClient(getUrl());
-      if (!opts.yes) {
-        const confirmed = await confirmDestructiveAction(
-          `Delete project source ${sourceId} from project ${projectId}?`,
-        );
-        if (!confirmed) {
-          console.log("Aborted.");
-          return;
-        }
-      }
+    .action(
+      action(
+        async (
+          projectId: string,
+          sourceId: string,
+          opts: ProjectSourceDeleteCommandOptions,
+        ) => {
+          const client = createClient(getUrl());
+          if (!opts.yes) {
+            const confirmed = await confirmDestructiveAction(
+              `Delete project source ${sourceId} from project ${projectId}?`,
+            );
+            if (!confirmed) {
+              console.log("Aborted.");
+              return;
+            }
+          }
 
-      await unwrap<{ ok: boolean }>(
-        client.api.v1.projects[":id"].sources[":sourceId"].$delete({
-          param: { id: projectId, sourceId },
-        }),
-      );
-      const result = { ok: true, projectId, sourceId };
-      if (outputJson(opts, result)) return;
-      console.log(`Project source ${sourceId} deleted`);
-    }));
-
+          await unwrap<{ ok: boolean }>(
+            client.api.v1.projects[":id"].sources[":sourceId"].$delete({
+              param: { id: projectId, sourceId },
+            }),
+          );
+          const result = { ok: true, projectId, sourceId };
+          if (outputJson(opts, result)) return;
+          console.log(`Project source ${sourceId} deleted`);
+        },
+      ),
+    );
 }
 
-function printProject(project: ProjectResponse, localHostId: string | null): void {
+function printProject(
+  project: ProjectResponse,
+  localHostId: string | null,
+): void {
   console.log("");
   console.log(`  ID:       ${project.id}`);
   console.log(`  Name:     ${project.name}`);
@@ -404,8 +449,11 @@ function printProject(project: ProjectResponse, localHostId: string | null): voi
     console.log("  Sources:");
     for (const source of project.sources) {
       if (source.type === "local_path") {
-        const local = localHostId && source.hostId === localHostId ? " (local)" : "";
-        console.log(`    ${source.hostId}${local}  ${source.type}  ${source.path}`);
+        const local =
+          localHostId && source.hostId === localHostId ? " (local)" : "";
+        console.log(
+          `    ${source.hostId}${local}  ${source.type}  ${source.path}`,
+        );
         continue;
       }
 
@@ -415,7 +463,10 @@ function printProject(project: ProjectResponse, localHostId: string | null): voi
   console.log("");
 }
 
-function printProjectTable(projects: ProjectResponse[], localHostId: string | null): void {
+function printProjectTable(
+  projects: ProjectResponse[],
+  localHostId: string | null,
+): void {
   const rows = projects.map((project) => {
     const localSource = localHostId
       ? findLocalPathProjectSourceForHost(project.sources, localHostId)

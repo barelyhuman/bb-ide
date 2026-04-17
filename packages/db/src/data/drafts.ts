@@ -23,7 +23,8 @@ export function createDraft(
 ) {
   const now = Date.now();
   const id = createDraftId();
-  const row = db.insert(queuedThreadMessages)
+  const row = db
+    .insert(queuedThreadMessages)
     .values({
       id,
       threadId: input.threadId,
@@ -62,10 +63,7 @@ export function listDrafts(db: DbConnection, threadId: string) {
         isNull(queuedThreadMessages.claimedAt),
       ),
     )
-    .orderBy(
-      asc(queuedThreadMessages.createdAt),
-      asc(queuedThreadMessages.id),
-    )
+    .orderBy(asc(queuedThreadMessages.createdAt), asc(queuedThreadMessages.id))
     .all();
 }
 
@@ -74,31 +72,34 @@ export function claimDraft(
   notifier: DbNotifier,
   id: string,
 ): DraftRow | null {
-  const claimedDraft = db.transaction((tx) => {
-    const existing = tx
-      .select()
-      .from(queuedThreadMessages)
-      .where(eq(queuedThreadMessages.id, id))
-      .get();
-    if (!existing || existing.claimedAt !== null) {
-      return null;
-    }
+  const claimedDraft = db.transaction(
+    (tx) => {
+      const existing = tx
+        .select()
+        .from(queuedThreadMessages)
+        .where(eq(queuedThreadMessages.id, id))
+        .get();
+      if (!existing || existing.claimedAt !== null) {
+        return null;
+      }
 
-    const now = Date.now();
-    const updated = tx
-      .update(queuedThreadMessages)
-      .set({ claimedAt: now, updatedAt: now })
-      .where(
-        and(
-          eq(queuedThreadMessages.id, id),
-          isNull(queuedThreadMessages.claimedAt),
-        ),
-      )
-      .returning()
-      .get();
+      const now = Date.now();
+      const updated = tx
+        .update(queuedThreadMessages)
+        .set({ claimedAt: now, updatedAt: now })
+        .where(
+          and(
+            eq(queuedThreadMessages.id, id),
+            isNull(queuedThreadMessages.claimedAt),
+          ),
+        )
+        .returning()
+        .get();
 
-    return updated ?? null;
-  }, { behavior: "immediate" });
+      return updated ?? null;
+    },
+    { behavior: "immediate" },
+  );
 
   if (claimedDraft) {
     notifier.notifyThread(claimedDraft.threadId, ["queue-changed"]);
@@ -111,41 +112,44 @@ export function claimNextDraft(
   notifier: DbNotifier,
   threadId: string,
 ): DraftRow | null {
-  const claimedDraft = db.transaction((tx) => {
-    const nextDraft = tx
-      .select()
-      .from(queuedThreadMessages)
-      .where(
-        and(
-          eq(queuedThreadMessages.threadId, threadId),
-          isNull(queuedThreadMessages.claimedAt),
-        ),
-      )
-      .orderBy(
-        asc(queuedThreadMessages.createdAt),
-        asc(queuedThreadMessages.id),
-      )
-      .limit(1)
-      .get();
-    if (!nextDraft) {
-      return null;
-    }
+  const claimedDraft = db.transaction(
+    (tx) => {
+      const nextDraft = tx
+        .select()
+        .from(queuedThreadMessages)
+        .where(
+          and(
+            eq(queuedThreadMessages.threadId, threadId),
+            isNull(queuedThreadMessages.claimedAt),
+          ),
+        )
+        .orderBy(
+          asc(queuedThreadMessages.createdAt),
+          asc(queuedThreadMessages.id),
+        )
+        .limit(1)
+        .get();
+      if (!nextDraft) {
+        return null;
+      }
 
-    const now = Date.now();
-    const updated = tx
-      .update(queuedThreadMessages)
-      .set({ claimedAt: now, updatedAt: now })
-      .where(
-        and(
-          eq(queuedThreadMessages.id, nextDraft.id),
-          isNull(queuedThreadMessages.claimedAt),
-        ),
-      )
-      .returning()
-      .get();
+      const now = Date.now();
+      const updated = tx
+        .update(queuedThreadMessages)
+        .set({ claimedAt: now, updatedAt: now })
+        .where(
+          and(
+            eq(queuedThreadMessages.id, nextDraft.id),
+            isNull(queuedThreadMessages.claimedAt),
+          ),
+        )
+        .returning()
+        .get();
 
-    return updated ?? null;
-  }, { behavior: "immediate" });
+      return updated ?? null;
+    },
+    { behavior: "immediate" },
+  );
 
   if (claimedDraft) {
     notifier.notifyThread(claimedDraft.threadId, ["queue-changed"]);
@@ -197,9 +201,7 @@ export function deleteDraft(
     .where(eq(queuedThreadMessages.id, id))
     .get();
   if (!existing) return false;
-  db.delete(queuedThreadMessages)
-    .where(eq(queuedThreadMessages.id, id))
-    .run();
+  db.delete(queuedThreadMessages).where(eq(queuedThreadMessages.id, id)).run();
   notifier.notifyThread(existing.threadId, ["queue-changed"]);
   return true;
 }

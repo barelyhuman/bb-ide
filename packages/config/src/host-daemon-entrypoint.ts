@@ -2,10 +2,12 @@ import { envsafe, makeValidator } from "envsafe";
 import { hostTypeSchema } from "@bb/domain";
 import type { HostType } from "@bb/domain";
 
-export const optionalTrimmedString = makeValidator<string | undefined>((input) => {
-  const trimmedInput = input?.trim() ?? "";
-  return trimmedInput.length === 0 ? undefined : trimmedInput;
-});
+export const optionalTrimmedString = makeValidator<string | undefined>(
+  (input) => {
+    const trimmedInput = input?.trim() ?? "";
+    return trimmedInput.length === 0 ? undefined : trimmedInput;
+  },
+);
 
 export const optionalHostType = makeValidator<HostType | undefined>((input) => {
   const trimmedInput = input?.trim() ?? "";

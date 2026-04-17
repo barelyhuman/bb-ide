@@ -1,10 +1,16 @@
 import type { PromptInput, ThreadEvent } from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
-import type { ToViewMessagesOptions, ViewAssistantTextMessage, ViewUserMessage } from "@bb/domain";
+import type {
+  ToViewMessagesOptions,
+  ViewAssistantTextMessage,
+  ViewUserMessage,
+} from "@bb/domain";
 import { messageId } from "./format-helpers.js";
 import { assertNever } from "./assert-never.js";
 
-export function parsePromptInput(input: ReadonlyArray<PromptInput> | undefined): {
+export function parsePromptInput(
+  input: ReadonlyArray<PromptInput> | undefined,
+): {
   text: string;
   webImages: number;
   localImages: number;
@@ -100,14 +106,20 @@ export function shouldPreservePendingMessages(
   }
 }
 
-function buildAttachments(parsed: NonNullable<ReturnType<typeof parsePromptInput>>): ViewUserMessage["attachments"] {
+function buildAttachments(
+  parsed: NonNullable<ReturnType<typeof parsePromptInput>>,
+): ViewUserMessage["attachments"] {
   return {
     webImages: parsed.webImages,
     localImages: parsed.localImages,
     localFiles: parsed.localFiles,
     ...(parsed.imageUrls.length > 0 ? { imageUrls: parsed.imageUrls } : {}),
-    ...(parsed.localImagePaths.length > 0 ? { localImagePaths: parsed.localImagePaths } : {}),
-    ...(parsed.localFilePaths.length > 0 ? { localFilePaths: parsed.localFilePaths } : {}),
+    ...(parsed.localImagePaths.length > 0
+      ? { localImagePaths: parsed.localImagePaths }
+      : {}),
+    ...(parsed.localFilePaths.length > 0
+      ? { localFilePaths: parsed.localFilePaths }
+      : {}),
   };
 }
 

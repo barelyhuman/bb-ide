@@ -26,7 +26,11 @@ function formatDebugEventData(
   }
 }
 
-export function DebugEventRow({ message }: { message: ViewDebugRawEventMessage }) {
+export function DebugEventRow({
+  message,
+}: {
+  message: ViewDebugRawEventMessage;
+}) {
   const [isExpanded, setIsExpanded] = useState(false);
   const event = message.rawEvent;
   const expandedContent = formatDebugEventData(event.data, {

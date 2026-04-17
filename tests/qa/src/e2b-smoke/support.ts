@@ -6,9 +6,7 @@ import {
   type ClaudeStoredCredential,
   type CodexStoredCredential,
 } from "@bb/agent-provider-auth";
-import {
-  upsertSandboxProviderCredential,
-} from "@bb/db";
+import { upsertSandboxProviderCredential } from "@bb/db";
 import type { DbConnection } from "@bb/db";
 import {
   availableModelSchema,
@@ -28,13 +26,8 @@ import {
   buildHostRuntimeMaterialState,
   hostRuntimeMaterialStateSchema,
 } from "@bb/host-runtime-material";
-import {
-  createSandbox,
-  runSandboxCommand,
-} from "@bb/sandbox-host";
-import {
-  createHostJoinResponseSchema,
-} from "@bb/server-contract";
+import { createSandbox, runSandboxCommand } from "@bb/sandbox-host";
+import { createHostJoinResponseSchema } from "@bb/server-contract";
 import { createCloudAuthService } from "../../../../apps/server/src/services/cloud-auth/service.js";
 import { createSandboxEnvService } from "../../../../apps/server/src/services/sandbox-env/service.js";
 import { initDb } from "../../../../apps/server/src/db.js";
@@ -52,17 +45,13 @@ import {
   buildSandboxDaemonEnv,
   startSandboxDaemon,
 } from "../../../../packages/sandbox-host/src/provision.js";
-import {
-  createHostJoin,
-  waitFor,
-} from "../shared.js";
+import { createHostJoin, waitFor } from "../shared.js";
 import type { SmokeQaAuthFixture } from "./fixture.js";
 
 export const SMOKE_TIMEOUT_MS = 5 * 60 * 1000;
 export const INITIAL_SANDBOX_TIMEOUT_MS = 8 * 60 * 1000;
 export const DAEMON_BOOTSTRAP_TIMEOUT_MS = 8 * 60 * 1000;
-export const SANDBOX_HOST_RUNTIME_MATERIAL_PATH =
-  `${SANDBOX_DATA_DIR}/${HOST_RUNTIME_MATERIAL_FILE_NAME}`;
+export const SANDBOX_HOST_RUNTIME_MATERIAL_PATH = `${SANDBOX_DATA_DIR}/${HOST_RUNTIME_MATERIAL_FILE_NAME}`;
 
 export type SmokeSandbox = Awaited<ReturnType<typeof createSandbox>>;
 
@@ -305,35 +294,31 @@ export async function waitForPublicServerHealth(
   publicUrl: string,
 ): Promise<void> {
   const healthUrl = new URL("/health", publicUrl).toString();
-  await waitForCommandSuccess(
-    async () => {
-      const result = await runSandboxCommand(
-        sandbox,
-        `curl -sf ${shellQuote(healthUrl)}`,
+  await waitForCommandSuccess(async () => {
+    const result = await runSandboxCommand(
+      sandbox,
+      `curl -sf ${shellQuote(healthUrl)}`,
+    );
+    if (!result.stdout.includes('"ok"')) {
+      throw new Error(
+        `Unexpected public server health response: ${result.stdout}`,
       );
-      if (!result.stdout.includes('"ok"')) {
-        throw new Error(`Unexpected public server health response: ${result.stdout}`);
-      }
-    },
-    "sandbox to real server connectivity",
-  );
+    }
+  }, "sandbox to real server connectivity");
 }
 
 export async function waitForDaemonHealth(
   sandbox: SmokeSandbox,
 ): Promise<void> {
-  await waitForCommandSuccess(
-    async () => {
-      const result = await runSandboxCommand(
-        sandbox,
-        `curl -sf http://127.0.0.1:${SANDBOX_DAEMON_HEALTH_PORT}${SANDBOX_DAEMON_HEALTH_PATH}`,
-      );
-      if (result.stdout.trim() !== SANDBOX_DAEMON_HEALTH_RESPONSE) {
-        throw new Error(`Unexpected daemon health response: ${result.stdout}`);
-      }
-    },
-    "bundled daemon health check",
-  );
+  await waitForCommandSuccess(async () => {
+    const result = await runSandboxCommand(
+      sandbox,
+      `curl -sf http://127.0.0.1:${SANDBOX_DAEMON_HEALTH_PORT}${SANDBOX_DAEMON_HEALTH_PATH}`,
+    );
+    if (result.stdout.trim() !== SANDBOX_DAEMON_HEALTH_RESPONSE) {
+      throw new Error(`Unexpected daemon health response: ${result.stdout}`);
+    }
+  }, "bundled daemon health check");
 }
 
 export async function waitForPersistedHostAuth(
@@ -342,30 +327,29 @@ export async function waitForPersistedHostAuth(
 ): Promise<void> {
   const expectedServerUrl = normalizeServerUrl(expectation.serverUrl);
 
-  await waitForCommandSuccess(
-    async () => {
-      const result = await runSandboxCommand(
-        sandbox,
-        `cat ${shellQuote(SANDBOX_HOST_AUTH_PATH)}`,
+  await waitForCommandSuccess(async () => {
+    const result = await runSandboxCommand(
+      sandbox,
+      `cat ${shellQuote(SANDBOX_HOST_AUTH_PATH)}`,
+    );
+    const persistedAuth = hostAuthStateSchema.parse(JSON.parse(result.stdout));
+    if (persistedAuth.hostId !== expectation.hostId) {
+      throw new Error(`Unexpected persisted host ID: ${persistedAuth.hostId}`);
+    }
+    if (persistedAuth.hostType !== "ephemeral") {
+      throw new Error(
+        `Unexpected persisted host type: ${persistedAuth.hostType}`,
       );
-      const persistedAuth = hostAuthStateSchema.parse(JSON.parse(result.stdout));
-      if (persistedAuth.hostId !== expectation.hostId) {
-        throw new Error(`Unexpected persisted host ID: ${persistedAuth.hostId}`);
-      }
-      if (persistedAuth.hostType !== "ephemeral") {
-        throw new Error(`Unexpected persisted host type: ${persistedAuth.hostType}`);
-      }
-      if (persistedAuth.serverUrl !== expectedServerUrl) {
-        throw new Error(`Unexpected persisted server URL: ${persistedAuth.serverUrl}`);
-      }
-    },
-    "persisted host auth",
-  );
+    }
+    if (persistedAuth.serverUrl !== expectedServerUrl) {
+      throw new Error(
+        `Unexpected persisted server URL: ${persistedAuth.serverUrl}`,
+      );
+    }
+  }, "persisted host auth");
 }
 
-export async function assertBundledBbCli(
-  sandbox: SmokeSandbox,
-): Promise<void> {
+export async function assertBundledBbCli(sandbox: SmokeSandbox): Promise<void> {
   const result = await runSandboxCommand(
     sandbox,
     `${shellQuote(SANDBOX_BB_EXECUTABLE_PATH)} --version`,
@@ -382,12 +366,14 @@ export async function createEphemeralHostJoin(
     hostId: string;
   },
 ): Promise<SmokeHostJoin> {
-  const response = createHostJoinResponseSchema.parse(await createHostJoin(localServerUrl, {
-    externalId: args.externalId,
-    hostId: args.hostId,
-    hostType: "ephemeral",
-    provider: "e2b",
-  }));
+  const response = createHostJoinResponseSchema.parse(
+    await createHostJoin(localServerUrl, {
+      externalId: args.externalId,
+      hostId: args.hostId,
+      hostType: "ephemeral",
+      provider: "e2b",
+    }),
+  );
   if (response.hostId !== args.hostId) {
     throw new Error(`Host join response host ID did not match ${args.hostId}`);
   }
@@ -414,7 +400,9 @@ export async function waitForHostStatus(
   await waitFor(
     async () => {
       try {
-        const response = await fetch(`${localServerUrl}/api/v1/hosts/${hostId}`);
+        const response = await fetch(
+          `${localServerUrl}/api/v1/hosts/${hostId}`,
+        );
         if (!response.ok) {
           return null;
         }
@@ -459,7 +447,9 @@ export async function waitForThreadIdle(
 ): Promise<SmokeThreadSummary> {
   return waitFor(
     async () => {
-      const response = await fetch(`${localServerUrl}/api/v1/threads/${threadId}`);
+      const response = await fetch(
+        `${localServerUrl}/api/v1/threads/${threadId}`,
+      );
       if (!response.ok) {
         throw new Error(
           `Failed to load thread ${threadId}: ${response.status} ${await response.text()}`,
@@ -491,7 +481,9 @@ export async function fetchThreadOutput(
   localServerUrl: string,
   threadId: string,
 ): Promise<{ output: string | null }> {
-  const response = await fetch(`${localServerUrl}/api/v1/threads/${threadId}/output`);
+  const response = await fetch(
+    `${localServerUrl}/api/v1/threads/${threadId}/output`,
+  );
   if (!response.ok) {
     throw new Error(
       `Failed to fetch thread ${threadId} output: ${response.status} ${await response.text()}`,
@@ -502,31 +494,33 @@ export async function fetchThreadOutput(
 
 export async function waitForPersistedRuntimeMaterial(
   sandbox: SmokeSandbox,
-  expectedSnapshot: Awaited<ReturnType<typeof buildSandboxRuntimeMaterialSnapshot>>,
+  expectedSnapshot: Awaited<
+    ReturnType<typeof buildSandboxRuntimeMaterialSnapshot>
+  >,
 ): Promise<void> {
   const expectedState = buildHostRuntimeMaterialState(expectedSnapshot);
-  await waitForCommandSuccess(
-    async () => {
-      const result = await runSandboxCommand(
-        sandbox,
-        `cat ${shellQuote(SANDBOX_HOST_RUNTIME_MATERIAL_PATH)}`,
+  await waitForCommandSuccess(async () => {
+    const result = await runSandboxCommand(
+      sandbox,
+      `cat ${shellQuote(SANDBOX_HOST_RUNTIME_MATERIAL_PATH)}`,
+    );
+    const persistedState = hostRuntimeMaterialStateSchema.parse(
+      JSON.parse(result.stdout),
+    );
+    if (persistedState.version !== expectedState.version) {
+      throw new Error(
+        `Unexpected runtime material version: ${persistedState.version}`,
       );
-      const persistedState = hostRuntimeMaterialStateSchema.parse(
-        JSON.parse(result.stdout),
+    }
+    if (
+      JSON.stringify(persistedState.files) !==
+      JSON.stringify(expectedState.files)
+    ) {
+      throw new Error(
+        `Unexpected runtime material files: ${JSON.stringify(persistedState.files)}`,
       );
-      if (persistedState.version !== expectedState.version) {
-        throw new Error(
-          `Unexpected runtime material version: ${persistedState.version}`,
-        );
-      }
-      if (JSON.stringify(persistedState.files) !== JSON.stringify(expectedState.files)) {
-        throw new Error(
-          `Unexpected runtime material files: ${JSON.stringify(persistedState.files)}`,
-        );
-      }
-    },
-    "persisted runtime material",
-  );
+    }
+  }, "persisted runtime material");
 }
 
 export async function assertSandboxFileContains(
@@ -680,16 +674,15 @@ export async function expireSmokeCodexCredential(
 export async function waitForExtendedSandboxTimeout(
   sandbox: SmokeSandbox,
 ): Promise<void> {
-  await waitForCommandSuccess(
-    async () => {
-      const info = await sandbox.getInfo();
-      const remainingMs = info.endAt.getTime() - Date.now();
-      if (remainingMs < 10 * 60 * 1000) {
-        throw new Error(`Sandbox timeout was not extended enough: ${remainingMs}ms remaining`);
-      }
-    },
-    "sandbox timeout extension",
-  );
+  await waitForCommandSuccess(async () => {
+    const info = await sandbox.getInfo();
+    const remainingMs = info.endAt.getTime() - Date.now();
+    if (remainingMs < 10 * 60 * 1000) {
+      throw new Error(
+        `Sandbox timeout was not extended enough: ${remainingMs}ms remaining`,
+      );
+    }
+  }, "sandbox timeout extension");
 }
 
 export async function createSmokeThread(

@@ -98,11 +98,7 @@ describe("PiSdkSession", () => {
   });
 
   it("falls back to an in-memory session when no file path is provided", async () => {
-    const session = new PiSdkSession(
-      { cwd: "/tmp/project" },
-      vi.fn(),
-      vi.fn(),
-    );
+    const session = new PiSdkSession({ cwd: "/tmp/project" }, vi.fn(), vi.fn());
 
     await session.start();
 
@@ -197,16 +193,13 @@ describe("PiSdkSession", () => {
 
   it("waits for abort before disposing during graceful close", async () => {
     let resolveAbort: (() => void) | undefined;
-    mockAbort.mockImplementation(() =>
-      new Promise<void>((resolve) => {
-        resolveAbort = resolve;
-      })
+    mockAbort.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveAbort = resolve;
+        }),
     );
-    const session = new PiSdkSession(
-      { cwd: "/tmp/project" },
-      vi.fn(),
-      vi.fn(),
-    );
+    const session = new PiSdkSession({ cwd: "/tmp/project" }, vi.fn(), vi.fn());
 
     await session.start();
     const closePromise = session.closeGracefully(1_000);

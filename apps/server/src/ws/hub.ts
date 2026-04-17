@@ -46,16 +46,25 @@ export class NotificationHub implements DbNotifier {
   private readonly clientKeysBySocket = new Map<HubSocket, Set<string>>();
   private readonly clientSocketsByKey = new Map<string, Set<HubSocket>>();
   private readonly commandResultCache = new Map<string, unknown>();
-  private readonly commandResultWaiters = new Map<string, Set<CommandResultWaiter>>();
+  private readonly commandResultWaiters = new Map<
+    string,
+    Set<CommandResultWaiter>
+  >();
   private readonly commandWaiters = new Map<string, Set<CommandWaiter>>();
-  private readonly daemonSessions = new Map<string, { hostId: string; socket: HubSocket }>();
+  private readonly daemonSessions = new Map<
+    string,
+    { hostId: string; socket: HubSocket }
+  >();
   private readonly daemonSessionIdsByHost = new Map<string, string>();
   private readonly hostEventWaiters = new Map<string, Set<HostEventWaiter>>();
   private readonly pendingDaemonDisconnects = new Map<
     string,
     ReturnType<typeof setTimeout>
   >();
-  private readonly threadEventWaiters = new Map<string, Set<ThreadEventWaiter>>();
+  private readonly threadEventWaiters = new Map<
+    string,
+    Set<ThreadEventWaiter>
+  >();
 
   registerClient(socket: HubSocket): void {
     if (!this.clientKeysBySocket.has(socket)) {
@@ -175,7 +184,8 @@ export class NotificationHub implements DbNotifier {
           resolve(false);
         }, timeoutMs),
       };
-      const waiters = this.commandWaiters.get(hostId) ?? new Set<CommandWaiter>();
+      const waiters =
+        this.commandWaiters.get(hostId) ?? new Set<CommandWaiter>();
       waiters.add(waiter);
       this.commandWaiters.set(hostId, waiters);
     });
@@ -200,13 +210,17 @@ export class NotificationHub implements DbNotifier {
         }, timeoutMs),
       };
       const waiters =
-        this.commandResultWaiters.get(commandId) ?? new Set<CommandResultWaiter>();
+        this.commandResultWaiters.get(commandId) ??
+        new Set<CommandResultWaiter>();
       waiters.add(waiter);
       this.commandResultWaiters.set(commandId, waiters);
     });
   }
 
-  async waitForThreadEvent(threadId: string, timeoutMs: number): Promise<boolean> {
+  async waitForThreadEvent(
+    threadId: string,
+    timeoutMs: number,
+  ): Promise<boolean> {
     const { promise } = this.registerThreadEventWaiter(threadId, timeoutMs);
     return promise;
   }
@@ -221,7 +235,8 @@ export class NotificationHub implements DbNotifier {
           resolve(false);
         }, timeoutMs),
       };
-      const waiters = this.hostEventWaiters.get(hostId) ?? new Set<HostEventWaiter>();
+      const waiters =
+        this.hostEventWaiters.get(hostId) ?? new Set<HostEventWaiter>();
       waiters.add(waiter);
       this.hostEventWaiters.set(hostId, waiters);
     });
@@ -241,7 +256,8 @@ export class NotificationHub implements DbNotifier {
           resolve(false);
         }, timeoutMs),
       };
-      const waiters = this.threadEventWaiters.get(threadId) ?? new Set<ThreadEventWaiter>();
+      const waiters =
+        this.threadEventWaiters.get(threadId) ?? new Set<ThreadEventWaiter>();
       waiters.add(waiter);
       this.threadEventWaiters.set(threadId, waiters);
     });
@@ -296,7 +312,10 @@ export class NotificationHub implements DbNotifier {
     });
   }
 
-  notifyEnvironment(environmentId: string, changes: EnvironmentChangeKind[]): void {
+  notifyEnvironment(
+    environmentId: string,
+    changes: EnvironmentChangeKind[],
+  ): void {
     this.notifyClients({
       type: "changed",
       entity: "environment",
@@ -363,7 +382,10 @@ export class NotificationHub implements DbNotifier {
     }
   }
 
-  private deleteThreadEventWaiter(threadId: string, waiter: ThreadEventWaiter): void {
+  private deleteThreadEventWaiter(
+    threadId: string,
+    waiter: ThreadEventWaiter,
+  ): void {
     const waiters = this.threadEventWaiters.get(threadId);
     if (!waiters) {
       return;

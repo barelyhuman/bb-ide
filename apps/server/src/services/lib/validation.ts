@@ -20,10 +20,7 @@ export function parseValue<TSchema extends ZodTypeAny>(
   }
 }
 
-export function parseInteger(
-  value: string,
-  name: string,
-): number {
+export function parseInteger(value: string, name: string): number {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) {
     throw new ApiError(400, "invalid_request", `Invalid integer for ${name}`);

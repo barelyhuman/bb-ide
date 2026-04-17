@@ -23,11 +23,7 @@ export type SandboxBackendInfoResolverConfig = Pick<
 
 export type SandboxBackendConfig = Pick<
   ServerRuntimeConfig,
-  | "e2bApiKey"
-  | "e2bTemplate"
-  | "githubPat"
-  | "anthropicApiKey"
-  | "openAiApiKey"
+  "e2bApiKey" | "e2bTemplate" | "githubPat" | "anthropicApiKey" | "openAiApiKey"
 >;
 
 export interface SandboxBackendProvisionArgs {
@@ -94,7 +90,9 @@ const E2B_SANDBOX_BACKEND_INFO = {
   },
 } satisfies Omit<SandboxBackendInfo, "available">;
 
-function isE2BBackendAvailable(config: SandboxBackendInfoResolverConfig): boolean {
+function isE2BBackendAvailable(
+  config: SandboxBackendInfoResolverConfig,
+): boolean {
   return (
     config.e2bApiKey !== "" &&
     hasConfiguredSandboxTemplate(config) &&
@@ -151,7 +149,8 @@ function buildProvisionHostOptions(
     hostName: args.hostName,
     progressCallbacks: args.progressCallbacks,
     serverUrl: args.serverUrl,
-    template: args.config.e2bTemplate === "" ? undefined : args.config.e2bTemplate,
+    template:
+      args.config.e2bTemplate === "" ? undefined : args.config.e2bTemplate,
   };
 }
 
@@ -210,7 +209,9 @@ const sandboxBackends = new Map<string, SandboxBackend>([
 export function listAvailableSandboxBackends(
   config: SandboxBackendInfoResolverConfig,
 ): SandboxBackendInfo[] {
-  return [...sandboxBackends.values()].map((backend) => backend.getInfo(config));
+  return [...sandboxBackends.values()].map((backend) =>
+    backend.getInfo(config),
+  );
 }
 
 export function createSandboxBackendForId(sandboxType: string): SandboxBackend {

@@ -28,12 +28,7 @@ import {
   seedThread,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
-import {
-  beforeEach,
-  describe,
-  expect,
-  it,
-} from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 
 describe("public thread archive delete cleanup routes", () => {
@@ -42,12 +37,13 @@ describe("public thread archive delete cleanup routes", () => {
     resumeHostMock.mockReset();
   });
 
-
   it("stops threads, archives unmanaged workspaces directly, and requires confirmation for dirty isolated managed workspaces", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -70,9 +66,12 @@ describe("public thread archive delete cleanup routes", () => {
         status: "idle",
       });
 
-      const stopPromise = harness.app.request(`/api/v1/threads/${thread.id}/stop`, {
-        method: "POST",
-      });
+      const stopPromise = harness.app.request(
+        `/api/v1/threads/${thread.id}/stop`,
+        {
+          method: "POST",
+        },
+      );
       const stopCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
@@ -112,16 +111,20 @@ describe("public thread archive delete cleanup routes", () => {
       expect(dirtyArchiveResponse.status).toBe(409);
       await expect(readJson(dirtyArchiveResponse)).resolves.toMatchObject({
         code: "archive_confirmation_required",
-        message: "Archiving this thread would clean up a workspace that contains work.",
+        message:
+          "Archiving this thread would clean up a workspace that contains work.",
       });
 
-      const archiveResponse = await harness.app.request(`/api/v1/threads/${thread.id}/archive`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
+      const archiveResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/archive`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ force: false }),
         },
-        body: JSON.stringify({ force: false }),
-      });
+      );
       expect(archiveResponse.status).toBe(200);
       expect(getThread(harness.db, thread.id)?.archivedAt).toBeTypeOf("number");
       await expect(
@@ -148,12 +151,13 @@ describe("public thread archive delete cleanup routes", () => {
     }
   });
 
-
   it("stops active threads while the host is disconnected", async () => {
     const harness = await createTestAppHarness();
     try {
       const host = seedHost(harness.deps, { id: "host-stop-offline" });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -164,12 +168,17 @@ describe("public thread archive delete cleanup routes", () => {
         status: "active",
       });
 
-      const response = await harness.app.request(`/api/v1/threads/${thread.id}/stop`, {
-        method: "POST",
-      });
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/stop`,
+        {
+          method: "POST",
+        },
+      );
 
       expect(response.status).toBe(200);
-      expect(getThread(harness.db, thread.id)?.stopRequestedAt).toBeTypeOf("number");
+      expect(getThread(harness.db, thread.id)?.stopRequestedAt).toBeTypeOf(
+        "number",
+      );
 
       const stopCommand = await waitForQueuedCommand(
         harness,
@@ -182,12 +191,13 @@ describe("public thread archive delete cleanup routes", () => {
     }
   });
 
-
   it("deletes active threads while the host is disconnected and hides the tombstone immediately", async () => {
     const harness = await createTestAppHarness();
     try {
       const host = seedHost(harness.deps, { id: "host-delete-active-offline" });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -201,15 +211,20 @@ describe("public thread archive delete cleanup routes", () => {
         status: "active",
       });
 
-      const response = await harness.app.request(`/api/v1/threads/${thread.id}`, {
-        method: "DELETE",
-      });
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}`,
+        {
+          method: "DELETE",
+        },
+      );
 
       expect(response.status).toBe(200);
       const deletedThread = getThread(harness.db, thread.id);
       expect(deletedThread?.deletedAt).toBeTypeOf("number");
       expect(deletedThread?.stopRequestedAt).toBeTypeOf("number");
-      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(0);
+      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(
+        0,
+      );
 
       const stopCommand = await waitForQueuedCommand(
         harness,
@@ -222,12 +237,13 @@ describe("public thread archive delete cleanup routes", () => {
     }
   });
 
-
   it("deletes idle threads while the host is disconnected without queueing stop", async () => {
     const harness = await createTestAppHarness();
     try {
       const host = seedHost(harness.deps, { id: "host-delete-idle-offline" });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -238,16 +254,21 @@ describe("public thread archive delete cleanup routes", () => {
         status: "idle",
       });
 
-      const response = await harness.app.request(`/api/v1/threads/${thread.id}`, {
-        method: "DELETE",
-      });
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}`,
+        {
+          method: "DELETE",
+        },
+      );
 
       expect(response.status).toBe(200);
       expect(getThread(harness.db, thread.id)).toMatchObject({
         id: thread.id,
         deletedAt: expect.any(Number),
       });
-      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(0);
+      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(
+        0,
+      );
       await expect(
         waitForQueuedCommand(
           harness,
@@ -269,12 +290,15 @@ describe("public thread archive delete cleanup routes", () => {
     }
   });
 
-
   it("deletes idle managed threads while disconnected and defers cleanup until reconnect", async () => {
     const harness = await createTestAppHarness();
     try {
-      const host = seedHost(harness.deps, { id: "host-delete-idle-managed-offline" });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const host = seedHost(harness.deps, {
+        id: "host-delete-idle-managed-offline",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -288,9 +312,12 @@ describe("public thread archive delete cleanup routes", () => {
         status: "idle",
       });
 
-      const response = await harness.app.request(`/api/v1/threads/${thread.id}`, {
-        method: "DELETE",
-      });
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}`,
+        {
+          method: "DELETE",
+        },
+      );
 
       expect(response.status).toBe(200);
       expect(getThread(harness.db, thread.id)).toMatchObject({
@@ -321,7 +348,6 @@ describe("public thread archive delete cleanup routes", () => {
       await harness.cleanup();
     }
   });
-
 
   it("tombstones created threads that already have thread.start queued", async () => {
     const harness = await createTestAppHarness();
@@ -363,8 +389,8 @@ describe("public thread archive delete cleanup routes", () => {
       const queuedStart = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "thread.start"
-          && command.threadId === createdThread.id,
+          command.type === "thread.start" &&
+          command.threadId === createdThread.id,
       );
 
       const deleteResponse = await harness.app.request(
@@ -379,14 +405,16 @@ describe("public thread archive delete cleanup routes", () => {
         deletedAt: expect.any(Number),
         stopRequestedAt: expect.any(Number),
       });
-      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(0);
+      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(
+        0,
+      );
 
       const queuedStop = await waitForQueuedCommandAfter(
         harness,
         queuedStart.row.cursor,
         ({ command }) =>
-          command.type === "thread.stop"
-          && command.threadId === createdThread.id,
+          command.type === "thread.stop" &&
+          command.threadId === createdThread.id,
       );
       expect(queuedStop.command).toMatchObject({
         environmentId: environment.id,
@@ -396,7 +424,6 @@ describe("public thread archive delete cleanup routes", () => {
       await harness.cleanup();
     }
   });
-
 
   it("queues thread.stop before cleanup when archiving a created thread with pending start", async () => {
     const harness = await createTestAppHarness();
@@ -440,8 +467,8 @@ describe("public thread archive delete cleanup routes", () => {
       const queuedStart = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "thread.start"
-          && command.threadId === createdThread.id,
+          command.type === "thread.start" &&
+          command.threadId === createdThread.id,
       );
 
       const archiveResponse = await harness.app.request(
@@ -465,8 +492,8 @@ describe("public thread archive delete cleanup routes", () => {
         harness,
         queuedStart.row.cursor,
         ({ command }) =>
-          command.type === "thread.stop"
-          && command.threadId === createdThread.id,
+          command.type === "thread.stop" &&
+          command.threadId === createdThread.id,
       );
       expect(queuedStop.command).toMatchObject({
         environmentId: environment.id,
@@ -478,8 +505,8 @@ describe("public thread archive delete cleanup routes", () => {
           harness,
           queuedStop.row.cursor,
           ({ command }) =>
-            command.type === "environment.destroy"
-            && command.environmentId === environment.id,
+            command.type === "environment.destroy" &&
+            command.environmentId === environment.id,
           100,
         ),
       ).rejects.toThrow("Timed out waiting for queued command");
@@ -488,12 +515,13 @@ describe("public thread archive delete cleanup routes", () => {
     }
   });
 
-
   it("archives shared managed environments without prompting or queueing cleanup", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -512,16 +540,21 @@ describe("public thread archive delete cleanup routes", () => {
         status: "idle",
       });
 
-      const response = await harness.app.request(`/api/v1/threads/${archivedThread.id}/archive`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
+      const response = await harness.app.request(
+        `/api/v1/threads/${archivedThread.id}/archive`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ force: false }),
         },
-        body: JSON.stringify({ force: false }),
-      });
+      );
 
       expect(response.status).toBe(200);
-      expect(getThread(harness.db, archivedThread.id)?.archivedAt).toBeTypeOf("number");
+      expect(getThread(harness.db, archivedThread.id)?.archivedAt).toBeTypeOf(
+        "number",
+      );
       await expect(
         waitForQueuedCommand(
           harness,
@@ -545,12 +578,15 @@ describe("public thread archive delete cleanup routes", () => {
     }
   });
 
-
   it("archives isolated managed environments while disconnected and records deferred safe cleanup", async () => {
     const harness = await createTestAppHarness();
     try {
-      const host = seedHost(harness.deps, { id: "host-archive-managed-offline" });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const host = seedHost(harness.deps, {
+        id: "host-archive-managed-offline",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -564,13 +600,16 @@ describe("public thread archive delete cleanup routes", () => {
         status: "idle",
       });
 
-      const response = await harness.app.request(`/api/v1/threads/${thread.id}/archive`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/archive`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ force: false }),
         },
-        body: JSON.stringify({ force: false }),
-      });
+      );
 
       expect(response.status).toBe(200);
       expect(getThread(harness.db, thread.id)?.archivedAt).toBeTypeOf("number");
@@ -593,14 +632,15 @@ describe("public thread archive delete cleanup routes", () => {
     }
   });
 
-
   it("archives active isolated managed environments without destroying them until stop finalization completes", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
         id: "host-archive-managed-active",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -614,13 +654,16 @@ describe("public thread archive delete cleanup routes", () => {
         status: "active",
       });
 
-      const archivePromise = harness.app.request(`/api/v1/threads/${thread.id}/archive`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
+      const archivePromise = harness.app.request(
+        `/api/v1/threads/${thread.id}/archive`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ force: false }),
         },
-        body: JSON.stringify({ force: false }),
-      });
+      );
 
       const initialStatusCommand = await waitForQueuedCommand(
         harness,
@@ -636,14 +679,15 @@ describe("public thread archive delete cleanup routes", () => {
         harness,
         initialStatusCommand.row.cursor,
         ({ command }) =>
-          command.type === "thread.stop" &&
-          command.threadId === thread.id,
+          command.type === "thread.stop" && command.threadId === thread.id,
       );
 
       const archiveResponse = await archivePromise;
       expect(archiveResponse.status).toBe(200);
       expect(getThread(harness.db, thread.id)?.archivedAt).toBeTypeOf("number");
-      expect(getThread(harness.db, thread.id)?.stopRequestedAt).toBeTypeOf("number");
+      expect(getThread(harness.db, thread.id)?.stopRequestedAt).toBeTypeOf(
+        "number",
+      );
       await expect(
         waitForQueuedCommandAfter(
           harness,
@@ -655,7 +699,11 @@ describe("public thread archive delete cleanup routes", () => {
         ),
       ).rejects.toThrow("Timed out waiting for queued command");
 
-      const stopResultPromise = reportQueuedCommandSuccess(harness, stopCommand, {});
+      const stopResultPromise = reportQueuedCommandSuccess(
+        harness,
+        stopCommand,
+        {},
+      );
 
       const cleanupStatusCommand = await waitForQueuedCommandAfter(
         harness,
@@ -685,14 +733,15 @@ describe("public thread archive delete cleanup routes", () => {
     }
   });
 
-
   it("preserves forced managed cleanup across active thread stop finalization", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
         id: "host-archive-managed-active-force",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -706,13 +755,16 @@ describe("public thread archive delete cleanup routes", () => {
         status: "active",
       });
 
-      const archiveResponse = await harness.app.request(`/api/v1/threads/${thread.id}/archive`, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
+      const archiveResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/archive`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ force: true }),
         },
-        body: JSON.stringify({ force: true }),
-      });
+      );
       expect(archiveResponse.status).toBe(200);
       expect(getEnvironment(harness.db, environment.id)).toMatchObject({
         cleanupMode: "force",
@@ -723,11 +775,14 @@ describe("public thread archive delete cleanup routes", () => {
       const stopCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "thread.stop" &&
-          command.threadId === thread.id,
+          command.type === "thread.stop" && command.threadId === thread.id,
       );
 
-      const stopResultPromise = reportQueuedCommandSuccess(harness, stopCommand, {});
+      const stopResultPromise = reportQueuedCommandSuccess(
+        harness,
+        stopCommand,
+        {},
+      );
 
       const destroyCommand = await waitForQueuedCommandAfter(
         harness,
@@ -757,12 +812,13 @@ describe("public thread archive delete cleanup routes", () => {
     }
   });
 
-
   it("queues environment.destroy when deleting the last thread on a managed environment", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -775,9 +831,12 @@ describe("public thread archive delete cleanup routes", () => {
         environmentId: environment.id,
       });
 
-      const response = await harness.app.request(`/api/v1/threads/${thread.id}`, {
-        method: "DELETE",
-      });
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}`,
+        {
+          method: "DELETE",
+        },
+      );
       expect(response.status).toBe(200);
 
       const destroyCommand = await waitForQueuedCommand(
@@ -794,12 +853,13 @@ describe("public thread archive delete cleanup routes", () => {
     }
   });
 
-
   it("records provisioning managed cleanup intent without queueing an invalid destroy", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = createEnvironment(harness.db, harness.hub, {
         projectId: project.id,
         hostId: host.id,
@@ -813,9 +873,12 @@ describe("public thread archive delete cleanup routes", () => {
         environmentId: environment.id,
       });
 
-      const response = await harness.app.request(`/api/v1/threads/${thread.id}`, {
-        method: "DELETE",
-      });
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}`,
+        {
+          method: "DELETE",
+        },
+      );
       expect(response.status).toBe(200);
       expect(getEnvironment(harness.db, environment.id)).toMatchObject({
         cleanupMode: "force",
@@ -834,12 +897,13 @@ describe("public thread archive delete cleanup routes", () => {
     }
   });
 
-
   it("archives non-git threads without requiring workspace status", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = createEnvironment(harness.db, harness.hub, {
         projectId: project.id,
         hostId: host.id,

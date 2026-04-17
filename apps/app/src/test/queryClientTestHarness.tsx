@@ -7,7 +7,9 @@ interface QueryClientTestWrapperProps {
   children: ReactNode;
 }
 
-type QueryClientTestWrapper = (props: QueryClientTestWrapperProps) => JSX.Element;
+type QueryClientTestWrapper = (
+  props: QueryClientTestWrapperProps,
+) => JSX.Element;
 
 export interface QueryClientTestHarness {
   queryClient: QueryClient;

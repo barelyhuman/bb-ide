@@ -3,9 +3,7 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { pendingInteractions as pendingInteractionTable } from "@bb/db";
 import type { PendingInteractionCreate } from "@bb/domain";
-import {
-  PendingInteractionLifecycle,
-} from "../../src/services/interactions/pending-interactions.js";
+import { PendingInteractionLifecycle } from "../../src/services/interactions/pending-interactions.js";
 import {
   seedEnvironment,
   seedHostSession,
@@ -80,7 +78,9 @@ describe("pending interaction lifecycle", () => {
         session.id,
       );
       if (corrupt.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${corrupt.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${corrupt.reason}`,
+        );
       }
 
       harness.db
@@ -111,7 +111,9 @@ describe("pending interaction lifecycle", () => {
         session.id,
       );
       if (valid.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${valid.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${valid.reason}`,
+        );
       }
 
       expect(lifecycle.listThreadInteractions(thread.id)).toEqual([
@@ -128,7 +130,7 @@ describe("pending interaction lifecycle", () => {
         lifecycle.getThreadInteraction({
           threadId: thread.id,
           interactionId: corrupt.interaction.id,
-        })
+        }),
       ).toThrow("Stored pending interaction resolution is invalid");
     } finally {
       await harness.cleanup();
@@ -171,7 +173,9 @@ describe("pending interaction lifecycle", () => {
         session.id,
       );
       if (created.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${created.reason}`,
+        );
       }
 
       harness.deps.pendingInteractions.resolvePendingInteraction({
@@ -253,8 +257,7 @@ describe("pending interaction lifecycle", () => {
         ),
       ).toEqual({
         outcome: "rejected",
-        reason:
-          `Thread ${thread.id} belongs to provider codex, not claude-code`,
+        reason: `Thread ${thread.id} belongs to provider codex, not claude-code`,
       });
     } finally {
       await harness.cleanup();
@@ -303,33 +306,37 @@ describe("pending interaction lifecycle", () => {
         session.id,
       );
       if (created.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${created.reason}`,
+        );
       }
 
-      const firstResolution = harness.deps.pendingInteractions.resolvePendingInteraction({
-        threadId: thread.id,
-        interactionId: created.interaction.id,
-        resolution: createAllowOnceResolution({
-          network: null,
-          fileSystem: {
-            read: ["/tmp/project/a", "/tmp/project/b"],
-            write: ["/tmp/project/c", "/tmp/project/d"],
-          },
-        }),
-      });
+      const firstResolution =
+        harness.deps.pendingInteractions.resolvePendingInteraction({
+          threadId: thread.id,
+          interactionId: created.interaction.id,
+          resolution: createAllowOnceResolution({
+            network: null,
+            fileSystem: {
+              read: ["/tmp/project/a", "/tmp/project/b"],
+              write: ["/tmp/project/c", "/tmp/project/d"],
+            },
+          }),
+        });
       expect(firstResolution.status).toBe("resolving");
 
-      const retryResolution = harness.deps.pendingInteractions.resolvePendingInteraction({
-        threadId: thread.id,
-        interactionId: created.interaction.id,
-        resolution: createAllowOnceResolution({
+      const retryResolution =
+        harness.deps.pendingInteractions.resolvePendingInteraction({
+          threadId: thread.id,
+          interactionId: created.interaction.id,
+          resolution: createAllowOnceResolution({
             network: null,
             fileSystem: {
               read: ["/tmp/project/b", "/tmp/project/a"],
               write: ["/tmp/project/d", "/tmp/project/c"],
             },
-        }),
-      });
+          }),
+        });
 
       expect(retryResolution).toMatchObject({
         id: created.interaction.id,
@@ -380,7 +387,9 @@ describe("pending interaction lifecycle", () => {
         session.id,
       );
       if (created.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${created.reason}`,
+        );
       }
 
       expect(() =>
@@ -388,11 +397,13 @@ describe("pending interaction lifecycle", () => {
           threadId: thread.id,
           interactionId: created.interaction.id,
           resolution: createAllowForSessionResolution({
-              network: null,
-              fileSystem: null,
+            network: null,
+            fileSystem: null,
           }),
         }),
-      ).toThrow("Allowed permission resolutions must grant at least one permission");
+      ).toThrow(
+        "Allowed permission resolutions must grant at least one permission",
+      );
 
       expect(
         harness.deps.pendingInteractions.getThreadInteraction({
@@ -444,7 +455,9 @@ describe("pending interaction lifecycle", () => {
         session.id,
       );
       if (created.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${created.reason}`,
+        );
       }
 
       expect(
@@ -456,16 +469,18 @@ describe("pending interaction lifecycle", () => {
             fileSystem: null,
           }),
         }),
-      ).toEqual(expect.objectContaining({
-        status: "resolving",
-        resolution: expect.objectContaining({
-          decision: "allow_for_session",
-          grantedPermissions: {
-            network: { enabled: true },
-            fileSystem: null,
-          },
+      ).toEqual(
+        expect.objectContaining({
+          status: "resolving",
+          resolution: expect.objectContaining({
+            decision: "allow_for_session",
+            grantedPermissions: {
+              network: { enabled: true },
+              fileSystem: null,
+            },
+          }),
         }),
-      }));
+      );
     } finally {
       await harness.cleanup();
     }
@@ -513,7 +528,9 @@ describe("pending interaction lifecycle", () => {
         session.id,
       );
       if (created.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${created.reason}`,
+        );
       }
 
       expect(() =>
@@ -572,7 +589,9 @@ describe("pending interaction lifecycle", () => {
         session.id,
       );
       if (created.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${created.reason}`,
+        );
       }
 
       expect(() =>
@@ -581,7 +600,9 @@ describe("pending interaction lifecycle", () => {
           interactionId: created.interaction.id,
           resolution: createAllowForSessionResolution(null),
         }),
-      ).toThrow("Session approval resolutions must include granted permissions");
+      ).toThrow(
+        "Session approval resolutions must include granted permissions",
+      );
     } finally {
       await harness.cleanup();
     }
@@ -623,7 +644,9 @@ describe("pending interaction lifecycle", () => {
         session.id,
       );
       if (created.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${created.reason}`,
+        );
       }
 
       expect(() =>
@@ -638,7 +661,9 @@ describe("pending interaction lifecycle", () => {
             },
           }),
         }),
-      ).toThrow("This approval subject and decision cannot grant the requested permissions");
+      ).toThrow(
+        "This approval subject and decision cannot grant the requested permissions",
+      );
     } finally {
       await harness.cleanup();
     }
@@ -680,7 +705,9 @@ describe("pending interaction lifecycle", () => {
         session.id,
       );
       if (created.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${created.reason}`,
+        );
       }
 
       expect(
@@ -790,7 +817,9 @@ describe("pending interaction lifecycle", () => {
         session.id,
       );
       if (created.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${created.reason}`,
+        );
       }
 
       harness.deps.pendingInteractions.interruptPendingInteraction({
@@ -803,7 +832,7 @@ describe("pending interaction lifecycle", () => {
           threadId: thread.id,
           interactionId: created.interaction.id,
           resolution: createAllowOnceResolution(),
-        })
+        }),
       ).toThrowError(
         `Pending interaction ${created.interaction.id} is already interrupted`,
       );
@@ -855,7 +884,9 @@ describe("pending interaction lifecycle", () => {
         session.id,
       );
       if (created.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${created.reason}`,
+        );
       }
 
       await sleep(50);
@@ -866,9 +897,10 @@ describe("pending interaction lifecycle", () => {
           interactionId: created.interaction.id,
         }),
       ).toMatchObject({
-          id: created.interaction.id,
-          status: "expired",
-          statusReason: "Pending interaction expired while waiting for a user response",
+        id: created.interaction.id,
+        status: "expired",
+        statusReason:
+          "Pending interaction expired while waiting for a user response",
       });
     } finally {
       await harness.cleanup();
@@ -918,7 +950,9 @@ describe("pending interaction lifecycle", () => {
         session.id,
       );
       if (created.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${created.reason}`,
+        );
       }
 
       const restartedLifecycle = new PendingInteractionLifecycle({
@@ -938,7 +972,8 @@ describe("pending interaction lifecycle", () => {
       ).toMatchObject({
         id: created.interaction.id,
         status: "expired",
-        statusReason: "Pending interaction expired while waiting for a user response",
+        statusReason:
+          "Pending interaction expired while waiting for a user response",
       });
     } finally {
       await harness.cleanup();
@@ -987,7 +1022,9 @@ describe("pending interaction lifecycle", () => {
         session.id,
       );
       if (created.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${created.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${created.reason}`,
+        );
       }
 
       await sleep(50);

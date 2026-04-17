@@ -44,7 +44,9 @@ async function initRepoWithOptionalSetup(
 
 afterEach(async () => {
   await Promise.all(
-    tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
+    tempDirs
+      .splice(0)
+      .map((dir) => fs.rm(dir, { recursive: true, force: true })),
   );
 });
 
@@ -128,7 +130,12 @@ describe("workspace provisioning", () => {
   it("creates nested clone targets when parent directories do not exist", async () => {
     const sourceRepo = await initRepoWithOptionalSetup();
     const parentDir = await makeTempDir("bb-clone-nested-parent-");
-    const targetPath = path.join(parentDir, ".bb-worktrees", "proj_123", "thr_456");
+    const targetPath = path.join(
+      parentDir,
+      ".bb-worktrees",
+      "proj_123",
+      "thr_456",
+    );
 
     await createClone({
       sourcePath: sourceRepo,
@@ -143,7 +150,12 @@ describe("workspace provisioning", () => {
   it("creates nested worktree targets when parent directories do not exist", async () => {
     const sourceRepo = await initRepoWithOptionalSetup();
     const parentDir = await makeTempDir("bb-worktree-nested-parent-");
-    const targetPath = path.join(parentDir, ".bb-worktrees", "proj_123", "thr_456");
+    const targetPath = path.join(
+      parentDir,
+      ".bb-worktrees",
+      "proj_123",
+      "thr_456",
+    );
 
     await createWorktree({
       sourcePath: sourceRepo,
@@ -242,7 +254,9 @@ describe("workspace provisioning", () => {
   it("returns a no-op when the setup script is missing", async () => {
     const workspacePath = await makeTempDir("bb-setup-noop-");
 
-    await expect(runSetupScript({ workspacePath, timeoutMs: 900000 })).resolves.toEqual({ ran: false });
+    await expect(
+      runSetupScript({ workspacePath, timeoutMs: 900000 }),
+    ).resolves.toEqual({ ran: false });
   });
 
   it("removes worktrees and plain directories", async () => {

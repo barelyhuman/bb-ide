@@ -6,8 +6,14 @@ import { devEnvConfig } from "../../packages/config/src/dev-env.js";
 import { serverPortConfig } from "../../packages/config/src/server-port.js";
 
 const DEFAULT_APP_PORT = 5173;
-const appPort = Number.parseInt(process.env.BB_APP_PORT ?? String(DEFAULT_APP_PORT), 10);
-const appHost = devEnvConfig.BB_DEV_APP_HOST === "" ? undefined : devEnvConfig.BB_DEV_APP_HOST;
+const appPort = Number.parseInt(
+  process.env.BB_APP_PORT ?? String(DEFAULT_APP_PORT),
+  10,
+);
+const appHost =
+  devEnvConfig.BB_DEV_APP_HOST === ""
+    ? undefined
+    : devEnvConfig.BB_DEV_APP_HOST;
 const serverPort = serverPortConfig.BB_SERVER_PORT;
 const serverHttpOrigin = `http://localhost:${serverPort}`;
 const serverWsOrigin = `ws://localhost:${serverPort}`;
@@ -19,16 +25,17 @@ export default defineConfig(({ command }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  define: command === "serve"
-    ? {
-        // In dev mode, connect the WebSocket directly to the server instead of
-        // going through Vite's proxy. Vite's WS proxy (node-http-proxy) does not
-        // handle reconnection when the upstream server restarts — it's a known
-        // limitation (vitejs/vite#8117, chimurai/http-proxy-middleware#44).
-        // In production the server serves the app directly so this isn't needed.
-        "__BB_DEV_WS_URL__": JSON.stringify(`${serverWsOrigin}/ws`),
-      }
-    : undefined,
+  define:
+    command === "serve"
+      ? {
+          // In dev mode, connect the WebSocket directly to the server instead of
+          // going through Vite's proxy. Vite's WS proxy (node-http-proxy) does not
+          // handle reconnection when the upstream server restarts — it's a known
+          // limitation (vitejs/vite#8117, chimurai/http-proxy-middleware#44).
+          // In production the server serves the app directly so this isn't needed.
+          __BB_DEV_WS_URL__: JSON.stringify(`${serverWsOrigin}/ws`),
+        }
+      : undefined,
   server: {
     host: appHost,
     port: appPort,

@@ -18,7 +18,9 @@ async function makeTempDir(prefix: string): Promise<string> {
 afterEach(async () => {
   vi.restoreAllMocks();
   await Promise.all(
-    tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
+    tempDirs
+      .splice(0)
+      .map((dir) => fs.rm(dir, { recursive: true, force: true })),
   );
 });
 
@@ -29,7 +31,7 @@ describe("runtime material files", () => {
     const previousPath = path.join(rootDir, ".claude", "credentials.json");
     const nextPath = path.join(rootDir, ".codex", "auth.json");
     await fs.mkdir(path.dirname(previousPath), { recursive: true });
-    await fs.writeFile(previousPath, "{\"old\":true}\n", "utf8");
+    await fs.writeFile(previousPath, '{"old":true}\n', "utf8");
 
     await replaceManagedRuntimeFiles({
       previousState: {
@@ -45,7 +47,7 @@ describe("runtime material files", () => {
         env: {},
         files: [
           {
-            contents: "{\"new\":true}\n",
+            contents: '{"new":true}\n',
             managedBy: "bb-runtime-material",
             mode: 0o600,
             path: "~/.codex/auth.json",
@@ -55,7 +57,7 @@ describe("runtime material files", () => {
       },
     });
 
-    await expect(fs.readFile(nextPath, "utf8")).resolves.toBe("{\"new\":true}\n");
+    await expect(fs.readFile(nextPath, "utf8")).resolves.toBe('{"new":true}\n');
     const stats = await fs.stat(nextPath);
     expect(stats.mode & 0o777).toBe(0o600);
     await expect(fs.access(previousPath)).rejects.toMatchObject({

@@ -20,7 +20,9 @@ describe("replay capture path helpers", () => {
     const dataDir = "/tmp/bb-data";
     const captureId = "cap_ya_abc123zz";
 
-    expect(replayCaptureDir(dataDir, captureId)).toBe("/tmp/bb-data/replays/cap_ya_abc123zz");
+    expect(replayCaptureDir(dataDir, captureId)).toBe(
+      "/tmp/bb-data/replays/cap_ya_abc123zz",
+    );
     expect(replayCaptureManifestPath(dataDir, captureId)).toBe(
       "/tmp/bb-data/replays/cap_ya_abc123zz/manifest.json",
     );
@@ -34,7 +36,7 @@ describe("replay capture path helpers", () => {
       resolveContainedReplayCapturePath({
         dataDir: "/tmp/bb-data",
         segments: ["..", "secrets"],
-      })
+      }),
     ).toThrow(/escapes replay root/u);
   });
 });

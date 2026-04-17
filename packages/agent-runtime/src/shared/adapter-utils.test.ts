@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildEditDiff,
-  extractResultText,
-} from "./adapter-utils.js";
+import { buildEditDiff, extractResultText } from "./adapter-utils.js";
 
 describe("adapter-utils", () => {
   it("extractResultText returns an empty string for nullish content", () => {
@@ -17,25 +14,31 @@ describe("adapter-utils", () => {
   });
 
   it("extractResultText unwraps content wrappers", () => {
-    expect(extractResultText({
-      content: [{ type: "text", text: "wrapped result" }],
-    })).toBe("wrapped result");
+    expect(
+      extractResultText({
+        content: [{ type: "text", text: "wrapped result" }],
+      }),
+    ).toBe("wrapped result");
   });
 
   it("extractResultText summarizes Claude tool reference blocks", () => {
-    expect(extractResultText([
-      { type: "tool_reference", tool_name: "TodoWrite" },
-      { type: "tool_reference", tool_name: "WebSearch" },
-      { type: "tool_reference", tool_name: "WebFetch" },
-    ])).toBe("Matched tools: TodoWrite, WebSearch, WebFetch");
+    expect(
+      extractResultText([
+        { type: "tool_reference", tool_name: "TodoWrite" },
+        { type: "tool_reference", tool_name: "WebSearch" },
+        { type: "tool_reference", tool_name: "WebFetch" },
+      ]),
+    ).toBe("Matched tools: TodoWrite, WebSearch, WebFetch");
   });
 
   it("extractResultText keeps mixed text and non-text blocks readable", () => {
-    expect(extractResultText([
-      { type: "text", text: "partial output" },
-      { type: "image", url: "https://example.com/image.png" },
-      { type: "file", path: "src/app.ts" },
-    ])).toBe(
+    expect(
+      extractResultText([
+        { type: "text", text: "partial output" },
+        { type: "image", url: "https://example.com/image.png" },
+        { type: "file", path: "src/app.ts" },
+      ]),
+    ).toBe(
       "partial output\n[image: https://example.com/image.png]\n[file: src/app.ts]",
     );
   });

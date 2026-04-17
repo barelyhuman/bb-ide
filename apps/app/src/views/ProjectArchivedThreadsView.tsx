@@ -16,21 +16,27 @@ export function ProjectArchivedThreadsView() {
   if (!projectId) {
     return (
       <PageShell contentClassName="min-h-full items-center justify-center">
-        <p className="py-12 text-center text-sm text-muted-foreground">Project not found</p>
+        <p className="py-12 text-center text-sm text-muted-foreground">
+          Project not found
+        </p>
       </PageShell>
     );
   }
 
   const archivedThreads =
     threads
-      ?.filter((thread) => thread.archivedAt != null && thread.parentThreadId == null)
+      ?.filter(
+        (thread) => thread.archivedAt != null && thread.parentThreadId == null,
+      )
       .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0)) ?? [];
 
   return (
     <PageShell contentClassName="pt-4 md:pt-5">
       <div className="mx-auto w-full max-w-3xl space-y-2">
         {isLoading ? (
-          <p className="text-sm text-muted-foreground">Loading archived threads…</p>
+          <p className="text-sm text-muted-foreground">
+            Loading archived threads…
+          </p>
         ) : archivedThreads.length === 0 ? (
           <p className="rounded-md border border-dashed border-border px-3 py-4 text-sm text-muted-foreground">
             No archived threads yet.

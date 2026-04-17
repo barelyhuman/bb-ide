@@ -1,6 +1,12 @@
 import { z } from "zod";
 
-export const REALTIME_ENTITIES = ["thread", "project", "environment", "host", "system"] as const;
+export const REALTIME_ENTITIES = [
+  "thread",
+  "project",
+  "environment",
+  "host",
+  "system",
+] as const;
 export type RealtimeEntity = (typeof REALTIME_ENTITIES)[number];
 export const realtimeEntitySchema = z.enum(REALTIME_ENTITIES);
 

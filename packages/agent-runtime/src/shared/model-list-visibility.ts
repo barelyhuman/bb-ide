@@ -27,10 +27,7 @@ export function includeSelectedOnlyModels({
   selectedOnlyModels,
 }: IncludeSelectedOnlyModelsArgs): AvailableModel[] {
   const models = [...activeModels];
-  if (
-    !selectedModel ||
-    models.some((model) => model.model === selectedModel)
-  ) {
+  if (!selectedModel || models.some((model) => model.model === selectedModel)) {
     return models;
   }
 

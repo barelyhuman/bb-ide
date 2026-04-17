@@ -9,7 +9,9 @@ describe("ansiToHtml", () => {
   });
 
   it("lets background contrast override a previously selected foreground", () => {
-    expect(ansiToHtml("\u001b[30m\u001b[45m @bb/server \u001b[49m\u001b[39m test")).toBe(
+    expect(
+      ansiToHtml("\u001b[30m\u001b[45m @bb/server \u001b[49m\u001b[39m test"),
+    ).toBe(
       '<span style="color:var(--ansi-0)"><span style="background-color:var(--ansi-5);color:var(--ansi-bg-fg-5)"> @bb/server <span style="background-color:var(--background);color:var(--foreground)"><span style="color:var(--foreground)"> test</span></span></span></span>',
     );
   });

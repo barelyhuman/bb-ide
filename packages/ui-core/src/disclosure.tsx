@@ -84,9 +84,15 @@ export function CollapsibleHeader({
     <button type="button" onClick={onToggle} className={rootClassName}>
       <span className={summaryClass}>{summaryContent}</span>
       {isExpanded ? (
-        <Chevron expanded={true} className="size-4 shrink-0 transition-transform duration-200 ease-out" />
+        <Chevron
+          expanded={true}
+          className="size-4 shrink-0 transition-transform duration-200 ease-out"
+        />
       ) : (
-        <Chevron expanded={false} className={COLLAPSIBLE_HEADER_CHEVRON_COLLAPSED_CLASS} />
+        <Chevron
+          expanded={false}
+          className={COLLAPSIBLE_HEADER_CHEVRON_COLLAPSED_CLASS}
+        />
       )}
     </button>
   );
@@ -127,7 +133,9 @@ export function ExpandablePanel({
           onToggle={onToggle}
           toneClassName={headerToneClass}
           className={headerButtonClassName}
-          summaryClassName={summaryContentClassName ?? COLLAPSIBLE_HEADER_TEXT_CLASS}
+          summaryClassName={
+            summaryContentClassName ?? COLLAPSIBLE_HEADER_TEXT_CLASS
+          }
           summaryContent={summaryContent}
         />
       </div>
@@ -135,7 +143,9 @@ export function ExpandablePanel({
         aria-hidden={!isExpanded}
         className={cx(
           "grid transition-[grid-template-rows,opacity] duration-200 ease-out",
-          isExpanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
+          isExpanded
+            ? "grid-rows-[1fr] opacity-100"
+            : "grid-rows-[0fr] opacity-0",
           bodyClassName,
         )}
       >
@@ -143,7 +153,9 @@ export function ExpandablePanel({
           <div
             className={cx(
               "px-2 pb-1 pt-0 transition-[transform,opacity] duration-200 ease-out will-change-transform",
-              isExpanded ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0",
+              isExpanded
+                ? "translate-y-0 opacity-100"
+                : "-translate-y-1 opacity-0",
               contentClassName,
             )}
           >

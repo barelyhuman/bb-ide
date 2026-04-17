@@ -49,7 +49,8 @@ export function useWorkspaceOpenTargets(
       return null;
     }
     const port = daemonPort;
-    return (request: OpenWorkspaceRequest) => daemonOpenWorkspace(port, request);
+    return (request: OpenWorkspaceRequest) =>
+      daemonOpenWorkspace(port, request);
   }, [args.enabled, localHostId, daemonPort, workspaceOpenTargets.length]);
 
   return {

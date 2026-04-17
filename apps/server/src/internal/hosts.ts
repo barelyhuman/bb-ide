@@ -12,37 +12,42 @@ import { requireBearerToken } from "./auth.js";
 
 export function registerInternalHostRoutes(app: Hono, deps: AppDeps): void {
   const { post } = typedRoutes<HostDaemonInternalSchema>(app, {
-    onValidationError: (message) => new ApiError(400, "invalid_request", message),
+    onValidationError: (message) =>
+      new ApiError(400, "invalid_request", message),
   });
 
-  post("/hosts/enroll", hostDaemonEnrollRequestSchema, async (context, payload) => {
-    const token = requireBearerToken(context.req.header("authorization"));
-    const enrollment = await deps.machineAuth.enrollHost({
-      hostId: payload.hostId,
-      hostType: payload.hostType,
-      token,
-    });
+  post(
+    "/hosts/enroll",
+    hostDaemonEnrollRequestSchema,
+    async (context, payload) => {
+      const token = requireBearerToken(context.req.header("authorization"));
+      const enrollment = await deps.machineAuth.enrollHost({
+        hostId: payload.hostId,
+        hostType: payload.hostType,
+        token,
+      });
 
-    if (!enrollment) {
-      throw new ApiError(401, "unauthorized", "Unauthorized");
-    }
-    assertMatchingExistingHostType({
-      existingHost: getHost(deps.db, enrollment.metadata.hostId),
-      requestedHostType: enrollment.metadata.hostType,
-    });
+      if (!enrollment) {
+        throw new ApiError(401, "unauthorized", "Unauthorized");
+      }
+      assertMatchingExistingHostType({
+        existingHost: getHost(deps.db, enrollment.metadata.hostId),
+        requestedHostType: enrollment.metadata.hostType,
+      });
 
-    upsertHost(deps.db, deps.hub, {
-      id: enrollment.metadata.hostId,
-      name: payload.hostName,
-      type: enrollment.metadata.hostType,
-    });
+      upsertHost(deps.db, deps.hub, {
+        id: enrollment.metadata.hostId,
+        name: payload.hostName,
+        type: enrollment.metadata.hostType,
+      });
 
-    return context.json(
-      {
-        hostId: enrollment.metadata.hostId,
-        hostKey: enrollment.hostKey,
-      },
-      201,
-    );
-  });
+      return context.json(
+        {
+          hostId: enrollment.metadata.hostId,
+          hostKey: enrollment.hostKey,
+        },
+        201,
+      );
+    },
+  );
 }

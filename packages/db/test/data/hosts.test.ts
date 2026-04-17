@@ -184,7 +184,9 @@ describe("hosts", () => {
 
     updateHost(db, noopNotifier, destroyedHost.id, { destroyedAt: 123 });
 
-    expect(listPublicHosts(db).map((host) => host.id)).toEqual([visibleHost.id]);
+    expect(listPublicHosts(db).map((host) => host.id)).toEqual([
+      visibleHost.id,
+    ]);
   });
 
   it("filters destroyed hosts from non-destroyed lookups", () => {

@@ -12,7 +12,9 @@ export type LocalPathExistence = Record<string, boolean>;
  * on disk. Returns `{}` while loading / disconnected; the consumer should
  * treat a missing entry as "unknown", not "exists".
  */
-export function useLocalPathExistence(paths: readonly string[]): LocalPathExistence {
+export function useLocalPathExistence(
+  paths: readonly string[],
+): LocalPathExistence {
   const localHostId = useAtomValue(localHostIdAtom);
   const daemonPort = useAtomValue(hostDaemonPortAtom);
 
@@ -21,7 +23,8 @@ export function useLocalPathExistence(paths: readonly string[]): LocalPathExiste
     return [...new Set(paths)].sort();
   }, [paths]);
 
-  const enabled = localHostId != null && daemonPort != null && sortedPaths.length > 0;
+  const enabled =
+    localHostId != null && daemonPort != null && sortedPaths.length > 0;
 
   const query = useQuery({
     queryKey: localPathExistenceQueryKey(localHostId ?? "", sortedPaths),

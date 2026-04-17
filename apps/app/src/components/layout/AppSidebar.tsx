@@ -1,6 +1,6 @@
-import { cn } from "@/lib/utils"
-import { Link, useLocation } from "react-router-dom"
-import { Moon, Settings, Sun } from "lucide-react"
+import { cn } from "@/lib/utils";
+import { Link, useLocation } from "react-router-dom";
+import { Moon, Settings, Sun } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -9,36 +9,34 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "@/components/ui/sidebar"
-import { ProjectList } from "./ProjectList"
-import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject"
-import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme"
+} from "@/components/ui/sidebar";
+import { ProjectList } from "./ProjectList";
+import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
+import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme";
 
 interface AppSidebarProps {
-  onResizeMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void
-  isResizing: boolean
+  onResizeMouseDown: (event: React.MouseEvent<HTMLDivElement>) => void;
+  isResizing: boolean;
 }
 
-export function AppSidebar({
-  onResizeMouseDown,
-  isResizing,
-}: AppSidebarProps) {
-  const quickCreateProject = useQuickCreateProjectController()
-  const location = useLocation()
-  const { isMobile, setOpenMobile } = useSidebar()
-  const theme = usePreferredTheme()
+export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
+  const quickCreateProject = useQuickCreateProjectController();
+  const location = useLocation();
+  const { isMobile, setOpenMobile } = useSidebar();
+  const theme = usePreferredTheme();
 
   const closeOnMobile = () => {
     if (isMobile) {
-      setOpenMobile(false)
+      setOpenMobile(false);
     }
-  }
+  };
 
-  const isDarkTheme = theme === "dark"
+  const isDarkTheme = theme === "dark";
   const toggleTheme = () => {
-    setPreferredTheme(isDarkTheme ? "light" : "dark")
-  }
-  const selectedProjectId = location.pathname.match(/^\/projects\/([^/]+)/)?.[1]
+    setPreferredTheme(isDarkTheme ? "light" : "dark");
+  };
+  const selectedProjectId =
+    location.pathname.match(/^\/projects\/([^/]+)/)?.[1];
 
   return (
     <>
@@ -61,8 +59,12 @@ export function AppSidebar({
               <SidebarMenuButton
                 onClick={toggleTheme}
                 className="h-9 w-9 justify-center p-0 [&>svg]:size-5 md:h-8 md:w-8 md:[&>svg]:size-4"
-                tooltip={isDarkTheme ? "Switch to light mode" : "Switch to dark mode"}
-                aria-label={isDarkTheme ? "Switch to light mode" : "Switch to dark mode"}
+                tooltip={
+                  isDarkTheme ? "Switch to light mode" : "Switch to dark mode"
+                }
+                aria-label={
+                  isDarkTheme ? "Switch to light mode" : "Switch to dark mode"
+                }
               >
                 {isDarkTheme ? <Sun /> : <Moon />}
               </SidebarMenuButton>
@@ -86,11 +88,11 @@ export function AppSidebar({
             "absolute -right-1.5 top-0 z-30 hidden h-full w-3 cursor-col-resize md:block",
             "before:absolute before:inset-y-0 before:left-1/2 before:w-px before:-translate-x-1/2 before:bg-transparent before:transition-colors hover:before:bg-sidebar-border",
             "group-data-[collapsible=icon]:hidden",
-            isResizing && "before:bg-sidebar-border"
+            isResizing && "before:bg-sidebar-border",
           )}
           onMouseDown={onResizeMouseDown}
         />
       </Sidebar>
     </>
-  )
+  );
 }

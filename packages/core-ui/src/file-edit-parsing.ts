@@ -6,7 +6,9 @@ import {
 import { getEventParentToolCallId } from "./event-decode.js";
 import type { ViewFileEditChange, ViewFileEditMessage } from "@bb/domain";
 
-export function mapFileChanges(changes: ThreadEventFileChange[]): ViewFileEditChange[] {
+export function mapFileChanges(
+  changes: ThreadEventFileChange[],
+): ViewFileEditChange[] {
   return changes.map((change) => ({
     path: change.path,
     kind: change.kind,
@@ -48,7 +50,8 @@ export function parseFileEditFromItemEvent(
   const callId = decoded.item.id;
   if (!callId) return null;
 
-  const defaultStatus = decoded.type === "item/completed" ? "completed" : "pending";
+  const defaultStatus =
+    decoded.type === "item/completed" ? "completed" : "pending";
   const changes = mapFileChanges(decoded.item.changes);
 
   return {

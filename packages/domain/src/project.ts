@@ -8,10 +8,7 @@ export const projectSchema = z.object({
 });
 export type Project = z.infer<typeof projectSchema>;
 
-export const projectSourceTypeValues = [
-  "local_path",
-  "github_repo",
-] as const;
+export const projectSourceTypeValues = ["local_path", "github_repo"] as const;
 export const projectSourceTypeSchema = z.enum(projectSourceTypeValues);
 export type ProjectSourceType = z.infer<typeof projectSourceTypeSchema>;
 
@@ -28,13 +25,17 @@ export const localPathProjectSourceSchema = baseProjectSourceSchema.extend({
   hostId: z.string(),
   path: z.string(),
 });
-export type LocalPathProjectSource = z.infer<typeof localPathProjectSourceSchema>;
+export type LocalPathProjectSource = z.infer<
+  typeof localPathProjectSourceSchema
+>;
 
 export const githubRepoProjectSourceSchema = baseProjectSourceSchema.extend({
   type: z.literal("github_repo"),
   repoUrl: z.string().url(),
 });
-export type GitHubRepoProjectSource = z.infer<typeof githubRepoProjectSourceSchema>;
+export type GitHubRepoProjectSource = z.infer<
+  typeof githubRepoProjectSourceSchema
+>;
 
 export const projectSourceSchema = z.discriminatedUnion("type", [
   localPathProjectSourceSchema,

@@ -68,7 +68,9 @@ async function pathExists(pathToCheck: string): Promise<boolean> {
 
 async function readPersistedHostId(dataDir: string): Promise<string | null> {
   try {
-    const value = (await readFile(join(dataDir, HOST_ID_FILE_NAME), "utf8")).trim();
+    const value = (
+      await readFile(join(dataDir, HOST_ID_FILE_NAME), "utf8")
+    ).trim();
     return value.length > 0 ? value : null;
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
@@ -106,7 +108,9 @@ export async function maybeAddAutoJoinEnv(
     );
   }
 
-  const joinResponse = createHostJoinResponseSchema.parse(await response.json());
+  const joinResponse = createHostJoinResponseSchema.parse(
+    await response.json(),
+  );
   if (requestedHostId && joinResponse.hostId !== requestedHostId) {
     throw new Error(
       `Join response host ID ${joinResponse.hostId} does not match persisted host ID ${requestedHostId}`,
@@ -138,7 +142,8 @@ if (
   resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   void main().catch((error) => {
-    const message = error instanceof Error ? error.stack ?? error.message : String(error);
+    const message =
+      error instanceof Error ? (error.stack ?? error.message) : String(error);
     process.stderr.write(`${message}\n`);
     process.exitCode = 1;
   });

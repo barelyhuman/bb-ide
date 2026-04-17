@@ -12,37 +12,50 @@ import {
   TURN_TIMEOUT_MS,
 } from "./shared.js";
 
-describe.sequential("fake provider managed graceful recovery integration", () => {
-  it("restarts cleanly with a managed-worktree environment and continues the thread", () =>
-    withHarness(async (harness) => {
-      const { thread } = await createRecoveryThread(
-        harness,
-        "Managed Worktree Graceful Restart",
-        "managed-worktree",
-      );
+describe.sequential(
+  "fake provider managed graceful recovery integration",
+  () => {
+    it("restarts cleanly with a managed-worktree environment and continues the thread", () =>
+      withHarness(async (harness) => {
+        const { thread } = await createRecoveryThread(
+          harness,
+          "Managed Worktree Graceful Restart",
+          "managed-worktree",
+        );
 
-      await sendTextMessage(harness.api, thread.id, {
-        text: "before managed restart",
-      });
-      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+        await sendTextMessage(harness.api, thread.id, {
+          text: "before managed restart",
+        });
+        await waitForThreadStatus(
+          harness.api,
+          thread.id,
+          "idle",
+          TURN_TIMEOUT_MS,
+        );
 
-      await harness.shutdownDaemon("managed-restart");
-      await waitForHostDisconnected(
-        harness.api,
-        harness.hostId,
-        RECOVERY_TIMEOUT_MS,
-      );
+        await harness.shutdownDaemon("managed-restart");
+        await waitForHostDisconnected(
+          harness.api,
+          harness.hostId,
+          RECOVERY_TIMEOUT_MS,
+        );
 
-      await harness.startDaemon();
-      await waitForHostConnected(harness.api, RECOVERY_TIMEOUT_MS);
+        await harness.startDaemon();
+        await waitForHostConnected(harness.api, RECOVERY_TIMEOUT_MS);
 
-      await sendTextMessage(harness.api, thread.id, {
-        text: "after managed restart",
-      });
-      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+        await sendTextMessage(harness.api, thread.id, {
+          text: "after managed restart",
+        });
+        await waitForThreadStatus(
+          harness.api,
+          thread.id,
+          "idle",
+          TURN_TIMEOUT_MS,
+        );
 
-      expect(await getThreadOutput(harness.api, thread.id)).toContain(
-        "after managed restart",
-      );
-    }));
-});
+        expect(await getThreadOutput(harness.api, thread.id)).toContain(
+          "after managed restart",
+        );
+      }));
+  },
+);

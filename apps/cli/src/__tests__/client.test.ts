@@ -27,13 +27,17 @@ describe("unwrap()", () => {
   it("unwrapVoid succeeds for empty response body", async () => {
     const response = new Response("", { status: 200 });
 
-    await expect(unwrapVoid(Promise.resolve(response))).resolves.toBeUndefined();
+    await expect(
+      unwrapVoid(Promise.resolve(response)),
+    ).resolves.toBeUndefined();
   });
 
   it("unwrapVoid succeeds for null body (204 No Content)", async () => {
     const response = new Response(null, { status: 204 });
 
-    await expect(unwrapVoid(Promise.resolve(response))).resolves.toBeUndefined();
+    await expect(
+      unwrapVoid(Promise.resolve(response)),
+    ).resolves.toBeUndefined();
   });
 
   it("unwrapVoid throws for non-ok response", async () => {

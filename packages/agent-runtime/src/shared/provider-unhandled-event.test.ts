@@ -27,7 +27,8 @@ describe("provider unhandled events", () => {
         jsonrpc: "2.0",
         method: "sdk/message",
         params: {
-          serializationError: "Provider raw event params were not JSON-serializable.",
+          serializationError:
+            "Provider raw event params were not JSON-serializable.",
         },
       },
     });

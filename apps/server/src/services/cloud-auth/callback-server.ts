@@ -63,7 +63,10 @@ export async function startOAuthCallbackServer(
     };
   });
 
-  function redirect(response: import("node:http").ServerResponse, location: string): void {
+  function redirect(
+    response: import("node:http").ServerResponse,
+    location: string,
+  ): void {
     response.writeHead(302, { location });
     response.end();
   }
@@ -72,11 +75,15 @@ export async function startOAuthCallbackServer(
     try {
       const requestUrl = new URL(request.url ?? "", "http://localhost");
       if (requestUrl.pathname !== args.path) {
-        redirect(response, buildCallbackRedirectUrl(args.appOrigin, {
-          message: "This OAuth callback route does not exist for the active connection attempt.",
-          status: "error",
-          title: "Callback not found",
-        }));
+        redirect(
+          response,
+          buildCallbackRedirectUrl(args.appOrigin, {
+            message:
+              "This OAuth callback route does not exist for the active connection attempt.",
+            status: "error",
+            title: "Callback not found",
+          }),
+        );
         return;
       }
 
@@ -85,44 +92,62 @@ export async function startOAuthCallbackServer(
       const error = requestUrl.searchParams.get("error");
 
       if (error) {
-        redirect(response, buildCallbackRedirectUrl(args.appOrigin, {
-          message: `The provider returned an OAuth error: ${error}.`,
-          status: "error",
-          title: args.errorTitle,
-        }));
+        redirect(
+          response,
+          buildCallbackRedirectUrl(args.appOrigin, {
+            message: `The provider returned an OAuth error: ${error}.`,
+            status: "error",
+            title: args.errorTitle,
+          }),
+        );
         return;
       }
 
       if (!code || !state) {
-        redirect(response, buildCallbackRedirectUrl(args.appOrigin, {
-          message: "The callback is missing the expected authorization code or state.",
-          status: "error",
-          title: args.errorTitle,
-        }));
+        redirect(
+          response,
+          buildCallbackRedirectUrl(args.appOrigin, {
+            message:
+              "The callback is missing the expected authorization code or state.",
+            status: "error",
+            title: args.errorTitle,
+          }),
+        );
         return;
       }
 
       if (state !== args.expectedState) {
-        redirect(response, buildCallbackRedirectUrl(args.appOrigin, {
-          message: "The returned OAuth state does not match the active connection attempt.",
-          status: "error",
-          title: args.errorTitle,
-        }));
+        redirect(
+          response,
+          buildCallbackRedirectUrl(args.appOrigin, {
+            message:
+              "The returned OAuth state does not match the active connection attempt.",
+            status: "error",
+            title: args.errorTitle,
+          }),
+        );
         return;
       }
 
-      redirect(response, buildCallbackRedirectUrl(args.appOrigin, {
-        message: "Authentication completed. You can close this window.",
-        status: "success",
-        title: args.successTitle,
-      }));
+      redirect(
+        response,
+        buildCallbackRedirectUrl(args.appOrigin, {
+          message: "Authentication completed. You can close this window.",
+          status: "success",
+          title: args.successTitle,
+        }),
+      );
       settleWait?.({ code, state });
     } catch {
-      redirect(response, buildCallbackRedirectUrl(args.appOrigin, {
-        message: "An internal error occurred while processing the OAuth callback.",
-        status: "error",
-        title: args.errorTitle,
-      }));
+      redirect(
+        response,
+        buildCallbackRedirectUrl(args.appOrigin, {
+          message:
+            "An internal error occurred while processing the OAuth callback.",
+          status: "error",
+          title: args.errorTitle,
+        }),
+      );
     }
   });
 

@@ -2,7 +2,11 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { dispatchCommand } from "../../src/command-dispatch.js";
-import { cleanupTempDirs, createHarness, makeTempDir } from "./dispatch-helpers.js";
+import {
+  cleanupTempDirs,
+  createHarness,
+  makeTempDir,
+} from "./dispatch-helpers.js";
 
 afterEach(cleanupTempDirs);
 
@@ -18,7 +22,10 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.status",
         environmentId: "env-1",
-        workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: "/tmp/env-1",
+          workspaceProvisionType: "unmanaged",
+        },
         mergeBaseBranch: "main",
       },
       harness.dispatchOptions(),
@@ -27,7 +34,10 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.diff",
         environmentId: "env-1",
-        workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: "/tmp/env-1",
+          workspaceProvisionType: "unmanaged",
+        },
         target: { type: "all", mergeBaseBranch: "main" },
       },
       harness.dispatchOptions(),
@@ -36,7 +46,10 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.commit",
         environmentId: "env-1",
-        workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: "/tmp/env-1",
+          workspaceProvisionType: "unmanaged",
+        },
         message: "Commit message",
       },
       harness.dispatchOptions(),
@@ -45,7 +58,10 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.squash_merge",
         environmentId: "env-1",
-        workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: "/tmp/env-1",
+          workspaceProvisionType: "unmanaged",
+        },
         targetBranch: "main",
         commitMessage: "feat: squash merge",
       },
@@ -55,7 +71,10 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.promote",
         environmentId: "env-1",
-        workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: "/tmp/env-1",
+          workspaceProvisionType: "unmanaged",
+        },
         primaryPath: "/tmp/primary",
       },
       harness.dispatchOptions(),
@@ -64,7 +83,10 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.demote",
         environmentId: "env-1",
-        workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: "/tmp/env-1",
+          workspaceProvisionType: "unmanaged",
+        },
         primaryPath: "/tmp/primary",
         defaultBranch: "main",
         envBranch: "feature",
@@ -74,7 +96,10 @@ describe("workspace command dispatch", () => {
 
     expect(statusResult.workspaceStatus?.workingTree.state).toBe("clean");
     expect(diffResult.diff.diff).toBe("");
-    expect(commitResult).toEqual({ commitSha: "commit-1", commitSubject: "Commit message" });
+    expect(commitResult).toEqual({
+      commitSha: "commit-1",
+      commitSubject: "Commit message",
+    });
     expect(squashResult).toEqual({ merged: true, commitSha: "merge-main" });
     expect(promoteResult).toEqual({ ok: true });
     expect(demoteResult).toEqual({ ok: true });
@@ -91,7 +116,10 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.status",
         environmentId: "env-rehydrate",
-        workspaceContext: { workspacePath: "/tmp/env-rehydrate", workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: "/tmp/env-rehydrate",
+          workspaceProvisionType: "unmanaged",
+        },
       },
       harness.dispatchOptions(),
     );
@@ -121,7 +149,10 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.list_files",
         environmentId: "env-1",
-        workspaceContext: { workspacePath: tempDir, workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: tempDir,
+          workspaceProvisionType: "unmanaged",
+        },
         limit: 1000,
       },
       harness.dispatchOptions(),
@@ -136,7 +167,10 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.list_files",
         environmentId: "env-1",
-        workspaceContext: { workspacePath: tempDir, workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: tempDir,
+          workspaceProvisionType: "unmanaged",
+        },
         query: "file-b",
         limit: 1000,
       },
@@ -150,7 +184,10 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.list_files",
         environmentId: "env-1",
-        workspaceContext: { workspacePath: tempDir, workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: tempDir,
+          workspaceProvisionType: "unmanaged",
+        },
         limit: 1,
       },
       harness.dispatchOptions(),
@@ -176,10 +213,7 @@ describe("workspace command dispatch", () => {
     );
 
     const paths = result.files.map((file) => file.path).sort();
-    expect(paths).toEqual([
-      "PREFERENCES.md",
-      path.join("notes", "todo.md"),
-    ]);
+    expect(paths).toEqual(["PREFERENCES.md", path.join("notes", "todo.md")]);
     expect(result.truncated).toBe(false);
   });
 
@@ -359,7 +393,7 @@ describe("workspace command dispatch", () => {
   it("enforces the 10 MB image read limit", async () => {
     const tempDir = await makeTempDir("bb-dispatch-host-read-large-image-");
     const imagePath = path.join(tempDir, "large.png");
-    await fs.writeFile(imagePath, Buffer.alloc((10 * 1024 * 1024) + 1));
+    await fs.writeFile(imagePath, Buffer.alloc(10 * 1024 * 1024 + 1));
 
     const harness = createHarness();
 
@@ -381,7 +415,7 @@ describe("workspace command dispatch", () => {
   it("enforces the 25 MB non-image read limit", async () => {
     const tempDir = await makeTempDir("bb-dispatch-host-read-large-file-");
     const filePath = path.join(tempDir, "large.bin");
-    await fs.writeFile(filePath, Buffer.alloc((25 * 1024 * 1024) + 1));
+    await fs.writeFile(filePath, Buffer.alloc(25 * 1024 * 1024 + 1));
 
     const harness = createHarness();
 
@@ -403,7 +437,7 @@ describe("workspace command dispatch", () => {
   it("treats svg files as utf8 text with the non-image size limit", async () => {
     const tempDir = await makeTempDir("bb-dispatch-host-read-svg-");
     const filePath = path.join(tempDir, "diagram.svg");
-    const svg = "<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>";
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg"></svg>';
     await fs.writeFile(filePath, svg);
 
     const harness = createHarness();
@@ -453,7 +487,10 @@ describe("workspace command dispatch", () => {
       {
         type: "workspace.list_branches",
         environmentId: "env-1",
-        workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: "/tmp/env-1",
+          workspaceProvisionType: "unmanaged",
+        },
       },
       harness.dispatchOptions(),
     );

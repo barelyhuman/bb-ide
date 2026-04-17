@@ -21,8 +21,14 @@ const altInput = [{ type: "text" as const, text: "world" }];
 function setup() {
   const db = createConnection(":memory:");
   migrate(db);
-  const host = upsertHost(db, noopNotifier, { name: "test-host", type: "persistent" });
-  const { project } = createProject(db, noopNotifier, { name: "test-project", source: { type: "local_path", hostId: host.id, path: "/tmp/test" } });
+  const host = upsertHost(db, noopNotifier, {
+    name: "test-host",
+    type: "persistent",
+  });
+  const { project } = createProject(db, noopNotifier, {
+    name: "test-project",
+    source: { type: "local_path", hostId: host.id, path: "/tmp/test" },
+  });
   const thread = createThread(db, noopNotifier, {
     projectId: project.id,
     providerId: "codex",

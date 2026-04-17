@@ -6,7 +6,9 @@ import type {
 
 export interface RequestEnvironmentActionMutationLike {
   isPending: boolean;
-  mutateAsync: (request: RequestEnvironmentActionMutationRequest) => Promise<EnvironmentActionResponse>;
+  mutateAsync: (
+    request: RequestEnvironmentActionMutationRequest,
+  ) => Promise<EnvironmentActionResponse>;
 }
 
 export type SendMessageMutationRequest = SendThreadMessageMutationRequest;

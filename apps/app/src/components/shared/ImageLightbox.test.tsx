@@ -1,15 +1,15 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "vitest";
 import {
   getImageLightboxKeyAction,
   getWrappedImageIndex,
-} from "./ImageLightbox"
+} from "./ImageLightbox";
 
 interface TestKeyboardEvent {
-  altKey: boolean
-  ctrlKey: boolean
-  defaultPrevented: boolean
-  key: string
-  metaKey: boolean
+  altKey: boolean;
+  ctrlKey: boolean;
+  defaultPrevented: boolean;
+  key: string;
+  metaKey: boolean;
 }
 
 function createKeyboardEvent(
@@ -23,7 +23,7 @@ function createKeyboardEvent(
     key,
     metaKey: false,
     ...overrides,
-  }
+  };
 }
 
 describe("ImageLightbox", () => {
@@ -33,17 +33,17 @@ describe("ImageLightbox", () => {
         currentIndex: 0,
         direction: "previous",
         itemCount: 3,
-      })
-    ).toBe(2)
+      }),
+    ).toBe(2);
 
     expect(
       getWrappedImageIndex({
         currentIndex: 2,
         direction: "next",
         itemCount: 3,
-      })
-    ).toBe(0)
-  })
+      }),
+    ).toBe(0);
+  });
 
   it("leaves the index unchanged when there are no images to navigate", () => {
     expect(
@@ -51,16 +51,16 @@ describe("ImageLightbox", () => {
         currentIndex: 1,
         direction: "next",
         itemCount: 0,
-      })
-    ).toBe(1)
-  })
+      }),
+    ).toBe(1);
+  });
 
   it("keeps Escape available when only a single image is open", () => {
     expect(
       getImageLightboxKeyAction({
         event: createKeyboardEvent("Escape"),
         hasNavigation: false,
-      })
-    ).toBe("close")
-  })
-})
+      }),
+    ).toBe("close");
+  });
+});

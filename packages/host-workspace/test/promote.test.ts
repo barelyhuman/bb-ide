@@ -31,7 +31,9 @@ async function createPrimaryAndWorktree(): Promise<{
   worktreePath: string;
 }> {
   const primaryRepo = await initRepo();
-  const worktreeParent = await makeTempDir("bb-workspace-promote-worktree-parent-");
+  const worktreeParent = await makeTempDir(
+    "bb-workspace-promote-worktree-parent-",
+  );
   const worktreePath = path.join(worktreeParent, "env");
   await createWorktree({
     sourcePath: primaryRepo,
@@ -39,7 +41,11 @@ async function createPrimaryAndWorktree(): Promise<{
     branchName: "bb/env-test",
     timeoutMs: 900000,
   });
-  await fs.writeFile(path.join(worktreePath, "feature.txt"), "feature work\n", "utf8");
+  await fs.writeFile(
+    path.join(worktreePath, "feature.txt"),
+    "feature work\n",
+    "utf8",
+  );
   await runGit(["add", "."], { cwd: worktreePath });
   await runGit(["commit", "-m", "Feature work"], { cwd: worktreePath });
   return { primaryRepo, worktreePath };
@@ -47,7 +53,9 @@ async function createPrimaryAndWorktree(): Promise<{
 
 afterEach(async () => {
   await Promise.all(
-    tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
+    tempDirs
+      .splice(0)
+      .map((dir) => fs.rm(dir, { recursive: true, force: true })),
   );
 });
 
@@ -65,7 +73,11 @@ describe("promoteWorkspace", () => {
 
   it("fails if source is dirty", async () => {
     const { primaryRepo, worktreePath } = await createPrimaryAndWorktree();
-    await fs.writeFile(path.join(worktreePath, "feature.txt"), "dirty\n", "utf8");
+    await fs.writeFile(
+      path.join(worktreePath, "feature.txt"),
+      "dirty\n",
+      "utf8",
+    );
 
     const source = new Workspace(worktreePath);
     const primary = new Workspace(primaryRepo);
@@ -79,7 +91,11 @@ describe("promoteWorkspace", () => {
 
   it("fails if primary is dirty", async () => {
     const { primaryRepo, worktreePath } = await createPrimaryAndWorktree();
-    await fs.writeFile(path.join(primaryRepo, "README.md"), "dirty primary\n", "utf8");
+    await fs.writeFile(
+      path.join(primaryRepo, "README.md"),
+      "dirty primary\n",
+      "utf8",
+    );
 
     const source = new Workspace(worktreePath);
     const primary = new Workspace(primaryRepo);
@@ -117,7 +133,12 @@ describe("demoteWorkspace", () => {
     expect(await primary.currentBranch).toBe("bb/env-test");
     expect(await source.currentBranch).toBeUndefined();
 
-    await demoteWorkspace({ source, primary, defaultBranch: "main", envBranch: "bb/env-test" });
+    await demoteWorkspace({
+      source,
+      primary,
+      defaultBranch: "main",
+      envBranch: "bb/env-test",
+    });
 
     expect(await primary.currentBranch).toBe("main");
     expect(await source.currentBranch).toBe("bb/env-test");
@@ -129,10 +150,19 @@ describe("demoteWorkspace", () => {
     const primary = new Workspace(primaryRepo);
 
     await promoteWorkspace(source, primary);
-    await fs.writeFile(path.join(primaryRepo, "README.md"), "dirty demote\n", "utf8");
+    await fs.writeFile(
+      path.join(primaryRepo, "README.md"),
+      "dirty demote\n",
+      "utf8",
+    );
 
     await expect(
-      demoteWorkspace({ source, primary, defaultBranch: "main", envBranch: "bb/env-test" }),
+      demoteWorkspace({
+        source,
+        primary,
+        defaultBranch: "main",
+        envBranch: "bb/env-test",
+      }),
     ).rejects.toThrow(/uncommitted changes/u);
 
     // Primary should still be on the env branch
@@ -145,10 +175,19 @@ describe("demoteWorkspace", () => {
     const primary = new Workspace(primaryRepo);
 
     await promoteWorkspace(source, primary);
-    await fs.writeFile(path.join(worktreePath, "feature.txt"), "dirty source\n", "utf8");
+    await fs.writeFile(
+      path.join(worktreePath, "feature.txt"),
+      "dirty source\n",
+      "utf8",
+    );
 
     await expect(
-      demoteWorkspace({ source, primary, defaultBranch: "main", envBranch: "bb/env-test" }),
+      demoteWorkspace({
+        source,
+        primary,
+        defaultBranch: "main",
+        envBranch: "bb/env-test",
+      }),
     ).rejects.toThrow(/uncommitted changes/u);
 
     expect(await primary.currentBranch).toBe("bb/env-test");

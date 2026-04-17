@@ -21,7 +21,9 @@ export interface ProviderTurnState {
   toolItemsByCallId: Map<string, ThreadEventItem>;
 }
 
-export interface CreateProviderTurnStateRegistryOptions<TState extends ProviderTurnState> {
+export interface CreateProviderTurnStateRegistryOptions<
+  TState extends ProviderTurnState,
+> {
   createState: () => TState;
   maxEntries?: number;
   turnIdPrefix?: string;
@@ -30,15 +32,21 @@ export interface CreateProviderTurnStateRegistryOptions<TState extends ProviderT
 export interface ProviderTurnStateRegistry<TState extends ProviderTurnState> {
   ensureTurnStarted(args: EnsureProviderTurnStartedArgs<TState>): string;
   finishTurn(args: FinishProviderTurnArgs<TState>): void;
-  getCurrentOrLastTurnId(args: GetCurrentOrLastProviderTurnIdArgs<TState>): string;
+  getCurrentOrLastTurnId(
+    args: GetCurrentOrLastProviderTurnIdArgs<TState>,
+  ): string;
   getOrCreate(args: GetProviderTurnStateArgs): TState;
-  getOrCreateAssistantMessageId(args: GetOrCreateAssistantMessageIdArgs<TState>): string;
+  getOrCreateAssistantMessageId(
+    args: GetOrCreateAssistantMessageIdArgs<TState>,
+  ): string;
   resolveCompletedAssistantMessageId(
     args: ResolveCompletedAssistantMessageIdArgs<TState>,
   ): string;
 }
 
-export interface EnsureProviderTurnStartedArgs<TState extends ProviderTurnState> {
+export interface EnsureProviderTurnStartedArgs<
+  TState extends ProviderTurnState,
+> {
   events: ThreadEvent[];
   state: TState;
   threadId: string;
@@ -58,17 +66,23 @@ export interface FinishOpenProviderTurnArgs<TState extends ProviderTurnState> {
   threadId: string;
 }
 
-export interface GetCurrentOrLastProviderTurnIdArgs<TState extends ProviderTurnState> {
+export interface GetCurrentOrLastProviderTurnIdArgs<
+  TState extends ProviderTurnState,
+> {
   state: TState;
 }
 
-export interface GetOrCreateAssistantMessageIdArgs<TState extends ProviderTurnState> {
+export interface GetOrCreateAssistantMessageIdArgs<
+  TState extends ProviderTurnState,
+> {
   assistantIdPrefix: string;
   parentToolCallId?: string;
   state: TState;
 }
 
-export interface ResolveCompletedAssistantMessageIdArgs<TState extends ProviderTurnState> {
+export interface ResolveCompletedAssistantMessageIdArgs<
+  TState extends ProviderTurnState,
+> {
   assistantIdPrefix: string;
   parentToolCallId?: string;
   providerMessageId?: string;
@@ -79,7 +93,9 @@ interface ProviderTurnStateRegistryEntry<TState extends ProviderTurnState> {
   state: TState;
 }
 
-export function createProviderTurnStateRegistry<TState extends ProviderTurnState>(
+export function createProviderTurnStateRegistry<
+  TState extends ProviderTurnState,
+>(
   options: CreateProviderTurnStateRegistryOptions<TState>,
 ): ProviderTurnStateRegistry<TState> {
   const entries = new Map<string, ProviderTurnStateRegistryEntry<TState>>();
@@ -97,7 +113,9 @@ export function createProviderTurnStateRegistry<TState extends ProviderTurnState
     state.toolItemsByCallId.clear();
   }
 
-  function touchEntry(args: GetProviderTurnStateArgs): ProviderTurnStateRegistryEntry<TState> | undefined {
+  function touchEntry(
+    args: GetProviderTurnStateArgs,
+  ): ProviderTurnStateRegistryEntry<TState> | undefined {
     const existing = entries.get(args.threadId);
     if (!existing) {
       return undefined;
@@ -124,7 +142,9 @@ export function createProviderTurnStateRegistry<TState extends ProviderTurnState
     }
   }
 
-  function createAssistantMessageId(args: GetOrCreateAssistantMessageIdArgs<TState>): string {
+  function createAssistantMessageId(
+    args: GetOrCreateAssistantMessageIdArgs<TState>,
+  ): string {
     args.state.assistantMessageCounter += 1;
     return `${args.assistantIdPrefix}-${args.state.assistantMessageCounter}`;
   }
@@ -153,10 +173,9 @@ export function createProviderTurnStateRegistry<TState extends ProviderTurnState
     },
 
     getCurrentOrLastTurnId(args) {
-      return args.state.currentTurnId ?? (
-        args.state.counter > 0
-          ? createTurnId(args.state.counter)
-          : ""
+      return (
+        args.state.currentTurnId ??
+        (args.state.counter > 0 ? createTurnId(args.state.counter) : "")
       );
     },
 

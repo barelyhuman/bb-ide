@@ -105,7 +105,9 @@ async function readHostDaemonErrorMessage(
   }
 
   try {
-    const parsed = hostDaemonErrorResponseSchema.safeParse(JSON.parse(trimmedText));
+    const parsed = hostDaemonErrorResponseSchema.safeParse(
+      JSON.parse(trimmedText),
+    );
     if (parsed.success) {
       return parsed.data.message;
     }

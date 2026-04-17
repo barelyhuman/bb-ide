@@ -7,10 +7,7 @@ import {
   waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
-import {
-  seedHostSession,
-  seedProjectWithSource,
-} from "../helpers/seed.js";
+import { seedHostSession, seedProjectWithSource } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 import { generateThreadMetadataWithOutcome } from "../../src/services/threads/title-generation.js";
 

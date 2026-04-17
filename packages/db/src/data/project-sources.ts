@@ -83,7 +83,8 @@ export function createProjectSource(
       .run();
   }
 
-  const row = db.insert(projectSources)
+  const row = db
+    .insert(projectSources)
     .values({
       id,
       projectId: input.projectId,
@@ -202,7 +203,8 @@ export function updateProjectSource(
       .run();
   }
   const { isDefault: _isDefault, ...rest } = input;
-  const updated = db.update(projectSources)
+  const updated = db
+    .update(projectSources)
     .set({
       ...rest,
       ...(input.isDefault ? { isDefault: true } : {}),
@@ -221,7 +223,7 @@ export function getProjectSourceByHost(
   projectId: string,
   hostId: string,
 ) {
-  const source = (
+  const source =
     db
       .select()
       .from(projectSources)
@@ -231,13 +233,12 @@ export function getProjectSourceByHost(
           eq(projectSources.hostId, hostId),
         ),
       )
-      .get() ?? null
-  );
+      .get() ?? null;
   return source ? toProjectSource(source) : null;
 }
 
 export function getDefaultProjectSource(db: DbConnection, projectId: string) {
-  const source = (
+  const source =
     db
       .select()
       .from(projectSources)
@@ -247,8 +248,7 @@ export function getDefaultProjectSource(db: DbConnection, projectId: string) {
           eq(projectSources.isDefault, true),
         ),
       )
-      .get() ?? null
-  );
+      .get() ?? null;
   return source ? toProjectSource(source) : null;
 }
 
@@ -275,10 +275,7 @@ export function deleteProjectSource(
       db.update(projectSources)
         .set({ isDefault: true, updatedAt: now })
         .where(
-          and(
-            eq(projectSources.id, replacement.id),
-            ne(projectSources.id, id),
-          ),
+          and(eq(projectSources.id, replacement.id), ne(projectSources.id, id)),
         )
         .run();
     }

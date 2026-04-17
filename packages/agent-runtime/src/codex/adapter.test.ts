@@ -67,26 +67,30 @@ describe("codex provider adapter", () => {
   it("translates accepted steer results to input accepted events", () => {
     const adapter = createCodexProviderAdapter();
 
-    expect(adapter.translateAcceptedCommand({
-      command: {
-        type: "turn/start",
-        threadId: "thread-1",
-        providerThreadId: "provider-thread-1",
-        input: [{ type: "text", text: "normal turn" }],
-        options: fullProviderExecutionContext,
-      },
-    })).toEqual([]);
-    expect(adapter.translateAcceptedCommand({
-      command: {
-        type: "turn/steer",
-        threadId: "thread-1",
-        providerThreadId: "provider-thread-1",
-        expectedTurnId: "turn-1",
-        clientRequestSequence: 17,
-        input: [{ type: "text", text: "steer turn" }],
-        options: fullProviderExecutionContext,
-      },
-    })).toEqual([
+    expect(
+      adapter.translateAcceptedCommand({
+        command: {
+          type: "turn/start",
+          threadId: "thread-1",
+          providerThreadId: "provider-thread-1",
+          input: [{ type: "text", text: "normal turn" }],
+          options: fullProviderExecutionContext,
+        },
+      }),
+    ).toEqual([]);
+    expect(
+      adapter.translateAcceptedCommand({
+        command: {
+          type: "turn/steer",
+          threadId: "thread-1",
+          providerThreadId: "provider-thread-1",
+          expectedTurnId: "turn-1",
+          clientRequestSequence: 17,
+          input: [{ type: "text", text: "steer turn" }],
+          options: fullProviderExecutionContext,
+        },
+      }),
+    ).toEqual([
       {
         type: "turn/input/accepted",
         threadId: "thread-1",
@@ -109,10 +113,14 @@ describe("codex provider adapter", () => {
       options: fullProviderExecutionContext,
     });
 
-    expect(adapter.translateEvent(codexEvent("turn/started", {
-      threadId: "provider-thread-1",
-      turn: { id: "turn-1", items: [], status: "inProgress", error: null },
-    }))).toEqual([
+    expect(
+      adapter.translateEvent(
+        codexEvent("turn/started", {
+          threadId: "provider-thread-1",
+          turn: { id: "turn-1", items: [], status: "inProgress", error: null },
+        }),
+      ),
+    ).toEqual([
       {
         type: "turn/started",
         threadId: "provider-thread-1",
@@ -128,15 +136,17 @@ describe("codex provider adapter", () => {
       },
     ]);
 
-    const echoEvents = adapter.translateEvent(codexEvent("item/completed", {
-      threadId: "provider-thread-1",
-      turnId: "turn-1",
-      item: {
-        type: "userMessage",
-        id: "provider-user-1",
-        content: [{ type: "text", text: "normal turn", text_elements: [] }],
-      },
-    }));
+    const echoEvents = adapter.translateEvent(
+      codexEvent("item/completed", {
+        threadId: "provider-thread-1",
+        turnId: "turn-1",
+        item: {
+          type: "userMessage",
+          id: "provider-user-1",
+          content: [{ type: "text", text: "normal turn", text_elements: [] }],
+        },
+      }),
+    );
 
     expect(echoEvents).toEqual([]);
   });
@@ -152,10 +162,14 @@ describe("codex provider adapter", () => {
       options: fullProviderExecutionContext,
     });
 
-    expect(adapter.translateEvent(codexEvent("turn/started", {
-      threadId: "thread-1",
-      turn: { id: "turn-1", items: [], status: "inProgress", error: null },
-    }))).toContainEqual({
+    expect(
+      adapter.translateEvent(
+        codexEvent("turn/started", {
+          threadId: "thread-1",
+          turn: { id: "turn-1", items: [], status: "inProgress", error: null },
+        }),
+      ),
+    ).toContainEqual({
       type: "turn/input/accepted",
       threadId: "thread-1",
       providerThreadId: "thread-1",
@@ -181,10 +195,14 @@ describe("codex provider adapter", () => {
     }
     prepared.rollback();
 
-    expect(adapter.translateEvent(codexEvent("turn/started", {
-      threadId: "provider-thread-1",
-      turn: { id: "turn-1", items: [], status: "inProgress", error: null },
-    }))).toEqual([
+    expect(
+      adapter.translateEvent(
+        codexEvent("turn/started", {
+          threadId: "provider-thread-1",
+          turn: { id: "turn-1", items: [], status: "inProgress", error: null },
+        }),
+      ),
+    ).toEqual([
       {
         type: "turn/started",
         threadId: "provider-thread-1",
@@ -197,15 +215,17 @@ describe("codex provider adapter", () => {
   it("suppresses native user-message echoes without a queued client request", () => {
     const adapter = createCodexProviderAdapter();
 
-    const events = adapter.translateEvent(codexEvent("item/completed", {
-      threadId: "provider-thread-1",
-      turnId: "turn-1",
-      item: {
-        type: "userMessage",
-        id: "provider-user-1",
-        content: [{ type: "text", text: "provider echo", text_elements: [] }],
-      },
-    }));
+    const events = adapter.translateEvent(
+      codexEvent("item/completed", {
+        threadId: "provider-thread-1",
+        turnId: "turn-1",
+        item: {
+          type: "userMessage",
+          id: "provider-user-1",
+          content: [{ type: "text", text: "provider echo", text_elements: [] }],
+        },
+      }),
+    );
 
     expect(events).toEqual([]);
   });
@@ -363,26 +383,8 @@ describe("codex provider adapter", () => {
           TEST_VAR: "123",
         },
       },
-      dynamicTools: [{
-        name: "bb_test_ping",
-        description: "Ping the host",
-        inputSchema: {
-          type: "object",
-          properties: {
-            ping: { type: "boolean" },
-          },
-          required: ["ping"],
-        },
-      }],
-    });
-
-    expect(cmd).toMatchObject({
-      method: "thread/start",
-      params: {
-        model: "gpt-5.4",
-        serviceTier: "fast",
-        developerInstructions: expect.stringContaining("Focus on the failing tests first."),
-        dynamicTools: [{
+      dynamicTools: [
+        {
           name: "bb_test_ping",
           description: "Ping the host",
           inputSchema: {
@@ -392,7 +394,31 @@ describe("codex provider adapter", () => {
             },
             required: ["ping"],
           },
-        }],
+        },
+      ],
+    });
+
+    expect(cmd).toMatchObject({
+      method: "thread/start",
+      params: {
+        model: "gpt-5.4",
+        serviceTier: "fast",
+        developerInstructions: expect.stringContaining(
+          "Focus on the failing tests first.",
+        ),
+        dynamicTools: [
+          {
+            name: "bb_test_ping",
+            description: "Ping the host",
+            inputSchema: {
+              type: "object",
+              properties: {
+                ping: { type: "boolean" },
+              },
+              required: ["ping"],
+            },
+          },
+        ],
       },
     });
     expect(cmd?.params).toMatchObject({
@@ -744,7 +770,11 @@ describe("codex provider adapter", () => {
           id: "turn-1",
           items: [],
           status: "failed",
-          error: { message: "rate limited", codexErrorInfo: null, additionalDetails: "try again" },
+          error: {
+            message: "rate limited",
+            codexErrorInfo: null,
+            additionalDetails: "try again",
+          },
         },
       }),
     );
@@ -768,7 +798,10 @@ describe("codex provider adapter", () => {
       }),
     );
     expect(events).toContainEqual(
-      expect.objectContaining({ type: "turn/completed", status: "interrupted" }),
+      expect.objectContaining({
+        type: "turn/completed",
+        status: "interrupted",
+      }),
     );
   });
 
@@ -798,7 +831,10 @@ describe("codex provider adapter", () => {
         },
       }),
     );
-    expect(events).toContainEqual({ type: "thread/started", threadId: "codex-uuid-123" });
+    expect(events).toContainEqual({
+      type: "thread/started",
+      threadId: "codex-uuid-123",
+    });
     expect(events).toContainEqual({
       type: "thread/identity",
       threadId: "codex-uuid-123",
@@ -815,7 +851,10 @@ describe("codex provider adapter", () => {
   it("translateEvent thread/name/updated", () => {
     const adapter = createCodexProviderAdapter();
     const events = adapter.translateEvent(
-      codexEvent("thread/name/updated", { threadId: "t1", threadName: "Updated title" }),
+      codexEvent("thread/name/updated", {
+        threadId: "t1",
+        threadName: "Updated title",
+      }),
     );
     expect(events).toContainEqual({
       type: "thread/name/updated",
@@ -854,7 +893,13 @@ describe("codex provider adapter", () => {
       codexEvent("item/started", {
         threadId: "t1",
         turnId: "turn-1",
-        item: { type: "agentMessage", id: "item-1", text: "Hello", phase: null, memoryCitation: null },
+        item: {
+          type: "agentMessage",
+          id: "item-1",
+          text: "Hello",
+          phase: null,
+          memoryCitation: null,
+        },
       }),
     );
     expect(events).toContainEqual({
@@ -1080,7 +1125,11 @@ describe("codex provider adapter", () => {
           type: "fileChange",
           id: "fc-1",
           changes: [
-            { path: "src/foo.ts", kind: { type: "update", move_path: null }, diff: "+line" },
+            {
+              path: "src/foo.ts",
+              kind: { type: "update", move_path: null },
+              diff: "+line",
+            },
             { path: "src/bar.ts", kind: { type: "add" }, diff: "" },
           ],
           status: "completed",
@@ -1089,10 +1138,23 @@ describe("codex provider adapter", () => {
     );
     const itemEvent = events.find((e) => e.type === "item/completed");
     expect(itemEvent).toBeDefined();
-    if (itemEvent?.type === "item/completed" && itemEvent.item.type === "fileChange") {
+    if (
+      itemEvent?.type === "item/completed" &&
+      itemEvent.item.type === "fileChange"
+    ) {
       expect(itemEvent.item.changes).toEqual([
-        { path: "src/foo.ts", kind: "update", movePath: undefined, diff: "+line" },
-        { path: "src/bar.ts", kind: "add", movePath: undefined, diff: undefined },
+        {
+          path: "src/foo.ts",
+          kind: "update",
+          movePath: undefined,
+          diff: "+line",
+        },
+        {
+          path: "src/bar.ts",
+          kind: "add",
+          movePath: undefined,
+          diff: undefined,
+        },
       ]);
       expect(itemEvent.item.status).toBe("completed");
     }
@@ -1250,7 +1312,12 @@ describe("codex provider adapter", () => {
           tool: "bb_test_image",
           arguments: {},
           status: "failed",
-          contentItems: [{ type: "inputImage", imageUrl: "https://example.com/tool-result.png" }],
+          contentItems: [
+            {
+              type: "inputImage",
+              imageUrl: "https://example.com/tool-result.png",
+            },
+          ],
           success: false,
           durationMs: 4,
         },
@@ -1511,8 +1578,20 @@ describe("codex provider adapter", () => {
         threadId: "t1",
         turnId: "turn-1",
         tokenUsage: {
-          total: { totalTokens: 100, inputTokens: 60, cachedInputTokens: 10, outputTokens: 30, reasoningOutputTokens: 0 },
-          last: { totalTokens: 50, inputTokens: 30, cachedInputTokens: 5, outputTokens: 15, reasoningOutputTokens: 0 },
+          total: {
+            totalTokens: 100,
+            inputTokens: 60,
+            cachedInputTokens: 10,
+            outputTokens: 30,
+            reasoningOutputTokens: 0,
+          },
+          last: {
+            totalTokens: 50,
+            inputTokens: 30,
+            cachedInputTokens: 5,
+            outputTokens: 15,
+            reasoningOutputTokens: 0,
+          },
           modelContextWindow: 128000,
         },
       }),
@@ -1814,8 +1893,8 @@ describe("codex provider adapter", () => {
 
   it("decodeInteractiveRequest rejects empty command approval decisions as invalid params", () => {
     const adapter = createCodexProviderAdapter();
-    expect(
-      () => adapter.decodeInteractiveRequest?.({
+    expect(() =>
+      adapter.decodeInteractiveRequest?.({
         id: 8,
         method: "item/commandExecution/requestApproval",
         params: {
@@ -1858,7 +1937,8 @@ describe("codex provider adapter", () => {
 
   it("decodeInteractiveRequest rejects unsupported macOS permissions in command session grants", () => {
     const adapter = createCodexProviderAdapter();
-    expect(() => adapter.decodeInteractiveRequest?.({
+    expect(() =>
+      adapter.decodeInteractiveRequest?.({
         id: 8,
         method: "item/commandExecution/requestApproval",
         params: {
@@ -1886,12 +1966,14 @@ describe("codex provider adapter", () => {
           },
           availableDecisions: ["accept", "decline"],
         },
-      })).toThrowError(ProviderRequestDecodeError);
+      }),
+    ).toThrowError(ProviderRequestDecodeError);
   });
 
   it("decodeInteractiveRequest rejects macOS automation none in command approvals", () => {
     const adapter = createCodexProviderAdapter();
-    expect(() => adapter.decodeInteractiveRequest?.({
+    expect(() =>
+      adapter.decodeInteractiveRequest?.({
         id: 81,
         method: "item/commandExecution/requestApproval",
         params: {
@@ -1917,12 +1999,14 @@ describe("codex provider adapter", () => {
           },
           availableDecisions: ["accept", "decline"],
         },
-      })).toThrowError(ProviderRequestDecodeError);
+      }),
+    ).toThrowError(ProviderRequestDecodeError);
   });
 
   it("decodeInteractiveRequest rejects unsupported macOS automation grants from command session grants", () => {
     const adapter = createCodexProviderAdapter();
-    expect(() => adapter.decodeInteractiveRequest?.({
+    expect(() =>
+      adapter.decodeInteractiveRequest?.({
         id: 82,
         method: "item/commandExecution/requestApproval",
         params: {
@@ -1948,7 +2032,8 @@ describe("codex provider adapter", () => {
           },
           availableDecisions: ["accept", "decline"],
         },
-      })).toThrowError(ProviderRequestDecodeError);
+      }),
+    ).toThrowError(ProviderRequestDecodeError);
   });
 
   it("decodeInteractiveRequest ignores unsupported policy-amendment decisions when simple decisions remain", () => {
@@ -1997,35 +2082,37 @@ describe("codex provider adapter", () => {
 
   it("decodeInteractiveRequest rejects policy-amendment-only command approval decisions", () => {
     const adapter = createCodexProviderAdapter();
-    expect(() => adapter.decodeInteractiveRequest?.({
-      id: 90,
-      method: "item/commandExecution/requestApproval",
-      params: {
-        threadId: "t1",
-        turnId: "turn-network-amendment",
-        itemId: "item-network-amendment",
-        reason: "Needs network policy approval",
-        command: "curl https://api.openai.com",
-        cwd: "/tmp/project",
-        commandActions: [],
-        additionalPermissions: null,
-        availableDecisions: [
-          {
-            acceptWithExecpolicyAmendment: {
-              execpolicy_amendment: ["allow", "git", "push"],
-            },
-          },
-          {
-            applyNetworkPolicyAmendment: {
-              network_policy_amendment: {
-                host: "api.openai.com",
-                action: "allow",
+    expect(() =>
+      adapter.decodeInteractiveRequest?.({
+        id: 90,
+        method: "item/commandExecution/requestApproval",
+        params: {
+          threadId: "t1",
+          turnId: "turn-network-amendment",
+          itemId: "item-network-amendment",
+          reason: "Needs network policy approval",
+          command: "curl https://api.openai.com",
+          cwd: "/tmp/project",
+          commandActions: [],
+          additionalPermissions: null,
+          availableDecisions: [
+            {
+              acceptWithExecpolicyAmendment: {
+                execpolicy_amendment: ["allow", "git", "push"],
               },
             },
-          },
-        ],
-      },
-    })).toThrowError(ProviderRequestDecodeError);
+            {
+              applyNetworkPolicyAmendment: {
+                network_policy_amendment: {
+                  host: "api.openai.com",
+                  action: "allow",
+                },
+              },
+            },
+          ],
+        },
+      }),
+    ).toThrowError(ProviderRequestDecodeError);
   });
 
   it("decodeInteractiveRequest preserves deny when policy amendments are paired with cancel", () => {

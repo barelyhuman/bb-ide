@@ -17,7 +17,9 @@ describe("standalone restart command", () => {
     expect(command).toContain("(kill '123' >/dev/null 2>&1 || true)");
     expect(command).toContain("[ ! -f '/repo/.env' ] || . '/repo/.env'");
     expect(command).toContain("BB_DATA_DIR='/tmp/bb root'");
-    expect(command).toContain("exec node '/repo/apps/host-daemon/dist/index.js'");
+    expect(command).toContain(
+      "exec node '/repo/apps/host-daemon/dist/index.js'",
+    );
     expect(command).toContain(">> '/tmp/bb logs/host-daemon.log' 2>&1) &");
     expect(command).not.toContain("OPENAI_API_KEY");
     expect(command).not.toContain("ANTHROPIC_API_KEY");

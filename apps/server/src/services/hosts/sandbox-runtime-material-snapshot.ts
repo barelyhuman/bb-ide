@@ -4,9 +4,7 @@ import {
   buildCloudAuthRuntimeMaterial,
   type CloudAuthResolvedCredential,
 } from "@bb/agent-provider-auth";
-import {
-  createHostRuntimeMaterialSnapshot,
-} from "@bb/host-runtime-material";
+import { createHostRuntimeMaterialSnapshot } from "@bb/host-runtime-material";
 import { ApiError } from "../../errors.js";
 import type { AppDeps, ServerRuntimeConfig } from "../../types.js";
 
@@ -47,7 +45,7 @@ export async function buildSandboxRuntimeMaterialSnapshot(
   const credentials = (
     await Promise.all(
       listCloudAuthProviders().map((provider) =>
-        deps.cloudAuth.getValidCredential({ providerId: provider.id })
+        deps.cloudAuth.getValidCredential({ providerId: provider.id }),
       ),
     )
   ).filter(isResolvedCloudAuthCredential);

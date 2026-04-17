@@ -27,7 +27,10 @@ import {
 } from "../../services/hosts/daemon-file-response.js";
 import { requireThreadStoragePath } from "../../services/threads/thread-storage.js";
 import { toQueuedMessage } from "../../services/threads/drafts.js";
-import { buildThreadTimeline, buildTimelineToolDetails } from "../../services/threads/timeline.js";
+import {
+  buildThreadTimeline,
+  buildTimelineToolDetails,
+} from "../../services/threads/timeline.js";
 import {
   findThreadEvent,
   getLastThreadOutput,
@@ -56,9 +59,16 @@ interface RequireThreadStorageTargetArgs {
 }
 
 function parseThreadStorageFileListLimit(rawLimit: string | undefined): number {
-  const limit = Math.min(parseOptionalInteger(rawLimit, "limit") ?? 1000, 10000);
+  const limit = Math.min(
+    parseOptionalInteger(rawLimit, "limit") ?? 1000,
+    10000,
+  );
   if (limit <= 0) {
-    throw new ApiError(400, "invalid_request", "limit must be a positive integer");
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "limit must be a positive integer",
+    );
   }
   return limit;
 }
@@ -88,36 +98,49 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
 
   get("/threads/:id/timeline", threadTimelineQuerySchema, (context, query) =>
     context.json(
-      buildThreadTimeline(deps.db, requirePublicThread(deps.db, context.req.param("id")), {
-        showAllManagerEvents: query.showAllManagerEvents === "true",
-        includeToolGroupMessages: query.includeToolGroupMessages === "true",
-      }),
-    ),
-  );
-
-  get("/threads/:id/timeline/tool-details", timelineToolDetailsQuerySchema, (context, query) =>
-    context.json(
-      buildTimelineToolDetails(
+      buildThreadTimeline(
         deps.db,
         requirePublicThread(deps.db, context.req.param("id")),
         {
-          sourceSeqStart: parseOptionalInteger(query.sourceSeqStart, "sourceSeqStart") ?? 0,
-          sourceSeqEnd: parseOptionalInteger(query.sourceSeqEnd, "sourceSeqEnd") ?? 0,
           showAllManagerEvents: query.showAllManagerEvents === "true",
+          includeToolGroupMessages: query.includeToolGroupMessages === "true",
         },
       ),
     ),
   );
 
+  get(
+    "/threads/:id/timeline/tool-details",
+    timelineToolDetailsQuerySchema,
+    (context, query) =>
+      context.json(
+        buildTimelineToolDetails(
+          deps.db,
+          requirePublicThread(deps.db, context.req.param("id")),
+          {
+            sourceSeqStart:
+              parseOptionalInteger(query.sourceSeqStart, "sourceSeqStart") ?? 0,
+            sourceSeqEnd:
+              parseOptionalInteger(query.sourceSeqEnd, "sourceSeqEnd") ?? 0,
+            showAllManagerEvents: query.showAllManagerEvents === "true",
+          },
+        ),
+      ),
+  );
+
   get("/threads/:id/output", (context) => {
     requirePublicThread(deps.db, context.req.param("id"));
-    return context.json({ output: getLastThreadOutput(deps.db, context.req.param("id")) });
+    return context.json({
+      output: getLastThreadOutput(deps.db, context.req.param("id")),
+    });
   });
 
   get("/threads/:id/drafts", (context) => {
     const threadId = context.req.param("id");
     requirePublicThread(deps.db, threadId);
-    return context.json(listDrafts(deps.db, threadId).map((draft) => toQueuedMessage(draft)));
+    return context.json(
+      listDrafts(deps.db, threadId).map((draft) => toQueuedMessage(draft)),
+    );
   });
 
   get("/threads/:id/events", threadEventsQuerySchema, (context, query) => {
@@ -131,41 +154,49 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     );
   });
 
-  get("/threads/:id/events/wait", threadEventWaitQuerySchema, async (context, query) => {
-    const threadId = context.req.param("id");
-    requirePublicThread(deps.db, threadId);
+  get(
+    "/threads/:id/events/wait",
+    threadEventWaitQuerySchema,
+    async (context, query) => {
+      const threadId = context.req.param("id");
+      requirePublicThread(deps.db, threadId);
 
-    const afterSeq = parseOptionalInteger(query.afterSeq, "afterSeq");
-    const waitMs = Math.min(parseOptionalInteger(query.waitMs, "waitMs") ?? 30_000, 60_000);
-    const parsedEventType = threadEventTypeSchema.safeParse(query.type);
-    if (!parsedEventType.success) {
-      throw new ApiError(400, "invalid_request", "Invalid event type");
-    }
-    const eventType = parsedEventType.data;
-
-    const findMatch = () => findThreadEvent(deps.db, { threadId, type: eventType, afterSeq });
-
-    const deadline = Date.now() + waitMs;
-    let match = findMatch();
-    while (!match) {
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) break;
-      const waiter = deps.hub.registerThreadEventWaiter(threadId, remaining);
-      match = findMatch();
-      if (match) {
-        waiter.cancel();
-        break;
+      const afterSeq = parseOptionalInteger(query.afterSeq, "afterSeq");
+      const waitMs = Math.min(
+        parseOptionalInteger(query.waitMs, "waitMs") ?? 30_000,
+        60_000,
+      );
+      const parsedEventType = threadEventTypeSchema.safeParse(query.type);
+      if (!parsedEventType.success) {
+        throw new ApiError(400, "invalid_request", "Invalid event type");
       }
-      await waiter.promise;
-      match = findMatch();
-    }
+      const eventType = parsedEventType.data;
 
-    if (!match) {
-      return new Response(null, { status: 204 });
-    }
+      const findMatch = () =>
+        findThreadEvent(deps.db, { threadId, type: eventType, afterSeq });
 
-    return context.json(match);
-  });
+      const deadline = Date.now() + waitMs;
+      let match = findMatch();
+      while (!match) {
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) break;
+        const waiter = deps.hub.registerThreadEventWaiter(threadId, remaining);
+        match = findMatch();
+        if (match) {
+          waiter.cancel();
+          break;
+        }
+        await waiter.promise;
+        match = findMatch();
+      }
+
+      if (!match) {
+        return new Response(null, { status: 204 });
+      }
+
+      return context.json(match);
+    },
+  );
 
   get("/threads/:id/default-execution-options", (context) => {
     requirePublicThread(deps.db, context.req.param("id"));
@@ -192,8 +223,14 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
             limit,
           },
         });
-        const result = hostDaemonCommandResultSchemaByType["host.list_files"].parse(rawResult);
-        return context.json({ files: result.files, truncated: result.truncated });
+        const result =
+          hostDaemonCommandResultSchemaByType["host.list_files"].parse(
+            rawResult,
+          );
+        return context.json({
+          files: result.files,
+          truncated: result.truncated,
+        });
       } catch (error) {
         if (error instanceof ApiError && error.body.code === "ENOENT") {
           return context.json({ files: [], truncated: false });
@@ -223,7 +260,9 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
           },
         });
         return createDaemonFileContentResponse(
-          hostDaemonCommandResultSchemaByType["host.read_file"].parse(rawResult),
+          hostDaemonCommandResultSchemaByType["host.read_file"].parse(
+            rawResult,
+          ),
         );
       } catch (error) {
         return remapDaemonFileRouteError(error);

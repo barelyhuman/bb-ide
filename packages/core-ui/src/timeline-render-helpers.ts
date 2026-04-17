@@ -53,7 +53,9 @@ function getReadDisplayName(
   return intent.name ?? intent.cmd;
 }
 
-export function formatDelegationSummary(message: DelegationSummaryInput): string {
+export function formatDelegationSummary(
+  message: DelegationSummaryInput,
+): string {
   if (message.subagentType && message.description) {
     return `${message.subagentType}: ${message.description}`;
   }
@@ -109,7 +111,11 @@ export function buildExploringDetailLines(
 
     if (isReadOnlyCall(call)) {
       const seen = new Set<string>();
-      while (index < calls.length && calls[index] && isReadOnlyCall(calls[index])) {
+      while (
+        index < calls.length &&
+        calls[index] &&
+        isReadOnlyCall(calls[index])
+      ) {
         const current = calls[index];
         if (!current) break;
         for (const intent of current.parsedCmd) {

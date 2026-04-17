@@ -46,7 +46,9 @@ export const workspaceFileStatusKindSchema = z.enum([
    */
   "?",
 ]);
-export type WorkspaceFileStatusKind = z.infer<typeof workspaceFileStatusKindSchema>;
+export type WorkspaceFileStatusKind = z.infer<
+  typeof workspaceFileStatusKindSchema
+>;
 
 export const workspaceFileStatusSchema = z.object({
   path: z.string(),
@@ -61,7 +63,9 @@ export const workspaceCommitSummarySchema = z.object({
   authorName: z.string(),
   authoredAt: z.number(),
 });
-export type WorkspaceCommitSummary = z.infer<typeof workspaceCommitSummarySchema>;
+export type WorkspaceCommitSummary = z.infer<
+  typeof workspaceCommitSummarySchema
+>;
 
 /**
  * Fields shared by any surface that reports a set of changed files plus the

@@ -1,7 +1,5 @@
 import type { CloudAuthProviderId } from "@bb/agent-providers";
-import type {
-  CloudAuthConnection,
-} from "@bb/server-contract";
+import type { CloudAuthConnection } from "@bb/server-contract";
 import { StatusPill, type StatusPillVariant } from "@bb/ui-core";
 import { Button } from "@/components/ui/button";
 import { SettingsCard } from "@/components/settings/SettingsCard";
@@ -49,7 +47,9 @@ function CloudAuthRow({
         <span className="min-w-0 truncate">
           {connection.displayName}
           {connection.label ? (
-            <span className="ml-1.5 text-xs text-muted-foreground">{connection.label}</span>
+            <span className="ml-1.5 text-xs text-muted-foreground">
+              {connection.label}
+            </span>
           ) : null}
         </span>
         {isConnected ? (
@@ -57,18 +57,16 @@ function CloudAuthRow({
         ) : isPendingAttempt ? (
           <StatusPill variant="secondary">Connecting…</StatusPill>
         ) : (
-          <StatusPill variant={CLOUD_AUTH_STATUS_DISPLAY[connection.status].pillVariant}>
+          <StatusPill
+            variant={CLOUD_AUTH_STATUS_DISPLAY[connection.status].pillVariant}
+          >
             {CLOUD_AUTH_STATUS_DISPLAY[connection.status].label}
           </StatusPill>
         )}
         <span className="flex-1" />
         <div className="flex shrink-0 gap-1.5">
           {isPendingAttempt ? (
-            <Button
-              size="sm"
-              variant="destructive"
-              onClick={onCancel}
-            >
+            <Button size="sm" variant="destructive" onClick={onCancel}>
               Cancel
             </Button>
           ) : connection.status === "missing" ? (

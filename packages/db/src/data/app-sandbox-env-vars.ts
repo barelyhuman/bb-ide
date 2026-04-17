@@ -42,11 +42,7 @@ export function getAppSandboxEnvVar(
 export function listAppSandboxEnvVars(
   db: DbConnection,
 ): AppSandboxEnvVarRecord[] {
-  return db
-    .select()
-    .from(appSandboxEnvVars)
-    .all()
-    .map(toRecord);
+  return db.select().from(appSandboxEnvVars).all().map(toRecord);
 }
 
 export function upsertAppSandboxEnvVar(

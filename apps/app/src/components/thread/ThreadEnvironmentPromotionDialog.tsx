@@ -33,7 +33,9 @@ interface DialogCopy {
   title: string;
 }
 
-function getDialogCopy(target: ThreadEnvironmentPromotionDialogTarget): DialogCopy {
+function getDialogCopy(
+  target: ThreadEnvironmentPromotionDialogTarget,
+): DialogCopy {
   switch (target.kind) {
     case "promote":
       return {
@@ -73,10 +75,12 @@ export function ThreadEnvironmentPromotionDialog({
       await onSubmit(target);
       onOpenChange(false);
     } catch (error) {
-      setErrorMessage(getMutationErrorMessage({
-        error,
-        fallbackMessage: "Failed to update promotion state.",
-      }));
+      setErrorMessage(
+        getMutationErrorMessage({
+          error,
+          fallbackMessage: "Failed to update promotion state.",
+        }),
+      );
     }
   };
 
@@ -99,8 +103,14 @@ export function ThreadEnvironmentPromotionDialog({
                   </DetailRow>
                 ) : null}
                 {primaryCheckoutPath ? (
-                  <DetailRow label="Primary checkout" valueClassName="min-w-0 truncate">
-                    <span className="block truncate" title={primaryCheckoutPath}>
+                  <DetailRow
+                    label="Primary checkout"
+                    valueClassName="min-w-0 truncate"
+                  >
+                    <span
+                      className="block truncate"
+                      title={primaryCheckoutPath}
+                    >
                       {primaryCheckoutPath}
                     </span>
                   </DetailRow>
@@ -113,7 +123,11 @@ export function ThreadEnvironmentPromotionDialog({
               </DetailCard>
               <FormError message={errorMessage} />
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onOpenChange(false)}
+                >
                   Cancel
                 </Button>
                 <Button type="submit" disabled={pending}>

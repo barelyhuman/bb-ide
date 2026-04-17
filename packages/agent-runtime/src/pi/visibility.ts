@@ -23,10 +23,7 @@ const PI_WELL_KNOWN_TOOL_NAMES = [
 ] as const;
 const PI_WELL_KNOWN_TOOL_NAME_SET = new Set<string>(PI_WELL_KNOWN_TOOL_NAMES);
 
-const PI_ACCEPTED_FALLBACK_TOOL_NAMES = new Set([
-  "ls",
-  "repo_outline",
-]);
+const PI_ACCEPTED_FALLBACK_TOOL_NAMES = new Set(["ls", "repo_outline"]);
 
 type PiAssistantEventType =
   | "text_delta"
@@ -40,11 +37,7 @@ type PiAssistantEventType =
   | "toolcall_start"
   | "unknown";
 
-type PiMessageBoundaryRole =
-  | "assistant"
-  | "toolResult"
-  | "user"
-  | "unknown";
+type PiMessageBoundaryRole = "assistant" | "toolResult" | "user" | "unknown";
 
 type PiSdkEventType =
   | "agent_end"
@@ -88,7 +81,11 @@ interface PiSimpleSdkRawEvent {
   kind: "sdk/simple";
   sdkType: Exclude<
     PiSdkEventType,
-    "message_end" | "message_start" | "message_update" | "tool_execution_start" | "unknown"
+    | "message_end"
+    | "message_start"
+    | "message_update"
+    | "tool_execution_start"
+    | "unknown"
   >;
 }
 
@@ -126,9 +123,7 @@ function assertNever(value: never): never {
   throw new Error(`Unhandled Pi visibility value: ${String(value)}`);
 }
 
-function toPiSdkEventType(
-  type: string | undefined,
-): PiSdkEventType {
+function toPiSdkEventType(type: string | undefined): PiSdkEventType {
   switch (type) {
     case "agent_end":
     case "agent_start":
@@ -244,7 +239,10 @@ function parsePiRawEvent(event: JsonRpcMessage): PiRawEvent {
     }
 
     case "message_update": {
-      const assistantMessageEvent = getRecordProperty(message, "assistantMessageEvent");
+      const assistantMessageEvent = getRecordProperty(
+        message,
+        "assistantMessageEvent",
+      );
       return {
         kind: "sdk/message_update",
         assistantEventType: toPiAssistantEventType(
@@ -299,7 +297,10 @@ function describeParsedPiRawEvent(
       return { kind: "thread/identity", coverage: "normalized" };
 
     case "thread/contextWindowUsage/updated":
-      return { kind: "thread/contextWindowUsage/updated", coverage: "normalized" };
+      return {
+        kind: "thread/contextWindowUsage/updated",
+        coverage: "normalized",
+      };
 
     case "error":
       return { kind: "error", coverage: "normalized" };
@@ -329,7 +330,11 @@ function describeParsedPiRawEvent(
       }
 
     case "sdk/message-boundary": {
-      const kind = `sdk/${event.sdkType}:${event.role === "unknown" ? "" : event.role}`.replace(/:$/u, "");
+      const kind =
+        `sdk/${event.sdkType}:${event.role === "unknown" ? "" : event.role}`.replace(
+          /:$/u,
+          "",
+        );
       switch (event.role) {
         case "assistant":
           return { kind, coverage: "noise" };
@@ -346,7 +351,10 @@ function describeParsedPiRawEvent(
     case "sdk/message_update":
       switch (event.assistantEventType) {
         case "text_delta":
-          return { kind: "sdk/message_update:text_delta", coverage: "normalized" };
+          return {
+            kind: "sdk/message_update:text_delta",
+            coverage: "normalized",
+          };
         case "thinking_start":
           return {
             kind: "sdk/message_update:thinking_start",
@@ -355,19 +363,26 @@ function describeParsedPiRawEvent(
         case "thinking_delta":
           return {
             kind: "sdk/message_update:thinking_delta",
-            coverage: event.delta && event.delta.length > 0 ? "normalized" : "noise",
+            coverage:
+              event.delta && event.delta.length > 0 ? "normalized" : "noise",
           };
         case "thinking_end":
           return {
             kind: "sdk/message_update:thinking_end",
-            coverage: event.content && event.content.length > 0 ? "normalized" : "noise",
+            coverage:
+              event.content && event.content.length > 0
+                ? "normalized"
+                : "noise",
           };
         case "text_end":
         case "text_start":
         case "toolcall_delta":
         case "toolcall_end":
         case "toolcall_start":
-          return { kind: `sdk/message_update:${event.assistantEventType}`, coverage: "noise" };
+          return {
+            kind: `sdk/message_update:${event.assistantEventType}`,
+            coverage: "noise",
+          };
         case "unknown":
           return { kind: "sdk/message_update", coverage: "unknown" };
         default:
@@ -401,11 +416,13 @@ function extractObservedToolCallsFromParsedPiRawEvent(
     return [];
   }
 
-  return [{
-    key: event.toolName,
-    displayName: event.toolName,
-    coverage: classifyPiToolCallCoverage(event.toolName),
-  }];
+  return [
+    {
+      key: event.toolName,
+      displayName: event.toolName,
+      coverage: classifyPiToolCallCoverage(event.toolName),
+    },
+  ];
 }
 
 export const piVisibilityMetadata: ProviderVisibilityMetadata<PiRawEvent> =
@@ -414,5 +431,6 @@ export const piVisibilityMetadata: ProviderVisibilityMetadata<PiRawEvent> =
     wellKnownToolNames: PI_WELL_KNOWN_TOOL_NAMES,
     parseRawEvent: parsePiRawEvent,
     describeParsedRawEvent: describeParsedPiRawEvent,
-    extractObservedToolCallsFromParsed: extractObservedToolCallsFromParsedPiRawEvent,
+    extractObservedToolCallsFromParsed:
+      extractObservedToolCallsFromParsedPiRawEvent,
   });

@@ -46,7 +46,9 @@ export function createExecLifecycleContext(): ExecLifecycleContext {
 
 type ExecItemViewStatus = ViewToolCallMessage["status"];
 
-function itemStatusToExecStatus(status: ThreadEventItemStatus): ExecItemViewStatus {
+function itemStatusToExecStatus(
+  status: ThreadEventItemStatus,
+): ExecItemViewStatus {
   switch (status) {
     case "pending":
       return "pending";
@@ -72,11 +74,15 @@ export function itemStatusToApprovalStatus(
   }
 }
 
-export function itemStatusToToolStatus(status: ThreadEventItemStatus): ViewToolCallMessage["status"] {
+export function itemStatusToToolStatus(
+  status: ThreadEventItemStatus,
+): ViewToolCallMessage["status"] {
   return itemStatusToExecStatus(status);
 }
 
-export function itemStatusToFileEditStatus(status: ThreadEventItemStatus): ViewFileEditMessage["status"] {
+export function itemStatusToFileEditStatus(
+  status: ThreadEventItemStatus,
+): ViewFileEditMessage["status"] {
   return itemStatusToExecStatus(status);
 }
 
@@ -93,7 +99,9 @@ export interface ExecLifecycleEvent {
   appendOutput?: boolean;
 }
 
-function toExecDefaultStatus(kind: "begin" | "end"): ViewToolCallMessage["status"] {
+function toExecDefaultStatus(
+  kind: "begin" | "end",
+): ViewToolCallMessage["status"] {
   if (kind === "begin") return "pending";
   return "completed";
 }
@@ -179,7 +187,10 @@ function getDelegationMetadata(
     return {};
   }
 
-  const subagentType = getFirstStringField(args, ["subagent_type", "subagentType"]);
+  const subagentType = getFirstStringField(args, [
+    "subagent_type",
+    "subagentType",
+  ]);
   const description = getFirstStringField(args, ["description", "prompt"]);
   return {
     ...(subagentType ? { subagentType } : {}),
@@ -263,15 +274,16 @@ export function parseExecLifecycleEvent(
       exitCode !== undefined && exitCode !== 0
         ? "error"
         : (itemStatusToToolStatus(decoded.item.status) ??
-            toExecDefaultStatus(kind));
-    const durationMs = kind === "end"
-      ? resolveCallDurationMs(
-          context,
-          callId,
-          meta.createdAt,
-          decoded.item.durationMs,
-        )
-      : decoded.item.durationMs;
+          toExecDefaultStatus(kind));
+    const durationMs =
+      kind === "end"
+        ? resolveCallDurationMs(
+            context,
+            callId,
+            meta.createdAt,
+            decoded.item.durationMs,
+          )
+        : decoded.item.durationMs;
     if (kind === "begin") {
       trackCallStart(context, callId, meta.createdAt);
     }
@@ -333,27 +345,33 @@ export function parseToolCallLifecycleEvent(
     const parsedArgs = decoded.item.arguments ?? null;
 
     const kind = decoded.type === "item/started" ? "begin" : "end";
-    const status = kind === "end"
-      ? (itemStatusToToolStatus(decoded.item.status) ?? "completed")
-      : "pending";
-    const durationMs = kind === "end"
-      ? resolveCallDurationMs(
-          context,
-          callId,
-          meta.createdAt,
-          decoded.item.durationMs,
-        )
-      : decoded.item.durationMs;
+    const status =
+      kind === "end"
+        ? (itemStatusToToolStatus(decoded.item.status) ?? "completed")
+        : "pending";
+    const durationMs =
+      kind === "end"
+        ? resolveCallDurationMs(
+            context,
+            callId,
+            meta.createdAt,
+            decoded.item.durationMs,
+          )
+        : decoded.item.durationMs;
     if (kind === "begin") {
       trackCallStart(context, callId, meta.createdAt);
     }
     const result = decoded.item.result;
-    const rawOutput = typeof result === "string"
-      ? result
-      : (result !== undefined ? JSON.stringify(result) : undefined);
-    const output = rawOutput !== undefined
-      ? formatToolCallResultOutput(fullToolName, rawOutput)
-      : undefined;
+    const rawOutput =
+      typeof result === "string"
+        ? result
+        : result !== undefined
+          ? JSON.stringify(result)
+          : undefined;
+    const output =
+      rawOutput !== undefined
+        ? formatToolCallResultOutput(fullToolName, rawOutput)
+        : undefined;
     const errorField = decoded.item.error;
     const parsedCmd = getStructuredToolParsedIntents(fullToolName, parsedArgs);
     const delegationMetadata = getDelegationMetadata(fullToolName, parsedArgs);

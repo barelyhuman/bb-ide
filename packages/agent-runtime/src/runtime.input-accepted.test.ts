@@ -4,10 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ThreadEvent } from "@bb/domain";
 import { createAgentRuntimeWithAdapters } from "./runtime.js";
-import {
-  createFakeAdapter,
-  fakeProviderScriptPath,
-} from "./test/index.js";
+import { createFakeAdapter, fakeProviderScriptPath } from "./test/index.js";
 import {
   fullRuntimeOptions,
   wait,
@@ -67,17 +64,22 @@ describe("createAgentRuntime input accepted events", () => {
     });
     await wait(50);
 
-    expect(events.some(
-      (event) =>
-        event.type === "item/completed" && event.item.type === "userMessage",
-    )).toBe(false);
+    expect(
+      events.some(
+        (event) =>
+          event.type === "item/completed" && event.item.type === "userMessage",
+      ),
+    ).toBe(false);
 
     await runtime.shutdown();
   });
 
   it("emits input accepted events only after accepted commands", async () => {
     const events: ThreadEvent[] = [];
-    const acceptedCommandScriptPath = join(tmpDir, "accepted-command-provider.cjs");
+    const acceptedCommandScriptPath = join(
+      tmpDir,
+      "accepted-command-provider.cjs",
+    );
     writeFileSync(
       acceptedCommandScriptPath,
       `
@@ -123,7 +125,9 @@ rl.on("line", (line) => {
 `,
       "utf8",
     );
-    const baseAdapter = createFakeAdapter({ scriptPath: acceptedCommandScriptPath });
+    const baseAdapter = createFakeAdapter({
+      scriptPath: acceptedCommandScriptPath,
+    });
     const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (event) => events.push(event),
@@ -140,13 +144,15 @@ rl.on("line", (line) => {
           if (command.clientRequestSequence === undefined) {
             return [];
           }
-          return [{
-            type: "turn/input/accepted",
-            threadId: command.threadId,
-            providerThreadId: command.providerThreadId ?? "",
-            turnId: command.expectedTurnId,
-            clientRequestSequence: command.clientRequestSequence,
-          }];
+          return [
+            {
+              type: "turn/input/accepted",
+              threadId: command.threadId,
+              providerThreadId: command.providerThreadId ?? "",
+              turnId: command.expectedTurnId,
+              clientRequestSequence: command.clientRequestSequence,
+            },
+          ];
         },
       }),
     });
@@ -192,7 +198,10 @@ rl.on("line", (line) => {
 
   it("does not emit provider accepted-command events when a command is rejected", async () => {
     const events: ThreadEvent[] = [];
-    const rejectingSteerScriptPath = join(tmpDir, "rejecting-steer-provider.cjs");
+    const rejectingSteerScriptPath = join(
+      tmpDir,
+      "rejecting-steer-provider.cjs",
+    );
     writeFileSync(
       rejectingSteerScriptPath,
       `
@@ -242,7 +251,9 @@ rl.on("line", (line) => {
 `,
       "utf8",
     );
-    const baseAdapter = createFakeAdapter({ scriptPath: rejectingSteerScriptPath });
+    const baseAdapter = createFakeAdapter({
+      scriptPath: rejectingSteerScriptPath,
+    });
     const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
       onEvent: (event) => events.push(event),
@@ -290,8 +301,9 @@ rl.on("line", (line) => {
       }),
     ).rejects.toThrow(/No active session/);
 
-    expect(events.some((event) => event.type === "turn/input/accepted"))
-      .toBe(false);
+    expect(events.some((event) => event.type === "turn/input/accepted")).toBe(
+      false,
+    );
 
     await runtime.shutdown();
   });

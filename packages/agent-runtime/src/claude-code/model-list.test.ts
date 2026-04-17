@@ -45,19 +45,34 @@ describe("listClaudeCodeModels", () => {
     }
 
     expect(listClaudeCodeModels({ selectedModel: "opus[1m]" })[0]).toEqual(
-      expect.objectContaining({ model: "opus[1m]", displayName: "Opus Alias (1M, Legacy)" }),
+      expect.objectContaining({
+        model: "opus[1m]",
+        displayName: "Opus Alias (1M, Legacy)",
+      }),
     );
     expect(listClaudeCodeModels({ selectedModel: "opus" })[0]).toEqual(
-      expect.objectContaining({ model: "opus", displayName: "Opus Alias (Legacy)" }),
+      expect.objectContaining({
+        model: "opus",
+        displayName: "Opus Alias (Legacy)",
+      }),
     );
     expect(listClaudeCodeModels({ selectedModel: "sonnet[1m]" })[0]).toEqual(
-      expect.objectContaining({ model: "sonnet[1m]", displayName: "Sonnet Alias (1M, Legacy)" }),
+      expect.objectContaining({
+        model: "sonnet[1m]",
+        displayName: "Sonnet Alias (1M, Legacy)",
+      }),
     );
     expect(listClaudeCodeModels({ selectedModel: "sonnet" })[0]).toEqual(
-      expect.objectContaining({ model: "sonnet", displayName: "Sonnet Alias (Legacy)" }),
+      expect.objectContaining({
+        model: "sonnet",
+        displayName: "Sonnet Alias (Legacy)",
+      }),
     );
     expect(listClaudeCodeModels({ selectedModel: "haiku" })[0]).toEqual(
-      expect.objectContaining({ model: "haiku", displayName: "Haiku Alias (Legacy)" }),
+      expect.objectContaining({
+        model: "haiku",
+        displayName: "Haiku Alias (Legacy)",
+      }),
     );
   });
 });

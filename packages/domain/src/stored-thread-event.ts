@@ -1,9 +1,6 @@
 import { z } from "zod";
 import { resolvedThreadExecutionOptionsSchema } from "./shared-types.js";
-import {
-  threadEventSchema,
-  threadEventTypeSchema,
-} from "./provider-event.js";
+import { threadEventSchema, threadEventTypeSchema } from "./provider-event.js";
 import {
   turnRequestEventDataSchema,
   turnRequestTargetSchema,
@@ -15,7 +12,8 @@ type ThreadEventByType = {
   [TType in ThreadEventType]: Extract<ThreadEvent, { type: TType }>;
 };
 
-type ThreadEventForType<TType extends ThreadEventType> = ThreadEventByType[TType];
+type ThreadEventForType<TType extends ThreadEventType> =
+  ThreadEventByType[TType];
 
 type StoredThreadEventDataFromEvent<TEvent extends ThreadEvent> = Omit<
   TEvent,
@@ -48,15 +46,17 @@ export type StoredThreadEventDataByType = {
   >;
 };
 
-export type StoredThreadEventData = StoredThreadEventDataByType[ThreadEventType];
+export type StoredThreadEventData =
+  StoredThreadEventDataByType[ThreadEventType];
 
 export type StoredThreadEventDataForType<TType extends ThreadEventType> =
   StoredThreadEventDataByType[TType];
 
-type ThreadEventRowFromEvent<TEvent extends ThreadEvent> = ThreadEventRowBase & {
-  type: TEvent["type"];
-  data: StoredThreadEventDataFromEvent<TEvent>;
-};
+type ThreadEventRowFromEvent<TEvent extends ThreadEvent> =
+  ThreadEventRowBase & {
+    type: TEvent["type"];
+    data: StoredThreadEventDataFromEvent<TEvent>;
+  };
 
 export type ThreadEventRowOfType<TType extends ThreadEventType> =
   ThreadEventRowFromEvent<ThreadEventForType<TType>>;
@@ -65,8 +65,10 @@ export type ThreadEventRow = {
   [TType in ThreadEventType]: ThreadEventRowOfType<TType>;
 }[ThreadEventType];
 
-export type ThreadEventOfType<TType extends ThreadEventType> =
-  Extract<ThreadEventRow, { type: TType }>;
+export type ThreadEventOfType<TType extends ThreadEventType> = Extract<
+  ThreadEventRow,
+  { type: TType }
+>;
 
 const threadEventRowInputSchema = z.object({
   id: z.string(),
@@ -175,6 +177,7 @@ export function parseThreadEventRow(value: unknown): ThreadEventRow {
   return parseThreadEventRowInput(row);
 }
 
-export const threadEventRowSchema = threadEventRowInputSchema.transform<ThreadEventRow>(
-  (row) => parseThreadEventRowInput(row),
-);
+export const threadEventRowSchema =
+  threadEventRowInputSchema.transform<ThreadEventRow>((row) =>
+    parseThreadEventRowInput(row),
+  );

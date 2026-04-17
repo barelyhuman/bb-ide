@@ -24,7 +24,11 @@ import {
   setAuthenticatedDaemon,
   verifyAuthenticatedDaemon,
 } from "./internal/auth.js";
-import { onClientSocketClose, onClientSocketMessage, onClientSocketOpen } from "./ws/client-protocol.js";
+import {
+  onClientSocketClose,
+  onClientSocketMessage,
+  onClientSocketOpen,
+} from "./ws/client-protocol.js";
 import {
   onDaemonSocketClose,
   onDaemonSocketMessage,
@@ -114,20 +118,28 @@ function closeWebSocketServer(args: CloseWebSocketServerArgs): Promise<void> {
   });
 }
 
-export function createApp(deps: AppDeps, options?: CreateAppOptions): ServerApp {
+export function createApp(
+  deps: AppDeps,
+  options?: CreateAppOptions,
+): ServerApp {
   const app = new Hono();
-  const { injectWebSocket, upgradeWebSocket, wss } = createNodeWebSocket({ app });
+  const { injectWebSocket, upgradeWebSocket, wss } = createNodeWebSocket({
+    app,
+  });
   const allowedCorsOrigins = buildAllowedCorsOrigins(deps);
 
-  app.use("*", cors({
-    origin: (origin, context) => {
-      const requestOrigin = new URL(context.req.url).origin;
-      if (origin === requestOrigin || allowedCorsOrigins.has(origin)) {
-        return origin;
-      }
-      return null;
-    },
-  }));
+  app.use(
+    "*",
+    cors({
+      origin: (origin, context) => {
+        const requestOrigin = new URL(context.req.url).origin;
+        if (origin === requestOrigin || allowedCorsOrigins.has(origin)) {
+          return origin;
+        }
+        return null;
+      },
+    }),
+  );
   app.onError((error) => errorToResponse(error));
   app.get("/health", (context) => context.json({ ok: true }));
   app.use("/internal/*", async (context, next) => {
@@ -201,8 +213,7 @@ export function createApp(deps: AppDeps, options?: CreateAppOptions): ServerApp 
             sessionId: websocketContext.sessionId,
             socket,
           }),
-        onClose: () =>
-          onDaemonSocketClose(deps, websocketContext.sessionId),
+        onClose: () => onDaemonSocketClose(deps, websocketContext.sessionId),
       };
     }),
   );
@@ -228,7 +239,8 @@ export function createApp(deps: AppDeps, options?: CreateAppOptions): ServerApp 
     };
 
     app.get("*", async (context) => {
-      const urlPath = context.req.path === "/" ? "/index.html" : context.req.path;
+      const urlPath =
+        context.req.path === "/" ? "/index.html" : context.req.path;
       const filePath = join(root, urlPath);
       if (!filePath.startsWith(root)) {
         return context.notFound();
@@ -237,14 +249,19 @@ export function createApp(deps: AppDeps, options?: CreateAppOptions): ServerApp 
         const fileStat = await stat(filePath);
         if (fileStat.isFile()) {
           const content = await readFile(filePath);
-          const contentType = MIME[extname(filePath)] ?? "application/octet-stream";
-          return new Response(content, { headers: { "content-type": contentType } });
+          const contentType =
+            MIME[extname(filePath)] ?? "application/octet-stream";
+          return new Response(content, {
+            headers: { "content-type": contentType },
+          });
         }
       } catch {
         // File not found — fall through to SPA fallback
       }
       const indexHtml = await readFile(join(root, "index.html"));
-      return new Response(indexHtml, { headers: { "content-type": "text/html" } });
+      return new Response(indexHtml, {
+        headers: { "content-type": "text/html" },
+      });
     });
   }
 

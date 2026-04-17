@@ -6,7 +6,10 @@ import { shouldPreferNestedOngoingLabels } from "../src/thread-timeline/rows/Del
 function baseMessage(
   id: string,
   sourceSeq: number,
-): Pick<ViewMessage, "id" | "threadId" | "sourceSeqStart" | "sourceSeqEnd" | "createdAt"> {
+): Pick<
+  ViewMessage,
+  "id" | "threadId" | "sourceSeqStart" | "sourceSeqEnd" | "createdAt"
+> {
   return {
     id,
     threadId: "thread-1",

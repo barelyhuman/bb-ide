@@ -32,7 +32,9 @@ function requireEnvironmentId(
   hookName: string,
 ): string {
   if (!environmentId) {
-    throw new Error(`${hookName}: environmentId is required when query is enabled`);
+    throw new Error(
+      `${hookName}: environmentId is required when query is enabled`,
+    );
   }
 
   return environmentId;
@@ -42,7 +44,9 @@ function requireGitDiffTarget(
   target: WorkspaceDiffTarget | undefined,
 ): WorkspaceDiffTarget {
   if (!target) {
-    throw new Error("useEnvironmentGitDiff: target is required when query is enabled");
+    throw new Error(
+      "useEnvironmentGitDiff: target is required when query is enabled",
+    );
   }
 
   return target;
@@ -51,7 +55,8 @@ function requireGitDiffTarget(
 export function useEnvironment(environmentId: string | null | undefined) {
   return useQuery<Environment>({
     queryKey: environmentQueryKey(environmentId),
-    queryFn: () => api.getEnvironment(requireEnvironmentId(environmentId, "useEnvironment")),
+    queryFn: () =>
+      api.getEnvironment(requireEnvironmentId(environmentId, "useEnvironment")),
     enabled: Boolean(environmentId),
   });
 }
@@ -64,7 +69,10 @@ export function useEnvironmentWorkStatus(
   const normalizedMergeBaseBranch = mergeBaseBranch ?? null;
 
   return useQuery<WorkspaceStatus | null>({
-    queryKey: environmentWorkStatusQueryKey(environmentId, normalizedMergeBaseBranch),
+    queryKey: environmentWorkStatusQueryKey(
+      environmentId,
+      normalizedMergeBaseBranch,
+    ),
     queryFn: () =>
       api.getEnvironmentWorkStatus(
         requireEnvironmentId(environmentId, "useEnvironmentWorkStatus"),
@@ -130,13 +138,17 @@ export function useEnvironmentGitDiff(
       targetKey,
     ),
     queryFn: () =>
-      api.getEnvironmentDiff(
-        environmentId,
-        requireGitDiffTarget(target),
-      ),
-    enabled: (options.enabled ?? true) && Boolean(environmentId) && target !== undefined,
+      api.getEnvironmentDiff(environmentId, requireGitDiffTarget(target)),
+    enabled:
+      (options.enabled ?? true) &&
+      Boolean(environmentId) &&
+      target !== undefined,
     placeholderData: (previousData, previousQuery) =>
-      resolveEnvironmentGitDiffPlaceholder(previousData, previousQuery?.queryKey, environmentId),
+      resolveEnvironmentGitDiffPlaceholder(
+        previousData,
+        previousQuery?.queryKey,
+        environmentId,
+      ),
     refetchOnWindowFocus: false,
     staleTime: 5_000,
   });

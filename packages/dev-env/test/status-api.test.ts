@@ -1,6 +1,10 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { parseTurboFingerprint, type DevServiceName, type RestartTarget } from "../src/fingerprint.js";
+import {
+  parseTurboFingerprint,
+  type DevServiceName,
+  type RestartTarget,
+} from "../src/fingerprint.js";
 import {
   createDevEnvStatusApp,
   type DevEnvRuntime,
@@ -45,7 +49,10 @@ function computeExpectedFingerprint(
   fingerprints: Record<DevServiceName, string>,
 ): string {
   const hash = createHash("sha256");
-  for (const serviceName of ["server", "host-daemon"] satisfies DevServiceName[]) {
+  for (const serviceName of [
+    "server",
+    "host-daemon",
+  ] satisfies DevServiceName[]) {
     hash.update(serviceName);
     hash.update("\0");
     hash.update(fingerprints[serviceName]);
@@ -101,11 +108,12 @@ describe("dev-env status API", () => {
     expect(state.restartTargets).toEqual(["server"]);
     expect(runtime.baselineFingerprints.get("server")).toBe("server-changed");
     const status = await response.json();
-    expect(status.services.find((service) => service.serviceName === "server"))
-      .toMatchObject({
-        changed: false,
-        serviceName: "server",
-      });
+    expect(
+      status.services.find((service) => service.serviceName === "server"),
+    ).toMatchObject({
+      changed: false,
+      serviceName: "server",
+    });
   });
 
   it("refreshes both baselines after a combined restart", async () => {
@@ -124,7 +132,9 @@ describe("dev-env status API", () => {
     expect(response.status).toBe(200);
     expect(state.restartTargets).toEqual(["both"]);
     expect(runtime.baselineFingerprints.get("server")).toBe("server-changed");
-    expect(runtime.baselineFingerprints.get("host-daemon")).toBe("host-baseline");
+    expect(runtime.baselineFingerprints.get("host-daemon")).toBe(
+      "host-baseline",
+    );
   });
 
   it("returns a conflict when the restart script fails", async () => {
@@ -148,7 +158,9 @@ describe("dev-env status API", () => {
 
     expect(response.status).toBe(409);
     expect(await response.text()).toContain("restart failed");
-    expect(runtime.baselineFingerprints.get("host-daemon")).toBe("host-baseline");
+    expect(runtime.baselineFingerprints.get("host-daemon")).toBe(
+      "host-baseline",
+    );
   });
 
   it("returns bad request for invalid restart bodies", async () => {

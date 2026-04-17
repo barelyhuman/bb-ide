@@ -1,18 +1,14 @@
-import {
-  CollapsibleHeader,
-  ExpandablePanel,
-} from "../../disclosure.js";
+import { CollapsibleHeader, ExpandablePanel } from "../../disclosure.js";
 import { EventCodeBlock } from "../../event-content.js";
 import type { ViewErrorMessage } from "@bb/domain";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
-import {
-  EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS,
-} from "./shared.js";
+import { EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS } from "./shared.js";
 
 function normalizeErrorMessageText(value: string): string {
   const normalized = value.replaceAll("\r\n", "\n");
   if (normalized.includes("\n")) return normalized;
-  if (!normalized.includes("\\n") && !normalized.includes("\\r\\n")) return normalized;
+  if (!normalized.includes("\\n") && !normalized.includes("\\r\\n"))
+    return normalized;
   if (/[A-Za-z]:\\\\/.test(normalized)) return normalized;
   return normalized.replaceAll("\\r\\n", "\n").replaceAll("\\n", "\n");
 }
@@ -25,9 +21,7 @@ function isThreadProvisioningFailureTitle(value: string): boolean {
 function normalizeProvisioningErrorDetail(detail: string): string {
   let normalized = normalizeErrorMessageText(detail).trim();
   if (!normalized) return normalized;
-  if (
-    !normalized.startsWith(".bb-env-setup.sh failed:")
-  ) {
+  if (!normalized.startsWith(".bb-env-setup.sh failed:")) {
     return normalized;
   }
 
@@ -38,7 +32,10 @@ function normalizeProvisioningErrorDetail(detail: string): string {
   return normalized.replace(/\s+•\s+/g, "\n• ");
 }
 
-function normalizeErrorDetailForDisplay(title: string, detail?: string): string | undefined {
+function normalizeErrorDetailForDisplay(
+  title: string,
+  detail?: string,
+): string | undefined {
   const normalized = detail?.trim();
   if (!normalized) return undefined;
   if (title === "Provisioning thread failed") {
@@ -58,11 +55,18 @@ function parseErrorDisplay(message: ViewErrorMessage): {
   }
 
   const [titleCandidate, ...detailParts] = trimmed.split(" - ");
-  const detailFromDelimiter = normalizeErrorMessageText(detailParts.join(" - ")).trim();
+  const detailFromDelimiter = normalizeErrorMessageText(
+    detailParts.join(" - "),
+  ).trim();
   const titleFromDelimiter = titleCandidate?.trim();
 
-  if (message.rawType === "system/error" && trimmed.startsWith("Project folder not found")) {
-    const missingPathMatch = trimmed.match(/^Project folder not found:\s*(.+?)(?:\s+-\s+.*)?$/);
+  if (
+    message.rawType === "system/error" &&
+    trimmed.startsWith("Project folder not found")
+  ) {
+    const missingPathMatch = trimmed.match(
+      /^Project folder not found:\s*(.+?)(?:\s+-\s+.*)?$/,
+    );
     const missingPath = missingPathMatch?.[1]?.trim();
     const detail = missingPath
       ? `Project folder not found: ${missingPath}. Please update the project path and try again.`
@@ -73,7 +77,10 @@ function parseErrorDisplay(message: ViewErrorMessage): {
     };
   }
 
-  if (titleFromDelimiter && isThreadProvisioningFailureTitle(titleFromDelimiter)) {
+  if (
+    titleFromDelimiter &&
+    isThreadProvisioningFailureTitle(titleFromDelimiter)
+  ) {
     return {
       title: "Provisioning thread failed",
       detail: detailFromDelimiter
@@ -86,7 +93,11 @@ function parseErrorDisplay(message: ViewErrorMessage): {
     return { title: "Provisioning thread failed" };
   }
 
-  if (titleFromDelimiter && detailFromDelimiter && titleFromDelimiter.length <= 96) {
+  if (
+    titleFromDelimiter &&
+    detailFromDelimiter &&
+    titleFromDelimiter.length <= 96
+  ) {
     return {
       title: titleFromDelimiter,
       detail: detailFromDelimiter,
@@ -119,7 +130,10 @@ export function ErrorRow({
       </span>
     </span>
   );
-  const detailText = normalizeErrorDetailForDisplay(display.title, display.detail);
+  const detailText = normalizeErrorDetailForDisplay(
+    display.title,
+    display.detail,
+  );
   const hasMultilineDetail = Boolean(detailText?.includes("\n"));
 
   if (!isExpandable) {
@@ -157,9 +171,7 @@ export function ErrorRow({
                   {detailText}
                 </EventCodeBlock>
               ) : (
-                <p className="whitespace-pre-wrap break-words">
-                  {detailText}
-                </p>
+                <p className="whitespace-pre-wrap break-words">{detailText}</p>
               )
             ) : null}
             {display.hint ? <p>{display.hint}</p> : null}

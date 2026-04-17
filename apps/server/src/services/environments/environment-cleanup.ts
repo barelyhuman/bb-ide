@@ -50,8 +50,7 @@ export interface EnvironmentCleanupCommandMutationArgs {
   commandId: string;
 }
 
-export interface FailEnvironmentCleanupForCommandArgs
-  extends EnvironmentCleanupCommandMutationArgs {
+export interface FailEnvironmentCleanupForCommandArgs extends EnvironmentCleanupCommandMutationArgs {
   failureReason: string;
 }
 
@@ -80,7 +79,7 @@ function hasConnectedHostSession(
 
 function workspaceHasRiskyChanges(
   workspaceStatus: ReturnType<
-    typeof hostDaemonCommandResultSchemaByType["workspace.status"]["parse"]
+    (typeof hostDaemonCommandResultSchemaByType)["workspace.status"]["parse"]
   >["workspaceStatus"],
 ): boolean {
   return (
@@ -117,7 +116,8 @@ async function assertWorkspaceCanBeSafelyCleaned(
     return false;
   }
 
-  const mergeBaseBranch = environment.mergeBaseBranch ?? environment.defaultBranch;
+  const mergeBaseBranch =
+    environment.mergeBaseBranch ?? environment.defaultBranch;
   if (environment.isGitRepo && !mergeBaseBranch) {
     return false;
   }
@@ -146,7 +146,8 @@ async function assertWorkspaceCanBeSafelyCleaned(
     }
     throw error;
   }
-  const result = hostDaemonCommandResultSchemaByType["workspace.status"].parse(rawResult);
+  const result =
+    hostDaemonCommandResultSchemaByType["workspace.status"].parse(rawResult);
   if (workspaceHasRiskyChanges(result.workspaceStatus)) {
     throw new ApiError(
       409,
@@ -185,7 +186,10 @@ function getDestroyOperationPayload(
   });
 
   if (operation) {
-    return parseJsonWithSchema(operation.payload, destroyOperationPayloadSchema);
+    return parseJsonWithSchema(
+      operation.payload,
+      destroyOperationPayloadSchema,
+    );
   }
 
   const environment = getEnvironment(deps.db, environmentId);
@@ -202,9 +206,9 @@ function getActiveDestroyOperationByCommandId(
 ) {
   const operation = getEnvironmentOperationByCommandId(deps.db, commandId);
   if (
-    !operation
-    || operation.kind !== "destroy"
-    || !isActiveLifecycleOperationState(operation.state)
+    !operation ||
+    operation.kind !== "destroy" ||
+    !isActiveLifecycleOperationState(operation.state)
   ) {
     return null;
   }
@@ -257,10 +261,7 @@ export function failEnvironmentDestroyForCommand(
   });
 
   const environment = getEnvironment(deps.db, operation.environmentId);
-  if (
-    environment
-    && environment.status === "destroying"
-  ) {
+  if (environment && environment.status === "destroying") {
     setEnvironmentStatus(deps.db, deps.hub, operation.environmentId, {
       status: environment.path ? "ready" : "error",
     });
@@ -377,10 +378,12 @@ export function wouldCleanupEnvironment(
     return false;
   }
 
-  return countLiveThreadsInEnvironment(deps.db, {
-    environmentId: environment.id,
-    excludeThreadId: args.excludeThreadId,
-  }) === 0;
+  return (
+    countLiveThreadsInEnvironment(deps.db, {
+      environmentId: environment.id,
+      excludeThreadId: args.excludeThreadId,
+    }) === 0
+  );
 }
 
 export async function advanceEnvironmentCleanup(
@@ -406,7 +409,10 @@ export async function advanceEnvironmentCleanup(
     return;
   }
 
-  if (countLiveThreadsInEnvironment(deps.db, { environmentId: environment.id }) > 0) {
+  if (
+    countLiveThreadsInEnvironment(deps.db, { environmentId: environment.id }) >
+    0
+  ) {
     return;
   }
 
@@ -443,10 +449,11 @@ export async function advanceEnvironmentCleanup(
   }
 
   if (
-    destroyOperation
-    && (destroyOperation.state === "queued" || destroyOperation.state === "fetched")
-    && destroyOperation.commandId
-    && getPendingEnvironmentCommand(deps.db, {
+    destroyOperation &&
+    (destroyOperation.state === "queued" ||
+      destroyOperation.state === "fetched") &&
+    destroyOperation.commandId &&
+    getPendingEnvironmentCommand(deps.db, {
       environmentId: environment.id,
       type: "environment.destroy",
     })
@@ -473,7 +480,11 @@ export async function advanceEnvironmentCleanup(
       return;
     }
 
-    if (countLiveThreadsInEnvironment(deps.db, { environmentId: refreshedEnvironment.id }) > 0) {
+    if (
+      countLiveThreadsInEnvironment(deps.db, {
+        environmentId: refreshedEnvironment.id,
+      }) > 0
+    ) {
       return;
     }
 

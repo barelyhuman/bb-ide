@@ -4,8 +4,6 @@ import { toViewMessages } from "../src/to-view-messages.js";
 import { fromRows } from "./timeline-test-harness.js";
 
 describe("toViewMessages approval projection", () => {
-
-
   it("projects permission approval lifecycle events without operation metadata", () => {
     const events: ThreadEventRow[] = [
       {
@@ -53,7 +51,6 @@ describe("toViewMessages approval projection", () => {
       }),
     ]);
   });
-
 
   it("replaces command approval state with the command item lifecycle", () => {
     const events: ThreadEventRow[] = [
@@ -134,7 +131,6 @@ describe("toViewMessages approval projection", () => {
     ]);
   });
 
-
   it("projects denied command approvals as the command item terminal state", () => {
     const events: ThreadEventRow[] = [
       {
@@ -191,7 +187,6 @@ describe("toViewMessages approval projection", () => {
       },
     ]);
   });
-
 
   it("replaces file-change approval state with the file-change item lifecycle", () => {
     const events: ThreadEventRow[] = [

@@ -10,21 +10,14 @@ export const viewTurnStatusValues = [
 export const viewTurnStatusSchema = z.enum(viewTurnStatusValues);
 export type ViewTurnStatus = z.infer<typeof viewTurnStatusSchema>;
 
-export const viewTurnMessageDetailValues = [
-  "summary",
-  "full",
-] as const;
-export const viewTurnMessageDetailSchema = z.enum(
-  viewTurnMessageDetailValues,
-);
+export const viewTurnMessageDetailValues = ["summary", "full"] as const;
+export const viewTurnMessageDetailSchema = z.enum(viewTurnMessageDetailValues);
 /**
  * Controls how eagerly completed turns include their message arrays.
  * Summary projections may still include messages when row ordering,
  * ungroupable messages, or nested delegation projections need them.
  */
-export type ViewTurnMessageDetail = z.infer<
-  typeof viewTurnMessageDetailSchema
->;
+export type ViewTurnMessageDetail = z.infer<typeof viewTurnMessageDetailSchema>;
 
 export interface ToViewProjectionOptions extends ToViewMessagesOptions {
   turnMessageDetail: ViewTurnMessageDetail;

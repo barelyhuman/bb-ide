@@ -11,9 +11,7 @@ import type { EventMeta } from "./event-decode.js";
 import { getEventTurnId } from "./event-decode.js";
 import { capitalize, messageId } from "./format-helpers.js";
 import { buildProviderUnhandledDetail } from "./provider-unhandled-detail.js";
-import {
-  readProvisioningTranscript,
-} from "./provisioning-helpers.js";
+import { readProvisioningTranscript } from "./provisioning-helpers.js";
 import type {
   ToViewMessagesOptions,
   ViewPermissionGrantLifecycleMessage,
@@ -34,12 +32,16 @@ function providerDisplayName(providerId: string): string {
   }
 }
 
-function normalizeThreadOperationKind(rawOperation: string): ViewThreadOperationKind {
+function normalizeThreadOperationKind(
+  rawOperation: string,
+): ViewThreadOperationKind {
   if (rawOperation === "ownership_change") return "ownership_change";
   return "other";
 }
 
-function normalizeThreadOperationStatus(rawStatus: string): ViewThreadOperationStatus {
+function normalizeThreadOperationStatus(
+  rawStatus: string,
+): ViewThreadOperationStatus {
   switch (rawStatus) {
     case "requested":
     case "queued":
@@ -67,14 +69,17 @@ function createThreadOperationMetadata(
   };
 }
 
-export function threadOperationTitle(meta: ViewThreadOperationMetadata | null): string {
+export function threadOperationTitle(
+  meta: ViewThreadOperationMetadata | null,
+): string {
   if (!meta) return "Operation update";
 
   const { operation, rawOperation, status, rawStatus, metadata } = meta;
 
   switch (operation) {
     case "ownership_change": {
-      const action = typeof metadata?.action === "string" ? metadata.action : undefined;
+      const action =
+        typeof metadata?.action === "string" ? metadata.action : undefined;
       switch (status) {
         case "completed":
           return action === "release"
@@ -172,7 +177,9 @@ type ViewOperationFields = Omit<
   | "startedAt"
 >;
 
-function formatPlanStepStatus(status: ThreadEventPlanStepStatus | undefined): string {
+function formatPlanStepStatus(
+  status: ThreadEventPlanStepStatus | undefined,
+): string {
   switch (status) {
     case "active":
       return "In progress";
@@ -209,7 +216,8 @@ export function parseOperationMessage(
     const detail =
       decoded.explanation && steps.length > 0
         ? `${decoded.explanation}\n${steps.join("\n")}`
-        : decoded.explanation ?? (steps.length > 0 ? steps.join("\n") : undefined);
+        : (decoded.explanation ??
+          (steps.length > 0 ? steps.join("\n") : undefined));
 
     return op(decoded, meta, "plan", {
       turnId: decoded.turnId,
@@ -300,7 +308,10 @@ export function parseOperationMessage(
     const threadOperation = createThreadOperationMetadata(decoded);
     const title = threadOperationTitle(threadOperation);
 
-    const branch = typeof decoded.metadata?.branch === "string" ? decoded.metadata.branch : undefined;
+    const branch =
+      typeof decoded.metadata?.branch === "string"
+        ? decoded.metadata.branch
+        : undefined;
     const detailParts = [
       decoded.message,
       branch ? `Branch: ${branch}` : undefined,
@@ -343,7 +354,11 @@ export function parseOperationMessage(
         title: "Context compacted",
         status: "completed",
       }),
-      id: messageId(decoded.threadId, "op", `compaction:${getCompactionKey(decoded, meta)}`),
+      id: messageId(
+        decoded.threadId,
+        "op",
+        `compaction:${getCompactionKey(decoded, meta)}`,
+      ),
     };
   }
 

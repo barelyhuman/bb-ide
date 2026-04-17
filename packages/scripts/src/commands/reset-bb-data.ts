@@ -5,15 +5,17 @@ import { resolveContainedPath } from "@bb/process-utils";
 import readline from "node:readline/promises";
 import { fileURLToPath } from "node:url";
 import {
-  bold, cyan, dim, green, yellow,
-  log, endStep,
+  bold,
+  cyan,
+  dim,
+  green,
+  yellow,
+  log,
+  endStep,
 } from "../lib/script-helpers.js";
 import { resolveConfiguredDataDir } from "@bb/config/data-dir";
 import { DEFAULTS } from "@bb/config/defaults";
-import {
-  type HostMode,
-  resolveScriptMode,
-} from "../lib/script-config.js";
+import { type HostMode, resolveScriptMode } from "../lib/script-config.js";
 
 interface NamedDataDirs {
   defaultDataDir: string;
@@ -26,8 +28,12 @@ function resolveMode(): HostMode {
 
 function resolveNamedDataDirs(): NamedDataDirs {
   return {
-    defaultDataDir: resolveConfiguredDataDir({ defaultDirName: DEFAULTS.dataDir.prod }),
-    defaultDevDataDir: resolveConfiguredDataDir({ defaultDirName: DEFAULTS.dataDir.dev }),
+    defaultDataDir: resolveConfiguredDataDir({
+      defaultDirName: DEFAULTS.dataDir.prod,
+    }),
+    defaultDevDataDir: resolveConfiguredDataDir({
+      defaultDirName: DEFAULTS.dataDir.dev,
+    }),
   };
 }
 
@@ -92,7 +98,9 @@ export function renderHelpText(): string {
 
 async function confirmReset(targets: string[]): Promise<boolean> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    throw new Error("Interactive confirmation requires a TTY. Re-run with --yes to confirm.");
+    throw new Error(
+      "Interactive confirmation requires a TTY. Re-run with --yes to confirm.",
+    );
   }
 
   const rl = readline.createInterface({
@@ -107,16 +115,23 @@ async function confirmReset(targets: string[]): Promise<boolean> {
       log(" ", dim(target));
     }
     process.stdout.write("\n");
-    log(" ", dim("Provider auth/config managed outside bb will be left untouched."));
+    log(
+      " ",
+      dim("Provider auth/config managed outside bb will be left untouched."),
+    );
     process.stdout.write("\n");
-    const answer = await rl.question(`  ${dim("?")}  Type ${bold('"reset"')} to continue: `);
+    const answer = await rl.question(
+      `  ${dim("?")}  Type ${bold('"reset"')} to continue: `,
+    );
     return answer.trim() === "reset";
   } finally {
     rl.close();
   }
 }
 
-export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
+export async function main(
+  argv: string[] = process.argv.slice(2),
+): Promise<void> {
   const args = new Set(argv);
 
   if (args.has("--help") || args.has("-h")) {
@@ -145,7 +160,12 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
       endStep(dim("–"), `${dim("skip")}  ${target} ${dim("(not found)")}`);
       continue;
     }
-    rmSync(target, { force: true, maxRetries: 3, recursive: true, retryDelay: 100 });
+    rmSync(target, {
+      force: true,
+      maxRetries: 3,
+      recursive: true,
+      retryDelay: 100,
+    });
     endStep(green("✓"), `${cyan(target)}`);
     removedCount += 1;
   }

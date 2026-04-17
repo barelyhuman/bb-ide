@@ -16,7 +16,9 @@ interface ToolCallRowProps {
   preferOngoingLabels?: boolean;
 }
 
-function getToolCallTone(message: ViewToolCallMessage): "default" | "destructive" {
+function getToolCallTone(
+  message: ViewToolCallMessage,
+): "default" | "destructive" {
   // Shell command rows are common, and failed commands should read like regular
   // command history rather than error alerts. Keep destructive tone for any future
   // non-shell tool rows that may still need stronger emphasis.
@@ -81,12 +83,14 @@ function getSummaryDurationMs(
 }
 
 function formatExitCodeLine(message: ViewToolCallMessage): string | undefined {
-  if (message.exitCode === undefined || message.exitCode === 0) return undefined;
+  if (message.exitCode === undefined || message.exitCode === 0)
+    return undefined;
   return `exit code ${message.exitCode}`;
 }
 
 function formatOutputText(message: ViewToolCallMessage): string {
-  const output = message.output && message.output.length > 0 ? message.output : undefined;
+  const output =
+    message.output && message.output.length > 0 ? message.output : undefined;
   const exitCodeLine = formatExitCodeLine(message);
 
   if (output && exitCodeLine) {
@@ -109,7 +113,8 @@ export function ToolCallRow({
   const titleDetail =
     isExpanded && isShellToolName(message.toolName) ? "command" : command;
   const outputText = formatOutputText(message);
-  const preferRunningLabel = preferOngoingLabels && message.status === "completed";
+  const preferRunningLabel =
+    preferOngoingLabels && message.status === "completed";
   const actionLabel = toolCallActionLabel(message, preferRunningLabel);
   const isRunning =
     message.approvalStatus !== "denied" &&

@@ -13,7 +13,9 @@ async function makeTempDir(): Promise<string> {
 }
 
 afterEach(async () => {
-  await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { force: true, recursive: true })));
+  await Promise.all(
+    tempDirs.splice(0).map((dir) => rm(dir, { force: true, recursive: true })),
+  );
 });
 
 describe("project attachments", () => {
@@ -34,70 +36,71 @@ describe("project attachments", () => {
   it("rejects POSIX traversal outside the project attachment directory", async () => {
     const dataDir = await makeTempDir();
 
-    await expect(readAttachment(dataDir, "proj_test", "../secret.txt")).rejects.toMatchObject(
-      {
-        status: 400,
-        body: expect.objectContaining({
-          code: "invalid_request",
-          message: "Attachment path escapes project directory",
-        }),
-      },
-    );
+    await expect(
+      readAttachment(dataDir, "proj_test", "../secret.txt"),
+    ).rejects.toMatchObject({
+      status: 400,
+      body: expect.objectContaining({
+        code: "invalid_request",
+        message: "Attachment path escapes project directory",
+      }),
+    });
   });
 
   it("rejects Windows-style traversal outside the project attachment directory", async () => {
     const dataDir = await makeTempDir();
 
-    await expect(readAttachment(dataDir, "proj_test", "..\\secret.txt")).rejects.toMatchObject(
-      {
-        status: 400,
-        body: expect.objectContaining({
-          code: "invalid_request",
-          message: "Attachment path escapes project directory",
-        }),
-      },
-    );
+    await expect(
+      readAttachment(dataDir, "proj_test", "..\\secret.txt"),
+    ).rejects.toMatchObject({
+      status: 400,
+      body: expect.objectContaining({
+        code: "invalid_request",
+        message: "Attachment path escapes project directory",
+      }),
+    });
   });
 
   it("rejects absolute paths outside the project attachment directory", async () => {
     const dataDir = await makeTempDir();
 
-    await expect(readAttachment(dataDir, "proj_test", "/etc/passwd")).rejects.toMatchObject(
-      {
-        status: 400,
-        body: expect.objectContaining({
-          code: "invalid_request",
-          message: "Attachment path escapes project directory",
-        }),
-      },
-    );
+    await expect(
+      readAttachment(dataDir, "proj_test", "/etc/passwd"),
+    ).rejects.toMatchObject({
+      status: 400,
+      body: expect.objectContaining({
+        code: "invalid_request",
+        message: "Attachment path escapes project directory",
+      }),
+    });
   });
 
   it("rejects attachment paths that resolve to the attachment directory itself", async () => {
     const dataDir = await makeTempDir();
 
-    await expect(readAttachment(dataDir, "proj_test", ".")).rejects.toMatchObject(
-      {
-        status: 400,
-        body: expect.objectContaining({
-          code: "invalid_request",
-          message: "Attachment path must refer to a file inside the project directory",
-        }),
-      },
-    );
+    await expect(
+      readAttachment(dataDir, "proj_test", "."),
+    ).rejects.toMatchObject({
+      status: 400,
+      body: expect.objectContaining({
+        code: "invalid_request",
+        message:
+          "Attachment path must refer to a file inside the project directory",
+      }),
+    });
   });
 
   it("treats percent-encoded traversal markers as literal file names", async () => {
     const dataDir = await makeTempDir();
 
-    await expect(readAttachment(dataDir, "proj_test", "%2e%2e%2fsecret.txt")).rejects.toMatchObject(
-      {
-        status: 404,
-        body: expect.objectContaining({
-          code: "invalid_request",
-          message: "Attachment not found",
-        }),
-      },
-    );
+    await expect(
+      readAttachment(dataDir, "proj_test", "%2e%2e%2fsecret.txt"),
+    ).rejects.toMatchObject({
+      status: 404,
+      body: expect.objectContaining({
+        code: "invalid_request",
+        message: "Attachment not found",
+      }),
+    });
   });
 });

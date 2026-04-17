@@ -4,7 +4,10 @@ import {
   formatExploringIntentLine,
   summarizeExploringCounts,
 } from "@bb/core-ui";
-import type { ViewToolExploringMessage, ViewToolParsedIntent } from "@bb/domain";
+import type {
+  ViewToolExploringMessage,
+  ViewToolParsedIntent,
+} from "@bb/domain";
 
 function buildCall(
   callId: string,

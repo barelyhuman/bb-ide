@@ -1,5 +1,5 @@
-import { useId, useState, type FormEvent } from "react"
-import { Button } from "@/components/ui/button"
+import { useId, useState, type FormEvent } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -7,25 +7,25 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 
 export interface ProjectRenameDialogTarget {
-  id: string
-  currentName: string
+  id: string;
+  currentName: string;
 }
 
 interface ProjectRenameDialogProps {
-  target: ProjectRenameDialogTarget | null
-  pending?: boolean
-  onOpenChange: (open: boolean) => void
-  onRename: (projectId: string, name: string) => void
+  target: ProjectRenameDialogTarget | null;
+  pending?: boolean;
+  onOpenChange: (open: boolean) => void;
+  onRename: (projectId: string, name: string) => void;
 }
 
 interface ProjectRenameDialogContentProps {
-  target: ProjectRenameDialogTarget
-  pending: boolean
-  onRename: (projectId: string, name: string) => void
+  target: ProjectRenameDialogTarget;
+  pending: boolean;
+  onRename: (projectId: string, name: string) => void;
 }
 
 export function ProjectRenameDialog({
@@ -47,7 +47,7 @@ export function ProjectRenameDialog({
         ) : null}
       </DialogContent>
     </Dialog>
-  )
+  );
 }
 
 function ProjectRenameDialogContent({
@@ -55,28 +55,32 @@ function ProjectRenameDialogContent({
   pending,
   onRename,
 }: ProjectRenameDialogContentProps) {
-  const inputId = useId()
-  const [nextName, setNextName] = useState(target.currentName)
-  const [validationMessage, setValidationMessage] = useState<string | null>(null)
+  const inputId = useId();
+  const [nextName, setNextName] = useState(target.currentName);
+  const [validationMessage, setValidationMessage] = useState<string | null>(
+    null,
+  );
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    if (pending) return
+    event.preventDefault();
+    if (pending) return;
 
-    const trimmedName = nextName.trim()
+    const trimmedName = nextName.trim();
     if (!trimmedName) {
-      setValidationMessage("Project name cannot be empty.")
-      return
+      setValidationMessage("Project name cannot be empty.");
+      return;
     }
 
-    onRename(target.id, trimmedName)
-  }
+    onRename(target.id, trimmedName);
+  };
 
   return (
     <>
       <DialogHeader>
         <DialogTitle>Rename project</DialogTitle>
-        <DialogDescription>Choose a new name for this project.</DialogDescription>
+        <DialogDescription>
+          Choose a new name for this project.
+        </DialogDescription>
       </DialogHeader>
       <form className="space-y-4" onSubmit={handleSubmit}>
         <div className="space-y-2">
@@ -90,9 +94,9 @@ function ProjectRenameDialogContent({
             spellCheck={false}
             disabled={pending}
             onChange={(event) => {
-              setNextName(event.target.value)
+              setNextName(event.target.value);
               if (validationMessage) {
-                setValidationMessage(null)
+                setValidationMessage(null);
               }
             }}
           />
@@ -107,5 +111,5 @@ function ProjectRenameDialogContent({
         </DialogFooter>
       </form>
     </>
-  )
+  );
 }

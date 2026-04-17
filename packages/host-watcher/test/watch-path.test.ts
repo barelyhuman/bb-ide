@@ -181,12 +181,13 @@ describe("watchPathChanges", () => {
     const threadStorageRoot = path.join("/tmp", "bb-watch-path-missing");
     let pathExistsCallCount = 0;
     const onWatchError = vi.fn();
-    const { rootPaths, watchPathChanges } = await importWatchPathWithMockedWatcher({
-      pathExistsImplementation: async () => {
-        pathExistsCallCount += 1;
-        return pathExistsCallCount >= 2;
-      },
-    });
+    const { rootPaths, watchPathChanges } =
+      await importWatchPathWithMockedWatcher({
+        pathExistsImplementation: async () => {
+          pathExistsCallCount += 1;
+          return pathExistsCallCount >= 2;
+        },
+      });
 
     const stopWatching = watchPathChanges(threadStorageRoot, {
       onChange: () => undefined,
@@ -248,10 +249,7 @@ describe("watchPathChanges", () => {
     });
 
     await vi.advanceTimersByTimeAsync(300);
-    await waitFor(
-      subscribeCallCount,
-      (count) => count === 2,
-    );
+    await waitFor(subscribeCallCount, (count) => count === 2);
 
     expect(rootPaths).toEqual([threadStorageRoot, threadStorageRoot]);
 

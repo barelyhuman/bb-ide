@@ -156,14 +156,21 @@ export function sweepExpiredLeases(
       closeReason: "expired",
       updatedAt: currentTime,
     })
-    .where(inArray(hostDaemonSessions.id, expiredSessions.map((session) => session.id)))
+    .where(
+      inArray(
+        hostDaemonSessions.id,
+        expiredSessions.map((session) => session.id),
+      ),
+    )
     .run();
 
   for (const session of expiredSessions) {
     notifier.notifyHost(session.hostId, ["host-disconnected"]);
   }
 
-  const expiredHostIds = [...new Set(expiredSessions.map((session) => session.hostId))];
+  const expiredHostIds = [
+    ...new Set(expiredSessions.map((session) => session.hostId)),
+  ];
 
   // Find active/provisioning threads on environments belonging to expired hosts.
   // Idle threads are excluded — they have no in-flight work to interrupt.

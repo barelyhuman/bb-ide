@@ -21,7 +21,9 @@ interface CreateRuntimeArgs {
   platform?: NodeJS.Platform;
 }
 
-function createRuntime(args: CreateRuntimeArgs = {}): WorkspaceOpenTargetRuntime {
+function createRuntime(
+  args: CreateRuntimeArgs = {},
+): WorkspaceOpenTargetRuntime {
   return {
     applicationDirectories: args.applicationDirectories ?? [],
     execFile: args.execFile ?? (async () => ({ stdout: "" })),
@@ -34,10 +36,12 @@ describe("workspace open targets", () => {
     const execFile = vi.fn(async () => ({ stdout: "" }));
 
     await expect(
-      listWorkspaceOpenTargetsWithRuntime(createRuntime({
-        execFile,
-        platform: "linux",
-      })),
+      listWorkspaceOpenTargetsWithRuntime(
+        createRuntime({
+          execFile,
+          platform: "linux",
+        }),
+      ),
     ).resolves.toEqual([]);
     expect(execFile).not.toHaveBeenCalled();
   });
@@ -53,9 +57,11 @@ describe("workspace open targets", () => {
       };
     };
 
-    const targets = await listWorkspaceOpenTargetsWithRuntime(createRuntime({
-      execFile,
-    }));
+    const targets = await listWorkspaceOpenTargetsWithRuntime(
+      createRuntime({
+        execFile,
+      }),
+    );
 
     expect(targets.map((target) => target.id)).toEqual([
       "zed",
@@ -71,14 +77,20 @@ describe("workspace open targets", () => {
   });
 
   it("falls back to application bundle paths when bundle id lookup misses", async () => {
-    const root = await mkdtemp(path.join(tmpdir(), "bb-workspace-open-targets-"));
+    const root = await mkdtemp(
+      path.join(tmpdir(), "bb-workspace-open-targets-"),
+    );
     const applicationsDirectory = path.join(root, "Applications");
-    await mkdir(path.join(applicationsDirectory, "Cursor.app"), { recursive: true });
+    await mkdir(path.join(applicationsDirectory, "Cursor.app"), {
+      recursive: true,
+    });
 
     try {
-      const targets = await listWorkspaceOpenTargetsWithRuntime(createRuntime({
-        applicationDirectories: [applicationsDirectory],
-      }));
+      const targets = await listWorkspaceOpenTargetsWithRuntime(
+        createRuntime({
+          applicationDirectories: [applicationsDirectory],
+        }),
+      );
 
       expect(targets.map((target) => target.id)).toContain("cursor");
     } finally {
@@ -93,9 +105,11 @@ describe("workspace open targets", () => {
         : "",
     });
 
-    const targets = await listWorkspaceOpenTargetsWithRuntime(createRuntime({
-      execFile,
-    }));
+    const targets = await listWorkspaceOpenTargetsWithRuntime(
+      createRuntime({
+        execFile,
+      }),
+    );
 
     expect(targets.map((target) => target.id)).toContain("antigravity");
   });
@@ -106,9 +120,10 @@ describe("workspace open targets", () => {
     const execFile: ExecFileHandler = async (file, args) => {
       calls.push({ file, args });
       return {
-        stdout: file === "mdfind" && args.join(" ").includes("dev.zed.Zed")
-          ? "/Applications/Zed.app\n"
-          : "",
+        stdout:
+          file === "mdfind" && args.join(" ").includes("dev.zed.Zed")
+            ? "/Applications/Zed.app\n"
+            : "",
       };
     };
 

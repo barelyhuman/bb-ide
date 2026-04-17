@@ -91,9 +91,7 @@ interface ThreadStartCommandArgs {
   workspacePath: string;
 }
 
-function buildUnmanagedProvisionCommand(
-  args: UnmanagedProvisionCommandArgs,
-) {
+function buildUnmanagedProvisionCommand(args: UnmanagedProvisionCommandArgs) {
   return {
     type: "environment.provision" as const,
     environmentId: args.environmentId,
@@ -103,9 +101,7 @@ function buildUnmanagedProvisionCommand(
   };
 }
 
-function buildThreadStartCommand(
-  args: ThreadStartCommandArgs,
-) {
+function buildThreadStartCommand(args: ThreadStartCommandArgs) {
   return {
     type: "thread.start" as const,
     environmentId: args.environmentId,
@@ -184,7 +180,9 @@ describe("periodic sweeps", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-periodic-sweep",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const firstEnvironment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -260,15 +258,17 @@ describe("periodic sweeps", () => {
         status: "provisioning",
       });
 
-      provisionHostMock.mockImplementation(async (args: ProvisionHostMockArgs) => {
-        args.progressCallbacks?.onSandboxCreated?.({
-          externalId: "sandbox-periodic-bootstrap",
-        });
-        return createMockSandboxHost(
-          args.hostId,
-          "sandbox-periodic-bootstrap",
-        );
-      });
+      provisionHostMock.mockImplementation(
+        async (args: ProvisionHostMockArgs) => {
+          args.progressCallbacks?.onSandboxCreated?.({
+            externalId: "sandbox-periodic-bootstrap",
+          });
+          return createMockSandboxHost(
+            args.hostId,
+            "sandbox-periodic-bootstrap",
+          );
+        },
+      );
 
       upsertEnvironmentOperationRecord(harness.db, {
         environmentId: environment.id,
@@ -313,8 +313,8 @@ describe("periodic sweeps", () => {
       const queued = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "environment.provision"
-          && command.environmentId === environment.id,
+          command.type === "environment.provision" &&
+          command.environmentId === environment.id,
       );
 
       expect(queued.command).toMatchObject({
@@ -441,8 +441,8 @@ describe("periodic sweeps", () => {
       const queued = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "environment.provision"
-          && command.environmentId === environment.id,
+          command.type === "environment.provision" &&
+          command.environmentId === environment.id,
       );
       expect(queued.command).toMatchObject({
         workspaceProvisionType: "unmanaged",
@@ -504,8 +504,7 @@ describe("periodic sweeps", () => {
       const queued = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "thread.start"
-          && command.threadId === thread.id,
+          command.type === "thread.start" && command.threadId === thread.id,
       );
       expect(queued.command).toMatchObject({
         environmentId: environment.id,
@@ -514,10 +513,12 @@ describe("periodic sweeps", () => {
       expect(getThread(harness.db, thread.id)).toMatchObject({
         status: "provisioning",
       });
-      expect(getThreadOperation(harness.db, {
-        threadId: thread.id,
-        kind: "provision",
-      })).toMatchObject({
+      expect(
+        getThreadOperation(harness.db, {
+          threadId: thread.id,
+          kind: "provision",
+        }),
+      ).toMatchObject({
         state: "completed",
       });
     } finally {
@@ -590,8 +591,7 @@ describe("periodic sweeps", () => {
       const queued = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "thread.start"
-          && command.threadId === thread.id,
+          command.type === "thread.start" && command.threadId === thread.id,
       );
       expect(queued.command).toMatchObject({
         environmentId: environment.id,
@@ -641,8 +641,8 @@ describe("periodic sweeps", () => {
       const queued = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "environment.provision"
-          && command.environmentId === environment.id,
+          command.type === "environment.provision" &&
+          command.environmentId === environment.id,
       );
 
       fetchCommands(harness.db, harness.hub, { hostId: host.id });
@@ -695,8 +695,7 @@ describe("periodic sweeps", () => {
       const firstStop = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "thread.stop"
-          && command.threadId === thread.id,
+          command.type === "thread.stop" && command.threadId === thread.id,
       );
 
       fetchCommands(harness.db, harness.hub, { hostId: host.id });
@@ -716,8 +715,7 @@ describe("periodic sweeps", () => {
         harness,
         firstStop.row.cursor,
         ({ command }) =>
-          command.type === "thread.stop"
-          && command.threadId === thread.id,
+          command.type === "thread.stop" && command.threadId === thread.id,
       );
       expect(retriedStop.command).toMatchObject({
         environmentId: environment.id,
@@ -738,7 +736,10 @@ describe("periodic sweeps", () => {
         provider: "e2b",
         type: "ephemeral",
       });
-      const sandboxHost = createMockSandboxHost(host.id, host.externalId ?? undefined);
+      const sandboxHost = createMockSandboxHost(
+        host.id,
+        host.externalId ?? undefined,
+      );
       harness.deps.sandboxRegistry.set(host.id, sandboxHost);
       openSession(harness.db, harness.hub, {
         heartbeatIntervalMs: 5_000,
@@ -759,7 +760,9 @@ describe("periodic sweeps", () => {
 
       expect(sandboxHost.suspend).toHaveBeenCalledTimes(1);
       expect(getActiveSession(harness.db, host.id)).toBeNull();
-      expect(getHost(harness.db, host.id)?.suspendedAt).toEqual(expect.any(Number));
+      expect(getHost(harness.db, host.id)?.suspendedAt).toEqual(
+        expect.any(Number),
+      );
     } finally {
       await harness.cleanup();
     }
@@ -775,7 +778,10 @@ describe("periodic sweeps", () => {
         provider: "e2b",
         type: "ephemeral",
       });
-      const sandboxHost = createMockSandboxHost(host.id, host.externalId ?? undefined);
+      const sandboxHost = createMockSandboxHost(
+        host.id,
+        host.externalId ?? undefined,
+      );
       harness.deps.sandboxRegistry.set(host.id, sandboxHost);
       openSession(harness.db, harness.hub, {
         heartbeatIntervalMs: 5_000,
@@ -820,24 +826,27 @@ describe("periodic sweeps", () => {
         environmentId: environment.id,
       });
 
-      const registered = harness.deps.pendingInteractions.registerPendingInteraction({
-        interaction: {
-          threadId: thread.id,
-          turnId: "turn-periodic-expired-interaction",
-          providerId: "codex",
-          providerThreadId: "provider-thread-periodic-expired-interaction",
-          providerRequestId: "request-periodic-expired-interaction",
-          payload: createCommandApprovalPayload({
-            itemId: "item-periodic-expired-interaction",
-            reason: "Approve command",
-            command: "git push",
-            cwd: "/tmp/project",
-          }),
-        },
-        sessionId: session.id,
-      });
+      const registered =
+        harness.deps.pendingInteractions.registerPendingInteraction({
+          interaction: {
+            threadId: thread.id,
+            turnId: "turn-periodic-expired-interaction",
+            providerId: "codex",
+            providerThreadId: "provider-thread-periodic-expired-interaction",
+            providerRequestId: "request-periodic-expired-interaction",
+            payload: createCommandApprovalPayload({
+              itemId: "item-periodic-expired-interaction",
+              reason: "Approve command",
+              command: "git push",
+              cwd: "/tmp/project",
+            }),
+          },
+          sessionId: session.id,
+        });
       if (registered.outcome === "rejected") {
-        throw new Error(`Expected interaction registration to succeed: ${registered.reason}`);
+        throw new Error(
+          `Expected interaction registration to succeed: ${registered.reason}`,
+        );
       }
 
       harness.db
@@ -901,8 +910,7 @@ describe("periodic sweeps", () => {
       const queuedStop = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "thread.stop"
-          && command.threadId === thread.id,
+          command.type === "thread.stop" && command.threadId === thread.id,
       );
       transitionThreadStatus(harness.db, harness.hub, thread.id, "idle");
 
@@ -919,14 +927,16 @@ describe("periodic sweeps", () => {
           .where(eq(hostDaemonCommands.id, queuedStop.row.id))
           .get(),
       ).toEqual({ state: "error" });
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe("destroying");
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+        "destroying",
+      );
 
       const destroyCommand = await waitForQueuedCommandAfter(
         harness,
         queuedStop.row.cursor,
         ({ command }) =>
-          command.type === "environment.destroy"
-          && command.environmentId === environment.id,
+          command.type === "environment.destroy" &&
+          command.environmentId === environment.id,
       );
       expect(destroyCommand.command).toMatchObject({
         environmentId: environment.id,

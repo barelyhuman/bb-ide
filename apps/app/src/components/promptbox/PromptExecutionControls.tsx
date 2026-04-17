@@ -1,7 +1,11 @@
 import type { PermissionMode, ReasoningLevel, ServiceTier } from "@bb/domain";
 import { formatModelLabel } from "@/hooks/useThreadCreationOptions";
 import { PromptProviderModelPicker } from "./PromptProviderModelPicker";
-import { PromptOptionPicker, PromptOptionDisplay, type PromptOption } from "./PromptOptionPicker";
+import {
+  PromptOptionPicker,
+  PromptOptionDisplay,
+  type PromptOption,
+} from "./PromptOptionPicker";
 
 export interface PromptExecutionProviderConfig {
   options?: readonly PromptOption<string>[];
@@ -98,7 +102,11 @@ export function PromptExecutionControls({
         <PromptOptionDisplay
           label="Provider"
           value={provider.displayName}
-          icon={provider.options?.find((candidate) => candidate.value === provider.selectedId)?.icon}
+          icon={
+            provider.options?.find(
+              (candidate) => candidate.value === provider.selectedId,
+            )?.icon
+          }
         />
       ) : null}
       {showModelPicker ? (
@@ -113,7 +121,9 @@ export function PromptExecutionControls({
           onModelChange={model.onChange}
           formatModelLabel={formatModelLabel}
           fastModeEnabled={serviceTier?.value === "fast"}
-          onFastModeChange={(enabled) => handleServiceTierChange(enabled ? "fast" : undefined)}
+          onFastModeChange={(enabled) =>
+            handleServiceTierChange(enabled ? "fast" : undefined)
+          }
           showFastModeToggle={serviceTier?.supported ?? false}
           serviceTierSupportByProvider={serviceTier?.supportByProvider}
         />

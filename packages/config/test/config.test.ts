@@ -17,9 +17,8 @@ describe("commonConfig", () => {
     vi.stubEnv("BB_DATA_DIR", undefined);
     vi.stubEnv("BB_LOG_LEVEL", undefined);
 
-    const { commonConfig } = await importFresh<typeof import("../src/common.js")>(
-      "../src/common.js",
-    );
+    const { commonConfig } =
+      await importFresh<typeof import("../src/common.js")>("../src/common.js");
 
     expect(commonConfig.BB_DATA_DIR).toBe(path.join(os.homedir(), ".bb-dev"));
     expect(commonConfig.BB_LOG_LEVEL).toBe("debug");
@@ -29,9 +28,8 @@ describe("commonConfig", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("BB_DATA_DIR", "~/custom-bb");
 
-    const { commonConfig } = await importFresh<typeof import("../src/common.js")>(
-      "../src/common.js",
-    );
+    const { commonConfig } =
+      await importFresh<typeof import("../src/common.js")>("../src/common.js");
 
     expect(commonConfig.BB_DATA_DIR).toBe(path.join(os.homedir(), "custom-bb"));
   });
@@ -48,29 +46,35 @@ describe("commonConfig", () => {
 
 describe("data-dir helpers", () => {
   it("expands a bare home-directory override", async () => {
-    const { resolveConfiguredDataDir } = await importFresh<typeof import("../src/data-dir.js")>(
-      "../src/data-dir.js",
-    );
+    const { resolveConfiguredDataDir } =
+      await importFresh<typeof import("../src/data-dir.js")>(
+        "../src/data-dir.js",
+      );
 
-    expect(resolveConfiguredDataDir({
-      defaultDirName: ".bb",
-      env: {
-        BB_DATA_DIR: "~",
-      },
-    })).toBe(os.homedir());
+    expect(
+      resolveConfiguredDataDir({
+        defaultDirName: ".bb",
+        env: {
+          BB_DATA_DIR: "~",
+        },
+      }),
+    ).toBe(os.homedir());
   });
 
   it("rejects whitespace-only data dir overrides", async () => {
-    const { resolveConfiguredDataDir } = await importFresh<typeof import("../src/data-dir.js")>(
-      "../src/data-dir.js",
-    );
+    const { resolveConfiguredDataDir } =
+      await importFresh<typeof import("../src/data-dir.js")>(
+        "../src/data-dir.js",
+      );
 
-    expect(() => resolveConfiguredDataDir({
-      defaultDirName: ".bb",
-      env: {
-        BB_DATA_DIR: " ",
-      },
-    })).toThrow("BB_DATA_DIR must not be empty");
+    expect(() =>
+      resolveConfiguredDataDir({
+        defaultDirName: ".bb",
+        env: {
+          BB_DATA_DIR: " ",
+        },
+      }),
+    ).toThrow("BB_DATA_DIR must not be empty");
   });
 });
 
@@ -91,9 +95,8 @@ describe("consumer-specific config", () => {
     vi.stubEnv("BB_SANDBOX_ACTIVITY_EXTENSION_DEBOUNCE_MS", undefined);
     vi.stubEnv("BB_SANDBOX_IDLE_THRESHOLD_MS", undefined);
 
-    const { serverConfig } = await importFresh<typeof import("../src/server.js")>(
-      "../src/server.js",
-    );
+    const { serverConfig } =
+      await importFresh<typeof import("../src/server.js")>("../src/server.js");
 
     expect(serverConfig.BB_SERVER_PORT).toBe(3334);
     expect(serverConfig.BB_DATABASE_URL).toBe("/tmp/bb-data/bb.db");
@@ -114,10 +117,9 @@ describe("consumer-specific config", () => {
     vi.stubEnv("BB_EXTERNAL_URL", "not-a-url");
     vi.stubEnv("BB_SERVER_PORT", undefined);
 
-    const { serverPortConfig } =
-      await importFresh<typeof import("../src/server-port.js")>(
-        "../src/server-port.js",
-      );
+    const { serverPortConfig } = await importFresh<
+      typeof import("../src/server-port.js")
+    >("../src/server-port.js");
 
     expect(serverPortConfig.BB_SERVER_PORT).toBe(3334);
   });
@@ -151,12 +153,11 @@ describe("consumer-specific config", () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("BB_SERVER_URL", "http://localhost:9999");
 
-    const { hostDaemonConfig } = await importFresh<typeof import("../src/host-daemon.js")>(
-      "../src/host-daemon.js",
-    );
-    const { cliConfig } = await importFresh<typeof import("../src/cli.js")>(
-      "../src/cli.js",
-    );
+    const { hostDaemonConfig } = await importFresh<
+      typeof import("../src/host-daemon.js")
+    >("../src/host-daemon.js");
+    const { cliConfig } =
+      await importFresh<typeof import("../src/cli.js")>("../src/cli.js");
 
     expect(hostDaemonConfig.BB_SERVER_URL).toBe("http://localhost:9999");
     expect(cliConfig.BB_SERVER_URL).toBe("http://localhost:9999");
@@ -172,9 +173,8 @@ describe("consumer-specific config", () => {
     vi.stubEnv("BB_SERVER_URL", undefined);
     vi.stubEnv("BB_HOST_DAEMON_PORT", undefined);
 
-    const { cliConfig } = await importFresh<typeof import("../src/cli.js")>(
-      "../src/cli.js",
-    );
+    const { cliConfig } =
+      await importFresh<typeof import("../src/cli.js")>("../src/cli.js");
 
     expect(cliConfig.BB_SERVER_URL).toBe("http://localhost:3334");
     expect(cliConfig.BB_HOST_DAEMON_PORT).toBe(3002);
@@ -185,9 +185,8 @@ describe("consumer-specific config", () => {
     vi.stubEnv("BB_SERVER_URL", "http://localhost:9999");
     vi.stubEnv("BB_HOST_DAEMON_PORT", "3999");
 
-    const { cliConfig } = await importFresh<typeof import("../src/cli.js")>(
-      "../src/cli.js",
-    );
+    const { cliConfig } =
+      await importFresh<typeof import("../src/cli.js")>("../src/cli.js");
 
     expect(cliConfig.BB_SERVER_URL).toBe("http://localhost:9999");
     expect(cliConfig.BB_HOST_DAEMON_PORT).toBe(3999);
@@ -200,9 +199,8 @@ describe("consumer-specific config", () => {
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
     vi.stubEnv("ANTHROPIC_API_KEY", "test-anthropic-key");
 
-    const { serverConfig } = await importFresh<typeof import("../src/server.js")>(
-      "../src/server.js",
-    );
+    const { serverConfig } =
+      await importFresh<typeof import("../src/server.js")>("../src/server.js");
 
     expect(serverConfig.BB_APP_URL).toBe("");
     expect(serverConfig.BB_EXTERNAL_URL).toBe("");
@@ -215,9 +213,8 @@ describe("consumer-specific config", () => {
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
     vi.stubEnv("ANTHROPIC_API_KEY", "test-anthropic-key");
 
-    const { serverConfig } = await importFresh<typeof import("../src/server.js")>(
-      "../src/server.js",
-    );
+    const { serverConfig } =
+      await importFresh<typeof import("../src/server.js")>("../src/server.js");
 
     expect(serverConfig.BB_APP_URL).toBe("https://app.example.test");
     expect(serverConfig.BB_EXTERNAL_URL).toBe("https://external.example.test");
@@ -239,9 +236,10 @@ describe("consumer-specific config", () => {
     vi.stubEnv("BB_DEV_APP_HOST", "0.0.0.0");
     vi.stubEnv("DEV_CLOUDFLARED_TUNNEL_TOKEN", "test-tunnel-token");
 
-    const { devEnvConfig } = await importFresh<typeof import("../src/dev-env.js")>(
-      "../src/dev-env.js",
-    );
+    const { devEnvConfig } =
+      await importFresh<typeof import("../src/dev-env.js")>(
+        "../src/dev-env.js",
+      );
 
     expect(devEnvConfig.BB_DEV_APP_HOST).toBe("0.0.0.0");
     expect(devEnvConfig.DEV_CLOUDFLARED_TUNNEL_TOKEN).toBe("test-tunnel-token");
@@ -255,10 +253,9 @@ describe("consumer-specific config", () => {
     vi.stubEnv("BB_HOST_NAME", " sandbox-123 ");
     vi.stubEnv("BB_HOST_TYPE", "ephemeral");
 
-    const { hostDaemonEntrypointConfig } =
-      await importFresh<typeof import("../src/host-daemon-entrypoint.js")>(
-        "../src/host-daemon-entrypoint.js",
-      );
+    const { hostDaemonEntrypointConfig } = await importFresh<
+      typeof import("../src/host-daemon-entrypoint.js")
+    >("../src/host-daemon-entrypoint.js");
 
     expect(hostDaemonEntrypointConfig).toEqual({
       BB_BRIDGE_DIR: "/tmp/bridges",
@@ -278,10 +275,9 @@ describe("consumer-specific config", () => {
     vi.stubEnv("BB_HOST_NAME", "");
     vi.stubEnv("BB_HOST_TYPE", "");
 
-    const { hostDaemonEntrypointConfig } =
-      await importFresh<typeof import("../src/host-daemon-entrypoint.js")>(
-        "../src/host-daemon-entrypoint.js",
-      );
+    const { hostDaemonEntrypointConfig } = await importFresh<
+      typeof import("../src/host-daemon-entrypoint.js")
+    >("../src/host-daemon-entrypoint.js");
 
     expect(hostDaemonEntrypointConfig).toEqual({
       BB_BRIDGE_DIR: undefined,

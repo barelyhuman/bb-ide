@@ -39,7 +39,9 @@ interface StreamNdjsonRecordsArgs<TRecord extends { relativeMs: number }> {
 }
 
 function isNodeError(error: unknown): error is Error & { code: string } {
-  return error instanceof Error && "code" in error && typeof error.code === "string";
+  return (
+    error instanceof Error && "code" in error && typeof error.code === "string"
+  );
 }
 
 function requireCaptureId(captureId: string): void {
@@ -70,7 +72,9 @@ async function pathIsDirectory(filePath: string): Promise<boolean> {
   }
 }
 
-export async function requireReplayCaptureFile(filePath: string): Promise<void> {
+export async function requireReplayCaptureFile(
+  filePath: string,
+): Promise<void> {
   try {
     await stat(filePath);
   } catch {
@@ -189,9 +193,9 @@ function toSummary(manifest: ReplayCaptureManifest): ReplayCaptureSummary {
   };
 }
 
-export async function listReplayCaptureSummaries(dataDir: string): Promise<
-  ReplayCaptureSummary[]
-> {
+export async function listReplayCaptureSummaries(
+  dataDir: string,
+): Promise<ReplayCaptureSummary[]> {
   let entries: string[];
   try {
     entries = await readdir(replayCaptureRoot(dataDir));
@@ -208,10 +212,14 @@ export async function listReplayCaptureSummaries(dataDir: string): Promise<
       continue;
     }
     try {
-      captures.push(toSummary(await readReplayCaptureManifest({
-        captureId: entry,
-        dataDir,
-      })));
+      captures.push(
+        toSummary(
+          await readReplayCaptureManifest({
+            captureId: entry,
+            dataDir,
+          }),
+        ),
+      );
     } catch {
       continue;
     }

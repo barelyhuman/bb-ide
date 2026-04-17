@@ -23,7 +23,10 @@ function setup() {
     name: "test-host",
     type: "persistent",
   });
-  const { project } = createProject(db, noopNotifier, { name: "test-project", source: { type: "local_path", hostId: host.id, path: "/tmp/test" } });
+  const { project } = createProject(db, noopNotifier, {
+    name: "test-project",
+    source: { type: "local_path", hostId: host.id, path: "/tmp/test" },
+  });
   return { db, host, project };
 }
 
@@ -96,7 +99,9 @@ describe("project-sources", () => {
     });
 
     expect(listProjectSourcesByProjectIds(db, [project.id])).toHaveLength(2);
-    expect(listProjectSourcesByProjectIds(db, [project.id, otherProject.id])).toHaveLength(4);
+    expect(
+      listProjectSourcesByProjectIds(db, [project.id, otherProject.id]),
+    ).toHaveLength(4);
   });
 
   it("returns the default source and preserves it when adding more sources", () => {
@@ -112,7 +117,9 @@ describe("project-sources", () => {
       type: "github_repo",
       repoUrl: "https://github.com/example/repo",
     });
-    expect(getDefaultProjectSource(db, project.id)?.id).toBe(initialDefault!.id);
+    expect(getDefaultProjectSource(db, project.id)?.id).toBe(
+      initialDefault!.id,
+    );
   });
 
   it("returns the source for a specific host", () => {
@@ -151,26 +158,32 @@ describe("project-sources", () => {
       repoUrl: "https://github.com/example/repo",
     });
 
-    expect(getProjectSourceForProject(db, {
-      projectId: project.id,
-      sourceId: source.id,
-    })?.id).toBe(source.id);
-    expect(getProjectSourceForProject(db, {
-      projectId: "proj_other",
-      sourceId: source.id,
-    })).toBeNull();
+    expect(
+      getProjectSourceForProject(db, {
+        projectId: project.id,
+        sourceId: source.id,
+      })?.id,
+    ).toBe(source.id);
+    expect(
+      getProjectSourceForProject(db, {
+        projectId: "proj_other",
+        sourceId: source.id,
+      }),
+    ).toBeNull();
     expect(countProjectSources(db, { projectId: project.id })).toBe(2);
   });
 
   it("rejects duplicate sources for the same project and host", () => {
     const { db, host, project } = setup();
 
-    expect(() => createProjectSource(db, noopNotifier, {
-      projectId: project.id,
-      type: "local_path",
-      hostId: host.id,
-      path: "/tmp/duplicate",
-    })).toThrow();
+    expect(() =>
+      createProjectSource(db, noopNotifier, {
+        projectId: project.id,
+        type: "local_path",
+        hostId: host.id,
+        path: "/tmp/duplicate",
+      }),
+    ).toThrow();
     expect(listProjectSources(db, project.id)).toHaveLength(1);
   });
 

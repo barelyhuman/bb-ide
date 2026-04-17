@@ -1,4 +1,7 @@
-export function toUserAttachmentImageSrc(pathOrUrl: string, projectId?: string): string {
+export function toUserAttachmentImageSrc(
+  pathOrUrl: string,
+  projectId?: string,
+): string {
   if (/^(https?:|data:|blob:)/i.test(pathOrUrl)) {
     return pathOrUrl;
   }

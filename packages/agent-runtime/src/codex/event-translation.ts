@@ -69,9 +69,13 @@ function buildUnhandledCodexEvent(
       rawEvent: args.rawEvent,
       rawType: args.rawType ?? description.kind,
       ...(args.threadId ? { threadId: args.threadId } : {}),
-      ...(args.providerThreadId ? { providerThreadId: args.providerThreadId } : {}),
+      ...(args.providerThreadId
+        ? { providerThreadId: args.providerThreadId }
+        : {}),
       ...(args.turnId ? { turnId: args.turnId } : {}),
-      ...(args.parentToolCallId ? { parentToolCallId: args.parentToolCallId } : {}),
+      ...(args.parentToolCallId
+        ? { parentToolCallId: args.parentToolCallId }
+        : {}),
     }),
   ];
 }
@@ -143,14 +147,16 @@ function extractDynamicToolCallResult(
     return undefined;
   }
 
-  const parts = contentItems.map((contentItem) => {
-    switch (contentItem.type) {
-      case "inputText":
-        return contentItem.text;
-      case "inputImage":
-        return `[image: ${contentItem.imageUrl}]`;
-    }
-  }).filter((part) => part.trim().length > 0);
+  const parts = contentItems
+    .map((contentItem) => {
+      switch (contentItem.type) {
+        case "inputText":
+          return contentItem.text;
+        case "inputImage":
+          return `[image: ${contentItem.imageUrl}]`;
+      }
+    })
+    .filter((part) => part.trim().length > 0);
 
   if (parts.length === 0) {
     return undefined;
@@ -219,20 +225,19 @@ function translateCodexItem(
         status: isStartedEvent ? "pending" : toItemStatus(parsedItem.status),
         approvalStatus: toApprovalStatus(parsedItem.status, eventMethod),
       };
-    case "mcpToolCall":
-      {
-        const toolArguments = toOptionalRecord(parsedItem.arguments);
-        return {
-          type: "toolCall",
-          id: parsedItem.id,
-          server: parsedItem.server,
-          tool: parsedItem.tool,
-          ...(toolArguments ? { arguments: toolArguments } : {}),
-          status: isStartedEvent ? "pending" : toItemStatus(parsedItem.status),
-          error: parsedItem.error?.message,
-          durationMs: parsedItem.durationMs ?? undefined,
-        };
-      }
+    case "mcpToolCall": {
+      const toolArguments = toOptionalRecord(parsedItem.arguments);
+      return {
+        type: "toolCall",
+        id: parsedItem.id,
+        server: parsedItem.server,
+        tool: parsedItem.tool,
+        ...(toolArguments ? { arguments: toolArguments } : {}),
+        status: isStartedEvent ? "pending" : toItemStatus(parsedItem.status),
+        error: parsedItem.error?.message,
+        durationMs: parsedItem.durationMs ?? undefined,
+      };
+    }
     case "dynamicToolCall": {
       const result = extractDynamicToolCallResult(parsedItem.contentItems);
       const toolArguments = toOptionalRecord(parsedItem.arguments);
@@ -257,7 +262,9 @@ function translateCodexItem(
           receiverThreadIds: parsedItem.receiverThreadIds,
           ...(parsedItem.prompt ? { prompt: parsedItem.prompt } : {}),
           ...(parsedItem.model ? { model: parsedItem.model } : {}),
-          ...(parsedItem.reasoningEffort ? { reasoningEffort: parsedItem.reasoningEffort } : {}),
+          ...(parsedItem.reasoningEffort
+            ? { reasoningEffort: parsedItem.reasoningEffort }
+            : {}),
         },
         status: isStartedEvent ? "pending" : toItemStatus(parsedItem.status),
         result: parsedItem.agentsStates,
@@ -292,7 +299,9 @@ function translateCodexItem(
   }
 }
 
-export function translateCodexEvent(event: ProviderRuntimeEvent): ThreadEvent[] {
+export function translateCodexEvent(
+  event: ProviderRuntimeEvent,
+): ThreadEvent[] {
   const envelope = codexBridgeEnvelopeSchema.safeParse(event);
   if (!envelope.success) {
     return [];
@@ -314,23 +323,27 @@ export function translateCodexEvent(event: ProviderRuntimeEvent): ThreadEvent[] 
   const handledEvent: CodexHandledEvent = parsed.data;
   switch (handledEvent.method) {
     case "turn/started":
-      return [{
-        type: "turn/started",
-        threadId: handledEvent.params.threadId,
-        providerThreadId: handledEvent.params.threadId,
-        turnId: handledEvent.params.turn.id,
-      }];
+      return [
+        {
+          type: "turn/started",
+          threadId: handledEvent.params.threadId,
+          providerThreadId: handledEvent.params.threadId,
+          turnId: handledEvent.params.turn.id,
+        },
+      ];
     case "turn/completed":
-      return [{
-        type: "turn/completed",
-        threadId: handledEvent.params.threadId,
-        providerThreadId: handledEvent.params.threadId,
-        turnId: handledEvent.params.turn.id,
-        status: toTurnStatus(handledEvent.params.turn.status),
-        ...(handledEvent.params.turn.error?.message
-          ? { error: { message: handledEvent.params.turn.error.message } }
-          : {}),
-      }];
+      return [
+        {
+          type: "turn/completed",
+          threadId: handledEvent.params.threadId,
+          providerThreadId: handledEvent.params.threadId,
+          turnId: handledEvent.params.turn.id,
+          status: toTurnStatus(handledEvent.params.turn.status),
+          ...(handledEvent.params.turn.error?.message
+            ? { error: { message: handledEvent.params.turn.error.message } }
+            : {}),
+        },
+      ];
     case "thread/started": {
       const events: ThreadEvent[] = [
         {
@@ -355,20 +368,24 @@ export function translateCodexEvent(event: ProviderRuntimeEvent): ThreadEvent[] 
     }
     case "thread/name/updated":
       return handledEvent.params.threadName
-        ? [{
-            type: "thread/name/updated",
-            threadId: handledEvent.params.threadId,
-            providerThreadId: handledEvent.params.threadId,
-            threadName: handledEvent.params.threadName,
-          }]
+        ? [
+            {
+              type: "thread/name/updated",
+              threadId: handledEvent.params.threadId,
+              providerThreadId: handledEvent.params.threadId,
+              threadName: handledEvent.params.threadName,
+            },
+          ]
         : [];
     case "thread/compacted":
-      return [{
-        type: "thread/compacted",
-        threadId: handledEvent.params.threadId,
-        providerThreadId: handledEvent.params.threadId,
-        turnId: handledEvent.params.turnId,
-      }];
+      return [
+        {
+          type: "thread/compacted",
+          threadId: handledEvent.params.threadId,
+          providerThreadId: handledEvent.params.threadId,
+          turnId: handledEvent.params.turnId,
+        },
+      ];
     case "item/started":
     case "item/completed": {
       const item = translateCodexItem(
@@ -384,164 +401,206 @@ export function translateCodexEvent(event: ProviderRuntimeEvent): ThreadEvent[] 
           turnId: handledEvent.params.turnId,
         });
       }
-      return [{
-        type: handledEvent.method,
-        threadId: handledEvent.params.threadId,
-        providerThreadId: handledEvent.params.threadId,
-        turnId: handledEvent.params.turnId,
-        item,
-      }];
+      return [
+        {
+          type: handledEvent.method,
+          threadId: handledEvent.params.threadId,
+          providerThreadId: handledEvent.params.threadId,
+          turnId: handledEvent.params.turnId,
+          item,
+        },
+      ];
     }
     case "item/agentMessage/delta":
-      return [{
-        type: "item/agentMessage/delta",
-        threadId: handledEvent.params.threadId,
-        providerThreadId: handledEvent.params.threadId,
-        turnId: handledEvent.params.turnId,
-        itemId: handledEvent.params.itemId,
-        delta: handledEvent.params.delta,
-      }];
-    case "item/commandExecution/outputDelta":
-      return [{
-        type: "item/commandExecution/outputDelta",
-        threadId: handledEvent.params.threadId,
-        providerThreadId: handledEvent.params.threadId,
-        turnId: handledEvent.params.turnId,
-        itemId: handledEvent.params.itemId,
-        delta: handledEvent.params.delta,
-      }];
-    case "item/fileChange/outputDelta":
-      return [{
-        type: "item/fileChange/outputDelta",
-        threadId: handledEvent.params.threadId,
-        providerThreadId: handledEvent.params.threadId,
-        turnId: handledEvent.params.turnId,
-        itemId: handledEvent.params.itemId,
-        delta: handledEvent.params.delta,
-      }];
-    case "item/reasoning/summaryTextDelta":
-      return [{
-        type: "item/reasoning/summaryTextDelta",
-        threadId: handledEvent.params.threadId,
-        providerThreadId: handledEvent.params.threadId,
-        turnId: handledEvent.params.turnId,
-        itemId: handledEvent.params.itemId,
-        delta: handledEvent.params.delta,
-      }];
-    case "item/reasoning/textDelta":
-      return [{
-        type: "item/reasoning/textDelta",
-        threadId: handledEvent.params.threadId,
-        providerThreadId: handledEvent.params.threadId,
-        turnId: handledEvent.params.turnId,
-        itemId: handledEvent.params.itemId,
-        delta: handledEvent.params.delta,
-      }];
-    case "item/plan/delta":
-      return [{
-        type: "item/plan/delta",
-        threadId: handledEvent.params.threadId,
-        providerThreadId: handledEvent.params.threadId,
-        turnId: handledEvent.params.turnId,
-        itemId: handledEvent.params.itemId,
-        delta: handledEvent.params.delta,
-      }];
-    case "item/mcpToolCall/progress":
-      return [{
-        type: "item/toolCall/progress",
-        threadId: handledEvent.params.threadId,
-        providerThreadId: handledEvent.params.threadId,
-        turnId: handledEvent.params.turnId,
-        itemId: handledEvent.params.itemId,
-        ...(handledEvent.params.message ? { message: handledEvent.params.message } : {}),
-      }];
-    case "thread/tokenUsage/updated":
-      return [{
-        type: "thread/tokenUsage/updated",
-        threadId: handledEvent.params.threadId,
-        providerThreadId: handledEvent.params.threadId,
-        turnId: handledEvent.params.turnId,
-        tokenUsage: {
-          total: {
-            totalTokens: handledEvent.params.tokenUsage.total.totalTokens,
-            inputTokens: handledEvent.params.tokenUsage.total.inputTokens,
-            cachedInputTokens: handledEvent.params.tokenUsage.total.cachedInputTokens,
-            outputTokens: handledEvent.params.tokenUsage.total.outputTokens,
-            reasoningOutputTokens: handledEvent.params.tokenUsage.total.reasoningOutputTokens,
-          },
-          last: {
-            totalTokens: handledEvent.params.tokenUsage.last.totalTokens,
-            inputTokens: handledEvent.params.tokenUsage.last.inputTokens,
-            cachedInputTokens: handledEvent.params.tokenUsage.last.cachedInputTokens,
-            outputTokens: handledEvent.params.tokenUsage.last.outputTokens,
-            reasoningOutputTokens: handledEvent.params.tokenUsage.last.reasoningOutputTokens,
-          },
-          modelContextWindow: handledEvent.params.tokenUsage.modelContextWindow,
+      return [
+        {
+          type: "item/agentMessage/delta",
+          threadId: handledEvent.params.threadId,
+          providerThreadId: handledEvent.params.threadId,
+          turnId: handledEvent.params.turnId,
+          itemId: handledEvent.params.itemId,
+          delta: handledEvent.params.delta,
         },
-      }, {
-        type: "thread/contextWindowUsage/updated",
-        threadId: handledEvent.params.threadId,
-        providerThreadId: handledEvent.params.threadId,
-        turnId: handledEvent.params.turnId,
-        contextWindowUsage: toCodexContextWindowUsage(
-          handledEvent.params.tokenUsage.last,
-          handledEvent.params.tokenUsage.modelContextWindow,
-        ),
-      }];
+      ];
+    case "item/commandExecution/outputDelta":
+      return [
+        {
+          type: "item/commandExecution/outputDelta",
+          threadId: handledEvent.params.threadId,
+          providerThreadId: handledEvent.params.threadId,
+          turnId: handledEvent.params.turnId,
+          itemId: handledEvent.params.itemId,
+          delta: handledEvent.params.delta,
+        },
+      ];
+    case "item/fileChange/outputDelta":
+      return [
+        {
+          type: "item/fileChange/outputDelta",
+          threadId: handledEvent.params.threadId,
+          providerThreadId: handledEvent.params.threadId,
+          turnId: handledEvent.params.turnId,
+          itemId: handledEvent.params.itemId,
+          delta: handledEvent.params.delta,
+        },
+      ];
+    case "item/reasoning/summaryTextDelta":
+      return [
+        {
+          type: "item/reasoning/summaryTextDelta",
+          threadId: handledEvent.params.threadId,
+          providerThreadId: handledEvent.params.threadId,
+          turnId: handledEvent.params.turnId,
+          itemId: handledEvent.params.itemId,
+          delta: handledEvent.params.delta,
+        },
+      ];
+    case "item/reasoning/textDelta":
+      return [
+        {
+          type: "item/reasoning/textDelta",
+          threadId: handledEvent.params.threadId,
+          providerThreadId: handledEvent.params.threadId,
+          turnId: handledEvent.params.turnId,
+          itemId: handledEvent.params.itemId,
+          delta: handledEvent.params.delta,
+        },
+      ];
+    case "item/plan/delta":
+      return [
+        {
+          type: "item/plan/delta",
+          threadId: handledEvent.params.threadId,
+          providerThreadId: handledEvent.params.threadId,
+          turnId: handledEvent.params.turnId,
+          itemId: handledEvent.params.itemId,
+          delta: handledEvent.params.delta,
+        },
+      ];
+    case "item/mcpToolCall/progress":
+      return [
+        {
+          type: "item/toolCall/progress",
+          threadId: handledEvent.params.threadId,
+          providerThreadId: handledEvent.params.threadId,
+          turnId: handledEvent.params.turnId,
+          itemId: handledEvent.params.itemId,
+          ...(handledEvent.params.message
+            ? { message: handledEvent.params.message }
+            : {}),
+        },
+      ];
+    case "thread/tokenUsage/updated":
+      return [
+        {
+          type: "thread/tokenUsage/updated",
+          threadId: handledEvent.params.threadId,
+          providerThreadId: handledEvent.params.threadId,
+          turnId: handledEvent.params.turnId,
+          tokenUsage: {
+            total: {
+              totalTokens: handledEvent.params.tokenUsage.total.totalTokens,
+              inputTokens: handledEvent.params.tokenUsage.total.inputTokens,
+              cachedInputTokens:
+                handledEvent.params.tokenUsage.total.cachedInputTokens,
+              outputTokens: handledEvent.params.tokenUsage.total.outputTokens,
+              reasoningOutputTokens:
+                handledEvent.params.tokenUsage.total.reasoningOutputTokens,
+            },
+            last: {
+              totalTokens: handledEvent.params.tokenUsage.last.totalTokens,
+              inputTokens: handledEvent.params.tokenUsage.last.inputTokens,
+              cachedInputTokens:
+                handledEvent.params.tokenUsage.last.cachedInputTokens,
+              outputTokens: handledEvent.params.tokenUsage.last.outputTokens,
+              reasoningOutputTokens:
+                handledEvent.params.tokenUsage.last.reasoningOutputTokens,
+            },
+            modelContextWindow:
+              handledEvent.params.tokenUsage.modelContextWindow,
+          },
+        },
+        {
+          type: "thread/contextWindowUsage/updated",
+          threadId: handledEvent.params.threadId,
+          providerThreadId: handledEvent.params.threadId,
+          turnId: handledEvent.params.turnId,
+          contextWindowUsage: toCodexContextWindowUsage(
+            handledEvent.params.tokenUsage.last,
+            handledEvent.params.tokenUsage.modelContextWindow,
+          ),
+        },
+      ];
     case "turn/plan/updated":
-      return [{
-        type: "turn/plan/updated",
-        threadId: handledEvent.params.threadId,
-        providerThreadId: handledEvent.params.threadId,
-        turnId: handledEvent.params.turnId,
-        plan: handledEvent.params.plan.map((step) => ({
-          step: step.step,
-          status: step.status === "inProgress" ? "active" : step.status,
-        })),
-        ...(handledEvent.params.explanation
-          ? { explanation: handledEvent.params.explanation }
-          : {}),
-      }];
+      return [
+        {
+          type: "turn/plan/updated",
+          threadId: handledEvent.params.threadId,
+          providerThreadId: handledEvent.params.threadId,
+          turnId: handledEvent.params.turnId,
+          plan: handledEvent.params.plan.map((step) => ({
+            step: step.step,
+            status: step.status === "inProgress" ? "active" : step.status,
+          })),
+          ...(handledEvent.params.explanation
+            ? { explanation: handledEvent.params.explanation }
+            : {}),
+        },
+      ];
     case "turn/diff/updated":
-      return [{
-        type: "turn/diff/updated",
-        threadId: handledEvent.params.threadId,
-        providerThreadId: handledEvent.params.threadId,
-        turnId: handledEvent.params.turnId,
-        diff: handledEvent.params.diff,
-      }];
+      return [
+        {
+          type: "turn/diff/updated",
+          threadId: handledEvent.params.threadId,
+          providerThreadId: handledEvent.params.threadId,
+          turnId: handledEvent.params.turnId,
+          diff: handledEvent.params.diff,
+        },
+      ];
     case "error":
-      return [{
-        type: "error",
-        threadId: handledEvent.params.threadId,
-        providerThreadId: handledEvent.params.threadId,
-        ...(handledEvent.params.turnId ? { turnId: handledEvent.params.turnId } : {}),
-        message: "Provider error",
-        detail: handledEvent.params.error.additionalDetails
-          ? `${handledEvent.params.error.message}\n${handledEvent.params.error.additionalDetails}`
-          : handledEvent.params.error.message,
-        ...(handledEvent.params.willRetry !== undefined
-          ? { willRetry: handledEvent.params.willRetry }
-          : {}),
-      }];
+      return [
+        {
+          type: "error",
+          threadId: handledEvent.params.threadId,
+          providerThreadId: handledEvent.params.threadId,
+          ...(handledEvent.params.turnId
+            ? { turnId: handledEvent.params.turnId }
+            : {}),
+          message: "Provider error",
+          detail: handledEvent.params.error.additionalDetails
+            ? `${handledEvent.params.error.message}\n${handledEvent.params.error.additionalDetails}`
+            : handledEvent.params.error.message,
+          ...(handledEvent.params.willRetry !== undefined
+            ? { willRetry: handledEvent.params.willRetry }
+            : {}),
+        },
+      ];
     case "deprecationNotice":
-      return [{
-        type: "warning",
-        threadId: "",
-        providerThreadId: "",
-        category: "deprecation",
-        summary: handledEvent.params.summary,
-        ...(handledEvent.params.details ? { details: handledEvent.params.details } : {}),
-      }];
+      return [
+        {
+          type: "warning",
+          threadId: "",
+          providerThreadId: "",
+          category: "deprecation",
+          summary: handledEvent.params.summary,
+          ...(handledEvent.params.details
+            ? { details: handledEvent.params.details }
+            : {}),
+        },
+      ];
     case "configWarning":
-      return [{
-        type: "warning",
-        threadId: "",
-        providerThreadId: "",
-        category: "config",
-        summary: handledEvent.params.summary,
-        ...(handledEvent.params.details ? { details: handledEvent.params.details } : {}),
-      }];
+      return [
+        {
+          type: "warning",
+          threadId: "",
+          providerThreadId: "",
+          category: "config",
+          summary: handledEvent.params.summary,
+          ...(handledEvent.params.details
+            ? { details: handledEvent.params.details }
+            : {}),
+        },
+      ];
     default:
       return assertNever(handledEvent);
   }

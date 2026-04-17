@@ -52,12 +52,9 @@ export async function runManagedEnvironmentArchiveCleanupSweep(
 ): Promise<void> {
   for (const environment of sweepManagedEnvironments(deps.db)) {
     try {
-      await evaluateCleanup(
-        deps,
-        {
-          environmentId: environment.id,
-        },
-      );
+      await evaluateCleanup(deps, {
+        environmentId: environment.id,
+      });
     } catch (error) {
       deps.logger.warn(
         {

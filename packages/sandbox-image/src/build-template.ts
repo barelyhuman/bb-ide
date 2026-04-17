@@ -1,7 +1,4 @@
-import {
-  Template,
-  defaultBuildLogger,
-} from "e2b";
+import { Template, defaultBuildLogger } from "e2b";
 import {
   SANDBOX_IMAGE_BUILD_CPU_COUNT,
   SANDBOX_IMAGE_BUILD_MEMORY_MB,

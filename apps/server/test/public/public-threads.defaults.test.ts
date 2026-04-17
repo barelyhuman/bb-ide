@@ -20,19 +20,13 @@ import {
   seedThread,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
-import {
-  beforeEach,
-  describe,
-  expect,
-  it,
-} from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 
 describe("public thread default routes", () => {
   beforeEach(() => {
     provisionHostMock.mockReset();
     resumeHostMock.mockReset();
   });
-
 
   it("remembers resolved execution options after standard thread creation", async () => {
     const harness = await createTestAppHarness();
@@ -61,7 +55,9 @@ describe("public thread default routes", () => {
           serviceTier: "fast",
           reasoningLevel: "high",
           permissionMode: "workspace-write",
-          input: [{ type: "text", text: "Create with explicit execution options" }],
+          input: [
+            { type: "text", text: "Create with explicit execution options" },
+          ],
           environment: {
             type: "reuse",
             environmentId: environment.id,
@@ -103,7 +99,6 @@ describe("public thread default routes", () => {
     }
   });
 
-
   it("does not remember project defaults after CLI-origin thread creation", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -131,7 +126,9 @@ describe("public thread default routes", () => {
           serviceTier: "fast",
           reasoningLevel: "high",
           permissionMode: "workspace-write",
-          input: [{ type: "text", text: "Create without mutating project defaults" }],
+          input: [
+            { type: "text", text: "Create without mutating project defaults" },
+          ],
           environment: {
             type: "reuse",
             environmentId: environment.id,
@@ -150,7 +147,6 @@ describe("public thread default routes", () => {
       await harness.cleanup();
     }
   });
-
 
   it("inherits the remembered provider and execution defaults when thread creation omits them", async () => {
     const harness = await createTestAppHarness();
@@ -214,7 +210,6 @@ describe("public thread default routes", () => {
     }
   });
 
-
   it("fails thread creation without a model when the explicit provider does not match the remembered provider", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -248,7 +243,9 @@ describe("public thread default routes", () => {
           origin: "app",
           projectId: project.id,
           providerId: "claude-code",
-          input: [{ type: "text", text: "Create with mismatched provider defaults" }],
+          input: [
+            { type: "text", text: "Create with mismatched provider defaults" },
+          ],
           environment: {
             type: "reuse",
             environmentId: environment.id,
@@ -265,7 +262,6 @@ describe("public thread default routes", () => {
       await harness.cleanup();
     }
   });
-
 
   it("fails thread creation without a model when the project has no stored defaults for the provider", async () => {
     const harness = await createTestAppHarness();
@@ -303,12 +299,13 @@ describe("public thread default routes", () => {
         code: "invalid_request",
         message: expect.stringContaining("has no stored execution defaults"),
       });
-      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(0);
+      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(
+        0,
+      );
     } finally {
       await harness.cleanup();
     }
   });
-
 
   it("does not overwrite project execution defaults after a standard thread send", async () => {
     const harness = await createTestAppHarness();
@@ -366,8 +363,7 @@ describe("public thread default routes", () => {
       const queuedRun = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "turn.submit" &&
-          command.threadId === thread.id,
+          command.type === "turn.submit" && command.threadId === thread.id,
       );
       expect(queuedRun.command).toMatchObject({
         options: {

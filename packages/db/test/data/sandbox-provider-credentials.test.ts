@@ -71,15 +71,23 @@ describe("sandbox provider credentials", () => {
       updatedAt: 1_700_000_200_100,
     });
 
-    expect(getSandboxProviderCredentialByProviderId(db, "claude-code")).toMatchObject({
+    expect(
+      getSandboxProviderCredentialByProviderId(db, "claude-code"),
+    ).toMatchObject({
       encryptedAccessToken: "access-claude",
       encryptedRefreshToken: "refresh-claude",
       encryptedIdToken: null,
       encryptedMetadata: "metadata-claude",
       providerId: "claude-code",
     });
-    expect(deleteSandboxProviderCredentialByProviderId(db, "claude-code")).toBe(true);
-    expect(getSandboxProviderCredentialByProviderId(db, "claude-code")).toBeNull();
-    expect(deleteSandboxProviderCredentialByProviderId(db, "claude-code")).toBe(false);
+    expect(deleteSandboxProviderCredentialByProviderId(db, "claude-code")).toBe(
+      true,
+    );
+    expect(
+      getSandboxProviderCredentialByProviderId(db, "claude-code"),
+    ).toBeNull();
+    expect(deleteSandboxProviderCredentialByProviderId(db, "claude-code")).toBe(
+      false,
+    );
   });
 });

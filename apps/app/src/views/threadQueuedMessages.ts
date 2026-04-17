@@ -1,6 +1,4 @@
-import {
-  type PromptInput,
-} from "@bb/domain";
+import { type PromptInput } from "@bb/domain";
 import { type PromptDraftState } from "@/lib/prompt-draft";
 
 const QUEUED_FOLLOW_UP_PREVIEW_MAX_CHARS = 220;

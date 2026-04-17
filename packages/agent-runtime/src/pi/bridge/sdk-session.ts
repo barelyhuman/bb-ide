@@ -29,12 +29,10 @@ type PiSessionEventHandler = (event: AgentSessionEvent) => void;
 type PiSessionDoneHandler = (error?: unknown) => void;
 type AppendSystemPromptOverride = (base: string[]) => string[];
 
-function assertExclusivePiPromptOverrides(
-  options: PiSdkSessionOptions,
-): void {
+function assertExclusivePiPromptOverrides(options: PiSdkSessionOptions): void {
   if (
-    options.systemPrompt !== undefined
-    && options.appendSystemPrompt !== undefined
+    options.systemPrompt !== undefined &&
+    options.appendSystemPrompt !== undefined
   ) {
     throw new Error(
       "Pi sessions accept either systemPrompt or appendSystemPrompt, not both",
@@ -261,7 +259,11 @@ export class PiSdkSession {
   }
 
   private ensureCustomToolsActive(): void {
-    if (!this.session || !this.options.customTools || this.options.customTools.length === 0) {
+    if (
+      !this.session ||
+      !this.options.customTools ||
+      this.options.customTools.length === 0
+    ) {
       return;
     }
 
@@ -284,7 +286,9 @@ export class PiSdkSession {
  * Resolve a model string like "anthropic/claude-sonnet-4-20250514" to a
  * Pi Model object. Returns undefined if the model can't be resolved.
  */
-function resolveModel(modelStr: string): ReturnType<typeof getModel> | undefined {
+function resolveModel(
+  modelStr: string,
+): ReturnType<typeof getModel> | undefined {
   // Parse "provider/model-id" format
   const slashIdx = modelStr.indexOf("/");
   if (slashIdx === -1) return undefined;

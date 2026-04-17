@@ -101,8 +101,12 @@ export interface ServerClient {
   reportCommandResult(
     report: Omit<HostDaemonCommandResultReport, "sessionId">,
   ): Promise<void>;
-  postEnvironmentChange(args: HostDaemonEnvironmentChangePayload): Promise<void>;
-  postEvents(events: HostDaemonEventEnvelope[]): Promise<Record<string, number>>;
+  postEnvironmentChange(
+    args: HostDaemonEnvironmentChangePayload,
+  ): Promise<void>;
+  postEvents(
+    events: HostDaemonEventEnvelope[],
+  ): Promise<Record<string, number>>;
   callTool(request: ToolCallRequest): Promise<HostDaemonToolCallResponse>;
   registerInteractiveRequest(
     request: PendingInteractionCreate,
@@ -129,9 +133,11 @@ function usesSecureRuntimeMaterialTransport(serverUrl: string): boolean {
     return true;
   }
 
-  return parsed.hostname === "127.0.0.1"
-    || parsed.hostname === "localhost"
-    || parsed.hostname === "::1";
+  return (
+    parsed.hostname === "127.0.0.1" ||
+    parsed.hostname === "localhost" ||
+    parsed.hostname === "::1"
+  );
 }
 
 export function createServerClient(
@@ -224,7 +230,9 @@ export function createServerClient(
   }
 
   return {
-    async openSession(args: OpenSessionArgs): Promise<HostDaemonSessionOpenResponse> {
+    async openSession(
+      args: OpenSessionArgs,
+    ): Promise<HostDaemonSessionOpenResponse> {
       const payload = hostDaemonSessionOpenRequestSchema.parse({
         hostId: args.hostId,
         instanceId: args.instanceId,
@@ -415,7 +423,8 @@ export function createServerClient(
       }
 
       const json = await response.json();
-      return hostDaemonEventBatchResponseSchema.parse(json).threadHighWaterMarks;
+      return hostDaemonEventBatchResponseSchema.parse(json)
+        .threadHighWaterMarks;
     },
 
     async callTool(
@@ -485,7 +494,9 @@ export function createServerClient(
       );
     },
 
-    async interruptInteractiveRequests(args): Promise<HostDaemonInteractiveInterruptResponse> {
+    async interruptInteractiveRequests(
+      args,
+    ): Promise<HostDaemonInteractiveInterruptResponse> {
       const payload = hostDaemonInteractiveInterruptRequestSchema.parse({
         sessionId: requireSessionId(),
         providerId: args.providerId,

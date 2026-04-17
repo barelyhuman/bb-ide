@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { getThreadEvents, getThreadOutput, sendTextMessage } from "../../helpers/api.js";
+import {
+  getThreadEvents,
+  getThreadOutput,
+  sendTextMessage,
+} from "../../helpers/api.js";
 import {
   waitForHostConnected,
   waitForHostDisconnected,
@@ -51,7 +55,12 @@ describe.sequential("fake provider active crash recovery integration", () => {
       await sendTextMessage(harness.api, thread.id, {
         text: "recovered after crash",
       });
-      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+      await waitForThreadStatus(
+        harness.api,
+        thread.id,
+        "idle",
+        TURN_TIMEOUT_MS,
+      );
 
       const events = await getThreadEvents(harness.api, thread.id);
       expect(

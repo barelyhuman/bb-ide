@@ -70,7 +70,9 @@ export function buildGitDiffTarget(
 
 export function buildGitDiffSelectionOptions(
   diffCommits: readonly WorkspaceCommitSummary[],
-  options: { hasUncommittedChanges: boolean } = { hasUncommittedChanges: false },
+  options: { hasUncommittedChanges: boolean } = {
+    hasUncommittedChanges: false,
+  },
 ): GitDiffSelectionOption[] {
   const allChangesOption = { value: "all", label: "All changes" };
   const uncommittedOption = {
@@ -83,7 +85,8 @@ export function buildGitDiffSelectionOptions(
     monoPrefix: commit.shortSha,
   }));
 
-  const hasMergeBaseContext = diffCommits.length > 0 || options.hasUncommittedChanges;
+  const hasMergeBaseContext =
+    diffCommits.length > 0 || options.hasUncommittedChanges;
   if (!hasMergeBaseContext) {
     return [allChangesOption];
   }
@@ -98,7 +101,9 @@ export function buildGitDiffSelectionOptions(
 export function shouldResetSelectedGitDiffCommit(
   selectedGitDiffCommitSha: string | null,
   diffCommits: readonly WorkspaceCommitSummary[],
-  options: { hasUncommittedChanges: boolean } = { hasUncommittedChanges: false },
+  options: { hasUncommittedChanges: boolean } = {
+    hasUncommittedChanges: false,
+  },
 ): boolean {
   if (!selectedGitDiffCommitSha) {
     return false;
@@ -109,9 +114,7 @@ export function shouldResetSelectedGitDiffCommit(
   return !diffCommits.some((commit) => commit.sha === selectedGitDiffCommitSha);
 }
 
-export function buildGitDiffStatsLabel(
-  stats: GitDiffStatsSummary,
-): string {
+export function buildGitDiffStatsLabel(stats: GitDiffStatsSummary): string {
   if (stats.files === 0 && stats.additions === 0 && stats.deletions === 0) {
     return "No changes";
   }
@@ -129,11 +132,9 @@ export function resolveGitDiffPreparationState(
     hasCurrentGitDiff && params.lastParsedGitDiffKey !== currentGitDiffKey;
   const isPreparingGitDiff =
     !hasParsedGitDiffFiles &&
-    (
-      params.isGitDiffLoading ||
+    (params.isGitDiffLoading ||
       params.isParsingGitDiffFiles ||
-      isAwaitingCurrentGitDiffParse
-    );
+      isAwaitingCurrentGitDiffParse);
 
   return {
     currentGitDiffKey,

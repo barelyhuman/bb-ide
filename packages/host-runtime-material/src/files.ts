@@ -27,10 +27,7 @@ function expandRuntimeMaterialPath(rawPath: string): string {
   const homeDir = path.resolve(os.homedir());
   const resolvedPath = path.resolve(homeDir, relativePath);
   const relativeToHome = path.relative(homeDir, resolvedPath);
-  if (
-    relativeToHome.startsWith("..")
-    || path.isAbsolute(relativeToHome)
-  ) {
+  if (relativeToHome.startsWith("..") || path.isAbsolute(relativeToHome)) {
     throw new Error(
       `Managed runtime material file path escapes the home directory: ${rawPath}`,
     );
@@ -56,7 +53,9 @@ function resolveManagedFiles(
   return files;
 }
 
-async function writeManagedFile(file: HostRuntimeMaterialManagedFile): Promise<void> {
+async function writeManagedFile(
+  file: HostRuntimeMaterialManagedFile,
+): Promise<void> {
   const destinationPath = expandRuntimeMaterialPath(file.path);
   await fs.mkdir(path.dirname(destinationPath), {
     recursive: true,
@@ -92,9 +91,7 @@ export async function replaceManagedRuntimeFiles(args: {
     (resolvedPath) => !nextFiles.has(resolvedPath),
   );
   await Promise.all(
-    removedPaths.map((resolvedPath) =>
-      fs.rm(resolvedPath, { force: true }),
-    ),
+    removedPaths.map((resolvedPath) => fs.rm(resolvedPath, { force: true })),
   );
 }
 

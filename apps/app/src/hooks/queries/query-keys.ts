@@ -6,17 +6,21 @@ export const PROJECTS_QUERY_KEY = "projects";
 export const PROJECT_FILES_QUERY_KEY = "projectFiles";
 export const THREADS_QUERY_KEY = "threads";
 export const THREAD_QUERY_KEY = "thread";
-export const THREAD_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY = "threadDefaultExecutionOptions";
+export const THREAD_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY =
+  "threadDefaultExecutionOptions";
 export const THREAD_DRAFTS_QUERY_KEY = "threadDrafts";
-export const THREAD_PENDING_INTERACTIONS_QUERY_KEY = "threadPendingInteractions";
+export const THREAD_PENDING_INTERACTIONS_QUERY_KEY =
+  "threadPendingInteractions";
 export const THREAD_STORAGE_FILES_QUERY_KEY = "threadStorageFiles";
 export const THREAD_STORAGE_FILE_PREVIEW_QUERY_KEY = "threadStorageFilePreview";
 export const ENVIRONMENT_QUERY_KEY = "environment";
 export const ENVIRONMENT_WORK_STATUS_QUERY_KEY = "environmentWorkStatus";
 export const ENVIRONMENT_PROMOTION_QUERY_KEY = "environmentPromotion";
-export const ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY = "environmentMergeBaseBranches";
+export const ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY =
+  "environmentMergeBaseBranches";
 export const ENVIRONMENT_GIT_DIFF_QUERY_KEY = "environmentGitDiff";
-export const PROJECT_SOURCE_WORKSPACE_STATUS_QUERY_KEY = "projectSourceWorkspaceStatus";
+export const PROJECT_SOURCE_WORKSPACE_STATUS_QUERY_KEY =
+  "projectSourceWorkspaceStatus";
 export const THREAD_TIMELINE_QUERY_KEY = "threadTimeline";
 export const AVAILABLE_MODELS_QUERY_KEY = "availableModels";
 export const SYSTEM_PROVIDERS_QUERY_KEY = "systemProviders";
@@ -55,18 +59,27 @@ export type ProjectSourceWorkspaceStatusQueryKey = readonly [
   string | null | undefined,
   string | null | undefined,
 ];
-export type ProjectSourceWorkspaceStatusQueryKeyPrefix =
-  readonly [typeof PROJECT_SOURCE_WORKSPACE_STATUS_QUERY_KEY];
+export type ProjectSourceWorkspaceStatusQueryKeyPrefix = readonly [
+  typeof PROJECT_SOURCE_WORKSPACE_STATUS_QUERY_KEY,
+];
 export type ThreadsQueryKey = readonly [typeof THREADS_QUERY_KEY];
-export type ThreadListQueryKey = readonly [typeof THREADS_QUERY_KEY, ThreadListQueryFilters?];
+export type ThreadListQueryKey = readonly [
+  typeof THREADS_QUERY_KEY,
+  ThreadListQueryFilters?,
+];
 export type ThreadQueryKeyPrefix = readonly [typeof THREAD_QUERY_KEY];
 export type ThreadQueryKey = readonly [typeof THREAD_QUERY_KEY, string];
 export type ThreadDefaultExecutionOptionsQueryKey = readonly [
   typeof THREAD_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY,
   string,
 ];
-export type ThreadDraftsQueryKeyPrefix = readonly [typeof THREAD_DRAFTS_QUERY_KEY];
-export type ThreadDraftsQueryKey = readonly [typeof THREAD_DRAFTS_QUERY_KEY, string];
+export type ThreadDraftsQueryKeyPrefix = readonly [
+  typeof THREAD_DRAFTS_QUERY_KEY,
+];
+export type ThreadDraftsQueryKey = readonly [
+  typeof THREAD_DRAFTS_QUERY_KEY,
+  string,
+];
 export type ThreadPendingInteractionsQueryKeyPrefix = readonly [
   typeof THREAD_PENDING_INTERACTIONS_QUERY_KEY,
 ];
@@ -74,7 +87,10 @@ export type ThreadPendingInteractionsQueryKey = readonly [
   typeof THREAD_PENDING_INTERACTIONS_QUERY_KEY,
   string,
 ];
-export type ThreadStorageFilesQueryKey = readonly [typeof THREAD_STORAGE_FILES_QUERY_KEY, string];
+export type ThreadStorageFilesQueryKey = readonly [
+  typeof THREAD_STORAGE_FILES_QUERY_KEY,
+  string,
+];
 export type ThreadStorageFilePreviewQueryKey = readonly [
   typeof THREAD_STORAGE_FILE_PREVIEW_QUERY_KEY,
   string,
@@ -84,7 +100,10 @@ export type ThreadStorageFilePreviewQueryKeyPrefix = readonly [
   typeof THREAD_STORAGE_FILE_PREVIEW_QUERY_KEY,
   string,
 ];
-export type EnvironmentQueryKey = readonly [typeof ENVIRONMENT_QUERY_KEY, string | null | undefined];
+export type EnvironmentQueryKey = readonly [
+  typeof ENVIRONMENT_QUERY_KEY,
+  string | null | undefined,
+];
 export type EnvironmentWorkStatusQueryKey = readonly [
   typeof ENVIRONMENT_WORK_STATUS_QUERY_KEY,
   string | null | undefined,
@@ -119,7 +138,9 @@ export type ThreadTimelineQueryKeyPrefix = readonly [
   typeof THREAD_TIMELINE_QUERY_KEY,
   string,
 ];
-export type AllThreadTimelineQueryKeyPrefix = readonly [typeof THREAD_TIMELINE_QUERY_KEY];
+export type AllThreadTimelineQueryKeyPrefix = readonly [
+  typeof THREAD_TIMELINE_QUERY_KEY,
+];
 export type EnvironmentGitDiffQueryKey = readonly [
   typeof ENVIRONMENT_GIT_DIFF_QUERY_KEY,
   string,
@@ -138,16 +159,27 @@ export type AvailableModelsQueryKey = readonly [
 export type AllAvailableModelsQueryKeyPrefix = readonly [
   typeof AVAILABLE_MODELS_QUERY_KEY,
 ];
-export type SystemProvidersQueryKey = readonly [typeof SYSTEM_PROVIDERS_QUERY_KEY];
-export type SandboxBackendsQueryKey = readonly [typeof SANDBOX_BACKENDS_QUERY_KEY];
-export type CloudAuthSettingsQueryKey = readonly [typeof CLOUD_AUTH_SETTINGS_QUERY_KEY];
+export type SystemProvidersQueryKey = readonly [
+  typeof SYSTEM_PROVIDERS_QUERY_KEY,
+];
+export type SandboxBackendsQueryKey = readonly [
+  typeof SANDBOX_BACKENDS_QUERY_KEY,
+];
+export type CloudAuthSettingsQueryKey = readonly [
+  typeof CLOUD_AUTH_SETTINGS_QUERY_KEY,
+];
 export type CloudAuthAttemptId = string | null;
 export type CloudAuthAttemptQueryKey = readonly [
   typeof CLOUD_AUTH_ATTEMPT_QUERY_KEY,
   CloudAuthAttemptId,
 ];
-export type SandboxEnvVarsQueryKey = readonly [typeof SANDBOX_ENV_VARS_QUERY_KEY];
-export type GithubReposQueryKey = readonly [typeof GITHUB_REPOS_QUERY_KEY, string];
+export type SandboxEnvVarsQueryKey = readonly [
+  typeof SANDBOX_ENV_VARS_QUERY_KEY,
+];
+export type GithubReposQueryKey = readonly [
+  typeof GITHUB_REPOS_QUERY_KEY,
+  string,
+];
 export type StatusQueryKey = readonly [typeof STATUS_QUERY_KEY];
 export type LocalPathExistenceQueryKey = readonly [
   typeof LOCAL_PATH_EXISTENCE_QUERY_KEY,
@@ -162,9 +194,7 @@ export function hostsQueryKey(): HostsQueryKey {
   return [HOSTS_QUERY_KEY];
 }
 
-export function hostQueryKey(
-  hostId: HostQueryId,
-): HostQueryKey {
+export function hostQueryKey(hostId: HostQueryId): HostQueryKey {
   return [HOST_QUERY_KEY, hostId];
 }
 
@@ -197,8 +227,7 @@ export function projectSourceWorkspaceStatusQueryKey(
   return [PROJECT_SOURCE_WORKSPACE_STATUS_QUERY_KEY, projectId, sourceId];
 }
 
-export function projectSourceWorkspaceStatusQueryKeyPrefix():
-  ProjectSourceWorkspaceStatusQueryKeyPrefix {
+export function projectSourceWorkspaceStatusQueryKeyPrefix(): ProjectSourceWorkspaceStatusQueryKeyPrefix {
   return [PROJECT_SOURCE_WORKSPACE_STATUS_QUERY_KEY];
 }
 
@@ -206,7 +235,9 @@ export function threadsQueryKey(): ThreadsQueryKey {
   return [THREADS_QUERY_KEY];
 }
 
-export function threadListQueryKey(filters?: ThreadListQueryFilters): ThreadListQueryKey {
+export function threadListQueryKey(
+  filters?: ThreadListQueryFilters,
+): ThreadListQueryKey {
   return filters ? [THREADS_QUERY_KEY, filters] : [THREADS_QUERY_KEY];
 }
 
@@ -238,12 +269,13 @@ export function threadPendingInteractionsQueryKey(
   return [THREAD_PENDING_INTERACTIONS_QUERY_KEY, threadId];
 }
 
-export function allThreadPendingInteractionsQueryKeyPrefix():
-  ThreadPendingInteractionsQueryKeyPrefix {
+export function allThreadPendingInteractionsQueryKeyPrefix(): ThreadPendingInteractionsQueryKeyPrefix {
   return [THREAD_PENDING_INTERACTIONS_QUERY_KEY];
 }
 
-export function threadStorageFilesQueryKey(threadId: string): ThreadStorageFilesQueryKey {
+export function threadStorageFilesQueryKey(
+  threadId: string,
+): ThreadStorageFilesQueryKey {
   return [THREAD_STORAGE_FILES_QUERY_KEY, threadId];
 }
 

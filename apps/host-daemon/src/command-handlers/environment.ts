@@ -1,7 +1,13 @@
 import type { ProvisioningTranscriptEntry } from "@bb/domain";
-import type { HostDaemonCommandResult, environmentProvisionCommandSchema } from "@bb/host-daemon-contract";
+import type {
+  HostDaemonCommandResult,
+  environmentProvisionCommandSchema,
+} from "@bb/host-daemon-contract";
 import type { ProvisionWorkspaceArgs } from "@bb/host-workspace";
-import { type CommandDispatchOptions, type CommandOf } from "../command-dispatch-support.js";
+import {
+  type CommandDispatchOptions,
+  type CommandOf,
+} from "../command-dispatch-support.js";
 
 type ProvisionProgressCallback = (entry: ProvisioningTranscriptEntry) => void;
 type BuildOnProgressArgs = {
@@ -14,7 +20,8 @@ export async function provisionEnvironment(
   command: CommandOf<"environment.provision">,
   options: CommandDispatchOptions,
 ): Promise<HostDaemonCommandResult<"environment.provision">> {
-  const alreadyExists = options.runtimeManager.get(command.environmentId) != null;
+  const alreadyExists =
+    options.runtimeManager.get(command.environmentId) != null;
 
   // Seed event buffer so daemon-emitted sequences don't collide with server-side events
   if (command.initiator) {

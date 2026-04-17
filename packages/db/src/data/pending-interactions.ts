@@ -1,7 +1,5 @@
 import { and, desc, eq, getTableColumns, inArray } from "drizzle-orm";
-import type {
-  PendingInteractionStatus,
-} from "@bb/domain";
+import type { PendingInteractionStatus } from "@bb/domain";
 import type { DbConnection, DbTransaction } from "../connection.js";
 import { createPendingInteractionId } from "../ids.js";
 import {
@@ -106,11 +104,13 @@ function getPendingInteractionRecord(
   db: PendingInteractionReadConnection,
   id: string,
 ): PendingInteractionRow | null {
-  return db
-    .select()
-    .from(pendingInteractions)
-    .where(eq(pendingInteractions.id, id))
-    .get() ?? null;
+  return (
+    db
+      .select()
+      .from(pendingInteractions)
+      .where(eq(pendingInteractions.id, id))
+      .get() ?? null
+  );
 }
 
 function updatePendingInteractionTerminalState(
@@ -119,25 +119,29 @@ function updatePendingInteractionTerminalState(
 ): PendingInteractionRow | null {
   const now = Date.now();
 
-  return db
-    .update(pendingInteractions)
-    .set({
-      status: args.status,
-      resolution: args.resolution,
-      statusReason: args.statusReason,
-      resolvedAt: args.resolvedAt ?? now,
-      updatedAt: now,
-    })
-    .where(
-      and(
-        eq(pendingInteractions.id, args.id),
-        args.allowedCurrentStatuses
-          ? inArray(pendingInteractions.status, [...args.allowedCurrentStatuses])
-          : undefined,
-      ),
-    )
-    .returning()
-    .get() ?? null;
+  return (
+    db
+      .update(pendingInteractions)
+      .set({
+        status: args.status,
+        resolution: args.resolution,
+        statusReason: args.statusReason,
+        resolvedAt: args.resolvedAt ?? now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(pendingInteractions.id, args.id),
+          args.allowedCurrentStatuses
+            ? inArray(pendingInteractions.status, [
+                ...args.allowedCurrentStatuses,
+              ])
+            : undefined,
+        ),
+      )
+      .returning()
+      .get() ?? null
+  );
 }
 
 export function createPendingInteraction(
@@ -179,35 +183,39 @@ export function getPendingInteractionByProviderRequest(
   db: PendingInteractionReadConnection,
   args: PendingInteractionProviderRequestIdentity,
 ): PendingInteractionRow | null {
-  return db
-    .select()
-    .from(pendingInteractions)
-    .where(
-      and(
-        eq(pendingInteractions.providerId, args.providerId),
-        eq(pendingInteractions.providerThreadId, args.providerThreadId),
-        eq(pendingInteractions.providerRequestId, args.providerRequestId),
-        eq(pendingInteractions.sessionId, args.sessionId),
-      ),
-    )
-    .get() ?? null;
+  return (
+    db
+      .select()
+      .from(pendingInteractions)
+      .where(
+        and(
+          eq(pendingInteractions.providerId, args.providerId),
+          eq(pendingInteractions.providerThreadId, args.providerThreadId),
+          eq(pendingInteractions.providerRequestId, args.providerRequestId),
+          eq(pendingInteractions.sessionId, args.sessionId),
+        ),
+      )
+      .get() ?? null
+  );
 }
 
 export function getActivePendingInteractionForThread(
   db: PendingInteractionReadConnection,
   threadId: string,
 ): PendingInteractionRow | null {
-  return db
-    .select()
-    .from(pendingInteractions)
-    .where(
-      and(
-        eq(pendingInteractions.threadId, threadId),
-        inArray(pendingInteractions.status, ["pending", "resolving"]),
-      ),
-    )
-    .orderBy(desc(pendingInteractions.createdAt))
-    .get() ?? null;
+  return (
+    db
+      .select()
+      .from(pendingInteractions)
+      .where(
+        and(
+          eq(pendingInteractions.threadId, threadId),
+          inArray(pendingInteractions.status, ["pending", "resolving"]),
+        ),
+      )
+      .orderBy(desc(pendingInteractions.createdAt))
+      .get() ?? null
+  );
 }
 
 export function listPendingInteractionsByThread(
@@ -347,22 +355,24 @@ export function setPendingInteractionResolving(
 ): PendingInteractionRow | null {
   const now = Date.now();
 
-  return db
-    .update(pendingInteractions)
-    .set({
-      status: "resolving",
-      resolution: args.resolution,
-      statusReason: null,
-      updatedAt: now,
-    })
-    .where(
-      and(
-        eq(pendingInteractions.id, args.id),
-        eq(pendingInteractions.status, "pending"),
-      ),
-    )
-    .returning()
-    .get() ?? null;
+  return (
+    db
+      .update(pendingInteractions)
+      .set({
+        status: "resolving",
+        resolution: args.resolution,
+        statusReason: null,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(pendingInteractions.id, args.id),
+          eq(pendingInteractions.status, "pending"),
+        ),
+      )
+      .returning()
+      .get() ?? null
+  );
 }
 
 export function setPendingInteractionInterrupted(

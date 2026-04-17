@@ -35,10 +35,16 @@ function isReachableExternalServerUrl(externalUrl: string): boolean {
     return false;
   }
   if (ipVersion === 4) {
-    return !unreachableSandboxExternalUrlBlockList.check(normalizedHostname, "ipv4");
+    return !unreachableSandboxExternalUrlBlockList.check(
+      normalizedHostname,
+      "ipv4",
+    );
   }
   if (ipVersion === 6) {
-    return !unreachableSandboxExternalUrlBlockList.check(normalizedHostname, "ipv6");
+    return !unreachableSandboxExternalUrlBlockList.check(
+      normalizedHostname,
+      "ipv6",
+    );
   }
   return true;
 }
@@ -46,7 +52,10 @@ function isReachableExternalServerUrl(externalUrl: string): boolean {
 export function hasConfiguredReachableExternalServerUrl(
   config: ExternalServerUrlConfig,
 ): boolean {
-  return config.externalUrl !== undefined && isReachableExternalServerUrl(config.externalUrl);
+  return (
+    config.externalUrl !== undefined &&
+    isReachableExternalServerUrl(config.externalUrl)
+  );
 }
 
 export function requireReachableExternalServerUrl(

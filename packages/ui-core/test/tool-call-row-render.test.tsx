@@ -13,7 +13,9 @@ interface BuildToolCallMessageArgs {
   toolName?: string;
 }
 
-function buildToolCallMessage(args: BuildToolCallMessageArgs): ViewToolCallMessage {
+function buildToolCallMessage(
+  args: BuildToolCallMessageArgs,
+): ViewToolCallMessage {
   return {
     kind: "tool-call",
     id: "tool-1",

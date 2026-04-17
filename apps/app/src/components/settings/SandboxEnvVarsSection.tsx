@@ -46,7 +46,9 @@ export function SandboxEnvVarsSection({
   onSave,
   savePending,
 }: SandboxEnvVarsSectionProps) {
-  const [rows, setRows] = useState<EnvVarRow[]>(() => buildInitialRows(envVars));
+  const [rows, setRows] = useState<EnvVarRow[]>(() =>
+    buildInitialRows(envVars),
+  );
   const savedNamesRef = useRef(new Set(envVars.map((v) => v.name)));
 
   // Sync when server data changes (after save completes, etc.)
@@ -112,10 +114,11 @@ export function SandboxEnvVarsSection({
   }, [rows]);
 
   const hasErrors = useMemo(
-    () => rows.some((row) => {
-      const trimmed = row.name.trim();
-      return trimmed !== "" && getNameError(trimmed) !== null;
-    }),
+    () =>
+      rows.some((row) => {
+        const trimmed = row.name.trim();
+        return trimmed !== "" && getNameError(trimmed) !== null;
+      }),
     [rows],
   );
 
@@ -125,17 +128,19 @@ export function SandboxEnvVarsSection({
   );
 
   const hasIncompleteNew = useMemo(
-    () => rows.some((row) => {
-      const trimmed = row.name.trim();
-      if (trimmed === "" && row.value === "") {
-        return false;
-      }
-      return !savedNames.has(trimmed) && (trimmed === "" || row.value === "");
-    }),
+    () =>
+      rows.some((row) => {
+        const trimmed = row.name.trim();
+        if (trimmed === "" && row.value === "") {
+          return false;
+        }
+        return !savedNames.has(trimmed) && (trimmed === "" || row.value === "");
+      }),
     [rows, savedNames],
   );
 
-  const canSave = dirty && !hasErrors && !hasDuplicates && !hasIncompleteNew && !savePending;
+  const canSave =
+    dirty && !hasErrors && !hasDuplicates && !hasIncompleteNew && !savePending;
 
   function handleSave() {
     const toUpsert: EnvVarEntry[] = [];
@@ -167,7 +172,10 @@ export function SandboxEnvVarsSection({
   }
 
   function handleAddRow() {
-    setRows((current) => [...current, { id: nextRowId++, name: "", value: "" }]);
+    setRows((current) => [
+      ...current,
+      { id: nextRowId++, name: "", value: "" },
+    ]);
   }
 
   function handleRemoveRow(index: number) {
@@ -180,7 +188,11 @@ export function SandboxEnvVarsSection({
     );
   }
 
-  function handlePaste(index: number, field: "name" | "value", event: React.ClipboardEvent) {
+  function handlePaste(
+    index: number,
+    field: "name" | "value",
+    event: React.ClipboardEvent,
+  ) {
     const text = event.clipboardData.getData("text/plain");
     if (!looksLikeEnvContent(text)) {
       return;
@@ -200,10 +212,16 @@ export function SandboxEnvVarsSection({
 
       if (isEmptyRow) {
         updated[startIndex] = { id: targetRow.id, ...entries[0] };
-        const rest = entries.slice(1).map((e) => ({ id: nextRowId++, name: e.name, value: e.value }));
+        const rest = entries
+          .slice(1)
+          .map((e) => ({ id: nextRowId++, name: e.name, value: e.value }));
         updated.splice(startIndex + 1, 0, ...rest);
       } else {
-        const newRows = entries.map((e) => ({ id: nextRowId++, name: e.name, value: e.value }));
+        const newRows = entries.map((e) => ({
+          id: nextRowId++,
+          name: e.name,
+          value: e.value,
+        }));
         updated.splice(startIndex, 0, ...newRows);
       }
 
@@ -225,8 +243,8 @@ export function SandboxEnvVarsSection({
               const isSaved = savedNames.has(row.name.trim());
               const nameError = getNameError(row.name);
               const isDuplicate =
-                row.name.trim() !== ""
-                && (nameCounts.get(row.name.trim()) ?? 0) > 1;
+                row.name.trim() !== "" &&
+                (nameCounts.get(row.name.trim()) ?? 0) > 1;
 
               return (
                 <div key={row.id}>
@@ -247,7 +265,9 @@ export function SandboxEnvVarsSection({
                       type="password"
                       placeholder={isSaved ? "••••••••" : "Value"}
                       value={row.value}
-                      onChange={(e) => updateRow(index, "value", e.target.value)}
+                      onChange={(e) =>
+                        updateRow(index, "value", e.target.value)
+                      }
                       onPaste={(e) => handlePaste(index, "value", e)}
                     />
                     <Button
@@ -261,7 +281,9 @@ export function SandboxEnvVarsSection({
                   {nameError ? (
                     <p className="mt-1 text-xs text-destructive">{nameError}</p>
                   ) : isDuplicate ? (
-                    <p className="mt-1 text-xs text-destructive">Duplicate name</p>
+                    <p className="mt-1 text-xs text-destructive">
+                      Duplicate name
+                    </p>
                   ) : null}
                 </div>
               );
@@ -269,19 +291,11 @@ export function SandboxEnvVarsSection({
 
             <div className="flex items-center gap-2">
               {rows.length > 0 ? (
-                <Button
-                  size="sm"
-                  disabled={!canSave}
-                  onClick={handleSave}
-                >
+                <Button size="sm" disabled={!canSave} onClick={handleSave}>
                   Save changes
                 </Button>
               ) : null}
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleAddRow}
-              >
+              <Button size="sm" variant="outline" onClick={handleAddRow}>
                 Add environment variable
               </Button>
             </div>

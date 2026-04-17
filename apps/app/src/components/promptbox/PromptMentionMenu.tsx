@@ -71,8 +71,7 @@ export function PromptMentionMenu({
 
             if (item.kind === "thread") {
               primary = item.title || "Untitled thread";
-              typeLabel =
-                item.threadType === "manager" ? "Manager" : "Thread";
+              typeLabel = item.threadType === "manager" ? "Manager" : "Thread";
             } else {
               const { name, directory } = splitFilePath(item.path);
               primary = name;
@@ -92,7 +91,9 @@ export function PromptMentionMenu({
                 }}
                 className={cn(
                   "w-full rounded px-2 py-1.5 text-left text-xs",
-                  isSelected ? "bg-accent text-accent-foreground" : "hover:bg-accent/70",
+                  isSelected
+                    ? "bg-accent text-accent-foreground"
+                    : "hover:bg-accent/70",
                 )}
                 title={item.path}
               >

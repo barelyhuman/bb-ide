@@ -1,86 +1,79 @@
-import { Fragment, type ReactNode } from "react"
-import { useCallback, useEffect, useRef, useState } from "react"
-import { useAtom } from "jotai"
-import { atomWithStorage } from "jotai/utils"
-import { Link, useLocation, useNavigate } from "react-router-dom"
-import {
-  Archive,
-  ChevronRight,
-  Settings,
-  UserRoundPlus,
-} from "lucide-react"
-import type { Thread } from "@bb/domain"
-import type { ProjectResponse } from "@bb/server-contract"
+import { Fragment, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useAtom } from "jotai";
+import { atomWithStorage } from "jotai/utils";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Archive, ChevronRight, Settings, UserRoundPlus } from "lucide-react";
+import type { Thread } from "@bb/domain";
+import type { ProjectResponse } from "@bb/server-contract";
 import {
   SidebarProvider,
   SidebarInset,
   SidebarTrigger,
-} from "@/components/ui/sidebar"
-import { AppSidebar } from "./AppSidebar"
-import { AppPageHeader, HEADER_ICON_BUTTON_CLASS } from "./AppPageHeader"
-import {
-  useHireProjectManager,
-} from "@/hooks/mutations/project-mutations"
-import { useProjects } from "@/hooks/queries/project-queries"
-import { useThread } from "@/hooks/queries/thread-queries"
-import { useAppRoute } from "@/hooks/useAppRoute"
-import { useDialogState } from "@/hooks/useDialogState"
-import { getThreadDisplayTitle } from "@/lib/thread-title"
-import { cn } from "@/lib/utils"
-import { HireManagerModal } from "@/components/HireManagerModal"
-import { ProjectPathDialog } from "@/components/project/ProjectPathDialog"
-import { ProjectActionsMenu } from "@/components/project/ProjectActionsMenu"
-import { ProjectActionsProvider } from "@/components/project/ProjectActionsProvider"
-import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider"
-import { createLocalStorageSyncStorage } from "@/lib/browser-storage"
-import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject"
+} from "@/components/ui/sidebar";
+import { AppSidebar } from "./AppSidebar";
+import { AppPageHeader, HEADER_ICON_BUTTON_CLASS } from "./AppPageHeader";
+import { useHireProjectManager } from "@/hooks/mutations/project-mutations";
+import { useProjects } from "@/hooks/queries/project-queries";
+import { useThread } from "@/hooks/queries/thread-queries";
+import { useAppRoute } from "@/hooks/useAppRoute";
+import { useDialogState } from "@/hooks/useDialogState";
+import { getThreadDisplayTitle } from "@/lib/thread-title";
+import { cn } from "@/lib/utils";
+import { HireManagerModal } from "@/components/HireManagerModal";
+import { ProjectPathDialog } from "@/components/project/ProjectPathDialog";
+import { ProjectActionsMenu } from "@/components/project/ProjectActionsMenu";
+import { ProjectActionsProvider } from "@/components/project/ProjectActionsProvider";
+import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider";
+import { createLocalStorageSyncStorage } from "@/lib/browser-storage";
+import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 
-const SIDEBAR_WIDTH_KEY = "bb.sidebar.width"
-const SIDEBAR_MIN_WIDTH = 240
-const SIDEBAR_MAX_WIDTH = 460
-const SIDEBAR_DEFAULT_WIDTH = 320
+const SIDEBAR_WIDTH_KEY = "bb.sidebar.width";
+const SIDEBAR_MIN_WIDTH = 240;
+const SIDEBAR_MAX_WIDTH = 460;
+const SIDEBAR_DEFAULT_WIDTH = 320;
 
 function clampSidebarWidth(value: number) {
-  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, value))
+  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, value));
 }
 
 const sidebarWidthStorage = createLocalStorageSyncStorage<number>({
   parse: (storedValue, initialValue) => {
     if (storedValue === null) {
-      return initialValue
+      return initialValue;
     }
-    const parsedValue = Number(storedValue)
+    const parsedValue = Number(storedValue);
     if (!Number.isFinite(parsedValue)) {
-      return initialValue
+      return initialValue;
     }
-    return clampSidebarWidth(parsedValue)
+    return clampSidebarWidth(parsedValue);
   },
   serialize: (value) => String(clampSidebarWidth(value)),
-})
+});
 const sidebarWidthAtom = atomWithStorage<number>(
   SIDEBAR_WIDTH_KEY,
   SIDEBAR_DEFAULT_WIDTH,
   sidebarWidthStorage,
   { getOnInit: true },
-)
+);
 
 const routeTitles: Record<string, { title: string; subtitle?: string }> = {
   "/": { title: "Projects", subtitle: "Select or create a project" },
   "/settings": { title: "Settings" },
-}
+};
 
 interface AppHeaderProps {
-  isProjectMainView: boolean
-  projectName?: string
-  projectId?: string
-  project?: ProjectResponse
-  isManagerActionPending?: boolean
-  onOpenManager?: () => void
+  isProjectMainView: boolean;
+  projectName?: string;
+  projectId?: string;
+  project?: ProjectResponse;
+  isManagerActionPending?: boolean;
+  onOpenManager?: () => void;
   meta: {
-    title: string
-    subtitle?: string
-    breadcrumbs?: Array<{ label: string; to?: string }>
-  }
+    title: string;
+    subtitle?: string;
+    breadcrumbs?: Array<{ label: string; to?: string }>;
+  };
 }
 
 function AppHeader({
@@ -92,21 +85,28 @@ function AppHeader({
   onOpenManager,
   meta,
 }: AppHeaderProps) {
-  const showProjectMenuButton = isProjectMainView && !!project
-  const showProjectNameInHeader = !isProjectMainView
-  const headerBreadcrumbs = showProjectNameInHeader ? meta.breadcrumbs : undefined
-  const headerTitle =
-    headerBreadcrumbs ? undefined : (showProjectNameInHeader ? meta.title : undefined)
+  const showProjectMenuButton = isProjectMainView && !!project;
+  const showProjectNameInHeader = !isProjectMainView;
+  const headerBreadcrumbs = showProjectNameInHeader
+    ? meta.breadcrumbs
+    : undefined;
+  const headerTitle = headerBreadcrumbs
+    ? undefined
+    : showProjectNameInHeader
+      ? meta.title
+      : undefined;
 
   const hasCenterContent =
-    Boolean(headerBreadcrumbs) || Boolean(headerTitle) || Boolean(meta.subtitle)
+    Boolean(headerBreadcrumbs) ||
+    Boolean(headerTitle) ||
+    Boolean(meta.subtitle);
 
   const center = hasCenterContent ? (
     <div className="min-w-0 flex-1">
       {headerBreadcrumbs ? (
         <p className="flex min-w-0 items-center gap-1.5 text-sm font-semibold">
           {headerBreadcrumbs.map((segment, index) => {
-            const isLast = index === headerBreadcrumbs.length - 1
+            const isLast = index === headerBreadcrumbs.length - 1;
             return (
               <Fragment key={`${segment.label}-${index}`}>
                 {index > 0 ? (
@@ -131,7 +131,7 @@ function AppHeader({
                   </span>
                 )}
               </Fragment>
-            )
+            );
           })}
         </p>
       ) : null}
@@ -139,56 +139,59 @@ function AppHeader({
         <p className="truncate text-sm font-semibold">{headerTitle}</p>
       ) : null}
       {meta.subtitle ? (
-        <p className="truncate text-xs text-muted-foreground">{meta.subtitle}</p>
+        <p className="truncate text-xs text-muted-foreground">
+          {meta.subtitle}
+        </p>
       ) : null}
     </div>
-  ) : null
+  ) : null;
 
-  const actions = isProjectMainView && projectId ? (
-    <>
-      <button
-        type="button"
-        className={cn(
-          HEADER_ICON_BUTTON_CLASS,
-          "inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60",
-        )}
-        aria-label="Hire manager"
-        title="Hire manager"
-        disabled={!projectId || isManagerActionPending}
-        onClick={() => onOpenManager?.()}
-      >
-        <UserRoundPlus />
-      </button>
-      <Link
-        to={`/projects/${projectId}/settings`}
-        className={cn(
-          HEADER_ICON_BUTTON_CLASS,
-          "inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
-        )}
-        aria-label="Project settings"
-        title="Project settings"
-      >
-        <Settings />
-      </Link>
-      <Link
-        to={`/projects/${projectId}/archived`}
-        className={cn(
-          HEADER_ICON_BUTTON_CLASS,
-          "inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
-        )}
-        aria-label="Archived threads"
-        title="Archived threads"
-      >
-        <Archive />
-      </Link>
-      {showProjectMenuButton && project ? (
-        <ProjectActionsMenu
-          project={project}
-          triggerClassName={HEADER_ICON_BUTTON_CLASS}
-        />
-      ) : null}
-    </>
-  ) : null
+  const actions =
+    isProjectMainView && projectId ? (
+      <>
+        <button
+          type="button"
+          className={cn(
+            HEADER_ICON_BUTTON_CLASS,
+            "inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60",
+          )}
+          aria-label="Hire manager"
+          title="Hire manager"
+          disabled={!projectId || isManagerActionPending}
+          onClick={() => onOpenManager?.()}
+        >
+          <UserRoundPlus />
+        </button>
+        <Link
+          to={`/projects/${projectId}/settings`}
+          className={cn(
+            HEADER_ICON_BUTTON_CLASS,
+            "inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+          )}
+          aria-label="Project settings"
+          title="Project settings"
+        >
+          <Settings />
+        </Link>
+        <Link
+          to={`/projects/${projectId}/archived`}
+          className={cn(
+            HEADER_ICON_BUTTON_CLASS,
+            "inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+          )}
+          aria-label="Archived threads"
+          title="Archived threads"
+        >
+          <Archive />
+        </Link>
+        {showProjectMenuButton && project ? (
+          <ProjectActionsMenu
+            project={project}
+            triggerClassName={HEADER_ICON_BUTTON_CLASS}
+          />
+        ) : null}
+      </>
+    ) : null;
 
   return (
     <AppPageHeader
@@ -196,28 +199,28 @@ function AppHeader({
       center={center}
       actions={actions}
     />
-  )
+  );
 }
 
 interface AppLayoutProps {
-  children: ReactNode
+  children: ReactNode;
 }
 
 export function AppLayout({ children }: AppLayoutProps) {
-  const quickCreateProject = useQuickCreateProjectController()
-  const location = useLocation()
-  const navigate = useNavigate()
-  const { data: projects, isLoading: projectsLoading } = useProjects()
-  const hireProjectManager = useHireProjectManager()
-  const hireManagerModal = useDialogState<string>()
-  const [sidebarOpen, setSidebarOpen] = useState(true)
-  const [sidebarWidth, setSidebarWidth] = useAtom(sidebarWidthAtom)
-  const [isSidebarResizing, setIsSidebarResizing] = useState(false)
-  const providerRef = useRef<HTMLDivElement>(null)
-  const startXRef = useRef(0)
-  const startWidthRef = useRef(0)
-  const liveWidthRef = useRef(sidebarWidth)
-  const animationFrameRef = useRef<number | null>(null)
+  const quickCreateProject = useQuickCreateProjectController();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { data: projects, isLoading: projectsLoading } = useProjects();
+  const hireProjectManager = useHireProjectManager();
+  const hireManagerModal = useDialogState<string>();
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarWidth, setSidebarWidth] = useAtom(sidebarWidthAtom);
+  const [isSidebarResizing, setIsSidebarResizing] = useState(false);
+  const providerRef = useRef<HTMLDivElement>(null);
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(0);
+  const liveWidthRef = useRef(sidebarWidth);
+  const animationFrameRef = useRef<number | null>(null);
 
   const {
     projectId,
@@ -227,23 +230,27 @@ export function AppLayout({ children }: AppLayoutProps) {
     isArchivedView,
     isSettingsView,
     isRootView,
-  } = useAppRoute()
-  const showHeader = !isRootView && !isThreadView
-  const showFloatingSidebarTrigger = isRootView
+  } = useAppRoute();
+  const showHeader = !isRootView && !isThreadView;
+  const showFloatingSidebarTrigger = isRootView;
 
   const project = projectId
     ? projects?.find((candidate) => candidate.id === projectId)
-    : undefined
-  const projectName = projectId ? project?.name : undefined
+    : undefined;
+  const projectName = projectId ? project?.name : undefined;
   const projectLabel =
     projectName ??
-    (projectId ? (projectsLoading ? "Loading project…" : projectId) : undefined)
-  const { data: thread } = useThread(threadId ?? "")
+    (projectId
+      ? projectsLoading
+        ? "Loading project…"
+        : projectId
+      : undefined);
+  const { data: thread } = useThread(threadId ?? "");
   const threadDisplayTitle = thread
     ? getThreadDisplayTitle(thread)
     : threadId
       ? `Thread ${threadId.slice(0, 8)}`
-      : "Thread"
+      : "Thread";
   const meta = isThreadView
     ? {
         title: thread ? getThreadDisplayTitle(thread) : "Thread",
@@ -261,114 +268,118 @@ export function AppLayout({ children }: AppLayoutProps) {
             { label: "Archived" },
           ],
         }
-    : isSettingsView && projectId
-      ? {
-          title: "",
-          subtitle: undefined,
-          breadcrumbs: [
-            {
-              label: projectLabel ?? projectId,
-              to: `/projects/${projectId}`,
-            },
-            { label: "Settings" },
-          ],
-        }
-    : projectId
-      ? {
-          title: projectLabel ?? projectId,
-          subtitle: undefined,
-        }
-      : (routeTitles[location.pathname] ?? { title: "" })
+      : isSettingsView && projectId
+        ? {
+            title: "",
+            subtitle: undefined,
+            breadcrumbs: [
+              {
+                label: projectLabel ?? projectId,
+                to: `/projects/${projectId}`,
+              },
+              { label: "Settings" },
+            ],
+          }
+        : projectId
+          ? {
+              title: projectLabel ?? projectId,
+              subtitle: undefined,
+            }
+          : (routeTitles[location.pathname] ?? { title: "" });
 
   const documentTitle = (() => {
     if (isThreadView) {
-      return threadDisplayTitle
+      return threadDisplayTitle;
     }
     if (isArchivedView && projectId) {
-      return `${projectLabel ?? projectId} · Archived`
+      return `${projectLabel ?? projectId} · Archived`;
     }
     if (isSettingsView && projectId) {
-      return `${projectLabel ?? projectId} · Settings`
+      return `${projectLabel ?? projectId} · Settings`;
     }
     if (projectId) {
-      return projectLabel ?? projectId
+      return projectLabel ?? projectId;
     }
-    const routeTitle = routeTitles[location.pathname]?.title
-    return routeTitle && routeTitle.length > 0 ? routeTitle : "BB"
-  })()
+    const routeTitle = routeTitles[location.pathname]?.title;
+    return routeTitle && routeTitle.length > 0 ? routeTitle : "BB";
+  })();
 
   const handleResizeMouseDown = useCallback(
     (event: React.MouseEvent<HTMLDivElement>) => {
-      event.preventDefault()
-      setIsSidebarResizing(true)
-      startXRef.current = event.clientX
-      startWidthRef.current = liveWidthRef.current
-      document.body.classList.add("sidebar-resizing")
-      document.body.style.cursor = "col-resize"
-      document.body.style.userSelect = "none"
+      event.preventDefault();
+      setIsSidebarResizing(true);
+      startXRef.current = event.clientX;
+      startWidthRef.current = liveWidthRef.current;
+      document.body.classList.add("sidebar-resizing");
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
     },
-    []
-  )
+    [],
+  );
 
   useEffect(() => {
-    if (!isSidebarResizing) return
+    if (!isSidebarResizing) return;
 
     const applyLiveWidth = () => {
-      animationFrameRef.current = null
+      animationFrameRef.current = null;
       providerRef.current?.style.setProperty(
         "--sidebar-width",
-        `${liveWidthRef.current}px`
-      )
-    }
+        `${liveWidthRef.current}px`,
+      );
+    };
 
     const handleMouseMove = (event: MouseEvent) => {
-      const delta = event.clientX - startXRef.current
-      liveWidthRef.current = clampSidebarWidth(startWidthRef.current + delta)
+      const delta = event.clientX - startXRef.current;
+      liveWidthRef.current = clampSidebarWidth(startWidthRef.current + delta);
       if (animationFrameRef.current === null) {
-        animationFrameRef.current = window.requestAnimationFrame(applyLiveWidth)
+        animationFrameRef.current =
+          window.requestAnimationFrame(applyLiveWidth);
       }
-    }
+    };
 
     const handleMouseUp = () => {
       if (animationFrameRef.current !== null) {
-        window.cancelAnimationFrame(animationFrameRef.current)
-        animationFrameRef.current = null
+        window.cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
       }
       providerRef.current?.style.setProperty(
         "--sidebar-width",
-        `${liveWidthRef.current}px`
-      )
-      setSidebarWidth(liveWidthRef.current)
-      setIsSidebarResizing(false)
-      document.body.classList.remove("sidebar-resizing")
-      document.body.style.cursor = ""
-      document.body.style.userSelect = ""
-    }
+        `${liveWidthRef.current}px`,
+      );
+      setSidebarWidth(liveWidthRef.current);
+      setIsSidebarResizing(false);
+      document.body.classList.remove("sidebar-resizing");
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
 
-    window.addEventListener("mousemove", handleMouseMove)
-    window.addEventListener("mouseup", handleMouseUp)
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
     return () => {
-      window.removeEventListener("mousemove", handleMouseMove)
-      window.removeEventListener("mouseup", handleMouseUp)
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
       if (animationFrameRef.current !== null) {
-        window.cancelAnimationFrame(animationFrameRef.current)
-        animationFrameRef.current = null
+        window.cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
       }
-      document.body.classList.remove("sidebar-resizing")
-      document.body.style.cursor = ""
-      document.body.style.userSelect = ""
-    }
-  }, [isSidebarResizing, setSidebarWidth])
+      document.body.classList.remove("sidebar-resizing");
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [isSidebarResizing, setSidebarWidth]);
 
   useEffect(() => {
-    liveWidthRef.current = sidebarWidth
-    providerRef.current?.style.setProperty("--sidebar-width", `${sidebarWidth}px`)
-  }, [sidebarWidth])
+    liveWidthRef.current = sidebarWidth;
+    providerRef.current?.style.setProperty(
+      "--sidebar-width",
+      `${sidebarWidth}px`,
+    );
+  }, [sidebarWidth]);
 
   useEffect(() => {
-    if (typeof document === "undefined") return
-    document.title = documentTitle
-  }, [documentTitle])
+    if (typeof document === "undefined") return;
+    document.title = documentTitle;
+  }, [documentTitle]);
 
   return (
     <ProjectActionsProvider>
@@ -396,10 +407,12 @@ export function AppLayout({ children }: AppLayoutProps) {
                   projectName={projectLabel}
                   projectId={projectId}
                   project={project}
-                  isManagerActionPending={hireProjectManager.isPending || hireManagerModal.isOpen}
+                  isManagerActionPending={
+                    hireProjectManager.isPending || hireManagerModal.isOpen
+                  }
                   onOpenManager={() => {
-                    if (!projectId || hireManagerModal.isOpen) return
-                    hireManagerModal.onOpen(projectId)
+                    if (!projectId || hireManagerModal.isOpen) return;
+                    hireManagerModal.onOpen(projectId);
                   }}
                   meta={meta}
                 />
@@ -423,11 +436,11 @@ export function AppLayout({ children }: AppLayoutProps) {
             open
             onClose={hireManagerModal.onClose}
             onHired={(thread: Thread) => {
-              navigate(`/projects/${thread.projectId}/threads/${thread.id}`)
+              navigate(`/projects/${thread.projectId}/threads/${thread.id}`);
             }}
           />
         ) : null}
       </ThreadActionsProvider>
     </ProjectActionsProvider>
-  )
+  );
 }

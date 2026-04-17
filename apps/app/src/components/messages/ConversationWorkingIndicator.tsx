@@ -1,8 +1,5 @@
 import { useState } from "react";
-import {
-  ExpandablePanel,
-  getCollapsibleHeaderToneClass,
-} from "@bb/ui-core";
+import { ExpandablePanel, getCollapsibleHeaderToneClass } from "@bb/ui-core";
 import { ConversationStatusIndicator } from "@/components/messages/ConversationStatusIndicator";
 import { cn } from "@/lib/utils";
 
@@ -28,7 +25,9 @@ export function ConversationWorkingIndicator({
       <div style={{ overflowAnchor: "none" }} className={cn("mt-4", className)}>
         <ExpandablePanel
           isExpanded={isExpanded}
-          summaryContent={<span className="animate-shine">{resolvedLabel}</span>}
+          summaryContent={
+            <span className="animate-shine">{resolvedLabel}</span>
+          }
           headerToneClass={getCollapsibleHeaderToneClass(isExpanded)}
           onToggle={() => setIsExpanded((current) => !current)}
         >

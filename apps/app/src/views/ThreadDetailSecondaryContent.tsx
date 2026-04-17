@@ -128,10 +128,7 @@ function ThreadManagerSelector({
   }
 
   return (
-    <DetailRow
-      label="Manager"
-      valueClassName="min-w-0"
-    >
+    <DetailRow label="Manager" valueClassName="min-w-0">
       {parentThreadId ? (
         <div className="inline-flex max-w-full min-w-0 items-center gap-1 text-xs text-foreground">
           <Link
@@ -161,7 +158,8 @@ function ThreadManagerSelector({
               role="button"
               tabIndex={
                 updateThreadPending ||
-                (managerSelectorOptions.length <= 1 && managerSelectorValue === "none")
+                (managerSelectorOptions.length <= 1 &&
+                  managerSelectorValue === "none")
                   ? -1
                   : 0
               }
@@ -178,7 +176,9 @@ function ThreadManagerSelector({
               <DropdownMenuItem
                 key={option.value}
                 onSelect={() => {
-                  onAssignManager(option.value === "none" ? null : option.value);
+                  onAssignManager(
+                    option.value === "none" ? null : option.value,
+                  );
                 }}
                 className="flex items-center justify-between gap-3"
               >
@@ -240,10 +240,7 @@ function ThreadMetadataContent({
     <div className="flex h-full min-h-0 flex-col">
       <DetailCard className="shrink-0 rounded-none border-0 bg-transparent px-0 py-0">
         {isManagerThread ? (
-          <DetailRow
-            label="Kind"
-            valueClassName="min-w-0 truncate"
-          >
+          <DetailRow label="Kind" valueClassName="min-w-0 truncate">
             Manager
           </DetailRow>
         ) : null}
@@ -261,10 +258,7 @@ function ThreadMetadataContent({
           />
         ) : null}
         {threadHostName ? (
-          <DetailRow
-            label="Host"
-            valueClassName="min-w-0 truncate"
-          >
+          <DetailRow label="Host" valueClassName="min-w-0 truncate">
             <span className="flex items-center gap-1.5">
               <span className="truncate">{threadHostName}</span>
               {threadHostIsLocal ? <LocalhostBadge /> : null}
@@ -274,19 +268,16 @@ function ThreadMetadataContent({
             </span>
           </DetailRow>
         ) : null}
-        {!isManagerThread && (threadEnvironmentModeLabel ?? threadEnvironmentType) ? (
-          <DetailRow
-            label="Environment"
-            valueClassName="min-w-0 truncate"
-          >
-            {threadEnvironmentModeLabel ?? threadEnvironmentValue ?? threadEnvironmentType}
+        {!isManagerThread &&
+        (threadEnvironmentModeLabel ?? threadEnvironmentType) ? (
+          <DetailRow label="Environment" valueClassName="min-w-0 truncate">
+            {threadEnvironmentModeLabel ??
+              threadEnvironmentValue ??
+              threadEnvironmentType}
           </DetailRow>
         ) : null}
         {!isManagerThread && threadBranchName ? (
-          <DetailRow
-            label="Branch"
-            valueClassName="min-w-0 truncate"
-          >
+          <DetailRow label="Branch" valueClassName="min-w-0 truncate">
             <button
               type="button"
               className="inline-flex max-w-full items-center gap-1.5 rounded-md text-left text-foreground transition-colors hover:text-foreground/80"
@@ -300,10 +291,7 @@ function ThreadMetadataContent({
           </DetailRow>
         ) : null}
         {!isManagerThread && showMergeBase ? (
-          <DetailRow
-            label="Merge base"
-            valueClassName="min-w-0 truncate"
-          >
+          <DetailRow label="Merge base" valueClassName="min-w-0 truncate">
             {canSelectMergeBase && mergeBaseBranch ? (
               <MergeBaseBranchPicker
                 value={mergeBaseBranch}
@@ -319,16 +307,17 @@ function ThreadMetadataContent({
           </DetailRow>
         ) : null}
         {showWorkspaceStatus ? (
-          <DetailRow
-            label="Git status"
-            align="start"
-            valueClassName="min-w-0"
-          >
+          <DetailRow label="Git status" align="start" valueClassName="min-w-0">
             <div
               className="flex min-w-0 items-baseline gap-2 whitespace-nowrap"
               title={`${threadGitStatusDisplay.label} ${threadGitStatusDisplay.summary}`}
             >
-              <span className={cn("shrink-0 font-medium", threadGitStatusLabelClass)}>
+              <span
+                className={cn(
+                  "shrink-0 font-medium",
+                  threadGitStatusLabelClass,
+                )}
+              >
                 {threadGitStatusDisplay.label}
               </span>
               <span className="min-w-0 truncate text-muted-foreground">
@@ -338,10 +327,7 @@ function ThreadMetadataContent({
           </DetailRow>
         ) : null}
         {thread.archivedAt != null ? (
-          <DetailRow
-            label="Archived"
-            valueClassName="min-w-0 truncate"
-          >
+          <DetailRow label="Archived" valueClassName="min-w-0 truncate">
             <ArchiveTimestampAction
               isPending={unarchivePending}
               onUnarchive={onUnarchive}
@@ -413,7 +399,9 @@ function ThreadStorageContent({
             {isExpanded ? (
               <div className="border-t border-border/70 px-3 py-3">
                 {isFileLoading ? (
-                  <p className="text-xs text-muted-foreground">Loading file...</p>
+                  <p className="text-xs text-muted-foreground">
+                    Loading file...
+                  </p>
                 ) : fileError ? (
                   <p className="text-xs text-destructive">
                     {fileError.message}
@@ -489,9 +477,7 @@ export function ThreadDetailSecondaryContent({
         )
       }
       threadStorageContent={
-        threadStorage ? (
-          <ThreadStorageContent {...threadStorage} />
-        ) : undefined
+        threadStorage ? <ThreadStorageContent {...threadStorage} /> : undefined
       }
     />
   );
@@ -499,11 +485,7 @@ export function ThreadDetailSecondaryContent({
   if (isMobile) {
     return (
       <div className="-mx-4 -mb-4 -mt-4 flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <ThreadTimelinePane
-          {...timeline}
-          footer={footer}
-          header={header}
-        />
+        <ThreadTimelinePane {...timeline} footer={footer} header={header} />
         <ResponsiveDrawerShell
           open={isSecondaryPanelOpen}
           onOpenChange={(open) => {
@@ -538,11 +520,7 @@ export function ThreadDetailSecondaryContent({
           order={1}
           className="min-w-0 overflow-hidden"
         >
-          <ThreadTimelinePane
-            {...timeline}
-            footer={footer}
-            header={header}
-          />
+          <ThreadTimelinePane {...timeline} footer={footer} header={header} />
         </Panel>
         {secondaryPanelContent}
       </PanelGroup>

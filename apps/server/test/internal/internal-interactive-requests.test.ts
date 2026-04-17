@@ -46,10 +46,13 @@ async function waitForPendingInteractionId(
   const deadline = Date.now() + 1_000;
 
   while (Date.now() < deadline) {
-    const interactions = args.harness.deps.pendingInteractions.listThreadInteractions(
-      args.threadId,
+    const interactions =
+      args.harness.deps.pendingInteractions.listThreadInteractions(
+        args.threadId,
+      );
+    const pending = interactions.find(
+      (interaction) => interaction.status === "pending",
     );
-    const pending = interactions.find((interaction) => interaction.status === "pending");
     if (pending) {
       return pending.id;
     }
@@ -109,26 +112,29 @@ describe("internal interactive request lifecycle", () => {
         environmentId: environment.id,
       });
 
-      const response = await harness.app.request("/internal/session/interactive-request", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          interaction: {
-            threadId: thread.id,
-            turnId: "turn-1",
-            providerId: "codex",
-            providerThreadId: "provider-thread-1",
-            providerRequestId: "request-1",
-            payload: createCommandApprovalPayload({
-              itemId: "item-1",
-              reason: "Needs approval",
-              command: "git push",
-              cwd: "/tmp/project",
-            }),
-          },
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/interactive-request",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            interaction: {
+              threadId: thread.id,
+              turnId: "turn-1",
+              providerId: "codex",
+              providerThreadId: "provider-thread-1",
+              providerRequestId: "request-1",
+              payload: createCommandApprovalPayload({
+                itemId: "item-1",
+                reason: "Needs approval",
+                command: "git push",
+                cwd: "/tmp/project",
+              }),
+            },
+          }),
+        },
+      );
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toMatchObject({
         outcome: "created",
@@ -139,11 +145,12 @@ describe("internal interactive request lifecycle", () => {
         harness,
         threadId: thread.id,
       });
-      const resolved = harness.deps.pendingInteractions.resolvePendingInteraction({
-        threadId: thread.id,
-        interactionId,
-        resolution: createAllowOnceResolution(),
-      });
+      const resolved =
+        harness.deps.pendingInteractions.resolvePendingInteraction({
+          threadId: thread.id,
+          interactionId,
+          resolution: createAllowOnceResolution(),
+        });
 
       expect(resolved).toMatchObject({
         id: interactionId,
@@ -225,27 +232,30 @@ describe("internal interactive request lifecycle", () => {
       };
       const sessionResolution = createAllowForSessionResolution(sessionGrant);
 
-      const response = await harness.app.request("/internal/session/interactive-request", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          interaction: {
-            threadId: thread.id,
-            turnId: "turn-session-1",
-            providerId: "codex",
-            providerThreadId: "provider-thread-session-1",
-            providerRequestId: "request-session-1",
-            payload: createCommandApprovalPayload({
-              itemId: "item-session-1",
-              reason: "Needs approval",
-              command: "git push",
-              cwd: "/tmp/project",
-              sessionGrant,
-            }),
-          },
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/interactive-request",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            interaction: {
+              threadId: thread.id,
+              turnId: "turn-session-1",
+              providerId: "codex",
+              providerThreadId: "provider-thread-session-1",
+              providerRequestId: "request-session-1",
+              payload: createCommandApprovalPayload({
+                itemId: "item-session-1",
+                reason: "Needs approval",
+                command: "git push",
+                cwd: "/tmp/project",
+                sessionGrant,
+              }),
+            },
+          }),
+        },
+      );
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toMatchObject({
         outcome: "created",
@@ -256,11 +266,12 @@ describe("internal interactive request lifecycle", () => {
         harness,
         threadId: thread.id,
       });
-      const resolved = harness.deps.pendingInteractions.resolvePendingInteraction({
-        threadId: thread.id,
-        interactionId,
-        resolution: sessionResolution,
-      });
+      const resolved =
+        harness.deps.pendingInteractions.resolvePendingInteraction({
+          threadId: thread.id,
+          interactionId,
+          resolution: sessionResolution,
+        });
 
       expect(resolved).toMatchObject({
         id: interactionId,
@@ -437,26 +448,29 @@ describe("internal interactive request lifecycle", () => {
         environmentId: environment.id,
       });
 
-      const response = await harness.app.request("/internal/session/interactive-request", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          interaction: {
-            threadId: thread.id,
-            turnId: "turn-1",
-            providerId: "codex",
-            providerThreadId: "provider-thread-1",
-            providerRequestId: "request-1",
-            payload: createCommandApprovalPayload({
-              itemId: "item-1",
-              reason: "Needs approval",
-              command: "git push",
-              cwd: "/tmp/project",
-            }),
-          },
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/interactive-request",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            interaction: {
+              threadId: thread.id,
+              turnId: "turn-1",
+              providerId: "codex",
+              providerThreadId: "provider-thread-1",
+              providerRequestId: "request-1",
+              payload: createCommandApprovalPayload({
+                itemId: "item-1",
+                reason: "Needs approval",
+                command: "git push",
+                cwd: "/tmp/project",
+              }),
+            },
+          }),
+        },
+      );
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toMatchObject({
         outcome: "created",
@@ -524,26 +538,29 @@ describe("internal interactive request lifecycle", () => {
       });
       deleteThread(harness.db, harness.hub, deletedThread.id);
 
-      const response = await harness.app.request("/internal/session/interactive-request", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          interaction: {
-            threadId: liveThread.id,
-            turnId: "turn-interrupt-live",
-            providerId: "codex",
-            providerThreadId: "provider-thread-interrupt-live",
-            providerRequestId: "request-interrupt-live",
-            payload: createCommandApprovalPayload({
-              itemId: "item-interrupt-live",
-              reason: "Needs approval",
-              command: "git push",
-              cwd: "/tmp/project",
-            }),
-          },
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/interactive-request",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            interaction: {
+              threadId: liveThread.id,
+              turnId: "turn-interrupt-live",
+              providerId: "codex",
+              providerThreadId: "provider-thread-interrupt-live",
+              providerRequestId: "request-interrupt-live",
+              payload: createCommandApprovalPayload({
+                itemId: "item-interrupt-live",
+                reason: "Needs approval",
+                command: "git push",
+                cwd: "/tmp/project",
+              }),
+            },
+          }),
+        },
+      );
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toMatchObject({
         outcome: "created",
@@ -607,26 +624,29 @@ describe("internal interactive request lifecycle", () => {
         environmentId: environment.id,
       });
 
-      const response = await harness.app.request("/internal/session/interactive-request", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          interaction: {
-            threadId: thread.id,
-            turnId: "turn-delete-1",
-            providerId: "codex",
-            providerThreadId: "provider-thread-delete-1",
-            providerRequestId: "request-delete-1",
-            payload: createCommandApprovalPayload({
-              itemId: "item-delete-1",
-              reason: "Needs approval",
-              command: "git push",
-              cwd: "/tmp/project",
-            }),
-          },
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/interactive-request",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            interaction: {
+              threadId: thread.id,
+              turnId: "turn-delete-1",
+              providerId: "codex",
+              providerThreadId: "provider-thread-delete-1",
+              providerRequestId: "request-delete-1",
+              payload: createCommandApprovalPayload({
+                itemId: "item-delete-1",
+                reason: "Needs approval",
+                command: "git push",
+                cwd: "/tmp/project",
+              }),
+            },
+          }),
+        },
+      );
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toMatchObject({
         outcome: "created",
@@ -643,9 +663,12 @@ describe("internal interactive request lifecycle", () => {
         1_000,
       );
 
-      const deleteResponse = await harness.app.request(`/api/v1/threads/${thread.id}`, {
-        method: "DELETE",
-      });
+      const deleteResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}`,
+        {
+          method: "DELETE",
+        },
+      );
       expect(deleteResponse.status).toBe(200);
 
       expect(await threadEventWaiter.promise).toBe(true);
@@ -657,7 +680,9 @@ describe("internal interactive request lifecycle", () => {
       );
       expect(queuedDelete.row.sessionId).toBe(session.id);
 
-      expect(harness.deps.pendingInteractions.listThreadInteractions(thread.id)).toEqual([]);
+      expect(
+        harness.deps.pendingInteractions.listThreadInteractions(thread.id),
+      ).toEqual([]);
     } finally {
       await harness.cleanup();
     }
@@ -682,29 +707,32 @@ describe("internal interactive request lifecycle", () => {
         providerId: "claude-code",
       });
 
-      const response = await harness.app.request("/internal/session/interactive-request", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          interaction: {
-            threadId: thread.id,
-            turnId: "turn-claude-1",
-            providerId: "claude-code",
-            providerThreadId: "claude-thread-1",
-            providerRequestId: "request-claude-1",
-            payload: createPermissionGrantApprovalPayload({
-              itemId: "item-claude-1",
-              reason: "Need network access",
-              toolName: "WebFetch",
-              permissions: {
-                network: { enabled: true },
-                fileSystem: null,
-              },
-            }),
-          },
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/interactive-request",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            interaction: {
+              threadId: thread.id,
+              turnId: "turn-claude-1",
+              providerId: "claude-code",
+              providerThreadId: "claude-thread-1",
+              providerRequestId: "request-claude-1",
+              payload: createPermissionGrantApprovalPayload({
+                itemId: "item-claude-1",
+                reason: "Need network access",
+                toolName: "WebFetch",
+                permissions: {
+                  network: { enabled: true },
+                  fileSystem: null,
+                },
+              }),
+            },
+          }),
+        },
+      );
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toMatchObject({
         outcome: "created",
@@ -715,14 +743,15 @@ describe("internal interactive request lifecycle", () => {
         harness,
         threadId: thread.id,
       });
-      const resolved = harness.deps.pendingInteractions.resolvePendingInteraction({
-        threadId: thread.id,
-        interactionId,
-        resolution: createAllowForSessionResolution({
+      const resolved =
+        harness.deps.pendingInteractions.resolvePendingInteraction({
+          threadId: thread.id,
+          interactionId,
+          resolution: createAllowForSessionResolution({
             network: { enabled: true },
             fileSystem: null,
-        }),
-      });
+          }),
+        });
 
       expect(resolved).toMatchObject({
         id: interactionId,
@@ -741,8 +770,8 @@ describe("internal interactive request lifecycle", () => {
         providerThreadId: "claude-thread-1",
         providerRequestId: "request-claude-1",
         resolution: createAllowForSessionResolution({
-            network: { enabled: true },
-            fileSystem: null,
+          network: { enabled: true },
+          fileSystem: null,
         }),
       });
       const commandResultResponse = await reportQueuedCommandSuccess(

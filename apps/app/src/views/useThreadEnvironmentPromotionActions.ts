@@ -1,15 +1,10 @@
 import { useCallback, useMemo } from "react";
-import {
-  type Environment,
-  type Thread,
-} from "@bb/domain";
+import { type Environment, type Thread } from "@bb/domain";
 import { useDialogState } from "@/hooks/useDialogState";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useEnvironmentPromotion } from "@/hooks/queries/environment-queries";
 import { useProjects } from "@/hooks/queries/project-queries";
-import type {
-  ThreadEnvironmentPromotionDialogTarget,
-} from "@/components/thread/ThreadEnvironmentPromotionDialog";
+import type { ThreadEnvironmentPromotionDialogTarget } from "@/components/thread/ThreadEnvironmentPromotionDialog";
 import type { RequestEnvironmentActionMutationLike } from "./threadDetailMutationTypes";
 import {
   findPromotionProjectSourceForHost,
@@ -28,19 +23,19 @@ export function useThreadEnvironmentPromotionActions({
   requestEnvironmentAction,
   thread,
 }: UseThreadEnvironmentPromotionActionsParams) {
-  const promotionDialog = useDialogState<ThreadEnvironmentPromotionDialogTarget>();
-  const {
-    hasConnectedPersistentHost,
-    isLocalHost,
-    localHostId,
-  } = useHostDaemon();
+  const promotionDialog =
+    useDialogState<ThreadEnvironmentPromotionDialogTarget>();
+  const { hasConnectedPersistentHost, isLocalHost, localHostId } =
+    useHostDaemon();
   const { data: projects } = useProjects();
   const project = useMemo(
-    () => projects?.find((candidate) => candidate.id === thread?.projectId) ?? null,
+    () =>
+      projects?.find((candidate) => candidate.id === thread?.projectId) ?? null,
     [projects, thread?.projectId],
   );
   const localSource = useMemo(
-    () => findPromotionProjectSourceForHost(project?.sources ?? [], localHostId),
+    () =>
+      findPromotionProjectSourceForHost(project?.sources ?? [], localHostId),
     [localHostId, project?.sources],
   );
   const hasPromotionControl =
@@ -49,7 +44,9 @@ export function useThreadEnvironmentPromotionActions({
     thread?.archivedAt === null &&
     Boolean(environment) &&
     environment?.managed === true;
-  const isEnvironmentLocal = environment ? isLocalHost(environment.hostId) : false;
+  const isEnvironmentLocal = environment
+    ? isLocalHost(environment.hostId)
+    : false;
   const canResolveLocalSource =
     projects !== undefined ||
     !hasConnectedPersistentHost ||
@@ -70,8 +67,7 @@ export function useThreadEnvironmentPromotionActions({
       localUnavailableReason === null,
   });
   const isPromotionStateLoading =
-    (hasPromotionControl && !canResolveLocalSource) ||
-    promotionQuery.isLoading;
+    (hasPromotionControl && !canResolveLocalSource) || promotionQuery.isLoading;
   const promotionState = promotionQuery.data?.state ?? {
     isPromoted: false,
     branchName: environment?.branchName ?? null,
@@ -100,17 +96,18 @@ export function useThreadEnvironmentPromotionActions({
     ],
   );
 
-  const handlePromotionAction = useCallback(async (
-    target: ThreadEnvironmentPromotionDialogTarget,
-  ) => {
-    if (!environment) {
-      return;
-    }
-    await requestEnvironmentAction.mutateAsync({
-      id: environment.id,
-      action: target.kind,
-    });
-  }, [environment, requestEnvironmentAction]);
+  const handlePromotionAction = useCallback(
+    async (target: ThreadEnvironmentPromotionDialogTarget) => {
+      if (!environment) {
+        return;
+      }
+      await requestEnvironmentAction.mutateAsync({
+        id: environment.id,
+        action: target.kind,
+      });
+    },
+    [environment, requestEnvironmentAction],
+  );
 
   return {
     branchName: promotionState.branchName,

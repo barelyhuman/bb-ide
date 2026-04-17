@@ -29,7 +29,9 @@ export interface ProviderVisibilityMetadata<
   wellKnownToolNames: readonly string[];
   parseRawEvent(event: JsonRpcMessage): TRawEvent;
   describeParsedRawEvent(event: TRawEvent): ProviderRawEventDescription;
-  extractObservedToolCallsFromParsed(event: TRawEvent): ProviderObservedToolCall[];
+  extractObservedToolCallsFromParsed(
+    event: TRawEvent,
+  ): ProviderObservedToolCall[];
   describeRawEvent(event: JsonRpcMessage): ProviderRawEventDescription;
   extractObservedToolCalls(event: JsonRpcMessage): ProviderObservedToolCall[];
 }
@@ -41,7 +43,9 @@ export interface CreateProviderVisibilityMetadataArgs<
   wellKnownToolNames: readonly string[];
   parseRawEvent(event: JsonRpcMessage): TRawEvent;
   describeParsedRawEvent(event: TRawEvent): ProviderRawEventDescription;
-  extractObservedToolCallsFromParsed(event: TRawEvent): ProviderObservedToolCall[];
+  extractObservedToolCallsFromParsed(
+    event: TRawEvent,
+  ): ProviderObservedToolCall[];
 }
 
 export function createProviderVisibilityMetadata<

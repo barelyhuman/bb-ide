@@ -12,9 +12,9 @@ const EXPIRED_COMMAND_ERROR_MESSAGE = "Command expired after retry";
 
 type LifecycleFailureReport =
   | Extract<
-    HostDaemonCommandResultReport,
-    { type: "host.sync_runtime_material" }
-  >
+      HostDaemonCommandResultReport,
+      { type: "host.sync_runtime_material" }
+    >
   | Extract<HostDaemonCommandResultReport, { type: "environment.destroy" }>
   | Extract<HostDaemonCommandResultReport, { type: "environment.provision" }>
   | Extract<HostDaemonCommandResultReport, { type: "thread.start" }>
@@ -35,13 +35,11 @@ type ExpiredCommandDeps = Pick<
   | "sandboxRegistry"
 >;
 
-function buildExpiredLifecycleFailureReport(
-  args: {
-    commandId: string;
-    completedAt: number;
-    type: LifecycleFailureReport["type"];
-  },
-): LifecycleFailureReport {
+function buildExpiredLifecycleFailureReport(args: {
+  commandId: string;
+  completedAt: number;
+  type: LifecycleFailureReport["type"];
+}): LifecycleFailureReport {
   return {
     commandId: args.commandId,
     completedAt: args.completedAt,

@@ -17,8 +17,12 @@ describe("environment workspace display", () => {
 
   it("maps worktree and sandbox labels", () => {
     expect(getEnvironmentWorkspaceLabelIcon("sandbox")).toBe(Container);
-    expect(getEnvironmentWorkspaceLabelIcon("managed-worktree")).toBe(FolderGit2);
-    expect(getEnvironmentWorkspaceLabelIcon("unmanaged-worktree")).toBe(FolderGit2);
+    expect(getEnvironmentWorkspaceLabelIcon("managed-worktree")).toBe(
+      FolderGit2,
+    );
+    expect(getEnvironmentWorkspaceLabelIcon("unmanaged-worktree")).toBe(
+      FolderGit2,
+    );
     expect(getEnvironmentWorkspaceDisplayIconLabel("managed-worktree")).toBe(
       "Managed worktree environment",
     );

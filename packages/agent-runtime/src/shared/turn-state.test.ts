@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type {
-  ThreadEvent,
-  ThreadEventTokenUsageBreakdown,
-} from "@bb/domain";
+import type { ThreadEvent, ThreadEventTokenUsageBreakdown } from "@bb/domain";
 import {
   createProviderTurnStateRegistry,
   type ProviderTurnState,
@@ -155,9 +152,13 @@ describe("turn-state", () => {
     const threadThreeState = registry.getOrCreate({ threadId: "thread-3" });
 
     expect(registry.getOrCreate({ threadId: "thread-1" })).toBe(threadOneState);
-    expect(registry.getOrCreate({ threadId: "thread-3" })).toBe(threadThreeState);
+    expect(registry.getOrCreate({ threadId: "thread-3" })).toBe(
+      threadThreeState,
+    );
 
-    const threadTwoRecreatedState = registry.getOrCreate({ threadId: "thread-2" });
+    const threadTwoRecreatedState = registry.getOrCreate({
+      threadId: "thread-2",
+    });
     expect(threadTwoRecreatedState).not.toBe(threadTwoState);
     expect(registry.getOrCreate({ threadId: "thread-1" })).toBe(threadOneState);
   });

@@ -25,6 +25,4 @@ export const threadGitDiffResponseSchema = z.object({
   shortstat: z.string(),
   files: z.string(),
 });
-export type ThreadGitDiffResponse = z.infer<
-  typeof threadGitDiffResponseSchema
->;
+export type ThreadGitDiffResponse = z.infer<typeof threadGitDiffResponseSchema>;

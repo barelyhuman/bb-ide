@@ -1,5 +1,8 @@
 import type { PromptInput } from "@bb/domain";
-import { uploadedPromptAttachmentSchema, type UploadedPromptAttachment } from "@bb/server-contract";
+import {
+  uploadedPromptAttachmentSchema,
+  type UploadedPromptAttachment,
+} from "@bb/server-contract";
 import { z } from "zod";
 
 export type PromptDraftAttachment = UploadedPromptAttachment;
@@ -33,7 +36,9 @@ export function isPromptDraftEmpty(draft: PromptDraftState): boolean {
   return draft.text.length === 0 && draft.attachments.length === 0;
 }
 
-export function parsePromptDraftStorage(rawValue: string | null): PromptDraftState {
+export function parsePromptDraftStorage(
+  rawValue: string | null,
+): PromptDraftState {
   if (!rawValue) return emptyPromptDraftState();
 
   try {
@@ -45,7 +50,9 @@ export function parsePromptDraftStorage(rawValue: string | null): PromptDraftSta
   }
 }
 
-export function serializePromptDraftStorage(draft: PromptDraftState): string | null {
+export function serializePromptDraftStorage(
+  draft: PromptDraftState,
+): string | null {
   const text = draft.text;
   const attachments = draft.attachments;
   if (isPromptDraftEmpty(draft)) {
@@ -61,7 +68,9 @@ export function arePromptDraftStatesEqual(
   left: PromptDraftState,
   right: PromptDraftState,
 ): boolean {
-  return serializePromptDraftStorage(left) === serializePromptDraftStorage(right);
+  return (
+    serializePromptDraftStorage(left) === serializePromptDraftStorage(right)
+  );
 }
 
 export function promptDraftToInput(draft: PromptDraftState): PromptInput[] {

@@ -18,7 +18,12 @@ import type {
 import { resolveEnvironmentWorkspaceDisplayKind } from "@bb/domain";
 import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
-import { environments, hosts, pendingInteractions, threads } from "../schema.js";
+import {
+  environments,
+  hosts,
+  pendingInteractions,
+  threads,
+} from "../schema.js";
 import { createThreadId } from "../ids.js";
 
 type ThreadWriteConnection = DbConnection | DbTransaction;
@@ -54,7 +59,8 @@ export function createThread(
 ) {
   const now = Date.now();
   const id = createThreadId();
-  const thread = db.insert(threads)
+  const thread = db
+    .insert(threads)
     .values({
       id,
       projectId: input.projectId,
@@ -165,7 +171,9 @@ function statusTransitionNeedsAttention(args: StatusTransition): boolean {
     return false;
   }
 
-  return args.currentStatus === "active" || args.currentStatus === "provisioning";
+  return (
+    args.currentStatus === "active" || args.currentStatus === "provisioning"
+  );
 }
 
 function buildListThreadsFilters(options: ListThreadsOptions) {
@@ -184,10 +192,7 @@ function buildListThreadsFilters(options: ListThreadsOptions) {
   ].filter((value) => value !== undefined);
 }
 
-export function listThreads(
-  db: DbConnection,
-  options: ListThreadsOptions,
-) {
+export function listThreads(db: DbConnection, options: ListThreadsOptions) {
   return db
     .select()
     .from(threads)
@@ -225,27 +230,29 @@ export function listThreadsWithPendingInteractionState(
     .orderBy(desc(threads.createdAt))
     .all();
 
-  return rows.map(({
-    environmentIsWorktree,
-    environmentWorkspaceProvisionType,
-    environmentBranchName,
-    environmentHostId,
-    hostType,
-    pendingInteractionCount,
-    ...thread
-  }) => ({
-    ...thread,
-    environmentBranchName,
-    environmentHostId,
-    environmentWorkspaceDisplayKind: resolveEnvironmentWorkspaceDisplayKind({
-      environment: {
-        isWorktree: environmentIsWorktree,
-        workspaceProvisionType: environmentWorkspaceProvisionType,
-      },
+  return rows.map(
+    ({
+      environmentIsWorktree,
+      environmentWorkspaceProvisionType,
+      environmentBranchName,
+      environmentHostId,
       hostType,
+      pendingInteractionCount,
+      ...thread
+    }) => ({
+      ...thread,
+      environmentBranchName,
+      environmentHostId,
+      environmentWorkspaceDisplayKind: resolveEnvironmentWorkspaceDisplayKind({
+        environment: {
+          isWorktree: environmentIsWorktree,
+          workspaceProvisionType: environmentWorkspaceProvisionType,
+        },
+        hostType,
+      }),
+      hasPendingInteraction: pendingInteractionCount > 0,
     }),
-    hasPendingInteraction: pendingInteractionCount > 0,
-  }));
+  );
 }
 
 export function countLiveThreadsInEnvironment(
@@ -260,9 +267,7 @@ export function countLiveThreadsInEnvironment(
         eq(threads.environmentId, args.environmentId),
         isNull(threads.archivedAt),
         isNull(threads.deletedAt),
-        args.excludeThreadId
-          ? ne(threads.id, args.excludeThreadId)
-          : undefined,
+        args.excludeThreadId ? ne(threads.id, args.excludeThreadId) : undefined,
       ),
     )
     .get();
@@ -278,10 +283,11 @@ export function listThreadEnvironmentAssignmentsOnHost(
     return [];
   }
 
-  return db.select({
-    threadId: threads.id,
-    environmentId: environments.id,
-  })
+  return db
+    .select({
+      threadId: threads.id,
+      environmentId: environments.id,
+    })
     .from(threads)
     .innerJoin(environments, eq(threads.environmentId, environments.id))
     .where(
@@ -309,13 +315,14 @@ export function listHostThreadIds(
 export function listStopRequestedThreads(
   db: DbConnection,
 ): StopRequestedThreadRow[] {
-  return db.select({
-    environmentId: threads.environmentId,
-    hostId: environments.hostId,
-    status: threads.status,
-    stopRequestedAt: threads.stopRequestedAt,
-    threadId: threads.id,
-  })
+  return db
+    .select({
+      environmentId: threads.environmentId,
+      hostId: environments.hostId,
+      status: threads.status,
+      stopRequestedAt: threads.stopRequestedAt,
+      threadId: threads.id,
+    })
     .from(threads)
     .innerJoin(environments, eq(threads.environmentId, environments.id))
     .where(isNotNull(threads.stopRequestedAt))
@@ -373,7 +380,8 @@ export function updateThread(
   }
   if ("parentThreadId" in input) set.parentThreadId = input.parentThreadId;
 
-  const updated = db.update(threads)
+  const updated = db
+    .update(threads)
     .set(set)
     .where(eq(threads.id, id))
     .returning()
@@ -402,7 +410,8 @@ export function markThreadStopRequested(
   notifier: DbNotifier,
   args: MarkThreadStopRequestedArgs,
 ) {
-  const updated = db.update(threads)
+  const updated = db
+    .update(threads)
     .set({
       stopRequestedAt: args.requestedAt ?? Date.now(),
       updatedAt: Date.now(),
@@ -423,7 +432,8 @@ export function clearThreadStopRequested(
   notifier: DbNotifier,
   threadId: string,
 ) {
-  const updated = db.update(threads)
+  const updated = db
+    .update(threads)
     .set({
       stopRequestedAt: null,
       updatedAt: Date.now(),
@@ -444,7 +454,8 @@ export function markThreadDeleted(
   notifier: DbNotifier,
   args: MarkThreadDeletedArgs,
 ) {
-  const updated = db.update(threads)
+  const updated = db
+    .update(threads)
     .set({
       deletedAt: args.deletedAt ?? Date.now(),
       updatedAt: Date.now(),
@@ -467,7 +478,8 @@ export function archiveThread(
   id: string,
 ) {
   const now = Date.now();
-  const updated = db.update(threads)
+  const updated = db
+    .update(threads)
     .set({ archivedAt: now, updatedAt: now })
     .where(eq(threads.id, id))
     .returning()
@@ -484,7 +496,8 @@ export function unarchiveThread(
   id: string,
 ) {
   const now = Date.now();
-  const updated = db.update(threads)
+  const updated = db
+    .update(threads)
     .set({ archivedAt: null, updatedAt: now })
     .where(eq(threads.id, id))
     .returning()
@@ -523,7 +536,8 @@ export function transitionThreadStatus(
     set.latestAttentionAt = now;
   }
 
-  const updated = db.update(threads)
+  const updated = db
+    .update(threads)
     .set(set)
     .where(eq(threads.id, id))
     .returning()
@@ -543,10 +557,11 @@ export function transitionThreadsToError(
   }
 
   const now = args.now ?? Date.now();
-  const eligibleThreads = db.select({
-    id: threads.id,
-    status: threads.status,
-  })
+  const eligibleThreads = db
+    .select({
+      id: threads.id,
+      status: threads.status,
+    })
     .from(threads)
     .where(
       and(
@@ -580,10 +595,7 @@ export function transitionThreadsToError(
       set.latestAttentionAt = now;
     }
 
-    db.update(threads)
-      .set(set)
-      .where(eq(threads.id, thread.id))
-      .run();
+    db.update(threads).set(set).where(eq(threads.id, thread.id)).run();
     notifier.notifyThread(thread.id, ["status-changed"]);
   }
 

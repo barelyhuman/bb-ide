@@ -25,7 +25,9 @@ interface ShouldSyncSelectedMergeBaseBranchParams {
   updatePending: boolean;
 }
 
-function normalizeSelectedMergeBaseBranch(branch?: string | null): string | undefined {
+function normalizeSelectedMergeBaseBranch(
+  branch?: string | null,
+): string | undefined {
   return branch ?? undefined;
 }
 
@@ -45,7 +47,8 @@ export function shouldSyncSelectedMergeBaseBranch({
   }
 
   return (
-    selectedMergeBaseBranch !== normalizeSelectedMergeBaseBranch(persistedMergeBaseBranch)
+    selectedMergeBaseBranch !==
+    normalizeSelectedMergeBaseBranch(persistedMergeBaseBranch)
   );
 }
 
@@ -61,21 +64,26 @@ export function useEnvironmentMergeBase({
   const mergeBaseStateKeyRef = useRef<string | undefined>(undefined);
   const mergeBaseStateKey = environment?.id ?? thread?.id;
   const isCurrentEnvironmentUpdatePending =
-    updateEnvironment.isPending && updateEnvironment.variables?.id === environment?.id;
+    updateEnvironment.isPending &&
+    updateEnvironment.variables?.id === environment?.id;
 
   useEffect(() => {
-    if (!shouldSyncSelectedMergeBaseBranch({
-      previousStateKey: mergeBaseStateKeyRef.current,
-      nextStateKey: mergeBaseStateKey,
-      persistedMergeBaseBranch: environment?.mergeBaseBranch,
-      selectedMergeBaseBranch,
-      updatePending: isCurrentEnvironmentUpdatePending,
-    })) {
+    if (
+      !shouldSyncSelectedMergeBaseBranch({
+        previousStateKey: mergeBaseStateKeyRef.current,
+        nextStateKey: mergeBaseStateKey,
+        persistedMergeBaseBranch: environment?.mergeBaseBranch,
+        selectedMergeBaseBranch,
+        updatePending: isCurrentEnvironmentUpdatePending,
+      })
+    ) {
       return;
     }
 
     mergeBaseStateKeyRef.current = mergeBaseStateKey;
-    setSelectedMergeBaseBranch(normalizeSelectedMergeBaseBranch(environment?.mergeBaseBranch));
+    setSelectedMergeBaseBranch(
+      normalizeSelectedMergeBaseBranch(environment?.mergeBaseBranch),
+    );
   }, [
     environment?.mergeBaseBranch,
     isCurrentEnvironmentUpdatePending,
@@ -102,12 +110,12 @@ export function useEnvironmentMergeBase({
   );
   const isOnDefaultBranch =
     workspaceStatus?.branch.currentBranch != null &&
-    workspaceStatus.branch.currentBranch === workspaceStatus.branch.defaultBranch;
-  const showMergeBase = showBranchComparisonUi && Boolean(mergeBaseBranch) && !isOnDefaultBranch;
+    workspaceStatus.branch.currentBranch ===
+      workspaceStatus.branch.defaultBranch;
+  const showMergeBase =
+    showBranchComparisonUi && Boolean(mergeBaseBranch) && !isOnDefaultBranch;
   const canSelectMergeBase = Boolean(
-    showMergeBase &&
-      mergeBaseBranch &&
-      mergeBaseCandidates.length > 0,
+    showMergeBase && mergeBaseBranch && mergeBaseCandidates.length > 0,
   );
 
   const handleMergeBaseBranchChange: MergeBaseBranchChangeHandler = useCallback(
@@ -136,11 +144,15 @@ export function useEnvironmentMergeBase({
         },
         {
           onError: (error) => {
-            setSelectedMergeBaseBranch(environment.mergeBaseBranch ?? undefined);
-            toast.error(getMutationErrorMessage({
-              error,
-              fallbackMessage: "Failed to update merge base branch.",
-            }));
+            setSelectedMergeBaseBranch(
+              environment.mergeBaseBranch ?? undefined,
+            );
+            toast.error(
+              getMutationErrorMessage({
+                error,
+                fallbackMessage: "Failed to update merge base branch.",
+              }),
+            );
           },
         },
       );

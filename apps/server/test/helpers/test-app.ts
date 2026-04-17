@@ -73,7 +73,9 @@ function decodeTestDaemonKey(token: string): TestDaemonKeyParts | null {
   };
 }
 
-export function createTestDaemonHostKey(args: Partial<TestDaemonKeyParts> = {}): string {
+export function createTestDaemonHostKey(
+  args: Partial<TestDaemonKeyParts> = {},
+): string {
   return encodeTestDaemonKey({
     hostId: args.hostId ?? "host-1",
     hostType: args.hostType ?? "persistent",

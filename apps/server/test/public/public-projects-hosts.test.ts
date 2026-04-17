@@ -93,11 +93,17 @@ describe("public project and host routes", () => {
         },
         body: JSON.stringify({
           name: "Project One",
-          source: { type: "local_path", hostId: host.id, path: "/tmp/project-one" },
+          source: {
+            type: "local_path",
+            hostId: host.id,
+            path: "/tmp/project-one",
+          },
         }),
       });
       expect(createResponse.status).toBe(201);
-      const createdProject = projectResponseSchema.parse(await readJson(createResponse));
+      const createdProject = projectResponseSchema.parse(
+        await readJson(createResponse),
+      );
       expect(createdProject.name).toBe("Project One");
       expect(createdProject.sources).toHaveLength(1);
       expect(createdProject.sources[0]?.isDefault).toBe(true);
@@ -148,7 +154,9 @@ describe("public project and host routes", () => {
   it("rejects unsupported local project paths at the API boundary", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-project-path-validation" });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-project-path-validation",
+      });
       const { project, source } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
         path: "/tmp/project-path-validation",
@@ -161,13 +169,19 @@ describe("public project and host routes", () => {
         },
         body: JSON.stringify({
           name: "Relative Path Project",
-          source: { type: "local_path", hostId: host.id, path: "relative/project" },
+          source: {
+            type: "local_path",
+            hostId: host.id,
+            path: "relative/project",
+          },
         }),
       });
       expect(createResponse.status).toBe(400);
       await expect(readJson(createResponse)).resolves.toMatchObject({
         code: "invalid_request",
-        message: expect.stringContaining("Project path must be an absolute path"),
+        message: expect.stringContaining(
+          "Project path must be an absolute path",
+        ),
       });
 
       const updateResponse = await harness.app.request(
@@ -186,23 +200,36 @@ describe("public project and host routes", () => {
       expect(updateResponse.status).toBe(400);
       await expect(readJson(updateResponse)).resolves.toMatchObject({
         code: "invalid_request",
-        message: expect.stringContaining("Project path must be an absolute path"),
+        message: expect.stringContaining(
+          "Project path must be an absolute path",
+        ),
       });
 
-      const nativeWindowsCreateResponse = await harness.app.request("/api/v1/projects", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
+      const nativeWindowsCreateResponse = await harness.app.request(
+        "/api/v1/projects",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            name: "Windows Path Project",
+            source: {
+              type: "local_path",
+              hostId: host.id,
+              path: "C:\\Users\\michael\\bb",
+            },
+          }),
         },
-        body: JSON.stringify({
-          name: "Windows Path Project",
-          source: { type: "local_path", hostId: host.id, path: "C:\\Users\\michael\\bb" },
-        }),
-      });
+      );
       expect(nativeWindowsCreateResponse.status).toBe(400);
-      await expect(readJson(nativeWindowsCreateResponse)).resolves.toMatchObject({
+      await expect(
+        readJson(nativeWindowsCreateResponse),
+      ).resolves.toMatchObject({
         code: "invalid_request",
-        message: expect.stringContaining("Native Windows paths are not supported"),
+        message: expect.stringContaining(
+          "Native Windows paths are not supported",
+        ),
       });
 
       const nativeWindowsUpdateResponse = await harness.app.request(
@@ -219,21 +246,28 @@ describe("public project and host routes", () => {
         },
       );
       expect(nativeWindowsUpdateResponse.status).toBe(400);
-      await expect(readJson(nativeWindowsUpdateResponse)).resolves.toMatchObject({
+      await expect(
+        readJson(nativeWindowsUpdateResponse),
+      ).resolves.toMatchObject({
         code: "invalid_request",
-        message: expect.stringContaining("Native Windows paths are not supported"),
+        message: expect.stringContaining(
+          "Native Windows paths are not supported",
+        ),
       });
 
-      const rootPathCreateResponse = await harness.app.request("/api/v1/projects", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
+      const rootPathCreateResponse = await harness.app.request(
+        "/api/v1/projects",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            name: "Root Path Project",
+            source: { type: "local_path", hostId: host.id, path: "/" },
+          }),
         },
-        body: JSON.stringify({
-          name: "Root Path Project",
-          source: { type: "local_path", hostId: host.id, path: "/" },
-        }),
-      });
+      );
       expect(rootPathCreateResponse.status).toBe(400);
       await expect(readJson(rootPathCreateResponse)).resolves.toMatchObject({
         code: "invalid_request",
@@ -247,7 +281,9 @@ describe("public project and host routes", () => {
   it("returns null when a project has no stored default execution options for a provider", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-project-defaults-none" });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-project-defaults-none",
+      });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
         path: "/tmp/project-defaults-none",
@@ -267,7 +303,9 @@ describe("public project and host routes", () => {
   it("returns the remembered provider and execution options for a project thread type", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-project-defaults" });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-project-defaults",
+      });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
         path: "/tmp/project-defaults",
@@ -303,7 +341,9 @@ describe("public project and host routes", () => {
   it("returns thread-type-matched stored default execution options for a project", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-project-manager-defaults" });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-project-manager-defaults",
+      });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
         path: "/tmp/project-manager-defaults",
@@ -348,7 +388,9 @@ describe("public project and host routes", () => {
   it("stores manager defaults separately from standard thread defaults when hiring a manager from the app", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-manager-defaults" });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-manager-defaults",
+      });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
         path: "/tmp/manager-defaults",
@@ -414,7 +456,9 @@ describe("public project and host routes", () => {
   it("inherits remembered manager defaults for CLI-origin manager creation without overwriting them", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-manager-defaults-cli" });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-manager-defaults-cli",
+      });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
         path: "/tmp/manager-defaults-cli",
@@ -478,32 +522,37 @@ describe("public project and host routes", () => {
         path: "/tmp/project-delete-created-start",
       });
 
-      const createThreadResponse = await harness.app.request("/api/v1/threads", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          projectId: project.id,
-          providerId: "codex",
-          model: "gpt-5",
-          input: [{ type: "text", text: "Create before project delete" }],
-          environment: {
-            type: "reuse",
-            environmentId: environment.id,
+      const createThreadResponse = await harness.app.request(
+        "/api/v1/threads",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
           },
-        }),
-      });
+          body: JSON.stringify({
+            projectId: project.id,
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "Create before project delete" }],
+            environment: {
+              type: "reuse",
+              environmentId: environment.id,
+            },
+          }),
+        },
+      );
 
       expect(createThreadResponse.status).toBe(201);
-      const createdThread = threadSchema.parse(await readJson(createThreadResponse));
+      const createdThread = threadSchema.parse(
+        await readJson(createThreadResponse),
+      );
       expect(createdThread.status).toBe("provisioning");
 
       const queuedStart = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "thread.start"
-          && command.threadId === createdThread.id,
+          command.type === "thread.start" &&
+          command.threadId === createdThread.id,
       );
 
       const deleteProjectResponse = await harness.app.request(
@@ -514,7 +563,9 @@ describe("public project and host routes", () => {
       );
 
       expect(deleteProjectResponse.status).toBe(200);
-      await expect(readJson(deleteProjectResponse)).resolves.toEqual({ ok: true });
+      await expect(readJson(deleteProjectResponse)).resolves.toEqual({
+        ok: true,
+      });
       expect(getProject(harness.db, project.id)).not.toBeNull();
       expect(getThread(harness.db, createdThread.id)).toMatchObject({
         deletedAt: expect.any(Number),
@@ -526,8 +577,8 @@ describe("public project and host routes", () => {
         harness,
         queuedStart.row.cursor,
         ({ command }) =>
-          command.type === "thread.stop"
-          && command.threadId === createdThread.id,
+          command.type === "thread.stop" &&
+          command.threadId === createdThread.id,
       );
       expect(queuedStop.command).toMatchObject({
         environmentId: environment.id,
@@ -589,10 +640,16 @@ describe("public project and host routes", () => {
         },
         body: JSON.stringify({
           name: "Project Sources",
-          source: { type: "local_path", hostId: host.id, path: "/tmp/project-sources" },
+          source: {
+            type: "local_path",
+            hostId: host.id,
+            path: "/tmp/project-sources",
+          },
         }),
       });
-      const project = projectResponseSchema.parse(await readJson(projectResponse));
+      const project = projectResponseSchema.parse(
+        await readJson(projectResponse),
+      );
       const defaultSourceId = project.sources[0]?.id;
       expect(defaultSourceId).toBeTruthy();
 
@@ -644,10 +701,12 @@ describe("public project and host routes", () => {
         },
       );
       expect(createGitHubSourceResponse.status).toBe(201);
-      const githubSource = z.object({
-        repoUrl: z.string(),
-        type: z.string(),
-      }).parse(await readJson(createGitHubSourceResponse));
+      const githubSource = z
+        .object({
+          repoUrl: z.string(),
+          type: z.string(),
+        })
+        .parse(await readJson(createGitHubSourceResponse));
       expect(githubSource).toMatchObject({
         type: "github_repo",
         repoUrl: "https://github.com/example/project-sources",
@@ -757,7 +816,9 @@ describe("public project and host routes", () => {
 
       const listResponse = await harness.app.request("/api/v1/hosts");
       expect(listResponse.status).toBe(200);
-      const hosts = hostStatusListResponseSchema.parse(await readJson(listResponse));
+      const hosts = hostStatusListResponseSchema.parse(
+        await readJson(listResponse),
+      );
       expect(hosts).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
@@ -808,11 +869,13 @@ describe("public project and host routes", () => {
         `/api/v1/hosts/${suspendedEphemeral.id}`,
       );
       expect(suspendedEphemeralResponse.status).toBe(200);
-      await expect(readJson(suspendedEphemeralResponse)).resolves.toMatchObject({
-        id: suspendedEphemeral.id,
-        type: "ephemeral",
-        status: "suspended",
-      });
+      await expect(readJson(suspendedEphemeralResponse)).resolves.toMatchObject(
+        {
+          id: suspendedEphemeral.id,
+          type: "ephemeral",
+          status: "suspended",
+        },
+      );
 
       const destroyedResponse = await harness.app.request(
         `/api/v1/hosts/${destroyed.host.id}`,
@@ -884,23 +947,22 @@ describe("public project and host routes", () => {
           command.environmentId === environment.id,
       );
       expect(queued.command).toMatchObject({
-        workspaceContext: { workspacePath: "/tmp/project-files", workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: "/tmp/project-files",
+          workspaceProvisionType: "unmanaged",
+        },
         query: "src",
         limit: 1,
       });
       await reportQueuedCommandSuccess(harness, queued, {
-        files: [
-          { path: "src/index.ts", name: "index.ts" },
-        ],
+        files: [{ path: "src/index.ts", name: "index.ts" }],
         truncated: true,
       });
 
       const response = await responsePromise;
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toEqual({
-        files: [
-          { path: "src/index.ts", name: "index.ts" },
-        ],
+        files: [{ path: "src/index.ts", name: "index.ts" }],
         truncated: true,
       });
     } finally {
@@ -989,7 +1051,9 @@ describe("public project and host routes", () => {
         },
       );
       expect(uploadResponse.status).toBe(201);
-      const uploaded = attachmentResponseSchema.parse(await readJson(uploadResponse));
+      const uploaded = attachmentResponseSchema.parse(
+        await readJson(uploadResponse),
+      );
       expect(uploaded).toMatchObject({
         type: "localFile",
         name: "notes.txt",
@@ -1184,7 +1248,9 @@ describe("public project and host routes", () => {
   it("deletes a host that has pending commands", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-delete-cmds" });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-delete-cmds",
+      });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
         path: "/tmp/host-delete-cmds",
@@ -1196,17 +1262,20 @@ describe("public project and host routes", () => {
       });
 
       // Create a thread to generate queued commands for this host
-      const createThreadResponse = await harness.app.request("/api/v1/threads", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          projectId: project.id,
-          providerId: "codex",
-          model: "gpt-5",
-          input: [{ type: "text", text: "test" }],
-          environment: { type: "reuse", environmentId: environment.id },
-        }),
-      });
+      const createThreadResponse = await harness.app.request(
+        "/api/v1/threads",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            projectId: project.id,
+            providerId: "codex",
+            model: "gpt-5",
+            input: [{ type: "text", text: "test" }],
+            environment: { type: "reuse", environmentId: environment.id },
+          }),
+        },
+      );
       expect(createThreadResponse.status).toBe(201);
 
       // Wait for the command to be queued
@@ -1279,15 +1348,15 @@ describe("public project and host routes", () => {
       const firstDestroy = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "environment.destroy"
-          && command.environmentId === firstEnvironment.id,
+          command.type === "environment.destroy" &&
+          command.environmentId === firstEnvironment.id,
       );
       const secondDestroy = await waitForQueuedCommandAfter(
         harness,
         firstDestroy.row.cursor,
         ({ command }) =>
-          command.type === "environment.destroy"
-          && command.environmentId === secondEnvironment.id,
+          command.type === "environment.destroy" &&
+          command.environmentId === secondEnvironment.id,
       );
 
       await reportQueuedCommandSuccess(harness, firstDestroy, { ok: true });
@@ -1304,8 +1373,8 @@ describe("public project and host routes", () => {
         harness,
         secondDestroy.row.cursor,
         ({ command }) =>
-          command.type === "environment.destroy"
-          && command.environmentId === secondEnvironment.id,
+          command.type === "environment.destroy" &&
+          command.environmentId === secondEnvironment.id,
       );
       await reportQueuedCommandSuccess(harness, retriedDestroy, { ok: true });
 

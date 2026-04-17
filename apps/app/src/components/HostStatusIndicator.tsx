@@ -41,8 +41,13 @@ interface HostStatusBadgeProps {
 }
 
 /** Renders a green dot when connected, or an "offline" pill when not. */
-export function HostStatusBadge({ connected, className }: HostStatusBadgeProps) {
-  return connected
-    ? <HostStatusDot className={className} />
-    : <HostOfflinePill className={className} />;
+export function HostStatusBadge({
+  connected,
+  className,
+}: HostStatusBadgeProps) {
+  return connected ? (
+    <HostStatusDot className={className} />
+  ) : (
+    <HostOfflinePill className={className} />
+  );
 }

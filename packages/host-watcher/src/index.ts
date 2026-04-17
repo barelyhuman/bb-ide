@@ -1,4 +1,7 @@
-import type { HostWatcher, CreateHostWatcherArgs } from "./host-watcher-types.js";
+import type {
+  HostWatcher,
+  CreateHostWatcherArgs,
+} from "./host-watcher-types.js";
 
 export type {
   HostObservedChange,

@@ -81,6 +81,11 @@ export const serverConfig = {
   ...rawServerConfig,
   ...serverPortConfig,
   BB_APP_URL: validateOptionalUrl("BB_APP_URL", rawServerConfig.BB_APP_URL),
-  BB_EXTERNAL_URL: validateOptionalUrl("BB_EXTERNAL_URL", rawServerConfig.BB_EXTERNAL_URL),
-  BB_INFERENCE_MODEL: validateInferenceModel(rawServerConfig.BB_INFERENCE_MODEL),
+  BB_EXTERNAL_URL: validateOptionalUrl(
+    "BB_EXTERNAL_URL",
+    rawServerConfig.BB_EXTERNAL_URL,
+  ),
+  BB_INFERENCE_MODEL: validateInferenceModel(
+    rawServerConfig.BB_INFERENCE_MODEL,
+  ),
 };

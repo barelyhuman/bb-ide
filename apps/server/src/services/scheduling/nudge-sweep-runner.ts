@@ -34,8 +34,9 @@ import { tryTransition } from "../threads/thread-transitions.js";
 const SCHEDULED_NUDGE_PREFIX = "[bb system] Scheduled nudge:";
 
 export const DUE_NUDGE_BATCH_SIZE = 100;
-export type DueManagerThreadNudgeRow =
-  ReturnType<typeof listDueManagerThreadNudges>[number];
+export type DueManagerThreadNudgeRow = ReturnType<
+  typeof listDueManagerThreadNudges
+>[number];
 
 interface PendingTurnSubmitCommandArgs {
   hostId: string;
@@ -254,7 +255,11 @@ async function prepareDueNudge(
     };
   }
 
-  const environment = getCachedEnvironment(deps.db, cache, thread.environmentId);
+  const environment = getCachedEnvironment(
+    deps.db,
+    cache,
+    thread.environmentId,
+  );
   if (!environment || environment.status !== "ready" || !environment.path) {
     return {
       kind: "skip",
@@ -271,10 +276,16 @@ async function prepareDueNudge(
     };
   }
 
-  if (hasPendingTurnSubmitCommand(deps.db, {
-    hostId: environment.hostId,
-    threadId: thread.id,
-  }, cache)) {
+  if (
+    hasPendingTurnSubmitCommand(
+      deps.db,
+      {
+        hostId: environment.hostId,
+        threadId: thread.id,
+      },
+      cache,
+    )
+  ) {
     return {
       kind: "skip",
       reason: "pending-turn-submit",
@@ -343,10 +354,12 @@ function queueDueNudgeInTransaction(
     preparation: QueueDueNudgePreparation;
   },
 ): QueueDueNudgeResult {
-  if (hasPendingTurnSubmitCommand(tx, {
-    hostId: args.preparation.environment.hostId,
-    threadId: args.preparation.thread.id,
-  })) {
+  if (
+    hasPendingTurnSubmitCommand(tx, {
+      hostId: args.preparation.environment.hostId,
+      threadId: args.preparation.thread.id,
+    })
+  ) {
     const advanced = advanceManagerThreadNudgeAfterFireInTransaction(tx, {
       expectedNextFireAt: args.nudge.nextFireAt,
       nextFireAt: args.nextFireAt,
@@ -354,9 +367,7 @@ function queueDueNudgeInTransaction(
       now: args.now,
     });
 
-    return advanced
-      ? { kind: "pending-turn-submit" }
-      : { kind: "lost-race" };
+    return advanced ? { kind: "pending-turn-submit" } : { kind: "lost-race" };
   }
 
   if (
@@ -434,13 +445,16 @@ export async function runDueNudge(
     throw error;
   }
 
-  const transactionResult = deps.db.transaction((tx) =>
-    queueDueNudgeInTransaction(tx, {
-      nudge,
-      now,
-      nextFireAt,
-      preparation,
-    }), { behavior: "immediate" });
+  const transactionResult = deps.db.transaction(
+    (tx) =>
+      queueDueNudgeInTransaction(tx, {
+        nudge,
+        now,
+        nextFireAt,
+        preparation,
+      }),
+    { behavior: "immediate" },
+  );
 
   if (transactionResult.kind === "lost-race") {
     return;

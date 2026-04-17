@@ -27,9 +27,7 @@ export interface ReadFileForTransportArgs {
 
 function isBinaryImageMimeType(mimeType?: string): boolean {
   return Boolean(
-    mimeType &&
-    mimeType.startsWith("image/") &&
-    mimeType !== "image/svg+xml",
+    mimeType && mimeType.startsWith("image/") && mimeType !== "image/svg+xml",
   );
 }
 
@@ -39,13 +37,12 @@ function getFileSizeLimitBytes(mimeType?: string): number {
     : NON_IMAGE_FILE_SIZE_LIMIT_BYTES;
 }
 
-function isPathWithinRoot(
-  candidatePath: string,
-  rootPath: string,
-): boolean {
+function isPathWithinRoot(candidatePath: string, rootPath: string): boolean {
   const relativePath = path.relative(rootPath, candidatePath);
-  return relativePath === "" ||
-    (!relativePath.startsWith("..") && !path.isAbsolute(relativePath));
+  return (
+    relativePath === "" ||
+    (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))
+  );
 }
 
 function getContentEncoding(

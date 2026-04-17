@@ -12,7 +12,9 @@ describe("threadQueuedMessages", () => {
       { type: "text", text: "Second line" },
     ];
 
-    expect(formatQueuedFollowUpPreview(input)).toBe("First line\n\nSecond line");
+    expect(formatQueuedFollowUpPreview(input)).toBe(
+      "First line\n\nSecond line",
+    );
   });
 
   it("falls back to attachment summaries when no text is present", () => {
@@ -25,7 +27,9 @@ describe("threadQueuedMessages", () => {
       },
     ];
 
-    expect(formatQueuedFollowUpPreview(input)).toBe("Attachment only (notes.md)");
+    expect(formatQueuedFollowUpPreview(input)).toBe(
+      "Attachment only (notes.md)",
+    );
   });
 
   it("restores editable drafts from queued messages", () => {

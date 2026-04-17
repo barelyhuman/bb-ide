@@ -28,10 +28,7 @@ import {
   listStoredEventRowsInRange,
 } from "@bb/db";
 import type { DbConnection, StoredEventRow } from "@bb/db";
-import {
-  parseStoredEvent,
-  parseStoredEventRow,
-} from "./thread-data.js";
+import { parseStoredEvent, parseStoredEventRow } from "./thread-data.js";
 
 const MIN_AGENT_MESSAGE_DELTAS_FOR_SUMMARY_COMPACTION = 1000;
 
@@ -77,12 +74,14 @@ function toTimelineMessageRow(message: ViewMessage): TimelineMessageRow {
   };
 }
 
-function buildManagerConversationRows(messages: ViewMessage[]): TimelineMessageRow[] {
+function buildManagerConversationRows(
+  messages: ViewMessage[],
+): TimelineMessageRow[] {
   const visibleMessages = flattenViewMessagesDeep(messages).filter(
     isManagerConversationMessage,
   );
   return mergeProvisioningOperations(visibleMessages).map((message) =>
-    toTimelineMessageRow(message)
+    toTimelineMessageRow(message),
   );
 }
 
@@ -90,12 +89,14 @@ function findMatchingToolGroupRow(
   rows: TimelineRow[],
   options: TimelineSourceSeqRange,
 ): TimelineToolGroupRow | null {
-  return rows.find(
-    (row): row is TimelineToolGroupRow =>
-      row.kind === "tool-group" &&
-      row.sourceSeqStart === options.sourceSeqStart &&
-      row.sourceSeqEnd === options.sourceSeqEnd,
-  ) ?? null;
+  return (
+    rows.find(
+      (row): row is TimelineToolGroupRow =>
+        row.kind === "tool-group" &&
+        row.sourceSeqStart === options.sourceSeqStart &&
+        row.sourceSeqEnd === options.sourceSeqEnd,
+    ) ?? null
+  );
 }
 
 function hasToolGroupRows(rows: TimelineRow[]): boolean {
@@ -164,10 +165,7 @@ export function compactSummaryStoredEventRows(
   const compactedRows: StoredEventRow[] = [];
 
   for (const row of rows) {
-    const itemId =
-      row.type === "item/agentMessage/delta"
-        ? row.itemId
-        : null;
+    const itemId = row.type === "item/agentMessage/delta" ? row.itemId : null;
     if (!itemId || !completedAgentMessageItemIds.has(itemId)) {
       compactedRows.push(row);
       continue;
@@ -283,13 +281,9 @@ export function buildTimelineToolDetails(
   );
 
   return {
-    messages: resolveTimelineToolDetailsMessages(
-      rows,
-      exactProjection,
-      {
-        sourceSeqStart: options.sourceSeqStart,
-        sourceSeqEnd: options.sourceSeqEnd,
-      },
-    ),
+    messages: resolveTimelineToolDetailsMessages(rows, exactProjection, {
+      sourceSeqStart: options.sourceSeqStart,
+      sourceSeqEnd: options.sourceSeqEnd,
+    }),
   };
 }

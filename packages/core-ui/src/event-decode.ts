@@ -39,9 +39,10 @@ function buildEventMeta(row: ThreadEventRow): EventMeta {
   };
 }
 
-export function decodeRow(
-  row: ThreadEventRow,
-): { event: ThreadEvent; meta: EventMeta } {
+export function decodeRow(row: ThreadEventRow): {
+  event: ThreadEvent;
+  meta: EventMeta;
+} {
   return {
     event: buildThreadEvent(row),
     meta: buildEventMeta(row),

@@ -1,4 +1,10 @@
-import { useCallback, useState, type ComponentType, type ReactNode, type RefObject } from "react";
+import {
+  useCallback,
+  useState,
+  type ComponentType,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { useActiveSecondaryPanel } from "@/lib/thread-secondary-panel";
 import type {
   PendingInteraction,
@@ -17,7 +23,12 @@ import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
 import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
 import { useUploadPromptAttachment } from "@/hooks/mutations/project-mutations";
-import { useCreateThreadDraft, useDeleteThreadDraft, useSendThreadDraft, useStopThread } from "@/hooks/mutations/thread-runtime-mutations";
+import {
+  useCreateThreadDraft,
+  useDeleteThreadDraft,
+  useSendThreadDraft,
+  useStopThread,
+} from "@/hooks/mutations/thread-runtime-mutations";
 import {
   getLatestPendingInteraction,
   useThreadDefaultExecutionOptions,
@@ -102,7 +113,9 @@ export function ThreadDetailPromptArea({
   workspaceStatus,
 }: ThreadDetailPromptAreaProps) {
   const isDiffPanelActive = useActiveSecondaryPanel() === "git-diff";
-  const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(thread.id);
+  const { data: defaultExecutionOptions } = useThreadDefaultExecutionOptions(
+    thread.id,
+  );
   const { data: queuedMessages = [] } = useThreadDrafts(thread.id);
   const createDraft = useCreateThreadDraft();
   const sendDraft = useSendThreadDraft();
@@ -119,8 +132,9 @@ export function ThreadDetailPromptArea({
   });
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [isChangeListExpanded, setIsChangeListExpanded] = useState(false);
-  const [processingQueuedMessageId, setProcessingQueuedMessageId] =
-    useState<string | null>(null);
+  const [processingQueuedMessageId, setProcessingQueuedMessageId] = useState<
+    string | null
+  >(null);
   const {
     selectedProviderId,
     providerOptions,
@@ -151,9 +165,12 @@ export function ThreadDetailPromptArea({
     initialPermissionMode: defaultExecutionOptions?.permissionMode,
     initialEnvironmentSelectionValue: thread.environmentId ?? undefined,
   });
-  const handleFollowUpAcknowledged = useCallback((submittedDraft: PromptDraftState) => {
-    promptDraft.clearIfCurrentMatches(submittedDraft);
-  }, [promptDraft]);
+  const handleFollowUpAcknowledged = useCallback(
+    (submittedDraft: PromptDraftState) => {
+      promptDraft.clearIfCurrentMatches(submittedDraft);
+    },
+    [promptDraft],
+  );
   const {
     beginPendingFollowUp,
     clearPendingFollowUp,
@@ -166,30 +183,29 @@ export function ThreadDetailPromptArea({
   const isCreated = thread.status === "created";
   const isProvisioning = thread.status === "provisioning";
   const isRuntimeError = thread.status === "error";
-  const activePendingInteraction = getLatestPendingInteraction(pendingInteractions);
+  const activePendingInteraction =
+    getLatestPendingInteraction(pendingInteractions);
   const hasPendingInteraction = activePendingInteraction !== null;
   const isQueueMutationPending =
-    createDraft.isPending ||
-    sendDraft.isPending ||
-    deleteDraft.isPending;
+    createDraft.isPending || sendDraft.isPending || deleteDraft.isPending;
   const isFollowUpSubmitting =
     sendMessage.isPending ||
     pendingSubmittedFollowUp !== null ||
     isEnvironmentActionPending ||
     createDraft.isPending;
-  const canSendFollowUp = !isCreated && !isProvisioning && !hasPendingInteraction;
-  const promptPlaceholder =
-    isCreated
-      ? "Thread is being created..."
-      : isProvisioning
+  const canSendFollowUp =
+    !isCreated && !isProvisioning && !hasPendingInteraction;
+  const promptPlaceholder = isCreated
+    ? "Thread is being created..."
+    : isProvisioning
       ? "Thread is being provisioned..."
       : hasPendingInteraction
-      ? "Resolve the pending interaction below before sending another message"
-      : isRuntimeError
-      ? "Retry by sending a follow-up message"
-      : thread.status === "idle"
-      ? "Ask for follow-up changes"
-      : "Send a message to this thread...";
+        ? "Resolve the pending interaction below before sending another message"
+        : isRuntimeError
+          ? "Retry by sending a follow-up message"
+          : thread.status === "idle"
+            ? "Ask for follow-up changes"
+            : "Send a message to this thread...";
   const sendFollowUpInput = useCallback(
     async ({
       input,
@@ -212,37 +228,46 @@ export function ThreadDetailPromptArea({
           ? {}
           : {
               ...(model ? { model } : {}),
-              ...(executionServiceTier ? { serviceTier: executionServiceTier } : {}),
-              ...(executionReasoningLevel ? { reasoningLevel: executionReasoningLevel } : {}),
-              ...(executionPermissionMode ? { permissionMode: executionPermissionMode } : {}),
+              ...(executionServiceTier
+                ? { serviceTier: executionServiceTier }
+                : {}),
+              ...(executionReasoningLevel
+                ? { reasoningLevel: executionReasoningLevel }
+                : {}),
+              ...(executionPermissionMode
+                ? { permissionMode: executionPermissionMode }
+                : {}),
             }),
       });
     },
     [scrollToBottom, sendMessage, thread.id],
   );
 
-  const handleAttachFiles = useCallback(async (files: File[]) => {
-    if (files.length === 0) {
-      return;
-    }
-
-    setAttachmentError(null);
-    const failedFiles: string[] = [];
-    for (const file of files) {
-      try {
-        const uploaded = await uploadPromptAttachment.mutateAsync({
-          projectId,
-          file,
-        });
-        promptDraft.addAttachment(uploaded);
-      } catch {
-        failedFiles.push(file.name);
+  const handleAttachFiles = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) {
+        return;
       }
-    }
-    if (failedFiles.length > 0) {
-      setAttachmentError(`Failed to attach: ${failedFiles.join(", ")}`);
-    }
-  }, [projectId, promptDraft, uploadPromptAttachment]);
+
+      setAttachmentError(null);
+      const failedFiles: string[] = [];
+      for (const file of files) {
+        try {
+          const uploaded = await uploadPromptAttachment.mutateAsync({
+            projectId,
+            file,
+          });
+          promptDraft.addAttachment(uploaded);
+        } catch {
+          failedFiles.push(file.name);
+        }
+      }
+      if (failedFiles.length > 0) {
+        setAttachmentError(`Failed to attach: ${failedFiles.join(", ")}`);
+      }
+    },
+    [projectId, promptDraft, uploadPromptAttachment],
+  );
 
   const handleSend = useCallback(async () => {
     const submittedDraft = {
@@ -267,10 +292,12 @@ export function ThreadDetailPromptArea({
         promptDraft.clearIfCurrentMatches(submittedDraft);
         setAttachmentError(null);
       } catch (nextError) {
-        toast.error(getMutationErrorMessage({
-          error: nextError,
-          fallbackMessage: "Failed to queue follow-up.",
-        }));
+        toast.error(
+          getMutationErrorMessage({
+            error: nextError,
+            fallbackMessage: "Failed to queue follow-up.",
+          }),
+        );
       }
       return;
     }
@@ -291,10 +318,12 @@ export function ThreadDetailPromptArea({
       });
     } catch (nextError) {
       clearPendingFollowUp();
-      toast.error(getMutationErrorMessage({
-        error: nextError,
-        fallbackMessage: "Failed to send follow-up.",
-      }));
+      toast.error(
+        getMutationErrorMessage({
+          error: nextError,
+          fallbackMessage: "Failed to send follow-up.",
+        }),
+      );
     }
   }, [
     activeModel?.model,
@@ -312,88 +341,110 @@ export function ThreadDetailPromptArea({
     thread.status,
   ]);
 
-  const handleSendQueuedImmediately = useCallback((messageId: string) => {
-    const queuedMessage = queuedMessages.find((candidate) => candidate.id === messageId);
-    if (!queuedMessage) {
-      return;
-    }
+  const handleSendQueuedImmediately = useCallback(
+    (messageId: string) => {
+      const queuedMessage = queuedMessages.find(
+        (candidate) => candidate.id === messageId,
+      );
+      if (!queuedMessage) {
+        return;
+      }
 
-    setProcessingQueuedMessageId(messageId);
-    void sendDraft
-      .mutateAsync({
-        id: thread.id,
-        queuedMessageId: messageId,
-      })
-      .then(() => {
-        setAttachmentError(null);
-      })
-      .catch((nextError) => {
-        toast.error(getMutationErrorMessage({
-          error: nextError,
-          fallbackMessage: "Failed to send queued follow-up.",
-        }));
-      })
-      .finally(() => {
-        setProcessingQueuedMessageId((currentMessageId) =>
-          currentMessageId === messageId ? null : currentMessageId,
-        );
-      });
-  }, [queuedMessages, sendDraft, thread.id]);
+      setProcessingQueuedMessageId(messageId);
+      void sendDraft
+        .mutateAsync({
+          id: thread.id,
+          queuedMessageId: messageId,
+        })
+        .then(() => {
+          setAttachmentError(null);
+        })
+        .catch((nextError) => {
+          toast.error(
+            getMutationErrorMessage({
+              error: nextError,
+              fallbackMessage: "Failed to send queued follow-up.",
+            }),
+          );
+        })
+        .finally(() => {
+          setProcessingQueuedMessageId((currentMessageId) =>
+            currentMessageId === messageId ? null : currentMessageId,
+          );
+        });
+    },
+    [queuedMessages, sendDraft, thread.id],
+  );
 
-  const handleEditQueuedMessage = useCallback((messageId: string) => {
-    const queuedMessage = queuedMessages.find((candidate) => candidate.id === messageId);
-    if (!queuedMessage) {
-      return;
-    }
+  const handleEditQueuedMessage = useCallback(
+    (messageId: string) => {
+      const queuedMessage = queuedMessages.find(
+        (candidate) => candidate.id === messageId,
+      );
+      if (!queuedMessage) {
+        return;
+      }
 
-    setProcessingQueuedMessageId(messageId);
-    void deleteDraft
-      .mutateAsync({
-        id: thread.id,
-        queuedMessageId: messageId,
-      })
-      .then(() => {
-        const restoredDraft = queuedInputToDraft(queuedMessage.content);
-        promptDraft.setText(restoredDraft.text);
-        promptDraft.setAttachments(restoredDraft.attachments);
-        setAttachmentError(null);
-      })
-      .catch((nextError) => {
-        toast.error(getMutationErrorMessage({
-          error: nextError,
-          fallbackMessage: "Failed to edit queued follow-up.",
-        }));
-      })
-      .finally(() => {
-        setProcessingQueuedMessageId((currentMessageId) =>
-          currentMessageId === messageId ? null : currentMessageId,
-        );
-      });
-  }, [deleteDraft, promptDraft, queuedMessages, thread.id]);
+      setProcessingQueuedMessageId(messageId);
+      void deleteDraft
+        .mutateAsync({
+          id: thread.id,
+          queuedMessageId: messageId,
+        })
+        .then(() => {
+          const restoredDraft = queuedInputToDraft(queuedMessage.content);
+          promptDraft.setText(restoredDraft.text);
+          promptDraft.setAttachments(restoredDraft.attachments);
+          setAttachmentError(null);
+        })
+        .catch((nextError) => {
+          toast.error(
+            getMutationErrorMessage({
+              error: nextError,
+              fallbackMessage: "Failed to edit queued follow-up.",
+            }),
+          );
+        })
+        .finally(() => {
+          setProcessingQueuedMessageId((currentMessageId) =>
+            currentMessageId === messageId ? null : currentMessageId,
+          );
+        });
+    },
+    [deleteDraft, promptDraft, queuedMessages, thread.id],
+  );
 
-  const handleDeleteQueuedMessage = useCallback((messageId: string) => {
-    setProcessingQueuedMessageId(messageId);
-    void deleteDraft
-      .mutateAsync({
-        id: thread.id,
-        queuedMessageId: messageId,
-      })
-      .catch((nextError) => {
-        toast.error(getMutationErrorMessage({
-          error: nextError,
-          fallbackMessage: "Failed to delete queued follow-up.",
-        }));
-      })
-      .finally(() => {
-        setProcessingQueuedMessageId((currentMessageId) =>
-          currentMessageId === messageId ? null : currentMessageId,
-        );
-      });
-  }, [deleteDraft, thread.id]);
+  const handleDeleteQueuedMessage = useCallback(
+    (messageId: string) => {
+      setProcessingQueuedMessageId(messageId);
+      void deleteDraft
+        .mutateAsync({
+          id: thread.id,
+          queuedMessageId: messageId,
+        })
+        .catch((nextError) => {
+          toast.error(
+            getMutationErrorMessage({
+              error: nextError,
+              fallbackMessage: "Failed to delete queued follow-up.",
+            }),
+          );
+        })
+        .finally(() => {
+          setProcessingQueuedMessageId((currentMessageId) =>
+            currentMessageId === messageId ? null : currentMessageId,
+          );
+        });
+    },
+    [deleteDraft, thread.id],
+  );
 
-  const handlePromptBannerFileClick = useCallback((file: PromptBannerFile) => {
-    openDiffFile(file.path);
-  }, [openDiffFile]);
+  const handlePromptBannerFileClick = useCallback(
+    (file: PromptBannerFile) => {
+      openDiffFile(file.path);
+    },
+    [openDiffFile],
+  );
 
   if (activePendingInteraction) {
     return (
@@ -422,11 +473,15 @@ export function ThreadDetailPromptArea({
         isDiffPanelActive: canUseGitUi && isDiffPanelActive,
         mergeBaseBranchOptions,
         mergeBaseBranchOptionsLoading: isLoadingMergeBaseBranchOptions,
-        onPromptBannerFileClick: canUseGitUi ? handlePromptBannerFileClick : () => {},
+        onPromptBannerFileClick: canUseGitUi
+          ? handlePromptBannerFileClick
+          : () => {},
         onPromptBannerMergeBaseBranchChange: showBranchComparisonUi
           ? onMergeBaseBranchChange
           : undefined,
-        onPromptGitStatsBannerClick: canUseGitUi ? openThreadDiffPanel : () => {},
+        onPromptGitStatsBannerClick: canUseGitUi
+          ? openThreadDiffPanel
+          : () => {},
         onToggleChangeListExpanded: () => {
           setIsChangeListExpanded((previousValue) => !previousValue);
         },

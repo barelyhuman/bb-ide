@@ -1,7 +1,4 @@
-import {
-  extractErrorMessage,
-  toRecord,
-} from "@bb/core-ui";
+import { extractErrorMessage, toRecord } from "@bb/core-ui";
 import { toast } from "sonner";
 import { HttpError } from "./api";
 
@@ -62,11 +59,15 @@ function getHttpErrorMessage(error: HttpError): string | null {
     return normalizeMessage(bodyMessage);
   }
 
-  const strippedMessage = stripHttpStatusPrefix(normalizeMessage(error.message));
+  const strippedMessage = stripHttpStatusPrefix(
+    normalizeMessage(error.message),
+  );
   return strippedMessage.length > 0 ? strippedMessage : null;
 }
 
-export function getMutationErrorMeta(value: MutationErrorMetaInput): MutationErrorMeta {
+export function getMutationErrorMeta(
+  value: MutationErrorMetaInput,
+): MutationErrorMeta {
   if (!value) {
     return {};
   }
@@ -103,7 +104,9 @@ export function getMutationErrorMessage({
     return fallbackMessage;
   }
 
-  const normalizedMessage = stripHttpStatusPrefix(normalizeMessage(extractedMessage));
+  const normalizedMessage = stripHttpStatusPrefix(
+    normalizeMessage(extractedMessage),
+  );
   return normalizedMessage.length > 0 ? normalizedMessage : fallbackMessage;
 }
 

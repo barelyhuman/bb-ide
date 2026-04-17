@@ -1,8 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  provisionHost,
-  resumeHost,
-} from "../src/index.js";
+import { provisionHost, resumeHost } from "../src/index.js";
 import {
   SANDBOX_BB_EXECUTABLE_DIR,
   SANDBOX_BB_EXECUTABLE_PATH,
@@ -402,7 +399,10 @@ describe("sandbox host provisioning", () => {
       `chmod +x ${SANDBOX_BB_EXECUTABLE_PATH}`,
       {},
     );
-    expect(sandbox.commands.run).toHaveBeenCalledWith("curl -sf http://127.0.0.1:9111/health", {});
+    expect(sandbox.commands.run).toHaveBeenCalledWith(
+      "curl -sf http://127.0.0.1:9111/health",
+      {},
+    );
     expect(sandbox.commands.run).toHaveBeenCalledWith(daemonStartCommand, {
       background: true,
       envs: expectedResumeDaemonEnv,
@@ -427,7 +427,10 @@ describe("sandbox host provisioning", () => {
     });
 
     expect(sandbox.commands.run).toHaveBeenCalledTimes(1);
-    expect(sandbox.commands.run).toHaveBeenCalledWith("curl -sf http://127.0.0.1:9111/health", {});
+    expect(sandbox.commands.run).toHaveBeenCalledWith(
+      "curl -sf http://127.0.0.1:9111/health",
+      {},
+    );
     expect(sandbox.files.write).not.toHaveBeenCalled();
     expect(host.externalId).toBe("sandbox-123");
   });
@@ -448,7 +451,9 @@ describe("sandbox host provisioning", () => {
       hostName: "sandbox-123",
       serverUrl: "https://bb.example.test",
     });
-    const assertion = expect(resuming).rejects.toThrow("health failed after restart");
+    const assertion = expect(resuming).rejects.toThrow(
+      "health failed after restart",
+    );
 
     await vi.runAllTimersAsync();
     await assertion;

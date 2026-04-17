@@ -1,79 +1,76 @@
-import { useMemo } from "react"
-import type { ThreadListEntry } from "@bb/domain"
-import type { ProjectResponse } from "@bb/server-contract"
-import {
-  AlertTriangle,
-  ChevronRight,
-  Folder,
-  FolderOpen,
-} from "lucide-react"
-import { NavLink } from "react-router-dom"
-import { EmptyState } from "@/components/shared/EmptyState"
-import { ProjectActionsMenu } from "@/components/project/ProjectActionsMenu"
-import { SidebarMenuItem, SidebarMenuSkeleton } from "@/components/ui/sidebar"
-import { isBusyThread } from "@/lib/thread-activity"
-import { cn } from "@/lib/utils"
-import { ThreadRow } from "./ThreadRow"
+import { useMemo } from "react";
+import type { ThreadListEntry } from "@bb/domain";
+import type { ProjectResponse } from "@bb/server-contract";
+import { AlertTriangle, ChevronRight, Folder, FolderOpen } from "lucide-react";
+import { NavLink } from "react-router-dom";
+import { EmptyState } from "@/components/shared/EmptyState";
+import { ProjectActionsMenu } from "@/components/project/ProjectActionsMenu";
+import { SidebarMenuItem, SidebarMenuSkeleton } from "@/components/ui/sidebar";
+import { isBusyThread } from "@/lib/thread-activity";
+import { cn } from "@/lib/utils";
+import { ThreadRow } from "./ThreadRow";
 
 interface ProjectRowProps {
-  project: ProjectResponse
-  projectThreads: ThreadListEntry[]
-  threadsLoading: boolean
-  selectedThreadId?: string
-  isActive: boolean
-  isCollapsed: boolean
-  collapsedManagerIds: Set<string>
-  isLocalPathInvalid: boolean
-  localHostId: string | null
-  onProjectSelect?: () => void
-  onToggleProjectCollapsed: (projectId: string) => void
-  onToggleManagerCollapsed: (threadId: string) => void
-  promotedBranchName: string | null
+  project: ProjectResponse;
+  projectThreads: ThreadListEntry[];
+  threadsLoading: boolean;
+  selectedThreadId?: string;
+  isActive: boolean;
+  isCollapsed: boolean;
+  collapsedManagerIds: Set<string>;
+  isLocalPathInvalid: boolean;
+  localHostId: string | null;
+  onProjectSelect?: () => void;
+  onToggleProjectCollapsed: (projectId: string) => void;
+  onToggleManagerCollapsed: (threadId: string) => void;
+  promotedBranchName: string | null;
 }
 
 interface ProjectThreadGroups {
-  managerThreads: ThreadListEntry[]
-  managedThreadsByManagerId: Map<string, ThreadListEntry[]>
-  otherThreads: ThreadListEntry[]
+  managerThreads: ThreadListEntry[];
+  managedThreadsByManagerId: Map<string, ThreadListEntry[]>;
+  otherThreads: ThreadListEntry[];
 }
 
-function buildProjectThreadGroups(projectThreads: ThreadListEntry[]): ProjectThreadGroups {
+function buildProjectThreadGroups(
+  projectThreads: ThreadListEntry[],
+): ProjectThreadGroups {
   const managerThreads = projectThreads
     .filter((thread) => thread.type === "manager")
-    .sort((a, b) => b.createdAt - a.createdAt)
-  const managerThreadIds = new Set(managerThreads.map((thread) => thread.id))
-  const managedThreadsByManagerId = new Map<string, ThreadListEntry[]>()
+    .sort((a, b) => b.createdAt - a.createdAt);
+  const managerThreadIds = new Set(managerThreads.map((thread) => thread.id));
+  const managedThreadsByManagerId = new Map<string, ThreadListEntry[]>();
 
   for (const thread of projectThreads) {
-    if (thread.type !== "standard" || !thread.parentThreadId) continue
-    if (!managerThreadIds.has(thread.parentThreadId)) continue
+    if (thread.type !== "standard" || !thread.parentThreadId) continue;
+    if (!managerThreadIds.has(thread.parentThreadId)) continue;
 
-    const existing = managedThreadsByManagerId.get(thread.parentThreadId)
+    const existing = managedThreadsByManagerId.get(thread.parentThreadId);
     if (existing) {
-      existing.push(thread)
-      continue
+      existing.push(thread);
+      continue;
     }
 
-    managedThreadsByManagerId.set(thread.parentThreadId, [thread])
+    managedThreadsByManagerId.set(thread.parentThreadId, [thread]);
   }
 
   for (const managedThreads of managedThreadsByManagerId.values()) {
-    managedThreads.sort((a, b) => b.createdAt - a.createdAt)
+    managedThreads.sort((a, b) => b.createdAt - a.createdAt);
   }
 
   const otherThreads = projectThreads
     .filter((thread) => {
-      if (thread.type === "manager") return false
-      if (!thread.parentThreadId) return true
-      return !managerThreadIds.has(thread.parentThreadId)
+      if (thread.type === "manager") return false;
+      if (!thread.parentThreadId) return true;
+      return !managerThreadIds.has(thread.parentThreadId);
     })
-    .sort((a, b) => b.createdAt - a.createdAt)
+    .sort((a, b) => b.createdAt - a.createdAt);
 
   return {
     managerThreads,
     managedThreadsByManagerId,
     otherThreads,
-  }
+  };
 }
 
 export function ProjectRow({
@@ -94,12 +91,12 @@ export function ProjectRow({
   const { managerThreads, managedThreadsByManagerId, otherThreads } = useMemo(
     () => buildProjectThreadGroups(projectThreads),
     [projectThreads],
-  )
+  );
   const isThreadPromoted = (thread: ThreadListEntry) =>
     localHostId !== null &&
     promotedBranchName !== null &&
     thread.environmentHostId === localHostId &&
-    thread.environmentBranchName === promotedBranchName
+    thread.environmentBranchName === promotedBranchName;
 
   return (
     <SidebarMenuItem className="space-y-1">
@@ -120,10 +117,14 @@ export function ProjectRow({
         <button
           type="button"
           aria-expanded={!isCollapsed}
-          aria-label={isCollapsed ? `Expand ${project.name}` : `Collapse ${project.name}`}
-          title={isCollapsed ? "Expand project threads" : "Collapse project threads"}
+          aria-label={
+            isCollapsed ? `Expand ${project.name}` : `Collapse ${project.name}`
+          }
+          title={
+            isCollapsed ? "Expand project threads" : "Collapse project threads"
+          }
           onClick={() => {
-            onToggleProjectCollapsed(project.id)
+            onToggleProjectCollapsed(project.id);
           }}
           className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2 md:h-8 md:w-8"
         >
@@ -148,8 +149,8 @@ export function ProjectRow({
           <NavLink
             to={`/projects/${project.id}/settings`}
             onClick={(event) => {
-              event.stopPropagation()
-              onProjectSelect?.()
+              event.stopPropagation();
+              onProjectSelect?.();
             }}
             title="Project folder not found. Open project settings to fix."
             aria-label="Project folder not found"
@@ -172,8 +173,9 @@ export function ProjectRow({
         ) : projectThreads.length > 0 ? (
           <div className="space-y-1 group-data-[collapsible=icon]:hidden">
             {managerThreads.map((thread) => {
-              const managedChildren = managedThreadsByManagerId.get(thread.id) ?? []
-              const isManagerCollapsed = collapsedManagerIds.has(thread.id)
+              const managedChildren =
+                managedThreadsByManagerId.get(thread.id) ?? [];
+              const isManagerCollapsed = collapsedManagerIds.has(thread.id);
 
               return (
                 <div key={thread.id} className="space-y-1">
@@ -189,7 +191,8 @@ export function ProjectRow({
                       hasManagedChildren: managedChildren.length > 0,
                       isCollapsed: isManagerCollapsed,
                       managedChildCount: managedChildren.length,
-                      managedChildBusyCount: managedChildren.filter(isBusyThread).length,
+                      managedChildBusyCount:
+                        managedChildren.filter(isBusyThread).length,
                     }}
                   />
                   {!isManagerCollapsed && managedChildren.length > 0 ? (
@@ -208,7 +211,7 @@ export function ProjectRow({
                     </div>
                   ) : null}
                 </div>
-              )
+              );
             })}
             {otherThreads.map((thread) => (
               <ThreadRow
@@ -231,5 +234,5 @@ export function ProjectRow({
         )
       ) : null}
     </SidebarMenuItem>
-  )
+  );
 }

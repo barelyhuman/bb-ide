@@ -6,7 +6,10 @@ import { DelegationRow } from "./rows/DelegationRow.js";
 import { DebugEventRow } from "./rows/DebugEventRow.js";
 import { ErrorRow } from "./rows/ErrorRow.js";
 import { FileEditRow } from "./rows/FileEditRow.js";
-import { PermissionGrantLifecycleRow, OperationRow } from "./rows/OperationRow.js";
+import {
+  PermissionGrantLifecycleRow,
+  OperationRow,
+} from "./rows/OperationRow.js";
 import { ReasoningRow } from "./rows/ReasoningRow.js";
 import { TasksRow } from "./rows/TasksRow.js";
 import { ToolCallRow } from "./rows/ToolCallRow.js";
@@ -50,7 +53,9 @@ function ConversationEntryComponent({
         />
       );
     case "assistant-reasoning":
-      return <ReasoningRow message={message} initialExpanded={initialExpanded} />;
+      return (
+        <ReasoningRow message={message} initialExpanded={initialExpanded} />
+      );
     case "assistant-text":
       return <AssistantMessageRow message={message} />;
     case "tool-exploring":
@@ -71,7 +76,10 @@ function ConversationEntryComponent({
       );
     case "web-search":
       return (
-        <WebSearchRow message={message} preferOngoingLabels={preferOngoingLabels} />
+        <WebSearchRow
+          message={message}
+          preferOngoingLabels={preferOngoingLabels}
+        />
       );
     case "file-edit":
       return (
@@ -83,7 +91,9 @@ function ConversationEntryComponent({
         />
       );
     case "operation":
-      return <OperationRow message={message} initialExpanded={initialExpanded} />;
+      return (
+        <OperationRow message={message} initialExpanded={initialExpanded} />
+      );
     case "permission-grant-lifecycle":
       return (
         <PermissionGrantLifecycleRow

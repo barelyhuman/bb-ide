@@ -1,8 +1,5 @@
 import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
-import {
-  makeWorkspaceMergeBase,
-  makeWorkspaceStatus,
-} from "@bb/test-helpers";
+import { makeWorkspaceMergeBase, makeWorkspaceStatus } from "@bb/test-helpers";
 import { vi } from "vitest";
 
 export const provisionHostMock = vi.fn();

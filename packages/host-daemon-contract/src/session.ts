@@ -24,7 +24,9 @@ export const HOST_DAEMON_WEBSOCKET_PROTOCOL = "bb-host-daemon.v1";
 export const hostDaemonActiveThreadSchema = z.object({
   threadId: z.string().min(1),
 });
-export type HostDaemonActiveThread = z.infer<typeof hostDaemonActiveThreadSchema>;
+export type HostDaemonActiveThread = z.infer<
+  typeof hostDaemonActiveThreadSchema
+>;
 
 export const hostDaemonTrackedThreadTargetSchema = z.object({
   environmentId: z.string().min(1),
@@ -47,19 +49,23 @@ export type HostDaemonSessionOpenRequest = z.infer<
   typeof hostDaemonSessionOpenRequestSchema
 >;
 
-export const hostDaemonEnrollRequestSchema = z.object({
-  hostId: z.string().min(1),
-  hostName: z.string().min(1),
-  hostType: hostTypeSchema,
-}).strict();
+export const hostDaemonEnrollRequestSchema = z
+  .object({
+    hostId: z.string().min(1),
+    hostName: z.string().min(1),
+    hostType: hostTypeSchema,
+  })
+  .strict();
 export type HostDaemonEnrollRequest = z.infer<
   typeof hostDaemonEnrollRequestSchema
 >;
 
-export const hostDaemonEnrollResponseSchema = z.object({
-  hostId: z.string().min(1),
-  hostKey: z.string().min(1),
-}).strict();
+export const hostDaemonEnrollResponseSchema = z
+  .object({
+    hostId: z.string().min(1),
+    hostKey: z.string().min(1),
+  })
+  .strict();
 export type HostDaemonEnrollResponse = z.infer<
   typeof hostDaemonEnrollResponseSchema
 >;
@@ -95,7 +101,9 @@ export type HostDaemonRuntimeMaterialQuery = z.infer<
 export const hostDaemonCommandBatchSchema = z.object({
   commands: z.array(hostDaemonCommandEnvelopeSchema),
 });
-export type HostDaemonCommandBatch = z.infer<typeof hostDaemonCommandBatchSchema>;
+export type HostDaemonCommandBatch = z.infer<
+  typeof hostDaemonCommandBatchSchema
+>;
 
 export const hostDaemonEventEnvelopeSchema = z.object({
   environmentId: z.string().min(1),
@@ -170,9 +178,11 @@ export type HostDaemonServerWsMessage = z.infer<
   typeof hostDaemonServerWsMessageSchema
 >;
 
-export const hostDaemonDaemonWsMessageSchema = z.object({
-  type: z.literal("heartbeat"),
-}).strict();
+export const hostDaemonDaemonWsMessageSchema = z
+  .object({
+    type: z.literal("heartbeat"),
+  })
+  .strict();
 export type HostDaemonDaemonWsMessage = z.infer<
   typeof hostDaemonDaemonWsMessageSchema
 >;
@@ -206,8 +216,9 @@ export type HostDaemonInteractiveRequest = z.infer<
   typeof hostDaemonInteractiveRequestSchema
 >;
 
-export const hostDaemonInteractiveRequestResponseSchema =
-  z.discriminatedUnion("outcome", [
+export const hostDaemonInteractiveRequestResponseSchema = z.discriminatedUnion(
+  "outcome",
+  [
     z.object({
       outcome: z.literal("created"),
       interactionId: z.string().min(1),
@@ -222,7 +233,8 @@ export const hostDaemonInteractiveRequestResponseSchema =
       outcome: z.literal("rejected"),
       reason: z.string().min(1),
     }),
-  ]);
+  ],
+);
 export type HostDaemonInteractiveRequestResponse = z.infer<
   typeof hostDaemonInteractiveRequestResponseSchema
 >;
@@ -265,7 +277,11 @@ export type HostDaemonInternalSchema = {
   "/session/commands": {
     /** Used by the daemon to fetch pending commands. Supports long-poll via `waitMs`. */
     $get:
-      | Endpoint<{ query: HostDaemonCommandsQuery }, HostDaemonCommandBatch, 200>
+      | Endpoint<
+          { query: HostDaemonCommandsQuery },
+          HostDaemonCommandBatch,
+          200
+        >
       | Endpoint<{ query: HostDaemonCommandsQuery }, undefined, 204>;
   };
   "/session/runtime-material": {

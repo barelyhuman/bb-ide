@@ -50,7 +50,9 @@ function requireProjectSourceWorkspaceStatusIds({
   sourceId,
 }: RequireProjectSourceWorkspaceStatusIdsArgs) {
   if (!projectId || !sourceId) {
-    throw new Error("useProjectSourceWorkspaceStatus: projectId and sourceId are required when query is enabled");
+    throw new Error(
+      "useProjectSourceWorkspaceStatus: projectId and sourceId are required when query is enabled",
+    );
   }
 
   return {

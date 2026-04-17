@@ -41,12 +41,10 @@ export function registerInternalInteractiveRequestRoutes(
         );
       }
 
-      const registered = deps.pendingInteractions.registerPendingInteraction(
-        {
-          interaction: payload.interaction,
-          sessionId: payload.sessionId,
-        },
-      );
+      const registered = deps.pendingInteractions.registerPendingInteraction({
+        interaction: payload.interaction,
+        sessionId: payload.sessionId,
+      });
       if (registered.outcome === "rejected") {
         return context.json({
           outcome: "rejected",
@@ -94,11 +92,12 @@ export function registerInternalInteractiveRequestRoutes(
         interruptibleThreadIds.push(threadId);
       }
 
-      const interrupted = deps.pendingInteractions.interruptPendingInteractionsForThreads({
-        providerId: payload.providerId,
-        threadIds: interruptibleThreadIds,
-        reason: payload.reason,
-      });
+      const interrupted =
+        deps.pendingInteractions.interruptPendingInteractionsForThreads({
+          providerId: payload.providerId,
+          threadIds: interruptibleThreadIds,
+          reason: payload.reason,
+        });
 
       return context.json({
         ok: true,

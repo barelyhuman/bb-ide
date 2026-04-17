@@ -9,9 +9,7 @@ import {
   upsertHost,
 } from "@bb/db";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
-import {
-  parseStoredThreadEvent,
-} from "@bb/domain";
+import { parseStoredThreadEvent } from "@bb/domain";
 import type {
   EnvironmentStatus,
   PermissionMode,
@@ -64,10 +62,7 @@ export function seedHostSession(
   return { host, session };
 }
 
-export function seedSession(
-  deps: Pick<AppDeps, "db" | "hub">,
-  hostId: string,
-) {
+export function seedSession(deps: Pick<AppDeps, "db" | "hub">, hostId: string) {
   return openSession(deps.db, deps.hub, {
     hostId,
     instanceId: "instance-1",
@@ -122,7 +117,8 @@ export function seedEnvironment(
     isWorktree: args.workspaceProvisionType === "managed-worktree",
     workspaceProvisionType: args.workspaceProvisionType ?? "unmanaged",
     branchName: args.branchName !== undefined ? args.branchName : "bb/test",
-    defaultBranch: args.defaultBranch !== undefined ? args.defaultBranch : "main",
+    defaultBranch:
+      args.defaultBranch !== undefined ? args.defaultBranch : "main",
     mergeBaseBranch: args.mergeBaseBranch ?? null,
   });
 }

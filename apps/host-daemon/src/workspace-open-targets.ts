@@ -39,7 +39,10 @@ interface ExecFileResult {
   stdout: string;
 }
 
-type ExecFileHandler = (file: string, args: string[]) => Promise<ExecFileResult>;
+type ExecFileHandler = (
+  file: string,
+  args: string[],
+) => Promise<ExecFileResult>;
 
 export interface WorkspaceOpenTargetRuntime {
   applicationDirectories: string[];
@@ -272,7 +275,7 @@ export async function listWorkspaceOpenTargetsWithRuntime(
 
   const targets = await Promise.all(
     WORKSPACE_OPEN_TARGET_DEFINITIONS.map(async (definition) =>
-      await isMacTargetAvailable(definition, runtime)
+      (await isMacTargetAvailable(definition, runtime))
         ? toWorkspaceOpenTarget(definition)
         : null,
     ),
@@ -326,10 +329,17 @@ export async function openWorkspaceInTargetWithRuntime(
     });
   }
 
-  await runtime.execFile("open", ["-a", definition.macos.appName, "--", args.path]);
+  await runtime.execFile("open", [
+    "-a",
+    definition.macos.appName,
+    "--",
+    args.path,
+  ]);
 }
 
-export async function listWorkspaceOpenTargets(): Promise<WorkspaceOpenTarget[]> {
+export async function listWorkspaceOpenTargets(): Promise<
+  WorkspaceOpenTarget[]
+> {
   return listWorkspaceOpenTargetsWithRuntime(createDefaultRuntime());
 }
 

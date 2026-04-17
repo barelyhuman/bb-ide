@@ -5,12 +5,8 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { ProviderAuditReplayBuildArtifact } from "../src/build-artifacts.js";
 import { loadProviderAuditReplayBuildArtifact } from "../src/build-artifacts.js";
-import {
-  replayFixtures,
-} from "../src/replay.js";
-import {
-  DEFAULT_LADLE_OUTPUT_PATH,
-} from "../src/visual-audit.js";
+import { replayFixtures } from "../src/replay.js";
+import { DEFAULT_LADLE_OUTPUT_PATH } from "../src/visual-audit.js";
 
 const TEMP_DIRS: string[] = [];
 let checkedInArtifact: ProviderAuditReplayBuildArtifact;
@@ -58,13 +54,12 @@ describe("@bb/agent-provider-audit fixture replay", () => {
   });
 
   it("snapshots parsed context-window data for replayed token-usage events", () => {
-    const contextWindowSnapshotRows = checkedInArtifact.contextWindowSnapshots.map(
-      (snapshot) => ({
+    const contextWindowSnapshotRows =
+      checkedInArtifact.contextWindowSnapshots.map((snapshot) => ({
         contextWindowUsage: snapshot.contextWindowUsage,
         fixture: snapshot.fixture,
         tokenUsageSummary: snapshot.tokenUsageSummary,
-      }),
-    );
+      }));
 
     expect(contextWindowSnapshotRows).toMatchSnapshot();
   });
@@ -77,8 +72,12 @@ describe("@bb/agent-provider-audit fixture replay", () => {
     expect(piSnapshots.length).toBeGreaterThan(0);
     for (const snapshot of piSnapshots) {
       expect(snapshot.contextWindowUsage).toBeNull();
-      expect(snapshot.tokenUsageSummary.nonNullModelContextWindowCount).toBeGreaterThan(0);
-      expect(snapshot.tokenUsageSummary.distinctModelContextWindows.length).toBeGreaterThan(0);
+      expect(
+        snapshot.tokenUsageSummary.nonNullModelContextWindowCount,
+      ).toBeGreaterThan(0);
+      expect(
+        snapshot.tokenUsageSummary.distinctModelContextWindows.length,
+      ).toBeGreaterThan(0);
     }
   });
 
@@ -134,25 +133,21 @@ describe("@bb/agent-provider-audit fixture replay", () => {
     expect(delegation?.hasChildToolActivity).toBe(true);
   });
 
-  it(
-    "exports shared React story data for the checked-in fixtures",
-    () => {
-      const storyData = checkedInArtifact.ladleStoryData;
+  it("exports shared React story data for the checked-in fixtures", () => {
+    const storyData = checkedInArtifact.ladleStoryData;
 
-      expect(
-        storyData.fixtures.map((fixture) => ({
-          id: fixture.id,
-          latestActivityRowId: fixture.latestActivityRowId,
-          timelineRowCount: fixture.timelineRowCount,
-          viewMessageCount: fixture.viewMessageCount,
-        })),
-      ).toMatchSnapshot();
+    expect(
+      storyData.fixtures.map((fixture) => ({
+        id: fixture.id,
+        latestActivityRowId: fixture.latestActivityRowId,
+        timelineRowCount: fixture.timelineRowCount,
+        viewMessageCount: fixture.viewMessageCount,
+      })),
+    ).toMatchSnapshot();
 
-      expect(existsSync(DEFAULT_LADLE_OUTPUT_PATH)).toBe(true);
-      expect(readFileSync(DEFAULT_LADLE_OUTPUT_PATH, "utf8")).toContain(
-        "fixtureStoryData",
-      );
-    },
-    60_000,
-  );
+    expect(existsSync(DEFAULT_LADLE_OUTPUT_PATH)).toBe(true);
+    expect(readFileSync(DEFAULT_LADLE_OUTPUT_PATH, "utf8")).toContain(
+      "fixtureStoryData",
+    );
+  }, 60_000);
 });

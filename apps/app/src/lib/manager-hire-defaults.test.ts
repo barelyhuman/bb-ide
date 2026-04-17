@@ -51,7 +51,9 @@ describe("resolvePreferredManagerProviderId", () => {
   });
 
   it("falls back to the first available provider", () => {
-    expect(resolvePreferredManagerProviderId([makeProvider("codex")])).toBe("codex");
+    expect(resolvePreferredManagerProviderId([makeProvider("codex")])).toBe(
+      "codex",
+    );
   });
 });
 
@@ -62,8 +64,14 @@ describe("resolvePreferredManagerReasoningLevel", () => {
         makeModel("claude-opus-4-7[1m]", {
           defaultReasoningEffort: "xhigh",
           supportedReasoningEfforts: [
-            { reasoningEffort: "medium", description: "Medium reasoning effort" },
-            { reasoningEffort: "xhigh", description: "Extra high reasoning effort" },
+            {
+              reasoningEffort: "medium",
+              description: "Medium reasoning effort",
+            },
+            {
+              reasoningEffort: "xhigh",
+              description: "Extra high reasoning effort",
+            },
           ],
         }),
       ),

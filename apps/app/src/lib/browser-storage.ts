@@ -110,11 +110,7 @@ export function createLocalStorageSyncStorage<T>(
     removeItem: (key: string) => {
       localStorageStringStorage.removeItem(key);
     },
-    subscribe: (
-      key: string,
-      callback: (value: T) => void,
-      initialValue: T,
-    ) =>
+    subscribe: (key: string, callback: (value: T) => void, initialValue: T) =>
       subscribeToLocalStorageKey(key, (storedValue) => {
         callback(codec.parse(storedValue, initialValue));
       }),
@@ -177,6 +173,6 @@ export function createProjectScopedStorageAtomFamily<T>(
       initialValue,
       storage,
       { getOnInit: true },
-    )
+    ),
   );
 }

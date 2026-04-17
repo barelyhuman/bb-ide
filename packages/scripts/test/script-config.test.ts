@@ -44,9 +44,8 @@ describe("script-config", () => {
       vi.stubEnv("NODE_ENV", testCase.nodeEnv);
 
       const { commonConfig } = await import("@bb/config/common");
-      const { resolveScriptMode: freshResolveScriptMode } = await import(
-        "../src/lib/script-config.js"
-      );
+      const { resolveScriptMode: freshResolveScriptMode } =
+        await import("../src/lib/script-config.js");
 
       const envsafeSaysDev = commonConfig.BB_LOG_LEVEL === "debug";
       const scriptMode = freshResolveScriptMode();

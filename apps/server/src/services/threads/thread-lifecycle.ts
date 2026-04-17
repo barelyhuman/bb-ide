@@ -35,7 +35,10 @@ import type {
   SandboxWorkSessionDeps,
 } from "../../types.js";
 import { ApiError } from "../../errors.js";
-import { advanceEnvironmentCleanup, requestEnvironmentCleanup } from "../environments/environment-cleanup.js";
+import {
+  advanceEnvironmentCleanup,
+  requestEnvironmentCleanup,
+} from "../environments/environment-cleanup.js";
 import {
   appendThreadInterruptedEvent,
   appendThreadProvisioningEvent,
@@ -93,8 +96,7 @@ export interface ThreadOperationCommandMutationArgs {
   commandId: string;
 }
 
-export interface FailThreadOperationForCommandArgs
-  extends ThreadOperationCommandMutationArgs {
+export interface FailThreadOperationForCommandArgs extends ThreadOperationCommandMutationArgs {
   failureReason: string;
 }
 
@@ -107,8 +109,10 @@ function hasQueuedThreadOperationCommand(
   }
 
   const command = getCommand(deps.db, commandId);
-  return command !== null
-    && (command.state === "pending" || command.state === "fetched");
+  return (
+    command !== null &&
+    (command.state === "pending" || command.state === "fetched")
+  );
 }
 
 function getActiveThreadOperation(
@@ -135,9 +139,9 @@ function getActiveThreadOperationByCommandId(
 ) {
   const operation = getThreadOperationByCommandId(deps.db, args.commandId);
   if (
-    !operation
-    || operation.kind !== args.kind
-    || !isActiveLifecycleOperationState(operation.state)
+    !operation ||
+    operation.kind !== args.kind ||
+    !isActiveLifecycleOperationState(operation.state)
   ) {
     return null;
   }
@@ -168,10 +172,12 @@ export function hasActiveThreadStartOperation(
   deps: Pick<AppDeps, "db">,
   threadId: string,
 ): boolean {
-  return getActiveThreadOperation(deps, {
-    threadId,
-    kind: "start",
-  }) !== null;
+  return (
+    getActiveThreadOperation(deps, {
+      threadId,
+      kind: "start",
+    }) !== null
+  );
 }
 
 export function ensureThreadCanQueueStartRequest(
@@ -179,8 +185,8 @@ export function ensureThreadCanQueueStartRequest(
   thread: Pick<Thread, "id" | "status">,
 ): void {
   if (
-    isPreStartThreadStatus(thread.status)
-    && hasActiveThreadStartOperation(deps, thread.id)
+    isPreStartThreadStatus(thread.status) &&
+    hasActiveThreadStartOperation(deps, thread.id)
   ) {
     throw new ApiError(409, "invalid_request", "Thread is still starting");
   }
@@ -190,20 +196,24 @@ export function hasActiveThreadStartOperationForCommand(
   deps: Pick<AppDeps, "db">,
   args: ThreadOperationCommandMutationArgs,
 ): boolean {
-  return getActiveThreadOperationByCommandId(deps, {
-    commandId: args.commandId,
-    kind: "start",
-  }) !== null;
+  return (
+    getActiveThreadOperationByCommandId(deps, {
+      commandId: args.commandId,
+      kind: "start",
+    }) !== null
+  );
 }
 
 export function hasActiveThreadStopOperationForCommand(
   deps: Pick<AppDeps, "db">,
   args: ThreadOperationCommandMutationArgs,
 ): boolean {
-  return getActiveThreadOperationByCommandId(deps, {
-    commandId: args.commandId,
-    kind: "stop",
-  }) !== null;
+  return (
+    getActiveThreadOperationByCommandId(deps, {
+      commandId: args.commandId,
+      kind: "stop",
+    }) !== null
+  );
 }
 
 function completeThreadOperation(
@@ -316,9 +326,9 @@ export async function requestThreadStart(
     kind: "start",
   });
   if (
-    existingOperation
-    && isActiveLifecycleOperationState(existingOperation.state)
-    && hasQueuedThreadOperationCommand(deps, existingOperation.commandId)
+    existingOperation &&
+    isActiveLifecycleOperationState(existingOperation.state) &&
+    hasQueuedThreadOperationCommand(deps, existingOperation.commandId)
   ) {
     return;
   }
@@ -442,9 +452,9 @@ export function requestThreadStop(
     kind: "stop",
   });
   if (
-    existingOperation
-    && isActiveLifecycleOperationState(existingOperation.state)
-    && hasQueuedThreadOperationCommand(deps, existingOperation.commandId)
+    existingOperation &&
+    isActiveLifecycleOperationState(existingOperation.state) &&
+    hasQueuedThreadOperationCommand(deps, existingOperation.commandId)
   ) {
     return;
   }
@@ -469,7 +479,10 @@ export function requestThreadStopIfNeeded(
     id: string;
   },
 ): void {
-  if (thread.status !== "active" && !hasActiveThreadStartOperation(deps, thread.id)) {
+  if (
+    thread.status !== "active" &&
+    !hasActiveThreadStartOperation(deps, thread.id)
+  ) {
     return;
   }
   requestThreadStop(deps, {
@@ -537,9 +550,9 @@ export async function finalizeStoppedThread(
     kind: "stop",
   });
   if (
-    args.expectedCommandId
-    && stopOperation
-    && stopOperation.commandId !== args.expectedCommandId
+    args.expectedCommandId &&
+    stopOperation &&
+    stopOperation.commandId !== args.expectedCommandId
   ) {
     return false;
   }
@@ -595,7 +608,9 @@ export async function finalizeStoppedThread(
     });
 
     const environmentId = finalizedThread.environmentId;
-    const environment = environmentId ? getEnvironment(deps.db, environmentId) : null;
+    const environment = environmentId
+      ? getEnvironment(deps.db, environmentId)
+      : null;
     if (environment) {
       const queuedDelete = queueThreadDeletedCommand(deps, {
         environment: { hostId: environment.hostId, id: environment.id },

@@ -3,33 +3,42 @@ import { z } from "zod";
 
 const reasoningLevelSchema = z.enum(["low", "medium", "high", "xhigh"]);
 
-const reasoningEffortOptionSchema = z.object({
-  reasoningEffort: reasoningLevelSchema,
-  description: z.string(),
-}).passthrough();
+const reasoningEffortOptionSchema = z
+  .object({
+    reasoningEffort: reasoningLevelSchema,
+    description: z.string(),
+  })
+  .passthrough();
 
-const DEFAULT_REASONING_EFFORTS: z.infer<typeof reasoningEffortOptionSchema>[] = [
-  { reasoningEffort: "low", description: "Low reasoning effort" },
-  { reasoningEffort: "medium", description: "Medium reasoning effort" },
-  { reasoningEffort: "high", description: "High reasoning effort" },
-  { reasoningEffort: "xhigh", description: "Extra high reasoning effort" },
-];
+const DEFAULT_REASONING_EFFORTS: z.infer<typeof reasoningEffortOptionSchema>[] =
+  [
+    { reasoningEffort: "low", description: "Low reasoning effort" },
+    { reasoningEffort: "medium", description: "Medium reasoning effort" },
+    { reasoningEffort: "high", description: "High reasoning effort" },
+    { reasoningEffort: "xhigh", description: "Extra high reasoning effort" },
+  ];
 
-const codexModelSchema = z.object({
-  id: z.string(),
-  model: z.string(),
-  displayName: z.string().optional(),
-  description: z.string().optional(),
-  isDefault: z.boolean().optional(),
-  supportedReasoningEfforts: z.array(reasoningEffortOptionSchema).optional(),
-  defaultReasoningEffort: reasoningLevelSchema.optional(),
-}).passthrough();
+const codexModelSchema = z
+  .object({
+    id: z.string(),
+    model: z.string(),
+    displayName: z.string().optional(),
+    description: z.string().optional(),
+    isDefault: z.boolean().optional(),
+    supportedReasoningEfforts: z.array(reasoningEffortOptionSchema).optional(),
+    defaultReasoningEffort: reasoningLevelSchema.optional(),
+  })
+  .passthrough();
 
-const codexModelListResponseSchema = z.object({
-  data: z.array(codexModelSchema),
-}).passthrough();
+const codexModelListResponseSchema = z
+  .object({
+    data: z.array(codexModelSchema),
+  })
+  .passthrough();
 
-function toAvailableModel(raw: z.infer<typeof codexModelSchema>): AvailableModel {
+function toAvailableModel(
+  raw: z.infer<typeof codexModelSchema>,
+): AvailableModel {
   const efforts = raw.supportedReasoningEfforts?.length
     ? raw.supportedReasoningEfforts
     : DEFAULT_REASONING_EFFORTS;
@@ -40,7 +49,8 @@ function toAvailableModel(raw: z.infer<typeof codexModelSchema>): AvailableModel
     displayName: raw.displayName ?? raw.model,
     description: raw.description ?? "",
     supportedReasoningEfforts: efforts,
-    defaultReasoningEffort: raw.defaultReasoningEffort ?? efforts[0].reasoningEffort,
+    defaultReasoningEffort:
+      raw.defaultReasoningEffort ?? efforts[0].reasoningEffort,
     isDefault: raw.isDefault ?? false,
   };
 }

@@ -80,13 +80,17 @@ const codexTokenResponseSchema = z
 
 const providerErrorBodySchema = z
   .object({
-    error: z.union([
-      z.string(),
-      z.object({
-        code: z.string().optional(),
-        type: z.string().optional(),
-      }).passthrough(),
-    ]).optional(),
+    error: z
+      .union([
+        z.string(),
+        z
+          .object({
+            code: z.string().optional(),
+            type: z.string().optional(),
+          })
+          .passthrough(),
+      ])
+      .optional(),
   })
   .passthrough();
 
@@ -125,12 +129,14 @@ export const claudeStoredCredentialSchema = z
     subscriptionType: claudeSubscriptionTypeSchema,
   })
   .strict();
-export type ClaudeStoredCredential = z.infer<typeof claudeStoredCredentialSchema>;
+export type ClaudeStoredCredential = z.infer<
+  typeof claudeStoredCredentialSchema
+>;
 
-export const storedCloudAuthCredentialSchema = z.discriminatedUnion("providerId", [
-  claudeStoredCredentialSchema,
-  codexStoredCredentialSchema,
-]);
+export const storedCloudAuthCredentialSchema = z.discriminatedUnion(
+  "providerId",
+  [claudeStoredCredentialSchema, codexStoredCredentialSchema],
+);
 export type StoredCloudAuthCredential = z.infer<
   typeof storedCloudAuthCredentialSchema
 >;
@@ -201,7 +207,9 @@ function extractProviderErrorCode(raw: string): string | null {
 
   const errorField = parsed.data.error;
   if (typeof errorField === "string") {
-    return SAFE_PROVIDER_ERROR_CODE_PATTERN.test(errorField) ? errorField : null;
+    return SAFE_PROVIDER_ERROR_CODE_PATTERN.test(errorField)
+      ? errorField
+      : null;
   }
   if (!errorField) {
     return null;
@@ -216,13 +224,11 @@ function extractProviderErrorCode(raw: string): string | null {
   return null;
 }
 
-function parseJsonResponseBody<TValue>(
-  args: {
-    action: string;
-    raw: string;
-    schema: z.ZodSchema<TValue>;
-  },
-): TValue {
+function parseJsonResponseBody<TValue>(args: {
+  action: string;
+  raw: string;
+  schema: z.ZodSchema<TValue>;
+}): TValue {
   try {
     const parsedJson = JSON.parse(args.raw);
     return args.schema.parse(parsedJson);
@@ -277,7 +283,9 @@ function decodeCodexAccountId(accessToken: string): string | null {
   }
 
   try {
-    const rawPayload = Buffer.from(parts[1] ?? "", "base64url").toString("utf8");
+    const rawPayload = Buffer.from(parts[1] ?? "", "base64url").toString(
+      "utf8",
+    );
     const payload = codexJwtPayloadSchema.parse(JSON.parse(rawPayload));
     return payload[OPENAI_JWT_CLAIM_PATH]?.chatgpt_account_id ?? null;
   } catch {
@@ -296,7 +304,9 @@ function decodeCodexAccountEmail(idToken: string | null): string | null {
   }
 
   try {
-    const rawPayload = Buffer.from(parts[1] ?? "", "base64url").toString("utf8");
+    const rawPayload = Buffer.from(parts[1] ?? "", "base64url").toString(
+      "utf8",
+    );
     const payload = codexIdTokenPayloadSchema.parse(JSON.parse(rawPayload));
     return payload.email ?? null;
   } catch {
@@ -328,212 +338,220 @@ async function fetchClaudeProfile(
   });
 }
 
-const claudeProviderDefinition: CloudAuthProviderDefinition<ClaudeStoredCredential> = {
-  callback: CLAUDE_CALLBACK_CONFIG,
-  async createAuthorizationFlow() {
-    const verifier = createPkceVerifier();
-    const challenge = createPkceChallenge(verifier);
-    const state = createOAuthState();
-    const url = new URL("https://claude.ai/oauth/authorize");
-    url.searchParams.set("code", "true");
-    url.searchParams.set(
-      "client_id",
-      "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
-    );
-    url.searchParams.set("response_type", "code");
-    url.searchParams.set("redirect_uri", CLAUDE_CALLBACK_CONFIG.redirectUri);
-    url.searchParams.set(
-      "scope",
-      [
-        "org:create_api_key",
-        "user:profile",
-        "user:inference",
-        "user:sessions:claude_code",
-        "user:mcp_servers",
-        "user:file_upload",
-      ].join(" "),
-    );
-    url.searchParams.set("code_challenge", challenge);
-    url.searchParams.set("code_challenge_method", "S256");
-    url.searchParams.set("state", state);
+const claudeProviderDefinition: CloudAuthProviderDefinition<ClaudeStoredCredential> =
+  {
+    callback: CLAUDE_CALLBACK_CONFIG,
+    async createAuthorizationFlow() {
+      const verifier = createPkceVerifier();
+      const challenge = createPkceChallenge(verifier);
+      const state = createOAuthState();
+      const url = new URL("https://claude.ai/oauth/authorize");
+      url.searchParams.set("code", "true");
+      url.searchParams.set("client_id", "9d1c250a-e61b-44d9-88ed-5944d1962f5e");
+      url.searchParams.set("response_type", "code");
+      url.searchParams.set("redirect_uri", CLAUDE_CALLBACK_CONFIG.redirectUri);
+      url.searchParams.set(
+        "scope",
+        [
+          "org:create_api_key",
+          "user:profile",
+          "user:inference",
+          "user:sessions:claude_code",
+          "user:mcp_servers",
+          "user:file_upload",
+        ].join(" "),
+      );
+      url.searchParams.set("code_challenge", challenge);
+      url.searchParams.set("code_challenge_method", "S256");
+      url.searchParams.set("state", state);
 
-    return {
-      authorizationUrl: formatOAuthAuthorizationUrl(url),
-      state,
-      verifier,
-    };
-  },
-  displayName: getCloudAuthProvider("claude-code").displayName,
-  async exchangeCode(args) {
-    const response = await fetch("https://platform.claude.com/v1/oauth/token", {
-      body: JSON.stringify({
-        client_id: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
-        code: args.code,
-        code_verifier: args.verifier,
-        grant_type: "authorization_code",
-        redirect_uri: CLAUDE_CALLBACK_CONFIG.redirectUri,
-        state: args.state,
-      }),
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      method: "POST",
-      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
-    });
-    const tokenResponse = await readJsonResponse(
-      response,
-      claudeTokenResponseSchema,
-      "Claude OAuth token exchange",
-    );
-    const profile = await fetchClaudeProfile(tokenResponse.access_token);
+      return {
+        authorizationUrl: formatOAuthAuthorizationUrl(url),
+        state,
+        verifier,
+      };
+    },
+    displayName: getCloudAuthProvider("claude-code").displayName,
+    async exchangeCode(args) {
+      const response = await fetch(
+        "https://platform.claude.com/v1/oauth/token",
+        {
+          body: JSON.stringify({
+            client_id: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
+            code: args.code,
+            code_verifier: args.verifier,
+            grant_type: "authorization_code",
+            redirect_uri: CLAUDE_CALLBACK_CONFIG.redirectUri,
+            state: args.state,
+          }),
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          method: "POST",
+          signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+        },
+      );
+      const tokenResponse = await readJsonResponse(
+        response,
+        claudeTokenResponseSchema,
+        "Claude OAuth token exchange",
+      );
+      const profile = await fetchClaudeProfile(tokenResponse.access_token);
 
-    return {
-      accessToken: tokenResponse.access_token,
-      accountEmail: profile?.account?.email ?? null,
-      accountId: profile?.account?.uuid ?? null,
-      expiresAt: Date.now() + tokenResponse.expires_in * 1000,
-      providerId: "claude-code",
-      refreshToken: tokenResponse.refresh_token,
-      scopes:
-        tokenResponse.scope?.split(" ").filter((scope) => scope.length > 0) ?? [],
-      subscriptionType: mapClaudeOrganizationTypeToSubscription(
-        profile?.organization?.organization_type ?? null,
-      ),
-    };
-  },
-  getConnectionLabel(credential) {
-    return credential.accountEmail ?? credential.accountId ?? null;
-  },
-  id: "claude-code",
-  async refreshCredential(args) {
-    const response = await fetch("https://platform.claude.com/v1/oauth/token", {
-      body: JSON.stringify({
-        client_id: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
-        grant_type: "refresh_token",
-        refresh_token: args.credential.refreshToken,
-      }),
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      method: "POST",
-      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
-    });
-    const tokenResponse = await readJsonResponse(
-      response,
-      claudeTokenResponseSchema,
-      "Claude OAuth refresh",
-    );
-    const profile = await fetchClaudeProfile(tokenResponse.access_token);
+      return {
+        accessToken: tokenResponse.access_token,
+        accountEmail: profile?.account?.email ?? null,
+        accountId: profile?.account?.uuid ?? null,
+        expiresAt: Date.now() + tokenResponse.expires_in * 1000,
+        providerId: "claude-code",
+        refreshToken: tokenResponse.refresh_token,
+        scopes:
+          tokenResponse.scope?.split(" ").filter((scope) => scope.length > 0) ??
+          [],
+        subscriptionType: mapClaudeOrganizationTypeToSubscription(
+          profile?.organization?.organization_type ?? null,
+        ),
+      };
+    },
+    getConnectionLabel(credential) {
+      return credential.accountEmail ?? credential.accountId ?? null;
+    },
+    id: "claude-code",
+    async refreshCredential(args) {
+      const response = await fetch(
+        "https://platform.claude.com/v1/oauth/token",
+        {
+          body: JSON.stringify({
+            client_id: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
+            grant_type: "refresh_token",
+            refresh_token: args.credential.refreshToken,
+          }),
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          method: "POST",
+          signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+        },
+      );
+      const tokenResponse = await readJsonResponse(
+        response,
+        claudeTokenResponseSchema,
+        "Claude OAuth refresh",
+      );
+      const profile = await fetchClaudeProfile(tokenResponse.access_token);
 
-    return {
-      accessToken: tokenResponse.access_token,
-      accountEmail: profile?.account?.email ?? args.credential.accountEmail,
-      accountId: profile?.account?.uuid ?? args.credential.accountId,
-      expiresAt: Date.now() + tokenResponse.expires_in * 1000,
-      providerId: "claude-code",
-      refreshToken: tokenResponse.refresh_token,
-      scopes:
-        tokenResponse.scope?.split(" ").filter((scope) => scope.length > 0)
-        ?? args.credential.scopes,
-      subscriptionType: mapClaudeOrganizationTypeToSubscription(
-        profile?.organization?.organization_type ?? null,
-      ),
-    };
-  },
-};
+      return {
+        accessToken: tokenResponse.access_token,
+        accountEmail: profile?.account?.email ?? args.credential.accountEmail,
+        accountId: profile?.account?.uuid ?? args.credential.accountId,
+        expiresAt: Date.now() + tokenResponse.expires_in * 1000,
+        providerId: "claude-code",
+        refreshToken: tokenResponse.refresh_token,
+        scopes:
+          tokenResponse.scope?.split(" ").filter((scope) => scope.length > 0) ??
+          args.credential.scopes,
+        subscriptionType: mapClaudeOrganizationTypeToSubscription(
+          profile?.organization?.organization_type ?? null,
+        ),
+      };
+    },
+  };
 
-const codexProviderDefinition: CloudAuthProviderDefinition<CodexStoredCredential> = {
-  callback: CODEX_CALLBACK_CONFIG,
-  async createAuthorizationFlow() {
-    const verifier = createPkceVerifier();
-    const challenge = createPkceChallenge(verifier);
-    const state = createOAuthState();
-    const url = new URL("https://auth.openai.com/oauth/authorize");
-    url.searchParams.set("response_type", "code");
-    url.searchParams.set("client_id", "app_EMoamEEZ73f0CkXaXp7hrann");
-    url.searchParams.set("redirect_uri", CODEX_CALLBACK_CONFIG.redirectUri);
-    url.searchParams.set("scope", "openid profile email offline_access");
-    url.searchParams.set("code_challenge", challenge);
-    url.searchParams.set("code_challenge_method", "S256");
-    url.searchParams.set("state", state);
-    url.searchParams.set("id_token_add_organizations", "true");
-    url.searchParams.set("codex_cli_simplified_flow", "true");
-    url.searchParams.set("originator", "pi");
+const codexProviderDefinition: CloudAuthProviderDefinition<CodexStoredCredential> =
+  {
+    callback: CODEX_CALLBACK_CONFIG,
+    async createAuthorizationFlow() {
+      const verifier = createPkceVerifier();
+      const challenge = createPkceChallenge(verifier);
+      const state = createOAuthState();
+      const url = new URL("https://auth.openai.com/oauth/authorize");
+      url.searchParams.set("response_type", "code");
+      url.searchParams.set("client_id", "app_EMoamEEZ73f0CkXaXp7hrann");
+      url.searchParams.set("redirect_uri", CODEX_CALLBACK_CONFIG.redirectUri);
+      url.searchParams.set("scope", "openid profile email offline_access");
+      url.searchParams.set("code_challenge", challenge);
+      url.searchParams.set("code_challenge_method", "S256");
+      url.searchParams.set("state", state);
+      url.searchParams.set("id_token_add_organizations", "true");
+      url.searchParams.set("codex_cli_simplified_flow", "true");
+      url.searchParams.set("originator", "pi");
 
-    return {
-      authorizationUrl: formatOAuthAuthorizationUrl(url),
-      state,
-      verifier,
-    };
-  },
-  displayName: getCloudAuthProvider("codex").displayName,
-  async exchangeCode(args) {
-    const response = await fetch("https://auth.openai.com/oauth/token", {
-      body: new URLSearchParams({
-        client_id: "app_EMoamEEZ73f0CkXaXp7hrann",
-        code: args.code,
-        code_verifier: args.verifier,
-        grant_type: "authorization_code",
-        redirect_uri: CODEX_CALLBACK_CONFIG.redirectUri,
-      }),
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      method: "POST",
-      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
-    });
-    const tokenResponse = await readJsonResponse(
-      response,
-      codexTokenResponseSchema,
-      "Codex OAuth token exchange",
-    );
+      return {
+        authorizationUrl: formatOAuthAuthorizationUrl(url),
+        state,
+        verifier,
+      };
+    },
+    displayName: getCloudAuthProvider("codex").displayName,
+    async exchangeCode(args) {
+      const response = await fetch("https://auth.openai.com/oauth/token", {
+        body: new URLSearchParams({
+          client_id: "app_EMoamEEZ73f0CkXaXp7hrann",
+          code: args.code,
+          code_verifier: args.verifier,
+          grant_type: "authorization_code",
+          redirect_uri: CODEX_CALLBACK_CONFIG.redirectUri,
+        }),
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        method: "POST",
+        signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+      });
+      const tokenResponse = await readJsonResponse(
+        response,
+        codexTokenResponseSchema,
+        "Codex OAuth token exchange",
+      );
 
-    return {
-      accessToken: tokenResponse.access_token,
-      accountId: decodeCodexAccountId(tokenResponse.access_token),
-      expiresAt: Date.now() + tokenResponse.expires_in * 1000,
-      idToken: tokenResponse.id_token ?? null,
-      providerId: "codex",
-      refreshToken: tokenResponse.refresh_token,
-    };
-  },
-  getConnectionLabel(credential) {
-    return decodeCodexAccountEmail(credential.idToken) ?? credential.accountId;
-  },
-  id: "codex",
-  async refreshCredential(args) {
-    const response = await fetch("https://auth.openai.com/oauth/token", {
-      body: new URLSearchParams({
-        client_id: "app_EMoamEEZ73f0CkXaXp7hrann",
-        grant_type: "refresh_token",
-        refresh_token: args.credential.refreshToken,
-      }),
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      method: "POST",
-      signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
-    });
-    const tokenResponse = await readJsonResponse(
-      response,
-      codexTokenResponseSchema,
-      "Codex OAuth refresh",
-    );
+      return {
+        accessToken: tokenResponse.access_token,
+        accountId: decodeCodexAccountId(tokenResponse.access_token),
+        expiresAt: Date.now() + tokenResponse.expires_in * 1000,
+        idToken: tokenResponse.id_token ?? null,
+        providerId: "codex",
+        refreshToken: tokenResponse.refresh_token,
+      };
+    },
+    getConnectionLabel(credential) {
+      return (
+        decodeCodexAccountEmail(credential.idToken) ?? credential.accountId
+      );
+    },
+    id: "codex",
+    async refreshCredential(args) {
+      const response = await fetch("https://auth.openai.com/oauth/token", {
+        body: new URLSearchParams({
+          client_id: "app_EMoamEEZ73f0CkXaXp7hrann",
+          grant_type: "refresh_token",
+          refresh_token: args.credential.refreshToken,
+        }),
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+        method: "POST",
+        signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
+      });
+      const tokenResponse = await readJsonResponse(
+        response,
+        codexTokenResponseSchema,
+        "Codex OAuth refresh",
+      );
 
-    return {
-      accessToken: tokenResponse.access_token,
-      accountId:
-        decodeCodexAccountId(tokenResponse.access_token)
-        ?? args.credential.accountId,
-      expiresAt: Date.now() + tokenResponse.expires_in * 1000,
-      idToken: tokenResponse.id_token ?? args.credential.idToken,
-      providerId: "codex",
-      refreshToken: tokenResponse.refresh_token,
-    };
-  },
-};
+      return {
+        accessToken: tokenResponse.access_token,
+        accountId:
+          decodeCodexAccountId(tokenResponse.access_token) ??
+          args.credential.accountId,
+        expiresAt: Date.now() + tokenResponse.expires_in * 1000,
+        idToken: tokenResponse.id_token ?? args.credential.idToken,
+        providerId: "codex",
+        refreshToken: tokenResponse.refresh_token,
+      };
+    },
+  };
 
 const cloudAuthProviderDefinitions = {
   "claude-code": claudeProviderDefinition,
@@ -543,19 +561,17 @@ const cloudAuthProviderDefinitions = {
   CloudAuthProviderDefinition<StoredCloudAuthCredential>
 >;
 
-export function getCloudAuthProviderDefinition<TProviderId extends CloudAuthProviderId>(
-  providerId: TProviderId,
-): (typeof cloudAuthProviderDefinitions)[TProviderId] {
+export function getCloudAuthProviderDefinition<
+  TProviderId extends CloudAuthProviderId,
+>(providerId: TProviderId): (typeof cloudAuthProviderDefinitions)[TProviderId] {
   return cloudAuthProviderDefinitions[providerId];
 }
 
-function matchStoredCloudAuthCredential<TResult>(
-  args: {
-    credential: StoredCloudAuthCredential;
-    onClaude(credential: ClaudeStoredCredential): TResult;
-    onCodex(credential: CodexStoredCredential): TResult;
-  },
-): TResult {
+function matchStoredCloudAuthCredential<TResult>(args: {
+  credential: StoredCloudAuthCredential;
+  onClaude(credential: ClaudeStoredCredential): TResult;
+  onCodex(credential: CodexStoredCredential): TResult;
+}): TResult {
   switch (args.credential.providerId) {
     case "claude-code":
       return args.onClaude(args.credential);
@@ -565,8 +581,8 @@ function matchStoredCloudAuthCredential<TResult>(
 }
 
 export function listCloudAuthProviderDefinitions() {
-  return listCloudAuthProviders().map((provider) =>
-    cloudAuthProviderDefinitions[provider.id]
+  return listCloudAuthProviders().map(
+    (provider) => cloudAuthProviderDefinitions[provider.id],
   );
 }
 

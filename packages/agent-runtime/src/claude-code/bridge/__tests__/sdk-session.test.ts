@@ -59,11 +59,14 @@ describe("SdkSession", () => {
   });
 
   it("waits for the SDK stream to finish during graceful close", async () => {
-    let finishStream: ((result: IteratorResult<SDKMessage>) => void) | undefined;
-    const next = vi.fn(() =>
-      new Promise<IteratorResult<SDKMessage>>((resolve) => {
-        finishStream = resolve;
-      })
+    let finishStream:
+      | ((result: IteratorResult<SDKMessage>) => void)
+      | undefined;
+    const next = vi.fn(
+      () =>
+        new Promise<IteratorResult<SDKMessage>>((resolve) => {
+          finishStream = resolve;
+        }),
     );
     mockQueryInstance[Symbol.asyncIterator].mockReturnValue({
       next,

@@ -56,127 +56,151 @@ describe("db rebuild schema", () => {
     const commandId = createHostDaemonCommandId();
     const eventId = createEventId();
 
-    db.insert(hosts).values({
-      id: hostId,
-      name: "Local host",
-      type: "persistent",
-      lastSeenAt: now,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(projects).values({
-      id: projectId,
-      name: "Rebuild",
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(projectSources).values({
-      id: sourceId,
-      projectId,
-      type: "local_path",
-      hostId,
-      path: "/tmp/rebuild",
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(environments).values({
-      id: environmentId,
-      projectId,
-      hostId,
-      path: null,
-      managed: true,
-      isGitRepo: true,
-      branchName: "bb/env-1",
-      workspaceProvisionType: "managed-worktree",
-      status: "ready",
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(automations).values({
-      id: automationId,
-      projectId,
-      name: "Daily sync",
-      enabled: true,
-      triggerType: "schedule",
-      triggerConfig: "{\"triggerType\":\"schedule\",\"cron\":\"0 8 * * 1-5\",\"timezone\":\"UTC\"}",
-      action: "{\"actionType\":\"scheduled-thread\",\"threadRequest\":{\"providerId\":\"codex\",\"model\":\"gpt-5\",\"input\":[{\"type\":\"text\",\"text\":\"Run daily sync\"}],\"environment\":{\"type\":\"host\",\"hostId\":\"host_1\",\"workspace\":{\"type\":\"managed-clone\"}}}}",
-      autoArchive: false,
-      nextRunAt: now + 60_000,
-      runCount: 0,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(threads).values({
-      id: threadId,
-      projectId,
-      environmentId,
-      automationId,
-      providerId: "codex",
-      type: "standard",
-      status: "idle",
-      latestAttentionAt: now,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(managerThreadNudges).values({
-      id: nudgeId,
-      projectId,
-      threadId,
-      name: "check-async",
-      cron: "0 * * * *",
-      timezone: "UTC",
-      enabled: true,
-      nextFireAt: now + 30_000,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(hostDaemonSessions).values({
-      id: sessionId,
-      hostId,
-      instanceId: "instance-1",
-      hostName: "Local host",
-      hostType: "persistent",
-      dataDir: "/tmp/test-data",
-      protocolVersion: 1,
-      heartbeatIntervalMs: 10_000,
-      leaseTimeoutMs: 30_000,
-      status: "connected",
-      leaseExpiresAt: now + 60_000,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(hostDaemonCommands).values({
-      id: commandId,
-      hostId,
-      sessionId,
-      cursor: 1,
-      type: "workspace.status",
-      payload: "{}",
-      state: "queued",
-      createdAt: now,
-    }).run();
-    db.insert(queuedThreadMessages).values({
-      id: createDraftId(),
-      threadId,
-      content: "[]",
-      model: "gpt-5",
-      reasoningLevel: "medium",
-      permissionMode: "full",
-      serviceTier: "default",
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(events).values({
-      id: eventId,
-      threadId,
-      environmentId,
-      turnId: "turn_1",
-      providerThreadId: "provider-thread-1",
-      sequence: 1,
-      type: "system/error",
-      data: "{\"message\":\"boom\"}",
-      createdAt: now,
-    }).run();
+    db.insert(hosts)
+      .values({
+        id: hostId,
+        name: "Local host",
+        type: "persistent",
+        lastSeenAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(projects)
+      .values({
+        id: projectId,
+        name: "Rebuild",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(projectSources)
+      .values({
+        id: sourceId,
+        projectId,
+        type: "local_path",
+        hostId,
+        path: "/tmp/rebuild",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(environments)
+      .values({
+        id: environmentId,
+        projectId,
+        hostId,
+        path: null,
+        managed: true,
+        isGitRepo: true,
+        branchName: "bb/env-1",
+        workspaceProvisionType: "managed-worktree",
+        status: "ready",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(automations)
+      .values({
+        id: automationId,
+        projectId,
+        name: "Daily sync",
+        enabled: true,
+        triggerType: "schedule",
+        triggerConfig:
+          '{"triggerType":"schedule","cron":"0 8 * * 1-5","timezone":"UTC"}',
+        action:
+          '{"actionType":"scheduled-thread","threadRequest":{"providerId":"codex","model":"gpt-5","input":[{"type":"text","text":"Run daily sync"}],"environment":{"type":"host","hostId":"host_1","workspace":{"type":"managed-clone"}}}}',
+        autoArchive: false,
+        nextRunAt: now + 60_000,
+        runCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(threads)
+      .values({
+        id: threadId,
+        projectId,
+        environmentId,
+        automationId,
+        providerId: "codex",
+        type: "standard",
+        status: "idle",
+        latestAttentionAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(managerThreadNudges)
+      .values({
+        id: nudgeId,
+        projectId,
+        threadId,
+        name: "check-async",
+        cron: "0 * * * *",
+        timezone: "UTC",
+        enabled: true,
+        nextFireAt: now + 30_000,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(hostDaemonSessions)
+      .values({
+        id: sessionId,
+        hostId,
+        instanceId: "instance-1",
+        hostName: "Local host",
+        hostType: "persistent",
+        dataDir: "/tmp/test-data",
+        protocolVersion: 1,
+        heartbeatIntervalMs: 10_000,
+        leaseTimeoutMs: 30_000,
+        status: "connected",
+        leaseExpiresAt: now + 60_000,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(hostDaemonCommands)
+      .values({
+        id: commandId,
+        hostId,
+        sessionId,
+        cursor: 1,
+        type: "workspace.status",
+        payload: "{}",
+        state: "queued",
+        createdAt: now,
+      })
+      .run();
+    db.insert(queuedThreadMessages)
+      .values({
+        id: createDraftId(),
+        threadId,
+        content: "[]",
+        model: "gpt-5",
+        reasoningLevel: "medium",
+        permissionMode: "full",
+        serviceTier: "default",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(events)
+      .values({
+        id: eventId,
+        threadId,
+        environmentId,
+        turnId: "turn_1",
+        providerThreadId: "provider-thread-1",
+        sequence: 1,
+        type: "system/error",
+        data: '{"message":"boom"}',
+        createdAt: now,
+      })
+      .run();
 
     const insertedThread = db.select().from(threads).get();
     expect(insertedThread?.environmentId).toBe(environmentId);
@@ -210,29 +234,35 @@ describe("db rebuild schema", () => {
     const projectId = createProjectId();
     const sourceId = createProjectSourceId();
 
-    db.insert(hosts).values({
-      id: hostId,
-      name: "Local host",
-      type: "persistent",
-      lastSeenAt: now,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(projects).values({
-      id: projectId,
-      name: "Rebuild",
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(projectSources).values({
-      id: sourceId,
-      projectId,
-      type: "local_path",
-      hostId,
-      path: "/tmp/rebuild",
-      createdAt: now,
-      updatedAt: now,
-    }).run();
+    db.insert(hosts)
+      .values({
+        id: hostId,
+        name: "Local host",
+        type: "persistent",
+        lastSeenAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(projects)
+      .values({
+        id: projectId,
+        name: "Rebuild",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(projectSources)
+      .values({
+        id: sourceId,
+        projectId,
+        type: "local_path",
+        hostId,
+        path: "/tmp/rebuild",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
 
     db.delete(hosts).where(eq(hosts.id, hostId)).run();
 
@@ -251,43 +281,51 @@ describe("db rebuild schema", () => {
     const environmentId = createEnvironmentId();
     const threadId = createThreadId();
 
-    db.insert(hosts).values({
-      id: hostId,
-      name: "Local host",
-      type: "persistent",
-      lastSeenAt: now,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(projects).values({
-      id: projectId,
-      name: "Rebuild",
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(environments).values({
-      id: environmentId,
-      projectId,
-      hostId,
-      path: "/tmp/rebuild/.bb/env",
-      managed: true,
-      isGitRepo: true,
-      workspaceProvisionType: "managed-worktree",
-      status: "ready",
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(threads).values({
-      id: threadId,
-      projectId,
-      environmentId,
-      providerId: "codex",
-      type: "standard",
-      status: "idle",
-      latestAttentionAt: now,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
+    db.insert(hosts)
+      .values({
+        id: hostId,
+        name: "Local host",
+        type: "persistent",
+        lastSeenAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(projects)
+      .values({
+        id: projectId,
+        name: "Rebuild",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(environments)
+      .values({
+        id: environmentId,
+        projectId,
+        hostId,
+        path: "/tmp/rebuild/.bb/env",
+        managed: true,
+        isGitRepo: true,
+        workspaceProvisionType: "managed-worktree",
+        status: "ready",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(threads)
+      .values({
+        id: threadId,
+        projectId,
+        environmentId,
+        providerId: "codex",
+        type: "standard",
+        status: "idle",
+        latestAttentionAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
 
     db.delete(projects).where(eq(projects.id, projectId)).run();
 
@@ -307,50 +345,62 @@ describe("db rebuild schema", () => {
     const automationId = createAutomationId();
     const threadId = createThreadId();
 
-    db.insert(hosts).values({
-      id: hostId,
-      name: "Local host",
-      type: "persistent",
-      lastSeenAt: now,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(projects).values({
-      id: projectId,
-      name: "Rebuild",
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(automations).values({
-      id: automationId,
-      projectId,
-      name: "Daily sync",
-      enabled: true,
-      triggerType: "schedule",
-      triggerConfig: "{\"triggerType\":\"schedule\",\"cron\":\"0 8 * * 1-5\",\"timezone\":\"UTC\"}",
-      action: "{\"actionType\":\"scheduled-thread\",\"threadRequest\":{\"providerId\":\"codex\",\"model\":\"gpt-5\",\"input\":[{\"type\":\"text\",\"text\":\"Run daily sync\"}],\"environment\":{\"type\":\"host\",\"hostId\":\"host_1\",\"workspace\":{\"type\":\"managed-clone\"}}}}",
-      autoArchive: false,
-      nextRunAt: now + 60_000,
-      runCount: 0,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(threads).values({
-      id: threadId,
-      projectId,
-      automationId,
-      providerId: "codex",
-      type: "standard",
-      status: "idle",
-      latestAttentionAt: now,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
+    db.insert(hosts)
+      .values({
+        id: hostId,
+        name: "Local host",
+        type: "persistent",
+        lastSeenAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(projects)
+      .values({
+        id: projectId,
+        name: "Rebuild",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(automations)
+      .values({
+        id: automationId,
+        projectId,
+        name: "Daily sync",
+        enabled: true,
+        triggerType: "schedule",
+        triggerConfig:
+          '{"triggerType":"schedule","cron":"0 8 * * 1-5","timezone":"UTC"}',
+        action:
+          '{"actionType":"scheduled-thread","threadRequest":{"providerId":"codex","model":"gpt-5","input":[{"type":"text","text":"Run daily sync"}],"environment":{"type":"host","hostId":"host_1","workspace":{"type":"managed-clone"}}}}',
+        autoArchive: false,
+        nextRunAt: now + 60_000,
+        runCount: 0,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(threads)
+      .values({
+        id: threadId,
+        projectId,
+        automationId,
+        providerId: "codex",
+        type: "standard",
+        status: "idle",
+        latestAttentionAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
 
     db.delete(automations).where(eq(automations.id, automationId)).run();
 
-    expect(db.select().from(threads).where(eq(threads.id, threadId)).get()?.automationId)
-      .toBeNull();
+    expect(
+      db.select().from(threads).where(eq(threads.id, threadId)).get()
+        ?.automationId,
+    ).toBeNull();
 
     closeConnection(db);
   });
@@ -365,42 +415,50 @@ describe("db rebuild schema", () => {
     const threadId = createThreadId();
     const nudgeId = createManagerThreadNudgeId();
 
-    db.insert(hosts).values({
-      id: hostId,
-      name: "Local host",
-      type: "persistent",
-      lastSeenAt: now,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(projects).values({
-      id: projectId,
-      name: "Rebuild",
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(threads).values({
-      id: threadId,
-      projectId,
-      providerId: "codex",
-      type: "manager",
-      status: "idle",
-      latestAttentionAt: now,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(managerThreadNudges).values({
-      id: nudgeId,
-      projectId,
-      threadId,
-      name: "morning-check",
-      cron: "0 9 * * *",
-      timezone: "UTC",
-      enabled: true,
-      nextFireAt: now + 60_000,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
+    db.insert(hosts)
+      .values({
+        id: hostId,
+        name: "Local host",
+        type: "persistent",
+        lastSeenAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(projects)
+      .values({
+        id: projectId,
+        name: "Rebuild",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(threads)
+      .values({
+        id: threadId,
+        projectId,
+        providerId: "codex",
+        type: "manager",
+        status: "idle",
+        latestAttentionAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(managerThreadNudges)
+      .values({
+        id: nudgeId,
+        projectId,
+        threadId,
+        name: "morning-check",
+        cron: "0 9 * * *",
+        timezone: "UTC",
+        enabled: true,
+        nextFireAt: now + 60_000,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
 
     db.delete(threads).where(eq(threads.id, threadId)).run();
 
@@ -420,58 +478,68 @@ describe("db rebuild schema", () => {
     const sessionId = createHostDaemonSessionId();
     const commandId = createHostDaemonCommandId();
 
-    db.insert(hosts).values({
-      id: hostId,
-      name: "Local host",
-      type: "persistent",
-      lastSeenAt: now,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(projects).values({
-      id: projectId,
-      name: "Rebuild",
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(environments).values({
-      id: environmentId,
-      projectId,
-      hostId,
-      path: "/tmp/rebuild/.bb/env",
-      managed: true,
-      isGitRepo: true,
-      workspaceProvisionType: "managed-worktree",
-      branchName: "bb/env-1",
-      status: "ready",
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(hostDaemonSessions).values({
-      id: sessionId,
-      hostId,
-      instanceId: "instance-1",
-      hostName: "Local host",
-      hostType: "persistent",
-      dataDir: "/tmp/test-data",
-      protocolVersion: 1,
-      heartbeatIntervalMs: 10_000,
-      leaseTimeoutMs: 30_000,
-      status: "connected",
-      leaseExpiresAt: now + 60_000,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(hostDaemonCommands).values({
-      id: commandId,
-      hostId,
-      sessionId,
-      cursor: 1,
-      type: "workspace.status",
-      payload: "{}",
-      state: "queued",
-      createdAt: now,
-    }).run();
+    db.insert(hosts)
+      .values({
+        id: hostId,
+        name: "Local host",
+        type: "persistent",
+        lastSeenAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(projects)
+      .values({
+        id: projectId,
+        name: "Rebuild",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(environments)
+      .values({
+        id: environmentId,
+        projectId,
+        hostId,
+        path: "/tmp/rebuild/.bb/env",
+        managed: true,
+        isGitRepo: true,
+        workspaceProvisionType: "managed-worktree",
+        branchName: "bb/env-1",
+        status: "ready",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(hostDaemonSessions)
+      .values({
+        id: sessionId,
+        hostId,
+        instanceId: "instance-1",
+        hostName: "Local host",
+        hostType: "persistent",
+        dataDir: "/tmp/test-data",
+        protocolVersion: 1,
+        heartbeatIntervalMs: 10_000,
+        leaseTimeoutMs: 30_000,
+        status: "connected",
+        leaseExpiresAt: now + 60_000,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(hostDaemonCommands)
+      .values({
+        id: commandId,
+        hostId,
+        sessionId,
+        cursor: 1,
+        type: "workspace.status",
+        payload: "{}",
+        state: "queued",
+        createdAt: now,
+      })
+      .run();
 
     // Commands reference host without cascade, so delete commands first.
     db.delete(hostDaemonCommands).run();
@@ -493,41 +561,49 @@ describe("db rebuild schema", () => {
     const sessionId = createHostDaemonSessionId();
     const commandId = createHostDaemonCommandId();
 
-    db.insert(hosts).values({
-      id: hostId,
-      name: "Local host",
-      type: "persistent",
-      lastSeenAt: now,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(hostDaemonSessions).values({
-      id: sessionId,
-      hostId,
-      instanceId: "instance-1",
-      hostName: "Local host",
-      hostType: "persistent",
-      dataDir: "/tmp/test-data",
-      protocolVersion: 1,
-      heartbeatIntervalMs: 10_000,
-      leaseTimeoutMs: 30_000,
-      status: "connected",
-      leaseExpiresAt: now + 60_000,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(hostDaemonCommands).values({
-      id: commandId,
-      hostId,
-      sessionId,
-      cursor: 1,
-      type: "workspace.status",
-      payload: "{}",
-      state: "queued",
-      createdAt: now,
-    }).run();
+    db.insert(hosts)
+      .values({
+        id: hostId,
+        name: "Local host",
+        type: "persistent",
+        lastSeenAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(hostDaemonSessions)
+      .values({
+        id: sessionId,
+        hostId,
+        instanceId: "instance-1",
+        hostName: "Local host",
+        hostType: "persistent",
+        dataDir: "/tmp/test-data",
+        protocolVersion: 1,
+        heartbeatIntervalMs: 10_000,
+        leaseTimeoutMs: 30_000,
+        status: "connected",
+        leaseExpiresAt: now + 60_000,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(hostDaemonCommands)
+      .values({
+        id: commandId,
+        hostId,
+        sessionId,
+        cursor: 1,
+        type: "workspace.status",
+        payload: "{}",
+        state: "queued",
+        createdAt: now,
+      })
+      .run();
 
-    db.delete(hostDaemonSessions).where(eq(hostDaemonSessions.id, sessionId)).run();
+    db.delete(hostDaemonSessions)
+      .where(eq(hostDaemonSessions.id, sessionId))
+      .run();
 
     const commands = db.select().from(hostDaemonCommands).all();
     expect(commands).toHaveLength(1);
@@ -546,53 +622,63 @@ describe("db rebuild schema", () => {
     const environmentId = createEnvironmentId();
     const threadId = createThreadId();
 
-    db.insert(hosts).values({
-      id: hostId,
-      name: "Local host",
-      type: "persistent",
-      lastSeenAt: now,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(projects).values({
-      id: projectId,
-      name: "Rebuild",
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(environments).values({
-      id: environmentId,
-      projectId,
-      hostId,
-      path: "/tmp/rebuild/.bb/env",
-      managed: true,
-      isGitRepo: true,
-      workspaceProvisionType: "managed-worktree",
-      branchName: "bb/env-1",
-      status: "ready",
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(threads).values({
-      id: threadId,
-      projectId,
-      environmentId,
-      providerId: "codex",
-      type: "standard",
-      status: "idle",
-      latestAttentionAt: now,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(events).values({
-      id: createEventId(),
-      threadId,
-      environmentId,
-      sequence: 1,
-      type: "system/error",
-      data: "{}",
-      createdAt: now,
-    }).run();
+    db.insert(hosts)
+      .values({
+        id: hostId,
+        name: "Local host",
+        type: "persistent",
+        lastSeenAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(projects)
+      .values({
+        id: projectId,
+        name: "Rebuild",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(environments)
+      .values({
+        id: environmentId,
+        projectId,
+        hostId,
+        path: "/tmp/rebuild/.bb/env",
+        managed: true,
+        isGitRepo: true,
+        workspaceProvisionType: "managed-worktree",
+        branchName: "bb/env-1",
+        status: "ready",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(threads)
+      .values({
+        id: threadId,
+        projectId,
+        environmentId,
+        providerId: "codex",
+        type: "standard",
+        status: "idle",
+        latestAttentionAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(events)
+      .values({
+        id: createEventId(),
+        threadId,
+        environmentId,
+        sequence: 1,
+        type: "system/error",
+        data: "{}",
+        createdAt: now,
+      })
+      .run();
 
     db.delete(environments).where(eq(environments.id, environmentId)).run();
 
@@ -610,41 +696,49 @@ describe("db rebuild schema", () => {
     const projectId = createProjectId();
     const threadId = createThreadId();
 
-    db.insert(projects).values({
-      id: projectId,
-      name: "Rebuild",
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(threads).values({
-      id: threadId,
-      projectId,
-      providerId: "codex",
-      type: "standard",
-      status: "idle",
-      latestAttentionAt: now,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(queuedThreadMessages).values({
-      id: createDraftId(),
-      threadId,
-      content: "[]",
-      model: "gpt-5",
-      reasoningLevel: "medium",
-      permissionMode: "full",
-      serviceTier: "default",
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(events).values({
-      id: createEventId(),
-      threadId,
-      sequence: 1,
-      type: "system/error",
-      data: "{}",
-      createdAt: now,
-    }).run();
+    db.insert(projects)
+      .values({
+        id: projectId,
+        name: "Rebuild",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(threads)
+      .values({
+        id: threadId,
+        projectId,
+        providerId: "codex",
+        type: "standard",
+        status: "idle",
+        latestAttentionAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(queuedThreadMessages)
+      .values({
+        id: createDraftId(),
+        threadId,
+        content: "[]",
+        model: "gpt-5",
+        reasoningLevel: "medium",
+        permissionMode: "full",
+        serviceTier: "default",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(events)
+      .values({
+        id: createEventId(),
+        threadId,
+        sequence: 1,
+        type: "system/error",
+        data: "{}",
+        createdAt: now,
+      })
+      .run();
 
     db.delete(threads).where(eq(threads.id, threadId)).run();
 
@@ -662,40 +756,49 @@ describe("db rebuild schema", () => {
     const projectId = createProjectId();
     const threadId = createThreadId();
 
-    db.insert(projects).values({
-      id: projectId,
-      name: "Rebuild",
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(threads).values({
-      id: threadId,
-      projectId,
-      providerId: "codex",
-      type: "standard",
-      status: "idle",
-      latestAttentionAt: now,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    db.insert(events).values({
-      id: createEventId(),
-      threadId,
-      sequence: 1,
-      type: "system/error",
-      data: "{}",
-      createdAt: now,
-    }).run();
-
-    expect(() =>
-      db.insert(events).values({
+    db.insert(projects)
+      .values({
+        id: projectId,
+        name: "Rebuild",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(threads)
+      .values({
+        id: threadId,
+        projectId,
+        providerId: "codex",
+        type: "standard",
+        status: "idle",
+        latestAttentionAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
+    db.insert(events)
+      .values({
         id: createEventId(),
         threadId,
         sequence: 1,
         type: "system/error",
         data: "{}",
-        createdAt: now + 1,
-      }).run(),
+        createdAt: now,
+      })
+      .run();
+
+    expect(() =>
+      db
+        .insert(events)
+        .values({
+          id: createEventId(),
+          threadId,
+          sequence: 1,
+          type: "system/error",
+          data: "{}",
+          createdAt: now + 1,
+        })
+        .run(),
     ).toThrow();
 
     closeConnection(db);
@@ -720,30 +823,35 @@ describe("db rebuild schema", () => {
     migrate(db);
     const hostId = createHostId();
     const now = Date.now();
-    db.insert(hosts).values({
-      id: hostId,
-      name: "host",
-      type: "persistent",
-      lastSeenAt: now,
-      createdAt: now,
-      updatedAt: now,
-    }).run();
-    expect(() =>
-      db.insert(hostDaemonSessions).values({
-        id: createHostDaemonSessionId(),
-        hostId,
-        instanceId: "instance",
-        hostName: "host",
-        hostType: "persistent",
-        // data_dir intentionally omitted — column is NOT NULL.
-        protocolVersion: 1,
-        heartbeatIntervalMs: 1_000,
-        leaseTimeoutMs: 10_000,
-        status: "active",
-        leaseExpiresAt: now + 10_000,
+    db.insert(hosts)
+      .values({
+        id: hostId,
+        name: "host",
+        type: "persistent",
+        lastSeenAt: now,
         createdAt: now,
         updatedAt: now,
-      } as never).run(),
+      })
+      .run();
+    expect(() =>
+      db
+        .insert(hostDaemonSessions)
+        .values({
+          id: createHostDaemonSessionId(),
+          hostId,
+          instanceId: "instance",
+          hostName: "host",
+          hostType: "persistent",
+          // data_dir intentionally omitted — column is NOT NULL.
+          protocolVersion: 1,
+          heartbeatIntervalMs: 1_000,
+          leaseTimeoutMs: 10_000,
+          status: "active",
+          leaseExpiresAt: now + 10_000,
+          createdAt: now,
+          updatedAt: now,
+        } as never)
+        .run(),
     ).toThrow(/NOT NULL constraint failed: host_daemon_sessions\.data_dir/);
     closeConnection(db);
   });

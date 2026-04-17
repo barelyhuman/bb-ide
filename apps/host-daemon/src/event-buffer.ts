@@ -16,7 +16,9 @@ export interface BufferedEvent extends BufferedEventInput {
 
 export interface CreateEventBufferOptions {
   logger: Pick<HostDaemonLogger, "warn">;
-  postEvents: (events: BufferedEvent[]) => Promise<Record<string, number> | void>;
+  postEvents: (
+    events: BufferedEvent[],
+  ) => Promise<Record<string, number> | void>;
   initialHighWaterMarks?: Record<string, number>;
   debounceMs?: number;
   flushAtCount?: number;
@@ -43,7 +45,8 @@ export function createEventBuffer(
 ): EventBuffer {
   const debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
   const flushAtCount = options.flushAtCount ?? DEFAULT_FLUSH_AT_COUNT;
-  const maxBufferedEvents = options.maxBufferedEvents ?? DEFAULT_MAX_BUFFERED_EVENTS;
+  const maxBufferedEvents =
+    options.maxBufferedEvents ?? DEFAULT_MAX_BUFFERED_EVENTS;
   const now = options.now ?? Date.now;
 
   const nextSequenceByThread = new Map<string, number>();
@@ -66,10 +69,7 @@ export function createEventBuffer(
 
   function queueDebouncedFlush(): void {
     void debouncedFlush().catch((error: unknown) => {
-      if (
-        error instanceof DOMException &&
-        error.name === "AbortError"
-      ) {
+      if (error instanceof DOMException && error.name === "AbortError") {
         return;
       }
       throw error;
@@ -114,9 +114,14 @@ export function createEventBuffer(
       return;
     }
 
-    for (const [threadId, highWaterMark] of Object.entries(threadHighWaterMarks)) {
+    for (const [threadId, highWaterMark] of Object.entries(
+      threadHighWaterMarks,
+    )) {
       const nextValue = nextSequenceByThread.get(threadId) ?? 1;
-      nextSequenceByThread.set(threadId, Math.max(nextValue, highWaterMark + 1));
+      nextSequenceByThread.set(
+        threadId,
+        Math.max(nextValue, highWaterMark + 1),
+      );
     }
 
     buffer = buffer.filter((event) => {

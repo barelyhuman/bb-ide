@@ -1,18 +1,16 @@
-import type {
-  PromptInput,
-  ProvisioningTranscriptEntry,
-} from "@bb/domain";
+import type { PromptInput, ProvisioningTranscriptEntry } from "@bb/domain";
 import type { AppDeps } from "../../types.js";
-import {
-  appendThreadProvisioningEvent,
-} from "./thread-events.js";
+import { appendThreadProvisioningEvent } from "./thread-events.js";
 import {
   applyGeneratedThreadTitle,
   generateThreadMetadataWithOutcome,
   type ThreadMetadataGenerationOutcome,
 } from "./title-generation.js";
 
-type ThreadMetadataInferenceDeps = Pick<AppDeps, "config" | "db" | "hub" | "logger">;
+type ThreadMetadataInferenceDeps = Pick<
+  AppDeps,
+  "config" | "db" | "hub" | "logger"
+>;
 
 export const MANAGED_THREAD_METADATA_TIMEOUT_MS = 5_000;
 
@@ -78,7 +76,9 @@ function metadataCompletedText(args: MetadataTextArgs): string {
   return "No title generated";
 }
 
-function metadataCompletedEntry(args: MetadataCompletedEntryArgs): ProvisioningTranscriptEntry {
+function metadataCompletedEntry(
+  args: MetadataCompletedEntryArgs,
+): ProvisioningTranscriptEntry {
   return {
     type: "step",
     key: "metadata-completed",
@@ -166,10 +166,11 @@ export async function inferThreadMetadata(
   }
 
   return {
-    branchSlug:
-      args.generateBranchName ? outcome.metadata?.branchSlug ?? null : null,
+    branchSlug: args.generateBranchName
+      ? (outcome.metadata?.branchSlug ?? null)
+      : null,
     eventSequence,
-    title: args.generateTitle ? outcome.metadata?.title ?? null : null,
+    title: args.generateTitle ? (outcome.metadata?.title ?? null) : null,
     titleApplied,
   };
 }

@@ -9,9 +9,7 @@ import type {
   ViewTurn,
   ViewTurnStatus,
 } from "@bb/domain";
-import {
-  findLastTerminalTimelineMessage,
-} from "./timeline-message-helpers.js";
+import { findLastTerminalTimelineMessage } from "./timeline-message-helpers.js";
 import { getProjectionSummaryCount } from "./apply-turn-message-detail.js";
 import { isDelegationToolName } from "./tool-call-parsing.js";
 
@@ -84,7 +82,9 @@ export function compactTaskMessages(messages: ViewMessage[]): ViewMessage[] {
   return compacted;
 }
 
-export function sortViewMessagesBySource(messages: ViewMessage[]): ViewMessage[] {
+export function sortViewMessagesBySource(
+  messages: ViewMessage[],
+): ViewMessage[] {
   return messages
     .map((message, index) => ({ index, message }))
     .sort((left, right) => {
@@ -102,10 +102,7 @@ export function sortViewMessagesBySource(messages: ViewMessage[]): ViewMessage[]
 function isDelegationCandidate(
   message: ViewMessage,
 ): message is ViewToolCallMessage {
-  return (
-    message.kind === "tool-call" &&
-    isDelegationToolName(message.toolName)
-  );
+  return message.kind === "tool-call" && isDelegationToolName(message.toolName);
 }
 
 function maybeStartedAt(
@@ -182,7 +179,10 @@ function getProjectionMessageBounds(
       const startedAt = getStartedAt(message);
       bounds = bounds
         ? {
-            sourceSeqStart: Math.min(bounds.sourceSeqStart, message.sourceSeqStart),
+            sourceSeqStart: Math.min(
+              bounds.sourceSeqStart,
+              message.sourceSeqStart,
+            ),
             sourceSeqEnd: Math.max(bounds.sourceSeqEnd, message.sourceSeqEnd),
             startedAt: Math.min(bounds.startedAt, startedAt),
             createdAt: Math.max(bounds.createdAt, message.createdAt),
@@ -255,9 +255,15 @@ function buildScopedTurn(
     );
   }
 
-  const sourceSeqStart = Math.min(...messages.map((message) => message.sourceSeqStart));
-  const sourceSeqEnd = Math.max(...messages.map((message) => message.sourceSeqEnd));
-  const startedAt = Math.min(...messages.map((message) => getStartedAt(message)));
+  const sourceSeqStart = Math.min(
+    ...messages.map((message) => message.sourceSeqStart),
+  );
+  const sourceSeqEnd = Math.max(
+    ...messages.map((message) => message.sourceSeqEnd),
+  );
+  const startedAt = Math.min(
+    ...messages.map((message) => getStartedAt(message)),
+  );
   const createdAt = Math.max(...messages.map((message) => message.createdAt));
   const status = getScopedTurnStatus(messages);
   const completedAt = status === "pending" ? null : createdAt;
@@ -359,7 +365,10 @@ function isSameTurnEntry(
 
 class SemanticProjectionBuilder {
   private readonly attachedMessageIds = new Set<string>();
-  private readonly childrenByParentCallId = new Map<string, SemanticMessageContext[]>();
+  private readonly childrenByParentCallId = new Map<
+    string,
+    SemanticMessageContext[]
+  >();
   private readonly rootContexts: SemanticMessageContext[];
 
   constructor(contexts: SemanticMessageContext[]) {
@@ -382,8 +391,8 @@ class SemanticProjectionBuilder {
       this.attachedMessageIds.add(context.message.id);
     }
 
-    this.rootContexts = contexts.filter((context) =>
-      !this.attachedMessageIds.has(context.message.id)
+    this.rootContexts = contexts.filter(
+      (context) => !this.attachedMessageIds.has(context.message.id),
     );
   }
 
@@ -393,7 +402,7 @@ class SemanticProjectionBuilder {
 
   buildRootMessages(): ViewMessage[] {
     return this.rootContexts.map((context) =>
-      this.toSemanticMessage(context.message)
+      this.toSemanticMessage(context.message),
     );
   }
 
@@ -435,9 +444,10 @@ class SemanticProjectionBuilder {
 
       entries.push({
         kind: "turn",
-        turn: turnMetadataMode === "source"
-          ? buildSourceTurn(sourceTurn, messages)
-          : buildScopedTurn(sourceTurn, messages),
+        turn:
+          turnMetadataMode === "source"
+            ? buildSourceTurn(sourceTurn, messages)
+            : buildScopedTurn(sourceTurn, messages),
       });
     }
 
@@ -468,7 +478,9 @@ export function normalizeSemanticViewProjection(
 export function normalizeSemanticViewMessages(
   messages: ViewMessage[],
 ): ViewMessage[] {
-  const orderedMessages = sortViewMessagesBySource(compactTaskMessages(messages));
+  const orderedMessages = sortViewMessagesBySource(
+    compactTaskMessages(messages),
+  );
   return new SemanticProjectionBuilder(
     collectFlatMessageContexts(orderedMessages),
   ).buildRootMessages();

@@ -85,7 +85,9 @@ async function main() {
     });
     serverProcess = qaServer.process;
     if (!serverProcess) {
-      throw new Error("Standalone QA server unexpectedly reused an existing server");
+      throw new Error(
+        "Standalone QA server unexpectedly reused an existing server",
+      );
     }
 
     const join = await createHostJoin(serverUrl, {
@@ -200,7 +202,8 @@ async function main() {
 }
 
 void main().catch((error) => {
-  const message = error instanceof Error ? error.stack ?? error.message : String(error);
+  const message =
+    error instanceof Error ? (error.stack ?? error.message) : String(error);
   process.stderr.write(`${message}\n`);
   process.exitCode = 1;
 });

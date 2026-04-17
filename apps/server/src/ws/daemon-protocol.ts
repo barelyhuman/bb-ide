@@ -103,11 +103,7 @@ export function onDaemonSocketMessage(
       hostId: args.hostId,
       sessionId: args.sessionId,
     });
-    heartbeatSession(
-      deps.db,
-      session.id,
-      Date.now() + session.leaseTimeoutMs,
-    );
+    heartbeatSession(deps.db, session.id, Date.now() + session.leaseTimeoutMs);
   } catch (error) {
     deps.logger.warn(
       { sessionId: args.sessionId, err: error },
@@ -139,10 +135,8 @@ export function onDaemonSocketClose(
   closeSession(deps.db, deps.hub, sessionId, "daemon-disconnect");
 
   const hostId = session.hostId;
-  deps.hub.scheduleDaemonDisconnect(
-    sessionId,
-    DAEMON_DISCONNECT_GRACE_MS,
-    () => deferredThreadInterrupt(deps, hostId),
+  deps.hub.scheduleDaemonDisconnect(sessionId, DAEMON_DISCONNECT_GRACE_MS, () =>
+    deferredThreadInterrupt(deps, hostId),
   );
 }
 
@@ -213,7 +207,9 @@ function interruptThreadsForDisconnectedHost(
         };
       }
 
-      const interruptedThreadIds = interruptedThreads.map((thread) => thread.id);
+      const interruptedThreadIds = interruptedThreads.map(
+        (thread) => thread.id,
+      );
       const maxSequences = new Map(
         tx
           .select({
@@ -249,7 +245,8 @@ function interruptThreadsForDisconnectedHost(
         )
         .run();
 
-      const updatedThreads = tx.update(threads)
+      const updatedThreads = tx
+        .update(threads)
         .set({
           status: "error",
           latestAttentionAt: now,

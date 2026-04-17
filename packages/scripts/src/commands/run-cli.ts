@@ -13,7 +13,9 @@ const commandDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(commandDir, "..", "..");
 const repoRoot = resolve(packageRoot, "..", "..");
 
-export function resolveCliExecution(cliArgs: string[] = process.argv.slice(2)): CliExecution {
+export function resolveCliExecution(
+  cliArgs: string[] = process.argv.slice(2),
+): CliExecution {
   return {
     args: ["apps/cli/dist/index.js", ...cliArgs],
     command: process.execPath,
@@ -22,7 +24,9 @@ export function resolveCliExecution(cliArgs: string[] = process.argv.slice(2)): 
   };
 }
 
-export async function main(cliArgs: string[] = process.argv.slice(2)): Promise<void> {
+export async function main(
+  cliArgs: string[] = process.argv.slice(2),
+): Promise<void> {
   const execution = resolveCliExecution(cliArgs);
   process.exitCode = await runScriptProcess({
     args: execution.args,
@@ -38,7 +42,8 @@ if (
   resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   void main().catch((error) => {
-    const message = error instanceof Error ? error.stack ?? error.message : String(error);
+    const message =
+      error instanceof Error ? (error.stack ?? error.message) : String(error);
     process.stderr.write(`${message}\n`);
     process.exitCode = 1;
   });

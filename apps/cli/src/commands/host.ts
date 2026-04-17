@@ -9,25 +9,28 @@ interface HostListCommandOptions {
   json?: boolean;
 }
 
-export function registerHostCommands(program: Command, getUrl: () => string): void {
+export function registerHostCommands(
+  program: Command,
+  getUrl: () => string,
+): void {
   const host = program.command("host").description("Inspect available hosts");
 
   host
     .command("list")
     .description("List persistent hosts")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (opts: HostListCommandOptions) => {
-      const client = createClient(getUrl());
-      const hosts = await unwrap<Host[]>(
-        client.api.v1.hosts.$get(),
-      );
-      if (outputJson(opts, hosts)) return;
-      if (hosts.length === 0) {
-        console.log("No hosts found");
-        return;
-      }
-      printHostTable(hosts);
-    }));
+    .action(
+      action(async (opts: HostListCommandOptions) => {
+        const client = createClient(getUrl());
+        const hosts = await unwrap<Host[]>(client.api.v1.hosts.$get());
+        if (outputJson(opts, hosts)) return;
+        if (hosts.length === 0) {
+          console.log("No hosts found");
+          return;
+        }
+        printHostTable(hosts);
+      }),
+    );
 }
 
 function printHostTable(hosts: Host[]): void {

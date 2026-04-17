@@ -1,6 +1,4 @@
-import {
-  extractThreadContextWindowUsage as extractThreadContextWindowUsageFromEvents,
-} from "@bb/core-ui";
+import { extractThreadContextWindowUsage as extractThreadContextWindowUsageFromEvents } from "@bb/core-ui";
 import type { ThreadContextWindowUsage } from "@bb/server-contract";
 
 const TOKEN_COMPACT_FORMATTER = new Intl.NumberFormat("en-US", {
@@ -8,9 +6,12 @@ const TOKEN_COMPACT_FORMATTER = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 });
 
-export const extractThreadContextWindowUsage = extractThreadContextWindowUsageFromEvents;
+export const extractThreadContextWindowUsage =
+  extractThreadContextWindowUsageFromEvents;
 
-export function calculateContextWindowUsagePercent(usage: ThreadContextWindowUsage): number {
+export function calculateContextWindowUsagePercent(
+  usage: ThreadContextWindowUsage,
+): number {
   if (usage.modelContextWindow <= 0) return 0;
   const ratio = usage.usedTokens / usage.modelContextWindow;
   const clampedRatio = Math.min(Math.max(ratio, 0), 1);

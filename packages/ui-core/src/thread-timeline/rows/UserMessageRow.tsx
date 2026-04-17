@@ -1,10 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ViewUserMessage } from "@bb/domain";
 import { Check, Copy } from "lucide-react";
 import { cn } from "../../cn.js";
@@ -24,7 +18,9 @@ export function UserMessageRow({
   projectId,
   resolveUserAttachmentImageSrc = toUserAttachmentImageSrc,
 }: UserMessageRowProps) {
-  const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(null);
+  const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(
+    null,
+  );
   const [copied, setCopied] = useState(false);
   const attachments: string[] = [];
   if (message.attachments?.localFiles) {
@@ -51,7 +47,9 @@ export function UserMessageRow({
   );
   const hasMultipleImages = imageItems.length > 1;
   const currentImage =
-    expandedImageIndex !== null ? (imageItems[expandedImageIndex] ?? null) : null;
+    expandedImageIndex !== null
+      ? (imageItems[expandedImageIndex] ?? null)
+      : null;
 
   useEffect(() => {
     if (!copied) {
@@ -152,7 +150,11 @@ export function UserMessageRow({
                 aria-label="Copy message"
                 title="Copy message"
               >
-                {copied ? <Check className="size-2.5" /> : <Copy className="size-2.5" />}
+                {copied ? (
+                  <Check className="size-2.5" />
+                ) : (
+                  <Copy className="size-2.5" />
+                )}
               </button>
             </div>
           ) : null}
@@ -198,11 +200,9 @@ function CollapsibleMessageText({ text }: CollapsibleMessageTextProps) {
     countPreWrappedLines({ text }) > COLLAPSED_MESSAGE_LINE_COUNT;
   const canOverflow =
     text.length >= OVERFLOW_MEASURE_MIN_LENGTH || exceedsCollapsedLineCount;
-  const isOverflowing = useIsOverflowing(
-    textRef,
-    canOverflow && !isExpanded,
-    [text],
-  );
+  const isOverflowing = useIsOverflowing(textRef, canOverflow && !isExpanded, [
+    text,
+  ]);
 
   const showToggle = isExpanded || exceedsCollapsedLineCount || isOverflowing;
 
@@ -232,4 +232,3 @@ function CollapsibleMessageText({ text }: CollapsibleMessageTextProps) {
     </>
   );
 }
-

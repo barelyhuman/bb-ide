@@ -6,7 +6,12 @@ import "./ladle.css";
 export const Provider: GlobalProvider = ({ globalState, children }) => {
   const isDark = globalState.theme === ThemeState.Dark;
   return (
-    <div className={cn(isDark && "dark", "min-h-screen bg-background text-foreground")}>
+    <div
+      className={cn(
+        isDark && "dark",
+        "min-h-screen bg-background text-foreground",
+      )}
+    >
       {children}
     </div>
   );

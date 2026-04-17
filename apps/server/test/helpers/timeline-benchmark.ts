@@ -162,7 +162,8 @@ function createTimelineBenchmarkScenario(
       threadId: thread.id,
       excludedTypes: TIMELINE_NOISE_EVENT_TYPES,
     });
-  const compactSummaryStoredRows = () => compactSummaryStoredEventRows(storedEventRows);
+  const compactSummaryStoredRows = () =>
+    compactSummaryStoredEventRows(storedEventRows);
   const loadContextWindowUsageRows = () =>
     listContextWindowUsageRows(db, {
       threadId: thread.id,

@@ -18,13 +18,10 @@ export type SandboxHostEnvironmentProvisionRequest = z.infer<
   typeof sandboxHostEnvironmentProvisionRequestSchema
 >;
 
-export const environmentProvisionRequestSchema = z.discriminatedUnion(
-  "mode",
-  [
-    directEnvironmentProvisionRequestSchema,
-    sandboxHostEnvironmentProvisionRequestSchema,
-  ],
-);
+export const environmentProvisionRequestSchema = z.discriminatedUnion("mode", [
+  directEnvironmentProvisionRequestSchema,
+  sandboxHostEnvironmentProvisionRequestSchema,
+]);
 
 export type EnvironmentProvisionRequest =
   | DirectEnvironmentProvisionRequest

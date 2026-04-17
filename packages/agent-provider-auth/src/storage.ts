@@ -18,18 +18,22 @@ import type {
 
 const encryptedStringSchema = z.string();
 
-const claudeCredentialMetadataSchema = z.object({
-  accountEmail: z.string().min(1).nullable(),
-  accountId: z.string().min(1).nullable(),
-  scopes: z.array(z.string()),
-  subscriptionType: claudeSubscriptionTypeSchema,
-}).strict();
+const claudeCredentialMetadataSchema = z
+  .object({
+    accountEmail: z.string().min(1).nullable(),
+    accountId: z.string().min(1).nullable(),
+    scopes: z.array(z.string()),
+    subscriptionType: claudeSubscriptionTypeSchema,
+  })
+  .strict();
 
 type ClaudeCredentialMetadata = z.infer<typeof claudeCredentialMetadataSchema>;
 
-const codexCredentialMetadataSchema = z.object({
-  accountId: z.string().min(1).nullable(),
-}).strict();
+const codexCredentialMetadataSchema = z
+  .object({
+    accountId: z.string().min(1).nullable(),
+  })
+  .strict();
 
 type CodexCredentialMetadata = z.infer<typeof codexCredentialMetadataSchema>;
 
@@ -60,10 +64,7 @@ function decryptStringValue(
   });
 }
 
-function encryptStringValue(
-  crypto: CloudAuthCrypto,
-  value: string,
-): string {
+function encryptStringValue(crypto: CloudAuthCrypto, value: string): string {
   return crypto.encryptJson({
     plaintext: JSON.stringify(value),
   });

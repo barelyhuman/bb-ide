@@ -6,10 +6,7 @@ import type { Readable, Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 import readline from "node:readline/promises";
 import type { ChildProcessByStdio } from "node:child_process";
-import {
-  bold, cyan, dim, green, yellow,
-  log,
-} from "../lib/script-helpers.js";
+import { bold, cyan, dim, green, yellow, log } from "../lib/script-helpers.js";
 
 const DEFAULT_TMP_BB_PATTERN = "/tmp/bb-*";
 const DEFAULT_ARCHIVE_CONCURRENCY = 25;
@@ -19,13 +16,7 @@ const SQLITE_FIELD_SEPARATOR = "\u001f";
 const MACOS_CODEX_BIN = "/Applications/Codex.app/Contents/Resources/codex";
 const CODEX_STATE_DB_FILE_PATTERN = /^state_(\d+)\.sqlite$/;
 
-type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonObject
-  | JsonValue[];
+type JsonValue = string | number | boolean | null | JsonObject | JsonValue[];
 
 interface JsonObject {
   [key: string]: JsonValue;
@@ -360,7 +351,9 @@ export function buildMatchingThreadPreviewSql(pattern: string): string {
   ].join(" ");
 }
 
-export function parseThreadPreviewRows(output: string): MatchingThreadPreview[] {
+export function parseThreadPreviewRows(
+  output: string,
+): MatchingThreadPreview[] {
   const trimmedOutput = output.trim();
   if (trimmedOutput.length === 0) {
     return [];
@@ -380,7 +373,10 @@ export function parseThreadPreviewRows(output: string): MatchingThreadPreview[] 
   });
 }
 
-function execFileText(command: string, args: string[]): Promise<ExecTextResult> {
+function execFileText(
+  command: string,
+  args: string[],
+): Promise<ExecTextResult> {
   return new Promise((resolvePromise, rejectPromise) => {
     execFile(
       command,
@@ -429,7 +425,10 @@ async function readMatchingThreadPreviews(
   dbPath: string,
   pattern: string,
 ): Promise<MatchingThreadPreview[]> {
-  const output = await runSqlite(dbPath, buildMatchingThreadPreviewSql(pattern));
+  const output = await runSqlite(
+    dbPath,
+    buildMatchingThreadPreviewSql(pattern),
+  );
   return parseThreadPreviewRows(output);
 }
 
@@ -489,17 +488,13 @@ export function archiveThreadsViaAppServer(
   args: ArchiveThreadsViaAppServerArgs,
 ): Promise<ArchiveThreadsViaAppServerResult> {
   return new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn(
-      args.codexBin,
-      ["app-server", "--listen", "stdio://"],
-      {
-        env: {
-          ...process.env,
-          CODEX_HOME: args.codexHome,
-        },
-        stdio: ["pipe", "pipe", "pipe"],
+    const child = spawn(args.codexBin, ["app-server", "--listen", "stdio://"], {
+      env: {
+        ...process.env,
+        CODEX_HOME: args.codexHome,
       },
-    );
+      stdio: ["pipe", "pipe", "pipe"],
+    });
     const state: SettleState = { settled: false };
     const threadIds = args.threadIds;
     const inFlight = new Map<string, string>();
@@ -640,7 +635,9 @@ export function archiveThreadsViaAppServer(
 
       clearTimeout(timeout);
       rejectPromise(
-        new Error(`Codex app-server exited early: code=${code ?? "null"} signal=${signal ?? "null"}`),
+        new Error(
+          `Codex app-server exited early: code=${code ?? "null"} signal=${signal ?? "null"}`,
+        ),
       );
     });
 
@@ -665,7 +662,9 @@ async function confirmArchive(
   total: number,
 ): Promise<boolean> {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    throw new Error("Interactive confirmation requires a TTY. Re-run with --yes to confirm.");
+    throw new Error(
+      "Interactive confirmation requires a TTY. Re-run with --yes to confirm.",
+    );
   }
 
   const rl = readline.createInterface({
@@ -675,7 +674,10 @@ async function confirmArchive(
 
   try {
     process.stdout.write("\n");
-    log(yellow("!"), `This will archive ${bold(String(total))} Codex session(s) matching ${cyan(options.pattern)}.`);
+    log(
+      yellow("!"),
+      `This will archive ${bold(String(total))} Codex session(s) matching ${cyan(options.pattern)}.`,
+    );
     log(" ", `${dim("Codex home:")} ${options.codexHome}`);
     process.stdout.write("\n");
     for (const preview of previews) {
@@ -685,7 +687,9 @@ async function confirmArchive(
       log(" ", dim(`...and ${total - previews.length} more`));
     }
     process.stdout.write("\n");
-    const answer = await rl.question(`  ${dim("?")}  Type ${bold('"archive"')} to continue: `);
+    const answer = await rl.question(
+      `  ${dim("?")}  Type ${bold('"archive"')} to continue: `,
+    );
     return answer.trim() === "archive";
   } finally {
     rl.close();
@@ -698,7 +702,9 @@ function ensureCodexStateDbExists(dbPath: string): void {
   }
 }
 
-export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
+export async function main(
+  argv: string[] = process.argv.slice(2),
+): Promise<void> {
   const parsedArgs = parseArchiveTmpBbSessionsArgs(argv);
   if (parsedArgs.help) {
     process.stdout.write(renderHelpText());
@@ -715,12 +721,18 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   const previews = await readMatchingThreadPreviews(dbPath, options.pattern);
 
   if (threadIds.length === 0) {
-    log(green("●"), `No unarchived Codex sessions matched ${cyan(options.pattern)}`);
+    log(
+      green("●"),
+      `No unarchived Codex sessions matched ${cyan(options.pattern)}`,
+    );
     process.stdout.write("\n");
     return;
   }
 
-  log(dim("●"), `Found ${bold(String(threadIds.length))} unarchived Codex session(s) matching ${cyan(options.pattern)}`);
+  log(
+    dim("●"),
+    `Found ${bold(String(threadIds.length))} unarchived Codex session(s) matching ${cyan(options.pattern)}`,
+  );
 
   if (options.dryRun) {
     for (const preview of previews) {
@@ -770,7 +782,10 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
       log(yellow("!"), `${failure.threadId}: ${failure.message}`);
     }
     if (archiveResult.failures.length > 10) {
-      log(yellow("!"), `${archiveResult.failures.length - 10} additional failure(s) omitted`);
+      log(
+        yellow("!"),
+        `${archiveResult.failures.length - 10} additional failure(s) omitted`,
+      );
     }
     throw new Error(
       `Archived ${archiveResult.succeeded} session(s), ${archiveResult.failed} failed.`,
@@ -778,7 +793,10 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   }
 
   process.stdout.write("\n");
-  log(green("●"), `Archived ${bold(String(archiveResult.succeeded))} Codex session(s)`);
+  log(
+    green("●"),
+    `Archived ${bold(String(archiveResult.succeeded))} Codex session(s)`,
+  );
   process.stdout.write("\n");
 }
 

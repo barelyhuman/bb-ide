@@ -15,13 +15,12 @@ import {
   ServerConnection,
   type ReconnectingWebSocketLike,
 } from "../../src/server-connection.js";
-import {
-  createTestServer,
-  type TestServer,
-} from "../helpers/test-server.js";
+import { createTestServer, type TestServer } from "../helpers/test-server.js";
 import { createHarness } from "../command/dispatch-helpers.js";
 
-type ServerConnectionOptions = ConstructorParameters<typeof ServerConnection>[0];
+type ServerConnectionOptions = ConstructorParameters<
+  typeof ServerConnection
+>[0];
 
 interface CreateConnectionOptions {
   commandResultRetryOptions?: CommandResultRetryOptions;
@@ -156,7 +155,10 @@ describe("ServerConnection", () => {
           permissionEscalation: null,
         },
         resumeContext: {
-          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged",
+          },
           projectId: "project-1",
           providerId: "fake",
           providerThreadId: "provider-1",
@@ -419,7 +421,9 @@ describe("ServerConnection", () => {
 
     await connection.start();
 
-    expect(testServer.sessionOpenCalls[0]?.activeThreads).toEqual(activeThreads);
+    expect(testServer.sessionOpenCalls[0]?.activeThreads).toEqual(
+      activeThreads,
+    );
 
     await connection.shutdown();
   });

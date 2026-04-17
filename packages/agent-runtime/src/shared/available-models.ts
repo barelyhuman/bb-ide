@@ -1,7 +1,4 @@
-import {
-  availableModelSchema,
-  type AvailableModel,
-} from "@bb/domain";
+import { availableModelSchema, type AvailableModel } from "@bb/domain";
 
 export function parseAvailableModelList(result: unknown): AvailableModel[] {
   if (!Array.isArray(result)) {

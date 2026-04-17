@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { WorkspaceError } from "@bb/host-workspace";
 import { dispatchCommand } from "../../src/command-dispatch.js";
-import { cleanupTempDirs, createFakeRuntime, createFakeWorkspace, createHarness, makeTempDir } from "./dispatch-helpers.js";
+import {
+  cleanupTempDirs,
+  createFakeRuntime,
+  createFakeWorkspace,
+  createHarness,
+  makeTempDir,
+} from "./dispatch-helpers.js";
 import { RuntimeManager } from "../../src/runtime-manager.js";
 
 afterEach(cleanupTempDirs);
@@ -31,7 +37,10 @@ describe("environment command dispatch", () => {
     });
     expect(result.transcript).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ key: "workspace-path", text: `Using workspace: ${sourcePath}` }),
+        expect.objectContaining({
+          key: "workspace-path",
+          text: `Using workspace: ${sourcePath}`,
+        }),
         expect.objectContaining({
           key: "workspace-branch",
           text: expect.stringContaining("Using branch: main"),
@@ -48,7 +57,10 @@ describe("environment command dispatch", () => {
   });
 
   it("covers environment.provision in managed-worktree mode", async () => {
-    const harness = createHarness({ workspacePath: "/tmp/worktree", isWorktree: true });
+    const harness = createHarness({
+      workspacePath: "/tmp/worktree",
+      isWorktree: true,
+    });
     const sourcePath = await makeTempDir("bb-dispatch-worktree-");
 
     const result = await dispatchCommand(
@@ -74,7 +86,10 @@ describe("environment command dispatch", () => {
     });
     expect(result.transcript).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ key: "workspace-path", text: "Using workspace: /tmp/worktree" }),
+        expect.objectContaining({
+          key: "workspace-path",
+          text: "Using workspace: /tmp/worktree",
+        }),
         expect.objectContaining({
           key: "workspace-branch",
           text: expect.stringContaining("Using branch: main"),
@@ -94,7 +109,10 @@ describe("environment command dispatch", () => {
   });
 
   it("covers environment.provision in managed-clone mode", async () => {
-    const harness = createHarness({ workspacePath: "/tmp/clone", isWorktree: false });
+    const harness = createHarness({
+      workspacePath: "/tmp/clone",
+      isWorktree: false,
+    });
     const sourcePath = await makeTempDir("bb-dispatch-clone-");
 
     const result = await dispatchCommand(
@@ -120,7 +138,10 @@ describe("environment command dispatch", () => {
     });
     expect(result.transcript).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ key: "workspace-path", text: "Using workspace: /tmp/clone" }),
+        expect.objectContaining({
+          key: "workspace-path",
+          text: "Using workspace: /tmp/clone",
+        }),
         expect.objectContaining({
           key: "workspace-branch",
           text: expect.stringContaining("Using branch: main"),
@@ -142,7 +163,8 @@ describe("environment command dispatch", () => {
   it("streams live events and flushes when initiator is provided", async () => {
     const harness = createHarness({ workspacePath: "/tmp/live-stream" });
     const sourcePath = await makeTempDir("bb-dispatch-stream-");
-    const emittedEvents: Array<{ environmentId: string; threadId: string }> = [];
+    const emittedEvents: Array<{ environmentId: string; threadId: string }> =
+      [];
     let seeded: { threadId: string; sequence: number } | undefined;
     let flushCount = 0;
 
@@ -156,10 +178,16 @@ describe("environment command dispatch", () => {
       },
       {
         runtimeManager: harness.manager,
-        seedThreadHighWaterMark: (args) => { seeded = args; },
+        seedThreadHighWaterMark: (args) => {
+          seeded = args;
+        },
         eventSink: {
-          emit: (event) => { emittedEvents.push(event); },
-          flush: async () => { flushCount += 1; },
+          emit: (event) => {
+            emittedEvents.push(event);
+          },
+          flush: async () => {
+            flushCount += 1;
+          },
         },
       },
     );
@@ -179,7 +207,8 @@ describe("environment command dispatch", () => {
   });
 
   it("flushes live events before surfacing provisioning failures", async () => {
-    const emittedEvents: Array<{ environmentId: string; threadId: string }> = [];
+    const emittedEvents: Array<{ environmentId: string; threadId: string }> =
+      [];
     let flushCount = 0;
     const manager = new RuntimeManager({
       provisionWorkspace: async (options) => {
@@ -190,7 +219,10 @@ describe("environment command dispatch", () => {
           status: "started",
           startedAt: Date.now(),
         });
-        throw new WorkspaceError("git_command_failed", "git worktree add failed");
+        throw new WorkspaceError(
+          "git_command_failed",
+          "git worktree add failed",
+        );
       },
       createRuntime: () => createFakeRuntime().runtime,
     });
@@ -210,8 +242,12 @@ describe("environment command dispatch", () => {
         {
           runtimeManager: manager,
           eventSink: {
-            emit: (event) => { emittedEvents.push(event); },
-            flush: async () => { flushCount += 1; },
+            emit: (event) => {
+              emittedEvents.push(event);
+            },
+            flush: async () => {
+              flushCount += 1;
+            },
           },
         },
       ),
@@ -318,7 +354,10 @@ describe("environment command dispatch", () => {
       provisionWorkspace: async () => {
         callCount++;
         if (callCount > 1) {
-          throw new WorkspaceError("path_not_found", "Managed workspace path does not exist: /tmp/env-retry");
+          throw new WorkspaceError(
+            "path_not_found",
+            "Managed workspace path does not exist: /tmp/env-retry",
+          );
         }
         return workspace;
       },

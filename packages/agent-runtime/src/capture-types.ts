@@ -12,8 +12,7 @@ interface AgentRuntimeCaptureEntryBase {
   providerId: string;
 }
 
-export interface AgentRuntimeRawProviderEventCaptureEntry
-  extends AgentRuntimeCaptureEntryBase {
+export interface AgentRuntimeRawProviderEventCaptureEntry extends AgentRuntimeCaptureEntryBase {
   kind: "raw-provider-event";
   captureId: string;
   rawLine: string;
@@ -21,16 +20,14 @@ export interface AgentRuntimeRawProviderEventCaptureEntry
   sourceThreadId?: string;
 }
 
-export interface AgentRuntimeTranslatedThreadEventCaptureEntry
-  extends AgentRuntimeCaptureEntryBase {
+export interface AgentRuntimeTranslatedThreadEventCaptureEntry extends AgentRuntimeCaptureEntryBase {
   kind: "translated-thread-event";
   rawCaptureId?: string;
   rawMethod?: string;
   event: ThreadEvent;
 }
 
-export interface AgentRuntimeToolCallRequestCaptureEntry
-  extends AgentRuntimeCaptureEntryBase {
+export interface AgentRuntimeToolCallRequestCaptureEntry extends AgentRuntimeCaptureEntryBase {
   kind: "tool-call-request";
   captureId: string;
   rawLine: string;
@@ -38,8 +35,7 @@ export interface AgentRuntimeToolCallRequestCaptureEntry
   request: ToolCallRequest;
 }
 
-export interface AgentRuntimeToolCallResultCaptureEntry
-  extends AgentRuntimeCaptureEntryBase {
+export interface AgentRuntimeToolCallResultCaptureEntry extends AgentRuntimeCaptureEntryBase {
   kind: "tool-call-result";
   requestCaptureId?: string;
   requestId: string | number;
@@ -48,8 +44,7 @@ export interface AgentRuntimeToolCallResultCaptureEntry
   errorMessage?: string;
 }
 
-export interface AgentRuntimeInteractiveRequestCaptureEntry
-  extends AgentRuntimeCaptureEntryBase {
+export interface AgentRuntimeInteractiveRequestCaptureEntry extends AgentRuntimeCaptureEntryBase {
   kind: "interactive-request";
   captureId: string;
   rawLine: string;
@@ -57,8 +52,7 @@ export interface AgentRuntimeInteractiveRequestCaptureEntry
   request: PendingInteractionCreate;
 }
 
-export interface AgentRuntimeInteractiveResultCaptureEntry
-  extends AgentRuntimeCaptureEntryBase {
+export interface AgentRuntimeInteractiveResultCaptureEntry extends AgentRuntimeCaptureEntryBase {
   kind: "interactive-result";
   requestCaptureId?: string;
   requestId: string;
@@ -67,21 +61,18 @@ export interface AgentRuntimeInteractiveResultCaptureEntry
   errorMessage?: string;
 }
 
-export interface AgentRuntimeProviderStderrCaptureEntry
-  extends AgentRuntimeCaptureEntryBase {
+export interface AgentRuntimeProviderStderrCaptureEntry extends AgentRuntimeCaptureEntryBase {
   kind: "provider-stderr";
   line: string;
   threadId?: string;
 }
 
-export interface AgentRuntimeProviderProcessErrorCaptureEntry
-  extends AgentRuntimeCaptureEntryBase {
+export interface AgentRuntimeProviderProcessErrorCaptureEntry extends AgentRuntimeCaptureEntryBase {
   kind: "provider-process-error";
   message: string;
 }
 
-export interface AgentRuntimeProviderProcessExitCaptureEntry
-  extends AgentRuntimeCaptureEntryBase {
+export interface AgentRuntimeProviderProcessExitCaptureEntry extends AgentRuntimeCaptureEntryBase {
   kind: "provider-process-exit";
   threadIds: string[];
   code: number | null;

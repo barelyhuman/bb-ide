@@ -40,14 +40,12 @@ const ENVIRONMENT_CHANGE_REPORT_RETRY_DELAY_MS = 1_000;
 const ENVIRONMENT_CHANGE_REPORT_MAX_RETRY_DELAY_MS = 30_000;
 const INTERACTIVE_INTERRUPT_RETRY_DELAY_MS = 1_000;
 
-export function createCommandFetchLoop<Command>(
-  args: {
-    logger: HostDaemonLogger;
-    fetchCommands: () => Promise<Command[]>;
-    handleCommands: (commands: Command[]) => Promise<void>;
-    retryDelayMs?: number;
-  },
-) {
+export function createCommandFetchLoop<Command>(args: {
+  logger: HostDaemonLogger;
+  fetchCommands: () => Promise<Command[]>;
+  handleCommands: (commands: Command[]) => Promise<void>;
+  retryDelayMs?: number;
+}) {
   let fetchRequested = false;
   let fetchPromise: Promise<void> | null = null;
 
@@ -73,7 +71,10 @@ export function createCommandFetchLoop<Command>(
           await drainPendingCommands();
         }
       } catch (error) {
-        args.logger.error({ err: error }, "Failed to fetch host-daemon commands");
+        args.logger.error(
+          { err: error },
+          "Failed to fetch host-daemon commands",
+        );
         setTimeout(() => {
           void request();
         }, args.retryDelayMs ?? COMMAND_FETCH_RETRY_DELAY_MS);
@@ -142,7 +143,8 @@ export async function createHostDaemonApp(
     PendingInteractiveInterruptRequest
   >();
   let flushPendingInteractiveInterruptsPromise: Promise<void> | null = null;
-  let interactiveInterruptRetryTimeout: ReturnType<typeof setTimeout> | null = null;
+  let interactiveInterruptRetryTimeout: ReturnType<typeof setTimeout> | null =
+    null;
 
   const serverClient = createServerClient({
     serverUrl: options.serverUrl,
@@ -160,7 +162,8 @@ export async function createHostDaemonApp(
   const environmentChangeReporter = createBufferedEnvironmentChangeReporter({
     debounceMs: ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS,
     logger: options.logger,
-    reportEnvironmentChange: (change) => serverClient.postEnvironmentChange(change),
+    reportEnvironmentChange: (change) =>
+      serverClient.postEnvironmentChange(change),
     retryDelayMs: ENVIRONMENT_CHANGE_REPORT_RETRY_DELAY_MS,
     retryMaxDelayMs: ENVIRONMENT_CHANGE_REPORT_MAX_RETRY_DELAY_MS,
   });
@@ -184,9 +187,9 @@ export async function createHostDaemonApp(
 
   function scheduleInteractiveInterruptRetry(): void {
     if (
-      interactiveInterruptRetryTimeout !== null
-      || sessionState.value === null
-      || pendingInteractiveInterrupts.size === 0
+      interactiveInterruptRetryTimeout !== null ||
+      sessionState.value === null ||
+      pendingInteractiveInterrupts.size === 0
     ) {
       return;
     }
@@ -267,12 +270,12 @@ export async function createHostDaemonApp(
   });
 
   const interactiveRequestRegistry = new InteractiveRequestRegistry({
-    registerRequest: (request) => serverClient.registerInteractiveRequest(request),
+    registerRequest: (request) =>
+      serverClient.registerInteractiveRequest(request),
     onRegistrationFailure: ({ error, request }) => {
       enqueueInteractiveInterrupt({
         providerId: request.providerId,
-        reason:
-          `Failed to register interactive request while provider was waiting: ${error.message}`,
+        reason: `Failed to register interactive request while provider was waiting: ${error.message}`,
         threadIds: [request.threadId],
       });
     },
@@ -370,8 +373,7 @@ export async function createHostDaemonApp(
       if (info.threadIds.length === 0) {
         return;
       }
-      const reason =
-        `Provider "${info.providerId}" exited while awaiting user interaction`;
+      const reason = `Provider "${info.providerId}" exited while awaiting user interaction`;
       interactiveRequestRegistry.interruptThreads({
         providerId: info.providerId,
         threadIds: info.threadIds,
@@ -455,17 +457,16 @@ export async function createHostDaemonApp(
     },
   });
 
-  const localApi =
-    options.localApiConfig
-      ? await startLocalApiServer({
-          hostId: options.hostId,
-          localApiConfig: options.localApiConfig,
-          serverUrl: options.serverUrl,
-          getConnected: () => connection.sessionId != null,
-          openPath: options.openPath,
-          pickFolder: options.pickFolder,
-        })
-      : null;
+  const localApi = options.localApiConfig
+    ? await startLocalApiServer({
+        hostId: options.hostId,
+        localApiConfig: options.localApiConfig,
+        serverUrl: options.serverUrl,
+        getConnected: () => connection.sessionId != null,
+        openPath: options.openPath,
+        pickFolder: options.pickFolder,
+      })
+    : null;
 
   const daemon = createDaemon({
     identity: {

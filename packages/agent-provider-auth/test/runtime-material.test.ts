@@ -52,15 +52,19 @@ describe("cloud auth runtime material", () => {
     });
     expect(result.files).toHaveLength(3);
 
-    const codexFile = result.files.find((file) => file.path === "~/.codex/auth.json");
+    const codexFile = result.files.find(
+      (file) => file.path === "~/.codex/auth.json",
+    );
     expect(codexFile).toMatchObject({
       managedBy: "bb-runtime-material",
       mode: 0o600,
     });
-    expect(codexFile?.contents).toContain("\"refresh_token\": \"\"");
-    expect(codexFile?.contents).toContain("\"access_token\": \"codex-access-token\"");
-    expect(codexFile?.contents).toContain("\"account_id\": \"acct_codex_test\"");
-    expect(codexFile?.contents).toContain("\"id_token\": \"codex-id-token\"");
+    expect(codexFile?.contents).toContain('"refresh_token": ""');
+    expect(codexFile?.contents).toContain(
+      '"access_token": "codex-access-token"',
+    );
+    expect(codexFile?.contents).toContain('"account_id": "acct_codex_test"');
+    expect(codexFile?.contents).toContain('"id_token": "codex-id-token"');
 
     const claudeFile = result.files.find(
       (file) => file.path === "~/.claude/.credentials.json",
@@ -69,19 +73,23 @@ describe("cloud auth runtime material", () => {
       managedBy: "bb-runtime-material",
       mode: 0o600,
     });
-    expect(claudeFile?.contents).toContain("\"refreshToken\": \"\"");
-    expect(claudeFile?.contents).toContain("\"accessToken\": \"claude-access-token\"");
-    expect(claudeFile?.contents).toContain("\"subscriptionType\": \"max\"");
+    expect(claudeFile?.contents).toContain('"refreshToken": ""');
+    expect(claudeFile?.contents).toContain(
+      '"accessToken": "claude-access-token"',
+    );
+    expect(claudeFile?.contents).toContain('"subscriptionType": "max"');
 
-    const piFile = result.files.find((file) => file.path === "~/.pi/agent/auth.json");
+    const piFile = result.files.find(
+      (file) => file.path === "~/.pi/agent/auth.json",
+    );
     expect(piFile).toMatchObject({
       managedBy: "bb-runtime-material",
       mode: 0o600,
     });
-    expect(piFile?.contents).toContain("\"anthropic\"");
-    expect(piFile?.contents).toContain("\"openai-codex\"");
-    expect(piFile?.contents).toContain("\"refresh\": \"\"");
-    expect(piFile?.contents).toContain("\"accountId\": \"acct_codex_test\"");
+    expect(piFile?.contents).toContain('"anthropic"');
+    expect(piFile?.contents).toContain('"openai-codex"');
+    expect(piFile?.contents).toContain('"refresh": ""');
+    expect(piFile?.contents).toContain('"accountId": "acct_codex_test"');
   });
 
   it("returns no env or files when there are no credentials", () => {

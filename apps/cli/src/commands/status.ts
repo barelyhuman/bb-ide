@@ -74,7 +74,10 @@ function fetchManagedThreads(args: {
   return fetchSilent(() =>
     unwrap<Thread[]>(
       args.client.api.v1.threads.$get({
-        query: { projectId: args.projectId, parentThreadId: args.parentThreadId },
+        query: {
+          projectId: args.projectId,
+          parentThreadId: args.parentThreadId,
+        },
       }),
     ),
   );
@@ -88,120 +91,124 @@ export function registerStatusCommand(
     .command("status")
     .description("Show current context")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (opts: StatusCommandOptions) => {
-      const context = resolveContextSnapshot();
+    .action(
+      action(async (opts: StatusCommandOptions) => {
+        const context = resolveContextSnapshot();
 
-      const payload: StatusPayload = {
-        project: null,
-        thread: null,
-        managedThreads: null,
-      };
+        const payload: StatusPayload = {
+          project: null,
+          thread: null,
+          managedThreads: null,
+        };
 
-      let serverAvailable = false;
+        let serverAvailable = false;
 
-      // Try to fetch enriched data from the server
-      if (context.projectId || context.threadId) {
-        const client = createClient(getUrl());
+        // Try to fetch enriched data from the server
+        if (context.projectId || context.threadId) {
+          const client = createClient(getUrl());
 
-        const [projectResult, threadResult] = await Promise.all([
-          context.projectId
-            ? fetchProject({ client, projectId: context.projectId })
-            : Promise.resolve(null),
-          context.threadId
-            ? fetchThread({ client, threadId: context.threadId })
-            : Promise.resolve(null),
-        ]);
+          const [projectResult, threadResult] = await Promise.all([
+            context.projectId
+              ? fetchProject({ client, projectId: context.projectId })
+              : Promise.resolve(null),
+            context.threadId
+              ? fetchThread({ client, threadId: context.threadId })
+              : Promise.resolve(null),
+          ]);
 
-        if (projectResult) {
-          payload.project = {
-            id: projectResult.id,
-            name: projectResult.name,
-          };
-          serverAvailable = true;
-        }
-
-        if (threadResult) {
-          let environmentInfo: ThreadEnvironmentInfo | null = null;
-          if (threadResult.environmentId) {
-            environmentInfo = await fetchEnvironmentInfo({
-              client,
-              environmentId: threadResult.environmentId,
-            });
+          if (projectResult) {
+            payload.project = {
+              id: projectResult.id,
+              name: projectResult.name,
+            };
+            serverAvailable = true;
           }
 
-          payload.thread = {
-            id: threadResult.id,
-            type: threadResult.type,
-            status: threadResult.status,
-            title: threadResult.title ?? null,
-            parentThreadId: threadResult.parentThreadId ?? null,
-            environment: environmentInfo,
-          };
-          serverAvailable = true;
+          if (threadResult) {
+            let environmentInfo: ThreadEnvironmentInfo | null = null;
+            if (threadResult.environmentId) {
+              environmentInfo = await fetchEnvironmentInfo({
+                client,
+                environmentId: threadResult.environmentId,
+              });
+            }
 
-          // If the thread is a manager, fetch managed (child) threads
-          if (threadResult.type === "manager") {
-            const managed = await fetchManagedThreads({
-              client,
-              projectId: threadResult.projectId,
-              parentThreadId: threadResult.id,
-            });
-            if (managed) {
-              payload.managedThreads = managed.map((t) => ({
-                id: t.id,
-                status: t.status,
-                title: t.title ?? null,
-              }));
+            payload.thread = {
+              id: threadResult.id,
+              type: threadResult.type,
+              status: threadResult.status,
+              title: threadResult.title ?? null,
+              parentThreadId: threadResult.parentThreadId ?? null,
+              environment: environmentInfo,
+            };
+            serverAvailable = true;
+
+            // If the thread is a manager, fetch managed (child) threads
+            if (threadResult.type === "manager") {
+              const managed = await fetchManagedThreads({
+                client,
+                projectId: threadResult.projectId,
+                parentThreadId: threadResult.id,
+              });
+              if (managed) {
+                payload.managedThreads = managed.map((t) => ({
+                  id: t.id,
+                  status: t.status,
+                  title: t.title ?? null,
+                }));
+              }
             }
           }
         }
-      }
 
-      // JSON output
-      if (outputJson(opts, payload)) return;
+        // JSON output
+        if (outputJson(opts, payload)) return;
 
-      // Human-readable output
-      if (serverAvailable && payload.project) {
-        console.log(`Project: ${payload.project.name} (${payload.project.id})`);
-      } else if (context.projectId) {
-        console.log(`Project: ${context.projectId}`);
-      } else {
-        console.log("Project: (not set)");
-      }
-
-      console.log("");
-
-      if (serverAvailable && payload.thread) {
-        console.log(`Thread: ${payload.thread.id}`);
-        console.log(`  Type: ${payload.thread.type}`);
-        console.log(`  Status: ${payload.thread.status}`);
-        if (payload.thread.title) {
-          console.log(`  Title: ${payload.thread.title}`);
-        }
-        if (payload.thread.parentThreadId) {
-          console.log(`  Parent: ${payload.thread.parentThreadId}`);
-        }
-        if (payload.thread.environment) {
-          printEnvironmentInfo(payload.thread.environment);
+        // Human-readable output
+        if (serverAvailable && payload.project) {
+          console.log(
+            `Project: ${payload.project.name} (${payload.project.id})`,
+          );
+        } else if (context.projectId) {
+          console.log(`Project: ${context.projectId}`);
+        } else {
+          console.log("Project: (not set)");
         }
 
-        if (payload.managedThreads && payload.managedThreads.length > 0) {
-          console.log("");
-          console.log(`Managed threads: ${payload.managedThreads.length}`);
-          for (const mt of payload.managedThreads) {
-            const title = mt.title ? `"${mt.title}"` : "";
-            console.log(`  ${mt.id}  ${mt.status}  ${title}`);
-          }
-        }
-      } else if (context.threadId) {
-        console.log(`Thread: ${context.threadId}`);
-      } else {
-        console.log("Thread: (not set)");
-      }
-
-      if (!context.projectId && !context.threadId) {
         console.log("");
-        console.log("Tip: run bb guide for help getting started.");
-      }
-    }));
+
+        if (serverAvailable && payload.thread) {
+          console.log(`Thread: ${payload.thread.id}`);
+          console.log(`  Type: ${payload.thread.type}`);
+          console.log(`  Status: ${payload.thread.status}`);
+          if (payload.thread.title) {
+            console.log(`  Title: ${payload.thread.title}`);
+          }
+          if (payload.thread.parentThreadId) {
+            console.log(`  Parent: ${payload.thread.parentThreadId}`);
+          }
+          if (payload.thread.environment) {
+            printEnvironmentInfo(payload.thread.environment);
+          }
+
+          if (payload.managedThreads && payload.managedThreads.length > 0) {
+            console.log("");
+            console.log(`Managed threads: ${payload.managedThreads.length}`);
+            for (const mt of payload.managedThreads) {
+              const title = mt.title ? `"${mt.title}"` : "";
+              console.log(`  ${mt.id}  ${mt.status}  ${title}`);
+            }
+          }
+        } else if (context.threadId) {
+          console.log(`Thread: ${context.threadId}`);
+        } else {
+          console.log("Thread: (not set)");
+        }
+
+        if (!context.projectId && !context.threadId) {
+          console.log("");
+          console.log("Tip: run bb guide for help getting started.");
+        }
+      }),
+    );
 }

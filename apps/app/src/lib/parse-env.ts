@@ -48,8 +48,8 @@ export function parseEnvContent(content: string): ParseEnvResult {
 
     // Strip surrounding quotes (skip inline comment stripping for quoted values)
     const isQuoted =
-      (value.startsWith('"') && value.endsWith('"'))
-      || (value.startsWith("'") && value.endsWith("'"));
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"));
 
     if (isQuoted) {
       value = value.slice(1, -1);

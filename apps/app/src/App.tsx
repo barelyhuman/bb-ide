@@ -18,7 +18,10 @@ function AppRoutes() {
         <Route path="/" element={<MainView />} />
         <Route path="/settings" element={<AppSettingsView />} />
         {import.meta.env.DEV ? (
-          <Route path="/development-only/replay/:captureId" element={<InternalReplayView />} />
+          <Route
+            path="/development-only/replay/:captureId"
+            element={<InternalReplayView />}
+          />
         ) : null}
         <Route path="/projects/:projectId" element={<ProjectMainView />} />
         <Route

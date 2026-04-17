@@ -104,7 +104,8 @@ async function requireMergeBaseBranch(
   environmentId: string,
 ): Promise<string> {
   const environment = await getEnvironment(api, environmentId);
-  const mergeBaseBranch = environment.mergeBaseBranch ?? environment.defaultBranch;
+  const mergeBaseBranch =
+    environment.mergeBaseBranch ?? environment.defaultBranch;
   if (!mergeBaseBranch) {
     throw new Error(`Environment ${environmentId} has no default branch`);
   }
@@ -143,7 +144,11 @@ export async function createManagerThread(
     param: { id: projectId },
     json: request,
   });
-  await expectStatus(response, 201, `create manager thread for project ${projectId}`);
+  await expectStatus(
+    response,
+    201,
+    `create manager thread for project ${projectId}`,
+  );
   return threadSchema.parse(await response.json());
 }
 
@@ -224,7 +229,11 @@ export async function getEnvironmentBranches(
   const response = await api.environments[":id"].diff.branches.$get({
     param: { id: environmentId },
   });
-  await expectStatus(response, 200, `get environment branches ${environmentId}`);
+  await expectStatus(
+    response,
+    200,
+    `get environment branches ${environmentId}`,
+  );
   return response.json();
 }
 
@@ -257,9 +266,7 @@ export async function getEnvironmentStatus(
   return environmentStatusResponseSchema.parse(await response.json());
 }
 
-export async function getHosts(
-  api: PublicApiClient,
-): Promise<Host[]> {
+export async function getHosts(api: PublicApiClient): Promise<Host[]> {
   const response = await api.hosts.$get({});
   await expectStatus(response, 200, "get hosts");
   return hostSchema.array().parse(await response.json());

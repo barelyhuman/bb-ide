@@ -131,7 +131,9 @@ export const providerUnhandledEventSchema = z.object({
   turnId: z.string().optional(),
   parentToolCallId: z.string().optional(),
 });
-export type ProviderUnhandledEvent = z.infer<typeof providerUnhandledEventSchema>;
+export type ProviderUnhandledEvent = z.infer<
+  typeof providerUnhandledEventSchema
+>;
 
 export const toolCallProgressEventSchema = z.object({
   type: z.literal("item/toolCall/progress"),
@@ -399,52 +401,72 @@ export const providerEventTypeValues = providerEventSchema.options.map(
 );
 const providerEventTypeSet = new Set<string>(providerEventTypeValues);
 export type ProviderEventType = ProviderEvent["type"];
-export const providerEventTypeSchema = z.string().refine(
-  (value): value is ProviderEventType => providerEventTypeSet.has(value),
-  "Invalid provider event type",
-);
+export const providerEventTypeSchema = z
+  .string()
+  .refine(
+    (value): value is ProviderEventType => providerEventTypeSet.has(value),
+    "Invalid provider event type",
+  );
 
 /**
  * Events originating from the server/system layer (not from a provider process).
  * These do NOT carry `providerThreadId`.
  */
 export const systemEventSchema = z.union([
-  z.object({
-    type: z.literal("client/thread/start"),
-    threadId: z.string(),
-  }).merge(clientTurnLifecycleEventDataSchema),
-  z.object({
-    type: z.literal("client/turn/requested"),
-    threadId: z.string(),
-  }).merge(turnRequestEventDataSchema),
-  z.object({
-    type: z.literal("client/turn/start"),
-    threadId: z.string(),
-  }).merge(clientTurnLifecycleEventDataSchema),
-  z.object({
-    type: z.literal("system/error"),
-    threadId: z.string(),
-  }).merge(systemErrorEventDataSchema),
-  z.object({
-    type: z.literal("system/manager/user_message"),
-    threadId: z.string(),
-  }).merge(systemManagerUserMessageEventDataSchema),
-  z.object({
-    type: z.literal("system/thread/interrupted"),
-    threadId: z.string(),
-  }).merge(systemThreadInterruptedEventDataSchema),
-  z.object({
-    type: z.literal("system/operation"),
-    threadId: z.string(),
-  }).merge(systemOperationEventDataSchema),
-  z.object({
-    type: z.literal("system/permissionGrant/lifecycle"),
-    threadId: z.string(),
-  }).merge(systemPermissionGrantLifecycleEventDataSchema),
-  z.object({
-    type: z.literal("system/thread-provisioning"),
-    threadId: z.string(),
-  }).merge(systemThreadProvisioningEventDataSchema),
+  z
+    .object({
+      type: z.literal("client/thread/start"),
+      threadId: z.string(),
+    })
+    .merge(clientTurnLifecycleEventDataSchema),
+  z
+    .object({
+      type: z.literal("client/turn/requested"),
+      threadId: z.string(),
+    })
+    .merge(turnRequestEventDataSchema),
+  z
+    .object({
+      type: z.literal("client/turn/start"),
+      threadId: z.string(),
+    })
+    .merge(clientTurnLifecycleEventDataSchema),
+  z
+    .object({
+      type: z.literal("system/error"),
+      threadId: z.string(),
+    })
+    .merge(systemErrorEventDataSchema),
+  z
+    .object({
+      type: z.literal("system/manager/user_message"),
+      threadId: z.string(),
+    })
+    .merge(systemManagerUserMessageEventDataSchema),
+  z
+    .object({
+      type: z.literal("system/thread/interrupted"),
+      threadId: z.string(),
+    })
+    .merge(systemThreadInterruptedEventDataSchema),
+  z
+    .object({
+      type: z.literal("system/operation"),
+      threadId: z.string(),
+    })
+    .merge(systemOperationEventDataSchema),
+  z
+    .object({
+      type: z.literal("system/permissionGrant/lifecycle"),
+      threadId: z.string(),
+    })
+    .merge(systemPermissionGrantLifecycleEventDataSchema),
+  z
+    .object({
+      type: z.literal("system/thread-provisioning"),
+      threadId: z.string(),
+    })
+    .merge(systemThreadProvisioningEventDataSchema),
 ]);
 export type SystemEvent = z.infer<typeof systemEventSchema>;
 
@@ -460,7 +482,9 @@ export const threadEventTypeValues = [
   ...systemEventTypeValues,
 ] as const;
 const threadEventTypeSet = new Set<string>(threadEventTypeValues);
-export const threadEventTypeSchema = z.string().refine(
-  (value): value is ThreadEventType => threadEventTypeSet.has(value),
-  "Invalid thread event type",
-);
+export const threadEventTypeSchema = z
+  .string()
+  .refine(
+    (value): value is ThreadEventType => threadEventTypeSet.has(value),
+    "Invalid thread event type",
+  );

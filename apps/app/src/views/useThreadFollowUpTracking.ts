@@ -63,13 +63,16 @@ export function useThreadFollowUpTracking({
     setPendingSubmittedFollowUp(null);
   }, [onAcknowledged, pendingSubmittedFollowUp, threadDetailRows]);
 
-  const beginPendingFollowUp: BeginPendingFollowUp = useCallback(({ draft, input }) => {
-    setPendingSubmittedFollowUp({
-      draft,
-      signature: buildFollowUpSignatureFromInput(input),
-      submittedAt: Date.now(),
-    });
-  }, []);
+  const beginPendingFollowUp: BeginPendingFollowUp = useCallback(
+    ({ draft, input }) => {
+      setPendingSubmittedFollowUp({
+        draft,
+        signature: buildFollowUpSignatureFromInput(input),
+        submittedAt: Date.now(),
+      });
+    },
+    [],
+  );
 
   const clearPendingFollowUp: ClearPendingFollowUp = useCallback(() => {
     setPendingSubmittedFollowUp(null);

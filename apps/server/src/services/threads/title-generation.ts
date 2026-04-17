@@ -1,16 +1,9 @@
 import { renderTemplate } from "@bb/templates";
-import {
-  getEnvironment,
-  getThread,
-  updateThread,
-} from "@bb/db";
+import { getEnvironment, getThread, updateThread } from "@bb/db";
 import type { PromptInput } from "@bb/domain";
 import type { AppDeps } from "../../types.js";
 import { Type } from "@mariozechner/pi-ai";
-import {
-  InferenceTimeoutError,
-  inferenceComplete,
-} from "../ai/inference.js";
+import { InferenceTimeoutError, inferenceComplete } from "../ai/inference.js";
 import { queueThreadRenameCommand } from "./thread-commands.js";
 import { isPreStartThreadStatus } from "./thread-status.js";
 
@@ -20,7 +13,10 @@ const MAX_BRANCH_SLUG_LENGTH = 48;
 
 type ThreadMetadataGenerationDeps = Pick<AppDeps, "config" | "logger">;
 type ThreadTitleApplyDeps = Pick<AppDeps, "db" | "hub">;
-type ThreadTitleGenerationDeps = Pick<AppDeps, "config" | "db" | "hub" | "logger">;
+type ThreadTitleGenerationDeps = Pick<
+  AppDeps,
+  "config" | "db" | "hub" | "logger"
+>;
 
 export interface ApplyGeneratedThreadTitleArgs {
   threadId: string;
@@ -233,16 +229,19 @@ export async function generateThreadTitle(
   }
 
   try {
-    if (!applyGeneratedThreadTitle(deps, {
-      threadId: args.threadId,
-      title: metadata.title,
-    })) {
+    if (
+      !applyGeneratedThreadTitle(deps, {
+        threadId: args.threadId,
+        title: metadata.title,
+      })
+    ) {
       return;
     }
 
     const titledThread = getThread(deps.db, args.threadId);
-    const environment =
-      titledThread?.environmentId ? getEnvironment(deps.db, titledThread.environmentId) : null;
+    const environment = titledThread?.environmentId
+      ? getEnvironment(deps.db, titledThread.environmentId)
+      : null;
     if (
       !titledThread ||
       !environment ||

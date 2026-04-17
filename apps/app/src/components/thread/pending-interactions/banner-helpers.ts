@@ -1,6 +1,4 @@
-import {
-  type PendingInteractionApprovalDecision,
-} from "@bb/domain";
+import { type PendingInteractionApprovalDecision } from "@bb/domain";
 
 export function labelForApprovalDecision(
   decision: PendingInteractionApprovalDecision,

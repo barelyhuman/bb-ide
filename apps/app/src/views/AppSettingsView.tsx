@@ -15,8 +15,14 @@ import { PageShell } from "@/components/layout/PageShell";
 import { CloudAuthSettingsSection } from "@/components/settings/CloudAuthSettingsSection";
 import { CONNECTED_DOT_CLASS } from "@/components/settings/constants";
 import { SettingsSection } from "@/components/settings/SettingsSection";
-import { SettingsRow, SettingsRowList } from "@/components/settings/SettingsRow";
-import { SandboxEnvVarsSection, type EnvVarEntry } from "@/components/settings/SandboxEnvVarsSection";
+import {
+  SettingsRow,
+  SettingsRowList,
+} from "@/components/settings/SettingsRow";
+import {
+  SandboxEnvVarsSection,
+  type EnvVarEntry,
+} from "@/components/settings/SandboxEnvVarsSection";
 import { SettingsWithControl } from "@/components/settings/SettingsWithControl";
 import {
   HostDeleteDialog,
@@ -54,20 +60,21 @@ export function AppSettingsView() {
   const theme = usePreferredTheme();
   const { data: hosts = [], isLoading: hostsLoading } = useHosts();
   const sandboxHostSupported = useAtomValue(sandboxHostSupportedAtom);
-  const { data: cloudAuthSettings, isLoading: cloudAuthLoading } = useCloudAuthSettings(
-    sandboxHostSupported,
-  );
-  const { data: sandboxEnvVars, isLoading: sandboxEnvLoading } = useSandboxEnvVars(
-    sandboxHostSupported,
-  );
+  const { data: cloudAuthSettings, isLoading: cloudAuthLoading } =
+    useCloudAuthSettings(sandboxHostSupported);
+  const { data: sandboxEnvVars, isLoading: sandboxEnvLoading } =
+    useSandboxEnvVars(sandboxHostSupported);
   const queryClient = useQueryClient();
 
-  const [renameTarget, setRenameTarget] = useState<HostRenameDialogTarget | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<HostDeleteDialogTarget | null>(null);
-  const [activeCloudAuthAttempt, setActiveCloudAuthAttempt] = useState<CloudAuthAttemptState | null>(
-    null,
+  const [renameTarget, setRenameTarget] =
+    useState<HostRenameDialogTarget | null>(null);
+  const [deleteTarget, setDeleteTarget] =
+    useState<HostDeleteDialogTarget | null>(null);
+  const [activeCloudAuthAttempt, setActiveCloudAuthAttempt] =
+    useState<CloudAuthAttemptState | null>(null);
+  const [cloudAuthNotices, setCloudAuthNotices] = useState<CloudAuthNoticeMap>(
+    {},
   );
-  const [cloudAuthNotices, setCloudAuthNotices] = useState<CloudAuthNoticeMap>({});
 
   const activeCloudAuthStatus = useCloudAuthAttempt(
     activeCloudAuthAttempt?.attemptId ?? null,
@@ -151,7 +158,8 @@ export function AppSettingsView() {
       queryClient.invalidateQueries({ queryKey: cloudAuthSettingsQueryKey() });
       setCloudAuthNotices((current) => ({
         ...current,
-        [providerId]: "Connection removed. The next sandbox sync will delete its auth material.",
+        [providerId]:
+          "Connection removed. The next sandbox sync will delete its auth material.",
       }));
       if (activeCloudAuthAttempt?.providerId === providerId) {
         setActiveCloudAuthAttempt(null);
@@ -194,7 +202,8 @@ export function AppSettingsView() {
     if (attempt.status !== "completed") {
       setCloudAuthNotices((current) => ({
         ...current,
-        [attempt.providerId]: attempt.errorMessage ?? "Connection did not complete.",
+        [attempt.providerId]:
+          attempt.errorMessage ?? "Connection did not complete.",
       }));
     }
     setActiveCloudAuthAttempt(null);
@@ -204,9 +213,7 @@ export function AppSettingsView() {
     <PageShell contentClassName="pt-4 md:pt-5">
       <div className="mx-auto w-full max-w-3xl space-y-6">
         <SettingsSection title="Appearance">
-          <SettingsWithControl
-            label="Theme"
-          >
+          <SettingsWithControl label="Theme">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
@@ -222,11 +229,23 @@ export function AppSettingsView() {
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuItem onSelect={() => setPreferredTheme("light")}>
                   Light
-                  <Check className={theme === "light" ? "ml-auto size-5 md:size-4" : "ml-auto size-5 opacity-0 md:size-4"} />
+                  <Check
+                    className={
+                      theme === "light"
+                        ? "ml-auto size-5 md:size-4"
+                        : "ml-auto size-5 opacity-0 md:size-4"
+                    }
+                  />
                 </DropdownMenuItem>
                 <DropdownMenuItem onSelect={() => setPreferredTheme("dark")}>
                   Dark
-                  <Check className={theme === "dark" ? "ml-auto size-5 md:size-4" : "ml-auto size-5 opacity-0 md:size-4"} />
+                  <Check
+                    className={
+                      theme === "dark"
+                        ? "ml-auto size-5 md:size-4"
+                        : "ml-auto size-5 opacity-0 md:size-4"
+                    }
+                  />
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -248,7 +267,9 @@ export function AppSettingsView() {
                   <SettingsRow key={host.id}>
                     <span className="min-w-0 flex-1 truncate">
                       {host.name}
-                      <span className="ml-1.5 text-xs text-muted-foreground">{host.id}</span>
+                      <span className="ml-1.5 text-xs text-muted-foreground">
+                        {host.id}
+                      </span>
                     </span>
                     {isConnected ? (
                       <span className={CONNECTED_DOT_CLASS} title="Connected" />
@@ -271,7 +292,10 @@ export function AppSettingsView() {
                       <DropdownMenuContent align="end" className="w-40">
                         <DropdownMenuItem
                           onSelect={() =>
-                            setRenameTarget({ id: host.id, currentName: host.name })
+                            setRenameTarget({
+                              id: host.id,
+                              currentName: host.name,
+                            })
                           }
                         >
                           Rename
@@ -297,30 +321,35 @@ export function AppSettingsView() {
           <section className="space-y-3">
             <h2 className="text-sm font-semibold">Sandbox Hosts</h2>
             <CloudAuthSettingsSection
-                activeAttemptProviderId={activeCloudAuthAttempt?.providerId ?? null}
-                connectPending={startCloudAuthConnection.isPending}
-                connections={cloudAuthSettings?.connections ?? []}
-                disconnectPending={disconnectCloudAuth.isPending}
-                isLoading={cloudAuthLoading}
-                notices={cloudAuthNotices}
-                onCancel={() => {
-                  if (authPopupRef.current && !authPopupRef.current.closed) {
-                    authPopupRef.current.close();
-                  }
-                  authPopupRef.current = null;
-                  setActiveCloudAuthAttempt(null);
-                }}
-                onConnect={handleCloudAuthConnect}
-                onDisconnect={(providerId) => disconnectCloudAuth.mutate(providerId)}
-              />
+              activeAttemptProviderId={
+                activeCloudAuthAttempt?.providerId ?? null
+              }
+              connectPending={startCloudAuthConnection.isPending}
+              connections={cloudAuthSettings?.connections ?? []}
+              disconnectPending={disconnectCloudAuth.isPending}
+              isLoading={cloudAuthLoading}
+              notices={cloudAuthNotices}
+              onCancel={() => {
+                if (authPopupRef.current && !authPopupRef.current.closed) {
+                  authPopupRef.current.close();
+                }
+                authPopupRef.current = null;
+                setActiveCloudAuthAttempt(null);
+              }}
+              onConnect={handleCloudAuthConnect}
+              onDisconnect={(providerId) =>
+                disconnectCloudAuth.mutate(providerId)
+              }
+            />
 
-              <SandboxEnvVarsSection
-                envVars={sandboxEnvVars?.envVars ?? []}
-                isLoading={sandboxEnvLoading}
-                onSave={(toUpsert, toDelete) =>
-                  saveEnvVars.mutate({ toUpsert, toDelete })}
-                savePending={saveEnvVars.isPending}
-              />
+            <SandboxEnvVarsSection
+              envVars={sandboxEnvVars?.envVars ?? []}
+              isLoading={sandboxEnvLoading}
+              onSave={(toUpsert, toDelete) =>
+                saveEnvVars.mutate({ toUpsert, toDelete })
+              }
+              savePending={saveEnvVars.isPending}
+            />
           </section>
         ) : null}
       </div>

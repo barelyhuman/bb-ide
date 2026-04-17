@@ -107,7 +107,11 @@ export type PublicApiSchema = {
     $get: Endpoint<PathId, ReplayCaptureDetail>;
   };
   "/development-only/replay/captures/:id/runs": {
-    $post: Endpoint<PathId & { json: ReplayRunRequest }, ReplayRunResponse, 201>;
+    $post: Endpoint<
+      PathId & { json: ReplayRunRequest },
+      ReplayRunResponse,
+      201
+    >;
   };
 
   // ─── Projects ────────────────────────────────────────────────────────
@@ -118,7 +122,10 @@ export type PublicApiSchema = {
   };
   "/projects/:id": {
     $get: Endpoint<PathProjectId, ProjectResponse>;
-    $patch: Endpoint<PathProjectId & { json: UpdateProjectRequest }, ProjectResponse>;
+    $patch: Endpoint<
+      PathProjectId & { json: UpdateProjectRequest },
+      ProjectResponse
+    >;
     /** Also cleans up attachment files for the project. */
     $delete: Endpoint<PathProjectId, { ok: true }>;
   };
@@ -130,10 +137,17 @@ export type PublicApiSchema = {
     >;
   };
   "/projects/:id/sources": {
-    $post: Endpoint<PathProjectId & { json: CreateProjectSourceRequest }, ProjectSource, 201>;
+    $post: Endpoint<
+      PathProjectId & { json: CreateProjectSourceRequest },
+      ProjectSource,
+      201
+    >;
   };
   "/projects/:id/sources/:sourceId": {
-    $patch: Endpoint<PathProjectSourceId & { json: UpdateProjectSourceRequest }, ProjectSource>;
+    $patch: Endpoint<
+      PathProjectSourceId & { json: UpdateProjectSourceRequest },
+      ProjectSource
+    >;
     $delete: Endpoint<PathProjectSourceId, { ok: true }>;
   };
   "/projects/:id/sources/:sourceId/status": {
@@ -142,7 +156,11 @@ export type PublicApiSchema = {
   };
   "/projects/:id/automations": {
     $get: Endpoint<PathProjectId, Automation[]>;
-    $post: Endpoint<PathProjectId & { json: CreateAutomationRequest }, Automation, 201>;
+    $post: Endpoint<
+      PathProjectId & { json: CreateAutomationRequest },
+      Automation,
+      201
+    >;
   };
   "/projects/:id/automations/:automationId": {
     $patch: Endpoint<
@@ -156,7 +174,10 @@ export type PublicApiSchema = {
      * Search files in the project. Used for file mentions in the prompt box.
      * Proxies to `workspace.list_files` on the project's default source host.
      */
-    $get: Endpoint<PathProjectId & { query: ProjectFilesQuery }, WorkspaceFileListResponse>;
+    $get: Endpoint<
+      PathProjectId & { query: ProjectFilesQuery },
+      WorkspaceFileListResponse
+    >;
   };
   "/projects/:id/attachments": {
     /** Upload a file attachment. Used to attach files to user messages. */
@@ -197,7 +218,11 @@ export type PublicApiSchema = {
     $get: Endpoint<EmptyInput, Host[]>;
   };
   "/hosts/join": {
-    $post: Endpoint<{ json: CreateHostJoinRequest }, CreateHostJoinResponse, 201>;
+    $post: Endpoint<
+      { json: CreateHostJoinRequest },
+      CreateHostJoinResponse,
+      201
+    >;
   };
   "/hosts/:id": {
     $get: Endpoint<PathId, Host>;
@@ -208,14 +233,15 @@ export type PublicApiSchema = {
   // ─── Environments ────────────────────────────────────────────────────
 
   "/environments/:id": {
-    $get:
-      | Endpoint<PathId, Environment, 200>
-      | Endpoint<PathId, ApiError, 404>;
+    $get: Endpoint<PathId, Environment, 200> | Endpoint<PathId, ApiError, 404>;
     $patch: Endpoint<PathId & { json: UpdateEnvironmentRequest }, Environment>;
   };
   "/environments/:id/status": {
     /** Get workspace status (git state) for an environment. Proxies to `workspace.status`. */
-    $get: Endpoint<PathId & { query: EnvironmentStatusQuery }, EnvironmentStatusResponse>;
+    $get: Endpoint<
+      PathId & { query: EnvironmentStatusQuery },
+      EnvironmentStatusResponse
+    >;
   };
   "/environments/:id/promotion": {
     /** Derive current promotion state and server-side action eligibility for an environment. */
@@ -223,7 +249,10 @@ export type PublicApiSchema = {
   };
   "/environments/:id/diff": {
     /** Get git diff for an environment's workspace. Proxies to `workspace.diff`. */
-    $get: Endpoint<PathId & { query: EnvironmentDiffQuery }, ThreadGitDiffResponse>;
+    $get: Endpoint<
+      PathId & { query: EnvironmentDiffQuery },
+      ThreadGitDiffResponse
+    >;
   };
   "/environments/:id/diff/branches": {
     /** List git branches. Proxies to `workspace.list_branches`. */
@@ -282,7 +311,11 @@ export type PublicApiSchema = {
   };
   "/threads/:id/drafts": {
     $get: Endpoint<PathId, ThreadDraftListResponse>;
-    $post: Endpoint<PathId & { json: CreateDraftRequest }, ThreadQueuedMessage, 201>;
+    $post: Endpoint<
+      PathId & { json: CreateDraftRequest },
+      ThreadQueuedMessage,
+      201
+    >;
   };
   "/threads/:id/drafts/:draftId/send": {
     /** Send a previously created draft. Starts or steers a turn, then deletes the draft. */
@@ -311,7 +344,10 @@ export type PublicApiSchema = {
   "/threads/:id/interactions/:interactionId/resolve": {
     /** Resolve a pending interaction and return its updated lifecycle record. */
     $post: Endpoint<
-      { param: { id: string; interactionId: string }; json: ResolvePendingInteractionRequest },
+      {
+        param: { id: string; interactionId: string };
+        json: ResolvePendingInteractionRequest;
+      },
       PendingInteraction
     >;
   };
@@ -335,11 +371,17 @@ export type PublicApiSchema = {
   };
   "/threads/:id/timeline": {
     /** Get thread timeline for UI rendering. Events transformed via `@bb/core-ui`. */
-    $get: Endpoint<PathId & { query?: ThreadTimelineQuery }, ThreadTimelineResponse>;
+    $get: Endpoint<
+      PathId & { query?: ThreadTimelineQuery },
+      ThreadTimelineResponse
+    >;
   };
   "/threads/:id/timeline/tool-details": {
     /** Get tool call details for a turn. Used by the UI to lazy-load expanded tool information. */
-    $get: Endpoint<PathId & { query: TimelineToolDetailsQuery }, TimelineToolDetailsResponse>;
+    $get: Endpoint<
+      PathId & { query: TimelineToolDetailsQuery },
+      TimelineToolDetailsResponse
+    >;
   };
   "/threads/:id/output": {
     $get: Endpoint<PathId, { output: string | null }>;
@@ -353,7 +395,10 @@ export type PublicApiSchema = {
      * Long-poll for a thread event matching `type`. Returns the first matching
      * event (200) or 204 if none appears within `waitMs`.
      */
-    $get: Endpoint<PathId & { query: ThreadEventWaitQuery }, ThreadEventRow | null>;
+    $get: Endpoint<
+      PathId & { query: ThreadEventWaitQuery },
+      ThreadEventRow | null
+    >;
   };
   "/threads/:id/default-execution-options": {
     /** Returns the last used options for the thread for use as defaults in the UI. */
@@ -365,7 +410,10 @@ export type PublicApiSchema = {
      * Resolves the thread storage root from the active host session `dataDir`
      * and proxies to `host.list_files`.
      */
-    $get: Endpoint<PathId & { query?: ThreadStorageFilesQuery }, WorkspaceFileListResponse>;
+    $get: Endpoint<
+      PathId & { query?: ThreadStorageFilesQuery },
+      WorkspaceFileListResponse
+    >;
   };
   "/threads/:id/thread-storage/content": {
     /**
@@ -395,7 +443,11 @@ export type PublicApiSchema = {
      * Starts an app-level OAuth flow for the requested provider and returns the
      * authorization URL the UI should open in a browser.
      */
-    $post: Endpoint<PathProviderId & { json: CloudAuthConnectRequest }, CloudAuthConnectResponse, 201>;
+    $post: Endpoint<
+      PathProviderId & { json: CloudAuthConnectRequest },
+      CloudAuthConnectResponse,
+      201
+    >;
   };
   "/system/cloud-auth/attempts/:attemptId": {
     /** Returns the status of a previously started cloud auth connection attempt. */
@@ -433,7 +485,10 @@ export type PublicApiSchema = {
   };
   "/system/voice-transcription": {
     /** Transcribe audio to text. Accepts audio file and optional prompt context. */
-    $post: Endpoint<{ form: SystemVoiceTranscriptionForm }, SystemVoiceTranscriptionResponse>;
+    $post: Endpoint<
+      { form: SystemVoiceTranscriptionForm },
+      SystemVoiceTranscriptionResponse
+    >;
   };
 };
 

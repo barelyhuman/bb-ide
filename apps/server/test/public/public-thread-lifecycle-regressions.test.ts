@@ -122,14 +122,18 @@ async function waitForThreadStatus(
     }
     await sleep(10);
   }
-  throw new Error(`Timed out waiting for thread ${args.threadId} to be ${args.status}`);
+  throw new Error(
+    `Timed out waiting for thread ${args.threadId} to be ${args.status}`,
+  );
 }
 
 describe("public thread lifecycle regressions", () => {
   it("uses unique branch names for same-title managed worktree threads", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-branch-unique" });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-branch-unique",
+      });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
         path: "/tmp/branch-unique",
@@ -155,8 +159,7 @@ describe("public thread lifecycle regressions", () => {
       const firstThread = await readJson(firstResponse);
       const firstProvision = await waitForQueuedCommand(
         harness,
-        ({ command }) =>
-          command.type === "environment.provision",
+        ({ command }) => command.type === "environment.provision",
       );
 
       const secondResponse = await harness.app.request("/api/v1/threads", {
@@ -180,8 +183,7 @@ describe("public thread lifecycle regressions", () => {
       const secondProvision = await waitForQueuedCommandAfter(
         harness,
         firstProvision.row.cursor,
-        ({ command }) =>
-          command.type === "environment.provision",
+        ({ command }) => command.type === "environment.provision",
       );
 
       expect(firstThread).toMatchObject({ id: expect.any(String) });
@@ -201,7 +203,9 @@ describe("public thread lifecycle regressions", () => {
 
       expect(firstProvision.command.branchName).toBe(`bb/${firstThread.id}`);
       expect(secondProvision.command.branchName).toBe(`bb/${secondThread.id}`);
-      expect(firstProvision.command.branchName).not.toBe(secondProvision.command.branchName);
+      expect(firstProvision.command.branchName).not.toBe(
+        secondProvision.command.branchName,
+      );
     } finally {
       await harness.cleanup();
     }
@@ -341,12 +345,8 @@ describe("public thread lifecycle regressions", () => {
   it("demotes a promoted environment before sending a follow-up", async () => {
     const harness = await createTestAppHarness();
     try {
-      const {
-        environment,
-        source,
-        sourceEnvironment,
-        thread,
-      } = seedPromotedThreadFixture(harness, { label: "send" });
+      const { environment, source, sourceEnvironment, thread } =
+        seedPromotedThreadFixture(harness, { label: "send" });
 
       const responsePromise = harness.app.request(
         `/api/v1/threads/${thread.id}/send`,
@@ -400,8 +400,7 @@ describe("public thread lifecycle regressions", () => {
         harness,
         demoteCommand.row.cursor,
         ({ command }) =>
-          command.type === "thread.start" &&
-          command.threadId === thread.id,
+          command.type === "thread.start" && command.threadId === thread.id,
       );
       expect(startCommand.command).toMatchObject({
         environmentId: environment.id,
@@ -456,8 +455,7 @@ describe("public thread lifecycle regressions", () => {
       const startCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "thread.start" &&
-          command.threadId === thread.id,
+          command.type === "thread.start" && command.threadId === thread.id,
       );
       expect(startCommand.command).toMatchObject({
         environmentId: environment.id,
@@ -482,11 +480,8 @@ describe("public thread lifecycle regressions", () => {
   it("demotes a promoted environment before sending a queued draft", async () => {
     const harness = await createTestAppHarness();
     try {
-      const {
-        environment,
-        sourceEnvironment,
-        thread,
-      } = seedPromotedThreadFixture(harness, { label: "draft" });
+      const { environment, sourceEnvironment, thread } =
+        seedPromotedThreadFixture(harness, { label: "draft" });
       const draft = seedDraft(harness.deps, {
         threadId: thread.id,
         content: [{ type: "text", text: "Queued follow-up" }],
@@ -535,8 +530,7 @@ describe("public thread lifecycle regressions", () => {
         harness,
         demoteCommand.row.cursor,
         ({ command }) =>
-          command.type === "thread.start" &&
-          command.threadId === thread.id,
+          command.type === "thread.start" && command.threadId === thread.id,
       );
       expect(startCommand.command).toMatchObject({
         environmentId: environment.id,
@@ -554,11 +548,8 @@ describe("public thread lifecycle regressions", () => {
   it("does not start a follow-up when automatic demote fails", async () => {
     const harness = await createTestAppHarness();
     try {
-      const {
-        environment,
-        sourceEnvironment,
-        thread,
-      } = seedPromotedThreadFixture(harness, { label: "blocked" });
+      const { environment, sourceEnvironment, thread } =
+        seedPromotedThreadFixture(harness, { label: "blocked" });
 
       const responsePromise = harness.app.request(
         `/api/v1/threads/${thread.id}/send`,
@@ -601,22 +592,17 @@ describe("public thread lifecycle regressions", () => {
           command.type === "workspace.demote" &&
           command.environmentId === environment.id,
       );
-      await reportQueuedCommandError(
-        harness,
-        demoteCommand,
-        {
-          errorCode: "workspace_dirty",
-          errorMessage: "Cannot proceed: demote primary has uncommitted changes",
-        },
-      );
+      await reportQueuedCommandError(harness, demoteCommand, {
+        errorCode: "workspace_dirty",
+        errorMessage: "Cannot proceed: demote primary has uncommitted changes",
+      });
 
       await expect(
         waitForQueuedCommandAfter(
           harness,
           demoteCommand.row.cursor,
           ({ command }) =>
-            command.type === "thread.start" &&
-            command.threadId === thread.id,
+            command.type === "thread.start" && command.threadId === thread.id,
           100,
         ),
       ).rejects.toThrow("Timed out waiting for queued command");
@@ -665,7 +651,9 @@ describe("public thread lifecycle regressions", () => {
         environmentId: environment.id,
         status: "provisioning",
       });
-      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(1);
+      expect(listThreads(harness.db, { projectId: project.id })).toHaveLength(
+        1,
+      );
 
       const queuedCommand = harness.db
         .select()
@@ -714,10 +702,12 @@ describe("public thread lifecycle regressions", () => {
         status: "error",
       });
 
-      expect(getThreadOperation(harness.db, {
-        threadId: createdThread.id,
-        kind: "provision",
-      })?.state).toBe("failed");
+      expect(
+        getThreadOperation(harness.db, {
+          threadId: createdThread.id,
+          kind: "provision",
+        })?.state,
+      ).toBe("failed");
       const errorEvent = harness.db
         .select()
         .from(events)
@@ -790,8 +780,12 @@ describe("public thread lifecycle regressions", () => {
   it("only queues environment.destroy after the last thread in a managed environment is deleted", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-thread-cleanup" });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-thread-cleanup",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -852,11 +846,21 @@ describe("public thread lifecycle regressions", () => {
       completeThreadStart(harness.deps, {
         threadId: firstThreadBody.id,
       });
-      transitionThreadStatus(harness.db, harness.deps.hub, firstThreadBody.id, "idle");
+      transitionThreadStatus(
+        harness.db,
+        harness.deps.hub,
+        firstThreadBody.id,
+        "idle",
+      );
       completeThreadStart(harness.deps, {
         threadId: secondThreadBody.id,
       });
-      transitionThreadStatus(harness.db, harness.deps.hub, secondThreadBody.id, "idle");
+      transitionThreadStatus(
+        harness.db,
+        harness.deps.hub,
+        secondThreadBody.id,
+        "idle",
+      );
 
       const firstDelete = await harness.app.request(
         `/api/v1/threads/${firstThreadBody.id}`,
@@ -894,7 +898,9 @@ describe("public thread lifecycle regressions", () => {
   it("fails reused threads when a provisioning environment has no active lifecycle operation", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-reuse-provisioning" });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-reuse-provisioning",
+      });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
         path: "/tmp/reuse-provisioning",
@@ -931,10 +937,12 @@ describe("public thread lifecycle regressions", () => {
         threadId: createdThread.id,
         status: "error",
       });
-      expect(getThreadOperation(harness.db, {
-        threadId: createdThread.id,
-        kind: "provision",
-      })?.state).toBe("failed");
+      expect(
+        getThreadOperation(harness.db, {
+          threadId: createdThread.id,
+          kind: "provision",
+        })?.state,
+      ).toBe("failed");
       const errorEvent = harness.db
         .select()
         .from(events)
@@ -943,7 +951,8 @@ describe("public thread lifecycle regressions", () => {
         .find((event) => event.type === "system/error");
       expect(errorEvent ? JSON.parse(errorEvent.data) : null).toMatchObject({
         code: "thread_provisioning_failed",
-        detail: "Environment is provisioning without an active provision operation",
+        detail:
+          "Environment is provisioning without an active provision operation",
       });
     } finally {
       await harness.cleanup();

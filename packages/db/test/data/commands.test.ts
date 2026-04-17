@@ -141,21 +141,27 @@ describe("commands", () => {
       }),
     });
 
-    expect(hasPendingHostCommandForThread(db, {
-      hostId: host.id,
-      threadId: "thr_target",
-      type: "turn.submit",
-    })).toBe(true);
-    expect(hasPendingHostCommandForThread(db, {
-      hostId: host.id,
-      threadId: "thr_target",
-      type: "thread.stop",
-    })).toBe(false);
-    expect(hasPendingHostCommandForThread(db, {
-      hostId: host.id,
-      threadId: "thr_missing",
-      type: "turn.submit",
-    })).toBe(false);
+    expect(
+      hasPendingHostCommandForThread(db, {
+        hostId: host.id,
+        threadId: "thr_target",
+        type: "turn.submit",
+      }),
+    ).toBe(true);
+    expect(
+      hasPendingHostCommandForThread(db, {
+        hostId: host.id,
+        threadId: "thr_target",
+        type: "thread.stop",
+      }),
+    ).toBe(false);
+    expect(
+      hasPendingHostCommandForThread(db, {
+        hostId: host.id,
+        threadId: "thr_missing",
+        type: "turn.submit",
+      }),
+    ).toBe(false);
   });
 
   it("finds pending environment commands by environment id and type", () => {
@@ -178,10 +184,12 @@ describe("commands", () => {
 
     fetchCommands(db, noopNotifier, { hostId: host.id });
 
-    expect(getPendingEnvironmentCommand(db, {
-      environmentId: "env_target",
-      type: "workspace.status",
-    })?.id).toBe(matching.id);
+    expect(
+      getPendingEnvironmentCommand(db, {
+        environmentId: "env_target",
+        type: "workspace.status",
+      })?.id,
+    ).toBe(matching.id);
 
     reportCommandResult(db, noopNotifier, {
       commandId: matching.id,
@@ -190,10 +198,12 @@ describe("commands", () => {
       resultPayload: JSON.stringify({ ok: true }),
     });
 
-    expect(getPendingEnvironmentCommand(db, {
-      environmentId: "env_target",
-      type: "workspace.status",
-    })).toBeNull();
+    expect(
+      getPendingEnvironmentCommand(db, {
+        environmentId: "env_target",
+        type: "workspace.status",
+      }),
+    ).toBeNull();
   });
 
   it("reports command result", () => {

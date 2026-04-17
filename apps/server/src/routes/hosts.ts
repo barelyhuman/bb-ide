@@ -1,4 +1,10 @@
-import { createHostId, deleteHost, getHost, updateHost, upsertHost } from "@bb/db";
+import {
+  createHostId,
+  deleteHost,
+  getHost,
+  updateHost,
+  upsertHost,
+} from "@bb/db";
 import {
   createHostJoinRequestSchema,
   updateHostRequestSchema,
@@ -27,7 +33,8 @@ function resolvePendingHostName(hostId: string): string {
 
 export function registerHostRoutes(app: Hono, deps: AppDeps): void {
   const { get, post, patch, del } = typedRoutes<PublicApiSchema>(app, {
-    onValidationError: (message) => new ApiError(400, "invalid_request", message),
+    onValidationError: (message) =>
+      new ApiError(400, "invalid_request", message),
   });
 
   get("/hosts", (context) => context.json(listPublicHostsWithStatus(deps.db)));
@@ -77,7 +84,9 @@ export function registerHostRoutes(app: Hono, deps: AppDeps): void {
   });
 
   get("/hosts/:id", (context) =>
-    context.json(requireNonDestroyedHostWithStatus(deps.db, context.req.param("id"))),
+    context.json(
+      requireNonDestroyedHostWithStatus(deps.db, context.req.param("id")),
+    ),
   );
 
   patch("/hosts/:id", updateHostRequestSchema, (context, payload) => {

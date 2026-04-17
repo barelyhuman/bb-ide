@@ -3,9 +3,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
-import {
-  createPiProviderAdapter,
-} from "./adapter.js";
+import { createPiProviderAdapter } from "./adapter.js";
 import { buildPiAvailableModels } from "./model-list.js";
 import type { ProviderExecutionContext } from "../provider-adapter.js";
 
@@ -13,7 +11,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = resolve(__dirname, "../__fixtures__/pi");
 
 function loadFixture(name: string): AgentSessionEvent {
-  return JSON.parse(readFileSync(resolve(FIXTURES, name), "utf8")) as AgentSessionEvent;
+  return JSON.parse(
+    readFileSync(resolve(FIXTURES, name), "utf8"),
+  ) as AgentSessionEvent;
 }
 
 const fullProviderExecutionContext = {
@@ -56,17 +56,19 @@ describe("pi provider adapter", () => {
   it("translates accepted steers to input accepted events", () => {
     const adapter = createPiProviderAdapter();
 
-    expect(adapter.translateAcceptedCommand({
-      command: {
-        type: "turn/steer",
-        threadId: "thread-1",
-        providerThreadId: "provider-thread-1",
-        expectedTurnId: "turn-1",
-        clientRequestSequence: 9,
-        input: [{ type: "text", text: "steer turn" }],
-        options: fullProviderExecutionContext,
-      },
-    })).toEqual([
+    expect(
+      adapter.translateAcceptedCommand({
+        command: {
+          type: "turn/steer",
+          threadId: "thread-1",
+          providerThreadId: "provider-thread-1",
+          expectedTurnId: "turn-1",
+          clientRequestSequence: 9,
+          input: [{ type: "text", text: "steer turn" }],
+          options: fullProviderExecutionContext,
+        },
+      }),
+    ).toEqual([
       {
         type: "turn/input/accepted",
         threadId: "thread-1",
@@ -80,13 +82,16 @@ describe("pi provider adapter", () => {
   it("translateEvent completes a failed turn for thread-scoped bridge errors", () => {
     const adapter = createPiProviderAdapter();
 
-    const events = adapter.translateEvent({
-      jsonrpc: "2.0",
-      method: "error",
-      params: {
-        message: "No API key found for openai.",
+    const events = adapter.translateEvent(
+      {
+        jsonrpc: "2.0",
+        method: "error",
+        params: {
+          message: "No API key found for openai.",
+        },
       },
-    }, { threadId: "bb-thread-1" });
+      { threadId: "bb-thread-1" },
+    );
 
     expect(events).toEqual([
       {
@@ -162,27 +167,8 @@ describe("pi provider adapter", () => {
           TEST_VAR: "123",
         },
       },
-      dynamicTools: [{
-        name: "bb_test_ping",
-        description: "Ping the host",
-        inputSchema: {
-          type: "object",
-          properties: {
-            ping: { type: "boolean" },
-          },
-          required: ["ping"],
-        },
-      }],
-    });
-
-    expect(cmd).toMatchObject({
-      method: "thread/start",
-      params: {
-        threadId: "bb-thread-1",
-        model: "anthropic/claude-sonnet-4-20250514",
-        reasoningLevel: "high",
-        appendSystemPrompt: "Focus on the failing tests first.",
-        dynamicTools: [{
+      dynamicTools: [
+        {
           name: "bb_test_ping",
           description: "Ping the host",
           inputSchema: {
@@ -192,7 +178,30 @@ describe("pi provider adapter", () => {
             },
             required: ["ping"],
           },
-        }],
+        },
+      ],
+    });
+
+    expect(cmd).toMatchObject({
+      method: "thread/start",
+      params: {
+        threadId: "bb-thread-1",
+        model: "anthropic/claude-sonnet-4-20250514",
+        reasoningLevel: "high",
+        appendSystemPrompt: "Focus on the failing tests first.",
+        dynamicTools: [
+          {
+            name: "bb_test_ping",
+            description: "Ping the host",
+            inputSchema: {
+              type: "object",
+              properties: {
+                ping: { type: "boolean" },
+              },
+              required: ["ping"],
+            },
+          },
+        ],
       },
     });
     expect(cmd).not.toMatchObject({
@@ -200,7 +209,9 @@ describe("pi provider adapter", () => {
         baseInstructions: expect.any(String),
       },
     });
-    expect((cmd as { params: { config?: Record<string, unknown> } }).params.config).toMatchObject({
+    expect(
+      (cmd as { params: { config?: Record<string, unknown> } }).params.config,
+    ).toMatchObject({
       "shell_environment_policy.set.BB_THREAD_ID": "bb-thread-1",
       "shell_environment_policy.set.TEST_VAR": "123",
     });
@@ -382,12 +393,10 @@ describe("pi provider adapter", () => {
   it("decodeToolCallRequest rejects non-string, non-number request ids", () => {
     const adapter = createPiProviderAdapter();
     const malformedRequest = JSON.parse(
-      "{\"jsonrpc\":\"2.0\",\"id\":true,\"method\":\"item/tool/call\",\"params\":{\"threadId\":\"t1\",\"turnId\":\"turn-1\",\"callId\":\"call-1\",\"tool\":\"bb_test_ping\",\"arguments\":{\"ping\":true}}}",
+      '{"jsonrpc":"2.0","id":true,"method":"item/tool/call","params":{"threadId":"t1","turnId":"turn-1","callId":"call-1","tool":"bb_test_ping","arguments":{"ping":true}}}',
     );
 
-    expect(
-      adapter.decodeToolCallRequest(malformedRequest),
-    ).toBeNull();
+    expect(adapter.decodeToolCallRequest(malformedRequest)).toBeNull();
   });
 
   // -- translateEvent: turn lifecycle --------------------------------------
@@ -417,7 +426,9 @@ describe("pi provider adapter", () => {
     // Start a turn first
     adapter.translateEvent(loadFixture("agent-start.json"));
 
-    const events = adapter.translateEvent(loadFixture("agent-end-with-message.json"));
+    const events = adapter.translateEvent(
+      loadFixture("agent-end-with-message.json"),
+    );
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -512,16 +523,18 @@ describe("pi provider adapter", () => {
     } satisfies AgentSessionEvent;
     const events = adapter.translateEvent(event);
 
-    expect(events).toEqual([{
-      type: "item/started",
-      threadId: "",
-      providerThreadId: "",
-      turnId: "turn-1",
-      item: {
-        type: "contextCompaction",
-        id: "pi-compaction-turn-1",
+    expect(events).toEqual([
+      {
+        type: "item/started",
+        threadId: "",
+        providerThreadId: "",
+        turnId: "turn-1",
+        item: {
+          type: "contextCompaction",
+          id: "pi-compaction-turn-1",
+        },
       },
-    }]);
+    ]);
   });
 
   // -- translateEvent: streaming -------------------------------------------
@@ -531,7 +544,9 @@ describe("pi provider adapter", () => {
     // Start a turn first
     adapter.translateEvent(loadFixture("agent-start.json"));
 
-    const events = adapter.translateEvent(loadFixture("message-update-delta.json"));
+    const events = adapter.translateEvent(
+      loadFixture("message-update-delta.json"),
+    );
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -546,12 +561,20 @@ describe("pi provider adapter", () => {
     const adapter = createPiProviderAdapter();
     adapter.translateEvent(loadFixture("agent-start.json"));
 
-    const deltaEvents = adapter.translateEvent(loadFixture("message-update-delta.json"));
-    const deltaEvent = deltaEvents.find(
-      (event): event is Extract<(typeof deltaEvents)[number], { type: "item/agentMessage/delta" }> =>
-        event.type === "item/agentMessage/delta",
+    const deltaEvents = adapter.translateEvent(
+      loadFixture("message-update-delta.json"),
     );
-    const completedEvents = adapter.translateEvent(loadFixture("agent-end-with-message.json"));
+    const deltaEvent = deltaEvents.find(
+      (
+        event,
+      ): event is Extract<
+        (typeof deltaEvents)[number],
+        { type: "item/agentMessage/delta" }
+      > => event.type === "item/agentMessage/delta",
+    );
+    const completedEvents = adapter.translateEvent(
+      loadFixture("agent-end-with-message.json"),
+    );
 
     expect(deltaEvent?.itemId).toMatch(/^pi-assistant-/);
     expect(completedEvents).toContainEqual(
@@ -570,10 +593,16 @@ describe("pi provider adapter", () => {
     adapter.translateEvent(loadFixture("agent-start.json"));
 
     // Stream assistant text before tool call
-    const preDelta = adapter.translateEvent(loadFixture("message-update-delta.json"));
+    const preDelta = adapter.translateEvent(
+      loadFixture("message-update-delta.json"),
+    );
     const preItemId = preDelta.find(
-      (e): e is Extract<(typeof preDelta)[number], { type: "item/agentMessage/delta" }> =>
-        e.type === "item/agentMessage/delta",
+      (
+        e,
+      ): e is Extract<
+        (typeof preDelta)[number],
+        { type: "item/agentMessage/delta" }
+      > => e.type === "item/agentMessage/delta",
     )?.itemId;
 
     // Tool call starts — should close the assistant scope
@@ -585,14 +614,22 @@ describe("pi provider adapter", () => {
     });
 
     // Stream assistant text after tool call
-    const postDelta = adapter.translateEvent(loadFixture("message-update-delta.json"));
+    const postDelta = adapter.translateEvent(
+      loadFixture("message-update-delta.json"),
+    );
     const postItemId = postDelta.find(
-      (e): e is Extract<(typeof postDelta)[number], { type: "item/agentMessage/delta" }> =>
-        e.type === "item/agentMessage/delta",
+      (
+        e,
+      ): e is Extract<
+        (typeof postDelta)[number],
+        { type: "item/agentMessage/delta" }
+      > => e.type === "item/agentMessage/delta",
     )?.itemId;
 
     // Completed assistant message at agent_end should use the post-tool id
-    const endEvents = adapter.translateEvent(loadFixture("agent-end-with-message.json"));
+    const endEvents = adapter.translateEvent(
+      loadFixture("agent-end-with-message.json"),
+    );
     const completedId = endEvents.find(
       (e) => e.type === "item/completed" && e.item.type === "agentMessage",
     );
@@ -601,7 +638,10 @@ describe("pi provider adapter", () => {
     expect(postItemId).toMatch(/^pi-assistant-/);
     expect(preItemId).not.toBe(postItemId);
     expect(completedId).toBeDefined();
-    if (completedId?.type === "item/completed" && completedId.item.type === "agentMessage") {
+    if (
+      completedId?.type === "item/completed" &&
+      completedId.item.type === "agentMessage"
+    ) {
       expect(completedId.item.id).toBe(postItemId);
     }
   });
@@ -619,8 +659,12 @@ describe("pi provider adapter", () => {
       },
     } as AgentSessionEvent);
     const reasoningDelta = deltaEvents.find(
-      (event): event is Extract<(typeof deltaEvents)[number], { type: "item/reasoning/textDelta" }> =>
-        event.type === "item/reasoning/textDelta",
+      (
+        event,
+      ): event is Extract<
+        (typeof deltaEvents)[number],
+        { type: "item/reasoning/textDelta" }
+      > => event.type === "item/reasoning/textDelta",
     );
 
     const completedEvents = adapter.translateEvent({
@@ -673,7 +717,9 @@ describe("pi provider adapter", () => {
     // Start a turn first
     adapter.translateEvent(loadFixture("agent-start.json"));
 
-    const events = adapter.translateEvent(loadFixture("tool-execution-start-bash.json"));
+    const events = adapter.translateEvent(
+      loadFixture("tool-execution-start-bash.json"),
+    );
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -820,7 +866,9 @@ describe("pi provider adapter", () => {
     } as AgentSessionEvent);
 
     const started = events.find(
-      (event): event is Extract<(typeof events)[number], { type: "item/started" }> =>
+      (
+        event,
+      ): event is Extract<(typeof events)[number], { type: "item/started" }> =>
         event.type === "item/started",
     );
     expect(started?.item).toMatchObject({
@@ -876,7 +924,9 @@ describe("pi provider adapter", () => {
     // Start a turn first
     adapter.translateEvent(loadFixture("agent-start.json"));
 
-    const events = adapter.translateEvent(loadFixture("tool-execution-end-bash.json"));
+    const events = adapter.translateEvent(
+      loadFixture("tool-execution-end-bash.json"),
+    );
 
     expect(events).toContainEqual(
       expect.objectContaining({
@@ -1073,18 +1123,30 @@ describe("pi provider adapter", () => {
     });
 
     adapter.translateEvent(loadFixture("agent-start.json"));
-    const firstTurnEvents = adapter.translateEvent(loadFixture("agent-end-with-message.json"));
+    const firstTurnEvents = adapter.translateEvent(
+      loadFixture("agent-end-with-message.json"),
+    );
 
     adapter.translateEvent(loadFixture("agent-start.json"));
-    const secondTurnEvents = adapter.translateEvent(loadFixture("agent-end-with-message.json"));
+    const secondTurnEvents = adapter.translateEvent(
+      loadFixture("agent-end-with-message.json"),
+    );
 
     const firstTokenUsage = firstTurnEvents.find(
-      (event): event is Extract<(typeof firstTurnEvents)[number], { type: "thread/tokenUsage/updated" }> =>
-        event.type === "thread/tokenUsage/updated",
+      (
+        event,
+      ): event is Extract<
+        (typeof firstTurnEvents)[number],
+        { type: "thread/tokenUsage/updated" }
+      > => event.type === "thread/tokenUsage/updated",
     );
     const secondTokenUsage = secondTurnEvents.find(
-      (event): event is Extract<(typeof secondTurnEvents)[number], { type: "thread/tokenUsage/updated" }> =>
-        event.type === "thread/tokenUsage/updated",
+      (
+        event,
+      ): event is Extract<
+        (typeof secondTurnEvents)[number],
+        { type: "thread/tokenUsage/updated" }
+      > => event.type === "thread/tokenUsage/updated",
     );
 
     expect(firstTokenUsage?.tokenUsage.last).toMatchObject({
@@ -1100,7 +1162,9 @@ describe("pi provider adapter", () => {
       cachedInputTokens: 6760,
       outputTokens: 312,
     });
-    expect(secondTokenUsage?.tokenUsage.last).toEqual(firstTokenUsage?.tokenUsage.last);
+    expect(secondTokenUsage?.tokenUsage.last).toEqual(
+      firstTokenUsage?.tokenUsage.last,
+    );
     expect(secondTokenUsage?.tokenUsage.modelContextWindow).toBe(123_456);
   });
 
@@ -1297,5 +1361,4 @@ describe("pi provider adapter", () => {
       }),
     );
   });
-
 });

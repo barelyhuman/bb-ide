@@ -27,13 +27,18 @@ export const dataDir = makeValidator((input: string) => {
   return expandHomeDirectory(trimmedInput);
 });
 
-export function resolveConfiguredDataDir(args: ResolveConfiguredDataDirArgs): string {
-  return envsafe({
-    BB_DATA_DIR: dataDir({
-      default: join(homedir(), args.defaultDirName),
-      desc: "Root directory for all bb data (db, logs, host-id, etc.)",
-    }),
-  }, {
-    env: args.env,
-  }).BB_DATA_DIR;
+export function resolveConfiguredDataDir(
+  args: ResolveConfiguredDataDirArgs,
+): string {
+  return envsafe(
+    {
+      BB_DATA_DIR: dataDir({
+        default: join(homedir(), args.defaultDirName),
+        desc: "Root directory for all bb data (db, logs, host-id, etc.)",
+      }),
+    },
+    {
+      env: args.env,
+    },
+  ).BB_DATA_DIR;
 }

@@ -50,7 +50,6 @@ for (const providerId of providers) {
       }
     });
 
-
     // 2. Starts a thread and runs a single turn
     it("starts a thread and runs a single turn", async () => {
       const ctx = createTestRuntime(providerId);
@@ -95,7 +94,6 @@ for (const providerId of providers) {
         cleanup(ctx);
       }
     });
-
 
     // 3. Handles a follow-up turn in the same session
     it("handles a follow-up turn in the same session", async () => {
@@ -158,7 +156,6 @@ for (const providerId of providers) {
       }
     });
 
-
     // 4. Steers an active turn.
     it("steers an active turn", async () => {
       const ctx = createTestRuntime(providerId);
@@ -180,12 +177,14 @@ for (const providerId of providers) {
         await ctx.runtime.runTurn({
           threadId,
           clientRequestSequence: 1,
-          input: [{
-            type: "text",
-            text:
-              "Write a detailed 20 section essay about the history of computing "
-              + "with four sentences per section.",
-          }],
+          input: [
+            {
+              type: "text",
+              text:
+                "Write a detailed 20 section essay about the history of computing " +
+                "with four sentences per section.",
+            },
+          ],
           options,
         });
 
@@ -212,11 +211,7 @@ for (const providerId of providers) {
         await waitForRuntimeCondition({
           ctx,
           threadId,
-          predicate: () => hasInputAcceptedForThread(
-            ctx.events,
-            threadId,
-            2,
-          ),
+          predicate: () => hasInputAcceptedForThread(ctx.events, threadId, 2),
           timeoutMs: 30_000,
           label: "steer input accepted",
         });
@@ -239,7 +234,6 @@ for (const providerId of providers) {
       }
     }, 90_000);
 
-
     // 5. Stops an active turn and recovers with a resumed session.
     it("stops an active turn and recovers with a follow-up", async () => {
       const ctx = createTestRuntime(providerId);
@@ -261,12 +255,14 @@ for (const providerId of providers) {
         await ctx.runtime.runTurn({
           threadId,
           clientRequestSequence: 1,
-          input: [{
-            type: "text",
-            text:
-              "Write a detailed 20 section essay about the history of computing "
-              + "with four sentences per section.",
-          }],
+          input: [
+            {
+              type: "text",
+              text:
+                "Write a detailed 20 section essay about the history of computing " +
+                "with four sentences per section.",
+            },
+          ],
           options,
         });
 
@@ -277,7 +273,10 @@ for (const providerId of providers) {
           label: "turn/started before stop",
         });
 
-        const completedBeforeStop = turnCompletedCountForThread(ctx.events, threadId);
+        const completedBeforeStop = turnCompletedCountForThread(
+          ctx.events,
+          threadId,
+        );
         expect(completedBeforeStop).toBe(0);
 
         await ctx.runtime.stopThread({ threadId });
@@ -297,14 +296,19 @@ for (const providerId of providers) {
         });
 
         const recoveryStartIndex = ctx.events.length;
-        const completedBeforeRecovery = turnCompletedCountForThread(ctx.events, threadId);
+        const completedBeforeRecovery = turnCompletedCountForThread(
+          ctx.events,
+          threadId,
+        );
         await ctx.runtime.runTurn({
           threadId,
           clientRequestSequence: 2,
-          input: [{
-            type: "text",
-            text: "Reply with a short confirmation that you are ready for the next task.",
-          }],
+          input: [
+            {
+              type: "text",
+              text: "Reply with a short confirmation that you are ready for the next task.",
+            },
+          ],
           options,
         });
 
@@ -312,24 +316,30 @@ for (const providerId of providers) {
           ctx,
           threadId,
           predicate: () =>
-            turnCompletedCountForThread(ctx.events, threadId) > completedBeforeRecovery
-            && getAgentTextAfterIndex(ctx.events, recoveryStartIndex, threadId).length > 0,
+            turnCompletedCountForThread(ctx.events, threadId) >
+              completedBeforeRecovery &&
+            getAgentTextAfterIndex(ctx.events, recoveryStartIndex, threadId)
+              .length > 0,
           timeoutMs: 60_000,
           label: "recovery turn/completed with output",
         });
 
-        expect(turnStartedCountForThread(ctx.events, threadId)).toBeGreaterThanOrEqual(2);
-        expect(getAgentTextAfterIndex(ctx.events, recoveryStartIndex, threadId).length)
-          .toBeGreaterThan(0);
-        const inputAcceptedCount =
-          getInputAcceptedEvents(getEventsForThread(ctx.events, threadId)).length;
+        expect(
+          turnStartedCountForThread(ctx.events, threadId),
+        ).toBeGreaterThanOrEqual(2);
+        expect(
+          getAgentTextAfterIndex(ctx.events, recoveryStartIndex, threadId)
+            .length,
+        ).toBeGreaterThan(0);
+        const inputAcceptedCount = getInputAcceptedEvents(
+          getEventsForThread(ctx.events, threadId),
+        ).length;
         expect(inputAcceptedCount).toBe(2);
       } finally {
         await ctx.runtime.shutdown();
         cleanup(ctx);
       }
     }, 90_000);
-
 
     // 6. Respects developer instructions
     it("respects developer instructions", async () => {
@@ -347,7 +357,8 @@ for (const providerId of providers) {
           projectId: "test-project",
           providerId,
           options,
-          instructions: "IMPORTANT: End every single response with exactly [TEST_TAG]. Never omit this tag.",
+          instructions:
+            "IMPORTANT: End every single response with exactly [TEST_TAG]. Never omit this tag.",
         });
 
         await ctx.runtime.runTurn({
@@ -370,7 +381,6 @@ for (const providerId of providers) {
         cleanup(ctx);
       }
     });
-
 
     // 7. Recovers from a bad request
     it("recovers from a bad request", async () => {
@@ -440,7 +450,6 @@ for (const providerId of providers) {
       }
     });
 
-
     // 8. Handles dynamic tool calls
     it("handles dynamic tool calls", async () => {
       let toolCalled = false;
@@ -449,12 +458,16 @@ for (const providerId of providers) {
           if (req.tool === "bb_test_ping") {
             toolCalled = true;
             return {
-              contentItems: [{ type: "inputText" as const, text: "PONG_FROM_TOOL" }],
+              contentItems: [
+                { type: "inputText" as const, text: "PONG_FROM_TOOL" },
+              ],
               success: true,
             };
           }
           return {
-            contentItems: [{ type: "inputText" as const, text: "unknown tool" }],
+            contentItems: [
+              { type: "inputText" as const, text: "unknown tool" },
+            ],
             success: false,
           };
         },
@@ -476,7 +489,8 @@ for (const providerId of providers) {
           dynamicTools: [
             {
               name: "bb_test_ping",
-              description: "Returns a test ping response. Always call this tool when asked to use it.",
+              description:
+                "Returns a test ping response. Always call this tool when asked to use it.",
               inputSchema: {
                 type: "object",
                 properties: {},

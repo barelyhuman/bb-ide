@@ -43,7 +43,10 @@ describe("formatEnvironmentDisplay", () => {
 
     it("returns 'Worktree' for worktree workspace", () => {
       const result = formatEnvironmentDisplay({
-        environment: makeEnvironment({ isWorktree: true, workspaceProvisionType: "managed-worktree" }),
+        environment: makeEnvironment({
+          isWorktree: true,
+          workspaceProvisionType: "managed-worktree",
+        }),
         isLocalHost: true,
       });
       expect(result).toEqual({

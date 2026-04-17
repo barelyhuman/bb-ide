@@ -58,7 +58,9 @@ export const authApiKeys = sqliteTable(
     refillAmount: integer("refillAmount"),
     lastRefillAt: integer("lastRefillAt", { mode: "timestamp_ms" }),
     enabled: integer("enabled", { mode: "boolean" }).notNull(),
-    rateLimitEnabled: integer("rateLimitEnabled", { mode: "boolean" }).notNull(),
+    rateLimitEnabled: integer("rateLimitEnabled", {
+      mode: "boolean",
+    }).notNull(),
     rateLimitTimeWindow: integer("rateLimitTimeWindow").notNull(),
     rateLimitMax: integer("rateLimitMax").notNull(),
     requestCount: integer("requestCount").notNull(),
@@ -180,14 +182,19 @@ export const projectSources = sqliteTable(
     hostId: text("host_id").references(() => hosts.id, { onDelete: "cascade" }),
     path: text("path"),
     repoUrl: text("repo_url"),
-    isDefault: integer("is_default", { mode: "boolean" }).notNull().default(false),
+    isDefault: integer("is_default", { mode: "boolean" })
+      .notNull()
+      .default(false),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
   (table) => [
     index("project_sources_project_idx").on(table.projectId),
     index("project_sources_host_idx").on(table.hostId),
-    uniqueIndex("project_sources_project_host_idx").on(table.projectId, table.hostId),
+    uniqueIndex("project_sources_project_host_idx").on(
+      table.projectId,
+      table.hostId,
+    ),
     check(
       "project_sources_shape_check",
       sql`(
@@ -228,7 +235,10 @@ export const environments = sqliteTable(
     workspaceProvisionType: text("workspace_provision_type")
       .$type<WorkspaceProvisionType>()
       .notNull(),
-    status: text("status").$type<EnvironmentStatus>().notNull().default("provisioning"),
+    status: text("status")
+      .$type<EnvironmentStatus>()
+      .notNull()
+      .default("provisioning"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
@@ -252,7 +262,9 @@ export const automations = sqliteTable(
     triggerType: text("trigger_type").notNull(),
     triggerConfig: text("trigger_config").notNull(),
     action: text("action").notNull(),
-    autoArchive: integer("auto_archive", { mode: "boolean" }).notNull().default(false),
+    autoArchive: integer("auto_archive", { mode: "boolean" })
+      .notNull()
+      .default(false),
     nextRunAt: integer("next_run_at"),
     lastRunAt: integer("last_run_at"),
     runCount: integer("run_count").notNull().default(0),
@@ -261,7 +273,11 @@ export const automations = sqliteTable(
   },
   (table) => [
     index("automations_project_idx").on(table.projectId),
-    index("automations_due_idx").on(table.enabled, table.triggerType, table.nextRunAt),
+    index("automations_due_idx").on(
+      table.enabled,
+      table.triggerType,
+      table.nextRunAt,
+    ),
   ],
 );
 
@@ -282,7 +298,9 @@ export const threads = sqliteTable(
     type: text("type").$type<ThreadType>().notNull().default("standard"),
     title: text("title"),
     titleFallback: text("title_fallback"),
-    status: text("status", { enum: threadStatusValues }).notNull().default("created"),
+    status: text("status", { enum: threadStatusValues })
+      .notNull()
+      .default("created"),
     parentThreadId: text("parent_thread_id").references(
       (): AnySQLiteColumn => threads.id,
       { onDelete: "set null" },
@@ -313,7 +331,6 @@ export const threads = sqliteTable(
     ),
   ],
 );
-
 
 export const managerThreadNudges = sqliteTable(
   "manager_thread_nudges",
@@ -365,7 +382,10 @@ export const events = sqliteTable(
     createdAt: integer("created_at").notNull(),
   },
   (table) => [
-    uniqueIndex("events_thread_sequence_idx").on(table.threadId, table.sequence),
+    uniqueIndex("events_thread_sequence_idx").on(
+      table.threadId,
+      table.sequence,
+    ),
     index("events_thread_type_item_kind_sequence_idx").on(
       table.threadId,
       table.type,
@@ -429,7 +449,10 @@ export const hostDaemonSessions = sqliteTable(
     updatedAt: integer("updated_at").notNull(),
   },
   (table) => [
-    index("host_daemon_sessions_host_status_idx").on(table.hostId, table.status),
+    index("host_daemon_sessions_host_status_idx").on(
+      table.hostId,
+      table.status,
+    ),
   ],
 );
 
@@ -458,10 +481,7 @@ export const hostDaemonCommands = sqliteTable(
       table.hostId,
       table.cursor,
     ),
-    index("host_daemon_commands_host_state_idx").on(
-      table.hostId,
-      table.state,
-    ),
+    index("host_daemon_commands_host_state_idx").on(table.hostId, table.state),
   ],
 );
 
@@ -591,10 +611,7 @@ export const hostOperations = sqliteTable(
     updatedAt: integer("updated_at").notNull(),
   },
   (table) => [
-    uniqueIndex("host_operations_host_kind_idx").on(
-      table.hostId,
-      table.kind,
-    ),
+    uniqueIndex("host_operations_host_kind_idx").on(table.hostId, table.kind),
     uniqueIndex("host_operations_command_idx").on(table.commandId),
     index("host_operations_state_idx").on(table.state),
   ],

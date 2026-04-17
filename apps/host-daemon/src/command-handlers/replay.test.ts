@@ -14,7 +14,10 @@ import {
   type ReplayRawProviderEventRecord,
 } from "@bb/replay-capture";
 import type { BufferedEventInput } from "../event-buffer.js";
-import type { EventSink, ReplayTaskRegistry } from "../command-dispatch-support.js";
+import type {
+  EventSink,
+  ReplayTaskRegistry,
+} from "../command-dispatch-support.js";
 import { getReplayCapture, listReplayCaptures, runReplay } from "./replay.js";
 
 function threadStorageRoot(dataDir: string): string {
@@ -56,7 +59,9 @@ async function writeCaptureManifest(args: {
   dataDir: string;
   manifest: ReplayCaptureManifest;
 }): Promise<void> {
-  await mkdir(replayCaptureDir(args.dataDir, args.manifest.captureId), { recursive: true });
+  await mkdir(replayCaptureDir(args.dataDir, args.manifest.captureId), {
+    recursive: true,
+  });
   await writeFile(
     replayCaptureManifestPath(args.dataDir, args.manifest.captureId),
     JSON.stringify(args.manifest, null, 2),
@@ -69,8 +74,12 @@ interface WriteRawProviderCaptureArgs {
   records: ReplayRawProviderEventRecord[];
 }
 
-async function writeRawProviderCapture(args: WriteRawProviderCaptureArgs): Promise<void> {
-  await mkdir(replayCaptureDir(args.dataDir, args.captureId), { recursive: true });
+async function writeRawProviderCapture(
+  args: WriteRawProviderCaptureArgs,
+): Promise<void> {
+  await mkdir(replayCaptureDir(args.dataDir, args.captureId), {
+    recursive: true,
+  });
   await writeFile(
     replayCaptureManifestPath(args.dataDir, args.captureId),
     JSON.stringify(
@@ -175,10 +184,15 @@ describe("replay capture commands", () => {
         capturedAt: 2_000,
       },
     });
-    await mkdir(replayCaptureDir(dataDir, createReplayCaptureId(1_500, "bad000zz")), {
+    await mkdir(
+      replayCaptureDir(dataDir, createReplayCaptureId(1_500, "bad000zz")),
+      {
+        recursive: true,
+      },
+    );
+    await mkdir(path.join(replayCaptureRoot(dataDir), "not-a-capture"), {
       recursive: true,
     });
-    await mkdir(path.join(replayCaptureRoot(dataDir), "not-a-capture"), { recursive: true });
 
     const result = await listReplayCaptures({
       dataDir,
@@ -197,12 +211,15 @@ describe("replay capture commands", () => {
     const manifest = baseManifest(captureId);
     await writeCaptureManifest({ dataDir, manifest });
 
-    const result = await getReplayCapture({
-      type: "replay.capture_get",
-      captureId,
-    }, {
-      dataDir,
-    });
+    const result = await getReplayCapture(
+      {
+        type: "replay.capture_get",
+        captureId,
+      },
+      {
+        dataDir,
+      },
+    );
 
     expect(result).toEqual(manifest);
   });
@@ -220,12 +237,17 @@ describe("replay capture commands", () => {
       }),
     );
 
-    await expect(getReplayCapture({
-      type: "replay.capture_get",
-      captureId,
-    }, {
-      dataDir,
-    })).rejects.toMatchObject({
+    await expect(
+      getReplayCapture(
+        {
+          type: "replay.capture_get",
+          captureId,
+        },
+        {
+          dataDir,
+        },
+      ),
+    ).rejects.toMatchObject({
       code: "invalid_replay_capture",
       message: "Replay capture manifest is invalid",
     });
@@ -286,13 +308,19 @@ describe("runReplay", () => {
         "turn/completed",
       ]);
     });
-    expect(emitted.every((input) => input.threadId === "thr-replay")).toBe(true);
-    expect(emitted.every((input) => input.event.threadId === "thr-replay")).toBe(true);
-    expect(emitted.every((input) => (
-      "providerThreadId" in input.event
-        ? input.event.providerThreadId === `replay:${captureId}`
-        : true
-    ))).toBe(true);
+    expect(emitted.every((input) => input.threadId === "thr-replay")).toBe(
+      true,
+    );
+    expect(
+      emitted.every((input) => input.event.threadId === "thr-replay"),
+    ).toBe(true);
+    expect(
+      emitted.every((input) =>
+        "providerThreadId" in input.event
+          ? input.event.providerThreadId === `replay:${captureId}`
+          : true,
+      ),
+    ).toBe(true);
     expect(emitted[1]?.event).toMatchObject({
       type: "thread/name/updated",
       threadName: "[Replay] Original title",
@@ -381,11 +409,13 @@ describe("runReplay", () => {
 
     vi.useFakeTimers();
     try {
-      await expect(runReplay(command, {
-        dataDir,
-        eventSink: captureEventSink(emitted),
-        replayTasks,
-      })).resolves.toEqual({});
+      await expect(
+        runReplay(command, {
+          dataDir,
+          eventSink: captureEventSink(emitted),
+          replayTasks,
+        }),
+      ).resolves.toEqual({});
 
       const replayTask = replayTasks.get("thr-replay");
       expect(replayTask).toBeDefined();
@@ -441,11 +471,13 @@ describe("runReplay", () => {
     const replayTasks: ReplayTaskRegistry = new Map();
     const emitted: BufferedEventInput[] = [];
 
-    await expect(runReplay(command, {
-      dataDir,
-      eventSink: captureEventSink(emitted),
-      replayTasks,
-    })).resolves.toEqual({});
+    await expect(
+      runReplay(command, {
+        dataDir,
+        eventSink: captureEventSink(emitted),
+        replayTasks,
+      }),
+    ).resolves.toEqual({});
     const replayTask = replayTasks.get("thr-replay");
     expect(replayTask).toBeDefined();
     if (!replayTask) {

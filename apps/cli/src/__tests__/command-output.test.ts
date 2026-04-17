@@ -43,7 +43,13 @@ import { registerThreadCommands } from "../commands/thread/index.js";
 
 type ServerClient = ReturnType<typeof createClient>;
 
-function makeThread(overrides: Partial<Thread> & { id: string; projectId: string; providerId: string }): Thread {
+function makeThread(
+  overrides: Partial<Thread> & {
+    id: string;
+    projectId: string;
+    providerId: string;
+  },
+): Thread {
   return {
     type: "standard",
     status: "idle",
@@ -64,7 +70,11 @@ function makeThread(overrides: Partial<Thread> & { id: string; projectId: string
 }
 
 function makeEnvironment(
-  overrides: Partial<Environment> & { id: string; projectId: string; hostId: string },
+  overrides: Partial<Environment> & {
+    id: string;
+    projectId: string;
+    hostId: string;
+  },
 ): Environment {
   return {
     path: "/tmp/environment",
@@ -138,7 +148,9 @@ function makeCommandApprovalPayload(
   };
 }
 
-function makeFileChangeApprovalPayload(itemId: string): PendingInteraction["payload"] {
+function makeFileChangeApprovalPayload(
+  itemId: string,
+): PendingInteraction["payload"] {
   return {
     subject: {
       kind: "file_change",
@@ -151,7 +163,9 @@ function makeFileChangeApprovalPayload(itemId: string): PendingInteraction["payl
   };
 }
 
-function makePermissionGrantApprovalPayload(itemId: string): PendingInteraction["payload"] {
+function makePermissionGrantApprovalPayload(
+  itemId: string,
+): PendingInteraction["payload"] {
   return {
     subject: {
       kind: "permission_grant",
@@ -198,14 +212,17 @@ describe("CLI command output contracts", () => {
   beforeEach(() => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.spyOn(process, "exit").mockImplementation((code?: string | number | null) => {
-      throw new Error(`process.exit:${code ?? 0}`);
-    });
-    vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
-      new Response(JSON.stringify({ ok: true }), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
+    vi.spyOn(process, "exit").mockImplementation(
+      (code?: string | number | null) => {
+        throw new Error(`process.exit:${code ?? 0}`);
+      },
+    );
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
     );
 
     createClientMock.mockReset();
@@ -232,7 +249,6 @@ describe("CLI command output contracts", () => {
     vi.restoreAllMocks();
   });
 
-
   it("bb project list --json prints raw projects", async () => {
     const projects = [
       {
@@ -243,23 +259,25 @@ describe("CLI command output contracts", () => {
       },
     ];
     const get = vi.fn(async () => projects);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          projects: {
-            $get: get,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            projects: {
+              $get: get,
+            },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(["project", "list", "--json"], (program) =>
       registerProjectCommands(program, () => "http://server"),
     );
 
-    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
-      projects,
-    );
+    expect(
+      JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0])),
+    ).toEqual(projects);
   });
 
   it("bb project list renders the shared borderless table", async () => {
@@ -267,21 +285,25 @@ describe("CLI command output contracts", () => {
       {
         id: "proj-1",
         name: "Alpha",
-        sources: [{ hostId: "host-test-001", type: "local_path", path: "/tmp/alpha" }],
+        sources: [
+          { hostId: "host-test-001", type: "local_path", path: "/tmp/alpha" },
+        ],
         createdAt: 1,
         updatedAt: 2,
       },
     ];
     const get = vi.fn(async () => projects);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          projects: {
-            $get: get,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            projects: {
+              $get: get,
+            },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(["project", "list"], (program) =>
       registerProjectCommands(program, () => "http://server"),
@@ -302,24 +324,36 @@ describe("CLI command output contracts", () => {
       updatedAt: 2,
     };
     const post = vi.fn(async () => created);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          projects: {
-            $post: post,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            projects: {
+              $post: post,
+            },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
-      ["project", "create", "--name", "Alpha", "--root", "/tmp/alpha", "--host", "host-1", "--json"],
+      [
+        "project",
+        "create",
+        "--name",
+        "Alpha",
+        "--root",
+        "/tmp/alpha",
+        "--host",
+        "host-1",
+        "--json",
+      ],
       (program) => registerProjectCommands(program, () => "http://server"),
     );
 
-    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
-      created,
-    );
+    expect(
+      JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0])),
+    ).toEqual(created);
   });
 
   it("bb project create supports github repo sources", async () => {
@@ -341,15 +375,17 @@ describe("CLI command output contracts", () => {
       ],
     };
     const post = vi.fn(async () => created);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          projects: {
-            $post: post,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            projects: {
+              $post: post,
+            },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
       [
@@ -363,7 +399,9 @@ describe("CLI command output contracts", () => {
       (program) => registerProjectCommands(program, () => "http://server"),
     );
 
-    expect(collectLogLines(vi.mocked(console.log))).toContain("Project created: proj-created");
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Project created: proj-created",
+    );
     expect(collectLogLines(vi.mocked(console.log))).toContain(
       "    -  github_repo  https://github.com/example/repo.git",
     );
@@ -401,22 +439,24 @@ describe("CLI command output contracts", () => {
       type: "github_repo",
       updatedAt: 3,
     }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          projects: {
-            ":id": {
-              sources: {
-                $post: post,
-                ":sourceId": {
-                  $patch: patch,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            projects: {
+              ":id": {
+                sources: {
+                  $post: post,
+                  ":sourceId": {
+                    $patch: patch,
+                  },
                 },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
       [
@@ -431,7 +471,9 @@ describe("CLI command output contracts", () => {
       (program) => registerProjectCommands(program, () => "http://server"),
     );
 
-    expect(collectLogLines(vi.mocked(console.log))).toContain("Project source added: source-2");
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Project source added: source-2",
+    );
     expect(collectLogLines(vi.mocked(console.log))).toContain(
       "source-2  github_repo  https://github.com/example/repo.git [default]",
     );
@@ -488,22 +530,24 @@ describe("CLI command output contracts", () => {
       type: "local_path",
       updatedAt: 3,
     }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          projects: {
-            ":id": {
-              $get: get,
-              sources: {
-                ":sourceId": {
-                  $patch: patch,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            projects: {
+              ":id": {
+                $get: get,
+                sources: {
+                  ":sourceId": {
+                    $patch: patch,
+                  },
                 },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
       [
@@ -518,7 +562,9 @@ describe("CLI command output contracts", () => {
       (program) => registerProjectCommands(program, () => "http://server"),
     );
 
-    expect(collectLogLines(vi.mocked(console.log))).toContain("Project source updated: source-1");
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Project source updated: source-1",
+    );
     expect(collectLogLines(vi.mocked(console.log))).toContain(
       "source-1  host-test-001 (local)  local_path  /tmp/renamed [default]",
     );
@@ -537,21 +583,23 @@ describe("CLI command output contracts", () => {
 
   it("bb project source delete deletes without prompting when --yes is passed", async () => {
     const del = vi.fn(async () => ({ ok: true }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          projects: {
-            ":id": {
-              sources: {
-                ":sourceId": {
-                  $delete: del,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            projects: {
+              ":id": {
+                sources: {
+                  ":sourceId": {
+                    $delete: del,
+                  },
                 },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
       ["project", "source", "delete", "proj-1", "source-1", "--yes"],
@@ -581,19 +629,21 @@ describe("CLI command output contracts", () => {
       createdAt: 1,
       updatedAt: 2,
     }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          projects: {
-            ":id": {
-              managers: {
-                $post: post,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            projects: {
+              ":id": {
+                managers: {
+                  $post: post,
+                },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
       [
@@ -609,8 +659,7 @@ describe("CLI command output contracts", () => {
         "--reasoning-level",
         "high",
       ],
-      (program) =>
-      registerManagerCommands(program, () => "http://server"),
+      (program) => registerManagerCommands(program, () => "http://server"),
     );
 
     expect(post).toHaveBeenCalledWith({
@@ -624,7 +673,9 @@ describe("CLI command output contracts", () => {
         reasoningLevel: "high",
       },
     });
-    expect(collectLogLines(vi.mocked(console.log))).toContain("Manager hired: thread-manager-1");
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Manager hired: thread-manager-1",
+    );
   });
 
   it("bb manager hire omits reasoning level when not provided", async () => {
@@ -637,19 +688,21 @@ describe("CLI command output contracts", () => {
       createdAt: 1,
       updatedAt: 2,
     }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          projects: {
-            ":id": {
-              managers: {
-                $post: post,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            projects: {
+              ":id": {
+                managers: {
+                  $post: post,
+                },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
       [
@@ -663,8 +716,7 @@ describe("CLI command output contracts", () => {
         "--model",
         "claude-opus-4-7",
       ],
-      (program) =>
-        registerManagerCommands(program, () => "http://server"),
+      (program) => registerManagerCommands(program, () => "http://server"),
     );
 
     expect(post).toHaveBeenCalledWith({
@@ -677,7 +729,9 @@ describe("CLI command output contracts", () => {
         providerId: "claude-code",
       },
     });
-    expect(collectLogLines(vi.mocked(console.log))).toContain("Manager hired: thread-manager-2");
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Manager hired: thread-manager-2",
+    );
   });
 
   it("bb manager hire omits provider and model when the user relies on remembered manager defaults", async () => {
@@ -690,30 +744,25 @@ describe("CLI command output contracts", () => {
       createdAt: 1,
       updatedAt: 2,
     }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          projects: {
-            ":id": {
-              managers: {
-                $post: post,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            projects: {
+              ":id": {
+                managers: {
+                  $post: post,
+                },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
-      [
-        "manager",
-        "hire",
-        "project-123",
-        "--name",
-        "Manager",
-      ],
-      (program) =>
-        registerManagerCommands(program, () => "http://server"),
+      ["manager", "hire", "project-123", "--name", "Manager"],
+      (program) => registerManagerCommands(program, () => "http://server"),
     );
 
     expect(post).toHaveBeenCalledWith({
@@ -724,20 +773,24 @@ describe("CLI command output contracts", () => {
         origin: "cli",
       },
     });
-    expect(collectLogLines(vi.mocked(console.log))).toContain("Manager hired: thread-manager-3");
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Manager hired: thread-manager-3",
+    );
   });
 
   it("bb manager list reports when no managers are hired", async () => {
     const list = vi.fn(async () => []);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            $get: list,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $get: list,
+            },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(["manager", "list", "project-123"], (program) =>
       registerManagerCommands(program, () => "http://server"),
@@ -746,7 +799,9 @@ describe("CLI command output contracts", () => {
     expect(list).toHaveBeenCalledWith({
       query: { projectId: "project-123", type: "manager" },
     });
-    expect(collectLogLines(vi.mocked(console.log))).toContain("No managers hired");
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "No managers hired",
+    );
   });
 
   it("bb manager list renders the shared borderless table", async () => {
@@ -762,15 +817,17 @@ describe("CLI command output contracts", () => {
         updatedAt: 2,
       }),
     ]);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            $get: list,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $get: list,
+            },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(["manager", "list", "project-123"], (program) =>
       registerManagerCommands(program, () => "http://server"),
@@ -809,22 +866,26 @@ describe("CLI command output contracts", () => {
       expect(param.id).toBe("thread-manager-1");
       return managerThread;
     });
-    const list = vi.fn(async ({ query }: { query: { parentThreadId?: string } }) => {
-      expect(query.parentThreadId).toBe("thread-manager-1");
-      return [managedThread];
-    });
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            $get: list,
-            ":id": {
-              $get: get,
+    const list = vi.fn(
+      async ({ query }: { query: { parentThreadId?: string } }) => {
+        expect(query.parentThreadId).toBe("thread-manager-1");
+        return [managedThread];
+      },
+    );
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $get: list,
+              ":id": {
+                $get: get,
+              },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(["manager", "status", "thread-manager-1"], (program) =>
       registerManagerCommands(program, () => "http://server"),
@@ -848,18 +909,20 @@ describe("CLI command output contracts", () => {
     });
     const get = vi.fn(async () => managerThread);
     const deleteFn = vi.fn(async () => ({ ok: true }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              $get: get,
-              $delete: deleteFn,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                $get: get,
+                $delete: deleteFn,
+              },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
       ["manager", "delete", "thread-manager-1", "--yes"],
@@ -901,14 +964,14 @@ describe("CLI command output contracts", () => {
         projectId: "proj-1",
         providerId: "codex",
         environmentId: "env-1",
-      })
+      }),
     );
     const getEnvironment = vi.fn(async () =>
       makeEnvironment({
         id: "env-1",
         projectId: "proj-1",
         hostId: "host-ephemeral",
-      })
+      }),
     );
     const getHost = vi.fn(async () => ({
       id: "host-ephemeral",
@@ -919,32 +982,34 @@ describe("CLI command output contracts", () => {
       updatedAt: 2,
       lastSeenAt: 3,
     }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          projects: {
-            ":id": {
-              $get: getProject,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            projects: {
+              ":id": {
+                $get: getProject,
+              },
             },
-          },
-          threads: {
-            ":id": {
-              $get: getThread,
+            threads: {
+              ":id": {
+                $get: getThread,
+              },
             },
-          },
-          environments: {
-            ":id": {
-              $get: getEnvironment,
+            environments: {
+              ":id": {
+                $get: getEnvironment,
+              },
             },
-          },
-          hosts: {
-            ":id": {
-              $get: getHost,
+            hosts: {
+              ":id": {
+                $get: getHost,
+              },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(["status"], (program) =>
       registerStatusCommand(program, () => "http://server"),
@@ -970,15 +1035,17 @@ describe("CLI command output contracts", () => {
       updatedAt: 1,
     });
     const post = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            $post: post,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $post: post,
+            },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(["thread", "spawn", "--prompt", "hello"], (program) =>
       registerThreadCommands(program, () => "http://server"),
@@ -989,7 +1056,11 @@ describe("CLI command output contracts", () => {
         origin: "cli",
         projectId: "proj-1",
         input: [{ type: "text", text: "hello" }],
-        environment: { type: "host", hostId: "host-test-001", workspace: { type: "unmanaged", path: null } },
+        environment: {
+          type: "host",
+          hostId: "host-test-001",
+          workspace: { type: "unmanaged", path: null },
+        },
       },
     });
   });
@@ -1006,15 +1077,17 @@ describe("CLI command output contracts", () => {
       updatedAt: 1,
     });
     const post = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            $post: post,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $post: post,
+            },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
       [
@@ -1046,7 +1119,11 @@ describe("CLI command output contracts", () => {
         permissionMode: "workspace-write",
         serviceTier: "fast",
         input: [{ type: "text", text: "hello" }],
-        environment: { type: "host", hostId: "host-test-001", workspace: { type: "unmanaged", path: null } },
+        environment: {
+          type: "host",
+          hostId: "host-test-001",
+          workspace: { type: "unmanaged", path: null },
+        },
       },
     });
   });
@@ -1065,9 +1142,13 @@ describe("CLI command output contracts", () => {
       program.parseAsync(["node", "bb", "thread", "spawn", "--help"]),
     ).rejects.toMatchObject({ code: "commander.helpDisplayed" });
 
-    const helpOutput = writeOut.mock.calls.map((args) => String(args[0] ?? "")).join("");
+    const helpOutput = writeOut.mock.calls
+      .map((args) => String(args[0] ?? ""))
+      .join("");
     expect(helpOutput).toContain("--permission-mode <mode>");
-    expect(helpOutput).toMatch(/Permission mode: full, workspace-write, or\s+readonly/);
+    expect(helpOutput).toMatch(
+      /Permission mode: full, workspace-write, or\s+readonly/,
+    );
   });
 
   it("bb thread spawn reports invalid permission mode choices", async () => {
@@ -1075,14 +1156,7 @@ describe("CLI command output contracts", () => {
 
     await expect(
       runCommand(
-        [
-          "thread",
-          "spawn",
-          "--prompt",
-          "hello",
-          "--permission-mode",
-          "unsafe",
-        ],
+        ["thread", "spawn", "--prompt", "hello", "--permission-mode", "unsafe"],
         (program) => registerThreadCommands(program, () => "http://server"),
       ),
     ).rejects.toThrow("process.exit:1");
@@ -1094,18 +1168,27 @@ describe("CLI command output contracts", () => {
 
   it("bb thread list supports parent-thread filtering", async () => {
     const list = vi.fn(async () => []);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            $get: list,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $get: list,
+            },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
-      ["thread", "list", "--project", "proj-1", "--parent-thread", "thread-manager-1"],
+      [
+        "thread",
+        "list",
+        "--project",
+        "proj-1",
+        "--parent-thread",
+        "thread-manager-1",
+      ],
       (program) => registerThreadCommands(program, () => "http://server"),
     );
 
@@ -1130,15 +1213,17 @@ describe("CLI command output contracts", () => {
         updatedAt: 1,
       }),
     ]);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            $get: list,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $get: list,
+            },
           },
         },
-      },
-    }));
+      }),
+    );
 
     process.env.BB_PROJECT_ID = "proj-1";
     await runCommand(["thread", "list"], (program) =>
@@ -1153,20 +1238,20 @@ describe("CLI command output contracts", () => {
   });
 
   it("bb provider list renders the shared borderless table", async () => {
-    const get = vi.fn(async () => [
-      { id: "openai", displayName: "OpenAI" },
-    ]);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          system: {
-            providers: {
-              $get: get,
+    const get = vi.fn(async () => [{ id: "openai", displayName: "OpenAI" }]);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            system: {
+              providers: {
+                $get: get,
+              },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(["provider", "list"], (program) =>
       registerProviderCommands(program, () => "http://server"),
@@ -1192,23 +1277,25 @@ describe("CLI command output contracts", () => {
       },
     ];
     const get = vi.fn(async () => hosts);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          hosts: {
-            $get: get,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            hosts: {
+              $get: get,
+            },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(["host", "list", "--json"], (program) =>
       registerHostCommands(program, () => "http://server"),
     );
 
-    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
-      hosts,
-    );
+    expect(
+      JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0])),
+    ).toEqual(hosts);
   });
 
   it("bb host list renders the shared borderless table", async () => {
@@ -1223,15 +1310,17 @@ describe("CLI command output contracts", () => {
         lastSeenAt: 3,
       },
     ]);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          hosts: {
-            $get: get,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            hosts: {
+              $get: get,
+            },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(["host", "list"], (program) =>
       registerHostCommands(program, () => "http://server"),
@@ -1248,17 +1337,19 @@ describe("CLI command output contracts", () => {
     const get = vi.fn(async () => [
       { model: "gpt-5", displayName: "GPT-5", isDefault: true },
     ]);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          system: {
-            models: {
-              $get: get,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            system: {
+              models: {
+                $get: get,
+              },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(["provider", "models", "openai"], (program) =>
       registerProviderCommands(program, () => "http://server"),
@@ -1274,20 +1365,28 @@ describe("CLI command output contracts", () => {
 
   it("bb provider models forwards the selected model context", async () => {
     const get = vi.fn(async () => []);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          system: {
-            models: {
-              $get: get,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            system: {
+              models: {
+                $get: get,
+              },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
-      ["provider", "models", "claude-code", "--selected-model", "claude-opus-4-6"],
+      [
+        "provider",
+        "models",
+        "claude-code",
+        "--selected-model",
+        "claude-opus-4-6",
+      ],
       (program) => registerProviderCommands(program, () => "http://server"),
     );
 
@@ -1311,23 +1410,36 @@ describe("CLI command output contracts", () => {
       updatedAt: 1,
     });
     const post = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            $post: post,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $post: post,
+            },
           },
         },
-      },
-    }));
-
-    await runCommand(["thread", "spawn", "--json", "--prompt", "hello", "--provider", "codex", "--model", "gpt-5"], (program) =>
-      registerThreadCommands(program, () => "http://server"),
+      }),
     );
 
-    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
-      thread,
+    await runCommand(
+      [
+        "thread",
+        "spawn",
+        "--json",
+        "--prompt",
+        "hello",
+        "--provider",
+        "codex",
+        "--model",
+        "gpt-5",
+      ],
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
+
+    expect(
+      JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0])),
+    ).toEqual(thread);
   });
 
   it("bb thread spawn prefixes missing-project-default failures with context", async () => {
@@ -1337,15 +1449,17 @@ describe("CLI command output contracts", () => {
         "HTTP 400: Provider is required when project proj-1 has no stored execution defaults for thread type standard",
       );
     });
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            $post: post,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $post: post,
+            },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await expect(
       runCommand(["thread", "spawn", "--prompt", "hello"], (program) =>
@@ -1371,18 +1485,31 @@ describe("CLI command output contracts", () => {
       updatedAt: 1,
     });
     const post = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            $post: post,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $post: post,
+            },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
-      ["thread", "spawn", "--parent-thread", "thread-parent", "--prompt", "hello", "--provider", "codex", "--model", "gpt-5"],
+      [
+        "thread",
+        "spawn",
+        "--parent-thread",
+        "thread-parent",
+        "--prompt",
+        "hello",
+        "--provider",
+        "codex",
+        "--model",
+        "gpt-5",
+      ],
       (program) => registerThreadCommands(program, () => "http://server"),
     );
 
@@ -1394,7 +1521,11 @@ describe("CLI command output contracts", () => {
         model: "gpt-5",
         input: [{ type: "text", text: "hello" }],
         parentThreadId: "thread-parent",
-        environment: { type: "host", hostId: "host-test-001", workspace: { type: "unmanaged", path: null } },
+        environment: {
+          type: "host",
+          hostId: "host-test-001",
+          workspace: { type: "unmanaged", path: null },
+        },
       },
     });
   });
@@ -1412,18 +1543,32 @@ describe("CLI command output contracts", () => {
       updatedAt: 1,
     });
     const post = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            $post: post,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $post: post,
+            },
           },
         },
-      },
-    }));
+      }),
+    );
 
-    await runCommand(["thread", "spawn", "--environment", "env-worktree-001", "--prompt", "hello", "--provider", "codex", "--model", "gpt-5"], (program) =>
-      registerThreadCommands(program, () => "http://server"),
+    await runCommand(
+      [
+        "thread",
+        "spawn",
+        "--environment",
+        "env-worktree-001",
+        "--prompt",
+        "hello",
+        "--provider",
+        "codex",
+        "--model",
+        "gpt-5",
+      ],
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     expect(post).toHaveBeenCalledWith({
@@ -1451,18 +1596,31 @@ describe("CLI command output contracts", () => {
       updatedAt: 1,
     });
     const post = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            $post: post,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              $post: post,
+            },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
-      ["thread", "spawn", "--new-environment", "worktree", "--prompt", "hello", "--provider", "codex", "--model", "gpt-5"],
+      [
+        "thread",
+        "spawn",
+        "--new-environment",
+        "worktree",
+        "--prompt",
+        "hello",
+        "--provider",
+        "codex",
+        "--model",
+        "gpt-5",
+      ],
       (program) => registerThreadCommands(program, () => "http://server"),
     );
 
@@ -1473,26 +1631,32 @@ describe("CLI command output contracts", () => {
         providerId: "codex",
         model: "gpt-5",
         input: [{ type: "text", text: "hello" }],
-        environment: { type: "host", hostId: "host-test-001", workspace: { type: "managed-worktree" } },
+        environment: {
+          type: "host",
+          hostId: "host-test-001",
+          workspace: { type: "managed-worktree" },
+        },
       },
     });
   });
 
   it("bb thread archive sends the thread id from args", async () => {
     const archivePost = vi.fn(async () => ({ ok: true }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              archive: {
-                $post: archivePost,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                archive: {
+                  $post: archivePost,
+                },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(["thread", "archive", "thread-archive-1"], (program) =>
       registerThreadCommands(program, () => "http://server"),
@@ -1510,19 +1674,21 @@ describe("CLI command output contracts", () => {
   it("bb thread archive --self resolves from BB_THREAD_ID and forwards --force", async () => {
     process.env.BB_THREAD_ID = "thread-archive-2";
     const archivePost = vi.fn(async () => ({ ok: true }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              archive: {
-                $post: archivePost,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                archive: {
+                  $post: archivePost,
+                },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(["thread", "archive", "--self", "--force"], (program) =>
       registerThreadCommands(program, () => "http://server"),
@@ -1538,19 +1704,21 @@ describe("CLI command output contracts", () => {
     const archivePost = vi.fn(async () => {
       throw new Error("HTTP 404: missing");
     });
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              archive: {
-                $post: archivePost,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                archive: {
+                  $post: archivePost,
+                },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await expect(
       runCommand(["thread", "archive", "thread-archive-1"], (program) =>
@@ -1570,19 +1738,21 @@ describe("CLI command output contracts", () => {
   it("bb thread unarchive --self resolves from BB_THREAD_ID", async () => {
     process.env.BB_THREAD_ID = "thread-unarchive-1";
     const unarchivePost = vi.fn(async () => ({ ok: true }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              unarchive: {
-                $post: unarchivePost,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                unarchive: {
+                  $post: unarchivePost,
+                },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(["thread", "unarchive", "--self"], (program) =>
       registerThreadCommands(program, () => "http://server"),
@@ -1609,18 +1779,20 @@ describe("CLI command output contracts", () => {
     });
     const get = vi.fn(async () => thread);
     const deleteFn = vi.fn(async () => ({ ok: true }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              $get: get,
-              $delete: deleteFn,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                $get: get,
+                $delete: deleteFn,
+              },
             },
           },
         },
-      },
-    }));
+      }),
+    );
     readlineState.question.mockResolvedValue("yes");
 
     await runCommand(["thread", "delete", "thread-delete-1"], (program) =>
@@ -1651,18 +1823,20 @@ describe("CLI command output contracts", () => {
     });
     const get = vi.fn(async () => thread);
     const deleteFn = vi.fn(async () => ({ ok: true }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              $get: get,
-              $delete: deleteFn,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                $get: get,
+                $delete: deleteFn,
+              },
             },
           },
         },
-      },
-    }));
+      }),
+    );
     readlineState.question.mockResolvedValue("no");
 
     await runCommand(["thread", "delete", "thread-delete-2"], (program) =>
@@ -1687,21 +1861,24 @@ describe("CLI command output contracts", () => {
     });
     const get = vi.fn(async () => thread);
     const deleteFn = vi.fn(async () => ({ ok: true }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              $get: get,
-              $delete: deleteFn,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                $get: get,
+                $delete: deleteFn,
+              },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
-    await runCommand(["thread", "delete", "thread-delete-3", "--yes"], (program) =>
-      registerThreadCommands(program, () => "http://server"),
+    await runCommand(
+      ["thread", "delete", "thread-delete-3", "--yes"],
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     expect(readlineState.question).not.toHaveBeenCalled();
@@ -1714,24 +1891,25 @@ describe("CLI command output contracts", () => {
     const post = vi.fn(async () => {
       throw new Error("HTTP 500: boom");
     });
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          environments: {
-            ":id": {
-              actions: {
-                $post: post,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            environments: {
+              ":id": {
+                actions: {
+                  $post: post,
+                },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await expect(
-      runCommand(
-        ["environment", "commit", "env-1"],
-        (program) => registerEnvironmentCommands(program, () => "http://server"),
+      runCommand(["environment", "commit", "env-1"], (program) =>
+        registerEnvironmentCommands(program, () => "http://server"),
       ),
     ).rejects.toThrow("process.exit:1");
 
@@ -1748,19 +1926,21 @@ describe("CLI command output contracts", () => {
       commitSha: "abc123",
       commitSubject: "bb: automated commit",
     }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          environments: {
-            ":id": {
-              actions: {
-                $post: post,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            environments: {
+              ":id": {
+                actions: {
+                  $post: post,
+                },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(["environment", "commit", "env-commit-1"], (program) =>
       registerEnvironmentCommands(program, () => "http://server"),
@@ -1782,20 +1962,28 @@ describe("CLI command output contracts", () => {
       updatedAt: 2,
     });
     const patch = vi.fn(async () => environment);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          environments: {
-            ":id": {
-              $patch: patch,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            environments: {
+              ":id": {
+                $patch: patch,
+              },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
-      ["environment", "update", "env-update-1", "--merge-base-branch", "release"],
+      [
+        "environment",
+        "update",
+        "env-update-1",
+        "--merge-base-branch",
+        "release",
+      ],
       (program) => registerEnvironmentCommands(program, () => "http://server"),
     );
 
@@ -1821,17 +2009,19 @@ describe("CLI command output contracts", () => {
       updatedAt: 2,
     });
     const patch = vi.fn(async () => environment);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          environments: {
-            ":id": {
-              $patch: patch,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            environments: {
+              ":id": {
+                $patch: patch,
+              },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
       ["environment", "update", "env-update-2", "--clear-merge-base-branch"],
@@ -1859,17 +2049,19 @@ describe("CLI command output contracts", () => {
       updatedAt: 2,
     });
     const get = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              $get: get,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                $get: get,
+              },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(["thread", "show", "thread-archived-1"], (program) =>
       registerThreadCommands(program, () => "http://server"),
@@ -1894,17 +2086,19 @@ describe("CLI command output contracts", () => {
       updatedAt: 2,
     });
     const get = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              $get: get,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                $get: get,
+              },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(["thread", "show", "--self"], (program) =>
       registerThreadCommands(program, () => "http://server"),
@@ -1930,7 +2124,6 @@ describe("CLI command output contracts", () => {
     );
     expect(createClientMock).not.toHaveBeenCalled();
   });
-
 });
 
 describe("CLI JSON output contracts", () => {
@@ -1940,9 +2133,11 @@ describe("CLI JSON output contracts", () => {
   beforeEach(() => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.spyOn(process, "exit").mockImplementation((code?: string | number | null) => {
-      throw new Error(`process.exit:${code ?? 0}`);
-    });
+    vi.spyOn(process, "exit").mockImplementation(
+      (code?: string | number | null) => {
+        throw new Error(`process.exit:${code ?? 0}`);
+      },
+    );
 
     createClientMock.mockReset();
     unwrapMock.mockReset();
@@ -1966,25 +2161,28 @@ describe("CLI JSON output contracts", () => {
       updatedAt: 2,
     });
     const get = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              $get: get,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                $get: get,
+              },
             },
           },
         },
-      },
-    }));
-
-    await runCommand(["thread", "show", "thread-json-show", "--json"], (program) =>
-      registerThreadCommands(program, () => "http://server"),
+      }),
     );
 
-    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
-      { thread, environment: null },
+    await runCommand(
+      ["thread", "show", "thread-json-show", "--json"],
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
+
+    expect(
+      JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0])),
+    ).toEqual({ thread, environment: null });
   });
 
   it("bb thread update sets the parent thread id", async () => {
@@ -2000,21 +2198,29 @@ describe("CLI JSON output contracts", () => {
     });
     const get = vi.fn(async () => thread);
     const patch = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              $get: get,
-              $patch: patch,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                $get: get,
+                $patch: patch,
+              },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
-      ["thread", "update", "thread-update-1", "--parent-thread", "thread-manager-1"],
+      [
+        "thread",
+        "update",
+        "thread-update-1",
+        "--parent-thread",
+        "thread-manager-1",
+      ],
       (program) => registerThreadCommands(program, () => "http://server"),
     );
 
@@ -2040,21 +2246,24 @@ describe("CLI JSON output contracts", () => {
     });
     const get = vi.fn(async () => thread);
     const patch = vi.fn(async () => thread);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              $get: get,
-              $patch: patch,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                $get: get,
+                $patch: patch,
+              },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
-    await runCommand(["thread", "update", "--self", "--clear-parent-thread"], (program) =>
-      registerThreadCommands(program, () => "http://server"),
+    await runCommand(
+      ["thread", "update", "--self", "--clear-parent-thread"],
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     expect(patch).toHaveBeenCalledWith({
@@ -2076,79 +2285,97 @@ describe("CLI JSON output contracts", () => {
       updatedAt: 2,
     });
     const patch = vi.fn(async () => environment);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          environments: {
-            ":id": {
-              $patch: patch,
-            },
-          },
-        },
-      },
-    }));
-
-    await runCommand(
-      ["environment", "update", "env-json-update", "--merge-base-branch", "release", "--json"],
-      (program) => registerEnvironmentCommands(program, () => "http://server"),
-    );
-
-    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
-      environment,
-    );
-  });
-
-  it("bb thread tell --json prints the raw response plus thread id", async () => {
-    const post = vi.fn(async () => ({ ok: true }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              send: {
-                $post: post,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            environments: {
+              ":id": {
+                $patch: patch,
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
+
+    await runCommand(
+      [
+        "environment",
+        "update",
+        "env-json-update",
+        "--merge-base-branch",
+        "release",
+        "--json",
+      ],
+      (program) => registerEnvironmentCommands(program, () => "http://server"),
+    );
+
+    expect(
+      JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0])),
+    ).toEqual(environment);
+  });
+
+  it("bb thread tell --json prints the raw response plus thread id", async () => {
+    const post = vi.fn(async () => ({ ok: true }));
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                send: {
+                  $post: post,
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
 
     await runCommand(
       ["thread", "tell", "thread-json-tell", "hello", "--json"],
       (program) => registerThreadCommands(program, () => "http://server"),
     );
 
-    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual({
+    expect(
+      JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0])),
+    ).toEqual({
       threadId: "thread-json-tell",
       ok: true,
     });
   });
 
   it("bb thread wait --status succeeds when the thread is already at the requested status", async () => {
-    const get = vi.fn(async () => makeThread({
-      id: "thread-wait",
-      projectId: "proj-1",
-      providerId: "codex",
-      type: "standard",
-      status: "idle",
-      createdAt: 1,
-      updatedAt: 2,
-    }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              $get: get,
+    const get = vi.fn(async () =>
+      makeThread({
+        id: "thread-wait",
+        projectId: "proj-1",
+        providerId: "codex",
+        type: "standard",
+        status: "idle",
+        createdAt: 1,
+        updatedAt: 2,
+      }),
+    );
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                $get: get,
+              },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
-    await runCommand(["thread", "wait", "thread-wait", "--status", "idle"], (program) =>
-      registerThreadCommands(program, () => "http://server"),
+    await runCommand(
+      ["thread", "wait", "thread-wait", "--status", "idle"],
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     expect(collectLogLines(vi.mocked(console.log))).toContain(
@@ -2157,56 +2384,72 @@ describe("CLI JSON output contracts", () => {
   });
 
   it("bb thread wait --status exits with timeout code when the status is not reached", async () => {
-    const get = vi.fn(async () => makeThread({
-      id: "thread-wait-timeout",
-      projectId: "proj-1",
-      providerId: "codex",
-      type: "standard",
-      status: "active",
-      createdAt: 1,
-      updatedAt: 2,
-    }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              $get: get,
+    const get = vi.fn(async () =>
+      makeThread({
+        id: "thread-wait-timeout",
+        projectId: "proj-1",
+        providerId: "codex",
+        type: "standard",
+        status: "active",
+        createdAt: 1,
+        updatedAt: 2,
+      }),
+    );
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                $get: get,
+              },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await expect(
       runCommand(
-        ["thread", "wait", "thread-wait-timeout", "--status", "idle", "--timeout", "0"],
+        [
+          "thread",
+          "wait",
+          "thread-wait-timeout",
+          "--status",
+          "idle",
+          "--timeout",
+          "0",
+        ],
         (program) => registerThreadCommands(program, () => "http://server"),
       ),
     ).rejects.toThrow("process.exit:2");
   });
 
   it("bb thread wait --status idle fails fast when the thread is stuck in error", async () => {
-    const get = vi.fn(async () => makeThread({
-      id: "thread-wait-error",
-      projectId: "proj-1",
-      providerId: "codex",
-      type: "standard",
-      status: "error",
-      createdAt: 1,
-      updatedAt: 2,
-    }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              $get: get,
+    const get = vi.fn(async () =>
+      makeThread({
+        id: "thread-wait-error",
+        projectId: "proj-1",
+        providerId: "codex",
+        type: "standard",
+        status: "error",
+        createdAt: 1,
+        updatedAt: 2,
+      }),
+    );
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                $get: get,
+              },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await expect(
       runCommand(
@@ -2222,31 +2465,45 @@ describe("CLI JSON output contracts", () => {
   });
 
   it("bb thread wait --event reports server errors instead of schema errors", async () => {
-    const waitGet = vi.fn(async () =>
-      new Response(JSON.stringify({ code: "not_found", message: "Thread not found" }), {
-        status: 404,
-        headers: { "Content-Type": "application/json" },
-      }),
+    const waitGet = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ code: "not_found", message: "Thread not found" }),
+          {
+            status: 404,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
     );
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              events: {
-                wait: {
-                  $get: waitGet,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                events: {
+                  wait: {
+                    $get: waitGet,
+                  },
                 },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await expect(
       runCommand(
-        ["thread", "wait", "thread-404", "--event", "turn/completed", "--timeout", "5"],
+        [
+          "thread",
+          "wait",
+          "thread-404",
+          "--event",
+          "turn/completed",
+          "--timeout",
+          "5",
+        ],
         (program) => registerThreadCommands(program, () => "http://server"),
       ),
     ).rejects.toThrow("process.exit:1");
@@ -2259,47 +2516,58 @@ describe("CLI JSON output contracts", () => {
   });
 
   it("bb thread wait --event --timeout 0 returns immediately when event exists", async () => {
-    const waitGet = vi.fn(async () =>
-      new Response(
-        JSON.stringify({
-          ...buildThreadEventRow({
-            id: "evt-1",
-            threadId: "thread-t0",
-            seq: 3,
-            createdAt: Date.now(),
-            event: {
-              type: "turn/completed",
+    const waitGet = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            ...buildThreadEventRow({
+              id: "evt-1",
               threadId: "thread-t0",
-              providerThreadId: "provider-thread-t0",
-              turnId: "turn-1",
-              status: "completed",
-            },
+              seq: 3,
+              createdAt: Date.now(),
+              event: {
+                type: "turn/completed",
+                threadId: "thread-t0",
+                providerThreadId: "provider-thread-t0",
+                turnId: "turn-1",
+                status: "completed",
+              },
+            }),
           }),
-        }),
-        {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        },
-      ),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        ),
     );
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              events: {
-                wait: {
-                  $get: waitGet,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                events: {
+                  wait: {
+                    $get: waitGet,
+                  },
                 },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
-      ["thread", "wait", "thread-t0", "--event", "turn/completed", "--timeout", "0"],
+      [
+        "thread",
+        "wait",
+        "thread-t0",
+        "--event",
+        "turn/completed",
+        "--timeout",
+        "0",
+      ],
       (program) => registerThreadCommands(program, () => "http://server"),
     );
 
@@ -2309,30 +2577,34 @@ describe("CLI JSON output contracts", () => {
   });
 
   it("bb thread stop exits early when the thread is already idle", async () => {
-    const get = vi.fn(async () => makeThread({
-      id: "thread-stop-idle",
-      projectId: "proj-1",
-      providerId: "codex",
-      type: "standard",
-      status: "idle",
-      createdAt: 1,
-      updatedAt: 2,
-    }));
+    const get = vi.fn(async () =>
+      makeThread({
+        id: "thread-stop-idle",
+        projectId: "proj-1",
+        providerId: "codex",
+        type: "standard",
+        status: "idle",
+        createdAt: 1,
+        updatedAt: 2,
+      }),
+    );
     const stopPost = vi.fn();
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              $get: get,
-              stop: {
-                $post: stopPost,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                $get: get,
+                stop: {
+                  $post: stopPost,
+                },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await expect(
       runCommand(["thread", "stop", "thread-stop-idle"], (program) =>
@@ -2347,30 +2619,34 @@ describe("CLI JSON output contracts", () => {
   });
 
   it("bb thread stop refuses to clear error into idle", async () => {
-    const get = vi.fn(async () => makeThread({
-      id: "thread-stop-error",
-      projectId: "proj-1",
-      providerId: "codex",
-      type: "standard",
-      status: "error",
-      createdAt: 1,
-      updatedAt: 2,
-    }));
+    const get = vi.fn(async () =>
+      makeThread({
+        id: "thread-stop-error",
+        projectId: "proj-1",
+        providerId: "codex",
+        type: "standard",
+        status: "error",
+        createdAt: 1,
+        updatedAt: 2,
+      }),
+    );
     const stopPost = vi.fn();
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              $get: get,
-              stop: {
-                $post: stopPost,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                $get: get,
+                stop: {
+                  $post: stopPost,
+                },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await expect(
       runCommand(["thread", "stop", "thread-stop-error"], (program) =>
@@ -2385,36 +2661,42 @@ describe("CLI JSON output contracts", () => {
   });
 
   it("bb thread stop still stops active threads", async () => {
-    const get = vi.fn(async () => makeThread({
-      id: "thread-stop-active",
-      projectId: "proj-1",
-      providerId: "codex",
-      type: "standard",
-      status: "active",
-      createdAt: 1,
-      updatedAt: 2,
-    }));
+    const get = vi.fn(async () =>
+      makeThread({
+        id: "thread-stop-active",
+        projectId: "proj-1",
+        providerId: "codex",
+        type: "standard",
+        status: "active",
+        createdAt: 1,
+        updatedAt: 2,
+      }),
+    );
     const stopPost = vi.fn(async () => ({ ok: true }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              $get: get,
-              stop: {
-                $post: stopPost,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                $get: get,
+                stop: {
+                  $post: stopPost,
+                },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(["thread", "stop", "thread-stop-active"], (program) =>
       registerThreadCommands(program, () => "http://server"),
     );
 
-    expect(collectLogLines(vi.mocked(console.log))).toContain("Thread thread-stop-active stopped");
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Thread thread-stop-active stopped",
+    );
     expect(stopPost).toHaveBeenCalledTimes(1);
   });
 
@@ -2440,28 +2722,31 @@ describe("CLI JSON output contracts", () => {
     ];
     const getThread = vi.fn(async () => thread);
     const getEvents = vi.fn(async () => events);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              $get: getThread,
-              events: {
-                $get: getEvents,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                $get: getThread,
+                events: {
+                  $get: getEvents,
+                },
               },
             },
           },
         },
-      },
-    }));
-
-    await runCommand(["thread", "log", "thread-json-log", "--json"], (program) =>
-      registerThreadCommands(program, () => "http://server"),
+      }),
     );
 
-    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual(
-      events,
+    await runCommand(
+      ["thread", "log", "thread-json-log", "--json"],
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
+
+    expect(
+      JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0])),
+    ).toEqual(events);
   });
 
   it("bb thread log renders merged timeline rows for human output", async () => {
@@ -2516,22 +2801,24 @@ describe("CLI JSON output contracts", () => {
         },
       ],
     }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              events: {
-                $get: getEvents,
-              },
-              timeline: {
-                $get: getTimeline,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                events: {
+                  $get: getEvents,
+                },
+                timeline: {
+                  $get: getTimeline,
+                },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(["thread", "log", "thread-log"], (program) =>
       registerThreadCommands(program, () => "http://server"),
@@ -2585,22 +2872,24 @@ describe("CLI JSON output contracts", () => {
         },
       ],
     }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              events: {
-                $get: getEvents,
-              },
-              timeline: {
-                $get: getTimeline,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                events: {
+                  $get: getEvents,
+                },
+                timeline: {
+                  $get: getTimeline,
+                },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(["thread", "log", "thread-log"], (program) =>
       registerThreadCommands(program, () => "http://server"),
@@ -2617,22 +2906,24 @@ describe("CLI JSON output contracts", () => {
     process.env.BB_THREAD_ID = "thread-log-self";
     const getEvents = vi.fn(async () => []);
     const getTimeline = vi.fn(async () => ({ rows: [], activeThinking: null }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              events: {
-                $get: getEvents,
-              },
-              timeline: {
-                $get: getTimeline,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                events: {
+                  $get: getEvents,
+                },
+                timeline: {
+                  $get: getTimeline,
+                },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(["thread", "log", "--self"], (program) =>
       registerThreadCommands(program, () => "http://server"),
@@ -2651,26 +2942,30 @@ describe("CLI JSON output contracts", () => {
 
   it("bb thread output --json prints the raw output payload", async () => {
     const getOutput = vi.fn(async () => ({ output: "FINAL" }));
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              output: {
-                $get: getOutput,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                output: {
+                  $get: getOutput,
+                },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
       ["thread", "output", "thread-json-output", "--json"],
       (program) => registerThreadCommands(program, () => "http://server"),
     );
 
-    expect(JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0]))).toEqual({
+    expect(
+      JSON.parse(String(vi.mocked(console.log).mock.calls[0]?.[0])),
+    ).toEqual({
       output: "FINAL",
     });
   });
@@ -2686,22 +2981,25 @@ describe("CLI JSON output contracts", () => {
         turnId: "turn-1",
       }),
     ]);
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              interactions: {
-                $get: listInteractions,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                interactions: {
+                  $get: listInteractions,
+                },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
-    await runCommand(["thread", "interactions", "list", "thread-1"], (program) =>
-      registerThreadCommands(program, () => "http://server"),
+    await runCommand(
+      ["thread", "interactions", "list", "thread-1"],
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     expect(listInteractions).toHaveBeenCalledWith({
@@ -2733,24 +3031,27 @@ describe("CLI JSON output contracts", () => {
         turnId: "turn-show",
       }),
     );
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              interactions: {
-                ":interactionId": {
-                  $get: getInteraction,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                interactions: {
+                  ":interactionId": {
+                    $get: getInteraction,
+                  },
                 },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
-    await runCommand(["thread", "interactions", "show", "int-show"], (program) =>
-      registerThreadCommands(program, () => "http://server"),
+    await runCommand(
+      ["thread", "interactions", "show", "int-show"],
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     expect(getInteraction).toHaveBeenCalledWith({
@@ -2794,24 +3095,27 @@ describe("CLI JSON output contracts", () => {
         },
       }),
     );
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              interactions: {
-                ":interactionId": {
-                  $get: getInteraction,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                interactions: {
+                  ":interactionId": {
+                    $get: getInteraction,
+                  },
                 },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
-    await runCommand(["thread", "interactions", "show", "int-show-resolving"], (program) =>
-      registerThreadCommands(program, () => "http://server"),
+    await runCommand(
+      ["thread", "interactions", "show", "int-show-resolving"],
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     const lines = collectLogLines(vi.mocked(console.log));
@@ -2848,27 +3152,30 @@ describe("CLI JSON output contracts", () => {
         },
       }),
     );
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              interactions: {
-                ":interactionId": {
-                  $get: getInteraction,
-                  resolve: {
-                    $post: resolveInteraction,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                interactions: {
+                  ":interactionId": {
+                    $get: getInteraction,
+                    resolve: {
+                      $post: resolveInteraction,
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
-    await runCommand(["thread", "interactions", "approve", "int-approve", "thread-approve"], (program) =>
-      registerThreadCommands(program, () => "http://server"),
+    await runCommand(
+      ["thread", "interactions", "approve", "int-approve", "thread-approve"],
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     expect(resolveInteraction).toHaveBeenCalledWith({
@@ -2921,27 +3228,35 @@ describe("CLI JSON output contracts", () => {
         },
       }),
     );
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              interactions: {
-                ":interactionId": {
-                  $get: getInteraction,
-                  resolve: {
-                    $post: resolveInteraction,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                interactions: {
+                  ":interactionId": {
+                    $get: getInteraction,
+                    resolve: {
+                      $post: resolveInteraction,
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
-      ["thread", "interactions", "approve", "int-approve-no-session", "thread-approve-no-session"],
+      [
+        "thread",
+        "interactions",
+        "approve",
+        "int-approve-no-session",
+        "thread-approve-no-session",
+      ],
       (program) => registerThreadCommands(program, () => "http://server"),
     );
 
@@ -2973,29 +3288,39 @@ describe("CLI JSON output contracts", () => {
       }),
     );
     const resolveInteraction = vi.fn();
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              interactions: {
-                ":interactionId": {
-                  $get: getInteraction,
-                  resolve: {
-                    $post: resolveInteraction,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                interactions: {
+                  ":interactionId": {
+                    $get: getInteraction,
+                    resolve: {
+                      $post: resolveInteraction,
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
-    await expect(runCommand(
-      ["thread", "interactions", "approve", "int-approve-amendment", "thread-approve-amendment"],
-      (program) => registerThreadCommands(program, () => "http://server"),
-    )).rejects.toThrow("process.exit:1");
+    await expect(
+      runCommand(
+        [
+          "thread",
+          "interactions",
+          "approve",
+          "int-approve-amendment",
+          "thread-approve-amendment",
+        ],
+        (program) => registerThreadCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
     expect(resolveInteraction).not.toHaveBeenCalled();
     expect(collectLogLines(vi.mocked(console.error)).join("\n")).toContain(
       "does not offer an approval decision",
@@ -3028,27 +3353,30 @@ describe("CLI JSON output contracts", () => {
         },
       }),
     );
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              interactions: {
-                ":interactionId": {
-                  $get: getInteraction,
-                  resolve: {
-                    $post: resolveInteraction,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                interactions: {
+                  ":interactionId": {
+                    $get: getInteraction,
+                    resolve: {
+                      $post: resolveInteraction,
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
-    await runCommand(["thread", "interactions", "deny", "int-deny", "thread-deny"], (program) =>
-      registerThreadCommands(program, () => "http://server"),
+    await runCommand(
+      ["thread", "interactions", "deny", "int-deny", "thread-deny"],
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     expect(resolveInteraction).toHaveBeenCalledWith({
@@ -3078,29 +3406,33 @@ describe("CLI JSON output contracts", () => {
       }),
     );
     const resolveInteraction = vi.fn();
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              interactions: {
-                ":interactionId": {
-                  $get: getInteraction,
-                  resolve: {
-                    $post: resolveInteraction,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                interactions: {
+                  ":interactionId": {
+                    $get: getInteraction,
+                    resolve: {
+                      $post: resolveInteraction,
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
-    await expect(runCommand(
-      ["thread", "interactions", "deny", "int-cancel", "thread-cancel"],
-      (program) => registerThreadCommands(program, () => "http://server"),
-    )).rejects.toThrow("process.exit:1");
+    await expect(
+      runCommand(
+        ["thread", "interactions", "deny", "int-cancel", "thread-cancel"],
+        (program) => registerThreadCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
     expect(resolveInteraction).not.toHaveBeenCalled();
     expect(collectLogLines(vi.mocked(console.error)).join("\n")).toContain(
       "does not offer a deny decision",
@@ -3136,27 +3468,36 @@ describe("CLI JSON output contracts", () => {
         },
       }),
     );
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              interactions: {
-                ":interactionId": {
-                  $get: getInteraction,
-                  resolve: {
-                    $post: resolveInteraction,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                interactions: {
+                  ":interactionId": {
+                    $get: getInteraction,
+                    resolve: {
+                      $post: resolveInteraction,
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
-    await runCommand(["thread", "interactions", "approve", "int-file-change", "thread-file-change"], (program) =>
-      registerThreadCommands(program, () => "http://server"),
+    await runCommand(
+      [
+        "thread",
+        "interactions",
+        "approve",
+        "int-file-change",
+        "thread-file-change",
+      ],
+      (program) => registerThreadCommands(program, () => "http://server"),
     );
 
     expect(resolveInteraction).toHaveBeenCalledWith({
@@ -3209,24 +3550,26 @@ describe("CLI JSON output contracts", () => {
         },
       }),
     );
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              interactions: {
-                ":interactionId": {
-                  $get: getInteraction,
-                  resolve: {
-                    $post: resolveInteraction,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                interactions: {
+                  ":interactionId": {
+                    $get: getInteraction,
+                    resolve: {
+                      $post: resolveInteraction,
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
       [
@@ -3269,7 +3612,9 @@ describe("CLI JSON output contracts", () => {
         providerThreadId: "provider-thread-claude-permission-grant",
         threadId: "thread-claude-permission-grant",
         turnId: "turn-claude-permission-grant",
-        payload: makePermissionGrantApprovalPayload("item-claude-permission-grant"),
+        payload: makePermissionGrantApprovalPayload(
+          "item-claude-permission-grant",
+        ),
       }),
     );
     const resolveInteraction = vi.fn(async () =>
@@ -3280,7 +3625,9 @@ describe("CLI JSON output contracts", () => {
         providerThreadId: "provider-thread-claude-permission-grant",
         threadId: "thread-claude-permission-grant",
         turnId: "turn-claude-permission-grant",
-        payload: makePermissionGrantApprovalPayload("item-claude-permission-grant"),
+        payload: makePermissionGrantApprovalPayload(
+          "item-claude-permission-grant",
+        ),
         status: "resolving",
         resolvedAt: null,
         resolution: {
@@ -3295,24 +3642,26 @@ describe("CLI JSON output contracts", () => {
         },
       }),
     );
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              interactions: {
-                ":interactionId": {
-                  $get: getInteraction,
-                  resolve: {
-                    $post: resolveInteraction,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                interactions: {
+                  ":interactionId": {
+                    $get: getInteraction,
+                    resolve: {
+                      $post: resolveInteraction,
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
       [
@@ -3376,27 +3725,35 @@ describe("CLI JSON output contracts", () => {
         },
       }),
     );
-    createClientMock.mockReturnValue(asServerClient({
-      api: {
-        v1: {
-          threads: {
-            ":id": {
-              interactions: {
-                ":interactionId": {
-                  $get: getInteraction,
-                  resolve: {
-                    $post: resolveInteraction,
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                interactions: {
+                  ":interactionId": {
+                    $get: getInteraction,
+                    resolve: {
+                      $post: resolveInteraction,
+                    },
                   },
                 },
               },
             },
           },
         },
-      },
-    }));
+      }),
+    );
 
     await runCommand(
-      ["thread", "interactions", "deny", "int-permission-deny", "thread-permission-deny"],
+      [
+        "thread",
+        "interactions",
+        "deny",
+        "int-permission-deny",
+        "thread-permission-deny",
+      ],
       (program) => registerThreadCommands(program, () => "http://server"),
     );
 
@@ -3413,5 +3770,4 @@ describe("CLI JSON output contracts", () => {
       "Interaction int-permission-deny submitted (denied); delivering to provider",
     ]);
   });
-
 });

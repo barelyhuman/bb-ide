@@ -1,16 +1,16 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "vitest";
 import {
   isBusyThread,
   isRunningThreadStatus,
   isUnreadDoneThread,
-} from "./thread-activity"
+} from "./thread-activity";
 
 describe("thread-activity", () => {
   it("exposes shared running/unread helpers", () => {
-    expect(isRunningThreadStatus("created")).toBe(true)
-    expect(isRunningThreadStatus("error")).toBe(false)
-    expect(isRunningThreadStatus("idle")).toBe(false)
-    expect(isBusyThread({ status: "active" })).toBe(true)
+    expect(isRunningThreadStatus("created")).toBe(true);
+    expect(isRunningThreadStatus("error")).toBe(false);
+    expect(isRunningThreadStatus("idle")).toBe(false);
+    expect(isBusyThread({ status: "active" })).toBe(true);
 
     expect(
       isUnreadDoneThread({
@@ -19,7 +19,7 @@ describe("thread-activity", () => {
         lastReadAt: 10,
         parentThreadId: null,
       }),
-    ).toBe(true)
+    ).toBe(true);
     expect(
       isUnreadDoneThread({
         status: "idle",
@@ -27,7 +27,7 @@ describe("thread-activity", () => {
         lastReadAt: 10,
         parentThreadId: "manager-1",
       }),
-    ).toBe(false)
+    ).toBe(false);
     expect(
       isUnreadDoneThread({
         status: "error",
@@ -35,7 +35,7 @@ describe("thread-activity", () => {
         lastReadAt: 10,
         parentThreadId: null,
       }),
-    ).toBe(true)
+    ).toBe(true);
     expect(
       isUnreadDoneThread({
         status: "active",
@@ -43,6 +43,6 @@ describe("thread-activity", () => {
         lastReadAt: null,
         parentThreadId: null,
       }),
-    ).toBe(false)
-  })
-})
+    ).toBe(false);
+  });
+});

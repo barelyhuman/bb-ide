@@ -11,9 +11,14 @@ const THREAD_DIFF_PANEL_QUERY_VALUE = "git-diff";
 const THREAD_INFO_PANEL_QUERY_VALUE = "thread-info";
 const THREAD_STORAGE_PANEL_QUERY_VALUE = "thread-storage";
 
-export type ThreadSecondaryPanel = "git-diff" | "thread-info" | "thread-storage";
+export type ThreadSecondaryPanel =
+  | "git-diff"
+  | "thread-info"
+  | "thread-storage";
 
-function decodeThreadSecondaryPanel(value: string | null): ThreadSecondaryPanel | null {
+function decodeThreadSecondaryPanel(
+  value: string | null,
+): ThreadSecondaryPanel | null {
   switch (value) {
     case THREAD_DIFF_PANEL_QUERY_VALUE:
       return "git-diff";
@@ -52,20 +57,25 @@ const storedThreadSecondaryPanelStorage = {
  * the last-selected tab persists across reloads. On navigation, the URL query
  * parameter overrides the stored value (see useThreadSecondaryPanelUrlSync).
  */
-export const activeSecondaryPanelAtom = atomWithStorage<ThreadSecondaryPanel | null>(
-  THREAD_SECONDARY_PANEL_STORAGE_KEY,
-  null,
-  storedThreadSecondaryPanelStorage,
-  { getOnInit: true },
-);
+export const activeSecondaryPanelAtom =
+  atomWithStorage<ThreadSecondaryPanel | null>(
+    THREAD_SECONDARY_PANEL_STORAGE_KEY,
+    null,
+    storedThreadSecondaryPanelStorage,
+    { getOnInit: true },
+  );
 
 export const isSecondaryPanelOpenAtom = atom(
   (get) => get(activeSecondaryPanelAtom) !== null,
 );
 
-export function getThreadSecondaryPanel(search: string): ThreadSecondaryPanel | null {
+export function getThreadSecondaryPanel(
+  search: string,
+): ThreadSecondaryPanel | null {
   const params = new URLSearchParams(search);
-  return decodeThreadSecondaryPanel(params.get(THREAD_SECONDARY_PANEL_QUERY_KEY));
+  return decodeThreadSecondaryPanel(
+    params.get(THREAD_SECONDARY_PANEL_QUERY_KEY),
+  );
 }
 
 export function withThreadSecondaryPanel(
@@ -102,7 +112,9 @@ export function useThreadSecondaryPanelUrlSync(): void {
  * atomWithStorage) and the URL query parameter so the change is persisted,
  * shareable, and visible to every subscriber of activeSecondaryPanelAtom.
  */
-export function useSetThreadSecondaryPanel(): (panel: ThreadSecondaryPanel | null) => void {
+export function useSetThreadSecondaryPanel(): (
+  panel: ThreadSecondaryPanel | null,
+) => void {
   const setActive = useSetAtom(activeSecondaryPanelAtom);
   const navigate = useNavigate();
   const location = useLocation();

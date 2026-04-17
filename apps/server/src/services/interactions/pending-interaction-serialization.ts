@@ -10,10 +10,7 @@ export class PendingInteractionSerializationError extends ApiError {
   readonly interactionId: string;
   readonly field: "payload" | "resolution";
 
-  constructor(
-    interactionId: string,
-    field: "payload" | "resolution",
-  ) {
+  constructor(interactionId: string, field: "payload" | "resolution") {
     super(
       500,
       "internal_error",
@@ -39,7 +36,9 @@ function parseStoredPendingInteractionJson(
   }
 }
 
-export function toPendingInteraction(row: PendingInteractionRow): PendingInteraction {
+export function toPendingInteraction(
+  row: PendingInteractionRow,
+): PendingInteraction {
   let payload: PendingInteraction["payload"];
   try {
     payload = pendingInteractionPayloadSchema.parse(
@@ -54,11 +53,12 @@ export function toPendingInteraction(row: PendingInteractionRow): PendingInterac
 
   let resolution: PendingInteraction["resolution"];
   try {
-    resolution = row.resolution === null
-      ? null
-      : pendingInteractionResolutionSchema.parse(
-          parseStoredPendingInteractionJson(row, "resolution"),
-        );
+    resolution =
+      row.resolution === null
+        ? null
+        : pendingInteractionResolutionSchema.parse(
+            parseStoredPendingInteractionJson(row, "resolution"),
+          );
   } catch (error) {
     if (error instanceof PendingInteractionSerializationError) {
       throw error;

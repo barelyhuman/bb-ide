@@ -67,6 +67,7 @@ Events from provider processes are `ProviderThreadEvent` — they carry both `th
 ### Fail-fast behavior
 
 The runtime fails fast when providers crash or are unavailable:
+
 - **Binary not found** → `ensureProvider` rejects immediately
 - **Crash during initialize** → `ensureProvider` rejects with stderr output
 - **Crash during a turn** → pending `runTurn` promise rejects with "exited unexpectedly"
@@ -101,6 +102,7 @@ Integration tests hit real provider APIs and take 30-60 seconds. Some lessons le
 **Don't assume provider behavior — test it directly.** Each provider (codex, claude-code, pi) has different concurrency, turn lifecycle, and session resume semantics. When a test fails or hangs, write a small standalone test that probes the provider directly (e.g., "does codex handle two concurrent turns on different threads?") instead of guessing and tweaking timeouts. The `vitest.config.ts` unit test config is handy for running quick one-off investigations since it includes `src/**/*.test.ts`.
 
 **Save output to a file, then read it.** Tests are slow — if you pipe output through `grep` and it doesn't match, you've wasted a full test run. Instead:
+
 ```bash
 pnpm --filter @bb/agent-runtime test:integration -- --reporter=verbose > /tmp/integ-out.txt 2>&1
 # Then inspect:
@@ -108,6 +110,7 @@ grep -E "(✓|×|Test Files|Tests )" /tmp/integ-out.txt
 ```
 
 **Build before running integration tests.** Bridge processes (claude-code, pi) run from `dist/`, not `src/`. If you change bridge or adapter code, rebuild first:
+
 ```bash
 pnpm exec turbo run build --filter=@bb/agent-runtime --force
 ```
@@ -115,6 +118,7 @@ pnpm exec turbo run build --filter=@bb/agent-runtime --force
 **Tests run concurrently across providers.** All 3 provider suites run in parallel via `describe.concurrent`. This means the total wall time is roughly the slowest provider, not the sum. Cross-provider tests also run concurrently with each other.
 
 **When a test hangs**, the provider is likely not responding to a JSON-RPC request. Common causes:
+
 - Bridge Zod schema rejects the request silently (check that `buildCommand` output matches what the bridge expects)
 - Provider needs credentials that aren't in the environment
 - Bridge process crashed on startup (check stderr — the runtime captures it in `proc.stderrChunks`)

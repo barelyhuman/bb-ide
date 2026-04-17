@@ -14,17 +14,21 @@ export interface AuthenticatedDaemon {
   keyId: string;
 }
 
-const authenticatedDaemonSchema = z.object({
-  hostId: z.string().min(1),
-  hostType: hostTypeSchema,
-  keyId: z.string().min(1),
-}).strict();
+const authenticatedDaemonSchema = z
+  .object({
+    hostId: z.string().min(1),
+    hostType: hostTypeSchema,
+    keyId: z.string().min(1),
+  })
+  .strict();
 
 function isAuthenticatedDaemon(value: unknown): value is AuthenticatedDaemon {
   return authenticatedDaemonSchema.safeParse(value).success;
 }
 
-export function requireBearerToken(authorizationHeader: string | undefined): string {
+export function requireBearerToken(
+  authorizationHeader: string | undefined,
+): string {
   if (!authorizationHeader?.startsWith("Bearer ")) {
     throw new ApiError(401, "unauthorized", "Unauthorized");
   }
@@ -61,10 +65,16 @@ export function setAuthenticatedDaemon(
   context.set("authenticatedDaemon", daemon);
 }
 
-export function getAuthenticatedDaemon(context: DaemonAuthContext): AuthenticatedDaemon {
+export function getAuthenticatedDaemon(
+  context: DaemonAuthContext,
+): AuthenticatedDaemon {
   const daemon = context.get("authenticatedDaemon");
   if (!isAuthenticatedDaemon(daemon)) {
-    throw new ApiError(500, "internal_error", "Daemon authentication context missing");
+    throw new ApiError(
+      500,
+      "internal_error",
+      "Daemon authentication context missing",
+    );
   }
   return daemon;
 }
@@ -74,6 +84,10 @@ export function assertAuthenticatedHostMatches(
   args: { hostId: string; hostType: HostType },
 ): void {
   if (daemon.hostId !== args.hostId || daemon.hostType !== args.hostType) {
-    throw new ApiError(403, "invalid_request", "Authenticated host does not match request");
+    throw new ApiError(
+      403,
+      "invalid_request",
+      "Authenticated host does not match request",
+    );
   }
 }

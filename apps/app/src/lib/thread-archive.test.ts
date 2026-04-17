@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest"
-import { HttpError } from "./api"
-import { isArchiveForceRequiredError } from "./thread-archive"
+import { describe, expect, it } from "vitest";
+import { HttpError } from "./api";
+import { isArchiveForceRequiredError } from "./thread-archive";
 
 describe("thread-archive", () => {
   it("recognizes archive confirmation conflicts from the server", () => {
@@ -8,11 +8,12 @@ describe("thread-archive", () => {
       isArchiveForceRequiredError(
         new HttpError({
           status: 409,
-          message: "Archiving this thread would clean up a workspace that contains work.",
+          message:
+            "Archiving this thread would clean up a workspace that contains work.",
           code: "archive_confirmation_required",
         }),
       ),
-    ).toBe(true)
+    ).toBe(true);
     expect(
       isArchiveForceRequiredError(
         new HttpError({
@@ -21,6 +22,6 @@ describe("thread-archive", () => {
           code: "internal_error",
         }),
       ),
-    ).toBe(false)
-  })
-})
+    ).toBe(false);
+  });
+});

@@ -1,36 +1,40 @@
-import { useCallback, useMemo, useState } from "react"
-import { Check, ChevronDown, Zap } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Switch } from "@/components/ui/switch"
-import { cn } from "@/lib/utils"
-import { useAvailableModels } from "@/hooks/queries/system-queries"
-import { useIsMobile } from "@/hooks/useMobile"
+import { useCallback, useMemo, useState } from "react";
+import { Check, ChevronDown, Zap } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Switch } from "@/components/ui/switch";
+import { cn } from "@/lib/utils";
+import { useAvailableModels } from "@/hooks/queries/system-queries";
+import { useIsMobile } from "@/hooks/useMobile";
 import {
   PROMPT_OPTION_BASE_CLASS_NAME,
   PROMPT_OPTION_INTERACTIVE_CLASS_NAME,
   PROMPT_OPTION_CONTENT_CLASS_NAME,
   type PromptOption,
-} from "./PromptOptionPicker"
+} from "./PromptOptionPicker";
 
 interface PromptProviderModelPickerProps {
   // Provider state
-  providerOptions: readonly PromptOption<string>[]
-  selectedProviderId: string
-  onSelectedProviderChange: (value: string) => void
-  hasMultipleProviders: boolean
-  providerReadOnly?: boolean
+  providerOptions: readonly PromptOption<string>[];
+  selectedProviderId: string;
+  onSelectedProviderChange: (value: string) => void;
+  hasMultipleProviders: boolean;
+  providerReadOnly?: boolean;
   // Model state
-  modelValue: string
-  modelOptions: readonly PromptOption<string>[]
-  onModelChange: (value: string) => void
-  formatModelLabel?: (displayName: string, providerId: string) => string
+  modelValue: string;
+  modelOptions: readonly PromptOption<string>[];
+  onModelChange: (value: string) => void;
+  formatModelLabel?: (displayName: string, providerId: string) => string;
   // Fast mode / service tier
-  fastModeEnabled: boolean
-  onFastModeChange: (enabled: boolean) => void
-  showFastModeToggle: boolean
-  serviceTierSupportByProvider?: Record<string, boolean>
-  className?: string
+  fastModeEnabled: boolean;
+  onFastModeChange: (enabled: boolean) => void;
+  showFastModeToggle: boolean;
+  serviceTierSupportByProvider?: Record<string, boolean>;
+  className?: string;
 }
 
 export function PromptProviderModelPicker({
@@ -49,75 +53,81 @@ export function PromptProviderModelPicker({
   serviceTierSupportByProvider,
   className,
 }: PromptProviderModelPickerProps) {
-  const isMobile = useIsMobile()
-  const [open, setOpen] = useState(false)
+  const isMobile = useIsMobile();
+  const [open, setOpen] = useState(false);
   // While the popover is open, the user can browse other providers without
   // committing. previewProviderId tracks which provider tab is active.
   // null means "showing the committed provider".
-  const [previewProviderId, setPreviewProviderId] = useState<string | null>(null)
+  const [previewProviderId, setPreviewProviderId] = useState<string | null>(
+    null,
+  );
 
-  const activeProviderId = previewProviderId ?? selectedProviderId
+  const activeProviderId = previewProviderId ?? selectedProviderId;
 
   // When previewing a different provider, resolve fast-mode toggle from that
   // provider's capabilities instead of the committed provider's.
   const effectiveShowFastModeToggle = serviceTierSupportByProvider
     ? (serviceTierSupportByProvider[activeProviderId] ?? false)
-    : showFastModeToggle
+    : showFastModeToggle;
 
   const selectedProvider = providerOptions.find(
     (p) => p.value === selectedProviderId,
-  )
-  const ProviderIcon = selectedProvider?.icon
-  const selectedModelOption = modelOptions.find((m) => m.value === modelValue)
-  const selectedModelLabel = selectedModelOption?.label ?? modelValue
+  );
+  const ProviderIcon = selectedProvider?.icon;
+  const selectedModelOption = modelOptions.find((m) => m.value === modelValue);
+  const selectedModelLabel = selectedModelOption?.label ?? modelValue;
 
   const showProviderTabs =
-    hasMultipleProviders && !providerReadOnly && providerOptions.length > 1
+    hasMultipleProviders && !providerReadOnly && providerOptions.length > 1;
 
   // When previewing a different provider, fetch its models independently
   // so we don't disturb the committed state in the hook.
-  const isPreviewing = previewProviderId !== null && previewProviderId !== selectedProviderId
+  const isPreviewing =
+    previewProviderId !== null && previewProviderId !== selectedProviderId;
   const previewModelsQuery = useAvailableModels(
     isPreviewing ? previewProviderId : undefined,
-  )
+  );
 
   const previewModelOptions = useMemo((): readonly PromptOption<string>[] => {
-    if (!isPreviewing) return modelOptions
-    const models = previewModelsQuery.data
-    if (!models || models.length === 0) return []
+    if (!isPreviewing) return modelOptions;
+    const models = previewModelsQuery.data;
+    if (!models || models.length === 0) return [];
     return models.map((model) => ({
       value: model.model,
       label: formatModelLabel
         ? formatModelLabel(model.displayName || model.model, previewProviderId!)
         : model.displayName || model.model,
-    }))
-  }, [isPreviewing, modelOptions, previewModelsQuery.data, formatModelLabel, previewProviderId])
+    }));
+  }, [
+    isPreviewing,
+    modelOptions,
+    previewModelsQuery.data,
+    formatModelLabel,
+    previewProviderId,
+  ]);
 
-  const handleOpenChange = useCallback(
-    (nextOpen: boolean) => {
-      setOpen(nextOpen)
-      if (!nextOpen) {
-        // Reset preview when closing without selecting a model
-        setPreviewProviderId(null)
-      }
-    },
-    [],
-  )
+  const handleOpenChange = useCallback((nextOpen: boolean) => {
+    setOpen(nextOpen);
+    if (!nextOpen) {
+      // Reset preview when closing without selecting a model
+      setPreviewProviderId(null);
+    }
+  }, []);
 
   const handleModelSelect = useCallback(
     (model: string) => {
       // Commit the previewed provider if it differs from the current one
       if (isPreviewing) {
-        onSelectedProviderChange(previewProviderId!)
+        onSelectedProviderChange(previewProviderId!);
       }
-      onModelChange(model)
-      setOpen(false)
-      setPreviewProviderId(null)
+      onModelChange(model);
+      setOpen(false);
+      setPreviewProviderId(null);
     },
     [isPreviewing, onModelChange, onSelectedProviderChange, previewProviderId],
-  )
+  );
 
-  const TriggerIcon = ProviderIcon
+  const TriggerIcon = ProviderIcon;
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange} modal>
@@ -135,9 +145,7 @@ export function PromptProviderModelPicker({
           )}
         >
           <span className={PROMPT_OPTION_CONTENT_CLASS_NAME}>
-            {TriggerIcon ? (
-              <TriggerIcon className="size-3.5 shrink-0" />
-            ) : null}
+            {TriggerIcon ? <TriggerIcon className="size-3.5 shrink-0" /> : null}
             {fastModeEnabled ? (
               <Zap className="size-3.5 shrink-0 fill-current text-muted-foreground/75" />
             ) : null}
@@ -152,13 +160,15 @@ export function PromptProviderModelPicker({
       >
         {/* Provider icon tabs */}
         {showProviderTabs ? (
-          <div className={cn(
-            "flex items-center gap-0.5 border-b border-border px-2.5 pt-1",
-            isMobile ? "sticky top-0 z-10 bg-background" : "bg-muted/40",
-          )}>
+          <div
+            className={cn(
+              "flex items-center gap-0.5 border-b border-border px-2.5 pt-1",
+              isMobile ? "sticky top-0 z-10 bg-background" : "bg-muted/40",
+            )}
+          >
             {providerOptions.map((provider) => {
-              const Icon = provider.icon
-              const isActive = provider.value === activeProviderId
+              const Icon = provider.icon;
+              const isActive = provider.value === activeProviderId;
               return (
                 <button
                   key={provider.value}
@@ -167,8 +177,10 @@ export function PromptProviderModelPicker({
                   onClick={() => {
                     if (provider.value !== activeProviderId) {
                       setPreviewProviderId(
-                        provider.value === selectedProviderId ? null : provider.value,
-                      )
+                        provider.value === selectedProviderId
+                          ? null
+                          : provider.value,
+                      );
                     }
                   }}
                   className={cn(
@@ -186,21 +198,26 @@ export function PromptProviderModelPicker({
                     </span>
                   )}
                 </button>
-              )
+              );
             })}
           </div>
         ) : null}
 
         {/* Model list */}
-        <div className={cn(
-          "overflow-y-auto p-1",
-          !isMobile && "max-h-[min(300px,var(--radix-popover-content-available-height,300px)-80px)]",
-        )}>
+        <div
+          className={cn(
+            "overflow-y-auto p-1",
+            !isMobile &&
+              "max-h-[min(300px,var(--radix-popover-content-available-height,300px)-80px)]",
+          )}
+        >
           {isPreviewing && previewModelsQuery.isLoading ? (
-            <div className={cn(
-              "px-2 text-xs text-muted-foreground",
-              isMobile ? "py-2" : "py-[0.3125rem]",
-            )}>
+            <div
+              className={cn(
+                "px-2 text-xs text-muted-foreground",
+                isMobile ? "py-2" : "py-[0.3125rem]",
+              )}
+            >
               Loading models...
             </div>
           ) : previewModelOptions.length > 0 ? (
@@ -228,10 +245,12 @@ export function PromptProviderModelPicker({
               </button>
             ))
           ) : (
-            <div className={cn(
-              "px-2 text-xs text-muted-foreground",
-              isMobile ? "py-2" : "py-[0.3125rem]",
-            )}>
+            <div
+              className={cn(
+                "px-2 text-xs text-muted-foreground",
+                isMobile ? "py-2" : "py-[0.3125rem]",
+              )}
+            >
               No models available
             </div>
           )}
@@ -258,5 +277,5 @@ export function PromptProviderModelPicker({
         ) : null}
       </PopoverContent>
     </Popover>
-  )
+  );
 }

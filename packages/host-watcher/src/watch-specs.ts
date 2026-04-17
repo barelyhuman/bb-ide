@@ -85,14 +85,7 @@ async function resolveGitMetadataLayout(
 
 function createCommonDirWatchOptions(): ParcelWatcherOptions {
   return {
-    ignore: [
-      "hooks",
-      "info",
-      "logs",
-      "modules",
-      "objects",
-      "worktrees",
-    ],
+    ignore: ["hooks", "info", "logs", "modules", "objects", "worktrees"],
   };
 }
 
@@ -110,13 +103,14 @@ function resolveEventPath(rootPath: string, eventPath: string): string {
     : path.resolve(rootPath, eventPath);
 }
 
-function normalizeRelativePath(rootPath: string, candidatePath: string): string {
+function normalizeRelativePath(
+  rootPath: string,
+  candidatePath: string,
+): string {
   return path.relative(rootPath, candidatePath).split(path.sep).join("/");
 }
 
-function isSharedGitRefPath(
-  relativePath: string,
-): boolean {
+function isSharedGitRefPath(relativePath: string): boolean {
   if (relativePath.length === 0 || relativePath.endsWith(".lock")) {
     return false;
   }
@@ -154,7 +148,9 @@ export function collectWorkspaceStatusChanges(args: {
   spec: WatchSubscriptionSpec;
 }): WorkspaceStatusChangeEvent | null {
   const changedPaths = new Set<string>();
-  const changeKinds = new Set<WorkspaceStatusChangeEvent["changeKinds"][number]>();
+  const changeKinds = new Set<
+    WorkspaceStatusChangeEvent["changeKinds"][number]
+  >();
 
   for (const event of args.events) {
     const candidatePath = resolveEventPath(args.spec.rootPath, event.path);
@@ -162,8 +158,12 @@ export function collectWorkspaceStatusChanges(args: {
       continue;
     }
 
-    const relativePath = normalizeRelativePath(args.spec.rootPath, candidatePath);
-    const eventChangeKinds: WorkspaceStatusChangeEvent["changeKinds"][number][] = [];
+    const relativePath = normalizeRelativePath(
+      args.spec.rootPath,
+      candidatePath,
+    );
+    const eventChangeKinds: WorkspaceStatusChangeEvent["changeKinds"][number][] =
+      [];
     if (args.spec.kind === "workspace-root") {
       eventChangeKinds.push("workspace-content-changed");
     } else if (args.spec.kind === "git-dir") {

@@ -105,7 +105,7 @@ function applyTurnMessageDetail(
   turnMessageDetail: ViewTurnMessageDetail,
 ): ViewTurn {
   const messages = (turn.messages ?? []).map((message) =>
-    withChildProjectionDetail(message)
+    withChildProjectionDetail(message),
   );
   const terminalMessage = findProjectionTerminalMessage(messages);
   const visibleMessages = toTimelineVisibleMessages(messages);

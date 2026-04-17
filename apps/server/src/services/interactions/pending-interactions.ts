@@ -174,7 +174,10 @@ export class PendingInteractionLifecycle {
   private readonly deps: CreateLifecycleDeps;
   private readonly sandboxInteractionExpiryMs: number;
   private readonly now: () => number;
-  private readonly expiryTimers = new Map<string, PendingInteractionExpiryTimer>();
+  private readonly expiryTimers = new Map<
+    string,
+    PendingInteractionExpiryTimer
+  >();
   private started = false;
 
   constructor(args: PendingInteractionLifecycleArgs) {
@@ -217,13 +220,19 @@ export class PendingInteractionLifecycle {
   getThreadInteraction(args: GetThreadInteractionArgs): PendingInteraction {
     const interaction = this.requireInteraction(args.interactionId);
     if (interaction.threadId !== args.threadId) {
-      throw new ApiError(404, "invalid_request", "Pending interaction not found");
+      throw new ApiError(
+        404,
+        "invalid_request",
+        "Pending interaction not found",
+      );
     }
     return interaction;
   }
 
   hasPendingThreadInteraction(threadId: string): boolean {
-    return getActivePendingInteractionForThread(this.deps.db, threadId) !== null;
+    return (
+      getActivePendingInteractionForThread(this.deps.db, threadId) !== null
+    );
   }
 
   registerPendingInteraction(
@@ -240,11 +249,11 @@ export class PendingInteractionLifecycle {
     if (thread.providerId !== interaction.providerId) {
       return {
         outcome: "rejected",
-        reason:
-          `Thread ${interaction.threadId} belongs to provider ${thread.providerId}, not ${interaction.providerId}`,
+        reason: `Thread ${interaction.threadId} belongs to provider ${thread.providerId}, not ${interaction.providerId}`,
       };
     }
-    const unsupportedReason = getUnsupportedPendingInteractionReason(interaction);
+    const unsupportedReason =
+      getUnsupportedPendingInteractionReason(interaction);
     if (unsupportedReason) {
       return {
         outcome: "rejected",
@@ -260,14 +269,10 @@ export class PendingInteractionLifecycle {
         sessionId: args.sessionId,
       });
       if (existing) {
-        if (
-          existing.status !== "pending"
-          && existing.status !== "resolving"
-        ) {
+        if (existing.status !== "pending" && existing.status !== "resolving") {
           return {
             outcome: "rejected" as const,
-            reason:
-              `Provider request ${interaction.providerRequestId} was already handled and cannot be reused`,
+            reason: `Provider request ${interaction.providerRequestId} was already handled and cannot be reused`,
           };
         }
 
@@ -326,12 +331,16 @@ export class PendingInteractionLifecycle {
     const currentRow = this.requireInteractionRow(args.interactionId);
     const current = toPendingInteraction(currentRow);
     if (current.threadId !== args.threadId) {
-      throw new ApiError(404, "invalid_request", "Pending interaction not found");
+      throw new ApiError(
+        404,
+        "invalid_request",
+        "Pending interaction not found",
+      );
     }
     if (current.status !== "pending") {
       if (
-        (current.status === "resolving" || current.status === "resolved")
-        && pendingInteractionResolutionEquals(current.resolution, args.resolution)
+        (current.status === "resolving" || current.status === "resolved") &&
+        pendingInteractionResolutionEquals(current.resolution, args.resolution)
       ) {
         return current;
       }
@@ -351,8 +360,8 @@ export class PendingInteractionLifecycle {
         interactionId: args.interactionId,
       });
       if (
-        (latest.status === "resolving" || latest.status === "resolved")
-        && pendingInteractionResolutionEquals(latest.resolution, args.resolution)
+        (latest.status === "resolving" || latest.status === "resolved") &&
+        pendingInteractionResolutionEquals(latest.resolution, args.resolution)
       ) {
         return latest;
       }
@@ -524,7 +533,11 @@ export class PendingInteractionLifecycle {
   private requireInteractionRow(interactionId: string): PendingInteractionRow {
     const interaction = getPendingInteraction(this.deps.db, interactionId);
     if (!interaction) {
-      throw new ApiError(404, "invalid_request", "Pending interaction not found");
+      throw new ApiError(
+        404,
+        "invalid_request",
+        "Pending interaction not found",
+      );
     }
 
     return interaction;
@@ -557,7 +570,9 @@ export class PendingInteractionLifecycle {
   private resolveInteractionExpiryMs(
     interaction: PendingInteraction,
   ): number | null {
-    if (!isThreadOnEphemeralHost(this.deps.db, { threadId: interaction.threadId })) {
+    if (
+      !isThreadOnEphemeralHost(this.deps.db, { threadId: interaction.threadId })
+    ) {
       return null;
     }
 
@@ -633,7 +648,9 @@ export class PendingInteractionLifecycle {
     return interaction;
   }
 
-  private settleInteractionTerminalState(interaction: PendingInteraction): void {
+  private settleInteractionTerminalState(
+    interaction: PendingInteraction,
+  ): void {
     this.clearExpiryTimer(interaction.id);
     appendPendingInteractionTimelineEvent(this.deps, interaction);
     notifyInteractionChanged(this.deps, interaction.threadId);

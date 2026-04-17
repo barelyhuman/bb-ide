@@ -66,11 +66,7 @@ export function getSandboxProviderCredentialByProviderId(
 export function listSandboxProviderCredentials(
   db: DbConnection,
 ): SandboxProviderCredentialRecord[] {
-  return db
-    .select()
-    .from(sandboxProviderCredentials)
-    .all()
-    .map(toRecord);
+  return db.select().from(sandboxProviderCredentials).all().map(toRecord);
 }
 
 export function upsertSandboxProviderCredential(
@@ -106,9 +102,7 @@ export function upsertSandboxProviderCredential(
         label: args.label,
         expiresAt: new Date(args.expiresAt),
         lastRefreshedAt:
-          args.lastRefreshedAt === null
-            ? null
-            : new Date(args.lastRefreshedAt),
+          args.lastRefreshedAt === null ? null : new Date(args.lastRefreshedAt),
         lastErrorMessage: args.lastErrorMessage,
         updatedAt: now,
       },

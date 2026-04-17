@@ -5,12 +5,14 @@ import { readOrCreateSecretFile } from "./secret-file.js";
 const CIPHER_ALGORITHM = "aes-256-gcm";
 const AUTH_TAG_LENGTH_BYTES = 16;
 
-const encryptedPayloadEnvelopeSchema = z.object({
-  ciphertext: z.string().min(1),
-  iv: z.string().min(1),
-  tag: z.string().min(1),
-  version: z.literal(1),
-}).strict();
+const encryptedPayloadEnvelopeSchema = z
+  .object({
+    ciphertext: z.string().min(1),
+    iv: z.string().min(1),
+    tag: z.string().min(1),
+    version: z.literal(1),
+  })
+  .strict();
 
 interface CreateEncryptedJsonCryptoArgs {
   dataDir: string;
@@ -48,7 +50,9 @@ export async function createEncryptedJsonCrypto(
 
   return {
     decryptJson({ payload, schema }) {
-      const envelope = encryptedPayloadEnvelopeSchema.parse(JSON.parse(payload));
+      const envelope = encryptedPayloadEnvelopeSchema.parse(
+        JSON.parse(payload),
+      );
       const decipher = createDecipheriv(
         CIPHER_ALGORITHM,
         secret,

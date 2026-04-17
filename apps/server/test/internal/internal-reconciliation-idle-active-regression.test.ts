@@ -17,7 +17,9 @@ describe("internal reconciliation idle-active regression", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-idle-active-reconcile",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,

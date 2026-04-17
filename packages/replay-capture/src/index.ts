@@ -7,7 +7,8 @@ import {
 
 export const REPLAY_CAPTURE_SCHEMA_VERSION = 1 as const;
 export const REPLAY_CAPTURE_ID_PATTERN = /^cap_[0-9a-z]+_[0-9a-z]{8}$/u;
-export const REPLAY_CAPTURE_ID_PATTERN_DESCRIPTION = "cap_<base36 timestamp>_<8 lowercase base36 chars>";
+export const REPLAY_CAPTURE_ID_PATTERN_DESCRIPTION =
+  "cap_<base36 timestamp>_<8 lowercase base36 chars>";
 export const DEFAULT_REPLAY_CAPTURE_MAX_CAPTURES = 100;
 
 export const jsonRpcMessageSchema = z.custom<JsonRpcEnvelope>(
@@ -66,14 +67,21 @@ export function isReplayCaptureId(value: string): boolean {
 
 export function assertReplayCaptureId(value: string): void {
   if (!isReplayCaptureId(value)) {
-    throw new Error(`Invalid replay capture id. Expected ${REPLAY_CAPTURE_ID_PATTERN_DESCRIPTION}`);
+    throw new Error(
+      `Invalid replay capture id. Expected ${REPLAY_CAPTURE_ID_PATTERN_DESCRIPTION}`,
+    );
   }
 }
 
-export function createReplayCaptureId(now: number, randomSuffix: string): string {
+export function createReplayCaptureId(
+  now: number,
+  randomSuffix: string,
+): string {
   const suffix = randomSuffix.toLowerCase();
   if (!/^[0-9a-z]{8}$/u.test(suffix)) {
-    throw new Error("Replay capture random suffix must be 8 lowercase base36 characters");
+    throw new Error(
+      "Replay capture random suffix must be 8 lowercase base36 characters",
+    );
   }
   return `cap_${now.toString(36)}_${suffix}`;
 }
@@ -89,7 +97,9 @@ export function resolveContainedReplayCapturePath(args: {
 }): string {
   const root = path.resolve(replayCaptureRoot(args.dataDir));
   const rawSegments = args.segments ?? [];
-  const segments = args.captureId ? [args.captureId, ...rawSegments] : [...rawSegments];
+  const segments = args.captureId
+    ? [args.captureId, ...rawSegments]
+    : [...rawSegments];
   if (args.captureId) {
     assertReplayCaptureId(args.captureId);
   }
@@ -105,7 +115,10 @@ export function replayCaptureDir(dataDir: string, captureId: string): string {
   return resolveContainedReplayCapturePath({ dataDir, captureId });
 }
 
-export function replayCaptureManifestPath(dataDir: string, captureId: string): string {
+export function replayCaptureManifestPath(
+  dataDir: string,
+  captureId: string,
+): string {
   return resolveContainedReplayCapturePath({
     dataDir,
     captureId,
@@ -113,7 +126,10 @@ export function replayCaptureManifestPath(dataDir: string, captureId: string): s
   });
 }
 
-export function replayRawProviderEventsPath(dataDir: string, captureId: string): string {
+export function replayRawProviderEventsPath(
+  dataDir: string,
+  captureId: string,
+): string {
   return resolveContainedReplayCapturePath({
     dataDir,
     captureId,
@@ -128,7 +144,9 @@ export function replayCaptureIndexPath(dataDir: string): string {
   });
 }
 
-export function parseReplayCaptureManifest(value: unknown): ReplayCaptureManifest {
+export function parseReplayCaptureManifest(
+  value: unknown,
+): ReplayCaptureManifest {
   return replayCaptureManifestSchema.parse(value);
 }
 
@@ -146,10 +164,14 @@ export const replayCaptureSummarySchema = replayCaptureManifestSchema.pick({
 });
 export type ReplayCaptureSummary = z.infer<typeof replayCaptureSummarySchema>;
 
-export const replayCaptureHostSummarySchema = replayCaptureSummarySchema.extend({
-  hostId: z.string().min(1),
-});
-export type ReplayCaptureHostSummary = z.infer<typeof replayCaptureHostSummarySchema>;
+export const replayCaptureHostSummarySchema = replayCaptureSummarySchema.extend(
+  {
+    hostId: z.string().min(1),
+  },
+);
+export type ReplayCaptureHostSummary = z.infer<
+  typeof replayCaptureHostSummarySchema
+>;
 
 export const replayCaptureDaemonListResponseSchema = z.object({
   captures: z.array(replayCaptureSummarySchema),
@@ -166,7 +188,9 @@ export type ReplayCaptureDetail = z.infer<typeof replayCaptureDetailSchema>;
 export const replayCaptureListResponseSchema = z.object({
   captures: z.array(replayCaptureHostSummarySchema),
 });
-export type ReplayCaptureListResponse = z.infer<typeof replayCaptureListResponseSchema>;
+export type ReplayCaptureListResponse = z.infer<
+  typeof replayCaptureListResponseSchema
+>;
 
 export const replaySpeedSchema = z.union([
   z.literal(0.5),
@@ -177,9 +201,11 @@ export const replaySpeedSchema = z.union([
 ]);
 export type ReplayRunSpeed = z.infer<typeof replaySpeedSchema>;
 
-export const replayRunRequestSchema = z.object({
-  speed: replaySpeedSchema,
-}).strict();
+export const replayRunRequestSchema = z
+  .object({
+    speed: replaySpeedSchema,
+  })
+  .strict();
 export type ReplayRunRequest = z.infer<typeof replayRunRequestSchema>;
 
 export const replayRunResponseSchema = z.object({

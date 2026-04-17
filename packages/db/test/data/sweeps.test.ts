@@ -38,7 +38,10 @@ function setup() {
     name: "test-host",
     type: "persistent",
   });
-  const { project } = createProject(db, noopNotifier, { name: "test-project", source: { type: "local_path", hostId: host.id, path: "/tmp/test" } });
+  const { project } = createProject(db, noopNotifier, {
+    name: "test-project",
+    source: { type: "local_path", hostId: host.id, path: "/tmp/test" },
+  });
   return { db, host, project };
 }
 
@@ -126,7 +129,9 @@ describe("sweepExpiredCommands", () => {
       .get();
     expect(updatedThread?.status).toBe("error");
 
-    expect(spy.notifyThread).toHaveBeenCalledWith(thread.id, ["status-changed"]);
+    expect(spy.notifyThread).toHaveBeenCalledWith(thread.id, [
+      "status-changed",
+    ]);
   });
 
   it("uses 20-minute TTL for environment.provision commands", () => {
@@ -202,10 +207,15 @@ describe("sweepExpiredCommands", () => {
     expect(result.errored).toBe(2);
 
     expect(
-      db.select().from(threads).where(eq(threads.id, deletedThread.id)).get()?.status,
+      db.select().from(threads).where(eq(threads.id, deletedThread.id)).get()
+        ?.status,
     ).toBe("idle");
     expect(
-      db.select().from(threads).where(eq(threads.id, stopPendingThread.id)).get()?.status,
+      db
+        .select()
+        .from(threads)
+        .where(eq(threads.id, stopPendingThread.id))
+        .get()?.status,
     ).toBe("active");
   });
 });
@@ -278,7 +288,9 @@ describe("sweepExpiredLeases", () => {
     expect(updatedThread?.status).toBe("error");
 
     expect(spy.notifyHost).toHaveBeenCalledWith(host.id, ["host-disconnected"]);
-    expect(spy.notifyThread).toHaveBeenCalledWith(thread.id, ["status-changed"]);
+    expect(spy.notifyThread).toHaveBeenCalledWith(thread.id, [
+      "status-changed",
+    ]);
   });
 
   it("does not error idle threads on lease expiry", () => {
@@ -527,8 +539,14 @@ describe("sweepDestroyingEnvironments", () => {
     const result = sweepDestroyingEnvironments(db, spy, now);
     expect(result.deleted).toBe(1);
     expect(
-      db.select().from(environments).all().map((row) => row.id),
+      db
+        .select()
+        .from(environments)
+        .all()
+        .map((row) => row.id),
     ).toEqual([freshEnvironment.id]);
-    expect(spy.notifyEnvironment).toHaveBeenCalledWith(staleEnvironment.id, ["environment-deleted"]);
+    expect(spy.notifyEnvironment).toHaveBeenCalledWith(staleEnvironment.id, [
+      "environment-deleted",
+    ]);
   });
 });

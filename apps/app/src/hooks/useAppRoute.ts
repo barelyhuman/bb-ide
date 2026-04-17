@@ -1,20 +1,20 @@
-import { useLocation, useMatch } from "react-router-dom"
+import { useLocation, useMatch } from "react-router-dom";
 
 export interface AppRouteState {
   /** ID of the project in view (any project-scoped route), else undefined. */
-  projectId: string | undefined
+  projectId: string | undefined;
   /** ID of the thread in view (thread detail only), else undefined. */
-  threadId: string | undefined
+  threadId: string | undefined;
   /** On `/projects/:id` — not a thread, archived, or settings subroute. */
-  isProjectMainView: boolean
+  isProjectMainView: boolean;
   /** On a thread detail URL. */
-  isThreadView: boolean
+  isThreadView: boolean;
   /** On the project's archived threads list. */
-  isArchivedView: boolean
+  isArchivedView: boolean;
   /** On the project settings page. */
-  isSettingsView: boolean
+  isSettingsView: boolean;
   /** On the app root ("/"). */
-  isRootView: boolean
+  isRootView: boolean;
 }
 
 /**
@@ -23,18 +23,20 @@ export interface AppRouteState {
  * schema have one place to update instead of N scattered `useMatch` calls.
  */
 export function useAppRoute(): AppRouteState {
-  const location = useLocation()
-  const projectMatch = useMatch("/projects/:projectId/*")
-  const projectThreadMatch = useMatch("/projects/:projectId/threads/:threadId/*")
-  const projectArchivedMatch = useMatch("/projects/:projectId/archived")
-  const projectSettingsMatch = useMatch("/projects/:projectId/settings")
+  const location = useLocation();
+  const projectMatch = useMatch("/projects/:projectId/*");
+  const projectThreadMatch = useMatch(
+    "/projects/:projectId/threads/:threadId/*",
+  );
+  const projectArchivedMatch = useMatch("/projects/:projectId/archived");
+  const projectSettingsMatch = useMatch("/projects/:projectId/settings");
 
-  const isThreadView = Boolean(projectThreadMatch)
-  const isArchivedView = Boolean(projectArchivedMatch)
-  const isSettingsView = Boolean(projectSettingsMatch)
+  const isThreadView = Boolean(projectThreadMatch);
+  const isArchivedView = Boolean(projectArchivedMatch);
+  const isSettingsView = Boolean(projectSettingsMatch);
   const isProjectMainView = Boolean(
     projectMatch && !isThreadView && !isArchivedView && !isSettingsView,
-  )
+  );
 
   return {
     projectId: projectMatch?.params.projectId,
@@ -44,5 +46,5 @@ export function useAppRoute(): AppRouteState {
     isArchivedView,
     isSettingsView,
     isRootView: location.pathname === "/",
-  }
+  };
 }

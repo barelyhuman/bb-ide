@@ -13,9 +13,7 @@ import { ExpandableLine, StatusPill } from "@bb/ui-core";
 import { useResolveThreadPendingInteraction } from "@/hooks/mutations/thread-interaction-mutations";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { cn } from "@/lib/utils";
-import {
-  labelForApprovalDecision,
-} from "./pending-interactions/banner-helpers";
+import { labelForApprovalDecision } from "./pending-interactions/banner-helpers";
 import { Button } from "../ui/button";
 
 interface ThreadPendingInteractionBannerProps {
@@ -162,14 +160,17 @@ export function ThreadPendingInteractionBanner({
 function buildBannerModel(interaction: PendingInteraction): BannerModel {
   const options = interaction.payload.availableDecisions.map((decision) => ({
     label: labelForApprovalDecision(decision),
-    resolution: buildPendingInteractionApprovalResolution(interaction, decision),
+    resolution: buildPendingInteractionApprovalResolution(
+      interaction,
+      decision,
+    ),
   }));
 
   switch (interaction.payload.subject.kind) {
     case "command": {
       const rawCommand = interaction.payload.subject.command;
       const command = rawCommand
-        ? extractShellCommandFromString(rawCommand) ?? rawCommand
+        ? (extractShellCommandFromString(rawCommand) ?? rawCommand)
         : null;
       const detailLines = formatPendingInteractionSubjectDetailLines(
         interaction,
@@ -197,36 +198,37 @@ function buildBannerModel(interaction: PendingInteraction): BannerModel {
       };
     }
     case "file_change": {
-      const detailLines = formatPendingInteractionSubjectDetailLines(
-        interaction,
-      );
+      const detailLines =
+        formatPendingInteractionSubjectDetailLines(interaction);
       return {
-        title: interaction.payload.reason ?? "Do you want to make these changes?",
-        subject: detailLines.length > 0 ? (
-          <ul className="rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
-            {detailLines.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        ) : null,
+        title:
+          interaction.payload.reason ?? "Do you want to make these changes?",
+        subject:
+          detailLines.length > 0 ? (
+            <ul className="rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
+              {detailLines.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          ) : null,
         options,
         skip: null,
       };
     }
     case "permission_grant": {
-      const detailLines = formatPendingInteractionSubjectDetailLines(
-        interaction,
-      );
+      const detailLines =
+        formatPendingInteractionSubjectDetailLines(interaction);
       return {
         title:
           interaction.payload.reason ?? "Do you want to grant this permission?",
-        subject: detailLines.length > 0 ? (
-          <ul className="rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
-            {detailLines.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-        ) : null,
+        subject:
+          detailLines.length > 0 ? (
+            <ul className="rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
+              {detailLines.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          ) : null,
         options,
         skip: null,
       };

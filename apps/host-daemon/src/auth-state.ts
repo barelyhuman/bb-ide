@@ -59,7 +59,8 @@ export interface ResolveServerUrlArgs {
 
 export function resolveServerUrl(args: ResolveServerUrlArgs): string | null {
   const normalizedProvided =
-    typeof args.providedServerUrl === "string" && args.providedServerUrl.trim().length > 0
+    typeof args.providedServerUrl === "string" &&
+    args.providedServerUrl.trim().length > 0
       ? normalizeServerUrl(args.providedServerUrl.trim())
       : null;
 

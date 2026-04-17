@@ -86,7 +86,9 @@ afterEach(() => {
 
 describe("formatModelLabel", () => {
   it("strips the Claude prefix for the claude-code provider", () => {
-    expect(formatModelLabel("Claude Sonnet 4.6", "claude-code")).toBe("Sonnet 4.6");
+    expect(formatModelLabel("Claude Sonnet 4.6", "claude-code")).toBe(
+      "Sonnet 4.6",
+    );
   });
 
   it("preserves GPT capitalization", () => {
@@ -97,10 +99,22 @@ describe("formatModelLabel", () => {
 describe("useThreadCreationOptions", () => {
   it("falls back to valid provider and model values from query data", async () => {
     const projectId = "project-1";
-    localStorage.setItem(getProjectScopedStorageKey("bb.promptbox.provider", projectId), "missing");
-    localStorage.setItem(getProjectScopedStorageKey("bb.promptbox.model", projectId), "missing-model");
-    localStorage.setItem(getProjectScopedStorageKey("bb.promptbox.reasoning", projectId), "xhigh");
-    localStorage.setItem(getProjectScopedStorageKey("bb.promptbox.service-tier", projectId), "fast");
+    localStorage.setItem(
+      getProjectScopedStorageKey("bb.promptbox.provider", projectId),
+      "missing",
+    );
+    localStorage.setItem(
+      getProjectScopedStorageKey("bb.promptbox.model", projectId),
+      "missing-model",
+    );
+    localStorage.setItem(
+      getProjectScopedStorageKey("bb.promptbox.reasoning", projectId),
+      "xhigh",
+    );
+    localStorage.setItem(
+      getProjectScopedStorageKey("bb.promptbox.service-tier", projectId),
+      "fast",
+    );
 
     vi.mocked(api.listSystemProviders).mockResolvedValue([
       makeProvider({
@@ -149,14 +163,19 @@ describe("useThreadCreationOptions", () => {
     expect(result.current.selectedModel).toBe("gpt-5.4");
     expect(result.current.reasoningLevel).toBe("low");
     expect(result.current.permissionMode).toBe("full");
-    expect(result.current.permissionModeOptions).toEqual(PERMISSION_MODE_OPTIONS);
+    expect(result.current.permissionModeOptions).toEqual(
+      PERMISSION_MODE_OPTIONS,
+    );
     expect(result.current.serviceTier).toBeUndefined();
     expect(result.current.supportsServiceTier).toBe(false);
   });
 
   it("filters permission modes by provider capabilities and falls back to full", async () => {
     const projectId = "project-pi";
-    localStorage.setItem(getProjectScopedStorageKey("bb.promptbox.permission-mode", projectId), "readonly");
+    localStorage.setItem(
+      getProjectScopedStorageKey("bb.promptbox.permission-mode", projectId),
+      "readonly",
+    );
 
     vi.mocked(api.listSystemProviders).mockResolvedValue([
       makeProvider({
@@ -193,7 +212,9 @@ describe("useThreadCreationOptions", () => {
 
     expect(result.current.permissionMode).toBe("full");
     expect(result.current.supportsPermissionModeSelection).toBe(false);
-    expect(result.current.permissionModeOptions).toEqual([PERMISSION_MODE_OPTIONS[0]]);
+    expect(result.current.permissionModeOptions).toEqual([
+      PERMISSION_MODE_OPTIONS[0],
+    ]);
   });
 
   it("persists new-thread selections to project-scoped local storage", async () => {
@@ -256,18 +277,33 @@ describe("useThreadCreationOptions", () => {
     });
 
     await waitFor(() => {
-      expect(localStorage.getItem(getProjectScopedStorageKey("bb.promptbox.model", projectId)))
-        .toBe("gpt-5.4-mini");
+      expect(
+        localStorage.getItem(
+          getProjectScopedStorageKey("bb.promptbox.model", projectId),
+        ),
+      ).toBe("gpt-5.4-mini");
     });
 
-    expect(localStorage.getItem(getProjectScopedStorageKey("bb.promptbox.reasoning", projectId)))
-      .toBe("high");
-    expect(localStorage.getItem(getProjectScopedStorageKey("bb.promptbox.permission-mode", projectId)))
-      .toBe("workspace-write");
-    expect(localStorage.getItem(getProjectScopedStorageKey("bb.promptbox.service-tier", projectId)))
-      .toBe("fast");
-    expect(localStorage.getItem(getProjectScopedStorageKey("bb.promptbox.environment", projectId)))
-      .toBe("worktree");
+    expect(
+      localStorage.getItem(
+        getProjectScopedStorageKey("bb.promptbox.reasoning", projectId),
+      ),
+    ).toBe("high");
+    expect(
+      localStorage.getItem(
+        getProjectScopedStorageKey("bb.promptbox.permission-mode", projectId),
+      ),
+    ).toBe("workspace-write");
+    expect(
+      localStorage.getItem(
+        getProjectScopedStorageKey("bb.promptbox.service-tier", projectId),
+      ),
+    ).toBe("fast");
+    expect(
+      localStorage.getItem(
+        getProjectScopedStorageKey("bb.promptbox.environment", projectId),
+      ),
+    ).toBe("worktree");
   });
 
   it("preserves touched thread selections until the reset key changes", async () => {
@@ -303,7 +339,13 @@ describe("useThreadCreationOptions", () => {
 
     const { wrapper } = createQueryClientTestHarness();
     const { result, rerender } = renderHook(
-      ({ initialModel, resetKey }: { initialModel: string; resetKey: string }) =>
+      ({
+        initialModel,
+        resetKey,
+      }: {
+        initialModel: string;
+        resetKey: string;
+      }) =>
         useThreadCreationOptions({
           initialModel,
           initialProviderId: "codex",
@@ -426,32 +468,34 @@ describe("useThreadCreationOptions", () => {
         id: "claude-code",
       }),
     ]);
-    vi.mocked(api.getAvailableModels).mockImplementation(async (providerId, selectedModel) => {
-      if (providerId === "claude-code" && selectedModel === "opus[1m]") {
+    vi.mocked(api.getAvailableModels).mockImplementation(
+      async (providerId, selectedModel) => {
+        if (providerId === "claude-code" && selectedModel === "opus[1m]") {
+          return [
+            makeModel({
+              displayName: "Opus Alias (1M, Legacy)",
+              id: "opus[1m]",
+              isDefault: false,
+              model: "opus[1m]",
+            }),
+            makeModel({
+              defaultReasoningEffort: "xhigh",
+              displayName: "Claude Opus 4.7 (1M)",
+              id: "claude-opus-4-7[1m]",
+              isDefault: true,
+              model: "claude-opus-4-7[1m]",
+            }),
+          ];
+        }
         return [
           makeModel({
-            displayName: "Opus Alias (1M, Legacy)",
-            id: "opus[1m]",
-            isDefault: false,
-            model: "opus[1m]",
-          }),
-          makeModel({
-            defaultReasoningEffort: "xhigh",
-            displayName: "Claude Opus 4.7 (1M)",
-            id: "claude-opus-4-7[1m]",
-            isDefault: true,
-            model: "claude-opus-4-7[1m]",
+            displayName: "gpt-5.4",
+            id: "gpt-5.4",
+            model: "gpt-5.4",
           }),
         ];
-      }
-      return [
-        makeModel({
-          displayName: "gpt-5.4",
-          id: "gpt-5.4",
-          model: "gpt-5.4",
-        }),
-      ];
-    });
+      },
+    );
 
     const { wrapper } = createQueryClientTestHarness();
     const { result } = renderHook(

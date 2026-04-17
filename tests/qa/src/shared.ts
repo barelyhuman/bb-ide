@@ -97,17 +97,23 @@ interface WaitForOptions {
 }
 
 const standaloneStateSchema = z.object({
-  daemon: z.object({
-    pid: z.number().int().positive().nullable().optional(),
-  }).optional(),
+  daemon: z
+    .object({
+      pid: z.number().int().positive().nullable().optional(),
+    })
+    .optional(),
   instanceId: z.string().nullable().optional(),
   parentPid: z.number().int().positive().nullable().optional(),
-  paths: z.object({
-    tmpRoot: z.string().nullable().optional(),
-  }).optional(),
-  server: z.object({
-    pid: z.number().int().positive().nullable().optional(),
-  }).optional(),
+  paths: z
+    .object({
+      tmpRoot: z.string().nullable().optional(),
+    })
+    .optional(),
+  server: z
+    .object({
+      pid: z.number().int().positive().nullable().optional(),
+    })
+    .optional(),
 });
 
 type StandaloneState = z.infer<typeof standaloneStateSchema>;
@@ -232,7 +238,9 @@ export async function createHostJoin(
   return createHostJoinResponseSchema.parse(await response.json());
 }
 
-export async function killProcess(pid: number | null | undefined): Promise<void> {
+export async function killProcess(
+  pid: number | null | undefined,
+): Promise<void> {
   if (!pid) {
     return;
   }
@@ -326,7 +334,9 @@ export async function runGit(cwd: string, args: string[]): Promise<void> {
   await execFile("git", args, { cwd });
 }
 
-export function spawnLoggedProcess(options: SpawnLoggedProcessOptions): ChildProcess {
+export function spawnLoggedProcess(
+  options: SpawnLoggedProcessOptions,
+): ChildProcess {
   const logFd = openSync(options.logPath, "a");
   try {
     const child = spawn(options.command, options.args, {
@@ -365,7 +375,10 @@ export async function startQuickTunnel(
       closeSync(logFd);
     };
 
-    writeSync(logFd, `\n--- quick tunnel attempt ${attempt}/${maxAttempts} ---\n`);
+    writeSync(
+      logFd,
+      `\n--- quick tunnel attempt ${attempt}/${maxAttempts} ---\n`,
+    );
 
     try {
       child = spawn(
@@ -418,10 +431,14 @@ export async function startQuickTunnel(
               return discoveredUrl;
             }
             if (tunnelProcess.exitCode !== null) {
-              throw new Error(`cloudflared exited with code ${tunnelProcess.exitCode}`);
+              throw new Error(
+                `cloudflared exited with code ${tunnelProcess.exitCode}`,
+              );
             }
             if (tunnelProcess.killed) {
-              throw new Error("cloudflared was killed before producing a public URL");
+              throw new Error(
+                "cloudflared was killed before producing a public URL",
+              );
             }
             return null;
           },
@@ -489,7 +506,7 @@ export async function startQaServer(
 ): Promise<StartQaServerResult> {
   const serverUrl = buildLocalServerUrl(args.port);
 
-  if (args.reuseExisting && await isServerReady(serverUrl)) {
+  if (args.reuseExisting && (await isServerReady(serverUrl))) {
     return {
       process: null,
       reusedExisting: true,
@@ -530,7 +547,9 @@ export async function startQaServer(
   };
 }
 
-async function readJsonIfExists(filePath: string): Promise<StandaloneState | null> {
+async function readJsonIfExists(
+  filePath: string,
+): Promise<StandaloneState | null> {
   try {
     const raw = await fs.readFile(filePath, "utf8");
     return parseStandaloneState(raw);
@@ -575,17 +594,19 @@ async function listProcessesByInstance(instanceId: string): Promise<number[]> {
     .map((entry) => entry.pid);
 }
 
-function readStandaloneEnvValue(command: string, envName: string): string | null {
+function readStandaloneEnvValue(
+  command: string,
+  envName: string,
+): string | null {
   const match = new RegExp(`${envName}=([^\\s]+)`, "u").exec(command);
   return match?.[1] ?? null;
 }
 
 async function listStandaloneProcesses(): Promise<StandaloneProcessInfo[]> {
-  const { stdout } = await execFile(
-    "ps",
-    ["eww", "-Ao", "pid=,command="],
-    { encoding: "utf8", maxBuffer: PROCESS_SCAN_MAX_BUFFER },
-  );
+  const { stdout } = await execFile("ps", ["eww", "-Ao", "pid=,command="], {
+    encoding: "utf8",
+    maxBuffer: PROCESS_SCAN_MAX_BUFFER,
+  });
   return stdout
     .split("\n")
     .map((line) => line.trim())
@@ -595,10 +616,12 @@ async function listStandaloneProcesses(): Promise<StandaloneProcessInfo[]> {
       if (!match) {
         return [];
       }
-      return [{
-        command: match[2],
-        pid: Number.parseInt(match[1], 10),
-      }];
+      return [
+        {
+          command: match[2],
+          pid: Number.parseInt(match[1], 10),
+        },
+      ];
     })
     .filter((entry) => entry.command.includes(`${STANDALONE_INSTANCE_ENV}=`))
     .map((entry) => {
@@ -607,8 +630,12 @@ async function listStandaloneProcesses(): Promise<StandaloneProcessInfo[]> {
         10,
       );
       return {
-        instanceId: readStandaloneEnvValue(entry.command, STANDALONE_INSTANCE_ENV),
-        parentPid: Number.isInteger(parentPid) && parentPid > 0 ? parentPid : null,
+        instanceId: readStandaloneEnvValue(
+          entry.command,
+          STANDALONE_INSTANCE_ENV,
+        ),
+        parentPid:
+          Number.isInteger(parentPid) && parentPid > 0 ? parentPid : null,
         pid: entry.pid,
       };
     });
@@ -622,7 +649,9 @@ export async function cleanupStandaloneInstance(
   const pidsToKill = new Set<number | null>([
     runtime.daemonPid,
     runtime.serverPid,
-    ...(runtime.instanceId ? await listProcessesByInstance(runtime.instanceId) : []),
+    ...(runtime.instanceId
+      ? await listProcessesByInstance(runtime.instanceId)
+      : []),
     ...(runtime.tmpRoot ? await listOpenFilePids(runtime.tmpRoot) : []),
   ]);
 
@@ -651,7 +680,9 @@ export async function cleanupStandaloneOrphans(): Promise<CleanupStandaloneResul
   const roots = await listStandaloneTmpRoots();
 
   for (const tmpRoot of roots) {
-    const state = await readJsonIfExists(path.join(tmpRoot, "standalone-state.json"));
+    const state = await readJsonIfExists(
+      path.join(tmpRoot, "standalone-state.json"),
+    );
     const runtime = readStandaloneStateRuntime(state);
     if (!runtime.parentPid || (await isProcessRunning(runtime.parentPid))) {
       continue;
@@ -737,15 +768,15 @@ export async function waitFor<TResult>(
     if (result) {
       return result;
     }
-    await new Promise((resolve) => setTimeout(resolve, options.intervalMs ?? 100));
+    await new Promise((resolve) =>
+      setTimeout(resolve, options.intervalMs ?? 100),
+    );
   }
 
   throw new Error(`Timed out waiting for ${options.description}`);
 }
 
-export async function waitForConnectedHost(
-  serverUrl: string,
-): Promise<Host> {
+export async function waitForConnectedHost(serverUrl: string): Promise<Host> {
   return waitFor(
     async () => {
       let response;

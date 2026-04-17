@@ -17,9 +17,5 @@ interface SettingsRowListProps {
 }
 
 export function SettingsRowList({ children }: SettingsRowListProps) {
-  return (
-    <div className="divide-y divide-border">
-      {children}
-    </div>
-  );
+  return <div className="divide-y divide-border">{children}</div>;
 }

@@ -69,7 +69,9 @@ describe("useThreadStorageViewer", () => {
       expect(result.current.threadStorageFiles?.files).toHaveLength(2);
     });
     await waitFor(() => {
-      expect(result.current.threadStorageFilePreview?.path).toBe("docs/alpha.txt");
+      expect(result.current.threadStorageFilePreview?.path).toBe(
+        "docs/alpha.txt",
+      );
     });
 
     expect(api.listThreadStorageFiles).toHaveBeenCalledWith("thread-1");
@@ -99,7 +101,9 @@ describe("useThreadStorageViewer", () => {
     );
 
     await waitFor(() => {
-      expect(result.current.threadStorageFilePreview?.path).toBe("docs/alpha.txt");
+      expect(result.current.threadStorageFilePreview?.path).toBe(
+        "docs/alpha.txt",
+      );
     });
 
     act(() => {
@@ -107,7 +111,9 @@ describe("useThreadStorageViewer", () => {
     });
 
     await waitFor(() => {
-      expect(result.current.threadStorageFilePreview?.path).toBe("docs/beta.txt");
+      expect(result.current.threadStorageFilePreview?.path).toBe(
+        "docs/beta.txt",
+      );
     });
 
     act(() => {
@@ -142,7 +148,9 @@ describe("useThreadStorageViewer", () => {
     );
 
     await waitFor(() => {
-      expect(result.current.threadStorageFilePreview?.path).toBe("docs/alpha.txt");
+      expect(result.current.threadStorageFilePreview?.path).toBe(
+        "docs/alpha.txt",
+      );
     });
 
     act(() => {
@@ -164,7 +172,9 @@ describe("useThreadStorageViewer", () => {
       expect(result.current.selectedThreadStoragePath).toBeNull();
     });
     await waitFor(() => {
-      expect(result.current.threadStorageFilePreview?.path).toBe("docs/gamma.txt");
+      expect(result.current.threadStorageFilePreview?.path).toBe(
+        "docs/gamma.txt",
+      );
     });
   });
 

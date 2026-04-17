@@ -34,7 +34,9 @@ describe("provider registry", () => {
       bridgeBundleDir: "/tmp",
     });
 
-    expect(claudeProvider.process.args[0]).toBe("/tmp/bb-claude-code-bridge.mjs");
+    expect(claudeProvider.process.args[0]).toBe(
+      "/tmp/bb-claude-code-bridge.mjs",
+    );
     expect(piProvider.process.args[0]).toBe("/tmp/bb-pi-bridge.mjs");
   });
 
@@ -166,13 +168,23 @@ describe("provider registry", () => {
             type: "assistant",
             message: {
               role: "assistant",
-              content: [{ type: "tool_use", id: `tool-${toolName}`, name: toolName, input: {} }],
+              content: [
+                {
+                  type: "tool_use",
+                  id: `tool-${toolName}`,
+                  name: toolName,
+                  input: {},
+                },
+              ],
             },
           },
         },
       });
       expect(observed).toContainEqual(
-        expect.objectContaining({ displayName: toolName, coverage: "well-known" }),
+        expect.objectContaining({
+          displayName: toolName,
+          coverage: "well-known",
+        }),
       );
     }
 
@@ -189,7 +201,10 @@ describe("provider registry", () => {
         },
       });
       expect(observed).toContainEqual(
-        expect.objectContaining({ displayName: toolName, coverage: "well-known" }),
+        expect.objectContaining({
+          displayName: toolName,
+          coverage: "well-known",
+        }),
       );
     }
 
@@ -216,7 +231,10 @@ describe("provider registry", () => {
         },
       } satisfies JsonRpcMessage);
       expect(observed).toContainEqual(
-        expect.objectContaining({ displayName: toolName, coverage: "well-known" }),
+        expect.objectContaining({
+          displayName: toolName,
+          coverage: "well-known",
+        }),
       );
     }
   });
@@ -225,59 +243,66 @@ describe("provider registry", () => {
     const claude = getProviderVisibilityMetadata("claude-code");
     const pi = getProviderVisibilityMetadata("pi");
 
-    expect(claude.describeRawEvent({
-      jsonrpc: "2.0",
-      method: "thread/contextWindowUsage/updated",
-      params: {
-        threadId: "t1",
-        contextWindowUsage: {
-          usedTokens: 12,
-          modelContextWindow: 100,
-          estimated: false,
+    expect(
+      claude.describeRawEvent({
+        jsonrpc: "2.0",
+        method: "thread/contextWindowUsage/updated",
+        params: {
+          threadId: "t1",
+          contextWindowUsage: {
+            usedTokens: 12,
+            modelContextWindow: 100,
+            estimated: false,
+          },
         },
-      },
-    })).toEqual({
+      }),
+    ).toEqual({
       kind: "thread/contextWindowUsage/updated",
       coverage: "normalized",
     });
 
-    expect(pi.describeRawEvent({
-      jsonrpc: "2.0",
-      method: "thread/contextWindowUsage/updated",
-      params: {
-        threadId: "t1",
-        contextWindowUsage: {
-          usedTokens: 12,
-          modelContextWindow: 100,
-          estimated: false,
+    expect(
+      pi.describeRawEvent({
+        jsonrpc: "2.0",
+        method: "thread/contextWindowUsage/updated",
+        params: {
+          threadId: "t1",
+          contextWindowUsage: {
+            usedTokens: 12,
+            modelContextWindow: 100,
+            estimated: false,
+          },
         },
-      },
-    })).toEqual({
+      }),
+    ).toEqual({
       kind: "thread/contextWindowUsage/updated",
       coverage: "normalized",
     });
 
-    expect(claude.describeRawEvent({
-      jsonrpc: "2.0",
-      method: "error",
-      params: {
-        message: "provider failed",
-      },
-    })).toEqual({
+    expect(
+      claude.describeRawEvent({
+        jsonrpc: "2.0",
+        method: "error",
+        params: {
+          message: "provider failed",
+        },
+      }),
+    ).toEqual({
       kind: "error",
       coverage: "normalized",
     });
 
-    expect(pi.describeRawEvent({
-      jsonrpc: "2.0",
-      method: "error",
-      params: {
-        message: "provider failed",
-      },
-    })).toEqual({
+    expect(
+      pi.describeRawEvent({
+        jsonrpc: "2.0",
+        method: "error",
+        params: {
+          message: "provider failed",
+        },
+      }),
+    ).toEqual({
       kind: "error",
       coverage: "normalized",
     });
   });
-
 });

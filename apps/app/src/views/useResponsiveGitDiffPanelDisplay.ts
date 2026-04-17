@@ -12,7 +12,9 @@ export function useResponsiveGitDiffPanelDisplay({
 }: {
   isSecondaryPanelOpen: boolean;
 }) {
-  const [gitDiffDisplayMode, setGitDiffDisplayMode] = useState<"unified" | "split">("unified");
+  const [gitDiffDisplayMode, setGitDiffDisplayMode] = useState<
+    "unified" | "split"
+  >("unified");
   const setIsResizing = useSetAtom(threadSecondaryPanelResizingAtom);
   const secondaryPanelRef = useRef<HTMLElement>(null!);
   const secondaryResizablePanelRef = useRef<ImperativePanelHandle | null>(null);
@@ -78,7 +80,9 @@ export function useResponsiveGitDiffPanelDisplay({
   useResizeObserver({
     ref: secondaryPanelRef,
     onResize: ({ width }) => {
-      applyWidth(width ?? secondaryPanelRef.current?.getBoundingClientRect().width);
+      applyWidth(
+        width ?? secondaryPanelRef.current?.getBoundingClientRect().width,
+      );
     },
   });
 

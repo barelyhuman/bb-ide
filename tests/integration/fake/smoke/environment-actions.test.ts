@@ -33,7 +33,10 @@ import {
 describe.sequential("fake provider smoke environment integration", () => {
   it("reports workspace status, diff, and branches for a ready environment", () =>
     withHarness(async (harness) => {
-      const project = await createProjectFixture(harness, "Workspace Status Smoke");
+      const project = await createProjectFixture(
+        harness,
+        "Workspace Status Smoke",
+      );
       const { environment } = await createReadyThread(harness, {
         projectId: project.id,
         workspace: {
@@ -44,7 +47,10 @@ describe.sequential("fake provider smoke environment integration", () => {
 
       const status = await getEnvironmentStatus(harness.api, environment.id);
       const diff = await getEnvironmentDiff(harness.api, environment.id);
-      const branches = await getEnvironmentBranches(harness.api, environment.id);
+      const branches = await getEnvironmentBranches(
+        harness.api,
+        environment.id,
+      );
 
       expect(status.workspace?.workingTree.state).toBe("clean");
       expect(status.workspace?.workingTree.hasUncommittedChanges).toBe(false);
@@ -54,7 +60,10 @@ describe.sequential("fake provider smoke environment integration", () => {
 
   it("commits dirty workspace changes through the environment actions route", () =>
     withHarness(async (harness) => {
-      const project = await createProjectFixture(harness, "Workspace Commit Smoke");
+      const project = await createProjectFixture(
+        harness,
+        "Workspace Commit Smoke",
+      );
       const { environment } = await createReadyThread(harness, {
         projectId: project.id,
         workspace: {
@@ -73,19 +82,29 @@ describe.sequential("fake provider smoke environment integration", () => {
         filePath: path.join(workspacePath, "committed.txt"),
       });
 
-      const dirtyStatus = await getEnvironmentStatus(harness.api, environment.id);
-      expect(dirtyStatus.workspace?.workingTree.hasUncommittedChanges).toBe(true);
+      const dirtyStatus = await getEnvironmentStatus(
+        harness.api,
+        environment.id,
+      );
+      expect(dirtyStatus.workspace?.workingTree.hasUncommittedChanges).toBe(
+        true,
+      );
 
       const result = await runEnvironmentAction(harness.api, environment.id, {
         action: "commit",
       });
       expect(result.action).toBe("commit");
       if (result.action !== "commit") {
-        throw new Error(`Expected commit action result, received ${result.action}`);
+        throw new Error(
+          `Expected commit action result, received ${result.action}`,
+        );
       }
       expect(result.commitSha).toBeTruthy();
 
-      const cleanStatus = await getEnvironmentStatus(harness.api, environment.id);
+      const cleanStatus = await getEnvironmentStatus(
+        harness.api,
+        environment.id,
+      );
       expect(cleanStatus.workspace?.workingTree.state).toBe("clean");
 
       const subject = await runGit({
@@ -137,9 +156,14 @@ describe.sequential("fake provider smoke environment integration", () => {
         args: ["rev-parse", "--abbrev-ref", "HEAD"],
         cwd: harness.repoDir,
       });
-      const environmentStatus = await getEnvironmentStatus(harness.api, environment.id);
+      const environmentStatus = await getEnvironmentStatus(
+        harness.api,
+        environment.id,
+      );
       expect(sourceBranch.trim()).toBe("main");
-      expect(environmentStatus.workspace?.workingTree.state).toBe("committed_unmerged");
+      expect(environmentStatus.workspace?.workingTree.state).toBe(
+        "committed_unmerged",
+      );
     }));
 
   it("archives and unarchives a thread, blocking work while archived", () =>
@@ -173,7 +197,12 @@ describe.sequential("fake provider smoke environment integration", () => {
       await sendTextMessage(harness.api, thread.id, {
         text: "after unarchive",
       });
-      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+      await waitForThreadStatus(
+        harness.api,
+        thread.id,
+        "idle",
+        TURN_TIMEOUT_MS,
+      );
 
       const output = await getThreadOutput(harness.api, thread.id);
       expect(output).toContain("after unarchive");
@@ -181,7 +210,10 @@ describe.sequential("fake provider smoke environment integration", () => {
 
   it("archives a managed worktree thread and destroys the environment", () =>
     withHarness(async (harness) => {
-      const project = await createProjectFixture(harness, "Archive Cleanup Smoke");
+      const project = await createProjectFixture(
+        harness,
+        "Archive Cleanup Smoke",
+      );
       const { environment, thread } = await createReadyThread(harness, {
         projectId: project.id,
         workspace: { type: "managed-worktree" },
@@ -224,7 +256,12 @@ describe.sequential("fake provider smoke environment integration", () => {
       await sendTextMessage(harness.api, thread.id, {
         text: "delete me after this turn",
       });
-      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+      await waitForThreadStatus(
+        harness.api,
+        thread.id,
+        "idle",
+        TURN_TIMEOUT_MS,
+      );
 
       await deleteThread(harness.api, thread.id);
       await expectThreadMissing(harness, thread.id);

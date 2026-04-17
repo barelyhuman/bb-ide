@@ -1,8 +1,5 @@
 import { z } from "zod";
-import type {
-  ProviderCapabilities,
-  ProviderInfo,
-} from "@bb/domain";
+import type { ProviderCapabilities, ProviderInfo } from "@bb/domain";
 
 const AGENT_PROVIDER_ID_VALUES = ["codex", "claude-code", "pi"] as const;
 export const agentProviderIdSchema = z.enum(AGENT_PROVIDER_ID_VALUES);
@@ -101,9 +98,7 @@ const CLOUD_AUTH_PROVIDER_ID_VALUES = CLOUD_AUTH_PROVIDER_CATALOG.map(
   ...(typeof CLOUD_AUTH_PROVIDER_CATALOG)[number]["id"][],
 ];
 
-export const cloudAuthProviderIdSchema = z.enum(
-  CLOUD_AUTH_PROVIDER_ID_VALUES,
-);
+export const cloudAuthProviderIdSchema = z.enum(CLOUD_AUTH_PROVIDER_ID_VALUES);
 export type CloudAuthProviderId = z.infer<typeof cloudAuthProviderIdSchema>;
 
 const BUILT_IN_AGENT_PROVIDER_CATALOG: BuiltInAgentProviderCatalogEntry[] = [
@@ -137,11 +132,16 @@ const BUILT_IN_AGENT_PROVIDER_CATALOG: BuiltInAgentProviderCatalogEntry[] = [
 ];
 
 const builtInAgentProviderById = new Map(
-  BUILT_IN_AGENT_PROVIDER_CATALOG.map((provider) => [provider.info.id, provider]),
+  BUILT_IN_AGENT_PROVIDER_CATALOG.map((provider) => [
+    provider.info.id,
+    provider,
+  ]),
 );
 
 const cloudAuthProviderById = new Map(
-  CLOUD_AUTH_PROVIDER_CATALOG.map((provider) => [provider.id, provider] as const),
+  CLOUD_AUTH_PROVIDER_CATALOG.map(
+    (provider) => [provider.id, provider] as const,
+  ),
 );
 
 /**
@@ -162,7 +162,9 @@ export const PI_DEFAULT_MODEL_PER_PROVIDER: PiDefaultModelPerProvider = {
   mistral: "devstral-medium-latest",
 };
 
-function cloneCapabilities(capabilities: ProviderCapabilities): ProviderCapabilities {
+function cloneCapabilities(
+  capabilities: ProviderCapabilities,
+): ProviderCapabilities {
   return {
     supportsRename: capabilities.supportsRename,
     supportsServiceTier: capabilities.supportsServiceTier,
@@ -207,7 +209,7 @@ export function isAgentProviderId(value: string): value is AgentProviderId {
 
 export function listBuiltInAgentProviderInfos(): BuiltInAgentProviderInfo[] {
   return BUILT_IN_AGENT_PROVIDER_CATALOG.map((provider) =>
-    cloneBuiltInAgentProviderInfo(provider.info)
+    cloneBuiltInAgentProviderInfo(provider.info),
   );
 }
 
@@ -223,7 +225,7 @@ export function getBuiltInAgentProviderInfo(
 
 export function listCloudAuthProviders(): CloudAuthProviderCatalogEntry<CloudAuthProviderId>[] {
   return CLOUD_AUTH_PROVIDER_CATALOG.map((provider) =>
-    cloneCloudAuthProviderCatalogEntry(provider)
+    cloneCloudAuthProviderCatalogEntry(provider),
   );
 }
 
@@ -237,6 +239,8 @@ export function getCloudAuthProvider(
   return cloneCloudAuthProviderCatalogEntry(provider);
 }
 
-export function resolvePiDefaultModelId(providerId: string): string | undefined {
+export function resolvePiDefaultModelId(
+  providerId: string,
+): string | undefined {
   return PI_DEFAULT_MODEL_PER_PROVIDER[providerId];
 }

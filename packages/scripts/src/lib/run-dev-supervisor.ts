@@ -1,9 +1,6 @@
 import type { ChildProcess } from "node:child_process";
 import { resolveSupervisorPidPath } from "./dev-restart-utils.js";
-import {
-  removePidFileSync,
-  writePidFile,
-} from "./pid-file.js";
+import { removePidFileSync, writePidFile } from "./pid-file.js";
 import {
   installTerminationSignalForwarding,
   killProcessIfRunning,
@@ -85,7 +82,9 @@ function waitForChildExit(child: ChildProcess): Promise<ChildExitResult> {
   return waitForProcessExit(child);
 }
 
-export async function runDevSupervisor(options: DevSupervisorOptions): Promise<void> {
+export async function runDevSupervisor(
+  options: DevSupervisorOptions,
+): Promise<void> {
   const pidPath = resolveSupervisorPidPath(options.serviceName);
   let activeChild: ChildProcess | null = null;
   let forceKillTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -126,7 +125,8 @@ export async function runDevSupervisor(options: DevSupervisorOptions): Promise<v
     terminateActiveChild(signal);
   };
 
-  const removeSignalForwarding = installTerminationSignalForwarding(requestStop);
+  const removeSignalForwarding =
+    installTerminationSignalForwarding(requestStop);
   process.on("SIGUSR1", () => {
     if (stopRequested || restartRequested) {
       return;

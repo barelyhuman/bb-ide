@@ -1,16 +1,11 @@
 import { z } from "zod";
-import {
-  permissionModeSchema,
-  reasoningLevelSchema,
-} from "./shared-types.js";
+import { permissionModeSchema, reasoningLevelSchema } from "./shared-types.js";
 
 export const modelReasoningEffortSchema = z.object({
   reasoningEffort: reasoningLevelSchema,
   description: z.string(),
 });
-export type ModelReasoningEffort = z.infer<
-  typeof modelReasoningEffortSchema
->;
+export type ModelReasoningEffort = z.infer<typeof modelReasoningEffortSchema>;
 
 export const availableModelSchema = z.object({
   id: z.string(),
@@ -28,9 +23,7 @@ export const providerCapabilitiesSchema = z.object({
   supportsServiceTier: z.boolean(),
   supportedPermissionModes: z.array(permissionModeSchema).min(1),
 });
-export type ProviderCapabilities = z.infer<
-  typeof providerCapabilitiesSchema
->;
+export type ProviderCapabilities = z.infer<typeof providerCapabilitiesSchema>;
 
 export const providerInfoSchema = z.object({
   id: z.string(),

@@ -25,7 +25,12 @@ describe.sequential("fake provider graceful recovery integration", () => {
       await sendTextMessage(harness.api, thread.id, {
         text: "before graceful restart",
       });
-      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+      await waitForThreadStatus(
+        harness.api,
+        thread.id,
+        "idle",
+        TURN_TIMEOUT_MS,
+      );
 
       await harness.shutdownDaemon("graceful-restart");
       await waitForHostDisconnected(
@@ -42,7 +47,12 @@ describe.sequential("fake provider graceful recovery integration", () => {
       await sendTextMessage(harness.api, thread.id, {
         text: "after graceful restart",
       });
-      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+      await waitForThreadStatus(
+        harness.api,
+        thread.id,
+        "idle",
+        TURN_TIMEOUT_MS,
+      );
 
       expect(await getThreadOutput(harness.api, thread.id)).toContain(
         "after graceful restart",

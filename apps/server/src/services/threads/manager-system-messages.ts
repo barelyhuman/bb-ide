@@ -6,7 +6,10 @@ import type {
 } from "@bb/domain";
 import type { PendingInteractionWorkSessionDeps } from "../../types.js";
 import { requireThreadEnvironment } from "../lib/entity-lookup.js";
-import { buildExecutionOptions, queueTurnSubmitCommand } from "./thread-commands.js";
+import {
+  buildExecutionOptions,
+  queueTurnSubmitCommand,
+} from "./thread-commands.js";
 import {
   ensureThreadCanQueueStartRequest,
   queueReadyThreadTurnCommand,
@@ -42,9 +45,10 @@ async function queueReadyManagerSystemMessage(
   deps: PendingInteractionWorkSessionDeps,
   args: QueueReadyManagerSystemMessageArgs,
 ): Promise<void> {
-  const expectedSteerTurnId = args.thread.status === "active"
-    ? getActiveTurnId(deps, args.thread.id)
-    : null;
+  const expectedSteerTurnId =
+    args.thread.status === "active"
+      ? getActiveTurnId(deps, args.thread.id)
+      : null;
 
   const eventSequence = appendClientTurnEvent(deps, {
     threadId: args.thread.id,
@@ -55,12 +59,13 @@ async function queueReadyManagerSystemMessage(
     initiator: "system",
     requestMethod: "turn/start",
     source: MANAGER_SYSTEM_MESSAGE_SOURCE,
-    target: args.thread.status === "active"
-      ? {
-          kind: "auto",
-          expectedTurnId: expectedSteerTurnId,
-        }
-      : { kind: "new-turn" },
+    target:
+      args.thread.status === "active"
+        ? {
+            kind: "auto",
+            expectedTurnId: expectedSteerTurnId,
+          }
+        : { kind: "new-turn" },
   });
   const permissionEscalation = resolvePermissionEscalation({
     thread: args.thread,
@@ -113,10 +118,10 @@ export async function queueManagerSystemMessage(
 ): Promise<boolean> {
   const managerThread = getThread(deps.db, args.managerThreadId);
   if (
-    !managerThread
-    || managerThread.type !== "manager"
-    || managerThread.archivedAt !== null
-    || managerThread.deletedAt !== null
+    !managerThread ||
+    managerThread.type !== "manager" ||
+    managerThread.archivedAt !== null ||
+    managerThread.deletedAt !== null
   ) {
     return false;
   }
@@ -124,7 +129,10 @@ export async function queueManagerSystemMessage(
     return false;
   }
 
-  const { environment } = requireThreadEnvironment(deps.db, args.managerThreadId);
+  const { environment } = requireThreadEnvironment(
+    deps.db,
+    args.managerThreadId,
+  );
   const input = buildSystemInput(args.messageText);
   const execution = await buildExecutionOptions(
     deps,

@@ -3,7 +3,11 @@ import path from "node:path";
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
 import { resolveContainedPath } from "@bb/process-utils";
 import type { RuntimeEntry } from "../runtime-manager.js";
-import { CommandDispatchError, type CommandDispatchOptions, type CommandOf } from "../command-dispatch-support.js";
+import {
+  CommandDispatchError,
+  type CommandDispatchOptions,
+  type CommandOf,
+} from "../command-dispatch-support.js";
 
 type TurnSubmitCommand = CommandOf<"turn.submit">;
 
@@ -66,8 +70,6 @@ export async function startThread(
   return result;
 }
 
-
-
 export async function ensureThreadRuntime(
   command: TurnSubmitCommand,
   options: CommandDispatchOptions,
@@ -79,11 +81,14 @@ export async function ensureThreadRuntime(
     entry = await options.runtimeManager.ensureEnvironment({
       environmentId: command.environmentId,
       workspacePath: resumeContext.workspaceContext.workspacePath,
-      workspaceProvisionType: resumeContext.workspaceContext.workspaceProvisionType,
+      workspaceProvisionType:
+        resumeContext.workspaceContext.workspaceProvisionType,
     });
   }
 
-  if (!options.runtimeManager.hasThread(command.environmentId, command.threadId)) {
+  if (
+    !options.runtimeManager.hasThread(command.environmentId, command.threadId)
+  ) {
     if (!resumeContext.providerThreadId) {
       throw new CommandDispatchError(
         "unknown_thread_runtime",

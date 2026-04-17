@@ -10,9 +10,7 @@
 import { AuthStorage, ModelRegistry } from "@mariozechner/pi-coding-agent";
 import { getBuiltInAgentProviderInfo } from "@bb/agent-providers";
 import { z } from "zod";
-import type {
-  AgentSessionEvent,
-} from "@mariozechner/pi-coding-agent";
+import type { AgentSessionEvent } from "@mariozechner/pi-coding-agent";
 import type {
   ProviderCapabilities,
   ThreadEvent,
@@ -22,14 +20,9 @@ import type {
   ThreadEventTokenUsageBreakdown,
 } from "@bb/domain";
 import { toPositiveNumber } from "@bb/domain";
-import {
-  decodeNormalizedProviderToolCallRequest,
-} from "../shared/provider-tool-call-contract.js";
+import { decodeNormalizedProviderToolCallRequest } from "../shared/provider-tool-call-contract.js";
 import { resolveBridgePath } from "../shared/bridge-path.js";
-import {
-  bashArgsSchema,
-  textBlockSchema,
-} from "../shared/tool-arg-schemas.js";
+import { bashArgsSchema, textBlockSchema } from "../shared/tool-arg-schemas.js";
 import {
   buildEditDiff,
   buildShellEnvironmentPolicyConfig,
@@ -109,14 +102,14 @@ interface PiInstructionOverrides {
 // Constants
 // ---------------------------------------------------------------------------
 
-function buildUnhandledPiEvent(
-  args: PiUnhandledEventArgs,
-): ThreadEvent[] {
+function buildUnhandledPiEvent(args: PiUnhandledEventArgs): ThreadEvent[] {
   return buildUnhandledProviderEvents({
     providerId: "pi",
     rawEvent: args.rawEvent,
     visibilityMetadata: piVisibilityMetadata,
-    ...(args.parentToolCallId ? { parentToolCallId: args.parentToolCallId } : {}),
+    ...(args.parentToolCallId
+      ? { parentToolCallId: args.parentToolCallId }
+      : {}),
   });
 }
 
@@ -165,14 +158,14 @@ function normalizePiContextWindowUsage(
   return {
     usedTokens:
       typeof usage.usedTokens === "number" &&
-        Number.isFinite(usage.usedTokens) &&
-        usage.usedTokens >= 0
+      Number.isFinite(usage.usedTokens) &&
+      usage.usedTokens >= 0
         ? usage.usedTokens
         : null,
     modelContextWindow:
       typeof usage.modelContextWindow === "number" &&
-        Number.isFinite(usage.modelContextWindow) &&
-        usage.modelContextWindow > 0
+      Number.isFinite(usage.modelContextWindow) &&
+      usage.modelContextWindow > 0
         ? usage.modelContextWindow
         : null,
     estimated: usage.estimated,
@@ -185,119 +178,153 @@ interface PiContextWindowModel {
   provider: string;
 }
 
-const piContextWindowModelSchema = z.object({
-  id: z.string(),
-  provider: z.string(),
-  contextWindow: z.number().optional(),
-}).passthrough();
+const piContextWindowModelSchema = z
+  .object({
+    id: z.string(),
+    provider: z.string(),
+    contextWindow: z.number().optional(),
+  })
+  .passthrough();
 
 const piContextWindowModelsSchema = z.array(piContextWindowModelSchema);
 
 // Keep Pi's SDK-level turn_start/turn_end outside the translated event union
 // until replay proves they represent bb turn boundaries rather than internal
 // provider subturns.
-const piEventTypeSchema = z.object({
-  type: z.enum([
-    "agent_end",
-    "agent_start",
-    "compaction_end",
-    "compaction_start",
-    "message_update",
-    "tool_execution_end",
-    "tool_execution_start",
-    "tool_execution_update",
-  ]),
-}).passthrough();
+const piEventTypeSchema = z
+  .object({
+    type: z.enum([
+      "agent_end",
+      "agent_start",
+      "compaction_end",
+      "compaction_start",
+      "message_update",
+      "tool_execution_end",
+      "tool_execution_start",
+      "tool_execution_update",
+    ]),
+  })
+  .passthrough();
 
-const piMessageContentBlockSchema = z.object({
-  type: z.string(),
-}).passthrough();
-
-const piAssistantUsageSchema = z.object({
-  input: z.number().optional(),
-  output: z.number().optional(),
-  cacheRead: z.number().optional(),
-  cacheWrite: z.number().optional(),
-  totalTokens: z.number().optional(),
-}).passthrough();
-
-const piAssistantMessageSchema = z.object({
-  role: z.literal("assistant"),
-  content: z.array(piMessageContentBlockSchema),
-  provider: z.string().optional(),
-  model: z.string().optional(),
-  usage: piAssistantUsageSchema.optional(),
-}).passthrough();
-
-const piConversationMessageSchema = z.object({
-  role: z.string(),
-  content: z.array(piMessageContentBlockSchema).optional(),
-  provider: z.string().optional(),
-  model: z.string().optional(),
-  usage: piAssistantUsageSchema.optional(),
-}).passthrough();
-
-const piAgentStartEventSchema = z.object({
-  type: z.literal("agent_start"),
-}).passthrough();
-
-const piAgentEndEventSchema = z.object({
-  type: z.literal("agent_end"),
-  messages: z.array(piConversationMessageSchema),
-}).passthrough();
-
-const piCompactionStartEventSchema = z.object({
-  type: z.literal("compaction_start"),
-}).passthrough();
-
-const piCompactionEndEventSchema = z.object({
-  type: z.literal("compaction_end"),
-}).passthrough();
-
-const piMessageUpdateEventSchema = z.object({
-  type: z.literal("message_update"),
-  assistantMessageEvent: z.object({
+const piMessageContentBlockSchema = z
+  .object({
     type: z.string(),
+  })
+  .passthrough();
+
+const piAssistantUsageSchema = z
+  .object({
+    input: z.number().optional(),
+    output: z.number().optional(),
+    cacheRead: z.number().optional(),
+    cacheWrite: z.number().optional(),
+    totalTokens: z.number().optional(),
+  })
+  .passthrough();
+
+const piAssistantMessageSchema = z
+  .object({
+    role: z.literal("assistant"),
+    content: z.array(piMessageContentBlockSchema),
+    provider: z.string().optional(),
+    model: z.string().optional(),
+    usage: piAssistantUsageSchema.optional(),
+  })
+  .passthrough();
+
+const piConversationMessageSchema = z
+  .object({
+    role: z.string(),
+    content: z.array(piMessageContentBlockSchema).optional(),
+    provider: z.string().optional(),
+    model: z.string().optional(),
+    usage: piAssistantUsageSchema.optional(),
+  })
+  .passthrough();
+
+const piAgentStartEventSchema = z
+  .object({
+    type: z.literal("agent_start"),
+  })
+  .passthrough();
+
+const piAgentEndEventSchema = z
+  .object({
+    type: z.literal("agent_end"),
+    messages: z.array(piConversationMessageSchema),
+  })
+  .passthrough();
+
+const piCompactionStartEventSchema = z
+  .object({
+    type: z.literal("compaction_start"),
+  })
+  .passthrough();
+
+const piCompactionEndEventSchema = z
+  .object({
+    type: z.literal("compaction_end"),
+  })
+  .passthrough();
+
+const piMessageUpdateEventSchema = z
+  .object({
+    type: z.literal("message_update"),
+    assistantMessageEvent: z
+      .object({
+        type: z.string(),
+        content: z.string().optional(),
+        contentIndex: z.number().optional(),
+        delta: z.string().optional(),
+      })
+      .passthrough(),
+  })
+  .passthrough();
+
+const piToolExecutionStartEventSchema = z
+  .object({
+    type: z.literal("tool_execution_start"),
+    toolCallId: z.string(),
+    toolName: z.string(),
+    args: z.unknown(),
+  })
+  .passthrough();
+
+const piToolExecutionEndEventSchema = z
+  .object({
+    type: z.literal("tool_execution_end"),
+    toolCallId: z.string(),
+    toolName: z.string(),
+    result: z.unknown(),
+    isError: z.boolean(),
+  })
+  .passthrough();
+
+const piToolExecutionUpdateEventSchema = z
+  .object({
+    type: z.literal("tool_execution_update"),
+    toolCallId: z.string(),
+    toolName: z.string(),
+    partialResult: z.unknown(),
+  })
+  .passthrough();
+
+const piFileEditArgsSchema = z
+  .object({
+    path: z.string().optional(),
+    oldText: z.string().optional(),
+    newText: z.string().optional(),
     content: z.string().optional(),
-    contentIndex: z.number().optional(),
-    delta: z.string().optional(),
-  }).passthrough(),
-}).passthrough();
-
-const piToolExecutionStartEventSchema = z.object({
-  type: z.literal("tool_execution_start"),
-  toolCallId: z.string(),
-  toolName: z.string(),
-  args: z.unknown(),
-}).passthrough();
-
-const piToolExecutionEndEventSchema = z.object({
-  type: z.literal("tool_execution_end"),
-  toolCallId: z.string(),
-  toolName: z.string(),
-  result: z.unknown(),
-  isError: z.boolean(),
-}).passthrough();
-
-const piToolExecutionUpdateEventSchema = z.object({
-  type: z.literal("tool_execution_update"),
-  toolCallId: z.string(),
-  toolName: z.string(),
-  partialResult: z.unknown(),
-}).passthrough();
-
-const piFileEditArgsSchema = z.object({
-  path: z.string().optional(),
-  oldText: z.string().optional(),
-  newText: z.string().optional(),
-  content: z.string().optional(),
-}).passthrough();
+  })
+  .passthrough();
 
 type PiFileEditArgs = z.infer<typeof piFileEditArgsSchema>;
 type PiPendingFileChangeItem = Extract<ThreadEventItem, { type: "fileChange" }>;
 type PiAssistantMessage = z.infer<typeof piAssistantMessageSchema>;
 type PiConversationMessage = z.infer<typeof piConversationMessageSchema>;
-type PiToolExecutionUpdateEvent = z.infer<typeof piToolExecutionUpdateEventSchema>;
+type PiToolExecutionUpdateEvent = z.infer<
+  typeof piToolExecutionUpdateEventSchema
+>;
 
 interface PiToolUseTranslationInput {
   callId: string;
@@ -323,20 +350,18 @@ function buildPiFileChangeItem(
   }
   const newText = args.newText ?? args.content;
 
-  const diff = buildEditDiff(
-    args.path,
-    args.oldText,
-    newText,
-  );
+  const diff = buildEditDiff(args.path, args.oldText, newText);
 
   return {
     type: "fileChange",
     id: "",
-    changes: [{
-      path: args.path,
-      kind: args.oldText === undefined ? "add" : "update",
-      ...(diff ? { diff } : {}),
-    }],
+    changes: [
+      {
+        path: args.path,
+        kind: args.oldText === undefined ? "add" : "update",
+        ...(diff ? { diff } : {}),
+      },
+    ],
     status: "pending",
     approvalStatus: null,
   };
@@ -363,14 +388,17 @@ function translatePiToolUseItem(
       if (!command) {
         return withParentToolCallId(baseToolCall, input.parentToolCallId);
       }
-      return withParentToolCallId({
-        type: "commandExecution",
-        id: input.callId,
-        command,
-        cwd: parsed.success ? (toOptionalString(parsed.data.cwd) ?? "") : "",
-        status: "pending",
-        approvalStatus: null,
-      }, input.parentToolCallId);
+      return withParentToolCallId(
+        {
+          type: "commandExecution",
+          id: input.callId,
+          command,
+          cwd: parsed.success ? (toOptionalString(parsed.data.cwd) ?? "") : "",
+          status: "pending",
+          approvalStatus: null,
+        },
+        input.parentToolCallId,
+      );
     }
     case "edit":
     case "write": {
@@ -380,15 +408,21 @@ function translatePiToolUseItem(
       }
       const fileChangeItem = buildPiFileChangeItem(parsed.data);
       if (!fileChangeItem) {
-        return withParentToolCallId({
-          ...baseToolCall,
-          arguments: parsed.data,
-        }, input.parentToolCallId);
+        return withParentToolCallId(
+          {
+            ...baseToolCall,
+            arguments: parsed.data,
+          },
+          input.parentToolCallId,
+        );
       }
-      return withParentToolCallId({
-        ...fileChangeItem,
-        id: input.callId,
-      }, input.parentToolCallId);
+      return withParentToolCallId(
+        {
+          ...fileChangeItem,
+          id: input.callId,
+        },
+        input.parentToolCallId,
+      );
     }
     default:
       return withParentToolCallId(baseToolCall, input.parentToolCallId);
@@ -405,33 +439,42 @@ function translatePiToolResultItem(
   if (startedItem) {
     switch (startedItem.type) {
       case "commandExecution":
-        return withParentToolCallId({
-          type: "commandExecution",
-          id: input.callId,
-          command: startedItem.command,
-          cwd: startedItem.cwd,
-          aggregatedOutput: outputText,
-          exitCode: input.isError ? 1 : 0,
-          status,
-          approvalStatus: startedItem.approvalStatus,
-        }, input.parentToolCallId ?? startedItem.parentToolCallId);
+        return withParentToolCallId(
+          {
+            type: "commandExecution",
+            id: input.callId,
+            command: startedItem.command,
+            cwd: startedItem.cwd,
+            aggregatedOutput: outputText,
+            exitCode: input.isError ? 1 : 0,
+            status,
+            approvalStatus: startedItem.approvalStatus,
+          },
+          input.parentToolCallId ?? startedItem.parentToolCallId,
+        );
       case "fileChange":
-        return withParentToolCallId({
-          type: "fileChange",
-          id: input.callId,
-          changes: startedItem.changes,
-          status,
-          approvalStatus: startedItem.approvalStatus,
-        }, input.parentToolCallId ?? startedItem.parentToolCallId);
+        return withParentToolCallId(
+          {
+            type: "fileChange",
+            id: input.callId,
+            changes: startedItem.changes,
+            status,
+            approvalStatus: startedItem.approvalStatus,
+          },
+          input.parentToolCallId ?? startedItem.parentToolCallId,
+        );
       case "toolCall":
-        return withParentToolCallId({
-          type: "toolCall",
-          id: input.callId,
-          tool: startedItem.tool,
-          arguments: startedItem.arguments,
-          status,
-          result: outputText,
-        }, input.parentToolCallId ?? startedItem.parentToolCallId);
+        return withParentToolCallId(
+          {
+            type: "toolCall",
+            id: input.callId,
+            tool: startedItem.tool,
+            arguments: startedItem.arguments,
+            status,
+            result: outputText,
+          },
+          input.parentToolCallId ?? startedItem.parentToolCallId,
+        );
       default:
         break;
     }
@@ -439,40 +482,54 @@ function translatePiToolResultItem(
 
   switch (input.toolName) {
     case "bash":
-      return withParentToolCallId({
-        type: "commandExecution",
-        id: input.callId,
-        command: "",
-        cwd: "",
-        aggregatedOutput: outputText,
-        exitCode: input.isError ? 1 : 0,
-        status,
-        approvalStatus: null,
-      }, input.parentToolCallId);
+      return withParentToolCallId(
+        {
+          type: "commandExecution",
+          id: input.callId,
+          command: "",
+          cwd: "",
+          aggregatedOutput: outputText,
+          exitCode: input.isError ? 1 : 0,
+          status,
+          approvalStatus: null,
+        },
+        input.parentToolCallId,
+      );
     case "edit":
     case "write":
-      return withParentToolCallId({
-        type: "fileChange",
-        id: input.callId,
-        changes: [],
-        status,
-        approvalStatus: null,
-      }, input.parentToolCallId);
+      return withParentToolCallId(
+        {
+          type: "fileChange",
+          id: input.callId,
+          changes: [],
+          status,
+          approvalStatus: null,
+        },
+        input.parentToolCallId,
+      );
     default:
-      return withParentToolCallId({
-        type: "toolCall",
-        id: input.callId,
-        tool: input.toolName ?? "unknown",
-        status,
-        result: outputText,
-      }, input.parentToolCallId);
+      return withParentToolCallId(
+        {
+          type: "toolCall",
+          id: input.callId,
+          tool: input.toolName ?? "unknown",
+          status,
+          result: outputText,
+        },
+        input.parentToolCallId,
+      );
   }
 }
 
-function buildPiConfig(threadId: string, options?: ProviderExecutionContext): Record<string, unknown> | undefined {
+function buildPiConfig(
+  threadId: string,
+  options?: ProviderExecutionContext,
+): Record<string, unknown> | undefined {
   const config: Record<string, unknown> = {};
   if (threadId) config["shell_environment_policy.set.BB_THREAD_ID"] = threadId;
-  const shellEnvironmentConfig = buildShellEnvironmentPolicyConfig(options?.envVars);
+  const shellEnvironmentConfig = buildShellEnvironmentPolicyConfig(
+    options?.envVars,
+  );
   if (shellEnvironmentConfig) {
     Object.assign(config, shellEnvironmentConfig);
   }
@@ -515,7 +572,9 @@ function createPiModelContextWindowResolver(): PiModelContextWindowResolver {
 
     // Resolve against a fresh registry so models.json overrides and custom
     // model definitions are reflected without module-level cached state.
-    const models = piContextWindowModelsSchema.parse(createPiModelRegistry().getAll());
+    const models = piContextWindowModelsSchema.parse(
+      createPiModelRegistry().getAll(),
+    );
     const modelContextWindowLookup = buildPiModelContextWindowLookup(models);
     return resolvePiModelContextWindow(lastAssistant, modelContextWindowLookup);
   };
@@ -563,14 +622,10 @@ interface TranslatePiErrorEnvelopeArgs {
 }
 
 function buildPiCompactionItemId(turnId: string): string {
-  return turnId.length > 0
-    ? `pi-compaction-${turnId}`
-    : "pi-compaction";
+  return turnId.length > 0 ? `pi-compaction-${turnId}` : "pi-compaction";
 }
 
-function createPiReasoningItemId(
-  state: PiTurnState,
-): string {
+function createPiReasoningItemId(state: PiTurnState): string {
   state.reasoningItemCounter += 1;
   return `pi-reasoning-${state.reasoningItemCounter}`;
 }
@@ -581,9 +636,7 @@ interface PiReasoningItemIdArgs {
   state: PiTurnState;
 }
 
-function getOrCreatePiReasoningItemId(
-  args: PiReasoningItemIdArgs,
-): string {
+function getOrCreatePiReasoningItemId(args: PiReasoningItemIdArgs): string {
   return getOrCreateScopedItemId({
     createItemId: () => createPiReasoningItemId(args.state),
     openItemIdsByScope: args.state.openReasoningItemIdsByScope,
@@ -610,17 +663,24 @@ export function createPiProviderAdapter(
   const capabilities: ProviderCapabilities = {
     supportsRename: providerInfo.capabilities.supportsRename,
     supportsServiceTier: providerInfo.capabilities.supportsServiceTier,
-    supportedPermissionModes: providerInfo.capabilities.supportedPermissionModes,
+    supportedPermissionModes:
+      providerInfo.capabilities.supportedPermissionModes,
   };
-  const resolveModelContextWindow = opts?.resolveModelContextWindow
-    ?? createPiModelContextWindowResolver();
+  const resolveModelContextWindow =
+    opts?.resolveModelContextWindow ?? createPiModelContextWindowResolver();
 
   const turnState = createProviderTurnStateRegistry<PiTurnState>({
     createState: () => ({
       assistantMessageCounter: 0,
       counter: 0,
       currentTurnId: undefined,
-      cumulativeTokens: { totalTokens: 0, inputTokens: 0, cachedInputTokens: 0, outputTokens: 0, reasoningOutputTokens: 0 },
+      cumulativeTokens: {
+        totalTokens: 0,
+        inputTokens: 0,
+        cachedInputTokens: 0,
+        outputTokens: 0,
+        reasoningOutputTokens: 0,
+      },
       openAssistantMessageIdsByScope: new Map(),
       openReasoningItemIdsByScope: new Map(),
       pendingAcceptedUserMessages: [],
@@ -699,15 +759,15 @@ export function createPiProviderAdapter(
         contextWindowUsageEnvelope.data.params;
       const state = turnState.getOrCreate({ threadId });
       const turnId = turnState.getCurrentOrLastTurnId({ state });
-      return [{
-        type: "thread/contextWindowUsage/updated",
-        threadId,
-        providerThreadId: threadId,
-        turnId,
-        contextWindowUsage: normalizePiContextWindowUsage(
-          contextWindowUsage,
-        ),
-      }];
+      return [
+        {
+          type: "thread/contextWindowUsage/updated",
+          threadId,
+          providerThreadId: threadId,
+          turnId,
+          contextWindowUsage: normalizePiContextWindowUsage(contextWindowUsage),
+        },
+      ];
     }
 
     const errorEnvelope = errorEnvelopeSchema.safeParse(event);
@@ -906,12 +966,15 @@ export function createPiProviderAdapter(
               threadId,
               providerThreadId: "",
               turnId: state.currentTurnId,
-              item: withParentToolCallId({
-                type: "reasoning",
-                id: itemId,
-                summary: [],
-                content: [content],
-              }, context?.parentToolCallId),
+              item: withParentToolCallId(
+                {
+                  type: "reasoning",
+                  id: itemId,
+                  summary: [],
+                  content: [content],
+                },
+                context?.parentToolCallId,
+              ),
             });
           }
         }
@@ -959,7 +1022,9 @@ export function createPiProviderAdapter(
         if (!state.currentTurnId) {
           return buildUnexpectedPiSdkEvent(piEvent.data, context);
         }
-        const startedItem = state.toolItemsByCallId.get(piEvent.data.toolCallId);
+        const startedItem = state.toolItemsByCallId.get(
+          piEvent.data.toolCallId,
+        );
         events.push({
           type: "item/completed",
           threadId,
@@ -1015,12 +1080,14 @@ export function createPiProviderAdapter(
     capabilities,
     process: {
       command: opts?.processCommand ?? "node",
-      args: opts?.processArgs ?? [resolveBridgePath({
-        bridgeBundleDir: opts?.bridgeBundleDir,
-        bundleFileName: "bb-pi-bridge.mjs",
-        importMetaUrl: import.meta.url,
-        bridgeRelativePath: "bridge/bridge.js",
-      })],
+      args: opts?.processArgs ?? [
+        resolveBridgePath({
+          bridgeBundleDir: opts?.bridgeBundleDir,
+          bundleFileName: "bb-pi-bridge.mjs",
+          importMetaUrl: import.meta.url,
+          bridgeRelativePath: "bridge/bridge.js",
+        }),
+      ],
     },
 
     // -- Unified command builder -------------------------------------------
@@ -1042,7 +1109,10 @@ export function createPiProviderAdapter(
               : {},
           };
         case "thread/start": {
-          finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
+          finishOpenProviderTurn({
+            registry: turnState,
+            threadId: command.threadId,
+          });
           const config = buildPiConfig(command.threadId, command.options);
           const dynamicTools = command.dynamicTools?.map((t) => ({
             name: t.name,
@@ -1057,16 +1127,23 @@ export function createPiProviderAdapter(
               cwd: command.cwd,
               ...resolvePiInstructionOverrides(command),
               ...(config ? { config } : {}),
-              ...(command.options?.model ? { model: command.options.model } : {}),
+              ...(command.options?.model
+                ? { model: command.options.model }
+                : {}),
               ...(command.options?.reasoningLevel
                 ? { reasoningLevel: command.options.reasoningLevel }
                 : {}),
-              ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
+              ...(dynamicTools && dynamicTools.length > 0
+                ? { dynamicTools }
+                : {}),
             },
           };
         }
         case "thread/resume": {
-          finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
+          finishOpenProviderTurn({
+            registry: turnState,
+            threadId: command.threadId,
+          });
           const threadId = command.providerThreadId ?? command.threadId;
           const config = buildPiConfig(command.threadId, command.options);
           const dynamicTools = command.dynamicTools?.map((t) => ({
@@ -1082,11 +1159,15 @@ export function createPiProviderAdapter(
               cwd: command.cwd,
               ...resolvePiInstructionOverrides(command),
               ...(config ? { config } : {}),
-              ...(command.options?.model ? { model: command.options.model } : {}),
+              ...(command.options?.model
+                ? { model: command.options.model }
+                : {}),
               ...(command.options?.reasoningLevel
                 ? { reasoningLevel: command.options.reasoningLevel }
                 : {}),
-              ...(dynamicTools && dynamicTools.length > 0 ? { dynamicTools } : {}),
+              ...(dynamicTools && dynamicTools.length > 0
+                ? { dynamicTools }
+                : {}),
             },
           };
         }
@@ -1097,7 +1178,9 @@ export function createPiProviderAdapter(
             params: {
               threadId: command.providerThreadId ?? command.threadId,
               input: command.input,
-              ...(command.options?.model ? { model: command.options.model } : {}),
+              ...(command.options?.model
+                ? { model: command.options.model }
+                : {}),
             },
           };
         case "turn/steer":
@@ -1111,7 +1194,10 @@ export function createPiProviderAdapter(
             },
           };
         case "thread/stop":
-          finishOpenProviderTurn({ registry: turnState, threadId: command.threadId });
+          finishOpenProviderTurn({
+            registry: turnState,
+            threadId: command.threadId,
+          });
           return {
             kind: "request",
             method: "thread/stop",
@@ -1181,7 +1267,9 @@ export function createPiProviderAdapter(
 
     // -- Tool call codec ---------------------------------------------------
 
-    decodeToolCallRequest(request: ProviderInboundRequest): DecodedToolCallRequest | null {
+    decodeToolCallRequest(
+      request: ProviderInboundRequest,
+    ): DecodedToolCallRequest | null {
       if (typeof request.id !== "string" && typeof request.id !== "number") {
         return null;
       }
@@ -1191,7 +1279,6 @@ export function createPiProviderAdapter(
         request.params,
       );
     },
-
   };
 }
 
@@ -1212,9 +1299,7 @@ function findLastAssistantMessage(
   return undefined;
 }
 
-function extractAssistantText(
-  message: PiAssistantMessage,
-): string | undefined {
+function extractAssistantText(message: PiAssistantMessage): string | undefined {
   const content = message.content;
   const chunks: string[] = [];
   for (const block of content) {
@@ -1274,9 +1359,7 @@ function resolvePiModelContextWindow(
   return modelContextWindowLookup.get(canonicalId) ?? null;
 }
 
-function extractPiToolProgressText(
-  event: PiToolExecutionUpdateEvent,
-): string {
+function extractPiToolProgressText(event: PiToolExecutionUpdateEvent): string {
   const text = extractResultText(event.partialResult).trim();
   if (text.length > 0) {
     return text;
@@ -1293,12 +1376,15 @@ function toAssistantUsageBreakdown(
   const inputTokens = toNonNegativeNumber(typedUsage.input);
   const outputTokens = toNonNegativeNumber(typedUsage.output);
   const cachedInputTokens =
-    toNonNegativeNumber(typedUsage.cacheRead) + toNonNegativeNumber(typedUsage.cacheWrite);
+    toNonNegativeNumber(typedUsage.cacheRead) +
+    toNonNegativeNumber(typedUsage.cacheWrite);
   const totalTokens = toNonNegativeNumber(typedUsage.totalTokens);
 
   return {
     totalTokens:
-      totalTokens > 0 ? totalTokens : inputTokens + outputTokens + cachedInputTokens,
+      totalTokens > 0
+        ? totalTokens
+        : inputTokens + outputTokens + cachedInputTokens,
     inputTokens,
     cachedInputTokens,
     outputTokens,

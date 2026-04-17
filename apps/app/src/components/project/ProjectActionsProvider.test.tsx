@@ -1,6 +1,13 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { Project } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import type { ReactNode } from "react";
@@ -39,7 +46,9 @@ vi.mock("@/hooks/useHostDaemon", () => ({
   }),
 }));
 
-function makeProjectResponse(overrides: Partial<Project> = {}): ProjectResponse {
+function makeProjectResponse(
+  overrides: Partial<Project> = {},
+): ProjectResponse {
   return {
     createdAt: 1,
     id: "project-1",
@@ -96,13 +105,21 @@ describe("ProjectActionsProvider", () => {
     });
 
     let actions: ReturnType<typeof useProjectActions> | null = null;
-    renderWithProvider(<HookProbe onReady={(a) => { actions = a; }} />);
+    renderWithProvider(
+      <HookProbe
+        onReady={(a) => {
+          actions = a;
+        }}
+      />,
+    );
 
     act(() => {
       actions!.requestRename(project);
     });
 
-    const input = (await screen.findByLabelText("Project name")) as HTMLInputElement;
+    const input = (await screen.findByLabelText(
+      "Project name",
+    )) as HTMLInputElement;
     expect(input.value).toBe(project.name);
 
     fireEvent.change(input, { target: { value: "Renamed project" } });
@@ -122,13 +139,21 @@ describe("ProjectActionsProvider", () => {
   it("rejects submission with an empty name and does not call the api", async () => {
     const project = makeProjectResponse();
     let actions: ReturnType<typeof useProjectActions> | null = null;
-    renderWithProvider(<HookProbe onReady={(a) => { actions = a; }} />);
+    renderWithProvider(
+      <HookProbe
+        onReady={(a) => {
+          actions = a;
+        }}
+      />,
+    );
 
     act(() => {
       actions!.requestRename(project);
     });
 
-    const input = (await screen.findByLabelText("Project name")) as HTMLInputElement;
+    const input = (await screen.findByLabelText(
+      "Project name",
+    )) as HTMLInputElement;
     fireEvent.change(input, { target: { value: "   " } });
     fireEvent.submit(input.closest("form")!);
 
@@ -141,7 +166,13 @@ describe("ProjectActionsProvider", () => {
     vi.mocked(api.deleteProject).mockResolvedValue(undefined);
 
     let actions: ReturnType<typeof useProjectActions> | null = null;
-    renderWithProvider(<HookProbe onReady={(a) => { actions = a; }} />);
+    renderWithProvider(
+      <HookProbe
+        onReady={(a) => {
+          actions = a;
+        }}
+      />,
+    );
 
     act(() => {
       actions!.requestDelete(project);
@@ -166,7 +197,11 @@ describe("ProjectActionsProvider", () => {
 
     let actions: ReturnType<typeof useProjectActions> | null = null;
     renderWithProvider(
-      <HookProbe onReady={(a) => { actions = a; }} />,
+      <HookProbe
+        onReady={(a) => {
+          actions = a;
+        }}
+      />,
       { jotaiStore },
     );
 

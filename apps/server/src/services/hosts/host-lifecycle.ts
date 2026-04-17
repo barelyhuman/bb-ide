@@ -11,7 +11,11 @@ import {
 } from "@bb/db";
 import { DEFAULT_SANDBOX_TIMEOUT_MS } from "@bb/sandbox-host";
 import type { SandboxHostProgressCallbacks } from "@bb/sandbox-host";
-import type { AppDeps, SandboxLifecycleDeps, SandboxWorkSessionDeps } from "../../types.js";
+import type {
+  AppDeps,
+  SandboxLifecycleDeps,
+  SandboxWorkSessionDeps,
+} from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { requireConnectedHostSession } from "../lib/entity-lookup.js";
 import type { HostLifecycleService } from "./host-lifecycle-service.js";
@@ -145,21 +149,25 @@ export async function waitForHostSession(
 }
 
 export async function destroyHost(
-  deps: Pick<AppDeps, "config" | "db" | "hostLifecycle" | "hub" | "sandboxRegistry">,
+  deps: Pick<
+    AppDeps,
+    "config" | "db" | "hostLifecycle" | "hub" | "sandboxRegistry"
+  >,
   hostId: string,
 ): Promise<void> {
   const state = deps.hostLifecycle;
-  return state.hostDestroyDeduper.run(
-    hostId,
-    async () =>
-      state.hostLifecycleLane.run(hostId, async () =>
-        destroyHostInternal(deps, state, hostId)
-      ),
+  return state.hostDestroyDeduper.run(hostId, async () =>
+    state.hostLifecycleLane.run(hostId, async () =>
+      destroyHostInternal(deps, state, hostId),
+    ),
   );
 }
 
 async function destroyHostInternal(
-  deps: Pick<AppDeps, "config" | "db" | "hostLifecycle" | "hub" | "sandboxRegistry">,
+  deps: Pick<
+    AppDeps,
+    "config" | "db" | "hostLifecycle" | "hub" | "sandboxRegistry"
+  >,
   state: HostLifecycleService,
   hostId: string,
 ): Promise<void> {
@@ -199,7 +207,10 @@ async function destroyHostInternal(
 }
 
 export async function destroyEphemeralHostIfReady(
-  deps: Pick<AppDeps, "config" | "db" | "hostLifecycle" | "hub" | "sandboxRegistry">,
+  deps: Pick<
+    AppDeps,
+    "config" | "db" | "hostLifecycle" | "hub" | "sandboxRegistry"
+  >,
   hostId: string,
 ): Promise<boolean> {
   if (!isEphemeralHostPendingCleanup(deps.db, hostId)) {
@@ -241,10 +252,9 @@ export async function ensureSandboxHostSessionReady(
         }
 
         const cachedHost = deps.sandboxRegistry.get(args.hostId);
-        const sandboxBackend =
-          host.provider
-            ? createSandboxBackendForId(host.provider)
-            : requireSandboxBackendForHost(host);
+        const sandboxBackend = host.provider
+          ? createSandboxBackendForId(host.provider)
+          : requireSandboxBackendForHost(host);
         const serverUrl = requireReachableExternalServerUrl(deps.config);
 
         if (host.suspendedAt !== null) {
@@ -272,39 +282,38 @@ export async function ensureSandboxHostSessionReady(
             hostId: host.id,
           });
         } else if (!cachedHost) {
-          const sandboxHost =
-            host.externalId
-              ? await sandboxBackend.resumeHost({
-                  config: deps.config,
-                  externalId: host.externalId,
-                  hostId: host.id,
-                  hostName: host.name,
-                  progressCallbacks: progressFanout,
-                  serverUrl,
-                })
-              : await sandboxBackend.provisionHost({
-                  config: deps.config,
-                  enrollKey: (
-                    await deps.machineAuth.issueHostEnrollKey({
-                      hostId: host.id,
-                      hostType: "ephemeral",
-                    })
-                  ).key,
-                  hostId: host.id,
-                  hostName: host.name,
-                  progressCallbacks: {
-                    ...progressFanout,
-                    onSandboxCreated: ({ externalId }) => {
-                      updateHost(deps.db, deps.hub, host.id, {
-                        externalId,
-                      });
-                      progressFanout.onSandboxCreated?.({
-                        externalId,
-                      });
-                    },
+          const sandboxHost = host.externalId
+            ? await sandboxBackend.resumeHost({
+                config: deps.config,
+                externalId: host.externalId,
+                hostId: host.id,
+                hostName: host.name,
+                progressCallbacks: progressFanout,
+                serverUrl,
+              })
+            : await sandboxBackend.provisionHost({
+                config: deps.config,
+                enrollKey: (
+                  await deps.machineAuth.issueHostEnrollKey({
+                    hostId: host.id,
+                    hostType: "ephemeral",
+                  })
+                ).key,
+                hostId: host.id,
+                hostName: host.name,
+                progressCallbacks: {
+                  ...progressFanout,
+                  onSandboxCreated: ({ externalId }) => {
+                    updateHost(deps.db, deps.hub, host.id, {
+                      externalId,
+                    });
+                    progressFanout.onSandboxCreated?.({
+                      externalId,
+                    });
                   },
-                  serverUrl,
-                });
+                },
+                serverUrl,
+              });
 
           updateHost(deps.db, deps.hub, host.id, {
             externalId: sandboxHost.externalId,
@@ -350,7 +359,8 @@ export async function extendSandboxLifeIfNeeded(
   pruneExpiredSandboxTimeoutExtensionEntries(state, at);
   const debounceWindowMs =
     args.debounceWindowMs ?? deps.config.sandboxActivityExtensionDebounceMs;
-  const nextAllowedAt = state.nextSandboxTimeoutExtensionAt.get(args.hostId) ?? 0;
+  const nextAllowedAt =
+    state.nextSandboxTimeoutExtensionAt.get(args.hostId) ?? 0;
   if (at < nextAllowedAt) {
     return false;
   }
@@ -361,11 +371,11 @@ export async function extendSandboxLifeIfNeeded(
       state.hostLifecycleLane.run(args.hostId, async () => {
         const host = getHost(deps.db, args.hostId);
         if (
-          !host
-          || host.type !== "ephemeral"
-          || host.destroyedAt !== null
-          || host.externalId === null
-          || host.suspendedAt !== null
+          !host ||
+          host.type !== "ephemeral" ||
+          host.destroyedAt !== null ||
+          host.externalId === null ||
+          host.suspendedAt !== null
         ) {
           return false;
         }
@@ -392,7 +402,10 @@ export async function extendSandboxLifeIfNeeded(
 }
 
 export async function markSandboxActivity(
-  deps: Pick<AppDeps, "config" | "db" | "hostLifecycle" | "logger" | "sandboxRegistry">,
+  deps: Pick<
+    AppDeps,
+    "config" | "db" | "hostLifecycle" | "logger" | "sandboxRegistry"
+  >,
   args: SandboxActivityArgs,
 ): Promise<void> {
   const at = args.at ?? Date.now();
@@ -422,7 +435,10 @@ export async function markSandboxActivity(
 }
 
 export async function maybeSuspendIdleSandbox(
-  deps: Pick<AppDeps, "config" | "db" | "hostLifecycle" | "hub" | "logger" | "sandboxRegistry">,
+  deps: Pick<
+    AppDeps,
+    "config" | "db" | "hostLifecycle" | "hub" | "logger" | "sandboxRegistry"
+  >,
   args: MaybeSuspendIdleSandboxArgs,
 ): Promise<boolean> {
   const state = deps.hostLifecycle;
@@ -438,49 +454,54 @@ export async function maybeSuspendIdleSandbox(
     return false;
   }
 
-  return state.hostSuspendDeduper.run(host.id, async () =>
-    state.hostLifecycleLane.run(host.id, async () => {
-      const refreshedHost = sweepIdleEphemeralHostsEligibleForSuspend(deps.db, {
-        hostId: host.id,
-        inactiveBefore: now - idleThresholdMs,
-      })[0];
-      const externalId = refreshedHost?.externalId ?? null;
-      if (!refreshedHost || externalId === null) {
-        return false;
-      }
+  return state.hostSuspendDeduper
+    .run(host.id, async () =>
+      state.hostLifecycleLane.run(host.id, async () => {
+        const refreshedHost = sweepIdleEphemeralHostsEligibleForSuspend(
+          deps.db,
+          {
+            hostId: host.id,
+            inactiveBefore: now - idleThresholdMs,
+          },
+        )[0];
+        const externalId = refreshedHost?.externalId ?? null;
+        if (!refreshedHost || externalId === null) {
+          return false;
+        }
 
-      const cachedHost = deps.sandboxRegistry.get(refreshedHost.id);
-      if (cachedHost) {
-        await cachedHost.suspend();
-      } else {
-        const sandboxBackend = requireSandboxBackendForHost(refreshedHost);
-        await sandboxBackend.suspendHost({
-          config: deps.config,
-          externalId,
+        const cachedHost = deps.sandboxRegistry.get(refreshedHost.id);
+        if (cachedHost) {
+          await cachedHost.suspend();
+        } else {
+          const sandboxBackend = requireSandboxBackendForHost(refreshedHost);
+          await sandboxBackend.suspendHost({
+            config: deps.config,
+            externalId,
+          });
+        }
+
+        state.nextSandboxTimeoutExtensionAt.delete(refreshedHost.id);
+        const activeSession = getActiveSession(deps.db, refreshedHost.id);
+        if (activeSession) {
+          closeSession(deps.db, deps.hub, activeSession.id, "suspended");
+        }
+        markHostSuspended(deps.db, {
+          hostId: refreshedHost.id,
+          suspendedAt: now,
         });
-      }
-
-      state.nextSandboxTimeoutExtensionAt.delete(refreshedHost.id);
-      const activeSession = getActiveSession(deps.db, refreshedHost.id);
-      if (activeSession) {
-        closeSession(deps.db, deps.hub, activeSession.id, "suspended");
-      }
-      markHostSuspended(deps.db, {
-        hostId: refreshedHost.id,
-        suspendedAt: now,
-      });
-      return true;
-    }),
-  ).catch((error) => {
-    deps.logger.warn(
-      {
-        err: error,
-        hostId: host.id,
-      },
-      "Idle sandbox suspend failed",
-    );
-    return false;
-  });
+        return true;
+      }),
+    )
+    .catch((error) => {
+      deps.logger.warn(
+        {
+          err: error,
+          hostId: host.id,
+        },
+        "Idle sandbox suspend failed",
+      );
+      return false;
+    });
 }
 
 export async function markHostSessionOpened(

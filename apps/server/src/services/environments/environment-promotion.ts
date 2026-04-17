@@ -1,7 +1,4 @@
-import {
-  findEnvironmentByHostPath,
-  getProjectSourceByHost,
-} from "@bb/db";
+import { findEnvironmentByHostPath, getProjectSourceByHost } from "@bb/db";
 import type {
   Environment,
   LocalPathProjectSource,
@@ -124,22 +121,40 @@ function getPromotionWorkspaceEligibility({
   source,
 }: EnvironmentPromotionEligibilityArgs): PromotionWorkspaceEligibility {
   if (environment.status !== "ready" || environment.path === null) {
-    return unavailablePromotionWorkspaceEligibility(source, "environment_not_ready");
+    return unavailablePromotionWorkspaceEligibility(
+      source,
+      "environment_not_ready",
+    );
   }
   if (!environment.isGitRepo) {
-    return unavailablePromotionWorkspaceEligibility(source, "unsupported_workspace");
+    return unavailablePromotionWorkspaceEligibility(
+      source,
+      "unsupported_workspace",
+    );
   }
   if (!environment.branchName) {
-    return unavailablePromotionWorkspaceEligibility(source, "missing_environment_branch");
+    return unavailablePromotionWorkspaceEligibility(
+      source,
+      "missing_environment_branch",
+    );
   }
   if (!source) {
-    return unavailablePromotionWorkspaceEligibility(source, "different_host_or_source");
+    return unavailablePromotionWorkspaceEligibility(
+      source,
+      "different_host_or_source",
+    );
   }
   if (isPrimaryCheckoutEnvironment(environment, source)) {
-    return unavailablePromotionWorkspaceEligibility(source, "environment_is_primary_checkout");
+    return unavailablePromotionWorkspaceEligibility(
+      source,
+      "environment_is_primary_checkout",
+    );
   }
   if (environment.workspaceProvisionType !== "managed-worktree") {
-    return unavailablePromotionWorkspaceEligibility(source, "unsupported_workspace");
+    return unavailablePromotionWorkspaceEligibility(
+      source,
+      "unsupported_workspace",
+    );
   }
   return {
     source,
@@ -219,7 +234,9 @@ function buildPromoteAvailability(
   if (state.isPromoted) {
     return unavailable("already_promoted");
   }
-  if (check.statuses.environmentStatus.branch.currentBranch !== state.branchName) {
+  if (
+    check.statuses.environmentStatus.branch.currentBranch !== state.branchName
+  ) {
     return unavailable("environment_branch_mismatch");
   }
   return available();
@@ -262,7 +279,8 @@ async function readWorkspaceStatus(
       },
     },
   });
-  const result = hostDaemonCommandResultSchemaByType["workspace.status"].parse(rawResult);
+  const result =
+    hostDaemonCommandResultSchemaByType["workspace.status"].parse(rawResult);
   return result.workspaceStatus;
 }
 
@@ -313,7 +331,11 @@ async function readExistingProjectSourceWorkspaceStatus(
     args.source.hostId,
     args.source.path,
   );
-  if (!environment || environment.status !== "ready" || !environment.isGitRepo) {
+  if (
+    !environment ||
+    environment.status !== "ready" ||
+    !environment.isGitRepo
+  ) {
     return null;
   }
 
@@ -338,9 +360,11 @@ async function readPromotionWorkspaceFacts(
     };
   }
 
-  const primaryStatus = (await readProjectSourceWorkspaceStatus(deps, {
-    source: eligibility.source,
-  })).workspace;
+  const primaryStatus = (
+    await readProjectSourceWorkspaceStatus(deps, {
+      source: eligibility.source,
+    })
+  ).workspace;
   const environmentStatus = await readEnvironmentWorkspaceStatus(deps, {
     environment,
   });

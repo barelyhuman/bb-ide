@@ -112,14 +112,19 @@ describe("environments", () => {
     });
     const notifier = createNotifierSpy();
 
-    const updated = applyProvisionedEnvironmentRecord(db, notifier, environment.id, {
-      path: "/tmp/project",
-      status: "ready",
-      isGitRepo: true,
-      isWorktree: false,
-      branchName: "bb/test",
-      defaultBranch: "main",
-    });
+    const updated = applyProvisionedEnvironmentRecord(
+      db,
+      notifier,
+      environment.id,
+      {
+        path: "/tmp/project",
+        status: "ready",
+        isGitRepo: true,
+        isWorktree: false,
+        branchName: "bb/test",
+        defaultBranch: "main",
+      },
+    );
 
     expect(updated).toMatchObject({
       path: "/tmp/project",
@@ -177,14 +182,24 @@ describe("environments", () => {
       status: "ready",
     });
 
-    const requested = recordEnvironmentCleanupRequest(db, notifier, environment.id, {
-      cleanupMode: "safe",
-      requestedAt: 123,
-    });
-    const escalated = recordEnvironmentCleanupRequest(db, notifier, environment.id, {
-      cleanupMode: "force",
-      requestedAt: 456,
-    });
+    const requested = recordEnvironmentCleanupRequest(
+      db,
+      notifier,
+      environment.id,
+      {
+        cleanupMode: "safe",
+        requestedAt: 123,
+      },
+    );
+    const escalated = recordEnvironmentCleanupRequest(
+      db,
+      notifier,
+      environment.id,
+      {
+        cleanupMode: "force",
+        requestedAt: 456,
+      },
+    );
     const cleared = clearEnvironmentCleanupRequestRecord(
       db,
       notifier,

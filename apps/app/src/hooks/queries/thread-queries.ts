@@ -14,9 +14,7 @@ import type {
 } from "@bb/server-contract";
 import type { ThreadListFilters, FilePreview } from "@/lib/api";
 import * as api from "@/lib/api";
-import {
-  getCachedThreadListPlaceholder,
-} from "./query-cache";
+import { getCachedThreadListPlaceholder } from "./query-cache";
 import {
   resolveThreadPlaceholder,
   resolveThreadTimelinePlaceholder,
@@ -40,7 +38,10 @@ interface RefetchOnMountOptions extends QueryOptions {
   refetchOnMount?: boolean | "always";
 }
 
-export interface UseThreadsFilters extends Omit<ThreadListFilters, "projectId"> {
+export interface UseThreadsFilters extends Omit<
+  ThreadListFilters,
+  "projectId"
+> {
   projectId?: string;
 }
 
@@ -59,10 +60,7 @@ function requireThreadId(id: string, hookName: string): string {
   return id;
 }
 
-export function useThreads(
-  filters: UseThreadsFilters,
-  options?: QueryOptions,
-) {
+export function useThreads(filters: UseThreadsFilters, options?: QueryOptions) {
   const { projectId, ...rest } = filters;
 
   return useQuery<ThreadListResponse>({
@@ -80,10 +78,7 @@ export function useThreads(
   });
 }
 
-export function useThread(
-  id: string,
-  options?: RefetchOnMountOptions,
-) {
+export function useThread(id: string, options?: RefetchOnMountOptions) {
   const queryClient = useQueryClient();
 
   return useQuery<Thread>({
@@ -105,16 +100,15 @@ export function useThreadDefaultExecutionOptions(
   return useQuery<ResolvedThreadExecutionOptions | null>({
     queryKey: threadDefaultExecutionOptionsQueryKey(id),
     queryFn: () =>
-      api.getThreadDefaultExecutionOptions(requireThreadId(id, "useThreadDefaultExecutionOptions")),
+      api.getThreadDefaultExecutionOptions(
+        requireThreadId(id, "useThreadDefaultExecutionOptions"),
+      ),
     enabled: (options?.enabled ?? true) && Boolean(id),
     refetchOnWindowFocus: false,
   });
 }
 
-export function useThreadDrafts(
-  id: string,
-  options?: QueryOptions,
-) {
+export function useThreadDrafts(id: string, options?: QueryOptions) {
   return useQuery<ThreadDraftListResponse>({
     queryKey: threadDraftsQueryKey(id),
     queryFn: () => api.listThreadDrafts(requireThreadId(id, "useThreadDrafts")),
@@ -139,13 +133,11 @@ export function useThreadPendingInteractions(
   });
 }
 
-export function useThreadStorageFiles(
-  id: string,
-  options?: QueryOptions,
-) {
+export function useThreadStorageFiles(id: string, options?: QueryOptions) {
   return useQuery<WorkspaceFileListResponse>({
     queryKey: threadStorageFilesQueryKey(id),
-    queryFn: () => api.listThreadStorageFiles(requireThreadId(id, "useThreadStorageFiles")),
+    queryFn: () =>
+      api.listThreadStorageFiles(requireThreadId(id, "useThreadStorageFiles")),
     enabled: (options?.enabled ?? true) && Boolean(id),
     refetchOnWindowFocus: false,
   });
@@ -190,7 +182,11 @@ export function useThreadTimeline(
     enabled: (options?.enabled ?? true) && Boolean(id),
     refetchOnMount: options?.refetchOnMount ?? true,
     placeholderData: (previousData, previousQuery) =>
-      resolveThreadTimelinePlaceholder(previousData, previousQuery?.queryKey, id),
+      resolveThreadTimelinePlaceholder(
+        previousData,
+        previousQuery?.queryKey,
+        id,
+      ),
   });
 }
 

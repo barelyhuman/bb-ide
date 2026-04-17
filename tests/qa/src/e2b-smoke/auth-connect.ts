@@ -71,7 +71,11 @@ function printHelp(): void {
   console.log("  --help                Show this help text.");
 }
 
-function requireOptionValue(argv: string[], index: number, flag: string): string {
+function requireOptionValue(
+  argv: string[],
+  index: number,
+  flag: string,
+): string {
   const value = argv[index + 1];
   if (!value) {
     throw new Error(`Missing value for ${flag}`);
@@ -162,13 +166,16 @@ function parseManualCallbackInput(
   let state: string | null = null;
 
   if (
-    trimmedInput.startsWith("http://")
-    || trimmedInput.startsWith("https://")
+    trimmedInput.startsWith("http://") ||
+    trimmedInput.startsWith("https://")
   ) {
     const url = new URL(trimmedInput);
     code = url.searchParams.get("code");
-    state = url.searchParams.get("state")
-      ?? parseFragmentState(url.hash.startsWith("#") ? url.hash.slice(1) : url.hash);
+    state =
+      url.searchParams.get("state") ??
+      parseFragmentState(
+        url.hash.startsWith("#") ? url.hash.slice(1) : url.hash,
+      );
   } else if (trimmedInput.includes("code=")) {
     const [queryPart, rawFragment = ""] = trimmedInput.split("#", 2);
     const query = queryPart.startsWith("?") ? queryPart.slice(1) : queryPart;
@@ -188,7 +195,9 @@ function parseManualCallbackInput(
   }
 
   if (state !== args.expectedState) {
-    throw new Error("The pasted OAuth state does not match the active auth attempt.");
+    throw new Error(
+      "The pasted OAuth state does not match the active auth attempt.",
+    );
   }
 
   return {
@@ -197,13 +206,11 @@ function parseManualCallbackInput(
   };
 }
 
-async function waitForManualInput(
-  args: {
-    abortController: AbortController;
-    providerDisplayName: string;
-    rl: ReturnType<typeof createInterface>;
-  },
-): Promise<string | null> {
+async function waitForManualInput(args: {
+  abortController: AbortController;
+  providerDisplayName: string;
+  rl: ReturnType<typeof createInterface>;
+}): Promise<string | null> {
   try {
     const answer = await args.rl.question(
       `Paste the final redirect URL or code#state for ${args.providerDisplayName} if localhost does not work, or press Enter to keep waiting: `,
@@ -233,7 +240,9 @@ async function waitForCallbackPayload(
   if (!stdin.isTTY || !stdout.isTTY) {
     const callbackPayload = await args.callbackPayloadPromise;
     if (!callbackPayload) {
-      throw new Error("OAuth callback wait was cancelled before a code arrived.");
+      throw new Error(
+        "OAuth callback wait was cancelled before a code arrived.",
+      );
     }
     return callbackPayload;
   }
@@ -261,7 +270,9 @@ async function waitForCallbackPayload(
       if (winner.kind === "callback") {
         abortController.abort();
         if (!winner.callbackPayload) {
-          throw new Error("OAuth callback wait was cancelled before a code arrived.");
+          throw new Error(
+            "OAuth callback wait was cancelled before a code arrived.",
+          );
         }
         return winner.callbackPayload;
       }
@@ -283,13 +294,11 @@ async function waitForCallbackPayload(
   }
 }
 
-function printFlowInstructions(
-  args: {
-    fixturePath: string;
-    flow: ProviderAuthorizationFlow;
-    providerDisplayName: string;
-  },
-): void {
+function printFlowInstructions(args: {
+  fixturePath: string;
+  flow: ProviderAuthorizationFlow;
+  providerDisplayName: string;
+}): void {
   console.log(`${args.providerDisplayName} QA auth helper`);
   console.log(`Fixture path: ${args.fixturePath}`);
   console.log("");
@@ -356,11 +365,15 @@ async function main(): Promise<void> {
     });
     const label = providerDefinition.getConnectionLabel(credential);
 
-    console.log(`${providerDefinition.displayName} auth saved to ${fixturePath}`);
+    console.log(
+      `${providerDefinition.displayName} auth saved to ${fixturePath}`,
+    );
     if (label) {
       console.log(`Connected account: ${label}`);
     }
-    console.log(`Credential expires at: ${new Date(credential.expiresAt).toISOString()}`);
+    console.log(
+      `Credential expires at: ${new Date(credential.expiresAt).toISOString()}`,
+    );
     console.log("You can now run:");
     console.log("  pnpm exec turbo run test:e2b-smoke --filter=@bb/qa");
   } finally {

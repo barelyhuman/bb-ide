@@ -2,7 +2,11 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { detectHostName, loadHostIdentity, readOrCreateHostId } from "./identity.js";
+import {
+  detectHostName,
+  loadHostIdentity,
+  readOrCreateHostId,
+} from "./identity.js";
 
 const tempDirs: string[] = [];
 
@@ -14,7 +18,9 @@ async function makeTempDir(prefix: string): Promise<string> {
 
 afterEach(async () => {
   await Promise.all(
-    tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
+    tempDirs
+      .splice(0)
+      .map((dir) => fs.rm(dir, { recursive: true, force: true })),
   );
 });
 

@@ -34,7 +34,9 @@ interface CreateContextWindowUsageDataArgs {
   usedTokens: number | null;
 }
 
-function createTokenUsageData(args: CreateTokenUsageDataArgs): Record<string, unknown> {
+function createTokenUsageData(
+  args: CreateTokenUsageDataArgs,
+): Record<string, unknown> {
   return {
     tokenUsage: {
       total: {
@@ -75,9 +77,10 @@ function listEventSequencesForType(
   return listEvents(harness.db, {
     threadId: args.threadId,
   })
-    .filter((event) =>
-      event.type === args.type &&
-      (args.itemId === undefined || event.itemId === args.itemId),
+    .filter(
+      (event) =>
+        event.type === args.type &&
+        (args.itemId === undefined || event.itemId === args.itemId),
     )
     .map((event) => event.sequence);
 }

@@ -10,10 +10,7 @@ import {
   type EncryptedJsonCrypto,
 } from "@bb/secret-storage";
 import type { ServerLogger } from "../../types.js";
-import type {
-  SandboxEnvService,
-  UpsertSandboxEnvVarArgs,
-} from "./types.js";
+import type { SandboxEnvService, UpsertSandboxEnvVarArgs } from "./types.js";
 
 const SANDBOX_ENV_SECRET_FILE_NAME = "sandbox-env-secret";
 
@@ -51,9 +48,7 @@ export async function createSandboxEnvService(
     fileName: SANDBOX_ENV_SECRET_FILE_NAME,
   });
 
-  async function upsertEnvVar(
-    upsertArgs: UpsertSandboxEnvVarArgs,
-  ) {
+  async function upsertEnvVar(upsertArgs: UpsertSandboxEnvVarArgs) {
     return toSandboxEnvVar(
       upsertAppSandboxEnvVar(args.db, {
         encryptedValue: crypto.encryptJson({

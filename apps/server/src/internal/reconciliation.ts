@@ -1,8 +1,13 @@
-import { and, eq, inArray, isNotNull, isNull, notInArray, or } from "drizzle-orm";
 import {
-  environments,
-  threads,
-} from "@bb/db";
+  and,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  notInArray,
+  or,
+} from "drizzle-orm";
+import { environments, threads } from "@bb/db";
 import type { HostDaemonActiveThread } from "@bb/host-daemon-contract";
 import type { PendingInteractionWorkSessionDeps } from "../types.js";
 import {
@@ -33,7 +38,13 @@ export async function reconcileSessionThreads(
     .where(
       and(
         eq(environments.hostId, hostId),
-        inArray(threads.status, ["active", "created", "idle", "error", "provisioning"]),
+        inArray(threads.status, [
+          "active",
+          "created",
+          "idle",
+          "error",
+          "provisioning",
+        ]),
         or(isNotNull(threads.deletedAt), isNotNull(threads.stopRequestedAt)),
       ),
     )
@@ -90,14 +101,14 @@ export async function reconcileSessionThreads(
     .from(threads)
     .innerJoin(environments, eq(threads.environmentId, environments.id))
     .where(
-        and(
-          eq(environments.hostId, hostId),
-          eq(threads.status, "active"),
-          isNull(threads.deletedAt),
-          isNull(threads.stopRequestedAt),
-          activeThreadIds.length > 0
-            ? notInArray(threads.id, activeThreadIds)
-            : undefined,
+      and(
+        eq(environments.hostId, hostId),
+        eq(threads.status, "active"),
+        isNull(threads.deletedAt),
+        isNull(threads.stopRequestedAt),
+        activeThreadIds.length > 0
+          ? notInArray(threads.id, activeThreadIds)
+          : undefined,
       ),
     )
     .all();

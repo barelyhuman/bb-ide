@@ -22,22 +22,30 @@ async function readJson(response: Response): Promise<unknown> {
   return response.json();
 }
 
-const weekdayMorningTrigger = createScheduleTrigger(createWeeklySchedule({
-  times: ["08:00"],
-  weekdays: ["mon", "tue", "wed", "thu", "fri"],
-}));
-const losAngelesWeekdayMorningTrigger = createScheduleTrigger(createWeeklySchedule({
-  times: ["08:00"],
-  timezone: "America/Los_Angeles",
-  weekdays: ["mon", "tue", "wed", "thu", "fri"],
-}));
-const invalidTimezoneTrigger = createScheduleTrigger(createDailySchedule({
-  times: ["08:00"],
-  timezone: "Mars/Olympus",
-}));
-const tooFrequentTrigger = createScheduleTrigger(createDailySchedule({
-  times: ["08:00", "08:03"],
-}));
+const weekdayMorningTrigger = createScheduleTrigger(
+  createWeeklySchedule({
+    times: ["08:00"],
+    weekdays: ["mon", "tue", "wed", "thu", "fri"],
+  }),
+);
+const losAngelesWeekdayMorningTrigger = createScheduleTrigger(
+  createWeeklySchedule({
+    times: ["08:00"],
+    timezone: "America/Los_Angeles",
+    weekdays: ["mon", "tue", "wed", "thu", "fri"],
+  }),
+);
+const invalidTimezoneTrigger = createScheduleTrigger(
+  createDailySchedule({
+    times: ["08:00"],
+    timezone: "Mars/Olympus",
+  }),
+);
+const tooFrequentTrigger = createScheduleTrigger(
+  createDailySchedule({
+    times: ["08:00", "08:03"],
+  }),
+);
 const invalidTimeTrigger = {
   cron: "0 8-9 * * *",
   timezone: "UTC",
@@ -53,7 +61,9 @@ describe("public automation routes", () => {
   it("supports automation CRUD", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-automation-crud" });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-automation-crud",
+      });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
       });
@@ -85,19 +95,25 @@ describe("public automation routes", () => {
         },
       );
       expect(createResponse.status).toBe(201);
-      const createdAutomation = automationSchema.parse(await readJson(createResponse));
+      const createdAutomation = automationSchema.parse(
+        await readJson(createResponse),
+      );
       expect(createdAutomation.enabled).toBe(true);
       expect(createdAutomation.isValid).toBe(true);
       expect(createdAutomation.validationIssues).toEqual([]);
       expect(createdAutomation.autoArchive).toBe(false);
-      expect(createdAutomation.trigger).toEqual(losAngelesWeekdayMorningTrigger);
+      expect(createdAutomation.trigger).toEqual(
+        losAngelesWeekdayMorningTrigger,
+      );
       expect(createdAutomation.nextRunAt).toBeTypeOf("number");
 
       const listResponse = await harness.app.request(
         `/api/v1/projects/${project.id}/automations`,
       );
       expect(listResponse.status).toBe(200);
-      expect(automationSchema.array().parse(await readJson(listResponse))).toEqual([
+      expect(
+        automationSchema.array().parse(await readJson(listResponse)),
+      ).toEqual([
         expect.objectContaining({
           id: createdAutomation.id,
           name: "Daily summary",
@@ -117,7 +133,9 @@ describe("public automation routes", () => {
         },
       );
       expect(disableResponse.status).toBe(200);
-      expect(automationSchema.parse(await readJson(disableResponse))).toMatchObject({
+      expect(
+        automationSchema.parse(await readJson(disableResponse)),
+      ).toMatchObject({
         id: createdAutomation.id,
         enabled: false,
         nextRunAt: null,
@@ -136,7 +154,9 @@ describe("public automation routes", () => {
         },
       );
       expect(enableResponse.status).toBe(200);
-      expect(automationSchema.parse(await readJson(enableResponse))).toMatchObject({
+      expect(
+        automationSchema.parse(await readJson(enableResponse)),
+      ).toMatchObject({
         id: createdAutomation.id,
         enabled: true,
       });
@@ -154,7 +174,9 @@ describe("public automation routes", () => {
         },
       );
       expect(updateResponse.status).toBe(200);
-      expect(automationSchema.parse(await readJson(updateResponse))).toMatchObject({
+      expect(
+        automationSchema.parse(await readJson(updateResponse)),
+      ).toMatchObject({
         id: createdAutomation.id,
         autoArchive: true,
       });
@@ -176,7 +198,9 @@ describe("public automation routes", () => {
   it("rejects invalid schedule shapes, invalid timezones, and sub-5-minute schedules", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-automation-validation" });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-automation-validation",
+      });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
       });
@@ -223,7 +247,9 @@ describe("public automation routes", () => {
   it("rejects mixed enable toggles and config edits in one PATCH request", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-automation-mixed-patch" });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-automation-mixed-patch",
+      });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
       });
@@ -274,7 +300,9 @@ describe("public automation routes", () => {
   it("rejects overlong automation schedule fields at the API boundary", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-automation-max-length" });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-automation-max-length",
+      });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
       });
@@ -293,10 +321,12 @@ describe("public automation routes", () => {
         },
         {
           name: "Valid name",
-          trigger: createScheduleTrigger(createDailySchedule({
-            times: ["08:00"],
-            timezone: "T".repeat(SCHEDULE_TIMEZONE_MAX_LENGTH + 1),
-          })),
+          trigger: createScheduleTrigger(
+            createDailySchedule({
+              times: ["08:00"],
+              timezone: "T".repeat(SCHEDULE_TIMEZONE_MAX_LENGTH + 1),
+            }),
+          ),
         },
       ] as const) {
         const response = await harness.app.request(
@@ -313,7 +343,9 @@ describe("public automation routes", () => {
                 threadRequest: {
                   providerId: "codex",
                   model: "gpt-5",
-                  input: [{ type: "text", text: "Reject this invalid payload" }],
+                  input: [
+                    { type: "text", text: "Reject this invalid payload" },
+                  ],
                   environment: {
                     type: "host",
                     hostId: host.id,
@@ -506,7 +538,9 @@ describe("public automation routes", () => {
               threadRequest: {
                 providerId: "codex",
                 model: "gpt-5",
-                input: [{ type: "text", text: "Create a valid automation first" }],
+                input: [
+                  { type: "text", text: "Create a valid automation first" },
+                ],
                 environment: {
                   type: "host",
                   hostId: primaryHost.id,
@@ -518,7 +552,9 @@ describe("public automation routes", () => {
         },
       );
       expect(createResponse.status).toBe(201);
-      const createdAutomation = automationSchema.parse(await readJson(createResponse));
+      const createdAutomation = automationSchema.parse(
+        await readJson(createResponse),
+      );
 
       const updateResponse = await harness.app.request(
         `/api/v1/projects/${project.id}/automations/${createdAutomation.id}`,
@@ -533,7 +569,9 @@ describe("public automation routes", () => {
               threadRequest: {
                 providerId: "codex",
                 model: "gpt-5",
-                input: [{ type: "text", text: "Cross project update should fail" }],
+                input: [
+                  { type: "text", text: "Cross project update should fail" },
+                ],
                 environment: {
                   type: "reuse",
                   environmentId: foreignEnvironment.id,
@@ -681,7 +719,9 @@ describe("public automation routes", () => {
               threadRequest: {
                 providerId: "codex",
                 model: "gpt-5",
-                input: [{ type: "text", text: "Use the cloneable secondary source" }],
+                input: [
+                  { type: "text", text: "Use the cloneable secondary source" },
+                ],
                 environment: {
                   type: "sandbox-host",
                   sandboxType: "e2b",
@@ -737,7 +777,9 @@ describe("public automation routes", () => {
               threadRequest: {
                 providerId: "codex",
                 model: "gpt-5",
-                input: [{ type: "text", text: "Use the explicit unmanaged path" }],
+                input: [
+                  { type: "text", text: "Use the explicit unmanaged path" },
+                ],
                 environment: {
                   type: "host",
                   hostId: explicitPathHost.id,
@@ -820,7 +862,9 @@ describe("public automation routes", () => {
       );
 
       expect(enableResponse.status).toBe(200);
-      expect(automationSchema.parse(await readJson(enableResponse))).toMatchObject({
+      expect(
+        automationSchema.parse(await readJson(enableResponse)),
+      ).toMatchObject({
         enabled: true,
         id: automation.id,
         isValid: false,
@@ -896,7 +940,9 @@ describe("public automation routes", () => {
       );
 
       expect(updateResponse.status).toBe(200);
-      expect(automationSchema.parse(await readJson(updateResponse))).toMatchObject({
+      expect(
+        automationSchema.parse(await readJson(updateResponse)),
+      ).toMatchObject({
         enabled: true,
         id: automation.id,
         isValid: true,

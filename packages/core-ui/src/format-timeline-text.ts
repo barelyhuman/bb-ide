@@ -89,7 +89,9 @@ function statusBadge(status: string, color: boolean): string {
   }
 }
 
-function formatSummaryDuration(durationMs: number | undefined): string | undefined {
+function formatSummaryDuration(
+  durationMs: number | undefined,
+): string | undefined {
   if (durationMs === undefined || durationMs < 1_000) {
     return undefined;
   }
@@ -126,14 +128,20 @@ function formatApprovalLifecycleTitle(
   }
 }
 
-function formatUser(msg: ViewUserMessage, _verbose: boolean, color: boolean): string {
+function formatUser(
+  msg: ViewUserMessage,
+  _verbose: boolean,
+  color: boolean,
+): string {
   const lines: string[] = [];
   lines.push(separator("User", color));
   lines.push(msg.text);
   if (msg.attachments) {
     const parts: string[] = [];
-    if (msg.attachments.localImages > 0) parts.push(`${msg.attachments.localImages} image(s)`);
-    if (msg.attachments.localFiles > 0) parts.push(`${msg.attachments.localFiles} file(s)`);
+    if (msg.attachments.localImages > 0)
+      parts.push(`${msg.attachments.localImages} image(s)`);
+    if (msg.attachments.localFiles > 0)
+      parts.push(`${msg.attachments.localFiles} file(s)`);
     if (parts.length > 0) lines.push(dim(`  [${parts.join(", ")}]`, color));
   }
   return lines.join("\n");
@@ -204,7 +212,8 @@ function formatExploring(
 ): string {
   const lines: string[] = [];
   const countsLabel =
-    formatExploringCountsLabel(summarizeExploringCounts(msg.calls)) || "workspace";
+    formatExploringCountsLabel(summarizeExploringCounts(msg.calls)) ||
+    "workspace";
   lines.push(
     separator(
       `${msg.status === "pending" ? "Exploring" : "Explored"} ${countsLabel}`,
@@ -216,7 +225,9 @@ function formatExploring(
     return lines.join("\n");
   }
 
-  for (const line of buildExploringDetailLines(msg.calls, { readPathStyle: "full" })) {
+  for (const line of buildExploringDetailLines(msg.calls, {
+    readPathStyle: "full",
+  })) {
     lines.push(`  ${line}`);
   }
 
@@ -241,7 +252,9 @@ function formatFileEdit(
   }
   for (const change of msg.changes) {
     const kindLabel = change.kind ? ` (${change.kind})` : "";
-    lines.push(`  ${badge} ${cyan(change.path, color)}${dim(kindLabel, color)}`);
+    lines.push(
+      `  ${badge} ${cyan(change.path, color)}${dim(kindLabel, color)}`,
+    );
     if (verbose && change.diff) {
       const diff = truncate(change.diff.trim(), 2_000);
       lines.push(dim(`  ${diff.split("\n").join("\n  ")}`, color));
@@ -277,11 +290,7 @@ function formatOperation(
   const lines: string[] = [];
   lines.push(separator(`Operation: ${msg.title}`, color));
   if (msg.detail) lines.push(dim(`  ${msg.detail}`, color));
-  if (
-    msg.status &&
-    msg.opType !== "warning" &&
-    msg.opType !== "deprecation"
-  ) {
+  if (msg.status && msg.opType !== "warning" && msg.opType !== "deprecation") {
     lines.push(`  ${statusBadge(msg.status, color)}`);
   }
   return lines.join("\n");
@@ -304,7 +313,11 @@ function formatPermissionGrantLifecycle(
   return lines.join("\n");
 }
 
-function formatTasks(msg: ViewTasksMessage, _verbose: boolean, color: boolean): string {
+function formatTasks(
+  msg: ViewTasksMessage,
+  _verbose: boolean,
+  color: boolean,
+): string {
   const lines: string[] = [];
   lines.push(separator("Updated tasks", color));
   for (const task of msg.tasks) {
@@ -336,7 +349,9 @@ function formatDelegation(
     return lines.join("\n");
   }
 
-  for (const row of buildTimelineRows(msg.childProjection, { collapseAll: true })) {
+  for (const row of buildTimelineRows(msg.childProjection, {
+    collapseAll: true,
+  })) {
     const block = formatTimelineRow(row, true, color);
     if (block) {
       lines.push(indentBlock(block, "  "));
@@ -353,14 +368,22 @@ function formatDelegation(
   return lines.join("\n");
 }
 
-function formatError(msg: ViewErrorMessage, _verbose: boolean, color: boolean): string {
+function formatError(
+  msg: ViewErrorMessage,
+  _verbose: boolean,
+  color: boolean,
+): string {
   const lines: string[] = [];
   lines.push(separator("Error", color));
   lines.push(red(`  ${msg.message}`, color));
   return lines.join("\n");
 }
 
-function formatMessage(msg: ViewMessage, verbose: boolean, color: boolean): string {
+function formatMessage(
+  msg: ViewMessage,
+  verbose: boolean,
+  color: boolean,
+): string {
   switch (msg.kind) {
     case "user":
       return formatUser(msg, verbose, color);
@@ -403,7 +426,11 @@ function formatToolGroupSummary(entry: TimelineToolGroupRow): string {
   return [parts.prefix, parts.emphasis, parts.suffix].filter(Boolean).join(" ");
 }
 
-function formatTimelineRow(row: TimelineRow, verbose: boolean, color: boolean): string {
+function formatTimelineRow(
+  row: TimelineRow,
+  verbose: boolean,
+  color: boolean,
+): string {
   if (row.kind === "message") {
     return formatMessage(row.message, verbose, color);
   }

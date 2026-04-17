@@ -4,15 +4,8 @@ import {
   listStoredEventRows as listStoredEventRowRecords,
 } from "@bb/db";
 import type { DbConnection, StoredEventRow } from "@bb/db";
-import {
-  buildThreadEventRow,
-  parseStoredThreadEvent,
-} from "@bb/domain";
-import type {
-  ThreadEvent,
-  ThreadEventRow,
-  ThreadEventType,
-} from "@bb/domain";
+import { buildThreadEventRow, parseStoredThreadEvent } from "@bb/domain";
+import type { ThreadEvent, ThreadEventRow, ThreadEventType } from "@bb/domain";
 import { ApiError } from "../../errors.js";
 
 type StoredEventPayloadRow = Pick<
@@ -40,7 +33,9 @@ function toRecord(value: unknown): Record<string, unknown> | null {
   return isRecord(value) ? value : null;
 }
 
-function parseStoredEventPayload(row: StoredEventPayloadRow): Record<string, unknown> {
+function parseStoredEventPayload(
+  row: StoredEventPayloadRow,
+): Record<string, unknown> {
   let data: unknown;
   try {
     data = JSON.parse(row.data);

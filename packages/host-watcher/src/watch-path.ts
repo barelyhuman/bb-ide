@@ -49,7 +49,10 @@ function createPathChangeCallbackError(
   };
 }
 
-function isPathWithinTarget(targetPath: string, candidatePath: string): boolean {
+function isPathWithinTarget(
+  targetPath: string,
+  candidatePath: string,
+): boolean {
   const relativePath = path.relative(targetPath, candidatePath);
   return (
     relativePath.length === 0 ||
@@ -57,10 +60,7 @@ function isPathWithinTarget(targetPath: string, candidatePath: string): boolean 
   );
 }
 
-function resolveEventPath(
-  watchedPath: string,
-  eventPath: string,
-): string {
+function resolveEventPath(watchedPath: string, eventPath: string): string {
   return path.isAbsolute(eventPath)
     ? path.normalize(eventPath)
     : path.resolve(watchedPath, eventPath);
@@ -138,18 +138,25 @@ class PathChangeWatcher {
   }
 
   private scheduleRetry(): void {
-    if (this.disposed || this.retryTimer !== null || this.subscription !== null) {
+    if (
+      this.disposed ||
+      this.retryTimer !== null ||
+      this.subscription !== null
+    ) {
       return;
     }
     this.retryAttempt += 1;
-    this.retryTimer = setTimeout(() => {
-      this.retryTimer = null;
-      void this.startAsync();
-    }, calculateExponentialBackoffDelay({
-      attempt: this.retryAttempt,
-      baseDelayMs: this.args.retryDelayMs,
-      maxDelayMs: this.args.maxRetryDelayMs,
-    }));
+    this.retryTimer = setTimeout(
+      () => {
+        this.retryTimer = null;
+        void this.startAsync();
+      },
+      calculateExponentialBackoffDelay({
+        attempt: this.retryAttempt,
+        baseDelayMs: this.args.retryDelayMs,
+        maxDelayMs: this.args.maxRetryDelayMs,
+      }),
+    );
   }
 
   private async startAsync(): Promise<void> {

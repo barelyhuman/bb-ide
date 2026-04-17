@@ -48,7 +48,9 @@ function ignoreWatchError(): void {
   // Ignore watcher warnings in tests that assert only change callbacks.
 }
 
-async function runGit(args: RunGitArgs): Promise<{ stdout: string; stderr: string }> {
+async function runGit(
+  args: RunGitArgs,
+): Promise<{ stdout: string; stderr: string }> {
   return execFileAsync("git", args.args, {
     cwd: args.cwd,
     encoding: "utf8",
@@ -65,7 +67,10 @@ async function initRepo(): Promise<string> {
   const repoPath = await makeTempDir("bb-workspace-repo-");
   await runGit({ args: ["init", "-b", "main"], cwd: repoPath });
   await runGit({ args: ["config", "user.name", "BB Tests"], cwd: repoPath });
-  await runGit({ args: ["config", "user.email", "bb@example.com"], cwd: repoPath });
+  await runGit({
+    args: ["config", "user.email", "bb@example.com"],
+    cwd: repoPath,
+  });
   await fs.writeFile(path.join(repoPath, "README.md"), "hello\n", "utf8");
   await runGit({ args: ["add", "README.md"], cwd: repoPath });
   await runGit({ args: ["commit", "-m", "Initial commit"], cwd: repoPath });
@@ -192,7 +197,11 @@ async function importWatchWorkspaceStatusWithReadySignal(
       await vi.importActual<ParcelWatcherModule>("@parcel/watcher");
     const markReady = (rootPath: string) => {
       seenRootPaths.add(normalizeWatchPath(rootPath));
-      if (expectedRootPaths.every((expectedRootPath) => seenRootPaths.has(expectedRootPath))) {
+      if (
+        expectedRootPaths.every((expectedRootPath) =>
+          seenRootPaths.has(expectedRootPath),
+        )
+      ) {
         if (readyScheduled) {
           return;
         }
@@ -209,7 +218,9 @@ async function importWatchWorkspaceStatusWithReadySignal(
         async subscribe(
           ...watchArgs: ParcelWatcherSubscribeArgs
         ): Promise<ParcelWatcherSubscribeResult> {
-          const subscription = await actualWatcher.default.subscribe(...watchArgs);
+          const subscription = await actualWatcher.default.subscribe(
+            ...watchArgs,
+          );
           markReady(watchArgs[0]);
           return subscription;
         },
@@ -254,7 +265,9 @@ async function importWatchWorkspaceStatusWithTransientWorkspaceSubscriptionFailu
             failedWorkspaceSubscription = true;
             throw new Error("workspace subscription unavailable");
           }
-          const subscription = await actualWatcher.default.subscribe(...watchArgs);
+          const subscription = await actualWatcher.default.subscribe(
+            ...watchArgs,
+          );
           if (isWorkspaceRootSubscription(watchArgs, workspaceRootPath)) {
             if (!readyScheduled) {
               readyScheduled = true;
@@ -334,7 +347,8 @@ async function importWatchWorkspaceStatusWithPersistentWorkspaceSubscriptionFail
   });
   const watchStatusModule = await import("../src/watch-status.js");
   return {
-    getWorkspaceSubscriptionAttemptCount: () => workspaceSubscriptionAttemptCount,
+    getWorkspaceSubscriptionAttemptCount: () =>
+      workspaceSubscriptionAttemptCount,
     ready: ready.promise,
     watchWorkspaceStatus: watchStatusModule.watchWorkspaceStatus,
   };
@@ -407,7 +421,11 @@ async function importWatchWorkspaceStatusWithManualRootEvents(
       const normalizedRootPath = normalizeWatchPath(rootPath);
       callbacksByRootPath.set(normalizedRootPath, callback);
       seenRootPaths.add(normalizedRootPath);
-      if (expectedRootPaths.every((expectedRootPath) => seenRootPaths.has(expectedRootPath))) {
+      if (
+        expectedRootPaths.every((expectedRootPath) =>
+          seenRootPaths.has(expectedRootPath),
+        )
+      ) {
         ready.resolve(undefined);
       }
       return createMockWatcherSubscription();
@@ -438,7 +456,9 @@ afterEach(async () => {
   vi.doUnmock("@parcel/watcher");
   vi.resetModules();
   await Promise.all(
-    tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
+    tempDirs
+      .splice(0)
+      .map((dir) => fs.rm(dir, { recursive: true, force: true })),
   );
 });
 
@@ -460,7 +480,11 @@ describe("watchWorkspaceStatus", () => {
 
     try {
       await ready;
-      await fs.writeFile(path.join(repoPath, "README.md"), "watch me\n", "utf8");
+      await fs.writeFile(
+        path.join(repoPath, "README.md"),
+        "watch me\n",
+        "utf8",
+      );
       await waitForCallCount(() => calls.length, 1, WATCH_TEST_TIMEOUT_MS);
       expect(calls).toHaveLength(1);
     } finally {
@@ -471,11 +495,8 @@ describe("watchWorkspaceStatus", () => {
   it("flushes sustained workspace event bursts at max wait", async () => {
     vi.useFakeTimers();
     const repoPath = await initRepo();
-    const {
-      emitWorkspaceRootEvents,
-      ready,
-      watchWorkspaceStatus,
-    } = await importWatchWorkspaceStatusWithManualWorkspaceEvents(repoPath);
+    const { emitWorkspaceRootEvents, ready, watchWorkspaceStatus } =
+      await importWatchWorkspaceStatusWithManualWorkspaceEvents(repoPath);
     const calls: number[] = [];
     const stopWatching = watchWorkspaceStatus(repoPath, {
       onChange: () => {
@@ -509,11 +530,8 @@ describe("watchWorkspaceStatus", () => {
   it("reports change callback failures and continues watching", async () => {
     vi.useFakeTimers();
     const repoPath = await initRepo();
-    const {
-      emitWorkspaceRootEvents,
-      ready,
-      watchWorkspaceStatus,
-    } = await importWatchWorkspaceStatusWithManualWorkspaceEvents(repoPath);
+    const { emitWorkspaceRootEvents, ready, watchWorkspaceStatus } =
+      await importWatchWorkspaceStatusWithManualWorkspaceEvents(repoPath);
     let callbackCount = 0;
     const watchErrors: string[] = [];
     const stopWatching = watchWorkspaceStatus(repoPath, {
@@ -540,7 +558,9 @@ describe("watchWorkspaceStatus", () => {
       expect(callbackCount).toBe(1);
       expect(watchErrors).toHaveLength(1);
       expect(watchErrors[0]).toContain(repoPath);
-      expect(watchErrors[0]).toContain("Workspace status callback failed: boom");
+      expect(watchErrors[0]).toContain(
+        "Workspace status callback failed: boom",
+      );
 
       emitWorkspaceRootEvents([
         {
@@ -583,10 +603,11 @@ describe("watchWorkspaceStatus", () => {
   it("keeps workspace root watching when git metadata watch resolution fails", async () => {
     const repoPath = await initRepo();
     await replaceDotGitWithSymlink(repoPath);
-    const { ready, watchWorkspaceStatus } = await importWatchWorkspaceStatusWithReadySignal({
-      expectedRootPaths: [repoPath],
-      workspaceRootPath: repoPath,
-    });
+    const { ready, watchWorkspaceStatus } =
+      await importWatchWorkspaceStatusWithReadySignal({
+        expectedRootPaths: [repoPath],
+        workspaceRootPath: repoPath,
+      });
     const calls: number[] = [];
     const stopWatching = watchWorkspaceStatus(repoPath, {
       onChange: () => {
@@ -597,7 +618,11 @@ describe("watchWorkspaceStatus", () => {
 
     try {
       await ready;
-      await fs.writeFile(path.join(repoPath, "README.md"), "symlink edit\n", "utf8");
+      await fs.writeFile(
+        path.join(repoPath, "README.md"),
+        "symlink edit\n",
+        "utf8",
+      );
       await waitForCallCount(() => calls.length, 1, WATCH_TEST_TIMEOUT_MS);
     } finally {
       stopWatching();
@@ -650,10 +675,18 @@ describe("watchWorkspaceStatus", () => {
 
     try {
       await ready;
-      await fs.writeFile(path.join(repoPath, "README.md"), "first edit\n", "utf8");
+      await fs.writeFile(
+        path.join(repoPath, "README.md"),
+        "first edit\n",
+        "utf8",
+      );
       await waitForCallCount(() => calls.length, 1, WATCH_TEST_TIMEOUT_MS);
 
-      await fs.writeFile(path.join(repoPath, "README.md"), "second edit\n", "utf8");
+      await fs.writeFile(
+        path.join(repoPath, "README.md"),
+        "second edit\n",
+        "utf8",
+      );
       await waitForCallCount(() => calls.length, 2, WATCH_TEST_TIMEOUT_MS);
 
       const diffOutput = await runGit({
@@ -687,10 +720,18 @@ describe("watchWorkspaceStatus", () => {
 
     try {
       await ready;
-      await fs.writeFile(path.join(repoPath, "a b.txt"), "first edit\n", "utf8");
+      await fs.writeFile(
+        path.join(repoPath, "a b.txt"),
+        "first edit\n",
+        "utf8",
+      );
       await waitForCallCount(() => calls.length, 1, WATCH_TEST_TIMEOUT_MS);
 
-      await fs.writeFile(path.join(repoPath, "a b.txt"), "second edit\n", "utf8");
+      await fs.writeFile(
+        path.join(repoPath, "a b.txt"),
+        "second edit\n",
+        "utf8",
+      );
       await waitForCallCount(() => calls.length, 2, WATCH_TEST_TIMEOUT_MS);
 
       const diffOutput = await runGit({
@@ -705,10 +746,10 @@ describe("watchWorkspaceStatus", () => {
 
   it("retries workspace subscriptions when setup fails", async () => {
     const repoPath = await initRepo();
-    const {
-      ready,
-      watchWorkspaceStatus,
-    } = await importWatchWorkspaceStatusWithTransientWorkspaceSubscriptionFailure(repoPath);
+    const { ready, watchWorkspaceStatus } =
+      await importWatchWorkspaceStatusWithTransientWorkspaceSubscriptionFailure(
+        repoPath,
+      );
     const calls: number[] = [];
     const stopWatching = watchWorkspaceStatus(repoPath, {
       onChange: () => {
@@ -720,7 +761,11 @@ describe("watchWorkspaceStatus", () => {
     try {
       await ready;
       const initialCallCount = calls.length;
-      await fs.writeFile(path.join(repoPath, "README.md"), "retried edit\n", "utf8");
+      await fs.writeFile(
+        path.join(repoPath, "README.md"),
+        "retried edit\n",
+        "utf8",
+      );
       await waitForCallCount(
         () => calls.length,
         initialCallCount + 1,
@@ -738,7 +783,9 @@ describe("watchWorkspaceStatus", () => {
       ready,
       watchWorkspaceStatus,
     } =
-      await importWatchWorkspaceStatusWithPersistentWorkspaceSubscriptionFailure(repoPath);
+      await importWatchWorkspaceStatusWithPersistentWorkspaceSubscriptionFailure(
+        repoPath,
+      );
     const calls: number[] = [];
     const watchErrors: string[] = [];
     const stopWatching = watchWorkspaceStatus(repoPath, {
@@ -752,7 +799,11 @@ describe("watchWorkspaceStatus", () => {
 
     try {
       await ready;
-      await waitForCallCount(() => watchErrors.length, 1, WATCH_TEST_TIMEOUT_MS);
+      await waitForCallCount(
+        () => watchErrors.length,
+        1,
+        WATCH_TEST_TIMEOUT_MS,
+      );
       await waitForCallCount(
         getWorkspaceSubscriptionAttemptCount,
         2,
@@ -782,14 +833,11 @@ describe("watchWorkspaceStatus", () => {
         ).stdout,
       ),
     );
-    const {
-      emitEvents,
-      ready,
-      watchWorkspaceStatus,
-    } = await importWatchWorkspaceStatusWithManualRootEvents({
-      expectedRootPaths,
-      workspaceRootPath: worktreePath,
-    });
+    const { emitEvents, ready, watchWorkspaceStatus } =
+      await importWatchWorkspaceStatusWithManualRootEvents({
+        expectedRootPaths,
+        workspaceRootPath: worktreePath,
+      });
     const calls: number[] = [];
     const stopWatching = watchWorkspaceStatus(worktreePath, {
       onChange: () => {
@@ -817,7 +865,11 @@ describe("watchWorkspaceStatus", () => {
     const initialHead = (
       await runGit({ args: ["rev-parse", "HEAD"], cwd: repoPath })
     ).stdout.trim();
-    await fs.writeFile(path.join(repoPath, "README.md"), "second commit\n", "utf8");
+    await fs.writeFile(
+      path.join(repoPath, "README.md"),
+      "second commit\n",
+      "utf8",
+    );
     await runGit({ args: ["add", "README.md"], cwd: repoPath });
     await runGit({ args: ["commit", "-m", "Second commit"], cwd: repoPath });
     const nextHead = (
@@ -870,14 +922,11 @@ describe("watchWorkspaceStatus", () => {
         ),
       ),
     );
-    const {
-      emitEvents,
-      ready,
-      watchWorkspaceStatus,
-    } = await importWatchWorkspaceStatusWithManualRootEvents({
-      expectedRootPaths: await resolveExpectedWatchRootPaths(repoPath),
-      workspaceRootPath: repoPath,
-    });
+    const { emitEvents, ready, watchWorkspaceStatus } =
+      await importWatchWorkspaceStatusWithManualRootEvents({
+        expectedRootPaths: await resolveExpectedWatchRootPaths(repoPath),
+        workspaceRootPath: repoPath,
+      });
     const calls: Array<{ changeKinds: string[]; changedPaths: string[] }> = [];
     const stopWatching = watchWorkspaceStatus(repoPath, {
       onChange: (event) => {
@@ -923,7 +972,11 @@ describe("watchWorkspaceStatus", () => {
 
     await ready;
     stopWatching();
-    await fs.writeFile(path.join(repoPath, "README.md"), "no callbacks\n", "utf8");
+    await fs.writeFile(
+      path.join(repoPath, "README.md"),
+      "no callbacks\n",
+      "utf8",
+    );
     await ensureCallCountStays(() => calls.length, 0);
 
     expect(calls).toHaveLength(0);

@@ -1,7 +1,4 @@
-import type {
-  AvailableModel,
-  ModelReasoningEffort,
-} from "@bb/domain";
+import type { AvailableModel, ModelReasoningEffort } from "@bb/domain";
 import {
   HIGH_REASONING_EFFORT,
   LOW_REASONING_EFFORT,
@@ -138,7 +135,8 @@ const CLAUDE_CODE_SELECTED_ONLY_CATALOG: readonly ClaudeCodeCatalogEntry[] = [
     id: "sonnet[1m]",
     model: "sonnet[1m]",
     displayName: "Sonnet Alias (1M, Legacy)",
-    description: "Legacy moving Sonnet 1M alias retained for existing selections",
+    description:
+      "Legacy moving Sonnet 1M alias retained for existing selections",
     supportedReasoningEfforts: SONNET_REASONING_EFFORTS,
     defaultReasoningEffort: "medium",
   },
@@ -166,9 +164,7 @@ function cloneReasoningEfforts(
   return efforts.map((effort) => ({ ...effort }));
 }
 
-function buildCatalogModel(
-  entry: ClaudeCodeCatalogEntry,
-): AvailableModel {
+function buildCatalogModel(entry: ClaudeCodeCatalogEntry): AvailableModel {
   return {
     id: entry.id,
     model: entry.model,
@@ -194,6 +190,7 @@ export function listClaudeCodeModels(
   return includeSelectedOnlyModels({
     activeModels: markDefaultModel(CLAUDE_CODE_CATALOG.map(buildCatalogModel)),
     selectedModel: args.selectedModel,
-    selectedOnlyModels: CLAUDE_CODE_SELECTED_ONLY_CATALOG.map(buildCatalogModel),
+    selectedOnlyModels:
+      CLAUDE_CODE_SELECTED_ONLY_CATALOG.map(buildCatalogModel),
   });
 }

@@ -73,7 +73,8 @@ function formatInteractionKind(interaction: PendingInteraction): string {
 function printRequestedPermissions(
   permissions: PrintablePermissionProfile,
 ): void {
-  const summaries = summarizePendingInteractionRequestedPermissions(permissions);
+  const summaries =
+    summarizePendingInteractionRequestedPermissions(permissions);
   if (summaries.length === 0) {
     return;
   }
@@ -91,7 +92,9 @@ function printInteraction(interaction: PendingInteraction): void {
   console.log(`  Status: ${interaction.status}`);
   console.log(`  Created: ${new Date(interaction.createdAt).toLocaleString()}`);
   if (interaction.resolvedAt !== null) {
-    console.log(`  Resolved: ${new Date(interaction.resolvedAt).toLocaleString()}`);
+    console.log(
+      `  Resolved: ${new Date(interaction.resolvedAt).toLocaleString()}`,
+    );
   }
   if (interaction.statusReason) {
     console.log(`  Reason: ${interaction.statusReason}`);
@@ -103,7 +106,9 @@ function printInteraction(interaction: PendingInteraction): void {
   switch (interaction.payload.subject.kind) {
     case "command":
     case "file_change":
-      for (const line of formatPendingInteractionSubjectDetailLines(interaction)) {
+      for (const line of formatPendingInteractionSubjectDetailLines(
+        interaction,
+      )) {
         console.log(`  ${line}`);
       }
       break;
@@ -126,9 +131,7 @@ function printInteraction(interaction: PendingInteraction): void {
   if (interaction.resolution) {
     console.log("");
     console.log("Resolution:");
-    console.log(
-      `  Decision: ${interaction.resolution.decision}`,
-    );
+    console.log(`  Decision: ${interaction.resolution.decision}`);
     if (interaction.resolution.decision === "allow_for_session") {
       console.log("  Scope: session");
     } else if (interaction.resolution.decision === "allow_once") {
@@ -137,7 +140,9 @@ function printInteraction(interaction: PendingInteraction): void {
   }
 }
 
-async function fetchInteraction(args: FetchInteractionArgs): Promise<PendingInteraction> {
+async function fetchInteraction(
+  args: FetchInteractionArgs,
+): Promise<PendingInteraction> {
   const client = createClient(args.getUrl());
   return unwrap<PendingInteraction>(
     client.api.v1.threads[":id"].interactions[":interactionId"].$get({
@@ -150,7 +155,9 @@ async function fetchInteraction(args: FetchInteractionArgs): Promise<PendingInte
 }
 
 interface ResolveInteractionArgs {
-  buildResolution: (interaction: PendingInteraction) => PendingInteractionResolution;
+  buildResolution: (
+    interaction: PendingInteraction,
+  ) => PendingInteractionResolution;
   failureAction: string;
   getUrl: () => string;
   interactionId: string;
@@ -171,9 +178,7 @@ interface FormatResolutionSuccessMessageArgs {
   updated: PendingInteraction;
 }
 
-async function resolveInteraction(
-  args: ResolveInteractionArgs,
-): Promise<void> {
+async function resolveInteraction(args: ResolveInteractionArgs): Promise<void> {
   const interaction = await fetchInteraction({
     getUrl: args.getUrl,
     interactionId: args.interactionId,
@@ -239,8 +244,8 @@ function buildBinaryResolution(
   action: "approve" | "deny",
 ): PendingInteractionResolution {
   if (
-    action === "approve"
-    && interaction.payload.subject.kind === "permission_grant"
+    action === "approve" &&
+    interaction.payload.subject.kind === "permission_grant"
   ) {
     throw new Error(
       `Interaction ${interaction.id} is a permission grant; use bb thread interactions grant.`,
@@ -269,9 +274,7 @@ function buildPermissionGrantResolution(
 function formatBinaryResolutionMessage(
   resolution: PendingInteractionResolution,
 ): string {
-  return formatPendingInteractionApprovalResolutionOutcome(
-    resolution.decision,
-  );
+  return formatPendingInteractionApprovalResolutionOutcome(resolution.decision);
 }
 
 function formatResolutionSuccessMessage(
@@ -299,97 +302,113 @@ export function registerInteractionCommands(
     .description("List interactions for a thread")
     .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (id: string | undefined, opts: ThreadInteractionTargetOptions) => {
-      const resolved = requireThreadIdWithLabelOrSelf(id, opts);
-      const client = createClient(getUrl());
-      printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
+    .action(
+      action(
+        async (
+          id: string | undefined,
+          opts: ThreadInteractionTargetOptions,
+        ) => {
+          const resolved = requireThreadIdWithLabelOrSelf(id, opts);
+          const client = createClient(getUrl());
+          printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
 
-      const items = await unwrap<PendingInteraction[]>(
-        client.api.v1.threads[":id"].interactions.$get({
-          param: { id: resolved.id },
-        }),
-      );
+          const items = await unwrap<PendingInteraction[]>(
+            client.api.v1.threads[":id"].interactions.$get({
+              param: { id: resolved.id },
+            }),
+          );
 
-      if (outputJson(opts, items)) {
-        return;
-      }
-      if (items.length === 0) {
-        console.log("No interactions found");
-        return;
-      }
+          if (outputJson(opts, items)) {
+            return;
+          }
+          if (items.length === 0) {
+            console.log("No interactions found");
+            return;
+          }
 
-      const table = renderBorderlessTable(
-        {
-          head: ["ID", "Kind", "Status", "Summary"],
-          colWidths: [20, 12, 12, 70],
-          trimTrailingWhitespace: true,
+          const table = renderBorderlessTable(
+            {
+              head: ["ID", "Kind", "Status", "Summary"],
+              colWidths: [20, 12, 12, 70],
+              trimTrailingWhitespace: true,
+            },
+            items.map((interaction) => [
+              interaction.id,
+              formatInteractionKind(interaction),
+              interaction.status,
+              formatPendingInteractionSummary({
+                interaction,
+                surface: "cli",
+              }),
+            ]),
+          );
+          console.log("");
+          console.log(table);
+          console.log("");
         },
-        items.map((interaction) => [
-          interaction.id,
-          formatInteractionKind(interaction),
-          interaction.status,
-          formatPendingInteractionSummary({
-            interaction,
-            surface: "cli",
-          }),
-        ]),
-      );
-      console.log("");
-      console.log(table);
-      console.log("");
-    }));
+      ),
+    );
 
   interactions
     .command("show <interactionId> [id]")
     .description("Show an interaction")
     .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (
-      interactionId: string,
-      id: string | undefined,
-      opts: ThreadInteractionTargetOptions,
-    ) => {
-      const resolved = requireThreadIdWithLabelOrSelf(id, opts);
-      printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
-      const interaction = await fetchInteraction({
-        getUrl,
-        interactionId,
-        threadId: resolved.id,
-      });
+    .action(
+      action(
+        async (
+          interactionId: string,
+          id: string | undefined,
+          opts: ThreadInteractionTargetOptions,
+        ) => {
+          const resolved = requireThreadIdWithLabelOrSelf(id, opts);
+          printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
+          const interaction = await fetchInteraction({
+            getUrl,
+            interactionId,
+            threadId: resolved.id,
+          });
 
-      if (outputJson(opts, interaction)) {
-        return;
-      }
-      printInteraction(interaction);
-    }));
+          if (outputJson(opts, interaction)) {
+            return;
+          }
+          printInteraction(interaction);
+        },
+      ),
+    );
 
   interactions
     .command("approve <interactionId> [id]")
     .description("Approve a command or file-change interaction for this turn")
     .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (
-      interactionId: string,
-      id: string | undefined,
-      opts: ThreadInteractionTargetOptions,
-    ) => {
-      const resolved = requireThreadIdWithLabelOrSelf(id, opts);
-      printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
-      await resolveInteraction({
-        buildResolution: (interaction) => buildBinaryResolution(interaction, "approve"),
-        failureAction: "approve",
-        getUrl,
-        interactionId,
-        json: opts.json,
-        threadId: resolved.id,
-        successMessage: ({ resolution, updated }) =>
-          formatResolutionSuccessMessage({
+    .action(
+      action(
+        async (
+          interactionId: string,
+          id: string | undefined,
+          opts: ThreadInteractionTargetOptions,
+        ) => {
+          const resolved = requireThreadIdWithLabelOrSelf(id, opts);
+          printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
+          await resolveInteraction({
+            buildResolution: (interaction) =>
+              buildBinaryResolution(interaction, "approve"),
+            failureAction: "approve",
+            getUrl,
             interactionId,
-            resolution,
-            updated,
-          }),
-      });
-    }));
+            json: opts.json,
+            threadId: resolved.id,
+            successMessage: ({ resolution, updated }) =>
+              formatResolutionSuccessMessage({
+                interactionId,
+                resolution,
+                updated,
+              }),
+          });
+        },
+      ),
+    );
 
   interactions
     .command("grant <interactionId> [id]")
@@ -397,56 +416,65 @@ export function registerInteractionCommands(
     .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
     .option("--scope <scope>", "Grant scope: turn or session")
-    .action(action(async (
-      interactionId: string,
-      id: string | undefined,
-      opts: ThreadInteractionGrantOptions,
-    ) => {
-      const resolved = requireThreadIdWithLabelOrSelf(id, opts);
-      printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
-      const scope = parsePermissionGrantScope(opts.scope);
-      await resolveInteraction({
-        buildResolution: (interaction) => buildPermissionGrantResolution(interaction, scope),
-        failureAction: "grant",
-        getUrl,
-        interactionId,
-        json: opts.json,
-        threadId: resolved.id,
-        successMessage: ({ resolution, updated }) =>
-          formatResolutionSuccessMessage({
+    .action(
+      action(
+        async (
+          interactionId: string,
+          id: string | undefined,
+          opts: ThreadInteractionGrantOptions,
+        ) => {
+          const resolved = requireThreadIdWithLabelOrSelf(id, opts);
+          printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
+          const scope = parsePermissionGrantScope(opts.scope);
+          await resolveInteraction({
+            buildResolution: (interaction) =>
+              buildPermissionGrantResolution(interaction, scope),
+            failureAction: "grant",
+            getUrl,
             interactionId,
-            resolution,
-            updated,
-          }),
-      });
-    }));
+            json: opts.json,
+            threadId: resolved.id,
+            successMessage: ({ resolution, updated }) =>
+              formatResolutionSuccessMessage({
+                interactionId,
+                resolution,
+                updated,
+              }),
+          });
+        },
+      ),
+    );
 
   interactions
     .command("deny <interactionId> [id]")
     .description("Deny a command, file-change, or permission interaction")
     .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (
-      interactionId: string,
-      id: string | undefined,
-      opts: ThreadInteractionTargetOptions,
-    ) => {
-      const resolved = requireThreadIdWithLabelOrSelf(id, opts);
-      printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
-      await resolveInteraction({
-        buildResolution: (interaction) => buildBinaryResolution(interaction, "deny"),
-        failureAction: "deny",
-        getUrl,
-        interactionId,
-        json: opts.json,
-        threadId: resolved.id,
-        successMessage: ({ resolution, updated }) =>
-          formatResolutionSuccessMessage({
+    .action(
+      action(
+        async (
+          interactionId: string,
+          id: string | undefined,
+          opts: ThreadInteractionTargetOptions,
+        ) => {
+          const resolved = requireThreadIdWithLabelOrSelf(id, opts);
+          printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
+          await resolveInteraction({
+            buildResolution: (interaction) =>
+              buildBinaryResolution(interaction, "deny"),
+            failureAction: "deny",
+            getUrl,
             interactionId,
-            resolution,
-            updated,
-          }),
-      });
-    }));
-
+            json: opts.json,
+            threadId: resolved.id,
+            successMessage: ({ resolution, updated }) =>
+              formatResolutionSuccessMessage({
+                interactionId,
+                resolution,
+                updated,
+              }),
+          });
+        },
+      ),
+    );
 }

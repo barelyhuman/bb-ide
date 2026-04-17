@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildFilePreview,
-  normalizeFilePreviewMimeType,
-} from "./file-preview";
+import { buildFilePreview, normalizeFilePreviewMimeType } from "./file-preview";
 
 describe("file-preview", () => {
   it("builds text previews for declared text mime types", () => {
@@ -26,7 +23,7 @@ describe("file-preview", () => {
 
   it("builds text previews for utf8 content without a text mime type", () => {
     const preview = buildFilePreview({
-      contentBytes: new TextEncoder().encode("{\"ok\":true}\n"),
+      contentBytes: new TextEncoder().encode('{"ok":true}\n'),
       mimeType: "application/octet-stream",
       path: "result.log",
       url: "/files/result.log",
@@ -37,7 +34,7 @@ describe("file-preview", () => {
       mimeType: "application/octet-stream",
       path: "result.log",
       url: "/files/result.log",
-      content: "{\"ok\":true}\n",
+      content: '{"ok":true}\n',
     });
   });
 
@@ -92,7 +89,9 @@ describe("file-preview", () => {
   });
 
   it("normalizes file preview mime types", () => {
-    expect(normalizeFilePreviewMimeType("text/plain; charset=utf-8")).toBe("text/plain");
+    expect(normalizeFilePreviewMimeType("text/plain; charset=utf-8")).toBe(
+      "text/plain",
+    );
     expect(normalizeFilePreviewMimeType(null)).toBe("application/octet-stream");
   });
 });

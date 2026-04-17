@@ -87,10 +87,7 @@ function toViewTurnStatus(
   }
 }
 
-function getTurnDurationMs(
-  startedAt: number,
-  completedAt: number,
-): number {
+function getTurnDurationMs(startedAt: number, completedAt: number): number {
   return Math.max(0, completedAt - startedAt);
 }
 
@@ -268,7 +265,7 @@ export function buildViewProjection(
 
   return {
     entries: orderedEntryDrafts.map((entryDraft) =>
-      createViewTimelineEntry(entryDraft, turnsById)
+      createViewTimelineEntry(entryDraft, turnsById),
     ),
   };
 }

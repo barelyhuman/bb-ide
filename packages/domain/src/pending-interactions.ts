@@ -108,10 +108,12 @@ export type PendingInteractionRequestedPermissionProfile = z.infer<
   typeof pendingInteractionRequestedPermissionProfileSchema
 >;
 
-export const pendingInteractionGrantablePermissionProfileSchema = z.object({
-  network: pendingInteractionNetworkPermissionsSchema.nullable(),
-  fileSystem: pendingInteractionFileSystemPermissionsSchema.nullable(),
-}).strict();
+export const pendingInteractionGrantablePermissionProfileSchema = z
+  .object({
+    network: pendingInteractionNetworkPermissionsSchema.nullable(),
+    fileSystem: pendingInteractionFileSystemPermissionsSchema.nullable(),
+  })
+  .strict();
 export type PendingInteractionGrantablePermissionProfile = z.infer<
   typeof pendingInteractionGrantablePermissionProfileSchema
 >;
@@ -168,11 +170,14 @@ export type PendingInteractionPermissionGrantApprovalSubject = z.infer<
   typeof pendingInteractionPermissionGrantApprovalSubjectSchema
 >;
 
-export const pendingInteractionApprovalSubjectSchema = z.discriminatedUnion("kind", [
-  pendingInteractionCommandApprovalSubjectSchema,
-  pendingInteractionFileChangeApprovalSubjectSchema,
-  pendingInteractionPermissionGrantApprovalSubjectSchema,
-]);
+export const pendingInteractionApprovalSubjectSchema = z.discriminatedUnion(
+  "kind",
+  [
+    pendingInteractionCommandApprovalSubjectSchema,
+    pendingInteractionFileChangeApprovalSubjectSchema,
+    pendingInteractionPermissionGrantApprovalSubjectSchema,
+  ],
+);
 export type PendingInteractionApprovalSubject = z.infer<
   typeof pendingInteractionApprovalSubjectSchema
 >;
@@ -186,25 +191,30 @@ export type ApprovalPendingInteractionPayload = z.infer<
   typeof approvalPendingInteractionPayloadSchema
 >;
 
-export const pendingInteractionPayloadSchema = approvalPendingInteractionPayloadSchema;
+export const pendingInteractionPayloadSchema =
+  approvalPendingInteractionPayloadSchema;
 export type PendingInteractionPayload = z.infer<
   typeof pendingInteractionPayloadSchema
 >;
 
-export const approvalPendingInteractionResolutionSchema =
-  z.discriminatedUnion("decision", [
+export const approvalPendingInteractionResolutionSchema = z.discriminatedUnion(
+  "decision",
+  [
     z.object({
       decision: z.literal("allow_once"),
-      grantedPermissions: pendingInteractionGrantedPermissionProfileSchema.nullable(),
+      grantedPermissions:
+        pendingInteractionGrantedPermissionProfileSchema.nullable(),
     }),
     z.object({
       decision: z.literal("allow_for_session"),
-      grantedPermissions: pendingInteractionGrantedPermissionProfileSchema.nullable(),
+      grantedPermissions:
+        pendingInteractionGrantedPermissionProfileSchema.nullable(),
     }),
     z.object({
       decision: z.literal("deny"),
     }),
-  ]);
+  ],
+);
 export type ApprovalPendingInteractionResolution = z.infer<
   typeof approvalPendingInteractionResolutionSchema
 >;

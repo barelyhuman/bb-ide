@@ -1,22 +1,22 @@
-import { FolderPlus, MoreHorizontal, PencilLine, Trash2 } from "lucide-react"
-import { findLocalPathProjectSourceForHost } from "@bb/domain"
-import type { ProjectResponse } from "@bb/server-contract"
-import { Button } from "@/components/ui/button"
+import { FolderPlus, MoreHorizontal, PencilLine, Trash2 } from "lucide-react";
+import { findLocalPathProjectSourceForHost } from "@bb/domain";
+import type { ProjectResponse } from "@bb/server-contract";
+import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { useHostDaemon } from "@/hooks/useHostDaemon"
-import { cn } from "@/lib/utils"
-import { useProjectActions } from "./ProjectActionsProvider"
+} from "@/components/ui/dropdown-menu";
+import { useHostDaemon } from "@/hooks/useHostDaemon";
+import { cn } from "@/lib/utils";
+import { useProjectActions } from "./ProjectActionsProvider";
 
 interface ProjectActionsMenuProps {
-  project: ProjectResponse
-  triggerClassName?: string
-  align?: "start" | "center" | "end"
-  onOpenChange?: (open: boolean) => void
+  project: ProjectResponse;
+  triggerClassName?: string;
+  align?: "start" | "center" | "end";
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function ProjectActionsMenu({
@@ -25,15 +25,12 @@ export function ProjectActionsMenu({
   align = "end",
   onOpenChange,
 }: ProjectActionsMenuProps) {
-  const { localHostId } = useHostDaemon()
-  const {
-    requestRename,
-    requestDelete,
-    requestAddLocalPath,
-  } = useProjectActions()
+  const { localHostId } = useHostDaemon();
+  const { requestRename, requestDelete, requestAddLocalPath } =
+    useProjectActions();
   const showAddLocalPath =
     localHostId != null &&
-    !findLocalPathProjectSourceForHost(project.sources, localHostId)
+    !findLocalPathProjectSourceForHost(project.sources, localHostId);
 
   return (
     <DropdownMenu onOpenChange={onOpenChange}>
@@ -49,7 +46,7 @@ export function ProjectActionsMenu({
           aria-label={`${project.name} actions`}
           title={`${project.name} actions`}
           onClick={(event) => {
-            event.stopPropagation()
+            event.stopPropagation();
           }}
         >
           <MoreHorizontal className="size-5 md:size-4" />
@@ -58,8 +55,8 @@ export function ProjectActionsMenu({
       <DropdownMenuContent align={align} className="w-44">
         <DropdownMenuItem
           onSelect={(event) => {
-            event.preventDefault()
-            requestRename(project)
+            event.preventDefault();
+            requestRename(project);
           }}
         >
           <PencilLine className="size-4" />
@@ -68,8 +65,8 @@ export function ProjectActionsMenu({
         {showAddLocalPath ? (
           <DropdownMenuItem
             onSelect={(event) => {
-              event.preventDefault()
-              requestAddLocalPath(project)
+              event.preventDefault();
+              requestAddLocalPath(project);
             }}
           >
             <FolderPlus className="size-4" />
@@ -79,8 +76,8 @@ export function ProjectActionsMenu({
         <DropdownMenuItem
           className="text-destructive focus:text-destructive"
           onSelect={(event) => {
-            event.preventDefault()
-            requestDelete(project)
+            event.preventDefault();
+            requestDelete(project);
           }}
         >
           <Trash2 className="size-4" />
@@ -88,5 +85,5 @@ export function ProjectActionsMenu({
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-  )
+  );
 }

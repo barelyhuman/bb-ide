@@ -123,147 +123,176 @@ async function validateArchiveCleanupRequest(
 }
 
 export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
-  const { post, del } = typedRoutes<PublicApiSchema>(app, { onValidationError: (msg) => new ApiError(400, "invalid_request", msg) });
+  const { post, del } = typedRoutes<PublicApiSchema>(app, {
+    onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
+  });
 
-  post("/threads/:id/send", sendMessageRequestSchema, async (context, payload) => {
-    const { environment, thread } = requirePublicThreadEnvironment(deps.db, context.req.param("id"));
-    ensureThreadIsWritable(thread);
-    ensureThreadIsNotAwaitingUserInteraction(deps, thread.id);
-    const mode = resolveSendMode(thread.status, payload.mode);
-    if (mode === "start") {
-      ensureThreadCanQueueStartRequest(deps, thread);
-    }
-    const expectedSteerTurnId = mode === "auto" || mode === "steer"
-      ? getActiveTurnId(deps, thread.id)
-      : null;
-    const execution = await buildExecutionOptions(
-      deps,
-      payload,
-      {
-        threadId: thread.id,
-      },
-      "client/turn/requested",
-    );
-    const permissionEscalation = resolvePermissionEscalation({
-      thread,
-      initiator: "user",
-    });
-
-    if (
-      await queueTurnDuringReprovision({
+  post(
+    "/threads/:id/send",
+    sendMessageRequestSchema,
+    async (context, payload) => {
+      const { environment, thread } = requirePublicThreadEnvironment(
+        deps.db,
+        context.req.param("id"),
+      );
+      ensureThreadIsWritable(thread);
+      ensureThreadIsNotAwaitingUserInteraction(deps, thread.id);
+      const mode = resolveSendMode(thread.status, payload.mode);
+      if (mode === "start") {
+        ensureThreadCanQueueStartRequest(deps, thread);
+      }
+      const expectedSteerTurnId =
+        mode === "auto" || mode === "steer"
+          ? getActiveTurnId(deps, thread.id)
+          : null;
+      const execution = await buildExecutionOptions(
         deps,
-        environment,
+        payload,
+        {
+          threadId: thread.id,
+        },
+        "client/turn/requested",
+      );
+      const permissionEscalation = resolvePermissionEscalation({
+        thread,
+        initiator: "user",
+      });
+
+      if (
+        await queueTurnDuringReprovision({
+          deps,
+          environment,
+          execution,
+          initiator: "user",
+          input: payload.input,
+          thread,
+        })
+      ) {
+        return context.json({ ok: true });
+      }
+      const readyEnvironment = requireReadyThreadEnvironment(environment);
+      if (mode === "start") {
+        await demoteEnvironmentIfPromoted(deps, {
+          environment: readyEnvironment,
+        });
+      }
+
+      const eventSequence = appendClientTurnEvent(deps, {
+        threadId: thread.id,
+        environmentId: readyEnvironment.id,
+        type: "client/turn/requested",
+        input: payload.input,
         execution,
         initiator: "user",
-        input: payload.input,
-        thread,
-      })
-    ) {
-      return context.json({ ok: true });
-    }
-    const readyEnvironment = requireReadyThreadEnvironment(environment);
-    if (mode === "start") {
-      await demoteEnvironmentIfPromoted(deps, {
-        environment: readyEnvironment,
+        requestMethod: "turn/start",
+        source: "tell",
+        target:
+          mode === "start"
+            ? { kind: "new-turn" }
+            : {
+                kind: mode,
+                expectedTurnId: expectedSteerTurnId,
+              },
       });
-    }
 
-    const eventSequence = appendClientTurnEvent(deps, {
-      threadId: thread.id,
-      environmentId: readyEnvironment.id,
-      type: "client/turn/requested",
-      input: payload.input,
-      execution,
-      initiator: "user",
-      requestMethod: "turn/start",
-      source: "tell",
-      target: mode === "start"
-        ? { kind: "new-turn" }
-        : {
-            kind: mode,
+      if (mode === "start") {
+        const queuedMode = await queueReadyThreadTurnCommand(deps, {
+          thread,
+          input: payload.input,
+          eventSequence,
+          execution,
+          permissionEscalation,
+          environment: {
+            id: readyEnvironment.id,
+            hostId: readyEnvironment.hostId,
+            path: readyEnvironment.path,
+            workspaceProvisionType: readyEnvironment.workspaceProvisionType,
+          },
+        });
+        if (queuedMode === "turn.submit") {
+          tryTransition(deps.db, deps.hub, thread.id, "active");
+        }
+      } else {
+        await queueTurnSubmitCommand(deps, {
+          thread,
+          input: payload.input,
+          eventSequence,
+          execution,
+          permissionEscalation,
+          target: {
+            mode,
             expectedTurnId: expectedSteerTurnId,
           },
-    });
-
-    if (mode === "start") {
-      const queuedMode = await queueReadyThreadTurnCommand(deps, {
-        thread,
-        input: payload.input,
-        eventSequence,
-        execution,
-        permissionEscalation,
-        environment: {
-          id: readyEnvironment.id,
-          hostId: readyEnvironment.hostId,
-          path: readyEnvironment.path,
-          workspaceProvisionType: readyEnvironment.workspaceProvisionType,
-        },
-      });
-      if (queuedMode === "turn.submit") {
-        tryTransition(deps.db, deps.hub, thread.id, "active");
+          environment: {
+            id: readyEnvironment.id,
+            hostId: readyEnvironment.hostId,
+            path: readyEnvironment.path,
+            workspaceProvisionType: readyEnvironment.workspaceProvisionType,
+          },
+        });
       }
-    } else {
-      await queueTurnSubmitCommand(deps, {
-        thread,
-        input: payload.input,
-        eventSequence,
-        execution,
-        permissionEscalation,
-        target: {
-          mode,
-          expectedTurnId: expectedSteerTurnId,
+
+      return context.json({ ok: true });
+    },
+  );
+
+  post(
+    "/threads/:id/drafts",
+    createDraftRequestSchema,
+    async (context, payload) => {
+      const { thread } = requirePublicThreadEnvironment(
+        deps.db,
+        context.req.param("id"),
+      );
+      ensureThreadIsWritable(thread);
+      const execution = await buildExecutionOptions(
+        deps,
+        payload,
+        {
+          threadId: thread.id,
         },
-        environment: {
-          id: readyEnvironment.id,
-          hostId: readyEnvironment.hostId,
-          path: readyEnvironment.path,
-          workspaceProvisionType: readyEnvironment.workspaceProvisionType,
-        },
+        "client/turn/requested",
+      );
+      const draft = createDraft(deps.db, deps.hub, {
+        threadId: context.req.param("id"),
+        content: payload.input,
+        model: execution.model,
+        reasoningLevel: execution.reasoningLevel,
+        permissionMode: execution.permissionMode,
+        serviceTier: execution.serviceTier,
       });
-    }
+      return context.json(toQueuedMessage(draft), 201);
+    },
+  );
 
-    return context.json({ ok: true });
-  });
-
-  post("/threads/:id/drafts", createDraftRequestSchema, async (context, payload) => {
-    const { thread } = requirePublicThreadEnvironment(deps.db, context.req.param("id"));
-    ensureThreadIsWritable(thread);
-    const execution = await buildExecutionOptions(
-      deps,
-      payload,
-      {
-        threadId: thread.id,
-      },
-      "client/turn/requested",
-    );
-    const draft = createDraft(deps.db, deps.hub, {
-      threadId: context.req.param("id"),
-      content: payload.input,
-      model: execution.model,
-      reasoningLevel: execution.reasoningLevel,
-      permissionMode: execution.permissionMode,
-      serviceTier: execution.serviceTier,
-    });
-    return context.json(toQueuedMessage(draft), 201);
-  });
-
-  post("/threads/:id/drafts/:draftId/send", sendDraftRequestSchema, async (context) => {
-    const { thread } = requirePublicThreadEnvironment(deps.db, context.req.param("id"));
-    ensureThreadIsWritable(thread);
-    ensureThreadIsNotAwaitingUserInteraction(deps, thread.id);
-    const queuedMessage = await sendQueuedDraft(deps, {
-      draftId: context.req.param("draftId"),
-      threadId: context.req.param("id"),
-    });
-    return context.json({ ok: true, queuedMessage });
-  });
+  post(
+    "/threads/:id/drafts/:draftId/send",
+    sendDraftRequestSchema,
+    async (context) => {
+      const { thread } = requirePublicThreadEnvironment(
+        deps.db,
+        context.req.param("id"),
+      );
+      ensureThreadIsWritable(thread);
+      ensureThreadIsNotAwaitingUserInteraction(deps, thread.id);
+      const queuedMessage = await sendQueuedDraft(deps, {
+        draftId: context.req.param("draftId"),
+        threadId: context.req.param("id"),
+      });
+      return context.json({ ok: true, queuedMessage });
+    },
+  );
 
   del("/threads/:id/drafts/:draftId", (context) => {
     const draft = getDraft(deps.db, context.req.param("draftId"));
     if (!draft || draft.threadId !== context.req.param("id")) {
       throw new ApiError(404, "invalid_request", "Draft not found");
     }
-    const deleted = deleteDraft(deps.db, deps.hub, context.req.param("draftId"));
+    const deleted = deleteDraft(
+      deps.db,
+      deps.hub,
+      context.req.param("draftId"),
+    );
     if (!deleted) {
       throw new ApiError(404, "invalid_request", "Draft not found");
     }
@@ -271,7 +300,10 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
   });
 
   post("/threads/:id/stop", async (context) => {
-    const { environment, thread } = requirePublicThreadEnvironment(deps.db, context.req.param("id"));
+    const { environment, thread } = requirePublicThreadEnvironment(
+      deps.db,
+      context.req.param("id"),
+    );
     if (thread.status !== "active" && thread.stopRequestedAt === null) {
       throw new ApiError(409, "invalid_request", "Thread is not active");
     }
@@ -279,39 +311,46 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
     return context.json({ ok: true });
   });
 
-  post("/threads/:id/archive", archiveThreadRequestSchema, async (context, payload) => {
-    const force = payload.force;
-    const { environment, thread } = requirePublicThreadEnvironment(deps.db, context.req.param("id"));
-    // Idempotent: archiving an already-archived thread is a no-op success.
-    // A concurrent archive (e.g. from another tab) could land between the
-    // client seeing a confirmation-required 409 and the user clicking
-    // "Archive anyway"; we'd rather succeed than surface a confusing error.
-    if (thread.archivedAt !== null) {
+  post(
+    "/threads/:id/archive",
+    archiveThreadRequestSchema,
+    async (context, payload) => {
+      const force = payload.force;
+      const { environment, thread } = requirePublicThreadEnvironment(
+        deps.db,
+        context.req.param("id"),
+      );
+      // Idempotent: archiving an already-archived thread is a no-op success.
+      // A concurrent archive (e.g. from another tab) could land between the
+      // client seeing a confirmation-required 409 and the user clicking
+      // "Archive anyway"; we'd rather succeed than surface a confusing error.
+      if (thread.archivedAt !== null) {
+        return context.json({ ok: true });
+      }
+      const shouldRequestCleanup = await validateArchiveCleanupRequest(
+        deps,
+        thread,
+        force,
+      );
+      archiveThread(deps.db, deps.hub, thread.id);
+      requestThreadStopIfNeeded(deps, thread, environment);
+      resetActiveThreadEventPruningState(thread.id);
+      pruneThreadEventHistoryBestEffort(deps, {
+        mode: "archived",
+        threadId: thread.id,
+      });
+      if (shouldRequestCleanup) {
+        requestEnvironmentCleanup(deps, {
+          environmentId: thread.environmentId,
+          mode: force ? "force" : "safe",
+        });
+        await advanceEnvironmentCleanup(deps, {
+          environmentId: thread.environmentId,
+        });
+      }
       return context.json({ ok: true });
-    }
-    const shouldRequestCleanup = await validateArchiveCleanupRequest(
-      deps,
-      thread,
-      force,
-    );
-    archiveThread(deps.db, deps.hub, thread.id);
-    requestThreadStopIfNeeded(deps, thread, environment);
-    resetActiveThreadEventPruningState(thread.id);
-    pruneThreadEventHistoryBestEffort(deps, {
-      mode: "archived",
-      threadId: thread.id,
-    });
-    if (shouldRequestCleanup) {
-      requestEnvironmentCleanup(deps, {
-        environmentId: thread.environmentId,
-        mode: force ? "force" : "safe",
-      });
-      await advanceEnvironmentCleanup(deps, {
-        environmentId: thread.environmentId,
-      });
-    }
-    return context.json({ ok: true });
-  });
+    },
+  );
 
   post("/threads/:id/unarchive", (context) => {
     requirePublicThread(deps.db, context.req.param("id"));

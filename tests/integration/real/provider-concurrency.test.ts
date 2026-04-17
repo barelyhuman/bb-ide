@@ -26,7 +26,9 @@ describe("real provider concurrency integration", () => {
       await assertProviderPrerequisites("codex");
       await assertProviderPrerequisites("claude-code");
 
-      const harness = await createIntegrationHarness({ adapterFactory: undefined });
+      const harness = await createIntegrationHarness({
+        adapterFactory: undefined,
+      });
 
       try {
         const project = await createProjectFixture(harness, {

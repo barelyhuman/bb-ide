@@ -55,7 +55,8 @@ export function ThreadTimelinePane({
   toolGroupMessagesById,
 }: ThreadTimelinePaneProps) {
   const preferredTheme = usePreferredTheme();
-  const showActiveThinking = activeThinking !== null && ongoingIndicatorLabel === undefined;
+  const showActiveThinking =
+    activeThinking !== null && ongoingIndicatorLabel === undefined;
   const activeThinkingText = activeThinking?.text.trim() ?? "";
   const activeThinkingDetails =
     showActiveThinking && activeThinkingText.length > 0
@@ -80,9 +81,14 @@ export function ThreadTimelinePane({
       >
         <ConversationTimeline>
           {isThreadTimelinePending ? (
-            <ConversationWorkingIndicator label="Loading thread..." className="mt-6" />
+            <ConversationWorkingIndicator
+              label="Loading thread..."
+              className="mt-6"
+            />
           ) : timelineError ? (
-            <div className="mt-6 px-2 text-sm text-destructive">Failed to load timeline</div>
+            <div className="mt-6 px-2 text-sm text-destructive">
+              Failed to load timeline
+            </div>
           ) : threadDetailRows.length === 0 ? (
             <ConversationEmptyState message="No events yet" />
           ) : (

@@ -5,7 +5,10 @@ import { Check, ChevronDown, Monitor } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Host, ProjectSource, SandboxBackendInfo } from "@bb/domain";
 import { LocalhostBadge } from "@bb/ui-core";
-import { findLocalPathProjectSourceForHost, isGitHubRepoProjectSource } from "@bb/domain";
+import {
+  findLocalPathProjectSourceForHost,
+  isGitHubRepoProjectSource,
+} from "@bb/domain";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,7 +22,10 @@ import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useHosts, useSandboxBackends } from "@/hooks/queries/system-queries";
 import { sandboxHostSupportedAtom } from "@/lib/atoms";
 import { getEnvironmentWorkspaceLabelIcon } from "@/lib/environment-workspace-display";
-import { HostStatusBadge, HostStatusDot } from "@/components/HostStatusIndicator";
+import {
+  HostStatusBadge,
+  HostStatusDot,
+} from "@/components/HostStatusIndicator";
 import { cn } from "@/lib/utils";
 import {
   PROMPT_OPTION_BASE_CLASS_NAME,
@@ -88,7 +94,8 @@ function buildHostSections(
 ): HostSection[] {
   const sections = hosts.map((host): HostSection => {
     const isConnected = host.status === "connected";
-    const hasSource = findLocalPathProjectSourceForHost(sources, host.id) !== undefined;
+    const hasSource =
+      findLocalPathProjectSourceForHost(sources, host.id) !== undefined;
     return {
       host,
       isLocal: isLocalHost(host.id),
@@ -134,7 +141,8 @@ export function EnvironmentPicker({
   const { isLocalHost } = useHostDaemon();
   const { data: hosts = [] } = useHosts();
   const sandboxHostSupported = useAtomValue(sandboxHostSupportedAtom);
-  const { data: sandboxBackends = [] } = useSandboxBackends(sandboxHostSupported);
+  const { data: sandboxBackends = [] } =
+    useSandboxBackends(sandboxHostSupported);
 
   const hostSections = useMemo(
     () => buildHostSections(hosts, sources, isLocalHost),
@@ -154,7 +162,12 @@ export function EnvironmentPicker({
       if (isLocalHost(parsed.hostId)) {
         return { modeLabel, icon, hostConnected };
       }
-      return { modeLabel, hostLabel: host?.name ?? "Unknown", icon, hostConnected };
+      return {
+        modeLabel,
+        hostLabel: host?.name ?? "Unknown",
+        icon,
+        hostConnected,
+      };
     }
     const backend = sandboxBackends.find((b) => b.id === parsed.backendId);
     return {
@@ -182,7 +195,10 @@ export function EnvironmentPicker({
             <span className="truncate">
               {selected.modeLabel}
               {selected.hostLabel ? (
-                <span className="text-muted-foreground/60"> · {selected.hostLabel}</span>
+                <span className="text-muted-foreground/60">
+                  {" "}
+                  · {selected.hostLabel}
+                </span>
               ) : null}
             </span>
             {selected.hostConnected !== undefined ? (
@@ -192,7 +208,11 @@ export function EnvironmentPicker({
           <ChevronDown className="size-5 text-muted-foreground md:size-3.5" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-52 max-w-80 divide-y [&>*+*]:pt-2 [&>*:not(:last-child)]:pb-2" mobileTitle="Environment">
+      <DropdownMenuContent
+        align="start"
+        className="min-w-52 max-w-80 divide-y [&>*+*]:pt-2 [&>*:not(:last-child)]:pb-2"
+        mobileTitle="Environment"
+      >
         {hostSections.map((section) => {
           const enabled = section.isConnected && section.hasSource;
           return (
@@ -242,35 +262,35 @@ function HostSectionGroup({
 
   return (
     <DropdownMenuGroup>
-        <DropdownMenuLabel className="flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="truncate">{section.host.name}</span>
-          {section.isLocal ? <LocalhostBadge /> : null}
-          {section.isConnected ? <HostStatusDot /> : null}
-        </DropdownMenuLabel>
-        {enabled ? (
-          <>
-            <EnvironmentMenuItem
-              label="Direct"
-              icon={getEnvironmentWorkspaceLabelIcon("other")}
-              itemValue={localValue}
-              selectedValue={value}
-              onSelect={onChange}
-            />
-            <EnvironmentMenuItem
-              label="Worktree"
-              icon={getEnvironmentWorkspaceLabelIcon("managed-worktree")}
-              itemValue={worktreeValue}
-              selectedValue={value}
-              onSelect={onChange}
-            />
-          </>
-        ) : (
-          <DropdownMenuItem disabled className="text-xs text-muted-foreground">
-            {!section.isConnected
-              ? "Host is offline"
-              : "Host not configured for project"}
-          </DropdownMenuItem>
-        )}
+      <DropdownMenuLabel className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span className="truncate">{section.host.name}</span>
+        {section.isLocal ? <LocalhostBadge /> : null}
+        {section.isConnected ? <HostStatusDot /> : null}
+      </DropdownMenuLabel>
+      {enabled ? (
+        <>
+          <EnvironmentMenuItem
+            label="Direct"
+            icon={getEnvironmentWorkspaceLabelIcon("other")}
+            itemValue={localValue}
+            selectedValue={value}
+            onSelect={onChange}
+          />
+          <EnvironmentMenuItem
+            label="Worktree"
+            icon={getEnvironmentWorkspaceLabelIcon("managed-worktree")}
+            itemValue={worktreeValue}
+            selectedValue={value}
+            onSelect={onChange}
+          />
+        </>
+      ) : (
+        <DropdownMenuItem disabled className="text-xs text-muted-foreground">
+          {!section.isConnected
+            ? "Host is offline"
+            : "Host not configured for project"}
+        </DropdownMenuItem>
+      )}
     </DropdownMenuGroup>
   );
 }
@@ -287,7 +307,13 @@ interface SandboxSectionProps {
   onChange: (value: string) => void;
 }
 
-function SandboxSection({ backends, hasGitHubSource, projectId, value, onChange }: SandboxSectionProps) {
+function SandboxSection({
+  backends,
+  hasGitHubSource,
+  projectId,
+  value,
+  onChange,
+}: SandboxSectionProps) {
   const navigate = useNavigate();
 
   return (

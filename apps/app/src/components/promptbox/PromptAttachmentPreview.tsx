@@ -1,6 +1,9 @@
 import { useEffect } from "react";
 import { X } from "lucide-react";
-import { ImageLightbox, getWrappedImageIndex } from "@/components/shared/ImageLightbox";
+import {
+  ImageLightbox,
+  getWrappedImageIndex,
+} from "@/components/shared/ImageLightbox";
 import type { PromptDraftAttachment } from "@/lib/prompt-draft";
 import { toUserAttachmentImageSrc } from "@/lib/user-attachment-images";
 
@@ -27,14 +30,18 @@ export function PromptAttachmentPreview({
   onRemoveAttachment,
 }: PromptAttachmentPreviewProps) {
   const imageAttachments = attachments.filter(isImageAttachment);
-  const nonImageAttachments = attachments.filter((attachment) => !isImageAttachment(attachment));
+  const nonImageAttachments = attachments.filter(
+    (attachment) => !isImageAttachment(attachment),
+  );
   const attachmentImageItems = imageAttachments.map((attachment) => ({
     alt: attachment.name,
     src: toUserAttachmentImageSrc(attachment.path, attachmentProjectId),
   }));
   const hasMultipleAttachmentImages = imageAttachments.length > 1;
   const currentAttachmentImage =
-    expandedImageIndex !== null ? (attachmentImageItems[expandedImageIndex] ?? null) : null;
+    expandedImageIndex !== null
+      ? (attachmentImageItems[expandedImageIndex] ?? null)
+      : null;
 
   useEffect(() => {
     if (expandedImageIndex === null) return;
@@ -60,7 +67,10 @@ export function PromptAttachmentPreview({
                   title={attachment.name}
                 >
                   <img
-                    src={toUserAttachmentImageSrc(attachment.path, attachmentProjectId)}
+                    src={toUserAttachmentImageSrc(
+                      attachment.path,
+                      attachmentProjectId,
+                    )}
                     alt={attachment.name}
                     className="h-16 w-24 object-cover"
                     loading="lazy"

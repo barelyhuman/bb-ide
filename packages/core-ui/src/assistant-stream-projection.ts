@@ -59,7 +59,9 @@ export function flushBufferedAssistantMessages(
     return;
   }
 
-  const pendingAssistants = Array.from(state.openAssistantByTurn.entries()).sort(
+  const pendingAssistants = Array.from(
+    state.openAssistantByTurn.entries(),
+  ).sort(
     (left, right) =>
       left[1].sourceSeqStart - right[1].sourceSeqStart ||
       left[1].sourceSeqEnd - right[1].sourceSeqEnd ||

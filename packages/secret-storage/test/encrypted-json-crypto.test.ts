@@ -15,9 +15,9 @@ async function makeTempDir(): Promise<string> {
 
 afterEach(async () => {
   await Promise.all(
-    tempDirs.splice(0).map((tempDir) =>
-      rm(tempDir, { force: true, recursive: true })
-    ),
+    tempDirs
+      .splice(0)
+      .map((tempDir) => rm(tempDir, { force: true, recursive: true })),
   );
 });
 
@@ -85,7 +85,7 @@ describe("encrypted JSON crypto", () => {
         schema: z.object({
           accessToken: z.string(),
         }),
-      })
+      }),
     ).toThrow();
   });
 

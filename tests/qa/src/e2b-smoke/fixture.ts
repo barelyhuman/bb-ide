@@ -6,7 +6,8 @@ import {
   type StoredCloudAuthCredential,
 } from "@bb/agent-provider-auth";
 
-export const DEFAULT_QA_AUTH_FIXTURE_PATH = "/tmp/bb-oauth-handshakes/credentials.json";
+export const DEFAULT_QA_AUTH_FIXTURE_PATH =
+  "/tmp/bb-oauth-handshakes/credentials.json";
 export const E2B_SMOKE_README_PATH = "tests/qa/src/e2b-smoke/README.md";
 
 export type SmokeQaAuthProviderId = "claude-code" | "codex";
@@ -79,18 +80,14 @@ function serializeQaAuthFixture(fixture: SmokeQaAuthFixture): string {
   return `${JSON.stringify(fixture, null, 2)}\n`;
 }
 
-async function writeQaAuthFixtureFile(
-  args: {
-    fixture: SmokeQaAuthFixture;
-    fixturePath: string;
-  },
-): Promise<void> {
+async function writeQaAuthFixtureFile(args: {
+  fixture: SmokeQaAuthFixture;
+  fixturePath: string;
+}): Promise<void> {
   await fs.mkdir(path.dirname(args.fixturePath), { recursive: true });
-  await fs.writeFile(
-    args.fixturePath,
-    serializeQaAuthFixture(args.fixture),
-    { mode: 0o600 },
-  );
+  await fs.writeFile(args.fixturePath, serializeQaAuthFixture(args.fixture), {
+    mode: 0o600,
+  });
 }
 
 async function enrichQaAuthFixture(
@@ -101,7 +98,9 @@ async function enrichQaAuthFixture(
 
   if (fixture.claude) {
     try {
-      const refreshedCredential = await getCloudAuthProviderDefinition("claude-code").refreshCredential({
+      const refreshedCredential = await getCloudAuthProviderDefinition(
+        "claude-code",
+      ).refreshCredential({
         credential: {
           accessToken: fixture.claude.access,
           accountEmail: null,
@@ -134,7 +133,9 @@ async function enrichQaAuthFixture(
   }
 
   try {
-    const refreshedCredential = await getCloudAuthProviderDefinition("codex").refreshCredential({
+    const refreshedCredential = await getCloudAuthProviderDefinition(
+      "codex",
+    ).refreshCredential({
       credential: {
         accessToken: codexFixture.access,
         accountId: codexFixture.accountId ?? null,
@@ -180,11 +181,7 @@ async function readQaAuthFixtureFile(
     const raw = await fs.readFile(fixturePath, "utf8");
     return parseQaAuthFixture(raw);
   } catch (error) {
-    if (
-      error instanceof Error
-      && "code" in error
-      && error.code === "ENOENT"
-    ) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
       return null;
     }
     throw error;
@@ -255,7 +252,10 @@ export async function loadQaAuthFixture(): Promise<LoadedSmokeQaAuthFixture> {
   }
 
   const enrichedFixture = await enrichQaAuthFixture(rawFixture, fixturePath);
-  if (serializeQaAuthFixture(enrichedFixture) !== serializeQaAuthFixture(rawFixture)) {
+  if (
+    serializeQaAuthFixture(enrichedFixture) !==
+    serializeQaAuthFixture(rawFixture)
+  ) {
     await writeQaAuthFixtureFile({
       fixture: enrichedFixture,
       fixturePath,
@@ -269,12 +269,10 @@ export async function loadQaAuthFixture(): Promise<LoadedSmokeQaAuthFixture> {
   };
 }
 
-export async function upsertQaAuthFixtureCredential(
-  args: {
-    credential: StoredCloudAuthCredential;
-    fixturePath?: string;
-  },
-): Promise<string> {
+export async function upsertQaAuthFixtureCredential(args: {
+  credential: StoredCloudAuthCredential;
+  fixturePath?: string;
+}): Promise<string> {
   const fixturePath = args.fixturePath ?? DEFAULT_QA_AUTH_FIXTURE_PATH;
   const existingFixture = await readQaAuthFixtureFile(fixturePath);
   const nextFixture: SmokeQaAuthFixture = {
@@ -311,17 +309,19 @@ export function buildQaAuthCoverageSummary(
   return {
     entries,
     fixturePath: loadedFixture.fixturePath,
-    hasFullSubscriptionCoverage: entries.every((entry) => entry.status === "available"),
-    hasSubscriptionCoverage: entries.some((entry) => entry.status === "available"),
+    hasFullSubscriptionCoverage: entries.every(
+      (entry) => entry.status === "available",
+    ),
+    hasSubscriptionCoverage: entries.some(
+      (entry) => entry.status === "available",
+    ),
   };
 }
 
 export function renderQaAuthCoverageSummary(
   summary: QaAuthCoverageSummary,
 ): string[] {
-  const lines = [
-    `Cloud auth fixture: ${summary.fixturePath}`,
-  ];
+  const lines = [`Cloud auth fixture: ${summary.fixturePath}`];
 
   for (const entry of summary.entries) {
     if (entry.status === "available") {
@@ -329,9 +329,7 @@ export function renderQaAuthCoverageSummary(
       continue;
     }
 
-    lines.push(
-      `${entry.label}: missing. Acquire it with: ${entry.command}`,
-    );
+    lines.push(`${entry.label}: missing. Acquire it with: ${entry.command}`);
   }
 
   lines.push(`Operator guide: ${E2B_SMOKE_README_PATH}`);

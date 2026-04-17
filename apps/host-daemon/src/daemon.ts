@@ -86,7 +86,10 @@ export function createDaemon(options: CreateDaemonOptions): HostDaemon {
           await step.run();
         } catch (error) {
           failure ??= error;
-          options.logger.error({ err: error, step: step.name }, "Shutdown step failed");
+          options.logger.error(
+            { err: error, step: step.name },
+            "Shutdown step failed",
+          );
         }
       }
 

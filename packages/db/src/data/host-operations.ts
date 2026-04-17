@@ -1,8 +1,5 @@
 import { and, eq, inArray } from "drizzle-orm";
-import type {
-  HostOperationKind,
-  LifecycleOperationState,
-} from "@bb/domain";
+import type { HostOperationKind, LifecycleOperationState } from "@bb/domain";
 import { createHostOperationId } from "../ids.js";
 import { hostOperations } from "../schema.js";
 import {
@@ -73,44 +70,48 @@ function getHostOperationRecord(
   db: HostOperationReadConnection,
   args: GetHostOperationArgs,
 ): HostOperationRow | null {
-  return db
-    .select()
-    .from(hostOperations)
-    .where(
-      and(
-        eq(hostOperations.hostId, args.hostId),
-        eq(hostOperations.kind, args.kind),
-      ),
-    )
-    .get() ?? null;
+  return (
+    db
+      .select()
+      .from(hostOperations)
+      .where(
+        and(
+          eq(hostOperations.hostId, args.hostId),
+          eq(hostOperations.kind, args.kind),
+        ),
+      )
+      .get() ?? null
+  );
 }
 
 function updateHostOperationStateRecord(
   db: HostOperationWriteConnection,
   args: UpdateHostOperationStateArgs,
 ): HostOperationRow | null {
-  return db
-    .update(hostOperations)
-    .set({
-      state: args.state,
-      payload: args.payload,
-      commandId: args.commandId,
-      queuedAt: args.queuedAt,
-      completedAt: args.completedAt,
-      failureReason: args.failureReason,
-      updatedAt: Date.now(),
-    })
-    .where(
-      and(
-        eq(hostOperations.hostId, args.hostId),
-        eq(hostOperations.kind, args.kind),
-        args.allowedCurrentStates
-          ? inArray(hostOperations.state, [...args.allowedCurrentStates])
-          : undefined,
-      ),
-    )
-    .returning()
-    .get() ?? null;
+  return (
+    db
+      .update(hostOperations)
+      .set({
+        state: args.state,
+        payload: args.payload,
+        commandId: args.commandId,
+        queuedAt: args.queuedAt,
+        completedAt: args.completedAt,
+        failureReason: args.failureReason,
+        updatedAt: Date.now(),
+      })
+      .where(
+        and(
+          eq(hostOperations.hostId, args.hostId),
+          eq(hostOperations.kind, args.kind),
+          args.allowedCurrentStates
+            ? inArray(hostOperations.state, [...args.allowedCurrentStates])
+            : undefined,
+        ),
+      )
+      .returning()
+      .get() ?? null
+  );
 }
 
 const hostOperationStore: LifecycleOperationStore<
@@ -191,11 +192,13 @@ export function getHostOperationByCommandId(
   db: HostOperationReadConnection,
   commandId: string,
 ): HostOperationRow | null {
-  return db
-    .select()
-    .from(hostOperations)
-    .where(eq(hostOperations.commandId, commandId))
-    .get() ?? null;
+  return (
+    db
+      .select()
+      .from(hostOperations)
+      .where(eq(hostOperations.commandId, commandId))
+      .get() ?? null
+  );
 }
 
 export function upsertHostOperationRecord(

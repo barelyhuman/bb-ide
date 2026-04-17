@@ -23,10 +23,7 @@ import {
   queueTurnDuringReprovision,
   requireReadyThreadEnvironment,
 } from "./thread-turn-dispatch.js";
-import {
-  appendClientTurnEvent,
-  getActiveTurnId,
-} from "./thread-events.js";
+import { appendClientTurnEvent, getActiveTurnId } from "./thread-events.js";
 import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import { tryTransition } from "./thread-transitions.js";
 import { demoteEnvironmentIfPromoted } from "../environments/environment-promotion.js";
@@ -78,14 +75,16 @@ async function sendClaimedDraft(
 ): Promise<ThreadQueuedMessage> {
   const draft = args.draft;
   const queuedMessage = toQueuedMessage(draft);
-  const { environment, thread } = requireThreadEnvironment(deps.db, args.threadId);
+  const { environment, thread } = requireThreadEnvironment(
+    deps.db,
+    args.threadId,
+  );
   const sendMode = resolveQueuedDraftSendMode(thread.status);
   if (sendMode === "start") {
     ensureThreadCanQueueStartRequest(deps, thread);
   }
-  const expectedSteerTurnId = sendMode === "auto"
-    ? getActiveTurnId(deps, thread.id)
-    : null;
+  const expectedSteerTurnId =
+    sendMode === "auto" ? getActiveTurnId(deps, thread.id) : null;
   const execution = await buildExecutionOptions(
     deps,
     queuedMessage,
@@ -131,12 +130,13 @@ async function sendClaimedDraft(
     initiator: "user",
     requestMethod: "turn/start",
     source: "tell",
-    target: sendMode === "auto"
-      ? {
-          kind: "auto",
-          expectedTurnId: expectedSteerTurnId,
-        }
-      : { kind: "new-turn" },
+    target:
+      sendMode === "auto"
+        ? {
+            kind: "auto",
+            expectedTurnId: expectedSteerTurnId,
+          }
+        : { kind: "new-turn" },
   });
 
   if (sendMode === "start") {

@@ -7,14 +7,20 @@ export function deriveRepoDirName(sourcePath: string): string {
   const trimmed = sourcePath.replace(/\/+$/, "");
 
   const scpMatch = /^[^:/]+@[^:]+:(?<path>.+)$/.exec(trimmed);
-  const pathPart = scpMatch?.groups?.path ?? tryParseUrlPath(trimmed) ?? trimmed;
+  const pathPart =
+    scpMatch?.groups?.path ?? tryParseUrlPath(trimmed) ?? trimmed;
 
   const basename = path.posix.basename(pathPart);
   const candidate = basename.endsWith(".git")
     ? basename.slice(0, -".git".length)
     : basename;
 
-  if (!candidate || candidate === "." || candidate === ".." || !REPO_DIR_NAME_PATTERN.test(candidate)) {
+  if (
+    !candidate ||
+    candidate === "." ||
+    candidate === ".." ||
+    !REPO_DIR_NAME_PATTERN.test(candidate)
+  ) {
     throw new ApiError(
       400,
       "invalid_request",
@@ -27,7 +33,11 @@ export function deriveRepoDirName(sourcePath: string): string {
 function tryParseUrlPath(value: string): string | null {
   try {
     const url = new URL(value);
-    if (url.protocol === "http:" || url.protocol === "https:" || url.protocol === "ssh:") {
+    if (
+      url.protocol === "http:" ||
+      url.protocol === "https:" ||
+      url.protocol === "ssh:"
+    ) {
       return url.pathname;
     }
   } catch {
@@ -42,7 +52,9 @@ export interface ResolveManagedTargetPathArgs {
   sourcePath: string;
 }
 
-export function resolveManagedTargetPath(args: ResolveManagedTargetPathArgs): string {
+export function resolveManagedTargetPath(
+  args: ResolveManagedTargetPathArgs,
+): string {
   return path.posix.join(
     args.dataDir,
     "worktrees",

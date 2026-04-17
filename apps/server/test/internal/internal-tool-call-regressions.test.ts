@@ -30,21 +30,24 @@ describe("internal tool-call regressions", () => {
         type: "manager",
       });
 
-      const response = await harness.app.request("/internal/session/tool-call", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: hostA.session.id,
-          threadId: thread.id,
-          providerThreadId: "provider-cross-host",
-          turnId: "turn-cross-host",
-          callId: "call-cross-host",
-          tool: "message_user",
-          arguments: {
-            text: "Should be rejected",
-          },
-        }),
-      });
+      const response = await harness.app.request(
+        "/internal/session/tool-call",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: hostA.session.id,
+            threadId: thread.id,
+            providerThreadId: "provider-cross-host",
+            turnId: "turn-cross-host",
+            callId: "call-cross-host",
+            tool: "message_user",
+            arguments: {
+              text: "Should be rejected",
+            },
+          }),
+        },
+      );
 
       expect(response.status).toBe(403);
       await expect(readJson(response)).resolves.toMatchObject({

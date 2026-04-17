@@ -141,7 +141,9 @@ describe("server integration", () => {
     let serverClosed = false;
 
     try {
-      const socket = new WebSocket(`${server.baseUrl.replace("http", "ws")}/ws`);
+      const socket = new WebSocket(
+        `${server.baseUrl.replace("http", "ws")}/ws`,
+      );
       await waitForOpen(socket);
 
       const closePromise = waitForClose(socket);
@@ -183,7 +185,11 @@ describe("server integration", () => {
       const projectResponse = await publicClient.projects.$post({
         json: {
           name: "Test Project",
-          source: { type: "local_path", hostId: "host-1", path: "/tmp/project-root" },
+          source: {
+            type: "local_path",
+            hostId: "host-1",
+            path: "/tmp/project-root",
+          },
         },
       });
       const project = await projectResponse.json();
@@ -210,23 +216,25 @@ describe("server integration", () => {
       );
       expect(provisionCommand.command.type).toBe("environment.provision");
 
-      const resultResponse = await daemonClient.session["command-result"].$post({
-        json: {
-          sessionId: session.sessionId,
-          commandId: provisionCommand.id,
-          completedAt: Date.now(),
-          type: "environment.provision",
-          ok: true,
-          result: {
-            path: "/tmp/project-root",
-            branchName: "bb/test",
-            defaultBranch: "main",
-            isGitRepo: true,
-            isWorktree: false,
-            transcript: [],
+      const resultResponse = await daemonClient.session["command-result"].$post(
+        {
+          json: {
+            sessionId: session.sessionId,
+            commandId: provisionCommand.id,
+            completedAt: Date.now(),
+            type: "environment.provision",
+            ok: true,
+            result: {
+              path: "/tmp/project-root",
+              branchName: "bb/test",
+              defaultBranch: "main",
+              isGitRepo: true,
+              isWorktree: false,
+              transcript: [],
+            },
           },
         },
-      });
+      );
       expect(resultResponse.status).toBe(200);
 
       const threadGetResponse = await publicClient.threads[":id"].$get({
@@ -235,7 +243,9 @@ describe("server integration", () => {
       const updatedThread = await threadGetResponse.json();
       expect(updatedThread.status).toBe("provisioning");
 
-      const environmentGetResponse = await publicClient.environments[":id"].$get({
+      const environmentGetResponse = await publicClient.environments[
+        ":id"
+      ].$get({
         param: { id: updatedThread.environmentId },
       });
       const environment = await environmentGetResponse.json();
@@ -277,7 +287,11 @@ describe("server integration", () => {
         await publicClient.projects.$post({
           json: {
             name: "Event Project",
-            source: { type: "local_path", hostId: "host-1", path: "/tmp/event-project" },
+            source: {
+              type: "local_path",
+              hostId: "host-1",
+              path: "/tmp/event-project",
+            },
           },
         })
       ).json();
@@ -340,7 +354,9 @@ describe("server integration", () => {
 
       const ws = new WebSocket(`${server.baseUrl.replace("http", "ws")}/ws`);
       await waitForOpen(ws);
-      ws.send(JSON.stringify({ type: "subscribe", entity: "thread", id: thread.id }));
+      ws.send(
+        JSON.stringify({ type: "subscribe", entity: "thread", id: thread.id }),
+      );
       await waitForThreadSubscription(server.hub, ws, thread.id);
 
       const messagePromise = waitForMatchingMessage<{
@@ -349,7 +365,9 @@ describe("server integration", () => {
         id?: string;
       }>(
         ws,
-        (message): message is { changes: string[]; entity: string; id?: string } =>
+        (
+          message,
+        ): message is { changes: string[]; entity: string; id?: string } =>
           message != null &&
           typeof message === "object" &&
           "entity" in message &&
@@ -416,7 +434,11 @@ describe("server integration", () => {
         await publicClient.projects.$post({
           json: {
             name: "Lifecycle Project",
-            source: { type: "local_path", hostId: "host-1", path: "/tmp/lifecycle-project" },
+            source: {
+              type: "local_path",
+              hostId: "host-1",
+              path: "/tmp/lifecycle-project",
+            },
           },
         })
       ).json();
@@ -480,7 +502,10 @@ describe("server integration", () => {
         },
       });
 
-      const initialNextSequence = await getNextEventSequence(publicClient, thread.id);
+      const initialNextSequence = await getNextEventSequence(
+        publicClient,
+        thread.id,
+      );
       const initialEventsResponse = await daemonClient.session.events.$post({
         json: {
           sessionId: session.sessionId,

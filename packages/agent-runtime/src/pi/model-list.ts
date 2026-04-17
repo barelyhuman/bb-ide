@@ -1,8 +1,5 @@
 import { resolvePiDefaultModelId } from "@bb/agent-providers";
-import type {
-  AvailableModel,
-  ModelReasoningEffort,
-} from "@bb/domain";
+import type { AvailableModel, ModelReasoningEffort } from "@bb/domain";
 import {
   HIGH_REASONING_EFFORT,
   LOW_REASONING_EFFORT,
@@ -48,7 +45,8 @@ const PI_SELECTED_ONLY_MODELS: readonly AvailableModel[] = [
     id: "anthropic/claude-opus-4-6",
     model: "anthropic/claude-opus-4-6",
     displayName: "Claude Opus 4.6 (Legacy)",
-    description: "Legacy Anthropic model via Pi retained for existing selections",
+    description:
+      "Legacy Anthropic model via Pi retained for existing selections",
     supportedReasoningEfforts: LEGACY_OPUS_REASONING_EFFORTS,
     defaultReasoningEffort: "medium",
     isDefault: false,
@@ -57,7 +55,8 @@ const PI_SELECTED_ONLY_MODELS: readonly AvailableModel[] = [
     id: "anthropic/claude-opus-4-6[1m]",
     model: "anthropic/claude-opus-4-6[1m]",
     displayName: "Claude Opus 4.6 (1M, Legacy)",
-    description: "Legacy Anthropic 1M model via Pi retained for existing selections",
+    description:
+      "Legacy Anthropic 1M model via Pi retained for existing selections",
     supportedReasoningEfforts: LEGACY_OPUS_REASONING_EFFORTS,
     defaultReasoningEffort: "medium",
     isDefault: false,
@@ -66,7 +65,8 @@ const PI_SELECTED_ONLY_MODELS: readonly AvailableModel[] = [
     id: "amazon-bedrock/us.anthropic.claude-opus-4-6",
     model: "amazon-bedrock/us.anthropic.claude-opus-4-6",
     displayName: "Claude Opus 4.6 (Legacy)",
-    description: "Legacy Amazon Bedrock model via Pi retained for existing selections",
+    description:
+      "Legacy Amazon Bedrock model via Pi retained for existing selections",
     supportedReasoningEfforts: LEGACY_OPUS_REASONING_EFFORTS,
     defaultReasoningEffort: "medium",
     isDefault: false,
@@ -75,7 +75,8 @@ const PI_SELECTED_ONLY_MODELS: readonly AvailableModel[] = [
     id: "vercel-ai-gateway/anthropic/claude-opus-4.6",
     model: "vercel-ai-gateway/anthropic/claude-opus-4.6",
     displayName: "Claude Opus 4.6 (Legacy)",
-    description: "Legacy Vercel AI Gateway model via Pi retained for existing selections",
+    description:
+      "Legacy Vercel AI Gateway model via Pi retained for existing selections",
     supportedReasoningEfforts: LEGACY_OPUS_REASONING_EFFORTS,
     defaultReasoningEffort: "medium",
     isDefault: false,
@@ -124,7 +125,10 @@ export function buildPiAvailableModels<TProvider extends string>(
   });
 }
 
-export function toCanonicalPiModelId(provider: string, modelId: string): string {
+export function toCanonicalPiModelId(
+  provider: string,
+  modelId: string,
+): string {
   return modelId.includes("/") ? modelId : `${provider}/${modelId}`;
 }
 
@@ -133,7 +137,11 @@ function getPiReasoningEfforts(model: PiCatalogModel): ModelReasoningEffort[] {
     return [LOW_REASONING_EFFORT];
   }
 
-  const efforts = [LOW_REASONING_EFFORT, MEDIUM_REASONING_EFFORT, HIGH_REASONING_EFFORT];
+  const efforts = [
+    LOW_REASONING_EFFORT,
+    MEDIUM_REASONING_EFFORT,
+    HIGH_REASONING_EFFORT,
+  ];
   if (model.supportsXhigh) {
     efforts.push(XHIGH_REASONING_EFFORT);
   }
@@ -147,9 +155,10 @@ function describePiModel(model: PiCatalogModel): string {
     capabilities.push("multimodal");
   }
 
-  const provider = model.provider.length > 0
-    ? model.provider[0].toUpperCase() + model.provider.slice(1)
-    : model.provider;
+  const provider =
+    model.provider.length > 0
+      ? model.provider[0].toUpperCase() + model.provider.slice(1)
+      : model.provider;
   return `${provider} ${capabilities.join(", ")} model via Pi`;
 }
 

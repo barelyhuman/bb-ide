@@ -22,7 +22,10 @@ interface BufferedEnvironmentInvalidator {
 export function createBufferedEnvironmentInvalidator(
   options: BufferedEnvironmentInvalidatorOptions,
 ): BufferedEnvironmentInvalidator {
-  const changedEnvironmentKindsById = new Map<string, Set<EnvironmentChangeKind>>();
+  const changedEnvironmentKindsById = new Map<
+    string,
+    Set<EnvironmentChangeKind>
+  >();
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
   let maxWaitTimer: ReturnType<typeof setTimeout> | null = null;
 

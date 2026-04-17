@@ -10,8 +10,14 @@ import {
 describe("@bb/templates", () => {
   it("lists template metadata", () => {
     const templates = listTemplates();
-    expect(templates.some((template) => template.id === "threadOperationCommitFailureFollowUp")).toBe(true);
-    expect(templates.some((template) => template.kind === "instruction")).toBe(true);
+    expect(
+      templates.some(
+        (template) => template.id === "threadOperationCommitFailureFollowUp",
+      ),
+    ).toBe(true);
+    expect(templates.some((template) => template.kind === "instruction")).toBe(
+      true,
+    );
   });
 
   it("returns metadata for an individual template", () => {
@@ -30,10 +36,13 @@ describe("@bb/templates", () => {
   });
 
   it("renders squash merge commit failure follow-up from structured variables", () => {
-    const rendered = renderTemplate("threadOperationSquashMergeCommitFailureFollowUp", {
-      prepCommitMergeBaseBranch: "main",
-      errorMessage: "nothing to commit",
-    });
+    const rendered = renderTemplate(
+      "threadOperationSquashMergeCommitFailureFollowUp",
+      {
+        prepCommitMergeBaseBranch: "main",
+        errorMessage: "nothing to commit",
+      },
+    );
 
     expect(rendered).toContain("could not create the prep commit");
     expect(rendered).toContain("main");
@@ -81,8 +90,12 @@ describe("@bb/templates", () => {
     }
 
     for (const template of templates) {
-      const vars = placeholderVariables[template.id] as TemplateVariables[TemplateId];
-      expect(() => renderTemplate(template.id as TemplateId, vars)).not.toThrow();
+      const vars = placeholderVariables[
+        template.id
+      ] as TemplateVariables[TemplateId];
+      expect(() =>
+        renderTemplate(template.id as TemplateId, vars),
+      ).not.toThrow();
     }
   });
 });

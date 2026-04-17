@@ -4,9 +4,18 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { PortableChildProcess } from "@bb/process-utils";
 import {
-  bold, cyan, dim, green, red, yellow,
-  log, beginStep, endStep,
-  waitForHealth, build, createOutputBuffer,
+  bold,
+  cyan,
+  dim,
+  green,
+  red,
+  yellow,
+  log,
+  beginStep,
+  endStep,
+  waitForHealth,
+  build,
+  createOutputBuffer,
 } from "../lib/script-helpers.js";
 import type { OutputBuffer } from "../lib/script-helpers.js";
 import { commonConfig } from "@bb/config/common";
@@ -18,7 +27,10 @@ import {
   toExitCode,
   waitForProcessExit,
 } from "../lib/process-helpers.js";
-import { resolveNodeEnvironment, resolveScriptMode } from "../lib/script-config.js";
+import {
+  resolveNodeEnvironment,
+  resolveScriptMode,
+} from "../lib/script-config.js";
 
 interface StartBbContext {
   daemonLockDir: string;
@@ -47,7 +59,9 @@ function formatReadyOutputRow(label: string, value: string): string {
 const commandDir = dirname(fileURLToPath(import.meta.url));
 const packageRoot = resolve(commandDir, "..", "..");
 const repoRoot = resolve(packageRoot, "..", "..");
-const runHostDaemonCommandPath = fileURLToPath(new URL("./run-host-daemon.js", import.meta.url));
+const runHostDaemonCommandPath = fileURLToPath(
+  new URL("./run-host-daemon.js", import.meta.url),
+);
 
 export function resolveStartBbContext(): StartBbContext {
   const mode = resolveScriptMode();
@@ -94,18 +108,23 @@ export async function main(): Promise<void> {
 
   process.stdout.write(`\n  ${bold("bb")}\n\n`);
 
-  if (!(await build({
-    dataDir: context.dataDir,
-    repoRoot,
-    turboFilters: ["@bb/app", "@bb/server", "@bb/host-daemon", "@bb/cli"],
-  }))) {
+  if (
+    !(await build({
+      dataDir: context.dataDir,
+      repoRoot,
+      turboFilters: ["@bb/app", "@bb/server", "@bb/host-daemon", "@bb/cli"],
+    }))
+  ) {
     return;
   }
 
   if (existsSync(context.daemonLockDir)) {
     log(yellow("!"), "Daemon lock is held — another instance may be running");
     log(" ", dim(`lock: ${context.daemonLockDir}`));
-    log(" ", dim("Remove it manually if the previous process exited uncleanly."));
+    log(
+      " ",
+      dim("Remove it manually if the previous process exited uncleanly."),
+    );
     process.stdout.write("\n");
   }
 
@@ -162,7 +181,10 @@ export async function main(): Promise<void> {
     });
 
     try {
-      await waitForHealth(`http://localhost:${context.daemonPort}/health`, daemonProcess);
+      await waitForHealth(
+        `http://localhost:${context.daemonPort}/health`,
+        daemonProcess,
+      );
     } catch {
       endStep(red("✗"), "Host daemon failed to start");
       log(" ", dim(`lock: ${context.daemonLockDir}`));
@@ -182,7 +204,10 @@ export async function main(): Promise<void> {
       log(" ", formatReadyOutputRow("app url", cyan(serverConfig.BB_APP_URL)));
     }
     if (serverConfig.BB_EXTERNAL_URL !== "") {
-      log(" ", formatReadyOutputRow("external", cyan(serverConfig.BB_EXTERNAL_URL)));
+      log(
+        " ",
+        formatReadyOutputRow("external", cyan(serverConfig.BB_EXTERNAL_URL)),
+      );
     }
     log(" ", formatReadyOutputRow("data", context.dataDir));
     log(" ", formatReadyOutputRow("db", context.dbPath));

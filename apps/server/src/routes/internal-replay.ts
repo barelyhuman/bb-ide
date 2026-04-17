@@ -31,7 +31,10 @@ interface ResolvedReplayCapture {
   title: string | null;
 }
 
-function toDetail(hostId: string, manifest: ReplayCaptureManifest): ReplayCaptureDetail {
+function toDetail(
+  hostId: string,
+  manifest: ReplayCaptureManifest,
+): ReplayCaptureDetail {
   return {
     ...manifest,
     hostId,
@@ -44,7 +47,9 @@ function requireReplayCaptureId(captureId: string): void {
   }
 }
 
-function resolveManifestReplayTarget(manifest: ReplayCaptureDetail): ResolvedReplayCapture {
+function resolveManifestReplayTarget(
+  manifest: ReplayCaptureDetail,
+): ResolvedReplayCapture {
   return {
     environmentId: manifest.environmentId,
     hostId: manifest.hostId,
@@ -55,7 +60,9 @@ function resolveManifestReplayTarget(manifest: ReplayCaptureDetail): ResolvedRep
 }
 
 function parseReplayCaptureListResult(value: unknown) {
-  return hostDaemonCommandResultSchemaByType["replay.capture_list"].parse(value);
+  return hostDaemonCommandResultSchemaByType["replay.capture_list"].parse(
+    value,
+  );
 }
 
 function parseReplayCaptureGetResult(value: unknown): ReplayCaptureManifest {
@@ -64,8 +71,7 @@ function parseReplayCaptureGetResult(value: unknown): ReplayCaptureManifest {
 
 function isReplayCaptureNotFound(error: unknown): boolean {
   return (
-    error instanceof ApiError &&
-    error.body.code === "replay_capture_not_found"
+    error instanceof ApiError && error.body.code === "replay_capture_not_found"
   );
 }
 
@@ -82,13 +88,17 @@ async function listHostCaptures(
       },
     }),
   );
-  return result.captures.map((capture): ReplayCaptureHostSummary => ({
-    ...capture,
-    hostId,
-  }));
+  return result.captures.map(
+    (capture): ReplayCaptureHostSummary => ({
+      ...capture,
+      hostId,
+    }),
+  );
 }
 
-async function listCaptures(deps: AppDeps): Promise<ReplayCaptureHostSummary[]> {
+async function listCaptures(
+  deps: AppDeps,
+): Promise<ReplayCaptureHostSummary[]> {
   const hostIds = [...new Set(listConnectedHostIds(deps.db))];
   const perHostCaptures = await Promise.all(
     hostIds.map(async (hostId) => {
@@ -146,9 +156,10 @@ async function findCapture(
         "Failed to resolve replay capture from host",
       );
       if (!firstUnexpectedError) {
-        firstUnexpectedError = error instanceof Error
-          ? error
-          : new Error("Unexpected replay capture resolution failure");
+        firstUnexpectedError =
+          error instanceof Error
+            ? error
+            : new Error("Unexpected replay capture resolution failure");
       }
     }
   }
@@ -156,10 +167,17 @@ async function findCapture(
   if (firstUnexpectedError) {
     throw firstUnexpectedError;
   }
-  throw new ApiError(404, "replay_capture_not_found", "Replay capture not found");
+  throw new ApiError(
+    404,
+    "replay_capture_not_found",
+    "Replay capture not found",
+  );
 }
 
-export function registerDevelopmentOnlyReplayRoutes(app: Hono, deps: AppDeps): void {
+export function registerDevelopmentOnlyReplayRoutes(
+  app: Hono,
+  deps: AppDeps,
+): void {
   const { get, post } = typedRoutes<PublicApiSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
   });
@@ -172,53 +190,64 @@ export function registerDevelopmentOnlyReplayRoutes(app: Hono, deps: AppDeps): v
     return context.json(await findCapture(deps, context.req.param("id")));
   });
 
-  post("/development-only/replay/captures/:id/runs", replayRunRequestSchema, async (context, payload) => {
-    const manifest = await findCapture(deps, context.req.param("id"));
-    const resolved = resolveManifestReplayTarget(manifest);
-    const environment = getEnvironment(deps.db, resolved.environmentId);
-    if (!environment) {
-      throw new ApiError(404, "environment_not_found", "Replay environment not found");
-    }
-    if (environment.hostId !== resolved.hostId) {
-      throw new ApiError(
-        409,
-        "replay_capture_host_mismatch",
-        "Replay capture belongs to a different host than its environment",
-      );
-    }
-    if (environment.projectId !== resolved.projectId) {
-      throw new ApiError(
-        409,
-        "replay_capture_project_mismatch",
-        "Replay capture belongs to a different project than its environment",
-      );
-    }
-    const session = await ensureHostSessionReadyForWork(deps, {
-      hostId: resolved.hostId,
-    });
-    const replayThread = createThread(deps.db, deps.hub, {
-      projectId: resolved.projectId,
-      environmentId: resolved.environmentId,
-      providerId: resolved.providerId,
-      status: "created",
-      title: `[Replay] ${resolved.title ?? manifest.captureId}`,
-    });
-    const command = queueCommand(deps.db, deps.hub, {
-      hostId: resolved.hostId,
-      sessionId: session.id,
-      type: "replay.run",
-      payload: JSON.stringify({
-        type: "replay.run",
-        captureId: manifest.captureId,
+  post(
+    "/development-only/replay/captures/:id/runs",
+    replayRunRequestSchema,
+    async (context, payload) => {
+      const manifest = await findCapture(deps, context.req.param("id"));
+      const resolved = resolveManifestReplayTarget(manifest);
+      const environment = getEnvironment(deps.db, resolved.environmentId);
+      if (!environment) {
+        throw new ApiError(
+          404,
+          "environment_not_found",
+          "Replay environment not found",
+        );
+      }
+      if (environment.hostId !== resolved.hostId) {
+        throw new ApiError(
+          409,
+          "replay_capture_host_mismatch",
+          "Replay capture belongs to a different host than its environment",
+        );
+      }
+      if (environment.projectId !== resolved.projectId) {
+        throw new ApiError(
+          409,
+          "replay_capture_project_mismatch",
+          "Replay capture belongs to a different project than its environment",
+        );
+      }
+      const session = await ensureHostSessionReadyForWork(deps, {
+        hostId: resolved.hostId,
+      });
+      const replayThread = createThread(deps.db, deps.hub, {
+        projectId: resolved.projectId,
         environmentId: resolved.environmentId,
-        threadId: replayThread.id,
-        speed: payload.speed,
-      }),
-    });
-    return context.json({
-      commandId: command.id,
-      replayThreadId: replayThread.id,
-      projectId: replayThread.projectId,
-    }, 201);
-  });
+        providerId: resolved.providerId,
+        status: "created",
+        title: `[Replay] ${resolved.title ?? manifest.captureId}`,
+      });
+      const command = queueCommand(deps.db, deps.hub, {
+        hostId: resolved.hostId,
+        sessionId: session.id,
+        type: "replay.run",
+        payload: JSON.stringify({
+          type: "replay.run",
+          captureId: manifest.captureId,
+          environmentId: resolved.environmentId,
+          threadId: replayThread.id,
+          speed: payload.speed,
+        }),
+      });
+      return context.json(
+        {
+          commandId: command.id,
+          replayThreadId: replayThread.id,
+          projectId: replayThread.projectId,
+        },
+        201,
+      );
+    },
+  );
 }

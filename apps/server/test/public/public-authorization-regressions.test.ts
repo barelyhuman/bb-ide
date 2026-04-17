@@ -21,15 +21,20 @@ describe("public authorization regressions", () => {
   it("does not delete a project source through another project route", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-source-delete" });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-source-delete",
+      });
       const { project: projectA } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
         path: "/tmp/source-delete-a",
       });
-      const { project: projectB, source: sourceB } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-        path: "/tmp/source-delete-b",
-      });
+      const { project: projectB, source: sourceB } = seedProjectWithSource(
+        harness.deps,
+        {
+          hostId: host.id,
+          path: "/tmp/source-delete-b",
+        },
+      );
 
       const response = await harness.app.request(
         `/api/v1/projects/${projectA.id}/sources/${sourceB.id}`,
@@ -61,7 +66,9 @@ describe("public authorization regressions", () => {
   it("does not update a project source through another project route", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-source-update" });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-source-update",
+      });
       const { project: projectA } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
         path: "/tmp/source-update-a",
@@ -99,7 +106,9 @@ describe("public authorization regressions", () => {
   it("validates managed workspace requirements before inserting environment or thread rows", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-managed-check" });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-managed-check",
+      });
       const { project } = createProject(harness.db, harness.hub, {
         name: "Project Without Local Source",
         source: {
@@ -152,8 +161,12 @@ describe("public authorization regressions", () => {
   it("does not delete a draft through another thread route", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host } = seedHostSession(harness.deps, { id: "host-draft-delete" });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-draft-delete",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,

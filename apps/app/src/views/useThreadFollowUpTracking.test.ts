@@ -37,17 +37,26 @@ describe("useThreadFollowUpTracking", () => {
   it("acknowledges matching follow-ups when a recent user row arrives", async () => {
     vi.spyOn(Date, "now").mockReturnValue(1_500);
     const onAcknowledged = vi.fn();
-    const input: PromptInput[] = [{ type: "text", text: "Please make this tweak" }];
+    const input: PromptInput[] = [
+      { type: "text", text: "Please make this tweak" },
+    ];
     const draft: PromptDraftState = {
       attachments: [],
       text: "Please make this tweak",
     };
-    const initialProps: { threadDetailRows: TimelineRow[]; threadId: string } = {
-      threadDetailRows: [],
-      threadId: "thread-1",
-    };
+    const initialProps: { threadDetailRows: TimelineRow[]; threadId: string } =
+      {
+        threadDetailRows: [],
+        threadId: "thread-1",
+      };
     const { result, rerender } = renderHook(
-      ({ threadDetailRows, threadId }: { threadDetailRows: TimelineRow[]; threadId: string }) =>
+      ({
+        threadDetailRows,
+        threadId,
+      }: {
+        threadDetailRows: TimelineRow[];
+        threadId: string;
+      }) =>
         useThreadFollowUpTracking({
           onAcknowledged,
           threadDetailRows,
@@ -65,7 +74,9 @@ describe("useThreadFollowUpTracking", () => {
     expect(result.current.pendingSubmittedFollowUp).not.toBeNull();
 
     rerender({
-      threadDetailRows: [makeUserRow({ createdAt: 500, text: "Please make this tweak" })],
+      threadDetailRows: [
+        makeUserRow({ createdAt: 500, text: "Please make this tweak" }),
+      ],
       threadId: "thread-1",
     });
 
@@ -84,12 +95,19 @@ describe("useThreadFollowUpTracking", () => {
       attachments: [],
       text: "Follow up on this",
     };
-    const initialProps: { threadDetailRows: TimelineRow[]; threadId: string } = {
-      threadDetailRows: [],
-      threadId: "thread-1",
-    };
+    const initialProps: { threadDetailRows: TimelineRow[]; threadId: string } =
+      {
+        threadDetailRows: [],
+        threadId: "thread-1",
+      };
     const { result, rerender } = renderHook(
-      ({ threadDetailRows, threadId }: { threadDetailRows: TimelineRow[]; threadId: string }) =>
+      ({
+        threadDetailRows,
+        threadId,
+      }: {
+        threadDetailRows: TimelineRow[];
+        threadId: string;
+      }) =>
         useThreadFollowUpTracking({
           onAcknowledged,
           threadDetailRows,
@@ -114,7 +132,9 @@ describe("useThreadFollowUpTracking", () => {
     });
 
     rerender({
-      threadDetailRows: [makeUserRow({ createdAt: 1_500, text: "Follow up on this" })],
+      threadDetailRows: [
+        makeUserRow({ createdAt: 1_500, text: "Follow up on this" }),
+      ],
       threadId: "thread-2",
     });
 
@@ -124,7 +144,9 @@ describe("useThreadFollowUpTracking", () => {
   it("ignores stale rows until the pending follow-up is cleared", async () => {
     vi.spyOn(Date, "now").mockReturnValue(10_000);
     const onAcknowledged = vi.fn();
-    const input: PromptInput[] = [{ type: "text", text: "Check the stale row" }];
+    const input: PromptInput[] = [
+      { type: "text", text: "Check the stale row" },
+    ];
     const draft: PromptDraftState = {
       attachments: [],
       text: "Check the stale row",
@@ -149,7 +171,9 @@ describe("useThreadFollowUpTracking", () => {
     });
 
     rerender({
-      threadDetailRows: [makeUserRow({ createdAt: 7_000, text: "Check the stale row" })],
+      threadDetailRows: [
+        makeUserRow({ createdAt: 7_000, text: "Check the stale row" }),
+      ],
     });
 
     expect(onAcknowledged).not.toHaveBeenCalled();
@@ -193,7 +217,9 @@ describe("useThreadFollowUpTracking", () => {
     });
 
     rerender({
-      threadDetailRows: [makeUserRow({ createdAt: 4_000, text: "Ship the fix" })],
+      threadDetailRows: [
+        makeUserRow({ createdAt: 4_000, text: "Ship the fix" }),
+      ],
     });
 
     await waitFor(() => {

@@ -72,9 +72,10 @@ describe("cloud auth system queries", () => {
     const fetchMock = installFetchRoutes([
       {
         pathname: "/api/v1/system/cloud-auth",
-        handler: async () => jsonResponse({
-          connections: [],
-        }),
+        handler: async () =>
+          jsonResponse({
+            connections: [],
+          }),
       },
     ]);
 
@@ -101,12 +102,13 @@ describe("cloud auth system queries", () => {
     const fetchMock = installFetchRoutes([
       {
         pathname: "/api/v1/system/cloud-auth/attempts/attempt-1",
-        handler: async () => jsonResponse({
-          attemptId: "attempt-1",
-          errorMessage: null,
-          providerId: "codex",
-          status: "completed",
-        }),
+        handler: async () =>
+          jsonResponse({
+            attemptId: "attempt-1",
+            errorMessage: null,
+            providerId: "codex",
+            status: "completed",
+          }),
       },
     ]);
 
@@ -121,7 +123,9 @@ describe("cloud auth system queries", () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(queryClient.getQueryData(cloudAuthAttemptQueryKey("attempt-1"))).toEqual({
+    expect(
+      queryClient.getQueryData(cloudAuthAttemptQueryKey("attempt-1")),
+    ).toEqual({
       attemptId: "attempt-1",
       errorMessage: null,
       providerId: "codex",
@@ -131,10 +135,9 @@ describe("cloud auth system queries", () => {
 
   it("stays disabled for cloud auth attempt queries without an attempt id", () => {
     const { wrapper } = createQueryClientTestHarness();
-    const { result } = renderHook(
-      () => useCloudAuthAttempt(null, true),
-      { wrapper },
-    );
+    const { result } = renderHook(() => useCloudAuthAttempt(null, true), {
+      wrapper,
+    });
 
     expect(result.current.fetchStatus).toBe("idle");
   });
@@ -143,21 +146,23 @@ describe("cloud auth system queries", () => {
     const fetchMock = installFetchRoutes([
       {
         pathname: "/api/v1/system/cloud-auth",
-        handler: async () => jsonResponse({
-          connections: [],
-        }),
+        handler: async () =>
+          jsonResponse({
+            connections: [],
+          }),
       },
       {
         pathname: "/api/v1/system/sandbox-env-vars",
-        handler: async () => jsonResponse({
-          envVars: [
-            {
-              createdAt: 1,
-              name: "OPENAI_API_KEY",
-              updatedAt: 2,
-            },
-          ],
-        }),
+        handler: async () =>
+          jsonResponse({
+            envVars: [
+              {
+                createdAt: 1,
+                name: "OPENAI_API_KEY",
+                updatedAt: 2,
+              },
+            ],
+          }),
       },
     ]);
 

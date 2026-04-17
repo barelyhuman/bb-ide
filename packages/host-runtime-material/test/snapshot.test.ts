@@ -14,13 +14,13 @@ describe("runtime material snapshot", () => {
       },
       files: [
         {
-          contents: "{\"token\":\"b\"}\n",
+          contents: '{"token":"b"}\n',
           managedBy: "bb-runtime-material",
           mode: 0o600,
           path: "~/.codex/auth.json",
         },
         {
-          contents: "{\"token\":\"a\"}\n",
+          contents: '{"token":"a"}\n',
           managedBy: "bb-runtime-material",
           mode: 0o600,
           path: "~/.claude/.credentials.json",
@@ -35,13 +35,13 @@ describe("runtime material snapshot", () => {
       },
       files: [
         {
-          contents: "{\"token\":\"a\"}\n",
+          contents: '{"token":"a"}\n',
           managedBy: "bb-runtime-material",
           mode: 0o600,
           path: "~/.claude/.credentials.json",
         },
         {
-          contents: "{\"token\":\"b\"}\n",
+          contents: '{"token":"b"}\n',
           managedBy: "bb-runtime-material",
           mode: 0o600,
           path: "~/.codex/auth.json",

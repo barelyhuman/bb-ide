@@ -153,7 +153,11 @@ export class SdkSession {
         this.completion,
         new Promise<void>((_, reject) => {
           timeout = setTimeout(() => {
-            reject(new Error(`Claude SDK session did not close within ${timeoutMs}ms`));
+            reject(
+              new Error(
+                `Claude SDK session did not close within ${timeoutMs}ms`,
+              ),
+            );
           }, timeoutMs);
         }),
       ]);

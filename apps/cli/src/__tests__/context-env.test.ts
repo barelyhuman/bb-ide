@@ -11,7 +11,9 @@ import {
 const ENV_KEYS = ["BB_PROJECT_ID", "BB_THREAD_ID"] as const;
 
 describe("context-env", () => {
-  const originalEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
+  const originalEnv: Partial<
+    Record<(typeof ENV_KEYS)[number], string | undefined>
+  > = {};
 
   beforeEach(() => {
     for (const key of ENV_KEYS) {

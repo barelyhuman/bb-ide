@@ -3,14 +3,24 @@ import type { ThreadEvent, ThreadEventType } from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
 import { getEventTurnId } from "./event-decode.js";
 import { messageId } from "./format-helpers.js";
-import type { ViewDebugRawEventMessage, ViewErrorMessage, ViewMessage } from "@bb/domain";
+import type {
+  ViewDebugRawEventMessage,
+  ViewErrorMessage,
+  ViewMessage,
+} from "@bb/domain";
 
-function formatErrorDetail(message: string, detail: string | undefined): string {
+function formatErrorDetail(
+  message: string,
+  detail: string | undefined,
+): string {
   if (detail && detail !== message) return `${message} - ${detail}`;
   return message || "Error event";
 }
 
-export function parseErrorMessage(decoded: ThreadEvent, meta: EventMeta): ViewErrorMessage | null {
+export function parseErrorMessage(
+  decoded: ThreadEvent,
+  meta: EventMeta,
+): ViewErrorMessage | null {
   if (decoded.type !== "error" && decoded.type !== "system/error") return null;
 
   const { message, detail } = decoded;
@@ -39,14 +49,18 @@ export function isDuplicateEventType(eventType: ThreadEventType): boolean {
 
 export function isIgnoredItemStartEvent(decoded: ThreadEvent): boolean {
   if (decoded.type !== "item/started") return false;
-  return decoded.item.type === "reasoning" || decoded.item.type === "agentMessage";
+  return (
+    decoded.item.type === "reasoning" || decoded.item.type === "agentMessage"
+  );
 }
 
 export function isIgnoredItemCompletedEvent(decoded: ThreadEvent): boolean {
   if (decoded.type !== "item/completed") return false;
 
   if (decoded.item.type === "reasoning") {
-    return decoded.item.summary.length === 0 && decoded.item.content.length === 0;
+    return (
+      decoded.item.summary.length === 0 && decoded.item.content.length === 0
+    );
   }
 
   if (decoded.item.type === "agentMessage") {

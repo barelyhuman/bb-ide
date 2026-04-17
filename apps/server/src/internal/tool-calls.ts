@@ -19,49 +19,61 @@ export function registerInternalToolCallRoutes(app: Hono, deps: AppDeps): void {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
   });
 
-  post("/session/tool-call", hostDaemonToolCallRequestSchema, async (context, payload) => {
-    const daemon = getAuthenticatedDaemon(context);
-    const session = requireAuthorizedActiveSession(deps.db, {
-      hostId: daemon.hostId,
-      sessionId: payload.sessionId,
-    });
-    const { environment } = requireThreadEnvironment(deps.db, payload.threadId);
-    if (environment.hostId !== session.hostId) {
-      throw new ApiError(
-        403,
-        "invalid_request",
-        "Thread does not belong to the session host",
-      );
-    }
-
-    void markSandboxActivity(deps, {
-      hostId: session.hostId,
-      source: "tool-call",
-    });
-
-    if (payload.tool === "message_user") {
-      const args = parseValue(payload.arguments ?? {}, messageUserToolArgumentsSchema);
-
-      appendThreadEvent(deps, {
-        threadId: payload.threadId,
-        turnId: payload.turnId,
-        type: "system/manager/user_message",
-        data: {
-          text: args.text,
-          toolCallId: payload.callId,
-          turnId: payload.turnId,
-        },
+  post(
+    "/session/tool-call",
+    hostDaemonToolCallRequestSchema,
+    async (context, payload) => {
+      const daemon = getAuthenticatedDaemon(context);
+      const session = requireAuthorizedActiveSession(deps.db, {
+        hostId: daemon.hostId,
+        sessionId: payload.sessionId,
       });
+      const { environment } = requireThreadEnvironment(
+        deps.db,
+        payload.threadId,
+      );
+      if (environment.hostId !== session.hostId) {
+        throw new ApiError(
+          403,
+          "invalid_request",
+          "Thread does not belong to the session host",
+        );
+      }
+
+      void markSandboxActivity(deps, {
+        hostId: session.hostId,
+        source: "tool-call",
+      });
+
+      if (payload.tool === "message_user") {
+        const args = parseValue(
+          payload.arguments ?? {},
+          messageUserToolArgumentsSchema,
+        );
+
+        appendThreadEvent(deps, {
+          threadId: payload.threadId,
+          turnId: payload.turnId,
+          type: "system/manager/user_message",
+          data: {
+            text: args.text,
+            toolCallId: payload.callId,
+            turnId: payload.turnId,
+          },
+        });
+
+        return context.json({
+          success: true,
+          contentItems: [{ type: "inputText", text: "Message delivered" }],
+        });
+      }
 
       return context.json({
-        success: true,
-        contentItems: [{ type: "inputText", text: "Message delivered" }],
+        success: false,
+        contentItems: [
+          { type: "inputText", text: `Unsupported tool: ${payload.tool}` },
+        ],
       });
-    }
-
-    return context.json({
-      success: false,
-      contentItems: [{ type: "inputText", text: `Unsupported tool: ${payload.tool}` }],
-    });
-  });
+    },
+  );
 }

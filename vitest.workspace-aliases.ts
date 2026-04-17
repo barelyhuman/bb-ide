@@ -32,10 +32,7 @@ export const workspaceTestAliases = {
     repoRoot,
     "packages/agent-runtime/src/index.ts",
   ),
-  "@bb/config/common": path.resolve(
-    repoRoot,
-    "packages/config/src/common.ts",
-  ),
+  "@bb/config/common": path.resolve(repoRoot, "packages/config/src/common.ts"),
   "@bb/config/host-daemon": path.resolve(
     repoRoot,
     "packages/config/src/host-daemon.ts",
@@ -79,10 +76,7 @@ export const workspaceTestAliases = {
     repoRoot,
     "packages/sandbox-host/src/index.ts",
   ),
-  "@bb/config/server": path.resolve(
-    repoRoot,
-    "packages/config/src/server.ts",
-  ),
+  "@bb/config/server": path.resolve(repoRoot, "packages/config/src/server.ts"),
   "@bb/server-contract": path.resolve(
     repoRoot,
     "packages/server-contract/src/index.ts",

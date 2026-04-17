@@ -29,7 +29,10 @@ async function withPlatform<T>(
   platform: NodeJS.Platform,
   action: () => Promise<T>,
 ): Promise<T> {
-  const originalDescriptor = Object.getOwnPropertyDescriptor(process, "platform");
+  const originalDescriptor = Object.getOwnPropertyDescriptor(
+    process,
+    "platform",
+  );
   if (!originalDescriptor) {
     throw new Error("Expected process.platform descriptor");
   }
@@ -71,9 +74,11 @@ async function createFakeCliPackage(
 afterEach(async () => {
   vi.unstubAllEnvs();
   await Promise.all(
-    tempDirs.splice(0).map((directoryPath) =>
-      fs.rm(directoryPath, { recursive: true, force: true }),
-    ),
+    tempDirs
+      .splice(0)
+      .map((directoryPath) =>
+        fs.rm(directoryPath, { recursive: true, force: true }),
+      ),
   );
 });
 
@@ -123,10 +128,13 @@ describe("resolveLocalBbExecutableDirectory", () => {
       executable: false,
     });
 
-    await expect(withPlatform("win32", () =>
-      resolveLocalBbExecutableDirectory({
-        cliExecutablePath: cliEntryPath,
-      }))).resolves.toBe(path.dirname(cliEntryPath));
+    await expect(
+      withPlatform("win32", () =>
+        resolveLocalBbExecutableDirectory({
+          cliExecutablePath: cliEntryPath,
+        }),
+      ),
+    ).resolves.toBe(path.dirname(cliEntryPath));
   });
 });
 

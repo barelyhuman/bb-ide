@@ -49,14 +49,20 @@ export function useGitDiffPanelState({
   const selectedMergeBaseBranch = useAtomValue(selectedMergeBaseBranchAtom);
   const pendingGitDiffScrollPath = useAtomValue(pendingGitDiffScrollPathAtom);
   const setPendingGitDiffScrollPath = useSetAtom(pendingGitDiffScrollPathAtom);
-  const [selectedGitDiffCommitSha, setSelectedGitDiffCommitSha] = useState<string | null>(null);
-  const [parsedGitDiffFiles, setParsedGitDiffFiles] = useState<ParsedGitDiffFile[]>([]);
+  const [selectedGitDiffCommitSha, setSelectedGitDiffCommitSha] = useState<
+    string | null
+  >(null);
+  const [parsedGitDiffFiles, setParsedGitDiffFiles] = useState<
+    ParsedGitDiffFile[]
+  >([]);
   const [isParsingGitDiffFiles, setIsParsingGitDiffFiles] = useState(false);
   const [lastParsedGitDiffKey, setLastParsedGitDiffKey] = useState("");
 
-  const effectiveMergeBaseBranch = selectedMergeBaseBranch ?? defaultMergeBaseBranch;
+  const effectiveMergeBaseBranch =
+    selectedMergeBaseBranch ?? defaultMergeBaseBranch;
   const gitDiffTarget = useMemo(
-    () => buildGitDiffTarget(selectedGitDiffCommitSha, effectiveMergeBaseBranch),
+    () =>
+      buildGitDiffTarget(selectedGitDiffCommitSha, effectiveMergeBaseBranch),
     [effectiveMergeBaseBranch, selectedGitDiffCommitSha],
   );
   const { data: gitDiffWorkspaceStatus } = useEnvironmentWorkStatus(
@@ -74,7 +80,10 @@ export function useGitDiffPanelState({
     isLoading: isGitDiffLoading,
     error: gitDiffError,
   } = useEnvironmentGitDiff(environmentId ?? "", {
-    enabled: Boolean(environmentId) && isDiffPanelActive && gitDiffTarget !== undefined,
+    enabled:
+      Boolean(environmentId) &&
+      isDiffPanelActive &&
+      gitDiffTarget !== undefined,
     target: gitDiffTarget,
   });
   const parsedGitDiffFileEntries = useMemo(
@@ -140,7 +149,10 @@ export function useGitDiffPanelState({
         nextPatchIndex === 0
           ? GIT_DIFF_PARSE_INITIAL_BATCH_SIZE
           : GIT_DIFF_PARSE_BATCH_SIZE;
-      const batchChunks = patchChunks.slice(nextPatchIndex, nextPatchIndex + batchSize);
+      const batchChunks = patchChunks.slice(
+        nextPatchIndex,
+        nextPatchIndex + batchSize,
+      );
       if (batchChunks.length === 0) {
         setIsParsingGitDiffFiles(false);
         setLastParsedGitDiffKey(parsePlan.gitDiffKey);
@@ -152,7 +164,9 @@ export function useGitDiffPanelState({
 
       nextPatchIndex += batchChunks.length;
       setParsedGitDiffFiles((currentFiles) =>
-        appliedFirstBatch ? [...currentFiles, ...parsedBatchFiles] : parsedBatchFiles,
+        appliedFirstBatch
+          ? [...currentFiles, ...parsedBatchFiles]
+          : parsedBatchFiles,
       );
       appliedFirstBatch = true;
 
@@ -162,7 +176,10 @@ export function useGitDiffPanelState({
         return;
       }
 
-      timerId = window.setTimeout(parseNextBatch, GIT_DIFF_PARSE_BATCH_DELAY_MS);
+      timerId = window.setTimeout(
+        parseNextBatch,
+        GIT_DIFF_PARSE_BATCH_DELAY_MS,
+      );
     };
 
     setIsParsingGitDiffFiles(true);
@@ -267,26 +284,22 @@ export function useGitDiffPanelState({
 
   const diffCommits = gitDiffWorkspaceStatus?.mergeBase?.commits ?? [];
   const gitDiffSelectValue = selectedGitDiffCommitSha ?? "all";
-  const gitDiffSelectOptions: GitDiffSelectionOption[] = buildGitDiffSelectionOptions(
-    diffCommits,
-    { hasUncommittedChanges },
-  );
+  const gitDiffSelectOptions: GitDiffSelectionOption[] =
+    buildGitDiffSelectionOptions(diffCommits, { hasUncommittedChanges });
   const currentGitDiff = threadGitDiff?.diff ?? "";
   const gitDiffStats = summarizeGitDiff(
     isParsingGitDiffFiles ? [] : parsedGitDiffFiles,
     currentGitDiff,
   );
   const gitDiffStatsLabel = buildGitDiffStatsLabel(gitDiffStats);
-  const {
-    hasParsedGitDiffFiles,
-    isPreparingGitDiff,
-  } = resolveGitDiffPreparationState({
-    currentGitDiff,
-    isGitDiffLoading,
-    isParsingGitDiffFiles,
-    lastParsedGitDiffKey,
-    parsedGitDiffFileCount: parsedGitDiffFileEntries.length,
-  });
+  const { hasParsedGitDiffFiles, isPreparingGitDiff } =
+    resolveGitDiffPreparationState({
+      currentGitDiff,
+      isGitDiffLoading,
+      isParsingGitDiffFiles,
+      lastParsedGitDiffKey,
+      parsedGitDiffFileCount: parsedGitDiffFileEntries.length,
+    });
 
   const onGitDiffSelectionChange = useCallback((value: string) => {
     setSelectedGitDiffCommitSha(value === "all" ? null : value);

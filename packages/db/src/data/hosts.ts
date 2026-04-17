@@ -71,7 +71,8 @@ export function upsertHost(
   const existing = db.select().from(hosts).where(eq(hosts.id, id)).get();
 
   if (existing) {
-    const updated = db.update(hosts)
+    const updated = db
+      .update(hosts)
       .set({
         name: input.name,
         type: input.type,
@@ -96,7 +97,8 @@ export function upsertHost(
     notifyHostMutation(notifier, existing, updated);
     return updated;
   } else {
-    const row = db.insert(hosts)
+    const row = db
+      .insert(hosts)
       .values({
         id,
         name: input.name,
@@ -122,10 +124,13 @@ export function getHost(db: DbConnection, id: string) {
 }
 
 export function getNonDestroyedHost(db: DbConnection, id: string) {
-  return db.select()
-    .from(hosts)
-    .where(and(eq(hosts.id, id), isNull(hosts.destroyedAt)))
-    .get() ?? null;
+  return (
+    db
+      .select()
+      .from(hosts)
+      .where(and(eq(hosts.id, id), isNull(hosts.destroyedAt)))
+      .get() ?? null
+  );
 }
 
 export function listHosts(db: DbConnection) {
@@ -133,21 +138,20 @@ export function listHosts(db: DbConnection) {
 }
 
 export function listPublicHosts(db: DbConnection) {
-  return db.select()
+  return db
+    .select()
     .from(hosts)
     .where(and(eq(hosts.type, "persistent"), isNull(hosts.destroyedAt)))
     .all();
 }
 
-export function listHostsByIds(
-  db: DbConnection,
-  hostIds: readonly string[],
-) {
+export function listHostsByIds(db: DbConnection, hostIds: readonly string[]) {
   if (hostIds.length === 0) {
     return [];
   }
 
-  return db.select()
+  return db
+    .select()
     .from(hosts)
     .where(inArray(hosts.id, [...hostIds]))
     .all();
@@ -161,7 +165,8 @@ export function listNonDestroyedHostsByIds(
     return [];
   }
 
-  return db.select()
+  return db
+    .select()
     .from(hosts)
     .where(and(inArray(hosts.id, [...hostIds]), isNull(hosts.destroyedAt)))
     .all();
@@ -215,10 +220,14 @@ export function updateHost(
   const now = Date.now();
   db.update(hosts)
     .set({
-      ...(input.destroyedAt !== undefined ? { destroyedAt: input.destroyedAt } : {}),
+      ...(input.destroyedAt !== undefined
+        ? { destroyedAt: input.destroyedAt }
+        : {}),
       ...(input.name !== undefined ? { name: input.name } : {}),
       ...(input.provider !== undefined ? { provider: input.provider } : {}),
-      ...(input.externalId !== undefined ? { externalId: input.externalId } : {}),
+      ...(input.externalId !== undefined
+        ? { externalId: input.externalId }
+        : {}),
       lastSeenAt: now,
       updatedAt: now,
     })

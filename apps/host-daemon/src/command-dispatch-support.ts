@@ -4,10 +4,7 @@ import {
   type AgentRuntime,
   type AgentRuntimeOptions,
 } from "@bb/agent-runtime";
-import type {
-  AvailableModel,
-  ProviderInfo,
-} from "@bb/domain";
+import type { AvailableModel, ProviderInfo } from "@bb/domain";
 import type { BufferedEventInput } from "./event-buffer.js";
 import type {
   HostDaemonCommand,
@@ -46,9 +43,7 @@ export interface CommandDispatchOptions {
     version: string,
   ) => Promise<HostRuntimeMaterialSnapshot>;
   readPersistedRuntimeMaterial: () => Promise<HostRuntimeMaterialState | null>;
-  persistRuntimeMaterial: (
-    state: HostRuntimeMaterialState,
-  ) => Promise<void>;
+  persistRuntimeMaterial: (state: HostRuntimeMaterialState) => Promise<void>;
   runtimeManager: RuntimeManager;
   seedThreadHighWaterMark?: (args: {
     sequence: number;
@@ -60,7 +55,9 @@ export interface CommandDispatchOptions {
   resolveInteractiveRequest?: (
     request: InteractiveResolveCommandInput,
   ) => Promise<void>;
-  recordReplayCaptureThreadMetadata?: (metadata: ReplayCaptureThreadMetadata) => void;
+  recordReplayCaptureThreadMetadata?: (
+    metadata: ReplayCaptureThreadMetadata,
+  ) => void;
   replayTasks?: ReplayTaskRegistry;
   threadStorageRootPath: string;
 }
@@ -106,9 +103,7 @@ function getDefaultModelListRuntime(
 export async function shutdownDefaultListModelsRuntimes(): Promise<void> {
   const runtimes = [...defaultModelListRuntimes.values()];
   defaultModelListRuntimes.clear();
-  await Promise.all(
-    runtimes.map((runtime) => runtime.shutdown()),
-  );
+  await Promise.all(runtimes.map((runtime) => runtime.shutdown()));
 }
 
 export interface ListModelsDispatchArgs {
@@ -124,7 +119,10 @@ export async function defaultListModels(
   try {
     return await runtime.listModels(args);
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith("Unsupported provider")) {
+    if (
+      error instanceof Error &&
+      error.message.startsWith("Unsupported provider")
+    ) {
       throw new CommandDispatchError("unknown_provider", error.message);
     }
     throw error;
@@ -135,7 +133,11 @@ export function getErrorCode(error: unknown): string {
   if (error instanceof CommandDispatchError) {
     return error.code;
   }
-  if (error instanceof Error && "code" in error && typeof error.code === "string") {
+  if (
+    error instanceof Error &&
+    "code" in error &&
+    typeof error.code === "string"
+  ) {
     return error.code;
   }
   return "command_failed";

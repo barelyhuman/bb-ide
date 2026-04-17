@@ -56,16 +56,18 @@ function getEnvironmentOperationRecord(
   db: EnvironmentOperationReadConnection,
   args: GetEnvironmentOperationArgs,
 ): EnvironmentOperationRow | null {
-  return db
-    .select()
-    .from(environmentOperations)
-    .where(
-      and(
-        eq(environmentOperations.environmentId, args.environmentId),
-        eq(environmentOperations.kind, args.kind),
-      ),
-    )
-    .get() ?? null;
+  return (
+    db
+      .select()
+      .from(environmentOperations)
+      .where(
+        and(
+          eq(environmentOperations.environmentId, args.environmentId),
+          eq(environmentOperations.kind, args.kind),
+        ),
+      )
+      .get() ?? null
+  );
 }
 
 function updateEnvironmentOperationStateRecord(
@@ -83,20 +85,24 @@ function updateEnvironmentOperationStateRecord(
     updatedAt: now,
   };
 
-  return db
-    .update(environmentOperations)
-    .set(set)
-    .where(
-      and(
-        eq(environmentOperations.environmentId, args.environmentId),
-        eq(environmentOperations.kind, args.kind),
-        args.allowedCurrentStates
-          ? inArray(environmentOperations.state, [...args.allowedCurrentStates])
-          : undefined,
-      ),
-    )
-    .returning()
-    .get() ?? null;
+  return (
+    db
+      .update(environmentOperations)
+      .set(set)
+      .where(
+        and(
+          eq(environmentOperations.environmentId, args.environmentId),
+          eq(environmentOperations.kind, args.kind),
+          args.allowedCurrentStates
+            ? inArray(environmentOperations.state, [
+                ...args.allowedCurrentStates,
+              ])
+            : undefined,
+        ),
+      )
+      .returning()
+      .get() ?? null
+  );
 }
 
 const environmentOperationStore: LifecycleOperationStore<
@@ -177,11 +183,13 @@ export function getEnvironmentOperationByCommandId(
   db: EnvironmentOperationReadConnection,
   commandId: string,
 ): EnvironmentOperationRow | null {
-  return db
-    .select()
-    .from(environmentOperations)
-    .where(eq(environmentOperations.commandId, commandId))
-    .get() ?? null;
+  return (
+    db
+      .select()
+      .from(environmentOperations)
+      .where(eq(environmentOperations.commandId, commandId))
+      .get() ?? null
+  );
 }
 
 export function upsertEnvironmentOperationRecord(

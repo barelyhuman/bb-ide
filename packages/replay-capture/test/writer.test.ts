@@ -1,4 +1,12 @@
-import { mkdir, mkdtemp, readdir, readFile, rm, stat, utimes } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  utimes,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -55,12 +63,13 @@ function replayRoot(dataDir: string): string {
 }
 
 async function listCaptureIds(dataDir: string): Promise<string[]> {
-  return (await readdir(replayRoot(dataDir)))
-    .filter(isReplayCaptureId)
-    .sort();
+  return (await readdir(replayRoot(dataDir))).filter(isReplayCaptureId).sort();
 }
 
-async function captureIdForThread(dataDir: string, threadId: string): Promise<string> {
+async function captureIdForThread(
+  dataDir: string,
+  threadId: string,
+): Promise<string> {
   for (const captureId of await listCaptureIds(dataDir)) {
     const manifest = await readCaptureManifest(dataDir, captureId);
     if (manifest.threadId === threadId) {
@@ -70,7 +79,10 @@ async function captureIdForThread(dataDir: string, threadId: string): Promise<st
   throw new Error(`No replay capture found for thread ${threadId}`);
 }
 
-async function captureIdsForThread(dataDir: string, threadId: string): Promise<string[]> {
+async function captureIdsForThread(
+  dataDir: string,
+  threadId: string,
+): Promise<string[]> {
   const captureIds: string[] = [];
   for (const captureId of await listCaptureIds(dataDir)) {
     const manifest = await readCaptureManifest(dataDir, captureId);
@@ -83,7 +95,9 @@ async function captureIdsForThread(dataDir: string, threadId: string): Promise<s
 
 async function readCaptureManifest(dataDir: string, captureId: string) {
   return replayCaptureManifestSchema.parse(
-    JSON.parse(await readFile(replayCaptureManifestPath(dataDir, captureId), "utf8")),
+    JSON.parse(
+      await readFile(replayCaptureManifestPath(dataDir, captureId), "utf8"),
+    ),
   );
 }
 
@@ -96,7 +110,9 @@ async function pathExists(filePath: string): Promise<boolean> {
   }
 }
 
-type ReplayCaptureServiceInstance = NonNullable<ReturnType<typeof createReplayCaptureService>>;
+type ReplayCaptureServiceInstance = NonNullable<
+  ReturnType<typeof createReplayCaptureService>
+>;
 
 interface CompleteCaptureArgs {
   completeAt: number;
@@ -267,7 +283,12 @@ describe("createReplayCaptureService", () => {
     if (!captureId) return;
 
     const manifest = replayCaptureManifestSchema.parse(
-      JSON.parse(await readFile(path.join(replayRoot, captureId, "manifest.json"), "utf8")),
+      JSON.parse(
+        await readFile(
+          path.join(replayRoot, captureId, "manifest.json"),
+          "utf8",
+        ),
+      ),
     );
     expect(manifest.projectId).toBe("proj-1");
     expect(manifest.environmentId).toBe("env-1");
@@ -275,7 +296,9 @@ describe("createReplayCaptureService", () => {
     expect(manifest.eventCounts.droppedRecords).toBe(0);
     expect(manifest.completedAt).toBe(1_050);
 
-    const rawLines = (await readFile(replayRawProviderEventsPath(dataDir, captureId), "utf8"))
+    const rawLines = (
+      await readFile(replayRawProviderEventsPath(dataDir, captureId), "utf8")
+    )
       .trim()
       .split("\n");
     expect(rawLines).toHaveLength(1);
@@ -369,11 +392,12 @@ describe("createReplayCaptureService", () => {
         replayRawProviderEventsPath(dataDir, captureId),
         "utf8",
       );
-      const rawLines = rawContent.trim().length > 0
-        ? rawContent.trim().split("\n")
-        : [];
+      const rawLines =
+        rawContent.trim().length > 0 ? rawContent.trim().split("\n") : [];
       expect(rawLines).toHaveLength(1);
-      await expect(readCaptureManifest(dataDir, captureId)).resolves.toMatchObject({
+      await expect(
+        readCaptureManifest(dataDir, captureId),
+      ).resolves.toMatchObject({
         eventCounts: {
           rawProviderEvents: 1,
         },
@@ -408,7 +432,9 @@ describe("createReplayCaptureService", () => {
     });
     await service.drain();
 
-    await expect(readCaptureManifest(dataDir, captureId)).resolves.toMatchObject({
+    await expect(
+      readCaptureManifest(dataDir, captureId),
+    ).resolves.toMatchObject({
       environmentId: "env-late",
       projectId: "proj-late",
       title: "Late title",
@@ -444,17 +470,22 @@ describe("createReplayCaptureService", () => {
     });
     await service.drain();
 
-    await expect(captureIdsForThread(dataDir, "thr-trailing")).resolves.toEqual([captureId]);
-    await expect(readCaptureManifest(dataDir, captureId)).resolves.toMatchObject({
+    await expect(captureIdsForThread(dataDir, "thr-trailing")).resolves.toEqual(
+      [captureId],
+    );
+    await expect(
+      readCaptureManifest(dataDir, captureId),
+    ).resolves.toMatchObject({
       completedAt: currentTime,
       eventCounts: {
         rawProviderEvents: 1,
       },
     });
-    const rawLines = (await readFile(
-      replayRawProviderEventsPath(dataDir, captureId),
-      "utf8",
-    )).trim().split("\n");
+    const rawLines = (
+      await readFile(replayRawProviderEventsPath(dataDir, captureId), "utf8")
+    )
+      .trim()
+      .split("\n");
     expect(rawLines).toHaveLength(1);
   });
 
@@ -487,8 +518,12 @@ describe("createReplayCaptureService", () => {
     });
     await service.drain();
 
-    await expect(captureIdsForThread(dataDir, "thr-post-grace")).resolves.toEqual([captureId]);
-    await expect(readCaptureManifest(dataDir, captureId)).resolves.toMatchObject({
+    await expect(
+      captureIdsForThread(dataDir, "thr-post-grace"),
+    ).resolves.toEqual([captureId]);
+    await expect(
+      readCaptureManifest(dataDir, captureId),
+    ).resolves.toMatchObject({
       completedAt: 1_010,
       eventCounts: {
         rawProviderEvents: 0,
@@ -553,8 +588,9 @@ describe("createReplayCaptureService", () => {
     recordCompleted(service, "thr-pending-raw", currentTime);
     await service.drain();
 
-    const secondCaptureId = (await captureIdsForThread(dataDir, "thr-pending-raw"))
-      .find((captureId) => captureId !== firstCaptureId);
+    const secondCaptureId = (
+      await captureIdsForThread(dataDir, "thr-pending-raw")
+    ).find((captureId) => captureId !== firstCaptureId);
     expect(secondCaptureId).toBeDefined();
     if (!secondCaptureId) return;
 
@@ -597,7 +633,9 @@ describe("createReplayCaptureService", () => {
     await service.drain();
     const captureId = await captureIdForThread(dataDir, "thr-capped");
 
-    await expect(readCaptureManifest(dataDir, captureId)).resolves.toMatchObject({
+    await expect(
+      readCaptureManifest(dataDir, captureId),
+    ).resolves.toMatchObject({
       eventCounts: {
         rawProviderEvents: 0,
         droppedRecords: 1,
@@ -692,9 +730,15 @@ describe("createReplayCaptureService", () => {
       threadId: "thr-newest",
     });
 
-    await expect(pathExists(replayCaptureDir(dataDir, oldestCaptureId))).resolves.toBe(false);
-    await expect(pathExists(replayCaptureDir(dataDir, middleCaptureId))).resolves.toBe(true);
-    await expect(pathExists(replayCaptureDir(dataDir, newestCaptureId))).resolves.toBe(true);
+    await expect(
+      pathExists(replayCaptureDir(dataDir, oldestCaptureId)),
+    ).resolves.toBe(false);
+    await expect(
+      pathExists(replayCaptureDir(dataDir, middleCaptureId)),
+    ).resolves.toBe(true);
+    await expect(
+      pathExists(replayCaptureDir(dataDir, newestCaptureId)),
+    ).resolves.toBe(true);
     await expect(listCaptureIds(dataDir)).resolves.toEqual(
       [middleCaptureId, newestCaptureId].sort(),
     );
@@ -732,8 +776,12 @@ describe("createReplayCaptureService", () => {
       threadId: "thr-retained",
     });
 
-    await expect(pathExists(replayCaptureDir(dataDir, prunedCaptureId))).resolves.toBe(false);
-    await expect(pathExists(replayCaptureDir(dataDir, retainedCaptureId))).resolves.toBe(true);
+    await expect(
+      pathExists(replayCaptureDir(dataDir, prunedCaptureId)),
+    ).resolves.toBe(false);
+    await expect(
+      pathExists(replayCaptureDir(dataDir, retainedCaptureId)),
+    ).resolves.toBe(true);
 
     log.warn.mockClear();
     service.recordThreadMetadata({
@@ -794,10 +842,18 @@ describe("createReplayCaptureService", () => {
       threadId: "thr-newest",
     });
 
-    await expect(pathExists(replayCaptureDir(dataDir, activeCaptureId))).resolves.toBe(true);
-    await expect(pathExists(replayCaptureDir(dataDir, oldestCaptureId))).resolves.toBe(false);
-    await expect(pathExists(replayCaptureDir(dataDir, middleCaptureId))).resolves.toBe(true);
-    await expect(pathExists(replayCaptureDir(dataDir, newestCaptureId))).resolves.toBe(true);
+    await expect(
+      pathExists(replayCaptureDir(dataDir, activeCaptureId)),
+    ).resolves.toBe(true);
+    await expect(
+      pathExists(replayCaptureDir(dataDir, oldestCaptureId)),
+    ).resolves.toBe(false);
+    await expect(
+      pathExists(replayCaptureDir(dataDir, middleCaptureId)),
+    ).resolves.toBe(true);
+    await expect(
+      pathExists(replayCaptureDir(dataDir, newestCaptureId)),
+    ).resolves.toBe(true);
     await expect(listCaptureIds(dataDir)).resolves.toEqual(
       [activeCaptureId, middleCaptureId, newestCaptureId].sort(),
     );

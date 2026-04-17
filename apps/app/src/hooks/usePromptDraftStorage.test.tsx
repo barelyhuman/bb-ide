@@ -16,7 +16,9 @@ afterEach(() => {
 
 describe("usePromptDraftStorage", () => {
   it("clears the draft when it still matches the submitted snapshot", () => {
-    const { result } = renderHook(() => usePromptDraftStorage(PROJECT_DRAFT_SCOPE));
+    const { result } = renderHook(() =>
+      usePromptDraftStorage(PROJECT_DRAFT_SCOPE),
+    );
 
     act(() => {
       result.current.setText("Investigate the outage");
@@ -37,7 +39,9 @@ describe("usePromptDraftStorage", () => {
   });
 
   it("preserves newer edits when clearing against a stale submitted snapshot", () => {
-    const { result } = renderHook(() => usePromptDraftStorage(PROJECT_DRAFT_SCOPE));
+    const { result } = renderHook(() =>
+      usePromptDraftStorage(PROJECT_DRAFT_SCOPE),
+    );
 
     act(() => {
       result.current.setText("Investigate the outage");

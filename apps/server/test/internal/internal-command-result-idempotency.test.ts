@@ -15,9 +15,7 @@ import {
   requestEnvironmentProvision,
 } from "../../src/services/environments/environment-provisioning.js";
 import { buildDirectEnvironmentProvisionRequest } from "../../src/services/environments/environment-provision-request.js";
-import {
-  requestThreadStart,
-} from "../../src/services/threads/thread-lifecycle.js";
+import { requestThreadStart } from "../../src/services/threads/thread-lifecycle.js";
 import { buildEnvironmentProvisionCommand } from "../../src/services/threads/thread-create-helpers.js";
 import {
   reportQueuedCommandError,
@@ -41,7 +39,9 @@ describe("internal command result idempotency", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-result-idempotent",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -236,9 +236,13 @@ describe("internal command result idempotency", () => {
           command.type === "thread.start" && command.threadId === thread.id,
       );
 
-      const response = await reportQueuedCommandSuccess(harness, originalStart, {
-        providerThreadId: "provider-thread-stale",
-      });
+      const response = await reportQueuedCommandSuccess(
+        harness,
+        originalStart,
+        {
+          providerThreadId: "provider-thread-stale",
+        },
+      );
       expect(response.status).toBe(200);
 
       const operation = getThreadOperation(harness.db, {
@@ -291,8 +295,8 @@ describe("internal command result idempotency", () => {
       const originalProvision = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "environment.provision"
-          && command.environmentId === environment.id,
+          command.type === "environment.provision" &&
+          command.environmentId === environment.id,
       );
       cancelCommand(harness.db, {
         commandId: originalProvision.row.id,
@@ -320,18 +324,22 @@ describe("internal command result idempotency", () => {
         harness,
         originalProvision.row.cursor,
         ({ command }) =>
-          command.type === "environment.provision"
-          && command.environmentId === environment.id,
+          command.type === "environment.provision" &&
+          command.environmentId === environment.id,
       );
 
-      const response = await reportQueuedCommandSuccess(harness, originalProvision, {
-        path: environment.path ?? "/tmp/stale-provision",
-        branchName: "bb/stale",
-        defaultBranch: "main",
-        isGitRepo: true,
-        isWorktree: false,
-        transcript: [],
-      });
+      const response = await reportQueuedCommandSuccess(
+        harness,
+        originalProvision,
+        {
+          path: environment.path ?? "/tmp/stale-provision",
+          branchName: "bb/stale",
+          defaultBranch: "main",
+          isGitRepo: true,
+          isWorktree: false,
+          transcript: [],
+        },
+      );
       expect(response.status).toBe(200);
 
       const operation = getEnvironmentOperation(harness.db, {
@@ -342,7 +350,9 @@ describe("internal command result idempotency", () => {
         commandId: requeuedProvision.row.id,
         state: "queued",
       });
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe("provisioning");
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+        "provisioning",
+      );
     } finally {
       await harness.cleanup();
     }
@@ -354,7 +364,9 @@ describe("internal command result idempotency", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-direct-provision-failure",
       });
-      const { project } = seedProjectWithSource(harness.deps, { hostId: host.id });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -391,10 +403,12 @@ describe("internal command result idempotency", () => {
 
       expect(getEnvironment(harness.db, environment.id)?.status).toBe("error");
       expect(getThread(harness.db, thread.id)?.status).toBe("error");
-      expect(getEnvironmentOperation(harness.db, {
-        environmentId: environment.id,
-        kind: "provision",
-      })).toMatchObject({
+      expect(
+        getEnvironmentOperation(harness.db, {
+          environmentId: environment.id,
+          kind: "provision",
+        }),
+      ).toMatchObject({
         commandId: command.id,
         failureReason: "setup failed",
         state: "failed",

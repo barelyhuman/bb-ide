@@ -17,7 +17,10 @@ function makeEnvVar(overrides: Partial<SandboxEnvVar> = {}): SandboxEnvVar {
 function renderSection(args?: {
   envVars?: SandboxEnvVar[];
   isLoading?: boolean;
-  onSave?: (toUpsert: { name: string; value: string }[], toDelete: string[]) => void;
+  onSave?: (
+    toUpsert: { name: string; value: string }[],
+    toDelete: string[],
+  ) => void;
   savePending?: boolean;
 }) {
   return render(
@@ -48,7 +51,9 @@ describe("SandboxEnvVarsSection", () => {
   it("shows validation error for invalid env var names in new rows", () => {
     renderSection();
 
-    fireEvent.click(screen.getByRole("button", { name: "Add environment variable" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add environment variable" }),
+    );
 
     const nameInputs = screen.getAllByLabelText("Environment variable name");
     fireEvent.change(nameInputs[0], { target: { value: "1 invalid name" } });
@@ -67,7 +72,9 @@ describe("SandboxEnvVarsSection", () => {
     expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
 
     // Add a row and fill it in
-    fireEvent.click(screen.getByRole("button", { name: "Add environment variable" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add environment variable" }),
+    );
     const nameInputs = screen.getAllByLabelText("Environment variable name");
     const valueInputs = screen.getAllByLabelText("Environment variable value");
     fireEvent.change(nameInputs[0], { target: { value: "MY_VAR" } });
@@ -89,7 +96,9 @@ describe("SandboxEnvVarsSection", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));
 
     // Add a new var
-    fireEvent.click(screen.getByRole("button", { name: "Add environment variable" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Add environment variable" }),
+    );
     const nameInputs = screen.getAllByLabelText("Environment variable name");
     const valueInputs = screen.getAllByLabelText("Environment variable value");
     fireEvent.change(nameInputs[0], { target: { value: "NEW_VAR" } });

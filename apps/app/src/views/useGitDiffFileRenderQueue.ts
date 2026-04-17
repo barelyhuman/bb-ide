@@ -82,8 +82,14 @@ export function useGitDiffFileRenderQueue({
         Math.min(options?.initialBatchSize ?? fileKeys.length, fileKeys.length),
       );
       const batchSize = Math.max(1, options?.batchSize ?? fileKeys.length);
-      const initialDelayMs = Math.max(0, options?.initialDelayMs ?? GIT_DIFF_FILE_RENDER_SPINNER_MS);
-      const batchDelayMs = Math.max(0, options?.batchDelayMs ?? GIT_DIFF_FILE_RENDER_SPINNER_MS);
+      const initialDelayMs = Math.max(
+        0,
+        options?.initialDelayMs ?? GIT_DIFF_FILE_RENDER_SPINNER_MS,
+      );
+      const batchDelayMs = Math.max(
+        0,
+        options?.batchDelayMs ?? GIT_DIFF_FILE_RENDER_SPINNER_MS,
+      );
 
       setLoadingFileKeys((currentKeys) => {
         const nextKeys = new Set(currentKeys);
@@ -103,7 +109,8 @@ export function useGitDiffFileRenderQueue({
           index < initialBatchSize
             ? initialDelayMs
             : initialDelayMs +
-              (Math.floor((index - initialBatchSize) / batchSize) + 1) * batchDelayMs;
+              (Math.floor((index - initialBatchSize) / batchSize) + 1) *
+                batchDelayMs;
         const timerId = window.setTimeout(() => {
           setLoadingFileKeys((currentKeys) => {
             if (!currentKeys.has(key)) return currentKeys;
@@ -192,7 +199,12 @@ export function useGitDiffFileRenderQueue({
         return nextKeys;
       });
     },
-    [scheduleGitDiffFileRender, setCollapsedFileKeys, setLoadingFileKeys, getCollapsedFileKeys],
+    [
+      scheduleGitDiffFileRender,
+      setCollapsedFileKeys,
+      setLoadingFileKeys,
+      getCollapsedFileKeys,
+    ],
   );
 
   const expandGitDiffFile = useCallback(
@@ -214,7 +226,9 @@ export function useGitDiffFileRenderQueue({
     if (parsedGitDiffFileEntries.length === 0) return;
     const allFileKeys = parsedGitDiffFileEntries.map(({ key }) => key);
     const currentCollapsed = getCollapsedFileKeys();
-    const areAllCollapsed = allFileKeys.every((key) => currentCollapsed.has(key));
+    const areAllCollapsed = allFileKeys.every((key) =>
+      currentCollapsed.has(key),
+    );
     if (areAllCollapsed) {
       setCollapsedFileKeys(new Set());
       scheduleGitDiffFileRender(allFileKeys);
@@ -234,13 +248,16 @@ export function useGitDiffFileRenderQueue({
     getCollapsedFileKeys,
   ]);
 
-  const setGitDiffFileRef = useCallback((fileKey: string, element: HTMLDivElement | null) => {
-    if (element) {
-      gitDiffFileRefs.current.set(fileKey, element);
-      return;
-    }
-    gitDiffFileRefs.current.delete(fileKey);
-  }, []);
+  const setGitDiffFileRef = useCallback(
+    (fileKey: string, element: HTMLDivElement | null) => {
+      if (element) {
+        gitDiffFileRefs.current.set(fileKey, element);
+        return;
+      }
+      gitDiffFileRefs.current.delete(fileKey);
+    },
+    [],
+  );
 
   return {
     expandGitDiffFile,

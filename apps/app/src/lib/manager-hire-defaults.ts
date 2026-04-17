@@ -8,7 +8,8 @@ export function resolvePreferredManagerProviderId(
   providers: readonly SystemProviderInfo[],
 ): string {
   return (
-    providers.find((provider) => provider.id === MANAGER_DEFAULT_PROVIDER_ID)?.id ??
+    providers.find((provider) => provider.id === MANAGER_DEFAULT_PROVIDER_ID)
+      ?.id ??
     providers[0]?.id ??
     ""
   );

@@ -43,7 +43,9 @@ type PrimaryAndFeatureWorktree = {
 
 async function createPrimaryAndFeatureWorktree(): Promise<PrimaryAndFeatureWorktree> {
   const primaryRepo = await initRepo();
-  const worktreeParent = await makeTempDir("bb-workspace-squash-worktree-parent-");
+  const worktreeParent = await makeTempDir(
+    "bb-workspace-squash-worktree-parent-",
+  );
   const worktreePath = path.join(worktreeParent, "feature");
   await runGit(["worktree", "add", "-b", "feature", worktreePath, "main"], {
     cwd: primaryRepo,
@@ -56,7 +58,9 @@ async function createPrimaryAndFeatureWorktree(): Promise<PrimaryAndFeatureWorkt
 
 afterEach(async () => {
   await Promise.all(
-    tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
+    tempDirs
+      .splice(0)
+      .map((dir) => fs.rm(dir, { recursive: true, force: true })),
   );
 });
 
@@ -68,7 +72,9 @@ describe("Workspace", () => {
     expect((await workspace.getStatus()).workingTree.state).toBe("clean");
 
     await fs.writeFile(path.join(repoPath, "README.md"), "dirty\n", "utf8");
-    expect((await workspace.getStatus()).workingTree.state).toBe("dirty_uncommitted");
+    expect((await workspace.getStatus()).workingTree.state).toBe(
+      "dirty_uncommitted",
+    );
 
     await workspace.reset();
     await fs.writeFile(path.join(repoPath, "notes.txt"), "note\n", "utf8");
@@ -76,7 +82,11 @@ describe("Workspace", () => {
     expect(untrackedStatus.workingTree.state).toBe("untracked");
     expect(untrackedStatus.workingTree.files).toHaveLength(1);
 
-    await fs.writeFile(path.join(repoPath, "README.md"), "dirty with note\n", "utf8");
+    await fs.writeFile(
+      path.join(repoPath, "README.md"),
+      "dirty with note\n",
+      "utf8",
+    );
     const mixedStatus = await workspace.getStatus();
     expect(mixedStatus.workingTree.state).toBe("dirty_uncommitted");
     expect(mixedStatus.workingTree.files).toHaveLength(2);
@@ -162,7 +172,11 @@ describe("Workspace", () => {
     await fs.writeFile(path.join(repoPath, "README.md"), "feature\n", "utf8");
     await runGit(["add", "README.md"], { cwd: repoPath });
     await runGit(["commit", "-m", "Feature commit"], { cwd: repoPath });
-    await fs.writeFile(path.join(repoPath, "notes.txt"), "untracked pending\n", "utf8");
+    await fs.writeFile(
+      path.join(repoPath, "notes.txt"),
+      "untracked pending\n",
+      "utf8",
+    );
 
     const workspace = new Workspace(repoPath);
     const status = await workspace.getStatus({ mergeBaseBranch: "main" });
@@ -189,7 +203,11 @@ describe("Workspace", () => {
     const repoPath = await initRepo();
     await runGit(["checkout", "-b", "feature"], { cwd: repoPath });
     await runGit(["checkout", "main"], { cwd: repoPath });
-    await fs.writeFile(path.join(repoPath, "README.md"), "main update\n", "utf8");
+    await fs.writeFile(
+      path.join(repoPath, "README.md"),
+      "main update\n",
+      "utf8",
+    );
     await runGit(["add", "README.md"], { cwd: repoPath });
     await runGit(["commit", "-m", "Main update"], { cwd: repoPath });
     await runGit(["checkout", "feature"], { cwd: repoPath });
@@ -209,7 +227,11 @@ describe("Workspace", () => {
   it("does not report a multi-commit squash-merged branch as ahead of its merge base", async () => {
     const { worktreePath } = await createPrimaryAndFeatureWorktree();
     // Add a second branch commit so the squash collapses N > 1 commits.
-    await fs.writeFile(path.join(worktreePath, "feature.txt"), "feature extra\n", "utf8");
+    await fs.writeFile(
+      path.join(worktreePath, "feature.txt"),
+      "feature extra\n",
+      "utf8",
+    );
     await runGit(["add", "feature.txt"], { cwd: worktreePath });
     await runGit(["commit", "-m", "Feature extra"], { cwd: worktreePath });
 
@@ -236,8 +258,13 @@ describe("Workspace", () => {
   });
 
   it("recognizes squash-merged branch after main advances past the squash commit", async () => {
-    const { primaryRepo, worktreePath } = await createPrimaryAndFeatureWorktree();
-    await fs.writeFile(path.join(worktreePath, "feature.txt"), "feature extra\n", "utf8");
+    const { primaryRepo, worktreePath } =
+      await createPrimaryAndFeatureWorktree();
+    await fs.writeFile(
+      path.join(worktreePath, "feature.txt"),
+      "feature extra\n",
+      "utf8",
+    );
     await runGit(["add", "feature.txt"], { cwd: worktreePath });
     await runGit(["commit", "-m", "Feature extra"], { cwd: worktreePath });
 
@@ -248,9 +275,15 @@ describe("Workspace", () => {
     });
 
     // Main advances further after the squash commit lands.
-    await fs.writeFile(path.join(primaryRepo, "after-squash.txt"), "later\n", "utf8");
+    await fs.writeFile(
+      path.join(primaryRepo, "after-squash.txt"),
+      "later\n",
+      "utf8",
+    );
     await runGit(["add", "after-squash.txt"], { cwd: primaryRepo });
-    await runGit(["commit", "-m", "Main work after squash"], { cwd: primaryRepo });
+    await runGit(["commit", "-m", "Main work after squash"], {
+      cwd: primaryRepo,
+    });
 
     const status = await workspace.getStatus({ mergeBaseBranch: "main" });
 
@@ -263,7 +296,8 @@ describe("Workspace", () => {
   });
 
   it("treats a branch whose commits cancel out as merged", async () => {
-    const { primaryRepo, worktreePath } = await createPrimaryAndFeatureWorktree();
+    const { primaryRepo, worktreePath } =
+      await createPrimaryAndFeatureWorktree();
     // Branch already has "Feature work" writing "squash\n" to README.md.
     // Revert it on the branch so the cumulative diff vs. the fork point is empty.
     await fs.writeFile(path.join(worktreePath, "README.md"), "hello\n", "utf8");
@@ -272,7 +306,11 @@ describe("Workspace", () => {
 
     // Advance the base so the squash-detection path is reached
     // (we skip it when behindCount === 0).
-    await fs.writeFile(path.join(primaryRepo, "main-work.txt"), "main\n", "utf8");
+    await fs.writeFile(
+      path.join(primaryRepo, "main-work.txt"),
+      "main\n",
+      "utf8",
+    );
     await runGit(["add", "main-work.txt"], { cwd: primaryRepo });
     await runGit(["commit", "-m", "Main advance"], { cwd: primaryRepo });
 
@@ -303,8 +341,13 @@ describe("Workspace", () => {
   });
 
   it("does not report squash-merged branch commits as ahead of their merge base", async () => {
-    const { primaryRepo, worktreePath } = await createPrimaryAndFeatureWorktree();
-    await fs.writeFile(path.join(primaryRepo, "notes.txt"), "main work\n", "utf8");
+    const { primaryRepo, worktreePath } =
+      await createPrimaryAndFeatureWorktree();
+    await fs.writeFile(
+      path.join(primaryRepo, "notes.txt"),
+      "main work\n",
+      "utf8",
+    );
     await runGit(["add", "notes.txt"], { cwd: primaryRepo });
     await runGit(["commit", "-m", "Main work"], { cwd: primaryRepo });
 
@@ -329,7 +372,11 @@ describe("Workspace", () => {
   it("reports status for git repositories with no commits yet", async () => {
     const repoPath = await makeTempDir("bb-workspace-unborn-repo-");
     await runGit(["init", "-b", "main"], { cwd: repoPath });
-    await fs.writeFile(path.join(repoPath, "notes.txt"), "untracked pending\n", "utf8");
+    await fs.writeFile(
+      path.join(repoPath, "notes.txt"),
+      "untracked pending\n",
+      "utf8",
+    );
 
     const workspace = new Workspace(repoPath);
     const status = await workspace.getStatus();
@@ -350,8 +397,16 @@ describe("Workspace", () => {
     await fs.writeFile(path.join(repoPath, "README.md"), "feature\n", "utf8");
     await runGit(["add", "README.md"], { cwd: repoPath });
     await runGit(["commit", "-m", "Feature commit"], { cwd: repoPath });
-    await fs.writeFile(path.join(repoPath, "README.md"), "feature plus pending\n", "utf8");
-    await fs.writeFile(path.join(repoPath, "notes.txt"), "untracked pending\n", "utf8");
+    await fs.writeFile(
+      path.join(repoPath, "README.md"),
+      "feature plus pending\n",
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(repoPath, "notes.txt"),
+      "untracked pending\n",
+      "utf8",
+    );
 
     const workspace = new Workspace(repoPath);
     const status = await workspace.getStatus({ mergeBaseBranch: "main" });
@@ -424,7 +479,11 @@ describe("Workspace", () => {
     ).stdout.trim();
     expect(commit.commitSha).toBe(head);
 
-    await fs.writeFile(path.join(repoPath, "README.md"), "modified again\n", "utf8");
+    await fs.writeFile(
+      path.join(repoPath, "README.md"),
+      "modified again\n",
+      "utf8",
+    );
     await fs.writeFile(path.join(repoPath, "temp.txt"), "temporary\n", "utf8");
     await workspace.reset();
 
@@ -449,7 +508,9 @@ describe("Workspace", () => {
     expect(await workspace.currentBranch).toBe("feature");
 
     await workspace.stashPop(stashRef ?? undefined);
-    expect((await workspace.getStatus()).workingTree.state).toBe("dirty_uncommitted");
+    expect((await workspace.getStatus()).workingTree.state).toBe(
+      "dirty_uncommitted",
+    );
   });
 
   it("squash merges into the target branch using a temporary worktree", async () => {
@@ -475,7 +536,8 @@ describe("Workspace", () => {
   });
 
   it("squash merges when the target branch is checked out in another worktree", async () => {
-    const { primaryRepo, worktreePath } = await createPrimaryAndFeatureWorktree();
+    const { primaryRepo, worktreePath } =
+      await createPrimaryAndFeatureWorktree();
 
     const workspace = new Workspace(worktreePath);
     const result = await workspace.squashMergeInto({
@@ -497,8 +559,13 @@ describe("Workspace", () => {
   });
 
   it("rejects squash merges when the checked-out target branch is dirty", async () => {
-    const { primaryRepo, worktreePath } = await createPrimaryAndFeatureWorktree();
-    await fs.writeFile(path.join(primaryRepo, "local.txt"), "local work\n", "utf8");
+    const { primaryRepo, worktreePath } =
+      await createPrimaryAndFeatureWorktree();
+    await fs.writeFile(
+      path.join(primaryRepo, "local.txt"),
+      "local work\n",
+      "utf8",
+    );
 
     const workspace = new Workspace(worktreePath);
 
@@ -540,10 +607,18 @@ describe("Workspace", () => {
   it("lists files recursively for non-git directories", async () => {
     const folder = await makeTempDir("bb-workspace-files-");
     await fs.mkdir(path.join(folder, "nested"), { recursive: true });
-    await fs.writeFile(path.join(folder, "nested", "notes.txt"), "hello\n", "utf8");
+    await fs.writeFile(
+      path.join(folder, "nested", "notes.txt"),
+      "hello\n",
+      "utf8",
+    );
     await fs.writeFile(path.join(folder, ".hidden.txt"), "skip\n", "utf8");
     await fs.mkdir(path.join(folder, "node_modules"), { recursive: true });
-    await fs.writeFile(path.join(folder, "node_modules", "pkg.txt"), "skip\n", "utf8");
+    await fs.writeFile(
+      path.join(folder, "node_modules", "pkg.txt"),
+      "skip\n",
+      "utf8",
+    );
 
     const workspace = new Workspace(folder);
     const files = await workspace.listFiles();

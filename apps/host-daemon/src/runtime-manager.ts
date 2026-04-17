@@ -27,10 +27,8 @@ import {
 } from "@bb/host-workspace";
 
 const STOP_WATCHING = () => undefined;
-const LOCAL_WORKSPACE_WATCH_CHANGE_KINDS: readonly WorkspaceStatusWatchChangeKind[] = [
-  "workspace-content-changed",
-  "workspace-git-changed",
-];
+const LOCAL_WORKSPACE_WATCH_CHANGE_KINDS: readonly WorkspaceStatusWatchChangeKind[] =
+  ["workspace-content-changed", "workspace-git-changed"];
 
 interface RuntimeThreadState {
   providerThreadId: string;
@@ -57,9 +55,15 @@ function lazyProvisionOpts(
     case "unmanaged":
       return { workspaceProvisionType: "unmanaged", path: workspacePath };
     case "managed-worktree":
-      return { workspaceProvisionType: "reconnect-managed-worktree", path: workspacePath };
+      return {
+        workspaceProvisionType: "reconnect-managed-worktree",
+        path: workspacePath,
+      };
     case "managed-clone":
-      return { workspaceProvisionType: "reconnect-managed-clone", path: workspacePath };
+      return {
+        workspaceProvisionType: "reconnect-managed-clone",
+        path: workspacePath,
+      };
   }
 }
 
@@ -74,7 +78,7 @@ function workspaceWatchKindsIncludeLocalState(
   changeKinds: readonly WorkspaceStatusWatchChangeKind[],
 ): boolean {
   return changeKinds.some((changeKind) =>
-    LOCAL_WORKSPACE_WATCH_CHANGE_KINDS.includes(changeKind)
+    LOCAL_WORKSPACE_WATCH_CHANGE_KINDS.includes(changeKind),
   );
 }
 
@@ -122,9 +126,7 @@ export interface RuntimeManagerOptions {
     changeKinds: HostDaemonEnvironmentChange[];
     environmentId: string;
   }) => void;
-  onWorkspaceStatusWatchError?: (args: {
-    error: WorkspaceWatchError;
-  }) => void;
+  onWorkspaceStatusWatchError?: (args: { error: WorkspaceWatchError }) => void;
   onInteractiveRequest?: (
     request: PendingInteractionCreate,
   ) => Promise<PendingInteractionResolution>;
@@ -140,7 +142,10 @@ export class RuntimeManager {
   private readonly baseShellEnv;
   private readonly entries = new Map<string, RuntimeEntry>();
   private readonly pendingEntries = new Map<string, Promise<RuntimeEntry>>();
-  private readonly trackedThreadStorageTargets = new Map<string, ThreadStorageTarget>();
+  private readonly trackedThreadStorageTargets = new Map<
+    string,
+    ThreadStorageTarget
+  >();
   private managedShellEnv: NonNullable<AgentRuntimeOptions["shellEnv"]> = {};
   private stopWatchingThreadStorageRoot: () => void = STOP_WATCHING;
 
@@ -163,10 +168,12 @@ export class RuntimeManager {
       };
     }
 
-    const [lastLocalFingerprint, lastSharedRefsFingerprint] = await Promise.all([
-      workspace.getLocalStateFingerprint(),
-      workspace.getSharedGitRefsFingerprint(),
-    ]);
+    const [lastLocalFingerprint, lastSharedRefsFingerprint] = await Promise.all(
+      [
+        workspace.getLocalStateFingerprint(),
+        workspace.getSharedGitRefsFingerprint(),
+      ],
+    );
     return {
       lastLocalFingerprint,
       lastSharedRefsFingerprint,
@@ -220,8 +227,11 @@ export class RuntimeManager {
     try {
       const changeKinds: HostDaemonEnvironmentChange[] = [];
       if (workspaceWatchKindsIncludeLocalState(pendingKinds)) {
-        const nextLocalFingerprint = await args.workspace.getLocalStateFingerprint();
-        if (args.workspaceWatchState.lastLocalFingerprint !== nextLocalFingerprint) {
+        const nextLocalFingerprint =
+          await args.workspace.getLocalStateFingerprint();
+        if (
+          args.workspaceWatchState.lastLocalFingerprint !== nextLocalFingerprint
+        ) {
           args.workspaceWatchState.lastLocalFingerprint = nextLocalFingerprint;
           changeKinds.push("work-status-changed");
         }
@@ -417,8 +427,8 @@ export class RuntimeManager {
     }
 
     const idleEntries = [...this.entries.values()].filter((entry) => {
-      const hasActiveThread = [...entry.threads.values()].some((thread) =>
-        thread.status === "active"
+      const hasActiveThread = [...entry.threads.values()].some(
+        (thread) => thread.status === "active",
       );
       return !hasActiveThread;
     });
@@ -434,15 +444,16 @@ export class RuntimeManager {
         return entry.environmentId;
       }),
     );
-    const firstRejected = shutdownResults.find((result) => result.status === "rejected");
+    const firstRejected = shutdownResults.find(
+      (result) => result.status === "rejected",
+    );
     if (firstRejected && firstRejected.status === "rejected") {
       throw firstRejected.reason;
     }
 
-    return shutdownResults
-      .flatMap((result) =>
-        result.status === "fulfilled" ? [result.value] : []
-      );
+    return shutdownResults.flatMap((result) =>
+      result.status === "fulfilled" ? [result.value] : [],
+    );
   }
 
   async shutdownAll(): Promise<void> {
@@ -469,15 +480,22 @@ export class RuntimeManager {
     this.stopWatchingThreadStorageRoot = STOP_WATCHING;
   }
 
-  private async createEntry(args: EnsureEnvironmentArgs): Promise<RuntimeEntry> {
+  private async createEntry(
+    args: EnsureEnvironmentArgs,
+  ): Promise<RuntimeEntry> {
     const provision =
       args.provision ??
       (args.workspacePath
-        ? lazyProvisionOpts(args.workspacePath, args.workspaceProvisionType ?? "unmanaged")
+        ? lazyProvisionOpts(
+            args.workspacePath,
+            args.workspaceProvisionType ?? "unmanaged",
+          )
         : null);
 
     if (!provision) {
-      throw new Error(`Missing workspace path for environment ${args.environmentId}`);
+      throw new Error(
+        `Missing workspace path for environment ${args.environmentId}`,
+      );
     }
 
     const workspace = await this.provisionWorkspace(provision);
@@ -583,27 +601,31 @@ export class RuntimeManager {
       return;
     }
 
-    this.stopWatchingThreadStorageRoot = this.hostWatcher.watchThreadStorageRoot({
-      threadStorageRootPath,
-      resolveThreadTarget: (threadId) => this.findTrackedThreadTarget(threadId),
-      onChange: (event) => {
-        if (event.kind !== "thread-storage-changed") {
-          return;
-        }
-        this.options.onThreadStorageChanged?.({
-          environmentId: event.environmentId,
-          threadId: event.threadId,
-        });
-      },
-      onWatchError: (error) => {
-        this.options.onThreadStorageWatchError?.({
-          error,
-        });
-      },
-    });
+    this.stopWatchingThreadStorageRoot =
+      this.hostWatcher.watchThreadStorageRoot({
+        threadStorageRootPath,
+        resolveThreadTarget: (threadId) =>
+          this.findTrackedThreadTarget(threadId),
+        onChange: (event) => {
+          if (event.kind !== "thread-storage-changed") {
+            return;
+          }
+          this.options.onThreadStorageChanged?.({
+            environmentId: event.environmentId,
+            threadId: event.threadId,
+          });
+        },
+        onWatchError: (error) => {
+          this.options.onThreadStorageWatchError?.({
+            error,
+          });
+        },
+      });
   }
 
-  private findTrackedThreadTarget(threadId: string): ThreadStorageTarget | null {
+  private findTrackedThreadTarget(
+    threadId: string,
+  ): ThreadStorageTarget | null {
     return this.trackedThreadStorageTargets.get(threadId) ?? null;
   }
 

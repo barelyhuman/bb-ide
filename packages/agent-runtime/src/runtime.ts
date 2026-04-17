@@ -1,8 +1,4 @@
-import type {
-  DynamicTool,
-  InstructionMode,
-  ThreadEvent,
-} from "@bb/domain";
+import type { DynamicTool, InstructionMode, ThreadEvent } from "@bb/domain";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 import type {
   AdapterCommand,
@@ -45,9 +41,7 @@ import type {
   AgentRuntimeExecutionOptions,
   AgentRuntimeOptions,
 } from "./types.js";
-import {
-  buildThreadShellEnvironment,
-} from "./thread-shell-environment.js";
+import { buildThreadShellEnvironment } from "./thread-shell-environment.js";
 import {
   resolveThreadIdentityResult,
   threadIdentityResultSchema,
@@ -63,8 +57,7 @@ interface AgentRuntimeInternalOptions extends AgentRuntimeOptions {
   adapterFactory?: ProviderAdapterFactory;
 }
 
-interface ResolveProviderRequestThreadIdArgs
-  extends ResolveRuntimeProviderRequestThreadIdArgs {
+interface ResolveProviderRequestThreadIdArgs extends ResolveRuntimeProviderRequestThreadIdArgs {
   proc: ProviderProcess;
 }
 
@@ -177,7 +170,9 @@ function createAgentRuntimeInternal(
       handleStdoutLine(args.line, args.providerProcess),
     onProcessExit: options.onProcessExit,
     onProviderIdentityWaitersInterrupted: (providerProcess) =>
-      threadIdentityRegistry.resolvePendingIdentityWaiters(providerProcess.identity),
+      threadIdentityRegistry.resolvePendingIdentityWaiters(
+        providerProcess.identity,
+      ),
     onProviderThreadDetached: (threadId) => {
       threadIdentityRegistry.clearThread(threadId);
       clearThreadRuntimeConfig(threadId);
@@ -317,7 +312,9 @@ function createAgentRuntimeInternal(
       type: "thread/resume",
       threadId: args.threadId,
       cwd: currentConfig.workspacePath,
-      providerThreadId: threadIdentityRegistry.getProviderThreadId(args.threadId),
+      providerThreadId: threadIdentityRegistry.getProviderThreadId(
+        args.threadId,
+      ),
       options: toProviderExecutionContext({
         envVars,
         execOpts: nextOptions,
@@ -373,24 +370,34 @@ function createAgentRuntimeInternal(
       }
 
       if (args.proc.identity.threadIds.has(event.threadId)) {
-        recordProviderThreadIdentity(args.proc, event.threadId, event.providerThreadId);
+        recordProviderThreadIdentity(
+          args.proc,
+          event.threadId,
+          event.providerThreadId,
+        );
         continue;
       }
 
-      const bbThreadId = threadIdentityRegistry.resolvePendingProviderThreadIdentity(
-        args.proc.identity,
-      );
+      const bbThreadId =
+        threadIdentityRegistry.resolvePendingProviderThreadIdentity(
+          args.proc.identity,
+        );
       if (bbThreadId) {
-        recordProviderThreadIdentity(args.proc, bbThreadId, event.providerThreadId);
+        recordProviderThreadIdentity(
+          args.proc,
+          bbThreadId,
+          event.providerThreadId,
+        );
       }
     }
 
     for (const event of args.events) {
-      const resolvedBbThreadId = threadIdentityRegistry.resolveProviderEventThreadId({
-        eventThreadId: event.threadId,
-        providerState: args.proc.identity,
-        sourceThreadId: args.sourceThreadId,
-      });
+      const resolvedBbThreadId =
+        threadIdentityRegistry.resolveProviderEventThreadId({
+          eventThreadId: event.threadId,
+          providerState: args.proc.identity,
+          sourceThreadId: args.sourceThreadId,
+        });
 
       if (!resolvedBbThreadId) {
         options.onStderr?.(
@@ -401,7 +408,8 @@ function createAgentRuntimeInternal(
 
       const stampedEvent = stampThreadEventScope({
         event,
-        providerThreadId: threadIdentityRegistry.getProviderThreadId(resolvedBbThreadId),
+        providerThreadId:
+          threadIdentityRegistry.getProviderThreadId(resolvedBbThreadId),
         threadId: resolvedBbThreadId,
       });
 
@@ -465,7 +473,9 @@ function createAgentRuntimeInternal(
     const rawEvent: JsonRpcMessage = {
       jsonrpc: "2.0",
       method: args.notificationMethod,
-      ...(Object.hasOwn(args.parsed, "params") ? { params: args.parsed.params } : {}),
+      ...(Object.hasOwn(args.parsed, "params")
+        ? { params: args.parsed.params }
+        : {}),
     };
     const providerId = args.proc.adapter.id;
     emitCapture({
@@ -478,7 +488,9 @@ function createAgentRuntimeInternal(
       sourceThreadId,
     });
     emitTranslatedEvents({
-      events: args.proc.adapter.translateEvent(args.parsed, { threadId: sourceThreadId }),
+      events: args.proc.adapter.translateEvent(args.parsed, {
+        threadId: sourceThreadId,
+      }),
       proc: args.proc,
       providerId,
       sourceThreadId,
@@ -487,12 +499,12 @@ function createAgentRuntimeInternal(
     });
   }
 
-  function handleStdoutLine(
-    line: string,
-    proc: ProviderProcess,
-  ): void {
+  function handleStdoutLine(line: string, proc: ProviderProcess): void {
     const parsedLine = parseJsonRpcLine(line);
-    if (parsedLine.kind === "non_json" || parsedLine.kind === "invalid_json_rpc") {
+    if (
+      parsedLine.kind === "non_json" ||
+      parsedLine.kind === "invalid_json_rpc"
+    ) {
       options.onStderr?.(line);
       return;
     }
@@ -632,7 +644,11 @@ function createAgentRuntimeInternal(
         sourceThreadId: threadId,
       });
 
-      const resolved = await waitForProviderThreadIdentity(proc, threadId, 5000);
+      const resolved = await waitForProviderThreadIdentity(
+        proc,
+        threadId,
+        5000,
+      );
       if (!resolved) {
         throw new Error(
           `Provider "${providerId}" did not return a providerThreadId for thread "${threadId}" within 5 seconds`,
@@ -703,7 +719,8 @@ function createAgentRuntimeInternal(
         threadId,
         cwd: options.workspacePath,
         providerThreadId:
-          providerThreadId ?? threadIdentityRegistry.getProviderThreadId(threadId),
+          providerThreadId ??
+          threadIdentityRegistry.getProviderThreadId(threadId),
         options: toProviderExecutionContext({
           envVars,
           execOpts,
@@ -715,7 +732,8 @@ function createAgentRuntimeInternal(
       const plan = proc.adapter.buildCommandPlan(adapterCommand);
       if (plan.kind === "noop") {
         const currentProviderThreadId =
-          providerThreadId ?? threadIdentityRegistry.getProviderThreadId(threadId);
+          providerThreadId ??
+          threadIdentityRegistry.getProviderThreadId(threadId);
         if (!currentProviderThreadId) {
           throw new Error(`No provider thread id available for ${threadId}`);
         }
@@ -735,7 +753,9 @@ function createAgentRuntimeInternal(
         providerThreadId ??
         threadIdentityRegistry.getProviderThreadId(threadId);
       if (!resolvedId) {
-        throw new Error(`Provider resume did not return a thread id for ${threadId}`);
+        throw new Error(
+          `Provider resume did not return a thread id for ${threadId}`,
+        );
       }
       recordProviderThreadIdentity(proc, threadId, resolvedId);
       emitAcceptedCommandEvents({
@@ -774,7 +794,9 @@ function createAgentRuntimeInternal(
         threadId,
         providerThreadId: threadIdentityRegistry.getProviderThreadId(threadId),
         input,
-        ...(clientRequestSequence !== undefined ? { clientRequestSequence } : {}),
+        ...(clientRequestSequence !== undefined
+          ? { clientRequestSequence }
+          : {}),
         options: toProviderExecutionContext({
           envVars: {},
           execOpts,
@@ -786,8 +808,7 @@ function createAgentRuntimeInternal(
         plan: proc.adapter.buildCommandPlan(adapterCommand),
         providerId: pid,
       });
-      const preparedTurnStart =
-        proc.adapter.prepareTurnStart(adapterCommand);
+      const preparedTurnStart = proc.adapter.prepareTurnStart(adapterCommand);
       try {
         await sendJsonRpcRequest({
           child: proc.child,
@@ -848,7 +869,9 @@ function createAgentRuntimeInternal(
         providerThreadId: threadIdentityRegistry.getProviderThreadId(threadId),
         expectedTurnId,
         input,
-        ...(clientRequestSequence !== undefined ? { clientRequestSequence } : {}),
+        ...(clientRequestSequence !== undefined
+          ? { clientRequestSequence }
+          : {}),
         options: toProviderExecutionContext({
           envVars: {},
           execOpts,
@@ -880,7 +903,8 @@ function createAgentRuntimeInternal(
     async stopThread({ threadId }) {
       const pid = resolveProviderForThread(threadId);
       const proc = requireProviderProcess(pid);
-      const providerThreadId = threadIdentityRegistry.getProviderThreadId(threadId);
+      const providerThreadId =
+        threadIdentityRegistry.getProviderThreadId(threadId);
       if (!providerThreadId) {
         throw new Error(`No provider thread id available for ${threadId}`);
       }
@@ -962,7 +986,10 @@ function createAgentRuntimeInternal(
       const proc = requireProviderProcess(providerId);
       const command = requireProviderRequestPlan({
         commandType: "model/list",
-        plan: proc.adapter.buildCommandPlan({ type: "model/list", selectedModel }),
+        plan: proc.adapter.buildCommandPlan({
+          type: "model/list",
+          selectedModel,
+        }),
         providerId,
       });
       const result = await sendJsonRpcRequest({

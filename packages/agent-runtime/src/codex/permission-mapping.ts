@@ -76,9 +76,9 @@ export function toPendingInteractionGrantablePermissionProfile(
   permissions: CodexAdditionalPermissions | CodexRequestedPermissionProfile,
 ): PendingInteractionGrantablePermissionProfile {
   if (
-    "macos" in permissions
-    && permissions.macos !== null
-    && permissions.macos !== undefined
+    "macos" in permissions &&
+    permissions.macos !== null &&
+    permissions.macos !== undefined
   ) {
     throw new ProviderRequestDecodeError(
       "Codex macOS permission grants are not supported by the provider-neutral permission layer",
@@ -100,7 +100,8 @@ export function toCodexGrantedPermissionProfile(
       ? {
           fileSystem: {
             read: args.fileSystem.read.length > 0 ? args.fileSystem.read : null,
-            write: args.fileSystem.write.length > 0 ? args.fileSystem.write : null,
+            write:
+              args.fileSystem.write.length > 0 ? args.fileSystem.write : null,
           },
         }
       : {}),
@@ -113,7 +114,10 @@ function fromCodexCommandApprovalDecision(
   return codexToPendingInteractionApprovalDecision[decision];
 }
 
-type CodexPolicyAmendmentDecision = Extract<CodexCommandApprovalDecision, object>;
+type CodexPolicyAmendmentDecision = Extract<
+  CodexCommandApprovalDecision,
+  object
+>;
 
 function isCodexPolicyAmendmentDecision(
   decision: CodexCommandApprovalDecision,
@@ -121,10 +125,8 @@ function isCodexPolicyAmendmentDecision(
   return (
     typeof decision === "object" &&
     decision !== null &&
-    (
-      "acceptWithExecpolicyAmendment" in decision ||
-      "applyNetworkPolicyAmendment" in decision
-    )
+    ("acceptWithExecpolicyAmendment" in decision ||
+      "applyNetworkPolicyAmendment" in decision)
   );
 }
 

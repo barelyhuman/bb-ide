@@ -6,8 +6,7 @@ export interface SandboxTemplateConfig {
 }
 
 export interface SandboxProvisioningConfig
-  extends SandboxTemplateConfig,
-    ExternalServerUrlConfig {
+  extends SandboxTemplateConfig, ExternalServerUrlConfig {
   e2bApiKey: string;
 }
 

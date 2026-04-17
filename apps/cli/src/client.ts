@@ -7,10 +7,7 @@ export function createClient(baseUrl: string): ApiClient {
 
 export type Client = ReturnType<typeof createClient>;
 
-function isTypeErrorWithCauseCode(
-  err: unknown,
-  expectedCode: string,
-): boolean {
+function isTypeErrorWithCauseCode(err: unknown, expectedCode: string): boolean {
   if (!(err instanceof TypeError)) {
     return false;
   }
@@ -41,10 +38,7 @@ async function readHttpErrorMessage(res: Response): Promise<string> {
 
   try {
     const parsed = JSON.parse(normalized) as unknown;
-    return (
-      extractErrorMessage(parsed, ERROR_EXTRACT_OPTS) ??
-      normalized
-    );
+    return extractErrorMessage(parsed, ERROR_EXTRACT_OPTS) ?? normalized;
   } catch {
     return normalized;
   }

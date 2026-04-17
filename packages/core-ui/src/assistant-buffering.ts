@@ -1,8 +1,6 @@
 import type { ThreadEvent } from "@bb/domain";
 
-export function parseAssistantDeltaText(
-  decoded: ThreadEvent,
-): string | null {
+export function parseAssistantDeltaText(decoded: ThreadEvent): string | null {
   if (decoded.type !== "item/agentMessage/delta") {
     return null;
   }
@@ -10,17 +8,13 @@ export function parseAssistantDeltaText(
   return decoded.delta.length > 0 ? decoded.delta : null;
 }
 
-export function parseAssistantFinalText(
-  decoded: ThreadEvent,
-): string | null {
+export function parseAssistantFinalText(decoded: ThreadEvent): string | null {
   if (decoded.type !== "item/completed") return null;
   if (decoded.item.type !== "agentMessage") return null;
   return decoded.item.text.length > 0 ? decoded.item.text : null;
 }
 
-export function parseReasoningDeltaText(
-  decoded: ThreadEvent,
-): string | null {
+export function parseReasoningDeltaText(decoded: ThreadEvent): string | null {
   if (
     decoded.type !== "item/reasoning/summaryTextDelta" &&
     decoded.type !== "item/reasoning/textDelta"
@@ -31,9 +25,7 @@ export function parseReasoningDeltaText(
   return decoded.delta.length > 0 ? decoded.delta : null;
 }
 
-export function parseReasoningFinalText(
-  decoded: ThreadEvent,
-): string | null {
+export function parseReasoningFinalText(decoded: ThreadEvent): string | null {
   if (decoded.type !== "item/completed") return null;
   if (decoded.item.type !== "reasoning") return null;
   const summaryText = decoded.item.summary.join("");
@@ -44,7 +36,6 @@ export function parseReasoningFinalText(
 
 export function isTerminalAssistantFlushEvent(eventType: string): boolean {
   return (
-    eventType === "system/thread/interrupted" ||
-    eventType === "turn/completed"
+    eventType === "system/thread/interrupted" || eventType === "turn/completed"
   );
 }

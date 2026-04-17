@@ -1,5 +1,9 @@
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
-import { CommandDispatchError, type CommandDispatchOptions, type CommandOf } from "../command-dispatch-support.js";
+import {
+  CommandDispatchError,
+  type CommandDispatchOptions,
+  type CommandOf,
+} from "../command-dispatch-support.js";
 
 export async function resolveInteractiveRequest(
   command: CommandOf<"interactive.resolve">,

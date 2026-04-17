@@ -31,9 +31,7 @@ function getErrorCode(error: unknown): string | undefined {
   return undefined;
 }
 
-async function resolveCliEntryPath(
-  cliExecutablePath: string,
-): Promise<string> {
+async function resolveCliEntryPath(cliExecutablePath: string): Promise<string> {
   const cliEntryPath = resolve(cliExecutablePath);
 
   try {

@@ -1,10 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import type { Thread, ThreadListEntry } from "@bb/domain";
-import type {
-  ProjectResponse,
-  UpdateThreadRequest,
-} from "@bb/server-contract";
+import type { ProjectResponse, UpdateThreadRequest } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import {
   environmentGitDiffQueryKeyPrefix,
@@ -32,19 +29,25 @@ interface ArchiveThreadMutationRequest {
 
 interface DeleteThreadMutationContext {
   previousThread: Thread | undefined;
-  previousThreadLists: Array<readonly [readonly unknown[], ThreadListEntry[] | undefined]>;
+  previousThreadLists: Array<
+    readonly [readonly unknown[], ThreadListEntry[] | undefined]
+  >;
   previousProjects: ProjectResponse[] | undefined;
   environmentId: string | null | undefined;
 }
 
 interface ThreadListMutationContext {
   previousThread: Thread | undefined;
-  previousThreadLists: Array<readonly [readonly unknown[], ThreadListEntry[] | undefined]>;
+  previousThreadLists: Array<
+    readonly [readonly unknown[], ThreadListEntry[] | undefined]
+  >;
 }
 
 function archiveThreadInLists(
   queryClient: QueryClient,
-  threadLists: Array<readonly [readonly unknown[], ThreadListEntry[] | undefined]>,
+  threadLists: Array<
+    readonly [readonly unknown[], ThreadListEntry[] | undefined]
+  >,
   id: string,
 ): void {
   for (const [queryKey, list] of threadLists) {
@@ -59,10 +62,17 @@ function archiveThreadInLists(
   }
 }
 
-function removeThreadScopedQueries(queryClient: QueryClient, threadId: string): void {
+function removeThreadScopedQueries(
+  queryClient: QueryClient,
+  threadId: string,
+): void {
   queryClient.removeQueries({ queryKey: threadQueryKey(threadId) });
-  queryClient.removeQueries({ queryKey: threadTimelineQueryKeyPrefix(threadId) });
-  queryClient.removeQueries({ queryKey: threadDefaultExecutionOptionsQueryKey(threadId) });
+  queryClient.removeQueries({
+    queryKey: threadTimelineQueryKeyPrefix(threadId),
+  });
+  queryClient.removeQueries({
+    queryKey: threadDefaultExecutionOptionsQueryKey(threadId),
+  });
   queryClient.removeQueries({ queryKey: threadDraftsQueryKey(threadId) });
   queryClient.removeQueries({ queryKey: threadStorageFilesQueryKey(threadId) });
   queryClient.removeQueries({
@@ -91,7 +101,9 @@ function removeEnvironmentScopedQueries(
 
 function restoreThreadLists(
   queryClient: QueryClient,
-  threadLists: Array<readonly [readonly unknown[], ThreadListEntry[] | undefined]>,
+  threadLists: Array<
+    readonly [readonly unknown[], ThreadListEntry[] | undefined]
+  >,
 ): void {
   for (const [queryKey, data] of threadLists) {
     queryClient.setQueryData(queryKey, data);
@@ -105,7 +117,10 @@ export function useUpdateThread() {
     meta: {
       errorMessage: "Failed to update thread.",
     },
-    mutationFn: ({ id, ...request }: ThreadMutationRequest & UpdateThreadRequest) =>
+    mutationFn: ({
+      id,
+      ...request
+    }: ThreadMutationRequest & UpdateThreadRequest) =>
       api.updateThread(id, request),
     onSuccess: (thread) => {
       queryClient.setQueryData<Thread>(threadQueryKey(thread.id), thread);
@@ -129,10 +144,14 @@ export function useArchiveThread() {
       await queryClient.cancelQueries({ queryKey: threadQueryKey(id) });
       await queryClient.cancelQueries({ queryKey: threadsQueryKey() });
 
-      const previousThread = queryClient.getQueryData<Thread>(threadQueryKey(id));
-      const previousThreadLists = queryClient.getQueriesData<ThreadListEntry[]>({
-        queryKey: threadsQueryKey(),
-      });
+      const previousThread = queryClient.getQueryData<Thread>(
+        threadQueryKey(id),
+      );
+      const previousThreadLists = queryClient.getQueriesData<ThreadListEntry[]>(
+        {
+          queryKey: threadsQueryKey(),
+        },
+      );
 
       const archivedAt = Date.now();
 
@@ -156,7 +175,10 @@ export function useArchiveThread() {
         return;
       }
 
-      queryClient.setQueryData(threadQueryKey(variables.id), context.previousThread);
+      queryClient.setQueryData(
+        threadQueryKey(variables.id),
+        context.previousThread,
+      );
       restoreThreadLists(queryClient, context.previousThreadLists);
     },
     onSettled: (_data, _error, variables) => {
@@ -179,10 +201,14 @@ export function useUnarchiveThread() {
       await queryClient.cancelQueries({ queryKey: threadQueryKey(id) });
       await queryClient.cancelQueries({ queryKey: threadsQueryKey() });
 
-      const previousThread = queryClient.getQueryData<Thread>(threadQueryKey(id));
-      const previousThreadLists = queryClient.getQueriesData<ThreadListEntry[]>({
-        queryKey: threadsQueryKey(),
-      });
+      const previousThread = queryClient.getQueryData<Thread>(
+        threadQueryKey(id),
+      );
+      const previousThreadLists = queryClient.getQueriesData<ThreadListEntry[]>(
+        {
+          queryKey: threadsQueryKey(),
+        },
+      );
 
       queryClient.setQueryData<Thread>(threadQueryKey(id), (thread) => {
         if (!thread) {
@@ -220,7 +246,10 @@ export function useUnarchiveThread() {
         return;
       }
 
-      queryClient.setQueryData(threadQueryKey(variables.id), context.previousThread);
+      queryClient.setQueryData(
+        threadQueryKey(variables.id),
+        context.previousThread,
+      );
       restoreThreadLists(queryClient, context.previousThreadLists);
     },
     onSettled: (_data, _error, variables) => {
@@ -244,11 +273,16 @@ export function useDeleteThread() {
       await queryClient.cancelQueries({ queryKey: threadsQueryKey() });
       await queryClient.cancelQueries({ queryKey: projectsQueryKey() });
 
-      const previousThread = queryClient.getQueryData<Thread>(threadQueryKey(id));
-      const previousThreadLists = queryClient.getQueriesData<ThreadListEntry[]>({
-        queryKey: threadsQueryKey(),
-      });
-      const previousProjects = queryClient.getQueryData<ProjectResponse[]>(projectsQueryKey());
+      const previousThread = queryClient.getQueryData<Thread>(
+        threadQueryKey(id),
+      );
+      const previousThreadLists = queryClient.getQueriesData<ThreadListEntry[]>(
+        {
+          queryKey: threadsQueryKey(),
+        },
+      );
+      const previousProjects =
+        queryClient.getQueryData<ProjectResponse[]>(projectsQueryKey());
       const environmentId = previousThread?.environmentId;
 
       removeThreadScopedQueries(queryClient, id);
@@ -277,7 +311,10 @@ export function useDeleteThread() {
         return;
       }
 
-      queryClient.setQueryData(threadQueryKey(variables.id), context.previousThread);
+      queryClient.setQueryData(
+        threadQueryKey(variables.id),
+        context.previousThread,
+      );
       restoreThreadLists(queryClient, context.previousThreadLists);
       queryClient.setQueryData(projectsQueryKey(), context.previousProjects);
     },

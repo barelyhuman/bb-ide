@@ -39,7 +39,9 @@ async function main(): Promise<void> {
   const selfDir = dirname(fileURLToPath(import.meta.url));
   const appDistDir = resolve(selfDir, "../../app/dist");
   const staticDir =
-    process.env.NODE_ENV === "production" && existsSync(appDistDir) ? appDistDir : undefined;
+    process.env.NODE_ENV === "production" && existsSync(appDistDir)
+      ? appDistDir
+      : undefined;
   const runtimeConfig: ServerRuntimeConfig = {
     anthropicApiKey: serverConfig.ANTHROPIC_API_KEY,
     dataDir: commonConfig.BB_DATA_DIR,
@@ -157,7 +159,8 @@ async function main(): Promise<void> {
 }
 
 void main().catch((error) => {
-  const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
+  const message =
+    error instanceof Error ? (error.stack ?? error.message) : String(error);
   process.stderr.write(`${message}\n`);
   process.exitCode = 1;
 });

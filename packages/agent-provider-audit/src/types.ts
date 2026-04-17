@@ -278,20 +278,17 @@ export interface ProviderAuditCoverageFixtureIds {
   fixtureIds: string[];
 }
 
-export interface ProviderAuditCoverageRawEventSummary
-  extends ProviderAuditCoverageFixtureIds {
+export interface ProviderAuditCoverageRawEventSummary extends ProviderAuditCoverageFixtureIds {
   kind: string;
   classification: ProviderRawEventCoverage;
   totalCount: number;
 }
 
-export interface ProviderAuditCoverageTranslatedEventTypeSummary
-  extends ProviderAuditCoverageFixtureIds {
+export interface ProviderAuditCoverageTranslatedEventTypeSummary extends ProviderAuditCoverageFixtureIds {
   type: ThreadEvent["type"];
 }
 
-export interface ProviderAuditCoverageToolCallSummary
-  extends ProviderAuditCoverageFixtureIds {
+export interface ProviderAuditCoverageToolCallSummary extends ProviderAuditCoverageFixtureIds {
   key: string;
   displayName: string;
   coverage: ProviderObservedToolCallCoverage;
@@ -364,8 +361,7 @@ export interface ProviderAuditBuildLadleStoryDataArgs {
   replayed: ProviderAuditReplayFixturesResult;
 }
 
-export interface ProviderAuditExportLadleDataArgs
-  extends ProviderAuditReplayFixturesArgs {
+export interface ProviderAuditExportLadleDataArgs extends ProviderAuditReplayFixturesArgs {
   outputPath: string;
 }
 

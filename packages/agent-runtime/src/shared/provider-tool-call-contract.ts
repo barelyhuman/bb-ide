@@ -54,7 +54,9 @@ export function decodeNormalizedProviderToolCallRequest(
     turnId: parsed.data.turnId,
     callId: parsed.data.callId,
     tool: parsed.data.tool,
-    ...(parsed.data.arguments !== undefined ? { arguments: parsed.data.arguments } : {}),
+    ...(parsed.data.arguments !== undefined
+      ? { arguments: parsed.data.arguments }
+      : {}),
     ...(parsed.data.threadId ? { threadId: parsed.data.threadId } : {}),
   };
 }
@@ -79,6 +81,8 @@ export function decodeNativeProviderToolCallRequest(
     turnId: parsed.data.turnId,
     callId: parsed.data.callId,
     tool: parsed.data.tool,
-    ...(parsed.data.arguments !== undefined ? { arguments: parsed.data.arguments } : {}),
+    ...(parsed.data.arguments !== undefined
+      ? { arguments: parsed.data.arguments }
+      : {}),
   };
 }

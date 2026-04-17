@@ -35,6 +35,7 @@ Generic, reusable, no BB-domain types in the API. If you swapped BB for a
 different product, these would still make sense.
 
 **Admission criteria — must satisfy all:**
+
 - Pure props in, JSX out. No queries, atoms, routing, or storage.
 - API references zero domain types from `@bb/domain`.
 - Aligned with a sanctioned visual pattern (page shell, detail card/rows,
@@ -47,6 +48,7 @@ Pure presentation, but the API references BB domain concepts. Reusable across BB
 consumers (`apps/app`, `packages/provider-audit`, future packages).
 
 **Admission criteria — must satisfy all:**
+
 - Pure props in, JSX out. No queries, atoms, routing, or storage.
 - Drivable from fixture data alone.
 - **Used by ≥2 consumers, or clearly destined to be.** Cross-package reuse is the
@@ -146,6 +148,7 @@ dependency and gives ui-core ownership of the design tokens.
    criteria, and litmus test.
 
 **Validation:**
+
 - `pnpm exec turbo run build --filter=@bb/ui-core` passes.
 - `pnpm exec turbo run typecheck --filter=@bb/app` passes (consumers see no
   change).
@@ -161,6 +164,7 @@ dependency and gives ui-core ownership of the design tokens.
    directly instead of reaching into `apps/app/src/app.css`.
 
 **Validation:**
+
 - `apps/app` renders identically (visual spot-check on a thread detail page).
 - `pnpm --filter @bb/provider-audit ladle` (run by the user) shows the same
   styling as before.
@@ -179,6 +183,7 @@ dependency and gives ui-core ownership of the design tokens.
      output). Validates the complex end.
 
 **Validation:**
+
 - `pnpm --filter @bb/ui-core ladle` (run by the user) opens with both stories
   visible and rendering correctly.
 - `pnpm exec turbo run build --filter=@bb/ui-core` still passes.
@@ -199,6 +204,7 @@ reference domain types or app context on closer inspection, drop them from this
 step and reconsider.
 
 **Validation:**
+
 - `pnpm exec turbo run typecheck --filter=@bb/app` passes.
 - `pnpm exec turbo run build --filter=@bb/ui-core --filter=@bb/app` passes.
 - Each extracted primitive has a story rendering at least its happy path and one
@@ -211,16 +217,19 @@ For each candidate from the audit, before moving, confirm: **does this have ≥2
 consumers, or is it imminently planned to?** If no, leave it in `apps/app`.
 
 Likely yes (worth moving with stories):
+
 - `ConversationStatusIndicator`, `ConversationWorkingIndicator` →
   `thread-timeline/`
 - `ThreadContextWindowIndicator` → `thread-timeline/` (move `useHoverPopover`
   alongside or inline it)
 
 Probably no for now (single consumer, no imminent reuse):
+
 - `HostStatusIndicator`, `WorkspaceChangesList`. Revisit when a second consumer
   appears.
 
 **Validation:**
+
 - Same as Step 4 for any moved component.
 - For each component left behind, write down (in the PR description, not the
   code) which criterion failed.
@@ -256,8 +265,8 @@ The following are explicitly out of scope for this plan:
 - [ ] Domain compositions are moved only when they meet the ≥2-consumer
       criterion. Components that don't qualify are documented (in PR
       descriptions) as intentionally staying in `apps/app`.
-- [ ] `pnpm exec turbo run build --filter=@bb/app --filter=@bb/ui-core
-      --filter=@bb/provider-audit` passes.
+- [ ] App and ui-core builds pass:
+      `pnpm exec turbo run build --filter=@bb/app --filter=@bb/ui-core --filter=@bb/provider-audit`.
 - [ ] `apps/app` visually unchanged (spot-check thread detail, settings, project
       list).
 

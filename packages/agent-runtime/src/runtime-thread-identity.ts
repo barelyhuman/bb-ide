@@ -125,10 +125,11 @@ export class RuntimeThreadIdentityRegistry {
       return undefined;
     }
 
-    for (const [bbThreadId, mappedProviderThreadId] of this.threadToProviderThread) {
+    for (const [bbThreadId, mappedProviderThreadId] of this
+      .threadToProviderThread) {
       if (
-        mappedProviderThreadId === args.providerThreadId
-        && args.providerState.threadIds.has(bbThreadId)
+        mappedProviderThreadId === args.providerThreadId &&
+        args.providerState.threadIds.has(bbThreadId)
       ) {
         return bbThreadId;
       }
@@ -141,25 +142,26 @@ export class RuntimeThreadIdentityRegistry {
     args: ResolveProviderEventThreadIdArgs,
   ): string | undefined {
     if (
-      args.sourceThreadId
-      && args.providerState.threadIds.has(args.sourceThreadId)
+      args.sourceThreadId &&
+      args.providerState.threadIds.has(args.sourceThreadId)
     ) {
       return args.sourceThreadId;
     }
 
     if (
-      args.eventThreadId
-      && args.providerState.threadIds.has(args.eventThreadId)
+      args.eventThreadId &&
+      args.providerState.threadIds.has(args.eventThreadId)
     ) {
       return args.eventThreadId;
     }
 
     const lookupId = args.sourceThreadId || args.eventThreadId;
     if (lookupId) {
-      for (const [bbThreadId, providerThreadId] of this.threadToProviderThread) {
+      for (const [bbThreadId, providerThreadId] of this
+        .threadToProviderThread) {
         if (
-          providerThreadId === lookupId
-          && args.providerState.threadIds.has(bbThreadId)
+          providerThreadId === lookupId &&
+          args.providerState.threadIds.has(bbThreadId)
         ) {
           return bbThreadId;
         }

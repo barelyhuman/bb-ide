@@ -40,7 +40,8 @@ describe("PromptOptionPicker", () => {
           {
             value: "full",
             label: "Full",
-            description: "No permission prompts. The agent can use full provider permissions.",
+            description:
+              "No permission prompts. The agent can use full provider permissions.",
             tone: "warning",
           },
           {
@@ -60,6 +61,8 @@ describe("PromptOptionPicker", () => {
     fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
 
     expect(screen.getByText("Workspace Write")).not.toBeNull();
-    expect(screen.getByText("Can edit and run safely inside the workspace.")).not.toBeNull();
+    expect(
+      screen.getByText("Can edit and run safely inside the workspace."),
+    ).not.toBeNull();
   });
 });

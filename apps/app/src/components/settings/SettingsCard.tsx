@@ -6,7 +6,11 @@ interface SettingsCardProps {
   title: string;
 }
 
-export function SettingsCard({ children, description, title }: SettingsCardProps) {
+export function SettingsCard({
+  children,
+  description,
+  title,
+}: SettingsCardProps) {
   return (
     <div className="rounded-lg border border-border bg-card px-3 py-2.5">
       <div className="mb-2">

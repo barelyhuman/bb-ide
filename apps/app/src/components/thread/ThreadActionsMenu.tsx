@@ -1,5 +1,5 @@
-import type { Thread } from "@bb/domain"
-import { MoreHorizontal } from "lucide-react"
+import type { Thread } from "@bb/domain";
+import { MoreHorizontal } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -7,27 +7,27 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
-import { threadTypeLabel } from "@/lib/thread-title"
-import { isThreadRead } from "@/lib/thread-read-state"
-import { useThreadActions } from "./ThreadActionsProvider"
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { threadTypeLabel } from "@/lib/thread-title";
+import { isThreadRead } from "@/lib/thread-read-state";
+import { useThreadActions } from "./ThreadActionsProvider";
 
 interface ThreadActionsMenuProps {
-  thread: Thread
+  thread: Thread;
   /**
    * Pass `false` to hide the Delete entry (e.g. sidebar rows that intentionally
    * route users to the thread detail page for destructive actions). Defaults
    * to true.
    */
-  canDelete?: boolean
-  viewerToggleLabel?: string
-  viewerToggleChecked?: boolean
-  onViewerToggleCheckedChange?: (checked: boolean) => void
-  onOpenChange?: (open: boolean) => void
-  triggerClassName?: string
-  align?: "start" | "center" | "end"
+  canDelete?: boolean;
+  viewerToggleLabel?: string;
+  viewerToggleChecked?: boolean;
+  onViewerToggleCheckedChange?: (checked: boolean) => void;
+  onOpenChange?: (open: boolean) => void;
+  triggerClassName?: string;
+  align?: "start" | "center" | "end";
 }
 
 export function ThreadActionsMenu({
@@ -40,16 +40,12 @@ export function ThreadActionsMenu({
   triggerClassName,
   align = "end",
 }: ThreadActionsMenuProps) {
-  const {
-    requestRename,
-    requestDelete,
-    toggleArchive,
-    toggleRead,
-  } = useThreadActions()
-  const label = threadTypeLabel(thread.type)
-  const capitalizedLabel = label.charAt(0).toUpperCase() + label.slice(1)
-  const isRead = isThreadRead(thread)
-  const isArchived = thread.archivedAt != null
+  const { requestRename, requestDelete, toggleArchive, toggleRead } =
+    useThreadActions();
+  const label = threadTypeLabel(thread.type);
+  const capitalizedLabel = label.charAt(0).toUpperCase() + label.slice(1);
+  const isRead = isThreadRead(thread);
+  const isArchived = thread.archivedAt != null;
 
   return (
     <DropdownMenu onOpenChange={onOpenChange}>
@@ -65,7 +61,7 @@ export function ThreadActionsMenu({
           aria-label={`${capitalizedLabel} actions`}
           title={`${capitalizedLabel} actions`}
           onClick={(event) => {
-            event.stopPropagation()
+            event.stopPropagation();
           }}
         >
           <MoreHorizontal className="size-5 md:size-4" />
@@ -74,8 +70,8 @@ export function ThreadActionsMenu({
       <DropdownMenuContent align={align} className="w-44">
         <DropdownMenuItem
           onSelect={(event) => {
-            event.preventDefault()
-            toggleRead(thread)
+            event.preventDefault();
+            toggleRead(thread);
           }}
         >
           {isRead ? "Mark as unread" : "Mark as read"}
@@ -83,16 +79,16 @@ export function ThreadActionsMenu({
         <DropdownMenuItem
           onSelect={() => {
             window.setTimeout(() => {
-              requestRename(thread)
-            }, 0)
+              requestRename(thread);
+            }, 0);
           }}
         >
           Rename
         </DropdownMenuItem>
         <DropdownMenuItem
           onSelect={(event) => {
-            event.preventDefault()
-            toggleArchive(thread)
+            event.preventDefault();
+            toggleArchive(thread);
           }}
         >
           {isArchived ? "Unarchive" : "Archive"}
@@ -102,8 +98,8 @@ export function ThreadActionsMenu({
             className="text-destructive focus:text-destructive"
             onSelect={() => {
               window.setTimeout(() => {
-                requestDelete(thread)
-              }, 0)
+                requestDelete(thread);
+              }, 0);
             }}
           >
             Delete
@@ -115,10 +111,10 @@ export function ThreadActionsMenu({
             <DropdownMenuCheckboxItem
               checked={viewerToggleChecked}
               onCheckedChange={(checked) => {
-                onViewerToggleCheckedChange(checked === true)
+                onViewerToggleCheckedChange(checked === true);
               }}
               onSelect={(event) => {
-                event.preventDefault()
+                event.preventDefault();
               }}
             >
               {viewerToggleLabel}
@@ -127,5 +123,5 @@ export function ThreadActionsMenu({
         ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
-  )
+  );
 }

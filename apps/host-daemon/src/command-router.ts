@@ -55,11 +55,9 @@ export class CommandRouter {
     envelope: HostDaemonCommandEnvelope,
   ): Promise<void> {
     let task: Promise<CommandResultReport>;
-    if (
-      envelope.command.type === "host.sync_runtime_material"
-    ) {
-      task = this.runInHostRuntimeMaterialLane(
-        () => this.executeCommand(envelope),
+    if (envelope.command.type === "host.sync_runtime_material") {
+      task = this.runInHostRuntimeMaterialLane(() =>
+        this.executeCommand(envelope),
       );
     } else if (
       this.requiresWorkspaceLane(envelope.command.type) &&
@@ -71,9 +69,8 @@ export class CommandRouter {
           `Command ${envelope.command.type} is missing environmentId`,
         );
       }
-      task = this.runInEnvironmentLane(
-        environmentId,
-        () => this.executeCommand(envelope),
+      task = this.runInEnvironmentLane(environmentId, () =>
+        this.executeCommand(envelope),
       );
     } else {
       task = this.executeCommand(envelope);
@@ -98,9 +95,7 @@ export class CommandRouter {
     await this.reportingPromise;
   }
 
-  private runInHostRuntimeMaterialLane<T>(
-    work: () => Promise<T>,
-  ): Promise<T> {
+  private runInHostRuntimeMaterialLane<T>(work: () => Promise<T>): Promise<T> {
     const next = this.hostRuntimeMaterialLane.catch(() => undefined).then(work);
     this.hostRuntimeMaterialLane = next.then(
       () => undefined,
@@ -124,7 +119,8 @@ export class CommandRouter {
     environmentId: string,
     work: () => Promise<T>,
   ): Promise<T> {
-    const previous = this.environmentLanes.get(environmentId) ?? Promise.resolve();
+    const previous =
+      this.environmentLanes.get(environmentId) ?? Promise.resolve();
     const next = previous.catch(() => undefined).then(work);
     this.environmentLanes.set(
       environmentId,
@@ -155,7 +151,8 @@ export class CommandRouter {
         eventSink: this.options.eventSink,
         listModels: this.options.listModels,
         resolveInteractiveRequest: this.options.resolveInteractiveRequest,
-        recordReplayCaptureThreadMetadata: this.options.recordReplayCaptureThreadMetadata,
+        recordReplayCaptureThreadMetadata:
+          this.options.recordReplayCaptureThreadMetadata,
         replayTasks: this.options.replayTasks,
         threadStorageRootPath: this.options.threadStorageRootPath,
       });
@@ -184,7 +181,9 @@ export class CommandRouter {
     }
   }
 
-  private requiresWorkspaceLane(type: HostDaemonCommandEnvelope["command"]["type"]): boolean {
+  private requiresWorkspaceLane(
+    type: HostDaemonCommandEnvelope["command"]["type"],
+  ): boolean {
     return (
       type === "environment.provision" ||
       type === "environment.destroy" ||

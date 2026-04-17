@@ -1,9 +1,7 @@
 import { useCallback, useEffect } from "react";
 import { useAtomValue, useSetAtom } from "jotai";
 import { useAtomCallback } from "jotai/utils";
-import {
-  useEnvironmentMergeBaseBranches,
-} from "../hooks/queries/environment-queries";
+import { useEnvironmentMergeBaseBranches } from "../hooks/queries/environment-queries";
 import {
   activeSecondaryPanelAtom,
   useSetThreadSecondaryPanel,

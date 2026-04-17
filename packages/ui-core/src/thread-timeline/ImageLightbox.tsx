@@ -112,7 +112,8 @@ export function ImageLightbox({
   onPrevious,
   title,
 }: ImageLightboxProps) {
-  const hasNavigation = hasMultipleImages && onPrevious !== undefined && onNext !== undefined;
+  const hasNavigation =
+    hasMultipleImages && onPrevious !== undefined && onNext !== undefined;
 
   useEffect(() => {
     if (!imageSrc) return;
@@ -162,9 +163,7 @@ export function ImageLightbox({
         }
       }}
     >
-      <div
-        className="left-0 top-0 flex h-screen w-screen max-w-none translate-x-0 translate-y-0 items-center justify-center border-none bg-transparent p-0 shadow-none data-[state=closed]:slide-out-to-left-0 data-[state=closed]:slide-out-to-top-0 data-[state=open]:slide-in-from-left-0 data-[state=open]:slide-in-from-top-0 sm:rounded-none [&>button]:hidden"
-      >
+      <div className="left-0 top-0 flex h-screen w-screen max-w-none translate-x-0 translate-y-0 items-center justify-center border-none bg-transparent p-0 shadow-none data-[state=closed]:slide-out-to-left-0 data-[state=closed]:slide-out-to-top-0 data-[state=open]:slide-in-from-left-0 data-[state=open]:slide-in-from-top-0 sm:rounded-none [&>button]:hidden">
         <span className="sr-only">{title}</span>
         <img
           src={imageSrc}

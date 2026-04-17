@@ -33,10 +33,7 @@ export function internalAuthHeaders(
     .where(eq(hostDaemonSessions.status, "active"))
     .all();
 
-  const inferredHost =
-    activeSessions.length === 1
-      ? activeSessions[0]
-      : null;
+  const inferredHost = activeSessions.length === 1 ? activeSessions[0] : null;
 
   return {
     authorization: `Bearer ${createTestDaemonHostKey({
@@ -112,7 +109,8 @@ export async function reportQueuedCommandSuccess<
       completedAt: Date.now(),
       type: queued.command.type,
       ok: true,
-      result: hostDaemonCommandResultSchemaByType[queued.command.type].parse(result),
+      result:
+        hostDaemonCommandResultSchemaByType[queued.command.type].parse(result),
     }),
   });
 }
@@ -150,11 +148,16 @@ export async function reportNextRuntimeMaterialSyncSuccess(
     hostType?: HostType;
     timeoutMs?: number;
   },
-): Promise<QueuedCommand<Extract<HostDaemonCommand, { type: "host.sync_runtime_material" }>>> {
+): Promise<
+  QueuedCommand<
+    Extract<HostDaemonCommand, { type: "host.sync_runtime_material" }>
+  >
+> {
   const queued = await waitForQueuedCommand(
     harness,
     ({ command, row }) =>
-      row.hostId === args.hostId && command.type === "host.sync_runtime_material",
+      row.hostId === args.hostId &&
+      command.type === "host.sync_runtime_material",
     args.timeoutMs,
   );
   if (queued.command.type !== "host.sync_runtime_material") {
@@ -173,7 +176,9 @@ export async function reportNextRuntimeMaterialSyncSuccess(
     },
   );
   if (!response.ok) {
-    throw new Error(`Expected runtime material sync success, got ${response.status}`);
+    throw new Error(
+      `Expected runtime material sync success, got ${response.status}`,
+    );
   }
 
   return queued;

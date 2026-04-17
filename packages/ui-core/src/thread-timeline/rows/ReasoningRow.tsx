@@ -52,7 +52,9 @@ export function ReasoningRow({
     [isStreaming, message.text, title],
   );
 
-  const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded || isStreaming);
+  const { isExpanded, onToggle } = useLatestInitialExpanded(
+    initialExpanded || isStreaming,
+  );
   const headerToneClass = getCollapsibleHeaderToneClass(isExpanded);
 
   if (!expandable) {
@@ -60,7 +62,12 @@ export function ReasoningRow({
       <div className="group w-full" style={{ overflowAnchor: "none" }}>
         <div className="mr-auto w-full">
           <div className="rounded-md px-2 py-1 text-muted-foreground">
-            <div className={cn("py-0.5 text-sm italic", COLLAPSIBLE_HEADER_STATIC_TONE_CLASS)}>
+            <div
+              className={cn(
+                "py-0.5 text-sm italic",
+                COLLAPSIBLE_HEADER_STATIC_TONE_CLASS,
+              )}
+            >
               <span className="truncate">{title}</span>
             </div>
           </div>

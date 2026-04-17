@@ -41,7 +41,9 @@ function isRecord(value: unknown): value is RuntimeTestRecord {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function unsupportedRuntimeTestCommand(command: AdapterCommand): ProviderCommandPlan {
+function unsupportedRuntimeTestCommand(
+  command: AdapterCommand,
+): ProviderCommandPlan {
   return { kind: "noop", reason: `${command.type} unsupported` };
 }
 
@@ -112,16 +114,17 @@ export function createInteractiveRequestAdapter(
 
       const params = request.params;
       if (
-        typeof params.threadId !== "string"
-        || typeof params.turnId !== "string"
-        || typeof params.itemId !== "string"
-        || typeof params.kind !== "string"
+        typeof params.threadId !== "string" ||
+        typeof params.turnId !== "string" ||
+        typeof params.itemId !== "string" ||
+        typeof params.kind !== "string"
       ) {
         return null;
       }
 
       if (params.kind === "command_approval") {
-        const command = typeof params.command === "string" ? params.command : "";
+        const command =
+          typeof params.command === "string" ? params.command : "";
         return {
           requestId: request.id,
           method: request.method,
@@ -179,7 +182,9 @@ export function createInvalidInteractiveRequestAdapter(
       if (request.method !== "request_interaction") {
         return null;
       }
-      throw new ProviderRequestDecodeError("Invalid interactive request params");
+      throw new ProviderRequestDecodeError(
+        "Invalid interactive request params",
+      );
     },
     buildInteractiveResponse({ resolution }) {
       return { resolution };

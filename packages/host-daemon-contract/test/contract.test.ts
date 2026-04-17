@@ -24,12 +24,18 @@ import {
 } from "../src/index.js";
 
 const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
-  "hostDaemonCommandSchema.maxDiffBytes": "workspace.diff may omit maxDiffBytes to use the system default cap.",
-  "hostDaemonCommandSchema.maxFileListBytes": "workspace.diff may omit maxFileListBytes to use the system default cap.",
-  "hostDaemonCommandSchema.mergeBaseBranch": "workspace.status may omit mergeBaseBranch when the caller only needs working-tree state.",
-  "hostDaemonCommandSchema.query": "host.list_files and workspace.list_files may omit a search string to list files without filtering.",
-  "hostDaemonCommandSchema.selectedModel": "provider.list_models may omit selectedModel to list only active provider models.",
-  "hostDaemonCommandSchema.threadStoragePath": "thread.start may include a storage path for manager threads so the daemon creates the directory before the agent starts.",
+  "hostDaemonCommandSchema.maxDiffBytes":
+    "workspace.diff may omit maxDiffBytes to use the system default cap.",
+  "hostDaemonCommandSchema.maxFileListBytes":
+    "workspace.diff may omit maxFileListBytes to use the system default cap.",
+  "hostDaemonCommandSchema.mergeBaseBranch":
+    "workspace.status may omit mergeBaseBranch when the caller only needs working-tree state.",
+  "hostDaemonCommandSchema.query":
+    "host.list_files and workspace.list_files may omit a search string to list files without filtering.",
+  "hostDaemonCommandSchema.selectedModel":
+    "provider.list_models may omit selectedModel to list only active provider models.",
+  "hostDaemonCommandSchema.threadStoragePath":
+    "thread.start may include a storage path for manager threads so the daemon creates the directory before the agent starts.",
 };
 
 describe("host-daemon local schemas", () => {
@@ -135,7 +141,10 @@ describe("host-daemon command schemas", () => {
         type: "workspace.commit",
         environmentId: "env_123",
         environmentStatus: "ready",
-        workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: "/tmp/workspace",
+          workspaceProvisionType: "unmanaged",
+        },
         threadId: "thr_123",
         message: "Checkpoint work",
       }),
@@ -168,7 +177,10 @@ describe("host-daemon command schemas", () => {
           type: "workspace.commit",
           environmentId: "env_123",
           environmentStatus: "ready",
-          workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
+          workspaceContext: {
+            workspacePath: "/tmp/workspace",
+            workspaceProvisionType: "unmanaged",
+          },
           threadId: "thr_123",
           message: "Checkpoint work",
         },
@@ -183,12 +195,18 @@ describe("host-daemon command schemas", () => {
         type: "workspace.list_files",
         environmentId: "env_123",
         environmentStatus: "ready",
-        workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: "/tmp/workspace",
+          workspaceProvisionType: "unmanaged",
+        },
         limit: 1000,
       }),
     ).toMatchObject({
       type: "workspace.list_files",
-      workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
+      workspaceContext: {
+        workspacePath: "/tmp/workspace",
+        workspaceProvisionType: "unmanaged",
+      },
       limit: 1000,
     });
 
@@ -366,7 +384,10 @@ describe("host-daemon command schemas", () => {
         type: "thread.start",
         environmentId: "env_123",
         threadId: "thr_123",
-        workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: "/tmp/workspace",
+          workspaceProvisionType: "unmanaged",
+        },
         projectId: "proj_123",
         providerId: "codex",
         eventSequence: 1,
@@ -390,7 +411,10 @@ describe("host-daemon command schemas", () => {
       }),
     ).toMatchObject({
       type: "thread.start",
-      workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
+      workspaceContext: {
+        workspacePath: "/tmp/workspace",
+        workspaceProvisionType: "unmanaged",
+      },
     });
   });
 
@@ -434,7 +458,10 @@ describe("host-daemon command schemas", () => {
           permissionEscalation: null,
         },
         resumeContext: {
-          workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
+          workspaceContext: {
+            workspacePath: "/tmp/workspace",
+            workspaceProvisionType: "unmanaged",
+          },
           projectId: "proj_123",
           providerId: "codex",
           providerThreadId: "provider_123",
@@ -448,7 +475,10 @@ describe("host-daemon command schemas", () => {
       type: "turn.submit",
       eventSequence: 12,
       resumeContext: {
-        workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: "/tmp/workspace",
+          workspaceProvisionType: "unmanaged",
+        },
       },
       target: { mode: "start" },
     });
@@ -468,7 +498,10 @@ describe("host-daemon command schemas", () => {
           permissionEscalation: null,
         },
         resumeContext: {
-          workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
+          workspaceContext: {
+            workspacePath: "/tmp/workspace",
+            workspaceProvisionType: "unmanaged",
+          },
           projectId: "proj_123",
           providerId: "codex",
           providerThreadId: "provider_123",
@@ -498,7 +531,10 @@ describe("host-daemon command schemas", () => {
           permissionEscalation: null,
         },
         resumeContext: {
-          workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
+          workspaceContext: {
+            workspacePath: "/tmp/workspace",
+            workspaceProvisionType: "unmanaged",
+          },
           projectId: "proj_123",
           providerId: "codex",
           instructions: "Be a helpful coding agent.",
@@ -540,7 +576,10 @@ describe("host-daemon command schemas", () => {
         type: "workspace.promote",
         environmentId: "env_123",
         environmentStatus: "ready",
-        workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: "/tmp/workspace",
+          workspaceProvisionType: "unmanaged",
+        },
         threadId: "thr_123",
         primaryPath: "/tmp/primary",
       }),
@@ -554,7 +593,10 @@ describe("host-daemon command schemas", () => {
         type: "workspace.demote",
         environmentId: "env_123",
         environmentStatus: "ready",
-        workspaceContext: { workspacePath: "/tmp/workspace", workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: "/tmp/workspace",
+          workspaceProvisionType: "unmanaged",
+        },
         threadId: "thr_123",
         primaryPath: "/tmp/primary",
         defaultBranch: "main",
@@ -623,7 +665,14 @@ describe("host-daemon command schemas", () => {
         isWorktree: true,
         branchName: "bb/env-123",
         defaultBranch: "main",
-        transcript: [{ type: "step", key: "setup", text: "/bin/bash .bb-env-setup.sh", status: "completed" }],
+        transcript: [
+          {
+            type: "step",
+            key: "setup",
+            text: "/bin/bash .bb-env-setup.sh",
+            status: "completed",
+          },
+        ],
       }),
     ).toMatchObject({
       isGitRepo: true,

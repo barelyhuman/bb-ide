@@ -35,16 +35,20 @@ export function summarizePendingInteractionRequestedMacOsPermissions(
     summaries.push("macOS reminders");
   }
   if (permissions.preferences !== "none") {
-    summaries.push(`macOS preferences (${permissions.preferences.replace("_", " ")})`);
+    summaries.push(
+      `macOS preferences (${permissions.preferences.replace("_", " ")})`,
+    );
   }
   if (permissions.contacts !== "none") {
-    summaries.push(`macOS contacts (${permissions.contacts.replace("_", " ")})`);
+    summaries.push(
+      `macOS contacts (${permissions.contacts.replace("_", " ")})`,
+    );
   }
   if (permissions.automations === "all") {
     summaries.push("macOS automation (all apps)");
   } else if (
-    permissions.automations !== "none"
-    && permissions.automations.bundleIds.length > 0
+    permissions.automations !== "none" &&
+    permissions.automations.bundleIds.length > 0
   ) {
     summaries.push(
       permissions.automations.bundleIds.length === 1
@@ -101,8 +105,8 @@ export function summarizePendingInteractionCommandActions(
         return action.query
           ? `Search for ${action.query}${action.path ? ` in ${action.path}` : ""}`
           : action.path
-          ? `Search in ${action.path}`
-          : "Search files";
+            ? `Search in ${action.path}`
+            : "Search files";
       case "unknown":
         return action.command;
       default:
@@ -118,7 +122,8 @@ function formatPermissionSummaryLine(
   if (permissions === null) {
     return null;
   }
-  const summaries = summarizePendingInteractionRequestedPermissions(permissions);
+  const summaries =
+    summarizePendingInteractionRequestedPermissions(permissions);
   return summaries.length > 0 ? `${label}: ${summaries.join(", ")}` : null;
 }
 
@@ -176,9 +181,7 @@ export function toGrantedPendingInteractionPermissions(
   permissions: PendingInteractionPermissionSummaryProfile,
 ): PendingInteractionGrantedPermissionProfile {
   return {
-    network: permissions.network?.enabled === true
-      ? { enabled: true }
-      : null,
+    network: permissions.network?.enabled === true ? { enabled: true } : null,
     fileSystem: permissions.fileSystem
       ? {
           read: permissions.fileSystem.read,
@@ -244,8 +247,8 @@ export function getPendingInteractionApprovalGrantedPermissions(
   }
 
   if (
-    interaction.payload.subject.kind === "command"
-    || interaction.payload.subject.kind === "file_change"
+    interaction.payload.subject.kind === "command" ||
+    interaction.payload.subject.kind === "file_change"
   ) {
     return interaction.payload.subject.sessionGrant;
   }
@@ -277,8 +280,9 @@ function hasPendingInteractionGrantedPermissions(
 ): boolean {
   return (
     permissions.network?.enabled === true ||
-    (permissions.fileSystem !== null
-      && (permissions.fileSystem.read.length > 0 || permissions.fileSystem.write.length > 0))
+    (permissions.fileSystem !== null &&
+      (permissions.fileSystem.read.length > 0 ||
+        permissions.fileSystem.write.length > 0))
   );
 }
 
@@ -290,8 +294,8 @@ export function formatPendingInteractionPermissionResolutionOutcome(
   }
 
   if (
-    args.grantedPermissions === null
-    || !hasPendingInteractionGrantedPermissions(args.grantedPermissions)
+    args.grantedPermissions === null ||
+    !hasPendingInteractionGrantedPermissions(args.grantedPermissions)
   ) {
     return "denied";
   }
@@ -314,8 +318,8 @@ export function formatPendingInteractionPermissionResolutionMessage(
   }
 
   if (
-    args.grantedPermissions === null
-    || !hasPendingInteractionGrantedPermissions(args.grantedPermissions)
+    args.grantedPermissions === null ||
+    !hasPendingInteractionGrantedPermissions(args.grantedPermissions)
   ) {
     return "Permission request denied";
   }

@@ -22,10 +22,12 @@ import { parseJsonWithSchema } from "../lib/json-parsing.js";
 
 const SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND = "sync_runtime_material";
 
-const sandboxRuntimeMaterialOperationPayloadSchema = z.object({
-  appliedVersion: z.string().min(1).nullable(),
-  desiredVersion: hostRuntimeMaterialSnapshotSchema.shape.version,
-}).strict();
+const sandboxRuntimeMaterialOperationPayloadSchema = z
+  .object({
+    appliedVersion: z.string().min(1).nullable(),
+    desiredVersion: hostRuntimeMaterialSnapshotSchema.shape.version,
+  })
+  .strict();
 
 export type SandboxRuntimeMaterialOperationPayload = z.infer<
   typeof sandboxRuntimeMaterialOperationPayloadSchema
@@ -66,8 +68,8 @@ export function getRuntimeMaterialOperationByCommandId(
 ) {
   const operation = getHostOperationByCommandId(deps.db, commandId);
   if (
-    !operation
-    || operation.kind !== SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND
+    !operation ||
+    operation.kind !== SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND
   ) {
     return null;
   }
@@ -90,8 +92,10 @@ export function hasQueuedRuntimeMaterialCommand(
   }
 
   const command = getCommand(deps.db, commandId);
-  return command !== null
-    && (command.state === "pending" || command.state === "fetched");
+  return (
+    command !== null &&
+    (command.state === "pending" || command.state === "fetched")
+  );
 }
 
 export function resetRuntimeMaterialOperationToRequested(
@@ -112,56 +116,62 @@ export function hasActiveSandboxRuntimeMaterialSyncOperationForCommand(
   deps: Pick<AppDeps, "db">,
   args: { commandId: string },
 ): boolean {
-  const operation = getRuntimeMaterialOperationByCommandId(deps, args.commandId);
-  return operation !== null
-    && isActiveLifecycleOperationState(operation.state);
+  const operation = getRuntimeMaterialOperationByCommandId(
+    deps,
+    args.commandId,
+  );
+  return operation !== null && isActiveLifecycleOperationState(operation.state);
 }
 
 export function completeSandboxRuntimeMaterialSyncForCommand(
   deps: Pick<AppDeps, "db">,
   args: { appliedVersion: string; commandId: string; completedAt?: number },
 ): boolean {
-  const operation = getRuntimeMaterialOperationByCommandId(deps, args.commandId);
-  if (
-    !operation
-    || !isActiveLifecycleOperationState(operation.state)
-  ) {
+  const operation = getRuntimeMaterialOperationByCommandId(
+    deps,
+    args.commandId,
+  );
+  if (!operation || !isActiveLifecycleOperationState(operation.state)) {
     return false;
   }
 
   const payload = parseRuntimeMaterialOperationPayload(operation.payload);
-  return markHostOperationRecordCompletedWithPayload(deps.db, {
-    hostId: operation.hostId,
-    kind: SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND,
-    allowedCurrentStates: activeLifecycleOperationStates,
-    commandId: operation.commandId,
-    completedAt: args.completedAt ?? Date.now(),
-    payload: JSON.stringify({
-      ...payload,
-      appliedVersion: args.appliedVersion,
-    }),
-    queuedAt: operation.queuedAt,
-  }) !== null;
+  return (
+    markHostOperationRecordCompletedWithPayload(deps.db, {
+      hostId: operation.hostId,
+      kind: SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND,
+      allowedCurrentStates: activeLifecycleOperationStates,
+      commandId: operation.commandId,
+      completedAt: args.completedAt ?? Date.now(),
+      payload: JSON.stringify({
+        ...payload,
+        appliedVersion: args.appliedVersion,
+      }),
+      queuedAt: operation.queuedAt,
+    }) !== null
+  );
 }
 
 export function failSandboxRuntimeMaterialSyncForCommand(
   deps: Pick<AppDeps, "db">,
   args: { commandId: string; completedAt?: number; failureReason: string },
 ): boolean {
-  const operation = getRuntimeMaterialOperationByCommandId(deps, args.commandId);
-  if (
-    !operation
-    || !isActiveLifecycleOperationState(operation.state)
-  ) {
+  const operation = getRuntimeMaterialOperationByCommandId(
+    deps,
+    args.commandId,
+  );
+  if (!operation || !isActiveLifecycleOperationState(operation.state)) {
     return false;
   }
 
-  return markHostOperationRecordFailed(deps.db, {
-    hostId: operation.hostId,
-    kind: SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND,
-    completedAt: args.completedAt,
-    failureReason: args.failureReason,
-  }) !== null;
+  return (
+    markHostOperationRecordFailed(deps.db, {
+      hostId: operation.hostId,
+      kind: SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND,
+      completedAt: args.completedAt,
+      failureReason: args.failureReason,
+    }) !== null
+  );
 }
 
 export function reconcileSandboxRuntimeMaterialAfterSessionOpen(
@@ -174,7 +184,10 @@ export function reconcileSandboxRuntimeMaterialAfterSessionOpen(
   }
 
   const payload = parseRuntimeMaterialOperationPayload(operation.payload);
-  if (operation.state === "completed" && hasDesiredRuntimeMaterialApplied(payload)) {
+  if (
+    operation.state === "completed" &&
+    hasDesiredRuntimeMaterialApplied(payload)
+  ) {
     return false;
   }
 
@@ -188,10 +201,18 @@ export function reconcileSandboxRuntimeMaterialAfterSessionOpen(
     return false;
   }
 
-  return resetHostOperationRecordToRequested(deps.db, {
-    hostId: args.hostId,
-    kind: SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND,
-    allowedCurrentStates: ["completed", "failed", "cancelled", "fetched", "queued"],
-    payload: JSON.stringify(payload),
-  }) !== null;
+  return (
+    resetHostOperationRecordToRequested(deps.db, {
+      hostId: args.hostId,
+      kind: SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND,
+      allowedCurrentStates: [
+        "completed",
+        "failed",
+        "cancelled",
+        "fetched",
+        "queued",
+      ],
+      payload: JSON.stringify(payload),
+    }) !== null
+  );
 }

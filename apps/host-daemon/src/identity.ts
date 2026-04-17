@@ -90,11 +90,13 @@ async function persistProvidedHostId(options: {
   }
 }
 
-export async function detectHostName(options: {
-  platform?: NodeJS.Platform;
-  execFile?: ExecFileFn;
-  fallbackHostName?: () => string;
-} = {}): Promise<string> {
+export async function detectHostName(
+  options: {
+    platform?: NodeJS.Platform;
+    execFile?: ExecFileFn;
+    fallbackHostName?: () => string;
+  } = {},
+): Promise<string> {
   const platform = options.platform ?? process.platform;
   const exec = options.execFile ?? execFile;
   const fallbackHostName = options.fallbackHostName ?? os.hostname;
@@ -130,20 +132,20 @@ export async function loadHostIdentity(options: {
   const [hostId, hostName] = await Promise.all([
     options.providedHostId
       ? persistProvidedHostId({
-        dataDir: options.dataDir,
-        hostId: options.providedHostId,
-      })
+          dataDir: options.dataDir,
+          hostId: options.providedHostId,
+        })
       : readOrCreateHostId({
-        dataDir: options.dataDir,
-        createId: options.createId,
-      }),
+          dataDir: options.dataDir,
+          createId: options.createId,
+        }),
     options.providedHostName
       ? Promise.resolve(options.providedHostName)
       : detectHostName({
-        platform: options.platform,
-        execFile: options.execFile,
-        fallbackHostName: options.fallbackHostName,
-      }),
+          platform: options.platform,
+          execFile: options.execFile,
+          fallbackHostName: options.fallbackHostName,
+        }),
   ]);
 
   return { hostId, hostName };

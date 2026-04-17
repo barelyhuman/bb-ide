@@ -1,14 +1,7 @@
 import type { AutomationScheduleTrigger } from "@bb/server-contract";
 import { serializeScheduleDefinitionAsCron } from "../../src/services/scheduling/schedule-helpers.js";
 
-type WeekdayName =
-  | "fri"
-  | "mon"
-  | "sat"
-  | "sun"
-  | "thu"
-  | "tue"
-  | "wed";
+type WeekdayName = "fri" | "mon" | "sat" | "sun" | "thu" | "tue" | "wed";
 
 interface HourlyScheduleArgs {
   intervalHours: number;

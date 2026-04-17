@@ -23,7 +23,10 @@ describe("thread command dispatch", () => {
         type: "thread.start",
         environmentId: "env-1",
         threadId: "thread-1",
-        workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: "/tmp/env-1",
+          workspaceProvisionType: "unmanaged",
+        },
         projectId: "project-1",
         providerId: "fake",
         eventSequence: 1,
@@ -64,7 +67,9 @@ describe("thread command dispatch", () => {
     expect(renameResult).toEqual({});
     expect(stopResult).toEqual({});
     expect(harness.runtimeState.startedThreadId).toBe("thread-1");
-    expect(harness.runtimeState.startedInstructions).toBe("Be a helpful coding agent.");
+    expect(harness.runtimeState.startedInstructions).toBe(
+      "Be a helpful coding agent.",
+    );
     expect(harness.runtimeState.renamedTitle).toBe("Renamed");
     expect(harness.runtimeState.stoppedThreadId).toBe("thread-1");
     expect(harness.manager.listActiveThreads()).toEqual([]);
@@ -93,7 +98,10 @@ describe("thread command dispatch", () => {
           permissionEscalation: null,
         },
         resumeContext: {
-          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged",
+          },
           projectId: "project-1",
           providerId: "fake",
           providerThreadId: "provider-1",
@@ -120,7 +128,10 @@ describe("thread command dispatch", () => {
           permissionEscalation: null,
         },
         resumeContext: {
-          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged",
+          },
           projectId: "project-1",
           providerId: "fake",
           providerThreadId: "provider-1",
@@ -139,7 +150,9 @@ describe("thread command dispatch", () => {
     expect(harness.runtimeState.ranTurnClientRequestSequence).toBe(3);
     expect(harness.runtimeState.steeredTurnId).toBe("turn-1");
     expect(harness.runtimeState.steeredClientRequestSequence).toBe(4);
-    expect(harness.runtimeState.steeredTurnInstructions).toBe("Be a helpful coding agent.");
+    expect(harness.runtimeState.steeredTurnInstructions).toBe(
+      "Be a helpful coding agent.",
+    );
   });
 
   it("marks a known thread active for the next turn after runtime completion made it idle", async () => {
@@ -189,7 +202,10 @@ describe("thread command dispatch", () => {
           permissionEscalation: null,
         },
         resumeContext: {
-          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged",
+          },
           projectId: "project-1",
           providerId: "fake",
           providerThreadId: "provider-1",
@@ -224,7 +240,10 @@ describe("thread command dispatch", () => {
           permissionEscalation: null,
         },
         resumeContext: {
-          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged",
+          },
           projectId: "project-1",
           providerId: "fake",
           providerThreadId: "provider-1",
@@ -276,7 +295,10 @@ describe("thread command dispatch", () => {
           permissionEscalation: null,
         },
         resumeContext: {
-          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged",
+          },
           projectId: "project-1",
           providerId: "fake",
           providerThreadId: "provider-1",
@@ -330,7 +352,10 @@ describe("thread command dispatch", () => {
           permissionEscalation: null,
         },
         resumeContext: {
-          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged",
+          },
           projectId: "project-1",
           providerId: "fake",
           providerThreadId: "provider-1",
@@ -377,7 +402,10 @@ describe("thread command dispatch", () => {
           permissionEscalation: null,
         },
         resumeContext: {
-          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged",
+          },
           projectId: "project-1",
           providerId: "fake",
           providerThreadId: "provider-1",
@@ -418,7 +446,10 @@ describe("thread command dispatch", () => {
           permissionEscalation: null,
         },
         resumeContext: {
-          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged",
+          },
           projectId: "project-1",
           providerId: "fake",
           providerThreadId: "provider-1",
@@ -455,7 +486,10 @@ describe("thread command dispatch", () => {
           permissionEscalation: null,
         },
         resumeContext: {
-          workspaceContext: { workspacePath: "/tmp/env-lazy", workspaceProvisionType: "unmanaged" },
+          workspaceContext: {
+            workspacePath: "/tmp/env-lazy",
+            workspaceProvisionType: "unmanaged",
+          },
           projectId: "project-1",
           providerId: "fake",
           providerThreadId: "provider-1",
@@ -526,7 +560,10 @@ describe("thread command dispatch", () => {
           permissionEscalation: null,
         },
         resumeContext: {
-          workspaceContext: { workspacePath: "/tmp/env-exit", workspaceProvisionType: "unmanaged" },
+          workspaceContext: {
+            workspacePath: "/tmp/env-exit",
+            workspaceProvisionType: "unmanaged",
+          },
           projectId: "project-1",
           providerId: "fake",
           providerThreadId: "provider-1",
@@ -644,7 +681,10 @@ describe("thread command dispatch", () => {
         type: "thread.start",
         environmentId: "env-manager",
         threadId: "thread-manager",
-        workspaceContext: { workspacePath: threadStorage, workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: threadStorage,
+          workspaceProvisionType: "unmanaged",
+        },
         projectId: "project-1",
         providerId: "fake",
         eventSequence: 1,
@@ -679,9 +719,9 @@ describe("thread command dispatch", () => {
       harness.dispatchOptions(),
     );
 
-    expect(harness.runtimeState.startedDynamicTools).toEqual(
-      [expect.objectContaining({ name: "message_user" })],
-    );
+    expect(harness.runtimeState.startedDynamicTools).toEqual([
+      expect.objectContaining({ name: "message_user" }),
+    ]);
     expect(harness.runtimeState.startedInstructions).toBe(managerInstructions);
   });
 
@@ -695,7 +735,10 @@ describe("thread command dispatch", () => {
         type: "thread.start",
         environmentId: "env-1",
         threadId: "thread-1",
-        workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: "/tmp/env-1",
+          workspaceProvisionType: "unmanaged",
+        },
         projectId: "project-1",
         providerId: "fake",
         eventSequence: 1,
@@ -727,7 +770,10 @@ describe("thread command dispatch", () => {
         type: "thread.start",
         environmentId: "env-1",
         threadId: "thread-1",
-        workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+        workspaceContext: {
+          workspacePath: "/tmp/env-1",
+          workspaceProvisionType: "unmanaged",
+        },
         projectId: "project-1",
         providerId: "fake",
         eventSequence: 1,
@@ -833,7 +879,10 @@ describe("thread command dispatch", () => {
           type: "thread.start",
           environmentId: "env-1",
           threadId: "thread-1",
-          workspaceContext: { workspacePath: "/tmp/env-1", workspaceProvisionType: "unmanaged" },
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged",
+          },
           projectId: "project-1",
           providerId: "fake",
           eventSequence: 1,
@@ -843,7 +892,7 @@ describe("thread command dispatch", () => {
             serviceTier: "default",
             reasoningLevel: "medium",
             permissionMode: "full",
-          permissionEscalation: null,
+            permissionEscalation: null,
           },
           instructions: "test",
           dynamicTools: [],

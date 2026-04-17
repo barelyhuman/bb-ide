@@ -34,7 +34,9 @@ function shouldRetryEnvironmentChangeError(error: unknown): boolean {
   return !(error instanceof AbortError);
 }
 
-function toEnvironmentChangeKey(change: HostDaemonEnvironmentChangePayload): string {
+function toEnvironmentChangeKey(
+  change: HostDaemonEnvironmentChangePayload,
+): string {
   return `${change.environmentId}:${change.change}`;
 }
 

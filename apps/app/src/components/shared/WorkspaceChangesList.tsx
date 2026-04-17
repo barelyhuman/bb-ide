@@ -48,7 +48,9 @@ export function WorkspaceChangesList({
               {file.path}
             </button>
           ) : (
-            <span className="min-w-0 truncate text-xs leading-5">{file.path}</span>
+            <span className="min-w-0 truncate text-xs leading-5">
+              {file.path}
+            </span>
           )}
         </li>
       ))}

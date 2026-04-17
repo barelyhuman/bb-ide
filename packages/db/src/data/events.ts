@@ -1,4 +1,16 @@
-import { and, desc, eq, gt, gte, inArray, isNotNull, lte, max, notInArray, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNotNull,
+  lte,
+  max,
+  notInArray,
+  sql,
+} from "drizzle-orm";
 import type {
   StoredThreadEventDataForType,
   ThreadEventItemType,
@@ -28,7 +40,9 @@ export interface InsertEventsResult {
   insertedInputIndexes: number[];
 }
 
-export type AppendStoredThreadEventArgs<TType extends ThreadEventType = ThreadEventType> = {
+export type AppendStoredThreadEventArgs<
+  TType extends ThreadEventType = ThreadEventType,
+> = {
   [TEventType in TType]: {
     data: StoredThreadEventDataForType<TEventType>;
     environmentId?: string | null;
@@ -98,10 +112,9 @@ export function insertEvents(
   };
 }
 
-export function appendStoredThreadEventInTransaction<TType extends ThreadEventType>(
-  db: DbTransaction,
-  args: AppendStoredThreadEventArgs<TType>,
-): number;
+export function appendStoredThreadEventInTransaction<
+  TType extends ThreadEventType,
+>(db: DbTransaction, args: AppendStoredThreadEventArgs<TType>): number;
 export function appendStoredThreadEventInTransaction(
   db: DbTransaction,
   args: AppendStoredThreadEventArgs,
@@ -315,7 +328,10 @@ export function listStoredEventRows(
     .where(
       args.afterSequence === undefined
         ? eq(events.threadId, args.threadId)
-        : and(eq(events.threadId, args.threadId), gt(events.sequence, args.afterSequence)),
+        : and(
+            eq(events.threadId, args.threadId),
+            gt(events.sequence, args.afterSequence),
+          ),
     )
     .orderBy(events.sequence)
     .limit(args.limit ?? Number.MAX_SAFE_INTEGER)
@@ -326,21 +342,23 @@ export function findStoredEventRow(
   db: DbConnection,
   args: FindStoredEventRowArgs,
 ): StoredEventRow | null {
-  return db
-    .select(storedEventRowFields)
-    .from(events)
-    .where(
-      args.afterSequence !== undefined
-        ? and(
-            eq(events.threadId, args.threadId),
-            eq(events.type, args.type),
-            gt(events.sequence, args.afterSequence),
-          )
-        : and(eq(events.threadId, args.threadId), eq(events.type, args.type)),
-    )
-    .orderBy(events.sequence)
-    .limit(1)
-    .get() ?? null;
+  return (
+    db
+      .select(storedEventRowFields)
+      .from(events)
+      .where(
+        args.afterSequence !== undefined
+          ? and(
+              eq(events.threadId, args.threadId),
+              eq(events.type, args.type),
+              gt(events.sequence, args.afterSequence),
+            )
+          : and(eq(events.threadId, args.threadId), eq(events.type, args.type)),
+      )
+      .orderBy(events.sequence)
+      .limit(1)
+      .get() ?? null
+  );
 }
 
 export function listStoredEventRowsInRange(
@@ -385,7 +403,9 @@ function listLatestRowsForContextWindowUsage(
   db: DbConnection,
   args: {
     contextWindowJsonPath: string;
-    eventType: "thread/contextWindowUsage/updated" | "thread/tokenUsage/updated";
+    eventType:
+      | "thread/contextWindowUsage/updated"
+      | "thread/tokenUsage/updated";
     threadId: string;
   },
 ): StoredEventRow[] {
@@ -393,10 +413,7 @@ function listLatestRowsForContextWindowUsage(
     .select(storedEventRowFields)
     .from(events)
     .where(
-      and(
-        eq(events.threadId, args.threadId),
-        eq(events.type, args.eventType),
-      ),
+      and(eq(events.threadId, args.threadId), eq(events.type, args.eventType)),
     )
     .orderBy(desc(events.sequence))
     .limit(1)
@@ -442,11 +459,12 @@ export function getLatestThreadOutputEventRow(
   db: DbConnection,
   args: GetLatestThreadOutputEventRowArgs,
 ): StoredEventRow | null {
-  return db
-    .select(storedEventRowFields)
-    .from(events)
-    .where(
-      sql`${events.threadId} = ${args.threadId} AND (
+  return (
+    db
+      .select(storedEventRowFields)
+      .from(events)
+      .where(
+        sql`${events.threadId} = ${args.threadId} AND (
         (
           ${events.type} = 'system/manager/user_message'
           AND COALESCE(json_extract(${events.data}, '$.text'), '') <> ''
@@ -457,10 +475,11 @@ export function getLatestThreadOutputEventRow(
           AND COALESCE(json_extract(${events.data}, '$.item.text'), '') <> ''
         )
       )`,
-    )
-    .orderBy(desc(events.sequence))
-    .limit(1)
-    .get() ?? null;
+      )
+      .orderBy(desc(events.sequence))
+      .limit(1)
+      .get() ?? null
+  );
 }
 
 export function getLatestThreadSequence(
@@ -553,16 +572,17 @@ export function getLastStoredTurnRequestEvent(
   db: DbConnection,
   threadId: string,
 ): StoredTurnRequestEventRow | null {
-  return db
-    .select({
-      data: events.data,
-      sequence: events.sequence,
-      threadId: events.threadId,
-      type: events.type,
-    })
-    .from(events)
-    .where(
-      sql`${events.threadId} = ${threadId}
+  return (
+    db
+      .select({
+        data: events.data,
+        sequence: events.sequence,
+        threadId: events.threadId,
+        type: events.type,
+      })
+      .from(events)
+      .where(
+        sql`${events.threadId} = ${threadId}
         AND (
           ${events.type} = 'client/turn/requested'
           OR (
@@ -570,10 +590,11 @@ export function getLastStoredTurnRequestEvent(
             AND json_type(${events.data}, '$.input') IS NOT NULL
           )
         )`,
-    )
-    .orderBy(sql`${events.sequence} DESC`)
-    .limit(1)
-    .get() ?? null;
+      )
+      .orderBy(sql`${events.sequence} DESC`)
+      .limit(1)
+      .get() ?? null
+  );
 }
 
 export function listCompletedTurnsByThreadIds(
@@ -598,14 +619,16 @@ export function listCompletedTurnsByThreadIds(
       ),
     )
     .all()
-    .flatMap((row) => (
+    .flatMap((row) =>
       row.turnId === null
         ? []
-        : [{
-            threadId: row.threadId,
-            turnId: row.turnId,
-          }]
-    ));
+        : [
+            {
+              threadId: row.threadId,
+              turnId: row.turnId,
+            },
+          ],
+    );
 }
 
 export function pruneThreadEventsBeforeSequence(
@@ -634,7 +657,9 @@ function pruneLatestRowsForContextWindowUsageBeforeSequence(
   db: DbConnection,
   args: {
     contextWindowJsonPath: string;
-    eventType: "thread/contextWindowUsage/updated" | "thread/tokenUsage/updated";
+    eventType:
+      | "thread/contextWindowUsage/updated"
+      | "thread/tokenUsage/updated";
     sequenceCutoff: number;
     threadId: string;
   },

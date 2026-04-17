@@ -25,12 +25,14 @@ export interface GetPendingEnvironmentCommandArgs {
   type: "environment.destroy" | "workspace.status";
 }
 
-export function getCommand(
-  db: CommandReadConnection,
-  id: string,
-) {
-  return db.select().from(hostDaemonCommands).where(eq(hostDaemonCommands.id, id)).get()
-    ?? null;
+export function getCommand(db: CommandReadConnection, id: string) {
+  return (
+    db
+      .select()
+      .from(hostDaemonCommands)
+      .where(eq(hostDaemonCommands.id, id))
+      .get() ?? null
+  );
 }
 
 function queueCommandRecord(
@@ -48,7 +50,8 @@ function queueCommandRecord(
 
   const cursor = (maxRow?.maxCursor ?? 0) + 1;
 
-  return db.insert(hostDaemonCommands)
+  return db
+    .insert(hostDaemonCommands)
     .values({
       id,
       hostId: input.hostId,
@@ -89,7 +92,8 @@ export function hasPendingHostCommandForThread(
   db: CommandReadConnection,
   args: HasPendingHostCommandForThreadArgs,
 ): boolean {
-  const row = db.select({ id: hostDaemonCommands.id })
+  const row = db
+    .select({ id: hostDaemonCommands.id })
     .from(hostDaemonCommands)
     .where(
       and(
@@ -108,17 +112,19 @@ export function getPendingEnvironmentCommand(
   db: CommandReadConnection,
   args: GetPendingEnvironmentCommandArgs,
 ) {
-  return db
-    .select({ id: hostDaemonCommands.id })
-    .from(hostDaemonCommands)
-    .where(
-      and(
-        eq(hostDaemonCommands.type, args.type),
-        inArray(hostDaemonCommands.state, ["pending", "fetched"]),
-        sql`json_extract(${hostDaemonCommands.payload}, '$.environmentId') = ${args.environmentId}`,
-      ),
-    )
-    .get() ?? null;
+  return (
+    db
+      .select({ id: hostDaemonCommands.id })
+      .from(hostDaemonCommands)
+      .where(
+        and(
+          eq(hostDaemonCommands.type, args.type),
+          inArray(hostDaemonCommands.state, ["pending", "fetched"]),
+          sql`json_extract(${hostDaemonCommands.payload}, '$.environmentId') = ${args.environmentId}`,
+        ),
+      )
+      .get() ?? null
+  );
 }
 
 export interface FetchCommandsOptions {
@@ -157,10 +163,19 @@ export function fetchCommands(
     // Batch update: mark all fetched commands in one query
     tx.update(hostDaemonCommands)
       .set({ state: "fetched", fetchedAt: now })
-      .where(inArray(hostDaemonCommands.id, commands.map((c) => c.id)))
+      .where(
+        inArray(
+          hostDaemonCommands.id,
+          commands.map((c) => c.id),
+        ),
+      )
       .run();
 
-    return commands.map((cmd) => ({ ...cmd, state: "fetched" as const, fetchedAt: now }));
+    return commands.map((cmd) => ({
+      ...cmd,
+      state: "fetched" as const,
+      fetchedAt: now,
+    }));
   });
 }
 
@@ -185,33 +200,36 @@ export function reportCommandResult(
   notifier: DbNotifier,
   input: ReportCommandResultInput,
 ) {
-  return db.update(hostDaemonCommands)
-    .set({
-      state: input.state,
-      resultPayload: input.resultPayload ?? null,
-      completedAt: input.completedAt,
-    })
-    .where(eq(hostDaemonCommands.id, input.commandId))
-    .returning()
-    .get() ?? null;
+  return (
+    db
+      .update(hostDaemonCommands)
+      .set({
+        state: input.state,
+        resultPayload: input.resultPayload ?? null,
+        completedAt: input.completedAt,
+      })
+      .where(eq(hostDaemonCommands.id, input.commandId))
+      .returning()
+      .get() ?? null
+  );
 }
 
-export function cancelCommand(
-  db: DbConnection,
-  args: CancelCommandArgs,
-) {
-  return db.update(hostDaemonCommands)
-    .set({
-      state: "error",
-      completedAt: args.completedAt ?? Date.now(),
-      resultPayload: args.resultPayload ?? null,
-    })
-    .where(
-      and(
-        eq(hostDaemonCommands.id, args.commandId),
-        inArray(hostDaemonCommands.state, ["pending", "fetched"]),
-      ),
-    )
-    .returning()
-    .get() ?? null;
+export function cancelCommand(db: DbConnection, args: CancelCommandArgs) {
+  return (
+    db
+      .update(hostDaemonCommands)
+      .set({
+        state: "error",
+        completedAt: args.completedAt ?? Date.now(),
+        resultPayload: args.resultPayload ?? null,
+      })
+      .where(
+        and(
+          eq(hostDaemonCommands.id, args.commandId),
+          inArray(hostDaemonCommands.state, ["pending", "fetched"]),
+        ),
+      )
+      .returning()
+      .get() ?? null
+  );
 }

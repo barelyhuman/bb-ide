@@ -33,7 +33,9 @@ export interface RuntimeProviderProcessLineArgs {
 export interface RuntimeProviderProcessManagerArgs {
   adapterFactory?: ProviderAdapterFactory;
   bridgeBundleDir: string | undefined;
-  createProviderIdentityState: (providerId: string) => RuntimeProviderIdentityState;
+  createProviderIdentityState: (
+    providerId: string,
+  ) => RuntimeProviderIdentityState;
   emitCapture: (entry: AgentRuntimeCaptureEntry) => void;
   env: Record<string, string> | undefined;
   getNextRequestId: () => number;
@@ -89,7 +91,7 @@ export class RuntimeProviderProcessManager {
         const stderr = providerProcess.stderrChunks.join("\n").slice(0, 500);
         throw new Error(
           `Provider "${args.providerId}" exited during startup with code ${providerProcess.child.exitCode}` +
-          (stderr ? `\nstderr: ${stderr}` : ""),
+            (stderr ? `\nstderr: ${stderr}` : ""),
         );
       }
 
@@ -271,9 +273,7 @@ export class RuntimeProviderProcessManager {
     const message = args.err.message;
     for (const [, pending] of args.providerProcess.pending) {
       pending.reject(
-        new Error(
-          `Provider "${args.providerId}" failed to start: ${message}`,
-        ),
+        new Error(`Provider "${args.providerId}" failed to start: ${message}`),
       );
     }
     args.providerProcess.pending.clear();
@@ -306,7 +306,7 @@ export class RuntimeProviderProcessManager {
       pending.reject(
         new Error(
           `Provider "${args.providerId}" exited unexpectedly` +
-          (stderr ? `\nstderr: ${stderr}` : ""),
+            (stderr ? `\nstderr: ${stderr}` : ""),
         ),
       );
     }

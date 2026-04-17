@@ -5,7 +5,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
-const DIST_INDEX_PATH = fileURLToPath(new URL("../dist/index.js", import.meta.url));
+const DIST_INDEX_PATH = fileURLToPath(
+  new URL("../dist/index.js", import.meta.url),
+);
 
 const tempDirs: string[] = [];
 
@@ -26,7 +28,8 @@ async function importFreshLoggerWithPinoTransportSpy() {
   const actual = await vi.importActual<typeof import("pino")>("pino");
   const transportSpy = vi.fn(actual.default.transport);
   const mockedPino = Object.assign(
-    ((...args: Parameters<typeof actual.default>) => actual.default(...args)) as typeof actual.default,
+    ((...args: Parameters<typeof actual.default>) =>
+      actual.default(...args)) as typeof actual.default,
     actual.default,
     {
       transport: transportSpy,
@@ -66,13 +69,17 @@ async function runLoggerInSubprocess(args: {
   `;
 
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, ["--input-type=module", "-e", script], {
-      env: {
-        ...process.env,
-        BB_DATA_DIR: args.dataDir,
+    const child = spawn(
+      process.execPath,
+      ["--input-type=module", "-e", script],
+      {
+        env: {
+          ...process.env,
+          BB_DATA_DIR: args.dataDir,
+        },
+        stdio: ["ignore", "pipe", "pipe"],
       },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    );
 
     let stdout = "";
     let stderr = "";
@@ -91,7 +98,10 @@ async function runLoggerInSubprocess(args: {
   });
 }
 
-async function waitFor(predicate: () => boolean, timeoutMs = 5_000): Promise<void> {
+async function waitFor(
+  predicate: () => boolean,
+  timeoutMs = 5_000,
+): Promise<void> {
   const startedAt = Date.now();
   while (!predicate()) {
     if (Date.now() - startedAt > timeoutMs) {
@@ -109,12 +119,17 @@ function getComponentLogFiles(logDir: string, component: string): string[] {
   return fs
     .readdirSync(logDir)
     .filter(
-      (entry) =>
-        entry.startsWith(`${component}.`) && entry.endsWith(".log"),
+      (entry) => entry.startsWith(`${component}.`) && entry.endsWith(".log"),
     )
     .sort((left, right) => {
-      const leftIndex = Number.parseInt(left.match(/\.(\d+)\.log$/u)?.[1] ?? "0", 10);
-      const rightIndex = Number.parseInt(right.match(/\.(\d+)\.log$/u)?.[1] ?? "0", 10);
+      const leftIndex = Number.parseInt(
+        left.match(/\.(\d+)\.log$/u)?.[1] ?? "0",
+        10,
+      );
+      const rightIndex = Number.parseInt(
+        right.match(/\.(\d+)\.log$/u)?.[1] ?? "0",
+        10,
+      );
       return leftIndex - rightIndex;
     });
 }
@@ -182,7 +197,9 @@ describe("createLogger", () => {
     const logDir = path.join(dataDir, "logs");
 
     logger.child({ threadId: "thr_123" }).info("turn started");
-    await waitFor(() => readComponentLogLines(logDir, "host-daemon").length === 1);
+    await waitFor(
+      () => readComponentLogLines(logDir, "host-daemon").length === 1,
+    );
 
     const entries = readComponentLogLines(logDir, "host-daemon");
     expect(entries[0]).toMatchObject({
@@ -253,7 +270,9 @@ describe("createLogger", () => {
     const logDir = path.join(dataDir, "logs");
 
     logger.info({ requestId: "req_2" }, "sandbox booted");
-    await waitFor(() => readComponentLogLines(logDir, "host-daemon").length === 1);
+    await waitFor(
+      () => readComponentLogLines(logDir, "host-daemon").length === 1,
+    );
 
     expect(transportSpy).not.toHaveBeenCalled();
     const entries = readComponentLogLines(logDir, "host-daemon");

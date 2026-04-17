@@ -51,7 +51,9 @@ describe("pi bridge model list", () => {
         },
       ];
     });
-    supportsXhigh.mockImplementation((model: { provider: string }) => model.provider === "anthropic");
+    supportsXhigh.mockImplementation(
+      (model: { provider: string }) => model.provider === "anthropic",
+    );
 
     await expect(listPiBridgeModels()).resolves.toEqual([
       {
@@ -63,7 +65,10 @@ describe("pi bridge model list", () => {
           { reasoningEffort: "low", description: "Low reasoning effort" },
           { reasoningEffort: "medium", description: "Medium reasoning effort" },
           { reasoningEffort: "high", description: "High reasoning effort" },
-          { reasoningEffort: "xhigh", description: "Extra high reasoning effort" },
+          {
+            reasoningEffort: "xhigh",
+            description: "Extra high reasoning effort",
+          },
         ],
         defaultReasoningEffort: "medium",
         isDefault: true,

@@ -37,7 +37,8 @@ export function createEnvironment(
 ) {
   const now = Date.now();
   const id = createEnvironmentId();
-  const row = db.insert(environments)
+  const row = db
+    .insert(environments)
     .values({
       id,
       projectId: input.projectId,
@@ -101,7 +102,8 @@ export function listEnvironmentsByIds(
     return [];
   }
 
-  return db.select()
+  return db
+    .select()
     .from(environments)
     .where(inArray(environments.id, [...environmentIds]))
     .all();
@@ -227,7 +229,8 @@ function updateEnvironmentRecord(
   const now = Date.now();
   const metadata = buildEnvironmentMetadataUpdateSet(args.metadata ?? {});
   const lifecycle = buildEnvironmentLifecycleUpdateSet(args.lifecycle ?? {});
-  const updated = db.update(environments)
+  const updated = db
+    .update(environments)
     .set({ ...metadata, ...lifecycle, updatedAt: now })
     .where(eq(environments.id, id))
     .returning()
@@ -372,29 +375,32 @@ export function claimManagedEnvironmentReprovisionRecord(
   args: ClaimManagedEnvironmentReprovisionArgs,
 ): boolean {
   const now = args.now ?? Date.now();
-  const claimed = db.transaction((tx) => {
-    const current = tx
-      .select({
-        status: environments.status,
-      })
-      .from(environments)
-      .where(eq(environments.id, args.environmentId))
-      .get();
+  const claimed = db.transaction(
+    (tx) => {
+      const current = tx
+        .select({
+          status: environments.status,
+        })
+        .from(environments)
+        .where(eq(environments.id, args.environmentId))
+        .get();
 
-    if (!current || current.status === "provisioning") {
-      return false;
-    }
+      if (!current || current.status === "provisioning") {
+        return false;
+      }
 
-    tx.update(environments)
-      .set({
-        status: "provisioning",
-        updatedAt: now,
-      })
-      .where(eq(environments.id, args.environmentId))
-      .run();
+      tx.update(environments)
+        .set({
+          status: "provisioning",
+          updatedAt: now,
+        })
+        .where(eq(environments.id, args.environmentId))
+        .run();
 
-    return true;
-  }, { behavior: "immediate" });
+      return true;
+    },
+    { behavior: "immediate" },
+  );
 
   if (claimed) {
     notifier.notifyEnvironment(args.environmentId, ["status-changed"]);

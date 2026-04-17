@@ -1,7 +1,14 @@
 // @vitest-environment jsdom
 
 import { Suspense, useEffect, type ReactNode } from "react";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import {
   openWorkspaceRequestSchema,
   type OpenWorkspaceRequest,
@@ -14,7 +21,8 @@ import { installFetchRoutes, jsonResponse } from "@/test/http-test-utils";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("partysocket/ws", async () => {
-  const { FakeReconnectingWebSocket: FakeSocket } = await import("@/test/fake-reconnecting-websocket");
+  const { FakeReconnectingWebSocket: FakeSocket } =
+    await import("@/test/fake-reconnecting-websocket");
   return {
     default: FakeSocket,
   };
@@ -55,11 +63,7 @@ function createSuspenseWrapper() {
 
   return ({ children }: SuspenseWrapperProps) =>
     baseWrapper({
-      children: (
-        <Suspense fallback={null}>
-          {children}
-        </Suspense>
-      ),
+      children: <Suspense fallback={null}>{children}</Suspense>,
     });
 }
 
@@ -78,7 +82,9 @@ function createWorkspaceOpenTargetsProbe(
 
     return (
       <div>
-        <div data-testid="workspace-open-targets">{String(value.workspaceOpenTargets.length)}</div>
+        <div data-testid="workspace-open-targets">
+          {String(value.workspaceOpenTargets.length)}
+        </div>
         <button
           disabled={value.openWorkspace == null}
           onClick={() => {
@@ -102,12 +108,13 @@ function installWorkspaceOpenTargetFetchRoutes(
   installFetchRoutes([
     {
       pathname: "/api/v1/system/config",
-      handler: async () => jsonResponse({
-        githubConnected: false,
-        hostDaemonPort: state.hostDaemonPort,
-        sandboxHostSupported: false,
-        voiceTranscriptionEnabled: false,
-      }),
+      handler: async () =>
+        jsonResponse({
+          githubConnected: false,
+          hostDaemonPort: state.hostDaemonPort,
+          sandboxHostSupported: false,
+          voiceTranscriptionEnabled: false,
+        }),
     },
     {
       pathname: "/status",
@@ -130,7 +137,9 @@ function installWorkspaceOpenTargetFetchRoutes(
       pathname: "/open-workspace",
       port: 4123,
       handler: async (request) => {
-        openWorkspaceRequests.push(openWorkspaceRequestSchema.parse(await request.json()));
+        openWorkspaceRequests.push(
+          openWorkspaceRequestSchema.parse(await request.json()),
+        );
         return jsonResponse({});
       },
     },
@@ -140,12 +149,15 @@ function installWorkspaceOpenTargetFetchRoutes(
 async function importFreshWorkspaceOpenTargetsModules(): Promise<WorkspaceOpenTargetsModules> {
   vi.resetModules();
 
-  const [{ useWorkspaceOpenTargets }, { wsManager }, { FakeReconnectingWebSocket }] =
-    await Promise.all([
-      import("./useWorkspaceOpenTargets"),
-      import("@/lib/ws"),
-      import("@/test/fake-reconnecting-websocket"),
-    ]);
+  const [
+    { useWorkspaceOpenTargets },
+    { wsManager },
+    { FakeReconnectingWebSocket },
+  ] = await Promise.all([
+    import("./useWorkspaceOpenTargets"),
+    import("@/lib/ws"),
+    import("@/test/fake-reconnecting-websocket"),
+  ]);
 
   return {
     FakeReconnectingWebSocket,
@@ -165,22 +177,33 @@ afterEach(() => {
 describe("useWorkspaceOpenTargets", () => {
   it("does not probe the daemon when disabled", async () => {
     installFetchRoutes([]);
-    const latestSnapshot: { current: WorkspaceOpenTargetsSnapshot | null } = { current: null };
-    const { useWorkspaceOpenTargets } = await importFreshWorkspaceOpenTargetsModules();
-    const WorkspaceOpenTargetsProbe = createWorkspaceOpenTargetsProbe(useWorkspaceOpenTargets);
+    const latestSnapshot: { current: WorkspaceOpenTargetsSnapshot | null } = {
+      current: null,
+    };
+    const { useWorkspaceOpenTargets } =
+      await importFreshWorkspaceOpenTargetsModules();
+    const WorkspaceOpenTargetsProbe = createWorkspaceOpenTargetsProbe(
+      useWorkspaceOpenTargets,
+    );
 
     await act(async () => {
       render(
         <WorkspaceOpenTargetsProbe
           enabled={false}
-          onSnapshot={(snapshot) => { latestSnapshot.current = snapshot; }}
+          onSnapshot={(snapshot) => {
+            latestSnapshot.current = snapshot;
+          }}
         />,
         { wrapper: createSuspenseWrapper() },
       );
     });
 
     expect(screen.getByTestId("workspace-open-targets").textContent).toBe("0");
-    expect(screen.getByRole("button", { name: "open workspace" }).hasAttribute("disabled")).toBe(true);
+    expect(
+      screen
+        .getByRole("button", { name: "open workspace" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
     expect(latestSnapshot.current?.workspaceOpenTargets).toEqual([]);
     expect(latestSnapshot.current?.openWorkspace).toBeNull();
   });
@@ -206,8 +229,11 @@ describe("useWorkspaceOpenTargets", () => {
     const openWorkspaceRequests: OpenWorkspaceRequest[] = [];
     installWorkspaceOpenTargetFetchRoutes(state, openWorkspaceRequests);
 
-    const { useWorkspaceOpenTargets } = await importFreshWorkspaceOpenTargetsModules();
-    const WorkspaceOpenTargetsProbe = createWorkspaceOpenTargetsProbe(useWorkspaceOpenTargets);
+    const { useWorkspaceOpenTargets } =
+      await importFreshWorkspaceOpenTargetsModules();
+    const WorkspaceOpenTargetsProbe = createWorkspaceOpenTargetsProbe(
+      useWorkspaceOpenTargets,
+    );
 
     await act(async () => {
       render(
@@ -217,7 +243,9 @@ describe("useWorkspaceOpenTargets", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("workspace-open-targets").textContent).toBe("1");
+      expect(screen.getByTestId("workspace-open-targets").textContent).toBe(
+        "1",
+      );
     });
 
     fireEvent.click(screen.getByRole("button", { name: "open workspace" }));
@@ -247,24 +275,37 @@ describe("useWorkspaceOpenTargets", () => {
     };
     installWorkspaceOpenTargetFetchRoutes(state);
 
-    const latestSnapshot: { current: WorkspaceOpenTargetsSnapshot | null } = { current: null };
-    const { useWorkspaceOpenTargets } = await importFreshWorkspaceOpenTargetsModules();
-    const WorkspaceOpenTargetsProbe = createWorkspaceOpenTargetsProbe(useWorkspaceOpenTargets);
+    const latestSnapshot: { current: WorkspaceOpenTargetsSnapshot | null } = {
+      current: null,
+    };
+    const { useWorkspaceOpenTargets } =
+      await importFreshWorkspaceOpenTargetsModules();
+    const WorkspaceOpenTargetsProbe = createWorkspaceOpenTargetsProbe(
+      useWorkspaceOpenTargets,
+    );
 
     await act(async () => {
       render(
         <WorkspaceOpenTargetsProbe
           enabled={true}
-          onSnapshot={(snapshot) => { latestSnapshot.current = snapshot; }}
+          onSnapshot={(snapshot) => {
+            latestSnapshot.current = snapshot;
+          }}
         />,
         { wrapper: createSuspenseWrapper() },
       );
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("workspace-open-targets").textContent).toBe("0");
+      expect(screen.getByTestId("workspace-open-targets").textContent).toBe(
+        "0",
+      );
     });
-    expect(screen.getByRole("button", { name: "open workspace" }).hasAttribute("disabled")).toBe(true);
+    expect(
+      screen
+        .getByRole("button", { name: "open workspace" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
     expect(latestSnapshot.current?.workspaceOpenTargets).toEqual([]);
     expect(latestSnapshot.current?.openWorkspace).toBeNull();
   });
@@ -286,7 +327,9 @@ describe("useWorkspaceOpenTargets", () => {
 
     const { FakeReconnectingWebSocket, useWorkspaceOpenTargets, wsManager } =
       await importFreshWorkspaceOpenTargetsModules();
-    const WorkspaceOpenTargetsProbe = createWorkspaceOpenTargetsProbe(useWorkspaceOpenTargets);
+    const WorkspaceOpenTargetsProbe = createWorkspaceOpenTargetsProbe(
+      useWorkspaceOpenTargets,
+    );
 
     await act(async () => {
       render(
@@ -296,7 +339,9 @@ describe("useWorkspaceOpenTargets", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("workspace-open-targets").textContent).toBe("0");
+      expect(screen.getByTestId("workspace-open-targets").textContent).toBe(
+        "0",
+      );
     });
 
     wsManager.connect();
@@ -312,7 +357,9 @@ describe("useWorkspaceOpenTargets", () => {
     socket.open();
 
     await waitFor(() => {
-      expect(screen.getByTestId("workspace-open-targets").textContent).toBe("1");
+      expect(screen.getByTestId("workspace-open-targets").textContent).toBe(
+        "1",
+      );
     });
 
     wsManager.disconnect();

@@ -14,7 +14,10 @@ import terminalIcon from "@/assets/workspace-open-target-icons/terminal.png";
 import iterm2Icon from "@/assets/workspace-open-target-icons/iterm2.png";
 import ghosttyIcon from "@/assets/workspace-open-target-icons/ghostty.png";
 import xcodeIcon from "@/assets/workspace-open-target-icons/xcode.png";
-import { SplitButton, type SplitButtonAction } from "@/components/ui/split-button";
+import {
+  SplitButton,
+  type SplitButtonAction,
+} from "@/components/ui/split-button";
 import {
   resolvePreferredWorkspaceOpenTarget,
   useWorkspaceOpenTargetPreference,
@@ -66,8 +69,10 @@ export function ThreadWorkspaceOpenButton({
   onOpenWorkspace,
   targets,
 }: ThreadWorkspaceOpenButtonProps) {
-  const [preferredTargetId, setPreferredTargetId] = useWorkspaceOpenTargetPreference();
-  const [pendingTargetId, setPendingTargetId] = useState<WorkspaceOpenTargetId | null>(null);
+  const [preferredTargetId, setPreferredTargetId] =
+    useWorkspaceOpenTargetPreference();
+  const [pendingTargetId, setPendingTargetId] =
+    useState<WorkspaceOpenTargetId | null>(null);
   const selectedTarget = resolvePreferredWorkspaceOpenTarget({
     preferredTargetId,
     targets,
@@ -107,7 +112,9 @@ export function ThreadWorkspaceOpenButton({
     onSelect: () => {
       void openTarget(selectedTarget, false);
     },
-    content: <WorkspaceOpenTargetIcon target={selectedTarget} className="size-5" />,
+    content: (
+      <WorkspaceOpenTargetIcon target={selectedTarget} className="size-5" />
+    ),
   };
   const secondaryActions: SplitButtonAction[] = targets.map((target) => ({
     label: target.label,

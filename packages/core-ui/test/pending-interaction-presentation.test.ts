@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PendingInteraction } from "@bb/domain";
-import {
-  formatPendingInteractionSummary,
-} from "../src/pending-interaction-presentation.js";
+import { formatPendingInteractionSummary } from "../src/pending-interaction-presentation.js";
 
 function createInteraction(
   payload: PendingInteraction["payload"],
@@ -83,5 +81,4 @@ describe("pending interaction presentation", () => {
       }),
     ).toBe("WebFetch");
   });
-
 });

@@ -33,7 +33,9 @@ export type CodexInteractiveResponse =
   | PermissionsRequestApprovalResponse;
 
 function assertNever(value: never, message?: string): never {
-  throw new ProviderResponseEncodeError(message ?? `Unexpected value: ${String(value)}`);
+  throw new ProviderResponseEncodeError(
+    message ?? `Unexpected value: ${String(value)}`,
+  );
 }
 
 function requireGrantedPermissions(
@@ -56,10 +58,8 @@ function hasGrantablePermissions(
   const fileSystem = permissions?.fileSystem ?? null;
   return (
     permissions?.network?.enabled === true ||
-    (
-      fileSystem !== null &&
-      (fileSystem.read.length > 0 || fileSystem.write.length > 0)
-    )
+    (fileSystem !== null &&
+      (fileSystem.read.length > 0 || fileSystem.write.length > 0))
   );
 }
 
@@ -71,7 +71,9 @@ function filterSessionDecisionWithoutGrant(
     return decisions;
   }
 
-  const filtered = decisions.filter((decision) => decision !== "allow_for_session");
+  const filtered = decisions.filter(
+    (decision) => decision !== "allow_for_session",
+  );
   if (filtered.length === 0) {
     throw new ProviderRequestDecodeErrorValue(
       "Approval request did not include decisions compatible with the requested permissions",
@@ -232,9 +234,8 @@ export function buildCodexInteractiveResponse(
         permissions: toCodexGrantedPermissionProfile(
           requireGrantedPermissions(args.resolution),
         ),
-        scope: args.resolution.decision === "allow_for_session"
-          ? "session"
-          : "turn",
+        scope:
+          args.resolution.decision === "allow_for_session" ? "session" : "turn",
       };
       return response;
     }

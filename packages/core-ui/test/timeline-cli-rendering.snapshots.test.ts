@@ -6,7 +6,9 @@ import {
 } from "./timeline-test-harness.js";
 import type { TimelineEventFactory } from "./timeline-test-harness.js";
 
-function renderIdleTimeline(events: ReturnType<TimelineEventFactory[keyof TimelineEventFactory]>[]) {
+function renderIdleTimeline(
+  events: ReturnType<TimelineEventFactory[keyof TimelineEventFactory]>[],
+) {
   return renderTimelineFixture({
     events,
     projectionOptions: {
@@ -16,7 +18,9 @@ function renderIdleTimeline(events: ReturnType<TimelineEventFactory[keyof Timeli
   });
 }
 
-function renderActiveTimeline(events: ReturnType<TimelineEventFactory[keyof TimelineEventFactory]>[]) {
+function renderActiveTimeline(
+  events: ReturnType<TimelineEventFactory[keyof TimelineEventFactory]>[],
+) {
   return renderTimelineFixture({
     events,
     projectionOptions: {
@@ -397,7 +401,11 @@ describe("timeline CLI rendering snapshots", () => {
       }),
     ]);
 
-    expect(messageKinds(timeline.messages)).toEqual(["error", "error", "error"]);
+    expect(messageKinds(timeline.messages)).toEqual([
+      "error",
+      "error",
+      "error",
+    ]);
     expect(timeline.rows).toHaveLength(2);
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Error ───────────────────────────────────────────────────

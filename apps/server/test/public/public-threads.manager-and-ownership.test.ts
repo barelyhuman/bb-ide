@@ -10,10 +10,7 @@ import {
   hostDaemonCommands,
   threads,
 } from "@bb/db";
-import {
-  systemOperationEventDataSchema,
-  threadSchema,
-} from "@bb/domain";
+import { systemOperationEventDataSchema, threadSchema } from "@bb/domain";
 import { renderTemplate } from "@bb/templates";
 import {
   reportQueuedCommandError,
@@ -32,13 +29,7 @@ import {
   seedThread,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
-import {
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 
 describe("public thread manager and ownership routes", () => {
@@ -46,7 +37,6 @@ describe("public thread manager and ownership routes", () => {
     provisionHostMock.mockReset();
     resumeHostMock.mockReset();
   });
-
 
   it("queues thread.rename, returns thread events, sends drafts, and creates manager threads", async () => {
     const harness = await createTestAppHarness();
@@ -76,15 +66,18 @@ describe("public thread manager and ownership routes", () => {
         data: { text: "Hello from the manager" },
       });
 
-      const patchResponse = await harness.app.request(`/api/v1/threads/${thread.id}`, {
-        method: "PATCH",
-        headers: {
-          "content-type": "application/json",
+      const patchResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            title: "New title",
+          }),
         },
-        body: JSON.stringify({
-          title: "New title",
-        }),
-      });
+      );
       expect(patchResponse.status).toBe(200);
       const renameCommand = await waitForQueuedCommand(
         harness,
@@ -185,9 +178,9 @@ describe("public thread manager and ownership routes", () => {
         permissionMode: "full",
         permissionEscalation: null,
       });
-      expect(managerStartCommand.command.dynamicTools).toEqual(
-        [expect.objectContaining({ name: "message_user" })],
-      );
+      expect(managerStartCommand.command.dynamicTools).toEqual([
+        expect.objectContaining({ name: "message_user" }),
+      ]);
       expect(managerStartCommand.command.instructions).toContain(
         "You are a manager for this project.",
       );
@@ -205,7 +198,6 @@ describe("public thread manager and ownership routes", () => {
       await harness.cleanup();
     }
   });
-
 
   it("appends an ownership change event and queues a manager assignment message", async () => {
     const harness = await createTestAppHarness();
@@ -239,22 +231,25 @@ describe("public thread manager and ownership routes", () => {
         parentThreadId: null,
       });
 
-      const responsePromise = harness.app.request(`/api/v1/threads/${thread.id}`, {
-        method: "PATCH",
-        headers: {
-          "content-type": "application/json",
+      const responsePromise = harness.app.request(
+        `/api/v1/threads/${thread.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            parentThreadId: managerThread.id,
+          }),
         },
-        body: JSON.stringify({
-          parentThreadId: managerThread.id,
-        }),
-      });
+      );
 
       const managerPreferencesPath = `/tmp/bb-host-data/${host.id}/thread-storage/${managerThread.id}/PREFERENCES.md`;
       const preferencesReadCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "host.read_file"
-          && command.path === managerPreferencesPath,
+          command.type === "host.read_file" &&
+          command.path === managerPreferencesPath,
       );
       const readResponse = await reportQueuedCommandError(
         harness,
@@ -268,7 +263,9 @@ describe("public thread manager and ownership routes", () => {
 
       const response = await responsePromise;
       expect(response.status).toBe(200);
-      expect(getThread(harness.db, thread.id)?.parentThreadId).toBe(managerThread.id);
+      expect(getThread(harness.db, thread.id)?.parentThreadId).toBe(
+        managerThread.id,
+      );
 
       const storedEvent = harness.db
         .select({ type: events.type, data: events.data })
@@ -297,7 +294,8 @@ describe("public thread manager and ownership routes", () => {
         harness,
         preferencesReadCommand.row.cursor,
         ({ command }) =>
-          command.type === "turn.submit" && command.threadId === managerThread.id,
+          command.type === "turn.submit" &&
+          command.threadId === managerThread.id,
       );
       expect(queuedCommand.command).toMatchObject({
         environmentId: environment.id,
@@ -331,7 +329,6 @@ describe("public thread manager and ownership routes", () => {
     }
   });
 
-
   it("queues a manager unassignment message when ownership is cleared", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -364,22 +361,25 @@ describe("public thread manager and ownership routes", () => {
         parentThreadId: managerThread.id,
       });
 
-      const responsePromise = harness.app.request(`/api/v1/threads/${thread.id}`, {
-        method: "PATCH",
-        headers: {
-          "content-type": "application/json",
+      const responsePromise = harness.app.request(
+        `/api/v1/threads/${thread.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            parentThreadId: null,
+          }),
         },
-        body: JSON.stringify({
-          parentThreadId: null,
-        }),
-      });
+      );
 
       const managerPreferencesPath = `/tmp/bb-host-data/${host.id}/thread-storage/${managerThread.id}/PREFERENCES.md`;
       const preferencesReadCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "host.read_file"
-          && command.path === managerPreferencesPath,
+          command.type === "host.read_file" &&
+          command.path === managerPreferencesPath,
       );
       const readResponse = await reportQueuedCommandError(
         harness,
@@ -399,7 +399,8 @@ describe("public thread manager and ownership routes", () => {
         harness,
         preferencesReadCommand.row.cursor,
         ({ command }) =>
-          command.type === "turn.submit" && command.threadId === managerThread.id,
+          command.type === "turn.submit" &&
+          command.threadId === managerThread.id,
       );
       expect(queuedCommand.command).toMatchObject({
         environmentId: environment.id,
@@ -432,7 +433,6 @@ describe("public thread manager and ownership routes", () => {
       await harness.cleanup();
     }
   });
-
 
   it("keeps ownership updates successful when manager notification queuing fails", async () => {
     const harness = await createTestAppHarness();
@@ -471,18 +471,23 @@ describe("public thread manager and ownership routes", () => {
         parentThreadId: null,
       });
 
-      const response = await harness.app.request(`/api/v1/threads/${thread.id}`, {
-        method: "PATCH",
-        headers: {
-          "content-type": "application/json",
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            parentThreadId: managerThread.id,
+          }),
         },
-        body: JSON.stringify({
-          parentThreadId: managerThread.id,
-        }),
-      });
+      );
 
       expect(response.status).toBe(200);
-      expect(getThread(harness.db, thread.id)?.parentThreadId).toBe(managerThread.id);
+      expect(getThread(harness.db, thread.id)?.parentThreadId).toBe(
+        managerThread.id,
+      );
       expect(
         harness.db
           .select({ id: hostDaemonCommands.id })

@@ -28,7 +28,9 @@ const CLAUDE_WELL_KNOWN_TOOL_NAMES = [
   "WebSearch",
   "Write",
 ] as const;
-const CLAUDE_WELL_KNOWN_TOOL_NAME_SET = new Set<string>(CLAUDE_WELL_KNOWN_TOOL_NAMES);
+const CLAUDE_WELL_KNOWN_TOOL_NAME_SET = new Set<string>(
+  CLAUDE_WELL_KNOWN_TOOL_NAMES,
+);
 const CLAUDE_NORMALIZED_ASSISTANT_CONTENT_TYPES = new Set([
   "text",
   "thinking",
@@ -51,11 +53,7 @@ type ClaudeSystemSubtype =
   | "task_started"
   | "unknown";
 
-type ClaudeStreamContentType =
-  | "text"
-  | "thinking"
-  | "tool_use"
-  | "unknown";
+type ClaudeStreamContentType = "text" | "thinking" | "tool_use" | "unknown";
 
 type ClaudeStreamDeltaType =
   | "input_json_delta"
@@ -292,7 +290,9 @@ function parseClaudeRawEvent(event: JsonRpcMessage): ClaudeRawEvent {
     case "assistant":
       return {
         kind: "sdk/assistant",
-        contentTypes: getMessageContentTypes(message).map(toClaudeMessageContentType),
+        contentTypes: getMessageContentTypes(message).map(
+          toClaudeMessageContentType,
+        ),
         hasParentToolUseId: hasClaudeParentToolUseId(message),
         toolNames: getClaudeToolNames(message),
       };
@@ -318,14 +318,18 @@ function parseClaudeRawEvent(event: JsonRpcMessage): ClaudeRawEvent {
           contentType: toClaudeStreamContentType(
             contentBlock ? getStringProperty(contentBlock, "type") : undefined,
           ),
-          text: contentBlock ? getStringProperty(contentBlock, "text") : undefined,
+          text: contentBlock
+            ? getStringProperty(contentBlock, "text")
+            : undefined,
           thinking: contentBlock
             ? getStringProperty(contentBlock, "thinking")
             : undefined,
         };
       }
       if (eventType === "content_block_delta") {
-        const delta = streamEvent ? getRecordProperty(streamEvent, "delta") : null;
+        const delta = streamEvent
+          ? getRecordProperty(streamEvent, "delta")
+          : null;
         return {
           kind: "sdk/stream_event",
           eventType,
@@ -351,7 +355,9 @@ function parseClaudeRawEvent(event: JsonRpcMessage): ClaudeRawEvent {
     case "user":
       return {
         kind: "sdk/user",
-        contentTypes: getMessageContentTypes(message).map(toClaudeMessageContentType),
+        contentTypes: getMessageContentTypes(message).map(
+          toClaudeMessageContentType,
+        ),
         hasParentToolUseId: hasClaudeParentToolUseId(message),
       };
 
@@ -381,7 +387,10 @@ function describeParsedClaudeRawEvent(
       return { kind: "thread/identity", coverage: "normalized" };
 
     case "thread/contextWindowUsage/updated":
-      return { kind: "thread/contextWindowUsage/updated", coverage: "normalized" };
+      return {
+        kind: "thread/contextWindowUsage/updated",
+        coverage: "normalized",
+      };
 
     case "error":
       return { kind: "error", coverage: "normalized" };
@@ -399,7 +408,9 @@ function describeParsedClaudeRawEvent(
       const kind = toClaudeMessageKind("sdk/assistant", event.contentTypes);
       if (
         event.contentTypes.length > 0 &&
-        event.contentTypes.every((contentType) => CLAUDE_NORMALIZED_ASSISTANT_CONTENT_TYPES.has(contentType))
+        event.contentTypes.every((contentType) =>
+          CLAUDE_NORMALIZED_ASSISTANT_CONTENT_TYPES.has(contentType),
+        )
       ) {
         return { kind, coverage: "normalized" };
       }
@@ -408,10 +419,7 @@ function describeParsedClaudeRawEvent(
 
     case "sdk/user": {
       const kind = toClaudeMessageKind("sdk/user", event.contentTypes);
-      if (
-        kind === "sdk/user:text" &&
-        event.hasParentToolUseId
-      ) {
+      if (kind === "sdk/user:text" && event.hasParentToolUseId) {
         return { kind, coverage: "noise" };
       }
       if (kind === "sdk/user:tool_result") {
@@ -423,7 +431,10 @@ function describeParsedClaudeRawEvent(
     case "sdk/system":
       switch (event.subtype) {
         case "compact_boundary":
-          return { kind: "sdk/system:compact_boundary", coverage: "normalized" };
+          return {
+            kind: "sdk/system:compact_boundary",
+            coverage: "normalized",
+          };
         case "status":
           return { kind: "sdk/system:status", coverage: "normalized" };
         case "init":
@@ -449,21 +460,36 @@ function describeParsedClaudeRawEvent(
         case "content_block_stop":
         case "message_delta":
         case "message_stop":
-          return { kind: `sdk/stream_event:${event.eventType}`, coverage: "noise" };
+          return {
+            kind: `sdk/stream_event:${event.eventType}`,
+            coverage: "noise",
+          };
 
         case "content_block_start":
           switch (event.contentType) {
             case "thinking":
               return {
                 kind: "sdk/stream_event:content_block_start:thinking",
-                coverage: event.thinking && event.thinking.length > 0 ? "normalized" : "noise",
+                coverage:
+                  event.thinking && event.thinking.length > 0
+                    ? "normalized"
+                    : "noise",
               };
             case "text":
-              return { kind: "sdk/stream_event:content_block_start:text", coverage: "noise" };
+              return {
+                kind: "sdk/stream_event:content_block_start:text",
+                coverage: "noise",
+              };
             case "tool_use":
-              return { kind: "sdk/stream_event:content_block_start:tool_use", coverage: "noise" };
+              return {
+                kind: "sdk/stream_event:content_block_start:tool_use",
+                coverage: "noise",
+              };
             case "unknown":
-              return { kind: "sdk/stream_event:content_block_start", coverage: "unknown" };
+              return {
+                kind: "sdk/stream_event:content_block_start",
+                coverage: "unknown",
+              };
             default:
               return assertNever(event.contentType);
           }
@@ -471,13 +497,17 @@ function describeParsedClaudeRawEvent(
         case "content_block_delta":
           switch (event.deltaType) {
             case "text_delta":
-              return { kind: "sdk/stream_event:content_block_delta:text_delta", coverage: "normalized" };
+              return {
+                kind: "sdk/stream_event:content_block_delta:text_delta",
+                coverage: "normalized",
+              };
             case "thinking_delta":
               return {
                 kind: "sdk/stream_event:content_block_delta:thinking_delta",
-                coverage: event.thinking && event.thinking.length > 0
-                  ? "normalized"
-                  : "noise",
+                coverage:
+                  event.thinking && event.thinking.length > 0
+                    ? "normalized"
+                    : "noise",
               };
             case "input_json_delta":
             case "signature_delta":
@@ -486,7 +516,10 @@ function describeParsedClaudeRawEvent(
                 coverage: "noise",
               };
             case "unknown":
-              return { kind: "sdk/stream_event:content_block_delta", coverage: "unknown" };
+              return {
+                kind: "sdk/stream_event:content_block_delta",
+                coverage: "unknown",
+              };
             default:
               return assertNever(event.deltaType);
           }
@@ -532,5 +565,6 @@ export const claudeCodeVisibilityMetadata: ProviderVisibilityMetadata<ClaudeRawE
     wellKnownToolNames: CLAUDE_WELL_KNOWN_TOOL_NAMES,
     parseRawEvent: parseClaudeRawEvent,
     describeParsedRawEvent: describeParsedClaudeRawEvent,
-    extractObservedToolCallsFromParsed: extractObservedToolCallsFromParsedClaudeRawEvent,
+    extractObservedToolCallsFromParsed:
+      extractObservedToolCallsFromParsedClaudeRawEvent,
   });

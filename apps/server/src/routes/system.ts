@@ -28,7 +28,10 @@ import { fetchGithubRepos } from "../services/github/repos.js";
 
 type HostLookupQuery = Pick<SystemProvidersQuery, "environmentId" | "hostId">;
 
-function resolveSystemLookupHostId(deps: AppDeps, query: HostLookupQuery): string {
+function resolveSystemLookupHostId(
+  deps: AppDeps,
+  query: HostLookupQuery,
+): string {
   if (query.environmentId) {
     return requireEnvironment(deps.db, query.environmentId).hostId;
   }
@@ -59,31 +62,43 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
     }),
   );
 
-  post("/system/cloud-auth/:providerId/connect", cloudAuthConnectRequestSchema, async (context, { appOrigin }) => {
-    const providerId = cloudAuthProviderIdSchema.parse(
-      context.req.param("providerId"),
-    );
-    const parsed = new URL(appOrigin);
-    if (parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") {
-      const allowedOrigins = new Set<string>();
-      if (deps.config.appUrl) {
-        allowedOrigins.add(new URL(deps.config.appUrl).origin);
+  post(
+    "/system/cloud-auth/:providerId/connect",
+    cloudAuthConnectRequestSchema,
+    async (context, { appOrigin }) => {
+      const providerId = cloudAuthProviderIdSchema.parse(
+        context.req.param("providerId"),
+      );
+      const parsed = new URL(appOrigin);
+      if (parsed.hostname !== "localhost" && parsed.hostname !== "127.0.0.1") {
+        const allowedOrigins = new Set<string>();
+        if (deps.config.appUrl) {
+          allowedOrigins.add(new URL(deps.config.appUrl).origin);
+        }
+        if (!allowedOrigins.has(parsed.origin)) {
+          throw new ApiError(
+            400,
+            "invalid_app_origin",
+            "The provided app origin is not allowed.",
+          );
+        }
       }
-      if (!allowedOrigins.has(parsed.origin)) {
-        throw new ApiError(400, "invalid_app_origin", "The provided app origin is not allowed.");
-      }
-    }
-    return context.json(
-      await deps.cloudAuth.startConnection({ appOrigin, providerId }),
-      201,
-    );
-  });
+      return context.json(
+        await deps.cloudAuth.startConnection({ appOrigin, providerId }),
+        201,
+      );
+    },
+  );
 
   get("/system/cloud-auth/attempts/:attemptId", (context) => {
     const attemptId = context.req.param("attemptId");
     const attempt = deps.cloudAuth.getAttempt({ attemptId });
     if (!attempt) {
-      throw new ApiError(404, "cloud_auth_attempt_not_found", "Cloud auth attempt not found");
+      throw new ApiError(
+        404,
+        "cloud_auth_attempt_not_found",
+        "Cloud auth attempt not found",
+      );
     }
     return context.json(attempt);
   });
@@ -102,8 +117,11 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
     }),
   );
 
-  post("/system/sandbox-env-vars", upsertSandboxEnvVarRequestSchema, async (context, payload) =>
-    context.json(await deps.sandboxEnv.upsertEnvVar(payload)),
+  post(
+    "/system/sandbox-env-vars",
+    upsertSandboxEnvVarRequestSchema,
+    async (context, payload) =>
+      context.json(await deps.sandboxEnv.upsertEnvVar(payload)),
   );
 
   del("/system/sandbox-env-vars/:name", async (context) => {
@@ -116,24 +134,39 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
     context.json(listAvailableSandboxBackends(deps.config)),
   );
 
-  get("/system/github-repos", githubReposQuerySchema, async (context, query) => {
-    if (!deps.config.githubPat) {
-      throw new ApiError(501, "not_configured", "GitHub PAT is not configured");
-    }
-    return context.json(await fetchGithubRepos(deps.config.githubPat, query.q));
-  });
+  get(
+    "/system/github-repos",
+    githubReposQuerySchema,
+    async (context, query) => {
+      if (!deps.config.githubPat) {
+        throw new ApiError(
+          501,
+          "not_configured",
+          "GitHub PAT is not configured",
+        );
+      }
+      return context.json(
+        await fetchGithubRepos(deps.config.githubPat, query.q),
+      );
+    },
+  );
 
-  get("/system/providers", systemProvidersQuerySchema, async (context, query) => {
-    const hostId = resolveSystemLookupHostId(deps, query);
-    const rawResult = await queueCommandAndWait(deps, {
-      hostId,
-      timeoutMs: COMMAND_TIMEOUT_MS,
-      command: { type: "provider.list" },
-    });
-    return context.json(
-      hostDaemonCommandResultSchemaByType["provider.list"].parse(rawResult).providers,
-    );
-  });
+  get(
+    "/system/providers",
+    systemProvidersQuerySchema,
+    async (context, query) => {
+      const hostId = resolveSystemLookupHostId(deps, query);
+      const rawResult = await queueCommandAndWait(deps, {
+        hostId,
+        timeoutMs: COMMAND_TIMEOUT_MS,
+        command: { type: "provider.list" },
+      });
+      return context.json(
+        hostDaemonCommandResultSchemaByType["provider.list"].parse(rawResult)
+          .providers,
+      );
+    },
+  );
 
   get("/system/models", systemModelsQuerySchema, async (context, query) => {
     const hostId = resolveSystemLookupHostId(deps, query);
@@ -148,11 +181,15 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
         },
       });
       return context.json(
-        hostDaemonCommandResultSchemaByType["provider.list_models"].parse(rawResult).models,
+        hostDaemonCommandResultSchemaByType["provider.list_models"].parse(
+          rawResult,
+        ).models,
       );
     }
 
-    const providers = hostDaemonCommandResultSchemaByType["provider.list"].parse(
+    const providers = hostDaemonCommandResultSchemaByType[
+      "provider.list"
+    ].parse(
       await queueCommandAndWait(deps, {
         hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
@@ -160,18 +197,19 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
       }),
     ).providers;
     const models = await Promise.all(
-      providers.map(async (provider) =>
-        hostDaemonCommandResultSchemaByType["provider.list_models"].parse(
-          await queueCommandAndWait(deps, {
-            hostId,
-            timeoutMs: COMMAND_TIMEOUT_MS,
-            command: {
-              type: "provider.list_models",
-              providerId: provider.id,
-              selectedModel: query.selectedModel,
-            },
-          }),
-        ).models,
+      providers.map(
+        async (provider) =>
+          hostDaemonCommandResultSchemaByType["provider.list_models"].parse(
+            await queueCommandAndWait(deps, {
+              hostId,
+              timeoutMs: COMMAND_TIMEOUT_MS,
+              command: {
+                type: "provider.list_models",
+                providerId: provider.id,
+                selectedModel: query.selectedModel,
+              },
+            }),
+          ).models,
       ),
     );
     return context.json(models.flat());
@@ -179,7 +217,11 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
 
   post("/system/voice-transcription", async (context) => {
     if (!deps.config.openAiApiKey) {
-      throw new ApiError(501, "not_configured", "Voice transcription requires OPENAI_API_KEY to be configured");
+      throw new ApiError(
+        501,
+        "not_configured",
+        "Voice transcription requires OPENAI_API_KEY to be configured",
+      );
     }
     const formData = await context.req.formData();
     const file = formData.get("file");

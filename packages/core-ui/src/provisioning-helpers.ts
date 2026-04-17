@@ -27,7 +27,9 @@ export function readProvisioningTranscript(
         key,
         text,
         status: entry.status ?? "started",
-        ...(entry.startedAt !== undefined ? { startedAt: entry.startedAt } : {}),
+        ...(entry.startedAt !== undefined
+          ? { startedAt: entry.startedAt }
+          : {}),
         ...(entry.metadata ? { metadata: entry.metadata } : {}),
       });
     } else if (entry.type === "output") {
@@ -35,7 +37,9 @@ export function readProvisioningTranscript(
         type: "output",
         key,
         text,
-        ...(entry.startedAt !== undefined ? { startedAt: entry.startedAt } : {}),
+        ...(entry.startedAt !== undefined
+          ? { startedAt: entry.startedAt }
+          : {}),
         ...(entry.metadata ? { metadata: entry.metadata } : {}),
       });
     }
@@ -81,12 +85,20 @@ function mergeProvisioningMetadata(
     return {
       ...incoming,
       ...(incoming.transcript
-        ? { transcript: mergeProvisioningTranscript(undefined, incoming.transcript) }
+        ? {
+            transcript: mergeProvisioningTranscript(
+              undefined,
+              incoming.transcript,
+            ),
+          }
         : {}),
     };
   }
 
-  const transcript = mergeProvisioningTranscript(existing.transcript, incoming.transcript);
+  const transcript = mergeProvisioningTranscript(
+    existing.transcript,
+    incoming.transcript,
+  );
   return {
     environmentId: incoming.environmentId ?? existing.environmentId,
     ...(transcript ? { transcript } : {}),
@@ -96,10 +108,14 @@ function mergeProvisioningMetadata(
 function isThreadInterruptedOperation(
   message: ViewMessage,
 ): message is Extract<ViewMessage, { kind: "operation" }> {
-  return message.kind === "operation" && message.opType === "thread-interrupted";
+  return (
+    message.kind === "operation" && message.opType === "thread-interrupted"
+  );
 }
 
-export function mergeProvisioningOperations(messages: ViewMessage[]): ViewMessage[] {
+export function mergeProvisioningOperations(
+  messages: ViewMessage[],
+): ViewMessage[] {
   const merged: ViewMessage[] = [];
   let active: Array<Extract<ViewMessage, { kind: "operation" }>> = [];
   let bufferedInterruptions: ViewMessage[] = [];
@@ -122,14 +138,15 @@ export function mergeProvisioningOperations(messages: ViewMessage[]): ViewMessag
       return;
     }
 
-    const mergedStatus =
-      active.some((message) => message.status === "completed")
-        ? "completed"
-        : active.some((message) => message.status === "error")
-          ? "error"
-          : active.some((message) => message.status === "interrupted")
-            ? "interrupted"
-            : "pending";
+    const mergedStatus = active.some(
+      (message) => message.status === "completed",
+    )
+      ? "completed"
+      : active.some((message) => message.status === "error")
+        ? "error"
+        : active.some((message) => message.status === "interrupted")
+          ? "interrupted"
+          : "pending";
     const details = active
       .map((message) => message.detail?.trim())
       .filter((value): value is string => Boolean(value));
@@ -139,23 +156,31 @@ export function mergeProvisioningOperations(messages: ViewMessage[]): ViewMessag
       undefined,
     );
     const title = (() => {
-      if (mergedStatus === "interrupted") return "Provisioning thread interrupted";
+      if (mergedStatus === "interrupted")
+        return "Provisioning thread interrupted";
       if (mergedStatus === "error") return "Provisioning thread failed";
-      return mergedStatus === "completed" ? "Provisioned thread" : "Provisioning thread";
+      return mergedStatus === "completed"
+        ? "Provisioned thread"
+        : "Provisioning thread";
     })();
 
     merged.push({
       kind: "operation",
       id: first.id,
       threadId: first.threadId,
-      sourceSeqStart: Math.min(...active.map((message) => message.sourceSeqStart)),
+      sourceSeqStart: Math.min(
+        ...active.map((message) => message.sourceSeqStart),
+      ),
       sourceSeqEnd: Math.max(...active.map((message) => message.sourceSeqEnd)),
       createdAt: Math.max(...active.map((message) => message.createdAt)),
-      startedAt: Math.min(...active.map((message) => getMessageStartedAt(message))),
+      startedAt: Math.min(
+        ...active.map((message) => getMessageStartedAt(message)),
+      ),
       turnId: first.turnId ?? last.turnId,
       opType: "thread-provisioning",
       title,
-      detail: uniqueDetailLines.length > 0 ? uniqueDetailLines.join("\n") : undefined,
+      detail:
+        uniqueDetailLines.length > 0 ? uniqueDetailLines.join("\n") : undefined,
       status: mergedStatus,
       ...(provisioning ? { provisioning } : {}),
     });

@@ -28,7 +28,11 @@ describe("createAgentRuntime tool calls", () => {
   });
 
   it("routes provider-scoped tool calls through onToolCall and sends response back", async () => {
-    const toolCalls: Array<{ threadId: string; providerThreadId: string; tool: string }> = [];
+    const toolCalls: Array<{
+      threadId: string;
+      providerThreadId: string;
+      tool: string;
+    }> = [];
     const events: ThreadEvent[] = [];
     const runtime = createAgentRuntimeWithAdapters({
       workspacePath: tmpDir,
@@ -63,8 +67,8 @@ describe("createAgentRuntime tool calls", () => {
       events,
       label: "tool call routed and turn completed",
       predicate: () =>
-        toolCalls.length === 1
-        && events.some((event) => event.type === "turn/completed"),
+        toolCalls.length === 1 &&
+        events.some((event) => event.type === "turn/completed"),
       providerId: "fake",
       runtime,
     });
@@ -179,11 +183,11 @@ describe("createAgentRuntime tool calls", () => {
     await waitForRuntimeState({
       label: "captured tool result and raw turn completion",
       predicate: () =>
-        captures.some((entry) => entry.kind === "tool-call-result")
-        && captures.some(
+        captures.some((entry) => entry.kind === "tool-call-result") &&
+        captures.some(
           (entry) =>
-            entry.kind === "raw-provider-event"
-            && entry.rawEvent.method === "turn/completed",
+            entry.kind === "raw-provider-event" &&
+            entry.rawEvent.method === "turn/completed",
         ),
       providerId: "fake",
       runtime,
@@ -191,27 +195,53 @@ describe("createAgentRuntime tool calls", () => {
     await runtime.shutdown();
 
     const rawEvents = captures.filter(
-      (entry): entry is Extract<AgentRuntimeCaptureEntry, { kind: "raw-provider-event" }> =>
-        entry.kind === "raw-provider-event",
+      (
+        entry,
+      ): entry is Extract<
+        AgentRuntimeCaptureEntry,
+        { kind: "raw-provider-event" }
+      > => entry.kind === "raw-provider-event",
     );
     const translatedEvents = captures.filter(
-      (entry): entry is Extract<AgentRuntimeCaptureEntry, { kind: "translated-thread-event" }> =>
-        entry.kind === "translated-thread-event",
+      (
+        entry,
+      ): entry is Extract<
+        AgentRuntimeCaptureEntry,
+        { kind: "translated-thread-event" }
+      > => entry.kind === "translated-thread-event",
     );
     const toolRequests = captures.filter(
-      (entry): entry is Extract<AgentRuntimeCaptureEntry, { kind: "tool-call-request" }> =>
-        entry.kind === "tool-call-request",
+      (
+        entry,
+      ): entry is Extract<
+        AgentRuntimeCaptureEntry,
+        { kind: "tool-call-request" }
+      > => entry.kind === "tool-call-request",
     );
     const toolResults = captures.filter(
-      (entry): entry is Extract<AgentRuntimeCaptureEntry, { kind: "tool-call-result" }> =>
-        entry.kind === "tool-call-result",
+      (
+        entry,
+      ): entry is Extract<
+        AgentRuntimeCaptureEntry,
+        { kind: "tool-call-result" }
+      > => entry.kind === "tool-call-result",
     );
 
     expect(rawEvents.map((entry) => entry.rawEvent.method)).toEqual(
-      expect.arrayContaining(["thread/identity", "turn/started", "item/completed", "turn/completed"]),
+      expect.arrayContaining([
+        "thread/identity",
+        "turn/started",
+        "item/completed",
+        "turn/completed",
+      ]),
     );
     expect(translatedEvents.map((entry) => entry.event.type)).toEqual(
-      expect.arrayContaining(["thread/identity", "turn/started", "item/completed", "turn/completed"]),
+      expect.arrayContaining([
+        "thread/identity",
+        "turn/started",
+        "item/completed",
+        "turn/completed",
+      ]),
     );
     expect(toolRequests).toHaveLength(1);
     expect(toolResults).toHaveLength(1);
@@ -226,7 +256,9 @@ describe("createAgentRuntime tool calls", () => {
       success: true,
     });
 
-    const turnStartedCapture = rawEvents.find((entry) => entry.rawEvent.method === "turn/started");
+    const turnStartedCapture = rawEvents.find(
+      (entry) => entry.rawEvent.method === "turn/started",
+    );
     expect(turnStartedCapture).toBeDefined();
     expect(
       translatedEvents.some(
@@ -238,5 +270,4 @@ describe("createAgentRuntime tool calls", () => {
   });
 
   // ---- Error handling ----
-
 });

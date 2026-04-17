@@ -19,20 +19,26 @@ function isErrorWithCode(error: Error): error is NodeJS.ErrnoException {
 function assertPositivePid(pid: number, args: RunningPidRequest): void {
   if (!Number.isInteger(pid) || pid <= 0) {
     rmSync(args.pidPath, { force: true });
-    throw new Error(`Invalid PID file for ${args.serviceName}: ${args.pidPath}`);
+    throw new Error(
+      `Invalid PID file for ${args.serviceName}: ${args.pidPath}`,
+    );
   }
 }
 
-export async function readRunningPid(
-  args: RunningPidRequest,
-): Promise<number> {
+export async function readRunningPid(args: RunningPidRequest): Promise<number> {
   let pidText: string;
 
   try {
     pidText = await readFile(args.pidPath, "utf8");
   } catch (error) {
-    if (error instanceof Error && isErrorWithCode(error) && error.code === "ENOENT") {
-      throw new Error(`No running ${args.serviceName} dev supervisor found at ${args.pidPath}`);
+    if (
+      error instanceof Error &&
+      isErrorWithCode(error) &&
+      error.code === "ENOENT"
+    ) {
+      throw new Error(
+        `No running ${args.serviceName} dev supervisor found at ${args.pidPath}`,
+      );
     }
 
     throw error;
@@ -44,9 +50,15 @@ export async function readRunningPid(
   try {
     process.kill(pid, 0);
   } catch (error) {
-    if (error instanceof Error && isErrorWithCode(error) && error.code === "ESRCH") {
+    if (
+      error instanceof Error &&
+      isErrorWithCode(error) &&
+      error.code === "ESRCH"
+    ) {
       await rm(args.pidPath, { force: true });
-      throw new Error(`Stale PID file for ${args.serviceName}: ${args.pidPath}`);
+      throw new Error(
+        `Stale PID file for ${args.serviceName}: ${args.pidPath}`,
+      );
     }
 
     throw error;

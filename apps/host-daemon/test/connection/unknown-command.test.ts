@@ -1,10 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HostDaemonLogger } from "../../src/logger.js";
 import { createServerClient } from "../../src/server-client.js";
-import {
-  createTestServer,
-  type TestServer,
-} from "../helpers/test-server.js";
+import { createTestServer, type TestServer } from "../helpers/test-server.js";
 
 function createLogger(): HostDaemonLogger {
   return {

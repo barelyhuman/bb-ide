@@ -416,7 +416,7 @@ describe("buildThreadTimeline", () => {
       buildTimelineToolDetails(harness.db, thread, {
         sourceSeqStart: 1,
         sourceSeqEnd: 5,
-      })
+      }),
     ).toThrow(/could not match tool group range 1-5/);
   });
 
@@ -659,7 +659,12 @@ describe("buildThreadTimeline", () => {
         status: "completed",
         environmentId: environment.id,
         entries: [
-          { type: "step", key: "workspace-path", text: "Using workspace: /tmp/test", status: "completed" },
+          {
+            type: "step",
+            key: "workspace-path",
+            text: "Using workspace: /tmp/test",
+            status: "completed",
+          },
         ],
       },
     });
@@ -770,7 +775,10 @@ describe("buildThreadTimeline", () => {
       (row) => row.kind === "message" && row.message.kind === "assistant-text",
     );
     expect(assistantRow).toBeDefined();
-    if (assistantRow?.kind === "message" && assistantRow.message.kind === "assistant-text") {
+    if (
+      assistantRow?.kind === "message" &&
+      assistantRow.message.kind === "assistant-text"
+    ) {
       expect(assistantRow.message.text).toBe("Hello from manager");
       expect(assistantRow.message.isManagerUserMessage).toBe(true);
     }
@@ -779,7 +787,9 @@ describe("buildThreadTimeline", () => {
     const debugTimeline = buildThreadTimeline(harness.db, thread, {
       showAllManagerEvents: true,
     });
-    expect(debugTimeline.rows.length).toBeGreaterThan(defaultTimeline.rows.length);
+    expect(debugTimeline.rows.length).toBeGreaterThan(
+      defaultTimeline.rows.length,
+    );
   });
 
   it("keeps manager-visible messages that would otherwise be buried in turn tool groups", async () => {

@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  findActiveFileMention,
-  insertFileMention,
-} from "./file-mention";
+import { findActiveFileMention, insertFileMention } from "./file-mention";
 
 describe("file mention helpers", () => {
   it("detects an active mention at the current caret", () => {
@@ -36,7 +33,10 @@ describe("file mention helpers", () => {
 
   it("replaces the active mention range with a selected file path", () => {
     const value = "Please check @src/com and update tests";
-    const mention = findActiveFileMention(value, "Please check @src/com".length);
+    const mention = findActiveFileMention(
+      value,
+      "Please check @src/com".length,
+    );
     expect(mention).not.toBeNull();
 
     const result = insertFileMention(
@@ -52,5 +52,4 @@ describe("file mention helpers", () => {
       "Please check @src/components/PromptBox.tsx".length,
     );
   });
-
 });

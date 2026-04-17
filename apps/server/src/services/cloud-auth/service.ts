@@ -14,7 +14,10 @@ import type {
   CloudAuthConnection,
 } from "@bb/server-contract";
 import { createAsyncDeduper } from "../lib/async-deduper.js";
-import { startOAuthCallbackServer, type OAuthCallbackServer } from "./callback-server.js";
+import {
+  startOAuthCallbackServer,
+  type OAuthCallbackServer,
+} from "./callback-server.js";
 import {
   buildCloudAuthCredentialUpsert,
   createCloudAuthCrypto,
@@ -26,9 +29,7 @@ import {
   type CloudAuthResolvedCredential,
   type StoredCloudAuthCredential,
 } from "@bb/agent-provider-auth";
-import type {
-  CloudAuthService,
-} from "./types.js";
+import type { CloudAuthService } from "./types.js";
 import type { ServerLogger } from "../../types.js";
 
 const ATTEMPT_RETENTION_MS = 10 * 60_000;
@@ -164,22 +165,30 @@ export async function createCloudAuthService(
       status: args.status,
     };
 
-    if (pendingAttemptIdsByProvider.get(attemptState.attempt.providerId) === args.attemptId) {
+    if (
+      pendingAttemptIdsByProvider.get(attemptState.attempt.providerId) ===
+      args.attemptId
+    ) {
       pendingAttemptIdsByProvider.delete(attemptState.attempt.providerId);
     }
 
     scheduleAttemptCleanup(args.attemptId);
   }
 
-  async function persistCredential(persistArgs: PersistCredentialArgs): Promise<void> {
-    upsertSandboxProviderCredential(db, buildCloudAuthCredentialUpsert({
-      credential: persistArgs.credential,
-      crypto,
-      label: getCloudAuthConnectionLabel(persistArgs.credential),
-      lastErrorMessage: null,
-      lastRefreshedAt: persistArgs.lastRefreshedAt,
-      updatedAt: persistArgs.updatedAt,
-    }));
+  async function persistCredential(
+    persistArgs: PersistCredentialArgs,
+  ): Promise<void> {
+    upsertSandboxProviderCredential(
+      db,
+      buildCloudAuthCredentialUpsert({
+        credential: persistArgs.credential,
+        crypto,
+        label: getCloudAuthConnectionLabel(persistArgs.credential),
+        lastErrorMessage: null,
+        lastRefreshedAt: persistArgs.lastRefreshedAt,
+        updatedAt: persistArgs.updatedAt,
+      }),
+    );
   }
 
   function markCredentialErrored(argsMark: {
@@ -351,7 +360,9 @@ export async function createCloudAuthService(
       } catch (error) {
         updateCredentialErrorState({
           errorMessage: sanitizeCloudAuthErrorMessage(
-            error instanceof Error ? error.message : "Credential refresh failed",
+            error instanceof Error
+              ? error.message
+              : "Credential refresh failed",
           ),
           providerId,
           updatedAt: Date.now(),
@@ -425,14 +436,16 @@ export async function createCloudAuthService(
       currentAttempt.callbackServer?.cancelWait();
       finalizeAttempt({
         attemptId,
-        errorMessage: "The connection attempt timed out before the provider redirected back.",
+        errorMessage:
+          "The connection attempt timed out before the provider redirected back.",
         status: "expired",
       });
       void closeAttemptCallbackServer(attemptId);
     }, ATTEMPT_TIMEOUT_MS);
     attemptState.expiresTimer.unref();
 
-    void callbackServer.waitForCode()
+    void callbackServer
+      .waitForCode()
       .then(async (callbackPayload) => {
         if (!callbackPayload) {
           return;
@@ -448,7 +461,10 @@ export async function createCloudAuthService(
           verifier: flow.verifier,
         });
         const persistedAttempt = attemptsById.get(attemptId);
-        if (!persistedAttempt || persistedAttempt.attempt.status !== "pending") {
+        if (
+          !persistedAttempt ||
+          persistedAttempt.attempt.status !== "pending"
+        ) {
           return;
         }
         const updatedAt = Date.now();
@@ -473,10 +489,11 @@ export async function createCloudAuthService(
         );
         finalizeAttempt({
           attemptId,
-          errorMessage:
-            sanitizeCloudAuthErrorMessage(
-              error instanceof Error ? error.message : "Cloud auth exchange failed",
-            ),
+          errorMessage: sanitizeCloudAuthErrorMessage(
+            error instanceof Error
+              ? error.message
+              : "Cloud auth exchange failed",
+          ),
           status: "failed",
         });
       })
@@ -490,7 +507,10 @@ export async function createCloudAuthService(
 
   async function listConnections(): Promise<CloudAuthConnection[]> {
     const recordsByProvider = new Map(
-      listSandboxProviderCredentials(db).map((record) => [record.providerId, record]),
+      listSandboxProviderCredentials(db).map((record) => [
+        record.providerId,
+        record,
+      ]),
     );
 
     return listCloudAuthProviderDefinitions().map((provider) => {

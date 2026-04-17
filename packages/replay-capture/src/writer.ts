@@ -86,11 +86,11 @@ const DEFAULT_REPLAY_CAPTURE_MAX_FILE_BYTES = 100 * 1024 * 1024;
 const DEFAULT_FINALIZED_CAPTURE_GRACE_MS = 5_000;
 
 function getTurnId(event: ThreadEvent): string | null {
-  return "turnId" in event ? event.turnId ?? null : null;
+  return "turnId" in event ? (event.turnId ?? null) : null;
 }
 
 function getProviderThreadId(event: ThreadEvent): string | null {
-  return "providerThreadId" in event ? event.providerThreadId ?? null : null;
+  return "providerThreadId" in event ? (event.providerThreadId ?? null) : null;
 }
 
 function shouldFinalizeCapture(event: ThreadEvent): boolean {
@@ -138,7 +138,8 @@ export function createReplayCaptureService(
     return null;
   }
 
-  const maxCaptures = options.maxCaptures ?? DEFAULT_REPLAY_CAPTURE_MAX_CAPTURES;
+  const maxCaptures =
+    options.maxCaptures ?? DEFAULT_REPLAY_CAPTURE_MAX_CAPTURES;
   const maxCaptureFileBytes =
     options.maxCaptureFileBytes ?? DEFAULT_REPLAY_CAPTURE_MAX_FILE_BYTES;
   const finalizedCaptureGraceMs =
@@ -148,7 +149,10 @@ export function createReplayCaptureService(
   const activeByThreadId = new Map<string, ActiveCapture>();
   const allCapturesById = new Map<string, ActiveCapture>();
   const latestCaptureByThreadId = new Map<string, ActiveCapture>();
-  const pendingRawByCaptureId = new Map<string, ReplayRawProviderCaptureEntry>();
+  const pendingRawByCaptureId = new Map<
+    string,
+    ReplayRawProviderCaptureEntry
+  >();
 
   function scheduleCaptureWrite(
     capture: ActiveCapture,
@@ -167,7 +171,8 @@ export function createReplayCaptureService(
           return;
         }
         capture.manifest.eventCounts.droppedRecords += 1;
-        capture.manifest.errorMessage = error instanceof Error ? error.message : String(error);
+        capture.manifest.errorMessage =
+          error instanceof Error ? error.message : String(error);
         options.logger.warn(
           { err: error, captureId: capture.captureId, label },
           "failed to write replay capture record",
@@ -185,7 +190,10 @@ export function createReplayCaptureService(
 
   async function writeManifest(capture: ActiveCapture): Promise<void> {
     updateManifestEventCounts(capture);
-    const manifestPath = replayCaptureManifestPath(options.dataDir, capture.captureId);
+    const manifestPath = replayCaptureManifestPath(
+      options.dataDir,
+      capture.captureId,
+    );
     const tempPath = `${manifestPath}.tmp`;
     await writeFile(tempPath, JSON.stringify(capture.manifest, null, 2));
     await rename(tempPath, manifestPath);
@@ -228,7 +236,10 @@ export function createReplayCaptureService(
     }
   }
 
-  function getOrCreateCapture(threadId: string, event: ThreadEvent): ActiveCapture | null {
+  function getOrCreateCapture(
+    threadId: string,
+    event: ThreadEvent,
+  ): ActiveCapture | null {
     const existing = activeByThreadId.get(threadId);
     if (existing) {
       if (!existing.finalized) {
@@ -291,7 +302,10 @@ export function createReplayCaptureService(
     latestCaptureByThreadId.set(threadId, capture);
     scheduleCaptureWrite(capture, "initialize", async () => {
       await mkdir(capture.dir, { recursive: true });
-      await writeFile(replayRawProviderEventsPath(options.dataDir, capture.captureId), "");
+      await writeFile(
+        replayRawProviderEventsPath(options.dataDir, capture.captureId),
+        "",
+      );
       await writeManifest(capture);
     });
     return capture;
@@ -303,7 +317,8 @@ export function createReplayCaptureService(
     value: object,
   ): boolean {
     const line = `${JSON.stringify(value)}\n`;
-    const nextBytes = capture.rawProviderBytes + Buffer.byteLength(line, "utf8");
+    const nextBytes =
+      capture.rawProviderBytes + Buffer.byteLength(line, "utf8");
     if (nextBytes > maxCaptureFileBytes) {
       capture.manifest.eventCounts.droppedRecords += 1;
       scheduleCaptureWrite(capture, "capture-file-cap", async () => {
@@ -326,7 +341,10 @@ export function createReplayCaptureService(
     }
   }
 
-  function updateProviderThreadId(capture: ActiveCapture, event: ThreadEvent): void {
+  function updateProviderThreadId(
+    capture: ActiveCapture,
+    event: ThreadEvent,
+  ): void {
     const providerThreadId = getProviderThreadId(event);
     if (providerThreadId) {
       capture.manifest.providerThreadId = providerThreadId;
@@ -478,8 +496,9 @@ export function createReplayCaptureService(
 
   function recordThreadMetadata(metadata: ReplayCaptureThreadMetadata): void {
     metadataByThreadId.set(metadata.threadId, metadata);
-    const capture = activeByThreadId.get(metadata.threadId)
-      ?? latestCaptureByThreadId.get(metadata.threadId);
+    const capture =
+      activeByThreadId.get(metadata.threadId) ??
+      latestCaptureByThreadId.get(metadata.threadId);
     if (capture && !capture.pruned) {
       capture.manifest = updateManifestFromMetadata(capture.manifest, metadata);
       scheduleCaptureWrite(capture, "metadata", async () => {
@@ -523,7 +542,9 @@ export function createReplayCaptureService(
         .filter((captureId) => !activeCaptureIds.has(captureId))
         .map(async (captureId) => ({
           captureId,
-          mtimeMs: await pathMtimeMs(replayCaptureDir(options.dataDir, captureId)),
+          mtimeMs: await pathMtimeMs(
+            replayCaptureDir(options.dataDir, captureId),
+          ),
         })),
     );
     const staleCaptures = captureEntries
@@ -541,12 +562,19 @@ export function createReplayCaptureService(
     }
   }
 
-  void mkdir(replayCaptureRoot(options.dataDir), { recursive: true }).catch((error) => {
-    options.logger.warn({ err: error }, "failed to create replay capture root");
-  });
+  void mkdir(replayCaptureRoot(options.dataDir), { recursive: true }).catch(
+    (error) => {
+      options.logger.warn(
+        { err: error },
+        "failed to create replay capture root",
+      );
+    },
+  );
 
   async function drain(): Promise<void> {
-    await Promise.all([...allCapturesById.values()].map((capture) => capture.pendingWrites));
+    await Promise.all(
+      [...allCapturesById.values()].map((capture) => capture.pendingWrites),
+    );
   }
 
   return {

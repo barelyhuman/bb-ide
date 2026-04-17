@@ -107,7 +107,9 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
   const transcriptionAbortRef = useRef<AbortController | null>(null);
 
   const [state, setState] = useState<VoiceInputState>("idle");
-  const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined);
+  const [errorMessage, setErrorMessage] = useState<string | undefined>(
+    undefined,
+  );
   const [isSupported, setIsSupported] = useState(false);
 
   const stopMediaStream = useCallback(() => {
@@ -122,7 +124,9 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
       setIsSupported(false);
       return;
     }
-    const hasMediaDevices = typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
+    const hasMediaDevices =
+      typeof navigator !== "undefined" &&
+      Boolean(navigator.mediaDevices?.getUserMedia);
     const hasMediaRecorder = typeof window.MediaRecorder !== "undefined";
     setIsSupported(hasMediaDevices && hasMediaRecorder);
   }, []);
@@ -223,7 +227,8 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
           return;
         }
 
-        const recordedMimeType = recorder.mimeType || preferredMimeType || "audio/webm";
+        const recordedMimeType =
+          recorder.mimeType || preferredMimeType || "audio/webm";
         const audioBlob = new Blob(chunks, { type: recordedMimeType });
         const audioFile = createRecordingFile(audioBlob, recordedMimeType);
         const promptContext = promptContextRef.current;

@@ -79,7 +79,10 @@ describe("tool-proxy", () => {
             properties: {
               field: { type: "string" },
               operator: {
-                anyOf: [{ const: "eq", type: "string" }, { const: "ne", type: "string" }],
+                anyOf: [
+                  { const: "eq", type: "string" },
+                  { const: "ne", type: "string" },
+                ],
               },
             },
           },

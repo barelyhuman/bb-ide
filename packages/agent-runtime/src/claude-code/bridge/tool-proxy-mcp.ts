@@ -52,9 +52,7 @@ export function getAllowedToolNames(
   );
 }
 
-function buildZodShape(
-  inputSchema: unknown,
-): z.ZodRawShape {
+function buildZodShape(inputSchema: unknown): z.ZodRawShape {
   if (
     !inputSchema ||
     typeof inputSchema !== "object" ||

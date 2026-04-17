@@ -1,7 +1,4 @@
-import {
-  getProjectSourceByHost,
-  listProjectSources,
-} from "@bb/db";
+import { getProjectSourceByHost, listProjectSources } from "@bb/db";
 import {
   isGitHubRepoProjectSource,
   type Environment,
@@ -136,10 +133,11 @@ function resolveStableHostThreadRequestEnvironmentFromProjectData(
     };
   }
 
-  const localSource = data.projectSources.find(
-    (source): source is LocalPathProjectSource =>
-      source.type === "local_path" && source.hostId === environment.hostId,
-  ) ?? null;
+  const localSource =
+    data.projectSources.find(
+      (source): source is LocalPathProjectSource =>
+        source.type === "local_path" && source.hostId === environment.hostId,
+    ) ?? null;
   if (!localSource) {
     throw new ApiError(
       409,
@@ -162,7 +160,9 @@ function resolveStableReuseThreadRequestEnvironmentFromProjectData(
   data: StableThreadRequestProjectData,
   environment: ReuseThreadRequestEnvironment,
 ): ResolvedReuseThreadRequestEnvironment {
-  const reusedEnvironment = data.environmentsById.get(environment.environmentId);
+  const reusedEnvironment = data.environmentsById.get(
+    environment.environmentId,
+  );
   if (!reusedEnvironment) {
     throw new ApiError(404, "environment_not_found", "Environment not found");
   }
@@ -213,7 +213,9 @@ export function resolveStableThreadRequestEnvironmentFromProjectData(
     }
     default: {
       const exhaustiveCheck: never = environment;
-      throw new Error(`Unsupported thread request environment: ${exhaustiveCheck}`);
+      throw new Error(
+        `Unsupported thread request environment: ${exhaustiveCheck}`,
+      );
     }
   }
 }
@@ -266,7 +268,10 @@ function resolveReuseThreadRequestEnvironment(
   environment: ReuseThreadRequestEnvironment,
   projectId: string,
 ): ResolvedReuseThreadRequestEnvironment {
-  const reusedEnvironment = requireEnvironment(deps.db, environment.environmentId);
+  const reusedEnvironment = requireEnvironment(
+    deps.db,
+    environment.environmentId,
+  );
   if (reusedEnvironment.projectId !== projectId) {
     throw new ApiError(
       409,
@@ -307,7 +312,9 @@ export function resolveStableThreadRequestEnvironment(
       };
     default: {
       const exhaustiveCheck: never = args.environment;
-      throw new Error(`Unsupported thread request environment: ${exhaustiveCheck}`);
+      throw new Error(
+        `Unsupported thread request environment: ${exhaustiveCheck}`,
+      );
     }
   }
 }

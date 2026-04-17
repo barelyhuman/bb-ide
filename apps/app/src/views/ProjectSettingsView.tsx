@@ -34,14 +34,20 @@ import {
   isLocalPathMissing,
   useLocalPathExistence,
 } from "@/hooks/queries/host-path-queries";
-import { useLocalPathPicker, type LocalPathSubmitParams } from "@/hooks/useLocalPathPicker";
+import {
+  useLocalPathPicker,
+  type LocalPathSubmitParams,
+} from "@/hooks/useLocalPathPicker";
 import { useProjects } from "@/hooks/queries/project-queries";
 import { projectsQueryKey } from "@/hooks/queries/query-keys";
 import { useGithubRepos, useHosts } from "@/hooks/queries/system-queries";
 import { githubConnectedAtom } from "@/lib/atoms";
 import * as api from "@/lib/api";
 
-function sourceLabel(source: ProjectSource, hostNameById: Map<string, string>): string {
+function sourceLabel(
+  source: ProjectSource,
+  hostNameById: Map<string, string>,
+): string {
   if (isLocalPathProjectSource(source)) {
     return hostNameById.get(source.hostId) ?? source.hostId;
   }
@@ -55,7 +61,10 @@ export function ProjectSettingsView() {
   const queryClient = useQueryClient();
   const githubConnected = useAtomValue(githubConnectedAtom);
 
-  const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: string;
+    label: string;
+  } | null>(null);
   const [repoPickerOpen, setRepoPickerOpen] = useState(false);
   const [repoSearch, setRepoSearch] = useState("");
 
@@ -92,12 +101,19 @@ export function ProjectSettingsView() {
   });
 
   const [debouncedSearch] = useDebounceValue(repoSearch, 300);
-  const { data: githubRepos = [], isLoading: reposLoading, isFetching: reposFetching } = useGithubRepos(repoPickerOpen, debouncedSearch);
+  const {
+    data: githubRepos = [],
+    isLoading: reposLoading,
+    isFetching: reposFetching,
+  } = useGithubRepos(repoPickerOpen, debouncedSearch);
 
   const visibleRepos = useMemo(() => {
     if (!repoSearch) return githubRepos;
     // Don't client-side filter URLs/owner-repo — let the server resolve them
-    if (repoSearch.includes("github.com/") || /^[^/\s]+\/[^/\s]+$/.test(repoSearch.trim())) {
+    if (
+      repoSearch.includes("github.com/") ||
+      /^[^/\s]+\/[^/\s]+$/.test(repoSearch.trim())
+    ) {
       return githubRepos;
     }
     const q = repoSearch.toLowerCase();
@@ -107,14 +123,18 @@ export function ProjectSettingsView() {
   const project = projects?.find((p) => p.id === projectId);
   const projectSources = project?.sources;
   const sources = useMemo(
-    () => [...(projectSources ?? [])].sort((a, b) => {
-      const aGh = isGitHubRepoProjectSource(a) ? 0 : 1;
-      const bGh = isGitHubRepoProjectSource(b) ? 0 : 1;
-      return aGh - bGh;
-    }),
+    () =>
+      [...(projectSources ?? [])].sort((a, b) => {
+        const aGh = isGitHubRepoProjectSource(a) ? 0 : 1;
+        const bGh = isGitHubRepoProjectSource(b) ? 0 : 1;
+        return aGh - bGh;
+      }),
     [projectSources],
   );
-  const hostNameById = useMemo(() => new Map(hosts.map((h) => [h.id, h.name])), [hosts]);
+  const hostNameById = useMemo(
+    () => new Map(hosts.map((h) => [h.id, h.name])),
+    [hosts],
+  );
   const hasGitHubSource = sources.some(isGitHubRepoProjectSource);
 
   const projectName = project?.name ?? "";
@@ -171,39 +191,43 @@ export function ProjectSettingsView() {
   const localhostSourcePaths = useMemo(() => {
     if (!localHostId) return [] as string[];
     return sources
-      .filter((source): source is LocalPathProjectSource =>
-        isLocalPathProjectSource(source) && source.hostId === localHostId)
+      .filter(
+        (source): source is LocalPathProjectSource =>
+          isLocalPathProjectSource(source) && source.hostId === localHostId,
+      )
       .map((source) => source.path);
   }, [localHostId, sources]);
   const pathExistence = useLocalPathExistence(localhostSourcePaths);
 
   const showAddLocalSourceButton =
-    localHostId != null && !findLocalPathProjectSourceForHost(sources, localHostId);
+    localHostId != null &&
+    !findLocalPathProjectSourceForHost(sources, localHostId);
   const showAddGitHubSourceButton = githubConnected && !hasGitHubSource;
 
-  const addSourceButtons = (showAddLocalSourceButton || showAddGitHubSourceButton) ? (
-    <div className="mt-2 flex gap-2">
-      {showAddGitHubSourceButton && (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setRepoPickerOpen(true)}
-        >
-          Connect GitHub repo
-        </Button>
-      )}
-      {showAddLocalSourceButton && (
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={addLocalSource.isPending}
-          onClick={openAddLocalSourcePicker}
-        >
-          Add local path
-        </Button>
-      )}
-    </div>
-  ) : null;
+  const addSourceButtons =
+    showAddLocalSourceButton || showAddGitHubSourceButton ? (
+      <div className="mt-2 flex gap-2">
+        {showAddGitHubSourceButton && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setRepoPickerOpen(true)}
+          >
+            Connect GitHub repo
+          </Button>
+        )}
+        {showAddLocalSourceButton && (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={addLocalSource.isPending}
+            onClick={openAddLocalSourcePicker}
+          >
+            Add local path
+          </Button>
+        )}
+      </div>
+    ) : null;
 
   return (
     <PageShell contentClassName="pt-4 md:pt-5">
@@ -227,9 +251,10 @@ export function ProjectSettingsView() {
                     localHostId != null &&
                     source.hostId === localHostId;
                   const isInvalid =
-                    isLocalhostSource && isLocalPathMissing(pathExistence, source.path);
+                    isLocalhostSource &&
+                    isLocalPathMissing(pathExistence, source.path);
                   const hostName = isLocalPathProjectSource(source)
-                    ? hostNameById.get(source.hostId) ?? source.hostId
+                    ? (hostNameById.get(source.hostId) ?? source.hostId)
                     : "";
                   return (
                     <ProjectSourceRow
@@ -255,7 +280,6 @@ export function ProjectSettingsView() {
             </div>
           )}
         </SettingsSection>
-
       </div>
 
       <ProjectPathDialog
@@ -266,10 +290,13 @@ export function ProjectSettingsView() {
         onSubmit={localSourcePicker.submitProjectPath}
       />
 
-      <Dialog open={repoPickerOpen} onOpenChange={(open) => {
-        setRepoPickerOpen(open);
-        if (!open) setRepoSearch("");
-      }}>
+      <Dialog
+        open={repoPickerOpen}
+        onOpenChange={(open) => {
+          setRepoPickerOpen(open);
+          if (!open) setRepoSearch("");
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Connect GitHub repository</DialogTitle>
@@ -294,7 +321,9 @@ export function ProjectSettingsView() {
               </div>
             ) : visibleRepos.length === 0 ? (
               <p className="py-4 text-center text-sm text-muted-foreground">
-                {repoSearch ? "No matching repositories" : "No repositories found"}
+                {repoSearch
+                  ? "No matching repositories"
+                  : "No repositories found"}
               </p>
             ) : (
               <div className="divide-y divide-border">
@@ -306,7 +335,9 @@ export function ProjectSettingsView() {
                     disabled={addGitHubSource.isPending}
                     onClick={() => addGitHubSource.mutate(repo.htmlUrl)}
                   >
-                    <span className="min-w-0 flex-1 truncate">{repo.fullName}</span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {repo.fullName}
+                    </span>
                     {repo.private && (
                       <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                         Private
@@ -320,7 +351,12 @@ export function ProjectSettingsView() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+      <Dialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Remove source?</DialogTitle>

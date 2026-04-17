@@ -40,8 +40,10 @@ function resolveThreadScopedPlaceholder<TData>(
     return undefined;
   }
 
-  return extractThreadIdFromThreadScopedQueryKey(previousQueryKey, queryKeyPrefix) ===
-    nextThreadId
+  return extractThreadIdFromThreadScopedQueryKey(
+    previousQueryKey,
+    queryKeyPrefix,
+  ) === nextThreadId
     ? previousData
     : undefined;
 }

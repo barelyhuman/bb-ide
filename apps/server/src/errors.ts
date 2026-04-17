@@ -16,9 +16,10 @@ export class ApiError extends HTTPException {
     retryable?: boolean,
   ) {
     super(status, { message });
-    this.body = retryable === undefined
-      ? { code, message }
-      : { code, message, retryable };
+    this.body =
+      retryable === undefined
+        ? { code, message }
+        : { code, message, retryable };
   }
 
   toResponse(): Response {

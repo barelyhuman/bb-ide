@@ -1,4 +1,9 @@
-import type { ThreadEvent, ThreadEventItemStatus, ViewTaskEntry, ViewTasksMessage } from "@bb/domain";
+import type {
+  ThreadEvent,
+  ThreadEventItemStatus,
+  ViewTaskEntry,
+  ViewTasksMessage,
+} from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
 import { getEventParentToolCallId } from "./event-decode.js";
 import { messageId } from "./format-helpers.js";
@@ -21,9 +26,7 @@ function toTodoArgumentShape(value: unknown): TodoArgumentShape | null {
   };
 }
 
-function toViewTaskStatus(
-  value: string | undefined,
-): ViewTaskEntry["status"] {
+function toViewTaskStatus(value: string | undefined): ViewTaskEntry["status"] {
   switch (value) {
     case "in_progress":
     case "active":
@@ -97,7 +100,9 @@ export function shouldSuppressLowValueToolCall(decoded: ThreadEvent): boolean {
     return false;
   }
 
-  return decoded.item.status === "pending" || decoded.item.status === "completed";
+  return (
+    decoded.item.status === "pending" || decoded.item.status === "completed"
+  );
 }
 
 export function parseTaskMessage(
@@ -126,7 +131,11 @@ export function parseTaskMessage(
 
     return {
       kind: "tasks",
-      id: messageId(decoded.threadId, "tasks", `plan:${decoded.turnId}:${meta.seq}`),
+      id: messageId(
+        decoded.threadId,
+        "tasks",
+        `plan:${decoded.turnId}:${meta.seq}`,
+      ),
       threadId: decoded.threadId,
       sourceSeqStart: meta.seq,
       sourceSeqEnd: meta.seq,
@@ -156,7 +165,11 @@ export function parseTaskMessage(
   const status = toTaskMessageStatus(decoded.item.status);
   return {
     kind: "tasks",
-    id: messageId(decoded.threadId, "tasks", `todo:${decoded.item.id}:${meta.seq}`),
+    id: messageId(
+      decoded.threadId,
+      "tasks",
+      `todo:${decoded.item.id}:${meta.seq}`,
+    ),
     threadId: decoded.threadId,
     sourceSeqStart: meta.seq,
     sourceSeqEnd: meta.seq,

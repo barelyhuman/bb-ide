@@ -1,22 +1,27 @@
-import { useEffect } from "react"
-import { ChevronLeft, ChevronRight, X } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogClose, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import { useEffect } from "react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export const imageLightboxKeyActionValues = [
   "close",
   "next",
   "previous",
-] as const
+] as const;
 export type ImageLightboxKeyAction =
-  (typeof imageLightboxKeyActionValues)[number]
+  (typeof imageLightboxKeyActionValues)[number];
 
 export interface ImageLightboxKeyActionInput {
   event: Pick<
     KeyboardEvent,
     "altKey" | "ctrlKey" | "defaultPrevented" | "key" | "metaKey"
-  >
-  hasNavigation: boolean
+  >;
+  hasNavigation: boolean;
 }
 
 export function getImageLightboxKeyAction({
@@ -29,26 +34,26 @@ export function getImageLightboxKeyAction({
     event.ctrlKey ||
     event.metaKey
   ) {
-    return null
+    return null;
   }
 
   if (event.key === "Escape") {
-    return "close"
+    return "close";
   }
 
   if (!hasNavigation) {
-    return null
+    return null;
   }
 
   if (event.key === "ArrowLeft") {
-    return "previous"
+    return "previous";
   }
 
   if (event.key === "ArrowRight") {
-    return "next"
+    return "next";
   }
 
-  return null
+  return null;
 }
 
 export function getWrappedImageIndex({
@@ -56,25 +61,25 @@ export function getWrappedImageIndex({
   direction,
   itemCount,
 }: {
-  currentIndex: number
-  direction: "next" | "previous"
-  itemCount: number
+  currentIndex: number;
+  direction: "next" | "previous";
+  itemCount: number;
 }): number {
-  if (itemCount <= 0) return currentIndex
+  if (itemCount <= 0) return currentIndex;
   if (direction === "previous") {
-    return currentIndex === 0 ? itemCount - 1 : currentIndex - 1
+    return currentIndex === 0 ? itemCount - 1 : currentIndex - 1;
   }
-  return currentIndex === itemCount - 1 ? 0 : currentIndex + 1
+  return currentIndex === itemCount - 1 ? 0 : currentIndex + 1;
 }
 
 interface ImageLightboxProps {
-  imageAlt: string
-  imageSrc: string | null
-  hasMultipleImages?: boolean
-  onClose: () => void
-  onNext?: () => void
-  onPrevious?: () => void
-  title: string
+  imageAlt: string;
+  imageSrc: string | null;
+  hasMultipleImages?: boolean;
+  onClose: () => void;
+  onNext?: () => void;
+  onPrevious?: () => void;
+  title: string;
 }
 
 export function ImageLightbox({
@@ -86,43 +91,44 @@ export function ImageLightbox({
   onPrevious,
   title,
 }: ImageLightboxProps) {
-  const hasNavigation = hasMultipleImages && onPrevious !== undefined && onNext !== undefined
+  const hasNavigation =
+    hasMultipleImages && onPrevious !== undefined && onNext !== undefined;
 
   useEffect(() => {
-    if (!imageSrc) return
+    if (!imageSrc) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       const action = getImageLightboxKeyAction({
         event,
         hasNavigation,
-      })
-      if (!action) return
+      });
+      if (!action) return;
 
       switch (action) {
         case "close":
-          event.preventDefault()
-          onClose()
-          return
+          event.preventDefault();
+          onClose();
+          return;
         case "previous":
-          if (!onPrevious) return
-          event.preventDefault()
-          onPrevious()
-          return
+          if (!onPrevious) return;
+          event.preventDefault();
+          onPrevious();
+          return;
         case "next":
-          if (!onNext) return
-          event.preventDefault()
-          onNext()
-          return
+          if (!onNext) return;
+          event.preventDefault();
+          onNext();
+          return;
         default:
-          return
+          return;
       }
-    }
+    };
 
-    window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [hasNavigation, imageSrc, onClose, onNext, onPrevious])
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [hasNavigation, imageSrc, onClose, onNext, onPrevious]);
 
-  if (!imageSrc) return null
+  if (!imageSrc) return null;
 
   return (
     <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
@@ -130,7 +136,7 @@ export function ImageLightbox({
         className="left-0 top-0 flex h-screen w-screen max-w-none translate-x-0 translate-y-0 items-center justify-center border-none bg-transparent p-0 shadow-none data-[state=closed]:slide-out-to-left-0 data-[state=closed]:slide-out-to-top-0 data-[state=open]:slide-in-from-left-0 data-[state=open]:slide-in-from-top-0 sm:rounded-none [&>button]:hidden"
         onClick={(event) => {
           if (event.target === event.currentTarget) {
-            onClose()
+            onClose();
           }
         }}
       >
@@ -179,5 +185,5 @@ export function ImageLightbox({
         </DialogClose>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

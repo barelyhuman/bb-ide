@@ -35,7 +35,10 @@ export function TerminalOutputBlock({
 
   return (
     <div
-      className={cn("overflow-hidden rounded-lg border border-border bg-card", className)}
+      className={cn(
+        "overflow-hidden rounded-lg border border-border bg-card",
+        className,
+      )}
     >
       <div className="px-4 py-3 font-mono text-xs leading-tight text-foreground">
         {command ? (
@@ -43,7 +46,10 @@ export function TerminalOutputBlock({
             fullText={`$ ${command}`}
             collapsedClassName="overflow-hidden whitespace-pre-wrap break-words max-h-[2lh]"
             collapsedStyle={COMMAND_LINE_CLAMP_STYLE}
-            expandedClassName={cn("whitespace-pre-wrap break-words overflow-auto", EVENT_DETAIL_MAX_HEIGHT_CLASS)}
+            expandedClassName={cn(
+              "whitespace-pre-wrap break-words overflow-auto",
+              EVENT_DETAIL_MAX_HEIGHT_CLASS,
+            )}
           >
             $ {command}
           </ExpandableLine>
@@ -51,10 +57,13 @@ export function TerminalOutputBlock({
         <pre
           ref={outputRef}
           onScroll={handleOutputScroll}
-          className={cn(command && "mt-1.5", maxHeightClassName, "overflow-auto whitespace-pre leading-tight text-foreground")}
+          className={cn(
+            command && "mt-1.5",
+            maxHeightClassName,
+            "overflow-auto whitespace-pre leading-tight text-foreground",
+          )}
           dangerouslySetInnerHTML={{ __html: renderedOutput }}
-        >
-        </pre>
+        ></pre>
       </div>
     </div>
   );

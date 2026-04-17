@@ -97,10 +97,7 @@ interface BlobStorage {
     sizeBytes: number;
   }>;
 
-  get(args: {
-    key: string;
-    range?: { start: number; end?: number };
-  }): Promise<{
+  get(args: { key: string; range?: { start: number; end?: number } }): Promise<{
     body: Uint8Array;
     contentType?: string;
     cacheControl?: string;
@@ -109,9 +106,7 @@ interface BlobStorage {
     etag?: string;
   } | null>;
 
-  head(args: {
-    key: string;
-  }): Promise<{
+  head(args: { key: string }): Promise<{
     contentType?: string;
     cacheControl?: string;
     metadata: Record<string, string>;
@@ -119,9 +114,7 @@ interface BlobStorage {
     etag?: string;
   } | null>;
 
-  delete(args: {
-    key: string;
-  }): Promise<void>;
+  delete(args: { key: string }): Promise<void>;
 }
 ```
 
@@ -129,10 +122,7 @@ Optional, but likely useful:
 
 ```ts
 interface BlobUrlSigner {
-  signGet(args: {
-    key: string;
-    expiresInSeconds: number;
-  }): Promise<string>;
+  signGet(args: { key: string; expiresInSeconds: number }): Promise<string>;
 }
 ```
 
@@ -190,6 +180,7 @@ If that package happens later, it should sit above `@bb/blob-storage`, not repla
    - If no caller needs it, delete it end to end instead of keeping parallel read surfaces around.
 
 Exit condition:
+
 - no product code depends on `workspace.read_file`
 
 ### Phase 1: Introduce `@bb/blob-storage`
@@ -201,6 +192,7 @@ Exit condition:
 5. Add implementation-agnostic contract tests
 
 Exit condition:
+
 - the repo has a storage package whose public API is provider-neutral and does not mention attachments or thread storage
 
 ### Phase 2: Move attachments onto `@bb/blob-storage`
@@ -211,6 +203,7 @@ Exit condition:
 4. Preserve the current attachment upload/read routes while swapping route internals
 
 Exit condition:
+
 - attachments can be stored either locally or in object storage without route changes
 
 ### Phase 3: Introduce a published thread-storage read model
@@ -222,11 +215,13 @@ Exit condition:
 5. Treat the published snapshot as the read path for `files` and `content`
 
 Preferred behavior:
+
 - the writing agent keeps writing to disk exactly as it does today
 - publication happens on turn completion and/or explicit file change events
 - user-facing list/read routes serve the latest completed snapshot
 
 Exit condition:
+
 - thread storage list/read routes no longer require the host to be online for previously-published content
 
 ### Phase 4: Publish thread storage snapshots into object storage
@@ -237,9 +232,11 @@ Exit condition:
 4. Decide whether file content routes should proxy bytes or redirect to signed object URLs
 
 Open question:
+
 - persist manifests in DB rows, object storage, or both
 
 Exit condition:
+
 - thread storage reads come from published storage, not live host reads
 
 ### Phase 5: Dispatch project file listing by source type
@@ -251,6 +248,7 @@ Exit condition:
 5. Preserve the same response shape for prompt-composer consumers
 
 Exit condition:
+
 - `/projects/:id/files` works for both `local_path` and `github_repo` project sources
 
 ### Phase 6: Move to metadata-first preview ergonomics
@@ -265,6 +263,7 @@ Exit condition:
 4. Consider partial text preview support for larger text files
 
 Exit condition:
+
 - consumers do not need to download arbitrary binary content just to decide whether preview is possible
 
 ## Public API Direction

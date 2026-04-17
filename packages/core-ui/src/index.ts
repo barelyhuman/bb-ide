@@ -1,8 +1,6 @@
 export { assertNever } from "./assert-never.js";
 
-export {
-  formatEnvironmentDisplay,
-} from "./environment-display.js";
+export { formatEnvironmentDisplay } from "./environment-display.js";
 export type { EnvironmentDisplayInfo } from "./environment-display.js";
 
 export {
@@ -20,9 +18,7 @@ export {
   summarizePendingInteractionRequestedPermissions,
   toGrantedPendingInteractionPermissions,
 } from "./pending-interaction-formatting.js";
-export {
-  formatPendingInteractionSummary,
-} from "./pending-interaction-presentation.js";
+export { formatPendingInteractionSummary } from "./pending-interaction-presentation.js";
 export type {
   FormatPendingInteractionSummaryArgs,
   PendingInteractionPresentationSurface,
@@ -69,12 +65,8 @@ export { extractThreadContextWindowUsage } from "./thread-context-window-usage.j
 export { mergeProvisioningOperations } from "./provisioning-helpers.js";
 export { extractActiveThinking } from "./active-thinking.js";
 
-export {
-  buildTimelineRows,
-} from "./thread-detail-rows.js";
-export type {
-  BuildTimelineRowsOptions,
-} from "./thread-detail-rows.js";
+export { buildTimelineRows } from "./thread-detail-rows.js";
+export type { BuildTimelineRowsOptions } from "./thread-detail-rows.js";
 export {
   flattenProjectionMessages,
   flattenProjectionMessagesDeep,
@@ -87,7 +79,4 @@ export type { EventMeta } from "./event-decode.js";
 export { toViewMessages, toViewProjection } from "./to-view-messages.js";
 export type { ThreadEventWithMeta } from "./to-view-messages.js";
 
-export {
-  extractErrorMessage,
-  toRecord,
-} from "./unknown-helpers.js";
+export { extractErrorMessage, toRecord } from "./unknown-helpers.js";

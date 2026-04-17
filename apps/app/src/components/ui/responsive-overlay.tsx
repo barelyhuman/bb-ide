@@ -1,17 +1,17 @@
-import * as React from "react"
-import { Slot } from "@radix-ui/react-slot"
+import * as React from "react";
+import { Slot } from "@radix-ui/react-slot";
 
-import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer"
-import { useIsMobile } from "@/hooks/useMobile"
+import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
+import { useIsMobile } from "@/hooks/useMobile";
 
 // ---------------------------------------------------------------------------
 // Shared context value for responsive overlays (dropdown menus, popovers)
 // ---------------------------------------------------------------------------
 
 export interface ResponsiveOverlayContextValue {
-  isMobile: boolean
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  isMobile: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -23,25 +23,25 @@ export function useResponsiveRoot(
   controlledOpen: boolean | undefined,
   controlledOnChange: ((open: boolean) => void) | undefined,
 ): ResponsiveOverlayContextValue {
-  const isMobile = useIsMobile()
-  const [internalOpen, setInternalOpen] = React.useState(false)
-  const isControlled = controlledOpen !== undefined
-  const open = isControlled ? controlledOpen : internalOpen
+  const isMobile = useIsMobile();
+  const [internalOpen, setInternalOpen] = React.useState(false);
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
 
   const onOpenChange = React.useCallback(
     (next: boolean) => {
       if (!isControlled) {
-        setInternalOpen(next)
+        setInternalOpen(next);
       }
-      controlledOnChange?.(next)
+      controlledOnChange?.(next);
     },
     [isControlled, controlledOnChange],
-  )
+  );
 
   return React.useMemo(
     () => ({ isMobile, open, onOpenChange }),
     [isMobile, open, onOpenChange],
-  )
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -51,46 +51,61 @@ export function useResponsiveRoot(
 // ---------------------------------------------------------------------------
 
 interface MobileTriggerProps {
-  asChild?: boolean
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  haspopup: "menu" | "dialog"
-  children: React.ReactNode
-  onClick?: React.MouseEventHandler<HTMLButtonElement>
+  asChild?: boolean;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  haspopup: "menu" | "dialog";
+  children: React.ReactNode;
+  onClick?: React.MouseEventHandler<HTMLButtonElement>;
 }
 
 export const MobileTrigger = React.forwardRef<
   HTMLButtonElement,
-  MobileTriggerProps & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, keyof MobileTriggerProps>
->(({ asChild, open, onOpenChange, haspopup, onClick, children, ...domProps }, ref) => {
-  const handleClick: React.MouseEventHandler<HTMLButtonElement> = (e) => {
-    onClick?.(e)
-    if (!e.defaultPrevented) {
-      onOpenChange(!open)
+  MobileTriggerProps &
+    Omit<
+      React.ButtonHTMLAttributes<HTMLButtonElement>,
+      keyof MobileTriggerProps
+    >
+>(
+  (
+    { asChild, open, onOpenChange, haspopup, onClick, children, ...domProps },
+    ref,
+  ) => {
+    const handleClick: React.MouseEventHandler<HTMLButtonElement> = (e) => {
+      onClick?.(e);
+      if (!e.defaultPrevented) {
+        onOpenChange(!open);
+      }
+    };
+
+    const ariaProps = {
+      "aria-expanded": open,
+      "aria-haspopup": haspopup,
+      "data-state": open ? "open" : "closed",
+    } as const;
+
+    if (asChild) {
+      return (
+        <Slot ref={ref} onClick={handleClick} {...ariaProps} {...domProps}>
+          {children}
+        </Slot>
+      );
     }
-  }
 
-  const ariaProps = {
-    "aria-expanded": open,
-    "aria-haspopup": haspopup,
-    "data-state": open ? "open" : "closed",
-  } as const
-
-  if (asChild) {
     return (
-      <Slot ref={ref} onClick={handleClick} {...ariaProps} {...domProps}>
+      <button
+        ref={ref}
+        type="button"
+        onClick={handleClick}
+        {...ariaProps}
+        {...domProps}
+      >
         {children}
-      </Slot>
-    )
-  }
-
-  return (
-    <button ref={ref} type="button" onClick={handleClick} {...ariaProps} {...domProps}>
-      {children}
-    </button>
-  )
-})
-MobileTrigger.displayName = "MobileTrigger"
+      </button>
+    );
+  },
+);
+MobileTrigger.displayName = "MobileTrigger";
 
 // ---------------------------------------------------------------------------
 // stripRadixContentProps: removes Radix positioning/behavior props from a
@@ -115,22 +130,24 @@ const RADIX_CONTENT_PROP_NAMES = [
   "onPointerDownOutside",
   "onFocusOutside",
   "onInteractOutside",
-] as const
+] as const;
 
-type RadixContentPropName = (typeof RADIX_CONTENT_PROP_NAMES)[number]
+type RadixContentPropName = (typeof RADIX_CONTENT_PROP_NAMES)[number];
 
-const RADIX_CONTENT_KEYS: ReadonlySet<string> = new Set(RADIX_CONTENT_PROP_NAMES)
+const RADIX_CONTENT_KEYS: ReadonlySet<string> = new Set(
+  RADIX_CONTENT_PROP_NAMES,
+);
 
 export function stripRadixContentProps<T extends Record<string, unknown>>(
   props: T,
 ): Omit<T, RadixContentPropName> {
-  const result = {} as Record<string, unknown>
+  const result = {} as Record<string, unknown>;
   for (const key of Object.keys(props)) {
     if (!RADIX_CONTENT_KEYS.has(key)) {
-      result[key] = props[key]
+      result[key] = props[key];
     }
   }
-  return result as Omit<T, RadixContentPropName>
+  return result as Omit<T, RadixContentPropName>;
 }
 
 // ---------------------------------------------------------------------------
@@ -142,16 +159,16 @@ export function stripRadixContentProps<T extends Record<string, unknown>>(
 // ---------------------------------------------------------------------------
 
 interface ResponsiveDrawerShellProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   /**
    * Sr-only label announced when the drawer opens. Omit if the caller
    * renders its own labeled heading inside children (e.g. DialogTitle).
    */
-  srLabel?: string
+  srLabel?: string;
   /** Class name on the DrawerContent wrapper. */
-  contentClassName?: string
-  children: React.ReactNode
+  contentClassName?: string;
+  children: React.ReactNode;
 }
 
 export function ResponsiveDrawerShell({
@@ -170,5 +187,5 @@ export function ResponsiveDrawerShell({
         {children}
       </DrawerContent>
     </Drawer>
-  )
+  );
 }

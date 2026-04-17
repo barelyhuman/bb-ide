@@ -141,49 +141,65 @@ const coverageFixtureIdsSchema = z.object({
 });
 
 const coverageSummarySchema = z.object({
-  providers: z.array(z.object({
-    providerId: z.string(),
-    fixtureIds: z.array(z.string()),
-    wellKnownToolNames: z.array(z.string()),
-    rawEventKinds: z.array(coverageFixtureIdsSchema.extend({
-      kind: z.string(),
-      classification: rawEventCoverageSchema,
-      totalCount: z.number(),
-    })),
-    translatedEventTypes: z.array(coverageFixtureIdsSchema.extend({
-      type: providerAuditThreadEventTypeSchema,
-    })),
-    observedToolCalls: z.array(coverageFixtureIdsSchema.extend({
-      key: z.string(),
-      displayName: z.string(),
-      coverage: observedToolCallCoverageSchema,
-      totalCount: z.number(),
-    })),
-  })),
+  providers: z.array(
+    z.object({
+      providerId: z.string(),
+      fixtureIds: z.array(z.string()),
+      wellKnownToolNames: z.array(z.string()),
+      rawEventKinds: z.array(
+        coverageFixtureIdsSchema.extend({
+          kind: z.string(),
+          classification: rawEventCoverageSchema,
+          totalCount: z.number(),
+        }),
+      ),
+      translatedEventTypes: z.array(
+        coverageFixtureIdsSchema.extend({
+          type: providerAuditThreadEventTypeSchema,
+        }),
+      ),
+      observedToolCalls: z.array(
+        coverageFixtureIdsSchema.extend({
+          key: z.string(),
+          displayName: z.string(),
+          coverage: observedToolCallCoverageSchema,
+          totalCount: z.number(),
+        }),
+      ),
+    }),
+  ),
 }) satisfies z.ZodType<ProviderAuditFixtureCoverageSummary>;
 
 const coverageIssuesSchema = z.object({
-  unexpectedUntranslatedFixtures: z.array(z.object({
-    fixtureId: z.string(),
-    unexpectedUntranslatedRawEventCount: z.number(),
-  })),
-  providersWithUnhandledEvents: z.array(z.object({
-    providerId: z.string(),
-    fixtureIds: z.array(z.string()),
-  })),
-  unknownRawEventKinds: z.array(z.object({
-    providerId: z.string(),
-    kind: z.string(),
-    totalCount: z.number(),
-    fixtureIds: z.array(z.string()),
-  })),
-  unknownObservedToolCalls: z.array(z.object({
-    providerId: z.string(),
-    key: z.string(),
-    displayName: z.string(),
-    totalCount: z.number(),
-    fixtureIds: z.array(z.string()),
-  })),
+  unexpectedUntranslatedFixtures: z.array(
+    z.object({
+      fixtureId: z.string(),
+      unexpectedUntranslatedRawEventCount: z.number(),
+    }),
+  ),
+  providersWithUnhandledEvents: z.array(
+    z.object({
+      providerId: z.string(),
+      fixtureIds: z.array(z.string()),
+    }),
+  ),
+  unknownRawEventKinds: z.array(
+    z.object({
+      providerId: z.string(),
+      kind: z.string(),
+      totalCount: z.number(),
+      fixtureIds: z.array(z.string()),
+    }),
+  ),
+  unknownObservedToolCalls: z.array(
+    z.object({
+      providerId: z.string(),
+      key: z.string(),
+      displayName: z.string(),
+      totalCount: z.number(),
+      fixtureIds: z.array(z.string()),
+    }),
+  ),
 }) satisfies z.ZodType<ProviderAuditCoverageIssues>;
 
 const contextWindowUsageSchema = z.object({
@@ -193,53 +209,63 @@ const contextWindowUsageSchema = z.object({
 });
 
 const replayBuildArtifactSchema = z.object({
-  contextWindowSnapshots: z.array(z.object({
-    contextWindowUsage: contextWindowUsageSchema.nullable(),
-    fixture: z.string(),
-    providerId: z.string(),
-    tokenUsageSummary: z.object({
-      distinctModelContextWindows: z.array(z.number()),
-      nonNullModelContextWindowCount: z.number(),
-      tokenUsageEventCount: z.number(),
+  contextWindowSnapshots: z.array(
+    z.object({
+      contextWindowUsage: contextWindowUsageSchema.nullable(),
+      fixture: z.string(),
+      providerId: z.string(),
+      tokenUsageSummary: z.object({
+        distinctModelContextWindows: z.array(z.number()),
+        nonNullModelContextWindowCount: z.number(),
+        tokenUsageEventCount: z.number(),
+      }),
     }),
-  })),
+  ),
   coverageIssues: coverageIssuesSchema,
   coverageSummary: coverageSummarySchema,
-  delegationSnapshots: z.array(z.object({
-    childMessageCount: z.number(),
-    fixture: z.string(),
-    hasChildToolActivity: z.boolean(),
-  })),
+  delegationSnapshots: z.array(
+    z.object({
+      childMessageCount: z.number(),
+      fixture: z.string(),
+      hasChildToolActivity: z.boolean(),
+    }),
+  ),
   fixtureCount: z.number(),
   ladleStoryData: z.object({
-    fixtures: z.array(z.object({
-      id: z.string(),
-      corpusId: z.string(),
-      providerId: z.string(),
-      taskId: z.string(),
-      scenarioDescription: z.string(),
-      threadStatus: z.string(),
-      latestActivityRowId: z.string().nullable(),
-      timelineRowCount: z.number(),
-      viewMessageCount: z.number(),
-      timelineRows: z.array(timelineRowSchema),
-    })),
+    fixtures: z.array(
+      z.object({
+        id: z.string(),
+        corpusId: z.string(),
+        providerId: z.string(),
+        taskId: z.string(),
+        scenarioDescription: z.string(),
+        threadStatus: z.string(),
+        latestActivityRowId: z.string().nullable(),
+        timelineRowCount: z.number(),
+        viewMessageCount: z.number(),
+        timelineRows: z.array(timelineRowSchema),
+      }),
+    ),
   }),
-  summaries: z.array(z.object({
-    debugRawEventCount: z.number(),
-    fixture: z.string(),
-    rawProviderEventCount: z.number(),
-    timelinePreview: z.array(z.string()),
-    timelineRowCount: z.number(),
-    translatedThreadEventCount: z.number(),
-    unexpectedUntranslatedRawEventCount: z.number(),
-    viewMessageCount: z.number(),
-    viewMessageKinds: z.record(z.string(), z.number()),
-  })),
-  verboseTimelines: z.array(z.object({
-    fixture: z.string(),
-    text: z.string(),
-  })),
+  summaries: z.array(
+    z.object({
+      debugRawEventCount: z.number(),
+      fixture: z.string(),
+      rawProviderEventCount: z.number(),
+      timelinePreview: z.array(z.string()),
+      timelineRowCount: z.number(),
+      translatedThreadEventCount: z.number(),
+      unexpectedUntranslatedRawEventCount: z.number(),
+      viewMessageCount: z.number(),
+      viewMessageKinds: z.record(z.string(), z.number()),
+    }),
+  ),
+  verboseTimelines: z.array(
+    z.object({
+      fixture: z.string(),
+      text: z.string(),
+    }),
+  ),
 }) satisfies z.ZodType<ProviderAuditReplayBuildArtifact>;
 
 function toFixtureId(
@@ -256,9 +282,7 @@ function countMessageKinds(messages: ViewMessage[]): Record<string, number> {
 }
 
 function buildTimelinePreview(text: string): string[] {
-  return text
-    .split("\n")
-    .filter((line) => line.trim().length > 0);
+  return text.split("\n").filter((line) => line.trim().length > 0);
 }
 
 function trimTrailingWhitespace(text: string): string {

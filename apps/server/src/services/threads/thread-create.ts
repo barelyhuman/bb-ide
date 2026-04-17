@@ -4,19 +4,13 @@ import {
   findEnvironmentByHostPath,
 } from "@bb/db";
 import { applyProvisionedEnvironmentRecord } from "@bb/db/internal-lifecycle";
-import type {
-  Environment,
-} from "@bb/domain";
+import type { Environment } from "@bb/domain";
 import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
-import {
-  waitForQueuedCommandResult,
-} from "../hosts/command-wait.js";
+import { waitForQueuedCommandResult } from "../hosts/command-wait.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
-import {
-  requireNonDestroyedHostWithStatus,
-} from "../lib/entity-lookup.js";
+import { requireNonDestroyedHostWithStatus } from "../lib/entity-lookup.js";
 import { requireReachableExternalServerUrl } from "../hosts/external-server-url.js";
 import { assertSandboxProvisioningConfig } from "../hosts/sandbox-backends.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
@@ -35,12 +29,8 @@ import {
   advanceEnvironmentProvisioning,
   requestEnvironmentProvision,
 } from "../environments/environment-provisioning.js";
-import {
-  buildDirectEnvironmentProvisionRequest,
-} from "../environments/environment-provision-request.js";
-import {
-  resolveStableThreadRequestEnvironment,
-} from "./thread-request-eligibility.js";
+import { buildDirectEnvironmentProvisionRequest } from "../environments/environment-provision-request.js";
+import { resolveStableThreadRequestEnvironment } from "./thread-request-eligibility.js";
 import {
   type ThreadCreateServiceRequestInput,
   type ThreadCreateServiceRequest,
@@ -72,7 +62,9 @@ interface ReuseEnvironmentIntentByHostPathArgs {
 
 interface CreateProvisioningThreadArgs {
   environmentId: string | null;
-  executionDefaults: Parameters<typeof buildExecutionOptions>[2]["projectDefaults"];
+  executionDefaults: Parameters<
+    typeof buildExecutionOptions
+  >[2]["projectDefaults"];
   request: ThreadCreateServiceRequest;
 }
 
@@ -147,7 +139,9 @@ async function createProvisioningThread(
       deps,
       args.request,
       {
-        ...(args.executionDefaults ? { projectDefaults: args.executionDefaults } : {}),
+        ...(args.executionDefaults
+          ? { projectDefaults: args.executionDefaults }
+          : {}),
         threadId: thread.id,
       },
       "client/turn/requested",
@@ -176,16 +170,14 @@ export async function createThreadFromRequest(
   requestInput: ThreadCreateServiceRequestInput,
 ) {
   requireProjectExists(deps, requestInput.projectId);
-  const { executionDefaults, providerId } = resolveProjectExecutionDefaultsForCreate(
-    deps,
-    {
+  const { executionDefaults, providerId } =
+    resolveProjectExecutionDefaultsForCreate(deps, {
       model: requestInput.model,
       origin: requestInput.origin,
       projectId: requestInput.projectId,
       providerId: requestInput.providerId,
       threadType: requestInput.type,
-    },
-  );
+    });
   const request: ThreadCreateServiceRequest = {
     ...requestInput,
     providerId,
@@ -214,7 +206,10 @@ export async function createThreadFromRequest(
     }
     case "reuse": {
       const environment = resolvedEnvironment.environment;
-      if (environment.status !== "ready" && environment.status !== "provisioning") {
+      if (
+        environment.status !== "ready" &&
+        environment.status !== "provisioning"
+      ) {
         throw new ApiError(409, "invalid_request", "Environment is not ready");
       }
       if (environment.status === "ready" && !environment.path) {
@@ -235,7 +230,9 @@ export async function createThreadFromRequest(
       const workspace = resolvedEnvironment.workspace;
       if (workspace.type === "unmanaged") {
         if (resolvedEnvironment.unmanagedPath === null) {
-          throw new Error("Validated unmanaged host request is missing a workspace path");
+          throw new Error(
+            "Validated unmanaged host request is missing a workspace path",
+          );
         }
         const reuseIntent = reuseEnvironmentIntentByHostPath(deps, {
           hostId,
@@ -255,7 +252,9 @@ export async function createThreadFromRequest(
 
       const managedSource = resolvedEnvironment.localSource;
       if (!managedSource) {
-        throw new Error("Validated managed host request is missing a local source");
+        throw new Error(
+          "Validated managed host request is missing a local source",
+        );
       }
       environmentIntent = {
         type: "direct-managed",
@@ -295,13 +294,15 @@ export async function ensureProjectSourceEnvironment(
     return existing;
   }
 
-  const environment = existing ?? createEnvironment(deps.db, deps.hub, {
-    projectId: args.projectId,
-    hostId: args.hostId,
-    managed: false,
-    workspaceProvisionType: "unmanaged",
-    status: "provisioning",
-  });
+  const environment =
+    existing ??
+    createEnvironment(deps.db, deps.hub, {
+      projectId: args.projectId,
+      hostId: args.hostId,
+      managed: false,
+      workspaceProvisionType: "unmanaged",
+      status: "provisioning",
+    });
 
   await ensureHostSessionReadyForWork(deps, {
     hostId: args.hostId,
@@ -332,16 +333,24 @@ export async function ensureProjectSourceEnvironment(
     commandId,
     timeoutMs: COMMAND_TIMEOUT_MS,
   });
-  const result = hostDaemonCommandResultSchemaByType["environment.provision"].parse(rawResult);
+  const result =
+    hostDaemonCommandResultSchemaByType["environment.provision"].parse(
+      rawResult,
+    );
 
-  const updated = applyProvisionedEnvironmentRecord(deps.db, deps.hub, environment.id, {
-    path: result.path,
-    status: "ready",
-    isGitRepo: result.isGitRepo,
-    isWorktree: result.isWorktree,
-    branchName: result.branchName,
-    defaultBranch: result.defaultBranch,
-  });
+  const updated = applyProvisionedEnvironmentRecord(
+    deps.db,
+    deps.hub,
+    environment.id,
+    {
+      path: result.path,
+      status: "ready",
+      isGitRepo: result.isGitRepo,
+      isWorktree: result.isWorktree,
+      branchName: result.branchName,
+      defaultBranch: result.defaultBranch,
+    },
+  );
   if (!updated) {
     throw new ApiError(500, "internal_error", "Failed to update environment");
   }

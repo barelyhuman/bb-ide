@@ -14,9 +14,13 @@ afterEach(() => {
 
 describe("script helpers", () => {
   it("fails health checks immediately when the child exits by signal", async () => {
-    const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 10_000)"], {
-      stdio: "ignore",
-    });
+    const child = spawn(
+      process.execPath,
+      ["-e", "setTimeout(() => {}, 10_000)"],
+      {
+        stdio: "ignore",
+      },
+    );
     spawnedChildren.push(child);
 
     child.kill("SIGTERM");

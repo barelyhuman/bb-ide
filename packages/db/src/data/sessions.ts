@@ -59,7 +59,8 @@ export function openSession(
 
   const leaseExpiresAt = now + input.leaseTimeoutMs;
 
-  const row = db.insert(hostDaemonSessions)
+  const row = db
+    .insert(hostDaemonSessions)
     .values({
       id,
       hostId: input.hostId,
@@ -102,7 +103,8 @@ export function closeSession(
   }
 
   const now = Date.now();
-  const updated = db.update(hostDaemonSessions)
+  const updated = db
+    .update(hostDaemonSessions)
     .set({
       status: "closed",
       closedAt: now,
@@ -207,7 +209,9 @@ export function getMostRecentlyUpdatedConnectedHostId(
       and(
         eq(hostDaemonSessions.status, "active"),
         gt(hostDaemonSessions.leaseExpiresAt, Date.now()),
-        args.hostType ? eq(hostDaemonSessions.hostType, args.hostType) : undefined,
+        args.hostType
+          ? eq(hostDaemonSessions.hostType, args.hostType)
+          : undefined,
       ),
     )
     .orderBy(desc(hostDaemonSessions.updatedAt))
@@ -223,13 +227,16 @@ export function heartbeatSession(
   leaseExpiresAt: number,
 ) {
   const now = Date.now();
-  return db.update(hostDaemonSessions)
-    .set({
-      lastHeartbeatAt: now,
-      leaseExpiresAt,
-      updatedAt: now,
-    })
-    .where(eq(hostDaemonSessions.id, sessionId))
-    .returning()
-    .get() ?? null;
+  return (
+    db
+      .update(hostDaemonSessions)
+      .set({
+        lastHeartbeatAt: now,
+        leaseExpiresAt,
+        updatedAt: now,
+      })
+      .where(eq(hostDaemonSessions.id, sessionId))
+      .returning()
+      .get() ?? null
+  );
 }

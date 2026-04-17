@@ -19,9 +19,8 @@ function sanitizeFilename(name: string): string {
 function buildStoredFilename(originalName: string): string {
   const sanitized = sanitizeFilename(originalName);
   const extension = extname(sanitized);
-  const stem = extension.length > 0
-    ? sanitized.slice(0, -extension.length)
-    : sanitized;
+  const stem =
+    extension.length > 0 ? sanitized.slice(0, -extension.length) : sanitized;
   return `${stem}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}${extension}`;
 }
 
@@ -35,7 +34,10 @@ function resolveAttachmentPath(
 ): string {
   const normalizedRelativePath = normalize(relativePath.replaceAll("\\", "/"));
   const resolvedAttachmentDir = resolve(attachmentDir);
-  const resolvedCandidatePath = resolve(resolvedAttachmentDir, normalizedRelativePath);
+  const resolvedCandidatePath = resolve(
+    resolvedAttachmentDir,
+    normalizedRelativePath,
+  );
 
   if (resolvedCandidatePath === resolvedAttachmentDir) {
     throw new ApiError(
@@ -54,7 +56,11 @@ function resolveAttachmentPath(
     return resolvedPath;
   }
 
-  throw new ApiError(400, "invalid_request", "Attachment path escapes project directory");
+  throw new ApiError(
+    400,
+    "invalid_request",
+    "Attachment path escapes project directory",
+  );
 }
 
 export async function storeAttachment(

@@ -81,7 +81,9 @@ export function upsertFileEdit(
       createdAt: meta.createdAt,
       startedAt: meta.createdAt,
       ...(turnId ? { turnId } : {}),
-      ...(partial.parentToolCallId ? { parentToolCallId: partial.parentToolCallId } : {}),
+      ...(partial.parentToolCallId
+        ? { parentToolCallId: partial.parentToolCallId }
+        : {}),
       callId: partial.callId,
       changes: partial.changes ?? [],
       stdout: partial.stdout,
@@ -126,7 +128,10 @@ export function upsertFileEdit(
   if (partial.status) {
     if (partial.status === "error") {
       existing.status = "error";
-    } else if (existing.status === "pending" || existing.status === "interrupted") {
+    } else if (
+      existing.status === "pending" ||
+      existing.status === "interrupted"
+    ) {
       existing.status = partial.status;
     } else if (existing.status !== "error" && partial.status === "completed") {
       existing.status = "completed";
@@ -219,19 +224,17 @@ export function finalizeOpenCompactionsForTurn(
   if (!args.turnId) return;
 
   for (const [key, message] of args.state.openCompactionsByKey) {
-    if (
-      message.threadId !== args.threadId ||
-      message.turnId !== args.turnId
-    ) {
+    if (message.threadId !== args.threadId || message.turnId !== args.turnId) {
       continue;
     }
 
     message.sourceSeqEnd = Math.max(message.sourceSeqEnd, args.meta.seq);
     message.createdAt = Math.max(message.createdAt, args.meta.createdAt);
     message.status = args.status;
-    message.title = args.status === "error"
-      ? "Context compaction failed"
-      : "Context compaction interrupted";
+    message.title =
+      args.status === "error"
+        ? "Context compaction failed"
+        : "Context compaction interrupted";
     message.detail = args.detail ?? message.detail;
     args.state.openCompactionsByKey.delete(key);
     args.state.finalizedCompactionKeys.add(key);

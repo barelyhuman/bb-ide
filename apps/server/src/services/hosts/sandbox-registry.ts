@@ -33,7 +33,11 @@ export function createSandboxHostRegistry(): SandboxHostRegistry {
     }
   }
 
-  function touchHost(hostId: string, host: SandboxHost, now: number): SandboxHost {
+  function touchHost(
+    hostId: string,
+    host: SandboxHost,
+    now: number,
+  ): SandboxHost {
     hosts.set(hostId, { host, lastTouchedAt: now });
     return host;
   }

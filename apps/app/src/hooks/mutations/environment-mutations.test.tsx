@@ -60,9 +60,9 @@ describe("useUpdateEnvironment", () => {
       });
     });
 
-    expect(queryClient.getQueryData(environmentQueryKey(environment.id))).toEqual(
-      environment,
-    );
+    expect(
+      queryClient.getQueryData(environmentQueryKey(environment.id)),
+    ).toEqual(environment);
     expect(invalidateQueries).toHaveBeenCalledWith({
       queryKey: environmentWorkStatusQueryKeyPrefix(environment.id),
     });

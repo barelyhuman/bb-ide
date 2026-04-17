@@ -8,16 +8,20 @@ const JSON_RPC_VERSION = "2.0" as const;
 
 const providerAuditJsonRpcParamsSchema = z.record(z.string(), z.unknown());
 
-const providerAuditJsonRpcEnvelopeSchema = z.object({
-  jsonrpc: z.literal(JSON_RPC_VERSION),
-  method: z.string(),
-  params: providerAuditJsonRpcParamsSchema.optional(),
-}).passthrough();
+const providerAuditJsonRpcEnvelopeSchema = z
+  .object({
+    jsonrpc: z.literal(JSON_RPC_VERSION),
+    method: z.string(),
+    params: providerAuditJsonRpcParamsSchema.optional(),
+  })
+  .passthrough();
 
-const providerAuditBridgeEnvelopeSchema = z.object({
-  method: z.string(),
-  params: providerAuditJsonRpcParamsSchema.optional(),
-}).passthrough();
+const providerAuditBridgeEnvelopeSchema = z
+  .object({
+    method: z.string(),
+    params: providerAuditJsonRpcParamsSchema.optional(),
+  })
+  .passthrough();
 
 export const providerAuditRawEventSchema = z.union([
   providerAuditJsonRpcEnvelopeSchema,
@@ -56,7 +60,9 @@ export const providerAuditManifestSchema = z.object({
 });
 
 const CLIENT_TURN_REQUESTED_TYPE = "client/turn/requested";
-const THREAD_START_TARGET = { kind: "thread-start" } satisfies TurnRequestTarget;
+const THREAD_START_TARGET = {
+  kind: "thread-start",
+} satisfies TurnRequestTarget;
 const NEW_TURN_TARGET = { kind: "new-turn" } satisfies TurnRequestTarget;
 
 const providerAuditClientRequestFileSchema = z.object({

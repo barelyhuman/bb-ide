@@ -25,15 +25,17 @@ describe.sequential("fake provider offline queue recovery integration", () => {
   it("drains queued work that was inserted while the daemon was offline", () =>
     withHarness(async (harness) => {
       const { environment, projectName, projectRootPath, thread } =
-        await createRecoveryThread(
-          harness,
-          "Queued Work Recovery",
-        );
+        await createRecoveryThread(harness, "Queued Work Recovery");
 
       await sendTextMessage(harness.api, thread.id, {
         text: "queued baseline",
       });
-      await waitForThreadStatus(harness.api, thread.id, "idle", TURN_TIMEOUT_MS);
+      await waitForThreadStatus(
+        harness.api,
+        thread.id,
+        "idle",
+        TURN_TIMEOUT_MS,
+      );
 
       await harness.crashDaemon();
       await waitForHostDisconnected(
@@ -43,9 +45,14 @@ describe.sequential("fake provider offline queue recovery integration", () => {
       );
 
       const eventsBefore = await getThreadEvents(harness.api, thread.id);
-      const providerThreadId = readLatestProviderThreadId(harness.db, thread.id);
+      const providerThreadId = readLatestProviderThreadId(
+        harness.db,
+        thread.id,
+      );
       if (!providerThreadId || !environment.path) {
-        throw new Error("Expected queued recovery turn to have provider context");
+        throw new Error(
+          "Expected queued recovery turn to have provider context",
+        );
       }
       const queuedTurnSubmitCommand = hostDaemonCommandSchema.parse({
         type: "turn.submit",

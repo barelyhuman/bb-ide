@@ -45,7 +45,10 @@ import type {
 } from "./types.js";
 
 function emitProgress(
-  callbacks: ProvisionHostOptions["progressCallbacks"] | ResumeHostOptions["progressCallbacks"] | undefined,
+  callbacks:
+    | ProvisionHostOptions["progressCallbacks"]
+    | ResumeHostOptions["progressCallbacks"]
+    | undefined,
   event: {
     externalId?: string;
     stage: "host" | "daemon-start";
@@ -59,7 +62,9 @@ function buildSandboxOptions(options: CreateSandboxOptions): SandboxOpts {
   return {
     ...(options.apiKey !== undefined ? { apiKey: options.apiKey } : {}),
     ...(options.envs !== undefined ? { envs: options.envs } : {}),
-    ...(options.lifecycle !== undefined ? { lifecycle: options.lifecycle } : {}),
+    ...(options.lifecycle !== undefined
+      ? { lifecycle: options.lifecycle }
+      : {}),
     ...(options.requestTimeoutMs !== undefined
       ? { requestTimeoutMs: options.requestTimeoutMs }
       : {}),
@@ -73,10 +78,9 @@ export async function createSandbox(
   const sandboxOptions = buildSandboxOptions(options);
   const template = options.template ?? resolveSandboxImageTemplate();
 
-  return pRetry(
-    async () => Sandbox.create(template, sandboxOptions),
-    { retries: DEFAULT_SANDBOX_CREATE_RETRIES },
-  );
+  return pRetry(async () => Sandbox.create(template, sandboxOptions), {
+    retries: DEFAULT_SANDBOX_CREATE_RETRIES,
+  });
 }
 
 export async function writeSandboxFile(
@@ -185,15 +189,12 @@ async function formatDaemonHealthFailure(
 
 async function waitForDaemonHealth(sandbox: E2BSandbox): Promise<void> {
   try {
-    await pRetry(
-      async () => assertDaemonHealth(sandbox),
-      {
-        factor: 1,
-        maxTimeout: SANDBOX_DAEMON_HEALTH_RETRY_MS,
-        minTimeout: SANDBOX_DAEMON_HEALTH_RETRY_MS,
-        retries: SANDBOX_DAEMON_HEALTH_RETRIES,
-      },
-    );
+    await pRetry(async () => assertDaemonHealth(sandbox), {
+      factor: 1,
+      maxTimeout: SANDBOX_DAEMON_HEALTH_RETRY_MS,
+      minTimeout: SANDBOX_DAEMON_HEALTH_RETRY_MS,
+      retries: SANDBOX_DAEMON_HEALTH_RETRIES,
+    });
   } catch (error) {
     throw await formatDaemonHealthFailure(sandbox, error);
   }
@@ -233,7 +234,11 @@ async function startDaemonProcess(
     daemonFiles.map((daemonFile) =>
       pRetry(
         async () =>
-          writeSandboxFile(options.sandbox, daemonFile.path, daemonFile.content),
+          writeSandboxFile(
+            options.sandbox,
+            daemonFile.path,
+            daemonFile.content,
+          ),
         {
           factor: 1,
           maxTimeout: SANDBOX_DAEMON_FILE_WRITE_RETRY_MS,

@@ -47,10 +47,11 @@ const defaultBinaryAvailableDecisions: PendingInteractionApprovalDecision[] = [
   "deny",
 ];
 
-export const defaultGrantablePermissions: PendingInteractionGrantablePermissionProfile = {
-  network: null,
-  fileSystem: null,
-};
+export const defaultGrantablePermissions: PendingInteractionGrantablePermissionProfile =
+  {
+    network: null,
+    fileSystem: null,
+  };
 
 export function createCommandApprovalPayload(
   options: CommandApprovalPayloadOptions = {},
@@ -65,8 +66,11 @@ export function createCommandApprovalPayload(
       sessionGrant: options.sessionGrant ?? null,
     },
     reason: options.reason ?? "Needs approval",
-    availableDecisions: options.availableDecisions
-      ?? (options.sessionGrant ? defaultAvailableDecisions : defaultBinaryAvailableDecisions),
+    availableDecisions:
+      options.availableDecisions ??
+      (options.sessionGrant
+        ? defaultAvailableDecisions
+        : defaultBinaryAvailableDecisions),
   };
 }
 
@@ -81,8 +85,11 @@ export function createFileChangeApprovalPayload(
       sessionGrant: options.sessionGrant ?? null,
     },
     reason: options.reason ?? "Approve file edit",
-    availableDecisions: options.availableDecisions
-      ?? (options.sessionGrant ? defaultAvailableDecisions : defaultBinaryAvailableDecisions),
+    availableDecisions:
+      options.availableDecisions ??
+      (options.sessionGrant
+        ? defaultAvailableDecisions
+        : defaultBinaryAvailableDecisions),
   };
 }
 

@@ -1,8 +1,6 @@
 import type { ThreadEventRow } from "@bb/domain";
 import { expect } from "vitest";
-import {
-  getEnvironment,
-} from "../../helpers/api.js";
+import { getEnvironment } from "../../helpers/api.js";
 import {
   createProjectFixture as createProjectFixtureForHarness,
   createReadyHostThread,

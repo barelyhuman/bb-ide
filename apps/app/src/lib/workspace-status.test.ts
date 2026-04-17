@@ -58,16 +58,18 @@ describe("workspace-status", () => {
     expect(workspaceStatusDescription(makeStatus({ state: "untracked" }))).toBe(
       "Workspace has untracked files that have not been committed yet.",
     );
-    expect(getGitStatusDisplay(makeStatus({ changedFiles: 1, state: "untracked" }))).toEqual({
+    expect(
+      getGitStatusDisplay(makeStatus({ changedFiles: 1, state: "untracked" })),
+    ).toEqual({
       label: "Untracked",
       summary: "1 file",
     });
   });
 
   it("describes dirty workspaces with a short explanation", () => {
-    expect(workspaceStatusDescription(makeStatus({ state: "dirty_uncommitted" }))).toBe(
-      "You have local changes that have not been committed yet.",
-    );
+    expect(
+      workspaceStatusDescription(makeStatus({ state: "dirty_uncommitted" })),
+    ).toBe("You have local changes that have not been committed yet.");
   });
 
   it("describes synchronized clean workspaces as having no local changes", () => {
@@ -78,19 +80,21 @@ describe("workspace-status", () => {
 
   it("describes clean branches that are behind their merge base", () => {
     expect(
-      workspaceStatusDescription(makeStatus({ behindCount: 2, state: "clean" })),
-    ).toBe(
-      "No local file changes, but this branch is behind its merge base.",
-    );
+      workspaceStatusDescription(
+        makeStatus({ behindCount: 2, state: "clean" }),
+      ),
+    ).toBe("No local file changes, but this branch is behind its merge base.");
   });
 
   it("includes branch comparison in untracked status summaries", () => {
     expect(
-      workspaceStatusDescription(makeStatus({
-        behindCount: 2,
-        changedFiles: 1,
-        state: "untracked",
-      })),
+      workspaceStatusDescription(
+        makeStatus({
+          behindCount: 2,
+          changedFiles: 1,
+          state: "untracked",
+        }),
+      ),
     ).toBe(
       "Workspace has untracked files, and this branch is behind its merge base.",
     );
@@ -114,13 +118,10 @@ describe("workspace-status", () => {
 
   it("reports behind branches as an explicit git status display", () => {
     expect(
-      getGitStatusDisplay(
-        makeStatus({ behindCount: 3, state: "clean" }),
-        {
-          mergeBaseBranch: "main",
-          showBranchComparison: true,
-        },
-      ),
+      getGitStatusDisplay(makeStatus({ behindCount: 3, state: "clean" }), {
+        mergeBaseBranch: "main",
+        showBranchComparison: true,
+      }),
     ).toEqual({
       label: "Behind",
       summary: "3 behind main",

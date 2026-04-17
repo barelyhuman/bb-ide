@@ -36,7 +36,10 @@ import { waitForHostConnected } from "./assertions.js";
 import { removePathWithRetry } from "./remove-path.js";
 import { createTestGitRepo } from "./seed.js";
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const repoRoot = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../..",
+);
 const HARNESS_DAEMON_START_RETRY_DELAY_MS = 50;
 const HARNESS_DAEMON_START_MAX_ATTEMPTS = 2;
 const TEST_SERVER_HOST = "127.0.0.1";
@@ -84,7 +87,9 @@ export interface CreateHarnessOptions {
   adapterFactory?: ProviderAdapterFactory;
 }
 
-export type WithHarnessCallback<T> = (harness: IntegrationHarness) => Promise<T>;
+export type WithHarnessCallback<T> = (
+  harness: IntegrationHarness,
+) => Promise<T>;
 type WithHarnessInvocation<T> = CreateHarnessOptions | WithHarnessCallback<T>;
 
 interface HarnessDaemonResources {
@@ -108,9 +113,7 @@ function requireListeningAddress(
   return address;
 }
 
-function hasAdapterFactoryOverride(
-  options: CreateHarnessOptions,
-): boolean {
+function hasAdapterFactoryOverride(options: CreateHarnessOptions): boolean {
   return Object.prototype.hasOwnProperty.call(options, "adapterFactory");
 }
 
@@ -324,7 +327,11 @@ async function startHarnessDaemon(
       releaseLock,
       serverUrl: server.baseUrl,
     });
-    for (let attempt = 1; attempt <= HARNESS_DAEMON_START_MAX_ATTEMPTS; attempt += 1) {
+    for (
+      let attempt = 1;
+      attempt <= HARNESS_DAEMON_START_MAX_ATTEMPTS;
+      attempt += 1
+    ) {
       try {
         await daemonApp.daemon.start();
         break;
@@ -358,7 +365,11 @@ export async function createIntegrationHarness(
 ): Promise<IntegrationHarness> {
   await loadProjectEnvFile();
   const tmpRoot = await fs.mkdtemp(path.join(tmpdir(), "bb-integration-"));
-  await fs.writeFile(path.join(tmpRoot, "parent.pid"), `${process.pid}\n`, "utf8");
+  await fs.writeFile(
+    path.join(tmpRoot, "parent.pid"),
+    `${process.pid}\n`,
+    "utf8",
+  );
   const reposRoot = path.join(tmpRoot, "repos");
   const daemonDataDir = path.join(tmpRoot, "daemon-data");
   const repoDir = await createTestGitRepo({
@@ -381,19 +392,20 @@ export async function createIntegrationHarness(
       return;
     }
 
-    daemonResources = await startHarnessDaemon(
-      daemonDataDir,
-      server,
-      options,
-    );
+    daemonResources = await startHarnessDaemon(daemonDataDir, server, options);
     harness.daemon = daemonResources.daemon;
     harness.daemonApp = daemonResources.daemonApp;
     harness.hostId = daemonResources.hostId;
-    harness.internal = createHostDaemonClient(server.baseUrl, daemonResources.hostKey);
+    harness.internal = createHostDaemonClient(
+      server.baseUrl,
+      daemonResources.hostKey,
+    );
     await waitForHostConnected(harness.api);
   }
 
-  async function shutdownDaemon(reason = "integration-shutdown"): Promise<void> {
+  async function shutdownDaemon(
+    reason = "integration-shutdown",
+  ): Promise<void> {
     if (!daemonResources) {
       return;
     }
@@ -413,12 +425,14 @@ export async function createIntegrationHarness(
     }
     const currentResources = daemonResources;
     daemonResources = null;
-    await currentResources.daemonApp.connection.shutdown().catch(() => undefined);
+    await currentResources.daemonApp.connection
+      .shutdown()
+      .catch(() => undefined);
     currentResources.daemonApp.eventBuffer.dispose();
     await currentResources.daemonApp.localApi?.close().catch(() => undefined);
-    await currentResources.daemonApp.runtimeManager.shutdownAll().catch(
-      () => undefined,
-    );
+    await currentResources.daemonApp.runtimeManager
+      .shutdownAll()
+      .catch(() => undefined);
     await currentResources.releaseLock().catch(() => undefined);
   }
 
@@ -436,11 +450,7 @@ export async function createIntegrationHarness(
   try {
     server = await startIntegrationServer(tmpRoot);
     const api = createPublicApiClient(server.baseUrl);
-    daemonResources = await startHarnessDaemon(
-      daemonDataDir,
-      server,
-      options,
-    );
+    daemonResources = await startHarnessDaemon(daemonDataDir, server, options);
     await waitForHostConnected(api);
 
     harness = {
@@ -469,9 +479,7 @@ export async function createIntegrationHarness(
   }
 }
 
-export async function withHarness<T>(
-  run: WithHarnessCallback<T>,
-): Promise<T>;
+export async function withHarness<T>(run: WithHarnessCallback<T>): Promise<T>;
 export async function withHarness<T>(
   options: CreateHarnessOptions,
   run: WithHarnessCallback<T>,

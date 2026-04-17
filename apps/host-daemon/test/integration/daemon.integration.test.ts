@@ -8,13 +8,9 @@ import {
   type ProviderAdapter,
 } from "@bb/agent-runtime/test";
 import { jsonValueSchema, type JsonValue } from "@bb/domain";
-import {
-  HOST_AUTH_FILE_NAME,
-} from "@bb/host-daemon-contract";
+import { HOST_AUTH_FILE_NAME } from "@bb/host-daemon-contract";
 import { startHostDaemon } from "../../src/index.js";
-import {
-  createTestServer,
-} from "../helpers/test-server.js";
+import { createTestServer } from "../helpers/test-server.js";
 
 const tempDirs: string[] = [];
 const INTERACTIVE_PROVIDER_TEST_TIMEOUT_MS = 15_000;
@@ -32,16 +28,18 @@ interface JsonValueObject {
   [key: string]: JsonValue;
 }
 
-function parseInteractiveRequestParams(value: JsonValue): InteractiveRequestParams | null {
+function parseInteractiveRequestParams(
+  value: JsonValue,
+): InteractiveRequestParams | null {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return null;
   }
   const params: JsonValueObject = value;
   if (
-    typeof params.threadId !== "string"
-    || typeof params.turnId !== "string"
-    || typeof params.itemId !== "string"
-    || typeof params.command !== "string"
+    typeof params.threadId !== "string" ||
+    typeof params.turnId !== "string" ||
+    typeof params.itemId !== "string" ||
+    typeof params.command !== "string"
   ) {
     return null;
   }
@@ -87,7 +85,9 @@ async function pathExists(pathToCheck: string): Promise<boolean> {
   }
 }
 
-async function writeInteractiveProviderScript(scriptPath: string): Promise<void> {
+async function writeInteractiveProviderScript(
+  scriptPath: string,
+): Promise<void> {
   await fs.writeFile(
     scriptPath,
     `
@@ -253,7 +253,10 @@ function createStandardThreadStartCommand(args: {
     type: "thread.start" as const,
     environmentId: args.environmentId,
     threadId: args.threadId,
-    workspaceContext: { workspacePath: args.workspacePath, workspaceProvisionType: "unmanaged" as const },
+    workspaceContext: {
+      workspacePath: args.workspacePath,
+      workspaceProvisionType: "unmanaged" as const,
+    },
     projectId: args.projectId,
     providerId: args.providerId,
     eventSequence: args.eventSequence,
@@ -295,7 +298,10 @@ function createTurnSubmitCommand(args: {
       permissionEscalation: null,
     },
     resumeContext: {
-      workspaceContext: { workspacePath: args.workspacePath, workspaceProvisionType: "unmanaged" as const },
+      workspaceContext: {
+        workspacePath: args.workspacePath,
+        workspaceProvisionType: "unmanaged" as const,
+      },
       projectId: args.projectId,
       providerId: args.providerId,
       providerThreadId: args.providerThreadId,
@@ -307,9 +313,11 @@ function createTurnSubmitCommand(args: {
   };
 }
 
-async function setupDaemonHarness(args: {
-  adapterFactory?: () => ProviderAdapter;
-} = {}) {
+async function setupDaemonHarness(
+  args: {
+    adapterFactory?: () => ProviderAdapter;
+  } = {},
+) {
   const dataDir = await makeTempDir("bb-host-daemon-data-");
   const workspaceRoot = await makeTempDir("bb-host-daemon-workspaces-");
 
@@ -347,7 +355,9 @@ async function setupDaemonHarness(args: {
 
 afterEach(async () => {
   await Promise.all(
-    tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
+    tempDirs
+      .splice(0)
+      .map((dir) => fs.rm(dir, { recursive: true, force: true })),
   );
 });
 
@@ -445,103 +455,108 @@ describe("host daemon integration", () => {
     }
   });
 
-  it("persists provider approvals on the server and resolves them through queued commands", async () => {
-    const dataDir = await makeTempDir("bb-host-daemon-interactive-provider-");
-    const scriptPath = path.join(dataDir, "interactive-provider.cjs");
-    await writeInteractiveProviderScript(scriptPath);
-    const harness = await setupDaemonHarness({
-      adapterFactory: () => createInteractiveRequestAdapter(scriptPath),
-    });
-
-    try {
-      harness.server.queueCommand({
-        ...createStandardThreadStartCommand({
-          environmentId: "env-a",
-          threadId: "thread-a",
-          workspacePath: harness.envAPath,
-          projectId: "project-1",
-          providerId: "fake",
-          eventSequence: 1,
-          input: [{ type: "text", text: "start" }],
-        }),
+  it(
+    "persists provider approvals on the server and resolves them through queued commands",
+    async () => {
+      const dataDir = await makeTempDir("bb-host-daemon-interactive-provider-");
+      const scriptPath = path.join(dataDir, "interactive-provider.cjs");
+      await writeInteractiveProviderScript(scriptPath);
+      const harness = await setupDaemonHarness({
+        adapterFactory: () => createInteractiveRequestAdapter(scriptPath),
       });
-      harness.server.sendWebSocketMessage({ type: "commands-available" });
-      await waitFor(() => harness.server.commandResults.length === 1);
 
-      harness.server.queueCommand({
-        ...createTurnSubmitCommand({
-          environmentId: "env-a",
+      try {
+        harness.server.queueCommand({
+          ...createStandardThreadStartCommand({
+            environmentId: "env-a",
+            threadId: "thread-a",
+            workspacePath: harness.envAPath,
+            projectId: "project-1",
+            providerId: "fake",
+            eventSequence: 1,
+            input: [{ type: "text", text: "start" }],
+          }),
+        });
+        harness.server.sendWebSocketMessage({ type: "commands-available" });
+        await waitFor(() => harness.server.commandResults.length === 1);
+
+        harness.server.queueCommand({
+          ...createTurnSubmitCommand({
+            environmentId: "env-a",
+            threadId: "thread-a",
+            workspacePath: harness.envAPath,
+            projectId: "project-1",
+            providerId: "fake",
+            providerThreadId: "prov-1",
+            eventSequence: 1,
+            input: [{ type: "text", text: "trigger approval" }],
+          }),
+        });
+        harness.server.sendWebSocketMessage({ type: "commands-available" });
+
+        await waitFor(() => harness.server.interactiveRequests.length === 1);
+        const interactiveRequest = harness.server.interactiveRequests[0];
+        if (!interactiveRequest) {
+          throw new Error("Expected an interactive request");
+        }
+        expect(interactiveRequest.sessionId).toBe("session-1");
+        expect(interactiveRequest.interaction).toMatchObject({
           threadId: "thread-a",
-          workspacePath: harness.envAPath,
-          projectId: "project-1",
+          turnId: "turn-1",
           providerId: "fake",
           providerThreadId: "prov-1",
-          eventSequence: 1,
-          input: [{ type: "text", text: "trigger approval" }],
-        }),
-      });
-      harness.server.sendWebSocketMessage({ type: "commands-available" });
-
-      await waitFor(() => harness.server.interactiveRequests.length === 1);
-      const interactiveRequest = harness.server.interactiveRequests[0];
-      if (!interactiveRequest) {
-        throw new Error("Expected an interactive request");
-      }
-      expect(interactiveRequest.sessionId).toBe("session-1");
-      expect(interactiveRequest.interaction).toMatchObject({
-        threadId: "thread-a",
-        turnId: "turn-1",
-        providerId: "fake",
-        providerThreadId: "prov-1",
-        payload: {
-          subject: {
-            kind: "command",
-            itemId: "item-host-daemon",
-            command: "git push",
-            cwd: "/tmp/project",
+          payload: {
+            subject: {
+              kind: "command",
+              itemId: "item-host-daemon",
+              command: "git push",
+              cwd: "/tmp/project",
+            },
+            availableDecisions: ["allow_once", "allow_for_session", "deny"],
           },
-          availableDecisions: ["allow_once", "allow_for_session", "deny"],
-        },
-      });
+        });
 
-      harness.server.queueCommand({
-        type: "interactive.resolve",
-        environmentId: "env-a",
-        threadId: "thread-a",
-        interactionId: "interaction-1",
-        providerId: "fake",
-        providerThreadId: interactiveRequest.interaction.providerThreadId,
-        providerRequestId: interactiveRequest.interaction.providerRequestId,
-        resolution: {
-          decision: "allow_for_session",
-          grantedPermissions: null,
-        },
-      });
-      harness.server.sendWebSocketMessage({ type: "commands-available" });
+        harness.server.queueCommand({
+          type: "interactive.resolve",
+          environmentId: "env-a",
+          threadId: "thread-a",
+          interactionId: "interaction-1",
+          providerId: "fake",
+          providerThreadId: interactiveRequest.interaction.providerThreadId,
+          providerRequestId: interactiveRequest.interaction.providerRequestId,
+          resolution: {
+            decision: "allow_for_session",
+            grantedPermissions: null,
+          },
+        });
+        harness.server.sendWebSocketMessage({ type: "commands-available" });
 
-      await waitFor(() =>
-        harness.server.commandResults.some(
-          (result) => result.type === "interactive.resolve" && result.ok,
-        ) &&
-        harness.server.events.some(
-          (event) =>
-            event.threadId === "thread-a" &&
-            event.event.type === "item/completed" &&
-            event.event.item.type === "agentMessage" &&
-            event.event.item.text === "interactive:allow_for_session",
-        ),
-      );
+        await waitFor(
+          () =>
+            harness.server.commandResults.some(
+              (result) => result.type === "interactive.resolve" && result.ok,
+            ) &&
+            harness.server.events.some(
+              (event) =>
+                event.threadId === "thread-a" &&
+                event.event.type === "item/completed" &&
+                event.event.item.type === "agentMessage" &&
+                event.event.item.text === "interactive:allow_for_session",
+            ),
+        );
 
-      expect(
-        harness.server.commandResults.some(
-          (result) => result.type === "turn.submit" && result.ok,
-        ),
-      ).toBe(true);
-    } finally {
-      await harness.daemon.shutdown("test");
-      await harness.server.close();
-    }
-  }, INTERACTIVE_PROVIDER_TEST_TIMEOUT_MS);
+        expect(
+          harness.server.commandResults.some(
+            (result) => result.type === "turn.submit" && result.ok,
+          ),
+        ).toBe(true);
+      } finally {
+        await harness.daemon.shutdown("test");
+        await harness.server.close();
+      }
+    },
+    INTERACTIVE_PROVIDER_TEST_TIMEOUT_MS,
+  );
 
   it("reopens the session after websocket disconnects and resumes fetching pending commands", async () => {
     const harness = await setupDaemonHarness();
@@ -641,28 +656,31 @@ describe("host daemon integration", () => {
       });
       harness.server.sendWebSocketMessage({ type: "commands-available" });
 
-      await waitFor(() =>
-        harness.server.events.some(
-          (event) =>
-            event.threadId === "thread-a" &&
-            event.event.type === "turn/completed",
-        ) &&
-        harness.server.events.some(
-          (event) =>
-            event.threadId === "thread-b" &&
-            event.event.type === "turn/completed",
-        ),
+      await waitFor(
+        () =>
+          harness.server.events.some(
+            (event) =>
+              event.threadId === "thread-a" &&
+              event.event.type === "turn/completed",
+          ) &&
+          harness.server.events.some(
+            (event) =>
+              event.threadId === "thread-b" &&
+              event.event.type === "turn/completed",
+          ),
       );
 
       const completedEvents = harness.server.events.filter(
         (event) => event.event.type === "turn/completed",
       );
-      expect(completedEvents.find((event) => event.threadId === "thread-a")?.environmentId).toBe(
-        "env-a",
-      );
-      expect(completedEvents.find((event) => event.threadId === "thread-b")?.environmentId).toBe(
-        "env-b",
-      );
+      expect(
+        completedEvents.find((event) => event.threadId === "thread-a")
+          ?.environmentId,
+      ).toBe("env-a");
+      expect(
+        completedEvents.find((event) => event.threadId === "thread-b")
+          ?.environmentId,
+      ).toBe("env-b");
     } finally {
       await harness.daemon.shutdown("test");
       await harness.server.close();
@@ -700,9 +718,9 @@ describe("host daemon integration", () => {
     try {
       await waitFor(() => server.sessionOpenCalls.length === 1);
       expect(server.sessionOpenCalls[0]?.hostId).toBe(hostId);
-      expect(
-        await pathExists(path.join(dataDir, HOST_AUTH_FILE_NAME)),
-      ).toBe(true);
+      expect(await pathExists(path.join(dataDir, HOST_AUTH_FILE_NAME))).toBe(
+        true,
+      );
     } finally {
       await daemon.shutdown("test");
       await server.close();

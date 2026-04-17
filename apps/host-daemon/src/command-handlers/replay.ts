@@ -1,12 +1,7 @@
 import { createReplayRawProviderEventTranslator } from "@bb/agent-runtime";
-import {
-  type ThreadEvent,
-  type ThreadEventTurnStatus,
-} from "@bb/domain";
+import { type ThreadEvent, type ThreadEventTurnStatus } from "@bb/domain";
 import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
-import {
-  replayRawProviderEventsPath,
-} from "@bb/replay-capture";
+import { replayRawProviderEventsPath } from "@bb/replay-capture";
 import {
   listReplayCaptureSummaries,
   readReplayCaptureManifest,
@@ -133,7 +128,8 @@ async function replayTranslatedEvents(
       providerThreadId: args.terminal.providerThreadId,
       threadId: args.command.threadId,
     });
-    args.terminal.turnId = replayEventTurnId(remappedEvent) ?? args.terminal.turnId;
+    args.terminal.turnId =
+      replayEventTurnId(remappedEvent) ?? args.terminal.turnId;
     args.eventSink.emit({
       environmentId: args.command.environmentId,
       threadId: args.command.threadId,
@@ -159,7 +155,10 @@ export async function runReplay(
 ): Promise<HostDaemonCommandResult<"replay.run">> {
   const eventSink = options.eventSink;
   if (!eventSink) {
-    throw new CommandDispatchError("replay_unavailable", "Replay requires an event sink");
+    throw new CommandDispatchError(
+      "replay_unavailable",
+      "Replay requires an event sink",
+    );
   }
   const replayTasks = options.replayTasks;
   if (!replayTasks) {
@@ -169,7 +168,10 @@ export async function runReplay(
     );
   }
   if (replayTasks.has(command.threadId)) {
-    throw new CommandDispatchError("replay_already_running", "Replay is already running");
+    throw new CommandDispatchError(
+      "replay_already_running",
+      "Replay is already running",
+    );
   }
 
   const readArgs: ReplayCaptureReadArgs = {
@@ -226,10 +228,11 @@ async function buildReplayPlan(
     providerId: manifest.providerId,
   });
   return {
-    events: () => streamRawProviderReplayEvents({
-      records: streamRawProviderRecords(readArgs),
-      translator,
-    }),
+    events: () =>
+      streamRawProviderReplayEvents({
+        records: streamRawProviderRecords(readArgs),
+        translator,
+      }),
     terminal,
   };
 }

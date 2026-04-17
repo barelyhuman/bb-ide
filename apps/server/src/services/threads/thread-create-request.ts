@@ -21,7 +21,9 @@ export interface ThreadCreateServiceRequestInput {
   type: ThreadType;
 }
 
-export interface ThreadCreateServiceRequest
-  extends Omit<ThreadCreateServiceRequestInput, "providerId"> {
+export interface ThreadCreateServiceRequest extends Omit<
+  ThreadCreateServiceRequestInput,
+  "providerId"
+> {
   providerId: string;
 }

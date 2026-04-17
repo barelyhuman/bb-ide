@@ -66,7 +66,9 @@ export type BridgeJsonRpcResponse =
   | z.infer<typeof jsonRpcSuccessResponseSchema>
   | z.infer<typeof jsonRpcErrorResponseSchema>;
 
-export function decodeBridgeJsonRpcResponse(input: unknown): BridgeJsonRpcResponse | null {
+export function decodeBridgeJsonRpcResponse(
+  input: unknown,
+): BridgeJsonRpcResponse | null {
   const error = jsonRpcErrorResponseSchema.safeParse(input);
   if (error.success) return error.data;
 

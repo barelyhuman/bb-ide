@@ -57,7 +57,9 @@ async function readThread(
     param: { id: threadId },
   });
   if (response.status !== 200) {
-    throw new Error(`Expected thread ${threadId} to exist, got ${response.status}`);
+    throw new Error(
+      `Expected thread ${threadId} to exist, got ${response.status}`,
+    );
   }
   return response.json();
 }
@@ -94,10 +96,7 @@ async function readThreadOutput(
   return payload.output;
 }
 
-async function readHost(
-  api: PublicApiClient,
-  hostId: string,
-): Promise<Host> {
+async function readHost(api: PublicApiClient, hostId: string): Promise<Host> {
   const response = await api.hosts[":id"].$get({
     param: { id: hostId },
   });
@@ -130,10 +129,7 @@ async function buildThreadStatusFailureMessage(
     readThreadEvents(api, context.threadId),
     readThreadOutput(api, context.threadId).catch(() => null),
   ]);
-  const recentEvents = events
-    .slice(-12)
-    .map(describeThreadEvent)
-    .join(" | ");
+  const recentEvents = events.slice(-12).map(describeThreadEvent).join(" | ");
   const lastError = [...events]
     .reverse()
     .find((event) => event.type === "error" || event.type === "system/error");
@@ -177,8 +173,8 @@ export async function waitForThreadStatus(
           );
         }
         if (
-          thread.status === status
-          && (status !== "idle" || thread.stopRequestedAt === null)
+          thread.status === status &&
+          (status !== "idle" || thread.stopRequestedAt === null)
         ) {
           return thread;
         }
@@ -331,8 +327,9 @@ export async function waitForCommand(
     async () => {
       const commands = listQueuedCommands(db);
       currentCommands =
-        commands.map((command) => `${command.cursor}:${command.type}`).join(", ") ||
-        "none";
+        commands
+          .map((command) => `${command.cursor}:${command.type}`)
+          .join(", ") || "none";
       return commands.find(predicate) ?? null;
     },
     "Timed out waiting for a matching command",

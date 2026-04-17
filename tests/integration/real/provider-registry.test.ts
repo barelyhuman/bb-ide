@@ -30,7 +30,9 @@ describe("real provider registry integration", () => {
             harness,
           });
 
-          expect(countTurnEvents(events, "turn/completed")).toBeGreaterThanOrEqual(1);
+          expect(
+            countTurnEvents(events, "turn/completed"),
+          ).toBeGreaterThanOrEqual(1);
           expectNonEmptyOutput(output, `${providerId} registry output`);
         } finally {
           await harness.cleanup();

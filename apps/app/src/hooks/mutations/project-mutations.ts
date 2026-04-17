@@ -7,9 +7,7 @@ import type {
   UploadedPromptAttachment,
 } from "@bb/server-contract";
 import * as api from "@/lib/api";
-import {
-  optimisticallyInsertThread,
-} from "../queries/query-cache";
+import { optimisticallyInsertThread } from "../queries/query-cache";
 import {
   localPathExistenceQueryKeyPrefix,
   projectFilesQueryKeyPrefix,
@@ -143,7 +141,9 @@ export function useAddLocalProjectSource() {
       api.addProjectSource(projectId, { type: "local_path", hostId, path }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: localPathExistenceQueryKeyPrefix() });
+      queryClient.invalidateQueries({
+        queryKey: localPathExistenceQueryKeyPrefix(),
+      });
     },
   });
 }
@@ -155,11 +155,20 @@ export function useUpdateLocalProjectSource() {
     meta: {
       errorMessage: "Failed to update local source.",
     },
-    mutationFn: ({ projectId, sourceId, path }: UpdateLocalProjectSourceRequest) =>
-      api.updateProjectSource(projectId, sourceId, { type: "local_path", path }),
+    mutationFn: ({
+      projectId,
+      sourceId,
+      path,
+    }: UpdateLocalProjectSourceRequest) =>
+      api.updateProjectSource(projectId, sourceId, {
+        type: "local_path",
+        path,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: localPathExistenceQueryKeyPrefix() });
+      queryClient.invalidateQueries({
+        queryKey: localPathExistenceQueryKeyPrefix(),
+      });
     },
   });
 }

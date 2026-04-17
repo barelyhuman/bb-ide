@@ -1,16 +1,19 @@
-import * as React from "react"
-import { cn } from "@/lib/utils"
+import * as React from "react";
+import { cn } from "@/lib/utils";
 
 type SwitchProps = Omit<
   React.ComponentPropsWithoutRef<"button">,
   "onChange" | "role"
 > & {
-  checked: boolean
-  onCheckedChange?: (checked: boolean) => void
-}
+  checked: boolean;
+  onCheckedChange?: (checked: boolean) => void;
+};
 
 const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
-  ({ checked, className, disabled, onCheckedChange, onClick, ...props }, ref) => (
+  (
+    { checked, className, disabled, onCheckedChange, onClick, ...props },
+    ref,
+  ) => (
     <button
       {...props}
       ref={ref}
@@ -24,9 +27,9 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         className,
       )}
       onClick={(event) => {
-        onClick?.(event)
+        onClick?.(event);
         if (!event.defaultPrevented) {
-          onCheckedChange?.(!checked)
+          onCheckedChange?.(!checked);
         }
       }}
     >
@@ -37,7 +40,7 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
       />
     </button>
   ),
-)
-Switch.displayName = "Switch"
+);
+Switch.displayName = "Switch";
 
-export { Switch }
+export { Switch };

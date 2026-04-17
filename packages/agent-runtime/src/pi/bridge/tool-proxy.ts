@@ -134,9 +134,7 @@ function toJsonSchemaObject(value: unknown): JsonSchemaObject | null {
   return value as JsonSchemaObject;
 }
 
-function toPropertiesRecord(
-  value: unknown,
-): Record<string, JsonSchemaObject> {
+function toPropertiesRecord(value: unknown): Record<string, JsonSchemaObject> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {};
   }

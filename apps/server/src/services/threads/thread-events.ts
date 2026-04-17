@@ -316,14 +316,26 @@ export function appendThreadProvisioningEventInTransaction(
   });
 }
 
-export function buildCwdBranchEntries(args: BuildCwdBranchEntriesArgs): ProvisioningTranscriptEntry[] {
+export function buildCwdBranchEntries(
+  args: BuildCwdBranchEntriesArgs,
+): ProvisioningTranscriptEntry[] {
   const now = Date.now();
   const entries: ProvisioningTranscriptEntry[] = [
-    { type: "step", key: "workspace-path", text: `Using workspace: ${args.path}`, status: "completed", startedAt: now },
+    {
+      type: "step",
+      key: "workspace-path",
+      text: `Using workspace: ${args.path}`,
+      status: "completed",
+      startedAt: now,
+    },
   ];
   if (args.branchName) {
     entries.push({
-      type: "step", key: "workspace-branch", text: `Using branch: ${args.branchName}`, status: "completed", startedAt: now,
+      type: "step",
+      key: "workspace-branch",
+      text: `Using branch: ${args.branchName}`,
+      status: "completed",
+      startedAt: now,
     });
   }
   return entries;

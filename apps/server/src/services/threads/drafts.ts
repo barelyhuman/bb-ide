@@ -1,5 +1,9 @@
 import { promptInputSchema, threadQueuedMessageSchema } from "@bb/domain";
-import type { PermissionMode, PromptInput, ThreadQueuedMessage } from "@bb/domain";
+import type {
+  PermissionMode,
+  PromptInput,
+  ThreadQueuedMessage,
+} from "@bb/domain";
 import { z } from "zod";
 import { ApiError } from "../../errors.js";
 

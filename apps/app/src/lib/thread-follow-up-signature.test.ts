@@ -1,20 +1,20 @@
-import { describe, expect, it } from "vitest"
-import type { PromptInput, TimelineRow } from "@bb/domain"
+import { describe, expect, it } from "vitest";
+import type { PromptInput, TimelineRow } from "@bb/domain";
 import {
   buildFollowUpSignatureFromInput,
   buildFollowUpSignatureFromRow,
-} from "./thread-follow-up-signature"
+} from "./thread-follow-up-signature";
 
 function makeUserRow(args: {
-  text: string
+  text: string;
   attachments?: {
-    webImages: number
-    localImages: number
-    localFiles: number
-    imageUrls?: string[]
-    localImagePaths?: string[]
-    localFilePaths?: string[]
-  }
+    webImages: number;
+    localImages: number;
+    localFiles: number;
+    imageUrls?: string[];
+    localImagePaths?: string[];
+    localFilePaths?: string[];
+  };
 }): TimelineRow {
   return {
     kind: "message",
@@ -30,12 +30,14 @@ function makeUserRow(args: {
       createdAt: 1,
       turnId: "turn-1",
     },
-  }
+  };
 }
 
 describe("thread-follow-up-signature", () => {
   it("treats empty attachment payloads as equivalent to no attachments", () => {
-    const input: PromptInput[] = [{ type: "text", text: "Please make this tweak" }]
+    const input: PromptInput[] = [
+      { type: "text", text: "Please make this tweak" },
+    ];
     const row = makeUserRow({
       text: "Please make this tweak",
       attachments: {
@@ -43,10 +45,12 @@ describe("thread-follow-up-signature", () => {
         localImages: 0,
         localFiles: 0,
       },
-    })
+    });
 
-    expect(buildFollowUpSignatureFromInput(input)).toBe(buildFollowUpSignatureFromRow(row))
-  })
+    expect(buildFollowUpSignatureFromInput(input)).toBe(
+      buildFollowUpSignatureFromRow(row),
+    );
+  });
 
   it("preserves non-empty attachment signatures for matching acknowledgements", () => {
     const input: PromptInput[] = [
@@ -54,7 +58,7 @@ describe("thread-follow-up-signature", () => {
       { type: "image", url: "https://example.com/a.png" },
       { type: "localImage", path: "/tmp/b.png" },
       { type: "localFile", path: "/tmp/spec.md" },
-    ]
+    ];
     const row = makeUserRow({
       text: "Review these",
       attachments: {
@@ -65,8 +69,10 @@ describe("thread-follow-up-signature", () => {
         localImagePaths: ["/tmp/b.png"],
         localFilePaths: ["/tmp/spec.md"],
       },
-    })
+    });
 
-    expect(buildFollowUpSignatureFromInput(input)).toBe(buildFollowUpSignatureFromRow(row))
-  })
-})
+    expect(buildFollowUpSignatureFromInput(input)).toBe(
+      buildFollowUpSignatureFromRow(row),
+    );
+  });
+});

@@ -3,7 +3,12 @@ import { getFirstStringField } from "./format-helpers.js";
 import { toRecord } from "./unknown-helpers.js";
 
 const SHELL_WRAPPER_NAMES = new Set(["sh", "bash", "zsh"]);
-const DELEGATION_TOOL_NAMES = new Set(["Agent", "Task", "spawnAgent", "resumeAgent"]);
+const DELEGATION_TOOL_NAMES = new Set([
+  "Agent",
+  "Task",
+  "spawnAgent",
+  "resumeAgent",
+]);
 
 type ToolArguments = Record<string, unknown>;
 type ToolIntentKind = ViewToolParsedIntent["type"];
@@ -46,7 +51,13 @@ function unwrapQuotedShellArg(value: string): string {
     const ch = inner[i];
     if (ch === "\\" && i + 1 < inner.length) {
       const next = inner[i + 1]!;
-      if (next === "$" || next === "`" || next === '"' || next === "\\" || next === "\n") {
+      if (
+        next === "$" ||
+        next === "`" ||
+        next === '"' ||
+        next === "\\" ||
+        next === "\n"
+      ) {
         result += next;
         i += 1;
         continue;
@@ -64,7 +75,9 @@ function isKnownShellWrapper(value: string): boolean {
   return SHELL_WRAPPER_NAMES.has(shellName);
 }
 
-export function extractShellCommandFromString(value: string): string | undefined {
+export function extractShellCommandFromString(
+  value: string,
+): string | undefined {
   const trimmed = value.trim();
   if (trimmed.length === 0) return undefined;
 
@@ -98,8 +111,16 @@ const TOOL_TABLE: Record<string, ToolDescriptor> = {
   read: { argKeys: ["file_path", "file", "path"], intentKind: "read" },
   Glob: { argKeys: ["pattern", "path"], intentKind: "list_files" },
   glob: { argKeys: ["pattern", "path"], intentKind: "list_files" },
-  Grep: { argKeys: ["pattern", "query"], secondaryArgKeys: ["path"], intentKind: "search" },
-  grep: { argKeys: ["pattern", "query"], secondaryArgKeys: ["path"], intentKind: "search" },
+  Grep: {
+    argKeys: ["pattern", "query"],
+    secondaryArgKeys: ["path"],
+    intentKind: "search",
+  },
+  grep: {
+    argKeys: ["pattern", "query"],
+    secondaryArgKeys: ["path"],
+    intentKind: "search",
+  },
   Bash: { argKeys: ["command"] },
   bash: { argKeys: ["command"] },
   Edit: { argKeys: ["file_path", "path"] },
@@ -164,7 +185,9 @@ function truncateForDisplay(value: string, maxLength: number): string {
 }
 
 function asString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+  return typeof value === "string" && value.trim().length > 0
+    ? value
+    : undefined;
 }
 
 function asTodoWriteTodos(value: unknown): TodoWriteTodo[] {
@@ -209,12 +232,16 @@ function summarizeTodoCounts(todos: TodoWriteTodo[]): string {
   return parts.join(", ");
 }
 
-function formatTodoWriteCommand(_toolName: string, args: ToolArguments): string {
+function formatTodoWriteCommand(
+  _toolName: string,
+  args: ToolArguments,
+): string {
   const todos = asTodoWriteTodos(args.todos);
   if (todos.length === 0) return "TodoWrite";
 
   const activeTodo = todos.find((todo) => todo.status === "in_progress");
-  const headline = activeTodo?.activeForm ?? activeTodo?.content ?? todos[0]?.content;
+  const headline =
+    activeTodo?.activeForm ?? activeTodo?.content ?? todos[0]?.content;
   const countSummary = summarizeTodoCounts(todos);
   const summaryParts = [`${todos.length} todo${todos.length === 1 ? "" : "s"}`];
 
@@ -234,7 +261,10 @@ function formatTodoWriteOutput(output: string): string {
   return output;
 }
 
-function formatToolSearchCommand(_toolName: string, args: ToolArguments): string {
+function formatToolSearchCommand(
+  _toolName: string,
+  args: ToolArguments,
+): string {
   const query = getFirstStringField(args, ["query"]);
   if (!query) return "ToolSearch";
   return `ToolSearch ${query}`;
@@ -246,7 +276,8 @@ function formatAgentCommand(_toolName: string, args: ToolArguments): string {
   const subagentType = getFirstStringField(args, ["subagent_type"]);
   const label = description ?? prompt;
   if (!label && !subagentType) return "Agent";
-  if (!subagentType) return `Agent ${truncateForDisplay(label ?? "", 90)}`.trim();
+  if (!subagentType)
+    return `Agent ${truncateForDisplay(label ?? "", 90)}`.trim();
   if (!label) return `Agent [${subagentType}]`;
   return `Agent [${subagentType}] ${truncateForDisplay(label, 90)}`;
 }
@@ -255,7 +286,9 @@ export function stripAgentOutputMetadata(output: string): string {
   const lines = output
     .split("\n")
     .map((line) => line.trimEnd())
-    .filter((line) => !line.startsWith("agentId:") && !line.startsWith("<usage>"));
+    .filter(
+      (line) => !line.startsWith("agentId:") && !line.startsWith("<usage>"),
+    );
   return lines.join("\n").trim();
 }
 
@@ -268,7 +301,10 @@ function countReceiverThreadIds(args: ToolArguments): number {
   return Array.isArray(receiverThreadIds) ? receiverThreadIds.length : 0;
 }
 
-function formatCollabAgentCommand(toolName: string, args: ToolArguments): string {
+function formatCollabAgentCommand(
+  toolName: string,
+  args: ToolArguments,
+): string {
   const receiverCount = countReceiverThreadIds(args);
   const prompt = getFirstStringField(args, ["prompt"]);
 
@@ -290,16 +326,17 @@ function formatCollabAgentCommand(toolName: string, args: ToolArguments): string
       : "closeAgent";
   }
 
-  const action = receiverCount > 0
-    ? `${toolName} ${receiverCount} agent${receiverCount === 1 ? "" : "s"}`
-    : toolName;
+  const action =
+    receiverCount > 0
+      ? `${toolName} ${receiverCount} agent${receiverCount === 1 ? "" : "s"}`
+      : toolName;
   if (!prompt) return action;
   return `${action}: ${truncateForDisplay(prompt, 90)}`;
 }
 
 // Characters that a backslash may escape inside double quotes, per POSIX shell
 // semantics. A backslash before any other character is preserved literally.
-const DOUBLE_QUOTE_ESCAPABLE = new Set(["$", "`", "\"", "\\", "\n"]);
+const DOUBLE_QUOTE_ESCAPABLE = new Set(["$", "`", '"', "\\", "\n"]);
 
 /** A shell token carries its literal value and whether any portion of it
  * came from inside a quoted string. The `quoted` flag lets the redirect
@@ -322,8 +359,12 @@ export function tokenizeShellWords(command: string): ShellToken[] {
   let quote: "'" | '"' | null = null;
   let escaping = false;
 
-  const recordQuoted = (): void => { currentHasQuoted = true; };
-  const recordUnquoted = (): void => { currentHasUnquoted = true; };
+  const recordQuoted = (): void => {
+    currentHasQuoted = true;
+  };
+  const recordUnquoted = (): void => {
+    currentHasUnquoted = true;
+  };
 
   const flushCurrent = (): void => {
     const fullyQuoted = currentHasQuoted && !currentHasUnquoted;
@@ -345,7 +386,8 @@ export function tokenizeShellWords(command: string): ShellToken[] {
 
     if (escaping) {
       current += character;
-      if (quote !== null) recordQuoted(); else recordUnquoted();
+      if (quote !== null) recordQuoted();
+      else recordUnquoted();
       escaping = false;
       continue;
     }
@@ -444,16 +486,36 @@ export function tokenizeShellWords(command: string): ShellToken[] {
       let consumed = 1;
 
       if (character === ">") {
-        if (next1 === ">") { op = ">>"; consumed = 2; }
-        else if (next1 === "|") { op = ">|"; consumed = 2; }
-        else if (next1 === "(") { op = ">("; consumed = 2; }
-        else if (next1 === "&") { op = ">&"; consumed = 2; }
+        if (next1 === ">") {
+          op = ">>";
+          consumed = 2;
+        } else if (next1 === "|") {
+          op = ">|";
+          consumed = 2;
+        } else if (next1 === "(") {
+          op = ">(";
+          consumed = 2;
+        } else if (next1 === "&") {
+          op = ">&";
+          consumed = 2;
+        }
       } else {
-        if (next1 === "<" && next2 === "<") { op = "<<<"; consumed = 3; }
-        else if (next1 === "<" && next2 === "-") { op = "<<-"; consumed = 3; }
-        else if (next1 === "<") { op = "<<"; consumed = 2; }
-        else if (next1 === "(") { op = "<("; consumed = 2; }
-        else if (next1 === ">") { op = "<>"; consumed = 2; }
+        if (next1 === "<" && next2 === "<") {
+          op = "<<<";
+          consumed = 3;
+        } else if (next1 === "<" && next2 === "-") {
+          op = "<<-";
+          consumed = 3;
+        } else if (next1 === "<") {
+          op = "<<";
+          consumed = 2;
+        } else if (next1 === "(") {
+          op = "<(";
+          consumed = 2;
+        } else if (next1 === ">") {
+          op = "<>";
+          consumed = 2;
+        }
       }
 
       tokens.push({ value: `${prefix}${op}`, quoted: false });
@@ -489,25 +551,41 @@ const ENV_ASSIGNMENT_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*=/u;
 
 /** Search flags that take a separate value. */
 const SEARCH_FLAGS_WITH_VALUE: ReadonlySet<string> = new Set([
-  "-g", "--glob",
-  "-t", "--type",
-  "-T", "--type-not",
-  "-A", "--after-context",
-  "-B", "--before-context",
-  "-C", "--context",
-  "-m", "--max-count",
+  "-g",
+  "--glob",
+  "-t",
+  "--type",
+  "-T",
+  "--type-not",
+  "-A",
+  "--after-context",
+  "-B",
+  "--before-context",
+  "-C",
+  "--context",
+  "-m",
+  "--max-count",
 ]);
 
 /** `find` flags whose value is the next token. Only the common ones —
  * unknown flags are treated as value-less, which is harmless for path extraction
  * since `find` puts the start path before the expression. */
 const FIND_FLAGS_WITH_VALUE: ReadonlySet<string> = new Set([
-  "-name", "-iname",
-  "-path", "-ipath",
-  "-type", "-maxdepth", "-mindepth",
-  "-size", "-mtime", "-mmin",
-  "-user", "-group",
-  "-perm", "-regex", "-iregex",
+  "-name",
+  "-iname",
+  "-path",
+  "-ipath",
+  "-type",
+  "-maxdepth",
+  "-mindepth",
+  "-size",
+  "-mtime",
+  "-mmin",
+  "-user",
+  "-group",
+  "-perm",
+  "-regex",
+  "-iregex",
 ]);
 
 const HEAD_TAIL_FLAGS_WITH_VALUE: ReadonlySet<string> = new Set(["-n", "-c"]);
@@ -718,7 +796,10 @@ function classifyShellSegment(
 
   // Write-shape: specific commands that mutate, regardless of redirects.
   if (commandName === "tee") return { kind: "write" };
-  if (commandName === "sed" && argTokens.some((t) => !t.quoted && isSedInPlaceFlag(t.value))) {
+  if (
+    commandName === "sed" &&
+    argTokens.some((t) => !t.quoted && isSedInPlaceFlag(t.value))
+  ) {
     return { kind: "write" };
   }
   // Heredocs and file redirections within this segment.
@@ -727,14 +808,20 @@ function classifyShellSegment(
   switch (commandName) {
     case "rg":
     case "grep": {
-      const positionals = collectPositionals(argTokens, SEARCH_FLAGS_WITH_VALUE);
+      const positionals = collectPositionals(
+        argTokens,
+        SEARCH_FLAGS_WITH_VALUE,
+      );
       return {
         kind: "intent",
         intent: {
           type: "search",
           cmd: fullCommand,
           query: positionals[0] ?? null,
-          path: positionals.length > 1 ? positionals[positionals.length - 1]! : null,
+          path:
+            positionals.length > 1
+              ? positionals[positionals.length - 1]!
+              : null,
         },
       };
     }
@@ -742,26 +829,41 @@ function classifyShellSegment(
       const positionals = collectPositionals(argTokens, FIND_FLAGS_WITH_VALUE);
       const path = positionals[0];
       if (!path) return { kind: "none" };
-      return { kind: "intent", intent: { type: "list_files", cmd: fullCommand, path } };
+      return {
+        kind: "intent",
+        intent: { type: "list_files", cmd: fullCommand, path },
+      };
     }
     case "ls": {
       const positionals = collectPositionals(argTokens, NO_FLAGS_WITH_VALUE);
       const path = positionals[0] ?? ".";
-      return { kind: "intent", intent: { type: "list_files", cmd: fullCommand, path } };
+      return {
+        kind: "intent",
+        intent: { type: "list_files", cmd: fullCommand, path },
+      };
     }
     case "cat":
     case "nl": {
       const positionals = collectPositionals(argTokens, NO_FLAGS_WITH_VALUE);
       const path = positionals[0];
       if (!path) return { kind: "none" };
-      return { kind: "intent", intent: { type: "read", cmd: fullCommand, name: commandName, path } };
+      return {
+        kind: "intent",
+        intent: { type: "read", cmd: fullCommand, name: commandName, path },
+      };
     }
     case "head":
     case "tail": {
-      const positionals = collectPositionals(argTokens, HEAD_TAIL_FLAGS_WITH_VALUE);
+      const positionals = collectPositionals(
+        argTokens,
+        HEAD_TAIL_FLAGS_WITH_VALUE,
+      );
       const path = positionals[0];
       if (!path) return { kind: "none" };
-      return { kind: "intent", intent: { type: "read", cmd: fullCommand, name: commandName, path } };
+      return {
+        kind: "intent",
+        intent: { type: "read", cmd: fullCommand, name: commandName, path },
+      };
     }
     case "sed": {
       // Only classify `sed -n SCRIPT FILE` as a read. Other sed invocations are
@@ -772,7 +874,10 @@ function classifyShellSegment(
       const positionals = collectPositionals(argTokens, NO_FLAGS_WITH_VALUE);
       const path = positionals[1]; // [script, file]
       if (!path) return { kind: "none" };
-      return { kind: "intent", intent: { type: "read", cmd: fullCommand, name: "sed", path } };
+      return {
+        kind: "intent",
+        intent: { type: "read", cmd: fullCommand, name: "sed", path },
+      };
     }
     default:
       return { kind: "none" };
@@ -781,14 +886,20 @@ function classifyShellSegment(
 
 export function hasShellWriteShape(command: string): boolean {
   const segments = splitShellCommandSegments(command);
-  return segments.some((segment) => classifyShellSegment(segment, command).kind === "write");
+  return segments.some(
+    (segment) => classifyShellSegment(segment, command).kind === "write",
+  );
 }
 
-export function parseShellCommandIntents(command: string | undefined): ViewToolParsedIntent[] {
+export function parseShellCommandIntents(
+  command: string | undefined,
+): ViewToolParsedIntent[] {
   if (!command) return [];
 
   const segments = splitShellCommandSegments(command);
-  const classifications = segments.map((segment) => classifyShellSegment(segment, command));
+  const classifications = segments.map((segment) =>
+    classifyShellSegment(segment, command),
+  );
 
   // Any segment that writes disqualifies the whole command from "exploring".
   if (classifications.some((c) => c.kind === "write")) return [];
@@ -799,7 +910,10 @@ export function parseShellCommandIntents(command: string | undefined): ViewToolP
   return [];
 }
 
-export function formatToolCallCommand(toolName: string, args: Record<string, unknown> | null): string {
+export function formatToolCallCommand(
+  toolName: string,
+  args: Record<string, unknown> | null,
+): string {
   if (!args) return toolName;
 
   const desc = TOOL_TABLE[toolName];
@@ -825,10 +939,7 @@ export function formatToolCallCommand(toolName: string, args: Record<string, unk
   return `${toolName} ${primary}`.trim();
 }
 
-export function formatToolCallOutput(
-  toolName: string,
-  output: string,
-): string {
+export function formatToolCallOutput(toolName: string, output: string): string {
   const desc = TOOL_TABLE[toolName];
   if (!desc?.formatOutput) {
     return output;
@@ -836,14 +947,19 @@ export function formatToolCallOutput(
   return desc.formatOutput(output);
 }
 
-function formatUnknownToolCommand(toolName: string, args: Record<string, unknown>): string {
+function formatUnknownToolCommand(
+  toolName: string,
+  args: Record<string, unknown>,
+): string {
   const entries = Object.entries(args).filter(([, v]) => v !== undefined);
   if (entries.length === 0) return toolName;
-  const compact = entries.map(([k, v]) => {
-    const vs = typeof v === "string" ? v : JSON.stringify(v);
-    const display = vs.length > 40 ? `${vs.slice(0, 37)}...` : vs;
-    return `${k}: ${display}`;
-  }).join(", ");
+  const compact = entries
+    .map(([k, v]) => {
+      const vs = typeof v === "string" ? v : JSON.stringify(v);
+      const display = vs.length > 40 ? `${vs.slice(0, 37)}...` : vs;
+      return `${k}: ${display}`;
+    })
+    .join(", ");
   return `${toolName} { ${compact} }`;
 }
 
@@ -855,7 +971,9 @@ export function isExploringIntent(intent: ViewToolParsedIntent): boolean {
   );
 }
 
-export function isExploringCall(call: Pick<ViewToolCallSummary, "parsedCmd">): boolean {
+export function isExploringCall(
+  call: Pick<ViewToolCallSummary, "parsedCmd">,
+): boolean {
   if (call.parsedCmd.length === 0) return false;
   return call.parsedCmd.every((intent) => isExploringIntent(intent));
 }

@@ -1,5 +1,8 @@
 /** Get the effective start time of a message, falling back to createdAt. */
-export function getMessageStartedAt(message: { createdAt: number; startedAt?: number }): number {
+export function getMessageStartedAt(message: {
+  createdAt: number;
+  startedAt?: number;
+}): number {
   return message.startedAt ?? message.createdAt;
 }
 
@@ -26,19 +29,26 @@ export function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export function durationToString(durationMs: number | undefined): string | undefined {
+export function durationToString(
+  durationMs: number | undefined,
+): string | undefined {
   if (durationMs === undefined) return undefined;
   if (durationMs < 1_000) return `${Math.round(durationMs)}ms`;
   const seconds = durationMs / 1_000;
-  if (seconds < 60) return `${Number.isInteger(seconds) ? seconds : seconds.toFixed(1)}s`;
+  if (seconds < 60)
+    return `${Number.isInteger(seconds) ? seconds : seconds.toFixed(1)}s`;
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = Math.round(seconds % 60);
-  return remainingSeconds === 0 ? `${minutes}m` : `${minutes}m ${remainingSeconds}s`;
+  return remainingSeconds === 0
+    ? `${minutes}m`
+    : `${minutes}m ${remainingSeconds}s`;
 }
 
 export function durationToCompactString(durationMs: number): string;
 export function durationToCompactString(durationMs: undefined): undefined;
-export function durationToCompactString(durationMs: number | undefined): string | undefined {
+export function durationToCompactString(
+  durationMs: number | undefined,
+): string | undefined {
   if (durationMs === undefined) return undefined;
   if (!Number.isFinite(durationMs) || durationMs < 0) return "0s";
   if (durationMs < 1_000) return `${Math.round(durationMs)}ms`;

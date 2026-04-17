@@ -1,53 +1,53 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 interface ThemeTestEnvironment {
-  classes: Set<string>
-  storage: Map<string, string>
+  classes: Set<string>;
+  storage: Map<string, string>;
 }
 
 function setupThemeEnvironment({
   storedTheme,
   prefersDark = false,
 }: {
-  storedTheme?: "light" | "dark"
-  prefersDark?: boolean
+  storedTheme?: "light" | "dark";
+  prefersDark?: boolean;
 } = {}): ThemeTestEnvironment {
-  const classes = new Set<string>()
-  const storage = new Map<string, string>()
+  const classes = new Set<string>();
+  const storage = new Map<string, string>();
 
   if (storedTheme) {
-    storage.set("bb.theme", storedTheme)
+    storage.set("bb.theme", storedTheme);
   }
 
   const classList = {
     contains: (token: string) => classes.has(token),
     toggle: (token: string, force?: boolean) => {
-      const shouldAdd = force ?? !classes.has(token)
+      const shouldAdd = force ?? !classes.has(token);
       if (shouldAdd) {
-        classes.add(token)
+        classes.add(token);
       } else {
-        classes.delete(token)
+        classes.delete(token);
       }
-      return shouldAdd
+      return shouldAdd;
     },
-  }
+  };
 
   const localStorage = {
     getItem: (key: string) => storage.get(key) ?? null,
     setItem: (key: string, value: string) => {
-      storage.set(key, value)
+      storage.set(key, value);
     },
     removeItem: (key: string) => {
-      storage.delete(key)
+      storage.delete(key);
     },
     clear: () => {
-      storage.clear()
+      storage.clear();
     },
     key: (index: number) => Array.from(storage.keys())[index] ?? null,
     get length() {
-      return storage.size
+      return storage.size;
     },
-  } satisfies Storage
+  } satisfies Storage;
 
   const mediaQuery = {
     matches: prefersDark,
@@ -58,70 +58,64 @@ function setupThemeEnvironment({
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
     dispatchEvent: vi.fn(),
-  } as unknown as MediaQueryList
+  } as unknown as MediaQueryList;
 
-  vi.stubGlobal(
-    "window",
-    {
-      localStorage,
-      matchMedia: vi.fn().mockReturnValue(mediaQuery),
-      addEventListener: vi.fn(),
-    } as unknown as Window & typeof globalThis,
-  )
-  vi.stubGlobal(
-    "document",
-    {
-      documentElement: {
-        classList,
-      },
-    } as unknown as Document,
-  )
+  vi.stubGlobal("window", {
+    localStorage,
+    matchMedia: vi.fn().mockReturnValue(mediaQuery),
+    addEventListener: vi.fn(),
+  } as unknown as Window & typeof globalThis);
+  vi.stubGlobal("document", {
+    documentElement: {
+      classList,
+    },
+  } as unknown as Document);
 
   class MockMutationObserver {
     constructor(_callback: MutationCallback) {}
     disconnect() {}
     observe() {}
     takeRecords() {
-      return []
+      return [];
     }
   }
 
-  vi.stubGlobal("MutationObserver", MockMutationObserver)
+  vi.stubGlobal("MutationObserver", MockMutationObserver);
 
-  return { classes, storage }
+  return { classes, storage };
 }
 
 describe("theme persistence", () => {
   afterEach(() => {
-    vi.unstubAllGlobals()
-    vi.resetModules()
-  })
+    vi.unstubAllGlobals();
+    vi.resetModules();
+  });
 
   it("applies the stored dark theme during initialization", async () => {
-    const env = setupThemeEnvironment({ storedTheme: "dark" })
-    const theme = await import("./useTheme")
+    const env = setupThemeEnvironment({ storedTheme: "dark" });
+    const theme = await import("./useTheme");
 
-    theme.initializePreferredTheme()
+    theme.initializePreferredTheme();
 
-    expect(env.classes.has("dark")).toBe(true)
-  })
+    expect(env.classes.has("dark")).toBe(true);
+  });
 
   it("applies system dark mode when no explicit preference is stored", async () => {
-    const env = setupThemeEnvironment({ prefersDark: true })
-    const theme = await import("./useTheme")
+    const env = setupThemeEnvironment({ prefersDark: true });
+    const theme = await import("./useTheme");
 
-    theme.initializePreferredTheme()
+    theme.initializePreferredTheme();
 
-    expect(env.classes.has("dark")).toBe(true)
-  })
+    expect(env.classes.has("dark")).toBe(true);
+  });
 
   it("stores and applies selected theme changes", async () => {
-    const env = setupThemeEnvironment()
-    const theme = await import("./useTheme")
+    const env = setupThemeEnvironment();
+    const theme = await import("./useTheme");
 
-    theme.setPreferredTheme("dark")
+    theme.setPreferredTheme("dark");
 
-    expect(env.storage.get(theme.THEME_STORAGE_KEY)).toBe("dark")
-    expect(env.classes.has("dark")).toBe(true)
-  })
-})
+    expect(env.storage.get(theme.THEME_STORAGE_KEY)).toBe("dark");
+    expect(env.classes.has("dark")).toBe(true);
+  });
+});

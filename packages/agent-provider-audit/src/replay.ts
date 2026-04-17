@@ -1,9 +1,7 @@
 import { mkdirSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  replayRawProviderEvents,
-} from "@bb/agent-runtime";
+import { replayRawProviderEvents } from "@bb/agent-runtime";
 import type {
   AgentRuntimeCaptureEntry,
   AgentRuntimeRawProviderEventCaptureEntry,
@@ -89,7 +87,12 @@ function loadFixtureBundle(args: {
   providerId: string;
   taskId: string;
 }): ProviderAuditFixtureBundle {
-  const fixturePath = join(args.fixtureRoot, args.corpusId, args.providerId, args.taskId);
+  const fixturePath = join(
+    args.fixtureRoot,
+    args.corpusId,
+    args.providerId,
+    args.taskId,
+  );
   return {
     corpusId: args.corpusId,
     providerId: args.providerId,
@@ -250,7 +253,9 @@ function replayFixtureBundle(args: {
 export function replayFixtures(
   args: ProviderAuditReplayFixturesArgs,
 ): ProviderAuditReplayFixturesResult {
-  const fixtureRoot = args.fixtureRoot ? resolve(args.fixtureRoot) : DEFAULT_FIXTURE_ROOT;
+  const fixtureRoot = args.fixtureRoot
+    ? resolve(args.fixtureRoot)
+    : DEFAULT_FIXTURE_ROOT;
   const fixtures = listFixtureBundles({
     ...args,
     fixtureRoot,
@@ -346,7 +351,10 @@ function getCoverageProviderAccumulator(
     observedToolCalls: new Map<string, CoverageToolCallAccumulator>(),
     providerId,
     rawEventKinds: new Map<string, CoverageRawEventAccumulator>(),
-    translatedEventTypes: new Map<string, CoverageTranslatedEventTypeAccumulator>(),
+    translatedEventTypes: new Map<
+      string,
+      CoverageTranslatedEventTypeAccumulator
+    >(),
     wellKnownToolNames: new Set<string>(),
   };
   accumulators.set(providerId, created);
@@ -362,39 +370,44 @@ function finalizeCoverageProviderAccumulator(
 ): ProviderAuditProviderCoverageSummary {
   const rawEventKinds: ProviderAuditCoverageRawEventSummary[] = [
     ...accumulator.rawEventKinds.values(),
-  ].map((entry) => ({
-    kind: entry.kind,
-    classification: entry.classification,
-    totalCount: entry.totalCount,
-    fixtureIds: sortFixtureIds(entry.fixtureIds),
-  })).sort((left, right) => {
-    if (left.kind !== right.kind) {
-      return left.kind.localeCompare(right.kind);
-    }
-    return left.classification.localeCompare(right.classification);
-  });
+  ]
+    .map((entry) => ({
+      kind: entry.kind,
+      classification: entry.classification,
+      totalCount: entry.totalCount,
+      fixtureIds: sortFixtureIds(entry.fixtureIds),
+    }))
+    .sort((left, right) => {
+      if (left.kind !== right.kind) {
+        return left.kind.localeCompare(right.kind);
+      }
+      return left.classification.localeCompare(right.classification);
+    });
 
-  const translatedEventTypes: ProviderAuditCoverageTranslatedEventTypeSummary[] = [
-    ...accumulator.translatedEventTypes.values(),
-  ].map((entry) => ({
-    type: entry.type,
-    fixtureIds: sortFixtureIds(entry.fixtureIds),
-  })).sort((left, right) => left.type.localeCompare(right.type));
+  const translatedEventTypes: ProviderAuditCoverageTranslatedEventTypeSummary[] =
+    [...accumulator.translatedEventTypes.values()]
+      .map((entry) => ({
+        type: entry.type,
+        fixtureIds: sortFixtureIds(entry.fixtureIds),
+      }))
+      .sort((left, right) => left.type.localeCompare(right.type));
 
   const observedToolCalls: ProviderAuditCoverageToolCallSummary[] = [
     ...accumulator.observedToolCalls.values(),
-  ].map((entry) => ({
-    key: entry.key,
-    displayName: entry.displayName,
-    coverage: entry.coverage,
-    totalCount: entry.totalCount,
-    fixtureIds: sortFixtureIds(entry.fixtureIds),
-  })).sort((left, right) => {
-    if (left.key !== right.key) {
-      return left.key.localeCompare(right.key);
-    }
-    return left.coverage.localeCompare(right.coverage);
-  });
+  ]
+    .map((entry) => ({
+      key: entry.key,
+      displayName: entry.displayName,
+      coverage: entry.coverage,
+      totalCount: entry.totalCount,
+      fixtureIds: sortFixtureIds(entry.fixtureIds),
+    }))
+    .sort((left, right) => {
+      if (left.key !== right.key) {
+        return left.key.localeCompare(right.key);
+      }
+      return left.coverage.localeCompare(right.coverage);
+    });
 
   return {
     providerId: accumulator.providerId,
@@ -439,7 +452,8 @@ export function summarizeFixtureCoverage(
       }
     }
 
-    for (const translatedEventType of entry.bundle.auditReport.translatedEventTypes) {
+    for (const translatedEventType of entry.bundle.auditReport
+      .translatedEventTypes) {
       const existing = provider.translatedEventTypes.get(translatedEventType);
       if (existing) {
         existing.fixtureIds.add(fixtureId);
@@ -484,7 +498,9 @@ export function collectCoverageIssues(
   return {
     unexpectedUntranslatedFixtures: result.fixtures
       .filter(
-        (entry) => entry.bundle.auditReport.summary.unexpectedUntranslatedRawEventCount > 0,
+        (entry) =>
+          entry.bundle.auditReport.summary.unexpectedUntranslatedRawEventCount >
+          0,
       )
       .map((entry) => ({
         fixtureId: toCoverageFixtureId(entry.fixture),
@@ -494,7 +510,9 @@ export function collectCoverageIssues(
       .sort((left, right) => left.fixtureId.localeCompare(right.fixtureId)),
     providersWithUnhandledEvents: coverage.providers
       .filter((provider) =>
-        provider.translatedEventTypes.some((entry) => entry.type === "provider/unhandled"),
+        provider.translatedEventTypes.some(
+          (entry) => entry.type === "provider/unhandled",
+        ),
       )
       .map((provider) => ({
         providerId: provider.providerId,

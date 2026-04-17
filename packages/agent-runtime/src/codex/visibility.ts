@@ -22,7 +22,9 @@ const CODEX_WELL_KNOWN_TOOL_NAMES = [
   "spawnAgent",
   "wait",
 ] as const;
-const CODEX_WELL_KNOWN_TOOL_NAME_SET = new Set<string>(CODEX_WELL_KNOWN_TOOL_NAMES);
+const CODEX_WELL_KNOWN_TOOL_NAME_SET = new Set<string>(
+  CODEX_WELL_KNOWN_TOOL_NAMES,
+);
 
 type CodexServerNotificationMethod = ServerNotification["method"];
 
@@ -59,9 +61,9 @@ const CODEX_SERVER_NOTIFICATION_METHODS = {
   "account/updated": true,
   "app/list/updated": true,
   "command/exec/outputDelta": true,
-  "configWarning": true,
-  "deprecationNotice": true,
-  "error": true,
+  configWarning: true,
+  deprecationNotice: true,
+  error: true,
   "fuzzyFileSearch/sessionCompleted": true,
   "fuzzyFileSearch/sessionUpdated": true,
   "hook/completed": true,
@@ -111,9 +113,9 @@ const CODEX_NOTIFICATION_COVERAGE = {
   "account/updated": "unknown",
   "app/list/updated": "unknown",
   "command/exec/outputDelta": "unknown",
-  "configWarning": "normalized",
-  "deprecationNotice": "normalized",
-  "error": "normalized",
+  configWarning: "normalized",
+  deprecationNotice: "normalized",
+  error: "normalized",
   "fuzzyFileSearch/sessionCompleted": "unknown",
   "fuzzyFileSearch/sessionUpdated": "unknown",
   "hook/completed": "unknown",
@@ -206,7 +208,8 @@ function describeParsedCodexRawEvent(
 
     case "notification":
       if (
-        (event.method === "item/started" || event.method === "item/completed") &&
+        (event.method === "item/started" ||
+          event.method === "item/completed") &&
         isCodexUserMessageItemEvent(event)
       ) {
         // User prompts render from client/turn/requested; Codex echoes are intentionally suppressed.
@@ -308,11 +311,13 @@ function extractObservedToolCallsFromParsedCodexRawEvent(
   if (!details) {
     return [];
   }
-  return [{
-    key: details.key,
-    displayName: details.displayName,
-    coverage: classifyCodexToolCallCoverage(details),
-  }];
+  return [
+    {
+      key: details.key,
+      displayName: details.displayName,
+      coverage: classifyCodexToolCallCoverage(details),
+    },
+  ];
 }
 
 export const codexVisibilityMetadata: ProviderVisibilityMetadata<CodexRawEvent> =
@@ -321,5 +326,6 @@ export const codexVisibilityMetadata: ProviderVisibilityMetadata<CodexRawEvent> 
     wellKnownToolNames: CODEX_WELL_KNOWN_TOOL_NAMES,
     parseRawEvent: parseCodexRawEvent,
     describeParsedRawEvent: describeParsedCodexRawEvent,
-    extractObservedToolCallsFromParsed: extractObservedToolCallsFromParsedCodexRawEvent,
+    extractObservedToolCallsFromParsed:
+      extractObservedToolCallsFromParsedCodexRawEvent,
   });

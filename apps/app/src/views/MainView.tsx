@@ -28,7 +28,9 @@ export function MainView() {
             onClick={() => {
               quickCreateProject.openCreateDialog();
             }}
-            disabled={quickCreateProject.isCreating || !quickCreateProject.isAvailable}
+            disabled={
+              quickCreateProject.isCreating || !quickCreateProject.isAvailable
+            }
           >
             {quickCreateProject.isCreating
               ? "Creating..."

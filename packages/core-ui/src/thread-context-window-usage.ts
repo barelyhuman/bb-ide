@@ -23,7 +23,9 @@ function toNonNegativeNumber(value: unknown): number | undefined {
   return value;
 }
 
-function decodeContextWindowSignal(event: ThreadEventRow): ThreadContextWindowSignal | null {
+function decodeContextWindowSignal(
+  event: ThreadEventRow,
+): ThreadContextWindowSignal | null {
   if (isThreadEventRowOfType(event, "thread/contextWindowUsage/updated")) {
     const contextWindowUsage = event.data.contextWindowUsage;
     return {
@@ -70,7 +72,10 @@ export function extractThreadContextWindowUsage(
       modelContextWindow = signal.modelContextWindow;
     }
 
-    if ((usedTokens !== undefined || usageIsUnknown) && modelContextWindow !== undefined) {
+    if (
+      (usedTokens !== undefined || usageIsUnknown) &&
+      modelContextWindow !== undefined
+    ) {
       break;
     }
   }
