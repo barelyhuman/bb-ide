@@ -169,39 +169,54 @@ function derivePromotionStateFromFacts(
   };
 }
 
-function commonUnavailableReason(
+interface ReadyPromotionStatuses {
+  environmentStatus: WorkspaceStatus;
+  primaryStatus: WorkspaceStatus;
+}
+
+type CommonAvailabilityCheck =
+  | { unavailableReason: EnvironmentPromotionUnavailableReason }
+  | { unavailableReason: null; statuses: ReadyPromotionStatuses };
+
+function checkCommonAvailability(
   facts: PromotionWorkspaceFacts,
-): EnvironmentPromotionUnavailableReason | null {
+): CommonAvailabilityCheck {
   if (facts.eligibilityUnavailableReason) {
-    return facts.eligibilityUnavailableReason;
+    return { unavailableReason: facts.eligibilityUnavailableReason };
   }
   if (!facts.primaryStatus) {
-    return "primary_checkout_status_unavailable";
+    return { unavailableReason: "primary_checkout_status_unavailable" };
   }
   if (!facts.environmentStatus) {
-    return "environment_status_unavailable";
+    return { unavailableReason: "environment_status_unavailable" };
   }
   if (facts.primaryStatus.workingTree.hasUncommittedChanges) {
-    return "primary_checkout_dirty";
+    return { unavailableReason: "primary_checkout_dirty" };
   }
   if (facts.environmentStatus.workingTree.hasUncommittedChanges) {
-    return "environment_dirty";
+    return { unavailableReason: "environment_dirty" };
   }
-  return null;
+  return {
+    unavailableReason: null,
+    statuses: {
+      environmentStatus: facts.environmentStatus,
+      primaryStatus: facts.primaryStatus,
+    },
+  };
 }
 
 function buildPromoteAvailability(
   facts: PromotionWorkspaceFacts,
   state: EnvironmentPromotionState,
 ): EnvironmentPromotionActionAvailability {
-  const commonReason = commonUnavailableReason(facts);
-  if (commonReason) {
-    return unavailable(commonReason);
+  const check = checkCommonAvailability(facts);
+  if (check.unavailableReason) {
+    return unavailable(check.unavailableReason);
   }
   if (state.isPromoted) {
     return unavailable("already_promoted");
   }
-  if (facts.environmentStatus.branch.currentBranch !== state.branchName) {
+  if (check.statuses.environmentStatus.branch.currentBranch !== state.branchName) {
     return unavailable("environment_branch_mismatch");
   }
   return available();
@@ -212,9 +227,9 @@ function buildDemoteAvailability(
   facts: PromotionWorkspaceFacts,
   state: EnvironmentPromotionState,
 ): EnvironmentPromotionActionAvailability {
-  const commonReason = commonUnavailableReason(facts);
-  if (commonReason) {
-    return unavailable(commonReason);
+  const check = checkCommonAvailability(facts);
+  if (check.unavailableReason) {
+    return unavailable(check.unavailableReason);
   }
   if (!environment.defaultBranch) {
     return unavailable("missing_default_branch");
