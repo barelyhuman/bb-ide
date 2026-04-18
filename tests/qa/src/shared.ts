@@ -72,6 +72,18 @@ interface StartQaServerResult {
   serverUrl: string;
 }
 
+interface BuildDaemonRestartCommandArgs {
+  daemonPid: number | null | undefined;
+  daemonPort: number;
+  dataDir: string;
+  entrypoint: string;
+  envFilePath: string | null;
+  hostId: string;
+  logPath: string;
+  parentPid: number;
+  serverUrl: string;
+}
+
 interface StandaloneProcessInfo {
   instanceId: string | null;
   parentPid: number | null;
@@ -723,16 +735,9 @@ export async function cleanupStandaloneOrphans(): Promise<CleanupStandaloneResul
   };
 }
 
-export function buildDaemonRestartCommand(args: {
-  daemonPid: number | null | undefined;
-  daemonPort: number;
-  dataDir: string;
-  entrypoint: string;
-  envFilePath: string | null;
-  logPath: string;
-  parentPid: number;
-  serverUrl: string;
-}): string {
+export function buildDaemonRestartCommand(
+  args: BuildDaemonRestartCommandArgs,
+): string {
   const shutdownCommand = args.daemonPid
     ? [
         `(kill ${shellQuote(String(args.daemonPid))} >/dev/null 2>&1 || true)`,
@@ -753,8 +758,16 @@ export function buildDaemonRestartCommand(args: {
     `(set -a; ${envFileCommand}; set +a; ` +
     `${daemonEnv} exec node ${shellQuote(args.entrypoint)} ` +
     `>> ${shellQuote(args.logPath)} 2>&1) &`;
+  const waitForReconnectCommand = [
+    "connected=0",
+    `for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do if curl -fsS ${shellQuote(`${args.serverUrl}/api/v1/hosts`)} | jq -e ${shellQuote(`any(.[]; .id == ${JSON.stringify(args.hostId)} and .status == "connected")`)} >/dev/null; then connected=1; break; fi`,
+    "sleep 1",
+    "done",
+    `[ "$connected" = 1 ]`,
+  ].join("; ");
+  const startAndWaitCommand = `${startCommand} ${waitForReconnectCommand}`;
 
-  return [...shutdownCommand, startCommand].join("; ");
+  return [...shutdownCommand, startAndWaitCommand].join("; ");
 }
 
 export async function waitFor<TResult>(

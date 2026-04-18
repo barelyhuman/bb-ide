@@ -55,7 +55,7 @@ CODEX_MODEL=$(bb provider models codex --json | jq -er '([.[] | select(.isDefaul
 CLAUDE_MODEL=$(bb provider models claude-code --json | jq -er '([.[] | select(.model == "claude-haiku-4-5")][0].model // [.[] | select(.isDefault)][0].model // .[0].model)')
 PI_MODELS_JSON=$(bb provider models pi --json)
 PI_MODEL=$(printf '%s\n' "$PI_MODELS_JSON" | jq -er '
-  [.[] | select(.model == "anthropic/claude-opus-4-7")][0].model
+  [.[] | select(.model == "anthropic/claude-haiku-4-5")][0].model
   // [.[] | select(.model == "openai-codex/gpt-5.4")][0].model
   // [.[] | select(.model | startswith("anthropic/")) | select(.isDefault)][0].model
   // [.[] | select(.model | startswith("openai-codex/")) | select(.isDefault)][0].model
@@ -73,8 +73,9 @@ Avoid phrasing like "reply only in chat with..." because providers can interpret
 as a behavioral constraint rather than the expected response text.
 
 For Pi checks, prefer subscription-backed models (`anthropic/...` from Claude
-subscription auth, then `openai-codex/...` from Codex subscription auth) over
-generic `openai/...` API-key models.
+subscription auth, specifically `anthropic/claude-haiku-4-5` first, then
+`openai-codex/gpt-5.4` from Codex subscription auth) over generic `openai/...`
+API-key models.
 
 Teardown:
 
@@ -293,7 +294,7 @@ PI_THREAD_ID=$(bb thread spawn \
   --json | jq -r '.id')
 
 bb thread wait "$CLAUDE_THREAD_ID" --status idle --timeout 120
-bb thread wait "$PI_THREAD_ID" --status idle --timeout 120
+bb thread wait "$PI_THREAD_ID" --status idle --timeout 180
 CLAUDE_ENV_ID=$(curl -fsS "$BB_SERVER_URL/api/v1/threads/$CLAUDE_THREAD_ID" | jq -r '.environmentId')
 PI_ENV_ID=$(curl -fsS "$BB_SERVER_URL/api/v1/threads/$PI_THREAD_ID" | jq -r '.environmentId')
 
