@@ -1,9 +1,47 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ToolDefinition } from "@mariozechner/pi-coding-agent";
 
+interface MockBashSpawnContext {
+  command: string;
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+}
+
+interface MockBashSpawnHook {
+  (context: MockBashSpawnContext): MockBashSpawnContext;
+}
+
+interface MockBashToolOptions {
+  spawnHook?: MockBashSpawnHook;
+}
+
+interface MockBashToolTextContent {
+  type: "text";
+  text: string;
+}
+
+interface MockBashToolExecutionResult {
+  content: MockBashToolTextContent[];
+  details: Record<string, never>;
+}
+
+interface MockBashToolDefinition {
+  name: string;
+  label: string;
+  description: string;
+  parameters: Record<string, never>;
+  execute: () => Promise<MockBashToolExecutionResult>;
+}
+
+interface MockCreateBashToolDefinition {
+  (cwd: string, options?: MockBashToolOptions): MockBashToolDefinition;
+}
+
 const {
   mockGetActiveToolNames,
   mockSetActiveToolsByName,
+  mockCreateBashToolDefinition,
+  mockDefineTool,
   mockOpen,
   mockInMemory,
   mockSettingsInMemory,
@@ -23,6 +61,21 @@ const {
   const mockOpen = vi.fn((path: string) => ({ kind: "open", path }));
   const mockInMemory = vi.fn((cwd?: string) => ({ kind: "in-memory", cwd }));
   const mockSettingsInMemory = vi.fn(() => ({ kind: "settings" }));
+  const mockCreateBashToolDefinition = vi.fn<MockCreateBashToolDefinition>(
+    (_cwd, _options) => ({
+      name: "bash",
+      label: "bash",
+      description: "Execute a bash command",
+      parameters: {},
+      execute: vi.fn(
+        async (): Promise<MockBashToolExecutionResult> => ({
+          content: [{ type: "text", text: "ok" }],
+          details: {},
+        }),
+      ),
+    }),
+  );
+  const mockDefineTool = vi.fn(<TTool>(tool: TTool): TTool => tool);
   const mockCreateAgentSession = vi.fn(async () => ({
     session: {
       abort: mockAbort,
@@ -44,6 +97,8 @@ const {
   return {
     mockGetActiveToolNames,
     mockSetActiveToolsByName,
+    mockCreateBashToolDefinition,
+    mockDefineTool,
     mockOpen,
     mockInMemory,
     mockSettingsInMemory,
@@ -56,6 +111,8 @@ const {
 
 vi.mock("@mariozechner/pi-coding-agent", () => ({
   createAgentSession: mockCreateAgentSession,
+  createBashToolDefinition: mockCreateBashToolDefinition,
+  defineTool: mockDefineTool,
   SessionManager: {
     open: mockOpen,
     inMemory: mockInMemory,
@@ -106,6 +163,14 @@ describe("PiSdkSession", () => {
     expect(mockOpen).not.toHaveBeenCalled();
   });
 
+  it("leaves Pi's built-in bash active when no shell env overrides are configured", async () => {
+    const session = new PiSdkSession({ cwd: "/tmp/project" }, vi.fn(), vi.fn());
+
+    await session.start();
+
+    expect(mockCreateBashToolDefinition).not.toHaveBeenCalled();
+  });
+
   it("resolves openai-codex subscription models", async () => {
     const session = new PiSdkSession(
       {
@@ -146,6 +211,75 @@ describe("PiSdkSession", () => {
         thinkingLevel: "xhigh",
       }),
     );
+  });
+
+  it("scopes shell env overrides to the bash spawn hook without mutating process.env", async () => {
+    const sessionEnvKey = "BB_PI_UNIT_SESSION_ENV";
+    const processOnlyEnvKey = "BB_PI_UNIT_PROCESS_ONLY_ENV";
+    const previousSessionEnvValue = process.env[sessionEnvKey];
+    const previousProcessOnlyEnvValue = process.env[processOnlyEnvKey];
+    delete process.env[sessionEnvKey];
+    process.env[processOnlyEnvKey] = "daemon-secret";
+
+    try {
+      const session = new PiSdkSession(
+        {
+          cwd: "/tmp/project",
+          shellEnvOverrides: {
+            BB_THREAD_ID: "t1",
+            [sessionEnvKey]: "thread-a",
+          },
+        },
+        vi.fn(),
+        vi.fn(),
+      );
+
+      await session.start();
+
+      expect(process.env[sessionEnvKey]).toBeUndefined();
+      expect(process.env[processOnlyEnvKey]).toBe("daemon-secret");
+      expect(mockCreateBashToolDefinition).toHaveBeenCalledTimes(1);
+
+      const bashToolCall = mockCreateBashToolDefinition.mock.calls[0];
+      if (!bashToolCall) {
+        throw new Error("Expected Pi bash tool to be created");
+      }
+
+      const bashToolOptions = bashToolCall[1];
+      if (!bashToolOptions?.spawnHook) {
+        throw new Error("Expected Pi bash tool to receive a spawn hook");
+      }
+
+      const spawnContext: MockBashSpawnContext = {
+        command: "printf ok",
+        cwd: "/tmp/project",
+        env: {
+          PATH: "/bin",
+          BB_THREAD_ID: "base-thread",
+        },
+      };
+
+      expect(bashToolOptions.spawnHook(spawnContext)).toEqual({
+        command: "printf ok",
+        cwd: "/tmp/project",
+        env: {
+          PATH: "/bin",
+          BB_THREAD_ID: "t1",
+          [sessionEnvKey]: "thread-a",
+        },
+      });
+    } finally {
+      if (previousSessionEnvValue === undefined) {
+        delete process.env[sessionEnvKey];
+      } else {
+        process.env[sessionEnvKey] = previousSessionEnvValue;
+      }
+      if (previousProcessOnlyEnvValue === undefined) {
+        delete process.env[processOnlyEnvKey];
+      } else {
+        process.env[processOnlyEnvKey] = previousProcessOnlyEnvValue;
+      }
+    }
   });
 
   it("re-activates missing custom tools before later prompts", async () => {

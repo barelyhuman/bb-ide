@@ -1,11 +1,14 @@
 import { dirname } from "node:path";
 import {
   createAgentSession,
+  createBashToolDefinition,
+  defineTool,
   DefaultResourceLoader,
   SessionManager,
   SettingsManager,
   type AgentSession,
   type AgentSessionEvent,
+  type BashSpawnHook,
   type ContextUsage,
   type CreateAgentSessionOptions,
   type SessionStats,
@@ -18,16 +21,29 @@ export interface PiSdkSessionOptions {
   cwd: string;
   model?: string;
   thinkingLevel?: CreateAgentSessionOptions["thinkingLevel"];
-  env?: NodeJS.ProcessEnv;
+  shellEnvOverrides?: ShellEnvOverrides;
   customTools?: ToolDefinition[];
   sessionFilePath?: string;
   systemPrompt?: string;
   appendSystemPrompt?: string;
 }
 
+export type ShellEnvOverrides = Record<string, string>;
+
 type PiSessionEventHandler = (event: AgentSessionEvent) => void;
 type PiSessionDoneHandler = (error?: unknown) => void;
 type AppendSystemPromptOverride = (base: string[]) => string[];
+
+interface CreateBashToolWithShellEnvOverlayArgs {
+  cwd: string;
+  shellEnvOverrides: ShellEnvOverrides;
+}
+
+interface BuildSessionCustomToolsArgs {
+  customTools?: ToolDefinition[];
+  cwd: string;
+  shellEnvOverrides?: ShellEnvOverrides;
+}
 
 function assertExclusivePiPromptOverrides(options: PiSdkSessionOptions): void {
   if (
@@ -44,6 +60,47 @@ function buildAppendSystemPromptOverride(
   appendSystemPrompt: string,
 ): AppendSystemPromptOverride {
   return (base) => [...base, appendSystemPrompt];
+}
+
+function hasShellEnvOverrides(
+  shellEnvOverrides: ShellEnvOverrides | undefined,
+): shellEnvOverrides is ShellEnvOverrides {
+  return (
+    shellEnvOverrides !== undefined && Object.keys(shellEnvOverrides).length > 0
+  );
+}
+
+function createBashToolWithShellEnvOverlay(
+  args: CreateBashToolWithShellEnvOverlayArgs,
+): ToolDefinition {
+  const shellEnvOverrides = args.shellEnvOverrides;
+  const spawnHook: BashSpawnHook = (context) => ({
+    ...context,
+    env: {
+      ...context.env,
+      ...shellEnvOverrides,
+    },
+  });
+
+  // Pi exposes shell env customization through bash spawn options today. This is
+  // intentionally bash-only; non-bash tools must not depend on per-thread env in
+  // this shared bridge process.
+  return defineTool(createBashToolDefinition(args.cwd, { spawnHook }));
+}
+
+function buildSessionCustomTools(
+  args: BuildSessionCustomToolsArgs,
+): ToolDefinition[] {
+  const customTools = [...(args.customTools ?? [])];
+  if (hasShellEnvOverrides(args.shellEnvOverrides)) {
+    customTools.push(
+      createBashToolWithShellEnvOverlay({
+        cwd: args.cwd,
+        shellEnvOverrides: args.shellEnvOverrides,
+      }),
+    );
+  }
+  return customTools;
 }
 
 /**
@@ -131,21 +188,12 @@ export class PiSdkSession {
       sessionOptions.thinkingLevel = this.options.thinkingLevel;
     }
 
-    // Register custom tools
-    if (this.options.customTools && this.options.customTools.length > 0) {
-      sessionOptions.customTools = this.options.customTools;
-    }
-
-    // The Pi SDK does not support per-session environment variables — its
-    // built-in tools (bash, etc.) inherit from process.env. BB therefore
-    // isolates Pi bridge subprocesses per thread at the host-daemon layer.
-    if (this.options.env) {
-      for (const [key, value] of Object.entries(this.options.env)) {
-        if (value !== undefined) {
-          process.env[key] = value;
-        }
-      }
-    }
+    const customTools = buildSessionCustomTools({
+      customTools: this.options.customTools,
+      cwd: this.options.cwd,
+      shellEnvOverrides: this.options.shellEnvOverrides,
+    });
+    sessionOptions.customTools = customTools;
 
     try {
       const { session } = await createAgentSession(sessionOptions);

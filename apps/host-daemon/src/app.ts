@@ -27,7 +27,12 @@ import {
 } from "./server-connection.js";
 import { ensureThreadStorageRoot } from "./thread-storage-root.js";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
-import type { HostType, ToolCallRequest, ToolCallResponse } from "@bb/domain";
+import {
+  calculateExponentialBackoffDelay,
+  type HostType,
+  type ToolCallRequest,
+  type ToolCallResponse,
+} from "@bb/domain";
 import type { HostWatcher } from "@bb/host-watcher";
 
 interface SessionState {
@@ -35,53 +40,189 @@ interface SessionState {
 }
 
 const COMMAND_FETCH_RETRY_DELAY_MS = 2_000;
+const COMMAND_FETCH_RETRY_MAX_DELAY_MS = 30_000;
+const COMMAND_FETCH_RETRY_JITTER_RATIO = 0.25;
 const ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS = 150;
 const ENVIRONMENT_CHANGE_REPORT_RETRY_DELAY_MS = 1_000;
 const ENVIRONMENT_CHANGE_REPORT_MAX_RETRY_DELAY_MS = 30_000;
 const INTERACTIVE_INTERRUPT_RETRY_DELAY_MS = 1_000;
+// Keeps unrelated thread/provider work moving while bounding memory and provider
+// pressure when the server has a large backlog.
+const DEFAULT_MAX_IN_FLIGHT_COMMANDS = 32;
 
-export function createCommandFetchLoop<Command>(args: {
+interface CommandFetchRetryDelayArgs {
+  attempt: number;
+  baseDelayMs: number;
+  maxDelayMs: number;
+}
+
+export interface CommandFetchLoopOptions<Command> {
   logger: HostDaemonLogger;
   fetchCommands: () => Promise<Command[]>;
   handleCommands: (commands: Command[]) => Promise<void>;
+  maxInFlightCommands?: number;
   retryDelayMs?: number;
-}) {
+}
+
+export interface CommandFetchLoop {
+  request: () => Promise<void>;
+  stopAndDrain: () => Promise<void>;
+}
+
+function resolveMaxInFlightCommands(value: number | undefined): number {
+  if (value === undefined) {
+    return DEFAULT_MAX_IN_FLIGHT_COMMANDS;
+  }
+  if (!Number.isFinite(value) || value < 1) {
+    throw new Error("maxInFlightCommands must be a finite number >= 1");
+  }
+  return Math.floor(value);
+}
+
+function calculateCommandFetchRetryDelayMs(
+  args: CommandFetchRetryDelayArgs,
+): number {
+  const exponentialDelayMs = calculateExponentialBackoffDelay({
+    attempt: args.attempt,
+    baseDelayMs: args.baseDelayMs,
+    maxDelayMs: args.maxDelayMs,
+  });
+  const jitterMultiplier =
+    1 + (Math.random() * 2 - 1) * COMMAND_FETCH_RETRY_JITTER_RATIO;
+  return Math.max(
+    1,
+    Math.min(
+      args.maxDelayMs,
+      Math.round(exponentialDelayMs * jitterMultiplier),
+    ),
+  );
+}
+
+export function createCommandFetchLoop<Command>(
+  args: CommandFetchLoopOptions<Command>,
+): CommandFetchLoop {
   let fetchRequested = false;
   let fetchPromise: Promise<void> | null = null;
+  let stopped = false;
+  let retryTimer: NodeJS.Timeout | null = null;
+  const pendingCommands: Command[] = [];
+  const inFlightHandlers = new Set<Promise<void>>();
+  const maxInFlightCommands = resolveMaxInFlightCommands(
+    args.maxInFlightCommands,
+  );
+  const retryBaseDelayMs = args.retryDelayMs ?? COMMAND_FETCH_RETRY_DELAY_MS;
+  let retryAttempt = 0;
 
-  async function drainPendingCommands(): Promise<void> {
-    let commands = await args.fetchCommands();
+  function resetRetryBackoff(): void {
+    retryAttempt = 0;
+  }
 
-    while (commands.length > 0) {
-      await args.handleCommands(commands);
-      commands = await args.fetchCommands();
+  function scheduleRetry(): void {
+    if (stopped || retryTimer) {
+      return;
+    }
+    retryAttempt += 1;
+    const retryDelayMs = calculateCommandFetchRetryDelayMs({
+      attempt: retryAttempt,
+      baseDelayMs: retryBaseDelayMs,
+      maxDelayMs: COMMAND_FETCH_RETRY_MAX_DELAY_MS,
+    });
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      void request();
+    }, retryDelayMs);
+  }
+
+  function clearRetry(): void {
+    if (retryTimer) {
+      clearTimeout(retryTimer);
+      retryTimer = null;
     }
   }
 
-  async function request(): Promise<void> {
-    fetchRequested = true;
+  function startAvailableCommands(): void {
+    while (
+      pendingCommands.length > 0 &&
+      inFlightHandlers.size < maxInFlightCommands
+    ) {
+      const command = pendingCommands.shift();
+      if (command === undefined) {
+        return;
+      }
+      const handlerPromise = args
+        .handleCommands([command])
+        .then(() => {
+          resetRetryBackoff();
+        })
+        .catch((error) => {
+          fetchRequested = false;
+          args.logger.error(
+            { err: error },
+            "Failed to handle host-daemon commands",
+          );
+          scheduleRetry();
+        })
+        .finally(() => {
+          inFlightHandlers.delete(handlerPromise);
+          if (canMakeProgress()) {
+            void ensurePump();
+          }
+        });
+      inFlightHandlers.add(handlerPromise);
+    }
+  }
+
+  function canMakeProgress(): boolean {
+    if (pendingCommands.length > 0) {
+      return inFlightHandlers.size < maxInFlightCommands;
+    }
+    return (
+      !stopped && fetchRequested && inFlightHandlers.size < maxInFlightCommands
+    );
+  }
+
+  async function fetchUntilCapacityBlocked(): Promise<void> {
+    while (
+      !stopped &&
+      fetchRequested &&
+      pendingCommands.length === 0 &&
+      inFlightHandlers.size < maxInFlightCommands
+    ) {
+      const commands = await args.fetchCommands();
+      resetRetryBackoff();
+      if (commands.length === 0) {
+        fetchRequested = false;
+        return;
+      }
+      pendingCommands.push(...commands);
+      startAvailableCommands();
+    }
+  }
+
+  async function drainPendingCommands(): Promise<void> {
+    startAvailableCommands();
+    await fetchUntilCapacityBlocked();
+  }
+
+  async function ensurePump(): Promise<void> {
     if (fetchPromise) {
       return fetchPromise;
     }
 
     fetchPromise = (async () => {
       try {
-        while (fetchRequested) {
-          fetchRequested = false;
-          await drainPendingCommands();
-        }
+        await drainPendingCommands();
       } catch (error) {
         args.logger.error(
           { err: error },
           "Failed to fetch host-daemon commands",
         );
-        setTimeout(() => {
-          void request();
-        }, args.retryDelayMs ?? COMMAND_FETCH_RETRY_DELAY_MS);
+        fetchRequested = false;
+        scheduleRetry();
       } finally {
         fetchPromise = null;
-        if (fetchRequested) {
-          await request();
+        if (canMakeProgress()) {
+          await ensurePump();
         }
       }
     })();
@@ -89,8 +230,37 @@ export function createCommandFetchLoop<Command>(args: {
     return fetchPromise;
   }
 
+  async function request(): Promise<void> {
+    if (stopped) {
+      return;
+    }
+    fetchRequested = true;
+    return ensurePump();
+  }
+
+  async function stopAndDrain(): Promise<void> {
+    stopped = true;
+    fetchRequested = false;
+    clearRetry();
+    while (
+      fetchPromise ||
+      pendingCommands.length > 0 ||
+      inFlightHandlers.size > 0
+    ) {
+      startAvailableCommands();
+      if (fetchPromise) {
+        await fetchPromise;
+        continue;
+      }
+      if (inFlightHandlers.size > 0) {
+        await Promise.race(inFlightHandlers);
+      }
+    }
+  }
+
   return {
     request,
+    stopAndDrain,
   };
 }
 
@@ -478,6 +648,7 @@ export async function createHostDaemonApp(
     releaseLock: options.releaseLock,
     flushEventBuffer: async () => {
       await abortReplayTasks();
+      await commandFetchLoop.stopAndDrain();
       await eventBuffer.flush();
     },
     shutdownRuntimes: async () => {

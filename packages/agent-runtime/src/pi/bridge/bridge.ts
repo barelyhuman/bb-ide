@@ -23,7 +23,11 @@ import type {
   ContextUsage,
 } from "@mariozechner/pi-coding-agent";
 import type { ImageContent } from "@mariozechner/pi-ai";
-import { PiSdkSession, type PiSdkSessionOptions } from "./sdk-session.js";
+import {
+  PiSdkSession,
+  type PiSdkSessionOptions,
+  type ShellEnvOverrides,
+} from "./sdk-session.js";
 import {
   buildDynamicTools,
   type DynamicToolDefinition,
@@ -45,6 +49,12 @@ interface BuildPiSessionOptionsParams extends PiInstructionOverrideParams {
   model?: string;
   sessionPath?: string;
   thinkingLevel?: ReasoningLevel;
+}
+
+interface BuildPiSessionOptionsArgs {
+  params: BuildPiSessionOptionsParams;
+  shellEnvOverrides: ShellEnvOverrides;
+  threadId: string;
 }
 
 function hasAtMostOnePiInstructionOverride(
@@ -434,8 +444,8 @@ async function closeThreadSessionsGracefully(message: string): Promise<void> {
 
 function extractEnvOverrides(
   config: Record<string, unknown> | undefined,
-): Record<string, string> {
-  const envOverrides: Record<string, string> = {};
+): ShellEnvOverrides {
+  const envOverrides: ShellEnvOverrides = {};
   if (config) {
     for (const [key, value] of Object.entries(config)) {
       if (
@@ -450,33 +460,33 @@ function extractEnvOverrides(
   return envOverrides;
 }
 
-function buildSessionEnv(
-  envOverrides: Record<string, string>,
-): NodeJS.ProcessEnv {
-  return {
-    ...process.env,
-    ...envOverrides,
-  };
+function normalizeShellEnvOverrides(
+  shellEnvOverrides: ShellEnvOverrides,
+): ShellEnvOverrides | undefined {
+  return Object.keys(shellEnvOverrides).length > 0
+    ? shellEnvOverrides
+    : undefined;
 }
 
 function buildSessionOptions(
-  params: BuildPiSessionOptionsParams,
-  env: NodeJS.ProcessEnv,
-  threadId: string,
+  args: BuildPiSessionOptionsArgs,
 ): PiSdkSessionOptions {
+  const shellEnvOverrides = normalizeShellEnvOverrides(args.shellEnvOverrides);
   const sessionFilePath = resolvePiSessionFilePath(
-    threadId,
-    params.sessionPath,
+    args.threadId,
+    args.params.sessionPath,
   );
 
   return {
-    cwd: params.cwd,
-    model: params.model,
-    env,
+    cwd: args.params.cwd,
+    model: args.params.model,
     sessionFilePath,
-    systemPrompt: params.baseInstructions,
-    appendSystemPrompt: params.appendSystemPrompt,
-    ...(params.thinkingLevel ? { thinkingLevel: params.thinkingLevel } : {}),
+    systemPrompt: args.params.baseInstructions,
+    appendSystemPrompt: args.params.appendSystemPrompt,
+    ...(shellEnvOverrides ? { shellEnvOverrides } : {}),
+    ...(args.params.thinkingLevel
+      ? { thinkingLevel: args.params.thinkingLevel }
+      : {}),
   };
 }
 
@@ -606,13 +616,12 @@ async function handleThreadStart(
     });
   }
 
-  const envOverrides = extractEnvOverrides(params.config);
-  const sessionEnv = buildSessionEnv(envOverrides);
-  const sessionOptions = buildSessionOptions(
-    buildPiSessionParams(params),
-    sessionEnv,
+  const shellEnvOverrides = extractEnvOverrides(params.config);
+  const sessionOptions = buildSessionOptions({
+    params: buildPiSessionParams(params),
+    shellEnvOverrides,
     threadId,
-  );
+  });
   applyDynamicTools(sessionOptions, params.dynamicTools, threadId);
 
   const sessionSerial = nextSessionSerial();
@@ -655,13 +664,12 @@ async function handleThreadResume(
     });
   }
 
-  const envOverrides = extractEnvOverrides(params.config);
-  const sessionEnv = buildSessionEnv(envOverrides);
-  const sessionOptions = buildSessionOptions(
-    buildPiSessionParams(params),
-    sessionEnv,
+  const shellEnvOverrides = extractEnvOverrides(params.config);
+  const sessionOptions = buildSessionOptions({
+    params: buildPiSessionParams(params),
+    shellEnvOverrides,
     threadId,
-  );
+  });
   applyDynamicTools(sessionOptions, params.dynamicTools, threadId);
 
   const sessionSerial = nextSessionSerial();
