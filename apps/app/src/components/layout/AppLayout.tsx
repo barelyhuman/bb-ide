@@ -60,6 +60,7 @@ const sidebarWidthAtom = atomWithStorage<number>(
 const routeTitles: Record<string, { title: string; subtitle?: string }> = {
   "/": { title: "Projects", subtitle: "Select or create a project" },
   "/settings": { title: "Settings" },
+  "/development-only/replay": { title: "Replay threads" },
 };
 
 interface AppHeaderProps {
