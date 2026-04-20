@@ -219,6 +219,7 @@ async function startIntegrationServer(
     externalUrl: "https://bb.example.test",
     sandboxActivityExtensionDebounceMs: 30_000,
     sandboxIdleThresholdMs: 300_000,
+    isDevelopment: false,
   };
   const machineAuth = await createMachineAuthService({
     dataDir: serverDataDir,
