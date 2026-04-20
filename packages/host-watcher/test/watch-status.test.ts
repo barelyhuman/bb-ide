@@ -10,6 +10,10 @@ import { createDeferredPromise } from "@bb/test-helpers";
 
 type WatchStatusModule = typeof import("../src/watch-status.js");
 type WatchWorkspaceStatus = WatchStatusModule["watchWorkspaceStatus"];
+type WatchWorkspaceStatusArgs = Parameters<WatchWorkspaceStatus>[1];
+type WorkspaceStatusChangeEvent = Parameters<
+  WatchWorkspaceStatusArgs["onChange"]
+>[0];
 type ParcelWatcherModule = typeof import("@parcel/watcher");
 type ParcelWatcherDefault = ParcelWatcherModule["default"];
 type ParcelWatcherCallback = Parameters<ParcelWatcherDefault["subscribe"]>[1];
@@ -39,10 +43,18 @@ interface WatchWorkspaceStatusImport {
   watchWorkspaceStatus: WatchWorkspaceStatus;
 }
 
+interface ManualWorkspaceEventsImport extends WatchWorkspaceStatusImport {
+  emitWorkspaceRootError: (error: Error) => void;
+  emitWorkspaceRootEvents: (events: ParcelWatcherEventBatch) => void;
+  getWorkspaceRootSubscriptionCount: () => number;
+}
+
 const execFileAsync = promisify(execFile);
 const tempDirs: string[] = [];
 const WATCH_READY_SETTLE_MS = 100;
 const WATCH_TEST_TIMEOUT_MS = 2_000;
+const FSEVENTS_DROPPED_EVENTS_ERROR_MESSAGE =
+  "Events were dropped by the FSEvents client. File system must be re-scanned.";
 
 function ignoreWatchError(): void {
   // Ignore watcher warnings in tests that assert only change callbacks.
@@ -362,25 +374,32 @@ function createMockWatcherSubscription(): ParcelWatcherSubscribeResult {
 
 async function importWatchWorkspaceStatusWithManualWorkspaceEvents(
   workspaceRootPath: string,
-): Promise<{
-  emitWorkspaceRootEvents: (events: ParcelWatcherEventBatch) => void;
-  ready: Promise<void>;
-  watchWorkspaceStatus: WatchWorkspaceStatus;
-}> {
+): Promise<ManualWorkspaceEventsImport> {
   let workspaceRootCallback: ParcelWatcherCallback | null = null;
+  let workspaceRootSubscriptionCount = 0;
   const ready = createDeferredPromise<void>();
   vi.resetModules();
   vi.doMock("@parcel/watcher", async () => {
-    const mockSubscribe = async (
+    const mockSubscribe = (
       ...watchArgs: ParcelWatcherSubscribeArgs
-    ): Promise<ParcelWatcherSubscribeResult> => {
-      const [_rootPath, callback] = watchArgs;
-      if (isWorkspaceRootSubscription(watchArgs, workspaceRootPath)) {
-        workspaceRootCallback = callback;
-        ready.resolve(undefined);
-      }
-      return createMockWatcherSubscription();
-    };
+    ): Promise<ParcelWatcherSubscribeResult> =>
+      new Promise<ParcelWatcherSubscribeResult>((resolve) => {
+        const [_rootPath, callback] = watchArgs;
+        const isWorkspaceRoot = isWorkspaceRootSubscription(
+          watchArgs,
+          workspaceRootPath,
+        );
+        if (isWorkspaceRoot) {
+          workspaceRootSubscriptionCount += 1;
+          workspaceRootCallback = callback;
+        }
+        resolve(createMockWatcherSubscription());
+        if (isWorkspaceRoot) {
+          queueMicrotask(() => {
+            ready.resolve(undefined);
+          });
+        }
+      });
     return {
       default: {
         subscribe: mockSubscribe,
@@ -390,12 +409,19 @@ async function importWatchWorkspaceStatusWithManualWorkspaceEvents(
   });
   const watchStatusModule = await import("../src/watch-status.js");
   return {
+    emitWorkspaceRootError: (error) => {
+      if (!workspaceRootCallback) {
+        throw new Error("Workspace root watcher has not been installed");
+      }
+      workspaceRootCallback(error, []);
+    },
     emitWorkspaceRootEvents: (events) => {
       if (!workspaceRootCallback) {
         throw new Error("Workspace root watcher has not been installed");
       }
       workspaceRootCallback(null, normalizeEventBatch(events));
     },
+    getWorkspaceRootSubscriptionCount: () => workspaceRootSubscriptionCount,
     ready: ready.promise,
     watchWorkspaceStatus: watchStatusModule.watchWorkspaceStatus,
   };
@@ -574,6 +600,56 @@ describe("watchWorkspaceStatus", () => {
     } finally {
       stopWatching();
       vi.useRealTimers();
+    }
+  });
+
+  it("rescans after dropped FSEvents errors and after watcher recovery", async () => {
+    const repoPath = await initRepo();
+    const {
+      emitWorkspaceRootError,
+      getWorkspaceRootSubscriptionCount,
+      ready,
+      watchWorkspaceStatus,
+    } = await importWatchWorkspaceStatusWithManualWorkspaceEvents(repoPath);
+    const calls: WorkspaceStatusChangeEvent[] = [];
+    const watchErrors: string[] = [];
+    const stopWatching = watchWorkspaceStatus(repoPath, {
+      onChange: (event) => {
+        calls.push(event);
+      },
+      onWatchError: (error) => {
+        watchErrors.push(`${error.rootPath}:${error.message}`);
+      },
+    });
+
+    try {
+      await ready;
+      await sleep(20);
+      expect(getWorkspaceRootSubscriptionCount()).toBe(1);
+      emitWorkspaceRootError(new Error(FSEVENTS_DROPPED_EVENTS_ERROR_MESSAGE));
+      await waitForCallCount(() => calls.length, 1, WATCH_TEST_TIMEOUT_MS);
+
+      expect(watchErrors).toHaveLength(0);
+      const expectedChange: WorkspaceStatusChangeEvent = {
+        changedPaths: [normalizeWatchPath(repoPath)],
+        changeKinds: [
+          "workspace-content-changed",
+          "workspace-git-changed",
+          "shared-git-refs-changed",
+        ],
+      };
+      expect(calls[0]).toEqual(expectedChange);
+
+      await waitForCallCount(
+        getWorkspaceRootSubscriptionCount,
+        2,
+        WATCH_TEST_TIMEOUT_MS,
+      );
+      await waitForCallCount(() => calls.length, 2, WATCH_TEST_TIMEOUT_MS);
+      expect(watchErrors).toHaveLength(0);
+      expect(calls).toEqual([expectedChange, expectedChange]);
+    } finally {
+      stopWatching();
     }
   });
 

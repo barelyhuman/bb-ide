@@ -9,16 +9,19 @@ import {
   resolveMetadataWatchSpecs,
   type WatchSubscriptionSpec,
 } from "./watch-specs.js";
-import type {
-  WorkspaceStatusChangeEvent,
-  WorkspaceStatusWatchArgs,
-  WorkspaceStatusWatchError,
+import {
+  WORKSPACE_STATUS_WATCH_CHANGE_KINDS,
+  type WorkspaceStatusWatchChangeKind,
+  type WorkspaceStatusWatchArgs,
+  type WorkspaceStatusWatchError,
 } from "./watch-status-types.js";
 
 const WORKSPACE_STATUS_WATCH_DEBOUNCE_MS = 75;
 const WORKSPACE_STATUS_WATCH_MAX_WAIT_MS = 500;
 const WORKSPACE_STATUS_WATCH_RETRY_DELAY_MS = 250;
 const WORKSPACE_STATUS_WATCH_MAX_RETRY_DELAY_MS = 30_000;
+const FSEVENTS_DROPPED_EVENTS_RESCAN_MESSAGE =
+  "File system must be re-scanned";
 
 type ParcelWatcherSubscribe = typeof parcelWatcher.subscribe;
 type ParcelWatcherCallback = Parameters<ParcelWatcherSubscribe>[1];
@@ -41,6 +44,11 @@ function toErrorMessage(error: unknown): string {
     return error.message;
   }
   return "Unknown watch error";
+}
+
+function isDroppedEventsRescanRequiredMessage(message: string): boolean {
+  // Parcel's FSEvents backend uses this phrase for every dropped-events variant.
+  return message.includes(FSEVENTS_DROPPED_EVENTS_RESCAN_MESSAGE);
 }
 
 function createWorkspaceStatusCallbackError(
@@ -73,12 +81,11 @@ async function resolveWatchRootPath(rootPath: string): Promise<string> {
 
 export class WorkspaceStatusWatcher {
   private readonly changedPaths = new Set<string>();
-  private readonly changeKinds = new Set<
-    WorkspaceStatusChangeEvent["changeKinds"][number]
-  >();
+  private readonly changeKinds = new Set<WorkspaceStatusWatchChangeKind>();
   private disposed = false;
   private metadataRetryAttempt = 0;
   private metadataStartRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly pendingRecoveryRescanRootPaths = new Set<string>();
   private readonly retryAttempts = new Map<string, number>();
   private readonly retryTimers = new Map<
     string,
@@ -129,6 +136,7 @@ export class WorkspaceStatusWatcher {
     this.changeScheduler.dispose();
     this.changedPaths.clear();
     this.changeKinds.clear();
+    this.pendingRecoveryRescanRootPaths.clear();
     if (this.metadataStartRetryTimer !== null) {
       clearTimeout(this.metadataStartRetryTimer);
       this.metadataStartRetryTimer = null;
@@ -237,6 +245,21 @@ export class WorkspaceStatusWatcher {
     this.scheduleWatchRetry(spec);
   }
 
+  private queueConservativeWorkspaceStatusChange(
+    spec: WatchSubscriptionSpec,
+  ): void {
+    this.changedPaths.add(spec.rootPath);
+    for (const changeKind of WORKSPACE_STATUS_WATCH_CHANGE_KINDS) {
+      this.changeKinds.add(changeKind);
+    }
+    this.changeScheduler.schedule();
+  }
+
+  private queueDroppedEventsRecovery(spec: WatchSubscriptionSpec): void {
+    this.pendingRecoveryRescanRootPaths.add(spec.rootPath);
+    this.queueConservativeWorkspaceStatusChange(spec);
+  }
+
   private startWatchSubscription(spec: WatchSubscriptionSpec): void {
     void this.startWatchSubscriptionAsync(spec);
   }
@@ -259,6 +282,14 @@ export class WorkspaceStatusWatcher {
             return;
           }
           if (error) {
+            const errorMessage = toErrorMessage(error);
+            if (isDroppedEventsRescanRequiredMessage(errorMessage)) {
+              // Dropped events are recoverable for workspace status: rescan
+              // now and after recovery instead of surfacing a watch warning.
+              this.queueDroppedEventsRecovery(spec);
+              this.handleWatchFailure(spec);
+              return;
+            }
             this.reportWatchError(spec, error);
             this.handleWatchFailure(spec);
             return;
@@ -297,8 +328,17 @@ export class WorkspaceStatusWatcher {
       }
       this.resetWatchRetryState(spec.rootPath);
       this.subscriptions.set(spec.rootPath, subscription);
+      if (this.pendingRecoveryRescanRootPaths.delete(spec.rootPath)) {
+        this.queueConservativeWorkspaceStatusChange(spec);
+      }
     } catch (error) {
       if (this.disposed) {
+        return;
+      }
+      const errorMessage = toErrorMessage(error);
+      if (isDroppedEventsRescanRequiredMessage(errorMessage)) {
+        this.queueDroppedEventsRecovery(spec);
+        this.scheduleWatchRetry(spec);
         return;
       }
       this.reportWatchError(spec, error);
