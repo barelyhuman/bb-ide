@@ -74,25 +74,7 @@ In `agent-provider-auth`, `lastRefreshedAt: number | null` and `lastErrorMessage
 - No new types added that mirror `ThreadEvent`.
 - `pnpm exec turbo run test --filter=@bb/core-ui` passes.
 
-## Phase 5: Move `threadDetailActivity` from `ui-core` to `core-ui`
-
-**Goal:** Projection logic lives with the other projection logic.
-
-`findLatestActivityMessageId` and `shouldPreferOngoingLabelsForRow` reach into `ViewMessage` discriminated unions to classify rendering intent. That is projection logic, and projection logic lives in `core-ui`. `ui-core` should be rendering, not classification.
-
-**Changes:**
-
-- Move `packages/ui-core/src/thread-timeline/threadDetailActivity.ts` to `packages/core-ui/src/thread-detail-activity.ts`.
-- Export from `core-ui/src/index.ts`.
-- Update import sites in `ui-core` and `apps/app` to import from `core-ui`.
-
-**Exit criteria:**
-
-- File no longer in `ui-core/src`.
-- `grep -r "threadDetailActivity" packages/ui-core/src` returns no matches.
-- `pnpm exec turbo run test --filter=@bb/core-ui --filter=@bb/ui-core` passes.
-
-## Phase 6: Extract projection state lifecycle from `to-view-messages.ts`
+## Phase 5: Extract projection state lifecycle from `to-view-messages.ts`
 
 **Goal:** Let the main loop be read top-to-bottom without paging through initialization and finalization helpers.
 
@@ -113,7 +95,7 @@ In `agent-provider-auth`, `lastRefreshedAt: number | null` and `lastErrorMessage
 - `ProjectionState` interface has exactly one definition, in `projection-state.ts`.
 - `pnpm exec turbo run test --filter=@bb/core-ui` passes.
 
-## Phase 7: Resolve server contract defaults at the route boundary
+## Phase 6: Resolve server contract defaults at the route boundary
 
 **Goal:** Move server policy decisions out of services and into a shared resolver that routes call before dispatching.
 
@@ -139,7 +121,7 @@ Routes accept `model`, `serviceTier`, `reasoningLevel`, `permissionMode` as opti
 - Services receive resolved options only; their types no longer mark these fields optional.
 - `pnpm exec turbo run test --filter=@bb/server` passes.
 
-## Phase 8: Remove daemon contract leakage from server routes
+## Phase 7: Remove daemon contract leakage from server routes
 
 **Goal:** Routes do not parse daemon response schemas inline.
 

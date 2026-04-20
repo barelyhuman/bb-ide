@@ -4,7 +4,7 @@ import {
   findLatestActivityMessageId,
   findLatestActivityRowId,
   shouldHighlightLatestActivity,
-} from "../src/thread-timeline/threadDetailActivity.js";
+} from "../src/thread-detail-activity.js";
 
 function baseMessage(
   id: string,

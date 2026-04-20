@@ -1,4 +1,7 @@
-import { buildToolGroupSummaryParts } from "@bb/core-ui";
+import {
+  buildToolGroupSummaryParts,
+  shouldPreferOngoingLabelsForRow,
+} from "@bb/core-ui";
 import type {
   TimelineRow,
   TimelineToolGroupRow,
@@ -7,7 +10,6 @@ import type {
 import { ExpandablePanel } from "../disclosure.js";
 import { ConversationEntry } from "./ConversationEntry.js";
 import { useLatestInitialExpanded } from "./latestInitialExpanded.js";
-import { shouldPreferOngoingLabelsForRow } from "./threadDetailActivity.js";
 import type {
   ThreadTimelineTheme,
   UserAttachmentImageSrcResolver,

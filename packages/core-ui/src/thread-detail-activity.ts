@@ -1,4 +1,4 @@
-import { assertNever } from "@bb/core-ui";
+import { assertNever } from "./assert-never.js";
 import type { TimelineRow, ViewMessage } from "@bb/domain";
 
 function isProvisioningActivityOperation(

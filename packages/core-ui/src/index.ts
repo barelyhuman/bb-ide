@@ -37,6 +37,12 @@ export {
 } from "./timeline-summary.js";
 export type { ToolGroupSummaryParts } from "./timeline-summary.js";
 export {
+  findLatestActivityMessageId,
+  findLatestActivityRowId,
+  shouldHighlightLatestActivity,
+  shouldPreferOngoingLabelsForRow,
+} from "./thread-detail-activity.js";
+export {
   isIgnoredNoiseType,
   TIMELINE_NOISE_EVENT_TYPES,
 } from "./timeline-noise-events.js";

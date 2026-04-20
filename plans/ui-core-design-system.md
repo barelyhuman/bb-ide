@@ -7,6 +7,15 @@ component. Statelessness is necessary but not sufficient for membership — with
 admission criteria, ui-core will accumulate one-off presentational components and
 stop being a coherent set of primitives that the rest of the codebase can rely on.
 
+The sharper problem is that the current design system is split across the wrong
+boundary. The shadcn/Radix wrappers live under `apps/app/src/components/ui`, so
+`packages/ui-core` cannot compose the same `Button`, `Dialog`, `Popover`,
+`DropdownMenu`, `Input`, `Skeleton`, etc. that the app uses. That forces shared
+ui-core components either to duplicate low-level class bundles or to stay in
+`apps/app` even when they otherwise belong in ui-core. The dependency direction
+is backwards: app code can depend on ui-core, but ui-core can never import from
+the app.
+
 At the same time, a lot of UI work in `apps/app` is becoming state-heavy and hard
 to iterate on visually. We want a Ladle harness so designers and engineers can
 preview components in isolation. Ladle is easy to add to ui-core (pure components,
@@ -18,10 +27,12 @@ WebSocket). The right answer is to push more presentational logic into ui-core �
 
 1. Establish a clear three-layer model for where React UI lives, with explicit
    admission criteria.
-2. Reorganize `packages/ui-core/src/` to make the layers visible.
-3. Stand up Ladle in `packages/ui-core` with two example stories that prove the
+2. Make `packages/ui-core` the source of truth for generic shadcn/Radix UI
+   primitives so shared components can compose them directly.
+3. Reorganize `packages/ui-core/src/` to make the layers visible.
+4. Stand up Ladle in `packages/ui-core` with two example stories that prove the
    pattern (one primitive, one domain composition).
-4. Extract a first batch of components from `apps/app` into the correct ui-core
+5. Extract a first batch of components from `apps/app` into the correct ui-core
    folder, with a story added in the same change.
 
 Non-goal: standing up a Ladle harness with mocked providers inside `apps/app`.
@@ -32,12 +43,17 @@ Defer that until we've exhausted the simpler approach.
 ### Layer 1 — `packages/ui-core/src/primitives/` (design system)
 
 Generic, reusable, no BB-domain types in the API. If you swapped BB for a
-different product, these would still make sense.
+different product, these would still make sense. This layer includes our
+shadcn/Radix wrappers; those are design-system primitives, not app components.
 
 **Admission criteria — must satisfy all:**
 
-- Pure props in, JSX out. No queries, atoms, routing, or storage.
+- No product data dependencies: no queries, atoms, routing, server API calls, or
+  BB lifecycle concepts.
 - API references zero domain types from `@bb/domain`.
+- May have generic local interaction state (`open`, `hovered`, media-query
+  matching), but browser persistence such as cookies/localStorage belongs in an
+  app wrapper unless the persistence itself is part of the generic primitive API.
 - Aligned with a sanctioned visual pattern (page shell, detail card/rows,
   collapsible header, status pill, etc. — see `AGENTS.md` "UI Consistency").
 - Replacing it would feel like a design system change, not a feature change.
@@ -45,7 +61,7 @@ different product, these would still make sense.
 ### Layer 2 — `packages/ui-core/src/{feature}/` (domain compositions)
 
 Pure presentation, but the API references BB domain concepts. Reusable across BB
-consumers (`apps/app`, `packages/provider-audit`, future packages).
+consumers (`apps/app`, `packages/agent-provider-audit`, future packages).
 
 **Admission criteria — must satisfy all:**
 
@@ -57,14 +73,20 @@ consumers (`apps/app`, `packages/provider-audit`, future packages).
 
 ### Layer 3 — `apps/app/src/components/`
 
-Stateless components that don't meet Layer 1 or Layer 2 criteria stay here. Used
-in exactly one place, no expected reuse, no design-system status — they don't
-need to move just because they're stateless.
+Components that don't meet Layer 1 or Layer 2 criteria stay here. Used in exactly
+one place, no expected reuse, no design-system status — they don't need to move
+just because they're stateless. App-owned integration wrappers also stay here:
+theme preference wiring, sidebar persistence, router/query/atom glue, and
+product-specific containers.
 
 ### The litmus test
 
 Before adding anything to ui-core, ask: **"Is this a design-system primitive, or
 is it used in ≥2 places?"** If neither, leave it in `apps/app`.
+
+Before leaving a generic shadcn component in `apps/app`, ask: **"Would a ui-core
+component reasonably need this to avoid reimplementing our button/menu/dialog
+styles?"** If yes, it belongs in `packages/ui-core`.
 
 ## Design
 
@@ -73,6 +95,23 @@ is it used in ≥2 places?"** If neither, leave it in `apps/app`.
 ```
 packages/ui-core/src/
 ├── primitives/
+│   ├── ui/                     (shadcn/Radix-derived base controls)
+│   │   ├── button.tsx
+│   │   ├── dialog.tsx
+│   │   ├── drawer.tsx
+│   │   ├── dropdown-menu.tsx
+│   │   ├── input.tsx
+│   │   ├── popover.tsx
+│   │   ├── responsive-overlay.tsx
+│   │   ├── separator.tsx
+│   │   ├── sidebar.tsx
+│   │   ├── skeleton.tsx
+│   │   ├── sonner.tsx
+│   │   ├── split-button.tsx
+│   │   ├── switch.tsx
+│   │   └── tooltip.tsx
+│   ├── hooks/
+│   │   └── use-mobile.ts
 │   ├── pill.tsx
 │   ├── status-pill.tsx
 │   ├── detail-card.tsx
@@ -84,19 +123,41 @@ packages/ui-core/src/
 │   ├── form-error.tsx          (extracted from apps/app)
 │   ├── settings-section.tsx    (extracted from apps/app)
 │   ├── scroll-to-bottom-button.tsx  (extracted from apps/app)
+│   ├── theme.css
 │   ├── scroll.ts
 │   └── utils.ts
 ├── thread-timeline/            (existing — domain composition)
 │   └── ...
-├── prompt-composer/            (promoted from prompt-composer.tsx)
-│   └── prompt-composer-shell.tsx
-├── context-panel/              (promoted from context-panel.tsx)
-│   └── context-panel.tsx
 └── index.ts                    (re-exports unchanged for consumers)
 ```
 
 `index.ts` continues to flat-export everything so consumers don't notice the
-reorganization. Internal imports update to the new paths.
+reorganization. Internal imports update to the new paths. Do not add a permanent
+`apps/app/src/components/ui` re-export layer; temporary shims are acceptable only
+inside a migration PR and must be deleted before the plan is complete.
+
+### Dependency Direction
+
+`packages/ui-core` owns generic UI primitives and may depend directly on Radix,
+Vaul, `class-variance-authority`, `sonner`, `tailwind-merge`, and `lucide-react`.
+`apps/app` consumes those primitives from `@bb/ui-core`. The app must not be the
+source of truth for a generic `Button`, `Dialog`, `Popover`, `DropdownMenu`,
+`Input`, `Skeleton`, etc.
+
+Not every current file under `apps/app/src/components/ui` moves unchanged:
+
+- `button`, `input`, `separator`, `skeleton`, `switch`, `tooltip`, `drawer`,
+  `responsive-overlay`, `dialog`, `popover`, `dropdown-menu`, and `split-button`
+  should move to `ui-core` as generic primitives.
+- `sonner` should split: ui-core owns the styled `Toaster` wrapper; `apps/app`
+  owns the `usePreferredTheme()` integration.
+- `sidebar` should move only after extracting cookie persistence and any app
+  layout policy into an app wrapper. The ui-core primitive should be controlled
+  or uncontrolled UI state only; app persistence writes the cookie and passes
+  `open`/`onOpenChange`.
+- `useIsMobile` is a generic viewport hook and should move with
+  `responsive-overlay`. Existing app callers should import it from `@bb/ui-core`
+  after the move.
 
 ### `packages/ui-core/README.md`
 
@@ -106,7 +167,7 @@ README gives reviewers a citation.
 
 ### Ladle setup
 
-Mirror `packages/provider-audit`:
+Mirror `packages/agent-provider-audit`:
 
 - `.ladle/config.mjs` — points at `stories/**/*.stories.tsx`, dark theme default
 - `.ladle/components.tsx` — single `GlobalProvider` applying the dark class
@@ -117,11 +178,12 @@ Mirror `packages/provider-audit`:
 - Stories use **hand-written mock props**. No `export-ladle-data` step.
 
 **One refactor while we're here:** the shared theme CSS currently lives at
-`apps/app/src/app.css`, and `provider-audit` reaches across the monorepo to import
-it. Extract the theme block into a small file (e.g.
+`apps/app/src/app.css`, and `agent-provider-audit` reaches across the monorepo to
+import it. Extract the shared token/base layer into a small file (e.g.
 `packages/ui-core/src/primitives/theme.css`) that both `apps/app/src/app.css` and
-the two `.ladle/ladle.css` files import. This removes the cross-package CSS
-dependency and gives ui-core ownership of the design tokens.
+the two `.ladle/ladle.css` files import. App-only utilities such as
+`chat-prompt-box` may stay in `apps/app/src/app.css`; tokens used by shadcn
+primitives must live in ui-core.
 
 ### Story style by layer
 
@@ -134,50 +196,94 @@ dependency and gives ui-core ownership of the design tokens.
 
 ## Steps
 
-### Step 1 — Reorganize ui-core into layers
+### Step 1 — Extract shared theme CSS
+
+1. Create `packages/ui-core/src/primitives/theme.css` containing the shared
+   Tailwind theme, color tokens, base element defaults, and generic utilities
+   required by ui-core primitives.
+2. Leave app-only utilities in `apps/app/src/app.css` (`chat-prompt-box`,
+   app-specific safe-area behavior, or anything that names an app surface).
+3. Update `apps/app/src/app.css` to `@import` the ui-core theme file and keep the
+   app-only layer locally.
+4. Update `packages/agent-provider-audit/.ladle/ladle.css` to import the new
+   ui-core theme file instead of reaching into `apps/app/src/app.css`.
+
+**Validation:**
+
+- `pnpm exec turbo run build --filter=@bb/app --filter=@bb/agent-provider-audit`
+  passes.
+- `packages/agent-provider-audit/.ladle/ladle.css` no longer imports from
+  `apps/app`.
+- Visual spot-check: thread detail and provider-audit Ladle still use the same
+  colors, radii, shadows, and ANSI terminal colors.
+
+### Step 2 — Move shadcn primitives into ui-core
+
+1. Create `packages/ui-core/src/primitives/ui/` and
+   `packages/ui-core/src/primitives/hooks/`.
+2. Move generic shadcn/Radix wrappers into `primitives/ui/`: `button`, `input`,
+   `separator`, `skeleton`, `switch`, `tooltip`, `drawer`,
+   `responsive-overlay`, `dialog`, `popover`, `dropdown-menu`, `split-button`,
+   and `sidebar`.
+3. Move `apps/app/src/hooks/useMobile.ts` to
+   `packages/ui-core/src/primitives/hooks/use-mobile.ts`.
+4. Split app integrations while moving:
+   - `sonner`: ui-core exports the styled `Toaster`; `apps/app` keeps only a thin
+     `AppToaster` wrapper that reads `usePreferredTheme()` and passes `theme`.
+   - `sidebar`: ui-core owns the visual/sidebar behavior after cookie writes are
+     extracted into an app wrapper. The final ui-core primitive must not write
+     `document.cookie` directly.
+5. Update moved files to use ui-core-relative imports (`../cn.js`,
+   `./button.js`, etc.). No `@/` imports are allowed inside `packages/ui-core`.
+6. Move Radix/Vaul/CVA/Sonner dependencies from `@bb/app` to `@bb/ui-core`
+   when app code no longer imports them directly.
+7. Export the migrated primitives from `packages/ui-core/src/index.ts`. Keep flat
+   exports for now; add subpath exports later only if the flat surface becomes
+   noisy.
+8. Migrate app imports from `@/components/ui/...` to `@bb/ui-core`. Delete
+   migrated app-local shadcn files before the plan is complete; do not leave a
+   permanent compatibility layer.
+
+**Validation:**
+
+- `rg -n "from \"@/|from '@/|@/components/ui|@/hooks/useMobile" packages/ui-core/src`
+  returns no matches.
+- `rg -n "components/ui/(button|dialog|drawer|dropdown-menu|input|popover|responsive-overlay|separator|sidebar|skeleton|sonner|split-button|switch|tooltip)" apps/app/src`
+  returns no matches after import migration.
+- `pnpm exec turbo run build --filter=@bb/ui-core` passes.
+- `pnpm exec turbo run typecheck --filter=@bb/app` passes.
+
+### Step 3 — Reorganize ui-core into layers
 
 1. Create `packages/ui-core/src/primitives/` and move existing primitives into it
    (`pill`, `status-pill`, `detail-card`, `disclosure`, `event-content`,
    `three-pane-layout`, `scroll`, `utils`).
-2. Promote `prompt-composer.tsx` and `context-panel.tsx` into their own folders so
-   future related files have a home.
+2. Keep `thread-timeline/` as the existing domain composition folder. Do not move
+   app-only containers into ui-core just because they are stateless.
 3. Update `index.ts` re-exports to the new paths. Keep the public surface
-   identical.
+   identical, plus the newly exported shadcn primitives from Step 2.
 4. Update internal imports inside `ui-core` to the new paths.
 5. Write `packages/ui-core/README.md` describing the three layers, admission
-   criteria, and litmus test.
+   criteria, dependency direction, and litmus tests.
 
 **Validation:**
 
 - `pnpm exec turbo run build --filter=@bb/ui-core` passes.
-- `pnpm exec turbo run typecheck --filter=@bb/app` passes (consumers see no
-  change).
-- `git grep -l "from \"@bb/ui-core\"" apps/app packages` produces the same
-  results as before the change.
+- `pnpm exec turbo run typecheck --filter=@bb/app` passes.
+- `git grep -l "from \"@bb/ui-core\"" apps/app packages` shows migrated app
+  components consuming ui-core, with no generic shadcn source left in
+  `apps/app/src/components/ui`.
 
-### Step 2 — Extract shared theme CSS
-
-1. Create `packages/ui-core/src/primitives/theme.css` containing the `@theme`
-   block currently in `apps/app/src/app.css`.
-2. Update `apps/app/src/app.css` to `@import` it.
-3. Update `packages/provider-audit/.ladle/ladle.css` to import the new theme file
-   directly instead of reaching into `apps/app/src/app.css`.
-
-**Validation:**
-
-- `apps/app` renders identically (visual spot-check on a thread detail page).
-- `pnpm --filter @bb/provider-audit ladle` (run by the user) shows the same
-  styling as before.
-
-### Step 3 — Scaffold Ladle in ui-core
+### Step 4 — Scaffold Ladle in ui-core
 
 1. Add `.ladle/config.mjs`, `.ladle/components.tsx`, `.ladle/ladle.css`.
 2. Add `vite.config.ts` with `@tailwindcss/vite`.
 3. Add `ladle` and `ladle:build` scripts to `packages/ui-core/package.json`.
 4. Add Ladle to `devDependencies`.
 5. Write **two example stories**:
-   - `stories/primitives/status-pill.stories.tsx` — visual catalog of every
-     variant. Validates the trivial end of the pattern.
+   - `stories/primitives/ui/button.stories.tsx` — visual catalog of every
+     button variant and size. Validates that shadcn primitives now live in
+     ui-core.
    - `stories/thread-timeline/tool-call-row.stories.tsx` — a handful of realistic
      `ToolCallRow` states (running, succeeded, failed, with output, without
      output). Validates the complex end.
@@ -188,7 +294,7 @@ dependency and gives ui-core ownership of the design tokens.
   visible and rendering correctly.
 - `pnpm exec turbo run build --filter=@bb/ui-core` still passes.
 
-### Step 4 — Extract first batch of primitives
+### Step 5 — Extract first batch of primitives
 
 For each of these, move the file into `packages/ui-core/src/primitives/`, update
 `apps/app` imports, and add a story in the same PR:
@@ -201,7 +307,9 @@ For each of these, move the file into `packages/ui-core/src/primitives/`, update
 
 Each must satisfy the Layer 1 admission criteria — if any of these turn out to
 reference domain types or app context on closer inspection, drop them from this
-step and reconsider.
+step and reconsider. While extracting, replace inline prop object types with
+named exported props types and compose the Step 2 primitives where that removes
+duplicated button/input/menu styling.
 
 **Validation:**
 
@@ -211,7 +319,7 @@ step and reconsider.
   edge case.
 - A grep for the old import paths in `apps/app` returns nothing.
 
-### Step 5 — Domain composition extractions (criteria-gated)
+### Step 6 — Domain composition extractions (criteria-gated)
 
 For each candidate from the audit, before moving, confirm: **does this have ≥2
 consumers, or is it imminently planned to?** If no, leave it in `apps/app`.
@@ -234,7 +342,7 @@ Probably no for now (single consumer, no imminent reuse):
 - For each component left behind, write down (in the PR description, not the
   code) which criterion failed.
 
-### Step 6 — Defer
+### Step 7 — Defer
 
 The following are explicitly out of scope for this plan:
 
@@ -252,10 +360,14 @@ The following are explicitly out of scope for this plan:
 
 - [ ] `packages/ui-core/src/primitives/` exists and contains all generic
       primitives. Domain compositions live in named feature folders.
+- [ ] Generic shadcn/Radix wrappers live in `packages/ui-core/src/primitives/ui/`,
+      not `apps/app/src/components/ui`.
+- [ ] `packages/ui-core/src` contains no app aliases (`@/components`, `@/hooks`,
+      or other `@/` imports).
 - [ ] `packages/ui-core/README.md` documents the three-layer model, admission
-      criteria, and litmus test.
+      criteria, dependency direction, and litmus tests.
 - [ ] Shared theme CSS lives in `packages/ui-core/`. Neither `apps/app` nor
-      `packages/provider-audit` reaches across the monorepo for it.
+      `packages/agent-provider-audit` reaches across the monorepo for it.
 - [ ] `packages/ui-core/.ladle/` exists. `pnpm --filter @bb/ui-core ladle`
       starts and shows working stories.
 - [ ] At least one primitive story (visual catalog style) and one domain story
@@ -266,7 +378,7 @@ The following are explicitly out of scope for this plan:
       criterion. Components that don't qualify are documented (in PR
       descriptions) as intentionally staying in `apps/app`.
 - [ ] App and ui-core builds pass:
-      `pnpm exec turbo run build --filter=@bb/app --filter=@bb/ui-core --filter=@bb/provider-audit`.
+      `pnpm exec turbo run build --filter=@bb/app --filter=@bb/ui-core --filter=@bb/agent-provider-audit`.
 - [ ] `apps/app` visually unchanged (spot-check thread detail, settings, project
       list).
 
@@ -274,7 +386,13 @@ The following are explicitly out of scope for this plan:
 
 **Re-exports stay flat.** `index.ts` keeps re-exporting everything so consumers
 don't break. Internal folder reorganization is invisible from outside the
-package.
+package. Add subpath exports only if the flat surface becomes painful in real
+call sites.
+
+**ui-core owns shadcn primitives.** The app should not keep canonical copies of
+generic shadcn wrappers after this migration. Thin app wrappers are acceptable
+only when they inject app policy, such as preferred theme or persisted sidebar
+state.
 
 **Don't split into separate packages yet.** Splitting `@bb/design-system` from
 `@bb/ui-core` is tempting but premature. The folder structure + admission
@@ -297,3 +415,8 @@ mocked-providers Ladle as a last resort.
 will probably surface a need for hooks like `useHoverPopover` to also live in
 ui-core. Inline trivially, or add a `primitives/hooks/` folder if more than one
 hook needs to move. Don't create a separate hooks package.
+
+**Sidebar persistence is the migration hazard.** The current sidebar primitive
+writes a cookie directly. That is app policy hidden inside a generic component.
+Split it before moving: ui-core owns the sidebar visuals and interaction state;
+`apps/app` owns whether and where that state is persisted.

@@ -46,12 +46,6 @@ export { ConversationEntry } from "./thread-timeline/ConversationEntry.js";
 export { ExpandableLine } from "./thread-timeline/rows/ExpandableLine.js";
 export type { ExpandableLineProps } from "./thread-timeline/rows/ExpandableLine.js";
 export { ThreadTimelineRows } from "./thread-timeline/ThreadTimelineRows.js";
-export {
-  findLatestActivityMessageId,
-  findLatestActivityRowId,
-  shouldHighlightLatestActivity,
-  shouldPreferOngoingLabelsForRow,
-} from "./thread-timeline/threadDetailActivity.js";
 export type {
   ThreadTimelineTheme,
   ThreadTimelineRenderOptions,

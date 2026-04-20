@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { findLatestActivityRowId } from "@bb/ui-core";
+import { findLatestActivityRowId } from "@bb/core-ui";
 import { replayFixtures } from "./replay.js";
 import type {
   ProviderAuditBuildLadleStoryDataArgs,

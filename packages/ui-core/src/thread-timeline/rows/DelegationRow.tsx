@@ -3,7 +3,9 @@ import { cn } from "../../cn.js";
 import {
   buildTimelineRows,
   buildToolGroupSummaryParts,
+  findLatestActivityRowId,
   formatDelegationSummary,
+  shouldPreferOngoingLabelsForRow,
 } from "@bb/core-ui";
 import type {
   TimelineRow,
@@ -14,10 +16,6 @@ import type {
 import { ExpandablePanel } from "../../disclosure.js";
 import { ConversationMarkdown } from "../ConversationMarkdown.js";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
-import {
-  findLatestActivityRowId,
-  shouldPreferOngoingLabelsForRow,
-} from "../threadDetailActivity.js";
 import {
   EVENT_LARGE_DETAIL_MAX_HEIGHT_CLASS,
   EventTitle,
