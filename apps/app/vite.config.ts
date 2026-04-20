@@ -5,11 +5,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { devEnvConfig } from "../../packages/config/src/dev-env.js";
 import { serverPortConfig } from "../../packages/config/src/server-port.js";
 
-const DEFAULT_APP_PORT = 5173;
-const appPort = Number.parseInt(
-  process.env.BB_APP_PORT ?? String(DEFAULT_APP_PORT),
-  10,
-);
+const appPort = devEnvConfig.BB_DEV_APP_PORT;
 const appHost =
   devEnvConfig.BB_DEV_APP_HOST === ""
     ? undefined

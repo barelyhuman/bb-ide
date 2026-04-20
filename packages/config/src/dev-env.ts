@@ -8,6 +8,11 @@ export const devEnvConfig = envsafe({
     allowEmpty: true,
     devDefault: "",
   }),
+  BB_DEV_APP_PORT: port({
+    desc: "Development-only Vite port for apps/app.",
+    default: DEFAULTS.appPort.dev,
+    devDefault: DEFAULTS.appPort.dev,
+  }),
   BB_DEV_ENV_PORT: port({
     desc: "Development-only localhost port for the bb dev-env helper API.",
     default: DEFAULTS.devEnvPort,
