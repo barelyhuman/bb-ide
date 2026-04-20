@@ -4,6 +4,10 @@ import {
   queueCommandInTransaction,
   transitionThreadStatus,
 } from "@bb/db";
+import {
+  getBuiltInAgentProviderInfo,
+  isAgentProviderId,
+} from "@bb/agent-providers";
 import type { DbTransaction } from "@bb/db";
 import type {
   PromptInput,
@@ -133,6 +137,7 @@ export interface QueueTurnSubmitCommandArgs extends PrepareTurnSubmitCommandPayl
 
 export interface QueueThreadRenameCommandArgs {
   environment: ThreadHostCommandEnvironment;
+  providerId: string;
   threadId: string;
   title: string;
 }
@@ -140,6 +145,14 @@ export interface QueueThreadRenameCommandArgs {
 export interface QueueThreadDeletedCommandArgs {
   environment: ThreadHostCommandEnvironment;
   threadId: string;
+}
+
+function providerSupportsThreadRename(providerId: string): boolean {
+  if (!isAgentProviderId(providerId)) {
+    return true;
+  }
+
+  return getBuiltInAgentProviderInfo(providerId).capabilities.supportsRename;
 }
 
 function toRuntimeExecutionOptions(
@@ -336,6 +349,10 @@ export function queueThreadRenameCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: QueueThreadRenameCommandArgs,
 ): void {
+  if (!providerSupportsThreadRename(args.providerId)) {
+    return;
+  }
+
   const session = getActiveSession(deps.db, args.environment.hostId);
   queueCommand(deps.db, deps.hub, {
     hostId: args.environment.hostId,

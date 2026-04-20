@@ -297,7 +297,7 @@ export type PublicApiSchema = {
   };
   "/threads/:id": {
     $get: Endpoint<PathId, Thread>;
-    /** Update thread metadata. If the title changes, also notifies the provider via `thread.rename`. */
+    /** Update thread metadata. If the title changes, also notifies providers that support `thread.rename`. */
     $patch: Endpoint<PathId & { json: UpdateThreadRequest }, Thread>;
     /** Delete a thread. Also destroys its environment if one exists. */
     $delete: Endpoint<PathId, { ok: true }>;

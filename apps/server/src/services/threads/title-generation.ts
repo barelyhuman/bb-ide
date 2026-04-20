@@ -255,6 +255,7 @@ export async function generateThreadTitle(
         id: environment.id,
         hostId: environment.hostId,
       },
+      providerId: titledThread.providerId,
       threadId: titledThread.id,
       title: metadata.title,
     });

@@ -123,6 +123,7 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
             id: environment.id,
             hostId: environment.hostId,
           },
+          providerId: updated.providerId,
           threadId: updated.id,
           title: payload.title,
         });

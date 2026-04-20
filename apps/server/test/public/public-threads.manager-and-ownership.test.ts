@@ -30,7 +30,7 @@ import {
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 describe("public thread manager and ownership routes", () => {
   beforeEach(() => {
@@ -198,6 +198,60 @@ describe("public thread manager and ownership routes", () => {
       await harness.cleanup();
     }
   });
+
+  for (const providerId of ["claude-code", "pi"]) {
+    it(`does not queue thread.rename for ${providerId} threads`, async () => {
+      const harness = await createTestAppHarness();
+      try {
+        const { host } = seedHostSession(harness.deps);
+        const { project } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+          path: `/tmp/${providerId}-thread-data-project`,
+        });
+        const environment = seedEnvironment(harness.deps, {
+          hostId: host.id,
+          projectId: project.id,
+          path: `/tmp/${providerId}-thread-data-project`,
+        });
+        const thread = seedThread(harness.deps, {
+          projectId: project.id,
+          environmentId: environment.id,
+          providerId,
+          status: "idle",
+          title: "Old title",
+          titleFallback: "Old title",
+        });
+
+        const patchResponse = await harness.app.request(
+          `/api/v1/threads/${thread.id}`,
+          {
+            method: "PATCH",
+            headers: {
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              title: "New title",
+            }),
+          },
+        );
+        expect(patchResponse.status).toBe(200);
+
+        const queuedRenames = harness.db
+          .select({ id: hostDaemonCommands.id })
+          .from(hostDaemonCommands)
+          .where(
+            and(
+              eq(hostDaemonCommands.hostId, host.id),
+              eq(hostDaemonCommands.type, "thread.rename"),
+            ),
+          )
+          .all();
+        expect(queuedRenames).toEqual([]);
+      } finally {
+        await harness.cleanup();
+      }
+    });
+  }
 
   it("appends an ownership change event and queues a manager assignment message", async () => {
     const harness = await createTestAppHarness();

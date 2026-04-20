@@ -422,6 +422,7 @@ function handleThreadStartResult(
         id: command.environmentId,
         hostId: commandRow.hostId,
       },
+      providerId: thread.providerId,
       threadId: thread.id,
       title: thread.title,
     });
