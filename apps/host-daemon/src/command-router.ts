@@ -115,9 +115,7 @@ export class CommandRouter {
     }
   }
 
-  private async reportCommandResult(
-    result: CommandResultReport,
-  ): Promise<void> {
+  private async reportCommandResult(result: CommandResultReport): Promise<void> {
     await this.options.eventSink.flush();
     await this.reportResult(result);
   }

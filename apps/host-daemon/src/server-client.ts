@@ -19,6 +19,7 @@ import {
   hostDaemonToolCallRequestSchema,
   hostDaemonToolCallResponseSchema,
   hostRuntimeMaterialSnapshotSchema,
+  type HostDaemonCommandResultResponse,
   type HostDaemonInteractiveInterruptResponse,
   type HostDaemonInteractiveRequestResponse,
   type HostDaemonActiveThread,
@@ -101,7 +102,7 @@ export interface ServerClient {
   }): Promise<HostRuntimeMaterialSnapshot>;
   reportCommandResult(
     report: HostDaemonCommandResultReportWithoutSession,
-  ): Promise<Record<string, number>>;
+  ): Promise<HostDaemonCommandResultResponse>;
   postEnvironmentChange(
     args: HostDaemonEnvironmentChangePayload,
   ): Promise<void>;
@@ -345,7 +346,7 @@ export function createServerClient(
 
     async reportCommandResult(
       report: HostDaemonCommandResultReportWithoutSession,
-    ): Promise<Record<string, number>> {
+    ): Promise<HostDaemonCommandResultResponse> {
       return pRetry(
         async () => {
           const payload = hostDaemonCommandResultReportSchema.parse({
@@ -367,7 +368,7 @@ export function createServerClient(
 
           return hostDaemonCommandResultResponseSchema.parse(
             await response.json(),
-          ).threadHighWaterMarks;
+          );
         },
         {
           retries: commandResultRetryOptions.retries,

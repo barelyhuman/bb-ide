@@ -432,7 +432,7 @@ export function interruptPendingToolActivity(
     }
     syncExploringStatus(state.toolActivity.activeCell);
   } else if (state.toolActivity.activeCell?.kind === "web-search") {
-    state.toolActivity.activeCell.status = "completed";
+    state.toolActivity.activeCell.status = "interrupted";
   }
 }
 

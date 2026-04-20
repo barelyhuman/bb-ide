@@ -41,6 +41,7 @@ import {
 import {
   completeEnvironmentProvisioningForCommand,
   failEnvironmentProvisioningDurably,
+  getEnvironmentProvisioningIdForCommand,
   hasActiveEnvironmentProvisionOperationForCommand,
 } from "../services/environments/environment-provisioning.js";
 import { destroyEphemeralHostIfReady } from "../services/hosts/host-lifecycle.js";
@@ -191,6 +192,15 @@ async function handleProvisionCommandResult(
   ) {
     return;
   }
+  const environmentProvisioningId = getEnvironmentProvisioningIdForCommand(
+    deps,
+    {
+      commandId: commandRow.id,
+    },
+  );
+  if (environmentProvisioningId === null) {
+    return;
+  }
   const boundThreads = deps.db
     .select()
     .from(threads)
@@ -247,6 +257,7 @@ async function handleProvisionCommandResult(
         appendThreadProvisioningEvent(deps, {
           threadId: thread.id,
           environmentId: command.environmentId,
+          provisioningId: environmentProvisioningId,
           status: thread.status === "provisioning" ? "active" : "completed",
           entries,
         });
@@ -379,39 +390,8 @@ function handleThreadStartResult(
       commandId: commandRow.id,
       failureReason: report.errorMessage,
     });
-    appendThreadProvisioningEvent(deps, {
-      threadId: thread.id,
-      environmentId: command.environmentId,
-      status: "failed",
-      entries: [
-        {
-          type: "step",
-          key: "agent-session-failed",
-          text: "Agent session failed",
-          status: "failed",
-          startedAt: commandRow.createdAt,
-          metadata: { durationMs: Date.now() - commandRow.createdAt },
-        },
-      ],
-    });
     return;
   }
-
-  appendThreadProvisioningEvent(deps, {
-    threadId: thread.id,
-    environmentId: command.environmentId,
-    status: "completed",
-    entries: [
-      {
-        type: "step",
-        key: "agent-session-completed",
-        text: "Agent session ready",
-        status: "completed",
-        startedAt: commandRow.createdAt,
-        metadata: { durationMs: Date.now() - commandRow.createdAt },
-      },
-    ],
-  });
 
   completeThreadStartForCommand(deps, {
     commandId: commandRow.id,

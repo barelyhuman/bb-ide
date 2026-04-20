@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   cancelCommand,
   events,
@@ -16,6 +16,7 @@ import {
   upsertHostOperationRecord,
   upsertThreadOperationRecord,
 } from "@bb/db/internal-lifecycle";
+import { systemThreadProvisioningEventDataSchema } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
 import {
@@ -29,6 +30,7 @@ import {
   requestThreadStop,
 } from "../../src/services/threads/thread-lifecycle.js";
 import { buildEnvironmentProvisionCommand } from "../../src/services/threads/thread-create-helpers.js";
+import type { QueueThreadStartCommandArgs } from "../../src/services/threads/thread-commands.js";
 import {
   reportQueuedCommandError,
   reportQueuedCommandSuccess,
@@ -110,6 +112,7 @@ describe("internal command result idempotency", () => {
           },
           input: [{ type: "text", text: "Retry partial result" }],
           provisionEventSequence,
+          provisioningId: "tpv-idempotency-1",
           stage: "environment-provisioning",
           titleProvided: true,
         }),
@@ -121,7 +124,11 @@ describe("internal command result idempotency", () => {
         command: {
           type: "environment.provision",
           environmentId: environment.id,
-          initiator: { threadId: thread.id, eventSequence: 0 },
+          initiator: {
+            threadId: thread.id,
+            provisioningId: "tpv-idempotency-1",
+            eventSequence: 0,
+          },
           workspaceProvisionType: "unmanaged",
           path: "/tmp/retry-partial-provision",
         },
@@ -208,7 +215,9 @@ describe("internal command result idempotency", () => {
       upsertThreadOperationRecord(harness.db, {
         threadId: thread.id,
         kind: "provision",
-        payload: JSON.stringify({ invalid: true }),
+        payload: JSON.stringify({
+          provisioningId: "tpv-idempotency-side-effect-failure",
+        }),
       });
       const command = queueEnvironmentProvisionLifecycleCommand(harness, {
         hostId: host.id,
@@ -313,6 +322,7 @@ describe("internal command result idempotency", () => {
           },
           input: [{ type: "text", text: "Start once" }],
           provisionEventSequence,
+          provisioningId: "tpv-idempotency-2",
           stage: "environment-provisioning",
           titleProvided: true,
         }),
@@ -324,7 +334,11 @@ describe("internal command result idempotency", () => {
         command: {
           type: "environment.provision",
           environmentId: environment.id,
-          initiator: { threadId: thread.id, eventSequence: 0 },
+          initiator: {
+            threadId: thread.id,
+            provisioningId: "tpv-idempotency-2",
+            eventSequence: 0,
+          },
           workspaceProvisionType: "unmanaged",
           path: "/tmp/idempotent-provision",
         },
@@ -373,6 +387,300 @@ describe("internal command result idempotency", () => {
         .all();
       expect(startCommands).toHaveLength(1);
       expect(getEnvironment(harness.db, environment.id)?.status).toBe("ready");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("deduplicates concurrent thread.start requests during provisioning handoff", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-concurrent-thread-start-handoff",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/concurrent-thread-start-handoff",
+        status: "ready",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+      const provisionEventSequence = appendClientTurnEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        type: "client/turn/requested",
+        input: [{ type: "text", text: "Concurrent start handoff" }],
+        target: { kind: "thread-start" },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+          source: "client/turn/requested",
+        },
+        initiator: "user",
+        requestMethod: "thread/start",
+        source: "spawn",
+      });
+      upsertThreadOperationRecord(harness.db, {
+        threadId: thread.id,
+        kind: "provision",
+        payload: JSON.stringify({
+          attachedEnvironmentId: environment.id,
+          branchSlug: null,
+          clientRequestSequence: provisionEventSequence,
+          environmentIntent: {
+            type: "reuse",
+            environmentId: environment.id,
+          },
+          execution: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            permissionEscalation: null,
+            source: "client/turn/requested",
+          },
+          input: [{ type: "text", text: "Concurrent start handoff" }],
+          provisionEventSequence,
+          provisioningId: "tpv-concurrent-start-handoff",
+          stage: "environment-provisioning",
+          titleProvided: true,
+        }),
+      });
+
+      const requestArgs: Omit<
+        QueueThreadStartCommandArgs,
+        "eventSequence" | "input"
+      > = {
+        thread,
+        environment: {
+          id: environment.id,
+          hostId: environment.hostId,
+          path: environment.path,
+          workspaceProvisionType: environment.workspaceProvisionType,
+        },
+        execution: {
+          model: "gpt-5",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          serviceTier: "default",
+          source: "client/turn/requested",
+        },
+        permissionEscalation: "ask",
+        projectId: project.id,
+        providerId: thread.providerId,
+      };
+
+      await Promise.all([
+        requestThreadStart(harness.deps, {
+          ...requestArgs,
+          eventSequence: provisionEventSequence,
+          input: [{ type: "text", text: "First concurrent start" }],
+        }),
+        requestThreadStart(harness.deps, {
+          ...requestArgs,
+          eventSequence: provisionEventSequence + 1,
+          input: [{ type: "text", text: "Second concurrent start" }],
+        }),
+      ]);
+
+      const startCommands = harness.db
+        .select()
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.type, "thread.start"))
+        .all();
+      expect(startCommands).toHaveLength(1);
+
+      const queuedStart = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" && command.threadId === thread.id,
+      );
+      if (queuedStart.command.type !== "thread.start") {
+        throw new Error("Expected a thread.start command");
+      }
+
+      const startOperation = getThreadOperation(harness.db, {
+        threadId: thread.id,
+        kind: "start",
+      });
+      expect(startOperation?.commandId).toBe(queuedStart.row.id);
+
+      const provisionOperation = getThreadOperation(harness.db, {
+        threadId: thread.id,
+        kind: "provision",
+      });
+      expect(provisionOperation?.state).toBe("completed");
+
+      const provisioningEvents = harness.db
+        .select()
+        .from(events)
+        .where(
+          and(
+            eq(events.threadId, thread.id),
+            eq(events.type, "system/thread-provisioning"),
+          ),
+        )
+        .all();
+      const completedProvisioningEvent = provisioningEvents.find((event) => {
+        const data = systemThreadProvisioningEventDataSchema.parse(
+          JSON.parse(event.data),
+        );
+        return data.status === "completed";
+      });
+      expect(completedProvisioningEvent).toBeDefined();
+      expect(queuedStart.command.eventSequence).toBe(
+        completedProvisioningEvent?.sequence,
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rolls back provisioning completion when start operation creation fails", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-atomic-thread-start-handoff",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/atomic-thread-start-handoff",
+        status: "ready",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+      const provisionEventSequence = appendClientTurnEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        type: "client/turn/requested",
+        input: [{ type: "text", text: "Atomic start handoff" }],
+        target: { kind: "thread-start" },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+          source: "client/turn/requested",
+        },
+        initiator: "user",
+        requestMethod: "thread/start",
+        source: "spawn",
+      });
+      upsertThreadOperationRecord(harness.db, {
+        threadId: thread.id,
+        kind: "provision",
+        payload: JSON.stringify({
+          attachedEnvironmentId: environment.id,
+          branchSlug: null,
+          clientRequestSequence: provisionEventSequence,
+          environmentIntent: {
+            type: "reuse",
+            environmentId: environment.id,
+          },
+          execution: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            permissionEscalation: null,
+            source: "client/turn/requested",
+          },
+          input: [{ type: "text", text: "Atomic start handoff" }],
+          provisionEventSequence,
+          provisioningId: "tpv-atomic-start-handoff",
+          stage: "environment-provisioning",
+          titleProvided: true,
+        }),
+      });
+
+      harness.db.run(
+        sql.raw(`
+          CREATE TRIGGER abort_start_operation_insert
+          BEFORE INSERT ON thread_operations
+          WHEN NEW.kind = 'start'
+          BEGIN
+            SELECT RAISE(ABORT, 'abort start operation insert');
+          END
+        `),
+      );
+
+      try {
+        await expect(
+          requestThreadStart(harness.deps, {
+            thread,
+            environment: {
+              id: environment.id,
+              hostId: environment.hostId,
+              path: environment.path,
+              workspaceProvisionType: environment.workspaceProvisionType,
+            },
+            eventSequence: provisionEventSequence,
+            input: [{ type: "text", text: "Atomic start handoff" }],
+            execution: {
+              model: "gpt-5",
+              reasoningLevel: "medium",
+              permissionMode: "full",
+              serviceTier: "default",
+              source: "client/turn/requested",
+            },
+            permissionEscalation: "ask",
+            projectId: project.id,
+            providerId: thread.providerId,
+          }),
+        ).rejects.toThrow("abort start operation insert");
+      } finally {
+        harness.db.run(
+          sql.raw("DROP TRIGGER IF EXISTS abort_start_operation_insert"),
+        );
+      }
+
+      const provisionOperation = getThreadOperation(harness.db, {
+        threadId: thread.id,
+        kind: "provision",
+      });
+      expect(provisionOperation?.state).toBe("requested");
+
+      const startOperation = getThreadOperation(harness.db, {
+        threadId: thread.id,
+        kind: "start",
+      });
+      expect(startOperation).toBeNull();
+
+      const completedProvisioningEvents = harness.db
+        .select()
+        .from(events)
+        .where(
+          and(
+            eq(events.threadId, thread.id),
+            eq(events.type, "system/thread-provisioning"),
+          ),
+        )
+        .all()
+        .filter((event) => {
+          const data = systemThreadProvisioningEventDataSchema.parse(
+            JSON.parse(event.data),
+          );
+          return data.status === "completed";
+        });
+      expect(completedProvisioningEvents).toHaveLength(0);
     } finally {
       await harness.cleanup();
     }
@@ -433,12 +741,18 @@ describe("internal command result idempotency", () => {
         resultPayload: JSON.stringify(result),
       });
 
-      const eventsBeforeRetry = harness.db
+      const provisioningEventsBeforeRetry = harness.db
         .select()
         .from(events)
         .where(eq(events.threadId, thread.id))
         .all()
         .filter((event) => event.type === "system/thread-provisioning");
+      const errorEventsBeforeRetry = harness.db
+        .select()
+        .from(events)
+        .where(eq(events.threadId, thread.id))
+        .all()
+        .filter((event) => event.type === "system/error");
       const retryResponse = await reportQueuedCommandSuccess(
         harness,
         queuedStart,
@@ -446,13 +760,24 @@ describe("internal command result idempotency", () => {
       );
       expect(retryResponse.status).toBe(200);
 
-      const eventsAfterRetry = harness.db
+      const provisioningEventsAfterRetry = harness.db
         .select()
         .from(events)
         .where(eq(events.threadId, thread.id))
         .all()
         .filter((event) => event.type === "system/thread-provisioning");
-      expect(eventsAfterRetry).toHaveLength(eventsBeforeRetry.length + 1);
+      const errorEventsAfterRetry = harness.db
+        .select()
+        .from(events)
+        .where(eq(events.threadId, thread.id))
+        .all()
+        .filter((event) => event.type === "system/error");
+      expect(provisioningEventsAfterRetry).toHaveLength(
+        provisioningEventsBeforeRetry.length,
+      );
+      expect(errorEventsAfterRetry).toHaveLength(
+        errorEventsBeforeRetry.length + 1,
+      );
       expect(getThread(harness.db, thread.id)?.status).toBe("error");
       expect(
         getThreadOperation(harness.db, {
@@ -881,15 +1206,16 @@ describe("internal command result idempotency", () => {
       requestEnvironmentProvision(harness.deps, {
         environmentId: environment.id,
         kind: "provision",
-        request: buildDirectEnvironmentProvisionRequest(
-          buildEnvironmentProvisionCommand({
+        request: buildDirectEnvironmentProvisionRequest({
+          command: buildEnvironmentProvisionCommand({
             environmentId: environment.id,
             hostId: host.id,
             initiator: null,
             workspaceProvisionType: "unmanaged",
             path: environment.path ?? "/tmp/stale-provision",
           }),
-        ),
+          provisioningId: "epv-stale-provision-original",
+        }),
       });
       const originalCommandId = advanceEnvironmentProvisioning(harness.deps, {
         environmentId: environment.id,
@@ -909,15 +1235,16 @@ describe("internal command result idempotency", () => {
       requestEnvironmentProvision(harness.deps, {
         environmentId: environment.id,
         kind: "provision",
-        request: buildDirectEnvironmentProvisionRequest(
-          buildEnvironmentProvisionCommand({
+        request: buildDirectEnvironmentProvisionRequest({
+          command: buildEnvironmentProvisionCommand({
             environmentId: environment.id,
             hostId: host.id,
             initiator: null,
             workspaceProvisionType: "unmanaged",
             path: environment.path ?? "/tmp/stale-provision",
           }),
-        ),
+          provisioningId: "epv-stale-provision-retry",
+        }),
       });
       const requeuedCommandId = advanceEnvironmentProvisioning(harness.deps, {
         environmentId: environment.id,
@@ -989,7 +1316,11 @@ describe("internal command result idempotency", () => {
         command: {
           type: "environment.provision",
           environmentId: environment.id,
-          initiator: { threadId: thread.id, eventSequence: 0 },
+          initiator: {
+            threadId: thread.id,
+            provisioningId: "tpv-idempotency-3",
+            eventSequence: 0,
+          },
           workspaceProvisionType: "unmanaged",
           path: "/tmp/direct-provision-failure",
         },

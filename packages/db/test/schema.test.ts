@@ -6,6 +6,7 @@ import {
   createAutomationId,
   createDraftId,
   createEnvironmentId,
+  createEnvironmentProvisioningId,
   createEventId,
   createHostDaemonCommandId,
   createHostDaemonSessionId,
@@ -809,6 +810,7 @@ describe("db rebuild schema", () => {
     expect(createProjectId()).toMatch(/^proj_/u);
     expect(createProjectSourceId()).toMatch(/^src_/u);
     expect(createEnvironmentId()).toMatch(/^env_/u);
+    expect(createEnvironmentProvisioningId()).toMatch(/^epv_/u);
     expect(createThreadId()).toMatch(/^thr_/u);
     expect(createAutomationId()).toMatch(/^auto_/u);
     expect(createManagerThreadNudgeId()).toMatch(/^mnge_/u);

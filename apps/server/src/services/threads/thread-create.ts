@@ -1,5 +1,6 @@
 import {
   createEnvironment,
+  createEnvironmentProvisioningId,
   deleteThread,
   findEnvironmentByHostPath,
 } from "@bb/db";
@@ -317,7 +318,10 @@ export async function ensureProjectSourceEnvironment(
   requestEnvironmentProvision(deps, {
     environmentId: environment.id,
     kind: "provision",
-    request: buildDirectEnvironmentProvisionRequest(command),
+    request: buildDirectEnvironmentProvisionRequest({
+      command,
+      provisioningId: createEnvironmentProvisioningId(),
+    }),
   });
   const commandId = await advanceEnvironmentProvisioning(deps, {
     environmentId: environment.id,

@@ -1,6 +1,7 @@
 import { expect } from "vitest";
 import type {
   PromptInput,
+  ProviderRawEvent,
   ProvisioningTranscriptEntry,
   ResolvedThreadExecutionOptions,
   SystemThreadProvisioningStatus,
@@ -8,6 +9,7 @@ import type {
   ThreadEventRow,
   ThreadEventRowOfType,
   ThreadEventUserContent,
+  ThreadEventWarningCategory,
   ThreadTurnInitiator,
   TurnRequestTarget,
   TimelineRow,
@@ -39,6 +41,45 @@ export interface RenderedTimelineFixture {
   rows: TimelineRow[];
   text: string;
   toolGroups: TimelineToolGroupRow[];
+}
+
+export interface RenderTimelinePrefixesArgs extends RenderTimelineFixtureArgs {
+  startAt?: number;
+}
+
+export type StableTimelineRowStatus =
+  | "pending"
+  | "completed"
+  | "error"
+  | "interrupted";
+
+export interface LogicalTimelineRow {
+  key: string;
+  status: StableTimelineRowStatus;
+  title: string;
+}
+
+export type LogicalTimelineRowResolver = (
+  row: TimelineRow,
+) => LogicalTimelineRow | null;
+
+export interface PrefixTerminalStabilityArgs extends RenderTimelinePrefixesArgs {
+  resolveRow: LogicalTimelineRowResolver;
+}
+
+export interface CollectLogicalTimelineRowsArgs {
+  resolveRow: LogicalTimelineRowResolver;
+  rows: TimelineRow[];
+}
+
+interface AppendResolvedLogicalRowArgs {
+  resolveRow: LogicalTimelineRowResolver;
+  rows: LogicalTimelineRow[];
+  timelineRow: TimelineRow;
+}
+
+interface TerminalRowSnapshot extends LogicalTimelineRow {
+  prefixLength: number;
 }
 
 export interface TimelineEventFactoryDefaults {
@@ -81,6 +122,11 @@ interface ProviderUserMessageArgs extends ProviderTurnEventOptions {
   text: string;
 }
 
+interface AssistantDeltaArgs extends ProviderTurnEventOptions {
+  delta: string;
+  itemId?: string;
+}
+
 interface AssistantCompletedArgs extends ProviderTurnEventOptions {
   itemId?: string;
   text: string;
@@ -98,10 +144,14 @@ interface ReasoningDeltaArgs extends ProviderTurnEventOptions {
 
 interface ToolCallCompletedArgs extends ProviderTurnEventOptions {
   arguments?: Record<string, JsonValue>;
+  error?: string;
   itemId?: string;
+  result?: JsonValue;
   status?: "pending" | "completed" | "failed" | "interrupted";
   tool?: string;
 }
+
+type ToolCallStartedArgs = ToolCallCompletedArgs;
 
 interface CommandCompletedArgs extends ProviderTurnEventOptions {
   aggregatedOutput?: string;
@@ -113,12 +163,21 @@ interface CommandCompletedArgs extends ProviderTurnEventOptions {
   status?: "pending" | "completed" | "failed" | "interrupted";
 }
 
+type CommandStartedArgs = CommandCompletedArgs;
+
+interface CommandOutputDeltaArgs extends ProviderTurnEventOptions {
+  delta: string;
+  itemId: string;
+}
+
 interface WebSearchCompletedArgs extends ProviderTurnEventOptions {
   action?: string;
   itemId?: string;
   outputText?: string;
   query: string;
 }
+
+type WebSearchStartedArgs = WebSearchCompletedArgs;
 
 interface FileChangeCompletedArgs extends ProviderTurnEventOptions {
   approvalStatus?: "waiting_for_approval" | "approved" | "denied" | null;
@@ -131,6 +190,17 @@ interface FileChangeCompletedArgs extends ProviderTurnEventOptions {
   status?: "pending" | "completed" | "failed" | "interrupted";
 }
 
+type FileChangeStartedArgs = FileChangeCompletedArgs;
+
+interface FileChangeOutputDeltaArgs extends ProviderTurnEventOptions {
+  delta: string;
+  itemId: string;
+}
+
+interface ContextCompactionArgs extends ProviderTurnEventOptions {
+  itemId?: string;
+}
+
 interface TurnPlanUpdatedArgs extends ProviderTurnEventOptions {
   plan: Array<{
     status: "pending" | "active" | "completed";
@@ -141,6 +211,7 @@ interface TurnPlanUpdatedArgs extends ProviderTurnEventOptions {
 interface ThreadProvisioningArgs extends EventFactoryRowOptions {
   entries: ProvisioningTranscriptEntry[];
   environmentId?: string;
+  provisioningId?: string;
   status: SystemThreadProvisioningStatus;
 }
 
@@ -148,6 +219,20 @@ interface SystemErrorArgs extends EventFactoryRowOptions {
   code?: string;
   detail?: string;
   message: string;
+}
+
+interface ProviderErrorArgs extends ProviderTurnEventOptions {
+  detail?: string;
+  message: string;
+  willRetry?: boolean;
+}
+
+interface SystemOperationArgs extends EventFactoryRowOptions {
+  message: string;
+  metadata?: Record<string, JsonValue>;
+  operation?: string;
+  operationId?: string;
+  status?: string;
 }
 
 interface PermissionGrantLifecycleArgs extends EventFactoryRowOptions {
@@ -165,7 +250,22 @@ interface ManagerUserMessageArgs extends EventFactoryRowOptions {
   turnId?: string;
 }
 
+interface ProviderUnhandledArgs extends ProviderTurnEventOptions {
+  providerId?: string;
+  rawEvent?: ProviderRawEvent;
+  rawType?: string;
+}
+
+interface WarningArgs extends EventFactoryRowOptions {
+  category?: ThreadEventWarningCategory;
+  details?: string;
+  summary?: string;
+}
+
 export interface TimelineEventFactory {
+  assistantDelta(
+    args: AssistantDeltaArgs,
+  ): ThreadEventRowOfType<"item/agentMessage/delta">;
   assistantCompleted(
     args: AssistantCompletedArgs,
   ): ThreadEventRowOfType<"item/completed">;
@@ -178,9 +278,27 @@ export interface TimelineEventFactory {
   commandCompleted(
     args: CommandCompletedArgs,
   ): ThreadEventRowOfType<"item/completed">;
+  commandOutputDelta(
+    args: CommandOutputDeltaArgs,
+  ): ThreadEventRowOfType<"item/commandExecution/outputDelta">;
+  commandStarted(
+    args: CommandStartedArgs,
+  ): ThreadEventRowOfType<"item/started">;
+  contextCompactionCompleted(
+    args?: ContextCompactionArgs,
+  ): ThreadEventRowOfType<"item/completed">;
+  contextCompactionStarted(
+    args?: ContextCompactionArgs,
+  ): ThreadEventRowOfType<"item/started">;
   fileChangeCompleted(
     args: FileChangeCompletedArgs,
   ): ThreadEventRowOfType<"item/completed">;
+  fileChangeOutputDelta(
+    args: FileChangeOutputDeltaArgs,
+  ): ThreadEventRowOfType<"item/fileChange/outputDelta">;
+  fileChangeStarted(
+    args: FileChangeStartedArgs,
+  ): ThreadEventRowOfType<"item/started">;
   inputAccepted(
     args: InputAcceptedArgs,
   ): ThreadEventRowOfType<"turn/input/accepted">;
@@ -190,6 +308,10 @@ export interface TimelineEventFactory {
   permissionGrantLifecycle(
     args?: PermissionGrantLifecycleArgs,
   ): ThreadEventRowOfType<"system/permissionGrant/lifecycle">;
+  providerError(args: ProviderErrorArgs): ThreadEventRowOfType<"error">;
+  providerUnhandled(
+    args?: ProviderUnhandledArgs,
+  ): ThreadEventRowOfType<"provider/unhandled">;
   providerUserMessage(
     args: ProviderUserMessageArgs,
   ): ThreadEventRowOfType<"item/completed">;
@@ -200,12 +322,21 @@ export interface TimelineEventFactory {
     args: ReasoningDeltaArgs,
   ): ThreadEventRowOfType<"item/reasoning/textDelta">;
   systemError(args: SystemErrorArgs): ThreadEventRowOfType<"system/error">;
+  systemOperation(
+    args: SystemOperationArgs,
+  ): ThreadEventRowOfType<"system/operation">;
   threadProvisioning(
     args: ThreadProvisioningArgs,
   ): ThreadEventRowOfType<"system/thread-provisioning">;
   toolCallCompleted(
     args: ToolCallCompletedArgs,
   ): ThreadEventRowOfType<"item/completed">;
+  toolCallStarted(
+    args: ToolCallStartedArgs,
+  ): ThreadEventRowOfType<"item/started">;
+  threadCompacted(
+    args?: ProviderTurnEventOptions,
+  ): ThreadEventRowOfType<"thread/compacted">;
   turnCompleted(
     args?: ProviderTurnEventOptions & {
       status?: "completed" | "failed" | "interrupted";
@@ -220,6 +351,10 @@ export interface TimelineEventFactory {
   webSearchCompleted(
     args: WebSearchCompletedArgs,
   ): ThreadEventRowOfType<"item/completed">;
+  webSearchStarted(
+    args: WebSearchStartedArgs,
+  ): ThreadEventRowOfType<"item/started">;
+  warning(args?: WarningArgs): ThreadEventRowOfType<"warning">;
 }
 
 export function fromRows(rows: ThreadEventRow[]): ThreadEventWithMeta[] {
@@ -324,6 +459,18 @@ export function createTimelineEventFactory(
   }
 
   return {
+    assistantDelta(args) {
+      const base = nextRowBase("assistant-delta", args);
+      return {
+        ...base,
+        type: "item/agentMessage/delta",
+        data: {
+          ...providerFields(args),
+          itemId: args.itemId ?? `assistant-${base.seq}`,
+          delta: args.delta,
+        },
+      };
+    },
     assistantCompleted(args) {
       const base = nextRowBase("assistant-completed", args);
       return {
@@ -394,6 +541,66 @@ export function createTimelineEventFactory(
         },
       };
     },
+    commandOutputDelta(args) {
+      const base = nextRowBase("command-output-delta", args);
+      return {
+        ...base,
+        type: "item/commandExecution/outputDelta",
+        data: {
+          ...providerFields(args),
+          itemId: args.itemId,
+          delta: args.delta,
+        },
+      };
+    },
+    commandStarted(args) {
+      const base = nextRowBase("command-started", args);
+      return {
+        ...base,
+        type: "item/started",
+        data: {
+          ...providerFields(args),
+          item: {
+            type: "commandExecution",
+            id: args.itemId ?? `command-${base.seq}`,
+            command: args.command,
+            cwd: args.cwd ?? "/repo",
+            aggregatedOutput: args.aggregatedOutput,
+            exitCode: args.exitCode,
+            status: args.status ?? "pending",
+            approvalStatus: args.approvalStatus ?? null,
+          },
+        },
+      };
+    },
+    contextCompactionCompleted(args = {}) {
+      const base = nextRowBase("context-compaction-completed", args);
+      return {
+        ...base,
+        type: "item/completed",
+        data: {
+          ...providerFields(args),
+          item: {
+            type: "contextCompaction",
+            id: args.itemId ?? "compact-1",
+          },
+        },
+      };
+    },
+    contextCompactionStarted(args = {}) {
+      const base = nextRowBase("context-compaction-started", args);
+      return {
+        ...base,
+        type: "item/started",
+        data: {
+          ...providerFields(args),
+          item: {
+            type: "contextCompaction",
+            id: args.itemId ?? "compact-1",
+          },
+        },
+      };
+    },
     fileChangeCompleted(args) {
       const base = nextRowBase("file-change-completed", args);
       return {
@@ -406,6 +613,35 @@ export function createTimelineEventFactory(
             id: args.itemId ?? `file-change-${base.seq}`,
             changes: args.changes,
             status: args.status ?? "completed",
+            approvalStatus: args.approvalStatus ?? null,
+          },
+        },
+      };
+    },
+    fileChangeOutputDelta(args) {
+      const base = nextRowBase("file-change-output-delta", args);
+      return {
+        ...base,
+        type: "item/fileChange/outputDelta",
+        data: {
+          ...providerFields(args),
+          itemId: args.itemId,
+          delta: args.delta,
+        },
+      };
+    },
+    fileChangeStarted(args) {
+      const base = nextRowBase("file-change-started", args);
+      return {
+        ...base,
+        type: "item/started",
+        data: {
+          ...providerFields(args),
+          item: {
+            type: "fileChange",
+            id: args.itemId ?? `file-change-${base.seq}`,
+            changes: args.changes,
+            status: args.status ?? "pending",
             approvalStatus: args.approvalStatus ?? null,
           },
         },
@@ -461,6 +697,35 @@ export function createTimelineEventFactory(
         },
       };
     },
+    providerError(args) {
+      const base = nextRowBase("provider-error", args);
+      return {
+        ...base,
+        type: "error",
+        data: {
+          ...providerFields(args),
+          message: args.message,
+          detail: args.detail,
+          willRetry: args.willRetry,
+        },
+      };
+    },
+    providerUnhandled(args = {}) {
+      const base = nextRowBase("provider-unhandled", args);
+      return {
+        ...base,
+        type: "provider/unhandled",
+        data: {
+          ...providerFields(args),
+          providerId: args.providerId ?? "codex",
+          rawType: args.rawType ?? "session.updated",
+          rawEvent: args.rawEvent ?? {
+            jsonrpc: "2.0",
+            method: "session.updated",
+          },
+        },
+      };
+    },
     systemError(args) {
       const base = nextRowBase("system-error", args);
       return {
@@ -473,12 +738,27 @@ export function createTimelineEventFactory(
         },
       };
     },
+    systemOperation(args) {
+      const base = nextRowBase("system-operation", args);
+      return {
+        ...base,
+        type: "system/operation",
+        data: {
+          operation: args.operation ?? "ownership_change",
+          operationId: args.operationId ?? "op-test",
+          status: args.status ?? "running",
+          message: args.message,
+          ...(args.metadata ? { metadata: args.metadata } : {}),
+        },
+      };
+    },
     threadProvisioning(args) {
       const base = nextRowBase("thread-provisioning", args);
       return {
         ...base,
         type: "system/thread-provisioning",
         data: {
+          provisioningId: args.provisioningId ?? "tpv-test",
           status: args.status,
           environmentId: args.environmentId ?? "env-1",
           entries: args.entries,
@@ -497,8 +777,40 @@ export function createTimelineEventFactory(
             id: args.itemId ?? `tool-${base.seq}`,
             tool: args.tool ?? "exec_command",
             arguments: args.arguments,
+            result: args.result,
+            error: args.error,
             status: args.status ?? "completed",
           },
+        },
+      };
+    },
+    toolCallStarted(args) {
+      const base = nextRowBase("tool-call-started", args);
+      return {
+        ...base,
+        type: "item/started",
+        data: {
+          ...providerFields(args),
+          item: {
+            type: "toolCall",
+            id: args.itemId ?? `tool-${base.seq}`,
+            tool: args.tool ?? "exec_command",
+            arguments: args.arguments,
+            result: args.result,
+            error: args.error,
+            status: args.status ?? "pending",
+          },
+        },
+      };
+    },
+    threadCompacted(args = {}) {
+      const base = nextRowBase("thread-compacted", args);
+      return {
+        ...base,
+        type: "thread/compacted",
+        data: {
+          ...providerFields(args),
+          threadId: args.threadId ?? defaults.threadId,
         },
       };
     },
@@ -575,6 +887,23 @@ export function createTimelineEventFactory(
         },
       };
     },
+    webSearchStarted(args) {
+      const base = nextRowBase("web-search-started", args);
+      return {
+        ...base,
+        type: "item/started",
+        data: {
+          ...providerFields(args),
+          item: {
+            type: "webSearch",
+            id: args.itemId ?? `web-${base.seq}`,
+            query: args.query,
+            action: args.action,
+            outputText: args.outputText,
+          },
+        },
+      };
+    },
     webSearchCompleted(args) {
       const base = nextRowBase("web-search-completed", args);
       return {
@@ -589,6 +918,19 @@ export function createTimelineEventFactory(
             action: args.action,
             outputText: args.outputText,
           },
+        },
+      };
+    },
+    warning(args = {}) {
+      const base = nextRowBase("warning", args);
+      return {
+        ...base,
+        type: "warning",
+        data: {
+          providerThreadId: defaults.providerThreadId ?? "provider-thread-1",
+          category: args.category ?? "general",
+          summary: args.summary,
+          details: args.details,
         },
       };
     },
@@ -620,6 +962,99 @@ export function renderTimelineFixture(
     text,
     toolGroups,
   };
+}
+
+export function renderTimelinePrefixes(
+  args: RenderTimelinePrefixesArgs,
+): RenderedTimelineFixture[] {
+  const startAt = args.startAt ?? 1;
+  return args.events
+    .map((_, index) => index + 1)
+    .filter((prefixLength) => prefixLength >= startAt)
+    .map((prefixLength) =>
+      renderTimelineFixture({
+        events: args.events.slice(0, prefixLength),
+        includeToolGroupMessages: args.includeToolGroupMessages,
+        projectionOptions: args.projectionOptions,
+        verbose: args.verbose,
+      }),
+    );
+}
+
+function isTerminalStatus(status: StableTimelineRowStatus): boolean {
+  return status !== "pending";
+}
+
+function appendResolvedLogicalRow(args: AppendResolvedLogicalRowArgs): void {
+  const logicalRow = args.resolveRow(args.timelineRow);
+  if (logicalRow) {
+    args.rows.push(logicalRow);
+  }
+}
+
+export function collectLogicalTimelineRows(
+  args: CollectLogicalTimelineRowsArgs,
+): LogicalTimelineRow[] {
+  const logicalRows: LogicalTimelineRow[] = [];
+  for (const row of args.rows) {
+    appendResolvedLogicalRow({
+      rows: logicalRows,
+      timelineRow: row,
+      resolveRow: args.resolveRow,
+    });
+    if (row.kind !== "tool-group") {
+      continue;
+    }
+    for (const message of row.messages) {
+      appendResolvedLogicalRow({
+        rows: logicalRows,
+        timelineRow: {
+          kind: "message",
+          id: message.id,
+          message,
+        },
+        resolveRow: args.resolveRow,
+      });
+    }
+  }
+  return logicalRows;
+}
+
+export function expectTerminalRowsNeverRegress(
+  args: PrefixTerminalStabilityArgs,
+): void {
+  const terminalByKey = new Map<string, TerminalRowSnapshot>();
+  const prefixes = renderTimelinePrefixes(args);
+
+  for (const prefix of prefixes) {
+    const currentRowsByKey = new Map<string, LogicalTimelineRow>();
+    for (const logicalRow of collectLogicalTimelineRows({
+      rows: prefix.rows,
+      resolveRow: args.resolveRow,
+    })) {
+      currentRowsByKey.set(logicalRow.key, logicalRow);
+    }
+
+    for (const previous of terminalByKey.values()) {
+      const current = currentRowsByKey.get(previous.key);
+      if (!current) {
+        throw new Error(
+          `Terminal row ${previous.key} disappeared after prefix ${previous.prefixLength}`,
+        );
+      }
+      expect(current.status).toBe(previous.status);
+      expect(current.title).toBe(previous.title);
+    }
+
+    for (const current of currentRowsByKey.values()) {
+      if (isTerminalStatus(current.status) && !terminalByKey.has(current.key)) {
+        terminalByKey.set(current.key, {
+          ...current,
+          prefixLength: prefix.events.length,
+        });
+      }
+    }
+  }
 }
 
 export function messageKinds(messages: readonly ViewMessage[]): string[] {

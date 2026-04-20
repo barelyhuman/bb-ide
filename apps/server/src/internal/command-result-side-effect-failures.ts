@@ -14,10 +14,7 @@ import { clearEnvironmentCleanupRequestRecord } from "@bb/db/internal-lifecycle"
 import { activeLifecycleOperationStates } from "@bb/domain";
 import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../types.js";
-import {
-  appendSystemErrorEvent,
-  appendThreadProvisioningEvent,
-} from "../services/threads/thread-events.js";
+import { appendSystemErrorEvent } from "../services/threads/thread-events.js";
 import {
   failThreadStartForCommand,
   failThreadStopForCommand,
@@ -247,25 +244,6 @@ function failThreadStartSideEffects(
   if (!thread) {
     return true;
   }
-
-  appendThreadProvisioningEvent(deps, {
-    threadId: thread.id,
-    environmentId: args.command.environmentId,
-    status: "failed",
-    entries: [
-      {
-        type: "step",
-        key: "agent-session-side-effects-failed",
-        text: COMMAND_RESULT_SIDE_EFFECT_FAILURE_SUMMARY,
-        status: "failed",
-        startedAt: commandStartedAt(args.commandRow),
-        metadata: {
-          commandId: args.commandRow.id,
-          commandType: args.commandRow.type,
-        },
-      },
-    ],
-  });
 
   if (thread.deletedAt === null && thread.stopRequestedAt === null) {
     appendSystemErrorEvent(deps, {

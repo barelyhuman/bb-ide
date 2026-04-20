@@ -173,7 +173,6 @@ describe("timeline CLI rendering snapshots", () => {
     expect(messageKinds(timeline.messages)).toEqual([
       "user",
       "operation",
-      "operation",
       "error",
     ]);
     expect(timeline.text).toMatchInlineSnapshot(`

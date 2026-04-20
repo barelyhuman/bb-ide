@@ -32,6 +32,10 @@ export function createEnvironmentOperationId(): string {
   return createId("eop");
 }
 
+export function createEnvironmentProvisioningId(): string {
+  return createId("epv");
+}
+
 export function createHostOperationId(): string {
   return createId("hop");
 }
@@ -42,6 +46,10 @@ export function createThreadId(): string {
 
 export function createThreadOperationId(): string {
   return createId("top");
+}
+
+export function createThreadProvisioningId(): string {
+  return createId("tpv");
 }
 
 export function createAutomationId(): string {

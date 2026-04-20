@@ -460,7 +460,7 @@ describe("host daemon integration", () => {
     }
   });
 
-  it("rebases provider event sequences from command-result high-water marks", async () => {
+  it("seeds subsequent provider event sequences from command-result high-water marks", async () => {
     const harness = await setupDaemonHarness({
       serverOptions: {
         commandResultThreadHighWaterMarks: {
@@ -489,6 +489,14 @@ describe("host daemon integration", () => {
       if (!startResult || !startResult.ok) {
         throw new Error("Expected thread.start to succeed");
       }
+      await waitFor(() =>
+        harness.server.events.some((event) => event.threadId === "thread-a"),
+      );
+      const startEvents = harness.server.events.filter(
+        (event) => event.threadId === "thread-a",
+      );
+      expect(startEvents.length).toBeGreaterThan(0);
+      expect(Math.min(...startEvents.map((event) => event.sequence))).toBe(2);
 
       const eventCountBeforeFollowUp = harness.server.events.length;
       harness.server.queueCommand({

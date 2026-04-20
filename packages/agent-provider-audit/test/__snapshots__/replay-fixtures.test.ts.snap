@@ -3146,6 +3146,7 @@ Implement that improvement with focused validation and keep the existing behavio
     +import { useEditorInterface } from "../App";
     +import { activeEyeDropperAtom, supportsNativeEyeDropper } from "../EyeDropper";
     +import { eyeDropperIcon } from "../icons";
+  ── File Edit ───────────────────────────────────────────────
     ✓ $EXCALIDRAW_REPO/packages/excalidraw/components/ColorPicker/ColorInput.tsx (update)
     --- a/$EXCALIDRAW_REPO/packages/excalidraw/components/ColorPicker/ColorInput.tsx
     +++ b/$EXCALIDRAW_REPO/packages/excalidraw/components/ColorPicker/ColorInput.tsx
@@ -4130,6 +4131,7 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
     +  LibraryIcon,
     +  historyCommandIcon,
     +} from "../icons";
+  ── File Edit ───────────────────────────────────────────────
     ✓ $EXCALIDRAW_REPO/packages/excalidraw/components/CommandPalette/CommandPalette.tsx (update)
     --- a/$EXCALIDRAW_REPO/packages/excalidraw/components/CommandPalette/CommandPalette.tsx
     +++ b/$EXCALIDRAW_REPO/packages/excalidraw/components/CommandPalette/CommandPalette.tsx
@@ -7015,6 +7017,9 @@ There's a positioning bug in the eyedropper preview: near the viewport edges, th
 
       return { top, left };
     };
+    Success. Updated the following files:
+  A packages/excalidraw/components/EyeDropper.common.ts
+  ── File Edit ───────────────────────────────────────────────
     ✓ $EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.tsx (update)
     @@ -15,2 +15,3 @@
      import { useApp, useExcalidrawContainer, useExcalidrawElements } from "./App";
@@ -7052,6 +7057,9 @@ There's a positioning bug in the eyedropper preview: near the viewport edges, th
     +
     +      colorPreviewDiv.style.top = \`\${top}px\`;
     +      colorPreviewDiv.style.left = \`\${left}px\`;
+    Success. Updated the following files:
+  M packages/excalidraw/components/EyeDropper.tsx
+  ── File Edit ───────────────────────────────────────────────
     ✓ $EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.test.ts (add)
     import {
       EYE_DROPPER_PREVIEW_POINTER_OFFSET_PX,
@@ -7395,6 +7403,9 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
     +          },
     +        },
            ];
+    Success. Updated the following files:
+  M $EXCALIDRAW_REPO/packages/excalidraw/components/CommandPalette/CommandPalette.tsx
+  ── File Edit ───────────────────────────────────────────────
     ✓ $EXCALIDRAW_REPO/packages/excalidraw/components/CommandPalette/CommandPalette.test.tsx (add)
     import React from "react";
     import { vi } from "vitest";
@@ -10733,6 +10744,9 @@ Use the available repo_outline helper first for the share and collaboration area
     -        />
     +        </div>
            </div>
+    Success. Updated the following files:
+  M excalidraw-app/share/ShareDialog.tsx
+  ── File Edit ───────────────────────────────────────────────
     ✓ $EXCALIDRAW_REPO/excalidraw-app/share/ShareDialog.scss (update)
     @@ -123,2 +123,14 @@
          &__active {
@@ -12669,6 +12683,7 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
     +  LibraryIcon,
     +  historyCommandIcon,
     +} from "../icons";
+  ── File Edit ───────────────────────────────────────────────
     ✓ packages/excalidraw/components/CommandPalette/CommandPalette.tsx (update)
     --- a/packages/excalidraw/components/CommandPalette/CommandPalette.tsx
     +++ b/packages/excalidraw/components/CommandPalette/CommandPalette.tsx

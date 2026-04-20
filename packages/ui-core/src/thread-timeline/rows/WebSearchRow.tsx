@@ -10,10 +10,18 @@ export function WebSearchRow({
   message: ViewWebSearchMessage;
   preferOngoingLabels?: boolean;
 }) {
-  const isSearching = message.status === "pending" || preferOngoingLabels;
+  const isSearching =
+    message.status === "pending" ||
+    (message.status !== "interrupted" && preferOngoingLabels);
+  const prefix =
+    message.status === "interrupted"
+      ? "Search interrupted"
+      : isSearching
+        ? "Searching"
+        : "Searched";
   const summary = (
     <EventTitle
-      prefix={isSearching ? "Searching" : "Searched"}
+      prefix={prefix}
       detail={message.query ?? "the web"}
       shimmerPrefix={isSearching}
     />

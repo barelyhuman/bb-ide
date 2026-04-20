@@ -7,7 +7,6 @@ import type {
 } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 import { getMessageStartedAt } from "./format-helpers.js";
-import { mergeProvisioningOperations } from "./provisioning-helpers.js";
 import {
   findLastTerminalTimelineMessageIndex,
   isTimelineUngroupableMessage,
@@ -236,6 +235,15 @@ function mergeConsecutiveToolActivityMessages(
     }
 
     if (isFileEditMessage(active) && isFileEditMessage(message)) {
+      if (active.callId !== message.callId) {
+        flush();
+        active = {
+          ...message,
+          changes: message.changes.map((change) => ({ ...change })),
+        };
+        continue;
+      }
+
       active.changes = [
         ...active.changes,
         ...message.changes.map((change) => ({ ...change })),
@@ -336,11 +344,8 @@ interface BuildTurnToolGroupRowArgs {
 
 function prepareTimelineMessages(messages: ViewMessage[]): ViewMessage[] {
   const visibleMessages = toTimelineVisibleMessages(messages);
-  const provisioningMergedMessages =
-    mergeProvisioningOperations(visibleMessages);
-  const reconnectMergedMessages = mergeConsecutiveReconnectErrors(
-    provisioningMergedMessages,
-  );
+  const reconnectMergedMessages =
+    mergeConsecutiveReconnectErrors(visibleMessages);
   return mergeConsecutiveToolActivityMessages(reconnectMergedMessages);
 }
 

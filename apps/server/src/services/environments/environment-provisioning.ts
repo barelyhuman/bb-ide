@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import {
   type EnvironmentOperationRow,
   getActiveSession,
@@ -8,6 +8,7 @@ import {
   getEnvironmentOperationByCommandId,
   getHost,
   queueCommand,
+  threadOperations,
   threads,
 } from "@bb/db";
 import {
@@ -22,8 +23,8 @@ import type {
   EnvironmentOperationKind,
   ProvisioningTranscriptEntry,
   SystemThreadProvisioningStatus,
-  Thread,
 } from "@bb/domain";
+import { activeLifecycleOperationStates } from "@bb/domain";
 import { type HostDaemonCommand } from "@bb/host-daemon-contract";
 import type { SandboxHostProgressEvent } from "@bb/sandbox-host";
 import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
@@ -54,6 +55,7 @@ import {
 } from "../hosts/host-lifecycle.js";
 import { advanceEnvironmentCleanup } from "./environment-cleanup.js";
 import { tryTransition } from "../threads/thread-transitions.js";
+import { readThreadProvisioningIdFromPayload } from "../threads/thread-provisioning-identity.js";
 
 type EnvironmentProvisionOperationKind = Extract<
   EnvironmentOperationKind,
@@ -79,6 +81,10 @@ export interface EnvironmentProvisioningCommandMutationArgs {
   commandId: string;
 }
 
+export interface EnvironmentProvisioningCommandLookupArgs {
+  commandId: string;
+}
+
 export interface FailEnvironmentProvisioningForCommandArgs extends EnvironmentProvisioningCommandMutationArgs {
   failureReason: string;
 }
@@ -96,7 +102,19 @@ interface FailEnvironmentProvisioningDurablyArgs {
   failureReason: string;
 }
 
-type LiveEnvironmentThread = Pick<Thread, "id" | "projectId">;
+interface LiveEnvironmentThread {
+  id: string;
+  provisionOperationPayload: string | null;
+}
+
+interface AppendThreadProvisioningEventToEnvironmentThreadsArgs {
+  entries: ProvisioningTranscriptEntry[];
+  environmentId: string;
+  fallbackProvisioningId: string;
+  status: SystemThreadProvisioningStatus;
+  threads?: LiveEnvironmentThread[];
+}
+
 const sandboxBootstrapDeduper = createAsyncDeduper<string, void>();
 
 function listLiveEnvironmentThreads(
@@ -106,23 +124,36 @@ function listLiveEnvironmentThreads(
   return deps.db
     .select({
       id: threads.id,
-      projectId: threads.projectId,
+      provisionOperationPayload: threadOperations.payload,
     })
     .from(threads)
+    .leftJoin(
+      threadOperations,
+      and(
+        eq(threadOperations.threadId, threads.id),
+        eq(threadOperations.kind, "provision"),
+        inArray(threadOperations.state, [...activeLifecycleOperationStates]),
+      ),
+    )
     .where(
       and(eq(threads.environmentId, environmentId), isNull(threads.deletedAt)),
     )
     .all();
 }
 
+function resolveLiveThreadProvisioningId(
+  thread: LiveEnvironmentThread,
+  fallbackProvisioningId: string,
+): string {
+  if (!thread.provisionOperationPayload) {
+    return fallbackProvisioningId;
+  }
+  return readThreadProvisioningIdFromPayload(thread.provisionOperationPayload);
+}
+
 function appendThreadProvisioningEventToEnvironmentThreads(
   deps: Pick<AppDeps, "db" | "hub">,
-  args: {
-    entries: ProvisioningTranscriptEntry[];
-    environmentId: string;
-    status: SystemThreadProvisioningStatus;
-    threads?: LiveEnvironmentThread[];
-  },
+  args: AppendThreadProvisioningEventToEnvironmentThreadsArgs,
 ): void {
   const liveThreads =
     args.threads ??
@@ -131,9 +162,14 @@ function appendThreadProvisioningEventToEnvironmentThreads(
     listLiveEnvironmentThreads(deps, args.environmentId);
 
   for (const thread of liveThreads) {
+    const provisioningId = resolveLiveThreadProvisioningId(
+      thread,
+      args.fallbackProvisioningId,
+    );
     appendThreadProvisioningEvent(deps, {
       entries: args.entries,
       environmentId: args.environmentId,
+      provisioningId,
       status: args.status,
       threadId: thread.id,
     });
@@ -244,6 +280,29 @@ function getActiveProvisionOperationByCommandId(
   }
 
   return operation;
+}
+
+function readEnvironmentProvisioningIdFromOperation(
+  operation: EnvironmentOperationRow,
+): string {
+  return parseJsonWithSchema(
+    operation.payload,
+    environmentProvisionRequestSchema,
+  ).provisioningId;
+}
+
+export function getEnvironmentProvisioningIdForCommand(
+  deps: Pick<AppDeps, "db">,
+  args: EnvironmentProvisioningCommandLookupArgs,
+): string | null {
+  const operation = getActiveProvisionOperationByCommandId(
+    deps,
+    args.commandId,
+  );
+  if (!operation) {
+    return null;
+  }
+  return readEnvironmentProvisioningIdFromOperation(operation);
 }
 
 function hasQueuedProvisionCommand(
@@ -382,7 +441,14 @@ export async function failEnvironmentProvisioningDurably(
   if (!environment) {
     return;
   }
+  const operation = args.commandId
+    ? getActiveProvisionOperationByCommandId(deps, args.commandId)
+    : getActiveProvisionOperation(deps, environment.id);
+  if (!operation) {
+    return;
+  }
   const liveThreads = listLiveEnvironmentThreads(deps, environment.id);
+  const provisioningId = readEnvironmentProvisioningIdFromOperation(operation);
 
   if (args.commandId) {
     failEnvironmentProvisioningForCommand(deps, {
@@ -398,6 +464,7 @@ export async function failEnvironmentProvisioningDurably(
 
   appendThreadProvisioningEventToEnvironmentThreads(deps, {
     environmentId: environment.id,
+    fallbackProvisioningId: provisioningId,
     status: "failed",
     threads: liveThreads,
     entries: [args.failureEntry],
@@ -455,8 +522,14 @@ async function bootstrapSandboxProvisioning(
     request: SandboxHostEnvironmentProvisionRequest;
   },
 ): Promise<void> {
+  const operation = getActiveProvisionOperation(deps, args.environment.id);
+  if (!operation) {
+    throw new Error("Environment provision operation is no longer active");
+  }
+  const provisioningId = readEnvironmentProvisioningIdFromOperation(operation);
   appendThreadProvisioningEventToEnvironmentThreads(deps, {
     environmentId: args.environment.id,
+    fallbackProvisioningId: provisioningId,
     status: "active",
     entries: [
       {
@@ -476,6 +549,7 @@ async function bootstrapSandboxProvisioning(
         onProgress: (event) => {
           appendThreadProvisioningEventToEnvironmentThreads(deps, {
             environmentId: args.environment.id,
+            fallbackProvisioningId: provisioningId,
             status: "active",
             entries: [sandboxHostProgressEntry(event)],
           });
@@ -485,6 +559,7 @@ async function bootstrapSandboxProvisioning(
 
     appendThreadProvisioningEventToEnvironmentThreads(deps, {
       environmentId: args.environment.id,
+      fallbackProvisioningId: provisioningId,
       status: "active",
       entries: [
         {
@@ -604,6 +679,7 @@ export interface QueueManagedEnvironmentReprovisionArgs {
   environment: Environment;
   projectId: string;
   provisionEventSequence: number;
+  provisioningId: string;
   threadId: string;
 }
 
@@ -661,6 +737,7 @@ export async function queueManagedEnvironmentReprovision(
     hostId: args.environment.hostId,
     initiator: {
       threadId: args.threadId,
+      provisioningId: args.provisioningId,
       eventSequence: args.provisionEventSequence,
     },
     sourcePath: source.path,
@@ -672,7 +749,10 @@ export async function queueManagedEnvironmentReprovision(
   requestEnvironmentProvision(deps, {
     environmentId: args.environment.id,
     kind: "reprovision",
-    request: buildDirectEnvironmentProvisionRequest(command),
+    request: buildDirectEnvironmentProvisionRequest({
+      command,
+      provisioningId: args.provisioningId,
+    }),
   });
   queueEnvironmentProvisionCommand(deps, {
     command,

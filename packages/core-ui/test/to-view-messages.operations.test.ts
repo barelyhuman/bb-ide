@@ -13,6 +13,7 @@ describe("toViewMessages operations", () => {
         seq: 1,
         type: "system/thread-provisioning",
         data: {
+          provisioningId: "tpv-1",
           status: "active",
           environmentId: "env-1",
           entries: [
@@ -32,6 +33,7 @@ describe("toViewMessages operations", () => {
         seq: 2,
         type: "system/thread-provisioning",
         data: {
+          provisioningId: "tpv-1",
           status: "active",
           environmentId: "env-1",
           entries: [
@@ -647,6 +649,7 @@ describe("toViewMessages operations", () => {
         seq: 1,
         type: "system/thread-provisioning",
         data: {
+          provisioningId: "tpv-1",
           status: "active",
           environmentId: "env-1",
           entries: [
@@ -666,6 +669,7 @@ describe("toViewMessages operations", () => {
         seq: 2,
         type: "system/thread-provisioning",
         data: {
+          provisioningId: "tpv-1",
           status: "active",
           environmentId: "env-1",
           entries: [
@@ -685,6 +689,7 @@ describe("toViewMessages operations", () => {
         seq: 3,
         type: "system/thread-provisioning",
         data: {
+          provisioningId: "tpv-1",
           status: "completed",
           environmentId: "env-1",
           entries: [
@@ -708,13 +713,131 @@ describe("toViewMessages operations", () => {
         message.kind === "operation",
     );
 
-    expect(ops).toHaveLength(3);
+    expect(ops).toHaveLength(1);
     expect(ops[0]?.opType).toBe("thread-provisioning");
-    expect(ops[0]?.title).toBe("Provisioning thread");
-    expect(ops[1]?.opType).toBe("thread-provisioning");
-    expect(ops[1]?.title).toBe("Provisioning thread");
-    expect(ops[2]?.opType).toBe("thread-provisioning");
-    expect(ops[2]?.title).toBe("Provisioned thread");
+    expect(ops[0]?.title).toBe("Provisioned thread");
+    expect(ops[0]?.status).toBe("completed");
+    expect(ops[0]?.provisioning?.transcript?.map((entry) => entry.key)).toEqual(
+      ["provision", "setup", "setup"],
+    );
+  });
+
+  it("keeps completed provisioning completed when the thread later errors", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "system/thread-provisioning",
+        data: {
+          provisioningId: "tpv-1",
+          status: "active",
+          environmentId: "env-1",
+          entries: [
+            {
+              type: "step",
+              key: "provision",
+              text: "Waiting for workspace",
+              status: "started",
+            },
+          ],
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "system/thread-provisioning",
+        data: {
+          provisioningId: "tpv-1",
+          status: "completed",
+          environmentId: "env-1",
+          entries: [
+            {
+              type: "step",
+              key: "branch",
+              text: "Using branch: main",
+              status: "completed",
+            },
+          ],
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "error",
+    });
+    const ops = projected.filter(
+      (message): message is Extract<ViewMessage, { kind: "operation" }> =>
+        message.kind === "operation",
+    );
+
+    expect(ops).toHaveLength(1);
+    expect(ops[0]?.opType).toBe("thread-provisioning");
+    expect(ops[0]?.status).toBe("completed");
+    expect(ops[0]?.title).toBe("Provisioned thread");
+  });
+
+  it("does not let stale failed provisioning updates replace a completed lifecycle", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "system/thread-provisioning",
+        data: {
+          provisioningId: "tpv-1",
+          status: "completed",
+          environmentId: "env-1",
+          entries: [
+            {
+              type: "step",
+              key: "branch",
+              text: "Using branch: main",
+              status: "completed",
+            },
+          ],
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "system/thread-provisioning",
+        data: {
+          provisioningId: "tpv-1",
+          status: "failed",
+          environmentId: "env-1",
+          entries: [
+            {
+              type: "step",
+              key: "setup",
+              text: "Workspace setup failed",
+              status: "failed",
+            },
+          ],
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "error",
+    });
+    const ops = projected.filter(
+      (message): message is Extract<ViewMessage, { kind: "operation" }> =>
+        message.kind === "operation",
+    );
+
+    expect(ops).toHaveLength(1);
+    expect(ops[0]?.opType).toBe("thread-provisioning");
+    expect(ops[0]?.status).toBe("completed");
+    expect(ops[0]?.title).toBe("Provisioned thread");
+    expect(ops[0]?.sourceSeqStart).toBe(1);
+    expect(ops[0]?.sourceSeqEnd).toBe(2);
   });
 
   it("projects active provisioning events as pending operations", () => {
@@ -725,13 +848,14 @@ describe("toViewMessages operations", () => {
         seq: 1,
         type: "system/thread-provisioning",
         data: {
+          provisioningId: "tpv-1",
           status: "active",
           environmentId: "env-1",
           entries: [
             {
               type: "step",
-              key: "session",
-              text: "Starting agent session",
+              key: "workspace",
+              text: "Preparing workspace",
               status: "started",
             },
           ],
@@ -762,6 +886,7 @@ describe("toViewMessages operations", () => {
         seq: 1,
         type: "system/thread-provisioning",
         data: {
+          provisioningId: "tpv-1",
           status: "active",
           environmentId: "env-1",
           entries: [
@@ -817,6 +942,7 @@ describe("toViewMessages operations", () => {
         type: "system/operation",
         data: {
           operation: "ownership_change",
+          operationId: "op-ownership-1",
           status: "completed",
           message: "Thread assigned to manager",
           metadata: {
@@ -842,6 +968,7 @@ describe("toViewMessages operations", () => {
     expect(op?.threadOperation).toEqual({
       operation: "ownership_change",
       rawOperation: "ownership_change",
+      operationId: "op-ownership-1",
       status: "completed",
       rawStatus: "completed",
       metadata: {
@@ -885,6 +1012,7 @@ describe("toViewMessages operations", () => {
         seq: 2,
         type: "system/thread-provisioning",
         data: {
+          provisioningId: "tpv-1",
           status: "active",
           environmentId: "env-1",
           entries: [
@@ -904,6 +1032,7 @@ describe("toViewMessages operations", () => {
         seq: 3,
         type: "system/thread-provisioning",
         data: {
+          provisioningId: "tpv-1",
           status: "completed",
           environmentId: "env-1",
           entries: [

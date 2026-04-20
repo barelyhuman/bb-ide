@@ -3,11 +3,17 @@ import type {
   ViewFileEditMessage,
   ViewMessage,
   ViewOperationMessage,
+  ViewPermissionGrantLifecycleMessage,
 } from "@bb/domain";
 import type { CompactionLifecycleEvent } from "./compaction-lifecycle.js";
 import type { EventMeta } from "./event-decode.js";
 import type { FileEditPartial } from "./file-edit-parsing.js";
 import { messageId } from "./format-helpers.js";
+import {
+  mergeProvisioningMetadata,
+  provisioningKey,
+  provisioningTitleForStatus,
+} from "./provisioning-helpers.js";
 import {
   applyApprovalStatusDelta,
   buildApprovalStatusDelta,
@@ -18,6 +24,12 @@ export interface OperationProjectionState {
   fileEditsByCallId: Map<string, ViewFileEditMessage>;
   openCompactionsByKey: Map<string, ViewOperationMessage>;
   finalizedCompactionKeys: Set<string>;
+  provisioningOperationsByKey: Map<string, ViewOperationMessage>;
+  permissionGrantsByInteractionId: Map<
+    string,
+    ViewPermissionGrantLifecycleMessage
+  >;
+  threadOperationsById: Map<string, ViewOperationMessage>;
 }
 
 export type CompactionTurnFinalizationStatus = Extract<
@@ -32,6 +44,188 @@ interface FinalizeOpenCompactionsForTurnArgs {
   turnId: string | undefined;
   status: CompactionTurnFinalizationStatus;
   detail: string | undefined;
+}
+
+type LifecycleStatus = Extract<
+  ViewOperationMessage["status"],
+  "pending" | "completed" | "error" | "interrupted"
+>;
+
+type LifecycleViewMessage =
+  | ViewOperationMessage
+  | ViewPermissionGrantLifecycleMessage;
+
+interface OperationDetailMergeArgs {
+  existing: string | undefined;
+  incoming: string | undefined;
+}
+
+interface UpsertKeyedLifecycleMessageArgs<
+  TMessage extends LifecycleViewMessage,
+> {
+  index: Map<string, TMessage>;
+  incoming: TMessage;
+  key: string | null | undefined;
+  mergeExisting: (existing: TMessage, incoming: TMessage) => void;
+  state: OperationProjectionState;
+}
+
+function isTerminalLifecycleStatus(status: LifecycleStatus): boolean {
+  return status !== "pending";
+}
+
+function mergeLifecycleStatus(
+  existing: LifecycleStatus,
+  incoming: LifecycleStatus,
+): LifecycleStatus {
+  if (isTerminalLifecycleStatus(existing)) {
+    return existing;
+  }
+  return incoming;
+}
+
+function mergeOperationDetail(
+  args: OperationDetailMergeArgs,
+): string | undefined {
+  const details = [args.existing, args.incoming].filter(
+    (value): value is string => Boolean(value),
+  );
+  if (details.length === 0) {
+    return undefined;
+  }
+  return [...new Set(details)].join("\n");
+}
+
+function upsertKeyedLifecycleMessage<TMessage extends LifecycleViewMessage>(
+  args: UpsertKeyedLifecycleMessageArgs<TMessage>,
+): void {
+  if (!args.key) {
+    args.state.messages.push(args.incoming);
+    return;
+  }
+
+  const existing = args.index.get(args.key);
+  if (!existing) {
+    args.index.set(args.key, args.incoming);
+    args.state.messages.push(args.incoming);
+    return;
+  }
+
+  updateMessageBounds(existing, args.incoming);
+  args.mergeExisting(existing, args.incoming);
+}
+
+function mergeProvisioningOperation(
+  existing: ViewOperationMessage,
+  incoming: ViewOperationMessage,
+): void {
+  existing.status = mergeLifecycleStatus(
+    existing.status ?? "pending",
+    incoming.status ?? "pending",
+  );
+  existing.title = provisioningTitleForStatus(existing.status);
+  existing.provisioning = mergeProvisioningMetadata(
+    existing.provisioning,
+    incoming.provisioning,
+  );
+  existing.detail = mergeOperationDetail({
+    existing: existing.detail,
+    incoming: incoming.detail,
+  });
+}
+
+export function upsertProvisioningOperation(
+  state: OperationProjectionState,
+  incoming: ViewOperationMessage,
+): void {
+  upsertKeyedLifecycleMessage({
+    index: state.provisioningOperationsByKey,
+    incoming,
+    key: provisioningKey(incoming),
+    mergeExisting: mergeProvisioningOperation,
+    state,
+  });
+}
+
+function updateMessageBounds(
+  existing: LifecycleViewMessage,
+  incoming: LifecycleViewMessage,
+): void {
+  existing.sourceSeqStart = Math.min(
+    existing.sourceSeqStart,
+    incoming.sourceSeqStart,
+  );
+  existing.sourceSeqEnd = Math.max(
+    existing.sourceSeqEnd,
+    incoming.sourceSeqEnd,
+  );
+  existing.createdAt = Math.max(existing.createdAt, incoming.createdAt);
+  existing.startedAt = Math.min(
+    existing.startedAt ?? existing.createdAt,
+    incoming.startedAt ?? incoming.createdAt,
+  );
+  if (!existing.turnId && incoming.turnId) {
+    existing.turnId = incoming.turnId;
+  }
+}
+
+export function upsertThreadOperationMessage(
+  state: OperationProjectionState,
+  incoming: ViewOperationMessage,
+): void {
+  upsertKeyedLifecycleMessage({
+    index: state.threadOperationsById,
+    incoming,
+    key: incoming.threadOperation?.operationId,
+    mergeExisting: mergeThreadOperationMessage,
+    state,
+  });
+}
+
+function mergeThreadOperationMessage(
+  existing: ViewOperationMessage,
+  incoming: ViewOperationMessage,
+): void {
+  const mergedStatus = mergeLifecycleStatus(
+    existing.status ?? "pending",
+    incoming.status ?? "pending",
+  );
+  const shouldUseIncomingLifecycle = existing.status !== mergedStatus;
+  existing.status = mergedStatus;
+  if (shouldUseIncomingLifecycle) {
+    existing.title = incoming.title;
+    existing.threadOperation = incoming.threadOperation;
+  }
+  existing.detail = mergeOperationDetail({
+    existing: existing.detail,
+    incoming: incoming.detail,
+  });
+}
+
+export function upsertPermissionGrantLifecycleMessage(
+  state: OperationProjectionState,
+  incoming: ViewPermissionGrantLifecycleMessage,
+): void {
+  upsertKeyedLifecycleMessage({
+    index: state.permissionGrantsByInteractionId,
+    incoming,
+    key: incoming.interactionId,
+    mergeExisting: mergePermissionGrantLifecycleMessage,
+    state,
+  });
+}
+
+function mergePermissionGrantLifecycleMessage(
+  existing: ViewPermissionGrantLifecycleMessage,
+  incoming: ViewPermissionGrantLifecycleMessage,
+): void {
+  const mergedStatus = mergeLifecycleStatus(existing.status, incoming.status);
+  const shouldUseIncomingLifecycle = existing.status !== mergedStatus;
+  existing.status = mergedStatus;
+  if (shouldUseIncomingLifecycle) {
+    existing.title = incoming.title;
+  }
+  existing.approvalTarget = incoming.approvalTarget;
 }
 
 function mergeFileChanges(
@@ -218,12 +412,16 @@ export function onCompactionEnd(
   state.finalizedCompactionKeys.add(payload.key);
 }
 
+/**
+ * Turn-end finalization is provisional: keep the compaction open so a later
+ * explicit compaction completion can override the inferred error/interruption.
+ */
 export function finalizeOpenCompactionsForTurn(
   args: FinalizeOpenCompactionsForTurnArgs,
 ): void {
   if (!args.turnId) return;
 
-  for (const [key, message] of args.state.openCompactionsByKey) {
+  for (const message of args.state.openCompactionsByKey.values()) {
     if (message.threadId !== args.threadId || message.turnId !== args.turnId) {
       continue;
     }
@@ -236,7 +434,5 @@ export function finalizeOpenCompactionsForTurn(
         ? "Context compaction failed"
         : "Context compaction interrupted";
     message.detail = args.detail ?? message.detail;
-    args.state.openCompactionsByKey.delete(key);
-    args.state.finalizedCompactionKeys.add(key);
   }
 }

@@ -14,6 +14,13 @@ import {
   sanitizeGeneratedBranchSlug,
 } from "./title-generation.js";
 
+type EnvironmentProvisionCommand = Extract<
+  HostDaemonCommand,
+  { type: "environment.provision" }
+>;
+type EnvironmentProvisionCommandInitiator =
+  EnvironmentProvisionCommand["initiator"];
+
 export interface ManagedBranchNameArgs {
   branchSlug?: string | null;
   threadId: string;
@@ -62,14 +69,14 @@ export type EnvironmentProvisionCommandArgs =
       workspaceProvisionType: "unmanaged";
       environmentId: string;
       hostId: string;
-      initiator: { threadId: string; eventSequence: number } | null;
+      initiator: EnvironmentProvisionCommandInitiator;
       path: string;
     }
   | {
       workspaceProvisionType: "managed-worktree" | "managed-clone";
       environmentId: string;
       hostId: string;
-      initiator: { threadId: string; eventSequence: number } | null;
+      initiator: EnvironmentProvisionCommandInitiator;
       sourcePath: string;
       targetPath: string;
       branchName: string;
@@ -78,7 +85,7 @@ export type EnvironmentProvisionCommandArgs =
 
 export function buildEnvironmentProvisionCommand(
   args: EnvironmentProvisionCommandArgs,
-): Extract<HostDaemonCommand, { type: "environment.provision" }> {
+): EnvironmentProvisionCommand {
   return args.workspaceProvisionType === "unmanaged"
     ? {
         type: "environment.provision" as const,

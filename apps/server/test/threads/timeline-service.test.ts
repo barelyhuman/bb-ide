@@ -656,6 +656,7 @@ describe("buildThreadTimeline", () => {
       sequence: 2,
       type: "system/thread-provisioning",
       data: {
+          provisioningId: "tpv-1",
         status: "completed",
         environmentId: environment.id,
         entries: [

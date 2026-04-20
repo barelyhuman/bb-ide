@@ -586,7 +586,8 @@ export async function createHostDaemonApp(
       flush: () => eventBuffer.flush(),
     },
     reportResult: async (report) => {
-      eventBuffer.rebase(await serverClient.reportCommandResult(report));
+      const result = await serverClient.reportCommandResult(report);
+      eventBuffer.rebase(result.threadHighWaterMarks);
     },
     persistRuntimeMaterial: (snapshot) =>
       writeRuntimeMaterialState(options.dataDir, snapshot),

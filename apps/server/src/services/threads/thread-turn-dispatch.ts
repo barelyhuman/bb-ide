@@ -5,6 +5,7 @@ import type {
   Thread,
   ThreadTurnInitiator,
 } from "@bb/domain";
+import { createThreadProvisioningId } from "@bb/db";
 import type { SandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { queueManagedEnvironmentReprovision } from "../environments/environment-provisioning.js";
@@ -88,9 +89,11 @@ export async function queueTurnDuringReprovision(
   if (args.thread.status === "idle") {
     tryTransition(args.deps.db, args.deps.hub, args.thread.id, "provisioning");
   }
+  const provisioningId = createThreadProvisioningId();
   const provisionEventSequence = appendThreadProvisioningEvent(args.deps, {
     threadId: args.thread.id,
     environmentId: args.environment.id,
+    provisioningId,
     status: "active",
     entries: [
       {
@@ -108,6 +111,7 @@ export async function queueTurnDuringReprovision(
       environment: args.environment,
       projectId: args.thread.projectId,
       provisionEventSequence,
+      provisioningId,
       threadId: args.thread.id,
     },
   );
@@ -129,6 +133,7 @@ export async function queueTurnDuringReprovision(
     input: args.input,
     execution: args.execution,
     initiator: args.initiator,
+    provisioningId,
   });
   args.onQueued?.();
   return true;

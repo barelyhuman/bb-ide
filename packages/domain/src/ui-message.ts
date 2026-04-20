@@ -139,7 +139,7 @@ export interface ViewWebSearchMessage extends ViewMessageBase {
   query?: string;
   action?: string;
   output?: string;
-  status: Extract<ViewMessageStatus, "pending" | "completed">;
+  status: Extract<ViewMessageStatus, "pending" | "completed" | "interrupted">;
 }
 
 export interface ViewFileEditChange {
@@ -209,7 +209,7 @@ export interface ViewThreadOperationMetadata {
   rawOperation: string;
   status: ViewThreadOperationStatus;
   rawStatus: string;
-  operationId?: string;
+  operationId: string;
   metadata?: Record<string, unknown>;
 }
 
@@ -224,6 +224,7 @@ export interface ViewProvisioningTranscriptEntry {
 
 export interface ViewProvisioningMetadata {
   environmentId?: string;
+  provisioningId: string;
   transcript?: ViewProvisioningTranscriptEntry[];
 }
 
@@ -247,6 +248,7 @@ export interface ViewOperationMessage extends ViewMessageBase {
 
 export interface ViewPermissionGrantLifecycleMessage extends ViewMessageBase {
   kind: "permission-grant-lifecycle";
+  interactionId: string;
   title: string;
   status: Extract<
     ViewMessageStatus,

@@ -102,13 +102,14 @@ export async function provisionEnvironment(
 
 function buildOnProgress(args: BuildOnProgressArgs): ProvisionProgressCallback {
   const { command, options, transcript } = args;
-  const threadId = command.initiator?.threadId;
+  const initiator = command.initiator;
   const eventSink = options.eventSink;
-  if (!threadId) {
+  if (!initiator) {
     return (entry) => {
       transcript.push(entry);
     };
   }
+  const threadId = initiator.threadId;
 
   return (entry) => {
     transcript.push(entry);
@@ -118,6 +119,7 @@ function buildOnProgress(args: BuildOnProgressArgs): ProvisionProgressCallback {
       event: {
         type: "system/thread-provisioning",
         threadId,
+        provisioningId: initiator.provisioningId,
         status: "active",
         environmentId: command.environmentId,
         entries: [entry],

@@ -22,18 +22,23 @@ export interface CreateEventBufferOptions {
   initialHighWaterMarks?: Record<string, number>;
   debounceMs?: number;
   flushAtCount?: number;
-  maxBufferedEvents?: number;
   now?: () => number;
 }
 
 export interface EventBuffer {
+  /**
+   * Buffered events are retained until the server acknowledges them. This
+   * buffer is intentionally uncapped: during outages we prefer memory pressure
+   * and retry backoff over silently dropping daemon events.
+   */
   push(event: BufferedEventInput): BufferedEvent;
   ack(threadHighWaterMarks: Record<string, number>): void;
   seed(threadHighWaterMarks: Record<string, number>): void;
   /**
-   * Move still-buffered events above server-originated sequence advances.
-   * Unlike ack(), this preserves buffered events because the server did not
-   * confirm that those specific events were persisted.
+   * Move still-buffered events above server-originated sequence advances after
+   * a command-result RPC. Command seed values establish the floor before events
+   * are emitted; rebase handles only later server appends that race with events
+   * still waiting in this buffer.
    */
   rebase(threadHighWaterMarks: Record<string, number>): void;
   flush(): Promise<void>;
@@ -44,15 +49,12 @@ export interface EventBuffer {
 
 const DEFAULT_DEBOUNCE_MS = 100;
 const DEFAULT_FLUSH_AT_COUNT = 50;
-const DEFAULT_MAX_BUFFERED_EVENTS = 1000;
 
 export function createEventBuffer(
   options: CreateEventBufferOptions,
 ): EventBuffer {
   const debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
   const flushAtCount = options.flushAtCount ?? DEFAULT_FLUSH_AT_COUNT;
-  const maxBufferedEvents =
-    options.maxBufferedEvents ?? DEFAULT_MAX_BUFFERED_EVENTS;
   const now = options.now ?? Date.now;
 
   const nextSequenceByThread = new Map<string, number>();
@@ -88,13 +90,6 @@ export function createEventBuffer(
     return nextValue;
   }
 
-  function trimOverflow(): void {
-    const overflow = buffer.length - maxBufferedEvents;
-    if (overflow > 0) {
-      buffer = buffer.slice(overflow);
-    }
-  }
-
   function push(event: BufferedEventInput): BufferedEvent {
     const sequence = nextSequence(event.threadId);
     const bufferedEvent: BufferedEvent = {
@@ -103,8 +98,7 @@ export function createEventBuffer(
       createdAt: event.createdAt ?? now(),
     };
 
-    buffer = [...buffer, bufferedEvent];
-    trimOverflow();
+    buffer.push(bufferedEvent);
 
     if (buffer.length >= flushAtCount) {
       void flush();
@@ -192,6 +186,7 @@ export function createEventBuffer(
       }
 
       const batch = buffer.slice();
+
       flushPromise = (async (): Promise<boolean> => {
         let succeeded = false;
         try {

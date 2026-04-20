@@ -70,8 +70,11 @@ import {
   finalizeOpenCompactionsForTurn,
   onCompactionBegin,
   onCompactionEnd,
+  upsertPermissionGrantLifecycleMessage,
   type CompactionTurnFinalizationStatus,
   upsertFileEdit,
+  upsertProvisioningOperation,
+  upsertThreadOperationMessage,
 } from "./operation-projection.js";
 import {
   completeOpenReasoningMessages,
@@ -109,6 +112,12 @@ interface ProjectionState {
   finalizedReasoningTurnKeys: Set<string>;
   openCompactionsByKey: Map<string, ViewOperationMessage>;
   finalizedCompactionKeys: Set<string>;
+  provisioningOperationsByKey: Map<string, ViewOperationMessage>;
+  permissionGrantsByInteractionId: Map<
+    string,
+    Extract<ViewMessage, { kind: "permission-grant-lifecycle" }>
+  >;
+  threadOperationsById: Map<string, ViewOperationMessage>;
   fileEditsByCallId: Map<string, ViewFileEditMessage>;
   delegationParentToolCallIdsByProviderThreadId: Map<string, string>;
   toolActivity: ToolActivityState;
@@ -124,6 +133,9 @@ function createProjectionState(): ProjectionState {
     finalizedReasoningTurnKeys: new Set(),
     openCompactionsByKey: new Map(),
     finalizedCompactionKeys: new Set(),
+    provisioningOperationsByKey: new Map(),
+    permissionGrantsByInteractionId: new Map(),
+    threadOperationsById: new Map(),
     fileEditsByCallId: new Map(),
     delegationParentToolCallIdsByProviderThreadId: new Map(),
     toolActivity: createToolActivityState(),
@@ -732,6 +744,21 @@ function buildFlatViewMessages(
     });
     if (operation) {
       flushToolActivityBeforeNonToolMessage(state);
+      if (
+        operation.kind === "operation" &&
+        operation.opType === "thread-provisioning"
+      ) {
+        upsertProvisioningOperation(state, operation);
+        continue;
+      }
+      if (operation.kind === "operation" && operation.opType === "operation") {
+        upsertThreadOperationMessage(state, operation);
+        continue;
+      }
+      if (operation.kind === "permission-grant-lifecycle") {
+        upsertPermissionGrantLifecycleMessage(state, operation);
+        continue;
+      }
       state.messages.push(operation);
       continue;
     }

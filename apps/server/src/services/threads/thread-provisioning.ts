@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  createThreadProvisioningId,
   createEnvironment,
   createHostId,
   type CreateEnvironmentInput,
@@ -12,7 +13,6 @@ import {
   upsertHost,
 } from "@bb/db";
 import {
-  markThreadOperationRecordCompleted,
   markThreadOperationRecordFailed,
   upsertEnvironmentOperationRecord,
   upsertThreadOperationRecord,
@@ -110,6 +110,7 @@ const threadProvisionCommonPayloadSchema = z.object({
   environmentIntent: threadProvisionEnvironmentIntentSchema,
   execution: resolvedThreadExecutionOptionsSchema,
   input: z.array(promptInputSchema),
+  provisioningId: z.string().min(1),
   titleProvided: z.boolean(),
 });
 
@@ -209,6 +210,7 @@ export interface RequestThreadReprovisionArgs {
   execution: ResolvedThreadExecutionOptions;
   input: PromptInput[];
   initiator: ThreadTurnInitiator;
+  provisioningId: string;
   thread: Thread;
 }
 
@@ -364,6 +366,7 @@ function createMetadataPendingPayload(
     environmentIntent: args.environmentIntent,
     execution: args.execution,
     input: args.input,
+    provisioningId: createThreadProvisioningId(),
     stage: "metadata-pending",
     titleProvided: args.titleProvided,
   };
@@ -379,6 +382,7 @@ function createEnvironmentPendingPayload(
     environmentIntent: payload.environmentIntent,
     execution: payload.execution,
     input: payload.input,
+    provisioningId: payload.provisioningId,
     stage: "environment-pending",
     titleProvided: payload.titleProvided,
   };
@@ -395,6 +399,7 @@ function createEnvironmentAttachedPayload(
     environmentIntent: payload.environmentIntent,
     execution: payload.execution,
     input: payload.input,
+    provisioningId: payload.provisioningId,
     stage: "environment-attached",
     titleProvided: payload.titleProvided,
   };
@@ -412,6 +417,7 @@ function createEnvironmentProvisioningPayload(
     execution: payload.execution,
     input: payload.input,
     provisionEventSequence: args.provisionEventSequence,
+    provisioningId: payload.provisioningId,
     stage: "environment-provisioning",
     titleProvided: payload.titleProvided,
   };
@@ -431,6 +437,7 @@ function createReprovisioningPayload(
     execution: args.execution,
     input: args.input,
     provisionEventSequence: args.eventSequence,
+    provisioningId: args.provisioningId,
     stage: "environment-provisioning",
     titleProvided: true,
   };
@@ -448,6 +455,7 @@ function createWorkspaceReadyPayload(
     execution: payload.execution,
     input: payload.input,
     provisionEventSequence: provisionEventSequenceForPayload(payload),
+    provisioningId: payload.provisioningId,
     stage: "workspace-ready",
     titleProvided: payload.titleProvided,
     workspaceReadyEventSequence: args.workspaceReadyEventSequence,
@@ -575,6 +583,7 @@ function ensureWorkspaceReadyEvent(
       const eventSequence = appendThreadProvisioningEventInTransaction(tx, {
         threadId: args.threadId,
         environmentId: args.environmentId,
+        provisioningId: payload.provisioningId,
         status: "active",
         entries: args.entries,
       });
@@ -596,16 +605,6 @@ function ensureWorkspaceReadyEvent(
     deps.hub.notifyThread(args.threadId, ["events-appended"]);
   }
   return result;
-}
-
-function completeThreadProvisioning(
-  deps: Pick<AppDeps, "db">,
-  threadId: string,
-): void {
-  markThreadOperationRecordCompleted(deps.db, {
-    threadId,
-    kind: "provision",
-  });
 }
 
 function failThreadProvisioning(
@@ -660,6 +659,7 @@ async function resolveMetadataIfNeeded(
         generateBranchName: false,
         generateTitle: true,
         input: args.payload.input,
+        provisioningId: args.payload.provisioningId,
         threadId: args.thread.id,
         writeTranscript: false,
       })
@@ -710,6 +710,7 @@ async function resolveMetadataIfNeeded(
     generateBranchName: needsBranch,
     generateTitle: !args.payload.titleProvided,
     input: args.payload.input,
+    provisioningId: args.payload.provisioningId,
     threadId: args.thread.id,
     timeoutMs: needsBranch ? MANAGED_THREAD_METADATA_TIMEOUT_MS : undefined,
     writeTranscript: false,
@@ -762,6 +763,7 @@ function appendProvisioningStartedEvent(
   const eventSequence = appendThreadProvisioningEvent(deps, {
     threadId: args.thread.id,
     environmentId: args.environment.id,
+    provisioningId: args.payload.provisioningId,
     status: "active",
     entries: initialProvisioningEntries(args.environment),
   });
@@ -831,6 +833,7 @@ function createProvisioningEnvironmentWithOperation(
       const eventSequence = appendThreadProvisioningEventInTransaction(tx, {
         threadId: args.thread.id,
         environmentId: environment.id,
+        provisioningId: attachedPayload.provisioningId,
         status: "active",
         entries: initialProvisioningEntries(environment),
       });
@@ -876,19 +879,21 @@ function createDirectUnmanagedEnvironment(
       status: "provisioning",
     },
     hostInput: null,
-    buildRequest: ({ environment, eventSequence }) =>
-      buildDirectEnvironmentProvisionRequest(
-        buildEnvironmentProvisionCommand({
+    buildRequest: ({ environment, eventSequence, payload }) =>
+      buildDirectEnvironmentProvisionRequest({
+        command: buildEnvironmentProvisionCommand({
           environmentId: environment.id,
           hostId: args.intent.hostId,
           initiator: {
             threadId: args.thread.id,
+            provisioningId: payload.provisioningId,
             eventSequence,
           },
           path: args.intent.path,
           workspaceProvisionType: "unmanaged",
         }),
-      ),
+        provisioningId: payload.provisioningId,
+      }),
   });
 }
 
@@ -911,8 +916,8 @@ async function createDirectManagedEnvironment(
     },
     hostInput: null,
     buildRequest: ({ environment, eventSequence, payload }) =>
-      buildDirectEnvironmentProvisionRequest(
-        buildEnvironmentProvisionCommand({
+      buildDirectEnvironmentProvisionRequest({
+        command: buildEnvironmentProvisionCommand({
           branchName: buildManagedBranchName({
             branchSlug: payload.branchSlug,
             threadId: args.thread.id,
@@ -921,6 +926,7 @@ async function createDirectManagedEnvironment(
           hostId: args.intent.hostId,
           initiator: {
             threadId: args.thread.id,
+            provisioningId: payload.provisioningId,
             eventSequence,
           },
           sourcePath: args.intent.sourcePath,
@@ -932,7 +938,8 @@ async function createDirectManagedEnvironment(
           workspaceProvisionType: args.intent.workspaceProvisionType,
           setupTimeoutMs: SETUP_TIMEOUT_MS,
         }),
-      ),
+        provisioningId: payload.provisioningId,
+      }),
   });
 }
 
@@ -970,6 +977,7 @@ function createSandboxManagedEnvironment(
           hostId,
           initiator: {
             threadId: args.thread.id,
+            provisioningId: payload.provisioningId,
             eventSequence,
           },
           sourcePath: args.intent.cloneRepoUrl,
@@ -981,6 +989,7 @@ function createSandboxManagedEnvironment(
           workspaceProvisionType: "managed-clone",
           setupTimeoutMs: SETUP_TIMEOUT_MS,
         }),
+        provisioningId: payload.provisioningId,
       }),
   });
 }
@@ -1129,7 +1138,6 @@ async function startThreadIfEnvironmentReady(
     projectId: args.thread.projectId,
     providerId: args.thread.providerId,
   });
-  completeThreadProvisioning(deps, args.thread.id);
 }
 
 export function requestThreadProvision(

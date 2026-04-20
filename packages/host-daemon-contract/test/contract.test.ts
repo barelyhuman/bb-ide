@@ -158,7 +158,11 @@ describe("host-daemon command schemas", () => {
       hostDaemonCommandSchema.parse({
         type: "environment.provision",
         environmentId: "env_123",
-        initiator: { threadId: "thr_123", eventSequence: 0 },
+        initiator: {
+          threadId: "thr_123",
+          provisioningId: "tpv_123",
+          eventSequence: 0,
+        },
         workspaceProvisionType: "managed-worktree",
         sourcePath: "/tmp/project",
         targetPath: "/tmp/project/.bb/env",

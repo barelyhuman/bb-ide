@@ -19,6 +19,7 @@ export interface ThreadMetadataInferenceArgs {
   generateBranchName: boolean;
   generateTitle: boolean;
   input: PromptInput[];
+  provisioningId: string | null;
   timeoutMs?: number;
   threadId: string;
   writeTranscript: boolean;
@@ -110,10 +111,18 @@ export async function inferThreadMetadata(
   }
 
   const startedAt = Date.now();
-  if (args.writeTranscript && args.environmentId) {
+  const provisioningId = args.provisioningId;
+  const transcriptEnvironmentId = args.writeTranscript
+    ? args.environmentId
+    : null;
+  if (transcriptEnvironmentId) {
+    if (provisioningId === null) {
+      throw new Error("Cannot write provisioning transcript without an id");
+    }
     appendThreadProvisioningEvent(deps, {
       threadId: args.threadId,
-      environmentId: args.environmentId,
+      environmentId: transcriptEnvironmentId,
+      provisioningId,
       status: "active",
       entries: [
         {
@@ -134,10 +143,11 @@ export async function inferThreadMetadata(
   });
 
   const eventSequence =
-    args.writeTranscript && args.environmentId
+    transcriptEnvironmentId && provisioningId
       ? appendThreadProvisioningEvent(deps, {
           threadId: args.threadId,
-          environmentId: args.environmentId,
+          environmentId: transcriptEnvironmentId,
+          provisioningId,
           status: "active",
           entries: [
             metadataCompletedEntry({

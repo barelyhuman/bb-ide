@@ -63,7 +63,11 @@ describe("internal authorization regressions", () => {
         payload: JSON.stringify({
           type: "environment.provision",
           environmentId: environment.id,
-          initiator: { threadId: thread.id, eventSequence: 0 },
+          initiator: {
+            threadId: thread.id,
+            provisioningId: "tpv-auth-regression",
+            eventSequence: 0,
+          },
           workspaceProvisionType: "unmanaged",
           path: "/tmp/cross-host-command",
         }),

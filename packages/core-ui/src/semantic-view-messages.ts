@@ -51,13 +51,52 @@ function mergeTaskMessages(
   previous: ViewTasksMessage,
   next: ViewTasksMessage,
 ): ViewTasksMessage {
+  const status = mergeTaskMessageStatus(previous.status, next.status);
+  const title = status === next.status ? next.title : previous.title;
   return {
     ...next,
     sourceSeqStart: Math.min(previous.sourceSeqStart, next.sourceSeqStart),
     sourceSeqEnd: Math.max(previous.sourceSeqEnd, next.sourceSeqEnd),
     startedAt: Math.min(getStartedAt(previous), getStartedAt(next)),
     createdAt: Math.max(previous.createdAt, next.createdAt),
+    status,
+    title,
   };
+}
+
+function isTerminalTaskMessageStatus(
+  status: ViewTasksMessage["status"],
+): boolean {
+  return status !== "pending";
+}
+
+function mergeTaskMessageStatus(
+  previous: ViewTasksMessage["status"],
+  next: ViewTasksMessage["status"],
+): ViewTasksMessage["status"] {
+  if (isTerminalTaskMessageStatus(previous)) {
+    return previous;
+  }
+  return next;
+}
+
+function canCompactTaskMessages(
+  previous: ViewTasksMessage,
+  next: ViewTasksMessage,
+): boolean {
+  if (previous.source !== next.source) {
+    return false;
+  }
+  if ((previous.turnId ?? null) !== (next.turnId ?? null)) {
+    return false;
+  }
+  if ((previous.parentToolCallId ?? null) !== (next.parentToolCallId ?? null)) {
+    return false;
+  }
+  if (previous.source === "todo" || next.source === "todo") {
+    return Boolean(previous.callId && previous.callId === next.callId);
+  }
+  return true;
 }
 
 export function compactTaskMessages(messages: ViewMessage[]): ViewMessage[] {
@@ -68,9 +107,7 @@ export function compactTaskMessages(messages: ViewMessage[]): ViewMessage[] {
     if (
       previous?.kind === "tasks" &&
       message.kind === "tasks" &&
-      previous.source === message.source &&
-      (previous.turnId ?? null) === (message.turnId ?? null) &&
-      (previous.parentToolCallId ?? null) === (message.parentToolCallId ?? null)
+      canCompactTaskMessages(previous, message)
     ) {
       compacted[compacted.length - 1] = mergeTaskMessages(previous, message);
       continue;

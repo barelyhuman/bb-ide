@@ -300,6 +300,7 @@ describe("periodic sweeps", () => {
               workspaceProvisionType: "unmanaged",
               path: environment.path ?? "/tmp/periodic-sandbox-bootstrap",
             }),
+            provisioningId: "epv-periodic-sandbox-bootstrap",
           }),
         ),
       });
@@ -444,12 +445,13 @@ describe("periodic sweeps", () => {
         environmentId: environment.id,
         kind: "provision",
         payload: JSON.stringify(
-          buildDirectEnvironmentProvisionRequest(
-            buildUnmanagedProvisionCommand({
+          buildDirectEnvironmentProvisionRequest({
+            command: buildUnmanagedProvisionCommand({
               environmentId: environment.id,
               path: "/tmp/periodic-provision",
             }),
-          ),
+            provisioningId: "epv-periodic-provision",
+          }),
         ),
       });
 
@@ -511,6 +513,7 @@ describe("periodic sweeps", () => {
             source: "client/turn/requested",
           },
           input: [{ type: "text", text: "short" }],
+          provisioningId: "tpv-periodic-thread-provision",
           stage: "metadata-pending",
           titleProvided: false,
         }),
@@ -645,12 +648,13 @@ describe("periodic sweeps", () => {
         environmentId: environment.id,
         kind: "provision",
         payload: JSON.stringify(
-          buildDirectEnvironmentProvisionRequest(
-            buildUnmanagedProvisionCommand({
+          buildDirectEnvironmentProvisionRequest({
+            command: buildUnmanagedProvisionCommand({
               environmentId: environment.id,
               path: "/tmp/periodic-provision-expiry",
             }),
-          ),
+            provisioningId: "epv-periodic-provision-expiry",
+          }),
         ),
       });
 

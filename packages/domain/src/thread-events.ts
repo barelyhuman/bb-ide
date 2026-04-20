@@ -107,7 +107,7 @@ export const systemOperationEventDataSchema = z.object({
   operation: z.string(),
   status: z.string(),
   message: z.string(),
-  operationId: z.string().optional(),
+  operationId: z.string(),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 export type SystemOperationEventData = z.infer<
@@ -159,6 +159,7 @@ export type SystemThreadProvisioningStatus = z.infer<
 >;
 
 export const systemThreadProvisioningEventDataSchema = z.object({
+  provisioningId: z.string(),
   status: systemThreadProvisioningStatusSchema,
   environmentId: z.string(),
   entries: z.array(provisioningTranscriptEntrySchema),

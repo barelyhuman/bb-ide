@@ -64,7 +64,7 @@ function createThreadOperationMetadata(
     rawOperation: decoded.operation,
     status: normalizeThreadOperationStatus(decoded.status),
     rawStatus: decoded.status,
-    ...(decoded.operationId ? { operationId: decoded.operationId } : {}),
+    operationId: decoded.operationId,
     ...(decoded.metadata ? { metadata: decoded.metadata } : {}),
   };
 }
@@ -274,7 +274,7 @@ export function parseOperationMessage(
   }
 
   if (decoded.type === "system/thread-provisioning") {
-    const { status, environmentId } = decoded;
+    const { status, environmentId, provisioningId } = decoded;
     const transcript = readProvisioningTranscript(decoded.entries);
     const title = (() => {
       switch (status) {
@@ -295,6 +295,7 @@ export function parseOperationMessage(
       status: provisioningOperationStatus(status),
       provisioning: {
         environmentId,
+        provisioningId,
         ...(transcript ? { transcript } : {}),
       },
     });
@@ -337,6 +338,7 @@ export function parseOperationMessage(
       createdAt: meta.createdAt,
       startedAt: meta.createdAt,
       turnId: eventTurnId,
+      interactionId: decoded.interactionId,
       title: decoded.message,
       status: permissionGrantLifecycleStatus(decoded.status),
       approvalTarget: {

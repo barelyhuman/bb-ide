@@ -172,7 +172,11 @@ describe("environment command dispatch", () => {
       {
         type: "environment.provision",
         environmentId: "env-stream",
-        initiator: { threadId: "thr-initiator", eventSequence: 5 },
+        initiator: {
+          threadId: "thr-initiator",
+          provisioningId: "tpv-initiator",
+          eventSequence: 5,
+        },
         workspaceProvisionType: "unmanaged",
         path: sourcePath,
       },
@@ -232,7 +236,11 @@ describe("environment command dispatch", () => {
         {
           type: "environment.provision",
           environmentId: "env-failure",
-          initiator: { threadId: "thr-failure", eventSequence: 8 },
+          initiator: {
+            threadId: "thr-failure",
+            provisioningId: "tpv-failure",
+            eventSequence: 8,
+          },
           workspaceProvisionType: "managed-worktree",
           sourcePath: "/tmp/source",
           targetPath: "/tmp/failure",
@@ -283,7 +291,11 @@ describe("environment command dispatch", () => {
       {
         type: "environment.provision",
         environmentId: "env-idempotent",
-        initiator: { threadId: "thr-second", eventSequence: 3 },
+        initiator: {
+          threadId: "thr-second",
+          provisioningId: "tpv-second",
+          eventSequence: 3,
+        },
         workspaceProvisionType: "unmanaged",
         path: sourcePath,
       },

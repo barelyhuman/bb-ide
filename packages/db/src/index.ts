@@ -8,6 +8,7 @@ export {
   createDraftId,
   createEnvironmentId,
   createEventId,
+  createEnvironmentProvisioningId,
   createHostDaemonCommandId,
   createHostDaemonSessionId,
   createHostId,
@@ -18,6 +19,7 @@ export {
   createProjectSourceId,
   createSandboxProviderCredentialId,
   createThreadId,
+  createThreadProvisioningId,
 } from "./ids.js";
 
 export { migrate } from "./migrate.js";

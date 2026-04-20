@@ -4,7 +4,6 @@ import {
   extractThreadContextWindowUsage,
   flattenProjectionMessages,
   flattenViewMessagesDeep,
-  mergeProvisioningOperations,
   TIMELINE_NOISE_EVENT_TYPES,
   toViewMessages,
   toViewProjection,
@@ -80,9 +79,7 @@ function buildManagerConversationRows(
   const visibleMessages = flattenViewMessagesDeep(messages).filter(
     isManagerConversationMessage,
   );
-  return mergeProvisioningOperations(visibleMessages).map((message) =>
-    toTimelineMessageRow(message),
-  );
+  return visibleMessages.map((message) => toTimelineMessageRow(message));
 }
 
 function findMatchingToolGroupRow(

@@ -220,6 +220,8 @@ export const providerListModelsCommandSchema = z.object({
 const provisionInitiatorSchema = z.object({
   /** Thread that initiated provisioning. Used to stream progress events. */
   threadId: z.string().min(1),
+  /** Stable provisioning lifecycle rendered by streamed progress events. */
+  provisioningId: z.string().min(1),
   /** Current max event sequence for the thread. Seeds the event buffer so daemon-emitted events don't collide with server-side sequences. */
   eventSequence: z.number().int().nonnegative(),
 });

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createEventBuffer } from "./event-buffer.js";
+import { createEventBuffer, type BufferedEvent } from "./event-buffer.js";
 
 function createLogger() {
   return {
@@ -120,7 +120,7 @@ describe("event buffer", () => {
   it("retries failed flushes and keeps events until they are acknowledged", async () => {
     vi.useFakeTimers();
     const postEvents = vi
-      .fn<(_: unknown) => Promise<Record<string, number>>>()
+      .fn<(events: BufferedEvent[]) => Promise<Record<string, number>>>()
       .mockRejectedValueOnce(new Error("boom"))
       .mockResolvedValueOnce({ threadA: 1 });
     const logger = createLogger();
@@ -145,7 +145,7 @@ describe("event buffer", () => {
   it("coalesces concurrent flushes into a single in-flight post", async () => {
     const firstFlush = createDeferred<Record<string, number> | void>();
     const postEvents = vi
-      .fn<(_: unknown) => Promise<Record<string, number> | void>>()
+      .fn<(events: BufferedEvent[]) => Promise<Record<string, number> | void>>()
       .mockImplementationOnce(() => firstFlush.promise)
       .mockResolvedValueOnce({ threadA: 2 });
     const buffer = createEventBuffer({
@@ -187,7 +187,7 @@ describe("event buffer", () => {
     vi.useFakeTimers();
     const firstFlush = createDeferred<Record<string, number> | void>();
     const postEvents = vi
-      .fn<(_: unknown) => Promise<Record<string, number> | void>>()
+      .fn<(events: BufferedEvent[]) => Promise<Record<string, number> | void>>()
       .mockImplementationOnce(() => firstFlush.promise)
       .mockResolvedValueOnce({ threadA: 2 });
     const buffer = createEventBuffer({
@@ -197,7 +197,7 @@ describe("event buffer", () => {
       debounceMs: 1_000,
     });
 
-    buffer.push({
+    const first = buffer.push({
       environmentId: "env-1",
       threadId: "threadA",
       event: createEvent("threadA"),
@@ -212,45 +212,14 @@ describe("event buffer", () => {
       event: createEvent("threadA"),
     });
 
+    expect(postEvents.mock.calls[0]?.[0]).toEqual([first]);
+
     firstFlush.resolve({ threadA: 1 });
     await flushPromise;
 
     expect(postEvents).toHaveBeenCalledTimes(2);
     expect(postEvents.mock.calls[1]?.[0]).toEqual([second]);
     expect(buffer.depth()).toBe(0);
-    buffer.dispose();
-  });
-
-  it("drops the oldest events when the buffer exceeds the max size", async () => {
-    const buffer = createEventBuffer({
-      logger: createLogger(),
-      postEvents: async () => undefined,
-      flushAtCount: 2_000,
-      maxBufferedEvents: 3,
-    });
-
-    buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createEvent("threadA"),
-    });
-    const second = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createEvent("threadA"),
-    });
-    const third = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createEvent("threadA"),
-    });
-    const fourth = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createEvent("threadA"),
-    });
-
-    expect(buffer.snapshot()).toEqual([second, third, fourth]);
     buffer.dispose();
   });
 

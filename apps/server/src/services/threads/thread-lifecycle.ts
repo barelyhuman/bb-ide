@@ -10,6 +10,8 @@ import {
   getThreadOperationByCommandId,
   markThreadStopRequested,
   queueCommand,
+  type DbConnection,
+  type DbTransaction,
 } from "@bb/db";
 import {
   markThreadOperationRecordCompleted,
@@ -39,10 +41,7 @@ import {
   advanceEnvironmentCleanup,
   requestEnvironmentCleanup,
 } from "../environments/environment-cleanup.js";
-import {
-  appendThreadInterruptedEvent,
-  appendThreadProvisioningEvent,
-} from "./thread-events.js";
+import { appendThreadInterruptedEvent } from "./thread-events.js";
 import { tryTransition } from "./thread-transitions.js";
 import { getLastProviderThreadId } from "./thread-events.js";
 import {
@@ -54,10 +53,15 @@ import {
   type QueueThreadStopCommandArgs,
 } from "./thread-commands.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
+import { createAsyncDeduper } from "../lib/async-deduper.js";
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
+import { completeThreadProvisioningForStartHandoff } from "./thread-provisioning-handoff.js";
 import { isPreStartThreadStatus } from "./thread-status.js";
 
 type QueueReadyThreadTurnCommandResult = "thread.start" | "turn.submit";
+type ThreadStartCommand = Awaited<ReturnType<typeof buildThreadStartCommand>>;
+
+const threadStartRequestDeduper = createAsyncDeduper<string, void>();
 
 export interface AdvanceThreadOperationArgs {
   hostId: string;
@@ -100,19 +104,44 @@ export interface FailThreadOperationForCommandArgs extends ThreadOperationComman
   failureReason: string;
 }
 
-function hasQueuedThreadOperationCommand(
-  deps: Pick<AppDeps, "db">,
-  commandId: string | null,
+interface RequestThreadStartHandoffArgs {
+  baseCommand: ThreadStartCommand;
+  environmentId: string;
+  threadId: string;
+}
+
+interface RequestThreadStartHandoffResult {
+  completedProvisionSequence: number | null;
+  startOperationCreated: boolean;
+}
+
+interface HasQueuedThreadOperationCommandArgs {
+  commandId: string | null;
+  db: DbConnection | DbTransaction;
+}
+
+function hasQueuedThreadOperationCommandForDb(
+  args: HasQueuedThreadOperationCommandArgs,
 ): boolean {
-  if (!commandId) {
+  if (!args.commandId) {
     return false;
   }
 
-  const command = getCommand(deps.db, commandId);
+  const command = getCommand(args.db, args.commandId);
   return (
     command !== null &&
     (command.state === "pending" || command.state === "fetched")
   );
+}
+
+function hasQueuedThreadOperationCommand(
+  deps: Pick<AppDeps, "db">,
+  commandId: string | null,
+): boolean {
+  return hasQueuedThreadOperationCommandForDb({
+    db: deps.db,
+    commandId,
+  });
 }
 
 function getActiveThreadOperation(
@@ -317,50 +346,128 @@ export function failThreadStopForCommand(
   });
 }
 
+async function advanceActiveThreadStartIfPresent(
+  deps: SandboxWorkSessionDeps,
+  args: QueueThreadStartCommandArgs,
+): Promise<boolean> {
+  const operation = getThreadOperation(deps.db, {
+    threadId: args.thread.id,
+    kind: "start",
+  });
+  if (!operation || !isActiveLifecycleOperationState(operation.state)) {
+    return false;
+  }
+
+  if (hasQueuedThreadOperationCommand(deps, operation.commandId)) {
+    return true;
+  }
+  if (operation.state !== "requested") {
+    return false;
+  }
+
+  await advanceThreadStart(deps, {
+    hostId: args.environment.hostId,
+    threadId: args.thread.id,
+  });
+  return true;
+}
+
+/**
+ * Makes the provision-to-start durability boundary atomic: after a crash, the
+ * thread should have either an active provision op to retry or an active start
+ * op for the lifecycle sweep to advance.
+ */
+function requestThreadStartHandoff(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: RequestThreadStartHandoffArgs,
+): RequestThreadStartHandoffResult {
+  const result: RequestThreadStartHandoffResult = deps.db.transaction(
+    (tx) => {
+      const existingStartOperation = getThreadOperation(tx, {
+        threadId: args.threadId,
+        kind: "start",
+      });
+      if (
+        existingStartOperation &&
+        isActiveLifecycleOperationState(existingStartOperation.state) &&
+        hasQueuedThreadOperationCommandForDb({
+          db: tx,
+          commandId: existingStartOperation.commandId,
+        })
+      ) {
+        return {
+          completedProvisionSequence: null,
+          startOperationCreated: false,
+        };
+      }
+
+      const completedProvisionSequence =
+        completeThreadProvisioningForStartHandoff(tx, {
+          threadId: args.threadId,
+          environmentId: args.environmentId,
+        });
+      // The completed provisioning event is the last server-owned lifecycle event
+      // before daemon-owned thread.start events. Seed the daemon above it.
+      const command =
+        completedProvisionSequence === null
+          ? args.baseCommand
+          : {
+              ...args.baseCommand,
+              eventSequence: completedProvisionSequence,
+            };
+      upsertThreadOperationRecord(tx, {
+        threadId: args.threadId,
+        kind: "start",
+        payload: JSON.stringify(command),
+      });
+      return {
+        completedProvisionSequence,
+        startOperationCreated: true,
+      };
+    },
+    { behavior: "immediate" },
+  );
+
+  if (result.completedProvisionSequence !== null) {
+    deps.hub.notifyThread(args.threadId, ["events-appended"]);
+  }
+  return result;
+}
+
 export async function requestThreadStart(
   deps: SandboxWorkSessionDeps,
   args: QueueThreadStartCommandArgs,
 ): Promise<void> {
-  const existingOperation = getThreadOperation(deps.db, {
-    threadId: args.thread.id,
-    kind: "start",
-  });
-  if (
-    existingOperation &&
-    isActiveLifecycleOperationState(existingOperation.state) &&
-    hasQueuedThreadOperationCommand(deps, existingOperation.commandId)
-  ) {
+  await threadStartRequestDeduper.run(args.thread.id, () =>
+    requestThreadStartOnce(deps, args),
+  );
+}
+
+async function requestThreadStartOnce(
+  deps: SandboxWorkSessionDeps,
+  args: QueueThreadStartCommandArgs,
+): Promise<void> {
+  if (await advanceActiveThreadStartIfPresent(deps, args)) {
     return;
   }
 
-  let eventSequence = args.eventSequence;
-  if (isPreStartThreadStatus(args.thread.status)) {
-    const agentSessionStartedAt = Date.now();
-    eventSequence = appendThreadProvisioningEvent(deps, {
-      threadId: args.thread.id,
-      environmentId: args.environment.id,
-      status: "active",
-      entries: [
-        {
-          type: "step",
-          key: "agent-session-started",
-          text: "Starting agent session",
-          status: "started",
-          startedAt: agentSessionStartedAt,
-        },
-      ],
-    });
+  const baseCommand = await buildThreadStartCommand(deps, {
+    ...args,
+  });
+  if (await advanceActiveThreadStartIfPresent(deps, args)) {
+    return;
   }
 
-  const command = await buildThreadStartCommand(deps, {
-    ...args,
-    eventSequence,
-  });
-  upsertThreadOperationRecord(deps.db, {
+  const handoff = requestThreadStartHandoff(deps, {
+    baseCommand,
+    environmentId: args.environment.id,
     threadId: args.thread.id,
-    kind: "start",
-    payload: JSON.stringify(command),
   });
+  if (!handoff.startOperationCreated) {
+    await advanceActiveThreadStartIfPresent(deps, args);
+    return;
+  }
+
   await advanceThreadStart(deps, {
     hostId: args.environment.hostId,
     threadId: args.thread.id,

@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   appendStoredThreadEvent,
   appendStoredThreadEventInTransaction,
+  createEventId,
   getActiveStoredTurnId,
   getLastStoredProviderThreadId,
   getLastStoredTurnRequestEvent,
@@ -74,6 +75,7 @@ export interface AppendSystemErrorEventArgs {
 export interface AppendThreadProvisioningEventArgs {
   entries: ProvisioningTranscriptEntry[];
   environmentId: string;
+  provisioningId: string;
   status: SystemThreadProvisioningStatus;
   threadId: string;
 }
@@ -293,6 +295,7 @@ export function appendThreadProvisioningEvent(
     environmentId: args.environmentId,
     type: "system/thread-provisioning",
     data: {
+      provisioningId: args.provisioningId,
       status: args.status,
       environmentId: args.environmentId,
       entries: args.entries,
@@ -309,6 +312,7 @@ export function appendThreadProvisioningEventInTransaction(
     environmentId: args.environmentId,
     type: "system/thread-provisioning",
     data: {
+      provisioningId: args.provisioningId,
       status: args.status,
       environmentId: args.environmentId,
       entries: args.entries,
@@ -424,6 +428,7 @@ export function appendThreadOwnershipChangeEvent(
     type: "system/operation",
     data: {
       operation: "ownership_change",
+      operationId: createEventId(),
       status: "completed",
       message: threadOwnershipChangeMessage(action),
       metadata: {

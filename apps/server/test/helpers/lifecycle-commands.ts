@@ -1,4 +1,4 @@
-import { queueCommand } from "@bb/db";
+import { createEnvironmentProvisioningId, queueCommand } from "@bb/db";
 import {
   markEnvironmentOperationRecordQueued,
   markThreadOperationRecordQueued,
@@ -7,6 +7,7 @@ import {
 } from "@bb/db/internal-lifecycle";
 import type { EnvironmentOperationKind, ThreadOperationKind } from "@bb/domain";
 import type { HostDaemonCommand } from "@bb/host-daemon-contract";
+import { buildDirectEnvironmentProvisionRequest } from "../../src/services/environments/environment-provision-request.js";
 import type { TestAppHarness } from "./test-app.js";
 
 type EnvironmentDestroyCommand = Extract<
@@ -28,6 +29,7 @@ interface QueueEnvironmentLifecycleCommandArgs {
     EnvironmentOperationKind,
     "destroy" | "provision" | "reprovision"
   >;
+  operationPayload: string;
   sessionId: string | null;
 }
 
@@ -53,7 +55,7 @@ function queueEnvironmentLifecycleCommand(
   upsertEnvironmentOperationRecord(harness.db, {
     environmentId: args.environmentId,
     kind: args.kind,
-    payload: JSON.stringify(args.command),
+    payload: args.operationPayload,
   });
   markEnvironmentOperationRecordQueued(harness.db, {
     environmentId: args.environmentId,
@@ -91,7 +93,10 @@ function queueThreadLifecycleCommand(
 
 export function queueEnvironmentProvisionLifecycleCommand(
   harness: TestAppHarness,
-  args: Omit<QueueEnvironmentLifecycleCommandArgs, "kind"> & {
+  args: Omit<
+    QueueEnvironmentLifecycleCommandArgs,
+    "kind" | "operationPayload"
+  > & {
     command: EnvironmentProvisionCommand;
     kind?: Extract<EnvironmentOperationKind, "provision" | "reprovision">;
   },
@@ -99,18 +104,30 @@ export function queueEnvironmentProvisionLifecycleCommand(
   return queueEnvironmentLifecycleCommand(harness, {
     ...args,
     kind: args.kind ?? "provision",
+    operationPayload: JSON.stringify(
+      buildDirectEnvironmentProvisionRequest({
+        command: args.command,
+        provisioningId:
+          args.command.initiator?.provisioningId ??
+          createEnvironmentProvisioningId(),
+      }),
+    ),
   });
 }
 
 export function queueEnvironmentDestroyLifecycleCommand(
   harness: TestAppHarness,
-  args: Omit<QueueEnvironmentLifecycleCommandArgs, "kind"> & {
+  args: Omit<
+    QueueEnvironmentLifecycleCommandArgs,
+    "kind" | "operationPayload"
+  > & {
     command: EnvironmentDestroyCommand;
   },
 ) {
   return queueEnvironmentLifecycleCommand(harness, {
     ...args,
     kind: "destroy",
+    operationPayload: JSON.stringify(args.command),
   });
 }
 
