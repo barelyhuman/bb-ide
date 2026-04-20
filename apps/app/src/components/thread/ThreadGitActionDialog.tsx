@@ -321,7 +321,7 @@ function ThreadGitActionDialogContent({
           </DetailCard>
         ) : null}
         <FormError message={errorMessage} />
-        <DialogFooter className="px-0 pt-4 sm:justify-between">
+        <DialogFooter className="sm:justify-between">
           {askAgentInput && onAskAgentToFix ? (
             <Button
               type="button"
