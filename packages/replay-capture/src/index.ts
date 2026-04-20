@@ -167,6 +167,7 @@ export type ReplayCaptureSummary = z.infer<typeof replayCaptureSummarySchema>;
 export const replayCaptureHostSummarySchema = replayCaptureSummarySchema.extend(
   {
     hostId: z.string().min(1),
+    projectName: z.string().nullable(),
   },
 );
 export type ReplayCaptureHostSummary = z.infer<
@@ -182,6 +183,7 @@ export type ReplayCaptureDaemonListResponse = z.infer<
 
 export const replayCaptureDetailSchema = replayCaptureManifestSchema.extend({
   hostId: z.string().min(1),
+  projectName: z.string().nullable(),
 });
 export type ReplayCaptureDetail = z.infer<typeof replayCaptureDetailSchema>;
 

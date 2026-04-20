@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
+import { DetailCard, DetailRow } from "@bb/ui-core";
 import { Button } from "@/components/ui/button";
 import { PageShell } from "@/components/layout/PageShell";
 import * as api from "@/lib/api";
@@ -31,74 +32,67 @@ export function InternalReplayView() {
   });
 
   const capture = captureQuery.data;
+  const heading = capture?.title ?? captureId;
 
   return (
-    <PageShell contentClassName="mx-auto w-full max-w-3xl gap-6 py-8">
-      <div className="space-y-2">
-        <p className="text-sm font-medium text-muted-foreground">
-          Development replay
-        </p>
-        <h1 className="text-2xl font-semibold tracking-tight">{captureId}</h1>
-        <p className="text-sm text-muted-foreground">
-          Create a fresh thread and stream this capture through the current host
-          daemon replay path.
-        </p>
-      </div>
-
-      {captureQuery.isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading capture...</p>
-      ) : captureQuery.isError ? (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
-          Failed to load replay capture.
+    <PageShell contentClassName="pt-4 md:pt-5">
+      <div className="mx-auto w-full max-w-3xl space-y-4">
+        <div className="space-y-1">
+          <h1 className="text-lg font-semibold tracking-tight">{heading}</h1>
+          <p className="text-sm text-muted-foreground">
+            <code className="font-mono text-xs">{captureId}</code>
+          </p>
         </div>
-      ) : capture ? (
-        <div className="space-y-6 rounded-lg border bg-card p-5 shadow-sm">
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <div>
-              <dt className="text-muted-foreground">Host</dt>
-              <dd className="font-medium">{capture.hostId}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Provider</dt>
-              <dd className="font-medium">{capture.providerId}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Project</dt>
-              <dd className="font-medium">{capture.projectId}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Original thread</dt>
-              <dd className="font-medium">{capture.threadId}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Captured</dt>
-              <dd className="font-medium">{formatDate(capture.capturedAt)}</dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">Raw provider events</dt>
-              <dd className="font-medium">
+
+        {captureQuery.isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading capture...</p>
+        ) : captureQuery.isError ? (
+          <p className="text-sm text-destructive">
+            Failed to load replay capture.
+          </p>
+        ) : capture ? (
+          <div className="space-y-4">
+            <DetailCard>
+              <DetailRow label="Host" valueClassName="min-w-0 truncate">
+                {capture.hostId}
+              </DetailRow>
+              <DetailRow label="Provider" valueClassName="min-w-0 truncate">
+                {capture.providerId}
+              </DetailRow>
+              <DetailRow label="Project" valueClassName="min-w-0 truncate">
+                {capture.projectName ?? capture.projectId}
+              </DetailRow>
+              <DetailRow label="Thread" valueClassName="min-w-0 truncate">
+                {capture.threadId}
+              </DetailRow>
+              <DetailRow label="Captured" valueClassName="min-w-0 truncate">
+                {formatDate(capture.capturedAt)}
+              </DetailRow>
+              <DetailRow label="Raw events" valueClassName="min-w-0 truncate">
                 {capture.eventCounts.rawProviderEvents}
-              </dd>
+              </DetailRow>
+            </DetailCard>
+
+            <div className="flex flex-wrap gap-3">
+              <Button
+                onClick={() => startReplay.mutate()}
+                disabled={
+                  startReplay.isPending ||
+                  capture.eventCounts.rawProviderEvents === 0
+                }
+              >
+                Start replay
+              </Button>
             </div>
-          </dl>
 
-          <div className="flex flex-wrap gap-3">
-            <Button
-              onClick={() => startReplay.mutate()}
-              disabled={
-                startReplay.isPending ||
-                capture.eventCounts.rawProviderEvents === 0
-              }
-            >
-              Start replay
-            </Button>
+            {startReplay.isError ? (
+              <p className="text-sm text-destructive">
+                Failed to start replay.
+              </p>
+            ) : null}
           </div>
-
-          {startReplay.isError ? (
-            <p className="text-sm text-destructive">Failed to start replay.</p>
-          ) : null}
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </PageShell>
   );
 }

@@ -52,6 +52,7 @@ import type {
   UpsertSandboxEnvVarRequest,
   WorkspaceFileListResponse,
   ReplayCaptureDetail,
+  ReplayCaptureListResponse,
   ReplayRunRequest,
   ReplayRunResponse,
 } from "@bb/server-contract";
@@ -257,6 +258,12 @@ async function postMultipart<T>(
   }
   const text = await res.text();
   return JSON.parse(text) as T;
+}
+
+export async function listReplayCaptures(): Promise<ReplayCaptureListResponse> {
+  return request<ReplayCaptureListResponse>(
+    apiClient["development-only"].replay.captures.$get(),
+  );
 }
 
 export async function getReplayCapture(

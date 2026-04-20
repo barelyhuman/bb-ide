@@ -1,6 +1,8 @@
 import {
   createThread,
   getEnvironment,
+  getProject,
+  getThread,
   listConnectedHostIds,
   queueCommand,
 } from "@bb/db";
@@ -31,13 +33,42 @@ interface ResolvedReplayCapture {
   title: string | null;
 }
 
+interface CaptureEnrichment {
+  title: string | null;
+  projectName: string | null;
+}
+
+function firstNonBlank(...values: Array<string | null | undefined>): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function loadCaptureEnrichment(
+  deps: AppDeps,
+  args: { projectId: string; threadId: string },
+): CaptureEnrichment {
+  const thread = getThread(deps.db, args.threadId);
+  const project = getProject(deps.db, args.projectId);
+  return {
+    title: firstNonBlank(thread?.title, thread?.titleFallback),
+    projectName: firstNonBlank(project?.name),
+  };
+}
+
 function toDetail(
   hostId: string,
   manifest: ReplayCaptureManifest,
+  enrichment: CaptureEnrichment,
 ): ReplayCaptureDetail {
   return {
     ...manifest,
     hostId,
+    title: enrichment.title,
+    projectName: enrichment.projectName,
   };
 }
 
@@ -88,12 +119,18 @@ async function listHostCaptures(
       },
     }),
   );
-  return result.captures.map(
-    (capture): ReplayCaptureHostSummary => ({
+  return result.captures.map((capture): ReplayCaptureHostSummary => {
+    const enrichment = loadCaptureEnrichment(deps, {
+      projectId: capture.projectId,
+      threadId: capture.threadId,
+    });
+    return {
       ...capture,
       hostId,
-    }),
-  );
+      title: enrichment.title,
+      projectName: enrichment.projectName,
+    };
+  });
 }
 
 async function listCaptures(
@@ -134,7 +171,11 @@ async function getHostCapture(
       },
     }),
   );
-  return toDetail(hostId, manifest);
+  const enrichment = loadCaptureEnrichment(deps, {
+    projectId: manifest.projectId,
+    threadId: manifest.threadId,
+  });
+  return toDetail(hostId, manifest, enrichment);
 }
 
 async function findCapture(

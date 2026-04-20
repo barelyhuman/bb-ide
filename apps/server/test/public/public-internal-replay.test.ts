@@ -265,7 +265,18 @@ describe("public development-only replay routes", () => {
       const response = await responsePromise;
 
       expect(response.status).toBe(200);
-      const body = replayListResponseSchema.parse(await readJson(response));
+      const rawBody = await readJson(response);
+      expect(rawBody).toMatchObject({
+        captures: [
+          {
+            captureId,
+            hostId: host.id,
+            title: "Test Thread",
+            projectName: "Test Project",
+          },
+        ],
+      });
+      const body = replayListResponseSchema.parse(rawBody);
       expect(body.captures).toEqual([
         {
           captureId,
@@ -324,6 +335,8 @@ describe("public development-only replay routes", () => {
         projectId: project.id,
         environmentId: environment.id,
         threadId: thread.id,
+        title: "Test Thread",
+        projectName: "Test Project",
       });
     } finally {
       await harness.cleanup();
