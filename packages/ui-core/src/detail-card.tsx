@@ -1,70 +1,47 @@
-import { Fragment, createContext, useContext, type ReactNode } from "react";
+import { type CSSProperties, type ReactNode } from "react";
 import { cx } from "./utils.js";
 
-const DETAIL_ROW_GRID_CLASS =
-  "grid grid-cols-[80px_minmax(0,1fr)] gap-x-3 gap-y-1 sm:grid-cols-[112px_minmax(0,1fr)]";
-const DETAIL_CARD_COLUMNS_CLASS =
-  "grid grid-cols-[80px_minmax(0,1fr)] gap-x-3 gap-y-1 sm:grid-cols-[112px_minmax(0,1fr)]";
+const DETAIL_GRID_CLASS =
+  "grid grid-cols-[var(--detail-label-width,96px)_minmax(0,1fr)] gap-x-3";
 const DETAIL_LABEL_CLASS = "m-0 text-xs leading-5 text-muted-foreground";
 const DETAIL_VALUE_CLASS = "m-0 min-w-0 text-xs leading-5 text-foreground";
 
-type DetailCardLayout = "stack" | "columns";
-type DetailRowLayout = "stack" | "contents" | "vertical";
+type DetailRowOrientation = "horizontal" | "vertical";
 
-const DetailCardLayoutContext = createContext<DetailCardLayout>("stack");
-
-function assertNever(value: never, message: string): never {
-  throw new Error(`${message}: ${String(value)}`);
-}
-
-function resolveDetailRowLayout(
-  layout: DetailRowLayout | undefined,
-  inheritedLayout: DetailCardLayout,
-): DetailRowLayout {
-  if (layout !== undefined) {
-    switch (layout) {
-      case "stack":
-      case "contents":
-      case "vertical":
-        return layout;
-    }
-
-    return assertNever(layout, "Unhandled detail row layout");
+function labelWidthStyle(
+  labelWidth: string | undefined,
+): CSSProperties | undefined {
+  if (!labelWidth) {
+    return undefined;
   }
-
-  switch (inheritedLayout) {
-    case "stack":
-      return "stack";
-    case "columns":
-      return "contents";
-  }
-
-  return assertNever(inheritedLayout, "Unhandled inherited detail row layout");
+  return { "--detail-label-width": labelWidth } as CSSProperties;
 }
 
 export interface DetailCardProps {
   children: ReactNode;
   className?: string;
-  layout?: DetailCardLayout;
+  /**
+   * Width of the label column. Applied as a CSS custom property so descendant
+   * rows inherit it without prop drilling. Defaults to 96px.
+   */
+  labelWidth?: string;
 }
 
 export function DetailCard({
   children,
   className,
-  layout = "stack",
+  labelWidth,
 }: DetailCardProps) {
   return (
-    <DetailCardLayoutContext.Provider value={layout}>
-      <dl
-        className={cx(
-          "rounded-md border border-border/80 bg-background/40 px-2.5 py-1.5",
-          layout === "columns" ? DETAIL_CARD_COLUMNS_CLASS : null,
-          className,
-        )}
-      >
-        {children}
-      </dl>
-    </DetailCardLayoutContext.Provider>
+    <dl
+      className={cx(
+        "flex flex-col gap-1 rounded-md border border-border/80 bg-background/40 px-2 py-1",
+        className,
+      )}
+      style={labelWidthStyle(labelWidth)}
+    >
+      {children}
+    </dl>
   );
 }
 
@@ -75,7 +52,11 @@ export interface DetailRowProps {
   labelClassName?: string;
   valueClassName?: string;
   align?: "start" | "center";
-  layout?: DetailRowLayout;
+  /**
+   * `horizontal` (default): label sits left of the value in the shared label column.
+   * `vertical`: label sits above the value. Use for wide/tall content like lists.
+   */
+  orientation?: DetailRowOrientation;
 }
 
 export function DetailRow({
@@ -85,49 +66,11 @@ export function DetailRow({
   labelClassName,
   valueClassName,
   align = "center",
-  layout,
+  orientation = "horizontal",
 }: DetailRowProps) {
-  const inheritedLayout = useContext(DetailCardLayoutContext);
-  const resolvedLayout = resolveDetailRowLayout(layout, inheritedLayout);
-
-  if (resolvedLayout === "contents") {
+  if (orientation === "vertical") {
     return (
-      <Fragment>
-        <dt
-          className={cx(
-            DETAIL_LABEL_CLASS,
-            "py-1.5",
-            className,
-            align === "center" ? "self-center" : "self-start",
-            labelClassName,
-          )}
-        >
-          {label}
-        </dt>
-        <dd
-          className={cx(
-            DETAIL_VALUE_CLASS,
-            "py-1.5",
-            className,
-            align === "center" ? "self-center" : "self-start",
-            valueClassName,
-          )}
-        >
-          {children}
-        </dd>
-      </Fragment>
-    );
-  }
-
-  if (resolvedLayout === "vertical") {
-    return (
-      <div
-        className={cx(
-          "space-y-1.5 py-1.5",
-          inheritedLayout === "columns" ? "col-span-2" : null,
-          className,
-        )}
-      >
+      <div className={cx("flex flex-col gap-1 py-0.5", className)}>
         <dt className={cx(DETAIL_LABEL_CLASS, labelClassName)}>{label}</dt>
         <dd className={cx(DETAIL_VALUE_CLASS, valueClassName)}>{children}</dd>
       </div>
@@ -137,8 +80,8 @@ export function DetailRow({
   return (
     <div
       className={cx(
-        DETAIL_ROW_GRID_CLASS,
-        align === "center" ? "items-center py-1.5" : "py-1.5",
+        DETAIL_GRID_CLASS,
+        align === "center" ? "items-center py-0.5" : "py-0.5",
         className,
       )}
     >
@@ -160,7 +103,7 @@ export function DetailMessageRow({
   contentClassName,
 }: DetailMessageRowProps) {
   return (
-    <div className={cx(DETAIL_ROW_GRID_CLASS, "py-1.5", className)}>
+    <div className={cx(DETAIL_GRID_CLASS, "py-0.5", className)}>
       <div aria-hidden="true" />
       <div className={contentClassName}>{children}</div>
     </div>

@@ -257,8 +257,11 @@ export function HireManagerModal({
           </DialogDescription>
         </DialogHeader>
         <form className="space-y-5 px-6 pb-5" onSubmit={handleHire}>
-          <DetailCard className="border-border/70 bg-muted/20 py-1 [&_>div]:grid-cols-[60px_minmax(0,1fr)] [&_>div]:sm:grid-cols-[72px_minmax(0,1fr)]">
-            <DetailRow label="Name" valueClassName="min-w-0" className="py-1">
+          <DetailCard
+            className="border-border/70 bg-muted/20"
+            labelWidth="60px"
+          >
+            <DetailRow label="Name" valueClassName="min-w-0">
               <Input
                 id={nameInputId}
                 value={managerName}
@@ -272,7 +275,7 @@ export function HireManagerModal({
                 }}
               />
             </DetailRow>
-            <DetailRow label="Model" valueClassName="min-w-0" className="py-1">
+            <DetailRow label="Model" valueClassName="min-w-0">
               {modelOptions.length > 0 ? (
                 <div className="flex min-w-0 flex-wrap items-center">
                   <PromptProviderModelPicker
@@ -305,7 +308,7 @@ export function HireManagerModal({
                 </span>
               )}
             </DetailRow>
-            <DetailRow label="Host" valueClassName="min-w-0" className="py-1">
+            <DetailRow label="Host" valueClassName="min-w-0">
               <HostPicker
                 hosts={hosts}
                 eligibleHosts={eligibleHosts}

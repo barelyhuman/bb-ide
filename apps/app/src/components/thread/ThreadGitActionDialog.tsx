@@ -309,7 +309,7 @@ function ThreadGitActionDialogContent({
             {shouldShowChangedFilesRow ? (
               <DetailRow
                 label="Changed files"
-                layout="vertical"
+                orientation="vertical"
                 valueClassName="pt-0.5"
               >
                 <WorkspaceChangesList
