@@ -809,15 +809,20 @@ export async function main(
         `${archiveResult.failures.length - 10} additional failure(s) omitted`,
       );
     }
+  }
+
+  if (archiveResult.succeeded === 0) {
     throw new Error(
-      `Archived ${archiveResult.succeeded} session(s), ${archiveResult.failed} failed.`,
+      `Archived 0 session(s), ${archiveResult.failed} failed.`,
     );
   }
 
   process.stdout.write("\n");
   log(
     green("●"),
-    `Archived ${bold(String(archiveResult.succeeded))} Codex session(s)`,
+    archiveResult.failed > 0
+      ? `Archived ${bold(String(archiveResult.succeeded))} Codex session(s), skipped ${bold(String(archiveResult.failed))} that Codex could not read`
+      : `Archived ${bold(String(archiveResult.succeeded))} Codex session(s)`,
   );
   process.stdout.write("\n");
 }
