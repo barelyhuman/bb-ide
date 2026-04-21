@@ -160,7 +160,7 @@ describe("formatTimelineAsText", () => {
     expect(text).not.toContain("no output");
   });
 
-  it("renders explicit lifecycle labels for non-command rows", () => {
+  it("renders explicit lifecycle labels for non-command web rows", () => {
     const text = formatMessagesAsText(
       [
         {
@@ -171,16 +171,64 @@ describe("formatTimelineAsText", () => {
           sourceSeqEnd: 1,
           createdAt: 1,
           callId: "call-1",
-          query: "React suspense docs",
-          output: "Found the React Suspense docs",
+          queries: ["React suspense docs"],
+          resultText: "Found the React Suspense docs",
           status: "completed",
         },
       ],
       { verbose: true },
     );
 
-    expect(text).toContain("Web Search");
+    expect(text).toContain("Searched React suspense docs");
     expect(text).toContain("[completed] React suspense docs");
+  });
+
+  it("renders pending web searches with a lifecycle label", () => {
+    const text = formatMessagesAsText(
+      [
+        {
+          kind: "web-search",
+          id: "web-search-1",
+          threadId: "t1",
+          sourceSeqStart: 1,
+          sourceSeqEnd: 1,
+          createdAt: 1,
+          callId: "web-call-1",
+          queries: ["React suspense docs"],
+          resultText: null,
+          status: "pending",
+        },
+      ],
+      { verbose: true },
+    );
+
+    expect(text).toContain("Searched React suspense docs");
+    expect(text).toContain("[running] React suspense docs");
+  });
+
+  it("renders interrupted web fetches with a lifecycle label", () => {
+    const text = formatMessagesAsText(
+      [
+        {
+          kind: "web-fetch",
+          id: "web-fetch-1",
+          threadId: "t1",
+          sourceSeqStart: 1,
+          sourceSeqEnd: 1,
+          createdAt: 1,
+          callId: "web-call-2",
+          url: "https://example.com",
+          prompt: null,
+          pattern: null,
+          resultText: null,
+          status: "interrupted",
+        },
+      ],
+      { verbose: true },
+    );
+
+    expect(text).toContain("Fetched https://example.com");
+    expect(text).toContain("[interrupted] https://example.com");
   });
 
   it("renders user + assistant + tool-call in minimal mode", () => {

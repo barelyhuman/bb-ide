@@ -98,6 +98,7 @@ import {
   claudeStreamEventMessageSchema,
   claudeSystemMessageSchema,
   claudeUserMessageSchema,
+  claudeWebFetchArgsSchema,
   claudeWebSearchArgsSchema,
   messageContentSchema,
   messageIdSchema,
@@ -108,6 +109,8 @@ import {
   toolUseBlockSchema,
   type ClaudeAssistantMessage,
   type ClaudeFileEditArgs,
+  type ClaudeWebFetchArgs,
+  type ClaudeWebSearchArgs,
   type ClaudeMessageContentBlock,
   type ClaudeResultMessage,
   type ClaudeSdkUsage,
@@ -146,6 +149,11 @@ type ClaudePendingFileChangeItem = Extract<
 interface ClaudeBashCommand {
   command: string;
   cwd: string | null;
+}
+
+interface ClaudeNormalizedWebFetch {
+  url: string;
+  prompt: string | null;
 }
 
 interface ClaudeToolUseTranslationInput {
@@ -221,6 +229,29 @@ function buildClaudeFileChangeItem(
     ],
     status: "pending",
     approvalStatus: null,
+  };
+}
+
+function normalizeClaudeWebSearchArgs(
+  args: ClaudeWebSearchArgs,
+): string[] | null {
+  const query = toOptionalString(args.query);
+  if (!query) {
+    return null;
+  }
+  return [query];
+}
+
+function normalizeClaudeWebFetchArgs(
+  args: ClaudeWebFetchArgs,
+): ClaudeNormalizedWebFetch | null {
+  const url = toOptionalString(args.url);
+  if (!url) {
+    return null;
+  }
+  return {
+    url,
+    prompt: toOptionalString(args.prompt) ?? null,
   };
 }
 
@@ -366,20 +397,42 @@ function translateClaudeToolUseItem(
     }
     case "WebSearch":
     case "WebFetch": {
-      const parsed = claudeWebSearchArgsSchema.safeParse(input.args);
-      const query = parsed.success
-        ? (toOptionalString(parsed.data.query) ??
-          toOptionalString(parsed.data.url))
-        : undefined;
-      if (!query) {
+      if (input.toolName === "WebSearch") {
+        const parsed = claudeWebSearchArgsSchema.safeParse(input.args);
+        if (!parsed.success) {
+          return withParentToolCallId(baseToolCall, input.parentToolCallId);
+        }
+        const normalized = normalizeClaudeWebSearchArgs(parsed.data);
+        if (!normalized) {
         return withParentToolCallId(baseToolCall, input.parentToolCallId);
       }
       return withParentToolCallId(
         {
           type: "webSearch",
           id: input.callId,
-          query,
-          ...(input.toolName === "WebFetch" ? { action: "fetch" } : {}),
+          queries: normalized,
+          resultText: null,
+        },
+        input.parentToolCallId,
+      );
+      }
+
+      const parsed = claudeWebFetchArgsSchema.safeParse(input.args);
+      if (!parsed.success) {
+        return withParentToolCallId(baseToolCall, input.parentToolCallId);
+      }
+      const normalized = normalizeClaudeWebFetchArgs(parsed.data);
+      if (!normalized) {
+        return withParentToolCallId(baseToolCall, input.parentToolCallId);
+      }
+      return withParentToolCallId(
+        {
+          type: "webFetch",
+          id: input.callId,
+          url: normalized.url,
+          prompt: normalized.prompt,
+          pattern: null,
+          resultText: null,
         },
         input.parentToolCallId,
       );
@@ -437,9 +490,20 @@ function translateClaudeToolResultItem(
           {
             type: "webSearch",
             id: input.callId,
-            query: startedItem.query,
-            ...(startedItem.action ? { action: startedItem.action } : {}),
-            ...(outputText ? { outputText } : {}),
+            queries: startedItem.queries,
+            resultText: outputText ?? null,
+          },
+          input.parentToolCallId ?? startedItem.parentToolCallId,
+        );
+      case "webFetch":
+        return withParentToolCallId(
+          {
+            type: "webFetch",
+            id: input.callId,
+            url: startedItem.url,
+            prompt: startedItem.prompt,
+            pattern: startedItem.pattern,
+            resultText: outputText ?? null,
           },
           input.parentToolCallId ?? startedItem.parentToolCallId,
         );
@@ -501,26 +565,8 @@ function translateClaudeToolResultItem(
         input.parentToolCallId,
       );
     case "WebSearch":
-      return withParentToolCallId(
-        {
-          type: "webSearch",
-          id: input.callId,
-          query: "",
-          ...(outputText ? { outputText } : {}),
-        },
-        input.parentToolCallId,
-      );
     case "WebFetch":
-      return withParentToolCallId(
-        {
-          type: "webSearch",
-          id: input.callId,
-          query: "",
-          action: "fetch",
-          ...(outputText ? { outputText } : {}),
-        },
-        input.parentToolCallId,
-      );
+      return fallbackToolCall;
     default:
       return fallbackToolCall;
   }

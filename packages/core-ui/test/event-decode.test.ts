@@ -81,7 +81,7 @@ describe("decodeRow", () => {
     expect(() => parseThreadEventRow(row)).toThrow();
   });
 
-  it("throws when web-search item actions are not canonical strings", () => {
+  it("throws when web-search items do not match the canonical shape", () => {
     const row = {
       id: "row-web-search-action",
       threadId: "thread-1",
@@ -94,7 +94,6 @@ describe("decodeRow", () => {
           type: "webSearch",
           id: "web-1",
           query: "react suspense",
-          action: { type: "search", query: "react suspense" },
           outputText: "Found the React Suspense docs",
         },
       },

@@ -67,6 +67,30 @@ export const threadEventPlanStepSchema = z.object({
 });
 export type ThreadEventPlanStep = z.infer<typeof threadEventPlanStepSchema>;
 
+export const threadEventWebSearchItemSchema = z.object({
+  type: z.literal("webSearch"),
+  id: z.string(),
+  queries: z.array(z.string()).min(1),
+  resultText: z.string().nullable(),
+  parentToolCallId: z.string().optional(),
+});
+export type ThreadEventWebSearchItem = z.infer<
+  typeof threadEventWebSearchItemSchema
+>;
+
+export const threadEventWebFetchItemSchema = z.object({
+  type: z.literal("webFetch"),
+  id: z.string(),
+  url: z.string(),
+  prompt: z.string().nullable(),
+  pattern: z.string().nullable(),
+  resultText: z.string().nullable(),
+  parentToolCallId: z.string().optional(),
+});
+export type ThreadEventWebFetchItem = z.infer<
+  typeof threadEventWebFetchItemSchema
+>;
+
 export const threadEventUserContentSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("text"), text: z.string() }),
   z.object({ type: z.literal("image"), url: z.string() }),
@@ -184,14 +208,8 @@ export const threadEventItemSchema = z.discriminatedUnion("type", [
     approvalStatus: threadEventItemApprovalStatusSchema,
     parentToolCallId: z.string().optional(),
   }),
-  z.object({
-    type: z.literal("webSearch"),
-    id: z.string(),
-    query: z.string(),
-    action: z.string().optional(),
-    outputText: z.string().optional(),
-    parentToolCallId: z.string().optional(),
-  }),
+  threadEventWebSearchItemSchema,
+  threadEventWebFetchItemSchema,
   z.object({
     type: z.literal("toolCall"),
     id: z.string(),

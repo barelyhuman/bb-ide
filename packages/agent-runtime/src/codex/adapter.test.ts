@@ -2019,7 +2019,7 @@ describe("codex provider adapter", () => {
     });
   });
 
-  it("translateEvent item/completed with webSearch maps to webSearch", () => {
+  it("translateEvent item/completed with search maps to webSearch", () => {
     const adapter = createCodexProviderAdapter();
     const events = adapter.translateEvent(
       codexEvent("item/completed", {
@@ -2041,10 +2041,254 @@ describe("codex provider adapter", () => {
       item: {
         type: "webSearch",
         id: "web-1",
-        query: "react suspense",
-        action: "search",
+        queries: ["react suspense"],
+        resultText: null,
       },
     });
+  });
+
+  it("translateEvent item/started with search maps to webSearch and merges query fields", () => {
+    const adapter = createCodexProviderAdapter();
+    const events = adapter.translateEvent(
+      codexEvent("item/started", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "webSearch",
+          id: "web-start-1",
+          query: "react suspense fallback",
+          action: {
+            type: "search",
+            query: "react suspense primary",
+            queries: ["react suspense primary", "react suspense secondary"],
+          },
+        },
+      }),
+    );
+
+    expect(events).toContainEqual({
+      type: "item/started",
+      threadId: "t1",
+      providerThreadId: "t1",
+      turnId: "turn-1",
+      item: {
+        type: "webSearch",
+        id: "web-start-1",
+        queries: [
+          "react suspense primary",
+          "react suspense secondary",
+          "react suspense fallback",
+        ],
+        resultText: null,
+      },
+    });
+  });
+
+  it("translateEvent item/started with camelCase openPage maps to webFetch", () => {
+    const adapter = createCodexProviderAdapter();
+    const events = adapter.translateEvent(
+      codexEvent("item/started", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "webSearch",
+          id: "web-open-start-1",
+          query: "ignored fallback",
+          action: { type: "openPage", url: "https://example.com" },
+        },
+      }),
+    );
+
+    expect(events).toContainEqual({
+      type: "item/started",
+      threadId: "t1",
+      providerThreadId: "t1",
+      turnId: "turn-1",
+      item: {
+        type: "webFetch",
+        id: "web-open-start-1",
+        url: "https://example.com",
+        prompt: null,
+        pattern: null,
+        resultText: null,
+      },
+    });
+  });
+
+  it("translateEvent item/started with camelCase findInPage maps to webFetch", () => {
+    const adapter = createCodexProviderAdapter();
+    const events = adapter.translateEvent(
+      codexEvent("item/started", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "webSearch",
+          id: "web-find-start-1",
+          query: "ignored fallback",
+          action: {
+            type: "findInPage",
+            url: "https://example.com",
+            pattern: "Example Domain",
+          },
+        },
+      }),
+    );
+
+    expect(events).toContainEqual({
+      type: "item/started",
+      threadId: "t1",
+      providerThreadId: "t1",
+      turnId: "turn-1",
+      item: {
+        type: "webFetch",
+        id: "web-find-start-1",
+        url: "https://example.com",
+        prompt: null,
+        pattern: "Example Domain",
+        resultText: null,
+      },
+    });
+  });
+
+  it("translateEvent item/completed with camelCase openPage maps to webFetch", () => {
+    const adapter = createCodexProviderAdapter();
+    const events = adapter.translateEvent(
+      codexEvent("item/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "webSearch",
+          id: "web-open-1",
+          query: "https://example.com",
+          action: { type: "openPage", url: "https://example.com" },
+        },
+      }),
+    );
+
+    expect(events).toContainEqual({
+      type: "item/completed",
+      threadId: "t1",
+      providerThreadId: "t1",
+      turnId: "turn-1",
+      item: {
+        type: "webFetch",
+        id: "web-open-1",
+        url: "https://example.com",
+        prompt: null,
+        pattern: null,
+        resultText: null,
+      },
+    });
+    expect(events).not.toContainEqual(
+      expect.objectContaining({
+        type: "provider/unhandled",
+      }),
+    );
+  });
+
+  it("translateEvent item/completed with camelCase findInPage maps to webFetch", () => {
+    const adapter = createCodexProviderAdapter();
+    const events = adapter.translateEvent(
+      codexEvent("item/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "webSearch",
+          id: "web-find-1",
+          query: "https://example.com",
+          action: {
+            type: "findInPage",
+            url: "https://example.com",
+            pattern: "Example Domain",
+          },
+        },
+      }),
+    );
+
+    expect(events).toContainEqual({
+      type: "item/completed",
+      threadId: "t1",
+      providerThreadId: "t1",
+      turnId: "turn-1",
+      item: {
+        type: "webFetch",
+        id: "web-find-1",
+        url: "https://example.com",
+        prompt: null,
+        pattern: "Example Domain",
+        resultText: null,
+      },
+    });
+    expect(events).not.toContainEqual(
+      expect.objectContaining({
+        type: "provider/unhandled",
+      }),
+    );
+  });
+
+  it("translateEvent ignores placeholder webSearch started items without canonical details", () => {
+    const adapter = createCodexProviderAdapter();
+    const events = adapter.translateEvent(
+      codexEvent("item/started", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "webSearch",
+          id: "web-placeholder-1",
+          query: "",
+          action: { type: "other" },
+        },
+      }),
+    );
+
+    expect(events).toEqual([]);
+  });
+
+  it("translateEvent ignores placeholder webSearch completed items without canonical details", () => {
+    const adapter = createCodexProviderAdapter();
+    const events = adapter.translateEvent(
+      codexEvent("item/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "webSearch",
+          id: "web-placeholder-completed-1",
+          query: "",
+          action: null,
+        },
+      }),
+    );
+
+    expect(events).toEqual([]);
+  });
+
+  it("translateEvent item/completed with missing openPage url falls back to provider/unhandled", () => {
+    const adapter = createCodexProviderAdapter();
+    const events = adapter.translateEvent(
+      codexEvent("item/completed", {
+        threadId: "t1",
+        turnId: "turn-1",
+        item: {
+          type: "webSearch",
+          id: "web-open-missing-url-1",
+          query: "not-a-url",
+          action: { type: "openPage", url: null },
+        },
+      }),
+    );
+
+    expect(
+      events.some(
+        (event) =>
+          event.type === "provider/unhandled" &&
+          event.rawType === "item/completed",
+      ),
+    ).toBe(true);
+    expect(
+      events.some(
+        (event) => event.type === "item/completed" && event.item.type === "webFetch",
+      ),
+    ).toBe(false);
   });
 
   it("translateEvent item/completed with reasoning maps to reasoning", () => {

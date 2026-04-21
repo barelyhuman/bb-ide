@@ -306,6 +306,7 @@ function getGroupMessageStatus(
     case "tool-exploring":
     case "tool-call":
     case "web-search":
+    case "web-fetch":
     case "file-edit":
     case "tasks":
     case "delegation":

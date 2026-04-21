@@ -14,9 +14,17 @@ export type ClaudeFileEditArgs = z.infer<typeof claudeFileEditArgsSchema>;
 export const claudeWebSearchArgsSchema = z
   .object({
     query: z.string().optional(),
-    url: z.string().optional(),
   })
   .passthrough();
+export type ClaudeWebSearchArgs = z.infer<typeof claudeWebSearchArgsSchema>;
+
+export const claudeWebFetchArgsSchema = z
+  .object({
+    url: z.string().optional(),
+    prompt: z.string().optional(),
+  })
+  .passthrough();
+export type ClaudeWebFetchArgs = z.infer<typeof claudeWebFetchArgsSchema>;
 
 export const messageIdSchema = z.object({
   id: z.string(),

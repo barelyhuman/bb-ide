@@ -1,5 +1,6 @@
 import type {
   ViewApprovalLifecycleStatus,
+  ViewWebFetchMessage,
   ViewMessage,
   ViewToolCallMessage,
   ViewToolCallSummary,
@@ -20,13 +21,16 @@ import {
   setVisibleTextBuffer,
   type VisibleTextBuffer,
 } from "./visible-text-buffer.js";
-import type { WebSearchLifecycleEvent } from "./web-search-lifecycle.js";
+import type { WebActivityLifecycleEvent } from "./web-activity-lifecycle.js";
 
 interface ExploringCompatibilityContext {
   turnId?: string;
   source?: string;
   parentToolCallId?: string;
 }
+
+type ViewWebActivityMessage = ViewWebSearchMessage | ViewWebFetchMessage;
+type WebActivityKind = ViewWebActivityMessage["kind"];
 
 type ApprovalStatusDelta =
   | { kind: "keep" }
@@ -54,13 +58,13 @@ export interface ToolActivityState {
   activeCell:
     | ViewToolExploringMessage
     | ViewToolCallMessage
-    | ViewWebSearchMessage
+    | ViewWebActivityMessage
     | null;
   historyCells: Array<
-    ViewToolExploringMessage | ViewToolCallMessage | ViewWebSearchMessage
+    ViewToolExploringMessage | ViewToolCallMessage | ViewWebActivityMessage
   >;
   finalizedExecCallIds: Set<string>;
-  finalizedWebSearchCallIds: Set<string>;
+  finalizedWebActivityCallIds: Set<string>;
 }
 
 interface MergeCallSummaryOptions {
@@ -75,7 +79,7 @@ export function createToolActivityState(): ToolActivityState {
     activeCell: null,
     historyCells: [],
     finalizedExecCallIds: new Set(),
-    finalizedWebSearchCallIds: new Set(),
+    finalizedWebActivityCallIds: new Set(),
   };
 }
 
@@ -321,7 +325,9 @@ function findCallInHistoryCells(
     index -= 1
   ) {
     const cell = state.toolActivity.historyCells[index];
-    if (!cell || cell.kind === "web-search") continue;
+    if (!cell || cell.kind === "web-search" || cell.kind === "web-fetch") {
+      continue;
+    }
 
     const call = findCallInActiveCell(cell, callId);
     if (!call) continue;
@@ -335,21 +341,49 @@ function findCallInHistoryCells(
   return null;
 }
 
-function findWebSearchInHistoryCells(
+function isWebActivityMessage(
+  cell:
+    | ViewToolExploringMessage
+    | ViewToolCallMessage
+    | ViewWebActivityMessage
+    | null
+    | undefined,
+): cell is ViewWebActivityMessage {
+  return cell?.kind === "web-search" || cell?.kind === "web-fetch";
+}
+
+interface FindWebActivityInHistoryCellsArgs {
+  callId: string;
+  itemKind?: WebActivityKind;
+}
+
+function findWebActivityInHistoryCells(
   state: ToolActivityProjectionState,
-  callId: string,
-): ViewWebSearchMessage | null {
+  args: FindWebActivityInHistoryCellsArgs,
+): ViewWebActivityMessage | null {
   for (
     let index = state.toolActivity.historyCells.length - 1;
     index >= 0;
     index -= 1
   ) {
     const cell = state.toolActivity.historyCells[index];
-    if (cell?.kind !== "web-search" || cell.callId !== callId) continue;
+    if (!isWebActivityMessage(cell)) continue;
+    if (cell.callId !== args.callId) continue;
+    if (args.itemKind && cell.kind !== args.itemKind) continue;
     return cell;
   }
 
   return null;
+}
+
+function buildWebActivityKey(kind: WebActivityKind, callId: string): string {
+  return `${kind}:${callId}`;
+}
+
+function interruptWebActivityMessage(message: ViewWebActivityMessage): void {
+  if (message.status === "pending") {
+    message.status = "interrupted";
+  }
 }
 
 function mergeCallSummary(
@@ -519,7 +553,10 @@ export function interruptPendingToolActivity(
       }
     }
     syncExploringStatus(state.toolActivity.activeCell);
-  } else if (state.toolActivity.activeCell?.kind === "web-search") {
+  } else if (
+    state.toolActivity.activeCell?.kind === "web-search" ||
+    state.toolActivity.activeCell?.kind === "web-fetch"
+  ) {
     state.toolActivity.activeCell.status = "interrupted";
   }
 }
@@ -847,31 +884,36 @@ export function onExecEnd(
   flushActiveToolCell(state);
 }
 
-export function onWebSearchBegin(
-  state: ToolActivityProjectionState,
-  meta: EventMeta,
+function createWebActivityMessage(
   threadId: string,
+  meta: EventMeta,
   turnId: string | undefined,
-  payload: WebSearchLifecycleEvent,
-): void {
-  if (state.toolActivity.finalizedWebSearchCallIds.has(payload.callId)) {
-    return;
+  payload: WebActivityLifecycleEvent,
+  status: ViewWebActivityMessage["status"],
+): ViewWebActivityMessage {
+  if (payload.itemKind === "web-search") {
+    return {
+      kind: "web-search",
+      id: messageId(threadId, "web-search", payload.callId),
+      threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
+      ...(turnId ? { turnId } : {}),
+      ...(payload.parentToolCallId
+        ? { parentToolCallId: payload.parentToolCallId }
+        : {}),
+      callId: payload.callId,
+      queries: payload.queries,
+      resultText: payload.resultText,
+      status,
+    };
   }
 
-  const active = state.toolActivity.activeCell;
-  if (active?.kind === "web-search" && active.callId === payload.callId) {
-    active.sourceSeqEnd = Math.max(active.sourceSeqEnd, meta.seq);
-    active.createdAt = Math.max(active.createdAt, meta.createdAt);
-    if (payload.query) active.query = payload.query;
-    if (payload.action) active.action = payload.action;
-    if (payload.output) active.output = payload.output;
-    return;
-  }
-
-  flushActiveToolCell(state);
-  state.toolActivity.activeCell = {
-    kind: "web-search",
-    id: messageId(threadId, "web-search", payload.callId),
+  return {
+    kind: "web-fetch",
+    id: messageId(threadId, "web-fetch", payload.callId),
     threadId,
     sourceSeqStart: meta.seq,
     sourceSeqEnd: meta.seq,
@@ -882,77 +924,153 @@ export function onWebSearchBegin(
       ? { parentToolCallId: payload.parentToolCallId }
       : {}),
     callId: payload.callId,
-    query: payload.query,
-    action: payload.action,
-    output: payload.output,
-    status: "pending",
+    url: payload.url,
+    prompt: payload.prompt,
+    pattern: payload.pattern,
+    resultText: payload.resultText,
+    status,
   };
 }
 
-function mergeWebSearchMessage(
-  target: ViewWebSearchMessage,
+function mergeWebActivityMessage(
+  target: ViewWebActivityMessage,
   meta: EventMeta,
   turnId: string | undefined,
-  payload: WebSearchLifecycleEvent,
+  payload: WebActivityLifecycleEvent,
 ): void {
   target.sourceSeqEnd = Math.max(target.sourceSeqEnd, meta.seq);
   target.createdAt = Math.max(target.createdAt, meta.createdAt);
-  if (!target.turnId && turnId) target.turnId = turnId;
+  if (!target.turnId && turnId) {
+    target.turnId = turnId;
+  }
   if (!target.parentToolCallId && payload.parentToolCallId) {
     target.parentToolCallId = payload.parentToolCallId;
   }
-  if (payload.query) target.query = payload.query;
-  if (payload.action) target.action = payload.action;
-  if (payload.output) target.output = payload.output;
+
+  if (target.kind === "web-search" && payload.itemKind === "web-search") {
+    target.queries = payload.queries;
+    target.resultText = payload.resultText;
+    return;
+  }
+
+  if (target.kind === "web-fetch" && payload.itemKind === "web-fetch") {
+    target.url = payload.url;
+    target.prompt = payload.prompt;
+    target.pattern = payload.pattern;
+    target.resultText = payload.resultText;
+  }
 }
 
-export function onWebSearchEnd(
+export function onWebActivityBegin(
   state: ToolActivityProjectionState,
   meta: EventMeta,
   threadId: string,
   turnId: string | undefined,
-  payload: WebSearchLifecycleEvent,
+  payload: WebActivityLifecycleEvent,
 ): void {
-  if (state.toolActivity.finalizedWebSearchCallIds.has(payload.callId)) {
+  const activityKey = buildWebActivityKey(payload.itemKind, payload.callId);
+  if (state.toolActivity.finalizedWebActivityCallIds.has(activityKey)) {
     return;
   }
 
   const active = state.toolActivity.activeCell;
-  if (active?.kind === "web-search" && active.callId === payload.callId) {
-    mergeWebSearchMessage(active, meta, turnId, payload);
+  if (
+    isWebActivityMessage(active) &&
+    active.callId === payload.callId &&
+    active.kind !== payload.itemKind
+  ) {
+    interruptWebActivityMessage(active);
+    flushActiveToolCell(state);
+  }
+
+  if (
+    active &&
+    active.kind === payload.itemKind &&
+    active.callId === payload.callId
+  ) {
+    mergeWebActivityMessage(active, meta, turnId, payload);
+    return;
+  }
+
+  flushActiveToolCell(state);
+  state.toolActivity.activeCell = createWebActivityMessage(
+    threadId,
+    meta,
+    turnId,
+    payload,
+    "pending",
+  );
+}
+
+export function onWebActivityEnd(
+  state: ToolActivityProjectionState,
+  meta: EventMeta,
+  threadId: string,
+  turnId: string | undefined,
+  payload: WebActivityLifecycleEvent,
+): void {
+  const activityKey = buildWebActivityKey(payload.itemKind, payload.callId);
+  if (state.toolActivity.finalizedWebActivityCallIds.has(activityKey)) {
+    return;
+  }
+
+  const active = state.toolActivity.activeCell;
+  if (
+    isWebActivityMessage(active) &&
+    active.callId === payload.callId &&
+    active.kind !== payload.itemKind
+  ) {
+    interruptWebActivityMessage(active);
+    flushActiveToolCell(state);
+  }
+
+  if (
+    active &&
+    active.kind === payload.itemKind &&
+    active.callId === payload.callId
+  ) {
+    mergeWebActivityMessage(active, meta, turnId, payload);
     active.status = "completed";
     flushActiveToolCell(state);
-    state.toolActivity.finalizedWebSearchCallIds.add(payload.callId);
+    state.toolActivity.finalizedWebActivityCallIds.add(activityKey);
     return;
   }
 
   flushActiveToolCell(state);
 
-  const historyMatch = findWebSearchInHistoryCells(state, payload.callId);
+  const conflictingHistoryMatch = findWebActivityInHistoryCells(state, {
+    callId: payload.callId,
+  });
+  if (
+    conflictingHistoryMatch &&
+    conflictingHistoryMatch.kind !== payload.itemKind
+  ) {
+    interruptWebActivityMessage(conflictingHistoryMatch);
+  }
+
+  const historyMatch = findWebActivityInHistoryCells(state, {
+    callId: payload.callId,
+    itemKind: payload.itemKind,
+  });
   if (historyMatch) {
-    mergeWebSearchMessage(historyMatch, meta, turnId, payload);
+    mergeWebActivityMessage(historyMatch, meta, turnId, payload);
     historyMatch.status = "completed";
-    state.toolActivity.finalizedWebSearchCallIds.add(payload.callId);
+    state.toolActivity.finalizedWebActivityCallIds.add(activityKey);
     return;
   }
 
-  state.messages.push({
-    kind: "web-search",
-    id: messageId(threadId, "web-search", `${payload.callId}:${meta.seq}`),
+  const completedMessage = createWebActivityMessage(
     threadId,
-    sourceSeqStart: meta.seq,
-    sourceSeqEnd: meta.seq,
-    createdAt: meta.createdAt,
-    startedAt: meta.createdAt,
-    ...(turnId ? { turnId } : {}),
-    ...(payload.parentToolCallId
-      ? { parentToolCallId: payload.parentToolCallId }
-      : {}),
-    callId: payload.callId,
-    query: payload.query,
-    action: payload.action,
-    output: payload.output,
-    status: "completed",
-  });
-  state.toolActivity.finalizedWebSearchCallIds.add(payload.callId);
+    meta,
+    turnId,
+    payload,
+    "completed",
+  );
+  completedMessage.id = messageId(
+    threadId,
+    completedMessage.kind,
+    `${payload.callId}:${meta.seq}`,
+  );
+  state.messages.push(completedMessage);
+  state.toolActivity.finalizedWebActivityCallIds.add(activityKey);
 }

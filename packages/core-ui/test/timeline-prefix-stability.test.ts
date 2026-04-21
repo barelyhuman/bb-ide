@@ -104,7 +104,7 @@ function webSearchLogicalRow(row: TimelineRow): LogicalTimelineRow | null {
   return {
     key: `web-search:${message.callId}`,
     status: message.status,
-    title: message.query ?? message.action ?? "web search",
+    title: `Searched ${message.queries[0] ?? "web search"}`,
   };
 }
 
@@ -665,12 +665,12 @@ describe("timeline prefix stability", () => {
       event.turnStarted({}),
       event.webSearchStarted({
         itemId: "web-prefix",
-        query: "timeline projection stability",
+        queries: ["timeline projection stability"],
       }),
       event.webSearchCompleted({
         itemId: "web-prefix",
-        query: "timeline projection stability",
-        outputText: "result",
+        queries: ["timeline projection stability"],
+        resultText: "result",
       }),
       event.assistantCompleted({
         itemId: "assistant-1",
@@ -701,7 +701,7 @@ describe("timeline prefix stability", () => {
         event.turnStarted({}),
         event.webSearchStarted({
           itemId: "web-interrupted",
-          query: "unfinished search",
+          queries: ["unfinished search"],
         }),
         event.turnCompleted({
           status: "interrupted",
@@ -722,7 +722,7 @@ describe("timeline prefix stability", () => {
       {
         key: "web-search:web-interrupted",
         status: "interrupted",
-        title: "unfinished search",
+        title: "Searched unfinished search",
       },
     ]);
   });

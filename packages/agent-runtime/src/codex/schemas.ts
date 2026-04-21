@@ -123,21 +123,21 @@ const codexWebSearchActionSchema = z.discriminatedUnion("type", [
   z
     .object({
       type: z.literal("search"),
-      query: z.string().optional(),
-      queries: z.array(z.string()).nullable().optional(),
+      query: z.string().nullable(),
+      queries: z.array(z.string()).nullable(),
     })
     .passthrough(),
   z
     .object({
-      type: z.literal("open_page"),
-      url: z.string().optional(),
+      type: z.literal("openPage"),
+      url: z.string().nullable(),
     })
     .passthrough(),
   z
     .object({
-      type: z.literal("find_in_page"),
-      url: z.string().optional(),
-      pattern: z.string().optional(),
+      type: z.literal("findInPage"),
+      url: z.string().nullable(),
+      pattern: z.string().nullable(),
     })
     .passthrough(),
   z

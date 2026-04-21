@@ -1,6 +1,8 @@
 import type {
   ThreadEvent,
   ThreadEventContextWindowUsage,
+  ThreadEventWebFetchItem,
+  ThreadEventWebSearchItem,
   ThreadEventItemApprovalStatus,
   ThreadEventItem,
   ThreadEventItemStatus,
@@ -34,6 +36,13 @@ function assertNever(value: never, message?: string): never {
 interface CodexLastTokenUsage {
   totalTokens: number;
 }
+
+type CodexNormalizedWebItem = ThreadEventWebSearchItem | ThreadEventWebFetchItem;
+
+type CodexItemTranslationResult =
+  | { kind: "translated"; item: ThreadEventItem }
+  | { kind: "ignored" }
+  | { kind: "unhandled" };
 
 function toCodexContextWindowUsage(
   lastTokenUsage: CodexLastTokenUsage,
@@ -178,121 +187,258 @@ function buildDynamicToolCallError(
   return "Dynamic tool call failed";
 }
 
+function collectNonEmptyStrings(
+  values: Array<string | null | undefined>,
+): string[] {
+  return values.filter(
+    (value): value is string => typeof value === "string" && value.length > 0,
+  );
+}
+
+function dedupeStrings(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
+interface CodexSearchQueriesArgs {
+  itemQuery: string;
+  actionQuery: string | null | undefined;
+  actionQueries: string[] | null | undefined;
+}
+
+function normalizeCodexSearchQueries(
+  args: CodexSearchQueriesArgs,
+): string[] | null {
+  const queries = dedupeStrings(
+    collectNonEmptyStrings([
+      ...(args.actionQueries ?? []),
+      args.actionQuery,
+      args.itemQuery,
+    ]),
+  );
+  return queries.length > 0 ? queries : null;
+}
+
+interface CodexUrlArgs {
+  actionUrl: string | null | undefined;
+}
+
+function normalizeCodexUrl(args: CodexUrlArgs): string | null {
+  const url = collectNonEmptyStrings([args.actionUrl])[0];
+  return url ?? null;
+}
+
+function normalizeCodexWebItem(
+  item: Extract<CodexHandledThreadItem, { type: "webSearch" }>,
+): CodexNormalizedWebItem | null {
+  if (!item.action) {
+    return null;
+  }
+
+  switch (item.action.type) {
+    case "search": {
+      const queries = normalizeCodexSearchQueries({
+        itemQuery: item.query,
+        actionQuery: item.action.query,
+        actionQueries: item.action.queries,
+      });
+      if (!queries) {
+        return null;
+      }
+      return {
+        type: "webSearch",
+        id: item.id,
+        queries,
+        resultText: null,
+      };
+    }
+    case "openPage": {
+      const url = normalizeCodexUrl({ actionUrl: item.action.url });
+      if (!url) {
+        return null;
+      }
+      return {
+        type: "webFetch",
+        id: item.id,
+        url,
+        prompt: null,
+        pattern: null,
+        resultText: null,
+      };
+    }
+    case "findInPage": {
+      const url = normalizeCodexUrl({ actionUrl: item.action.url });
+      if (!url) {
+        return null;
+      }
+      return {
+        type: "webFetch",
+        id: item.id,
+        url,
+        prompt: null,
+        pattern: item.action.pattern ?? null,
+        resultText: null,
+      };
+    }
+    case "other":
+      return null;
+    default:
+      return assertNever(item.action);
+  }
+}
+
+function shouldIgnoreCodexWebItem(
+  item: Extract<CodexHandledThreadItem, { type: "webSearch" }>,
+): boolean {
+  return item.action === null || item.action.type === "other";
+}
+
 function translateCodexItem(
   item: unknown,
   eventMethod: "item/started" | "item/completed",
-): ThreadEventItem | null {
+): CodexItemTranslationResult {
   const parsed = codexHandledThreadItemSchema.safeParse(item);
   if (!parsed.success) {
-    return null;
+    return { kind: "unhandled" };
   }
 
   const parsedItem: CodexHandledThreadItem = parsed.data;
   const isStartedEvent = eventMethod === "item/started";
   switch (parsedItem.type) {
     case "agentMessage":
-      return { type: "agentMessage", id: parsedItem.id, text: parsedItem.text };
+      return {
+        kind: "translated",
+        item: { type: "agentMessage", id: parsedItem.id, text: parsedItem.text },
+      };
     case "userMessage": {
       const content = parsedItem.content
         .map((entry) => translateCodexUserContent(entry))
         .filter((entry) => entry.type !== "text" || entry.text.length > 0);
-      return { type: "userMessage", id: parsedItem.id, content };
+      return {
+        kind: "translated",
+        item: { type: "userMessage", id: parsedItem.id, content },
+      };
     }
     case "commandExecution":
       return {
-        type: "commandExecution",
-        id: parsedItem.id,
-        command: parsedItem.command,
-        cwd: parsedItem.cwd,
-        status: isStartedEvent ? "pending" : toItemStatus(parsedItem.status),
-        approvalStatus: toApprovalStatus(parsedItem.status, eventMethod),
-        aggregatedOutput: parsedItem.aggregatedOutput ?? undefined,
-        exitCode: parsedItem.exitCode ?? undefined,
-        durationMs: parsedItem.durationMs ?? undefined,
+        kind: "translated",
+        item: {
+          type: "commandExecution",
+          id: parsedItem.id,
+          command: parsedItem.command,
+          cwd: parsedItem.cwd,
+          status: isStartedEvent ? "pending" : toItemStatus(parsedItem.status),
+          approvalStatus: toApprovalStatus(parsedItem.status, eventMethod),
+          aggregatedOutput: parsedItem.aggregatedOutput ?? undefined,
+          exitCode: parsedItem.exitCode ?? undefined,
+          durationMs: parsedItem.durationMs ?? undefined,
+        },
       };
     case "fileChange":
       return {
-        type: "fileChange",
-        id: parsedItem.id,
-        changes: parsedItem.changes.map((change) => ({
-          path: change.path,
-          kind: change.kind.type,
-          ...(change.kind.type === "update" && change.kind.move_path
-            ? { movePath: change.kind.move_path }
-            : {}),
-          ...(change.diff ? { diff: change.diff } : {}),
-        })),
-        status: isStartedEvent ? "pending" : toItemStatus(parsedItem.status),
-        approvalStatus: toApprovalStatus(parsedItem.status, eventMethod),
+        kind: "translated",
+        item: {
+          type: "fileChange",
+          id: parsedItem.id,
+          changes: parsedItem.changes.map((change) => ({
+            path: change.path,
+            kind: change.kind.type,
+            ...(change.kind.type === "update" && change.kind.move_path
+              ? { movePath: change.kind.move_path }
+              : {}),
+            ...(change.diff ? { diff: change.diff } : {}),
+          })),
+          status: isStartedEvent ? "pending" : toItemStatus(parsedItem.status),
+          approvalStatus: toApprovalStatus(parsedItem.status, eventMethod),
+        },
       };
     case "mcpToolCall": {
       const toolArguments = toOptionalRecord(parsedItem.arguments);
       return {
-        type: "toolCall",
-        id: parsedItem.id,
-        server: parsedItem.server,
-        tool: parsedItem.tool,
-        ...(toolArguments ? { arguments: toolArguments } : {}),
-        status: isStartedEvent ? "pending" : toItemStatus(parsedItem.status),
-        error: parsedItem.error?.message,
-        durationMs: parsedItem.durationMs ?? undefined,
+        kind: "translated",
+        item: {
+          type: "toolCall",
+          id: parsedItem.id,
+          server: parsedItem.server,
+          tool: parsedItem.tool,
+          ...(toolArguments ? { arguments: toolArguments } : {}),
+          status: isStartedEvent ? "pending" : toItemStatus(parsedItem.status),
+          error: parsedItem.error?.message,
+          durationMs: parsedItem.durationMs ?? undefined,
+        },
       };
     }
     case "dynamicToolCall": {
       const result = extractDynamicToolCallResult(parsedItem.contentItems);
       const toolArguments = toOptionalRecord(parsedItem.arguments);
       return {
-        type: "toolCall",
-        id: parsedItem.id,
-        tool: parsedItem.tool,
-        ...(toolArguments ? { arguments: toolArguments } : {}),
-        status: isStartedEvent ? "pending" : toItemStatus(parsedItem.status),
-        result,
-        error: buildDynamicToolCallError(parsedItem.success, result),
-        durationMs: parsedItem.durationMs ?? undefined,
+        kind: "translated",
+        item: {
+          type: "toolCall",
+          id: parsedItem.id,
+          tool: parsedItem.tool,
+          ...(toolArguments ? { arguments: toolArguments } : {}),
+          status: isStartedEvent ? "pending" : toItemStatus(parsedItem.status),
+          result,
+          error: buildDynamicToolCallError(parsedItem.success, result),
+          durationMs: parsedItem.durationMs ?? undefined,
+        },
       };
     }
     case "collabAgentToolCall":
       return {
-        type: "toolCall",
-        id: parsedItem.id,
-        tool: parsedItem.tool,
-        arguments: {
-          senderThreadId: parsedItem.senderThreadId,
-          receiverThreadIds: parsedItem.receiverThreadIds,
-          ...(parsedItem.prompt ? { prompt: parsedItem.prompt } : {}),
-          ...(parsedItem.model ? { model: parsedItem.model } : {}),
-          ...(parsedItem.reasoningEffort
-            ? { reasoningEffort: parsedItem.reasoningEffort }
-            : {}),
+        kind: "translated",
+        item: {
+          type: "toolCall",
+          id: parsedItem.id,
+          tool: parsedItem.tool,
+          arguments: {
+            senderThreadId: parsedItem.senderThreadId,
+            receiverThreadIds: parsedItem.receiverThreadIds,
+            ...(parsedItem.prompt ? { prompt: parsedItem.prompt } : {}),
+            ...(parsedItem.model ? { model: parsedItem.model } : {}),
+            ...(parsedItem.reasoningEffort
+              ? { reasoningEffort: parsedItem.reasoningEffort }
+              : {}),
+          },
+          status: isStartedEvent ? "pending" : toItemStatus(parsedItem.status),
+          result: parsedItem.agentsStates,
         },
-        status: isStartedEvent ? "pending" : toItemStatus(parsedItem.status),
-        result: parsedItem.agentsStates,
       };
-    case "webSearch":
-      return {
-        type: "webSearch",
-        id: parsedItem.id,
-        query: parsedItem.query,
-        ...(parsedItem.action ? { action: parsedItem.action.type } : {}),
-      };
+    case "webSearch": {
+      if (shouldIgnoreCodexWebItem(parsedItem)) {
+        return { kind: "ignored" };
+      }
+      const normalized = normalizeCodexWebItem(parsedItem);
+      return normalized
+        ? { kind: "translated", item: normalized }
+        : { kind: "unhandled" };
+    }
     case "reasoning":
       return {
-        type: "reasoning",
-        id: parsedItem.id,
-        summary: parsedItem.summary,
-        content: parsedItem.content,
+        kind: "translated",
+        item: {
+          type: "reasoning",
+          id: parsedItem.id,
+          summary: parsedItem.summary,
+          content: parsedItem.content,
+        },
       };
     case "plan":
       return {
-        type: "plan",
-        id: parsedItem.id,
-        text: parsedItem.text,
+        kind: "translated",
+        item: {
+          type: "plan",
+          id: parsedItem.id,
+          text: parsedItem.text,
+        },
       };
     case "contextCompaction":
       return {
-        type: "contextCompaction",
-        id: parsedItem.id,
+        kind: "translated",
+        item: {
+          type: "contextCompaction",
+          id: parsedItem.id,
+        },
       };
     default:
       return assertNever(parsedItem);
@@ -388,11 +534,14 @@ export function translateCodexEvent(
       ];
     case "item/started":
     case "item/completed": {
-      const item = translateCodexItem(
+      const translation = translateCodexItem(
         handledEvent.params.item,
         handledEvent.method,
       );
-      if (!item) {
+      if (translation.kind === "ignored") {
+        return [];
+      }
+      if (translation.kind === "unhandled") {
         return buildUnhandledCodexEvent({
           rawEvent,
           rawType: handledEvent.method,
@@ -407,7 +556,7 @@ export function translateCodexEvent(
           threadId: handledEvent.params.threadId,
           providerThreadId: handledEvent.params.threadId,
           turnId: handledEvent.params.turnId,
-          item,
+          item: translation.item,
         },
       ];
     }

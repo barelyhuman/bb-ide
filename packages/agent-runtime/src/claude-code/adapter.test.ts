@@ -1098,7 +1098,7 @@ describe("claude-code provider adapter", () => {
     );
   });
 
-  it("translateEvent maps WebSearch and WebFetch tool uses into webSearch items", () => {
+  it("translateEvent maps WebSearch and WebFetch tool uses into web items", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
     const events = adapter.translateEvent({
@@ -1129,7 +1129,8 @@ describe("claude-code provider adapter", () => {
         item: expect.objectContaining({
           type: "webSearch",
           id: "tool-search-1",
-          query: "react suspense",
+          queries: ["react suspense"],
+          resultText: null,
         }),
       }),
     );
@@ -1137,16 +1138,18 @@ describe("claude-code provider adapter", () => {
       expect.objectContaining({
         type: "item/started",
         item: expect.objectContaining({
-          type: "webSearch",
+          type: "webFetch",
           id: "tool-fetch-1",
-          query: "https://example.com",
-          action: "fetch",
+          url: "https://example.com",
+          prompt: null,
+          pattern: null,
+          resultText: null,
         }),
       }),
     );
   });
 
-  it("translateEvent preserves completed WebSearch output text", () => {
+  it("translateEvent preserves completed WebSearch result text", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
     adapter.translateEvent({
@@ -1187,8 +1190,61 @@ describe("claude-code provider adapter", () => {
         item: expect.objectContaining({
           type: "webSearch",
           id: "tool-search-1",
-          query: "react suspense",
-          outputText: "Found the Suspense docs",
+          queries: ["react suspense"],
+          resultText: "Found the Suspense docs",
+        }),
+      }),
+    );
+  });
+
+  it("translateEvent preserves completed WebFetch result text and prompt", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    adapter.translateEvent({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "tool-fetch-1",
+            name: "WebFetch",
+            input: {
+              url: "https://example.com",
+              prompt: "page title",
+            },
+          },
+        ],
+      },
+      session_id: "sess-1",
+    });
+
+    const events = adapter.translateEvent({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "tool-fetch-1",
+            content: "Example Domain",
+            is_error: false,
+          },
+        ],
+      },
+      session_id: "sess-1",
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: "item/completed",
+        item: expect.objectContaining({
+          type: "webFetch",
+          id: "tool-fetch-1",
+          url: "https://example.com",
+          prompt: "page title",
+          pattern: null,
+          resultText: "Example Domain",
         }),
       }),
     );

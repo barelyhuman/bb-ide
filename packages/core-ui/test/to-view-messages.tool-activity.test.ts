@@ -1406,8 +1406,8 @@ describe("toViewMessages tool activity", () => {
           item: {
             type: "webSearch",
             id: "web-1",
-            query: "",
-            action: "other",
+            queries: ["react suspense"],
+            resultText: null,
           },
         },
         createdAt: 1,
@@ -1423,9 +1423,8 @@ describe("toViewMessages tool activity", () => {
           item: {
             type: "webSearch",
             id: "web-1",
-            query: "react suspense",
-            action: "search",
-            outputText: "Found the React Suspense docs",
+            queries: ["react suspense"],
+            resultText: "Found the React Suspense docs",
           },
         },
         createdAt: 2,
@@ -1442,8 +1441,8 @@ describe("toViewMessages tool activity", () => {
 
     expect(search).toBeDefined();
     expect(search?.status).toBe("completed");
-    expect(search?.query).toBe("react suspense");
-    expect(search?.output).toBe("Found the React Suspense docs");
+    expect(search?.queries).toEqual(["react suspense"]);
+    expect(search?.resultText).toBe("Found the React Suspense docs");
   });
 
   it("merges a completed web search into a flushed pending web-search cell", () => {
@@ -1459,8 +1458,8 @@ describe("toViewMessages tool activity", () => {
           item: {
             type: "webSearch",
             id: "web-1",
-            query: "",
-            action: "other",
+            queries: ["react suspense"],
+            resultText: null,
           },
         },
         createdAt: 1,
@@ -1492,9 +1491,8 @@ describe("toViewMessages tool activity", () => {
           item: {
             type: "webSearch",
             id: "web-1",
-            query: "react suspense",
-            action: "search",
-            outputText: "Found the React Suspense docs",
+            queries: ["react suspense"],
+            resultText: "Found the React Suspense docs",
           },
         },
         createdAt: 3,
@@ -1516,12 +1514,12 @@ describe("toViewMessages tool activity", () => {
       sourceSeqEnd: 3,
       createdAt: 3,
       status: "completed",
-      query: "react suspense",
-      output: "Found the React Suspense docs",
+      queries: ["react suspense"],
+      resultText: "Found the React Suspense docs",
     });
   });
 
-  it("preserves unknown provider web-search action types", () => {
+  it("projects item web fetch lifecycle as dedicated web-fetch cells", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-1",
@@ -1532,10 +1530,12 @@ describe("toViewMessages tool activity", () => {
           providerThreadId: "thread-1",
           turnId: "turn-1",
           item: {
-            type: "webSearch",
-            id: "web-2",
-            query: "new runtime action",
-            action: "providerCustomAction",
+            type: "webFetch",
+            id: "web-fetch-1",
+            url: "https://example.com",
+            prompt: "page title",
+            pattern: null,
+            resultText: "Example Domain",
           },
         },
         createdAt: 1,
@@ -1545,13 +1545,85 @@ describe("toViewMessages tool activity", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "idle",
     });
-    const search = projected.find(
-      (message): message is Extract<ViewMessage, { kind: "web-search" }> =>
-        message.kind === "web-search",
+    const fetch = projected.find(
+      (message): message is Extract<ViewMessage, { kind: "web-fetch" }> =>
+        message.kind === "web-fetch",
     );
 
-    expect(search).toBeDefined();
-    expect(search?.action).toBe("providerCustomAction");
+    expect(fetch).toBeDefined();
+    expect(fetch).toMatchObject({
+      url: "https://example.com",
+      prompt: "page title",
+      pattern: null,
+      resultText: "Example Domain",
+    });
+  });
+
+  it("interrupts mismatched pending web rows before projecting a new web activity kind", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          providerThreadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "webSearch",
+            id: "web-shared-1",
+            queries: ["react suspense"],
+            resultText: null,
+          },
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          providerThreadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "webFetch",
+            id: "web-shared-1",
+            url: "https://example.com",
+            prompt: null,
+            pattern: null,
+            resultText: "Example Domain",
+          },
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "idle",
+    });
+    const webMessages = projected.filter(
+      (
+        message,
+      ): message is Extract<ViewMessage, { kind: "web-search" | "web-fetch" }> =>
+        message.kind === "web-search" || message.kind === "web-fetch",
+    );
+
+    expect(webMessages).toHaveLength(2);
+    expect(webMessages).toMatchObject([
+      {
+        kind: "web-search",
+        callId: "web-shared-1",
+        status: "interrupted",
+        queries: ["react suspense"],
+      },
+      {
+        kind: "web-fetch",
+        callId: "web-shared-1",
+        status: "completed",
+        url: "https://example.com",
+      },
+    ]);
   });
 
   it("merges file-change lifecycle with output delta details", () => {

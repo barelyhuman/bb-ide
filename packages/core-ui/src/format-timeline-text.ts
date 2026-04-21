@@ -13,6 +13,7 @@ import type {
   ViewToolCallMessage,
   ViewToolExploringMessage,
   ViewUserMessage,
+  ViewWebFetchMessage,
   ViewWebSearchMessage,
 } from "@bb/domain";
 import { durationToCompactString } from "./format-helpers.js";
@@ -332,17 +333,37 @@ function formatWebSearch(
   color: boolean,
 ): string {
   const lines: string[] = [];
+  const query = msg.queries[0] ?? "web search";
   const lifecycleLabel = formatLifecycleLabel(
     getTimelineDisplayStatus({
       status: msg.status,
     }),
     color,
   );
-  lines.push(separator("Web Search", color));
-  const query = msg.query ?? msg.action ?? "";
+  lines.push(separator(`Searched ${query}`, color));
   lines.push(`  ${lifecycleLabel} ${cyan(query, color)}`);
-  if (verbose && msg.output) {
-    lines.push(dim(`  ${truncate(msg.output.trim(), 500)}`, color));
+  if (verbose && msg.resultText) {
+    lines.push(dim(`  ${truncate(msg.resultText.trim(), 500)}`, color));
+  }
+  return lines.join("\n");
+}
+
+function formatWebFetch(
+  msg: ViewWebFetchMessage,
+  verbose: boolean,
+  color: boolean,
+): string {
+  const lines: string[] = [];
+  const lifecycleLabel = formatLifecycleLabel(
+    getTimelineDisplayStatus({
+      status: msg.status,
+    }),
+    color,
+  );
+  lines.push(separator(`Fetched ${msg.url}`, color));
+  lines.push(`  ${lifecycleLabel} ${cyan(msg.url, color)}`);
+  if (verbose && msg.resultText) {
+    lines.push(dim(`  ${truncate(msg.resultText.trim(), 500)}`, color));
   }
   return lines.join("\n");
 }
@@ -465,6 +486,8 @@ function formatMessage(
       return formatFileEdit(msg, verbose, color);
     case "web-search":
       return formatWebSearch(msg, verbose, color);
+    case "web-fetch":
+      return formatWebFetch(msg, verbose, color);
     case "operation":
       return formatOperation(msg, verbose, color);
     case "permission-grant-lifecycle":

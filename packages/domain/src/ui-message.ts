@@ -136,9 +136,18 @@ export interface ViewToolCallMessage
 export interface ViewWebSearchMessage extends ViewMessageBase {
   kind: "web-search";
   callId: string;
-  query?: string;
-  action?: string;
-  output?: string;
+  queries: string[];
+  resultText: string | null;
+  status: Extract<ViewMessageStatus, "pending" | "completed" | "interrupted">;
+}
+
+export interface ViewWebFetchMessage extends ViewMessageBase {
+  kind: "web-fetch";
+  callId: string;
+  url: string;
+  prompt: string | null;
+  pattern: string | null;
+  resultText: string | null;
   status: Extract<ViewMessageStatus, "pending" | "completed" | "interrupted">;
 }
 
@@ -319,6 +328,7 @@ export type ViewMessage =
   | ViewToolExploringMessage
   | ViewToolCallMessage
   | ViewWebSearchMessage
+  | ViewWebFetchMessage
   | ViewFileEditMessage
   | ViewOperationMessage
   | ViewPermissionGrantLifecycleMessage

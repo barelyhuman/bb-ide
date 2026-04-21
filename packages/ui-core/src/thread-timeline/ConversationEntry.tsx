@@ -15,7 +15,7 @@ import { TasksRow } from "./rows/TasksRow.js";
 import { ToolCallRow } from "./rows/ToolCallRow.js";
 import { ToolExploringRow } from "./rows/ToolExploringRow.js";
 import { UserMessageRow } from "./rows/UserMessageRow.js";
-import { WebSearchRow } from "./rows/WebSearchRow.js";
+import { WebFetchRow, WebSearchRow } from "./rows/WebSearchRow.js";
 import type {
   ThreadTimelineRenderOptions,
   ThreadTimelineTheme,
@@ -77,6 +77,13 @@ function ConversationEntryComponent({
     case "web-search":
       return (
         <WebSearchRow
+          message={message}
+          preferOngoingLabels={preferOngoingLabels}
+        />
+      );
+    case "web-fetch":
+      return (
+        <WebFetchRow
           message={message}
           preferOngoingLabels={preferOngoingLabels}
         />

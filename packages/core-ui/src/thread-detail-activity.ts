@@ -20,6 +20,7 @@ function isActivityMessage(message: ViewMessage): boolean {
     message.kind === "tool-exploring" ||
     message.kind === "tasks" ||
     message.kind === "web-search" ||
+    message.kind === "web-fetch" ||
     message.kind === "permission-grant-lifecycle" ||
     message.kind === "error" ||
     (message.kind === "operation" && isProvisioningActivityOperation(message))
@@ -37,6 +38,7 @@ function shouldPreferOngoingLabelsForMessage(message: ViewMessage): boolean {
     case "delegation":
     case "tool-exploring":
     case "web-search":
+    case "web-fetch":
     case "file-edit":
     case "permission-grant-lifecycle":
       return message.status === "completed";

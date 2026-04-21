@@ -319,6 +319,7 @@ export {
   providerEventTypeValues,
   providerRawEventSchema,
   systemEventSchema,
+  threadEventContextWindowUsageSchema,
   threadEventFileChangeKindSchema,
   threadEventFileChangeSchema,
   threadEventItemSchema,
@@ -326,14 +327,15 @@ export {
   threadEventPlanStepSchema,
   threadEventPlanStepStatusSchema,
   threadEventSchema,
-  threadEventContextWindowUsageSchema,
-  threadEventTypeSchema,
-  threadEventTypeValues,
   threadEventTokenUsageBreakdownSchema,
   threadEventTokenUsageSchema,
   threadEventTurnStatusSchema,
+  threadEventTypeSchema,
+  threadEventTypeValues,
   threadEventUserContentSchema,
   threadEventWarningCategorySchema,
+  threadEventWebFetchItemSchema,
+  threadEventWebSearchItemSchema,
 } from "./provider-event.js";
 export type {
   ProviderUnhandledEvent,
@@ -357,6 +359,8 @@ export type {
   ThreadEventType,
   ThreadEventUserContent,
   ThreadEventWarningCategory,
+  ThreadEventWebFetchItem,
+  ThreadEventWebSearchItem,
   ToolCallProgressEvent,
 } from "./provider-event.js";
 
@@ -421,6 +425,7 @@ export type {
   ViewToolExploringMessage,
   ViewToolParsedIntent,
   ViewUserMessage,
+  ViewWebFetchMessage,
   ViewWebSearchMessage,
 } from "./ui-message.js";
 

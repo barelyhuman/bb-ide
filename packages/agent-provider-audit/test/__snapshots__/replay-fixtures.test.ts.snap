@@ -321,7 +321,8 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "tool-call": 5,
       "tool-exploring": 17,
       "user": 3,
-      "web-search": 8,
+      "web-fetch": 5,
+      "web-search": 3,
     },
   },
   {
@@ -2768,7 +2769,7 @@ I want to make Excalidraw's eyedropper experience friendlier on browsers with un
     □ Recommend changes to improve cross-browser experience
   ── Explored 1 search ───────────────────────────────────────
     Search eyeDropper|EyeDropper|eyedropper|EYEDROPPER
-  ── Web Search ──────────────────────────────────────────────
+  ── Searched EyeDropper API browser compatibility support 2026
     [completed] EyeDropper API browser compatibility support 2026
     Web search results for query: "EyeDropper API browser compatibility support 2026"
 
@@ -2779,7 +2780,7 @@ I want to make Excalidraw's eyedropper experience friendlier on browsers with un
     Read /home/user/excalidraw/packages/excalidraw/components/EyeDropper.tsx
     Read /home/user/excalidraw/packages/excalidraw/components/ColorPicker/ColorPicker.tsx
     Read /home/user/excalidraw/packages/excalidraw/components/ColorPicker/Picker.tsx
-  ── Web Search ──────────────────────────────────────────────
+  ── Fetched https://developer.mozilla.org/en-US/docs/Web/API/EyeDropper_API
     [completed] https://developer.mozilla.org/en-US/docs/Web/API/EyeDropper_API
     # EyeDropper API Browser Compatibility
 
@@ -2790,7 +2791,7 @@ I want to make Excalidraw's eyedropper experience friendlier on browsers with un
   The page does provide these important context clues:
 
   1. **Limited Availability Status**: The feature is marked as "**Limited availability**" and states: *"This feature is no...
-  ── Web Search ──────────────────────────────────────────────
+  ── Fetched https://caniuse.com/mdn-api_eyedropper ──────────
     [completed] https://caniuse.com/mdn-api_eyedropper
     # EyeDropper API Browser Compatibility
 
@@ -2846,15 +2847,15 @@ I want to make Excalidraw's eyedropper experience friendlier on browsers with un
   ── Explored 2 searches ─────────────────────────────────────
     Search eyeDropper|eye_dropper|eyedropper in $EXCALIDRAW_REPO/packages/excalidraw/locales/en.json
     Search eyeDropper|EyeDropper in $EXCALIDRAW_REPO/packages/excalidraw/components/HelpDialog.tsx
-  ── Web Search ──────────────────────────────────────────────
+  ── Fetched https://github.com/nicolo-ribaudo/tc39-proposal-eyedropper-api
     [completed] https://github.com/nicolo-ribaudo/tc39-proposal-eyedropper-api
     Request failed with status code 404
-  ── Web Search ──────────────────────────────────────────────
+  ── Searched Firefox EyeDropper API support intent implement 2025 2026
     [completed] Firefox EyeDropper API support intent implement 2025 2026
     Web search results for query: "Firefox EyeDropper API support intent implement 2025 2026"
 
   Links: [{"title":"EyeDropper API - Web APIs | MDN","url":"https://developer.mozilla.org/en-US/docs/Web/API/EyeDropper_API"},{"title":"EyeDropper API | Can I use... Support tables for HTML5, CSS3, etc","url":"https://caniuse.com/mdn-api_eyedropper"},{"title":"1728527 - Implement JavaScript EyeDropper API","url":"https://bugzilla.mozilla.org/show_bug.cgi?id=1728527"},{"title":"EyeDropper - Web APIs | MDN"...
-  ── Web Search ──────────────────────────────────────────────
+  ── Fetched https://bugzilla.mozilla.org/show_bug.cgi?id=1728527
     [completed] https://bugzilla.mozilla.org/show_bug.cgi?id=1728527
     # Firefox EyeDropper API Bug Status
 
@@ -2869,12 +2870,12 @@ I want to make Excalidraw's eyedropper experience friendlier on browsers with un
 
   **Key Blockers:**
   - A standards-position decision from Mozill...
-  ── Web Search ──────────────────────────────────────────────
+  ── Searched Safari WebKit EyeDropper API support status intent 2025 2026
     [completed] Safari WebKit EyeDropper API support status intent 2025 2026
     Web search results for query: "Safari WebKit EyeDropper API support status intent 2025 2026"
 
   Links: [{"title":"Eyedropper API · Issue #29 · WebKit/standards-positions","url":"https://github.com/WebKit/standards-positions/issues/29"},{"title":"EyeDropper API | Can I use... Support tables for HTML5, CSS3, etc","url":"https://caniuse.com/mdn-api_eyedropper"},{"title":"Add Eyedropper API to caniuse · Issue #6049 · Fyrd/caniuse","url":"https://github.com/Fyrd/caniuse/issues/6049"},{"title":"22975...
-  ── Web Search ──────────────────────────────────────────────
+  ── Fetched https://github.com/WebKit/standards-positions/issues/29
     [completed] https://github.com/WebKit/standards-positions/issues/29
     # WebKit/Apple's Position on EyeDropper API
 

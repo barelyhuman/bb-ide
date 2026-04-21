@@ -13,7 +13,7 @@ import {
   parseToolCallLifecycleEvent,
 } from "./exec-lifecycle.js";
 import { parseFileEditFromItemEvent } from "./file-edit-parsing.js";
-import { parseWebSearchLifecycleEvent } from "./web-search-lifecycle.js";
+import { parseWebActivityLifecycleEvent } from "./web-activity-lifecycle.js";
 import {
   parseOperationMessage,
   finalizeOperationMessage,
@@ -64,8 +64,8 @@ import {
   onExecBegin,
   onExecEnd,
   onExecOutput,
-  onWebSearchBegin,
-  onWebSearchEnd,
+  onWebActivityBegin,
+  onWebActivityEnd,
   type ToolActivityState,
 } from "./tool-activity-projection.js";
 import {
@@ -755,26 +755,26 @@ function buildFlatViewMessages(
       continue;
     }
 
-    const webSearchEvent = parseWebSearchLifecycleEvent(
+    const webActivityEvent = parseWebActivityLifecycleEvent(
       decoded,
       eventParentToolCallId,
     );
-    if (webSearchEvent) {
-      if (webSearchEvent.kind === "begin") {
-        onWebSearchBegin(
+    if (webActivityEvent) {
+      if (webActivityEvent.kind === "begin") {
+        onWebActivityBegin(
           state,
           meta,
           decoded.threadId,
           eventTurnId,
-          webSearchEvent,
+          webActivityEvent,
         );
       } else {
-        onWebSearchEnd(
+        onWebActivityEnd(
           state,
           meta,
           decoded.threadId,
           eventTurnId,
-          webSearchEvent,
+          webActivityEvent,
         );
       }
       continue;

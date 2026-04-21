@@ -172,13 +172,22 @@ interface CommandOutputDeltaArgs extends ProviderTurnEventOptions {
 }
 
 interface WebSearchCompletedArgs extends ProviderTurnEventOptions {
-  action?: string;
   itemId?: string;
-  outputText?: string;
-  query: string;
+  queries: string[];
+  resultText?: string | null;
 }
 
 type WebSearchStartedArgs = WebSearchCompletedArgs;
+
+interface WebFetchCompletedArgs extends ProviderTurnEventOptions {
+  itemId?: string;
+  pattern?: string | null;
+  prompt?: string | null;
+  resultText?: string | null;
+  url: string;
+}
+
+type WebFetchStartedArgs = WebFetchCompletedArgs;
 
 interface FileChangeCompletedArgs extends ProviderTurnEventOptions {
   approvalStatus?: "waiting_for_approval" | "approved" | "denied" | null;
@@ -354,6 +363,12 @@ export interface TimelineEventFactory {
   ): ThreadEventRowOfType<"item/completed">;
   webSearchStarted(
     args: WebSearchStartedArgs,
+  ): ThreadEventRowOfType<"item/started">;
+  webFetchCompleted(
+    args: WebFetchCompletedArgs,
+  ): ThreadEventRowOfType<"item/completed">;
+  webFetchStarted(
+    args: WebFetchStartedArgs,
   ): ThreadEventRowOfType<"item/started">;
   warning(args?: WarningArgs): ThreadEventRowOfType<"warning">;
 }
@@ -899,9 +914,8 @@ export function createTimelineEventFactory(
           item: {
             type: "webSearch",
             id: args.itemId ?? `web-${base.seq}`,
-            query: args.query,
-            action: args.action,
-            outputText: args.outputText,
+            queries: args.queries,
+            resultText: args.resultText ?? null,
           },
         },
       };
@@ -916,9 +930,44 @@ export function createTimelineEventFactory(
           item: {
             type: "webSearch",
             id: args.itemId ?? `web-${base.seq}`,
-            query: args.query,
-            action: args.action,
-            outputText: args.outputText,
+            queries: args.queries,
+            resultText: args.resultText ?? null,
+          },
+        },
+      };
+    },
+    webFetchStarted(args) {
+      const base = nextRowBase("web-fetch-started", args);
+      return {
+        ...base,
+        type: "item/started",
+        data: {
+          ...providerFields(args),
+          item: {
+            type: "webFetch",
+            id: args.itemId ?? `web-fetch-${base.seq}`,
+            url: args.url,
+            prompt: args.prompt ?? null,
+            pattern: args.pattern ?? null,
+            resultText: args.resultText ?? null,
+          },
+        },
+      };
+    },
+    webFetchCompleted(args) {
+      const base = nextRowBase("web-fetch-completed", args);
+      return {
+        ...base,
+        type: "item/completed",
+        data: {
+          ...providerFields(args),
+          item: {
+            type: "webFetch",
+            id: args.itemId ?? `web-fetch-${base.seq}`,
+            url: args.url,
+            prompt: args.prompt ?? null,
+            pattern: args.pattern ?? null,
+            resultText: args.resultText ?? null,
           },
         },
       };

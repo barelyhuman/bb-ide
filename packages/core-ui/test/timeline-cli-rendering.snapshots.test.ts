@@ -281,9 +281,8 @@ describe("timeline CLI rendering snapshots", () => {
       }),
       event.webSearchCompleted({
         itemId: "web-1",
-        query: "React suspense docs",
-        action: "search",
-        outputText: "Found the React Suspense docs",
+        queries: ["React suspense docs"],
+        resultText: "Found the React Suspense docs",
       }),
       event.fileChangeCompleted({
         itemId: "edit-1",
@@ -313,7 +312,7 @@ describe("timeline CLI rendering snapshots", () => {
         ◼ Patch the projection
         □ Run focused tests
 
-      ── Web Search ──────────────────────────────────────────────
+      ── Searched React suspense docs ────────────────────────────
         [completed] React suspense docs
         Found the React Suspense docs
 
