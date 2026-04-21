@@ -31,75 +31,16 @@ import {
 } from "../../services/lib/entity-lookup.js";
 import { sendQueuedDraft } from "../../services/threads/queued-drafts.js";
 import {
-  queueTurnDuringReprovision,
-  requireReadyThreadEnvironment,
-} from "../../services/threads/thread-turn-dispatch.js";
+  ensureThreadIsNotAwaitingUserInteraction,
+  ensureThreadIsWritable,
+  sendThreadMessage,
+} from "../../services/threads/thread-send.js";
 import {
   pruneThreadEventHistoryBestEffort,
   resetActiveThreadEventPruningState,
 } from "../../services/system/event-pruning.js";
-import {
-  buildExecutionOptions,
-  queueTurnSubmitCommand,
-} from "../../services/threads/thread-commands.js";
-import {
-  ensureThreadCanQueueStartRequest,
-  queueReadyThreadTurnCommand,
-  requestThreadStopIfNeeded,
-} from "../../services/threads/thread-lifecycle.js";
-import {
-  appendClientTurnEvent,
-  getActiveTurnId,
-} from "../../services/threads/thread-events.js";
-import { resolvePermissionEscalation } from "../../services/threads/thread-runtime-config.js";
-import { tryTransition } from "../../services/threads/thread-transitions.js";
-import { demoteEnvironmentIfPromoted } from "../../services/environments/environment-promotion.js";
-
-function ensureThreadIsWritable(thread: Thread): void {
-  if (thread.archivedAt) {
-    throw new ApiError(409, "invalid_request", "Thread is archived");
-  }
-  if (thread.stopRequestedAt !== null) {
-    throw new ApiError(409, "invalid_request", "Thread is stopping");
-  }
-}
-
-function ensureThreadIsNotAwaitingUserInteraction(
-  deps: Pick<AppDeps, "pendingInteractions">,
-  threadId: string,
-): void {
-  if (!deps.pendingInteractions.hasPendingThreadInteraction(threadId)) {
-    return;
-  }
-
-  throw new ApiError(
-    409,
-    "awaiting_user_interaction",
-    "Thread is awaiting user interaction. Resolve the pending interaction before sending another prompt.",
-  );
-}
-
-function resolveSendMode(
-  threadStatus: string,
-  requestedMode: "auto" | "start" | "steer",
-): "start" | "auto" | "steer" {
-  if (requestedMode === "start") {
-    if (threadStatus === "active") {
-      throw new ApiError(409, "invalid_request", "Thread is already active");
-    }
-    return "start";
-  }
-  if (requestedMode === "steer") {
-    if (threadStatus !== "active") {
-      throw new ApiError(409, "invalid_request", "Thread is not active");
-    }
-    return "steer";
-  }
-  if (threadStatus === "active") {
-    return "auto";
-  }
-  return "start";
-}
+import { buildExecutionOptions } from "../../services/threads/thread-commands.js";
+import { requestThreadStopIfNeeded } from "../../services/threads/thread-lifecycle.js";
 
 async function validateArchiveCleanupRequest(
   deps: AppDeps,
@@ -135,103 +76,12 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
         deps.db,
         context.req.param("id"),
       );
-      ensureThreadIsWritable(thread);
-      ensureThreadIsNotAwaitingUserInteraction(deps, thread.id);
-      const mode = resolveSendMode(thread.status, payload.mode);
-      if (mode === "start") {
-        ensureThreadCanQueueStartRequest(deps, thread);
-      }
-      const expectedSteerTurnId =
-        mode === "auto" || mode === "steer"
-          ? getActiveTurnId(deps, thread.id)
-          : null;
-      const execution = await buildExecutionOptions(
-        deps,
+      await sendThreadMessage(deps, {
+        environment,
         payload,
-        {
-          threadId: thread.id,
-        },
-        "client/turn/requested",
-      );
-      const permissionEscalation = resolvePermissionEscalation({
         thread,
-        initiator: "user",
+        trigger: "user",
       });
-
-      if (
-        await queueTurnDuringReprovision({
-          deps,
-          environment,
-          execution,
-          initiator: "user",
-          input: payload.input,
-          thread,
-        })
-      ) {
-        return context.json({ ok: true });
-      }
-      const readyEnvironment = requireReadyThreadEnvironment(environment);
-      if (mode === "start") {
-        await demoteEnvironmentIfPromoted(deps, {
-          environment: readyEnvironment,
-        });
-      }
-
-      const eventSequence = appendClientTurnEvent(deps, {
-        threadId: thread.id,
-        environmentId: readyEnvironment.id,
-        type: "client/turn/requested",
-        input: payload.input,
-        execution,
-        initiator: "user",
-        requestMethod: "turn/start",
-        source: "tell",
-        target:
-          mode === "start"
-            ? { kind: "new-turn" }
-            : {
-                kind: mode,
-                expectedTurnId: expectedSteerTurnId,
-              },
-      });
-
-      if (mode === "start") {
-        const queuedMode = await queueReadyThreadTurnCommand(deps, {
-          thread,
-          input: payload.input,
-          eventSequence,
-          execution,
-          permissionEscalation,
-          environment: {
-            id: readyEnvironment.id,
-            hostId: readyEnvironment.hostId,
-            path: readyEnvironment.path,
-            workspaceProvisionType: readyEnvironment.workspaceProvisionType,
-          },
-        });
-        if (queuedMode === "turn.submit") {
-          tryTransition(deps.db, deps.hub, thread.id, "active");
-        }
-      } else {
-        await queueTurnSubmitCommand(deps, {
-          thread,
-          input: payload.input,
-          eventSequence,
-          execution,
-          permissionEscalation,
-          target: {
-            mode,
-            expectedTurnId: expectedSteerTurnId,
-          },
-          environment: {
-            id: readyEnvironment.id,
-            hostId: readyEnvironment.hostId,
-            path: readyEnvironment.path,
-            workspaceProvisionType: readyEnvironment.workspaceProvisionType,
-          },
-        });
-      }
-
       return context.json({ ok: true });
     },
   );

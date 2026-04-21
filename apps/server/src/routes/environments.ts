@@ -1,5 +1,4 @@
 import { updateEnvironmentMetadata } from "@bb/db";
-import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import {
   environmentActionRequestSchema,
   environmentDiffQuerySchema,
@@ -11,7 +10,11 @@ import {
 } from "@bb/server-contract";
 import type { Hono } from "hono";
 import type { AppDeps } from "../types.js";
-import { COMMAND_TIMEOUT_MS } from "../constants.js";
+import {
+  COMMAND_TIMEOUT_MS,
+  WORKSPACE_DIFF_MAX_DIFF_BYTES,
+  WORKSPACE_DIFF_MAX_FILE_LIST_BYTES,
+} from "../constants.js";
 import { ApiError } from "../errors.js";
 import {
   requireEnvironment,
@@ -101,7 +104,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       if (!environment.isGitRepo) {
         return context.json({ workspace: null });
       }
-      const rawResult = await queueCommandAndWait(deps, {
+      const result = await queueCommandAndWait(deps, {
         hostId: environment.hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: {
@@ -116,10 +119,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
             : {}),
         },
       });
-      const result =
-        hostDaemonCommandResultSchemaByType["workspace.status"].parse(
-          rawResult,
-        );
       return context.json({ workspace: result.workspaceStatus });
     },
   );
@@ -139,7 +138,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         deps.db,
         context.req.param("id"),
       );
-      const rawResult = await queueCommandAndWait(deps, {
+      const result = await queueCommandAndWait(deps, {
         hostId: environment.hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: {
@@ -150,12 +149,11 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
             workspaceProvisionType: environment.workspaceProvisionType,
           },
           target: toWorkspaceDiffTarget(query),
+          maxDiffBytes: WORKSPACE_DIFF_MAX_DIFF_BYTES,
+          maxFileListBytes: WORKSPACE_DIFF_MAX_FILE_LIST_BYTES,
         },
       });
-      return context.json(
-        hostDaemonCommandResultSchemaByType["workspace.diff"].parse(rawResult)
-          .diff,
-      );
+      return context.json(result.diff);
     },
   );
 
@@ -164,7 +162,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       deps.db,
       context.req.param("id"),
     );
-    const rawResult = await queueCommandAndWait(deps, {
+    const result = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
       command: {
@@ -176,11 +174,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
         },
       },
     });
-    return context.json(
-      hostDaemonCommandResultSchemaByType["workspace.list_branches"].parse(
-        rawResult,
-      ).branches,
-    );
+    return context.json(result.branches);
   });
 
   post(
@@ -199,7 +193,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
             workspaceProvisionType: environment.workspaceProvisionType,
           };
 
-          const [statusRaw, diffRaw] = await Promise.all([
+          const [statusResult, diffResult] = await Promise.all([
             queueCommandAndWait(deps, {
               hostId: environment.hostId,
               timeoutMs: COMMAND_TIMEOUT_MS,
@@ -222,10 +216,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
               },
             }),
           ]);
-          const statusResult =
-            hostDaemonCommandResultSchemaByType["workspace.status"].parse(
-              statusRaw,
-            );
           if (!statusResult.workspaceStatus.workingTree.hasUncommittedChanges) {
             throw new ApiError(
               409,
@@ -233,10 +223,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
               "No uncommitted changes to commit",
             );
           }
-          const diffResult =
-            hostDaemonCommandResultSchemaByType["workspace.diff"].parse(
-              diffRaw,
-            );
 
           const aiMessage = await generateCommitMessage(deps, {
             diffDescription: "uncommitted changes",
@@ -246,7 +232,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           });
           const commitMessage = aiMessage ?? COMMIT_FALLBACK_MESSAGE;
 
-          const rawResult = await queueCommandAndWait(deps, {
+          const result = await queueCommandAndWait(deps, {
             hostId: environment.hostId,
             timeoutMs: COMMAND_TIMEOUT_MS,
             command: {
@@ -256,10 +242,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
               message: commitMessage,
             },
           });
-          const result =
-            hostDaemonCommandResultSchemaByType["workspace.commit"].parse(
-              rawResult,
-            );
           return context.json({
             ok: true,
             action: "commit",
@@ -275,7 +257,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           };
           const targetBranch = payload.options.mergeBaseBranch;
 
-          const statusRaw = await queueCommandAndWait(deps, {
+          const statusResult = await queueCommandAndWait(deps, {
             hostId: environment.hostId,
             timeoutMs: COMMAND_TIMEOUT_MS,
             command: {
@@ -284,10 +266,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
               workspaceContext,
             },
           });
-          const statusResult =
-            hostDaemonCommandResultSchemaByType["workspace.status"].parse(
-              statusRaw,
-            );
 
           const currentBranch =
             statusResult.workspaceStatus.branch.currentBranch;
@@ -312,7 +290,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
             });
           }
 
-          const diffRaw = await queueCommandAndWait(deps, {
+          const diffResult = await queueCommandAndWait(deps, {
             hostId: environment.hostId,
             timeoutMs: COMMAND_TIMEOUT_MS,
             command: {
@@ -327,10 +305,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
               maxFileListBytes: AI_MAX_FILE_LIST_BYTES,
             },
           });
-          const diffResult =
-            hostDaemonCommandResultSchemaByType["workspace.diff"].parse(
-              diffRaw,
-            );
 
           const aiMessage = await generateCommitMessage(deps, {
             diffDescription: `squash merge of ${currentBranch} into ${targetBranch}`,
@@ -340,7 +314,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
           });
           const commitMessage = aiMessage ?? SQUASH_MERGE_FALLBACK_MESSAGE;
 
-          const rawResult = await queueCommandAndWait(deps, {
+          const result = await queueCommandAndWait(deps, {
             hostId: environment.hostId,
             timeoutMs: COMMAND_TIMEOUT_MS,
             command: {
@@ -351,10 +325,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
               commitMessage,
             },
           });
-          const result =
-            hostDaemonCommandResultSchemaByType["workspace.squash_merge"].parse(
-              rawResult,
-            );
           return context.json({
             ok: true,
             action: "squash_merge",

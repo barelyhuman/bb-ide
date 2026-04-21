@@ -10,7 +10,7 @@ import {
   countTurnEvents,
   createRealThread,
   expectNonEmptyOutput,
-  getExecutionOptions,
+  resolveExecutionOptions,
   REAL_PROVIDER_IDS,
   sendAndWaitForIdle,
   sendLongRunningTurnAndWaitStarted,
@@ -33,6 +33,10 @@ describe("real provider control integration", () => {
         });
 
         try {
+          const execution = await resolveExecutionOptions({
+            harness,
+            providerId,
+          });
           const activeTurn = await sendLongRunningTurnAndWaitStarted({
             providerId,
             harness,
@@ -48,7 +52,7 @@ describe("real provider control integration", () => {
           );
           const steerText = `Steer acknowledgement ${providerId}`;
           await sendTextMessage(harness.api, thread.id, {
-            execution: getExecutionOptions(providerId),
+            execution,
             mode: "steer",
             text: steerText,
           });

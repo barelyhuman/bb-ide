@@ -177,12 +177,9 @@ export class PiSdkSession {
       sessionOptions.resourceLoader = resourceLoader;
     }
 
-    // Resolve model if specified
-    if (this.options.model) {
-      const model = resolveModel(this.options.model);
-      if (model) {
-        sessionOptions.model = model;
-      }
+    const configuredModel = resolveConfiguredModel(this.options.model);
+    if (configuredModel) {
+      sessionOptions.model = configuredModel;
     }
     if (this.options.thinkingLevel) {
       sessionOptions.thinkingLevel = this.options.thinkingLevel;
@@ -195,20 +192,16 @@ export class PiSdkSession {
     });
     sessionOptions.customTools = customTools;
 
-    try {
-      const { session } = await createAgentSession(sessionOptions);
-      this.session = session;
+    const { session } = await createAgentSession(sessionOptions);
+    this.session = session;
 
-      this.ensureCustomToolsActive();
+    this.ensureCustomToolsActive();
 
-      // Subscribe to session events
-      this.unsubscribe = session.subscribe((event: AgentSessionEvent) => {
-        this.trackProcessingState(event);
-        this.onEvent(event);
-      });
-    } catch (error) {
-      this.onDone(error);
-    }
+    // Subscribe to session events
+    this.unsubscribe = session.subscribe((event: AgentSessionEvent) => {
+      this.trackProcessingState(event);
+      this.onEvent(event);
+    });
   }
 
   async prompt(text: string, images?: ImageContent[]): Promise<void> {
@@ -334,6 +327,20 @@ export class PiSdkSession {
  * Resolve a model string like "anthropic/claude-sonnet-4-20250514" to a
  * Pi Model object. Returns undefined if the model can't be resolved.
  */
+function resolveConfiguredModel(
+  modelStr: string | undefined,
+): ReturnType<typeof getModel> | undefined {
+  if (!modelStr) {
+    return undefined;
+  }
+
+  const model = resolveModel(modelStr);
+  if (!model) {
+    throw new Error(`Failed to resolve Pi model "${modelStr}"`);
+  }
+  return model;
+}
+
 function resolveModel(
   modelStr: string,
 ): ReturnType<typeof getModel> | undefined {

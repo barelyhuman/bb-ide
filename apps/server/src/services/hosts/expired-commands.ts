@@ -4,7 +4,7 @@ import {
   type HostDaemonCommandResultReport,
 } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../../types.js";
-import { handleCommandResultSideEffects } from "../../internal/command-result-handlers.js";
+import { handleCommandResultSideEffects } from "../../internal/command-result-owners.js";
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
 
 const EXPIRED_COMMAND_ERROR_CODE = "command_expired";
@@ -29,6 +29,7 @@ type ExpiredCommandDeps = Pick<
   | "db"
   | "hostLifecycle"
   | "hub"
+  | "lifecycleDedupers"
   | "logger"
   | "machineAuth"
   | "pendingInteractions"
@@ -93,7 +94,6 @@ export async function handleExpiredCommands(
 
     deps.hub.recordCommandResult(commandId, {
       commandId,
-      completedAt,
       errorCode: EXPIRED_COMMAND_ERROR_CODE,
       errorMessage: EXPIRED_COMMAND_ERROR_MESSAGE,
       ok: false,

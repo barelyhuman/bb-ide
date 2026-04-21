@@ -16,6 +16,7 @@ import {
 } from "../../src/services/interactions/pending-interactions.js";
 import { createMachineAuthService } from "../../src/services/machine-auth.js";
 import { createSandboxEnvService } from "../../src/services/sandbox-env/service.js";
+import { createLifecycleDedupers } from "../../src/lifecycle-dedupers.js";
 import type { AppDeps, ServerRuntimeConfig } from "../../src/types.js";
 import type { NotificationHub } from "../../src/ws/hub.js";
 import { NotificationHub as NotificationHubImpl } from "../../src/ws/hub.js";
@@ -97,6 +98,7 @@ export async function createTestAppHarness(
   });
   pendingInteractions.start();
   const sandboxRegistry = createSandboxHostRegistry();
+  const lifecycleDedupers = createLifecycleDedupers();
   const machineAuth = await createMachineAuthService({
     dataDir,
     db,
@@ -148,6 +150,7 @@ export async function createTestAppHarness(
     db,
     hostLifecycle,
     hub,
+    lifecycleDedupers,
     logger: testLogger,
     machineAuth: testMachineAuth,
     sandboxEnv,

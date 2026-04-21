@@ -7,39 +7,18 @@ import type { HostDaemonCommandResultReport } from "@bb/host-daemon-contract";
 import {
   handleCommandResultSideEffects,
   type CommandResultSideEffectsDeps,
-} from "./command-result-handlers.js";
+} from "./command-result-owners.js";
+import type { CommandResultWaiterResponse } from "./command-result-response.js";
 import {
   buildCommandResultSideEffectFailureResponse,
   commandResultSideEffectFailureReason,
   errorDetail,
   failCommandResultSideEffects,
   failSettledCommandActiveSideEffects,
+  replaySettledCommandActiveSideEffects,
   settledCommandSideEffectFailureReason,
 } from "./command-result-side-effect-failures.js";
-
-type SuccessfulCommandResultReport = Extract<
-  HostDaemonCommandResultReport,
-  { ok: true }
->;
-type FailedCommandResultReport = Extract<
-  HostDaemonCommandResultReport,
-  { ok: false }
->;
-
-export type CommandResultWaiterResponse =
-  | {
-      commandId: string;
-      ok: true;
-      result: SuccessfulCommandResultReport["result"];
-      type: SuccessfulCommandResultReport["type"];
-    }
-  | {
-      commandId: string;
-      errorCode: FailedCommandResultReport["errorCode"];
-      errorMessage: string;
-      ok: false;
-      type: FailedCommandResultReport["type"];
-    };
+import { buildStoredCommandResultResponse } from "./stored-command-result-report.js";
 
 function buildCommandResultResponse(
   commandId: string,
@@ -84,19 +63,24 @@ export async function handleCommandResult(
   }
 
   if (command.state === "success" || command.state === "error") {
-    const failedActiveSideEffects = settledCommandMatchesReport(command, report)
-      ? await failSettledCommandActiveSideEffects(deps, command)
+    const reportMatchesCommand = settledCommandMatchesReport(command, report);
+    const replayedActiveSideEffects = reportMatchesCommand
+      ? await replaySettledCommandActiveSideEffects(deps, command)
       : false;
-    deps.hub.recordCommandResult(
-      command.id,
-      failedActiveSideEffects
-        ? buildCommandResultSideEffectFailureResponse({
-            commandId: command.id,
-            commandType: report.type,
-            failureReason: settledCommandSideEffectFailureReason(),
-          })
-        : buildCommandResultResponse(command.id, report),
-    );
+    const failedActiveSideEffects =
+      reportMatchesCommand && !replayedActiveSideEffects
+        ? await failSettledCommandActiveSideEffects(deps, command)
+        : false;
+    const settledResponse = failedActiveSideEffects
+      ? buildCommandResultSideEffectFailureResponse({
+          commandId: command.id,
+          commandType: report.type,
+          failureReason: settledCommandSideEffectFailureReason(),
+        })
+      : buildStoredCommandResultResponse(command);
+    if (settledResponse) {
+      deps.hub.recordCommandResult(command.id, settledResponse);
+    }
     return command;
   }
 

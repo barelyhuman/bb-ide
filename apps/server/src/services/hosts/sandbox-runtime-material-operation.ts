@@ -209,7 +209,6 @@ export function reconcileSandboxRuntimeMaterialAfterSessionOpen(
         "completed",
         "failed",
         "cancelled",
-        "fetched",
         "queued",
       ],
       payload: JSON.stringify(payload),

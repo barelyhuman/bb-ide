@@ -26,7 +26,6 @@ import {
   type ProjectResponse,
   type PublicApiSchema,
 } from "@bb/server-contract";
-import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import { renderTemplate } from "@bb/templates";
 import type { AppDeps } from "../types.js";
@@ -291,7 +290,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
         path: source.path,
         projectId: context.req.param("id"),
       });
-      const rawResult = await queueCommandAndWait(deps, {
+      const result = await queueCommandAndWait(deps, {
         hostId: source.hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: {
@@ -305,10 +304,6 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
           limit,
         },
       });
-      const result =
-        hostDaemonCommandResultSchemaByType["workspace.list_files"].parse(
-          rawResult,
-        );
       return context.json({ files: result.files, truncated: result.truncated });
     },
   );

@@ -39,28 +39,48 @@ const knownCommandTypes = new Set<string>(HOST_DAEMON_COMMAND_TYPES);
 const DEFAULT_COMMAND_FETCH_LIMIT = 100;
 const DEFAULT_COMMAND_FETCH_WAIT_MS = 0;
 
+interface JsonRecord {
+  readonly [key: string]: unknown;
+}
+
+interface RawCommandHeader {
+  commandId?: string;
+  type?: string;
+}
+
+interface ReportCommandErrorArgs {
+  commandId: string;
+  errorCode: string;
+  errorMessage: string;
+  type: string;
+}
+
+function isJsonRecord(value: unknown): value is JsonRecord {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function toJsonRecord(value: unknown): JsonRecord | null {
+  return isJsonRecord(value) ? value : null;
+}
+
 function parseRawCommandBatch(json: unknown): unknown[] {
-  if (
-    json != null &&
-    typeof json === "object" &&
-    "commands" in json &&
-    Array.isArray(json.commands)
-  ) {
-    return json.commands;
+  const record = toJsonRecord(json);
+  if (record && Array.isArray(record.commands)) {
+    return record.commands;
   }
   throw new Error("Invalid command batch structure: missing commands array");
 }
 
-function extractRawField<T>(obj: unknown, key: string): T | undefined {
-  if (obj != null && typeof obj === "object" && key in obj) {
-    return (obj as Record<string, unknown>)[key] as T;
+function readRawCommandHeader(rawCommand: unknown): RawCommandHeader {
+  const record = toJsonRecord(rawCommand);
+  if (!record) {
+    return {};
   }
-  return undefined;
-}
-
-function extractRawCommandType(rawCommand: unknown): string | undefined {
-  const command = extractRawField<unknown>(rawCommand, "command");
-  return extractRawField<string>(command, "type") ?? undefined;
+  const command = toJsonRecord(record.command);
+  return {
+    commandId: typeof record.id === "string" ? record.id : undefined,
+    type: command && typeof command.type === "string" ? command.type : undefined,
+  };
 }
 
 type FetchFn = typeof fetch;
@@ -187,19 +207,10 @@ export function createServerClient(
     return new Error(message);
   }
 
-  async function reportUnknownCommand(rawCommand: unknown): Promise<void> {
+  async function reportCommandError(
+    args: ReportCommandErrorArgs,
+  ): Promise<void> {
     try {
-      const commandId = extractRawField<string>(rawCommand, "id");
-      const rawType = extractRawCommandType(rawCommand) ?? "unknown";
-
-      if (!commandId) {
-        options.logger.warn(
-          { rawCommand },
-          "cannot report unknown command: missing id",
-        );
-        return;
-      }
-
       const response = await fetchFn(
         buildInternalUrl("/session/command-result"),
         {
@@ -207,26 +218,26 @@ export function createServerClient(
           headers: headers(),
           body: JSON.stringify({
             sessionId: requireSessionId(),
-            commandId,
-            type: rawType,
+            commandId: args.commandId,
+            type: args.type,
             completedAt: Date.now(),
             ok: false,
-            errorCode: "unknown_command",
-            errorMessage: `Unrecognized command type: ${rawType}`,
+            errorCode: args.errorCode,
+            errorMessage: args.errorMessage,
           }),
         },
       );
 
       if (!response.ok) {
         options.logger.warn(
-          { status: response.status, commandId },
-          "failed to report unknown command result",
+          { status: response.status, commandId: args.commandId },
+          "failed to report command error result",
         );
       }
     } catch (error) {
       options.logger.warn(
         { err: error },
-        "error while reporting unknown command",
+        "error while reporting command error",
       );
     }
   }
@@ -289,7 +300,8 @@ export function createServerClient(
       const reportPromises: Promise<void>[] = [];
 
       for (const rawCommand of rawCommands) {
-        const rawType = extractRawCommandType(rawCommand);
+        const header = readRawCommandHeader(rawCommand);
+        const rawType = header.type;
 
         if (rawType && knownCommandTypes.has(rawType)) {
           const parsed = hostDaemonCommandEnvelopeSchema.safeParse(rawCommand);
@@ -300,18 +312,47 @@ export function createServerClient(
               { type: rawType, error: parsed.error.message },
               "failed to parse command envelope, skipping",
             );
-            reportPromises.push(reportUnknownCommand(rawCommand));
+            if (header.commandId) {
+              reportPromises.push(
+                reportCommandError({
+                  commandId: header.commandId,
+                  type: rawType,
+                  errorCode: "invalid_command",
+                  errorMessage: `Invalid command envelope for type ${rawType}`,
+                }),
+              );
+            } else {
+              options.logger.warn(
+                { rawCommand },
+                "cannot report invalid command: missing id",
+              );
+            }
           }
         } else {
           options.logger.warn(
             { type: rawType ?? "missing" },
             "unknown command type in batch, reporting error to server",
           );
-          reportPromises.push(reportUnknownCommand(rawCommand));
+          if (header.commandId) {
+            const type = rawType ?? "unknown";
+            reportPromises.push(
+              reportCommandError({
+                commandId: header.commandId,
+                type,
+                errorCode: "unknown_command",
+                errorMessage: `Unrecognized command type: ${type}`,
+              }),
+            );
+          } else {
+            options.logger.warn(
+              { rawCommand },
+              "cannot report unknown command: missing id",
+            );
+          }
         }
       }
 
-      // Wait for all unknown command reports to complete before returning
+      // Wait for all command error reports to complete before returning
       // so callers don't race ahead of the error reports within the same fetch cycle.
       await Promise.all(reportPromises);
 

@@ -2,7 +2,7 @@ import { getThreadOperation, type DbTransaction } from "@bb/db";
 import { markThreadOperationRecordCompleted } from "@bb/db/internal-lifecycle";
 import { isActiveLifecycleOperationState } from "@bb/domain";
 import { appendThreadProvisioningEventInTransaction } from "./thread-events.js";
-import { readThreadProvisioningIdFromPayload } from "./thread-provisioning-identity.js";
+import { readThreadProvisioningIdFromRecord } from "./thread-provisioning-state.js";
 
 export interface CompleteThreadProvisioningForStartHandoffArgs {
   environmentId: string;
@@ -20,7 +20,7 @@ export function completeThreadProvisioningForStartHandoff(
   if (!operation || !isActiveLifecycleOperationState(operation.state)) {
     return null;
   }
-  const provisioningId = readThreadProvisioningIdFromPayload(operation.payload);
+  const provisioningId = readThreadProvisioningIdFromRecord(operation);
 
   const sequence = appendThreadProvisioningEventInTransaction(db, {
     threadId: args.threadId,

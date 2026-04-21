@@ -10,7 +10,6 @@ import {
 } from "@bb/db/internal-lifecycle";
 import { isActiveLifecycleOperationState } from "@bb/domain";
 import {
-  hostDaemonCommandResultSchemaByType,
   type HostRuntimeMaterialSnapshot,
 } from "@bb/host-daemon-contract";
 import { isEmptyHostRuntimeMaterialSnapshot } from "@bb/host-runtime-material";
@@ -186,14 +185,11 @@ export async function ensureSandboxRuntimeMaterialSynced(
     );
   }
 
-  const rawResult = await waitForQueuedCommandResult(deps, {
+  const result = await waitForQueuedCommandResult(deps, {
     commandId,
     timeoutMs: args.timeoutMs ?? DEFAULT_RUNTIME_MATERIAL_SYNC_TIMEOUT_MS,
+    type: "host.sync_runtime_material",
   });
-  const result =
-    hostDaemonCommandResultSchemaByType["host.sync_runtime_material"].parse(
-      rawResult,
-    );
   if (result.appliedVersion !== desiredSnapshot.version) {
     throw new ApiError(
       500,

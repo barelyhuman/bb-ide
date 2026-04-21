@@ -1,5 +1,6 @@
 import {
   createPendingInteraction,
+  deleteQueuedCommandInTransaction,
   getActivePendingInteractionForThread,
   getEnvironment,
   getPendingInteraction,
@@ -479,21 +480,24 @@ export class PendingInteractionLifecycle {
     const resolutionJson = JSON.stringify(args.resolution);
     const commandPayload = JSON.stringify(command);
     const updated = this.deps.db.transaction((tx) => {
-      const resolving = setPendingInteractionResolving(tx, {
-        id: args.interaction.id,
-        resolution: resolutionJson,
-      });
-      if (!resolving) {
-        return null;
-      }
-
-      queueCommandInTransaction(tx, {
+      const queuedCommand = queueCommandInTransaction(tx, {
         hostId: environment.hostId,
         sessionId: args.sessionId,
         type: command.type,
         payload: commandPayload,
       });
-      return resolving;
+      const resolving = setPendingInteractionResolving(tx, {
+        commandId: queuedCommand.id,
+        id: args.interaction.id,
+        resolution: resolutionJson,
+      });
+      if (resolving) {
+        return resolving;
+      }
+      deleteQueuedCommandInTransaction(tx, {
+        commandId: queuedCommand.id,
+      });
+      return null;
     });
 
     if (updated) {

@@ -8,6 +8,7 @@ import type {
 } from "@bb/domain";
 import type { DbNotifier } from "@bb/db";
 import { COMMAND_RESULT_CACHE_TTL_MS } from "../constants.js";
+import type { CommandResultWaiterResponse } from "../internal/command-result-response.js";
 
 interface HubSocket {
   close(code?: number, reason?: string): void;
@@ -15,26 +16,26 @@ interface HubSocket {
 }
 
 interface CommandWaiter {
-  reject: (reason?: unknown) => void;
+  reject: (reason?: Error) => void;
   resolve: (notified: boolean) => void;
   timeout: ReturnType<typeof setTimeout>;
 }
 
 interface ThreadEventWaiter {
-  reject: (reason?: unknown) => void;
+  reject: (reason?: Error) => void;
   resolve: (notified: boolean) => void;
   timeout: ReturnType<typeof setTimeout>;
 }
 
 interface HostEventWaiter {
-  reject: (reason?: unknown) => void;
+  reject: (reason?: Error) => void;
   resolve: (notified: boolean) => void;
   timeout: ReturnType<typeof setTimeout>;
 }
 
 interface CommandResultWaiter {
-  reject: (reason?: unknown) => void;
-  resolve: (result: unknown) => void;
+  reject: (reason?: Error) => void;
+  resolve: (result: CommandResultWaiterResponse) => void;
   timeout: ReturnType<typeof setTimeout>;
 }
 
@@ -45,7 +46,10 @@ function subKey(entity: string, id?: string): string {
 export class NotificationHub implements DbNotifier {
   private readonly clientKeysBySocket = new Map<HubSocket, Set<string>>();
   private readonly clientSocketsByKey = new Map<string, Set<HubSocket>>();
-  private readonly commandResultCache = new Map<string, unknown>();
+  private readonly commandResultCache = new Map<
+    string,
+    CommandResultWaiterResponse
+  >();
   private readonly commandResultWaiters = new Map<
     string,
     Set<CommandResultWaiter>
@@ -194,13 +198,13 @@ export class NotificationHub implements DbNotifier {
   async waitForCommandResult(
     commandId: string,
     timeoutMs: number,
-  ): Promise<unknown> {
+  ): Promise<CommandResultWaiterResponse> {
     const cached = this.commandResultCache.get(commandId);
     if (cached !== undefined) {
       return cached;
     }
 
-    return new Promise<unknown>((resolve, reject) => {
+    return new Promise<CommandResultWaiterResponse>((resolve, reject) => {
       const waiter: CommandResultWaiter = {
         reject,
         resolve,
@@ -267,7 +271,10 @@ export class NotificationHub implements DbNotifier {
     return { promise, cancel };
   }
 
-  recordCommandResult(commandId: string, result: unknown): void {
+  recordCommandResult(
+    commandId: string,
+    result: CommandResultWaiterResponse,
+  ): void {
     this.commandResultCache.set(commandId, result);
     setTimeout(() => {
       this.commandResultCache.delete(commandId);

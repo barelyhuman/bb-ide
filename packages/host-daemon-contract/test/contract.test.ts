@@ -25,10 +25,6 @@ import {
 } from "../src/index.js";
 
 const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
-  "hostDaemonCommandSchema.maxDiffBytes":
-    "workspace.diff may omit maxDiffBytes to use the system default cap.",
-  "hostDaemonCommandSchema.maxFileListBytes":
-    "workspace.diff may omit maxFileListBytes to use the system default cap.",
   "hostDaemonCommandSchema.mergeBaseBranch":
     "workspace.status may omit mergeBaseBranch when the caller only needs working-tree state.",
   "hostDaemonCommandSchema.query":

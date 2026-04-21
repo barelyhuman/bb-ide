@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createConnection } from "../../src/connection.js";
+import { createProjectSourceId } from "../../src/ids.js";
 import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
+import { projectSources } from "../../src/schema.js";
 import {
   countProjectSources,
   createProjectSource,
@@ -185,6 +187,30 @@ describe("project-sources", () => {
       }),
     ).toThrow();
     expect(listProjectSources(db, project.id)).toHaveLength(1);
+  });
+
+  it("enforces one default source per project at the database boundary", () => {
+    const { db, project } = setup();
+    const now = Date.now();
+
+    expect(() =>
+      db
+        .insert(projectSources)
+        .values({
+          id: createProjectSourceId(),
+          projectId: project.id,
+          type: "github_repo",
+          hostId: null,
+          path: null,
+          repoUrl: "https://github.com/example/default-conflict",
+          isDefault: true,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run(),
+    ).toThrow();
+
+    expect(getDefaultProjectSource(db, project.id)?.id).toBeTruthy();
   });
 
   it("updates a project source", () => {

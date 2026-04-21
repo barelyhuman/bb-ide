@@ -23,7 +23,10 @@ import {
   setEnvironmentStatus,
   upsertEnvironmentOperationRecord,
 } from "@bb/db/internal-lifecycle";
-import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
+import {
+  hostDaemonCommandResultSchemaByType,
+  type HostDaemonCommandResult,
+} from "@bb/host-daemon-contract";
 import { z } from "zod";
 import { ApiError } from "../../errors.js";
 import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
@@ -122,9 +125,9 @@ async function assertWorkspaceCanBeSafelyCleaned(
     return false;
   }
 
-  let rawResult: unknown;
+  let result: HostDaemonCommandResult<"workspace.status">;
   try {
-    rawResult = await queueCommandAndWait(deps, {
+    result = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
       timeoutMs: 30_000,
       command: {
@@ -146,8 +149,6 @@ async function assertWorkspaceCanBeSafelyCleaned(
     }
     throw error;
   }
-  const result =
-    hostDaemonCommandResultSchemaByType["workspace.status"].parse(rawResult);
   if (workspaceHasRiskyChanges(result.workspaceStatus)) {
     throw new ApiError(
       409,
@@ -233,11 +234,15 @@ export function completeEnvironmentDestroyForCommand(
   }
 
   const environment = getEnvironment(deps.db, operation.environmentId);
-  if (!environment || environment.status !== "destroying") {
+  if (!environment) {
+    return false;
+  }
+  if (environment.status === "destroying") {
+    setEnvironmentRecordDestroyed(deps.db, deps.hub, operation.environmentId);
+  } else if (environment.status !== "destroyed") {
     return false;
   }
 
-  setEnvironmentRecordDestroyed(deps.db, deps.hub, operation.environmentId);
   markEnvironmentOperationRecordCompleted(deps.db, {
     environmentId: operation.environmentId,
     kind: operation.kind,
@@ -450,8 +455,7 @@ export async function advanceEnvironmentCleanup(
 
   if (
     destroyOperation &&
-    (destroyOperation.state === "queued" ||
-      destroyOperation.state === "fetched") &&
+    isActiveLifecycleOperationState(destroyOperation.state) &&
     destroyOperation.commandId &&
     getPendingEnvironmentCommand(deps.db, {
       environmentId: environment.id,

@@ -513,10 +513,15 @@ describe("periodic sweeps", () => {
             source: "client/turn/requested",
           },
           input: [{ type: "text", text: "short" }],
-          provisioningId: "tpv-periodic-thread-provision",
-          stage: "metadata-pending",
           titleProvided: false,
         }),
+        provisioningState: {
+          environmentId: null,
+          provisionEventSequence: null,
+          provisioningId: "tpv-periodic-thread-provision",
+          stage: "metadata-pending",
+          workspaceReadyEventSequence: null,
+        },
       });
 
       await runThreadLifecycleSweep(harness.deps);
@@ -686,7 +691,7 @@ describe("periodic sweeps", () => {
     }
   });
 
-  it("fails active environment provision operations attached to settled commands", async () => {
+  it("replays active environment provision operations attached to settled commands", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -735,8 +740,8 @@ describe("periodic sweeps", () => {
 
       await runPeriodicSweeps(harness.deps);
 
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe("error");
-      expect(getThread(harness.db, thread.id)?.status).toBe("error");
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe("ready");
+      expect(getThread(harness.db, thread.id)?.status).toBe("provisioning");
       expect(
         getEnvironmentOperation(harness.db, {
           environmentId: environment.id,
@@ -744,10 +749,8 @@ describe("periodic sweeps", () => {
         }),
       ).toMatchObject({
         commandId: command.id,
-        failureReason: expect.stringContaining(
-          "Command result reached terminal state before lifecycle side effects completed",
-        ),
-        state: "failed",
+        failureReason: null,
+        state: "completed",
       });
       const provisionCommands = harness.db
         .select()
@@ -824,7 +827,7 @@ describe("periodic sweeps", () => {
     }
   });
 
-  it("fails active thread.start operations attached to settled commands", async () => {
+  it("replays active thread.start operations attached to settled commands", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -867,7 +870,6 @@ describe("periodic sweeps", () => {
 
       await runPeriodicSweeps(harness.deps);
 
-      expect(getThread(harness.db, thread.id)?.status).toBe("error");
       expect(
         getThreadOperation(harness.db, {
           threadId: thread.id,
@@ -875,10 +877,8 @@ describe("periodic sweeps", () => {
         }),
       ).toMatchObject({
         commandId: command.id,
-        failureReason: expect.stringContaining(
-          "Command result reached terminal state before lifecycle side effects completed",
-        ),
-        state: "failed",
+        failureReason: null,
+        state: "completed",
       });
       const startCommands = harness.db
         .select()
@@ -891,7 +891,7 @@ describe("periodic sweeps", () => {
     }
   });
 
-  it("fails active environment destroy operations attached to settled commands", async () => {
+  it("replays active environment destroy operations attached to settled commands", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -937,7 +937,7 @@ describe("periodic sweeps", () => {
 
       expect(getEnvironment(harness.db, environment.id)).toMatchObject({
         cleanupRequestedAt: null,
-        status: "ready",
+        status: "destroyed",
       });
       expect(
         getEnvironmentOperation(harness.db, {
@@ -946,10 +946,8 @@ describe("periodic sweeps", () => {
         }),
       ).toMatchObject({
         commandId: command.id,
-        failureReason: expect.stringContaining(
-          "Command result reached terminal state before lifecycle side effects completed",
-        ),
-        state: "failed",
+        failureReason: null,
+        state: "completed",
       });
 
       await advanceEnvironmentCleanup(harness.deps, {
@@ -966,7 +964,69 @@ describe("periodic sweeps", () => {
     }
   });
 
-  it("fails active thread.stop operations attached to settled commands without reissuing stop", async () => {
+  it("replays settled sessionless environment.destroy commands", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        name: "host-periodic-sessionless-destroy",
+        type: "persistent",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/periodic-sessionless-destroy",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        managed: true,
+        path: "/tmp/periodic-sessionless-destroy",
+        projectId: project.id,
+        status: "ready",
+        workspaceProvisionType: "managed-worktree",
+      });
+
+      requestEnvironmentCleanup(harness.deps, {
+        environmentId: environment.id,
+        mode: "force",
+      });
+      await advanceEnvironmentCleanup(harness.deps, {
+        environmentId: environment.id,
+      });
+      const queuedDestroy = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "environment.destroy" &&
+          command.environmentId === environment.id,
+      );
+      expect(queuedDestroy.row.sessionId).toBeNull();
+      reportCommandResult(harness.db, harness.hub, {
+        commandId: queuedDestroy.row.id,
+        state: "success",
+        completedAt: Date.now(),
+        resultPayload: JSON.stringify({}),
+      });
+
+      await runPeriodicSweeps(harness.deps);
+
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        cleanupRequestedAt: null,
+        status: "destroyed",
+      });
+      expect(
+        getEnvironmentOperation(harness.db, {
+          environmentId: environment.id,
+          kind: "destroy",
+        }),
+      ).toMatchObject({
+        commandId: queuedDestroy.row.id,
+        failureReason: null,
+        state: "completed",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("replays active thread.stop operations attached to settled commands without reissuing stop", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
@@ -1008,7 +1068,7 @@ describe("periodic sweeps", () => {
       await runPeriodicSweeps(harness.deps);
 
       expect(getThread(harness.db, thread.id)).toMatchObject({
-        status: "error",
+        status: "idle",
         stopRequestedAt: null,
       });
       expect(
@@ -1018,10 +1078,8 @@ describe("periodic sweeps", () => {
         }),
       ).toMatchObject({
         commandId: command.row.id,
-        failureReason: expect.stringContaining(
-          "Command result reached terminal state before lifecycle side effects completed",
-        ),
-        state: "failed",
+        failureReason: null,
+        state: "completed",
       });
       const stopCommands = harness.db
         .select()
@@ -1034,7 +1092,69 @@ describe("periodic sweeps", () => {
     }
   });
 
-  it("fails active runtime material operations attached to settled commands", async () => {
+  it("replays settled sessionless thread.stop commands", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const host = upsertHost(harness.db, harness.hub, {
+        name: "host-periodic-sessionless-thread-stop",
+        type: "persistent",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/periodic-sessionless-thread-stop",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/periodic-sessionless-thread-stop",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      requestThreadStop(harness.deps, {
+        environmentId: environment.id,
+        hostId: host.id,
+        stopRequestedAt: null,
+        threadId: thread.id,
+      });
+      const queuedStop = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.stop" && command.threadId === thread.id,
+      );
+      expect(queuedStop.row.sessionId).toBeNull();
+      reportCommandResult(harness.db, harness.hub, {
+        commandId: queuedStop.row.id,
+        state: "success",
+        completedAt: Date.now(),
+        resultPayload: JSON.stringify({}),
+      });
+
+      await runPeriodicSweeps(harness.deps);
+
+      expect(getThread(harness.db, thread.id)).toMatchObject({
+        status: "idle",
+        stopRequestedAt: null,
+      });
+      expect(
+        getThreadOperation(harness.db, {
+          threadId: thread.id,
+          kind: "stop",
+        }),
+      ).toMatchObject({
+        commandId: queuedStop.row.id,
+        failureReason: null,
+        state: "completed",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("replays active runtime material operations attached to settled commands", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -1081,17 +1201,15 @@ describe("periodic sweeps", () => {
         }),
       ).toMatchObject({
         commandId: command.id,
-        failureReason: expect.stringContaining(
-          "Command result reached terminal state before lifecycle side effects completed",
-        ),
-        state: "failed",
+        failureReason: null,
+        state: "completed",
       });
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("interrupts resolving interactions attached to settled commands", async () => {
+  it("replays resolving interactions attached to settled commands", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -1157,10 +1275,8 @@ describe("periodic sweeps", () => {
           interactionId: registered.interaction.id,
         }),
       ).toMatchObject({
-        status: "interrupted",
-        statusReason: expect.stringContaining(
-          "Command result reached terminal state before lifecycle side effects completed",
-        ),
+        status: "resolved",
+        statusReason: null,
       });
     } finally {
       await harness.cleanup();

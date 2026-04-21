@@ -1,11 +1,24 @@
+import { and, eq } from "drizzle-orm";
 import {
   activeLifecycleOperationStates,
   type LifecycleOperationState,
 } from "@bb/domain";
 import type { DbConnection, DbTransaction } from "../connection.js";
+import {
+  environmentOperations,
+  hostOperations,
+  projectOperations,
+  threadOperations,
+} from "../schema.js";
 
 export type LifecycleOperationReadConnection = DbConnection | DbTransaction;
 export type LifecycleOperationWriteConnection = DbConnection | DbTransaction;
+
+type LifecycleOperationTable =
+  | typeof environmentOperations
+  | typeof hostOperations
+  | typeof projectOperations
+  | typeof threadOperations;
 
 export interface LifecycleOperationRecordBase<TKind> {
   commandId: string | null;
@@ -30,7 +43,10 @@ export interface InsertRequestedLifecycleOperationArgs<TUpsertInput> {
   requestedAt: number;
 }
 
-export interface UpdateLifecycleOperationRecordArgs<TIdentityArgs> {
+export interface UpdateLifecycleOperationRecordArgs<
+  TIdentityArgs,
+  TUpsertInput,
+> {
   allowedCurrentStates?: readonly LifecycleOperationState[];
   commandId?: string | null;
   completedAt?: number | null;
@@ -38,6 +54,7 @@ export interface UpdateLifecycleOperationRecordArgs<TIdentityArgs> {
   identity: TIdentityArgs;
   payload?: string;
   queuedAt?: number | null;
+  requestedInput?: TUpsertInput;
   state: LifecycleOperationState;
 }
 
@@ -45,20 +62,20 @@ export interface LifecycleOperationStore<
   TRow extends LifecycleOperationRecordBase<TKind>,
   TIdentityArgs,
   TKind,
-  TUpsertInput extends LifecycleOperationUpsertInput<TKind>,
+  TUpsertInput extends LifecycleOperationUpsertInput<TKind> & TIdentityArgs,
 > {
   get(
     db: LifecycleOperationReadConnection,
     identity: TIdentityArgs,
   ): TRow | null;
-  getIdentity(input: TUpsertInput): TIdentityArgs;
+  getIdentity(input: TIdentityArgs): TIdentityArgs;
   insertRequested(
     db: LifecycleOperationWriteConnection,
     args: InsertRequestedLifecycleOperationArgs<TUpsertInput>,
   ): TRow;
   updateState(
     db: LifecycleOperationWriteConnection,
-    args: UpdateLifecycleOperationRecordArgs<TIdentityArgs>,
+    args: UpdateLifecycleOperationRecordArgs<TIdentityArgs, TUpsertInput>,
   ): TRow | null;
 }
 
@@ -79,11 +96,175 @@ export interface FailLifecycleOperationArgs<TIdentityArgs> {
   identity: TIdentityArgs;
 }
 
+export type QueueLifecycleOperationRecordArgs<TIdentityArgs> = TIdentityArgs & {
+  commandId: string;
+  queuedAt?: number;
+};
+
+export type CompleteLifecycleOperationRecordArgs<TIdentityArgs> =
+  TIdentityArgs & {
+    completedAt?: number;
+  };
+
+export type FailLifecycleOperationRecordArgs<TIdentityArgs> = TIdentityArgs & {
+  completedAt?: number;
+  failureReason: string;
+};
+
+export interface LifecycleOperationRepository<
+  TRow extends LifecycleOperationRecordBase<TKind>,
+  TIdentityArgs,
+  TKind,
+  TUpsertInput extends LifecycleOperationUpsertInput<TKind> & TIdentityArgs,
+> {
+  cancel(
+    db: LifecycleOperationWriteConnection,
+    args: CompleteLifecycleOperationRecordArgs<TIdentityArgs>,
+  ): TRow | null;
+  markCompleted(
+    db: LifecycleOperationWriteConnection,
+    args: CompleteLifecycleOperationRecordArgs<TIdentityArgs>,
+  ): TRow | null;
+  markFailed(
+    db: LifecycleOperationWriteConnection,
+    args: FailLifecycleOperationRecordArgs<TIdentityArgs>,
+  ): TRow | null;
+  markQueued(
+    db: LifecycleOperationWriteConnection,
+    args: QueueLifecycleOperationRecordArgs<TIdentityArgs>,
+  ): TRow | null;
+  upsert(
+    db: LifecycleOperationWriteConnection,
+    input: TUpsertInput,
+  ): TRow;
+}
+
+export function createLifecycleOperationRepository<
+  TRow extends LifecycleOperationRecordBase<TKind>,
+  TIdentityArgs,
+  TKind,
+  TUpsertInput extends LifecycleOperationUpsertInput<TKind> & TIdentityArgs,
+>(
+  store: LifecycleOperationStore<TRow, TIdentityArgs, TKind, TUpsertInput>,
+): LifecycleOperationRepository<TRow, TIdentityArgs, TKind, TUpsertInput> {
+  return {
+    cancel: (db, args) =>
+      cancelLifecycleOperationRecord(db, store, {
+        identity: store.getIdentity(args),
+        completedAt: args.completedAt,
+      }),
+    markCompleted: (db, args) =>
+      markLifecycleOperationCompleted(db, store, {
+        identity: store.getIdentity(args),
+        completedAt: args.completedAt,
+      }),
+    markFailed: (db, args) =>
+      markLifecycleOperationFailed(db, store, {
+        identity: store.getIdentity(args),
+        completedAt: args.completedAt,
+        failureReason: args.failureReason,
+      }),
+    markQueued: (db, args) =>
+      markLifecycleOperationQueued(db, store, {
+        identity: store.getIdentity(args),
+        commandId: args.commandId,
+        queuedAt: args.queuedAt,
+      }),
+    upsert: (db, input) => upsertLifecycleOperationRecord(db, store, input),
+  };
+}
+
+export interface BuildRequestedLifecycleOperationValuesArgs<
+  TKind,
+  TIdentity extends object,
+  TExtra extends object,
+> {
+  createId(): string;
+  extraValues: TExtra;
+  identity: TIdentity;
+  input: LifecycleOperationUpsertInput<TKind>;
+  now: number;
+  requestedAt: number;
+}
+
+export function buildRequestedLifecycleOperationValues<
+  TKind,
+  TIdentity extends object,
+  TExtra extends object = Record<string, never>,
+>(
+  args: BuildRequestedLifecycleOperationValuesArgs<TKind, TIdentity, TExtra>,
+) {
+  return {
+    id: args.createId(),
+    ...args.identity,
+    kind: args.input.kind,
+    state: "requested" as const,
+    payload: args.input.payload,
+    ...args.extraValues,
+    commandId: null,
+    requestedAt: args.requestedAt,
+    queuedAt: null,
+    completedAt: null,
+    failureReason: null,
+    createdAt: args.now,
+    updatedAt: args.now,
+  };
+}
+
+export interface BuildLifecycleOperationUpdateValuesArgs<TExtra extends object> {
+  commandId?: string | null;
+  completedAt?: number | null;
+  extraValues: TExtra;
+  failureReason?: string | null;
+  payload?: string;
+  queuedAt?: number | null;
+  state: LifecycleOperationState;
+}
+
+export function buildLifecycleOperationUpdateValues<
+  TExtra extends object = Record<string, never>,
+>(args: BuildLifecycleOperationUpdateValuesArgs<TExtra>) {
+  return {
+    state: args.state,
+    payload: args.payload,
+    ...args.extraValues,
+    commandId: args.commandId,
+    queuedAt: args.queuedAt,
+    completedAt: args.completedAt,
+    failureReason: args.failureReason,
+    updatedAt: Date.now(),
+  };
+}
+
+export function getLifecycleOperationByCommandId<
+  TTable extends LifecycleOperationTable,
+>(
+  db: LifecycleOperationReadConnection,
+  table: TTable,
+  commandId: string,
+) {
+  return (
+    db
+      .select()
+      .from(table)
+      .where(eq(table.commandId, commandId))
+      .get() ?? null
+  );
+}
+
+export function listLifecycleOperationRows<TTable extends LifecycleOperationTable>(
+  db: LifecycleOperationReadConnection,
+  table: TTable,
+  filter: ReturnType<typeof and> | undefined,
+) {
+  return db.select().from(table).where(filter).all();
+}
+
 export function upsertLifecycleOperationRecord<
   TRow extends LifecycleOperationRecordBase<TKind>,
   TIdentityArgs,
   TKind,
-  TUpsertInput extends LifecycleOperationUpsertInput<TKind>,
+  TUpsertInput extends LifecycleOperationUpsertInput<TKind> & TIdentityArgs,
 >(
   db: LifecycleOperationWriteConnection,
   store: LifecycleOperationStore<TRow, TIdentityArgs, TKind, TUpsertInput>,
@@ -99,6 +280,7 @@ export function upsertLifecycleOperationRecord<
       store.updateState(db, {
         identity,
         payload: input.payload,
+        requestedInput: input,
         state: "requested",
         commandId: null,
         queuedAt: null,
@@ -119,7 +301,7 @@ export function markLifecycleOperationQueued<
   TRow extends LifecycleOperationRecordBase<TKind>,
   TIdentityArgs,
   TKind,
-  TUpsertInput extends LifecycleOperationUpsertInput<TKind>,
+  TUpsertInput extends LifecycleOperationUpsertInput<TKind> & TIdentityArgs,
 >(
   db: LifecycleOperationWriteConnection,
   store: LifecycleOperationStore<TRow, TIdentityArgs, TKind, TUpsertInput>,
@@ -136,38 +318,11 @@ export function markLifecycleOperationQueued<
   });
 }
 
-export function markLifecycleOperationFetched<
-  TRow extends LifecycleOperationRecordBase<TKind>,
-  TIdentityArgs,
-  TKind,
-  TUpsertInput extends LifecycleOperationUpsertInput<TKind>,
->(
-  db: LifecycleOperationWriteConnection,
-  store: LifecycleOperationStore<TRow, TIdentityArgs, TKind, TUpsertInput>,
-  identity: TIdentityArgs,
-): TRow | null {
-  const existing = store.get(db, identity);
-  if (!existing) {
-    return null;
-  }
-
-  return store.updateState(db, {
-    identity,
-    payload: existing.payload,
-    state: "fetched",
-    commandId: existing.commandId,
-    queuedAt: existing.queuedAt,
-    completedAt: null,
-    failureReason: null,
-    allowedCurrentStates: ["queued"],
-  });
-}
-
 export function markLifecycleOperationCompleted<
   TRow extends LifecycleOperationRecordBase<TKind>,
   TIdentityArgs,
   TKind,
-  TUpsertInput extends LifecycleOperationUpsertInput<TKind>,
+  TUpsertInput extends LifecycleOperationUpsertInput<TKind> & TIdentityArgs,
 >(
   db: LifecycleOperationWriteConnection,
   store: LifecycleOperationStore<TRow, TIdentityArgs, TKind, TUpsertInput>,
@@ -194,7 +349,7 @@ export function markLifecycleOperationFailed<
   TRow extends LifecycleOperationRecordBase<TKind>,
   TIdentityArgs,
   TKind,
-  TUpsertInput extends LifecycleOperationUpsertInput<TKind>,
+  TUpsertInput extends LifecycleOperationUpsertInput<TKind> & TIdentityArgs,
 >(
   db: LifecycleOperationWriteConnection,
   store: LifecycleOperationStore<TRow, TIdentityArgs, TKind, TUpsertInput>,
@@ -221,7 +376,7 @@ export function cancelLifecycleOperationRecord<
   TRow extends LifecycleOperationRecordBase<TKind>,
   TIdentityArgs,
   TKind,
-  TUpsertInput extends LifecycleOperationUpsertInput<TKind>,
+  TUpsertInput extends LifecycleOperationUpsertInput<TKind> & TIdentityArgs,
 >(
   db: LifecycleOperationWriteConnection,
   store: LifecycleOperationStore<TRow, TIdentityArgs, TKind, TUpsertInput>,

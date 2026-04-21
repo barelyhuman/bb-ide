@@ -19,7 +19,6 @@ import type {
   ThreadTurnInitiator,
   WorkspaceProvisionType,
 } from "@bb/domain";
-import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import { renderTemplate } from "@bb/templates";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
@@ -123,7 +122,7 @@ async function readManagerPreferences(
   },
 ): Promise<string> {
   try {
-    const rawResult = await queueCommandAndWait(deps, {
+    const result = await queueCommandAndWait(deps, {
       hostId: args.hostId,
       timeoutMs: COMMAND_TIMEOUT_MS,
       command: {
@@ -132,8 +131,6 @@ async function readManagerPreferences(
         rootPath: args.threadStoragePath,
       },
     });
-    const result =
-      hostDaemonCommandResultSchemaByType["host.read_file"].parse(rawResult);
     if (result.contentEncoding !== "utf8") {
       throw new ApiError(
         502,

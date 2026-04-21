@@ -7,26 +7,15 @@ import {
   releaseDraftClaim,
 } from "@bb/db";
 import type { Thread, ThreadQueuedMessage } from "@bb/domain";
-import type { AppDeps, LoggedSandboxWorkSessionDeps } from "../../types.js";
+import type { SendMessageRequest } from "@bb/server-contract";
+import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { toQueuedMessage } from "./drafts.js";
-import { requireThreadEnvironment } from "../lib/entity-lookup.js";
 import {
-  buildExecutionOptions,
-  queueTurnSubmitCommand,
-} from "./thread-commands.js";
-import {
-  ensureThreadCanQueueStartRequest,
-  queueReadyThreadTurnCommand,
-} from "./thread-lifecycle.js";
-import {
-  queueTurnDuringReprovision,
-  requireReadyThreadEnvironment,
-} from "./thread-turn-dispatch.js";
-import { appendClientTurnEvent, getActiveTurnId } from "./thread-events.js";
-import { resolvePermissionEscalation } from "./thread-runtime-config.js";
-import { tryTransition } from "./thread-transitions.js";
-import { demoteEnvironmentIfPromoted } from "../environments/environment-promotion.js";
+  requireEnvironment,
+  requireThreadEnvironment,
+} from "../lib/entity-lookup.js";
+import { sendThreadMessage } from "./thread-send.js";
 
 interface SendQueuedDraftArgs {
   draftId: string;
@@ -35,14 +24,27 @@ interface SendQueuedDraftArgs {
 
 type ClaimedDraft = Exclude<ReturnType<typeof claimDraft>, null>;
 
-function resolveQueuedDraftSendMode(
-  threadStatus: Thread["status"],
-): "start" | "auto" {
-  if (threadStatus === "active") {
-    return "auto";
-  }
+interface SendClaimedDraftArgs {
+  draft: ClaimedDraft;
+  threadId: string;
+}
 
-  return "start";
+interface SendClaimedDraftForThreadArgs {
+  draft: ClaimedDraft;
+  thread: Thread;
+}
+
+function sendQueuedMessagePayload(
+  queuedMessage: ThreadQueuedMessage,
+): SendMessageRequest {
+  return {
+    input: queuedMessage.content,
+    mode: "auto",
+    model: queuedMessage.model,
+    permissionMode: queuedMessage.permissionMode,
+    reasoningLevel: queuedMessage.reasoningLevel,
+    serviceTier: queuedMessage.serviceTier,
+  };
 }
 
 function claimDraftForSend(
@@ -67,11 +69,8 @@ function claimDraftForSend(
 }
 
 async function sendClaimedDraft(
-  deps: LoggedSandboxWorkSessionDeps,
-  args: {
-    draft: ClaimedDraft;
-    threadId: string;
-  },
+  deps: AppDeps,
+  args: SendClaimedDraftArgs,
 ): Promise<ThreadQueuedMessage> {
   const draft = args.draft;
   const queuedMessage = toQueuedMessage(draft);
@@ -79,109 +78,38 @@ async function sendClaimedDraft(
     deps.db,
     args.threadId,
   );
-  const sendMode = resolveQueuedDraftSendMode(thread.status);
-  if (sendMode === "start") {
-    ensureThreadCanQueueStartRequest(deps, thread);
-  }
-  const expectedSteerTurnId =
-    sendMode === "auto" ? getActiveTurnId(deps, thread.id) : null;
-  const execution = await buildExecutionOptions(
-    deps,
-    queuedMessage,
-    {
-      threadId: thread.id,
-    },
-    "client/turn/requested",
-  );
-  const permissionEscalation = resolvePermissionEscalation({
+  await sendThreadMessage(deps, {
+    environment,
+    payload: sendQueuedMessagePayload(queuedMessage),
     thread,
-    initiator: "user",
+    trigger: "auto-dispatch",
   });
+  deleteDraft(deps.db, deps.hub, draft.id);
+  return queuedMessage;
+}
 
-  if (
-    await queueTurnDuringReprovision({
-      deps,
-      environment,
-      execution,
-      initiator: "user",
-      input: queuedMessage.content,
-      onQueued: () => {
-        deleteDraft(deps.db, deps.hub, draft.id);
-      },
-      thread,
-    })
-  ) {
-    return queuedMessage;
+async function sendClaimedDraftForThread(
+  deps: AppDeps,
+  args: SendClaimedDraftForThreadArgs,
+): Promise<ThreadQueuedMessage> {
+  const draft = args.draft;
+  const queuedMessage = toQueuedMessage(draft);
+  if (!args.thread.environmentId) {
+    throw new ApiError(409, "invalid_request", "Thread has no environment");
   }
-
-  const readyEnvironment = requireReadyThreadEnvironment(environment);
-  if (sendMode === "start") {
-    await demoteEnvironmentIfPromoted(deps, {
-      environment: readyEnvironment,
-    });
-  }
-
-  const eventSequence = appendClientTurnEvent(deps, {
-    threadId: thread.id,
-    environmentId: readyEnvironment.id,
-    type: "client/turn/requested",
-    input: queuedMessage.content,
-    execution,
-    initiator: "user",
-    requestMethod: "turn/start",
-    source: "tell",
-    target:
-      sendMode === "auto"
-        ? {
-            kind: "auto",
-            expectedTurnId: expectedSteerTurnId,
-          }
-        : { kind: "new-turn" },
+  const environment = requireEnvironment(deps.db, args.thread.environmentId);
+  await sendThreadMessage(deps, {
+    environment,
+    payload: sendQueuedMessagePayload(queuedMessage),
+    thread: args.thread,
+    trigger: "auto-dispatch",
   });
-
-  if (sendMode === "start") {
-    const queuedMode = await queueReadyThreadTurnCommand(deps, {
-      thread,
-      input: queuedMessage.content,
-      eventSequence,
-      execution,
-      permissionEscalation,
-      environment: {
-        id: readyEnvironment.id,
-        hostId: readyEnvironment.hostId,
-        path: readyEnvironment.path,
-        workspaceProvisionType: readyEnvironment.workspaceProvisionType,
-      },
-    });
-    if (queuedMode === "turn.submit") {
-      tryTransition(deps.db, deps.hub, thread.id, "active");
-    }
-  } else {
-    await queueTurnSubmitCommand(deps, {
-      thread,
-      input: queuedMessage.content,
-      eventSequence,
-      execution,
-      permissionEscalation,
-      target: {
-        mode: "auto",
-        expectedTurnId: expectedSteerTurnId,
-      },
-      environment: {
-        id: readyEnvironment.id,
-        hostId: readyEnvironment.hostId,
-        path: readyEnvironment.path,
-        workspaceProvisionType: readyEnvironment.workspaceProvisionType,
-      },
-    });
-  }
-
   deleteDraft(deps.db, deps.hub, draft.id);
   return queuedMessage;
 }
 
 export async function sendQueuedDraft(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: AppDeps,
   args: SendQueuedDraftArgs,
 ): Promise<ThreadQueuedMessage> {
   const draft = claimDraftForSend(deps, args);
@@ -197,7 +125,7 @@ export async function sendQueuedDraft(
 }
 
 export async function sendNextQueuedDraftIfPresent(
-  deps: LoggedSandboxWorkSessionDeps,
+  deps: AppDeps,
   args: { threadId: string },
 ): Promise<boolean> {
   const thread = getThread(deps.db, args.threadId);
@@ -211,9 +139,9 @@ export async function sendNextQueuedDraftIfPresent(
   }
 
   try {
-    await sendClaimedDraft(deps, {
+    await sendClaimedDraftForThread(deps, {
       draft: nextDraft,
-      threadId: args.threadId,
+      thread,
     });
   } catch (error) {
     releaseDraftClaim(deps.db, deps.hub, nextDraft.id);

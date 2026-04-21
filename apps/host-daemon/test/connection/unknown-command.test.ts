@@ -160,4 +160,49 @@ describe("fetchCommands with unknown command types", () => {
     );
     expect(missingFieldsWarning).toBeDefined();
   });
+
+  it("reports invalid_command for malformed envelopes with known command types", async () => {
+    testServer = await createTestServer();
+    const logger = createLogger();
+    const sessionState = { value: "" };
+    const serverClient = createServerClient({
+      serverUrl: testServer.baseUrl,
+      hostKey: testServer.hostKey,
+      logger,
+      getSessionId: () => sessionState.value,
+    });
+
+    const session = await serverClient.openSession({
+      hostId: "host-1",
+      hostName: "Host One",
+      hostType: "persistent",
+      dataDir: "/tmp/daemon-data",
+      instanceId: "instance-1",
+      activeThreads: [],
+    });
+    sessionState.value = session.sessionId;
+
+    testServer.queueRawCommand({
+      id: "cmd-invalid-1",
+      cursor: 80,
+      command: {
+        type: "thread.stop",
+        threadId: "thread-1",
+      },
+    });
+
+    const commands = await serverClient.fetchCommands();
+
+    expect(commands).toHaveLength(0);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "thread.stop" }),
+      "failed to parse command envelope, skipping",
+    );
+    const errorReport = testServer.commandResultReports.find(
+      (r: any) => r.commandId === "cmd-invalid-1",
+    );
+    expect(errorReport).toBeDefined();
+    expect((errorReport as any).ok).toBe(false);
+    expect((errorReport as any).errorCode).toBe("invalid_command");
+  });
 });

@@ -26,6 +26,10 @@ export interface GetPendingEnvironmentCommandArgs {
   type: "environment.destroy" | "workspace.status";
 }
 
+export interface DeleteQueuedCommandInTransactionArgs {
+  commandId: string;
+}
+
 export function getCommand(db: CommandReadConnection, id: string) {
   return (
     db
@@ -73,6 +77,24 @@ export function queueCommandInTransaction(
   input: QueueCommandInput,
 ) {
   return queueCommandRecord(db, input);
+}
+
+export function deleteQueuedCommandInTransaction(
+  db: DbTransaction,
+  args: DeleteQueuedCommandInTransactionArgs,
+): boolean {
+  const deleted =
+    db
+      .delete(hostDaemonCommands)
+      .where(
+        and(
+          eq(hostDaemonCommands.id, args.commandId),
+          eq(hostDaemonCommands.state, "pending"),
+        ),
+      )
+      .returning({ id: hostDaemonCommands.id })
+      .get() ?? null;
+  return deleted !== null;
 }
 
 /**

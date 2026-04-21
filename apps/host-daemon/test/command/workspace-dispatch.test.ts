@@ -39,6 +39,8 @@ describe("workspace command dispatch", () => {
           workspaceProvisionType: "unmanaged",
         },
         target: { type: "all", mergeBaseBranch: "main" },
+        maxDiffBytes: 2 * 1024 * 1024,
+        maxFileListBytes: 256 * 1024,
       },
       harness.dispatchOptions(),
     );

@@ -19,6 +19,7 @@ import {
 } from "@bb/host-daemon/test";
 import { createHostDaemonClient } from "@bb/host-daemon-contract";
 import { initDb } from "../../../apps/server/src/db.js";
+import { createLifecycleDedupers } from "../../../apps/server/src/lifecycle-dedupers.js";
 import { createApp } from "../../../apps/server/src/server.js";
 import { createCloudAuthService } from "../../../apps/server/src/services/cloud-auth/service.js";
 import { createHostLifecycleService } from "../../../apps/server/src/services/hosts/host-lifecycle-service.js";
@@ -237,12 +238,14 @@ async function startIntegrationServer(
     db,
     logger: testLogger,
   });
+  const lifecycleDedupers = createLifecycleDedupers();
   const { app, injectWebSocket } = createApp({
     cloudAuth,
     config,
     db,
     hostLifecycle,
     hub,
+    lifecycleDedupers,
     logger: testLogger,
     machineAuth,
     sandboxEnv,

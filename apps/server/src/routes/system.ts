@@ -1,5 +1,4 @@
 import { cloudAuthProviderIdSchema } from "@bb/agent-providers";
-import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import {
   cloudAuthConnectRequestSchema,
   githubReposQuerySchema,
@@ -156,22 +155,19 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
     systemProvidersQuerySchema,
     async (context, query) => {
       const hostId = resolveSystemLookupHostId(deps, query);
-      const rawResult = await queueCommandAndWait(deps, {
+      const result = await queueCommandAndWait(deps, {
         hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: { type: "provider.list" },
       });
-      return context.json(
-        hostDaemonCommandResultSchemaByType["provider.list"].parse(rawResult)
-          .providers,
-      );
+      return context.json(result.providers);
     },
   );
 
   get("/system/models", systemModelsQuerySchema, async (context, query) => {
     const hostId = resolveSystemLookupHostId(deps, query);
     if (query.providerId) {
-      const rawResult = await queueCommandAndWait(deps, {
+      const result = await queueCommandAndWait(deps, {
         hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: {
@@ -180,26 +176,20 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
           selectedModel: query.selectedModel,
         },
       });
-      return context.json(
-        hostDaemonCommandResultSchemaByType["provider.list_models"].parse(
-          rawResult,
-        ).models,
-      );
+      return context.json(result.models);
     }
 
-    const providers = hostDaemonCommandResultSchemaByType[
-      "provider.list"
-    ].parse(
+    const providers = (
       await queueCommandAndWait(deps, {
         hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: { type: "provider.list" },
-      }),
+      })
     ).providers;
     const models = await Promise.all(
       providers.map(
         async (provider) =>
-          hostDaemonCommandResultSchemaByType["provider.list_models"].parse(
+          (
             await queueCommandAndWait(deps, {
               hostId,
               timeoutMs: COMMAND_TIMEOUT_MS,
@@ -208,7 +198,7 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
                 providerId: provider.id,
                 selectedModel: query.selectedModel,
               },
-            }),
+            })
           ).models,
       ),
     );

@@ -1,17 +1,21 @@
 import { and, eq, inArray } from "drizzle-orm";
-import type { LifecycleOperationState, ThreadOperationKind } from "@bb/domain";
+import type {
+  LifecycleOperationState,
+  ThreadOperationKind,
+  ThreadProvisioningState,
+  ThreadProvisioningStage,
+} from "@bb/domain";
 import { createThreadOperationId } from "../ids.js";
 import { threadOperations } from "../schema.js";
 import {
-  cancelLifecycleOperationRecord,
+  buildLifecycleOperationUpdateValues,
+  buildRequestedLifecycleOperationValues,
+  createLifecycleOperationRepository,
+  getLifecycleOperationByCommandId,
+  listLifecycleOperationRows,
   type LifecycleOperationReadConnection,
   type LifecycleOperationStore,
   type LifecycleOperationWriteConnection,
-  markLifecycleOperationCompleted,
-  markLifecycleOperationFailed,
-  markLifecycleOperationFetched,
-  markLifecycleOperationQueued,
-  upsertLifecycleOperationRecord,
 } from "./lifecycle-operation-helpers.js";
 
 type ThreadOperationWriteConnection = LifecycleOperationWriteConnection;
@@ -27,6 +31,7 @@ export interface GetThreadOperationArgs {
 export interface UpsertThreadOperationInput {
   kind: ThreadOperationKind;
   payload: string;
+  provisioningState?: ThreadProvisioningState | null;
   requestedAt?: number;
   threadId: string;
 }
@@ -38,6 +43,7 @@ export interface UpdateThreadOperationStateArgs {
   failureReason?: string | null;
   kind: ThreadOperationKind;
   payload?: string;
+  provisioningState?: ThreadProvisioningState | null;
   queuedAt?: number | null;
   state: LifecycleOperationState;
   threadId: string;
@@ -47,6 +53,38 @@ export interface ListThreadOperationsArgs {
   kinds?: ThreadOperationKind[];
   states?: LifecycleOperationState[];
   threadIds?: string[];
+}
+
+interface ThreadOperationProvisioningStateColumns {
+  provisionEventSequence?: number | null;
+  provisioningEnvironmentId?: string | null;
+  provisioningId?: string | null;
+  provisioningStage?: ThreadProvisioningStage | null;
+  workspaceReadyEventSequence?: number | null;
+}
+
+function threadOperationProvisioningStateColumns(
+  state: ThreadProvisioningState | null | undefined,
+): ThreadOperationProvisioningStateColumns {
+  if (state === undefined) {
+    return {};
+  }
+  if (state === null) {
+    return {
+      provisionEventSequence: null,
+      provisioningEnvironmentId: null,
+      provisioningId: null,
+      provisioningStage: null,
+      workspaceReadyEventSequence: null,
+    };
+  }
+  return {
+    provisionEventSequence: state.provisionEventSequence,
+    provisioningEnvironmentId: state.environmentId,
+    provisioningId: state.provisioningId,
+    provisioningStage: state.stage,
+    workspaceReadyEventSequence: state.workspaceReadyEventSequence,
+  };
 }
 
 function getThreadOperationRecord(
@@ -71,20 +109,22 @@ function updateThreadOperationStateRecord(
   db: ThreadOperationWriteConnection,
   args: UpdateThreadOperationStateArgs,
 ): ThreadOperationRow | null {
-  const now = Date.now();
-
   return (
     db
       .update(threadOperations)
-      .set({
-        state: args.state,
-        payload: args.payload,
-        commandId: args.commandId,
-        queuedAt: args.queuedAt,
-        completedAt: args.completedAt,
-        failureReason: args.failureReason,
-        updatedAt: now,
-      })
+      .set(
+        buildLifecycleOperationUpdateValues({
+          state: args.state,
+          payload: args.payload,
+          extraValues: threadOperationProvisioningStateColumns(
+            args.provisioningState,
+          ),
+          commandId: args.commandId,
+          queuedAt: args.queuedAt,
+          completedAt: args.completedAt,
+          failureReason: args.failureReason,
+        }),
+      )
       .where(
         and(
           eq(threadOperations.threadId, args.threadId),
@@ -113,20 +153,20 @@ const threadOperationStore: LifecycleOperationStore<
   insertRequested: (db, args) =>
     db
       .insert(threadOperations)
-      .values({
-        id: createThreadOperationId(),
-        threadId: args.input.threadId,
-        kind: args.input.kind,
-        state: "requested",
-        payload: args.input.payload,
-        commandId: null,
-        requestedAt: args.requestedAt,
-        queuedAt: null,
-        completedAt: null,
-        failureReason: null,
-        createdAt: args.now,
-        updatedAt: args.now,
-      })
+      .values(
+        buildRequestedLifecycleOperationValues({
+          createId: createThreadOperationId,
+          identity: {
+            threadId: args.input.threadId,
+          },
+          input: args.input,
+          extraValues: threadOperationProvisioningStateColumns(
+            args.input.provisioningState ?? null,
+          ),
+          now: args.now,
+          requestedAt: args.requestedAt,
+        }),
+      )
       .returning()
       .get(),
   updateState: (db, args) =>
@@ -135,6 +175,7 @@ const threadOperationStore: LifecycleOperationStore<
       kind: args.identity.kind,
       allowedCurrentStates: args.allowedCurrentStates,
       payload: args.payload,
+      provisioningState: args.requestedInput?.provisioningState,
       state: args.state,
       commandId: args.commandId,
       queuedAt: args.queuedAt,
@@ -142,6 +183,9 @@ const threadOperationStore: LifecycleOperationStore<
       failureReason: args.failureReason,
     }),
 };
+const threadOperationRepository = createLifecycleOperationRepository(
+  threadOperationStore,
+);
 
 export function getThreadOperation(
   db: ThreadOperationReadConnection,
@@ -166,98 +210,26 @@ export function listThreadOperations(
       : undefined,
   ].filter((value) => value !== undefined);
 
-  return db
-    .select()
-    .from(threadOperations)
-    .where(filters.length > 0 ? and(...filters) : undefined)
-    .all();
+  return listLifecycleOperationRows(
+    db,
+    threadOperations,
+    filters.length > 0 ? and(...filters) : undefined,
+  );
 }
 
 export function getThreadOperationByCommandId(
   db: ThreadOperationReadConnection,
   commandId: string,
 ): ThreadOperationRow | null {
-  return (
-    db
-      .select()
-      .from(threadOperations)
-      .where(eq(threadOperations.commandId, commandId))
-      .get() ?? null
-  );
+  return getLifecycleOperationByCommandId(db, threadOperations, commandId);
 }
 
-export function upsertThreadOperationRecord(
-  db: ThreadOperationWriteConnection,
-  input: UpsertThreadOperationInput,
-): ThreadOperationRow {
-  return upsertLifecycleOperationRecord(db, threadOperationStore, input);
-}
+export const upsertThreadOperationRecord = threadOperationRepository.upsert;
 
-export function markThreadOperationRecordQueued(
-  db: ThreadOperationWriteConnection,
-  args: {
-    commandId: string;
-    kind: ThreadOperationKind;
-    queuedAt?: number;
-    threadId: string;
-  },
-): ThreadOperationRow | null {
-  return markLifecycleOperationQueued(db, threadOperationStore, {
-    identity: {
-      threadId: args.threadId,
-      kind: args.kind,
-    },
-    commandId: args.commandId,
-    queuedAt: args.queuedAt,
-  });
-}
-
-export function markThreadOperationRecordFetched(
-  db: ThreadOperationWriteConnection,
-  args: GetThreadOperationArgs,
-): ThreadOperationRow | null {
-  return markLifecycleOperationFetched(db, threadOperationStore, args);
-}
-
-export function markThreadOperationRecordCompleted(
-  db: ThreadOperationWriteConnection,
-  args: GetThreadOperationArgs & { completedAt?: number },
-): ThreadOperationRow | null {
-  return markLifecycleOperationCompleted(db, threadOperationStore, {
-    identity: {
-      threadId: args.threadId,
-      kind: args.kind,
-    },
-    completedAt: args.completedAt,
-  });
-}
-
-export function markThreadOperationRecordFailed(
-  db: ThreadOperationWriteConnection,
-  args: GetThreadOperationArgs & {
-    completedAt?: number;
-    failureReason: string;
-  },
-): ThreadOperationRow | null {
-  return markLifecycleOperationFailed(db, threadOperationStore, {
-    identity: {
-      threadId: args.threadId,
-      kind: args.kind,
-    },
-    completedAt: args.completedAt,
-    failureReason: args.failureReason,
-  });
-}
-
-export function cancelThreadOperationRecord(
-  db: ThreadOperationWriteConnection,
-  args: GetThreadOperationArgs & { completedAt?: number },
-): ThreadOperationRow | null {
-  return cancelLifecycleOperationRecord(db, threadOperationStore, {
-    identity: {
-      threadId: args.threadId,
-      kind: args.kind,
-    },
-    completedAt: args.completedAt,
-  });
-}
+export const markThreadOperationRecordQueued =
+  threadOperationRepository.markQueued;
+export const markThreadOperationRecordCompleted =
+  threadOperationRepository.markCompleted;
+export const markThreadOperationRecordFailed =
+  threadOperationRepository.markFailed;
+export const cancelThreadOperationRecord = threadOperationRepository.cancel;

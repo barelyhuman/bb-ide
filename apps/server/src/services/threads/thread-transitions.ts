@@ -1,4 +1,7 @@
-import { transitionThreadStatus } from "@bb/db";
+import {
+  InvalidThreadStatusTransitionError,
+  transitionThreadStatus,
+} from "@bb/db";
 import type { DbConnection } from "@bb/db";
 import type { ThreadStatus } from "@bb/domain";
 import type { NotificationHub } from "../../ws/hub.js";
@@ -12,7 +15,10 @@ export function tryTransition(
   try {
     transitionThreadStatus(db, hub, threadId, targetStatus);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (error instanceof InvalidThreadStatusTransitionError) {
+      return false;
+    }
+    throw error;
   }
 }

@@ -38,6 +38,7 @@ import {
 } from "../helpers/seed.js";
 import { createCommandApprovalPayload } from "../helpers/pending-interactions.js";
 import { queueManagerSystemMessage } from "../../src/services/threads/manager-system-messages.js";
+import { sendNextQueuedDraftIfPresent } from "../../src/services/threads/queued-drafts.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
 describe("internal event side effects", () => {
@@ -212,6 +213,91 @@ describe("internal event side effects", () => {
         harness.db.select().from(threads).where(eq(threads.id, thread.id)).get()
           ?.status,
       ).toBe("active");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("auto-sends the next queued draft even when a pending interaction exists", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-event-auto-send-pending-interaction",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/queued-draft-auto-send-pending-interaction",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-auto-send-pending-interaction",
+        sequence: 1,
+        type: "thread/identity",
+        data: {},
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-auto-send-pending-interaction",
+        sequence: 2,
+        turnId: "turn-auto-send-pending-interaction",
+        type: "turn/started",
+        data: {},
+      });
+      seedDraft(harness.deps, {
+        threadId: thread.id,
+        content: [{ type: "text", text: "Queued follow-up with pending interaction" }],
+        model: "gpt-5",
+        serviceTier: "default",
+      });
+      const pending =
+        harness.deps.pendingInteractions.registerPendingInteraction({
+          interaction: {
+            threadId: thread.id,
+            turnId: "turn-auto-send-pending-interaction",
+            providerId: "codex",
+            providerThreadId: "provider-auto-send-pending-interaction",
+            providerRequestId: "request-auto-send-pending-interaction",
+            payload: createCommandApprovalPayload({
+              itemId: "item-auto-send-pending-interaction",
+              reason: "Approve queued follow-up",
+              command: "git push",
+              cwd: "/tmp/project",
+            }),
+          },
+          sessionId: session.id,
+        });
+      if (pending.outcome === "rejected") {
+        throw new Error(
+          `Expected pending interaction registration to succeed: ${pending.reason}`,
+        );
+      }
+
+      await expect(
+        sendNextQueuedDraftIfPresent(harness.deps, {
+          threadId: thread.id,
+        }),
+      ).resolves.toBe(true);
+      const queuedCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "turn.submit" && command.threadId === thread.id,
+      );
+      expect(queuedCommand.command).toMatchObject({
+        input: [
+          { type: "text", text: "Queued follow-up with pending interaction" },
+        ],
+      });
     } finally {
       await harness.cleanup();
     }

@@ -190,6 +190,34 @@ describe("pi bridge", () => {
     }
   });
 
+  it("fails thread/start when the requested Pi model cannot be resolved", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    mockCreateAgentSession.mockImplementation(async () => ({
+      session: createControlledPiAgentSession(),
+    }));
+
+    try {
+      bridge.sendRequest(4, "thread/start", {
+        cwd: "/tmp/worktree",
+        model: "unsupported/model",
+        threadId: "thread-invalid-model",
+      });
+      await expect(bridge.waitForResponse(4)).resolves.toMatchObject({
+        error: {
+          code: -32000,
+          message: 'Failed to resolve Pi model "unsupported/model"',
+        },
+        id: 4,
+      });
+      expect(mockCreateAgentSession).not.toHaveBeenCalled();
+      expect(
+        bridge.messages.some((message) => message.method === "thread/identity"),
+      ).toBe(false);
+    } finally {
+      bridge.restore();
+    }
+  });
+
   it("rejects requests that combine replacement and append instructions", async () => {
     const bridge = createBridgeJsonRpcTestHarness(handleLine);
     mockCreateAgentSession.mockImplementation(async () => ({

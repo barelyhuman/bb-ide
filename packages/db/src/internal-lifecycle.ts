@@ -10,7 +10,6 @@ export {
   cancelEnvironmentOperationRecord,
   markEnvironmentOperationRecordCompleted,
   markEnvironmentOperationRecordFailed,
-  markEnvironmentOperationRecordFetched,
   markEnvironmentOperationRecordQueued,
   upsertEnvironmentOperationRecord,
 } from "./data/environment-operations.js";
@@ -19,7 +18,6 @@ export {
   markHostOperationRecordCompletedWithPayload,
   markHostOperationRecordCompleted,
   markHostOperationRecordFailed,
-  markHostOperationRecordFetched,
   markHostOperationRecordQueued,
   resetHostOperationRecordToRequested,
   upsertHostOperationRecord,
@@ -32,7 +30,6 @@ export {
   cancelProjectOperationRecord,
   markProjectOperationRecordCompleted,
   markProjectOperationRecordFailed,
-  markProjectOperationRecordFetched,
   markProjectOperationRecordQueued,
   upsertProjectOperationRecord,
 } from "./data/project-operations.js";
@@ -40,7 +37,6 @@ export {
   cancelThreadOperationRecord,
   markThreadOperationRecordCompleted,
   markThreadOperationRecordFailed,
-  markThreadOperationRecordFetched,
   markThreadOperationRecordQueued,
   upsertThreadOperationRecord,
 } from "./data/thread-operations.js";

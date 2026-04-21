@@ -5,7 +5,9 @@ import { promisify } from "node:util";
 import { expect } from "vitest";
 import type { ThreadEventRow, ThreadExecutionOptions } from "@bb/domain";
 import type { ThreadTimelineResponse } from "@bb/server-contract";
+import { resolvePreferredTestModel } from "@bb/test-helpers";
 import {
+  getAvailableModels,
   getThread,
   getThreadEvents,
   getThreadOutput,
@@ -33,10 +35,16 @@ export const REAL_PROVIDER_IDS: ReadonlyArray<RealProviderId> = [
   "claude-code",
   "pi",
 ];
+const REAL_PROVIDER_BOOTSTRAP_TEXT =
+  "Reply with exactly READY and nothing else.";
 
 type RealProviderExecutionOptions = Pick<
   ThreadExecutionOptions,
   "model" | "reasoningLevel" | "serviceTier"
+>;
+type RealProviderExecutionTemplate = Omit<
+  RealProviderExecutionOptions,
+  "model"
 >;
 
 export type ProviderSmokeHarness = Awaited<
@@ -91,6 +99,11 @@ interface SendAndWaitForIdleArgs {
   threadId: string;
 }
 
+interface ResolveExecutionOptionsArgs {
+  harness: ProviderSmokeHarness;
+  providerId: RealProviderId;
+}
+
 // Active-turn waits: enough time to confirm the provider has started a long-running turn.
 export const ACTIVE_TIMEOUT_MS = scaleTimeoutMs(15_000);
 export const REAL_POLL_INTERVAL_MS = 200;
@@ -105,22 +118,23 @@ export const TEST_TIMEOUT_MS = scaleTimeoutMs(120_000);
 process.setMaxListeners(Math.max(process.getMaxListeners(), 64));
 
 const providerPrerequisitePromises = new Map<RealProviderId, Promise<void>>();
+const resolvedExecutionOptionsPromises = new Map<
+  string,
+  Promise<RealProviderExecutionOptions>
+>();
 
 const FAST_EXECUTION_BY_PROVIDER: Record<
   RealProviderId,
-  RealProviderExecutionOptions
+  RealProviderExecutionTemplate
 > = {
   codex: {
-    model: "gpt-5.4",
     reasoningLevel: "low",
     serviceTier: "fast",
   },
   "claude-code": {
-    model: "claude-haiku-4-5",
     reasoningLevel: "low",
   },
   pi: {
-    model: "openai/codex-mini",
     reasoningLevel: "low",
   },
 };
@@ -319,7 +333,10 @@ export async function sendLongRunningTurnAndWaitStarted(
     ...baselineEvents.map((event) => event.seq),
   );
   await sendTextMessage(args.harness.api, args.threadId, {
-    execution: getExecutionOptions(args.providerId),
+    execution: await resolveExecutionOptions({
+      harness: args.harness,
+      providerId: args.providerId,
+    }),
     text: "Write a detailed 20 section essay about the history of computing with four sentences per section.",
   });
   return waitForTurnStartedAfter({
@@ -359,6 +376,50 @@ export async function assertProviderPrerequisites(
   }
 }
 
+export async function resolveExecutionOptions(
+  args: ResolveExecutionOptionsArgs,
+): Promise<RealProviderExecutionOptions> {
+  const cacheKey = `${args.harness.hostId}:${args.providerId}`;
+  const cached = resolvedExecutionOptionsPromises.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = resolveExecutionOptionsUncached(args);
+  resolvedExecutionOptionsPromises.set(cacheKey, promise);
+
+  try {
+    return await promise;
+  } catch (error) {
+    if (resolvedExecutionOptionsPromises.get(cacheKey) === promise) {
+      resolvedExecutionOptionsPromises.delete(cacheKey);
+    }
+    throw error;
+  }
+}
+
+async function resolveExecutionOptionsUncached(
+  args: ResolveExecutionOptionsArgs,
+): Promise<RealProviderExecutionOptions> {
+  const models = await getAvailableModels(args.harness.api, {
+    hostId: args.harness.hostId,
+    providerId: args.providerId,
+  });
+  const model = resolvePreferredTestModel({
+    models,
+    providerId: args.providerId,
+  });
+  if (!model) {
+    throw new Error(
+      `Provider "${args.providerId}" returned no available models for host ${args.harness.hostId}`,
+    );
+  }
+  return {
+    ...FAST_EXECUTION_BY_PROVIDER[args.providerId],
+    model,
+  };
+}
+
 async function assertProviderPrerequisitesUncached(
   providerId: RealProviderId,
 ): Promise<void> {
@@ -383,12 +444,6 @@ async function assertCliInstalled(command: string): Promise<void> {
     }
     // --help returned non-zero but the binary exists - that's fine.
   }
-}
-
-export function getExecutionOptions(
-  providerId: RealProviderId,
-): RealProviderExecutionOptions {
-  return FAST_EXECUTION_BY_PROVIDER[providerId];
 }
 
 export function expectNonEmptyOutput(
@@ -416,7 +471,11 @@ export async function createRealThread(args: CreateRealThreadArgs) {
     name: `Real Provider ${args.providerId}`,
   });
   const readyThread = await createReadyHostThread(harness, {
-    execution: getExecutionOptions(args.providerId),
+    execution: await resolveExecutionOptions({
+      harness,
+      providerId: args.providerId,
+    }),
+    input: [{ type: "text", text: REAL_PROVIDER_BOOTSTRAP_TEXT }],
     projectId: project.id,
     providerId: args.providerId,
     timeoutMs: TURN_TIMEOUT_MS,
@@ -436,7 +495,10 @@ export async function sendAndWaitForIdle(args: SendAndWaitForIdleArgs) {
     ...baselineEvents.map((event) => event.seq),
   );
   await sendTextMessage(args.harness.api, args.threadId, {
-    execution: getExecutionOptions(args.providerId),
+    execution: await resolveExecutionOptions({
+      harness: args.harness,
+      providerId: args.providerId,
+    }),
     text: args.text,
   });
   try {

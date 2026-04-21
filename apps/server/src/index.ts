@@ -17,6 +17,7 @@ import {
 import { createMachineAuthService } from "./services/machine-auth.js";
 import { createSandboxEnvService } from "./services/sandbox-env/service.js";
 import { runPeriodicSweeps } from "./services/system/periodic-sweeps.js";
+import { createLifecycleDedupers } from "./lifecycle-dedupers.js";
 import type { ServerRuntimeConfig } from "./types.js";
 import { NotificationHub } from "./ws/hub.js";
 
@@ -33,6 +34,7 @@ async function main(): Promise<void> {
   });
   pendingInteractions.start();
   const sandboxRegistry = createSandboxHostRegistry();
+  const lifecycleDedupers = createLifecycleDedupers();
   const appUrl = toOptionalString(serverConfig.BB_APP_URL);
   const externalUrl = toOptionalString(serverConfig.BB_EXTERNAL_URL);
 
@@ -87,6 +89,7 @@ async function main(): Promise<void> {
       db,
       hostLifecycle,
       hub,
+      lifecycleDedupers,
       logger,
       machineAuth,
       sandboxEnv,
@@ -117,6 +120,7 @@ async function main(): Promise<void> {
       db,
       hostLifecycle,
       hub,
+      lifecycleDedupers,
       logger,
       machineAuth,
       pendingInteractions,

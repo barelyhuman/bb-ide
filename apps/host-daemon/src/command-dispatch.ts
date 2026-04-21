@@ -1,6 +1,7 @@
 import type {
   HostDaemonCommand,
   HostDaemonCommandResult,
+  HostDaemonCommandType,
 } from "@bb/host-daemon-contract";
 import {
   defaultListModels,
@@ -35,10 +36,6 @@ import {
   listBranches,
   listWorkspaceFiles,
 } from "./command-handlers/workspace-files.js";
-
-/** System stability caps — applied when the server doesn't specify its own. */
-const SYSTEM_MAX_DIFF_BYTES = 2 * 1024 * 1024; // 2 MB
-const SYSTEM_MAX_FILE_LIST_BYTES = 256 * 1024; // 256 KB
 
 export {
   CommandDispatchError,
@@ -82,181 +79,215 @@ function seedThreadHighWaterMarkIfPresent(
   });
 }
 
-export async function dispatchCommand<TCommand extends HostDaemonCommand>(
-  command: TCommand,
+type CommandHandlerMap = {
+  [TType in HostDaemonCommandType]: (
+    command: Extract<HostDaemonCommand, { type: TType }>,
+    options: CommandDispatchOptions,
+  ) => Promise<HostDaemonCommandResult<TType>>;
+};
+
+const commandHandlers: CommandHandlerMap = {
+  "thread.start": async (
+    command: Extract<HostDaemonCommand, { type: "thread.start" }>,
+    options: CommandDispatchOptions,
+  ) => {
+    recordReplayThreadMetadata(command, options);
+    seedThreadHighWaterMarkIfPresent(command, options);
+    return startThread(command, options);
+  },
+  "turn.submit": async (
+    command: Extract<HostDaemonCommand, { type: "turn.submit" }>,
+    options: CommandDispatchOptions,
+  ) => {
+    recordReplayThreadMetadata(command, options);
+    seedThreadHighWaterMarkIfPresent(command, options);
+    const entry = await ensureThreadRuntime(command, options);
+    return submitTurn(command, entry);
+  },
+  "thread.stop": async (
+    command: Extract<HostDaemonCommand, { type: "thread.stop" }>,
+    options: CommandDispatchOptions,
+  ) => {
+    const replayTask = options.replayTasks?.get(command.threadId);
+    if (replayTask) {
+      replayTask.abort.abort();
+      return {};
+    }
+    const entry = await requireExistingEnvironment(
+      command.environmentId,
+      options.runtimeManager,
+    );
+    await entry.runtime.stopThread({ threadId: command.threadId });
+    // Stop completion finalizes server-side thread state. Flush provider
+    // events first so buffered lifecycle events cannot arrive after that.
+    await options.eventSink.flush();
+    options.runtimeManager.forgetThread(
+      command.environmentId,
+      command.threadId,
+    );
+    return {};
+  },
+  "thread.rename": async (
+    command: Extract<HostDaemonCommand, { type: "thread.rename" }>,
+    options: CommandDispatchOptions,
+  ) => {
+    const entry = await requireExistingEnvironment(
+      command.environmentId,
+      options.runtimeManager,
+    );
+    await entry.runtime.renameThread({
+      threadId: command.threadId,
+      title: command.title,
+    });
+    return {};
+  },
+  "thread.deleted": async (
+    command: Extract<HostDaemonCommand, { type: "thread.deleted" }>,
+    options: CommandDispatchOptions,
+  ) => handleThreadDeleted(command, options),
+  "replay.capture_list": async (
+    _command: Extract<HostDaemonCommand, { type: "replay.capture_list" }>,
+    options: CommandDispatchOptions,
+  ) => listReplayCaptures(options),
+  "replay.capture_get": async (
+    command: Extract<HostDaemonCommand, { type: "replay.capture_get" }>,
+    options: CommandDispatchOptions,
+  ) => getReplayCapture(command, options),
+  "replay.capture_delete": async (
+    command: Extract<HostDaemonCommand, { type: "replay.capture_delete" }>,
+    options: CommandDispatchOptions,
+  ) => removeReplayCapture(command, options),
+  "replay.run": async (
+    command: Extract<HostDaemonCommand, { type: "replay.run" }>,
+    options: CommandDispatchOptions,
+  ) => runReplay(command, options),
+  "interactive.resolve": async (
+    command: Extract<HostDaemonCommand, { type: "interactive.resolve" }>,
+    options: CommandDispatchOptions,
+  ) => resolveInteractiveRequest(command, options),
+  "host.sync_runtime_material": async (
+    command: Extract<HostDaemonCommand, { type: "host.sync_runtime_material" }>,
+    options: CommandDispatchOptions,
+  ) => syncRuntimeMaterial(command, options),
+  "host.list_files": async (
+    command: Extract<HostDaemonCommand, { type: "host.list_files" }>,
+    _options: CommandDispatchOptions,
+  ) => listHostFiles(command),
+  "host.read_file": async (
+    command: Extract<HostDaemonCommand, { type: "host.read_file" }>,
+    _options: CommandDispatchOptions,
+  ) => readHostFile(command),
+  "provider.list": async (
+    _command: Extract<HostDaemonCommand, { type: "provider.list" }>,
+    options: CommandDispatchOptions,
+  ) => ({
+    providers: (options.listProviders ?? defaultListProviders)(),
+  }),
+  "provider.list_models": async (
+    command: Extract<HostDaemonCommand, { type: "provider.list_models" }>,
+    options: CommandDispatchOptions,
+  ) => ({
+    models: await (options.listModels ?? defaultListModels)({
+      providerId: command.providerId,
+      selectedModel: command.selectedModel,
+    }),
+  }),
+  "environment.provision": async (
+    command: Extract<HostDaemonCommand, { type: "environment.provision" }>,
+    options: CommandDispatchOptions,
+  ) => provisionEnvironment(command, options),
+  "environment.destroy": async (
+    command: Extract<HostDaemonCommand, { type: "environment.destroy" }>,
+    options: CommandDispatchOptions,
+  ) => {
+    try {
+      await requireWorkspaceEnvironment(command, options.runtimeManager);
+      await options.runtimeManager.destroyEnvironment(command.environmentId);
+    } catch (error) {
+      // Treat already-missing workspaces as successful destroy (idempotent retry).
+      if (error instanceof WorkspaceError && error.code === "path_not_found") {
+        return {};
+      }
+      throw error;
+    }
+    return {};
+  },
+  "workspace.status": async (
+    command: Extract<HostDaemonCommand, { type: "workspace.status" }>,
+    options: CommandDispatchOptions,
+  ) => {
+    const entry = await requireWorkspaceEnvironment(
+      command,
+      options.runtimeManager,
+    );
+    return {
+      workspaceStatus: await entry.workspace.getStatus({
+        mergeBaseBranch: command.mergeBaseBranch,
+      }),
+    };
+  },
+  "workspace.diff": async (
+    command: Extract<HostDaemonCommand, { type: "workspace.diff" }>,
+    options: CommandDispatchOptions,
+  ) => {
+    const entry = await requireWorkspaceEnvironment(
+      command,
+      options.runtimeManager,
+    );
+    return {
+      diff: await entry.workspace.getDiff({
+        target: command.target,
+        maxDiffBytes: command.maxDiffBytes,
+        maxFileListBytes: command.maxFileListBytes,
+      }),
+    };
+  },
+  "workspace.commit": async (
+    command: Extract<HostDaemonCommand, { type: "workspace.commit" }>,
+    options: CommandDispatchOptions,
+  ) => {
+    const entry = await requireWorkspaceEnvironment(
+      command,
+      options.runtimeManager,
+    );
+    return entry.workspace.commit({
+      message: command.message,
+      noVerify: true,
+    });
+  },
+  "workspace.squash_merge": async (
+    command: Extract<HostDaemonCommand, { type: "workspace.squash_merge" }>,
+    options: CommandDispatchOptions,
+  ) => squashMerge(command, options.runtimeManager),
+  "workspace.promote": async (
+    command: Extract<HostDaemonCommand, { type: "workspace.promote" }>,
+    options: CommandDispatchOptions,
+  ) => promoteWorkspace(command, options.runtimeManager),
+  "workspace.demote": async (
+    command: Extract<HostDaemonCommand, { type: "workspace.demote" }>,
+    options: CommandDispatchOptions,
+  ) => demoteWorkspace(command, options.runtimeManager),
+  "workspace.list_files": async (
+    command: Extract<HostDaemonCommand, { type: "workspace.list_files" }>,
+    options: CommandDispatchOptions,
+  ) => listWorkspaceFiles(command, options.runtimeManager),
+  "workspace.list_branches": async (
+    command: Extract<HostDaemonCommand, { type: "workspace.list_branches" }>,
+    options: CommandDispatchOptions,
+  ) => listBranches(command, options.runtimeManager),
+};
+
+function dispatchCommandByType<TType extends HostDaemonCommandType>(
+  type: TType,
+  command: Extract<HostDaemonCommand, { type: TType }>,
   options: CommandDispatchOptions,
-): Promise<HostDaemonCommandResult<TCommand["type"]>> {
-  switch (command.type) {
-    case "thread.start":
-      recordReplayThreadMetadata(command, options);
-      seedThreadHighWaterMarkIfPresent(command, options);
-      return startThread(command, options) as Promise<
-        HostDaemonCommandResult<TCommand["type"]>
-      >;
-    case "turn.submit": {
-      recordReplayThreadMetadata(command, options);
-      seedThreadHighWaterMarkIfPresent(command, options);
-      const entry = await ensureThreadRuntime(command, options);
-      return submitTurn(command, entry) as Promise<
-        HostDaemonCommandResult<TCommand["type"]>
-      >;
-    }
-    case "thread.stop": {
-      const replayTask = options.replayTasks?.get(command.threadId);
-      if (replayTask) {
-        replayTask.abort.abort();
-        return {} as HostDaemonCommandResult<TCommand["type"]>;
-      }
-      const entry = await requireExistingEnvironment(
-        command.environmentId,
-        options.runtimeManager,
-      );
-      await entry.runtime.stopThread({ threadId: command.threadId });
-      // Stop completion finalizes server-side thread state. Flush provider
-      // events first so buffered lifecycle events cannot arrive after that.
-      await options.eventSink.flush();
-      options.runtimeManager.forgetThread(
-        command.environmentId,
-        command.threadId,
-      );
-      return {} as HostDaemonCommandResult<TCommand["type"]>;
-    }
-    case "thread.rename": {
-      const entry = await requireExistingEnvironment(
-        command.environmentId,
-        options.runtimeManager,
-      );
-      await entry.runtime.renameThread({
-        threadId: command.threadId,
-        title: command.title,
-      });
-      return {} as HostDaemonCommandResult<TCommand["type"]>;
-    }
-    case "thread.deleted":
-      return handleThreadDeleted(command, options) as Promise<
-        HostDaemonCommandResult<TCommand["type"]>
-      >;
-    case "replay.capture_list":
-      return listReplayCaptures(options) as Promise<
-        HostDaemonCommandResult<TCommand["type"]>
-      >;
-    case "replay.capture_get":
-      return getReplayCapture(command, options) as Promise<
-        HostDaemonCommandResult<TCommand["type"]>
-      >;
-    case "replay.capture_delete":
-      return removeReplayCapture(command, options) as Promise<
-        HostDaemonCommandResult<TCommand["type"]>
-      >;
-    case "replay.run":
-      return runReplay(command, options) as Promise<
-        HostDaemonCommandResult<TCommand["type"]>
-      >;
-    case "interactive.resolve":
-      return resolveInteractiveRequest(command, options) as Promise<
-        HostDaemonCommandResult<TCommand["type"]>
-      >;
-    case "host.sync_runtime_material":
-      return syncRuntimeMaterial(command, options) as Promise<
-        HostDaemonCommandResult<TCommand["type"]>
-      >;
-    case "host.list_files":
-      return listHostFiles(command) as Promise<
-        HostDaemonCommandResult<TCommand["type"]>
-      >;
-    case "host.read_file":
-      return readHostFile(command) as Promise<
-        HostDaemonCommandResult<TCommand["type"]>
-      >;
-    case "provider.list":
-      return {
-        providers: (options.listProviders ?? defaultListProviders)(),
-      } as HostDaemonCommandResult<TCommand["type"]>;
-    case "provider.list_models":
-      return {
-        models: await (options.listModels ?? defaultListModels)({
-          providerId: command.providerId,
-          selectedModel: command.selectedModel,
-        }),
-      } as HostDaemonCommandResult<TCommand["type"]>;
-    case "environment.provision":
-      return provisionEnvironment(command, options) as Promise<
-        HostDaemonCommandResult<TCommand["type"]>
-      >;
-    case "environment.destroy": {
-      try {
-        await requireWorkspaceEnvironment(command, options.runtimeManager);
-        await options.runtimeManager.destroyEnvironment(command.environmentId);
-      } catch (error) {
-        // Treat already-missing workspaces as successful destroy (idempotent retry).
-        if (
-          error instanceof WorkspaceError &&
-          error.code === "path_not_found"
-        ) {
-          return {} as HostDaemonCommandResult<TCommand["type"]>;
-        }
-        throw error;
-      }
-      return {} as HostDaemonCommandResult<TCommand["type"]>;
-    }
-    case "workspace.status": {
-      const entry = await requireWorkspaceEnvironment(
-        command,
-        options.runtimeManager,
-      );
-      return {
-        workspaceStatus: await entry.workspace.getStatus({
-          mergeBaseBranch: command.mergeBaseBranch,
-        }),
-      } as HostDaemonCommandResult<TCommand["type"]>;
-    }
-    case "workspace.diff": {
-      const entry = await requireWorkspaceEnvironment(
-        command,
-        options.runtimeManager,
-      );
-      return {
-        diff: await entry.workspace.getDiff({
-          target: command.target,
-          maxDiffBytes: command.maxDiffBytes ?? SYSTEM_MAX_DIFF_BYTES,
-          maxFileListBytes:
-            command.maxFileListBytes ?? SYSTEM_MAX_FILE_LIST_BYTES,
-        }),
-      } as HostDaemonCommandResult<TCommand["type"]>;
-    }
-    case "workspace.commit": {
-      const entry = await requireWorkspaceEnvironment(
-        command,
-        options.runtimeManager,
-      );
-      return entry.workspace.commit({
-        message: command.message,
-        noVerify: true,
-      }) as Promise<HostDaemonCommandResult<TCommand["type"]>>;
-    }
-    case "workspace.squash_merge":
-      return squashMerge(command, options.runtimeManager) as Promise<
-        HostDaemonCommandResult<TCommand["type"]>
-      >;
-    case "workspace.promote":
-      return promoteWorkspace(command, options.runtimeManager) as Promise<
-        HostDaemonCommandResult<TCommand["type"]>
-      >;
-    case "workspace.demote":
-      return demoteWorkspace(command, options.runtimeManager) as Promise<
-        HostDaemonCommandResult<TCommand["type"]>
-      >;
-    case "workspace.list_files":
-      return listWorkspaceFiles(command, options.runtimeManager) as Promise<
-        HostDaemonCommandResult<TCommand["type"]>
-      >;
-    case "workspace.list_branches":
-      return listBranches(command, options.runtimeManager) as Promise<
-        HostDaemonCommandResult<TCommand["type"]>
-      >;
-    default: {
-      const _exhaustive: never = command;
-      throw new Error(`Unhandled command type: ${String(_exhaustive)}`);
-    }
-  }
+): Promise<HostDaemonCommandResult<TType>> {
+  return commandHandlers[type](command, options);
+}
+
+export function dispatchCommand<TType extends HostDaemonCommandType>(
+  command: Extract<HostDaemonCommand, { type: TType }>,
+  options: CommandDispatchOptions,
+): Promise<HostDaemonCommandResult<TType>> {
+  return dispatchCommandByType(command.type, command, options);
 }

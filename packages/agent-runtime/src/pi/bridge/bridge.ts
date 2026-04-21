@@ -320,6 +320,13 @@ function getCurrentThreadSession(
   return threadSession;
 }
 
+function removeThreadSessionIfCurrent(args: CurrentThreadSessionArgs): void {
+  const threadSession = sessions.get(args.threadId);
+  if (threadSession?.sessionSerial === args.sessionSerial) {
+    sessions.delete(args.threadId);
+  }
+}
+
 function createOnPiEvent(
   args: CreateSessionCallbackArgs,
 ): (event: AgentSessionEvent) => void {
@@ -639,7 +646,12 @@ async function handleThreadStart(
   };
   sessions.set(threadId, threadSession);
 
-  await session.start();
+  try {
+    await session.start();
+  } catch (error) {
+    removeThreadSessionIfCurrent({ sessionSerial, threadId });
+    throw error;
+  }
 
   sendResult(id, { threadId });
   send({
@@ -687,7 +699,12 @@ async function handleThreadResume(
   };
   sessions.set(threadId, threadSession);
 
-  await session.start();
+  try {
+    await session.start();
+  } catch (error) {
+    removeThreadSessionIfCurrent({ sessionSerial, threadId });
+    throw error;
+  }
 
   sendResult(id, { threadId });
 }

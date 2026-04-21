@@ -23,6 +23,7 @@ import type {
   ReasoningLevel,
   ServiceTier,
   ThreadOperationKind,
+  ThreadProvisioningStage,
   ThreadType,
   ThreadEventItemType,
   ThreadEventType,
@@ -204,8 +205,8 @@ export const projectSources = sqliteTable(
       )`,
     ),
     // NOTE: Drizzle does not support partial/filtered unique indexes.
-    // The constraint "only one default source per project" (WHERE is_default = 1)
-    // must be enforced in application code.
+    // Migration 0037 adds the database constraint for at most one default
+    // source per project.
   ],
 );
 
@@ -497,6 +498,10 @@ export const pendingInteractions = sqliteTable(
     providerThreadId: text("provider_thread_id").notNull(),
     providerRequestId: text("provider_request_id").notNull(),
     sessionId: text("session_id").notNull(),
+    resolvingCommandId: text("resolving_command_id").references(
+      () => hostDaemonCommands.id,
+      { onDelete: "set null" },
+    ),
     status: text("status").$type<PendingInteractionStatus>().notNull(),
     payload: text("payload").notNull(),
     resolution: text("resolution"),
@@ -524,6 +529,9 @@ export const pendingInteractions = sqliteTable(
     index("pending_interactions_status_created_idx").on(
       table.status,
       table.createdAt,
+    ),
+    index("pending_interactions_resolving_command_idx").on(
+      table.resolvingCommandId,
     ),
   ],
 );
@@ -627,6 +635,15 @@ export const threadOperations = sqliteTable(
     kind: text("kind").$type<ThreadOperationKind>().notNull(),
     state: text("state").$type<LifecycleOperationState>().notNull(),
     payload: text("payload").notNull(),
+    provisioningId: text("provisioning_id"),
+    provisioningStage:
+      text("provisioning_stage").$type<ThreadProvisioningStage>(),
+    provisioningEnvironmentId: text("provisioning_environment_id").references(
+      () => environments.id,
+      { onDelete: "set null" },
+    ),
+    provisionEventSequence: integer("provision_event_sequence"),
+    workspaceReadyEventSequence: integer("workspace_ready_event_sequence"),
     commandId: text("command_id").references(() => hostDaemonCommands.id, {
       onDelete: "set null",
     }),

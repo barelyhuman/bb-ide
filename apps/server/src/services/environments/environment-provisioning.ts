@@ -23,8 +23,12 @@ import type {
   EnvironmentOperationKind,
   ProvisioningTranscriptEntry,
   SystemThreadProvisioningStatus,
+  ThreadProvisioningStage,
 } from "@bb/domain";
-import { activeLifecycleOperationStates } from "@bb/domain";
+import {
+  activeLifecycleOperationStates,
+  isActiveLifecycleOperationState,
+} from "@bb/domain";
 import { type HostDaemonCommand } from "@bb/host-daemon-contract";
 import type { SandboxHostProgressEvent } from "@bb/sandbox-host";
 import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
@@ -46,7 +50,6 @@ import {
   type EnvironmentProvisionRequest,
   type SandboxHostEnvironmentProvisionRequest,
 } from "./environment-provision-request.js";
-import { createAsyncDeduper } from "../lib/async-deduper.js";
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
 import {
   destroyHost,
@@ -55,7 +58,7 @@ import {
 } from "../hosts/host-lifecycle.js";
 import { advanceEnvironmentCleanup } from "./environment-cleanup.js";
 import { tryTransition } from "../threads/thread-transitions.js";
-import { readThreadProvisioningIdFromPayload } from "../threads/thread-provisioning-identity.js";
+import { readThreadProvisioningIdFromRecord } from "../threads/thread-provisioning-state.js";
 
 type EnvironmentProvisionOperationKind = Extract<
   EnvironmentOperationKind,
@@ -104,7 +107,11 @@ interface FailEnvironmentProvisioningDurablyArgs {
 
 interface LiveEnvironmentThread {
   id: string;
-  provisionOperationPayload: string | null;
+  provisionEventSequence: number | null;
+  provisionOperationProvisioningEnvironmentId: string | null;
+  provisionOperationProvisioningId: string | null;
+  provisionOperationProvisioningStage: ThreadProvisioningStage | null;
+  workspaceReadyEventSequence: number | null;
 }
 
 interface AppendThreadProvisioningEventToEnvironmentThreadsArgs {
@@ -115,8 +122,6 @@ interface AppendThreadProvisioningEventToEnvironmentThreadsArgs {
   threads?: LiveEnvironmentThread[];
 }
 
-const sandboxBootstrapDeduper = createAsyncDeduper<string, void>();
-
 function listLiveEnvironmentThreads(
   deps: Pick<AppDeps, "db">,
   environmentId: string,
@@ -124,7 +129,12 @@ function listLiveEnvironmentThreads(
   return deps.db
     .select({
       id: threads.id,
-      provisionOperationPayload: threadOperations.payload,
+      provisionEventSequence: threadOperations.provisionEventSequence,
+      provisionOperationProvisioningEnvironmentId:
+        threadOperations.provisioningEnvironmentId,
+      provisionOperationProvisioningId: threadOperations.provisioningId,
+      provisionOperationProvisioningStage: threadOperations.provisioningStage,
+      workspaceReadyEventSequence: threadOperations.workspaceReadyEventSequence,
     })
     .from(threads)
     .leftJoin(
@@ -145,10 +155,20 @@ function resolveLiveThreadProvisioningId(
   thread: LiveEnvironmentThread,
   fallbackProvisioningId: string,
 ): string {
-  if (!thread.provisionOperationPayload) {
+  if (
+    thread.provisionOperationProvisioningId === null &&
+    thread.provisionOperationProvisioningStage === null
+  ) {
     return fallbackProvisioningId;
   }
-  return readThreadProvisioningIdFromPayload(thread.provisionOperationPayload);
+  return readThreadProvisioningIdFromRecord({
+    provisionEventSequence: thread.provisionEventSequence,
+    provisioningEnvironmentId:
+      thread.provisionOperationProvisioningEnvironmentId,
+    provisioningId: thread.provisionOperationProvisioningId,
+    provisioningStage: thread.provisionOperationProvisioningStage,
+    workspaceReadyEventSequence: thread.workspaceReadyEventSequence,
+  });
 }
 
 function appendThreadProvisioningEventToEnvironmentThreads(
@@ -238,12 +258,6 @@ function queueEnvironmentProvisionCommand(
   return queuedCommand.id;
 }
 
-function isActiveProvisionOperationState(
-  state: EnvironmentOperationRow["state"],
-): boolean {
-  return state === "requested" || state === "queued" || state === "fetched";
-}
-
 function getActiveProvisionOperation(
   deps: Pick<AppDeps, "db">,
   environmentId: string,
@@ -255,7 +269,7 @@ function getActiveProvisionOperation(
       environmentId,
       kind,
     });
-    if (operation && isActiveProvisionOperationState(operation.state)) {
+    if (operation && isActiveLifecycleOperationState(operation.state)) {
       return {
         ...operation,
         kind,
@@ -274,7 +288,7 @@ function getActiveProvisionOperationByCommandId(
   if (
     !operation ||
     (operation.kind !== "provision" && operation.kind !== "reprovision") ||
-    !isActiveProvisionOperationState(operation.state)
+    !isActiveLifecycleOperationState(operation.state)
   ) {
     return null;
   }
@@ -431,6 +445,7 @@ export async function failEnvironmentProvisioningDurably(
     | "db"
     | "hostLifecycle"
     | "hub"
+    | "lifecycleDedupers"
     | "machineAuth"
     | "sandboxEnv"
     | "sandboxRegistry"
@@ -512,6 +527,7 @@ async function bootstrapSandboxProvisioning(
     | "db"
     | "hostLifecycle"
     | "hub"
+    | "lifecycleDedupers"
     | "machineAuth"
     | "sandboxEnv"
     | "sandboxRegistry"
@@ -608,6 +624,7 @@ export async function advanceEnvironmentProvisioning(
     | "db"
     | "hostLifecycle"
     | "hub"
+    | "lifecycleDedupers"
     | "machineAuth"
     | "sandboxEnv"
     | "sandboxRegistry"
@@ -641,13 +658,16 @@ export async function advanceEnvironmentProvisioning(
     // Sandbox bootstrap is intentionally fire-and-forget here: failures are
     // handled inside bootstrapSandboxProvisioning so the request path and
     // sweeps both converge on the same async lifecycle.
-    void sandboxBootstrapDeduper.run(environment.id, async () => {
-      await bootstrapSandboxProvisioning(deps, {
-        environment,
-        operationKind: operation.kind,
-        request,
-      });
-    });
+    void deps.lifecycleDedupers.sandboxBootstrap.run(
+      environment.id,
+      async () => {
+        await bootstrapSandboxProvisioning(deps, {
+          environment,
+          operationKind: operation.kind,
+          request,
+        });
+      },
+    );
     return null;
   }
 

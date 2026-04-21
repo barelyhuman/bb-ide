@@ -9,7 +9,6 @@ import {
   listHostOperations,
   markHostOperationRecordCompleted,
   markHostOperationRecordFailed,
-  markHostOperationRecordFetched,
   markHostOperationRecordQueued,
   resetHostOperationRecordToRequested,
   upsertHostOperationRecord,
@@ -61,7 +60,7 @@ describe("host operations", () => {
     });
   });
 
-  it("records queued, fetched, completed, and failed host operations", () => {
+  it("records queued, completed, and failed host operations", () => {
     const { db, host } = setup();
     const command = queueCommand(db, noopNotifier, {
       hostId: host.id,
@@ -79,10 +78,6 @@ describe("host operations", () => {
       kind: "sync_runtime_material",
       commandId: command.id,
       queuedAt: 333,
-    });
-    const fetched = markHostOperationRecordFetched(db, {
-      hostId: host.id,
-      kind: "sync_runtime_material",
     });
     const completed = markHostOperationRecordCompleted(db, {
       hostId: host.id,
@@ -112,7 +107,6 @@ describe("host operations", () => {
       commandId: command.id,
       queuedAt: 333,
     });
-    expect(fetched?.state).toBe("fetched");
     expect(getHostOperationByCommandId(db, command.id)?.id).toBe(queued?.id);
     expect(completed).toMatchObject({
       state: "completed",
@@ -206,45 +200,6 @@ describe("host operations", () => {
     });
   });
 
-  it("does not move completed host operations back to fetched", () => {
-    const { db, host } = setup();
-    const command = queueCommand(db, noopNotifier, {
-      hostId: host.id,
-      type: "provider.list",
-      payload: JSON.stringify({ type: "provider.list" }),
-    });
-
-    upsertHostOperationRecord(db, {
-      hostId: host.id,
-      kind: "sync_runtime_material",
-      payload: JSON.stringify({ version: 1 }),
-    });
-    markHostOperationRecordQueued(db, {
-      hostId: host.id,
-      kind: "sync_runtime_material",
-      commandId: command.id,
-    });
-    markHostOperationRecordCompleted(db, {
-      hostId: host.id,
-      kind: "sync_runtime_material",
-    });
-
-    const regressed = markHostOperationRecordFetched(db, {
-      hostId: host.id,
-      kind: "sync_runtime_material",
-    });
-
-    expect(regressed).toBeNull();
-    expect(
-      getHostOperation(db, {
-        hostId: host.id,
-        kind: "sync_runtime_material",
-      }),
-    ).toMatchObject({
-      state: "completed",
-    });
-  });
-
   it("only resets host operations to requested from allowed states", () => {
     const { db, host } = setup();
     const command = queueCommand(db, noopNotifier, {
@@ -269,7 +224,7 @@ describe("host operations", () => {
     });
 
     const rejectedReset = resetHostOperationRecordToRequested(db, {
-      allowedCurrentStates: ["queued", "fetched"],
+      allowedCurrentStates: ["queued"],
       hostId: host.id,
       kind: "sync_runtime_material",
       payload: JSON.stringify({ version: 2 }),

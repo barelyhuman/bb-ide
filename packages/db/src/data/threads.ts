@@ -97,6 +97,25 @@ export interface ListThreadsOptions {
 
 type ThreadRow = typeof threads.$inferSelect;
 
+interface InvalidThreadStatusTransitionErrorArgs {
+  currentStatus: ThreadStatus;
+  newStatus: ThreadStatus;
+}
+
+export class InvalidThreadStatusTransitionError extends Error {
+  readonly currentStatus: ThreadStatus;
+  readonly newStatus: ThreadStatus;
+
+  constructor(args: InvalidThreadStatusTransitionErrorArgs) {
+    super(
+      `Invalid thread status transition: ${args.currentStatus} → ${args.newStatus}`,
+    );
+    this.name = "InvalidThreadStatusTransitionError";
+    this.currentStatus = args.currentStatus;
+    this.newStatus = args.newStatus;
+  }
+}
+
 export interface ThreadWithPendingInteractionState extends ThreadRow {
   environmentBranchName: string | null;
   environmentHostId: string | null;
@@ -522,9 +541,10 @@ export function transitionThreadStatus(
   const currentStatus = thread.status;
   const allowed = ALLOWED_TRANSITIONS[currentStatus];
   if (!allowed || !allowed.includes(newStatus)) {
-    throw new Error(
-      `Invalid thread status transition: ${currentStatus} → ${newStatus}`,
-    );
+    throw new InvalidThreadStatusTransitionError({
+      currentStatus,
+      newStatus,
+    });
   }
 
   const now = Date.now();

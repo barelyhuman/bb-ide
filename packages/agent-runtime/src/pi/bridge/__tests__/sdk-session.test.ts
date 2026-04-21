@@ -194,6 +194,22 @@ describe("PiSdkSession", () => {
     );
   });
 
+  it("rejects unresolved explicit models before opening a Pi session", async () => {
+    const session = new PiSdkSession(
+      {
+        cwd: "/tmp/project",
+        model: "unsupported/model",
+      },
+      vi.fn(),
+      vi.fn(),
+    );
+
+    await expect(session.start()).rejects.toThrow(
+      'Failed to resolve Pi model "unsupported/model"',
+    );
+    expect(mockCreateAgentSession).not.toHaveBeenCalled();
+  });
+
   it("forwards thinking level to the SDK when configured", async () => {
     const session = new PiSdkSession(
       {

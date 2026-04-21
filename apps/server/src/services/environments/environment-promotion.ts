@@ -4,7 +4,6 @@ import type {
   LocalPathProjectSource,
   WorkspaceStatus,
 } from "@bb/domain";
-import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type {
   EnvironmentPromotionActionAvailability,
   EnvironmentPromotionResponse,
@@ -267,7 +266,7 @@ async function readWorkspaceStatus(
   if (!args.environment.isGitRepo || !args.environment.path) {
     return null;
   }
-  const rawResult = await queueCommandAndWait(deps, {
+  const result = await queueCommandAndWait(deps, {
     hostId: args.environment.hostId,
     timeoutMs: COMMAND_TIMEOUT_MS,
     command: {
@@ -279,8 +278,6 @@ async function readWorkspaceStatus(
       },
     },
   });
-  const result =
-    hostDaemonCommandResultSchemaByType["workspace.status"].parse(rawResult);
   return result.workspaceStatus;
 }
 

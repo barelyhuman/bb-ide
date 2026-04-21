@@ -1,20 +1,14 @@
 import { queueCommand } from "@bb/db";
-import type {
-  HostDaemonCommand,
-  HostDaemonCommandType,
+import {
+  hostDaemonCommandResultSchemaByType,
+  type HostDaemonCommand,
+  type HostDaemonCommandResult,
+  type HostDaemonCommandType,
 } from "@bb/host-daemon-contract";
+import type { CommandResultWaiterResponse } from "../../internal/command-result-response.js";
 import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { ensureHostSessionReadyForWork } from "./host-lifecycle.js";
-
-export interface CompletedCommandResult {
-  commandId: string;
-  errorCode?: string;
-  errorMessage?: string;
-  ok: boolean;
-  result?: unknown;
-  type: string;
-}
 
 export interface QueueCommandAndWaitArgs<TType extends HostDaemonCommandType> {
   command: Extract<HostDaemonCommand, { type: TType }>;
@@ -22,27 +16,22 @@ export interface QueueCommandAndWaitArgs<TType extends HostDaemonCommandType> {
   timeoutMs: number;
 }
 
-export interface WaitForQueuedCommandResultArgs {
+export interface WaitForQueuedCommandResultArgs<
+  TType extends HostDaemonCommandType,
+> {
   commandId: string;
   timeoutMs: number;
+  type: TType;
 }
 
-function isCompletedCommandResult(
-  value: unknown,
-): value is CompletedCommandResult {
-  if (value == null || typeof value !== "object") {
-    return false;
-  }
-  if (!("commandId" in value) || !("ok" in value) || !("type" in value)) {
-    return false;
-  }
-  return true;
-}
-
-export async function queueCommandAndWait<TType extends HostDaemonCommandType>(
+export function queueCommandAndWait<TType extends HostDaemonCommandType>(
   deps: SandboxWorkSessionDeps,
   args: QueueCommandAndWaitArgs<TType>,
-): Promise<unknown> {
+): Promise<HostDaemonCommandResult<TType>>;
+export async function queueCommandAndWait(
+  deps: SandboxWorkSessionDeps,
+  args: QueueCommandAndWaitArgs<HostDaemonCommandType>,
+): Promise<HostDaemonCommandResult> {
   const session = await ensureHostSessionReadyForWork(deps, {
     hostId: args.hostId,
   });
@@ -56,14 +45,19 @@ export async function queueCommandAndWait<TType extends HostDaemonCommandType>(
   return waitForQueuedCommandResult(deps, {
     commandId: queuedCommand.id,
     timeoutMs: args.timeoutMs,
+    type: args.command.type,
   });
 }
 
+export function waitForQueuedCommandResult<TType extends HostDaemonCommandType>(
+  deps: Pick<AppDeps, "hub">,
+  args: WaitForQueuedCommandResultArgs<TType>,
+): Promise<HostDaemonCommandResult<TType>>;
 export async function waitForQueuedCommandResult(
   deps: Pick<AppDeps, "hub">,
-  args: WaitForQueuedCommandResultArgs,
-): Promise<unknown> {
-  let completed: unknown;
+  args: WaitForQueuedCommandResultArgs<HostDaemonCommandType>,
+): Promise<HostDaemonCommandResult> {
+  let completed: CommandResultWaiterResponse;
   try {
     completed = await deps.hub.waitForCommandResult(
       args.commandId,
@@ -77,10 +71,6 @@ export async function waitForQueuedCommandResult(
     );
   }
 
-  if (!isCompletedCommandResult(completed)) {
-    throw new ApiError(500, "internal_error", "Invalid command result payload");
-  }
-
   if (!completed.ok) {
     throw new ApiError(
       502,
@@ -90,5 +80,13 @@ export async function waitForQueuedCommandResult(
     );
   }
 
-  return completed.result;
+  if (completed.type !== args.type) {
+    throw new ApiError(
+      500,
+      "internal_error",
+      `Command ${args.commandId} completed with unexpected type ${completed.type}`,
+    );
+  }
+
+  return hostDaemonCommandResultSchemaByType[args.type].parse(completed.result);
 }

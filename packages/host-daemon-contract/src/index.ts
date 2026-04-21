@@ -65,6 +65,8 @@ export {
   hostDaemonCommandSchema,
   hostDaemonCommandTypeSchema,
   hostDaemonExecutionOptionsSchema,
+  isHostDaemonCommandType,
+  isKnownHostDaemonCommandResultReport,
   hostListFilesCommandSchema,
   hostReadFileCommandSchema,
   providerListCommandSchema,

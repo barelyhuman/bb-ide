@@ -6,15 +6,14 @@ import type {
 import { createEnvironmentOperationId } from "../ids.js";
 import { environmentOperations } from "../schema.js";
 import {
-  cancelLifecycleOperationRecord,
+  buildLifecycleOperationUpdateValues,
+  buildRequestedLifecycleOperationValues,
+  createLifecycleOperationRepository,
+  getLifecycleOperationByCommandId,
+  listLifecycleOperationRows,
   type LifecycleOperationReadConnection,
   type LifecycleOperationStore,
   type LifecycleOperationWriteConnection,
-  markLifecycleOperationCompleted,
-  markLifecycleOperationFailed,
-  markLifecycleOperationFetched,
-  markLifecycleOperationQueued,
-  upsertLifecycleOperationRecord,
 } from "./lifecycle-operation-helpers.js";
 
 type EnvironmentOperationWriteConnection = LifecycleOperationWriteConnection;
@@ -74,21 +73,20 @@ function updateEnvironmentOperationStateRecord(
   db: EnvironmentOperationWriteConnection,
   args: UpdateEnvironmentOperationStateArgs,
 ): EnvironmentOperationRow | null {
-  const now = Date.now();
-  const set = {
-    state: args.state,
-    payload: args.payload,
-    commandId: args.commandId,
-    queuedAt: args.queuedAt,
-    completedAt: args.completedAt,
-    failureReason: args.failureReason,
-    updatedAt: now,
-  };
-
   return (
     db
       .update(environmentOperations)
-      .set(set)
+      .set(
+        buildLifecycleOperationUpdateValues({
+          state: args.state,
+          payload: args.payload,
+          extraValues: {},
+          commandId: args.commandId,
+          queuedAt: args.queuedAt,
+          completedAt: args.completedAt,
+          failureReason: args.failureReason,
+        }),
+      )
       .where(
         and(
           eq(environmentOperations.environmentId, args.environmentId),
@@ -119,20 +117,18 @@ const environmentOperationStore: LifecycleOperationStore<
   insertRequested: (db, args) =>
     db
       .insert(environmentOperations)
-      .values({
-        id: createEnvironmentOperationId(),
-        environmentId: args.input.environmentId,
-        kind: args.input.kind,
-        state: "requested",
-        payload: args.input.payload,
-        commandId: null,
-        requestedAt: args.requestedAt,
-        queuedAt: null,
-        completedAt: null,
-        failureReason: null,
-        createdAt: args.now,
-        updatedAt: args.now,
-      })
+      .values(
+        buildRequestedLifecycleOperationValues({
+          createId: createEnvironmentOperationId,
+          identity: {
+            environmentId: args.input.environmentId,
+          },
+          input: args.input,
+          extraValues: {},
+          now: args.now,
+          requestedAt: args.requestedAt,
+        }),
+      )
       .returning()
       .get(),
   updateState: (db, args) =>
@@ -148,6 +144,9 @@ const environmentOperationStore: LifecycleOperationStore<
       failureReason: args.failureReason,
     }),
 };
+const environmentOperationRepository = createLifecycleOperationRepository(
+  environmentOperationStore,
+);
 
 export function getEnvironmentOperation(
   db: EnvironmentOperationReadConnection,
@@ -172,98 +171,27 @@ export function listEnvironmentOperations(
       : undefined,
   ].filter((value) => value !== undefined);
 
-  return db
-    .select()
-    .from(environmentOperations)
-    .where(filters.length > 0 ? and(...filters) : undefined)
-    .all();
+  return listLifecycleOperationRows(
+    db,
+    environmentOperations,
+    filters.length > 0 ? and(...filters) : undefined,
+  );
 }
 
 export function getEnvironmentOperationByCommandId(
   db: EnvironmentOperationReadConnection,
   commandId: string,
 ): EnvironmentOperationRow | null {
-  return (
-    db
-      .select()
-      .from(environmentOperations)
-      .where(eq(environmentOperations.commandId, commandId))
-      .get() ?? null
-  );
+  return getLifecycleOperationByCommandId(db, environmentOperations, commandId);
 }
 
-export function upsertEnvironmentOperationRecord(
-  db: EnvironmentOperationWriteConnection,
-  input: UpsertEnvironmentOperationInput,
-): EnvironmentOperationRow {
-  return upsertLifecycleOperationRecord(db, environmentOperationStore, input);
-}
-
-export function markEnvironmentOperationRecordQueued(
-  db: EnvironmentOperationWriteConnection,
-  args: {
-    commandId: string;
-    environmentId: string;
-    kind: EnvironmentOperationKind;
-    queuedAt?: number;
-  },
-): EnvironmentOperationRow | null {
-  return markLifecycleOperationQueued(db, environmentOperationStore, {
-    identity: {
-      environmentId: args.environmentId,
-      kind: args.kind,
-    },
-    commandId: args.commandId,
-    queuedAt: args.queuedAt,
-  });
-}
-
-export function markEnvironmentOperationRecordFetched(
-  db: EnvironmentOperationWriteConnection,
-  args: GetEnvironmentOperationArgs,
-): EnvironmentOperationRow | null {
-  return markLifecycleOperationFetched(db, environmentOperationStore, args);
-}
-
-export function markEnvironmentOperationRecordCompleted(
-  db: EnvironmentOperationWriteConnection,
-  args: GetEnvironmentOperationArgs & { completedAt?: number },
-): EnvironmentOperationRow | null {
-  return markLifecycleOperationCompleted(db, environmentOperationStore, {
-    identity: {
-      environmentId: args.environmentId,
-      kind: args.kind,
-    },
-    completedAt: args.completedAt,
-  });
-}
-
-export function markEnvironmentOperationRecordFailed(
-  db: EnvironmentOperationWriteConnection,
-  args: GetEnvironmentOperationArgs & {
-    completedAt?: number;
-    failureReason: string;
-  },
-): EnvironmentOperationRow | null {
-  return markLifecycleOperationFailed(db, environmentOperationStore, {
-    identity: {
-      environmentId: args.environmentId,
-      kind: args.kind,
-    },
-    completedAt: args.completedAt,
-    failureReason: args.failureReason,
-  });
-}
-
-export function cancelEnvironmentOperationRecord(
-  db: EnvironmentOperationWriteConnection,
-  args: GetEnvironmentOperationArgs & { completedAt?: number },
-): EnvironmentOperationRow | null {
-  return cancelLifecycleOperationRecord(db, environmentOperationStore, {
-    identity: {
-      environmentId: args.environmentId,
-      kind: args.kind,
-    },
-    completedAt: args.completedAt,
-  });
-}
+export const upsertEnvironmentOperationRecord =
+  environmentOperationRepository.upsert;
+export const markEnvironmentOperationRecordQueued =
+  environmentOperationRepository.markQueued;
+export const markEnvironmentOperationRecordCompleted =
+  environmentOperationRepository.markCompleted;
+export const markEnvironmentOperationRecordFailed =
+  environmentOperationRepository.markFailed;
+export const cancelEnvironmentOperationRecord =
+  environmentOperationRepository.cancel;

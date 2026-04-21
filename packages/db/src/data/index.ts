@@ -96,6 +96,7 @@ export {
   markThreadStopRequested,
   unarchiveThread,
   transitionThreadStatus,
+  InvalidThreadStatusTransitionError,
   ALLOWED_TRANSITIONS,
 } from "./threads.js";
 export type {
@@ -174,7 +175,6 @@ export {
   listHostOperations,
   markHostOperationRecordCompleted,
   markHostOperationRecordFailed,
-  markHostOperationRecordFetched,
   markHostOperationRecordQueued,
   resetHostOperationRecordToRequested,
   upsertHostOperationRecord,
@@ -187,6 +187,12 @@ export type {
   UpdateHostOperationStateArgs,
   UpsertHostOperationInput,
 } from "./host-operations.js";
+
+export { listActiveLifecycleOperationTerminalCommands } from "./lifecycle-operation-terminal-commands.js";
+export type {
+  ActiveLifecycleOperationTerminalCommand,
+  LifecycleOperationOwner,
+} from "./lifecycle-operation-terminal-commands.js";
 
 export {
   markHostResumed,
@@ -265,6 +271,7 @@ export type {
 
 export {
   cancelCommand,
+  deleteQueuedCommandInTransaction,
   getCommand,
   getPendingEnvironmentCommand,
   hasPendingHostCommandForThread,
@@ -274,9 +281,10 @@ export {
   reportCommandResult,
 } from "./commands.js";
 export type {
-  QueueCommandInput,
+  DeleteQueuedCommandInTransactionArgs,
   FetchCommandsOptions,
   HasPendingHostCommandForThreadArgs,
+  QueueCommandInput,
   HostDaemonCommandRow,
   ReportCommandResultInput,
 } from "./commands.js";

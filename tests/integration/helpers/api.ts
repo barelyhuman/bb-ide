@@ -1,4 +1,5 @@
 import type {
+  AvailableModel,
   Environment,
   Host,
   Thread,
@@ -7,12 +8,14 @@ import type {
   ThreadGitDiffResponse,
 } from "@bb/domain";
 import {
+  availableModelSchema,
   environmentSchema,
   hostSchema,
   threadEventRowSchema,
   threadGitDiffResponseSchema,
   threadSchema,
 } from "@bb/domain";
+import { listPreferredTestModels } from "@bb/test-helpers";
 import type {
   CreateManagerThreadRequest,
   CreateProjectRequest,
@@ -67,7 +70,15 @@ export interface SendTextMessageOptions {
   text: string;
 }
 
+export interface GetAvailableModelsOptions {
+  hostId?: string;
+  providerId?: string;
+  selectedModel?: string;
+}
+
 type PublicApiClient = ReturnType<typeof createPublicApiClient>;
+const DEFAULT_THREAD_BOOTSTRAP_TEXT =
+  "Reply with exactly READY and nothing else.";
 
 async function expectStatus(
   response: Response,
@@ -87,16 +98,7 @@ function defaultThreadInput(text: string): CreateThreadRequest["input"] {
 }
 
 function defaultModelForProvider(providerId: string): string {
-  switch (providerId) {
-    case "codex":
-      return "gpt-5.4";
-    case "claude-code":
-      return "claude-haiku-4-5";
-    case "pi":
-      return "openai/codex-mini";
-    default:
-      return `${providerId}-model`;
-  }
+  return listPreferredTestModels(providerId)[0] ?? `${providerId}-model`;
 }
 
 async function requireMergeBaseBranch(
@@ -165,7 +167,7 @@ export async function createHostThread(
         hostId: options.hostId,
         workspace: options.workspace,
       },
-      input: options.input ?? defaultThreadInput("Start integration thread"),
+      input: options.input ?? defaultThreadInput(DEFAULT_THREAD_BOOTSTRAP_TEXT),
       ...execution,
       model: model ?? defaultModelForProvider(providerId),
       projectId: options.projectId,
@@ -189,7 +191,7 @@ export async function createReuseThread(
         type: "reuse",
         environmentId: options.environmentId,
       },
-      input: options.input ?? defaultThreadInput("Start integration thread"),
+      input: options.input ?? defaultThreadInput(DEFAULT_THREAD_BOOTSTRAP_TEXT),
       ...execution,
       model: model ?? defaultModelForProvider(providerId),
       projectId: options.projectId,
@@ -264,6 +266,23 @@ export async function getEnvironmentStatus(
   });
   await expectStatus(response, 200, `get environment status ${environmentId}`);
   return environmentStatusResponseSchema.parse(await response.json());
+}
+
+export async function getAvailableModels(
+  api: PublicApiClient,
+  options: GetAvailableModelsOptions,
+): Promise<AvailableModel[]> {
+  const response = await api.system.models.$get({
+    query: {
+      ...(options.hostId ? { hostId: options.hostId } : {}),
+      ...(options.providerId ? { providerId: options.providerId } : {}),
+      ...(options.selectedModel
+        ? { selectedModel: options.selectedModel }
+        : {}),
+    },
+  });
+  await expectStatus(response, 200, "get available models");
+  return availableModelSchema.array().parse(await response.json());
 }
 
 export async function getHosts(api: PublicApiClient): Promise<Host[]> {

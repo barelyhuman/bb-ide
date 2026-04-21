@@ -6,7 +6,6 @@ import {
 } from "@bb/db";
 import { applyProvisionedEnvironmentRecord } from "@bb/db/internal-lifecycle";
 import type { Environment } from "@bb/domain";
-import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { waitForQueuedCommandResult } from "../hosts/command-wait.js";
@@ -49,6 +48,7 @@ type ThreadCreateDeps = Pick<
   | "db"
   | "hostLifecycle"
   | "hub"
+  | "lifecycleDedupers"
   | "logger"
   | "machineAuth"
   | "sandboxEnv"
@@ -283,6 +283,7 @@ export async function ensureProjectSourceEnvironment(
     | "db"
     | "hostLifecycle"
     | "hub"
+    | "lifecycleDedupers"
     | "logger"
     | "machineAuth"
     | "sandboxEnv"
@@ -333,14 +334,11 @@ export async function ensureProjectSourceEnvironment(
       "Failed to queue environment provisioning",
     );
   }
-  const rawResult = await waitForQueuedCommandResult(deps, {
+  const result = await waitForQueuedCommandResult(deps, {
     commandId,
     timeoutMs: COMMAND_TIMEOUT_MS,
+    type: "environment.provision",
   });
-  const result =
-    hostDaemonCommandResultSchemaByType["environment.provision"].parse(
-      rawResult,
-    );
 
   const updated = applyProvisionedEnvironmentRecord(
     deps.db,

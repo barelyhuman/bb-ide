@@ -145,6 +145,8 @@ export {
   projectOperationKindValues,
   threadOperationKindSchema,
   threadOperationKindValues,
+  threadProvisioningStageSchema,
+  threadProvisioningStageValues,
 } from "./lifecycle-operations.js";
 export type {
   EnvironmentOperationKind,
@@ -152,6 +154,8 @@ export type {
   LifecycleOperationState,
   ProjectOperationKind,
   ThreadOperationKind,
+  ThreadProvisioningState,
+  ThreadProvisioningStage,
 } from "./lifecycle-operations.js";
 
 export {

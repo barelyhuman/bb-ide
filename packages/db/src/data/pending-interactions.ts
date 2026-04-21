@@ -57,6 +57,7 @@ export interface SetPendingInteractionTerminalStateArgs {
 }
 
 export interface SetPendingInteractionResolvingArgs {
+  commandId: string;
   id: string;
   resolution: string;
 }
@@ -123,6 +124,7 @@ function updatePendingInteractionTerminalState(
     db
       .update(pendingInteractions)
       .set({
+        resolvingCommandId: null,
         status: args.status,
         resolution: args.resolution,
         statusReason: args.statusReason,
@@ -152,16 +154,17 @@ export function createPendingInteraction(
 
   return db
     .insert(pendingInteractions)
-    .values({
-      id: createPendingInteractionId(),
-      threadId: input.threadId,
+      .values({
+        id: createPendingInteractionId(),
+        threadId: input.threadId,
       turnId: input.turnId,
       providerId: input.providerId,
-      providerThreadId: input.providerThreadId,
-      providerRequestId: input.providerRequestId,
-      sessionId: input.sessionId,
-      status: "pending",
-      payload: input.payload,
+        providerThreadId: input.providerThreadId,
+        providerRequestId: input.providerRequestId,
+        sessionId: input.sessionId,
+        resolvingCommandId: null,
+        status: "pending",
+        payload: input.payload,
       resolution: null,
       statusReason: null,
       createdAt: now,
@@ -359,6 +362,7 @@ export function setPendingInteractionResolving(
     db
       .update(pendingInteractions)
       .set({
+        resolvingCommandId: args.commandId,
         status: "resolving",
         resolution: args.resolution,
         statusReason: null,
@@ -423,6 +427,7 @@ export function interruptPendingInteractionsForThreads(
       ...db
         .update(pendingInteractions)
         .set({
+          resolvingCommandId: null,
           status: "interrupted",
           statusReason: args.statusReason,
           resolvedAt: args.resolvedAt ?? now,
@@ -459,6 +464,7 @@ export function interruptPendingInteractionsForThreadIds(
       ...db
         .update(pendingInteractions)
         .set({
+          resolvingCommandId: null,
           status: "interrupted",
           statusReason: args.statusReason,
           resolvedAt: args.resolvedAt ?? now,
@@ -494,6 +500,7 @@ export function interruptPendingInteractionsForSessionIds(
       ...db
         .update(pendingInteractions)
         .set({
+          resolvingCommandId: null,
           status: "interrupted",
           statusReason: args.statusReason,
           resolvedAt: args.resolvedAt ?? now,

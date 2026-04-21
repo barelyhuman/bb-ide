@@ -14,7 +14,7 @@ import { createIntegrationHarness } from "../helpers/harness.js";
 import {
   assertProviderPrerequisites,
   expectNonEmptyOutput,
-  getExecutionOptions,
+  resolveExecutionOptions,
   TEST_TIMEOUT_MS,
   TURN_TIMEOUT_MS,
 } from "./provider-smoke-harness.js";
@@ -31,18 +31,26 @@ describe("real provider concurrency integration", () => {
       });
 
       try {
+        const codexExecution = await resolveExecutionOptions({
+          harness,
+          providerId: "codex",
+        });
+        const claudeExecution = await resolveExecutionOptions({
+          harness,
+          providerId: "claude-code",
+        });
         const project = await createProjectFixture(harness, {
           name: "Real Concurrent Providers",
         });
         const codexThread = await createReadyHostThread(harness, {
-          execution: getExecutionOptions("codex"),
+          execution: codexExecution,
           projectId: project.id,
           providerId: "codex",
           timeoutMs: TURN_TIMEOUT_MS,
           workspace: { type: "managed-worktree" },
         });
         const claudeThread = await createReadyHostThread(harness, {
-          execution: getExecutionOptions("claude-code"),
+          execution: claudeExecution,
           projectId: project.id,
           providerId: "claude-code",
           timeoutMs: TURN_TIMEOUT_MS,
@@ -51,11 +59,11 @@ describe("real provider concurrency integration", () => {
 
         await Promise.all([
           sendTextMessage(harness.api, codexThread.thread.id, {
-            execution: getExecutionOptions("codex"),
+            execution: codexExecution,
             text: "Reply with a short hello from Codex.",
           }),
           sendTextMessage(harness.api, claudeThread.thread.id, {
-            execution: getExecutionOptions("claude-code"),
+            execution: claudeExecution,
             text: "Reply with a short hello from Claude.",
           }),
         ]);

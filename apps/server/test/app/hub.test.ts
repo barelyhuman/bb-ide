@@ -154,11 +154,44 @@ describe("NotificationHub", () => {
 
     setTimeout(() => {
       hub.notifyCommand("host-1");
-      hub.recordCommandResult("cmd-1", { ok: true });
+      hub.recordCommandResult("cmd-1", {
+        commandId: "cmd-1",
+        ok: true,
+        result: {},
+        type: "thread.stop",
+      });
     }, 0);
 
     await expect(commandWait).resolves.toBe(true);
-    await expect(resultWait).resolves.toEqual({ ok: true });
+    await expect(resultWait).resolves.toEqual({
+      commandId: "cmd-1",
+      ok: true,
+      result: {},
+      type: "thread.stop",
+    });
+  });
+
+  it("resolves failed command-result waiters", async () => {
+    const hub = new NotificationHub();
+    const resultWait = hub.waitForCommandResult("cmd-2", 1_000);
+
+    setTimeout(() => {
+      hub.recordCommandResult("cmd-2", {
+        commandId: "cmd-2",
+        errorCode: "command_failed",
+        errorMessage: "Command failed",
+        ok: false,
+        type: "thread.stop",
+      });
+    }, 0);
+
+    await expect(resultWait).resolves.toEqual({
+      commandId: "cmd-2",
+      errorCode: "command_failed",
+      errorMessage: "Command failed",
+      ok: false,
+      type: "thread.stop",
+    });
   });
 
   it("rejects command-result waiters on timeout", async () => {

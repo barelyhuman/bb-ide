@@ -3,15 +3,14 @@ import type { LifecycleOperationState, ProjectOperationKind } from "@bb/domain";
 import { createProjectOperationId } from "../ids.js";
 import { projectOperations } from "../schema.js";
 import {
-  cancelLifecycleOperationRecord,
+  buildLifecycleOperationUpdateValues,
+  buildRequestedLifecycleOperationValues,
+  createLifecycleOperationRepository,
+  getLifecycleOperationByCommandId,
+  listLifecycleOperationRows,
   type LifecycleOperationReadConnection,
   type LifecycleOperationStore,
   type LifecycleOperationWriteConnection,
-  markLifecycleOperationCompleted,
-  markLifecycleOperationFailed,
-  markLifecycleOperationFetched,
-  markLifecycleOperationQueued,
-  upsertLifecycleOperationRecord,
 } from "./lifecycle-operation-helpers.js";
 
 type ProjectOperationWriteConnection = LifecycleOperationWriteConnection;
@@ -71,20 +70,20 @@ function updateProjectOperationStateRecord(
   db: ProjectOperationWriteConnection,
   args: UpdateProjectOperationStateArgs,
 ): ProjectOperationRow | null {
-  const now = Date.now();
-
   return (
     db
       .update(projectOperations)
-      .set({
-        state: args.state,
-        payload: args.payload,
-        commandId: args.commandId,
-        queuedAt: args.queuedAt,
-        completedAt: args.completedAt,
-        failureReason: args.failureReason,
-        updatedAt: now,
-      })
+      .set(
+        buildLifecycleOperationUpdateValues({
+          state: args.state,
+          payload: args.payload,
+          extraValues: {},
+          commandId: args.commandId,
+          queuedAt: args.queuedAt,
+          completedAt: args.completedAt,
+          failureReason: args.failureReason,
+        }),
+      )
       .where(
         and(
           eq(projectOperations.projectId, args.projectId),
@@ -113,20 +112,18 @@ const projectOperationStore: LifecycleOperationStore<
   insertRequested: (db, args) =>
     db
       .insert(projectOperations)
-      .values({
-        id: createProjectOperationId(),
-        projectId: args.input.projectId,
-        kind: args.input.kind,
-        state: "requested",
-        payload: args.input.payload,
-        commandId: null,
-        requestedAt: args.requestedAt,
-        queuedAt: null,
-        completedAt: null,
-        failureReason: null,
-        createdAt: args.now,
-        updatedAt: args.now,
-      })
+      .values(
+        buildRequestedLifecycleOperationValues({
+          createId: createProjectOperationId,
+          identity: {
+            projectId: args.input.projectId,
+          },
+          input: args.input,
+          extraValues: {},
+          now: args.now,
+          requestedAt: args.requestedAt,
+        }),
+      )
       .returning()
       .get(),
   updateState: (db, args) =>
@@ -142,6 +139,9 @@ const projectOperationStore: LifecycleOperationStore<
       failureReason: args.failureReason,
     }),
 };
+const projectOperationRepository = createLifecycleOperationRepository(
+  projectOperationStore,
+);
 
 export function getProjectOperation(
   db: ProjectOperationReadConnection,
@@ -164,98 +164,25 @@ export function listProjectOperations(
       : undefined,
   ].filter((value) => value !== undefined);
 
-  return db
-    .select()
-    .from(projectOperations)
-    .where(filters.length > 0 ? and(...filters) : undefined)
-    .all();
+  return listLifecycleOperationRows(
+    db,
+    projectOperations,
+    filters.length > 0 ? and(...filters) : undefined,
+  );
 }
 
 export function getProjectOperationByCommandId(
   db: ProjectOperationReadConnection,
   commandId: string,
 ): ProjectOperationRow | null {
-  return (
-    db
-      .select()
-      .from(projectOperations)
-      .where(eq(projectOperations.commandId, commandId))
-      .get() ?? null
-  );
+  return getLifecycleOperationByCommandId(db, projectOperations, commandId);
 }
 
-export function upsertProjectOperationRecord(
-  db: ProjectOperationWriteConnection,
-  input: UpsertProjectOperationInput,
-): ProjectOperationRow {
-  return upsertLifecycleOperationRecord(db, projectOperationStore, input);
-}
-
-export function markProjectOperationRecordQueued(
-  db: ProjectOperationWriteConnection,
-  args: {
-    commandId: string;
-    kind: ProjectOperationKind;
-    projectId: string;
-    queuedAt?: number;
-  },
-): ProjectOperationRow | null {
-  return markLifecycleOperationQueued(db, projectOperationStore, {
-    identity: {
-      projectId: args.projectId,
-      kind: args.kind,
-    },
-    commandId: args.commandId,
-    queuedAt: args.queuedAt,
-  });
-}
-
-export function markProjectOperationRecordFetched(
-  db: ProjectOperationWriteConnection,
-  args: GetProjectOperationArgs,
-): ProjectOperationRow | null {
-  return markLifecycleOperationFetched(db, projectOperationStore, args);
-}
-
-export function markProjectOperationRecordCompleted(
-  db: ProjectOperationWriteConnection,
-  args: GetProjectOperationArgs & { completedAt?: number },
-): ProjectOperationRow | null {
-  return markLifecycleOperationCompleted(db, projectOperationStore, {
-    identity: {
-      projectId: args.projectId,
-      kind: args.kind,
-    },
-    completedAt: args.completedAt,
-  });
-}
-
-export function markProjectOperationRecordFailed(
-  db: ProjectOperationWriteConnection,
-  args: GetProjectOperationArgs & {
-    completedAt?: number;
-    failureReason: string;
-  },
-): ProjectOperationRow | null {
-  return markLifecycleOperationFailed(db, projectOperationStore, {
-    identity: {
-      projectId: args.projectId,
-      kind: args.kind,
-    },
-    completedAt: args.completedAt,
-    failureReason: args.failureReason,
-  });
-}
-
-export function cancelProjectOperationRecord(
-  db: ProjectOperationWriteConnection,
-  args: GetProjectOperationArgs & { completedAt?: number },
-): ProjectOperationRow | null {
-  return cancelLifecycleOperationRecord(db, projectOperationStore, {
-    identity: {
-      projectId: args.projectId,
-      kind: args.kind,
-    },
-    completedAt: args.completedAt,
-  });
-}
+export const upsertProjectOperationRecord = projectOperationRepository.upsert;
+export const markProjectOperationRecordQueued =
+  projectOperationRepository.markQueued;
+export const markProjectOperationRecordCompleted =
+  projectOperationRepository.markCompleted;
+export const markProjectOperationRecordFailed =
+  projectOperationRepository.markFailed;
+export const cancelProjectOperationRecord = projectOperationRepository.cancel;

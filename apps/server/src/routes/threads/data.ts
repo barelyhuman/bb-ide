@@ -1,6 +1,5 @@
 import path from "node:path";
 import { listDrafts } from "@bb/db";
-import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import { threadEventTypeSchema } from "@bb/domain";
 import {
@@ -213,7 +212,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
       const limit = parseThreadStorageFileListLimit(query.limit);
 
       try {
-        const rawResult = await queueCommandAndWait(deps, {
+        const result = await queueCommandAndWait(deps, {
           hostId: target.hostId,
           timeoutMs: COMMAND_TIMEOUT_MS,
           command: {
@@ -223,10 +222,6 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
             limit,
           },
         });
-        const result =
-          hostDaemonCommandResultSchemaByType["host.list_files"].parse(
-            rawResult,
-          );
         return context.json({
           files: result.files,
           truncated: result.truncated,
@@ -250,7 +245,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
       });
 
       try {
-        const rawResult = await queueCommandAndWait(deps, {
+        const result = await queueCommandAndWait(deps, {
           hostId: target.hostId,
           timeoutMs: COMMAND_TIMEOUT_MS,
           command: {
@@ -259,11 +254,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
             rootPath: target.storagePath,
           },
         });
-        return createDaemonFileContentResponse(
-          hostDaemonCommandResultSchemaByType["host.read_file"].parse(
-            rawResult,
-          ),
-        );
+        return createDaemonFileContentResponse(result);
       } catch (error) {
         return remapDaemonFileRouteError(error);
       }

@@ -66,38 +66,40 @@ export function createProjectSource(
   notifier: DbNotifier,
   input: CreateProjectSourceInput,
 ) {
-  const now = Date.now();
-  const id = createProjectSourceId();
-  const existingSources = db
-    .select({ id: projectSources.id })
-    .from(projectSources)
-    .where(eq(projectSources.projectId, input.projectId))
-    .all();
-  const shouldBeDefault =
-    input.isDefault === true || existingSources.length === 0;
-
-  if (shouldBeDefault) {
-    db.update(projectSources)
-      .set({ isDefault: false, updatedAt: now })
+  const row = db.transaction((tx) => {
+    const now = Date.now();
+    const id = createProjectSourceId();
+    const existingSources = tx
+      .select({ id: projectSources.id })
+      .from(projectSources)
       .where(eq(projectSources.projectId, input.projectId))
-      .run();
-  }
+      .all();
+    const shouldBeDefault =
+      input.isDefault === true || existingSources.length === 0;
 
-  const row = db
-    .insert(projectSources)
-    .values({
-      id,
-      projectId: input.projectId,
-      type: input.type,
-      hostId: input.type === "local_path" ? input.hostId : null,
-      path: input.type === "local_path" ? input.path : null,
-      repoUrl: input.type === "github_repo" ? input.repoUrl : null,
-      isDefault: shouldBeDefault,
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning()
-    .get();
+    if (shouldBeDefault) {
+      tx.update(projectSources)
+        .set({ isDefault: false, updatedAt: now })
+        .where(eq(projectSources.projectId, input.projectId))
+        .run();
+    }
+
+    return tx
+      .insert(projectSources)
+      .values({
+        id,
+        projectId: input.projectId,
+        type: input.type,
+        hostId: input.type === "local_path" ? input.hostId : null,
+        path: input.type === "local_path" ? input.path : null,
+        repoUrl: input.type === "github_repo" ? input.repoUrl : null,
+        isDefault: shouldBeDefault,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning()
+      .get();
+  });
   notifier.notifyProject(input.projectId, ["project-sources-changed"]);
   return toProjectSource(row);
 }
@@ -188,34 +190,46 @@ export function updateProjectSource(
   id: string,
   input: UpdateProjectSourceInput,
 ) {
-  const existing = db
-    .select()
-    .from(projectSources)
-    .where(eq(projectSources.id, id))
-    .get();
-  if (!existing) return null;
+  const updated = db.transaction((tx) => {
+    const existing = tx
+      .select()
+      .from(projectSources)
+      .where(eq(projectSources.id, id))
+      .get();
+    if (!existing) {
+      return null;
+    }
 
-  const now = Date.now();
-  if (input.isDefault) {
-    db.update(projectSources)
-      .set({ isDefault: false, updatedAt: now })
-      .where(eq(projectSources.projectId, existing.projectId))
-      .run();
+    const now = Date.now();
+    if (input.isDefault) {
+      tx.update(projectSources)
+        .set({ isDefault: false, updatedAt: now })
+        .where(eq(projectSources.projectId, existing.projectId))
+        .run();
+    }
+    const { isDefault: _isDefault, ...rest } = input;
+    const updatedRow =
+      tx
+        .update(projectSources)
+        .set({
+          ...rest,
+          ...(input.isDefault ? { isDefault: true } : {}),
+          updatedAt: now,
+        })
+        .where(eq(projectSources.id, id))
+        .returning()
+        .get() ?? null;
+
+    return updatedRow
+      ? { projectId: existing.projectId, row: updatedRow }
+      : null;
+  });
+  if (!updated) {
+    return null;
   }
-  const { isDefault: _isDefault, ...rest } = input;
-  const updated = db
-    .update(projectSources)
-    .set({
-      ...rest,
-      ...(input.isDefault ? { isDefault: true } : {}),
-      updatedAt: now,
-    })
-    .where(eq(projectSources.id, id))
-    .returning()
-    .get();
 
-  notifier.notifyProject(existing.projectId, ["project-sources-changed"]);
-  return updated ? toProjectSource(updated) : null;
+  notifier.notifyProject(updated.projectId, ["project-sources-changed"]);
+  return toProjectSource(updated.row);
 }
 
 export function getProjectSourceByHost(
@@ -257,29 +271,43 @@ export function deleteProjectSource(
   notifier: DbNotifier,
   id: string,
 ) {
-  const existing = db
-    .select()
-    .from(projectSources)
-    .where(eq(projectSources.id, id))
-    .get();
-  if (!existing) return false;
-  const now = Date.now();
-  db.delete(projectSources).where(eq(projectSources.id, id)).run();
-  if (existing.isDefault) {
-    const replacement = db
+  const deleted = db.transaction((tx) => {
+    const existing = tx
       .select()
       .from(projectSources)
-      .where(eq(projectSources.projectId, existing.projectId))
+      .where(eq(projectSources.id, id))
       .get();
-    if (replacement) {
-      db.update(projectSources)
-        .set({ isDefault: true, updatedAt: now })
-        .where(
-          and(eq(projectSources.id, replacement.id), ne(projectSources.id, id)),
-        )
-        .run();
+    if (!existing) {
+      return null;
     }
+
+    const now = Date.now();
+    tx.delete(projectSources).where(eq(projectSources.id, id)).run();
+    if (existing.isDefault) {
+      const replacement =
+        tx
+          .select()
+          .from(projectSources)
+          .where(eq(projectSources.projectId, existing.projectId))
+          .get() ?? null;
+      if (replacement) {
+        tx.update(projectSources)
+          .set({ isDefault: true, updatedAt: now })
+          .where(
+            and(
+              eq(projectSources.id, replacement.id),
+              ne(projectSources.id, id),
+            ),
+          )
+          .run();
+      }
+    }
+    return existing.projectId;
+  });
+  if (!deleted) {
+    return false;
   }
-  notifier.notifyProject(existing.projectId, ["project-sources-changed"]);
+
+  notifier.notifyProject(deleted, ["project-sources-changed"]);
   return true;
 }

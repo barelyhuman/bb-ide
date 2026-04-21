@@ -6,6 +6,7 @@ import type { PendingInteractionLifecycle } from "./services/interactions/pendin
 import type { SandboxHostRegistry } from "./services/hosts/sandbox-registry.js";
 import type { MachineAuthService } from "./services/machine-auth.js";
 import type { SandboxEnvService } from "./services/sandbox-env/types.js";
+import type { LifecycleDedupers } from "./lifecycle-dedupers.js";
 import type { NotificationHub } from "./ws/hub.js";
 
 export type ServerLogger = Pick<Logger, "error" | "info" | "warn">;
@@ -32,6 +33,7 @@ export interface AppDeps {
   db: DbConnection;
   hostLifecycle: HostLifecycleService;
   hub: NotificationHub;
+  lifecycleDedupers: LifecycleDedupers;
   logger: ServerLogger;
   machineAuth: MachineAuthService;
   sandboxEnv: SandboxEnvService;
@@ -46,6 +48,7 @@ export type SandboxLifecycleDeps = Pick<
   | "db"
   | "hostLifecycle"
   | "hub"
+  | "lifecycleDedupers"
   | "machineAuth"
   | "sandboxEnv"
   | "sandboxRegistry"

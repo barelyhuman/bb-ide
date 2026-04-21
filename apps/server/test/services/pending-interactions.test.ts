@@ -343,6 +343,31 @@ describe("pending interaction lifecycle", () => {
         status: "resolving",
         resolution: firstResolution.resolution,
       });
+      const resolvingRow = harness.db
+        .select()
+        .from(pendingInteractionTable)
+        .where(eq(pendingInteractionTable.id, created.interaction.id))
+        .get();
+      expect(resolvingRow?.resolvingCommandId).not.toBeNull();
+
+      const completed =
+        harness.deps.pendingInteractions.completeResolvingInteraction({
+          interactionId: created.interaction.id,
+          resolution: createAllowOnceResolution({
+            network: null,
+            fileSystem: {
+              read: ["/tmp/project/a", "/tmp/project/b"],
+              write: ["/tmp/project/c", "/tmp/project/d"],
+            },
+          }),
+        });
+      expect(completed?.status).toBe("resolved");
+      const resolvedRow = harness.db
+        .select()
+        .from(pendingInteractionTable)
+        .where(eq(pendingInteractionTable.id, created.interaction.id))
+        .get();
+      expect(resolvedRow?.resolvingCommandId).toBeNull();
     } finally {
       await harness.cleanup();
     }

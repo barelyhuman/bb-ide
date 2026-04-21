@@ -13,6 +13,10 @@ import {
 } from "@bb/test-helpers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  WORKSPACE_DIFF_MAX_DIFF_BYTES,
+  WORKSPACE_DIFF_MAX_FILE_LIST_BYTES,
+} from "../../src/constants.js";
+import {
   reportNextRuntimeMaterialSyncSuccess,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
@@ -404,6 +408,8 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(diffCommand.command).toMatchObject({
+        maxDiffBytes: WORKSPACE_DIFF_MAX_DIFF_BYTES,
+        maxFileListBytes: WORKSPACE_DIFF_MAX_FILE_LIST_BYTES,
         workspaceContext: {
           workspacePath: "/tmp/environment-details/worktree",
           workspaceProvisionType: "managed-worktree",
@@ -547,6 +553,8 @@ describe("public environment and system routes", () => {
           command.environmentId === environment.id,
       );
       expect(diffCommand.command).toMatchObject({
+        maxDiffBytes: 32_000,
+        maxFileListBytes: 4_000,
         target: { type: "uncommitted" },
       });
       await reportQueuedCommandSuccess(harness, diffCommand, {

@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect } from "vitest";
 import type {
-  AvailableModel,
   PendingInteractionCreate,
   PendingInteractionResolution,
   ReasoningLevel,
@@ -12,6 +11,7 @@ import type {
   ToolCallRequest,
   ToolCallResponse,
 } from "@bb/domain";
+import { resolvePreferredTestModel } from "@bb/test-helpers";
 import type { AgentRuntimeCaptureEntry } from "../capture-types.js";
 import { createAgentRuntime } from "../runtime.js";
 import type { AgentRuntime, AgentRuntimeExecutionOptions } from "../types.js";
@@ -135,12 +135,6 @@ export const runtimeOptionsTemplates = {
   "workspace-write-ask": workspaceWriteAskRuntimeOptionsTemplate,
   "workspace-write-deny": workspaceWriteDenyRuntimeOptionsTemplate,
 } satisfies Record<RuntimeOptionsPreset, RuntimeOptionsTemplate>;
-
-const FAST_INTEGRATION_MODELS_BY_PROVIDER: Record<string, readonly string[]> = {
-  codex: ["gpt-5.4"],
-  "claude-code": ["claude-haiku-4-5"],
-  pi: ["openai-codex/gpt-5.4-mini", "anthropic/claude-haiku-4-5"],
-};
 
 const INTEGRATION_REASONING_LEVEL = "low" satisfies ReasoningLevel;
 const resolvedIntegrationModelPromises = new Map<string, Promise<string>>();
@@ -650,7 +644,7 @@ async function resolveDefaultModelUncached(
   ctx: TestContext,
 ): Promise<string> {
   const models = await ctx.runtime.listModels({ providerId });
-  const model = resolveIntegrationModel({
+  const model = resolvePreferredTestModel({
     models,
     providerId,
   });
@@ -658,31 +652,6 @@ async function resolveDefaultModelUncached(
     throw new Error(`Provider "${providerId}" returned no available models`);
   }
   return model;
-}
-
-interface ResolveIntegrationModelArgs {
-  models: AvailableModel[];
-  providerId: string;
-}
-
-function resolveIntegrationModel(
-  args: ResolveIntegrationModelArgs,
-): string | undefined {
-  const preferredModels =
-    FAST_INTEGRATION_MODELS_BY_PROVIDER[args.providerId] ?? [];
-  for (const preferredModel of preferredModels) {
-    const model = args.models.find(
-      (availableModel) => availableModel.model === preferredModel,
-    );
-    if (model) {
-      return model.model;
-    }
-  }
-
-  return (
-    args.models.find((availableModel) => availableModel.isDefault)?.model ??
-    args.models[0]?.model
-  );
 }
 
 function resolveIntegrationServiceTier(

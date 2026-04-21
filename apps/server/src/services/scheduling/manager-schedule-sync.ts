@@ -6,7 +6,6 @@ import {
   replaceManagerThreadNudges,
   type ReplaceManagerThreadNudgeInput,
 } from "@bb/db";
-import { hostDaemonCommandResultSchemaByType } from "@bb/host-daemon-contract";
 import {
   scheduleCronSchema,
   scheduleNameSchema,
@@ -190,7 +189,7 @@ export async function syncManagerThreadSchedules(
   let content: string;
   let sizeBytes: number;
   try {
-    const rawResult = await queueCommandAndWait(deps, {
+    const result = await queueCommandAndWait(deps, {
       hostId: environment.hostId,
       timeoutMs: 10_000,
       command: {
@@ -199,8 +198,6 @@ export async function syncManagerThreadSchedules(
         rootPath: threadStoragePath,
       },
     });
-    const result =
-      hostDaemonCommandResultSchemaByType["host.read_file"].parse(rawResult);
     if (result.contentEncoding !== "utf8") {
       throw new ApiError(502, "invalid_request", "ASYNC.md must be UTF-8 text");
     }

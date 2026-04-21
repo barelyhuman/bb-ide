@@ -14,9 +14,9 @@ import { waitForThreadStatus } from "../helpers/assertions.js";
 import {
   createRealThread,
   expectNonEmptyOutput,
-  getExecutionOptions,
   pathExists,
   REAL_PROVIDER_IDS,
+  resolveExecutionOptions,
   TEST_TIMEOUT_MS,
   TURN_TIMEOUT_MS,
 } from "./provider-smoke-harness.js";
@@ -34,6 +34,10 @@ describe("real provider workspace integration", () => {
         });
 
         try {
+          const execution = await resolveExecutionOptions({
+            harness,
+            providerId,
+          });
           const initialStatus = await getEnvironmentStatus(
             harness.api,
             environment.id,
@@ -47,7 +51,7 @@ describe("real provider workspace integration", () => {
 
           await sendTextMessage(harness.api, thread.id, {
             text: "Create a file named hello.txt in the workspace with the content hello world if tool use is available. Then briefly summarize what you did.",
-            execution: getExecutionOptions(providerId),
+            execution,
           });
           await waitForThreadStatus(
             harness.api,

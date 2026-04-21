@@ -20,6 +20,7 @@ import {
   markThreadStopRequested,
   unarchiveThread,
   transitionThreadStatus,
+  InvalidThreadStatusTransitionError,
   transitionThreadsToError,
   ALLOWED_TRANSITIONS,
 } from "../../src/data/threads.js";
@@ -559,6 +560,9 @@ describe("transitionThreadStatus", () => {
     expect(() =>
       transitionThreadStatus(db, noopNotifier, thread.id, "created"),
     ).toThrow("Invalid thread status transition: provisioning → created");
+    expect(() =>
+      transitionThreadStatus(db, noopNotifier, thread.id, "created"),
+    ).toThrow(InvalidThreadStatusTransitionError);
 
     // provisioning → active is allowed, so move to active before checking an invalid edge
     transitionThreadStatus(db, noopNotifier, thread.id, "active");

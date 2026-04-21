@@ -3,7 +3,6 @@ import { z } from "zod";
 export const lifecycleOperationStateValues = [
   "requested",
   "queued",
-  "fetched",
   "completed",
   "failed",
   "cancelled",
@@ -18,13 +17,12 @@ export type LifecycleOperationState = z.infer<
 export const activeLifecycleOperationStates = [
   "requested",
   "queued",
-  "fetched",
 ] as const satisfies readonly LifecycleOperationState[];
 
 export function isActiveLifecycleOperationState(
   state: LifecycleOperationState,
 ): boolean {
-  return state === "requested" || state === "queued" || state === "fetched";
+  return state === "requested" || state === "queued";
 }
 
 export const environmentOperationKindValues = [
@@ -46,6 +44,28 @@ export const threadOperationKindValues = [
 ] as const;
 export const threadOperationKindSchema = z.enum(threadOperationKindValues);
 export type ThreadOperationKind = z.infer<typeof threadOperationKindSchema>;
+
+export const threadProvisioningStageValues = [
+  "metadata-pending",
+  "environment-pending",
+  "environment-attached",
+  "environment-provisioning",
+  "workspace-ready",
+] as const;
+export const threadProvisioningStageSchema = z.enum(
+  threadProvisioningStageValues,
+);
+export type ThreadProvisioningStage = z.infer<
+  typeof threadProvisioningStageSchema
+>;
+
+export interface ThreadProvisioningState {
+  environmentId: string | null;
+  provisionEventSequence: number | null;
+  provisioningId: string;
+  stage: ThreadProvisioningStage;
+  workspaceReadyEventSequence: number | null;
+}
 
 export const projectOperationKindValues = ["delete"] as const;
 export const projectOperationKindSchema = z.enum(projectOperationKindValues);

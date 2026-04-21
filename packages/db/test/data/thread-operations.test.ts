@@ -37,7 +37,7 @@ function setup() {
     environmentId: environment.id,
     providerId: "openai",
   });
-  return { db, host, thread };
+  return { db, environment, host, thread };
 }
 
 describe("thread operations", () => {
@@ -68,6 +68,81 @@ describe("thread operations", () => {
       payload: JSON.stringify({ type: "thread.start", attempt: 2 }),
       requestedAt: 111,
       state: "requested",
+    });
+  });
+
+  it("stores provisioning state columns for provision operations", () => {
+    const { db, environment, host, thread } = setup();
+    const command = queueCommand(db, noopNotifier, {
+      hostId: host.id,
+      type: "environment.provision",
+      payload: JSON.stringify({
+        type: "environment.provision",
+        environmentId: environment.id,
+        initiator: null,
+        workspaceProvisionType: "unmanaged",
+        path: "/tmp/test",
+      }),
+    });
+
+    const first = upsertThreadOperationRecord(db, {
+      threadId: thread.id,
+      kind: "provision",
+      payload: JSON.stringify({ clientRequestSequence: 1 }),
+      provisioningState: {
+        environmentId: null,
+        provisionEventSequence: null,
+        provisioningId: "tpv-db-1",
+        stage: "metadata-pending",
+        workspaceReadyEventSequence: null,
+      },
+    });
+    const second = upsertThreadOperationRecord(db, {
+      threadId: thread.id,
+      kind: "provision",
+      payload: JSON.stringify({ clientRequestSequence: 2 }),
+      provisioningState: {
+        environmentId: environment.id,
+        provisionEventSequence: 12,
+        provisioningId: "tpv-db-1",
+        stage: "workspace-ready",
+        workspaceReadyEventSequence: 18,
+      },
+    });
+    markThreadOperationRecordQueued(db, {
+      threadId: thread.id,
+      kind: "provision",
+      commandId: command.id,
+    });
+
+    expect(first).toMatchObject({
+      payload: JSON.stringify({ clientRequestSequence: 1 }),
+      provisioningId: "tpv-db-1",
+      provisioningStage: "metadata-pending",
+      provisioningEnvironmentId: null,
+    });
+    expect(second).toMatchObject({
+      id: first.id,
+      payload: JSON.stringify({ clientRequestSequence: 2 }),
+      provisioningId: "tpv-db-1",
+      provisioningStage: "workspace-ready",
+      provisioningEnvironmentId: environment.id,
+      provisionEventSequence: 12,
+      workspaceReadyEventSequence: 18,
+    });
+    expect(
+      getThreadOperation(db, {
+        threadId: thread.id,
+        kind: "provision",
+      }),
+    ).toMatchObject({
+      commandId: command.id,
+      payload: JSON.stringify({ clientRequestSequence: 2 }),
+      provisioningId: "tpv-db-1",
+      provisioningStage: "workspace-ready",
+      provisioningEnvironmentId: environment.id,
+      provisionEventSequence: 12,
+      workspaceReadyEventSequence: 18,
     });
   });
 

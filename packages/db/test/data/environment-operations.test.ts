@@ -9,7 +9,6 @@ import {
   getEnvironmentOperationByCommandId,
   markEnvironmentOperationRecordCompleted,
   markEnvironmentOperationRecordFailed,
-  markEnvironmentOperationRecordFetched,
   markEnvironmentOperationRecordQueued,
   upsertEnvironmentOperationRecord,
 } from "../../src/data/environment-operations.js";
@@ -70,7 +69,7 @@ describe("environment operations", () => {
     });
   });
 
-  it("tracks queued, fetched, completed, and failed environment operations", () => {
+  it("tracks queued, completed, and failed environment operations", () => {
     const { db, environment, host } = setup();
     const command = queueCommand(db, noopNotifier, {
       hostId: host.id,
@@ -97,10 +96,6 @@ describe("environment operations", () => {
       kind: "provision",
       commandId: command.id,
       queuedAt: 321,
-    });
-    const fetched = markEnvironmentOperationRecordFetched(db, {
-      environmentId: environment.id,
-      kind: "provision",
     });
     const completed = markEnvironmentOperationRecordCompleted(db, {
       environmentId: environment.id,
@@ -130,7 +125,6 @@ describe("environment operations", () => {
       commandId: command.id,
       queuedAt: 321,
     });
-    expect(fetched?.state).toBe("fetched");
     expect(getEnvironmentOperationByCommandId(db, command.id)?.id).toBe(
       queued?.id,
     );

@@ -246,6 +246,34 @@
       "when": 1775864681000,
       "tag": "0035_thread_latest_attention",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "6",
+      "when": 1775868281000,
+      "tag": "0036_thread_provisioning_state",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "6",
+      "when": 1775871881000,
+      "tag": "0037_default_project_source_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1775875481000,
+      "tag": "0038_pending_interaction_resolving_command",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1775879081000,
+      "tag": "0039_trim_thread_provisioning_indexes",
+      "breakpoints": true
     }
   ]
 }

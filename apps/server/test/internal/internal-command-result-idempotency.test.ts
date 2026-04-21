@@ -13,6 +13,7 @@ import {
 } from "@bb/db";
 import {
   markHostOperationRecordQueued,
+  setEnvironmentRecordDestroyed,
   upsertHostOperationRecord,
   upsertThreadOperationRecord,
 } from "@bb/db/internal-lifecycle";
@@ -53,8 +54,49 @@ import {
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
+interface ReuseThreadProvisionOperationArgs {
+  clientRequestSequence: number;
+  environmentId: string;
+  inputText: string;
+  provisionEventSequence: number;
+  provisioningId: string;
+  titleProvided: boolean;
+}
+
+function buildReuseThreadProvisionOperation(
+  args: ReuseThreadProvisionOperationArgs,
+) {
+  return {
+    payload: JSON.stringify({
+      branchSlug: null,
+      clientRequestSequence: args.clientRequestSequence,
+      environmentIntent: {
+        type: "reuse",
+        environmentId: args.environmentId,
+      },
+      execution: {
+        model: "gpt-5",
+        serviceTier: "default",
+        reasoningLevel: "medium",
+        permissionMode: "full",
+        permissionEscalation: null,
+        source: "client/turn/requested",
+      },
+      input: [{ type: "text", text: args.inputText }],
+      titleProvided: args.titleProvided,
+    }),
+    provisioningState: {
+      environmentId: args.environmentId,
+      provisionEventSequence: args.provisionEventSequence,
+      provisioningId: args.provisioningId,
+      stage: "environment-provisioning" as const,
+      workspaceReadyEventSequence: null,
+    },
+  };
+}
+
 describe("internal command result idempotency", () => {
-  it("fails active lifecycle state when a command-result retry arrives after partial settlement", async () => {
+  it("replays active lifecycle state when a command-result retry arrives after partial settlement", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -94,26 +136,12 @@ describe("internal command result idempotency", () => {
       upsertThreadOperationRecord(harness.db, {
         threadId: thread.id,
         kind: "provision",
-        payload: JSON.stringify({
-          attachedEnvironmentId: environment.id,
-          branchSlug: null,
+        ...buildReuseThreadProvisionOperation({
           clientRequestSequence: provisionEventSequence,
-          environmentIntent: {
-            type: "reuse",
-            environmentId: environment.id,
-          },
-          execution: {
-            model: "gpt-5",
-            serviceTier: "default",
-            reasoningLevel: "medium",
-            permissionMode: "full",
-            permissionEscalation: null,
-            source: "client/turn/requested",
-          },
-          input: [{ type: "text", text: "Retry partial result" }],
+          environmentId: environment.id,
+          inputText: "Retry partial result",
           provisionEventSequence,
           provisioningId: "tpv-idempotency-1",
-          stage: "environment-provisioning",
           titleProvided: true,
         }),
       });
@@ -167,26 +195,24 @@ describe("internal command result idempotency", () => {
       );
       expect(retryResponse.status).toBe(200);
 
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe("error");
+      expect(getEnvironment(harness.db, environment.id)?.status).toBe("ready");
       expect(
         getEnvironmentOperation(harness.db, {
           environmentId: environment.id,
           kind: "provision",
         }),
       ).toMatchObject({
-        failureReason: expect.stringContaining(
-          "Command result reached terminal state before lifecycle side effects completed",
-        ),
-        state: "failed",
+        failureReason: null,
+        state: "completed",
       });
-      expect(getThread(harness.db, thread.id)?.status).toBe("error");
+      expect(getThread(harness.db, thread.id)?.status).toBe("provisioning");
 
       const startCommands = harness.db
         .select()
         .from(hostDaemonCommands)
         .where(eq(hostDaemonCommands.type, "thread.start"))
         .all();
-      expect(startCommands).toHaveLength(0);
+      expect(startCommands).toHaveLength(1);
     } finally {
       await harness.cleanup();
     }
@@ -215,9 +241,14 @@ describe("internal command result idempotency", () => {
       upsertThreadOperationRecord(harness.db, {
         threadId: thread.id,
         kind: "provision",
-        payload: JSON.stringify({
+        payload: buildReuseThreadProvisionOperation({
+          clientRequestSequence: 0,
+          environmentId: environment.id,
+          inputText: "Side-effect failure",
+          provisionEventSequence: 0,
           provisioningId: "tpv-idempotency-side-effect-failure",
-        }),
+          titleProvided: true,
+        }).payload,
       });
       const command = queueEnvironmentProvisionLifecycleCommand(harness, {
         hostId: host.id,
@@ -304,26 +335,12 @@ describe("internal command result idempotency", () => {
       upsertThreadOperationRecord(harness.db, {
         threadId: thread.id,
         kind: "provision",
-        payload: JSON.stringify({
-          attachedEnvironmentId: environment.id,
-          branchSlug: null,
+        ...buildReuseThreadProvisionOperation({
           clientRequestSequence: provisionEventSequence,
-          environmentIntent: {
-            type: "reuse",
-            environmentId: environment.id,
-          },
-          execution: {
-            model: "gpt-5",
-            serviceTier: "default",
-            reasoningLevel: "medium",
-            permissionMode: "full",
-            permissionEscalation: null,
-            source: "client/turn/requested",
-          },
-          input: [{ type: "text", text: "Start once" }],
+          environmentId: environment.id,
+          inputText: "Start once",
           provisionEventSequence,
           provisioningId: "tpv-idempotency-2",
-          stage: "environment-provisioning",
           titleProvided: true,
         }),
       });
@@ -433,26 +450,12 @@ describe("internal command result idempotency", () => {
       upsertThreadOperationRecord(harness.db, {
         threadId: thread.id,
         kind: "provision",
-        payload: JSON.stringify({
-          attachedEnvironmentId: environment.id,
-          branchSlug: null,
+        ...buildReuseThreadProvisionOperation({
           clientRequestSequence: provisionEventSequence,
-          environmentIntent: {
-            type: "reuse",
-            environmentId: environment.id,
-          },
-          execution: {
-            model: "gpt-5",
-            serviceTier: "default",
-            reasoningLevel: "medium",
-            permissionMode: "full",
-            permissionEscalation: null,
-            source: "client/turn/requested",
-          },
-          input: [{ type: "text", text: "Concurrent start handoff" }],
+          environmentId: environment.id,
+          inputText: "Concurrent start handoff",
           provisionEventSequence,
           provisioningId: "tpv-concurrent-start-handoff",
-          stage: "environment-provisioning",
           titleProvided: true,
         }),
       });
@@ -587,26 +590,12 @@ describe("internal command result idempotency", () => {
       upsertThreadOperationRecord(harness.db, {
         threadId: thread.id,
         kind: "provision",
-        payload: JSON.stringify({
-          attachedEnvironmentId: environment.id,
-          branchSlug: null,
+        ...buildReuseThreadProvisionOperation({
           clientRequestSequence: provisionEventSequence,
-          environmentIntent: {
-            type: "reuse",
-            environmentId: environment.id,
-          },
-          execution: {
-            model: "gpt-5",
-            serviceTier: "default",
-            reasoningLevel: "medium",
-            permissionMode: "full",
-            permissionEscalation: null,
-            source: "client/turn/requested",
-          },
-          input: [{ type: "text", text: "Atomic start handoff" }],
+          environmentId: environment.id,
+          inputText: "Atomic start handoff",
           provisionEventSequence,
           provisioningId: "tpv-atomic-start-handoff",
-          stage: "environment-provisioning",
           titleProvided: true,
         }),
       });
@@ -686,7 +675,7 @@ describe("internal command result idempotency", () => {
     }
   });
 
-  it("fails unaudited settled thread.start side effects", async () => {
+  it("replays settled thread.start side effects", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
@@ -775,10 +764,7 @@ describe("internal command result idempotency", () => {
       expect(provisioningEventsAfterRetry).toHaveLength(
         provisioningEventsBeforeRetry.length,
       );
-      expect(errorEventsAfterRetry).toHaveLength(
-        errorEventsBeforeRetry.length + 1,
-      );
-      expect(getThread(harness.db, thread.id)?.status).toBe("error");
+      expect(errorEventsAfterRetry).toHaveLength(errorEventsBeforeRetry.length);
       expect(
         getThreadOperation(harness.db, {
           threadId: thread.id,
@@ -786,17 +772,15 @@ describe("internal command result idempotency", () => {
         }),
       ).toMatchObject({
         commandId: queuedStart.row.id,
-        failureReason: expect.stringContaining(
-          "Command result reached terminal state before lifecycle side effects completed",
-        ),
-        state: "failed",
+        failureReason: null,
+        state: "completed",
       });
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("fails settled environment.destroy side effects when a success retry arrives", async () => {
+  it("replays settled environment.destroy side effects when a success retry arrives", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -851,7 +835,7 @@ describe("internal command result idempotency", () => {
 
       expect(getEnvironment(harness.db, environment.id)).toMatchObject({
         cleanupRequestedAt: null,
-        status: "ready",
+        status: "destroyed",
       });
       expect(
         getEnvironmentOperation(harness.db, {
@@ -860,17 +844,88 @@ describe("internal command result idempotency", () => {
         }),
       ).toMatchObject({
         commandId: command.id,
-        failureReason: expect.stringContaining(
-          "Command result reached terminal state before lifecycle side effects completed",
-        ),
-        state: "failed",
+        failureReason: null,
+        state: "completed",
       });
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("fails settled thread.stop side effects when a success retry arrives", async () => {
+  it("completes environment.destroy replay when the environment row is already destroyed", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-settled-destroy-already-destroyed",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/settled-destroy-already-destroyed",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        managed: true,
+        path: "/tmp/settled-destroy-already-destroyed",
+        projectId: project.id,
+        status: "destroying",
+        workspaceProvisionType: "managed-worktree",
+      });
+      requestEnvironmentCleanup(harness.deps, {
+        environmentId: environment.id,
+        mode: "force",
+      });
+      const command = queueEnvironmentDestroyLifecycleCommand(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        environmentId: environment.id,
+        command: {
+          type: "environment.destroy",
+          environmentId: environment.id,
+          workspaceContext: {
+            workspacePath: environment.path,
+            workspaceProvisionType: environment.workspaceProvisionType,
+          },
+        },
+      });
+      const queuedDestroy = await waitForQueuedCommand(
+        harness,
+        ({ row }) => row.id === command.id,
+      );
+      reportCommandResult(harness.db, harness.hub, {
+        commandId: command.id,
+        state: "success",
+        completedAt: Date.now(),
+        resultPayload: JSON.stringify({}),
+      });
+      setEnvironmentRecordDestroyed(harness.db, harness.hub, environment.id);
+
+      const retryResponse = await reportQueuedCommandSuccess(
+        harness,
+        queuedDestroy,
+        {},
+      );
+      expect(retryResponse.status).toBe(200);
+
+      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
+        cleanupRequestedAt: null,
+        status: "destroyed",
+      });
+      expect(
+        getEnvironmentOperation(harness.db, {
+          environmentId: environment.id,
+          kind: "destroy",
+        }),
+      ).toMatchObject({
+        commandId: command.id,
+        failureReason: null,
+        state: "completed",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("replays settled thread.stop side effects when a success retry arrives", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
@@ -916,7 +971,7 @@ describe("internal command result idempotency", () => {
       expect(retryResponse.status).toBe(200);
 
       expect(getThread(harness.db, thread.id)).toMatchObject({
-        status: "error",
+        status: "idle",
         stopRequestedAt: null,
       });
       expect(
@@ -926,17 +981,138 @@ describe("internal command result idempotency", () => {
         }),
       ).toMatchObject({
         commandId: queuedStop.row.id,
-        failureReason: expect.stringContaining(
-          "Command result reached terminal state before lifecycle side effects completed",
-        ),
-        state: "failed",
+        failureReason: null,
+        state: "completed",
       });
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("interrupts settled interactive.resolve side effects when a success retry arrives", async () => {
+  it("keeps the stored error cached when a settled command retry reports success", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-settled-stop-conflict",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/settled-stop-conflict",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/settled-stop-conflict",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      requestThreadStop(harness.deps, {
+        environmentId: environment.id,
+        hostId: host.id,
+        stopRequestedAt: null,
+        threadId: thread.id,
+      });
+      const queuedStop = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.stop" && command.threadId === thread.id,
+      );
+
+      reportCommandResult(harness.db, harness.hub, {
+        commandId: queuedStop.row.id,
+        state: "error",
+        completedAt: Date.now(),
+        resultPayload: JSON.stringify({
+          errorCode: "stop_failed",
+          errorMessage: "Stored stop failure",
+        }),
+      });
+
+      const retryResponse = await reportQueuedCommandSuccess(
+        harness,
+        queuedStop,
+        {},
+      );
+      expect(retryResponse.status).toBe(200);
+
+      await expect(
+        harness.hub.waitForCommandResult(queuedStop.row.id, 1_000),
+      ).resolves.toEqual({
+        commandId: queuedStop.row.id,
+        errorCode: "stop_failed",
+        errorMessage: "Stored stop failure",
+        ok: false,
+        type: "thread.stop",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("keeps the stored success cached when a settled command retry reports error", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-settled-stop-conflict-inverse",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/settled-stop-conflict-inverse",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/settled-stop-conflict-inverse",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      requestThreadStop(harness.deps, {
+        environmentId: environment.id,
+        hostId: host.id,
+        stopRequestedAt: null,
+        threadId: thread.id,
+      });
+      const queuedStop = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.stop" && command.threadId === thread.id,
+      );
+
+      reportCommandResult(harness.db, harness.hub, {
+        commandId: queuedStop.row.id,
+        state: "success",
+        completedAt: Date.now(),
+        resultPayload: JSON.stringify({}),
+      });
+
+      const retryResponse = await reportQueuedCommandError(harness, queuedStop, {
+        errorCode: "stop_failed",
+        errorMessage: "Retry stop failure",
+      });
+      expect(retryResponse.status).toBe(200);
+
+      await expect(
+        harness.hub.waitForCommandResult(queuedStop.row.id, 1_000),
+      ).resolves.toEqual({
+        commandId: queuedStop.row.id,
+        ok: true,
+        result: {},
+        type: "thread.stop",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("replays settled interactive.resolve side effects when a success retry arrives", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -1007,17 +1183,15 @@ describe("internal command result idempotency", () => {
           interactionId: registered.interaction.id,
         }),
       ).toMatchObject({
-        status: "interrupted",
-        statusReason: expect.stringContaining(
-          "Command result reached terminal state before lifecycle side effects completed",
-        ),
+        status: "resolved",
+        statusReason: null,
       });
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("fails settled runtime material side effects when a success retry arrives", async () => {
+  it("replays settled runtime material side effects when a success retry arrives", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
@@ -1075,10 +1249,8 @@ describe("internal command result idempotency", () => {
         }),
       ).toMatchObject({
         commandId: command.id,
-        failureReason: expect.stringContaining(
-          "Command result reached terminal state before lifecycle side effects completed",
-        ),
-        state: "failed",
+        failureReason: null,
+        state: "completed",
       });
     } finally {
       await harness.cleanup();
