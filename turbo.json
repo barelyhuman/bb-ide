@@ -75,9 +75,6 @@
     },
     "test:integration": {
       "dependsOn": ["build", "^build"]
-    },
-    "test:e2e": {
-      "dependsOn": ["build", "^build"]
     }
   }
 }
