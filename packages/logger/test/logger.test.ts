@@ -68,15 +68,17 @@ async function runLoggerInSubprocess(args: {
     setTimeout(() => process.exit(0), 250);
   `;
 
+  const childEnv = { ...process.env, BB_DATA_DIR: args.dataDir };
+  // The logger skips pino-pretty under VITEST; clear it so the spawned
+  // process exercises the real stdout transport like production does.
+  delete childEnv.VITEST;
+
   return new Promise((resolve, reject) => {
     const child = spawn(
       process.execPath,
       ["--input-type=module", "-e", script],
       {
-        env: {
-          ...process.env,
-          BB_DATA_DIR: args.dataDir,
-        },
+        env: childEnv,
         stdio: ["ignore", "pipe", "pipe"],
       },
     );

@@ -65,7 +65,14 @@ export function createLogger(options: CreateLoggerOptions): Logger {
       },
       level: commonConfig.BB_LOG_LEVEL,
     },
-    {
+  ];
+
+  // pino-pretty streams to stdout from a worker thread, so vitest's
+  // `silent` setting (which patches console.* in the main thread) can't
+  // suppress it. Skip it under vitest to keep large-payload tests from
+  // flooding the reporter.
+  if (!process.env.VITEST) {
+    targets.push({
       target: "pino-pretty",
       options: {
         ignore: "pid,hostname,component",
@@ -74,8 +81,8 @@ export function createLogger(options: CreateLoggerOptions): Logger {
         translateTime: "HH:mm:ss",
       },
       level: commonConfig.BB_LOG_LEVEL,
-    },
-  ];
+    });
+  }
 
   const transport = pino.transport({ targets });
 
