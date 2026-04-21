@@ -118,12 +118,13 @@ export function DelegationRow({
   ) => ReactNode;
 }) {
   const { isExpanded, onToggle } = useLatestInitialExpanded(initialExpanded);
+  const isSubagentPending = message.status === "pending";
   const nestedRows = useMemo(
     () =>
       buildTimelineRows(message.childProjection, {
-        collapseAll: true,
+        grouping: isSubagentPending ? "ungrouped" : "collapse-all",
       }),
-    [message.childProjection],
+    [message.childProjection, isSubagentPending],
   );
   const nestedLatestActivityRowId = useMemo(
     () => findLatestActivityRowId(nestedRows),

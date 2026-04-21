@@ -15,10 +15,17 @@ import {
   type IndexedTimelineMessage,
 } from "./timeline-message-helpers.js";
 
+export type TimelineRowGrouping =
+  /** Smart grouping: collapse pre-terminal activity into a tool-group, keep the terminal message standalone. */
+  | "terminal-aware"
+  /** Collapse every turn's non-ungroupable messages into a single tool-group, ignoring terminal detection. */
+  | "collapse-all"
+  /** Render every turn's messages as individual rows, with no tool-group wrapping. */
+  | "ungrouped";
+
 export interface BuildTimelineRowsOptions {
   includeToolGroupMessages?: boolean;
-  /** When true, group all non-ungroupable messages into one group, ignoring terminal detection. */
-  collapseAll?: boolean;
+  grouping?: TimelineRowGrouping;
 }
 
 function isToolExploringMessage(
@@ -504,7 +511,11 @@ function buildTurnRows(
   options: BuildTimelineRowsOptions | undefined,
 ): TimelineRow[] {
   const includeToolGroupMessages = options?.includeToolGroupMessages ?? true;
-  const collapseAll = options?.collapseAll ?? false;
+  const grouping = options?.grouping ?? "terminal-aware";
+  if (grouping === "ungrouped") {
+    return buildPendingTurnRows(turn);
+  }
+  const collapseAll = grouping === "collapse-all";
   if (turn.status === "pending" && !collapseAll) {
     return buildPendingTurnRows(turn);
   }

@@ -437,7 +437,7 @@ function formatDelegation(
   }
 
   for (const row of buildTimelineRows(msg.childProjection, {
-    collapseAll: true,
+    grouping: "collapse-all",
   })) {
     const block = formatTimelineRow(row, true, color);
     if (block) {
