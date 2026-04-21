@@ -94,7 +94,6 @@ SMOKE_THREAD_ID=$(bb thread spawn \
   --provider codex \
   --model "$CODEX_MODEL" \
   --reasoning-level low \
-  --service-tier fast \
   --prompt "Say hello from the smoke pass" \
   --json | jq -r '.id')
 
@@ -120,7 +119,6 @@ WORKTREE_THREAD_ID=$(bb thread spawn \
   --provider codex \
   --model "$CODEX_MODEL" \
   --reasoning-level low \
-  --service-tier fast \
   --new-environment worktree \
   --prompt "Create a file named smoke.txt and briefly confirm it" \
   --json | jq -r '.id')
@@ -179,7 +177,6 @@ DIRTY_ARCHIVE_THREAD_ID=$(bb thread spawn \
   --provider codex \
   --model "$CODEX_MODEL" \
   --reasoning-level low \
-  --service-tier fast \
   --new-environment worktree \
   --prompt "Say exactly: dirty archive setup" \
   --json | jq -r '.id')
@@ -219,7 +216,6 @@ THREAD_A_ID=$(bb thread spawn \
   --provider codex \
   --model "$CODEX_MODEL" \
   --reasoning-level low \
-  --service-tier fast \
   --prompt "Say exactly: THREAD A HELLO" \
   --json | jq -r '.id')
 
@@ -236,7 +232,6 @@ THREAD_B_ID=$(bb thread spawn \
   --provider codex \
   --model "$CODEX_MODEL" \
   --reasoning-level low \
-  --service-tier fast \
   --prompt "Say exactly: THREAD B WORLD" \
   --json | jq -r '.id')
 
@@ -313,7 +308,6 @@ PROMOTE_THREAD_ID=$(bb thread spawn \
   --provider codex \
   --model "$CODEX_MODEL" \
   --reasoning-level low \
-  --service-tier fast \
   --new-environment worktree \
   --prompt "Write a file named promote.txt" \
   --json | jq -r '.id')
@@ -420,7 +414,7 @@ Repeat this section for `codex`, `claude-code`, and `pi`:
 
 Use the resolved model for each provider:
 
-- `codex`: `--model "$CODEX_MODEL" --service-tier fast`
+- `codex`: `--model "$CODEX_MODEL"`
 - `claude-code`: `--model "$CLAUDE_MODEL"`
 - `pi`: `--model "$PI_MODEL"`
 
@@ -475,7 +469,6 @@ APPROVAL_THREAD_ID=$(bb thread spawn \
   --provider codex \
   --model "$CODEX_MODEL" \
   --reasoning-level low \
-  --service-tier fast \
   --new-environment worktree \
   --permission-mode readonly \
   --prompt "Run this exact shell command: printf 'APPROVED' > approval-smoke.txt. If approval is needed, request approval. After the command finishes, reply with exactly DONE." \
@@ -514,7 +507,6 @@ DENY_THREAD_ID=$(bb thread spawn \
   --provider codex \
   --model "$CODEX_MODEL" \
   --reasoning-level low \
-  --service-tier fast \
   --new-environment worktree \
   --permission-mode readonly \
   --prompt "Run this exact shell command: printf 'DENIED' > denied-smoke.txt. If approval is denied, reply with exactly DENIED." \
