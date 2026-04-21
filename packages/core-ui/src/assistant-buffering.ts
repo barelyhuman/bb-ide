@@ -34,7 +34,7 @@ export function parseReasoningFinalText(decoded: ThreadEvent): string | null {
   return text.length > 0 ? text : null;
 }
 
-export function isTerminalAssistantFlushEvent(eventType: string): boolean {
+export function isTerminalBufferedTextFlushEvent(eventType: string): boolean {
   return (
     eventType === "system/thread/interrupted" || eventType === "turn/completed"
   );

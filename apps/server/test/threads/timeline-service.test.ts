@@ -141,7 +141,7 @@ describe("buildThreadTimeline", () => {
     });
   });
 
-  it("returns streaming thinking separately without rendering a timeline reasoning row", async () => {
+  it("keeps partial streaming thinking hidden until a newline boundary", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
@@ -183,8 +183,54 @@ describe("buildThreadTimeline", () => {
 
     const timeline = buildThreadTimeline(harness.db, thread, {});
 
+    expect(timeline.activeThinking).toBeNull();
+    expect(timeline.rows).toEqual([]);
+  });
+
+  it("returns newline-complete streaming thinking separately without rendering a timeline reasoning row", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      status: "active",
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 1,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      turnId: "turn-1",
+      sequence: 2,
+      type: "item/reasoning/textDelta",
+      data: {
+        itemId: "reasoning-1",
+        delta: "Looking through the workspace.\nTrailing partial",
+      },
+    });
+
+    const timeline = buildThreadTimeline(harness.db, thread, {});
+
     expect(timeline.activeThinking).toMatchObject({
-      text: "Looking through the workspace.",
+      text: "Looking through the workspace.\n",
       startedAt: expect.any(Number),
       updatedAt: expect.any(Number),
     });

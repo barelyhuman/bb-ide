@@ -1,6 +1,7 @@
 import type { ThreadEvent } from "@bb/domain";
 import { parseCompactionLifecycleEvent } from "./compaction-lifecycle.js";
 import {
+  type EventMeta,
   getEventParentToolCallId,
   getEventProviderThreadId,
   getEventTurnId,
@@ -52,11 +53,12 @@ import {
   parseAssistantFinalText,
   parseReasoningDeltaText,
   parseReasoningFinalText,
-  isTerminalAssistantFlushEvent,
+  isTerminalBufferedTextFlushEvent,
 } from "./assistant-buffering.js";
 import {
   createToolActivityState,
   flushActiveToolCell,
+  flushPendingToolActivityOutput,
   flushToolActivityBeforeNonToolMessage,
   interruptPendingToolActivity,
   onExecBegin,
@@ -68,6 +70,7 @@ import {
 } from "./tool-activity-projection.js";
 import {
   finalizeOpenCompactionsForTurn,
+  flushPendingFileEditOutput,
   onCompactionBegin,
   onCompactionEnd,
   upsertPermissionGrantLifecycleMessage,
@@ -80,9 +83,17 @@ import {
   completeOpenReasoningMessages,
   finalizeProjectionKeys,
   flushBufferedAssistantMessages,
+  flushBufferedReasoningMessages,
   hasFinalizedProjectionKey,
   resolveOpenProjectionKey,
+  syncBufferedTextMessage,
 } from "./assistant-stream-projection.js";
+import {
+  appendVisibleTextBuffer,
+  createVisibleTextBuffer,
+  setVisibleTextBuffer,
+  type VisibleTextBuffer,
+} from "./visible-text-buffer.js";
 import type {
   ToViewMessagesOptions,
   ToViewProjectionOptions,
@@ -97,18 +108,52 @@ import type {
 // --- Projection state machine ---
 
 type ProjectedUserMessage = Extract<ViewMessage, { kind: "user" }>;
+type BufferedTextViewMessage =
+  | ViewAssistantReasoningMessage
+  | ViewAssistantTextMessage;
 
 interface CompactionTurnFinalization {
   status: CompactionTurnFinalizationStatus;
   detail: string | undefined;
 }
 
+interface BufferedTextProjectionKeys {
+  fallbackTurnKey: string | undefined;
+  primaryTurnKey: string;
+  turnKey: string;
+}
+
+interface BufferedTextProjectionRefs<TMessage extends BufferedTextViewMessage> {
+  finalizedKeys: Set<string>;
+  openMessages: Map<string, TMessage>;
+  textBuffers: Map<string, VisibleTextBuffer>;
+  visibleKeys: Set<string>;
+}
+
+interface ProjectBufferedTextEventArgs<
+  TMessage extends BufferedTextViewMessage,
+> {
+  createMessage: (turnKey: string) => TMessage;
+  decodedItemId: string | undefined;
+  eventParentToolCallId: string | undefined;
+  eventTurnId: string | undefined;
+  meta: EventMeta;
+  mode: "delta" | "final";
+  refs: BufferedTextProjectionRefs<TMessage>;
+  state: ProjectionState;
+  text: string | null;
+}
+
 interface ProjectionState {
   messages: ViewMessage[];
   seenUserKeys: Set<string>;
   openAssistantByTurn: Map<string, ViewAssistantTextMessage>;
+  assistantTextBuffersByTurn: Map<string, VisibleTextBuffer>;
+  visibleAssistantTurnKeys: Set<string>;
   finalizedAssistantTurnKeys: Set<string>;
   openReasoningByTurn: Map<string, ViewAssistantReasoningMessage>;
+  reasoningTextBuffersByTurn: Map<string, VisibleTextBuffer>;
+  visibleReasoningTurnKeys: Set<string>;
   finalizedReasoningTurnKeys: Set<string>;
   openCompactionsByKey: Map<string, ViewOperationMessage>;
   finalizedCompactionKeys: Set<string>;
@@ -119,6 +164,7 @@ interface ProjectionState {
   >;
   threadOperationsById: Map<string, ViewOperationMessage>;
   fileEditsByCallId: Map<string, ViewFileEditMessage>;
+  fileEditStdoutBuffersByCallId: Map<string, VisibleTextBuffer>;
   delegationParentToolCallIdsByProviderThreadId: Map<string, string>;
   toolActivity: ToolActivityState;
 }
@@ -128,8 +174,12 @@ function createProjectionState(): ProjectionState {
     messages: [],
     seenUserKeys: new Set(),
     openAssistantByTurn: new Map(),
+    assistantTextBuffersByTurn: new Map(),
+    visibleAssistantTurnKeys: new Set(),
     finalizedAssistantTurnKeys: new Set(),
     openReasoningByTurn: new Map(),
+    reasoningTextBuffersByTurn: new Map(),
+    visibleReasoningTurnKeys: new Set(),
     finalizedReasoningTurnKeys: new Set(),
     openCompactionsByKey: new Map(),
     finalizedCompactionKeys: new Set(),
@@ -137,6 +187,7 @@ function createProjectionState(): ProjectionState {
     permissionGrantsByInteractionId: new Map(),
     threadOperationsById: new Map(),
     fileEditsByCallId: new Map(),
+    fileEditStdoutBuffersByCallId: new Map(),
     delegationParentToolCallIdsByProviderThreadId: new Map(),
     toolActivity: createToolActivityState(),
   };
@@ -219,6 +270,114 @@ function getCompactionTurnFinalization(
   return undefined;
 }
 
+function resolveBufferedTextProjectionKeys<
+  TMessage extends BufferedTextViewMessage,
+>(
+  args: Omit<ProjectBufferedTextEventArgs<TMessage>, "createMessage" | "mode" | "state" | "text">,
+): BufferedTextProjectionKeys | null {
+  const turnKeyPrefix = args.eventParentToolCallId
+    ? `parent:${args.eventParentToolCallId}:`
+    : "";
+  const primaryTurnKey = `${turnKeyPrefix}${args.decodedItemId ?? args.eventTurnId ?? `seq-${args.meta.seq}`}`;
+  const fallbackTurnKey =
+    args.decodedItemId && args.eventTurnId
+      ? `${turnKeyPrefix}${args.eventTurnId}`
+      : undefined;
+
+  if (
+    hasFinalizedProjectionKey(
+      args.refs.finalizedKeys,
+      primaryTurnKey,
+      fallbackTurnKey,
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    fallbackTurnKey,
+    primaryTurnKey,
+    turnKey: resolveOpenProjectionKey(
+      args.refs.openMessages,
+      primaryTurnKey,
+      fallbackTurnKey,
+    ),
+  };
+}
+
+function upsertBufferedTextMessage<TMessage extends BufferedTextViewMessage>(
+  args: Pick<
+    ProjectBufferedTextEventArgs<TMessage>,
+    "createMessage" | "eventParentToolCallId" | "meta" | "refs"
+  > & { turnKey: string },
+): TMessage {
+  let existing = args.refs.openMessages.get(args.turnKey);
+  if (!existing) {
+    existing = args.createMessage(args.turnKey);
+    args.refs.openMessages.set(args.turnKey, existing);
+    return existing;
+  }
+
+  existing.sourceSeqEnd = args.meta.seq;
+  existing.createdAt = args.meta.createdAt;
+  if (!existing.parentToolCallId && args.eventParentToolCallId) {
+    existing.parentToolCallId = args.eventParentToolCallId;
+  }
+  return existing;
+}
+
+function projectBufferedTextEvent<TMessage extends BufferedTextViewMessage>(
+  args: ProjectBufferedTextEventArgs<TMessage>,
+): boolean {
+  if (!args.text) {
+    return false;
+  }
+
+  const keys = resolveBufferedTextProjectionKeys(args);
+  if (!keys) {
+    return true;
+  }
+
+  const message = upsertBufferedTextMessage({
+    createMessage: args.createMessage,
+    eventParentToolCallId: args.eventParentToolCallId,
+    meta: args.meta,
+    refs: args.refs,
+    turnKey: keys.turnKey,
+  });
+  const buffer =
+    args.refs.textBuffers.get(keys.turnKey) ?? createVisibleTextBuffer();
+  args.refs.textBuffers.set(keys.turnKey, buffer);
+
+  if (args.mode === "delta") {
+    appendVisibleTextBuffer(buffer, args.text);
+    syncBufferedTextMessage({
+      buffer,
+      message,
+      state: args.state,
+      status: "streaming",
+      turnKey: keys.turnKey,
+      visibleKeys: args.refs.visibleKeys,
+    });
+    return true;
+  }
+
+  setVisibleTextBuffer(buffer, args.text, true);
+  syncBufferedTextMessage({
+    buffer,
+    message,
+    state: args.state,
+    status: "completed",
+    turnKey: keys.turnKey,
+    visibleKeys: args.refs.visibleKeys,
+  });
+  args.refs.openMessages.delete(keys.turnKey);
+  args.refs.textBuffers.delete(keys.turnKey);
+  args.refs.visibleKeys.delete(keys.turnKey);
+  finalizeProjectionKeys(args.refs.finalizedKeys, [keys.primaryTurnKey]);
+  return true;
+}
+
 function finalizePendingMessages(
   state: ProjectionState,
   options: ToViewMessagesOptions | undefined,
@@ -233,6 +392,8 @@ function finalizePendingMessages(
     return;
   }
 
+  flushPendingToolActivityOutput(state);
+  flushPendingFileEditOutput(state);
   interruptPendingToolActivity(state);
 
   for (const fileEdit of state.fileEditsByCallId.values()) {
@@ -243,9 +404,10 @@ function finalizePendingMessages(
 
   if (shouldFinalizeBufferedAssistants) {
     flushBufferedAssistantMessages(state);
+    flushBufferedReasoningMessages(state);
+  } else {
+    completeOpenReasoningMessages(state);
   }
-
-  completeOpenReasoningMessages(state);
 
   for (const message of state.messages) {
     if (message.kind !== "operation") continue;
@@ -296,11 +458,11 @@ function buildFlatViewMessages(
       });
     }
 
-    if (
-      state.openAssistantByTurn.size > 0 &&
-      isTerminalAssistantFlushEvent(eventType)
-    ) {
+    if (isTerminalBufferedTextFlushEvent(eventType)) {
       flushBufferedAssistantMessages(state);
+      flushBufferedReasoningMessages(state);
+      flushPendingToolActivityOutput(state);
+      flushPendingFileEditOutput(state);
     }
 
     const userFromClientRequest = parseUserFromClientRequest({
@@ -339,40 +501,9 @@ function buildFlatViewMessages(
           ? decoded.item.id
           : undefined;
 
-    const assistantDelta =
-      options?.threadType === "manager"
-        ? null
-        : parseAssistantDeltaText(decoded);
-    if (assistantDelta) {
-      const turnKeyPrefix = eventParentToolCallId
-        ? `parent:${eventParentToolCallId}:`
-        : "";
-      const primaryTurnKey = `${turnKeyPrefix}${decodedItemId ?? eventTurnId ?? `seq-${meta.seq}`}`;
-      const fallbackTurnKey =
-        decodedItemId && eventTurnId
-          ? `${turnKeyPrefix}${eventTurnId}`
-          : undefined;
-      if (
-        hasFinalizedProjectionKey(
-          state.finalizedAssistantTurnKeys,
-          primaryTurnKey,
-          fallbackTurnKey,
-        )
-      ) {
-        continue;
-      }
-
-      const turnKey = resolveOpenProjectionKey(
-        state.openAssistantByTurn,
-        primaryTurnKey,
-        fallbackTurnKey,
-      );
-      let existing = state.openAssistantByTurn.get(turnKey);
-      if (existing?.status === "completed") {
-        continue;
-      }
-      if (!existing) {
-        existing = {
+    if (
+      projectBufferedTextEvent({
+        createMessage: (turnKey) => ({
           kind: "assistant-text",
           id: messageId(decoded.threadId, "assistant", turnKey),
           threadId: decoded.threadId,
@@ -384,73 +515,35 @@ function buildFlatViewMessages(
           ...(eventParentToolCallId
             ? { parentToolCallId: eventParentToolCallId }
             : {}),
-          text: assistantDelta,
+          text: "",
           status: "streaming",
-        };
-        state.openAssistantByTurn.set(turnKey, existing);
-      } else {
-        existing.sourceSeqEnd = meta.seq;
-        existing.createdAt = meta.createdAt;
-        if (!existing.parentToolCallId && eventParentToolCallId) {
-          existing.parentToolCallId = eventParentToolCallId;
-        }
-        existing.text += assistantDelta;
-      }
+        }),
+        decodedItemId,
+        eventParentToolCallId,
+        eventTurnId,
+        meta,
+        mode: "delta",
+        refs: {
+          finalizedKeys: state.finalizedAssistantTurnKeys,
+          openMessages: state.openAssistantByTurn,
+          textBuffers: state.assistantTextBuffersByTurn,
+          visibleKeys: state.visibleAssistantTurnKeys,
+        },
+        state,
+        text:
+          options?.threadType === "manager"
+            ? null
+            : parseAssistantDeltaText(decoded),
+      })
+    ) {
       continue;
     }
 
-    const assistantFinal =
-      options?.threadType === "manager"
-        ? null
-        : parseAssistantFinalText(decoded);
-    if (assistantFinal) {
-      const turnKeyPrefix = eventParentToolCallId
-        ? `parent:${eventParentToolCallId}:`
-        : "";
-      const primaryTurnKey = `${turnKeyPrefix}${decodedItemId ?? eventTurnId ?? `seq-${meta.seq}`}`;
-      const fallbackTurnKey =
-        decodedItemId && eventTurnId
-          ? `${turnKeyPrefix}${eventTurnId}`
-          : undefined;
-      if (
-        hasFinalizedProjectionKey(
-          state.finalizedAssistantTurnKeys,
-          primaryTurnKey,
-          fallbackTurnKey,
-        )
-      ) {
-        continue;
-      }
-      const turnKey = resolveOpenProjectionKey(
-        state.openAssistantByTurn,
-        primaryTurnKey,
-        fallbackTurnKey,
-      );
-      const existing = state.openAssistantByTurn.get(turnKey);
-
-      if (existing) {
-        existing.sourceSeqEnd = meta.seq;
-        existing.createdAt = meta.createdAt;
-        if (!existing.parentToolCallId && eventParentToolCallId) {
-          existing.parentToolCallId = eventParentToolCallId;
-        }
-        existing.text = assistantFinal;
-        existing.status = "completed";
-        state.openAssistantByTurn.delete(turnKey);
-        flushToolActivityBeforeNonToolMessage(state);
-        state.messages.push(existing);
-        finalizeProjectionKeys(state.finalizedAssistantTurnKeys, [
-          primaryTurnKey,
-        ]);
-      } else {
-        flushToolActivityBeforeNonToolMessage(state);
-        state.messages.push({
+    if (
+      projectBufferedTextEvent({
+        createMessage: (turnKey) => ({
           kind: "assistant-text",
-          id: messageId(
-            decoded.threadId,
-            "assistant",
-            `${primaryTurnKey}:${meta.seq}`,
-          ),
+          id: messageId(decoded.threadId, "assistant", turnKey),
           threadId: decoded.threadId,
           sourceSeqStart: meta.seq,
           sourceSeqEnd: meta.seq,
@@ -460,47 +553,33 @@ function buildFlatViewMessages(
           ...(eventParentToolCallId
             ? { parentToolCallId: eventParentToolCallId }
             : {}),
-          text: assistantFinal,
-          status: "completed",
-        });
-        finalizeProjectionKeys(state.finalizedAssistantTurnKeys, [
-          primaryTurnKey,
-        ]);
-      }
+          text: "",
+          status: "streaming",
+        }),
+        decodedItemId,
+        eventParentToolCallId,
+        eventTurnId,
+        meta,
+        mode: "final",
+        refs: {
+          finalizedKeys: state.finalizedAssistantTurnKeys,
+          openMessages: state.openAssistantByTurn,
+          textBuffers: state.assistantTextBuffersByTurn,
+          visibleKeys: state.visibleAssistantTurnKeys,
+        },
+        state,
+        text:
+          options?.threadType === "manager"
+            ? null
+            : parseAssistantFinalText(decoded),
+      })
+    ) {
       continue;
     }
 
-    const reasoningDelta =
-      options?.threadType === "manager"
-        ? null
-        : parseReasoningDeltaText(decoded);
-    if (reasoningDelta) {
-      const turnKeyPrefix = eventParentToolCallId
-        ? `parent:${eventParentToolCallId}:`
-        : "";
-      const primaryTurnKey = `${turnKeyPrefix}${decodedItemId ?? eventTurnId ?? `seq-${meta.seq}`}`;
-      const fallbackTurnKey =
-        decodedItemId && eventTurnId
-          ? `${turnKeyPrefix}${eventTurnId}`
-          : undefined;
-      if (
-        hasFinalizedProjectionKey(
-          state.finalizedReasoningTurnKeys,
-          primaryTurnKey,
-          fallbackTurnKey,
-        )
-      ) {
-        continue;
-      }
-
-      const turnKey = resolveOpenProjectionKey(
-        state.openReasoningByTurn,
-        primaryTurnKey,
-        fallbackTurnKey,
-      );
-      let existing = state.openReasoningByTurn.get(turnKey);
-      if (!existing) {
-        existing = {
+    if (
+      projectBufferedTextEvent({
+        createMessage: (turnKey) => ({
           kind: "assistant-reasoning",
           id: messageId(decoded.threadId, "reasoning", turnKey),
           threadId: decoded.threadId,
@@ -512,64 +591,35 @@ function buildFlatViewMessages(
           ...(eventParentToolCallId
             ? { parentToolCallId: eventParentToolCallId }
             : {}),
-          text: reasoningDelta,
+          text: "",
           status: "streaming",
-        };
-        state.openReasoningByTurn.set(turnKey, existing);
-        flushToolActivityBeforeNonToolMessage(state);
-        state.messages.push(existing);
-      } else {
-        existing.sourceSeqEnd = meta.seq;
-        existing.createdAt = meta.createdAt;
-        if (!existing.parentToolCallId && eventParentToolCallId) {
-          existing.parentToolCallId = eventParentToolCallId;
-        }
-        existing.text += reasoningDelta;
-      }
+        }),
+        decodedItemId,
+        eventParentToolCallId,
+        eventTurnId,
+        meta,
+        mode: "delta",
+        refs: {
+          finalizedKeys: state.finalizedReasoningTurnKeys,
+          openMessages: state.openReasoningByTurn,
+          textBuffers: state.reasoningTextBuffersByTurn,
+          visibleKeys: state.visibleReasoningTurnKeys,
+        },
+        state,
+        text:
+          options?.threadType === "manager"
+            ? null
+            : parseReasoningDeltaText(decoded),
+      })
+    ) {
       continue;
     }
 
-    const reasoningFinal =
-      options?.threadType === "manager"
-        ? null
-        : parseReasoningFinalText(decoded);
-    if (reasoningFinal) {
-      const turnKeyPrefix = eventParentToolCallId
-        ? `parent:${eventParentToolCallId}:`
-        : "";
-      const primaryTurnKey = `${turnKeyPrefix}${decodedItemId ?? eventTurnId ?? `seq-${meta.seq}`}`;
-      const fallbackTurnKey =
-        decodedItemId && eventTurnId
-          ? `${turnKeyPrefix}${eventTurnId}`
-          : undefined;
-      const turnKey = resolveOpenProjectionKey(
-        state.openReasoningByTurn,
-        primaryTurnKey,
-        fallbackTurnKey,
-      );
-      const existing = state.openReasoningByTurn.get(turnKey);
-
-      if (existing) {
-        existing.sourceSeqEnd = meta.seq;
-        existing.createdAt = meta.createdAt;
-        if (!existing.parentToolCallId && eventParentToolCallId) {
-          existing.parentToolCallId = eventParentToolCallId;
-        }
-        existing.text = reasoningFinal;
-        existing.status = "completed";
-        state.openReasoningByTurn.delete(turnKey);
-        finalizeProjectionKeys(state.finalizedReasoningTurnKeys, [
-          primaryTurnKey,
-        ]);
-      } else {
-        flushToolActivityBeforeNonToolMessage(state);
-        state.messages.push({
+    if (
+      projectBufferedTextEvent({
+        createMessage: (turnKey) => ({
           kind: "assistant-reasoning",
-          id: messageId(
-            decoded.threadId,
-            "reasoning",
-            `${primaryTurnKey}:${meta.seq}`,
-          ),
+          id: messageId(decoded.threadId, "reasoning", turnKey),
           threadId: decoded.threadId,
           sourceSeqStart: meta.seq,
           sourceSeqEnd: meta.seq,
@@ -579,13 +629,27 @@ function buildFlatViewMessages(
           ...(eventParentToolCallId
             ? { parentToolCallId: eventParentToolCallId }
             : {}),
-          text: reasoningFinal,
-          status: "completed",
-        });
-        finalizeProjectionKeys(state.finalizedReasoningTurnKeys, [
-          primaryTurnKey,
-        ]);
-      }
+          text: "",
+          status: "streaming",
+        }),
+        decodedItemId,
+        eventParentToolCallId,
+        eventTurnId,
+        meta,
+        mode: "final",
+        refs: {
+          finalizedKeys: state.finalizedReasoningTurnKeys,
+          openMessages: state.openReasoningByTurn,
+          textBuffers: state.reasoningTextBuffersByTurn,
+          visibleKeys: state.visibleReasoningTurnKeys,
+        },
+        state,
+        text:
+          options?.threadType === "manager"
+            ? null
+            : parseReasoningFinalText(decoded),
+      })
+    ) {
       continue;
     }
 

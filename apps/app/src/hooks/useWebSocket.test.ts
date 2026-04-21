@@ -16,6 +16,7 @@ import {
   environmentWorkStatusQueryKey,
   environmentWorkStatusQueryKeyPrefix,
   hostsQueryKey,
+  statusQueryKey,
   systemProvidersQueryKey,
   threadQueryKey,
   threadTimelineQueryKeyPrefix,
@@ -450,6 +451,127 @@ describe("useWebSocket", () => {
     });
   });
 
+  it("debounces pure thread event appends within the single invalidation window", () => {
+    vi.useFakeTimers();
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+
+    renderHook(() => useWebSocket(), { wrapper });
+
+    act(() => {
+      changedCallbacks[0]?.({
+        changes: ["events-appended"],
+        entity: "thread",
+        id: "thread-1",
+        type: "changed",
+      });
+      vi.advanceTimersByTime(40);
+    });
+
+    expect(invalidateQueries).not.toHaveBeenCalledWith({
+      queryKey: threadTimelineQueryKeyPrefix("thread-1"),
+    });
+
+    act(() => {
+      changedCallbacks[0]?.({
+        changes: ["events-appended"],
+        entity: "thread",
+        id: "thread-1",
+        type: "changed",
+      });
+      vi.advanceTimersByTime(49);
+    });
+
+    expect(invalidateQueries).not.toHaveBeenCalledWith({
+      queryKey: threadTimelineQueryKeyPrefix("thread-1"),
+    });
+
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: threadTimelineQueryKeyPrefix("thread-1"),
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: threadQueryKey("thread-1"),
+    });
+  });
+
+  it("invalidates successive thread append bursts after each debounce window", () => {
+    vi.useFakeTimers();
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+
+    renderHook(() => useWebSocket(), { wrapper });
+
+    act(() => {
+      changedCallbacks[0]?.({
+        changes: ["events-appended"],
+        entity: "thread",
+        id: "thread-1",
+        type: "changed",
+      });
+      vi.advanceTimersByTime(50);
+    });
+
+    expect(
+      invalidateQueries.mock.calls.filter(
+        ([args]) =>
+          JSON.stringify(args) ===
+          JSON.stringify({ queryKey: threadTimelineQueryKeyPrefix("thread-1") }),
+      ),
+    ).toHaveLength(1);
+
+    act(() => {
+      changedCallbacks[0]?.({
+        changes: ["events-appended"],
+        entity: "thread",
+        id: "thread-1",
+        type: "changed",
+      });
+      vi.advanceTimersByTime(50);
+    });
+
+    expect(
+      invalidateQueries.mock.calls.filter(
+        ([args]) =>
+          JSON.stringify(args) ===
+          JSON.stringify({ queryKey: threadTimelineQueryKeyPrefix("thread-1") }),
+      ),
+    ).toHaveLength(2);
+  });
+
+  it("flushes thread status changes immediately without waiting for the debounce window", () => {
+    vi.useFakeTimers();
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+
+    renderHook(() => useWebSocket(), { wrapper });
+
+    act(() => {
+      changedCallbacks[0]?.({
+        changes: ["status-changed"],
+        entity: "thread",
+        id: "thread-1",
+        type: "changed",
+      });
+    });
+
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: threadTimelineQueryKeyPrefix("thread-1"),
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: threadQueryKey("thread-1"),
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: threadsQueryKey(),
+    });
+    expect(invalidateQueries).toHaveBeenCalledWith({
+      queryKey: statusQueryKey(),
+    });
+  });
+
   it("invalidates pending interaction queries and timeline state for thread interaction changes", () => {
     vi.useFakeTimers();
     const { queryClient, wrapper } = createQueryClientTestHarness();
@@ -464,7 +586,7 @@ describe("useWebSocket", () => {
         id: "thread-1",
         type: "changed",
       });
-      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(200);
     });
 
     expect(invalidateQueries).toHaveBeenCalledWith({

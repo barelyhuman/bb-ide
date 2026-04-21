@@ -1,4 +1,7 @@
-import type { EnvironmentChangeKind } from "@bb/domain";
+import {
+  createDebouncedCallbackScheduler,
+  type EnvironmentChangeKind,
+} from "@bb/domain";
 
 interface BufferedEnvironmentInvalidatorOptions {
   debounceMs: number;
@@ -26,18 +29,8 @@ export function createBufferedEnvironmentInvalidator(
     string,
     Set<EnvironmentChangeKind>
   >();
-  let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-  let maxWaitTimer: ReturnType<typeof setTimeout> | null = null;
 
   const flush = () => {
-    if (debounceTimer !== null) {
-      clearTimeout(debounceTimer);
-      debounceTimer = null;
-    }
-    if (maxWaitTimer !== null) {
-      clearTimeout(maxWaitTimer);
-      maxWaitTimer = null;
-    }
     if (changedEnvironmentKindsById.size === 0) {
       return;
     }
@@ -52,27 +45,15 @@ export function createBufferedEnvironmentInvalidator(
     changedEnvironmentKindsById.clear();
   };
 
-  const schedule = () => {
-    if (debounceTimer !== null) {
-      clearTimeout(debounceTimer);
-    }
-    debounceTimer = setTimeout(flush, options.debounceMs);
-
-    if (maxWaitTimer === null) {
-      maxWaitTimer = setTimeout(flush, options.maxWaitMs);
-    }
-  };
+  const scheduler = createDebouncedCallbackScheduler({
+    debounceMs: options.debounceMs,
+    maxWaitMs: options.maxWaitMs,
+    onFlush: flush,
+  });
 
   return {
     dispose: () => {
-      if (debounceTimer !== null) {
-        clearTimeout(debounceTimer);
-        debounceTimer = null;
-      }
-      if (maxWaitTimer !== null) {
-        clearTimeout(maxWaitTimer);
-        maxWaitTimer = null;
-      }
+      scheduler.dispose();
       changedEnvironmentKindsById.clear();
     },
     markChanged: (
@@ -87,7 +68,7 @@ export function createBufferedEnvironmentInvalidator(
       for (const changeKind of changeKinds) {
         entry.add(changeKind);
       }
-      schedule();
+      scheduler.schedule();
     },
   };
 }

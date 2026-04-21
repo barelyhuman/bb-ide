@@ -11,6 +11,15 @@ import type { EventMeta } from "./event-decode.js";
 import type { ExecCallPartial } from "./exec-lifecycle.js";
 import { messageId } from "./format-helpers.js";
 import { isExploringCall } from "./tool-call-parsing.js";
+import {
+  appendVisibleTextBuffer,
+  createVisibleTextBuffer,
+  flushVisibleTextBuffer,
+  getVisibleTextBufferFullLength,
+  getVisibleTextBufferText,
+  setVisibleTextBuffer,
+  type VisibleTextBuffer,
+} from "./visible-text-buffer.js";
 import type { WebSearchLifecycleEvent } from "./web-search-lifecycle.js";
 
 interface ExploringCompatibilityContext {
@@ -37,6 +46,7 @@ interface RunningExecCall extends ViewToolCallSummary {
   sourceSeqEnd: number;
   createdAt: number;
   startedAt: number;
+  outputBuffer: VisibleTextBuffer;
 }
 
 export interface ToolActivityState {
@@ -56,6 +66,7 @@ export interface ToolActivityState {
 interface MergeCallSummaryOptions {
   appendOutput?: boolean;
   replaceOutput?: boolean;
+  visibleOutput?: string;
 }
 
 export function createToolActivityState(): ToolActivityState {
@@ -132,6 +143,25 @@ function chooseParsedIntents(
   return existing;
 }
 
+function isTerminalToolCallStatus(
+  status: ViewToolCallSummary["status"] | undefined,
+): boolean {
+  return status !== undefined && status !== "pending";
+}
+
+function syncRunningCallVisibleOutput(call: RunningExecCall): void {
+  call.output = getVisibleTextBufferText(call.outputBuffer);
+}
+
+function setRunningCallOutput(
+  call: RunningExecCall,
+  text: string,
+  flushTrailingPartial: boolean,
+): void {
+  setVisibleTextBuffer(call.outputBuffer, text, flushTrailingPartial);
+  syncRunningCallVisibleOutput(call);
+}
+
 function upsertRunningExecCall(
   existing: RunningExecCall | undefined,
   incoming: ExecCallPartial,
@@ -140,6 +170,15 @@ function upsertRunningExecCall(
   turnId: string | undefined,
 ): RunningExecCall {
   if (!existing) {
+    const outputBuffer = createVisibleTextBuffer();
+    if (incoming.output && incoming.output.length > 0) {
+      setVisibleTextBuffer(
+        outputBuffer,
+        incoming.output,
+        isTerminalToolCallStatus(incoming.status),
+      );
+    }
+
     return {
       callId: incoming.callId,
       threadId,
@@ -150,7 +189,7 @@ function upsertRunningExecCall(
       source: incoming.source,
       subagentType: incoming.subagentType,
       description: incoming.description,
-      output: incoming.output,
+      output: getVisibleTextBufferText(outputBuffer),
       exitCode: incoming.exitCode,
       duration: incoming.duration,
       durationMs: incoming.durationMs,
@@ -162,6 +201,7 @@ function upsertRunningExecCall(
       sourceSeqEnd: meta.seq,
       createdAt: meta.createdAt,
       startedAt: meta.createdAt,
+      outputBuffer,
     };
   }
 
@@ -199,8 +239,15 @@ function upsertRunningExecCall(
     existing.command = incoming.command;
   }
   if (incoming.output && incoming.output.length > 0) {
-    if (!existing.output || incoming.output.length >= existing.output.length) {
-      existing.output = incoming.output;
+    if (
+      isTerminalToolCallStatus(incoming.status) ||
+      incoming.output.length >= getVisibleTextBufferFullLength(existing.outputBuffer)
+    ) {
+      setRunningCallOutput(
+        existing,
+        incoming.output,
+        isTerminalToolCallStatus(incoming.status),
+      );
     }
   }
 
@@ -228,7 +275,8 @@ function appendExecOutputDelta(
   delta: string | undefined,
 ): void {
   if (!delta || delta.length === 0) return;
-  call.output = `${call.output ?? ""}${delta}`;
+  appendVisibleTextBuffer(call.outputBuffer, delta);
+  syncRunningCallVisibleOutput(call);
 }
 
 function areExploringCallsCompatible(
@@ -309,7 +357,7 @@ function mergeCallSummary(
   incoming: ExecCallPartial,
   options: MergeCallSummaryOptions = {},
 ): void {
-  const { appendOutput, replaceOutput } = options;
+  const { appendOutput, replaceOutput, visibleOutput } = options;
   if (
     incoming.command &&
     (!target.command || incoming.command.length > target.command.length)
@@ -322,17 +370,25 @@ function mergeCallSummary(
     incoming.parsedCmd,
   );
   if (incoming.source && !target.source) target.source = incoming.source;
-  if (incoming.output && incoming.output.length > 0) {
-    if (replaceOutput) {
-      target.output = incoming.output;
-    } else if (appendOutput) {
-      target.output = `${target.output ?? ""}${incoming.output}`;
-    } else if (
-      !target.output ||
-      incoming.output.length >= target.output.length
-    ) {
-      target.output = incoming.output;
-    }
+  if (visibleOutput !== undefined) {
+    target.output = visibleOutput;
+  } else if (appendOutput && incoming.output && incoming.output.length > 0) {
+    target.output = `${target.output ?? ""}${incoming.output}`;
+  } else if (
+    replaceOutput &&
+    incoming.output &&
+    incoming.output.length > 0
+  ) {
+    target.output = incoming.output;
+  } else if (appendOutput && incoming.output && incoming.output.length > 0) {
+    target.output = `${target.output ?? ""}${incoming.output}`;
+  } else if (
+    !appendOutput &&
+    incoming.output &&
+    incoming.output.length > 0 &&
+    (!target.output || incoming.output.length >= target.output.length)
+  ) {
+    target.output = incoming.output;
   }
   if (incoming.exitCode !== undefined) target.exitCode = incoming.exitCode;
   if (incoming.duration && !target.duration)
@@ -352,6 +408,21 @@ function mergeCallSummary(
   );
   target.status =
     mergeCallStatus(target.status, incoming.status) ?? target.status;
+}
+
+function syncProjectedCallOutput(
+  state: ToolActivityProjectionState,
+  call: RunningExecCall,
+): void {
+  const activeCall = findCallInActiveCell(state.toolActivity.activeCell, call.callId);
+  if (activeCall) {
+    activeCall.output = call.output;
+  }
+
+  const historyMatch = findCallInHistoryCells(state, call.callId);
+  if (historyMatch) {
+    historyMatch.call.output = call.output;
+  }
 }
 
 export function flushActiveToolCell(state: ToolActivityProjectionState): void {
@@ -380,10 +451,24 @@ export function flushToolActivityBeforeNonToolMessage(
   flushActiveToolCell(state);
 }
 
+export function flushPendingToolActivityOutput(
+  state: ToolActivityProjectionState,
+): void {
+  for (const call of state.toolActivity.runningCallsById.values()) {
+    if (!flushVisibleTextBuffer(call.outputBuffer)) {
+      continue;
+    }
+    syncRunningCallVisibleOutput(call);
+    syncProjectedCallOutput(state, call);
+  }
+}
+
 export function interruptPendingToolActivity(
   state: ToolActivityProjectionState,
 ): void {
   for (const call of state.toolActivity.runningCallsById.values()) {
+    flushVisibleTextBuffer(call.outputBuffer);
+    syncRunningCallVisibleOutput(call);
     call.status = mergeCallStatus(call.status, "interrupted") ?? "interrupted";
     if (!call.output) {
       call.output = "Tool execution interrupted";
@@ -569,6 +654,22 @@ export function onExecOutput(
   if (existingRunning) {
     if (appendOutput) {
       appendExecOutputDelta(existingRunning, incoming.output);
+      mergeCallSummary(existingRunning, incoming, {
+        appendOutput,
+        replaceOutput,
+        visibleOutput: existingRunning.output,
+      });
+    } else if (replaceOutput && incoming.output !== undefined) {
+      setRunningCallOutput(
+        existingRunning,
+        incoming.output,
+        isTerminalToolCallStatus(incoming.status),
+      );
+      mergeCallSummary(existingRunning, incoming, {
+        appendOutput,
+        replaceOutput,
+        visibleOutput: existingRunning.output,
+      });
     } else {
       mergeCallSummary(existingRunning, incoming, {
         appendOutput,
@@ -590,7 +691,11 @@ export function onExecOutput(
     incoming.callId,
   );
   if (activeCall) {
-    mergeCallSummary(activeCall, incoming, { appendOutput, replaceOutput });
+    mergeCallSummary(activeCall, incoming, {
+      appendOutput,
+      replaceOutput,
+      visibleOutput: existingRunning?.output,
+    });
     if (state.toolActivity.activeCell?.kind === "tool-exploring") {
       state.toolActivity.activeCell.sourceSeqEnd = Math.max(
         state.toolActivity.activeCell.sourceSeqEnd,
@@ -618,6 +723,7 @@ export function onExecOutput(
   mergeCallSummary(historyMatch.call, incoming, {
     appendOutput,
     replaceOutput,
+    visibleOutput: existingRunning?.output,
   });
   historyMatch.cell.sourceSeqEnd = Math.max(
     historyMatch.cell.sourceSeqEnd,
@@ -652,12 +758,18 @@ export function onExecEnd(
     threadId,
     turnId,
   );
+  if (isTerminalToolCallStatus(merged.status)) {
+    flushVisibleTextBuffer(merged.outputBuffer);
+    syncRunningCallVisibleOutput(merged);
+  }
   state.toolActivity.runningCallsById.delete(incoming.callId);
 
   const active = state.toolActivity.activeCell;
   const existingInActive = findCallInActiveCell(active, incoming.callId);
   if (existingInActive) {
-    mergeCallSummary(existingInActive, merged);
+    mergeCallSummary(existingInActive, merged, {
+      visibleOutput: merged.output,
+    });
     if (active?.kind === "tool-exploring") {
       active.sourceSeqEnd = Math.max(active.sourceSeqEnd, merged.sourceSeqEnd);
       active.createdAt = Math.max(active.createdAt, merged.createdAt);
@@ -687,7 +799,9 @@ export function onExecEnd(
 
   const historyMatch = findCallInHistoryCells(state, incoming.callId);
   if (historyMatch) {
-    mergeCallSummary(historyMatch.call, merged);
+    mergeCallSummary(historyMatch.call, merged, {
+      visibleOutput: merged.output,
+    });
     historyMatch.cell.sourceSeqEnd = Math.max(
       historyMatch.cell.sourceSeqEnd,
       merged.sourceSeqEnd,

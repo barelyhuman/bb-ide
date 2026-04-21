@@ -188,6 +188,12 @@ export {
 } from "./project-path.js";
 
 export {
+  createDebouncedCallbackScheduler,
+  type DebouncedCallbackScheduler,
+  type DebouncedCallbackSchedulerArgs,
+} from "./debounced-callback-scheduler.js";
+
+export {
   hostSchema,
   hostStatusSchema,
   hostStatusValues,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { ThreadEventRow } from "@bb/domain";
+import type { ThreadEventRow, ViewMessage } from "@bb/domain";
 import { toViewMessages } from "../src/to-view-messages.js";
 import {
   assertMonotonicSourceSeq,
@@ -882,6 +882,219 @@ describe("toViewMessages tool activity", () => {
     expect(toolMessage?.output).toBe("reset\n");
   });
 
+  it("appends output deltas that arrive after a command has completed", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          providerThreadId: "thread-1",
+          item: {
+            type: "commandExecution",
+            id: "call-1",
+            command: "/bin/zsh -lc 'printf first second'",
+            cwd: "/repo",
+            status: "pending",
+          },
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/completed",
+        data: {
+          providerThreadId: "thread-1",
+          item: {
+            type: "commandExecution",
+            id: "call-1",
+            command: "/bin/zsh -lc 'printf first second'",
+            cwd: "/repo",
+            aggregatedOutput: "first\n",
+            exitCode: 0,
+            status: "completed",
+          },
+          turnId: "turn-1",
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/commandExecution/outputDelta",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "call-1",
+          delta: "second\n",
+        },
+        createdAt: 3,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "idle",
+    });
+    const toolMessage = projected.find(
+      (
+        message,
+      ): message is Extract<
+        ViewMessage,
+        { kind: "tool-call" | "tool-exploring" }
+      > => message.kind === "tool-call" || message.kind === "tool-exploring",
+    );
+
+    expect(toolMessage).toBeDefined();
+    if (toolMessage?.kind === "tool-exploring") {
+      expect(toolMessage.calls).toHaveLength(1);
+      expect(toolMessage.calls[0]?.status).toBe("completed");
+      expect(toolMessage.calls[0]?.output).toBe("first\nsecond\n");
+      return;
+    }
+
+    expect(toolMessage?.status).toBe("completed");
+    expect(toolMessage?.output).toBe("first\nsecond\n");
+  });
+
+  it("hides partial command output until a newline or terminal boundary", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          providerThreadId: "thread-1",
+          item: {
+            type: "commandExecution",
+            id: "call-1",
+            command: "/bin/zsh -lc 'printf partial'",
+            cwd: "/repo",
+            status: "pending",
+          },
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/commandExecution/outputDelta",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "call-1",
+          delta: "partial",
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/commandExecution/outputDelta",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "call-1",
+          delta: "\ntrailing",
+        },
+        createdAt: 3,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "active",
+    });
+    const toolMessage = projected.find(
+      (
+        message,
+      ): message is Extract<
+        ViewMessage,
+        { kind: "tool-call" | "tool-exploring" }
+      > => message.kind === "tool-call" || message.kind === "tool-exploring",
+    );
+
+    expect(toolMessage).toBeDefined();
+    if (toolMessage?.kind === "tool-exploring") {
+      expect(toolMessage.calls[0]?.output).toBe("partial\n");
+      return;
+    }
+
+    expect(toolMessage?.output).toBe("partial\n");
+    expect(toolMessage?.status).toBe("pending");
+  });
+
+  it("flushes partial command output before interruption markers", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          providerThreadId: "thread-1",
+          item: {
+            type: "commandExecution",
+            id: "call-1",
+            command: "/bin/zsh -lc 'printf partial'",
+            cwd: "/repo",
+            status: "pending",
+          },
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/commandExecution/outputDelta",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "call-1",
+          delta: "partial",
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "system/thread/interrupted",
+        data: {
+          threadId: "thread-1",
+          turnId: "turn-1",
+          reason: "user",
+          message: "Stopped by user",
+        },
+        createdAt: 3,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "idle",
+    });
+    const toolMessage = projected.find(
+      (message): message is Extract<ViewMessage, { kind: "tool-call" }> =>
+        message.kind === "tool-call",
+    );
+
+    expect(toolMessage?.output).toBe("partial");
+    expect(toolMessage?.status).toBe("interrupted");
+  });
+
   it("coalesces consecutive exploring toolCall calls into one exploring cell", () => {
     const events: ThreadEventRow[] = [
       {
@@ -1418,6 +1631,67 @@ describe("toViewMessages tool activity", () => {
     expect(fileEdit?.changes).toHaveLength(1);
     expect(fileEdit?.changes[0]?.path).toBe("/repo/src/a.ts");
     expect(fileEdit?.stdout).toContain("patched");
+  });
+
+  it("keeps file-change stdout hidden until a newline or terminal boundary", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          providerThreadId: "thread-1",
+          item: {
+            type: "fileChange",
+            id: "call-edit-1",
+            status: "pending",
+            changes: [],
+          },
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/fileChange/outputDelta",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "call-edit-1",
+          delta: "patched",
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/fileChange/outputDelta",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "call-edit-1",
+          delta: "\ntrailing",
+        },
+        createdAt: 3,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "active",
+    });
+    const fileEdit = projected.find(
+      (message): message is Extract<ViewMessage, { kind: "file-edit" }> =>
+        message.kind === "file-edit",
+    );
+
+    expect(fileEdit?.stdout).toBe("patched\n");
+    expect(fileEdit?.status).toBe("pending");
   });
 
   it("maps interrupted command executions to interrupted status", () => {

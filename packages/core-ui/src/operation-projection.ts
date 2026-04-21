@@ -18,10 +18,19 @@ import {
   applyApprovalStatusDelta,
   buildApprovalStatusDelta,
 } from "./tool-activity-projection.js";
+import {
+  appendVisibleTextBuffer,
+  createVisibleTextBuffer,
+  flushVisibleTextBuffer,
+  getVisibleTextBufferText,
+  setVisibleTextBuffer,
+  type VisibleTextBuffer,
+} from "./visible-text-buffer.js";
 
 export interface OperationProjectionState {
   messages: ViewMessage[];
   fileEditsByCallId: Map<string, ViewFileEditMessage>;
+  fileEditStdoutBuffersByCallId: Map<string, VisibleTextBuffer>;
   openCompactionsByKey: Map<string, ViewOperationMessage>;
   finalizedCompactionKeys: Set<string>;
   provisioningOperationsByKey: Map<string, ViewOperationMessage>;
@@ -256,6 +265,24 @@ function mergeFileChanges(
   return [...byPath.values()];
 }
 
+function isTerminalFileEditStatus(
+  status: ViewFileEditMessage["status"] | undefined,
+): boolean {
+  return status !== undefined && status !== "pending";
+}
+
+export function flushPendingFileEditOutput(
+  state: OperationProjectionState,
+): void {
+  for (const [callId, fileEdit] of state.fileEditsByCallId.entries()) {
+    const buffer = state.fileEditStdoutBuffersByCallId.get(callId);
+    if (!buffer || !flushVisibleTextBuffer(buffer)) {
+      continue;
+    }
+    fileEdit.stdout = getVisibleTextBufferText(buffer);
+  }
+}
+
 export function upsertFileEdit(
   state: OperationProjectionState,
   meta: EventMeta,
@@ -264,6 +291,24 @@ export function upsertFileEdit(
   partial: FileEditPartial,
 ): void {
   const existing = state.fileEditsByCallId.get(partial.callId);
+  const stdoutBuffer =
+    state.fileEditStdoutBuffersByCallId.get(partial.callId) ??
+    createVisibleTextBuffer();
+  state.fileEditStdoutBuffersByCallId.set(partial.callId, stdoutBuffer);
+
+  if (partial.stdout) {
+    if (partial.appendStdout) {
+      appendVisibleTextBuffer(stdoutBuffer, partial.stdout);
+    } else {
+      setVisibleTextBuffer(
+        stdoutBuffer,
+        partial.stdout,
+        isTerminalFileEditStatus(partial.status),
+      );
+    }
+  } else if (isTerminalFileEditStatus(partial.status)) {
+    flushVisibleTextBuffer(stdoutBuffer);
+  }
 
   if (!existing) {
     const message: ViewFileEditMessage = {
@@ -280,7 +325,7 @@ export function upsertFileEdit(
         : {}),
       callId: partial.callId,
       changes: partial.changes ?? [],
-      stdout: partial.stdout,
+      stdout: getVisibleTextBufferText(stdoutBuffer),
       stderr: partial.stderr,
       approvalStatus: partial.approvalStatus ?? null,
       status: partial.status ?? "pending",
@@ -302,13 +347,7 @@ export function upsertFileEdit(
     existing.changes = mergeFileChanges(existing.changes, partial.changes);
   }
 
-  if (partial.stdout) {
-    if (partial.appendStdout) {
-      existing.stdout = `${existing.stdout ?? ""}${partial.stdout}`;
-    } else {
-      existing.stdout = partial.stdout;
-    }
-  }
+  existing.stdout = getVisibleTextBufferText(stdoutBuffer);
 
   if (partial.stderr) {
     existing.stderr = partial.stderr;

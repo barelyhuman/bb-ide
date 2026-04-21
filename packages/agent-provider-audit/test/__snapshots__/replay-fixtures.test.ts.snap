@@ -102,7 +102,7 @@ exports[`@bb/agent-provider-audit fixture replay > exports shared React story da
     "id": "excalidraw/pi/command-palette-map",
     "latestActivityRowId": "turn-2:tool-group:133",
     "timelineRowCount": 8,
-    "viewMessageCount": 48,
+    "viewMessageCount": 49,
   },
   {
     "id": "excalidraw/pi/eyedropper-preview-bugfix",
@@ -2008,13 +2008,13 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 8,
     "translatedThreadEventCount": 421,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 48,
+    "viewMessageCount": 49,
     "viewMessageKinds": {
       "assistant-reasoning": 3,
       "assistant-text": 27,
       "file-edit": 3,
       "tool-call": 6,
-      "tool-exploring": 6,
+      "tool-exploring": 7,
       "user": 3,
     },
   },
@@ -12041,7 +12041,7 @@ Based on that map, add one small discoverability improvement for an existing gat
 
 
   Let me start by understanding the current state of the search action and its discoverability, then find a focused improvement.
-  ── Explored 7 files, 8 searches, 4 lists ───────────────────
+  ── Explored 6 files, 7 searches, 4 lists ───────────────────
     Read packages/excalidraw/actions/actionToggleSearchMenu.ts
     Search keywords in packages/excalidraw/actions/action*.tsx
     Search keywords in packages/excalidraw/components/CommandPalette/CommandPalette.tsx
@@ -12060,8 +12060,6 @@ Based on that map, add one small discoverability improvement for an existing gat
     Search export.*screen\\|screen in packages/excalidraw/tests/test-utils.ts
     Search from.*test-utils in packages/excalidraw/tests/actionStyles.test.tsx
     Search export in packages/excalidraw/tests/test-utils.ts
-    Read packages/excalidraw/deburr.ts
-    Search "search" in packages/excalidraw/locales/en.json
   ── Assistant ───────────────────────────────────────────────
   Good. Now let me see how the keyword haystack is built and searched — specifically that fuzzy match at line 620:
   ── Assistant ───────────────────────────────────────────────
@@ -12084,6 +12082,9 @@ Based on that map, add one small discoverability improvement for an existing gat
   I'll expand the keywords and write a focused test that verifies the command palette's fuzzy matcher actually surfaces the search action for each of those synonyms.
 
   Let me check the \`deburr\` utility quickly since the haystack uses it:
+  ── Explored 1 file, 1 search ───────────────────────────────
+    Read packages/excalidraw/deburr.ts
+    Search "search" in packages/excalidraw/locales/en.json
   ── Assistant ───────────────────────────────────────────────
   Now let me check what the search.title label resolves to, since the haystack includes the label:
   ── Tool Call: exec_command ─────────────────────────────────

@@ -188,7 +188,7 @@ describe("toViewMessages assistant streams", () => {
     ).toBe(false);
   });
 
-  it("keeps assistant text buffered while reasoning continues streaming on active threads", () => {
+  it("keeps assistant and reasoning text buffered on active threads until a newline or terminal boundary arrives", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-1",
@@ -235,9 +235,94 @@ describe("toViewMessages assistant streams", () => {
     );
 
     expect(assistant).toBeUndefined();
-    expect(reasoning).toBeDefined();
+    expect(reasoning).toBeUndefined();
+  });
+
+  it("does not flush hidden assistant or reasoning partials when thread status is omitted", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/agentMessage/delta",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "msg-1",
+          delta: "Partial reply",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/reasoning/summaryTextDelta",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "rs-1",
+          delta: "Partial reasoning",
+        },
+        createdAt: 2,
+      },
+    ];
+
+    expect(toViewMessages(fromRows(events))).toEqual([]);
+  });
+
+  it("surfaces newline-terminated assistant and reasoning chunks while streaming", () => {
+    const events: ThreadEventRow[] = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/agentMessage/delta",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "msg-1",
+          delta: "First line\nSecond",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/reasoning/summaryTextDelta",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "rs-1",
+          delta: "Reasoning line\nTrailing",
+        },
+        createdAt: 2,
+      },
+    ];
+
+    const projected = toViewMessages(fromRows(events), {
+      threadStatus: "active",
+    });
+    const assistant = projected.find(
+      (message): message is Extract<ViewMessage, { kind: "assistant-text" }> =>
+        message.kind === "assistant-text",
+    );
+    const reasoning = projected.find(
+      (
+        message,
+      ): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
+        message.kind === "assistant-reasoning",
+    );
+
+    expect(assistant?.text).toBe("First line\n");
+    expect(assistant?.status).toBe("streaming");
+    expect(reasoning?.text).toBe("Reasoning line\n");
     expect(reasoning?.status).toBe("streaming");
-    expect(reasoning?.startedAt).toBe(2);
   });
 
   it("preserves startedAt for assistant and reasoning streams after completion", () => {
@@ -562,7 +647,7 @@ describe("toViewMessages assistant streams", () => {
     expect(reasoning[0]?.status).toBe("completed");
   });
 
-  it("treats raw reasoning text deltas as reasoning stream updates", () => {
+  it("treats raw reasoning text deltas as newline-buffered reasoning stream updates", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-1",
@@ -574,7 +659,7 @@ describe("toViewMessages assistant streams", () => {
           threadId: "thread-1",
           turnId: "turn-1",
           itemId: "reasoning-1",
-          delta: "raw-reasoning",
+          delta: "raw-reasoning\npartial",
           contentIndex: 0,
         },
         createdAt: 1,
@@ -592,7 +677,7 @@ describe("toViewMessages assistant streams", () => {
     );
 
     expect(reasoning).toBeDefined();
-    expect(reasoning?.text).toContain("raw-reasoning");
+    expect(reasoning?.text).toBe("raw-reasoning\n");
     expect(reasoning?.status).toBe("streaming");
   });
 

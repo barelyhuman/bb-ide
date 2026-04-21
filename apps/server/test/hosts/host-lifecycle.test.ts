@@ -382,9 +382,14 @@ describe("host lifecycle", () => {
       );
       const firstProgressEvents: string[] = [];
       const secondProgressEvents: string[] = [];
+      let signalProvisionStarted: (() => void) | null = null;
+      const provisionStarted = new Promise<void>((resolve) => {
+        signalProvisionStarted = resolve;
+      });
 
       provisionHostMock.mockImplementation(
         async (args: ProvisionHostMockArgs) => {
+          signalProvisionStarted?.();
           setTimeout(() => {
             args.progressCallbacks?.onProgress?.({
               stage: "host",
@@ -429,6 +434,7 @@ describe("host lifecycle", () => {
         },
       });
 
+      await provisionStarted;
       await vi.advanceTimersByTimeAsync(15);
 
       const secondReady = ensureSandboxHostSessionReady(harness.deps, {

@@ -1,10 +1,11 @@
 import { useEffect } from "react";
 import { useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { assertNever } from "@bb/core-ui";
-import type {
-  EnvironmentChangeKind,
-  Thread,
-  ThreadChangeKind,
+import {
+  createDebouncedCallbackScheduler,
+  type EnvironmentChangeKind,
+  type Thread,
+  type ThreadChangeKind,
 } from "@bb/domain";
 import { createBufferedEnvironmentInvalidator } from "./buffered-environment-invalidator";
 import { wsManager } from "../lib/ws";
@@ -36,10 +37,10 @@ import {
 } from "./queries/query-keys";
 import * as api from "../lib/api";
 
-const INVALIDATION_DEBOUNCE_MS = 250;
-// Keep realtime thread updates responsive while still coalescing bursts.
-const INVALIDATION_MAX_WAIT_MS = 500;
-const TIMELINE_EVENT_REFETCH_INTERVAL_MS = 500;
+// Keep this paired with daemon-side event batching so a single provider burst
+// still maps to a single app invalidation window.
+const INVALIDATION_DEBOUNCE_MS = 50;
+const INVALIDATION_MAX_WAIT_MS = 200;
 const ENVIRONMENT_INVALIDATION_DEBOUNCE_MS = 250;
 const ENVIRONMENT_INVALIDATION_MAX_WAIT_MS = 500;
 const PERSISTED_ENVIRONMENT_CHANGE_KINDS: readonly EnvironmentChangeKind[] = [
@@ -129,23 +130,6 @@ function toThreadChangeFlags(
   return flags;
 }
 
-function shouldBypassTimelineEventThrottle(
-  status: Thread["status"] | undefined,
-): boolean {
-  if (!status) return false;
-  switch (status) {
-    case "created":
-    case "provisioning":
-    case "error":
-      return true;
-    case "active":
-    case "idle":
-      return false;
-    default:
-      return assertNever(status);
-  }
-}
-
 export function shouldFlushThreadChangesImmediately(
   changes: readonly ThreadChangeKind[],
 ): boolean {
@@ -231,7 +215,6 @@ export function useWebSocket(): void {
 
     const changedThreadKinds = new Map<string, Set<ThreadChangeKind>>();
     const globalChangeKinds = new Set<ThreadChangeKind>();
-    const lastTimelineRefetchAtByThread = new Map<string, number>();
     const environmentInvalidator = createBufferedEnvironmentInvalidator({
       debounceMs: ENVIRONMENT_INVALIDATION_DEBOUNCE_MS,
       flushChangedEnvironmentIds: (changedEnvironments) => {
@@ -299,8 +282,6 @@ export function useWebSocket(): void {
     let shouldInvalidateAllThreadPendingInteractions = false;
     let shouldInvalidateAllThreadTimeline = false;
     let shouldInvalidateAllThreadsById = false;
-    let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-    let maxWaitTimer: ReturnType<typeof setTimeout> | null = null;
 
     const mergeThreadChanges = (
       threadId: string,
@@ -317,16 +298,6 @@ export function useWebSocket(): void {
     };
 
     const flushInvalidations = () => {
-      if (debounceTimer !== null) {
-        clearTimeout(debounceTimer);
-        debounceTimer = null;
-      }
-
-      if (maxWaitTimer !== null) {
-        clearTimeout(maxWaitTimer);
-        maxWaitTimer = null;
-      }
-
       if (shouldInvalidateThreads) {
         queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
       }
@@ -350,7 +321,6 @@ export function useWebSocket(): void {
         });
       }
 
-      const now = Date.now();
       const changedIds = Array.from(changedThreadKinds.keys());
       for (const id of changedIds) {
         const changeKinds = changedThreadKinds.get(id);
@@ -385,26 +355,9 @@ export function useWebSocket(): void {
             });
         }
         if (flags.timelineChanged) {
-          if (flags.statusChanged) {
-            queryClient.invalidateQueries({
-              queryKey: threadTimelineQueryKeyPrefix(id),
-            });
-            lastTimelineRefetchAtByThread.set(id, now);
-          } else {
-            const lastRefetchAt = lastTimelineRefetchAtByThread.get(id) ?? 0;
-            const cachedThread = queryClient.getQueryData<Thread>(
-              threadQueryKey(id),
-            );
-            if (
-              shouldBypassTimelineEventThrottle(cachedThread?.status) ||
-              now - lastRefetchAt >= TIMELINE_EVENT_REFETCH_INTERVAL_MS
-            ) {
-              queryClient.invalidateQueries({
-                queryKey: threadTimelineQueryKeyPrefix(id),
-              });
-              lastTimelineRefetchAtByThread.set(id, now);
-            }
-          }
+          queryClient.invalidateQueries({
+            queryKey: threadTimelineQueryKeyPrefix(id),
+          });
         }
       }
 
@@ -422,15 +375,14 @@ export function useWebSocket(): void {
       shouldInvalidateAllThreadsById = false;
     };
 
-    const scheduleInvalidations = () => {
-      if (debounceTimer !== null) {
-        clearTimeout(debounceTimer);
-      }
-      debounceTimer = setTimeout(flushInvalidations, INVALIDATION_DEBOUNCE_MS);
+    const invalidationScheduler = createDebouncedCallbackScheduler({
+      debounceMs: INVALIDATION_DEBOUNCE_MS,
+      maxWaitMs: INVALIDATION_MAX_WAIT_MS,
+      onFlush: flushInvalidations,
+    });
 
-      if (maxWaitTimer === null) {
-        maxWaitTimer = setTimeout(flushInvalidations, INVALIDATION_MAX_WAIT_MS);
-      }
+    const scheduleInvalidations = () => {
+      invalidationScheduler.schedule();
     };
 
     // Connect to WebSocket
@@ -471,7 +423,7 @@ export function useWebSocket(): void {
             shouldInvalidateAllThreadTimeline = globalFlags.timelineChanged;
           }
           if (shouldFlushThreadChangesImmediately(message.changes)) {
-            flushInvalidations();
+            invalidationScheduler.flush();
           } else {
             scheduleInvalidations();
           }
@@ -503,12 +455,7 @@ export function useWebSocket(): void {
     });
 
     return () => {
-      if (debounceTimer !== null) {
-        clearTimeout(debounceTimer);
-      }
-      if (maxWaitTimer !== null) {
-        clearTimeout(maxWaitTimer);
-      }
+      invalidationScheduler.dispose();
       environmentInvalidator.dispose();
       unsubscribeConnected();
       unsubscribe();

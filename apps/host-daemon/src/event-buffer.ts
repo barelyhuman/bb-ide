@@ -1,5 +1,7 @@
-import pDebounce from "p-debounce";
-import type { ThreadEvent } from "@bb/domain";
+import {
+  createDebouncedCallbackScheduler,
+  type ThreadEvent,
+} from "@bb/domain";
 import type { HostDaemonLogger } from "./logger.js";
 
 export interface BufferedEventInput {
@@ -16,12 +18,10 @@ export interface BufferedEvent extends BufferedEventInput {
 
 export interface CreateEventBufferOptions {
   logger: Pick<HostDaemonLogger, "warn">;
-  postEvents: (
-    events: BufferedEvent[],
-  ) => Promise<Record<string, number> | void>;
+  postEvents: (events: BufferedEvent[]) => Promise<Record<string, number>>;
   initialHighWaterMarks?: Record<string, number>;
   debounceMs?: number;
-  flushAtCount?: number;
+  maxWaitMs?: number;
   now?: () => number;
 }
 
@@ -48,13 +48,48 @@ export interface EventBuffer {
 }
 
 const DEFAULT_DEBOUNCE_MS = 100;
-const DEFAULT_FLUSH_AT_COUNT = 50;
+const DEFAULT_MAX_WAIT_MS = 500;
+
+function isWaitingForApprovalItemEvent(event: ThreadEvent): boolean {
+  if (event.type !== "item/started" && event.type !== "item/completed") {
+    return false;
+  }
+
+  if (
+    event.item.type !== "commandExecution" &&
+    event.item.type !== "fileChange"
+  ) {
+    return false;
+  }
+
+  return event.item.approvalStatus === "waiting_for_approval";
+}
+
+export function shouldFlushThreadEventImmediately(event: ThreadEvent): boolean {
+  if (event.type === "item/completed") {
+    return true;
+  }
+
+  if (
+    event.type === "turn/completed" ||
+    event.type === "system/error" ||
+    event.type === "system/thread/interrupted"
+  ) {
+    return true;
+  }
+
+  if (event.type === "error") {
+    return event.willRetry !== true;
+  }
+
+  return isWaitingForApprovalItemEvent(event);
+}
 
 export function createEventBuffer(
   options: CreateEventBufferOptions,
 ): EventBuffer {
   const debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
-  const flushAtCount = options.flushAtCount ?? DEFAULT_FLUSH_AT_COUNT;
+  const maxWaitMs = options.maxWaitMs ?? DEFAULT_MAX_WAIT_MS;
   const now = options.now ?? Date.now;
 
   const nextSequenceByThread = new Map<string, number>();
@@ -65,23 +100,31 @@ export function createEventBuffer(
   }
 
   let buffer: BufferedEvent[] = [];
-  let flushPromise: Promise<boolean> | null = null;
-  const flushAbortController = new AbortController();
-  const debouncedFlush = pDebounce(
-    async () => {
-      await flush();
-    },
+  let disposed = false;
+  let flushPromise: Promise<{
+    acknowledgedBatchCount: number;
+    succeeded: boolean;
+  }> | null = null;
+  const flushScheduler = createDebouncedCallbackScheduler({
     debounceMs,
-    { signal: flushAbortController.signal },
-  );
+    maxWaitMs,
+    onFlush: () => {
+      void flush();
+    },
+  });
 
-  function queueDebouncedFlush(): void {
-    void debouncedFlush().catch((error: unknown) => {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        return;
-      }
-      throw error;
-    });
+  function scheduleFlush(): void {
+    if (disposed) {
+      return;
+    }
+    flushScheduler.schedule();
+  }
+
+  function flushImmediately(): void {
+    if (disposed) {
+      return;
+    }
+    flushScheduler.flush();
   }
 
   function nextSequence(threadId: string): number {
@@ -100,10 +143,10 @@ export function createEventBuffer(
 
     buffer.push(bufferedEvent);
 
-    if (buffer.length >= flushAtCount) {
-      void flush();
+    if (shouldFlushThreadEventImmediately(event.event)) {
+      flushImmediately();
     } else {
-      queueDebouncedFlush();
+      scheduleFlush();
     }
 
     return bufferedEvent;
@@ -173,9 +216,22 @@ export function createEventBuffer(
 
   async function flush(): Promise<void> {
     while (true) {
+      if (disposed) {
+        return;
+      }
+
       if (flushPromise) {
-        const succeeded = await flushPromise;
-        if (!succeeded || buffer.length === 0) {
+        const result = await flushPromise;
+        if (disposed) {
+          return;
+        }
+        if (!result.succeeded || result.acknowledgedBatchCount === 0) {
+          if (buffer.length > 0) {
+            scheduleFlush();
+          }
+          return;
+        }
+        if (buffer.length === 0) {
           return;
         }
         continue;
@@ -187,12 +243,28 @@ export function createEventBuffer(
 
       const batch = buffer.slice();
 
-      flushPromise = (async (): Promise<boolean> => {
+      flushPromise = (async (): Promise<{
+        acknowledgedBatchCount: number;
+        succeeded: boolean;
+      }> => {
+        let acknowledgedBatchCount = 0;
         let succeeded = false;
         try {
           const threadHighWaterMarks = await options.postEvents(batch);
-          if (threadHighWaterMarks) {
-            ack(threadHighWaterMarks);
+          const bufferDepthBeforeAck = buffer.length;
+          ack(threadHighWaterMarks);
+          acknowledgedBatchCount = Math.min(
+            batch.length,
+            Math.max(0, bufferDepthBeforeAck - buffer.length),
+          );
+          if (acknowledgedBatchCount === 0) {
+            options.logger.warn(
+              {
+                bufferDepth: batch.length,
+                threadHighWaterMarks,
+              },
+              "event flush made no progress, will retry",
+            );
           }
           succeeded = true;
         } catch (error) {
@@ -206,13 +278,19 @@ export function createEventBuffer(
         } finally {
           flushPromise = null;
         }
-        return succeeded;
+        return {
+          acknowledgedBatchCount,
+          succeeded,
+        };
       })();
 
-      const succeeded = await flushPromise;
-      if (!succeeded) {
+      const result = await flushPromise;
+      if (disposed) {
+        return;
+      }
+      if (!result.succeeded || result.acknowledgedBatchCount === 0) {
         if (buffer.length > 0) {
-          queueDebouncedFlush();
+          scheduleFlush();
         }
         return;
       }
@@ -224,7 +302,8 @@ export function createEventBuffer(
   }
 
   function dispose(): void {
-    flushAbortController.abort();
+    disposed = true;
+    flushScheduler.dispose();
   }
 
   return {
