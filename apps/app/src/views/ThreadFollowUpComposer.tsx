@@ -7,7 +7,7 @@ import {
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import {
   CornerDownRight,
-  GitBranch,
+  GitMerge,
   Pencil,
   Trash2,
   ChevronDown,
@@ -510,7 +510,7 @@ export function ThreadFollowUpComposer({
                         });
                       }}
                     >
-                      <GitBranch className="size-3.5 shrink-0" />
+                      <GitMerge className="size-3.5 shrink-0" />
                       <span className="truncate">
                         {environment.environmentBranchName}
                       </span>
