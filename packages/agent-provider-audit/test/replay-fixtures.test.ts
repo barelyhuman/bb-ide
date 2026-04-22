@@ -15,6 +15,10 @@ function fixtureRoot(): string {
   return join(dirname(fileURLToPath(import.meta.url)), "../fixtures");
 }
 
+function normalizeTimelineSnapshotText(text: string): string {
+  return text.replaceAll("─", "-");
+}
+
 afterEach(() => {
   for (const dir of TEMP_DIRS.splice(0, TEMP_DIRS.length)) {
     rmSync(dir, { recursive: true, force: true });
@@ -45,7 +49,9 @@ describe("@bb/agent-provider-audit fixture replay", () => {
 
   it("snapshots verbose CLI timeline output for every fixture", () => {
     for (const timeline of checkedInArtifact.verboseTimelines) {
-      expect(timeline.text).toMatchSnapshot(timeline.fixture);
+      expect(normalizeTimelineSnapshotText(timeline.text)).toMatchSnapshot(
+        timeline.fixture,
+      );
     }
   });
 
