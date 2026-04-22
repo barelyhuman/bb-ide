@@ -290,8 +290,8 @@ export function ThreadFollowUpComposer({
 
   return (
     <div ref={composer.composerRef}>
+      <ThreadTimelineScrollToBottomButton onClick={queue.onScrollToBottom} />
       <div className="space-y-2">
-        <ThreadTimelineScrollToBottomButton onClick={queue.onScrollToBottom} />
         {banner.showPromptGitStatsBanner ? (
           <div
             className={cn(

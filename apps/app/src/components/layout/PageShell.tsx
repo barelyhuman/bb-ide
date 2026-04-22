@@ -50,10 +50,14 @@ export function PageShell({
         </div>
 
         {footer ? (
-          <div className="shrink-0">
+          <div className="relative shrink-0">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-b from-transparent to-background"
+            />
             <div
               className={cn(
-                "mx-auto w-full bg-background px-4 pb-4 pt-2",
+                "mx-auto w-full bg-background px-4 pb-4",
                 maxWidthClassName,
                 footerUsesPromptPadding && "chat-prompt-box",
                 footerClassName,
