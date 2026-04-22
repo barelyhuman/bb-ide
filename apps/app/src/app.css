@@ -64,6 +64,37 @@
   --shadow-2xl: var(--shadow-2xl);
 }
 
+/*
+ * Typography scale overrides.
+ *
+ * Desktop gets tighter copy (~13px text-sm, ~15px text-base) for denser UI.
+ * On narrow viewports (<768px) we bump xs/sm/base back up so dense copy
+ * lands at a legible size. The 767px breakpoint matches Tailwind's md:,
+ * which is where the sidebar switches to a drawer and the rest of the
+ * app's responsive sizing fires — keeping these in sync avoids an
+ * intermediate state where icons have grown but text hasn't.
+ *
+ * Overriding the --text-* tokens (rather than the .text-* classes) ensures
+ * responsive variants like md:text-sm resolve to the same value and don't
+ * collide with base classes in the cascade.
+ */
+@theme {
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-base--line-height: 1.375rem;
+}
+
+@media (max-width: 767px) {
+  :root {
+    --text-xs: 0.875rem;
+    --text-xs--line-height: 1.25rem;
+    --text-sm: 0.9375rem;
+    --text-sm--line-height: 1.375rem;
+    --text-base: 1rem;
+    --text-base--line-height: 1.5rem;
+  }
+}
+
 :root {
   color-scheme: light;
   --background: oklch(0.9551 0 0);
@@ -313,28 +344,6 @@ body.sidebar-resizing [data-sidebar="panel"] {
 }
 
 @layer utilities {
-  /* Tighten text-sm on desktop for denser UI copy (~13px). On narrow
-     viewports, bump text-xs and text-sm up so dense copy lands at ~14–15px
-     instead of 12–14px. Breakpoint matches Tailwind's md: (≥768px), which
-     is where the sidebar switches to a drawer and where the rest of the
-     app's responsive sizing fires — keeping these in sync avoids a jarring
-     intermediate state where icons have grown but text hasn't. */
-  .text-sm {
-    font-size: 0.8125rem;
-    line-height: 1.25rem;
-  }
-
-  @media (max-width: 767px) {
-    .text-xs {
-      font-size: 0.875rem;
-      line-height: 1.25rem;
-    }
-    .text-sm {
-      font-size: 0.9375rem;
-      line-height: 1.375rem;
-    }
-  }
-
   .animate-shine {
     display: inline-block;
     background: linear-gradient(
