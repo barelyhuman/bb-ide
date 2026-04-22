@@ -140,10 +140,10 @@ export function UserMessageRow({
             ) : null}
           </div>
           {messageText ? (
-            <div className="mt-1 flex justify-end opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+            <div className="mt-1 flex justify-end opacity-100 transition-opacity duration-150 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
               <button
                 type="button"
-                className="size-6 text-muted-foreground hover:text-foreground focus-visible:opacity-100"
+                className="inline-flex size-5 items-center justify-center text-muted-foreground hover:text-foreground focus-visible:opacity-100"
                 onClick={() => {
                   void handleCopy();
                 }}
@@ -151,9 +151,9 @@ export function UserMessageRow({
                 title="Copy message"
               >
                 {copied ? (
-                  <Check className="size-2.5" />
+                  <Check className="size-3" />
                 ) : (
-                  <Copy className="size-2.5" />
+                  <Copy className="size-3" />
                 )}
               </button>
             </div>
