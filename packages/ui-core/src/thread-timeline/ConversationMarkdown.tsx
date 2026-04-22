@@ -176,7 +176,7 @@ export function ConversationMarkdown({
               return (
                 <a
                   href={href}
-                  className="underline underline-offset-2 break-all"
+                  className="underline underline-offset-2 break-words"
                   target="_blank"
                   rel="noopener noreferrer"
                   {...props}
