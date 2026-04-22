@@ -35,8 +35,9 @@ import { getEnvironmentWorkspaceLabelIcon } from "@/lib/environment-workspace-di
 import { useStoredShowAllEvents } from "@/lib/show-all-events-preference";
 import { getGitStatusDisplay } from "@/lib/workspace-status";
 import {
-  formatChangeSummary,
+  renderChangeSummary,
   selectWorkspaceChangedFilesSection,
+  toChangeTally,
 } from "@/lib/workspace-change-summary";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { useGitDiffPanel } from "./useGitDiffPanel";
@@ -355,9 +356,12 @@ export function ThreadDetailView() {
         threadEnvironmentDisplay.workspaceDisplayKind,
       )
     : null;
-  const promptBannerSummary = workspaceChangedFilesSection
-    ? `${PROMPT_BANNER_KIND_PREFIX[workspaceChangedFilesSection.kind]} · ${formatChangeSummary(workspaceChangedFilesSection.stats)}`
-    : "";
+  const promptBannerSummary: ReactNode = workspaceChangedFilesSection ? (
+    <>
+      {PROMPT_BANNER_KIND_PREFIX[workspaceChangedFilesSection.kind]} ·{" "}
+      {renderChangeSummary(toChangeTally(workspaceChangedFilesSection.stats))}
+    </>
+  ) : null;
   const showPromptGitStatsBanner =
     canUseGitUi && workspaceChangedFilesSection !== null;
   const canExpandPromptChangeList =
@@ -616,8 +620,7 @@ export function ThreadDetailView() {
           pending={requestEnvironmentAction.isPending}
           askAgentPending={sendMessage.isPending}
           branchName={threadBranchName}
-          gitStatusLabel={threadGitStatusDisplay.label}
-          gitStatusSummary={threadGitStatusDisplay.summary}
+          gitStatusDisplay={threadGitStatusDisplay}
           changedFiles={workspaceWorkingTree?.files}
           threadId={thread.id}
           threadType={thread.type}

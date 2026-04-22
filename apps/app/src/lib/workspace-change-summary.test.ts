@@ -14,11 +14,7 @@ describe("workspace-change-summary", () => {
   it("includes +/- counts when line changes exist", () => {
     expect(
       formatChangeSummary({
-        files: [
-          { path: "a", status: "M" },
-          { path: "b", status: "M" },
-          { path: "c", status: "M" },
-        ],
+        filesCount: 3,
         insertions: 9,
         deletions: 4,
       }),
@@ -28,11 +24,17 @@ describe("workspace-change-summary", () => {
   it("omits +/- counts when only file-level changes exist", () => {
     expect(
       formatChangeSummary({
-        files: [{ path: "a", status: "M" }],
+        filesCount: 1,
         insertions: 0,
         deletions: 0,
       }),
     ).toBe("1 file");
+  });
+
+  it("renders a no-changes label for empty tallies", () => {
+    expect(
+      formatChangeSummary({ filesCount: 0, insertions: 0, deletions: 0 }),
+    ).toBe("No changes");
   });
 
   it("maps untracked status and preserves unknown statuses", () => {

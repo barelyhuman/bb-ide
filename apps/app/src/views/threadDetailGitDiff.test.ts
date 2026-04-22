@@ -60,8 +60,8 @@ describe("threadDetailGitDiff", () => {
 
   it("falls back to raw diff counting before parsed files are available", () => {
     expect(summarizeGitDiff([], SAMPLE_DIFF)).toEqual({
-      files: 1,
-      additions: 1,
+      filesCount: 1,
+      insertions: 1,
       deletions: 1,
     });
   });

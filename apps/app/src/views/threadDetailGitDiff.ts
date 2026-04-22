@@ -4,9 +4,9 @@ export type ParsedGitDiffFile = ReturnType<
   typeof parsePatchFiles
 >[number]["files"][number];
 
-interface GitDiffStats {
-  files: number;
-  additions: number;
+export interface GitDiffStats {
+  filesCount: number;
+  insertions: number;
   deletions: number;
 }
 
@@ -73,29 +73,29 @@ export function summarizeGitDiff(
   diff: string,
 ): GitDiffStats {
   if (files.length > 0) {
-    let additions = 0;
+    let insertions = 0;
     let deletions = 0;
     for (const file of files) {
       for (const hunk of file.hunks) {
-        additions += hunk.additionCount;
+        insertions += hunk.additionCount;
         deletions += hunk.deletionCount;
       }
     }
-    return { files: files.length, additions, deletions };
+    return { filesCount: files.length, insertions, deletions };
   }
 
-  let additions = 0;
+  let insertions = 0;
   let deletions = 0;
-  let fileCount = 0;
+  let filesCount = 0;
   for (const line of diff.split("\n")) {
     if (line.startsWith("diff --git ")) {
-      fileCount += 1;
+      filesCount += 1;
       continue;
     }
     if (line.startsWith("+++ ")) continue;
     if (line.startsWith("--- ")) continue;
     if (line.startsWith("+")) {
-      additions += 1;
+      insertions += 1;
       continue;
     }
     if (line.startsWith("-")) {
@@ -103,22 +103,23 @@ export function summarizeGitDiff(
     }
   }
   return {
-    files: fileCount > 0 ? fileCount : additions > 0 || deletions > 0 ? 1 : 0,
-    additions,
+    filesCount:
+      filesCount > 0 ? filesCount : insertions > 0 || deletions > 0 ? 1 : 0,
+    insertions,
     deletions,
   };
 }
 
 export function summarizeGitDiffFile(
   file: ParsedGitDiffFile,
-): Pick<GitDiffStats, "additions" | "deletions"> {
-  let additions = 0;
+): Pick<GitDiffStats, "insertions" | "deletions"> {
+  let insertions = 0;
   let deletions = 0;
   for (const hunk of file.hunks) {
-    additions += hunk.additionCount;
+    insertions += hunk.additionCount;
     deletions += hunk.deletionCount;
   }
-  return { additions, deletions };
+  return { insertions, deletions };
 }
 
 export function formatGitDiffFileLabel(file: ParsedGitDiffFile): string {

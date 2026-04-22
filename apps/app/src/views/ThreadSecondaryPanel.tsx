@@ -16,7 +16,12 @@ import {
   X,
 } from "lucide-react";
 import { FileDiff as DiffView } from "@pierre/diffs/react";
+import { DiffStatsTally } from "@bb/ui-core";
 import { Panel, PanelResizeHandle } from "react-resizable-panels";
+import {
+  formatChangeSummary,
+  renderChangeSummary,
+} from "@/lib/workspace-change-summary";
 import { useIntersectionObserver } from "usehooks-ts";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -294,9 +299,11 @@ const GitDiffFileCard = memo(function GitDiffFileCard({
               </span>
             )}
           </span>
-          <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
-            +{fileDiffStats.additions} -{fileDiffStats.deletions}
-          </span>
+          <DiffStatsTally
+            insertions={fileDiffStats.insertions}
+            deletions={fileDiffStats.deletions}
+            className="shrink-0 text-xs"
+          />
         </div>
       </div>
       {!isCollapsed ? (
@@ -387,7 +394,7 @@ export function ThreadSecondaryPanel({
     gitDiffError,
     gitDiffSelectOptions,
     gitDiffSelectValue,
-    gitDiffStatsLabel,
+    gitDiffStats,
     hasParsedGitDiffFiles,
     isGitDiffLoading,
     isParsingGitDiffFiles,
@@ -525,9 +532,9 @@ export function ThreadSecondaryPanel({
               </div>
               <span
                 className="min-w-0 shrink truncate text-xs text-muted-foreground"
-                title={gitDiffStatsLabel}
+                title={formatChangeSummary(gitDiffStats)}
               >
-                {gitDiffStatsLabel}
+                {renderChangeSummary(gitDiffStats)}
               </span>
               {isParsingGitDiffFiles ? (
                 <span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">

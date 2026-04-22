@@ -73,7 +73,7 @@ interface ThreadDetailPromptAreaProps {
   projectId: string;
   promptBannerFiles?: WorkspaceFileStatus[];
   promptBannerMergeBaseBranch?: string;
-  promptBannerSummary: string;
+  promptBannerSummary: ReactNode;
   promptComposerRef: RefObject<HTMLDivElement | null>;
   scrollToBottom: () => void;
   sendMessage: SendMessageMutationLike;

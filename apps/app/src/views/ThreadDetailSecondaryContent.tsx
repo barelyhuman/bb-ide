@@ -17,6 +17,7 @@ import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
 import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
 import { MergeBaseBranchPicker } from "@/components/thread/MergeBaseBranchPicker";
 import { useIsSecondaryPanelOpen } from "@/lib/thread-secondary-panel";
+import type { ThreadGitStatusDisplay } from "@/lib/workspace-status";
 import { ThreadSecondaryPanel } from "./ThreadSecondaryPanel";
 import { ThreadTimelinePane } from "./ThreadTimelinePane";
 import { DetailCard, DetailRow, LocalhostBadge } from "@bb/ui-core";
@@ -39,11 +40,6 @@ type ThreadSecondaryPanelProps = Omit<
 interface ManagerSelectorOption {
   label: string;
   value: string;
-}
-
-interface ThreadGitStatusDisplay {
-  label: string;
-  summary: string;
 }
 
 interface ThreadDetailMetadataProps {
@@ -322,7 +318,7 @@ function ThreadMetadataContent({
               {threadGitStatusDisplay.label}
             </span>
             <span className="min-w-0 truncate text-muted-foreground">
-              {threadGitStatusDisplay.summary}
+              {threadGitStatusDisplay.summaryContent}
             </span>
           </div>
         </DetailRow>

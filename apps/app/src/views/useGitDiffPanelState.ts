@@ -22,7 +22,6 @@ import { type GitDiffSelectionOption } from "./ThreadSecondaryPanel";
 import {
   buildGitDiffParsePlan,
   buildGitDiffSelectionOptions,
-  buildGitDiffStatsLabel,
   buildGitDiffTarget,
   GIT_DIFF_PARSE_BATCH_DELAY_MS,
   GIT_DIFF_PARSE_BATCH_SIZE,
@@ -291,7 +290,6 @@ export function useGitDiffPanelState({
     isParsingGitDiffFiles ? [] : parsedGitDiffFiles,
     currentGitDiff,
   );
-  const gitDiffStatsLabel = buildGitDiffStatsLabel(gitDiffStats);
   const { hasParsedGitDiffFiles, isPreparingGitDiff } =
     resolveGitDiffPreparationState({
       currentGitDiff,
@@ -310,7 +308,7 @@ export function useGitDiffPanelState({
     gitDiffError,
     gitDiffSelectOptions,
     gitDiffSelectValue,
-    gitDiffStatsLabel,
+    gitDiffStats,
     hasParsedGitDiffFiles,
     isGitDiffLoading,
     isParsingGitDiffFiles,

@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { assertNever } from "@bb/core-ui";
 import type { PromptInput, ThreadType, WorkspaceStatus } from "@bb/domain";
 import { DetailCard, DetailRow } from "@bb/ui-core";
+import type { ThreadGitStatusDisplay } from "@/lib/workspace-status";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
 import { FormError } from "@/components/shared/FormError";
 import { Button } from "@/components/ui/button";
@@ -40,8 +41,7 @@ interface ThreadGitActionDialogProps {
   pending?: boolean;
   askAgentPending?: boolean;
   branchName?: string;
-  gitStatusLabel?: string;
-  gitStatusSummary?: string;
+  gitStatusDisplay?: ThreadGitStatusDisplay;
   changedFiles?: WorkspaceStatus["workingTree"]["files"];
   threadId?: string;
   threadType?: ThreadType;
@@ -93,8 +93,7 @@ export function ThreadGitActionDialog({
   pending = false,
   askAgentPending = false,
   branchName,
-  gitStatusLabel,
-  gitStatusSummary,
+  gitStatusDisplay,
   changedFiles,
   threadId,
   threadType,
@@ -123,8 +122,7 @@ export function ThreadGitActionDialog({
             pending={pending}
             askAgentPending={askAgentPending}
             branchName={branchName}
-            gitStatusLabel={gitStatusLabel}
-            gitStatusSummary={gitStatusSummary}
+            gitStatusDisplay={gitStatusDisplay}
             changedFiles={changedFiles}
             threadId={threadId}
             threadType={threadType}
@@ -149,8 +147,7 @@ function ThreadGitActionDialogContent({
   pending,
   askAgentPending,
   branchName,
-  gitStatusLabel,
-  gitStatusSummary,
+  gitStatusDisplay,
   changedFiles,
   threadId,
   threadType,
@@ -257,7 +254,7 @@ function ThreadGitActionDialogContent({
       </DialogHeader>
       <form className="space-y-5 px-6 pt-3 pb-5" onSubmit={handleSubmit}>
         {branchName ||
-        gitStatusLabel ||
+        gitStatusDisplay ||
         canShowMergeBase ||
         shouldShowChangedFilesRow ? (
           <DetailCard className="border-border/70 bg-muted/20">
@@ -268,20 +265,18 @@ function ThreadGitActionDialogContent({
                 </span>
               </DetailRow>
             ) : null}
-            {gitStatusLabel ? (
+            {gitStatusDisplay ? (
               <DetailRow label="Git status" valueClassName="min-w-0">
                 <div
                   className="flex min-w-0 items-baseline gap-2 whitespace-nowrap"
-                  title={[gitStatusLabel, gitStatusSummary]
-                    .filter(Boolean)
-                    .join(" ")}
+                  title={`${gitStatusDisplay.label} ${gitStatusDisplay.summary}`.trim()}
                 >
-                  <span className="shrink-0 font-medium">{gitStatusLabel}</span>
-                  {gitStatusSummary ? (
-                    <span className="min-w-0 truncate text-muted-foreground">
-                      {gitStatusSummary}
-                    </span>
-                  ) : null}
+                  <span className="shrink-0 font-medium">
+                    {gitStatusDisplay.label}
+                  </span>
+                  <span className="min-w-0 truncate text-muted-foreground">
+                    {gitStatusDisplay.summaryContent}
+                  </span>
                 </div>
               </DetailRow>
             ) : null}

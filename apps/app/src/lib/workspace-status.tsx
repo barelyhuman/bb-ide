@@ -1,9 +1,14 @@
+import type { ReactNode } from "react";
 import { assertNever } from "@bb/core-ui";
 import type { WorkspaceStatus } from "@bb/domain";
 import { HttpError } from "@/lib/api";
-import { formatChangeSummary } from "@/lib/workspace-change-summary";
+import {
+  formatChangeSummary,
+  renderChangeSummary,
+  toChangeTally,
+} from "@/lib/workspace-change-summary";
 
-interface ThreadGitStatusDisplay {
+export interface ThreadGitStatusDisplay {
   label:
     | "Unknown"
     | "Deleted"
@@ -15,6 +20,7 @@ interface ThreadGitStatusDisplay {
     | "Dirty"
     | "Untracked";
   summary: string;
+  summaryContent: ReactNode;
 }
 
 function formatComparisonSummary(
@@ -51,6 +57,23 @@ function joinStatusSummary(parts: Array<string | null>): string {
   return filteredParts.join(" • ");
 }
 
+function joinSummaryNodes(nodes: Array<ReactNode | null>): ReactNode {
+  const filtered = nodes.filter((node): node is ReactNode => node !== null);
+  return filtered.map((node, index) => (
+    <span key={index}>
+      {index > 0 ? " • " : null}
+      {node}
+    </span>
+  ));
+}
+
+function plainDisplay(
+  label: ThreadGitStatusDisplay["label"],
+  summary: string,
+): ThreadGitStatusDisplay {
+  return { label, summary, summaryContent: summary };
+}
+
 export function getGitStatusDisplay(
   status: WorkspaceStatus | undefined,
   options?: {
@@ -65,15 +88,9 @@ export function getGitStatusDisplay(
       options?.error instanceof HttpError &&
       options.error.code === "path_not_found";
     if (options?.workspaceDeleted || isPathNotFound) {
-      return {
-        label: "Deleted",
-        summary: "Workspace deleted.",
-      };
+      return plainDisplay("Deleted", "Workspace deleted.");
     }
-    return {
-      label: "Unknown",
-      summary: "Workspace status unavailable.",
-    };
+    return plainDisplay("Unknown", "Workspace status unavailable.");
   }
 
   const resolvedMergeBaseBranch =
@@ -81,12 +98,16 @@ export function getGitStatusDisplay(
   const comparisonSummary = options?.showBranchComparison
     ? formatComparisonSummary(status, resolvedMergeBaseBranch)
     : null;
+  const workspaceTally = toChangeTally(status.workingTree);
   const hasWorkspaceChanges =
-    status.workingTree.files.length > 0 ||
-    status.workingTree.insertions > 0 ||
-    status.workingTree.deletions > 0;
+    workspaceTally.filesCount > 0 ||
+    workspaceTally.insertions > 0 ||
+    workspaceTally.deletions > 0;
   const workspaceSummary = hasWorkspaceChanges
-    ? formatChangeSummary(status.workingTree)
+    ? formatChangeSummary(workspaceTally)
+    : null;
+  const workspaceSummaryContent: ReactNode = hasWorkspaceChanges
+    ? renderChangeSummary(workspaceTally)
     : null;
 
   switch (status.workingTree.state) {
@@ -95,35 +116,39 @@ export function getGitStatusDisplay(
         (status.mergeBase?.aheadCount ?? 0) > 0 &&
         (status.mergeBase?.behindCount ?? 0) > 0
       ) {
-        return {
-          label: "Diverged",
-          summary: comparisonSummary ?? "Branch has diverged.",
-        };
+        return plainDisplay(
+          "Diverged",
+          comparisonSummary ?? "Branch has diverged.",
+        );
       }
       if ((status.mergeBase?.aheadCount ?? 0) > 0) {
-        return {
-          label: "Ahead",
-          summary: comparisonSummary ?? "Local commits pending merge.",
-        };
+        return plainDisplay(
+          "Ahead",
+          comparisonSummary ?? "Local commits pending merge.",
+        );
       }
       if ((status.mergeBase?.behindCount ?? 0) > 0) {
-        return {
-          label: "Behind",
-          summary: comparisonSummary ?? "Branch is behind its merge base.",
-        };
+        return plainDisplay(
+          "Behind",
+          comparisonSummary ?? "Branch is behind its merge base.",
+        );
       }
-      return {
-        label: options?.showBranchComparison ? "Up to date" : "Clean",
-        summary: resolvedMergeBaseBranch
+      return plainDisplay(
+        options?.showBranchComparison ? "Up to date" : "Clean",
+        resolvedMergeBaseBranch
           ? `No local changes relative to ${resolvedMergeBaseBranch}.`
           : "No local changes.",
-      };
+      );
     }
     case "untracked":
       return {
         label: "Untracked",
         summary: joinStatusSummary([
           workspaceSummary ?? "Untracked files",
+          comparisonSummary,
+        ]),
+        summaryContent: joinSummaryNodes([
+          workspaceSummaryContent ?? "Untracked files",
           comparisonSummary,
         ]),
       };
@@ -134,32 +159,41 @@ export function getGitStatusDisplay(
           workspaceSummary ?? "Local changes pending commit.",
           comparisonSummary,
         ]),
+        summaryContent: joinSummaryNodes([
+          workspaceSummaryContent ?? "Local changes pending commit.",
+          comparisonSummary,
+        ]),
       };
     case "committed_unmerged":
       if (
         (status.mergeBase?.aheadCount ?? 0) > 0 &&
         (status.mergeBase?.behindCount ?? 0) > 0
       ) {
-        return {
-          label: "Diverged",
-          summary: comparisonSummary ?? "Branch has diverged.",
-        };
+        return plainDisplay(
+          "Diverged",
+          comparisonSummary ?? "Branch has diverged.",
+        );
       }
       if ((status.mergeBase?.behindCount ?? 0) > 0) {
-        return {
-          label: "Behind",
-          summary: comparisonSummary ?? "Branch is behind its merge base.",
-        };
+        return plainDisplay(
+          "Behind",
+          comparisonSummary ?? "Branch is behind its merge base.",
+        );
       }
-      return {
-        label: "Ahead",
-        summary: comparisonSummary ?? "Local commits pending merge.",
-      };
+      return plainDisplay(
+        "Ahead",
+        comparisonSummary ?? "Local commits pending merge.",
+      );
     case "dirty_and_committed_unmerged":
       return {
         label: "Dirty",
         summary: joinStatusSummary([
           workspaceSummary ?? "Local changes and commits pending merge.",
+          comparisonSummary,
+        ]),
+        summaryContent: joinSummaryNodes([
+          workspaceSummaryContent ??
+            "Local changes and commits pending merge.",
           comparisonSummary,
         ]),
       };

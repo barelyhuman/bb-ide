@@ -60,7 +60,7 @@ describe("workspace-status", () => {
     );
     expect(
       getGitStatusDisplay(makeStatus({ changedFiles: 1, state: "untracked" })),
-    ).toEqual({
+    ).toMatchObject({
       label: "Untracked",
       summary: "1 file",
     });
@@ -110,7 +110,7 @@ describe("workspace-status", () => {
           showBranchComparison: true,
         },
       ),
-    ).toEqual({
+    ).toMatchObject({
       label: "Untracked",
       summary: "1 file • 2 behind main",
     });
@@ -122,7 +122,7 @@ describe("workspace-status", () => {
         mergeBaseBranch: "main",
         showBranchComparison: true,
       }),
-    ).toEqual({
+    ).toMatchObject({
       label: "Behind",
       summary: "3 behind main",
     });
@@ -141,7 +141,7 @@ describe("workspace-status", () => {
           showBranchComparison: true,
         },
       ),
-    ).toEqual({
+    ).toMatchObject({
       label: "Diverged",
       summary: "2 ahead, 1 behind relative to main",
     });
@@ -156,7 +156,7 @@ describe("workspace-status", () => {
           showBranchComparison: true,
         },
       ),
-    ).toEqual({
+    ).toMatchObject({
       label: "Ahead",
       summary: "2 ahead of main",
     });
@@ -172,7 +172,7 @@ describe("workspace-status", () => {
           state: "dirty_uncommitted",
         }),
       ),
-    ).toEqual({
+    ).toMatchObject({
       label: "Dirty",
       summary: "3 files, +8 -2",
     });
@@ -193,14 +193,14 @@ describe("workspace-status", () => {
           showBranchComparison: true,
         },
       ),
-    ).toEqual({
+    ).toMatchObject({
       label: "Dirty",
       summary: "3 files, +8 -2 • 2 ahead of main",
     });
   });
 
   it("reports unavailable workspace status explicitly", () => {
-    expect(getGitStatusDisplay(undefined)).toEqual({
+    expect(getGitStatusDisplay(undefined)).toMatchObject({
       label: "Unknown",
       summary: "Workspace status unavailable.",
     });
@@ -215,7 +215,7 @@ describe("workspace-status", () => {
       message: "Managed workspace path does not exist",
       code: "path_not_found",
     });
-    expect(getGitStatusDisplay(undefined, { error })).toEqual({
+    expect(getGitStatusDisplay(undefined, { error })).toMatchObject({
       label: "Deleted",
       summary: "Workspace deleted.",
     });

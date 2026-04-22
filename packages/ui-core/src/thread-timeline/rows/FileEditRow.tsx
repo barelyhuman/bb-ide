@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { PatchDiff } from "@pierre/diffs/react";
 import type { ViewFileEditMessage } from "@bb/domain";
+import { DiffStatsTally } from "../../diff-stats-tally.js";
 import { CollapsibleHeader, ExpandablePanel } from "../../disclosure.js";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";
 import { EventTitle, getEventHeaderToneClass } from "./shared.js";
@@ -359,12 +360,10 @@ export function FileEditRow({
       emphasis={summaryLabel}
       suffix={
         hasDiffs ? (
-          <>
-            <span className="text-emerald-600">+{collapsedStats.added}</span>{" "}
-            <span className="text-destructive/80">
-              -{collapsedStats.removed}
-            </span>
-          </>
+          <DiffStatsTally
+            insertions={collapsedStats.added}
+            deletions={collapsedStats.removed}
+          />
         ) : undefined
       }
       tone={tone}
@@ -432,12 +431,11 @@ export function FileEditRow({
                     {fileName}
                   </span>
                   {hasChangeStats ? (
-                    <span className="shrink-0">
-                      <span className="text-emerald-600">+{stats.added}</span>{" "}
-                      <span className="text-destructive/80">
-                        -{stats.removed}
-                      </span>
-                    </span>
+                    <DiffStatsTally
+                      insertions={stats.added}
+                      deletions={stats.removed}
+                      className="shrink-0"
+                    />
                   ) : null}
                 </span>
               );
@@ -476,14 +474,11 @@ export function FileEditRow({
                             {fileName}
                           </span>
                           {hasChangeStats ? (
-                            <span className="shrink-0 font-mono text-xs">
-                              <span className="text-emerald-600">
-                                +{stats.added}
-                              </span>{" "}
-                              <span className="text-destructive/80">
-                                -{stats.removed}
-                              </span>
-                            </span>
+                            <DiffStatsTally
+                              insertions={stats.added}
+                              deletions={stats.removed}
+                              className="shrink-0 font-mono text-xs"
+                            />
                           ) : null}
                         </div>
                       )}

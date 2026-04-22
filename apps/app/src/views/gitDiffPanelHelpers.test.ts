@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   buildGitDiffParsePlan,
   buildGitDiffSelectionOptions,
-  buildGitDiffStatsLabel,
   buildGitDiffTarget,
   GIT_DIFF_PARSE_BATCH_THRESHOLD,
   resolveGitDiffPreparationState,
@@ -115,25 +114,7 @@ describe("gitDiffPanelHelpers", () => {
     ).toBe(true);
   });
 
-  it("formats git diff stats labels for empty and non-empty diffs", () => {
-    expect(
-      buildGitDiffStatsLabel({
-        additions: 0,
-        deletions: 0,
-        files: 0,
-      }),
-    ).toBe("No changes");
-
-    expect(
-      buildGitDiffStatsLabel({
-        additions: 4,
-        deletions: 2,
-        files: 1,
-      }),
-    ).toBe("1 file · +4 -2");
-  });
-
-  it("tracks when a diff is still preparing for the current parse key", () => {
+it("tracks when a diff is still preparing for the current parse key", () => {
     const currentGitDiff = buildPatchDiff(2);
     const state = resolveGitDiffPreparationState({
       currentGitDiff,

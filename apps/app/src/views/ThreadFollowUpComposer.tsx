@@ -189,7 +189,7 @@ export interface ComposerBannerProps {
   onToggleChangeListExpanded: () => void;
   promptBannerFiles?: WorkspaceFileStatus[];
   promptBannerMergeBaseBranch?: string;
-  promptBannerSummary: string;
+  promptBannerSummary: ReactNode;
   showBranchComparisonUi: boolean;
   showPromptGitStatsBanner: boolean;
   workspaceStatus?: WorkspaceStatus | null;

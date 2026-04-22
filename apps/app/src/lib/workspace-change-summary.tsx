@@ -1,19 +1,65 @@
+import type { ReactNode } from "react";
 import type {
   WorkspaceChangeStats,
   WorkspaceFileStatus,
   WorkspaceStatus,
 } from "@bb/domain";
+import { DiffStatsTally } from "@bb/ui-core";
+
+export interface ChangeTally {
+  filesCount: number;
+  insertions: number;
+  deletions: number;
+}
+
+export function toChangeTally(stats: WorkspaceChangeStats): ChangeTally {
+  return {
+    filesCount: stats.files.length,
+    insertions: stats.insertions,
+    deletions: stats.deletions,
+  };
+}
 
 export function formatWorkspaceChangedFilesLabel(changedFiles: number): string {
   return `${changedFiles} file${changedFiles === 1 ? "" : "s"}`;
 }
 
-export function formatChangeSummary(stats: WorkspaceChangeStats): string {
-  const filesLabel = formatWorkspaceChangedFilesLabel(stats.files.length);
-  if (stats.insertions === 0 && stats.deletions === 0) {
+export function formatChangeSummary(tally: ChangeTally): string {
+  if (
+    tally.filesCount === 0 &&
+    tally.insertions === 0 &&
+    tally.deletions === 0
+  ) {
+    return "No changes";
+  }
+  const filesLabel = formatWorkspaceChangedFilesLabel(tally.filesCount);
+  if (tally.insertions === 0 && tally.deletions === 0) {
     return filesLabel;
   }
-  return `${filesLabel}, +${stats.insertions} -${stats.deletions}`;
+  return `${filesLabel}, +${tally.insertions} -${tally.deletions}`;
+}
+
+export function renderChangeSummary(tally: ChangeTally): ReactNode {
+  if (
+    tally.filesCount === 0 &&
+    tally.insertions === 0 &&
+    tally.deletions === 0
+  ) {
+    return "No changes";
+  }
+  const filesLabel = formatWorkspaceChangedFilesLabel(tally.filesCount);
+  if (tally.insertions === 0 && tally.deletions === 0) {
+    return filesLabel;
+  }
+  return (
+    <>
+      {filesLabel},{" "}
+      <DiffStatsTally
+        insertions={tally.insertions}
+        deletions={tally.deletions}
+      />
+    </>
+  );
 }
 
 export interface WorkspaceChangedFilesSection {

@@ -18,6 +18,10 @@ export {
   type DetailRowProps,
   type DetailMessageRowProps,
 } from "./detail-card.js";
+export {
+  DiffStatsTally,
+  type DiffStatsTallyProps,
+} from "./diff-stats-tally.js";
 export { Pill, type PillProps, type PillVariant } from "./pill.js";
 export {
   StatusPill,

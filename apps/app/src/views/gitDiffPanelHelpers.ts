@@ -32,12 +32,6 @@ export type GitDiffParsePlan =
   | { kind: "immediate"; gitDiffKey: string; patchChunks: string[] }
   | { kind: "batched"; gitDiffKey: string; patchChunks: string[] };
 
-interface GitDiffStatsSummary {
-  additions: number;
-  deletions: number;
-  files: number;
-}
-
 interface GitDiffPreparationStateParams {
   currentGitDiff: string;
   isGitDiffLoading: boolean;
@@ -112,14 +106,6 @@ export function shouldResetSelectedGitDiffCommit(
     return !options.hasUncommittedChanges;
   }
   return !diffCommits.some((commit) => commit.sha === selectedGitDiffCommitSha);
-}
-
-export function buildGitDiffStatsLabel(stats: GitDiffStatsSummary): string {
-  if (stats.files === 0 && stats.additions === 0 && stats.deletions === 0) {
-    return "No changes";
-  }
-
-  return `${stats.files} ${stats.files === 1 ? "file" : "files"} · +${stats.additions} -${stats.deletions}`;
 }
 
 export function resolveGitDiffPreparationState(
