@@ -1237,6 +1237,95 @@ describe("buildTimelineRows tool group collapsing", () => {
     expect(expectToolBundleRow(rows[1]).summary.kind).toBe("exploration");
   });
 
+  it("wraps pre-terminal tool bundles in an assistant-step-summary even without any mid-turn assistant-text", () => {
+    const rows = buildRowsFromMessages([
+      {
+        kind: "tool-call",
+        id: "tool-1",
+        threadId: "thread-1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+        createdAt: 1,
+        turnId: "turn-1",
+        toolName: "exec_command",
+        callId: "call-1",
+        command: "git show main:src/a.ts",
+        status: "completed",
+      },
+      {
+        kind: "tool-exploring",
+        id: "explore-1",
+        threadId: "thread-1",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+        createdAt: 2,
+        turnId: "turn-1",
+        status: "completed",
+        calls: [
+          {
+            callId: "call-2",
+            command: "Grep foo",
+            parsedCmd: [
+              { type: "search", cmd: "Grep foo", query: "foo", path: null },
+            ],
+            output: "match",
+            status: "completed",
+          },
+        ],
+      },
+      {
+        kind: "tool-call",
+        id: "tool-3",
+        threadId: "thread-1",
+        sourceSeqStart: 3,
+        sourceSeqEnd: 3,
+        createdAt: 3,
+        turnId: "turn-1",
+        toolName: "exec_command",
+        callId: "call-3",
+        command: "git show main:src/b.ts",
+        status: "completed",
+      },
+      {
+        kind: "tool-call",
+        id: "tool-4",
+        threadId: "thread-1",
+        sourceSeqStart: 4,
+        sourceSeqEnd: 4,
+        createdAt: 4,
+        turnId: "turn-1",
+        toolName: "exec_command",
+        callId: "call-4",
+        command: "git show main:src/c.ts",
+        status: "completed",
+      },
+      {
+        kind: "assistant-text",
+        id: "assistant-1",
+        threadId: "thread-1",
+        sourceSeqStart: 5,
+        sourceSeqEnd: 5,
+        createdAt: 5,
+        turnId: "turn-1",
+        text: "Here's the summary.",
+        status: "completed",
+      },
+    ]);
+
+    expect(rows.map((row) => row.kind)).toEqual(["turn-summary", "message"]);
+    const turnSummary = expectTurnSummaryRow(rows[0]);
+    const nested = turnSummary.rows ?? [];
+    expect(nested).toHaveLength(1);
+    expect(nested[0]?.kind).toBe("assistant-step-summary");
+    if (nested[0]?.kind === "assistant-step-summary") {
+      expect(nested[0].rows.map((row) => row.kind)).toEqual([
+        "tool-bundle",
+        "tool-bundle",
+        "tool-bundle",
+      ]);
+    }
+  });
+
   it("does not collapse an active turn with pending tool work", () => {
     const rows = buildRowsFromMessages([
       {

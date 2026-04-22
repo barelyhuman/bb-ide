@@ -696,20 +696,6 @@ function buildAssistantStepSummaryRows(
   let bufferedRows: TimelineAssistantStepSummaryChildRow[] = [];
   let hasSeenAssistantMessage = false;
 
-  const flushBufferedRows = (flushMode: AssistantStepSummaryMode) => {
-    if (bufferedRows.length === 0) {
-      return;
-    }
-
-    if (!hasSeenAssistantMessage || flushMode === "active") {
-      groupedRows.push(...bufferedRows);
-    } else {
-      groupedRows.push(...materializeAssistantStepSummaryRows(bufferedRows));
-    }
-
-    bufferedRows = [];
-  };
-
   for (const row of rows) {
     if (isAssistantBoundaryRow(row)) {
       if (bufferedRows.length > 0) {
@@ -729,7 +715,14 @@ function buildAssistantStepSummaryRows(
     bufferedRows.push(row);
   }
 
-  flushBufferedRows(mode);
+  if (bufferedRows.length > 0) {
+    if (mode === "active") {
+      groupedRows.push(...bufferedRows);
+    } else {
+      groupedRows.push(...materializeAssistantStepSummaryRows(bufferedRows));
+    }
+  }
+
   return groupedRows;
 }
 
