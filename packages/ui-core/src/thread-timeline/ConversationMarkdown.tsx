@@ -142,10 +142,19 @@ export function ConversationMarkdown({
               children,
             }: ComponentPropsWithoutRef<"table"> & ExtraProps) {
               return (
-                <div className="my-2 overflow-x-auto">
-                  <table className="min-w-full border border-border/80">
-                    {children}
-                  </table>
+                <div
+                  className="my-2"
+                  style={{
+                    width: "max(100%, min(1100px, 100cqw - 2rem))",
+                    marginInline:
+                      "calc((100% - max(100%, min(1100px, 100cqw - 2rem))) / 2)",
+                  }}
+                >
+                  <div className="mx-auto w-max max-w-full overflow-x-auto">
+                    <table className="border border-border/80">
+                      {children}
+                    </table>
+                  </div>
                 </div>
               );
             },

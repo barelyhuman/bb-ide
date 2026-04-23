@@ -36,7 +36,10 @@ export function PageShell({
         <div
           ref={scrollRef}
           onScroll={onScroll}
-          className={cn("min-h-0 flex-1 overflow-y-auto", scrollAreaClassName)}
+          className={cn(
+            "@container/page min-h-0 flex-1 overflow-y-auto",
+            scrollAreaClassName,
+          )}
         >
           <div
             className={cn(
