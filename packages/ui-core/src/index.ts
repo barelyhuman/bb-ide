@@ -1,4 +1,5 @@
 export { cn } from "./cn.js";
+export { Skeleton } from "./primitives/ui/skeleton.js";
 export {
   ThreePaneLayout,
   type ThreePaneLayoutProps,
@@ -33,7 +34,6 @@ export {
   ExpandablePanel,
   getCollapsibleHeaderToneClass,
   COLLAPSIBLE_HEADER_BUTTON_BASE_CLASS,
-  COLLAPSIBLE_HEADER_CHEVRON_COLLAPSED_CLASS,
   COLLAPSIBLE_HEADER_COLLAPSED_TONE_CLASS,
   COLLAPSIBLE_HEADER_EXPANDED_TONE_CLASS,
   COLLAPSIBLE_HEADER_STATIC_TONE_CLASS,

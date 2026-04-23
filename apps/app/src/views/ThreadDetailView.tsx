@@ -192,6 +192,7 @@ export function ThreadDetailView() {
     timelineLoading && threadDetailRows.length === 0;
   const {
     captureTimelineScrollPosition,
+    erroredTurnSummaryIds,
     handleLoadTurnSummaryRows,
     handleTimelineScroll,
     loadingTurnSummaryIds,
@@ -599,6 +600,7 @@ export function ThreadDetailView() {
           timelineError: Boolean(timelineError),
           latestActivityRowId,
           loadingTurnSummaryIds,
+          erroredTurnSummaryIds,
           onLoadTurnSummaryRows: handleLoadTurnSummaryRows,
           onScroll: handleTimelineScroll,
           projectId,

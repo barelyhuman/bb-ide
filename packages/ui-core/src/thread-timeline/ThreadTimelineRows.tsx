@@ -15,6 +15,7 @@ import type {
 export interface ThreadTimelineRowsProps {
   latestActivityRowId: string | null;
   loadingTurnSummaryIds: ReadonlySet<string>;
+  erroredTurnSummaryIds: ReadonlySet<string>;
   onLoadTurnSummaryRows: (entry: TimelineTurnSummaryRow) => void;
   projectId?: string;
   resolveUserAttachmentImageSrc?: UserAttachmentImageSrcResolver;
@@ -37,6 +38,7 @@ function getPresentationOptions(
 
 function createTurnSummaryRowsController(
   loadingTurnSummaryIds: ReadonlySet<string>,
+  erroredTurnSummaryIds: ReadonlySet<string>,
   onLoadTurnSummaryRows: (entry: TimelineTurnSummaryRow) => void,
   turnSummaryRowsById: Record<string, TimelineRow[]>,
 ): NestedTimelineTurnSummaryRowsController {
@@ -47,6 +49,9 @@ function createTurnSummaryRowsController(
     isLoading(row) {
       return loadingTurnSummaryIds.has(row.id);
     },
+    isError(row) {
+      return erroredTurnSummaryIds.has(row.id);
+    },
     loadRows(row) {
       onLoadTurnSummaryRows(row);
     },
@@ -56,6 +61,7 @@ function createTurnSummaryRowsController(
 export function ThreadTimelineRows({
   latestActivityRowId,
   loadingTurnSummaryIds,
+  erroredTurnSummaryIds,
   onLoadTurnSummaryRows,
   projectId,
   resolveUserAttachmentImageSrc,
@@ -68,10 +74,16 @@ export function ThreadTimelineRows({
     () =>
       createTurnSummaryRowsController(
         loadingTurnSummaryIds,
+        erroredTurnSummaryIds,
         onLoadTurnSummaryRows,
         turnSummaryRowsById,
       ),
-    [loadingTurnSummaryIds, onLoadTurnSummaryRows, turnSummaryRowsById],
+    [
+      erroredTurnSummaryIds,
+      loadingTurnSummaryIds,
+      onLoadTurnSummaryRows,
+      turnSummaryRowsById,
+    ],
   );
 
   const renderMessage = (

@@ -4,6 +4,7 @@ import { ConversationTimeline, ThreadTimelineRows } from "@bb/ui-core";
 import { fixtureStoryData } from "../.ladle/fixture-story-data.js";
 
 const EMPTY_LOADING_IDS = new Set<string>();
+const EMPTY_ERRORED_IDS = new Set<string>();
 const EMPTY_TURN_SUMMARY_ROWS_BY_ID: Record<string, TimelineRow[]> = {};
 
 type FixtureStoryId = string;
@@ -39,6 +40,7 @@ function FixtureTimeline({ fixtureId }: { fixtureId: FixtureStoryId }) {
         <ThreadTimelineRows
           latestActivityRowId={fixture.latestActivityRowId}
           loadingTurnSummaryIds={EMPTY_LOADING_IDS}
+          erroredTurnSummaryIds={EMPTY_ERRORED_IDS}
           onLoadTurnSummaryRows={() => {}}
           themeType="dark"
           threadDetailRows={fixture.timelineRows}

@@ -164,6 +164,9 @@ export function useThreadTimelineController({
   const [loadingTurnSummaryIds, setLoadingTurnSummaryIds] = useState<Set<string>>(
     new Set(),
   );
+  const [erroredTurnSummaryIds, setErroredTurnSummaryIds] = useState<
+    Set<string>
+  >(new Set());
   const [turnSummaryRowsById, setTurnSummaryRowsById] = useState<
     Record<string, TimelineRow[]>
   >({});
@@ -356,6 +359,12 @@ export function useThreadTimelineController({
       }
 
       setLoadingTurnSummaryIds((prev) => new Set(prev).add(entry.id));
+      setErroredTurnSummaryIds((prev) => {
+        if (!prev.has(entry.id)) return prev;
+        const next = new Set(prev);
+        next.delete(entry.id);
+        return next;
+      });
       void loadTurnSummaryRows({
         id: currentThreadId,
         sourceSeqStart: entry.sourceSeqStart,
@@ -366,6 +375,9 @@ export function useThreadTimelineController({
             ...prev,
             [entry.id]: response.rows,
           }));
+        })
+        .catch(() => {
+          setErroredTurnSummaryIds((prev) => new Set(prev).add(entry.id));
         })
         .finally(() => {
           setLoadingTurnSummaryIds((prev) => {
@@ -385,6 +397,7 @@ export function useThreadTimelineController({
 
   useEffect(() => {
     setLoadingTurnSummaryIds(new Set());
+    setErroredTurnSummaryIds(new Set());
     setTurnSummaryRowsById({});
   }, [threadId]);
 
@@ -557,6 +570,7 @@ export function useThreadTimelineController({
 
   return {
     captureTimelineScrollPosition,
+    erroredTurnSummaryIds,
     handleLoadTurnSummaryRows,
     handleTimelineScroll,
     loadingTurnSummaryIds,

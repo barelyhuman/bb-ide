@@ -22,6 +22,7 @@ interface ThreadTimelinePaneProps {
   timelineError: boolean;
   latestActivityRowId: string | null;
   loadingTurnSummaryIds: ReadonlySet<string>;
+  erroredTurnSummaryIds: ReadonlySet<string>;
   onLoadTurnSummaryRows: (entry: TimelineTurnSummaryRow) => void;
   onScroll: () => void;
   projectId?: string;
@@ -42,6 +43,7 @@ export function ThreadTimelinePane({
   timelineError,
   latestActivityRowId,
   loadingTurnSummaryIds,
+  erroredTurnSummaryIds,
   onLoadTurnSummaryRows,
   onScroll,
   projectId,
@@ -94,6 +96,7 @@ export function ThreadTimelinePane({
             <ThreadTimelineRows
               latestActivityRowId={latestActivityRowId}
               loadingTurnSummaryIds={loadingTurnSummaryIds}
+              erroredTurnSummaryIds={erroredTurnSummaryIds}
               onLoadTurnSummaryRows={onLoadTurnSummaryRows}
               projectId={projectId}
               resolveUserAttachmentImageSrc={toUserAttachmentImageSrc}

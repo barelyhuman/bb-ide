@@ -54,6 +54,9 @@ function createTurnSummaryRowsController(): NestedTimelineTurnSummaryRowsControl
     isLoading(): boolean {
       return false;
     },
+    isError(): boolean {
+      return false;
+    },
     loadRows(): void {},
   };
 }

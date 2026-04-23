@@ -18,6 +18,7 @@ import type {
   ViewMessage,
 } from "@bb/domain";
 import { ExpandablePanel } from "../disclosure.js";
+import { Skeleton } from "../primitives/ui/skeleton.js";
 import { useLatestInitialExpanded } from "./latestInitialExpanded.js";
 import { ToolBundleBody } from "./rows/ToolBundleBody.js";
 import {
@@ -43,6 +44,7 @@ export interface NestedTimelineRowPresentationOptions {
 export interface NestedTimelineTurnSummaryRowsController {
   getRows: (row: TimelineTurnSummaryRow) => TimelineRow[] | null;
   isLoading: (row: TimelineTurnSummaryRow) => boolean;
+  isError: (row: TimelineTurnSummaryRow) => boolean;
   loadRows: (row: TimelineTurnSummaryRow) => void;
 }
 
@@ -376,6 +378,7 @@ function TurnSummaryEntry({
   });
   const rows = turnSummaryRowsController.getRows(entry);
   const isLoadingRows = turnSummaryRowsController.isLoading(entry);
+  const isErrored = turnSummaryRowsController.isError(entry);
   const { isExpanded, onToggle } = useLatestInitialExpanded(
     shouldAutoExpandTimelineRow(entry, rowState),
   );
@@ -421,8 +424,13 @@ function TurnSummaryEntry({
         >
           <div className="overflow-hidden rounded-md border border-border/60 bg-background/40">
             {isLoadingRows ? (
-              <div className="px-3 py-2 text-xs text-muted-foreground">
-                <span className="animate-shine">Loading details...</span>
+              <div className="px-3 py-2" aria-label="Loading details">
+                <Skeleton className="h-3 w-3/4" />
+              </div>
+            ) : null}
+            {!isLoadingRows && isErrored && !rows ? (
+              <div className="px-3 py-2 text-xs text-destructive">
+                Failed to load details.
               </div>
             ) : null}
             {rows ? (

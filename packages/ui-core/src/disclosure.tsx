@@ -1,5 +1,7 @@
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { cx } from "./utils.js";
+
+const EXPANDABLE_PANEL_TRANSITION_MS = 200;
 
 export const COLLAPSIBLE_HEADER_COLLAPSED_TONE_CLASS =
   "text-muted-foreground/90 transition-colors group-hover:text-foreground/90 group-focus-within:text-foreground/90";
@@ -8,20 +10,8 @@ export const COLLAPSIBLE_HEADER_STATIC_TONE_CLASS = "text-muted-foreground/90";
 export const COLLAPSIBLE_HEADER_BUTTON_BASE_CLASS =
   "inline-flex max-w-full items-center gap-1 overflow-hidden py-0.5 text-left text-sm";
 export const COLLAPSIBLE_HEADER_TEXT_CLASS = "min-w-0 truncate";
-export const COLLAPSIBLE_HEADER_CHEVRON_COLLAPSED_CLASS =
-  "size-4 shrink-0 opacity-0 transition-[opacity,transform] duration-200 group-hover:translate-x-0.5 group-hover:opacity-100";
 
-function Chevron({
-  expanded,
-  className,
-}: {
-  expanded: boolean;
-  className?: string;
-}) {
-  const style = expanded
-    ? undefined
-    : ({ transformBox: "fill-box" } as CSSProperties);
-
+function Chevron({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 16 16"
@@ -30,14 +20,10 @@ function Chevron({
       strokeWidth="1.8"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={cx(
-        expanded ? "lucide lucide-chevron-down" : "lucide lucide-chevron-right",
-        className,
-      )}
-      style={style}
+      className={cx("lucide lucide-chevron-right", className)}
       aria-hidden="true"
     >
-      {expanded ? <path d="M4 6l4 4 4-4" /> : <path d="M6 4l4 4-4 4" />}
+      <path d="M6 4l4 4-4 4" />
     </svg>
   );
 }
@@ -83,17 +69,14 @@ export function CollapsibleHeader({
   return (
     <button type="button" onClick={onToggle} className={rootClassName}>
       <span className={summaryClass}>{summaryContent}</span>
-      {isExpanded ? (
-        <Chevron
-          expanded={true}
-          className="size-4 shrink-0 transition-transform duration-200 ease-out"
-        />
-      ) : (
-        <Chevron
-          expanded={false}
-          className={COLLAPSIBLE_HEADER_CHEVRON_COLLAPSED_CLASS}
-        />
-      )}
+      <Chevron
+        className={cx(
+          "size-4 shrink-0 origin-center transition-[opacity,rotate] duration-200 ease-out",
+          isExpanded
+            ? "rotate-90"
+            : "opacity-0 group-hover:opacity-100",
+        )}
+      />
     </button>
   );
 }
@@ -125,6 +108,31 @@ export function ExpandablePanel({
   bodyClassName,
   contentClassName,
 }: ExpandablePanelProps) {
+  // Mount children strictly while expanded; keep them mounted through the
+  // close animation so grid-template-rows can transition from 1fr → 0fr with
+  // real content, then unmount once the animation settles. Collapsed panels
+  // pay zero DOM/layout cost for their body.
+  const [shouldRenderChildren, setShouldRenderChildren] = useState(isExpanded);
+  const [prevIsExpanded, setPrevIsExpanded] = useState(isExpanded);
+  if (prevIsExpanded !== isExpanded) {
+    // Sync mount with the isExpanded flip so grid-template-rows can
+    // transition 0fr → 1fr with actual content already in the DOM.
+    setPrevIsExpanded(isExpanded);
+    if (isExpanded) {
+      setShouldRenderChildren(true);
+    }
+  }
+  useEffect(() => {
+    if (isExpanded || !shouldRenderChildren) {
+      return;
+    }
+    const timeout = setTimeout(
+      () => setShouldRenderChildren(false),
+      EXPANDABLE_PANEL_TRANSITION_MS,
+    );
+    return () => clearTimeout(timeout);
+  }, [isExpanded, shouldRenderChildren]);
+
   return (
     <div className={cx("rounded-md text-muted-foreground", className)}>
       <div className={cx("px-2 py-1", headerClassName)}>
@@ -159,7 +167,7 @@ export function ExpandablePanel({
               contentClassName,
             )}
           >
-            {children}
+            {shouldRenderChildren ? children : null}
           </div>
         </div>
       </div>

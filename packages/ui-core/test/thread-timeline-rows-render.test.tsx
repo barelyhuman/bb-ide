@@ -69,6 +69,7 @@ describe("ThreadTimelineRows rendering", () => {
       <ThreadTimelineRows
         latestActivityRowId={null}
         loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
         onLoadTurnSummaryRows={() => {}}
         threadDetailRows={[buildToolGroupRow()]}
         threadStatus="completed"
@@ -85,6 +86,7 @@ describe("ThreadTimelineRows rendering", () => {
       <ThreadTimelineRows
         latestActivityRowId={null}
         loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
         onLoadTurnSummaryRows={() => {}}
         threadDetailRows={[buildUserMessageRow()]}
         threadStatus="completed"

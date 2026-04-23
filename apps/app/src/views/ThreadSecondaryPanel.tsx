@@ -24,7 +24,7 @@ import {
 } from "@/lib/workspace-change-summary";
 import { useIntersectionObserver } from "usehooks-ts";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Skeleton } from "@bb/ui-core";
 import {
   DropdownMenu,
   DropdownMenuContent,
