@@ -13,7 +13,6 @@ import type {
   ViewTurn,
 } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
-import { fileChangeIdentity } from "./file-change-summary.js";
 import { getMessageStartedAt } from "./format-helpers.js";
 import {
   findLastTerminalTimelineMessageIndex,
@@ -385,8 +384,6 @@ function getToolBundleKind(
   switch (message.kind) {
     case "tool-exploring":
       return "exploration";
-    case "file-edit":
-      return "file-edits";
     case "tool-call":
       return isShellToolName(message.toolName) ? "commands" : null;
     case "web-search":
@@ -397,6 +394,7 @@ function getToolBundleKind(
     case "debug/raw-event":
     case "delegation":
     case "error":
+    case "file-edit":
     case "operation":
     case "permission-grant-lifecycle":
     case "tasks":
@@ -414,12 +412,6 @@ function canAppendToToolBundle(
   switch (active.bundleKind) {
     case "exploration":
       return message.kind === "tool-exploring";
-    case "file-edits":
-      return (
-        message.kind === "file-edit" &&
-        active.messages[0]?.kind === "file-edit" &&
-        active.messages[0].callId === message.callId
-      );
     case "commands":
       return (
         message.kind === "tool-call" && isShellToolName(message.toolName)
@@ -449,21 +441,6 @@ function buildToolBundleSummary(
         filesRead: counts.filesRead,
         searches: counts.searches,
         lists: counts.lists,
-      };
-    }
-    case "file-edits": {
-      const filesChanged = new Set<string>();
-      for (const message of messages) {
-        if (message.kind !== "file-edit") {
-          throw new Error("File edit bundles require file-edit messages");
-        }
-        for (const change of message.changes) {
-          filesChanged.add(fileChangeIdentity(change));
-        }
-      }
-      return {
-        kind: "file-edits",
-        filesEdited: filesChanged.size,
       };
     }
     case "commands":

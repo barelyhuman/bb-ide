@@ -321,12 +321,11 @@ describe("timeline CLI rendering snapshots", () => {
           [completed] React suspense docs
           Found the React Suspense docs
 
-      ── Edited 1 file ───────────────────────────────────────────
-        ── File Edit ───────────────────────────────────────────────
-          [completed] /repo/packages/core-ui/src/timeline.ts (update)
-          @@ -1 +1 @@
-          -before
-          +after
+      ── File Edit ───────────────────────────────────────────────
+        [completed] /repo/packages/core-ui/src/timeline.ts (update)
+        @@ -1 +1 @@
+        -before
+        +after
 
       ── Assistant ───────────────────────────────────────────────
       I patched the projection and verified it."

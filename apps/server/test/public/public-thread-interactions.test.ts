@@ -1052,20 +1052,14 @@ describe("public thread interaction routes", () => {
         expect.objectContaining({
           rows: expect.arrayContaining([
             expect.objectContaining({
-              kind: "tool-bundle",
-              bundleKind: "file-edits",
-              rows: expect.arrayContaining([
-                expect.objectContaining({
-                  kind: "message",
-                  message: expect.objectContaining({
-                    kind: "file-edit",
-                    callId: "item-file-timeline",
-                    changes: [],
-                    status: "pending",
-                    approvalStatus: "waiting_for_approval",
-                  }),
-                }),
-              ]),
+              kind: "message",
+              message: expect.objectContaining({
+                kind: "file-edit",
+                callId: "item-file-timeline",
+                changes: [],
+                status: "pending",
+                approvalStatus: "waiting_for_approval",
+              }),
             }),
           ]),
         }),

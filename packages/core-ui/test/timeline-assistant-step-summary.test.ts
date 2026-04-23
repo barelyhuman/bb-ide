@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type {
   TimelineAssistantStepSummaryChildRow,
+  TimelineMessageRow,
   TimelineToolBundleRow,
   ViewFileEditMessage,
   ViewToolCallMessage,
@@ -119,17 +120,17 @@ function buildExplorationBundleRow(
   };
 }
 
-function buildFileEditBundleRow({
+function buildFileEditMessageRow({
   callId,
   createdAt,
-  path,
+  paths,
   sourceSeq,
 }: {
   callId: string;
   createdAt: number;
-  path: string;
+  paths: readonly string[];
   sourceSeq: number;
-}): TimelineToolBundleRow {
+}): TimelineMessageRow {
   const message: ViewFileEditMessage = {
     kind: "file-edit",
     id: `${callId}-message`,
@@ -139,38 +140,15 @@ function buildFileEditBundleRow({
     sourceSeqEnd: sourceSeq,
     createdAt,
     callId,
-    changes: [
-      {
-        path,
-        kind: "update",
-      },
-    ],
+    changes: paths.map((path) => ({ path, kind: "update" })),
     approvalStatus: null,
     status: "completed",
   };
 
   return {
-    kind: "tool-bundle",
-    id: `${callId}:tool-bundle:${sourceSeq}:file-edits`,
-    bundleKind: "file-edits",
-    presentation: "default",
-    turnId: "turn-1",
-    sourceSeqStart: sourceSeq,
-    sourceSeqEnd: sourceSeq,
-    startedAt: createdAt,
-    createdAt,
-    status: "completed",
-    summary: {
-      kind: "file-edits",
-      filesEdited: 1,
-    },
-    rows: [
-      {
-        kind: "message",
-        id: `${callId}-row`,
-        message,
-      },
-    ],
+    kind: "message",
+    id: `${callId}-row`,
+    message,
   };
 }
 
@@ -238,38 +216,32 @@ describe("timeline assistant step summary", () => {
     expect(completedThenPendingStatus).toBe("pending");
   });
 
-  it("dedupes files across merged file-edit bundles", () => {
+  it("dedupes files across consecutive file-edit messages", () => {
     const rows = [
-      buildFileEditBundleRow({
+      buildFileEditMessageRow({
         callId: "file-edit-1",
         createdAt: 1,
-        path: "/repo/src/app.ts",
+        paths: ["/repo/src/app.ts"],
         sourceSeq: 1,
       }),
-      buildFileEditBundleRow({
+      buildFileEditMessageRow({
         callId: "file-edit-2",
         createdAt: 2,
-        path: "/repo/src/app.ts",
+        paths: ["/repo/src/app.ts", "/repo/src/util.ts"],
         sourceSeq: 2,
       }),
     ] satisfies TimelineAssistantStepSummaryChildRow[];
     const summary = buildTimelineAssistantStepSummary(rows);
-    const part = summary.parts.find(
-      (entry) =>
-        "row" in entry && entry.row.bundleKind === "file-edits",
-    );
+    const part = summary.parts.find((entry) => entry.kind === "file-edits");
 
     expect(part).toBeDefined();
-    if (!part || !("row" in part)) {
+    if (!part || part.kind !== "file-edits") {
       throw new Error("Missing file-edits part");
     }
 
-    expect(part.row.summary).toEqual({
-      kind: "file-edits",
-      filesEdited: 1,
-    });
+    expect(part.count).toBe(2);
     expect(buildTimelineAssistantStepSummaryLabel(rows)).toBe(
-      "Edited 1 file",
+      "Edited 2 files",
     );
   });
 });

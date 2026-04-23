@@ -22,7 +22,6 @@ export type TimelineGroupedRowStatus = z.infer<
 
 export const timelineToolBundleKindValues = [
   "exploration",
-  "file-edits",
   "commands",
   "web-research",
 ] as const;
@@ -51,11 +50,6 @@ export interface TimelineExplorationToolBundleSummary {
   lists: number;
 }
 
-export interface TimelineFileEditsToolBundleSummary {
-  kind: "file-edits";
-  filesEdited: number;
-}
-
 export interface TimelineCommandsToolBundleSummary {
   kind: "commands";
   commands: number;
@@ -69,7 +63,6 @@ export interface TimelineWebResearchToolBundleSummary {
 
 export type TimelineToolBundleSummary =
   | TimelineExplorationToolBundleSummary
-  | TimelineFileEditsToolBundleSummary
   | TimelineCommandsToolBundleSummary
   | TimelineWebResearchToolBundleSummary;
 
@@ -149,10 +142,6 @@ export const timelineExplorationToolBundleSummarySchema = z.object({
   searches: z.number().int().nonnegative(),
   lists: z.number().int().nonnegative(),
 });
-export const timelineFileEditsToolBundleSummarySchema = z.object({
-  kind: z.literal("file-edits"),
-  filesEdited: z.number().int().nonnegative(),
-});
 export const timelineCommandsToolBundleSummarySchema = z.object({
   kind: z.literal("commands"),
   commands: z.number().int().nonnegative(),
@@ -164,7 +153,6 @@ export const timelineWebResearchToolBundleSummarySchema = z.object({
 });
 export const timelineToolBundleSummarySchema = z.discriminatedUnion("kind", [
   timelineExplorationToolBundleSummarySchema,
-  timelineFileEditsToolBundleSummarySchema,
   timelineCommandsToolBundleSummarySchema,
   timelineWebResearchToolBundleSummarySchema,
 ]);

@@ -31,8 +31,8 @@ interface TimelineExplorationSummaryPart {
 }
 
 interface TimelineFileEditsSummaryPart {
+  count: number;
   kind: "file-edits";
-  row: TimelineToolBundleRow;
 }
 
 interface TimelineCommandsSummaryPart {
@@ -66,6 +66,7 @@ type TimelineAssistantStepSummaryPart =
 interface TimelineAssistantStepSummaryAccumulator {
   delegationCount: number;
   fallbackItemCount: number;
+  fileEditPaths: Set<string>;
   hasMeaningfulWork: boolean;
   partOrder: TimelineAssistantStepSummaryPartKind[];
   toolBundleRowsByKind: ToolBundleRowsByKind;
@@ -75,7 +76,6 @@ interface TimelineAssistantStepSummaryAccumulator {
 interface ToolBundleRowsByKind {
   commands: TimelineToolBundleRow[];
   exploration: TimelineToolBundleRow[];
-  "file-edits": TimelineToolBundleRow[];
   "web-research": TimelineToolBundleRow[];
 }
 
@@ -95,12 +95,12 @@ function createAccumulator(): TimelineAssistantStepSummaryAccumulator {
   return {
     delegationCount: 0,
     fallbackItemCount: 0,
+    fileEditPaths: new Set<string>(),
     hasMeaningfulWork: false,
     partOrder: [],
     toolBundleRowsByKind: {
       commands: [],
       exploration: [],
-      "file-edits": [],
       "web-research": [],
     },
     toolsCount: 0,
@@ -166,6 +166,19 @@ function addMessageRow(
       accumulator.toolsCount += 1;
       addPartOrder(accumulator, "tools");
       return;
+    case "file-edit": {
+      const hadPaths = accumulator.fileEditPaths.size > 0;
+      for (const change of message.changes) {
+        accumulator.fileEditPaths.add(fileChangeIdentity(change));
+      }
+      if (accumulator.fileEditPaths.size > 0) {
+        accumulator.hasMeaningfulWork = true;
+        if (!hadPaths) {
+          addPartOrder(accumulator, "file-edits");
+        }
+      }
+      return;
+    }
     case "tasks":
     case "permission-grant-lifecycle":
       return;
@@ -175,7 +188,6 @@ function addMessageRow(
     case "assistant-reasoning":
     case "assistant-text":
     case "debug/raw-event":
-    case "file-edit":
     case "tool-exploring":
     case "user":
     case "web-fetch":
@@ -196,48 +208,30 @@ function addToolBundleRow(
   addPartOrder(accumulator, row.bundleKind);
 }
 
-function buildSummaryPart(
+function buildCountSummaryPart(
   accumulator: TimelineAssistantStepSummaryAccumulator,
-  kind: "delegations" | "tools",
-): TimelineDelegationsSummaryPart | TimelineToolsSummaryPart | null {
+  kind: "delegations" | "file-edits" | "tools",
+):
+  | TimelineDelegationsSummaryPart
+  | TimelineFileEditsSummaryPart
+  | TimelineToolsSummaryPart
+  | null {
   switch (kind) {
     case "delegations":
       return accumulator.delegationCount > 0
-        ? {
-            kind: "delegations",
-            count: accumulator.delegationCount,
-          }
+        ? { kind: "delegations", count: accumulator.delegationCount }
+        : null;
+    case "file-edits":
+      return accumulator.fileEditPaths.size > 0
+        ? { kind: "file-edits", count: accumulator.fileEditPaths.size }
         : null;
     case "tools":
       return accumulator.toolsCount > 0
-        ? {
-            kind: "tools",
-            count: accumulator.toolsCount,
-          }
+        ? { kind: "tools", count: accumulator.toolsCount }
         : null;
     default:
       return assertNever(kind);
   }
-}
-
-function countMergedFileEditBundleFiles(
-  bundleRows: readonly TimelineToolBundleRow[],
-): number {
-  const filesChanged = new Set<string>();
-
-  for (const row of bundleRows) {
-    for (const entry of row.rows) {
-      if (entry.message.kind !== "file-edit") {
-        throw new Error("File edit bundle rows require file-edit messages");
-      }
-
-      for (const change of entry.message.changes) {
-        filesChanged.add(fileChangeIdentity(change));
-      }
-    }
-  }
-
-  return filesChanged.size;
 }
 
 function buildMergedToolBundleRowBase(
@@ -295,11 +289,6 @@ function mergeToolBundleSummary(
             total + (row.summary.kind === "exploration" ? row.summary.lists : 0),
           0,
         ),
-      };
-    case "file-edits":
-      return {
-        kind: "file-edits",
-        filesEdited: countMergedFileEditBundleFiles(bundleRows),
       };
     case "commands":
       return {
@@ -392,57 +381,23 @@ export function buildTimelineAssistantStepSummary(
     fallbackItemCount: accumulator.fallbackItemCount,
     hasMeaningfulWork: accumulator.hasMeaningfulWork,
     parts: accumulator.partOrder
-      .map((kind) => {
+      .map((kind): TimelineAssistantStepSummaryPart | null => {
         switch (kind) {
           case "exploration":
-            return mergeToolBundleRows(
-              getToolBundleRowsByKind(
-                accumulator.toolBundleRowsByKind,
-                "exploration",
-              ),
-            );
-          case "file-edits":
-            return mergeToolBundleRows(
-              getToolBundleRowsByKind(
-                accumulator.toolBundleRowsByKind,
-                "file-edits",
-              ),
-            );
           case "commands":
-            return mergeToolBundleRows(
-              getToolBundleRowsByKind(
-                accumulator.toolBundleRowsByKind,
-                "commands",
-              ),
+          case "web-research": {
+            const merged = mergeToolBundleRows(
+              getToolBundleRowsByKind(accumulator.toolBundleRowsByKind, kind),
             );
-          case "web-research":
-            return mergeToolBundleRows(
-              getToolBundleRowsByKind(
-                accumulator.toolBundleRowsByKind,
-                "web-research",
-              ),
-            );
+            return merged ? { kind: merged.bundleKind, row: merged } : null;
+          }
+          case "file-edits":
           case "delegations":
           case "tools":
-            return buildSummaryPart(accumulator, kind);
+            return buildCountSummaryPart(accumulator, kind);
           default:
             return assertNever(kind);
         }
-      })
-      .map((value) => {
-        if (!value) {
-          return null;
-        }
-        if ("kind" in value && value.kind === "delegations") {
-          return value;
-        }
-        if ("kind" in value && value.kind === "tools") {
-          return value;
-        }
-        return {
-          kind: value.bundleKind,
-          row: value,
-        } satisfies TimelineAssistantStepSummaryPart;
       })
       .filter((part): part is TimelineAssistantStepSummaryPart => part !== null),
   };
@@ -454,7 +409,6 @@ function formatSummaryPart(
 ): string {
   switch (part.kind) {
     case "exploration":
-    case "file-edits":
     case "commands":
     case "web-research":
       return formatToolBundleSummaryLabel({
@@ -462,6 +416,12 @@ function formatSummaryPart(
         status: getAssistantStepSummaryLabelStatus(part.row.status),
         summary: part.row.summary,
       });
+    case "file-edits":
+      return `${capitalize ? "Edited" : "edited"} ${pluralize(
+        part.count,
+        "file",
+        "files",
+      )}`;
     case "delegations":
       return `${capitalize ? "Delegated to" : "delegated to"} ${pluralize(
         part.count,

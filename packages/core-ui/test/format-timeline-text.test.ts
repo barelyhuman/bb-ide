@@ -525,8 +525,8 @@ describe("formatTimelineAsText", () => {
     ];
 
     const minimal = formatMessagesAsText(messages, { color: false });
-    expect(minimal).toContain("Edited 1 file");
-    expect(minimal).not.toContain("/src/auth.ts");
+    expect(minimal).toContain("File Edit");
+    expect(minimal).toContain("/src/auth.ts"); // path shown so status is meaningful
     expect(minimal).not.toContain("if (!user)"); // diff hidden in minimal
 
     const verbose = formatMessagesAsText(messages, {

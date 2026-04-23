@@ -122,7 +122,7 @@ export function EventTitle({
   );
 
   return (
-    <span className={cx("inline-flex min-w-0 items-center gap-1.5", className)}>
+    <span className={cx("flex min-w-0 items-center gap-1.5", className)}>
       <span className={cx("shrink-0", prefixToneClass, prefixClassName)}>
         {prefixContent}
       </span>
@@ -136,7 +136,7 @@ export function EventTitle({
       {emphasis !== undefined ? (
         <EmphasisTag
           className={cx(
-            "truncate font-semibold not-italic",
+            "min-w-0 truncate font-semibold not-italic",
             emphasisToneClass,
             emphasisClassName,
           )}

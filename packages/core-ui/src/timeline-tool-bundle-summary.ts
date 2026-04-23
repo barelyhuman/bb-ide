@@ -97,13 +97,6 @@ function formatToolBundleSummaryParts({
         emphasis: countsLabel.length > 0 ? countsLabel : "workspace",
       };
     }
-    case "file-edits": {
-      const verb = getVerbPair(status, "Edited", "Editing");
-      return {
-        prefix: verb.uppercase,
-        emphasis: pluralize(summary.filesEdited, "file", "files"),
-      };
-    }
     case "commands": {
       const verb = getVerbPair(status, "Ran", "Running");
       return {
@@ -172,7 +165,6 @@ export function buildToolBundleDetailLines(
         options,
       );
     case "commands":
-    case "file-edits":
     case "web-research":
       return [];
     default:
