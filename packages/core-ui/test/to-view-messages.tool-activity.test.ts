@@ -1184,6 +1184,8 @@ describe("toViewMessages tool activity", () => {
     expect(exploringRows).toHaveLength(1);
     expect(exploringRows[0]?.calls).toHaveLength(2);
     expect(exploringRows[0]?.status).toBe("completed");
+    expect(exploringRows[0]?.calls[0]).not.toHaveProperty("threadId");
+    expect(exploringRows[0]?.calls[0]).not.toHaveProperty("sourceSeqEnd");
   });
 
   it("updates a flushed exploring cell when completion arrives later", () => {
@@ -1253,7 +1255,7 @@ describe("toViewMessages tool activity", () => {
     expect(exploringRows[0]?.sourceSeqEnd).toBe(3);
     expect(exploringRows[0]?.calls).toHaveLength(1);
     expect(exploringRows[0]?.calls[0]?.status).toBe("completed");
-    expect(exploringRows[0]?.calls[0]?.sourceSeqEnd).toBe(3);
+    expect(exploringRows[0]?.calls[0]).not.toHaveProperty("sourceSeqEnd");
   });
 
   it("updates a flushed tool-call cell when completion arrives later", () => {

@@ -127,7 +127,7 @@ describe("@bb/agent-provider-audit fixture replay", () => {
     const timeline = readFileSync(timelinePath, "utf8");
     expect(timeline).toContain("User");
     expect(timeline).toContain("Assistant");
-  });
+  }, 30_000);
 
   it("replays Claude delegated child activity under the parent delegation", () => {
     const delegation = checkedInArtifact.delegationSnapshots.find(

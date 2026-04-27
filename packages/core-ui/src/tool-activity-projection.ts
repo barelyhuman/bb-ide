@@ -591,6 +591,24 @@ function createToolCallMessage(call: RunningExecCall): ViewToolCallMessage {
   };
 }
 
+function createToolCallSummary(call: RunningExecCall): ViewToolCallSummary {
+  return {
+    callId: call.callId,
+    command: call.command,
+    cwd: call.cwd,
+    parsedCmd: call.parsedCmd,
+    source: call.source,
+    subagentType: call.subagentType,
+    description: call.description,
+    output: call.output,
+    exitCode: call.exitCode,
+    duration: call.duration,
+    durationMs: call.durationMs,
+    approvalStatus: call.approvalStatus,
+    status: call.status,
+  };
+}
+
 function createExploringMessage(
   call: RunningExecCall,
 ): ViewToolExploringMessage {
@@ -611,7 +629,7 @@ function createExploringMessage(
       ? { parentToolCallId: call.parentToolCallId }
       : {}),
     status: call.status === "pending" ? "pending" : "completed",
-    calls: [call],
+    calls: [createToolCallSummary(call)],
   };
 }
 
@@ -659,8 +677,18 @@ export function onExecBegin(
 
   if (exploring && active?.kind === "tool-exploring") {
     const lastCall = active.calls[active.calls.length - 1];
-    if (lastCall && areExploringCallsCompatible(lastCall, call)) {
-      active.calls.push(call);
+    if (
+      lastCall &&
+      areExploringCallsCompatible(
+        {
+          turnId: active.turnId,
+          source: lastCall.source,
+          parentToolCallId: active.parentToolCallId,
+        },
+        call,
+      )
+    ) {
+      active.calls.push(createToolCallSummary(call));
       active.sourceSeqEnd = Math.max(active.sourceSeqEnd, call.sourceSeqEnd);
       active.createdAt = Math.max(active.createdAt, call.createdAt);
       syncExploringStatus(active);

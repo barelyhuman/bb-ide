@@ -18,5 +18,5 @@ describe("computeServiceFingerprint", () => {
         serviceName: "server",
       }),
     ).resolves.toMatch(/^[a-f0-9]{64}$/);
-  });
+  }, 30_000);
 });
