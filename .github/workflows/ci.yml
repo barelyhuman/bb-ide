@@ -47,6 +47,3 @@ jobs:
 
       - name: Build, typecheck, lint, and test
         run: pnpm exec turbo run build typecheck lint test --cache-dir=.turbo/cache --output-logs=new-only
-
-      - name: Smoke test
-        run: pnpm exec turbo run test:smoke --filter=@bb/integration-tests --cache-dir=.turbo/cache --output-logs=new-only

@@ -54,11 +54,48 @@
     "typecheck": {
       "dependsOn": ["^build"]
     },
+    "@bb/integration-tests#build": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/server/package.json",
+        "$TURBO_ROOT$/apps/server/tsconfig.json",
+        "$TURBO_ROOT$/apps/server/src/**"
+      ],
+      "outputs": []
+    },
+    "@bb/integration-tests#typecheck": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/server/package.json",
+        "$TURBO_ROOT$/apps/server/tsconfig.json",
+        "$TURBO_ROOT$/apps/server/src/**"
+      ]
+    },
     "test": {
       "dependsOn": ["build", "^build"]
     },
+    "@bb/integration-tests#test": {
+      "dependsOn": ["build", "^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/server/package.json",
+        "$TURBO_ROOT$/apps/server/tsconfig.json",
+        "$TURBO_ROOT$/apps/server/src/**"
+      ]
+    },
     "test:smoke": {
       "dependsOn": ["build", "^build"]
+    },
+    "@bb/integration-tests#test:smoke": {
+      "dependsOn": ["build", "^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/server/package.json",
+        "$TURBO_ROOT$/apps/server/tsconfig.json",
+        "$TURBO_ROOT$/apps/server/src/**"
+      ]
     },
     "test:e2b-smoke": {
       "dependsOn": ["typecheck", "^build"],
@@ -75,6 +112,15 @@
     },
     "test:integration": {
       "dependsOn": ["build", "^build"]
+    },
+    "@bb/integration-tests#test:integration": {
+      "dependsOn": ["build", "^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "$TURBO_ROOT$/apps/server/package.json",
+        "$TURBO_ROOT$/apps/server/tsconfig.json",
+        "$TURBO_ROOT$/apps/server/src/**"
+      ]
     }
   }
 }
