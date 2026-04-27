@@ -44,7 +44,7 @@ Three operations, applied mechanically:
 - **Live bundling** — adjacent same-kind rows pack into a `bundle`. Mixed-kind rows stay standalone alongside. Visual fragmentation during alternating mixed-kind streams (e.g., command, edit, command, search → four separate rows) is an accepted trade-off; close-and-flatten resolves it once the run ends.
 - **Close-and-flatten** — when an assistant-text lands or the turn ends, every live bundle and standalone in the just-finished run fuses into one flat `summary-bundle`. Skipped if the buffer is empty (e.g., back-to-back assistant-texts with no tool work between them) — no empty `summary-bundle` is emitted.
 - **Done-turn wrap** — when the turn becomes non-pending, a `turn-summary` absorbs all the turn's summary-bundles and mid-turn assistant-texts. The final assistant-text stays at the top level. If the wrap would be empty (a turn that produced only the final assistant-text — no tool work, no mid-turn text), suppress the wrapper; the final assistant-text stands alone.
-- **Thread-interrupted positioning** — when the user stops a thread, `thread-interrupted` is a thread-level peer rather than absorbed into a turn-summary. The terminating turn's `turn-summary` reads `Worked for X` (interrupted status), and the `Stopped by user` row appears after it as a top-level row.
+- **Thread-interrupted positioning** — when the user stops a thread, `thread-interrupted` is a thread-level peer rather than absorbed into a turn-summary. The terminating turn's `turn-summary` reads `Worked for X` (uniform across statuses), and the `Stopped by user` row appears after it as a top-level row.
 
 Walkthrough:
 
@@ -103,7 +103,7 @@ A mid-turn error that the agent recovered from stays collapsed by default — th
 
 ## Row copy
 
-Per-row copy spec, derived from the principles and rules above. **Bold** marks the `EventTitle` emphasis slot. Tense for leaves comes from the row's own status; tense for bundles comes from "tail of timeline AND thread+turn active".
+Per-row copy spec, derived from the principles and rules above. **Bold** marks the `EventTitle` emphasis slot. Tense for leaves comes from the row's own status; tense for bundles comes from "tail of timeline AND enclosing scope in-progress" (see Labels rule for the recursive definition — for outer timelines it's thread+turn active; for delegation inner timelines it's the delegation pending).
 
 **Conventions**
 
@@ -256,7 +256,7 @@ Render `message.title` directly. No verb structure. Body shows optional detail.
 
 ### Bundles
 
-Format: `<verb> <emphasis> · <duration>`. Verb tense from the rule above.
+Format: `<verb> <emphasis> · <duration>`. Verb tense per the Labels rule for live bundles; always past tense for summary bundles (see the two subsections below).
 
 #### Live bundle (single-kind)
 
@@ -336,11 +336,11 @@ Mapping per row:
 - **Bundle (summary, multi-kind):** prefix=first contribution's verb (capitalized), emphasis=full comma-joined contribution string with mid-sentence verbs included as part of the emphasis text (e.g., `"3 commands, edited 2 files, ran 1 subagent"`), duration=set, ongoing=false.
 - **Turn-summary:** prefix=`"Worked for"`, emphasis=duration value (e.g., `"12.4s"`), duration=omitted (the duration *is* the emphasis), ongoing=false.
 
-If a future use case can't fit these four slots, that's a design signal, not a reason to add a prop.
+If a future use case can't fit these four props, that's a design signal, not a reason to add another prop.
 
 ### Delegation bundling
 
-Adjacent delegations bundle like any other same-kind work. One delegation: inline. Multiple: `Ran N subagents`.
+Adjacent delegations bundle like any other same-kind work. One delegation: inline. Multiple: `Running/Ran N subagents` per the bundle tense rule.
 
 ### Single-row rendering
 
@@ -349,7 +349,7 @@ From the user's perspective, bundle headers should look consistent regardless of
 - **Live bundle, one row** — the bundle is invisible. Header = the inner row's own header. No "Ran 1 command" wrapper.
 - **Summary bundle, one row** — standard summary header (so it sits visually with multi-row summaries). Expanding shows the inner row directly, not a nested bundle.
 
-The unwrap decision lives in one shared helper (`shouldUnwrapAsInnerRow(bundle, isLive)`) in `core-ui` so the web renderer and the CLI text formatter behave identically — neither owns its own copy of the rule. The builder always emits a `TimelineBundleRow`.
+The unwrap decision lives in one shared helper (`shouldUnwrapAsInnerRow(bundle)`, reads `bundle.phase`) in `core-ui` so the web renderer and the CLI text formatter behave identically — neither owns its own copy of the rule. The builder always emits a `TimelineBundleRow`.
 
 ## Migration
 
