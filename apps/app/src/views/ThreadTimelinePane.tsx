@@ -4,12 +4,9 @@ import type {
   TimelineRow,
   TimelineTurnSummaryRow,
 } from "@bb/domain";
-import {
-  ConversationEmptyState,
-  ConversationTimeline,
-  ThreadTimelineRows,
-} from "@bb/ui-core";
+import { ConversationTimeline, ThreadTimelineRows } from "@bb/ui-core";
 import { PageShell } from "@/components/layout/PageShell";
+import { ConversationStatusIndicator } from "@/components/messages/ConversationStatusIndicator";
 import { ConversationWorkingIndicator } from "@/components/messages/ConversationWorkingIndicator";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { toUserAttachmentImageSrc } from "@/lib/user-attachment-images";
@@ -82,12 +79,11 @@ export function ThreadTimelinePane({
               className="mt-6"
             />
           ) : timelineError ? (
-            <div className="mt-6 px-2 text-sm text-destructive">
-              Failed to load timeline
-            </div>
-          ) : threadDetailRows.length === 0 ? (
-            <ConversationEmptyState message="No events yet" />
-          ) : (
+            <ConversationStatusIndicator
+              label="Failed to load timeline"
+              className="mt-6 text-destructive"
+            />
+          ) : threadDetailRows.length > 0 ? (
             <ThreadTimelineRows
               latestActivityRowId={latestActivityRowId}
               loadingTurnSummaryIds={loadingTurnSummaryIds}
@@ -100,7 +96,7 @@ export function ThreadTimelinePane({
               threadStatus={threadStatus}
               turnSummaryRowsById={turnSummaryRowsById}
             />
-          )}
+          ) : null}
         </ConversationTimeline>
         {showOngoingIndicator ? (
           <ConversationWorkingIndicator
