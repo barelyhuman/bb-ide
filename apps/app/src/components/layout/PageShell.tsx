@@ -25,7 +25,7 @@ const SHELL_BLEED_CLASS =
   "-mx-4 -mt-4 flex h-full min-h-0 flex-1 flex-col overflow-hidden md:-mx-5 md:-mt-5";
 const DEFAULT_MAX_WIDTH_CLASS = "max-w-[760px]";
 
-function renderFooter(
+function renderStaticFooter(
   footer: ReactNode,
   {
     maxWidthClassName,
@@ -58,6 +58,38 @@ function renderFooter(
   );
 }
 
+// Footer lives inside the scroll content (as the last child of contentRef) so
+// the library's existing ResizeObserver picks up footer height changes (e.g.
+// the prompt's git status banner resolving) and re-sticks. `position: sticky`
+// pins it to the bottom of the viewport visually.
+function renderStickyFooter(
+  footer: ReactNode,
+  {
+    footerUsesPromptPadding,
+    footerClassName,
+  }: {
+    footerUsesPromptPadding: boolean;
+    footerClassName?: string;
+  },
+) {
+  if (!footer) return null;
+  return (
+    <div
+      className={cn(
+        "sticky bottom-0 -mx-4 bg-background px-4 pb-4",
+        footerUsesPromptPadding && "chat-prompt-box",
+        footerClassName,
+      )}
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-b from-transparent to-background"
+      />
+      {footer}
+    </div>
+  );
+}
+
 export function PageShell({
   children,
   footer,
@@ -69,42 +101,47 @@ export function PageShell({
   footerUsesPromptPadding = false,
   scrollBehavior = "static",
 }: PageShellProps) {
-  const footerElement = renderFooter(footer, {
-    maxWidthClassName,
-    footerUsesPromptPadding,
-    footerClassName,
-  });
-
   if (scrollBehavior === "stick-to-bottom") {
+    const stickyFooter = renderStickyFooter(footer, {
+      footerUsesPromptPadding,
+      footerClassName,
+    });
     return (
-      <StickToBottom className={cn(SHELL_BLEED_CLASS, shellClassName)}>
+      <StickToBottom
+        initial="instant"
+        resize="instant"
+        className={cn(SHELL_BLEED_CLASS, shellClassName)}
+      >
         {(ctx: StickToBottomContext) => (
-          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div
+            ref={ctx.scrollRef}
+            className={cn(
+              "@container/page min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]",
+              scrollAreaClassName,
+            )}
+          >
             <div
-              ref={ctx.scrollRef}
+              ref={ctx.contentRef}
               className={cn(
-                "@container/page min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]",
-                scrollAreaClassName,
+                "mx-auto flex w-full flex-col px-4 pt-2",
+                maxWidthClassName,
+                contentClassName,
               )}
             >
-              <div
-                ref={ctx.contentRef}
-                className={cn(
-                  "mx-auto flex w-full flex-col px-4 pb-4 pt-2",
-                  maxWidthClassName,
-                  contentClassName,
-                )}
-              >
-                {children}
-              </div>
+              {children}
+              {stickyFooter}
             </div>
-            {footerElement}
           </div>
         )}
       </StickToBottom>
     );
   }
 
+  const staticFooter = renderStaticFooter(footer, {
+    maxWidthClassName,
+    footerUsesPromptPadding,
+    footerClassName,
+  });
   return (
     <div className={cn(SHELL_BLEED_CLASS, shellClassName)}>
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -124,7 +161,7 @@ export function PageShell({
             {children}
           </div>
         </div>
-        {footerElement}
+        {staticFooter}
       </div>
     </div>
   );
