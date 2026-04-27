@@ -1,12 +1,14 @@
-import { useAtomValue } from "jotai";
+import { useStickToBottomContext } from "use-stick-to-bottom";
 import { ScrollToBottomButton } from "@/components/shared/ScrollToBottomButton";
-import { threadTimelineShowScrollToBottomAtom } from "./threadTimelineAtoms";
 
-export function ThreadTimelineScrollToBottomButton({
-  onClick,
-}: {
-  onClick: () => void;
-}) {
-  const visible = useAtomValue(threadTimelineShowScrollToBottomAtom);
-  return <ScrollToBottomButton visible={visible} onClick={onClick} />;
+export function ThreadTimelineScrollToBottomButton() {
+  const { isAtBottom, scrollToBottom } = useStickToBottomContext();
+  return (
+    <ScrollToBottomButton
+      visible={!isAtBottom}
+      onClick={() => {
+        void scrollToBottom();
+      }}
+    />
+  );
 }

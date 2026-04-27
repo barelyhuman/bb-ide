@@ -2,8 +2,8 @@ import {
   type ComponentProps,
   type ComponentType,
   type ReactNode,
-  type RefObject,
 } from "react";
+import { useStickToBottomContext } from "use-stick-to-bottom";
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import {
   CornerDownRight,
@@ -47,6 +47,18 @@ import {
   countQueuedMessageAttachments,
   formatQueuedFollowUpPreview,
 } from "./threadQueuedMessages";
+
+function PromptBoxWithScrollAnchor({
+  onSubmit,
+  ...promptBoxProps
+}: ComponentProps<typeof PromptBox>) {
+  const { scrollToBottom } = useStickToBottomContext();
+  const handleSubmit = () => {
+    onSubmit();
+    void scrollToBottom({ wait: true });
+  };
+  return <PromptBox {...promptBoxProps} onSubmit={handleSubmit} />;
+}
 
 function QueuedFollowUpList({
   queuedMessages,
@@ -197,7 +209,6 @@ export interface ComposerBannerProps {
 
 export interface ComposerCoreProps {
   canSendFollowUp: boolean;
-  composerRef: RefObject<HTMLDivElement | null>;
   isFollowUpSubmitting: boolean;
   message: string;
   onChangeMessage: (value: string) => void;
@@ -254,7 +265,6 @@ export interface ComposerQueueProps {
   onDeleteQueuedMessage: (messageId: string) => void;
   onEditQueuedMessage: (messageId: string) => void;
   onSendQueuedImmediately: (messageId: string) => void;
-  onScrollToBottom: () => void;
   queuedMessages: readonly ThreadQueuedMessage[];
 }
 
@@ -289,8 +299,8 @@ export function ThreadFollowUpComposer({
   );
 
   return (
-    <div ref={composer.composerRef}>
-      <ThreadTimelineScrollToBottomButton onClick={queue.onScrollToBottom} />
+    <>
+      <ThreadTimelineScrollToBottomButton />
       <div className="space-y-2">
         {banner.showPromptGitStatsBanner ? (
           <div
@@ -396,7 +406,7 @@ export function ThreadFollowUpComposer({
           onEdit={queue.onEditQueuedMessage}
           onDelete={queue.onDeleteQueuedMessage}
         />
-        <PromptBox
+        <PromptBoxWithScrollAnchor
           value={composer.message}
           onChange={composer.onChangeMessage}
           onSubmit={composer.onSubmit}
@@ -536,6 +546,6 @@ export function ThreadFollowUpComposer({
           </div>
         ) : null}
       </div>
-    </div>
+    </>
   );
 }

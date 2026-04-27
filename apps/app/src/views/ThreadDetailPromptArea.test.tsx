@@ -158,8 +158,6 @@ describe("ThreadDetailPromptArea", () => {
         openThreadDiffPanel={() => {}}
         projectId="proj_1"
         promptBannerSummary="No changes"
-        promptComposerRef={{ current: null }}
-        scrollToBottom={() => {}}
         sendMessage={{
           isPending: false,
           mutateAsync: vi.fn(async () => {}),

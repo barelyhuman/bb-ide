@@ -3,7 +3,6 @@ import {
   useState,
   type ComponentType,
   type ReactNode,
-  type RefObject,
 } from "react";
 import { useActiveSecondaryPanel } from "@/lib/thread-secondary-panel";
 import type {
@@ -74,8 +73,6 @@ interface ThreadDetailPromptAreaProps {
   promptBannerFiles?: WorkspaceFileStatus[];
   promptBannerMergeBaseBranch?: string;
   promptBannerSummary: ReactNode;
-  promptComposerRef: RefObject<HTMLDivElement | null>;
-  scrollToBottom: () => void;
   sendMessage: SendMessageMutationLike;
   showBranchComparisonUi: boolean;
   showPromptGitStatsBanner: boolean;
@@ -103,8 +100,6 @@ export function ThreadDetailPromptArea({
   promptBannerFiles,
   promptBannerMergeBaseBranch,
   promptBannerSummary,
-  promptComposerRef,
-  scrollToBottom,
   sendMessage,
   showBranchComparisonUi,
   showPromptGitStatsBanner,
@@ -219,7 +214,6 @@ export function ThreadDetailPromptArea({
         return;
       }
 
-      scrollToBottom();
       await sendMessage.mutateAsync({
         id: thread.id,
         input,
@@ -240,7 +234,7 @@ export function ThreadDetailPromptArea({
             }),
       });
     },
-    [scrollToBottom, sendMessage, thread.id],
+    [sendMessage, thread.id],
   );
 
   const handleAttachFiles = useCallback(
@@ -448,12 +442,10 @@ export function ThreadDetailPromptArea({
 
   if (activePendingInteraction) {
     return (
-      <div ref={promptComposerRef}>
-        <ThreadPendingInteractionBanner
-          interaction={activePendingInteraction}
-          threadId={thread.id}
-        />
-      </div>
+      <ThreadPendingInteractionBanner
+        interaction={activePendingInteraction}
+        threadId={thread.id}
+      />
     );
   }
 
@@ -494,7 +486,6 @@ export function ThreadDetailPromptArea({
       }}
       composer={{
         canSendFollowUp,
-        composerRef: promptComposerRef,
         isFollowUpSubmitting,
         message: promptDraft.text,
         onChangeMessage: promptDraft.setText,
@@ -549,7 +540,6 @@ export function ThreadDetailPromptArea({
         isQueueMutationPending,
         onDeleteQueuedMessage: handleDeleteQueuedMessage,
         onEditQueuedMessage: handleEditQueuedMessage,
-        onScrollToBottom: scrollToBottom,
         onSendQueuedImmediately: handleSendQueuedImmediately,
         queuedMessages,
       }}

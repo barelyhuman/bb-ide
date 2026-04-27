@@ -24,9 +24,7 @@ interface ThreadTimelinePaneProps {
   loadingTurnSummaryIds: ReadonlySet<string>;
   erroredTurnSummaryIds: ReadonlySet<string>;
   onLoadTurnSummaryRows: (entry: TimelineTurnSummaryRow) => void;
-  onScroll: () => void;
   projectId?: string;
-  scrollRef: (element: HTMLDivElement | null) => void;
   showOngoingIndicator: boolean;
   ongoingIndicatorLabel?: string;
   threadDetailRows: TimelineRow[];
@@ -45,9 +43,7 @@ export function ThreadTimelinePane({
   loadingTurnSummaryIds,
   erroredTurnSummaryIds,
   onLoadTurnSummaryRows,
-  onScroll,
   projectId,
-  scrollRef,
   showOngoingIndicator,
   ongoingIndicatorLabel,
   threadDetailRows,
@@ -73,8 +69,7 @@ export function ThreadTimelinePane({
       {header}
       <PageShell
         key={threadId}
-        scrollRef={scrollRef}
-        onScroll={onScroll}
+        scrollBehavior="stick-to-bottom"
         shellClassName="!mx-0 !mt-0 md:!mx-0 md:!mt-0"
         contentClassName="gap-2 pt-0"
         footerUsesPromptPadding

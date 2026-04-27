@@ -13,13 +13,11 @@ import {
 } from "./threadSecondaryPanelAtoms";
 
 interface UseGitDiffPanelParams {
-  onBeforePanelChange?: () => void;
   defaultMergeBaseBranch?: string;
   environmentId?: string;
 }
 
 export function useGitDiffPanel({
-  onBeforePanelChange,
   defaultMergeBaseBranch,
   environmentId,
 }: UseGitDiffPanelParams) {
@@ -41,10 +39,9 @@ export function useGitDiffPanel({
 
   const setThreadSecondaryPanel = useCallback(
     (panel: ThreadSecondaryPanelTab | null) => {
-      onBeforePanelChange?.();
       applyThreadSecondaryPanel(panel);
     },
-    [applyThreadSecondaryPanel, onBeforePanelChange],
+    [applyThreadSecondaryPanel],
   );
 
   const openThreadSecondaryPanel = useAtomCallback(

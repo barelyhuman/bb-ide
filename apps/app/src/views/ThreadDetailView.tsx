@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, type ReactNode } from "react";
+import { useCallback, useMemo, type ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { useThreadSecondaryPanelUrlSync } from "@/lib/thread-secondary-panel";
 import { useRequestEnvironmentAction } from "../hooks/mutations/environment-mutations";
@@ -41,7 +41,7 @@ import {
 } from "@/lib/workspace-change-summary";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { useGitDiffPanel } from "./useGitDiffPanel";
-import { useThreadTimelineController } from "./useThreadTimelineController";
+import { useTurnSummaryRowLoader } from "./useTurnSummaryRowLoader";
 import { ThreadDetailHeader } from "./ThreadDetailHeader";
 import { ThreadDetailPromptArea } from "./ThreadDetailPromptArea";
 import { ThreadDetailSecondaryContent } from "./ThreadDetailSecondaryContent";
@@ -126,7 +126,6 @@ export function ThreadDetailView() {
   const markThreadRead = useMarkThreadRead();
   const updateEnvironment = useUpdateEnvironment();
   const updateThread = useUpdateThread();
-  const captureTimelineScrollPositionRef = useRef<() => void>(() => {});
   const threadDetailRows = useMemo(
     () => timeline?.rows ?? [],
     [timeline?.rows],
@@ -151,9 +150,6 @@ export function ThreadDetailView() {
     setSelectedMergeBaseBranch,
     toggleThreadSecondaryPanel,
   } = useGitDiffPanel({
-    onBeforePanelChange: () => {
-      captureTimelineScrollPositionRef.current();
-    },
     defaultMergeBaseBranch:
       environment?.mergeBaseBranch ?? environment?.defaultBranch ?? undefined,
     environmentId: thread?.environmentId ?? undefined,
@@ -191,26 +187,18 @@ export function ThreadDetailView() {
   const isThreadTimelinePending =
     timelineLoading && threadDetailRows.length === 0;
   const {
-    captureTimelineScrollPosition,
     erroredTurnSummaryIds,
     handleLoadTurnSummaryRows,
-    handleTimelineScroll,
     loadingTurnSummaryIds,
-    promptComposerRef,
-    scrollToBottom,
-    setContainerRef,
     turnSummaryRowsById,
-  } = useThreadTimelineController({
+  } = useTurnSummaryRowLoader({
     threadId,
-    threadDetailRows,
-    threadStatus: thread?.status,
     loadTurnSummaryRows: (args) =>
       timelineTurnSummaryDetails.mutateAsync({
         ...args,
         includeAllEvents: showAllEvents,
       }),
   });
-  captureTimelineScrollPositionRef.current = captureTimelineScrollPosition;
   useThreadReadTracking({
     markThreadRead,
     thread,
@@ -496,8 +484,6 @@ export function ThreadDetailView() {
       promptBannerFiles={workspaceChangedFilesSection?.files}
       promptBannerMergeBaseBranch={promptBannerMergeBaseBranch}
       promptBannerSummary={promptBannerSummary}
-      promptComposerRef={promptComposerRef}
-      scrollToBottom={scrollToBottom}
       sendMessage={sendMessage}
       showBranchComparisonUi={showBranchComparisonUi}
       showPromptGitStatsBanner={showPromptGitStatsBanner}
@@ -602,9 +588,7 @@ export function ThreadDetailView() {
           loadingTurnSummaryIds,
           erroredTurnSummaryIds,
           onLoadTurnSummaryRows: handleLoadTurnSummaryRows,
-          onScroll: handleTimelineScroll,
           projectId,
-          scrollRef: setContainerRef,
           showOngoingIndicator:
             thread.status === "active" && !isThreadTimelinePending,
           ongoingIndicatorLabel: hasPendingInteraction
