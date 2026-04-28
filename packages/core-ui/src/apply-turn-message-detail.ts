@@ -139,6 +139,7 @@ export function applyProjectionTurnMessageDetail(
   turnMessageDetail: ViewTurnMessageDetail,
 ): ViewProjection {
   return {
+    state: projection.state,
     entries: projection.entries.map((entry) => {
       if (entry.kind === "message") {
         return {

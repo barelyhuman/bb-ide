@@ -3,6 +3,7 @@ import { cloudAuthProviderIdSchema } from "@bb/agent-providers";
 import {
   getProjectPathValidationMessage,
   normalizeProjectPathInput,
+  activeThinkingSchema,
   pendingInteractionResolutionSchema,
   pendingInteractionSchema,
   projectSchema,
@@ -14,7 +15,6 @@ import {
   serviceTierSchema,
   threadListEntrySchema,
   threadTypeSchema,
-  timelineActiveThinkingSchema,
   timelineRowSchema,
   threadQueuedMessageSchema,
   workspaceStatusSchema,
@@ -900,7 +900,7 @@ export type TimelineTurnSummaryDetailsResponse = z.infer<
 
 export const threadTimelineResponseSchema = z.object({
   rows: z.array(timelineRowSchema),
-  activeThinking: timelineActiveThinkingSchema.nullable(),
+  activeThinking: activeThinkingSchema.nullable(),
   contextWindowUsage: threadContextWindowUsageSchema.optional(),
 });
 export type ThreadTimelineResponse = z.infer<

@@ -16,6 +16,31 @@ import {
 
 type TimelineMessageRow = Extract<TimelineRow, { kind: "message" }>;
 
+function flattenTimelineMessageRows(rows: TimelineRow[]): TimelineMessageRow[] {
+  const messageRows: TimelineMessageRow[] = [];
+
+  for (const row of rows) {
+    switch (row.kind) {
+      case "message":
+        messageRows.push(row);
+        break;
+      case "tool-bundle":
+        messageRows.push(...row.rows);
+        break;
+      case "assistant-step-summary":
+        messageRows.push(...flattenTimelineMessageRows(row.rows));
+        break;
+      case "turn-summary":
+        if (row.rows) {
+          messageRows.push(...flattenTimelineMessageRows(row.rows));
+        }
+        break;
+    }
+  }
+
+  return messageRows;
+}
+
 describe("buildThreadTimeline", () => {
   const scenarios = getTimelineBenchmarkScenarios();
   const harnesses: Array<Awaited<ReturnType<typeof createTestAppHarness>>> = [];
@@ -141,7 +166,7 @@ describe("buildThreadTimeline", () => {
     });
   });
 
-  it("keeps partial streaming thinking hidden until a newline boundary", async () => {
+  it("reports active thinking even when a reasoning block has no visible text yet", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
@@ -160,6 +185,7 @@ describe("buildThreadTimeline", () => {
     });
 
     seedEvent(harness.deps, {
+      createdAt: 100,
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
@@ -169,6 +195,64 @@ describe("buildThreadTimeline", () => {
       data: {},
     });
     seedEvent(harness.deps, {
+      createdAt: 200,
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 2,
+      type: "item/started",
+      data: {
+        item: {
+          type: "reasoning",
+          id: "reasoning-1",
+          summary: [],
+          content: [],
+        },
+      },
+    });
+
+    const timeline = buildThreadTimeline(harness.db, thread, {});
+
+    expect(timeline.activeThinking).toMatchObject({
+      id: "reasoning-1",
+      text: "",
+      startedAt: 200,
+      updatedAt: 200,
+    });
+    expect(timeline.rows).toEqual([]);
+  });
+
+  it("keeps partial streaming thinking details hidden until a newline boundary", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      status: "active",
+    });
+
+    seedEvent(harness.deps, {
+      createdAt: 100,
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 1,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      createdAt: 250,
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
@@ -183,7 +267,12 @@ describe("buildThreadTimeline", () => {
 
     const timeline = buildThreadTimeline(harness.db, thread, {});
 
-    expect(timeline.activeThinking).toBeNull();
+    expect(timeline.activeThinking).toMatchObject({
+      id: "reasoning-1",
+      text: "",
+      startedAt: 250,
+      updatedAt: 250,
+    });
     expect(timeline.rows).toEqual([]);
   });
 
@@ -206,6 +295,7 @@ describe("buildThreadTimeline", () => {
     });
 
     seedEvent(harness.deps, {
+      createdAt: 100,
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
@@ -215,6 +305,7 @@ describe("buildThreadTimeline", () => {
       data: {},
     });
     seedEvent(harness.deps, {
+      createdAt: 300,
       threadId: thread.id,
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
@@ -230,11 +321,97 @@ describe("buildThreadTimeline", () => {
     const timeline = buildThreadTimeline(harness.db, thread, {});
 
     expect(timeline.activeThinking).toMatchObject({
+      id: "reasoning-1",
       text: "Looking through the workspace.\n",
-      startedAt: expect.any(Number),
-      updatedAt: expect.any(Number),
+      startedAt: 300,
+      updatedAt: 300,
     });
     expect(timeline.rows).toEqual([]);
+  });
+
+  it("advances active thinking updatedAt when later reasoning deltas arrive", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      status: "active",
+    });
+
+    seedEvent(harness.deps, {
+      createdAt: 100,
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 1,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      createdAt: 150,
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 2,
+      type: "item/started",
+      data: {
+        item: {
+          type: "reasoning",
+          id: "reasoning-1",
+          summary: [],
+          content: [],
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      createdAt: 250,
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 3,
+      type: "item/reasoning/textDelta",
+      data: {
+        itemId: "reasoning-1",
+        delta: "Looking through the workspace.",
+      },
+    });
+    seedEvent(harness.deps, {
+      createdAt: 400,
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 4,
+      type: "item/reasoning/textDelta",
+      data: {
+        itemId: "reasoning-1",
+        delta: "\nNext step",
+      },
+    });
+
+    const timeline = buildThreadTimeline(harness.db, thread, {});
+
+    expect(timeline.activeThinking).toMatchObject({
+      id: "reasoning-1",
+      text: "Looking through the workspace.\n",
+      startedAt: 150,
+      updatedAt: 400,
+    });
+    expect(timeline.activeThinking?.updatedAt).toBeGreaterThan(
+      timeline.activeThinking?.startedAt ?? 0,
+    );
   });
 
   it("removes completed thinking from summary rows", async () => {
@@ -331,6 +508,362 @@ describe("buildThreadTimeline", () => {
     });
   });
 
+  it("clears active thinking when the thread is interrupted before reasoning completes", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      status: "active",
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 1,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 2,
+      type: "item/started",
+      data: {
+        item: {
+          type: "reasoning",
+          id: "reasoning-1",
+          summary: [],
+          content: [],
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 3,
+      type: "item/reasoning/textDelta",
+      data: {
+        itemId: "reasoning-1",
+        delta: "Partial reasoning",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      scope: threadScope(),
+      sequence: 4,
+      type: "system/thread/interrupted",
+      data: {
+        turnId: "turn-1",
+        reason: "user",
+        message: "Stopped by user",
+      },
+    });
+
+    const timeline = buildThreadTimeline(harness.db, thread, {});
+
+    expect(timeline.activeThinking).toBeNull();
+  });
+
+  it("surfaces active thinking only for active threads", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      status: "active",
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 1,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 2,
+      type: "item/started",
+      data: {
+        item: {
+          type: "reasoning",
+          id: "reasoning-1",
+          summary: [],
+          content: [],
+        },
+      },
+    });
+
+    const activeTimeline = buildThreadTimeline(harness.db, thread, {});
+    const provisioningTimeline = buildThreadTimeline(
+      harness.db,
+      {
+        ...thread,
+        status: "provisioning",
+      },
+      {},
+    );
+    const idleTimeline = buildThreadTimeline(
+      harness.db,
+      {
+        ...thread,
+        status: "idle",
+      },
+      {},
+    );
+
+    expect(activeTimeline.activeThinking).toMatchObject({
+      id: "reasoning-1",
+      text: "",
+    });
+    expect(provisioningTimeline.activeThinking).toBeNull();
+    expect(idleTimeline.activeThinking).toBeNull();
+  });
+
+  it("does not reopen active thinking on active threads after a reasoning item completes", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      status: "active",
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 1,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 2,
+      type: "item/started",
+      data: {
+        item: {
+          type: "reasoning",
+          id: "reasoning-1",
+          summary: [],
+          content: [],
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 3,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "reasoning",
+          id: "reasoning-1",
+          summary: ["Final reasoning"],
+          content: [],
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 4,
+      type: "item/reasoning/textDelta",
+      data: {
+        itemId: "reasoning-1",
+        delta: " late",
+      },
+    });
+
+    const timeline = buildThreadTimeline(harness.db, thread, {});
+
+    expect(timeline.activeThinking).toBeNull();
+  });
+
+  it("does not surface active thinking after an interrupted turn receives a fresh late reasoning item", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      status: "active",
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 1,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      scope: threadScope(),
+      sequence: 2,
+      type: "system/thread/interrupted",
+      data: {
+        reason: "user",
+        message: "Stopped by user",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 3,
+      type: "item/reasoning/textDelta",
+      data: {
+        itemId: "reasoning-99",
+        delta: " late",
+      },
+    });
+
+    const timeline = buildThreadTimeline(harness.db, thread, {});
+
+    expect(timeline.activeThinking).toBeNull();
+  });
+
+  it("does not attach visible reasoning details from a different open reasoning item", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      status: "active",
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 1,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 2,
+      type: "item/started",
+      data: {
+        item: {
+          type: "reasoning",
+          id: "reasoning-1",
+          summary: [],
+          content: [],
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 3,
+      type: "item/reasoning/textDelta",
+      data: {
+        itemId: "reasoning-1",
+        delta: "Visible reasoning.\nTrailing partial",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 4,
+      type: "item/started",
+      data: {
+        item: {
+          type: "reasoning",
+          id: "reasoning-2",
+          summary: [],
+          content: [],
+        },
+      },
+    });
+
+    const timeline = buildThreadTimeline(harness.db, thread, {});
+
+    expect(timeline.activeThinking).toMatchObject({
+      id: "reasoning-2",
+      text: "",
+    });
+  });
+
   it("keeps the last non-null modelContextWindow when the newest context-usage row omits it", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
@@ -388,7 +921,7 @@ describe("buildThreadTimeline", () => {
     });
   });
 
-  it("fails loudly when turn-summary details cannot match a projected turn-summary range", async () => {
+  it("fails loudly when turn summary details cannot match a projected turn-summary range", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
@@ -463,7 +996,7 @@ describe("buildThreadTimeline", () => {
         sourceSeqStart: 1,
         sourceSeqEnd: 5,
       }),
-    ).toThrow(/turn summary details could not match range 1-5/);
+    ).toThrow(/Timeline turn summary details could not match range 1-5/);
   });
 
   it("matches tool detail ranges whose end depends on the following input-accepted event", async () => {
@@ -581,26 +1114,17 @@ describe("buildThreadTimeline", () => {
       sourceSeqStart: 1,
       sourceSeqEnd: 5,
     });
+    const detailMessages = flattenTimelineMessageRows(details.rows);
 
-    expect(details.rows).toEqual([
-      expect.objectContaining({
-        kind: "tool-bundle",
-        bundleKind: "commands",
-        rows: [
-          expect.objectContaining({
-            kind: "message",
-            message: expect.objectContaining({
-              kind: "tool-call",
-              sourceSeqStart: 2,
-              sourceSeqEnd: 2,
-            }),
-          }),
-        ],
-      }),
-    ]);
+    expect(detailMessages).toHaveLength(1);
+    expect(detailMessages[0]?.message).toMatchObject({
+      kind: "tool-call",
+      sourceSeqStart: 2,
+      sourceSeqEnd: 2,
+    });
   });
 
-  it("keeps scanning past unrelated stored events when resolving turn-summary details", async () => {
+  it("finds matching input-accepted events without a widening lookahead cap", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
@@ -692,7 +1216,7 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    for (let sequence = 6; sequence < 36; sequence += 1) {
+    for (let sequence = 6; sequence < 136; sequence += 1) {
       seedEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
@@ -713,7 +1237,7 @@ describe("buildThreadTimeline", () => {
       environmentId: environment.id,
       providerThreadId: "provider-thread-1",
       scope: turnScope("turn-1"),
-      sequence: 36,
+      sequence: 136,
       type: "turn/input/accepted",
       data: {
         clientRequestSequence: 5,
@@ -808,19 +1332,12 @@ describe("buildThreadTimeline", () => {
       sourceSeqStart: 1,
       sourceSeqEnd: 3,
     });
+    const detailMessages = flattenTimelineMessageRows(details.rows);
 
-    expect(details.rows).toEqual([
-      expect.objectContaining({
-        kind: "message",
-        message: expect.objectContaining({
-          kind: "assistant-text",
-          text: "Nothing to expand.",
-        }),
-      }),
-    ]);
-    const detailRow = details.rows[0];
-    if (detailRow?.kind === "message" && detailRow.message.kind === "assistant-text") {
-      expect(detailRow.message.text).toBe("Nothing to expand.");
+    expect(detailMessages).toHaveLength(1);
+    expect(detailMessages[0]?.message.kind).toBe("assistant-text");
+    if (detailMessages[0]?.message.kind === "assistant-text") {
+      expect(detailMessages[0].message.text).toBe("Nothing to expand.");
     }
   });
 

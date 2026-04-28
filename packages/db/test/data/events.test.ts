@@ -22,6 +22,7 @@ import {
   listRecentStoredEventRows,
   listStoredEventRows,
   listStoredEventRowsInRange,
+  listStoredTurnInputAcceptedRowsByClientRequestSequences,
   pruneContextWindowUsageEventsBeforeSequence,
   pruneTokenUsageEventsBeforeSequence,
   pruneResolvedItemDeltas,
@@ -458,6 +459,90 @@ describe("events", () => {
         threadId: thread.id,
       }).map((row) => row.sequence),
     ).toEqual([2, 3]);
+  });
+
+  it("lists accepted input rows for requested client turn sequences", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "client/turn/requested",
+        ...threadEventFields,
+        data: JSON.stringify({
+          direction: "outbound",
+          source: "tell",
+          initiator: "user",
+          input: [{ type: "text", text: "first" }],
+          target: { kind: "new-turn" },
+          request: { method: "turn/start", params: {} },
+          execution: {
+            model: "gpt-5",
+            reasoningLevel: "medium",
+            permissionMode: "workspace-write",
+            source: "client/turn/requested",
+            serviceTier: "auto",
+          },
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        type: "client/turn/requested",
+        ...threadEventFields,
+        data: JSON.stringify({
+          direction: "outbound",
+          source: "tell",
+          initiator: "user",
+          input: [{ type: "text", text: "second" }],
+          target: { kind: "new-turn" },
+          request: { method: "turn/start", params: {} },
+          execution: {
+            model: "gpt-5",
+            reasoningLevel: "medium",
+            permissionMode: "workspace-write",
+            source: "client/turn/requested",
+            serviceTier: "auto",
+          },
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 3,
+        type: "turn/input/accepted",
+        ...createTurnEventFields({ turnId: "turn-1" }),
+        data: JSON.stringify({
+          clientRequestSequence: 1,
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 4,
+        type: "turn/input/accepted",
+        ...createTurnEventFields({ turnId: "turn-2" }),
+        data: JSON.stringify({
+          clientRequestSequence: 99,
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 5,
+        type: "turn/input/accepted",
+        ...createTurnEventFields({ turnId: "turn-3" }),
+        data: JSON.stringify({
+          clientRequestSequence: 2,
+        }),
+      },
+    ]);
+
+    expect(
+      listStoredTurnInputAcceptedRowsByClientRequestSequences(db, {
+        threadId: thread.id,
+        afterSequence: 2,
+        clientRequestSequences: [1, 2],
+      }).map((row) => row.sequence),
+    ).toEqual([3, 5]);
   });
 
   it("appends stored thread events and exposes the latest thread runtime markers", () => {

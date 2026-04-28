@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { ActiveThinking } from "./active-thinking.js";
+import { activeThinkingSchema } from "./active-thinking.js";
 import type { ToViewMessagesOptions, ViewMessage } from "./ui-message.js";
 
 export const viewTurnStatusValues = [
@@ -18,6 +20,19 @@ export const viewTurnMessageDetailSchema = z.enum(viewTurnMessageDetailValues);
  * ungroupable messages, or nested delegation projections need them.
  */
 export type ViewTurnMessageDetail = z.infer<typeof viewTurnMessageDetailSchema>;
+
+export interface ViewProjectionState {
+  /**
+   * Root-projection-only ephemeral state that should not be modeled as a
+   * timeline row. Nested child projections always expose `activeThinking` as
+   * null because only the thread-level timeline owns live thinking state.
+   */
+  activeThinking: ActiveThinking | null;
+}
+
+export const viewProjectionStateSchema = z.object({
+  activeThinking: activeThinkingSchema.nullable(),
+});
 
 export interface ToViewProjectionOptions extends ToViewMessagesOptions {
   turnMessageDetail: ViewTurnMessageDetail;
@@ -55,4 +70,6 @@ export interface ViewTurn {
 
 export interface ViewProjection {
   entries: ViewTimelineEntry[];
+  /** Projection-owned live state derived during the same event pass as entries. */
+  state: ViewProjectionState;
 }

@@ -405,8 +405,10 @@ export type {
 
 export { toPositiveNumber } from "./number-utils.js";
 
+export { activeThinkingSchema } from "./active-thinking.js";
+export type { ActiveThinking } from "./active-thinking.js";
+
 export {
-  timelineActiveThinkingSchema,
   timelineAssistantStepSummaryRowSchema,
   timelineCommandsToolBundleSummarySchema,
   timelineExplorationToolBundleSummarySchema,
@@ -422,7 +424,6 @@ export {
   timelineWebResearchToolBundleSummarySchema,
 } from "./thread-detail-rows.js";
 export type {
-  TimelineActiveThinking,
   TimelineAssistantStepSummaryChildRow,
   TimelineAssistantStepSummaryRow,
   TimelineCommandsToolBundleSummary,
@@ -486,6 +487,7 @@ export type {
 } from "./ui-message.js";
 
 export {
+  viewProjectionStateSchema,
   viewTurnMessageDetailSchema,
   viewTurnMessageDetailValues,
   viewTurnStatusSchema,
@@ -494,6 +496,7 @@ export {
 export type {
   ToViewProjectionOptions,
   ViewProjection,
+  ViewProjectionState,
   ViewStandaloneTimelineEntry,
   ViewTimelineEntry,
   ViewTurn,

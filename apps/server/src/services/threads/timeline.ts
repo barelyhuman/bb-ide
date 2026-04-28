@@ -1,10 +1,9 @@
 import {
   buildTimelineRows,
-  extractActiveThinking,
   extractThreadContextWindowUsage,
-  flattenViewMessagesDeep,
+  flattenProjectionMessagesDeep,
   TIMELINE_NOISE_EVENT_TYPES,
-  toViewMessages,
+  toViewProjectionEntries,
   toViewProjection,
   type ThreadEventWithMeta,
 } from "@bb/core-ui";
@@ -25,15 +24,13 @@ import type {
 import {
   listContextWindowUsageRows,
   listRecentStoredEventRows,
-  listStoredEventRows,
   listStoredEventRowsInRange,
+  listStoredTurnInputAcceptedRowsByClientRequestSequences,
 } from "@bb/db";
 import type { DbConnection, StoredEventRow } from "@bb/db";
 import { parseStoredEvent, parseStoredEventRow } from "./thread-data.js";
 
 const MIN_AGENT_MESSAGE_DELTAS_FOR_SUMMARY_COMPACTION = 1000;
-const TURN_SUMMARY_DETAILS_LOOKAHEAD_BATCH_SIZE = 25;
-const TURN_SUMMARY_DETAILS_MAX_LOOKAHEAD_ROWS = 100;
 
 interface TimelineSourceSeqRange {
   sourceSeqEnd: number;
@@ -91,9 +88,9 @@ function toTimelineMessageRow(message: ViewMessage): TimelineMessageRow {
 }
 
 function buildManagerConversationRows(
-  messages: ViewMessage[],
+  projection: ViewProjection,
 ): TimelineMessageRow[] {
-  const visibleMessages = flattenViewMessagesDeep(messages).filter(
+  const visibleMessages = flattenProjectionMessagesDeep(projection).filter(
     isManagerConversationMessage,
   );
   return visibleMessages.map((message) => toTimelineMessageRow(message));
@@ -255,39 +252,40 @@ export function buildThreadTimeline(
   const decodedEvents = compactSummaryThreadEvents(decodedRawEvents);
   const isDefaultManagerView =
     thread.type === "manager" && !options.showAllManagerEvents;
-  const activeThinking = extractActiveThinking(
-    toViewMessages(decodedEvents, {
-      includeInternalSystemMessages: options.showAllManagerEvents,
-      threadStatus: thread.status,
-      threadType: thread.type,
-    }),
-  );
-  const rows = isDefaultManagerView
-    ? buildManagerConversationRows(
-        toViewMessages(decodedEvents, {
-          includeInternalSystemMessages: options.showAllManagerEvents,
-          threadStatus: thread.status,
-          threadType: thread.type,
-        }),
-      )
-    : buildTimelineRows(
-        toViewProjection(decodedEvents, {
-          includeInternalSystemMessages: options.showAllManagerEvents,
-          threadStatus: thread.status,
-          threadType: thread.type,
-          turnMessageDetail: "summary",
-        }),
-        {
-          includeNestedRows,
-        },
-      );
   const contextWindowUsageRows = listContextWindowUsageRows(db, {
     threadId: thread.id,
   });
 
+  if (isDefaultManagerView) {
+    const projection = toViewProjectionEntries(decodedEvents, {
+      includeInternalSystemMessages: options.showAllManagerEvents,
+      threadStatus: thread.status,
+      threadType: thread.type,
+      turnMessageDetail: "full",
+    });
+    return {
+      rows: buildManagerConversationRows(projection),
+      activeThinking: null,
+      contextWindowUsage:
+        extractThreadContextWindowUsage(
+          contextWindowUsageRows.map((row) => parseStoredEventRow(row)),
+        ) ?? undefined,
+    };
+  }
+
+  const projection = toViewProjection(decodedEvents, {
+    includeInternalSystemMessages: options.showAllManagerEvents,
+    threadStatus: thread.status,
+    threadType: thread.type,
+    turnMessageDetail: "summary",
+  });
+  const rows = buildTimelineRows(projection, {
+    includeNestedRows,
+  });
+
   return {
     rows,
-    activeThinking,
+    activeThinking: projection.state.activeThinking,
     contextWindowUsage:
       extractThreadContextWindowUsage(
         contextWindowUsageRows.map((row) => parseStoredEventRow(row)),
@@ -305,56 +303,39 @@ export function buildTimelineTurnSummaryDetails(
     seqStart: options.sourceSeqStart,
     seqEnd: options.sourceSeqEnd,
   });
-  const lookaheadEventRows: StoredEventRow[] = [];
-  let afterSequence = options.sourceSeqEnd;
-
-  for (;;) {
-    const projection = toViewProjection(
-      [...exactEventRows, ...lookaheadEventRows].map((row) =>
-        toThreadEventWithMeta(row),
+  const clientRequestSequences = Array.from(
+    new Set(
+      exactEventRows.flatMap((row) =>
+        row.type === "client/turn/requested" ? [row.sequence] : [],
       ),
-      {
-        includeInternalSystemMessages: options.showAllManagerEvents,
-        threadStatus: thread.status,
-        threadType: thread.type,
-        turnMessageDetail: "full",
-      },
-    );
-    const resolution = resolveTimelineTurnSummaryDetailsRows(projection, {
-      sourceSeqStart: options.sourceSeqStart,
-      sourceSeqEnd: options.sourceSeqEnd,
-    });
-
-    if (resolution.kind !== "missing-match") {
-      return {
-        rows: resolution.rows,
-      };
-    }
-
-    const remainingLookaheadRows =
-      TURN_SUMMARY_DETAILS_MAX_LOOKAHEAD_ROWS - lookaheadEventRows.length;
-    if (remainingLookaheadRows <= 0) {
-      break;
-    }
-
-    // A client/turn/requested event can only be assigned to its turn after a
-    // later turn/input/accepted event is decoded. Fetch post-range rows in
-    // batches so unrelated stored events between those two do not break
-    // turn-summary expansion.
-    const nextLookaheadRows = listStoredEventRows(db, {
+    ),
+  );
+  const acceptedInputRows =
+    listStoredTurnInputAcceptedRowsByClientRequestSequences(db, {
       threadId: thread.id,
-      afterSequence,
-      limit: Math.min(
-        TURN_SUMMARY_DETAILS_LOOKAHEAD_BATCH_SIZE,
-        remainingLookaheadRows,
-      ),
+      afterSequence: options.sourceSeqEnd,
+      clientRequestSequences,
     });
-    if (nextLookaheadRows.length === 0) {
-      break;
-    }
+  const projection = toViewProjectionEntries(
+    [...exactEventRows, ...acceptedInputRows].map((row) =>
+      toThreadEventWithMeta(row),
+    ),
+    {
+      includeInternalSystemMessages: options.showAllManagerEvents,
+      threadStatus: thread.status,
+      threadType: thread.type,
+      turnMessageDetail: "full",
+    },
+  );
+  const resolution = resolveTimelineTurnSummaryDetailsRows(projection, {
+    sourceSeqStart: options.sourceSeqStart,
+    sourceSeqEnd: options.sourceSeqEnd,
+  });
 
-    lookaheadEventRows.push(...nextLookaheadRows);
-    afterSequence = nextLookaheadRows[nextLookaheadRows.length - 1]!.sequence;
+  if (resolution.kind !== "missing-match") {
+    return {
+      rows: resolution.rows,
+    };
   }
 
   throw new Error(

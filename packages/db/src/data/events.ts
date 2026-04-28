@@ -9,6 +9,7 @@ import {
   lte,
   max,
   notInArray,
+  or,
   sql,
 } from "drizzle-orm";
 import type {
@@ -263,6 +264,12 @@ export interface ListStoredEventRowsInRangeArgs {
   threadId: string;
 }
 
+export interface ListStoredTurnInputAcceptedRowsByClientRequestSequencesArgs {
+  afterSequence: number;
+  clientRequestSequences: readonly number[];
+  threadId: string;
+}
+
 export interface ListRecentStoredEventRowsArgs {
   excludedTypes?: readonly ThreadEventType[];
   threadId: string;
@@ -379,6 +386,34 @@ export function listStoredEventRowsInRange(
         eq(events.threadId, args.threadId),
         gte(events.sequence, args.seqStart),
         lte(events.sequence, args.seqEnd),
+      ),
+    )
+    .orderBy(events.sequence)
+    .all();
+}
+
+export function listStoredTurnInputAcceptedRowsByClientRequestSequences(
+  db: DbConnection,
+  args: ListStoredTurnInputAcceptedRowsByClientRequestSequencesArgs,
+): StoredEventRow[] {
+  if (args.clientRequestSequences.length === 0) {
+    return [];
+  }
+
+  const clientRequestSequenceConditions = args.clientRequestSequences.map(
+    (clientRequestSequence) =>
+      sql`json_extract(${events.data}, '$.clientRequestSequence') = ${clientRequestSequence}`,
+  );
+
+  return db
+    .select(storedEventRowFields)
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, args.threadId),
+        eq(events.type, "turn/input/accepted"),
+        gt(events.sequence, args.afterSequence),
+        or(...clientRequestSequenceConditions),
       ),
     )
     .orderBy(events.sequence)

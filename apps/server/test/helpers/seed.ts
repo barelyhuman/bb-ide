@@ -22,6 +22,7 @@ import type {
 import type { AppDeps } from "../../src/types.js";
 
 export interface SeedEventArgs<TType extends ThreadEventType> {
+  createdAt?: number;
   data: StoredThreadEventDataForType<TType>;
   environmentId?: string | null;
   providerThreadId?: string | null;
@@ -32,6 +33,7 @@ export interface SeedEventArgs<TType extends ThreadEventType> {
 }
 
 export interface SeedStoredEventArgs {
+  createdAt?: number;
   data: Record<string, unknown>;
   environmentId?: string | null;
   itemId?: string | null;
@@ -187,6 +189,7 @@ export function seedEvent<TType extends ThreadEventType>(
   });
   insertEvents(deps.db, deps.hub, [
     {
+      createdAt: args.createdAt,
       threadId: args.threadId,
       environmentId: args.environmentId ?? null,
       providerThreadId: args.providerThreadId ?? null,
@@ -262,6 +265,7 @@ export function seedStoredEvent(
 ): void {
   insertEvents(deps.db, deps.hub, [
     {
+      createdAt: args.createdAt,
       threadId: args.threadId,
       environmentId: args.environmentId ?? null,
       providerThreadId: args.providerThreadId ?? null,

@@ -1,13 +1,49 @@
 import { describe, expect, it } from "vitest";
+import {
+  threadEventScopePolicyByType,
+  threadScope,
+  turnScope,
+} from "@bb/domain";
 import type { ThreadEventRow, ViewMessage } from "@bb/domain";
-import { threadScope, turnScope } from "@bb/domain";
-import { getViewMessageScopeTurnId } from "../src/message-scope.js";
-import { toViewMessages } from "../src/to-view-messages.js";
+import { toViewMessages, toViewProjection } from "../src/to-view-messages.js";
 import { fromRows } from "./timeline-test-harness.js";
+
+type AssistantStreamFixtureScope = ThreadEventRow["scope"];
+
+type AssistantStreamFixtureRow = Omit<ThreadEventRow, "scope"> & {
+  scope?: AssistantStreamFixtureScope;
+};
+
+type AssistantStreamFixtureRows = AssistantStreamFixtureRow[];
+
+function inferFixtureScope(
+  row: AssistantStreamFixtureRow,
+): AssistantStreamFixtureScope {
+  const scopePolicy = threadEventScopePolicyByType[row.type];
+
+  if (scopePolicy === "thread") {
+    return threadScope();
+  }
+
+  if ("turnId" in row.data && typeof row.data.turnId === "string") {
+    return turnScope(row.data.turnId);
+  }
+
+  return threadScope();
+}
+
+function decodeFixtureRows(rows: AssistantStreamFixtureRows) {
+  return fromRows(
+    rows.map((row) => ({
+      ...row,
+      scope: row.scope ?? inferFixtureScope(row),
+    })),
+  );
+}
 
 describe("toViewMessages assistant streams", () => {
   it("projects flat event data with the same output as raw events", () => {
-    const events: ThreadEventRow[] = [
+    const events: AssistantStreamFixtureRows = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -23,23 +59,22 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 1,
-        scope: turnScope("turn-1"),
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), {
+    const projected = toViewMessages(decodeFixtureRows(events), {
       threadStatus: "idle",
     });
     expect(projected).toHaveLength(1);
     expect(projected[0]?.kind).toBe("assistant-text");
     if (projected[0]?.kind === "assistant-text") {
       expect(projected[0].text).toBe("Flat output");
-      expect(getViewMessageScopeTurnId(projected[0])).toBe("turn-1");
+      expect(projected[0].scope).toEqual(turnScope("turn-1"));
     }
   });
 
   it("deduplicates repeated completed assistant final messages for the same item id", () => {
-    const events: ThreadEventRow[] = [
+    const events: AssistantStreamFixtureRows = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -55,7 +90,6 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 1,
-        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -72,11 +106,10 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 2,
-        scope: turnScope("turn-1"),
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), {
+    const projected = toViewMessages(decodeFixtureRows(events), {
       threadStatus: "idle",
     });
     const assistantMessages = projected.filter(
@@ -88,12 +121,25 @@ describe("toViewMessages assistant streams", () => {
     expect(assistantMessages[0]?.text).toBe("Hello");
   });
 
-  it("keeps later-turn assistant messages when the same item id is reused across turns", () => {
-    const events: ThreadEventRow[] = [
+  it("keeps streamed assistant text separate when the later final uses a different item id key", () => {
+    const events: AssistantStreamFixtureRows = [
       {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
+        type: "item/agentMessage/delta",
+        data: {
+          providerThreadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "assistant-stream-1",
+          delta: "PONG",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
         type: "item/completed",
         data: {
           providerThreadId: "thread-1",
@@ -101,46 +147,14 @@ describe("toViewMessages assistant streams", () => {
           item: {
             type: "agentMessage",
             id: "assistant-1",
-            text: "First answer",
+            text: "PONG",
           },
-        },
-        createdAt: 1,
-        scope: turnScope("turn-1"),
-      },
-      {
-        id: "evt-2",
-        threadId: "thread-1",
-        seq: 2,
-        type: "item/agentMessage/delta",
-        data: {
-          providerThreadId: "thread-1",
-          turnId: "turn-2",
-          itemId: "assistant-1",
-          delta: "Second",
         },
         createdAt: 2,
-        scope: turnScope("turn-2"),
-      },
-      {
-        id: "evt-3",
-        threadId: "thread-1",
-        seq: 3,
-        type: "item/completed",
-        data: {
-          providerThreadId: "thread-1",
-          turnId: "turn-2",
-          item: {
-            type: "agentMessage",
-            id: "assistant-1",
-            text: "Second answer",
-          },
-        },
-        createdAt: 3,
-        scope: turnScope("turn-2"),
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), {
+    const projected = toViewMessages(decodeFixtureRows(events), {
       threadStatus: "idle",
     });
     const assistantMessages = projected.filter(
@@ -149,247 +163,31 @@ describe("toViewMessages assistant streams", () => {
     );
 
     expect(assistantMessages).toHaveLength(2);
-    expect(assistantMessages.map((message) => message.text)).toEqual([
-      "First answer",
-      "Second answer",
-    ]);
-    expect(assistantMessages.map(getViewMessageScopeTurnId)).toEqual([
-      "turn-1",
-      "turn-2",
-    ]);
-  });
-
-  it("keeps later-turn reasoning messages when the same item id is reused across turns", () => {
-    const events: ThreadEventRow[] = [
-      {
-        id: "evt-1",
-        threadId: "thread-1",
-        seq: 1,
-        type: "item/completed",
-        data: {
-          providerThreadId: "thread-1",
-          turnId: "turn-1",
-          item: {
-            type: "reasoning",
-            id: "reasoning-1",
-            summary: ["First reasoning"],
-            content: [],
-          },
-        },
-        createdAt: 1,
-        scope: turnScope("turn-1"),
-      },
-      {
-        id: "evt-2",
-        threadId: "thread-1",
-        seq: 2,
-        type: "item/reasoning/summaryTextDelta",
-        data: {
-          providerThreadId: "thread-1",
-          turnId: "turn-2",
-          itemId: "reasoning-1",
-          delta: "Second reasoning",
-        },
-        createdAt: 2,
-        scope: turnScope("turn-2"),
-      },
-      {
-        id: "evt-3",
-        threadId: "thread-1",
-        seq: 3,
-        type: "item/completed",
-        data: {
-          providerThreadId: "thread-1",
-          turnId: "turn-2",
-          item: {
-            type: "reasoning",
-            id: "reasoning-1",
-            summary: ["Second reasoning"],
-            content: [],
-          },
-        },
-        createdAt: 3,
-        scope: turnScope("turn-2"),
-      },
-    ];
-
-    const projected = toViewMessages(fromRows(events), {
-      threadStatus: "idle",
-    });
-    const reasoningMessages = projected.filter(
-      (
-        message,
-      ): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
-        message.kind === "assistant-reasoning",
-    );
-
-    expect(reasoningMessages).toHaveLength(2);
-    expect(reasoningMessages.map((message) => message.text)).toEqual([
-      "First reasoning",
-      "Second reasoning",
-    ]);
-    expect(reasoningMessages.map(getViewMessageScopeTurnId)).toEqual([
-      "turn-1",
-      "turn-2",
-    ]);
-  });
-
-  it("keeps same-turn assistant messages when the same item id is reused under different parent tool calls", () => {
-    const events: ThreadEventRow[] = [
-      {
-        id: "evt-1",
-        threadId: "thread-1",
-        seq: 1,
-        type: "item/completed",
-        data: {
-          providerThreadId: "thread-1",
-          turnId: "turn-1",
-          item: {
-            type: "agentMessage",
-            id: "assistant-1",
-            text: "Child A",
-            parentToolCallId: "tool-1",
-          },
-        },
-        createdAt: 1,
-        scope: turnScope("turn-1"),
-      },
-      {
-        id: "evt-2",
-        threadId: "thread-1",
-        seq: 2,
-        type: "item/agentMessage/delta",
-        data: {
-          providerThreadId: "thread-1",
-          turnId: "turn-1",
-          itemId: "assistant-1",
-          parentToolCallId: "tool-2",
-          delta: "Child B",
-        },
-        createdAt: 2,
-        scope: turnScope("turn-1"),
-      },
-      {
-        id: "evt-3",
-        threadId: "thread-1",
-        seq: 3,
-        type: "item/completed",
-        data: {
-          providerThreadId: "thread-1",
-          turnId: "turn-1",
-          item: {
-            type: "agentMessage",
-            id: "assistant-1",
-            text: "Child B",
-            parentToolCallId: "tool-2",
-          },
-        },
-        createdAt: 3,
-        scope: turnScope("turn-1"),
-      },
-    ];
-
-    const projected = toViewMessages(fromRows(events), {
-      threadStatus: "idle",
-    });
-    const assistantMessages = projected.filter(
-      (message): message is Extract<ViewMessage, { kind: "assistant-text" }> =>
-        message.kind === "assistant-text",
-    );
-
-    expect(assistantMessages).toHaveLength(2);
-    expect(assistantMessages.map((message) => message.text)).toEqual([
-      "Child A",
-      "Child B",
-    ]);
     expect(
-      assistantMessages.map((message) => message.parentToolCallId ?? null),
-    ).toEqual(["tool-1", "tool-2"]);
+      assistantMessages.some(
+        (message) => message.text === "PONG" && message.status === "completed",
+      ),
+    ).toBe(true);
   });
 
-  it("keeps same-turn reasoning messages when the same item id is reused under different parent tool calls", () => {
-    const events: ThreadEventRow[] = [
+  it("finalizes streaming assistant messages and clears active thinking when thread is idle", () => {
+    const events: AssistantStreamFixtureRows = [
       {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
-        type: "item/completed",
+        type: "turn/started",
         data: {
           providerThreadId: "thread-1",
+          threadId: "thread-1",
           turnId: "turn-1",
-          item: {
-            type: "reasoning",
-            id: "reasoning-1",
-            summary: ["Child reasoning A"],
-            content: [],
-            parentToolCallId: "tool-1",
-          },
         },
         createdAt: 1,
-        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
         threadId: "thread-1",
         seq: 2,
-        type: "item/reasoning/summaryTextDelta",
-        data: {
-          providerThreadId: "thread-1",
-          turnId: "turn-1",
-          itemId: "reasoning-1",
-          parentToolCallId: "tool-2",
-          delta: "Child reasoning B",
-        },
-        createdAt: 2,
-        scope: turnScope("turn-1"),
-      },
-      {
-        id: "evt-3",
-        threadId: "thread-1",
-        seq: 3,
-        type: "item/completed",
-        data: {
-          providerThreadId: "thread-1",
-          turnId: "turn-1",
-          item: {
-            type: "reasoning",
-            id: "reasoning-1",
-            summary: ["Child reasoning B"],
-            content: [],
-            parentToolCallId: "tool-2",
-          },
-        },
-        createdAt: 3,
-        scope: turnScope("turn-1"),
-      },
-    ];
-
-    const projected = toViewMessages(fromRows(events), {
-      threadStatus: "idle",
-    });
-    const reasoningMessages = projected.filter(
-      (
-        message,
-      ): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
-        message.kind === "assistant-reasoning",
-    );
-
-    expect(reasoningMessages).toHaveLength(2);
-    expect(reasoningMessages.map((message) => message.text)).toEqual([
-      "Child reasoning A",
-      "Child reasoning B",
-    ]);
-    expect(
-      reasoningMessages.map((message) => message.parentToolCallId ?? null),
-    ).toEqual(["tool-1", "tool-2"]);
-  });
-
-  it("finalizes streaming assistant and reasoning messages when thread is idle", () => {
-    const events: ThreadEventRow[] = [
-      {
-        id: "evt-1",
-        threadId: "thread-1",
-        seq: 1,
         type: "item/agentMessage/delta",
         data: {
           providerThreadId: "thread-1",
@@ -398,13 +196,12 @@ describe("toViewMessages assistant streams", () => {
           itemId: "msg-1",
           delta: "Partial reply",
         },
-        createdAt: 1,
-        scope: turnScope("turn-1"),
+        createdAt: 2,
       },
       {
-        id: "evt-2",
+        id: "evt-3",
         threadId: "thread-1",
-        seq: 2,
+        seq: 3,
         type: "item/reasoning/summaryTextDelta",
         data: {
           providerThreadId: "thread-1",
@@ -413,41 +210,35 @@ describe("toViewMessages assistant streams", () => {
           itemId: "rs-1",
           delta: "Partial reasoning",
         },
-        createdAt: 2,
-        scope: turnScope("turn-1"),
+        createdAt: 3,
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), {
+    const projected = toViewMessages(decodeFixtureRows(events), {
       threadStatus: "idle",
+    });
+    const projection = toViewProjection(decodeFixtureRows(events), {
+      threadStatus: "idle",
+      turnMessageDetail: "full",
     });
     const assistant = projected.find(
       (message): message is Extract<ViewMessage, { kind: "assistant-text" }> =>
         message.kind === "assistant-text",
-    );
-    const reasoning = projected.find(
-      (
-        message,
-      ): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
-        message.kind === "assistant-reasoning",
     );
 
     expect(assistant).toBeDefined();
     expect(assistant?.status).toBe("completed");
-    expect(reasoning).toBeDefined();
-    expect(reasoning?.status).toBe("completed");
     expect(
       projected.some(
         (message) =>
-          (message.kind === "assistant-text" ||
-            message.kind === "assistant-reasoning") &&
-          message.status === "streaming",
+          message.kind === "assistant-text" && message.status === "streaming",
       ),
     ).toBe(false);
+    expect(projection.state.activeThinking).toBeNull();
   });
 
-  it("keeps assistant and reasoning text buffered on active threads until a newline or terminal boundary arrives", () => {
-    const events: ThreadEventRow[] = [
+  it("keeps assistant text buffered and active thinking open on active threads until a newline or terminal boundary arrives", () => {
+    const events: AssistantStreamFixtureRows = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -461,7 +252,6 @@ describe("toViewMessages assistant streams", () => {
           delta: "Partial reply",
         },
         createdAt: 1,
-        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -476,30 +266,32 @@ describe("toViewMessages assistant streams", () => {
           delta: "Partial reasoning",
         },
         createdAt: 2,
-        scope: turnScope("turn-1"),
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), {
+    const projected = toViewMessages(decodeFixtureRows(events), {
       threadStatus: "active",
+    });
+    const projection = toViewProjection(decodeFixtureRows(events), {
+      threadStatus: "active",
+      turnMessageDetail: "full",
     });
     const assistant = projected.find(
       (message): message is Extract<ViewMessage, { kind: "assistant-text" }> =>
         message.kind === "assistant-text",
     );
-    const reasoning = projected.find(
-      (
-        message,
-      ): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
-        message.kind === "assistant-reasoning",
-    );
 
     expect(assistant).toBeUndefined();
-    expect(reasoning).toBeUndefined();
+    expect(projection.state.activeThinking).toMatchObject({
+      id: "rs-1",
+      text: "",
+      startedAt: 2,
+      updatedAt: 2,
+    });
   });
 
   it("does not flush hidden assistant or reasoning partials when thread status is omitted", () => {
-    const events: ThreadEventRow[] = [
+    const events: AssistantStreamFixtureRows = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -513,7 +305,6 @@ describe("toViewMessages assistant streams", () => {
           delta: "Partial reply",
         },
         createdAt: 1,
-        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -528,19 +319,30 @@ describe("toViewMessages assistant streams", () => {
           delta: "Partial reasoning",
         },
         createdAt: 2,
-        scope: turnScope("turn-1"),
       },
     ];
 
-    expect(toViewMessages(fromRows(events))).toEqual([]);
+    expect(toViewMessages(decodeFixtureRows(events))).toEqual([]);
   });
 
-  it("surfaces newline-terminated assistant and reasoning chunks while streaming", () => {
-    const events: ThreadEventRow[] = [
+  it("surfaces newline-terminated assistant chunks while keeping reasoning in active thinking state", () => {
+    const events: AssistantStreamFixtureRows = [
       {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
+        type: "turn/started",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
         type: "item/agentMessage/delta",
         data: {
           providerThreadId: "thread-1",
@@ -549,13 +351,12 @@ describe("toViewMessages assistant streams", () => {
           itemId: "msg-1",
           delta: "First line\nSecond",
         },
-        createdAt: 1,
-        scope: turnScope("turn-1"),
+        createdAt: 2,
       },
       {
-        id: "evt-2",
+        id: "evt-3",
         threadId: "thread-1",
-        seq: 2,
+        seq: 3,
         type: "item/reasoning/summaryTextDelta",
         data: {
           providerThreadId: "thread-1",
@@ -564,33 +365,29 @@ describe("toViewMessages assistant streams", () => {
           itemId: "rs-1",
           delta: "Reasoning line\nTrailing",
         },
-        createdAt: 2,
-        scope: turnScope("turn-1"),
+        createdAt: 3,
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), {
+    const projected = toViewMessages(decodeFixtureRows(events), {
       threadStatus: "active",
+    });
+    const projection = toViewProjection(decodeFixtureRows(events), {
+      threadStatus: "active",
+      turnMessageDetail: "full",
     });
     const assistant = projected.find(
       (message): message is Extract<ViewMessage, { kind: "assistant-text" }> =>
         message.kind === "assistant-text",
     );
-    const reasoning = projected.find(
-      (
-        message,
-      ): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
-        message.kind === "assistant-reasoning",
-    );
 
     expect(assistant?.text).toBe("First line\n");
     expect(assistant?.status).toBe("streaming");
-    expect(reasoning?.text).toBe("Reasoning line\n");
-    expect(reasoning?.status).toBe("streaming");
+    expect(projection.state.activeThinking?.text).toBe("Reasoning line\n");
   });
 
-  it("preserves startedAt for assistant and reasoning streams after completion", () => {
-    const events: ThreadEventRow[] = [
+  it("preserves startedAt for assistant streams after completion", () => {
+    const events: AssistantStreamFixtureRows = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -604,7 +401,6 @@ describe("toViewMessages assistant streams", () => {
           delta: "Partial reply",
         },
         createdAt: 10,
-        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -619,7 +415,6 @@ describe("toViewMessages assistant streams", () => {
           delta: " finished",
         },
         createdAt: 25,
-        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -634,7 +429,6 @@ describe("toViewMessages assistant streams", () => {
           delta: "Reasoning start",
         },
         createdAt: 30,
-        scope: turnScope("turn-1"),
       },
       {
         id: "evt-4",
@@ -651,7 +445,6 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 40,
-        scope: turnScope("turn-1"),
       },
       {
         id: "evt-5",
@@ -669,32 +462,23 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 45,
-        scope: turnScope("turn-1"),
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), {
+    const projected = toViewMessages(decodeFixtureRows(events), {
       threadStatus: "idle",
     });
     const assistant = projected.find(
       (message): message is Extract<ViewMessage, { kind: "assistant-text" }> =>
         message.kind === "assistant-text",
     );
-    const reasoning = projected.find(
-      (
-        message,
-      ): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
-        message.kind === "assistant-reasoning",
-    );
 
     expect(assistant?.startedAt).toBe(10);
     expect(assistant?.createdAt).toBe(40);
-    expect(reasoning?.startedAt).toBe(30);
-    expect(reasoning?.createdAt).toBe(45);
   });
 
   it("renders completed assistant text immediately even while the thread is active", () => {
-    const events: ThreadEventRow[] = [
+    const events: AssistantStreamFixtureRows = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -711,11 +495,10 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 1,
-        scope: turnScope("turn-1"),
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), {
+    const projected = toViewMessages(decodeFixtureRows(events), {
       threadStatus: "active",
     });
 
@@ -729,7 +512,7 @@ describe("toViewMessages assistant streams", () => {
   });
 
   it("flushes buffered assistant text when the turn completes even if thread status is still active", () => {
-    const events: ThreadEventRow[] = [
+    const events: AssistantStreamFixtureRows = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -743,7 +526,6 @@ describe("toViewMessages assistant streams", () => {
           delta: "Partial reply",
         },
         createdAt: 1,
-        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -757,11 +539,10 @@ describe("toViewMessages assistant streams", () => {
           status: "completed",
         },
         createdAt: 2,
-        scope: turnScope("turn-1"),
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), {
+    const projected = toViewMessages(decodeFixtureRows(events), {
       threadStatus: "active",
     });
     const assistant = projected.find(
@@ -774,7 +555,7 @@ describe("toViewMessages assistant streams", () => {
   });
 
   it("flushes buffered assistant text before interruption markers on idle threads", () => {
-    const events: ThreadEventRow[] = [
+    const events: AssistantStreamFixtureRows = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -788,7 +569,6 @@ describe("toViewMessages assistant streams", () => {
           delta: "Partial reply",
         },
         createdAt: 1,
-        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -802,11 +582,10 @@ describe("toViewMessages assistant streams", () => {
           message: "Stopped by user",
         },
         createdAt: 2,
-        scope: threadScope(),
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), {
+    const projected = toViewMessages(decodeFixtureRows(events), {
       threadStatus: "idle",
     });
 
@@ -823,7 +602,7 @@ describe("toViewMessages assistant streams", () => {
   });
 
   it("ignores trailing assistant deltas that arrive after completion", () => {
-    const events: ThreadEventRow[] = [
+    const events: AssistantStreamFixtureRows = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -840,7 +619,6 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 1,
-        scope: turnScope("turn-1"),
       },
       {
         id: "evt-2",
@@ -855,11 +633,10 @@ describe("toViewMessages assistant streams", () => {
           delta: " trailing",
         },
         createdAt: 2,
-        scope: turnScope("turn-1"),
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), {
+    const projected = toViewMessages(decodeFixtureRows(events), {
       threadStatus: "idle",
     });
     const assistants = projected.filter(
@@ -872,12 +649,24 @@ describe("toViewMessages assistant streams", () => {
     expect(assistants[0]?.status).toBe("completed");
   });
 
-  it("ignores trailing reasoning deltas that arrive after completion", () => {
-    const events: ThreadEventRow[] = [
+  it("keeps active thinking cleared after trailing reasoning deltas arrive post-completion", () => {
+    const events: AssistantStreamFixtureRows = [
       {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
+        type: "turn/started",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
         type: "item/completed",
         data: {
           providerThreadId: "thread-1",
@@ -890,13 +679,12 @@ describe("toViewMessages assistant streams", () => {
             content: [],
           },
         },
-        createdAt: 1,
-        scope: turnScope("turn-1"),
+        createdAt: 2,
       },
       {
-        id: "evt-2",
+        id: "evt-3",
         threadId: "thread-1",
-        seq: 2,
+        seq: 3,
         type: "item/reasoning/summaryTextDelta",
         data: {
           providerThreadId: "thread-1",
@@ -905,32 +693,193 @@ describe("toViewMessages assistant streams", () => {
           itemId: "rs-1",
           delta: " trailing",
         },
-        createdAt: 2,
-        scope: turnScope("turn-1"),
+        createdAt: 3,
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), {
+    const projection = toViewProjection(decodeFixtureRows(events), {
       threadStatus: "idle",
+      turnMessageDetail: "full",
     });
-    const reasoning = projected.filter(
-      (
-        message,
-      ): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
-        message.kind === "assistant-reasoning",
-    );
 
-    expect(reasoning).toHaveLength(1);
-    expect(reasoning[0]?.text).toBe("Final reasoning");
-    expect(reasoning[0]?.status).toBe("completed");
+    expect(projection.state.activeThinking).toBeNull();
   });
 
-  it("treats raw reasoning text deltas as newline-buffered reasoning stream updates", () => {
-    const events: ThreadEventRow[] = [
+  it("does not reopen active thinking on active threads after a reasoning item completes", () => {
+    const events: AssistantStreamFixtureRows = [
       {
         id: "evt-1",
         threadId: "thread-1",
         seq: 1,
+        type: "turn/started",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "item/started",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "reasoning",
+            id: "rs-1",
+            summary: [],
+            content: [],
+          },
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/completed",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "reasoning",
+            id: "rs-1",
+            summary: ["Final reasoning"],
+            content: [],
+          },
+        },
+        createdAt: 3,
+      },
+      {
+        id: "evt-4",
+        threadId: "thread-1",
+        seq: 4,
+        type: "item/reasoning/textDelta",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "rs-1",
+          delta: " late",
+          contentIndex: 0,
+        },
+        createdAt: 4,
+      },
+    ];
+
+    const projection = toViewProjection(decodeFixtureRows(events), {
+      threadStatus: "active",
+      turnMessageDetail: "full",
+    });
+
+    expect(projection.state.activeThinking).toBeNull();
+  });
+
+  it("does not surface active thinking when a fresh reasoning item arrives after the turn completes", () => {
+    const events: AssistantStreamFixtureRows = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "turn/started",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
+        type: "turn/completed",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          status: "completed",
+        },
+        createdAt: 2,
+      },
+      {
+        id: "evt-3",
+        threadId: "thread-1",
+        seq: 3,
+        type: "item/reasoning/textDelta",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          itemId: "rs-99",
+          delta: " late",
+          contentIndex: 0,
+        },
+        createdAt: 3,
+      },
+    ];
+
+    const projection = toViewProjection(decodeFixtureRows(events), {
+      threadStatus: "active",
+      turnMessageDetail: "full",
+    });
+
+    expect(projection.state.activeThinking).toBeNull();
+  });
+
+  it("does not surface active thinking while a thread is still provisioning", () => {
+    const events: AssistantStreamFixtureRows = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "item/started",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+          item: {
+            type: "reasoning",
+            id: "rs-1",
+            summary: [],
+            content: [],
+          },
+        },
+        createdAt: 1,
+      },
+    ];
+
+    const projection = toViewProjection(decodeFixtureRows(events), {
+      threadStatus: "provisioning",
+      turnMessageDetail: "full",
+    });
+
+    expect(projection.state.activeThinking).toBeNull();
+  });
+
+  it("treats raw reasoning text deltas as newline-buffered active thinking updates", () => {
+    const events: AssistantStreamFixtureRows = [
+      {
+        id: "evt-1",
+        threadId: "thread-1",
+        seq: 1,
+        type: "turn/started",
+        data: {
+          providerThreadId: "thread-1",
+          threadId: "thread-1",
+          turnId: "turn-1",
+        },
+        createdAt: 1,
+      },
+      {
+        id: "evt-2",
+        threadId: "thread-1",
+        seq: 2,
         type: "item/reasoning/textDelta",
         data: {
           providerThreadId: "thread-1",
@@ -940,28 +889,20 @@ describe("toViewMessages assistant streams", () => {
           delta: "raw-reasoning\npartial",
           contentIndex: 0,
         },
-        createdAt: 1,
-        scope: turnScope("turn-1"),
+        createdAt: 2,
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), {
+    const projection = toViewProjection(decodeFixtureRows(events), {
       threadStatus: "active",
+      turnMessageDetail: "full",
     });
-    const reasoning = projected.find(
-      (
-        message,
-      ): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
-        message.kind === "assistant-reasoning",
-    );
 
-    expect(reasoning).toBeDefined();
-    expect(reasoning?.text).toBe("raw-reasoning\n");
-    expect(reasoning?.status).toBe("streaming");
+    expect(projection.state.activeThinking?.text).toBe("raw-reasoning\n");
   });
 
   it("keeps assistant-side items from earlier and later assistant responses", () => {
-    const events: ThreadEventRow[] = [
+    const events: AssistantStreamFixtureRows = [
       {
         id: "evt-1",
         threadId: "thread-1",
@@ -986,7 +927,6 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 1,
-        scope: threadScope(),
       },
       {
         id: "evt-2",
@@ -1004,7 +944,6 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 2,
-        scope: turnScope("turn-1"),
       },
       {
         id: "evt-3",
@@ -1023,7 +962,6 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 3,
-        scope: turnScope("turn-1"),
       },
       {
         id: "evt-4",
@@ -1041,7 +979,6 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 4,
-        scope: turnScope("turn-1"),
       },
       {
         id: "evt-5",
@@ -1067,11 +1004,10 @@ describe("toViewMessages assistant streams", () => {
           },
         },
         createdAt: 5,
-        scope: threadScope(),
       },
     ];
 
-    const projected = toViewMessages(fromRows(events), {
+    const projected = toViewMessages(decodeFixtureRows(events), {
       threadStatus: "idle",
     });
 
@@ -1079,7 +1015,8 @@ describe("toViewMessages assistant streams", () => {
       projected.some(
         (message) =>
           message.kind === "user" &&
-          getViewMessageScopeTurnId(message) === "turn-1" &&
+          message.scope.kind === "turn" &&
+          message.scope.turnId === "turn-1" &&
           message.text.includes("First question"),
       ),
     ).toBe(true);
@@ -1087,23 +1024,17 @@ describe("toViewMessages assistant streams", () => {
       projected.some(
         (message) =>
           message.kind === "assistant-text" &&
-          getViewMessageScopeTurnId(message) === "turn-1" &&
+          message.scope.kind === "turn" &&
+          message.scope.turnId === "turn-1" &&
           message.text.includes("Old assistant output"),
       ),
     ).toBe(true);
     expect(
       projected.some(
         (message) =>
-          getViewMessageScopeTurnId(message) === "turn-1" &&
-          message.kind === "assistant-reasoning" &&
-          message.text.includes("More thinking"),
-      ),
-    ).toBe(true);
-    expect(
-      projected.some(
-        (message) =>
           message.kind === "assistant-text" &&
-          getViewMessageScopeTurnId(message) === "turn-1" &&
+          message.scope.kind === "turn" &&
+          message.scope.turnId === "turn-1" &&
           message.text.includes("Latest assistant output"),
       ),
     ).toBe(true);
@@ -1111,7 +1042,8 @@ describe("toViewMessages assistant streams", () => {
       projected.some(
         (message) =>
           message.kind === "user" &&
-          getViewMessageScopeTurnId(message) === "turn-2" &&
+          message.scope.kind === "turn" &&
+          message.scope.turnId === "turn-2" &&
           message.text.includes("Second question"),
       ),
     ).toBe(true);

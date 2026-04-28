@@ -90,10 +90,12 @@ import {
 import {
   appendVisibleTextBuffer,
   createVisibleTextBuffer,
+  getVisibleTextBufferText,
   setVisibleTextBuffer,
   type VisibleTextBuffer,
 } from "./visible-text-buffer.js";
 import type {
+  ActiveThinking,
   BufferedTextInstanceIdentity,
   ToViewMessagesOptions,
   ToViewProjectionOptions,
@@ -140,17 +142,41 @@ interface ProjectBufferedTextEventArgs<
   text: string | null;
 }
 
+interface ActiveThinkingLifecycle {
+  itemId: string;
+  messageKey: string;
+  startedAt: number;
+  threadId: string;
+  turnId: string;
+  updatedAt: number;
+  updatedSeq: number;
+}
+
+interface BuildFlatProjectionDataArgs {
+  events: ThreadEventWithMeta[];
+  includeActiveThinking: boolean;
+  options?: ToViewMessagesOptions;
+}
+
+interface BuildFlatProjectionDataResult {
+  activeThinking: ActiveThinking | null;
+  messages: ViewMessage[];
+}
+
 interface ProjectionState {
   messages: ViewMessage[];
   seenUserKeys: Set<string>;
+  openTurnIds: Set<string>;
+  closedTurnIds: Set<string>;
   openAssistantMessagesByKey: Map<string, ViewAssistantTextMessage>;
   assistantTextBuffersByKey: Map<string, VisibleTextBuffer>;
   visibleAssistantMessageKeys: Set<string>;
   finalizedAssistantMessageKeys: Set<string>;
+  openReasoningLifecyclesByKey: Map<string, ActiveThinkingLifecycle>;
   openReasoningMessagesByKey: Map<string, ViewAssistantReasoningMessage>;
   reasoningTextBuffersByKey: Map<string, VisibleTextBuffer>;
   visibleReasoningMessageKeys: Set<string>;
-  finalizedReasoningMessageKeys: Set<string>;
+  finalizedReasoningKeys: Set<string>;
   openCompactionsByKey: Map<string, ViewOperationMessage>;
   finalizedCompactionKeys: Set<string>;
   provisioningOperationsByKey: Map<string, ViewOperationMessage>;
@@ -169,14 +195,17 @@ function createProjectionState(): ProjectionState {
   return {
     messages: [],
     seenUserKeys: new Set(),
+    openTurnIds: new Set(),
+    closedTurnIds: new Set(),
     openAssistantMessagesByKey: new Map(),
     assistantTextBuffersByKey: new Map(),
     visibleAssistantMessageKeys: new Set(),
     finalizedAssistantMessageKeys: new Set(),
+    openReasoningLifecyclesByKey: new Map(),
     openReasoningMessagesByKey: new Map(),
     reasoningTextBuffersByKey: new Map(),
     visibleReasoningMessageKeys: new Set(),
-    finalizedReasoningMessageKeys: new Set(),
+    finalizedReasoningKeys: new Set(),
     openCompactionsByKey: new Map(),
     finalizedCompactionKeys: new Set(),
     provisioningOperationsByKey: new Map(),
@@ -277,7 +306,7 @@ function resolveBufferedTextMessageKey<
 >(
   args: Omit<
     ProjectBufferedTextEventArgs<TMessage>,
-    "createMessage" | "mode" | "state" | "text"
+    "createMessage" | "mode" | "text"
   >,
 ): string | null {
   if (!args.identity) {
@@ -285,10 +314,14 @@ function resolveBufferedTextMessageKey<
   }
 
   const messageKey = createBufferedTextInstanceKey(args.identity);
+  if (args.state.closedTurnIds.has(args.identity.turnId)) {
+    return null;
+  }
   if (args.refs.finalizedKeys.has(messageKey)) {
     return null;
   }
 
+  args.state.openTurnIds.add(args.identity.turnId);
   return messageKey;
 }
 
@@ -361,6 +394,159 @@ function projectBufferedTextEvent<TMessage extends BufferedTextViewMessage>(
   return true;
 }
 
+function isNewerActiveThinkingLifecycle(
+  candidate: ActiveThinkingLifecycle,
+  current: ActiveThinkingLifecycle,
+): boolean {
+  if (candidate.updatedSeq !== current.updatedSeq) {
+    return candidate.updatedSeq > current.updatedSeq;
+  }
+  return candidate.updatedAt > current.updatedAt;
+}
+
+function findLatestActiveThinkingLifecycle(
+  openLifecycles: ReadonlyMap<string, ActiveThinkingLifecycle>,
+): ActiveThinkingLifecycle | null {
+  let latestLifecycle: ActiveThinkingLifecycle | null = null;
+  for (const lifecycle of openLifecycles.values()) {
+    if (
+      latestLifecycle === null ||
+      isNewerActiveThinkingLifecycle(lifecycle, latestLifecycle)
+    ) {
+      latestLifecycle = lifecycle;
+    }
+  }
+  return latestLifecycle;
+}
+
+function getActiveThinkingText(
+  state: ProjectionState,
+  messageKey: string,
+): string {
+  const buffer = state.reasoningTextBuffersByKey.get(messageKey);
+  const bufferedText = buffer ? getVisibleTextBufferText(buffer) : undefined;
+  if (bufferedText) {
+    return bufferedText;
+  }
+  return state.openReasoningMessagesByKey.get(messageKey)?.text ?? "";
+}
+
+function buildProjectionActiveThinking(
+  state: ProjectionState,
+  threadStatus: ToViewMessagesOptions["threadStatus"],
+): ActiveThinking | null {
+  if (threadStatus !== "active") {
+    return null;
+  }
+
+  const latestLifecycle = findLatestActiveThinkingLifecycle(
+    state.openReasoningLifecyclesByKey,
+  );
+  if (!latestLifecycle) {
+    return null;
+  }
+
+  return {
+    id: latestLifecycle.itemId,
+    text: getActiveThinkingText(state, latestLifecycle.messageKey),
+    startedAt: latestLifecycle.startedAt,
+    updatedAt: latestLifecycle.updatedAt,
+  };
+}
+
+function upsertReasoningLifecycle(
+  args: {
+    identity: BufferedTextInstanceIdentity | null;
+    meta: EventMeta;
+    state: ProjectionState;
+    threadId: string;
+  },
+): void {
+  if (!args.identity) {
+    return;
+  }
+
+  const messageKey = createBufferedTextInstanceKey(args.identity);
+  if (args.state.closedTurnIds.has(args.identity.turnId)) {
+    return;
+  }
+  if (args.state.finalizedReasoningKeys.has(messageKey)) {
+    return;
+  }
+
+  args.state.openTurnIds.add(args.identity.turnId);
+
+  const existingLifecycle =
+    args.state.openReasoningLifecyclesByKey.get(messageKey);
+  if (existingLifecycle) {
+    existingLifecycle.updatedAt = args.meta.createdAt;
+    existingLifecycle.updatedSeq = args.meta.seq;
+    return;
+  }
+
+  args.state.openReasoningLifecyclesByKey.set(messageKey, {
+    itemId: args.identity.itemId,
+    messageKey,
+    startedAt: args.meta.createdAt,
+    threadId: args.threadId,
+    turnId: args.identity.turnId,
+    updatedAt: args.meta.createdAt,
+    updatedSeq: args.meta.seq,
+  });
+}
+
+function trackReasoningTurn(
+  state: ProjectionState,
+  identity: BufferedTextInstanceIdentity | null,
+): void {
+  if (!identity || state.closedTurnIds.has(identity.turnId)) {
+    return;
+  }
+  state.openTurnIds.add(identity.turnId);
+}
+
+function finalizeReasoningLifecycle(
+  state: ProjectionState,
+  identity: BufferedTextInstanceIdentity | null,
+): void {
+  if (!identity) {
+    return;
+  }
+
+  const messageKey = createBufferedTextInstanceKey(identity);
+  state.openReasoningLifecyclesByKey.delete(messageKey);
+  state.finalizedReasoningKeys.add(messageKey);
+}
+
+function closeOpenTurns(state: ProjectionState): void {
+  for (const turnId of state.openTurnIds) {
+    state.closedTurnIds.add(turnId);
+  }
+  state.openTurnIds.clear();
+}
+
+function finalizeOpenReasoningLifecycles(state: ProjectionState): void {
+  for (const messageKey of state.openReasoningLifecyclesByKey.keys()) {
+    state.finalizedReasoningKeys.add(messageKey);
+  }
+  state.openReasoningLifecyclesByKey.clear();
+}
+
+function onTurnStarted(state: ProjectionState, turnId: string): void {
+  state.openTurnIds.add(turnId);
+}
+
+function onTurnCompleted(state: ProjectionState, turnId: string): void {
+  state.closedTurnIds.add(turnId);
+  state.openTurnIds.delete(turnId);
+  finalizeOpenReasoningLifecycles(state);
+}
+
+function onThreadInterrupted(state: ProjectionState): void {
+  closeOpenTurns(state);
+  finalizeOpenReasoningLifecycles(state);
+}
+
 function finalizePendingMessages(
   state: ProjectionState,
   options: ToViewMessagesOptions | undefined,
@@ -402,16 +588,14 @@ function finalizePendingMessages(
 
 // --- Main entry point ---
 
-function buildFlatViewMessages(
-  events: ThreadEventWithMeta[] | undefined,
-  options?: ToViewMessagesOptions,
-): ViewMessage[] {
-  if (!events || events.length === 0) return [];
-
+function buildFlatProjectionData(
+  args: BuildFlatProjectionDataArgs,
+): BuildFlatProjectionDataResult {
   const state = createProjectionState();
-  const includeDebugRawEvents = options?.includeDebugRawEvents ?? false;
+  const includeDebugRawEvents = args.options?.includeDebugRawEvents ?? false;
+  const shouldTrackActiveThinking = args.includeActiveThinking;
 
-  const orderedEvents = getOrderedThreadEvents(events);
+  const orderedEvents = args.events;
   const clientRequestTurnIdBySequence =
     buildClientRequestTurnIdBySequence(orderedEvents);
   const execLifecycleContext = createExecLifecycleContext();
@@ -429,6 +613,16 @@ function buildFlatViewMessages(
           )
         : undefined);
 
+    if (decoded.type === "turn/started") {
+      onTurnStarted(
+        state,
+        requireThreadEventScopeTurnId({
+          type: decoded.type,
+          scope: decoded.scope,
+        }),
+      );
+    }
+
     const compactionTurnFinalization = getCompactionTurnFinalization(decoded);
     if (compactionTurnFinalization) {
       finalizeOpenCompactionsForTurn({
@@ -442,6 +636,17 @@ function buildFlatViewMessages(
     }
 
     if (isTerminalBufferedTextFlushEvent(eventType)) {
+      if (decoded.type === "turn/completed") {
+        onTurnCompleted(
+          state,
+          requireThreadEventScopeTurnId({
+            type: decoded.type,
+            scope: decoded.scope,
+          }),
+        );
+      } else {
+        onThreadInterrupted(state);
+      }
       flushBufferedAssistantMessages(state);
       flushBufferedReasoningMessages(state);
       flushPendingToolActivityOutput(state);
@@ -451,7 +656,7 @@ function buildFlatViewMessages(
     const userFromClientRequest = parseUserFromClientRequest({
       decoded,
       meta,
-      options,
+      options: args.options,
       resolvedTurnId: clientRequestTurnIdBySequence.get(meta.seq),
     });
     if (userFromClientRequest) {
@@ -485,6 +690,18 @@ function buildFlatViewMessages(
       turnId: eventTurnId,
     });
 
+    if (decoded.type === "item/started" && decoded.item.type === "reasoning") {
+      trackReasoningTurn(state, reasoningIdentity);
+      if (shouldTrackActiveThinking) {
+        upsertReasoningLifecycle({
+          identity: reasoningIdentity,
+          meta,
+          state,
+          threadId: decoded.threadId,
+        });
+      }
+    }
+
     if (
       projectBufferedTextEvent({
         createMessage: (messageKey) => ({
@@ -513,7 +730,7 @@ function buildFlatViewMessages(
         },
         state,
         text:
-          options?.threadType === "manager"
+          args.options?.threadType === "manager"
             ? null
             : parseAssistantDeltaText(decoded),
       })
@@ -549,12 +766,28 @@ function buildFlatViewMessages(
         },
         state,
         text:
-          options?.threadType === "manager"
+          args.options?.threadType === "manager"
             ? null
             : parseAssistantFinalText(decoded),
       })
     ) {
       continue;
+    }
+
+    if (
+      (decoded.type === "item/reasoning/summaryTextDelta" ||
+        decoded.type === "item/reasoning/textDelta") &&
+      reasoningIdentity
+    ) {
+      trackReasoningTurn(state, reasoningIdentity);
+      if (shouldTrackActiveThinking) {
+        upsertReasoningLifecycle({
+          identity: reasoningIdentity,
+          meta,
+          state,
+          threadId: decoded.threadId,
+        });
+      }
     }
 
     if (
@@ -578,14 +811,14 @@ function buildFlatViewMessages(
         meta,
         mode: "delta",
         refs: {
-          finalizedKeys: state.finalizedReasoningMessageKeys,
+          finalizedKeys: state.finalizedReasoningKeys,
           openMessages: state.openReasoningMessagesByKey,
           textBuffers: state.reasoningTextBuffersByKey,
           visibleKeys: state.visibleReasoningMessageKeys,
         },
         state,
         text:
-          options?.threadType === "manager"
+          args.options?.threadType === "manager"
             ? null
             : parseReasoningDeltaText(decoded),
       })
@@ -614,19 +847,26 @@ function buildFlatViewMessages(
         meta,
         mode: "final",
         refs: {
-          finalizedKeys: state.finalizedReasoningMessageKeys,
+          finalizedKeys: state.finalizedReasoningKeys,
           openMessages: state.openReasoningMessagesByKey,
           textBuffers: state.reasoningTextBuffersByKey,
           visibleKeys: state.visibleReasoningMessageKeys,
         },
         state,
         text:
-          options?.threadType === "manager"
+          args.options?.threadType === "manager"
             ? null
             : parseReasoningFinalText(decoded),
       })
     ) {
+      if (decoded.type === "item/completed" && decoded.item.type === "reasoning") {
+        finalizeReasoningLifecycle(state, reasoningIdentity);
+      }
       continue;
+    }
+
+    if (decoded.type === "item/completed" && decoded.item.type === "reasoning") {
+      finalizeReasoningLifecycle(state, reasoningIdentity);
     }
 
     const execEvent = parseExecLifecycleEvent(
@@ -787,7 +1027,7 @@ function buildFlatViewMessages(
     }
 
     const operation = parseOperationMessage(decoded, meta, {
-      includeOptionalOperations: options?.includeOptionalOperations,
+      includeOptionalOperations: args.options?.includeOptionalOperations,
     });
     if (operation) {
       flushToolActivityBeforeNonToolMessage(state);
@@ -835,18 +1075,53 @@ function buildFlatViewMessages(
     }
   }
 
-  finalizePendingMessages(state, options);
-  return sortViewMessagesBySource(compactTaskMessages(state.messages));
+  finalizePendingMessages(state, args.options);
+  return {
+    activeThinking: args.includeActiveThinking
+      ? buildProjectionActiveThinking(state, args.options?.threadStatus)
+      : null,
+    messages: sortViewMessagesBySource(compactTaskMessages(state.messages)),
+  };
+}
+
+function buildDetailedProjection(
+  args: {
+    activeThinking: ActiveThinking | null;
+    events: ThreadEventWithMeta[];
+    messages: ViewMessage[];
+    turnMessageDetail: ToViewProjectionOptions["turnMessageDetail"];
+  },
+): ViewProjection {
+  const projection = buildViewProjection({
+    events: args.events,
+    messages: args.messages,
+  });
+  const semanticProjection = normalizeSemanticViewProjection({
+    ...projection,
+    state: {
+      activeThinking: args.activeThinking,
+    },
+  });
+  return applyProjectionTurnMessageDetail(
+    semanticProjection,
+    args.turnMessageDetail,
+  );
 }
 
 function toFullProjection(
   events: ThreadEventWithMeta[],
   options: ToViewProjectionOptions,
 ): ViewProjection {
-  const messages = buildFlatViewMessages(events, options);
-  return buildViewProjection({
+  const flatProjection = buildFlatProjectionData({
     events,
-    messages,
+    includeActiveThinking: true,
+    options,
+  });
+  return buildDetailedProjection({
+    activeThinking: flatProjection.activeThinking,
+    events,
+    messages: flatProjection.messages,
+    turnMessageDetail: options.turnMessageDetail,
   });
 }
 
@@ -854,7 +1129,45 @@ export function toViewMessages(
   events: ThreadEventWithMeta[] | undefined,
   options?: ToViewMessagesOptions,
 ): ViewMessage[] {
-  return normalizeSemanticViewMessages(buildFlatViewMessages(events, options));
+  if (!events || events.length === 0) {
+    return [];
+  }
+
+  const orderedEvents = getOrderedThreadEvents(events);
+  return normalizeSemanticViewMessages(
+    buildFlatProjectionData({
+      events: orderedEvents,
+      includeActiveThinking: false,
+      options,
+    }).messages,
+  );
+}
+
+export function toViewProjectionEntries(
+  events: ThreadEventWithMeta[] | undefined,
+  options: ToViewProjectionOptions,
+): ViewProjection {
+  if (!events || events.length === 0) {
+    return {
+      state: {
+        activeThinking: null,
+      },
+      entries: [],
+    };
+  }
+
+  const orderedEvents = getOrderedThreadEvents(events);
+  const flatProjection = buildFlatProjectionData({
+    events: orderedEvents,
+    includeActiveThinking: false,
+    options,
+  });
+  return buildDetailedProjection({
+    activeThinking: null,
+    events: orderedEvents,
+    messages: flatProjection.messages,
+    turnMessageDetail: options.turnMessageDetail,
+  });
 }
 
 export function toViewProjection(
@@ -862,14 +1175,14 @@ export function toViewProjection(
   options: ToViewProjectionOptions,
 ): ViewProjection {
   if (!events || events.length === 0) {
-    return { entries: [] };
+    return {
+      state: {
+        activeThinking: null,
+      },
+      entries: [],
+    };
   }
 
   const orderedEvents = getOrderedThreadEvents(events);
-  const fullProjection = toFullProjection(orderedEvents, options);
-  const semanticProjection = normalizeSemanticViewProjection(fullProjection);
-  return applyProjectionTurnMessageDetail(
-    semanticProjection,
-    options.turnMessageDetail,
-  );
+  return toFullProjection(orderedEvents, options);
 }

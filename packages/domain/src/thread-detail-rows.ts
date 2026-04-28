@@ -118,13 +118,6 @@ export interface TimelineTurnSummaryRow {
   rows: TimelineTurnSummaryChildRow[] | null;
 }
 
-export interface TimelineActiveThinking {
-  id: string;
-  text: string;
-  startedAt: number;
-  updatedAt: number;
-}
-
 export type TimelineRow =
   | TimelineMessageRow
   | TimelineToolBundleRow
@@ -212,9 +205,3 @@ export const timelineRowSchema = z.discriminatedUnion("kind", [
   timelineAssistantStepSummaryRowSchema,
   timelineTurnSummaryRowSchema,
 ]);
-export const timelineActiveThinkingSchema = z.object({
-  id: z.string(),
-  text: z.string(),
-  startedAt: z.number(),
-  updatedAt: z.number(),
-});

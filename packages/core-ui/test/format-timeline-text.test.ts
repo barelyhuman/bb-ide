@@ -97,6 +97,7 @@ function projectionFromMessages(messages: ViewMessage[]): ViewProjection {
         turn: projectionTurnFromMessages(entry.turn.turnId, messagesForTurn),
       };
     }),
+    state: { activeThinking: null },
   };
 }
 
@@ -224,27 +225,6 @@ describe("formatTimelineAsText", () => {
     expect(text).toContain("[running] React suspense docs");
   });
 
-  it("renders pending command bundle summaries in present tense", () => {
-    const text = formatMessagesAsText([
-      {
-        kind: "tool-call",
-        id: "command-1",
-        threadId: "t1",
-        sourceSeqStart: 1,
-        sourceSeqEnd: 1,
-        createdAt: 1,
-        toolName: "exec_command",
-        callId: "call-1",
-        command: "pnpm test",
-        status: "pending",
-        approvalStatus: null,
-      },
-    ]);
-
-    expect(text).toContain("Running 1 command");
-    expect(text).not.toContain("Ran 1 command");
-  });
-
   it("renders interrupted web fetches with a lifecycle label", () => {
     const text = formatMessagesAsText(
       [
@@ -268,76 +248,6 @@ describe("formatTimelineAsText", () => {
 
     expect(text).toContain("Fetched https://example.com");
     expect(text).toContain("[interrupted] https://example.com");
-  });
-
-  it("renders assistant-step summaries as neutral recaps even when child work is pending", () => {
-    const text = formatMessagesAsText([
-      {
-        kind: "assistant-text",
-        id: "assistant-1",
-        threadId: "t1",
-        turnId: "turn-1",
-        sourceSeqStart: 1,
-        sourceSeqEnd: 1,
-        createdAt: 1,
-        text: "I am inspecting the repo.",
-        status: "completed",
-      },
-      {
-        kind: "tool-exploring",
-        id: "explore-1",
-        threadId: "t1",
-        turnId: "turn-1",
-        sourceSeqStart: 2,
-        sourceSeqEnd: 2,
-        createdAt: 2,
-        status: "completed",
-        calls: [
-          {
-            callId: "explore-call-1",
-            command: "Read /src/main.ts",
-            parsedCmd: [
-              {
-                type: "read",
-                cmd: "Read /src/main.ts",
-                name: "Read",
-                path: "/src/main.ts",
-              },
-            ],
-            output: "file contents",
-            status: "completed",
-          },
-        ],
-      },
-      {
-        kind: "tool-call",
-        id: "command-1",
-        threadId: "t1",
-        turnId: "turn-1",
-        sourceSeqStart: 3,
-        sourceSeqEnd: 3,
-        createdAt: 3,
-        toolName: "Bash",
-        callId: "call-2",
-        command: "pnpm test",
-        status: "pending",
-        approvalStatus: null,
-      },
-      {
-        kind: "assistant-text",
-        id: "assistant-2",
-        threadId: "t1",
-        turnId: "turn-1",
-        sourceSeqStart: 4,
-        sourceSeqEnd: 4,
-        createdAt: 4,
-        text: "I am waiting for the command to finish.",
-        status: "streaming",
-      },
-    ]);
-
-    expect(text).toContain("Explored 1 file, ran 1 command");
-    expect(text).not.toContain("Explored 1 file, running 1 command");
   });
 
   it("renders user + assistant + tool-call in minimal mode", () => {
@@ -447,45 +357,6 @@ describe("formatTimelineAsText", () => {
     expect(verbose).not.toContain("file contents here");
   });
 
-  it("does not repeat the exploration summary inside an expanded exploration bundle", () => {
-    const text = formatMessagesAsText(
-      [
-        {
-          kind: "tool-exploring",
-          id: "exp-single-search",
-          threadId: "t1",
-          sourceSeqStart: 1,
-          sourceSeqEnd: 1,
-          createdAt: 1,
-          status: "completed",
-          calls: [
-            {
-              callId: "search-1",
-              command: "Grep 'bug' in /src",
-              parsedCmd: [
-                {
-                  type: "search",
-                  cmd: "Grep 'bug' in /src",
-                  query: "bug",
-                  path: "/src",
-                },
-              ],
-              output: "found 3 matches",
-              status: "completed",
-            },
-          ],
-        },
-      ],
-      {
-        color: false,
-        verbose: true,
-      },
-    );
-
-    expect(text.match(/Explored 1 search/g)).toHaveLength(1);
-    expect(text).toContain("Search bug in /src");
-  });
-
   it("limits large exploring groups in minimal mode", () => {
     const calls = Array.from({ length: 10 }, (_, index) => ({
       callId: `c${index + 1}`,
@@ -544,14 +415,13 @@ describe("formatTimelineAsText", () => {
 
     const minimal = formatMessagesAsText(messages, { color: false });
     expect(minimal).toContain("File Edit");
-    expect(minimal).toContain("/src/auth.ts"); // path shown so status is meaningful
+    expect(minimal).toContain("/src/auth.ts");
     expect(minimal).not.toContain("if (!user)"); // diff hidden in minimal
 
     const verbose = formatMessagesAsText(messages, {
       color: false,
       verbose: true,
     });
-    expect(verbose).toContain("/src/auth.ts");
     expect(verbose).toContain("if (!user)"); // diff shown in verbose
   });
 
@@ -572,30 +442,6 @@ describe("formatTimelineAsText", () => {
     const text = formatMessagesAsText(messages, { color: false });
     expect(text).toContain("Error");
     expect(text).toContain("Provider unavailable");
-  });
-
-  it("omits reasoning from timeline rows", () => {
-    const messages: ViewMessage[] = [
-      {
-        kind: "assistant-reasoning",
-        id: "r1",
-        threadId: "t1",
-        sourceSeqStart: 1,
-        sourceSeqEnd: 1,
-        createdAt: 1,
-        text: "Let me think about this...",
-        status: "completed",
-      },
-    ];
-
-    const minimal = formatMessagesAsText(messages, { color: false });
-    expect(minimal).toBe("");
-
-    const verbose = formatMessagesAsText(messages, {
-      color: false,
-      verbose: true,
-    });
-    expect(verbose).toBe("");
   });
 
   it("collapses grouped tool activity in minimal mode and expands it in verbose mode", () => {

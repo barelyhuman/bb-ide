@@ -22,7 +22,7 @@ export interface AssistantStreamProjectionState extends ToolActivityProjectionSt
   openReasoningMessagesByKey: Map<string, ViewAssistantReasoningMessage>;
   reasoningTextBuffersByKey: Map<string, VisibleTextBuffer>;
   visibleReasoningMessageKeys: Set<string>;
-  finalizedReasoningMessageKeys: Set<string>;
+  finalizedReasoningKeys: Set<string>;
 }
 
 type BufferedAssistantMessage =
@@ -129,7 +129,7 @@ export function flushBufferedReasoningMessages(
 ): void {
   flushBufferedTextMessages({
     buffers: state.reasoningTextBuffersByKey,
-    finalizedKeys: state.finalizedReasoningMessageKeys,
+    finalizedKeys: state.finalizedReasoningKeys,
     openMessages: state.openReasoningMessagesByKey,
     state,
     visibleKeys: state.visibleReasoningMessageKeys,

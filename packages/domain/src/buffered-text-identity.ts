@@ -103,6 +103,17 @@ export function resolveBufferedTextIdentity(
     };
   }
   if (
+    args.decoded.type === "item/started" &&
+    args.decoded.item.type === "reasoning"
+  ) {
+    return {
+      itemId: args.decoded.item.id,
+      kind: "reasoning",
+      parentToolCallId,
+      turnId,
+    };
+  }
+  if (
     args.decoded.type === "item/completed" &&
     args.decoded.item.type === "reasoning"
   ) {

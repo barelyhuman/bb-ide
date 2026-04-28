@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type {
-  TimelineActiveThinking,
+  ActiveThinking,
   TimelineRow,
   TimelineTurnSummaryRow,
 } from "@bb/domain";
@@ -12,7 +12,7 @@ import { usePreferredTheme } from "@/hooks/useTheme";
 import { toUserAttachmentImageSrc } from "@/lib/user-attachment-images";
 
 interface ThreadTimelinePaneProps {
-  activeThinking: TimelineActiveThinking | null;
+  activeThinking: ActiveThinking | null;
   footer: ReactNode;
   header: ReactNode;
   isThreadTimelinePending: boolean;

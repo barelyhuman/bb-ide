@@ -108,7 +108,6 @@ export {
 } from "./provider-event-utils.js";
 
 export { extractThreadContextWindowUsage } from "./thread-context-window-usage.js";
-export { extractActiveThinking } from "./active-thinking.js";
 
 export {
   buildCollapsedTimelineRows,
@@ -124,7 +123,11 @@ export {
 export { decodeRow } from "./event-decode.js";
 export type { EventMeta } from "./event-decode.js";
 
-export { toViewMessages, toViewProjection } from "./to-view-messages.js";
+export {
+  toViewMessages,
+  toViewProjection,
+  toViewProjectionEntries,
+} from "./to-view-messages.js";
 export type { ThreadEventWithMeta } from "./to-view-messages.js";
 
 export { extractErrorMessage, toRecord } from "./unknown-helpers.js";

@@ -488,7 +488,12 @@ class SemanticProjectionBuilder {
       });
     }
 
-    return { entries };
+    return {
+      state: {
+        activeThinking: null,
+      },
+      entries,
+    };
   }
 
   private toSemanticMessage(message: ViewMessage): ViewMessage {
@@ -507,9 +512,13 @@ class SemanticProjectionBuilder {
 export function normalizeSemanticViewProjection(
   projection: ViewProjection,
 ): ViewProjection {
-  return new SemanticProjectionBuilder(
+  const normalizedProjection = new SemanticProjectionBuilder(
     collectProjectionMessageContexts(projection),
   ).buildRootProjection();
+  return {
+    ...normalizedProjection,
+    state: projection.state,
+  };
 }
 
 export function normalizeSemanticViewMessages(

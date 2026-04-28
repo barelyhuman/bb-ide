@@ -249,6 +249,7 @@ export {
   listRecentStoredEventRows,
   listStoredEventRows,
   listStoredEventRowsInRange,
+  listStoredTurnInputAcceptedRowsByClientRequestSequences,
   pruneContextWindowUsageEventsBeforeSequence,
   pruneTokenUsageEventsBeforeSequence,
   pruneResolvedItemDeltas,

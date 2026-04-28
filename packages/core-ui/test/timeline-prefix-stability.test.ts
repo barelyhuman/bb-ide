@@ -168,7 +168,9 @@ function userLogicalRow(row: TimelineRow): LogicalTimelineRow | null {
   };
 }
 
-function providerNoticeLogicalRow(row: TimelineRow): LogicalTimelineRow | null {
+function providerNoticeLogicalRow(
+  row: TimelineRow,
+): LogicalTimelineRow | null {
   if (row.kind !== "message") {
     return null;
   }
@@ -191,17 +193,6 @@ function providerNoticeLogicalRow(row: TimelineRow): LogicalTimelineRow | null {
     status: message.status ?? "completed",
     title: message.title,
   };
-}
-
-function completedReasoningMessages(
-  messages: ViewMessage[],
-): Array<Extract<ViewMessage, { kind: "assistant-reasoning" }>> {
-  return messages.filter(
-    (
-      message,
-    ): message is Extract<ViewMessage, { kind: "assistant-reasoning" }> =>
-      message.kind === "assistant-reasoning" && message.status === "completed",
-  );
 }
 
 describe("timeline prefix stability", () => {
@@ -263,9 +254,9 @@ describe("timeline prefix stability", () => {
     });
 
     expect(
-      completedPrefix.rows
-        .map((row) => provisioningLogicalRow(row))
-        .filter((row): row is LogicalTimelineRow => row !== null),
+      completedPrefix.rows.map((row) => provisioningLogicalRow(row)).filter(
+        (row): row is LogicalTimelineRow => row !== null,
+      ),
     ).toEqual([
       {
         key: "provisioning:tpv-prefix",
@@ -274,9 +265,9 @@ describe("timeline prefix stability", () => {
       },
     ]);
     expect(
-      contentPrefix.rows
-        .map((row) => provisioningLogicalRow(row))
-        .filter((row): row is LogicalTimelineRow => row !== null),
+      contentPrefix.rows.map((row) => provisioningLogicalRow(row)).filter(
+        (row): row is LogicalTimelineRow => row !== null,
+      ),
     ).toEqual([
       {
         key: "provisioning:tpv-prefix",
@@ -391,9 +382,9 @@ describe("timeline prefix stability", () => {
     });
 
     expect(
-      contentPrefix.rows
-        .map((row) => operationLogicalRow(row))
-        .filter((row): row is LogicalTimelineRow => row !== null),
+      contentPrefix.rows.map((row) => operationLogicalRow(row)).filter(
+        (row): row is LogicalTimelineRow => row !== null,
+      ),
     ).toEqual([
       {
         key: "operation:op-prefix",
@@ -447,9 +438,9 @@ describe("timeline prefix stability", () => {
     });
 
     expect(
-      contentPrefix.rows
-        .map((row) => permissionGrantLogicalRow(row))
-        .filter((row): row is LogicalTimelineRow => row !== null),
+      contentPrefix.rows.map((row) => permissionGrantLogicalRow(row)).filter(
+        (row): row is LogicalTimelineRow => row !== null,
+      ),
     ).toEqual([
       {
         key: "permission-grant:pi-prefix",
@@ -506,9 +497,9 @@ describe("timeline prefix stability", () => {
     });
 
     expect(
-      completedPrefix.rows
-        .map((row) => compactionLogicalRow(row))
-        .filter((row): row is LogicalTimelineRow => row !== null),
+      completedPrefix.rows.map((row) => compactionLogicalRow(row)).filter(
+        (row): row is LogicalTimelineRow => row !== null,
+      ),
     ).toEqual([
       {
         key: "thread-1:op:compaction:turn-1",
@@ -895,24 +886,55 @@ describe("timeline prefix stability", () => {
     });
   });
 
-  it("keeps completed reasoning stable after late deltas", () => {
+  it("does not reopen active thinking after late reasoning deltas", () => {
     const event = createTimelineEventFactory({
       threadId: "thread-1",
       providerThreadId: "provider-thread-1",
       turnId: "turn-1",
     });
+    const activePrefix = renderTimelineFixture({
+      events: [
+        event.turnStarted({
+          createdAt: 1,
+        }),
+        event.reasoningDelta({
+          createdAt: 2,
+          itemId: "reasoning-open",
+          delta: "Thinking through the repo.\nTrailing partial",
+        }),
+      ],
+      projectionOptions: {
+        threadStatus: "active",
+        turnMessageDetail: "full",
+      },
+    });
+
+    expect(activePrefix.projection.state.activeThinking).toMatchObject({
+      id: "reasoning-open",
+      text: "Thinking through the repo.\n",
+      startedAt: 2,
+      updatedAt: 2,
+    });
+
     const events = [
-      event.turnStarted({}),
+      event.turnStarted({
+        createdAt: 3,
+      }),
       event.reasoningDelta({
+        createdAt: 4,
         itemId: "reasoning-prefix",
         delta: "Thinking",
       }),
       event.reasoningCompleted({
+        createdAt: 5,
         itemId: "reasoning-prefix",
         text: "Done thinking.",
       }),
-      event.turnCompleted({}),
+      event.turnCompleted({
+        createdAt: 6,
+      }),
       event.reasoningDelta({
+        createdAt: 7,
         itemId: "reasoning-prefix",
         delta: " late",
       }),
@@ -920,17 +942,12 @@ describe("timeline prefix stability", () => {
     const finalPrefix = renderTimelineFixture({
       events,
       projectionOptions: {
-        threadStatus: "idle",
+        threadStatus: "active",
         turnMessageDetail: "full",
       },
     });
 
-    expect(completedReasoningMessages(finalPrefix.messages)).toMatchObject([
-      {
-        status: "completed",
-        text: "Done thinking.",
-      },
-    ]);
+    expect(finalPrefix.projection.state.activeThinking).toBeNull();
   });
 
   it("keeps client-requested input stable when the turn is accepted", () => {

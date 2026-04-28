@@ -277,6 +277,9 @@ export function buildViewProjection(
   });
 
   return {
+    state: {
+      activeThinking: null,
+    },
     entries: orderedEntryDrafts.map((entryDraft) =>
       createViewTimelineEntry(entryDraft, turnsById),
     ),
