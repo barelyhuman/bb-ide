@@ -1,6 +1,11 @@
-import { Fragment, type ReactNode } from "react";
+import {
+  Fragment,
+  type CSSProperties,
+  type Ref,
+  type ReactNode,
+} from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useAtom } from "jotai";
+import { atom, useAtom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Archive, ChevronRight, Settings, UserRoundPlus } from "lucide-react";
@@ -56,6 +61,37 @@ const sidebarWidthAtom = atomWithStorage<number>(
   sidebarWidthStorage,
   { getOnInit: true },
 );
+
+// Held in jotai (rather than as `useState` inside AppLayout) so that toggling
+// the sidebar does not re-render AppLayout — only the small bridge below
+// subscribes. AppLayout's `children` reference stays stable across toggles,
+// so React's element-reference bailout skips re-rendering the entire route
+// subtree (ThreadDetailView, the timeline, etc.).
+const sidebarOpenAtom = atom(true);
+
+interface SidebarStateBridgeProps {
+  providerRef: Ref<HTMLDivElement>;
+  style: CSSProperties;
+  children: ReactNode;
+}
+
+function SidebarStateBridge({
+  providerRef,
+  style,
+  children,
+}: SidebarStateBridgeProps) {
+  const [open, setOpen] = useAtom(sidebarOpenAtom);
+  return (
+    <SidebarProvider
+      ref={providerRef}
+      style={style}
+      open={open}
+      onOpenChange={setOpen}
+    >
+      {children}
+    </SidebarProvider>
+  );
+}
 
 const routeTitles: Record<string, { title: string; subtitle?: string }> = {
   "/": { title: "Projects", subtitle: "Select or create a project" },
@@ -214,7 +250,6 @@ export function AppLayout({ children }: AppLayoutProps) {
   const { data: projects, isLoading: projectsLoading } = useProjects();
   const hireProjectManager = useHireProjectManager();
   const hireManagerModal = useDialogState<string>();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarWidth, setSidebarWidth] = useAtom(sidebarWidthAtom);
   const [isSidebarResizing, setIsSidebarResizing] = useState(false);
   const providerRef = useRef<HTMLDivElement>(null);
@@ -371,10 +406,6 @@ export function AppLayout({ children }: AppLayoutProps) {
 
   useEffect(() => {
     liveWidthRef.current = sidebarWidth;
-    providerRef.current?.style.setProperty(
-      "--sidebar-width",
-      `${sidebarWidth}px`,
-    );
   }, [sidebarWidth]);
 
   useEffect(() => {
@@ -385,11 +416,13 @@ export function AppLayout({ children }: AppLayoutProps) {
   return (
     <ProjectActionsProvider>
       <ThreadActionsProvider>
-        <SidebarProvider
-          ref={providerRef}
-          className="[--sidebar-width:20rem]"
-          open={sidebarOpen}
-          onOpenChange={setSidebarOpen}
+        <SidebarStateBridge
+          providerRef={providerRef}
+          style={
+            {
+              "--sidebar-width": `${sidebarWidth}px`,
+            } as CSSProperties
+          }
         >
           <AppSidebar
             onResizeMouseDown={handleResizeMouseDown}
@@ -423,7 +456,7 @@ export function AppLayout({ children }: AppLayoutProps) {
               </main>
             </div>
           </SidebarInset>
-        </SidebarProvider>
+        </SidebarStateBridge>
         <ProjectPathDialog
           target={quickCreateProject.projectPathDialog.target}
           pending={quickCreateProject.isCreating}
