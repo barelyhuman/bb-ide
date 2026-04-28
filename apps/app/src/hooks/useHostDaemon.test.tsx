@@ -53,6 +53,14 @@ interface HostDaemonModules {
   };
 }
 
+interface SuspenseWrapperProps {
+  children: ReactNode;
+}
+
+interface HostDaemonProbeProps {
+  onSnapshot: (snapshot: HostDaemonSnapshot) => void;
+}
+
 function makeHost(overrides: HostOverrides = {}): Host {
   return {
     createdAt: 1,
@@ -69,7 +77,7 @@ function makeHost(overrides: HostOverrides = {}): Host {
 function createSuspenseWrapper() {
   const { wrapper: baseWrapper } = createQueryClientTestHarness();
 
-  return ({ children }: { children: ReactNode }) =>
+  return ({ children }: SuspenseWrapperProps) =>
     baseWrapper({
       children: <Suspense fallback={null}>{children}</Suspense>,
     });
@@ -78,11 +86,7 @@ function createSuspenseWrapper() {
 function createHostDaemonProbe(
   useHostDaemon: HostDaemonModules["useHostDaemon"],
 ) {
-  return function HostDaemonProbe({
-    onSnapshot,
-  }: {
-    onSnapshot: (snapshot: HostDaemonSnapshot) => void;
-  }) {
+  return function HostDaemonProbe({ onSnapshot }: HostDaemonProbeProps) {
     const value = useHostDaemon();
 
     useEffect(() => {
@@ -335,6 +339,47 @@ describe("useHostDaemon", () => {
       expect(screen.getByTestId("supports-folder-picker").textContent).toBe(
         "true",
       );
+    });
+
+    wsManager.disconnect();
+  });
+
+  it("does not report cached connected hosts as connected while the server websocket reconnects", async () => {
+    const state: HostDaemonFetchState = {
+      daemonStatus: {
+        connected: true,
+        hostId: "host-1",
+        serverUrl: "http://localhost:3334",
+        supportsNativeFolderPicker: false,
+        platform: "linux",
+      },
+      hostDaemonPort: 4123,
+      hosts: [makeHost()],
+      pickedFolderPath: null,
+    };
+    installHostDaemonFetchRoutes(state, []);
+
+    const { FakeReconnectingWebSocket, useHostDaemon, wsManager } =
+      await importFreshHostDaemonModules();
+    const HostDaemonProbe = createHostDaemonProbe(useHostDaemon);
+
+    await act(async () => {
+      render(<HostDaemonProbe onSnapshot={() => {}} />, {
+        wrapper: createSuspenseWrapper(),
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("is-connected").textContent).toBe("true");
+    });
+
+    wsManager.connect();
+    const socket = FakeReconnectingWebSocket.latest();
+    socket.open();
+    socket.close();
+
+    await waitFor(() => {
+      expect(screen.getByTestId("is-connected").textContent).toBe("false");
     });
 
     wsManager.disconnect();

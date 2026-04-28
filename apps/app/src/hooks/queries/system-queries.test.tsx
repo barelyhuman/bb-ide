@@ -17,6 +17,7 @@ import {
   useHost,
   useSandboxEnvVars,
 } from "./system-queries";
+import { getEffectiveHost } from "./effective-hosts";
 
 function makeHost(overrides: Partial<Host> = {}): Host {
   return {
@@ -64,6 +65,35 @@ describe("useHost", () => {
     const { result } = renderHook(() => useHost(undefined), { wrapper });
 
     expect(result.current.fetchStatus).toBe("idle");
+  });
+});
+
+describe("getEffectiveHost", () => {
+  it("keeps raw host status before the initial server websocket connects", () => {
+    expect(
+      getEffectiveHost({
+        host: makeHost({ status: "connected" }),
+        serverConnectionState: "connecting",
+      }).status,
+    ).toBe("connected");
+  });
+
+  it("treats cached connected hosts as disconnected while reconnecting", () => {
+    expect(
+      getEffectiveHost({
+        host: makeHost({ status: "connected" }),
+        serverConnectionState: "reconnecting",
+      }).status,
+    ).toBe("disconnected");
+  });
+
+  it("preserves non-connected host statuses while reconnecting", () => {
+    expect(
+      getEffectiveHost({
+        host: makeHost({ status: "suspended" }),
+        serverConnectionState: "reconnecting",
+      }).status,
+    ).toBe("suspended");
   });
 });
 

@@ -2,13 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { PendingInteraction } from "@bb/domain";
 import type { ResolvePendingInteractionRequest } from "@bb/server-contract";
 import * as api from "@/lib/api";
-import {
-  statusQueryKey,
-  threadPendingInteractionsQueryKey,
-  threadQueryKey,
-  threadTimelineQueryKeyPrefix,
-  threadsQueryKey,
-} from "../queries/query-keys";
+import { invalidateThreadPendingInteractionResolutionQueries } from "../cache-effects";
 
 export interface ResolveThreadPendingInteractionMutationRequest {
   threadId: string;
@@ -31,20 +25,9 @@ export function useResolveThreadPendingInteraction() {
     }: ResolveThreadPendingInteractionMutationRequest): Promise<PendingInteraction> =>
       api.resolveThreadPendingInteraction(threadId, interactionId, resolution),
     onSuccess: (interaction, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: threadPendingInteractionsQueryKey(variables.threadId),
-      });
-      queryClient.invalidateQueries({
-        queryKey: threadTimelineQueryKeyPrefix(variables.threadId),
-      });
-      queryClient.invalidateQueries({
-        queryKey: threadQueryKey(variables.threadId),
-      });
-      queryClient.invalidateQueries({
-        queryKey: threadsQueryKey(),
-      });
-      queryClient.invalidateQueries({
-        queryKey: statusQueryKey(),
+      invalidateThreadPendingInteractionResolutionQueries({
+        queryClient,
+        threadId: variables.threadId,
       });
       return interaction;
     },

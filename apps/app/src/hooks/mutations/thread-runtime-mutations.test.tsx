@@ -2,11 +2,14 @@
 
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { SendDraftResponse, ThreadTimelineResponse } from "@bb/server-contract";
+import type {
+  SendDraftResponse,
+  ThreadTimelineResponse,
+} from "@bb/server-contract";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import * as api from "@/lib/api";
 import {
-  projectSourceWorkspaceStatusQueryKeyPrefix,
+  projectSourceWorkspaceStatusQueryKey,
   threadTimelineQueryKey,
 } from "../queries/query-keys";
 import {
@@ -44,7 +47,11 @@ describe("thread runtime mutations", () => {
   it("invalidates primary checkout status after sending a message", async () => {
     vi.mocked(api.sendThreadMessage).mockResolvedValue(undefined);
     const { queryClient, wrapper } = createQueryClientTestHarness();
-    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+    const workspaceStatusQueryKey = projectSourceWorkspaceStatusQueryKey(
+      "project-1",
+      "source-1",
+    );
+    queryClient.setQueryData(workspaceStatusQueryKey, {});
     const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
 
     await act(async () => {
@@ -55,9 +62,9 @@ describe("thread runtime mutations", () => {
       });
     });
 
-    expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: projectSourceWorkspaceStatusQueryKeyPrefix(),
-    });
+    expect(
+      queryClient.getQueryState(workspaceStatusQueryKey)?.isInvalidated,
+    ).toBe(true);
   });
 
   it("optimistically inserts a user message row into the timeline cache", async () => {
@@ -75,7 +82,7 @@ describe("thread runtime mutations", () => {
     );
     const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
 
-    let mutationPromise: Promise<unknown> | undefined;
+    let mutationPromise: Promise<void> | undefined;
     act(() => {
       mutationPromise = result.current.mutateAsync({
         id: "thread-1",
@@ -90,10 +97,9 @@ describe("thread runtime mutations", () => {
       );
       expect(timeline?.rows).toHaveLength(1);
     });
-    const optimisticTimeline =
-      queryClient.getQueryData<ThreadTimelineResponse>(
-        threadTimelineQueryKey("thread-1", false),
-      );
+    const optimisticTimeline = queryClient.getQueryData<ThreadTimelineResponse>(
+      threadTimelineQueryKey("thread-1", false),
+    );
     const onlyRow = optimisticTimeline?.rows[0];
     expect(onlyRow?.kind).toBe("message");
     if (onlyRow?.kind === "message") {
@@ -140,7 +146,11 @@ describe("thread runtime mutations", () => {
       queuedMessage,
     });
     const { queryClient, wrapper } = createQueryClientTestHarness();
-    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+    const workspaceStatusQueryKey = projectSourceWorkspaceStatusQueryKey(
+      "project-1",
+      "source-1",
+    );
+    queryClient.setQueryData(workspaceStatusQueryKey, {});
     const { result } = renderHook(() => useSendThreadDraft(), { wrapper });
 
     await act(async () => {
@@ -150,8 +160,8 @@ describe("thread runtime mutations", () => {
       });
     });
 
-    expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: projectSourceWorkspaceStatusQueryKeyPrefix(),
-    });
+    expect(
+      queryClient.getQueryState(workspaceStatusQueryKey)?.isInvalidated,
+    ).toBe(true);
   });
 });

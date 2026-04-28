@@ -32,7 +32,7 @@ import { ThreadWorkspaceOpenButton } from "@/components/thread/ThreadWorkspaceOp
 import { findLatestActivityRowId, formatEnvironmentDisplay } from "@bb/core-ui";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useLocalOpenTargets } from "@/hooks/useLocalOpenTargets";
-import { useHost } from "@/hooks/queries/system-queries";
+import { useEffectiveHost } from "@/hooks/queries/effective-hosts";
 import { getEnvironmentWorkspaceLabelIcon } from "@/lib/environment-workspace-display";
 import { useStoredShowAllEvents } from "@/lib/show-all-events-preference";
 import { getGitStatusDisplay } from "@/lib/workspace-status";
@@ -197,7 +197,7 @@ export function ThreadDetailView() {
   } = useLocalOpenTargets({
     enabled: localWorkspaceRootPath !== null,
   });
-  const { data: environmentHost } = useHost(environment?.hostId);
+  const { data: environmentHost } = useEffectiveHost(environment?.hostId);
   const isThreadTimelinePending =
     timelineLoading && threadDetailRows.length === 0;
   const {
@@ -612,17 +612,16 @@ export function ThreadDetailView() {
           isManagerThread,
           onClose: closeThreadSecondaryPanel,
           onCollapse: closeThreadSecondaryPanel,
-          onOpenFile:
-            localWorkspaceRootPath
-              ? (relativePath: string) => {
-                  const fullPath = `${localWorkspaceRootPath}/${relativePath}`;
-                  void openPathInPreferredTarget({
-                    lineNumber: null,
-                    path: fullPath,
-                    workspaceRootPath: localWorkspaceRootPath,
-                  });
-                }
-              : undefined,
+          onOpenFile: localWorkspaceRootPath
+            ? (relativePath: string) => {
+                const fullPath = `${localWorkspaceRootPath}/${relativePath}`;
+                void openPathInPreferredTarget({
+                  lineNumber: null,
+                  path: fullPath,
+                  workspaceRootPath: localWorkspaceRootPath,
+                });
+              }
+            : undefined,
           onPanelChange: openThreadSecondaryPanel,
           showGitDiffTab: canUseGitUi,
           showThreadStorageTab: thread.type === "manager",

@@ -8,7 +8,7 @@ import {
 import {
   pickFolder as daemonPickFolder,
 } from "@/lib/api-host-daemon";
-import { useHosts } from "./queries/system-queries";
+import { useEffectiveHosts } from "./queries/effective-hosts";
 
 /**
  * Hook for host daemon operations.
@@ -26,7 +26,7 @@ export function useHostDaemon() {
   const localHostId = useAtomValue(localHostIdAtom);
   const localHostStatus = useAtomValue(localHostStatusAtom);
   const daemonPort = useAtomValue(hostDaemonPortAtom);
-  const { data: hosts } = useHosts();
+  const { data: hosts } = useEffectiveHosts();
 
   const hasDaemon = localHostId != null;
   const supportsNativeFolderPicker =
@@ -38,11 +38,8 @@ export function useHostDaemon() {
     return hosts.find((h) => h.id === localHostId) ?? null;
   }, [localHostId, hosts]);
 
-  // For the connection indicator we only need the hosts query — not the daemon
-  // probe atom.  The atom can temporarily return null (e.g. after a server
-  // restart while the daemon is still reconnecting), which would make the
-  // indicator stuck on "Disconnected" even though the server already has an
-  // active session.  Checking for any connected persistent host avoids that.
+  // This is derived from effective host availability, so UI does not treat a
+  // stale "connected" server snapshot as online while the server is reconnecting.
   const connectedPersistentHost = useMemo(() => {
     if (!hosts) return null;
     return (

@@ -36,16 +36,15 @@ import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme";
 import {
   useCloudAuthAttempt,
   useCloudAuthSettings,
-  useHosts,
   useSandboxEnvVars,
 } from "@/hooks/queries/system-queries";
+import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import {
-  allHostQueryKeyPrefix,
-  cloudAuthSettingsQueryKey,
-  hostsQueryKey,
-  projectsQueryKey,
-  sandboxEnvVarsQueryKey,
-} from "@/hooks/queries/query-keys";
+  invalidateCloudAuthSettings,
+  invalidateHostDeleteDependentQueries,
+  invalidateSandboxEnvVars,
+  invalidateHostAvailabilityQueries,
+} from "@/hooks/cache-effects";
 import { sandboxHostSupportedAtom } from "@/lib/atoms";
 import * as api from "@/lib/api";
 
@@ -54,11 +53,25 @@ interface CloudAuthAttemptState {
   providerId: CloudAuthProviderId;
 }
 
+interface RenameHostMutationRequest {
+  id: string;
+  name: string;
+}
+
+interface DeleteHostMutationRequest {
+  id: string;
+}
+
+interface SaveEnvVarsMutationRequest {
+  toDelete: string[];
+  toUpsert: EnvVarEntry[];
+}
+
 type CloudAuthNoticeMap = Partial<Record<CloudAuthProviderId, string>>;
 
 export function AppSettingsView() {
   const theme = usePreferredTheme();
-  const { data: hosts = [], isLoading: hostsLoading } = useHosts();
+  const { data: hosts = [], isLoading: hostsLoading } = useEffectiveHosts();
   const sandboxHostSupported = useAtomValue(sandboxHostSupportedAtom);
   const { data: cloudAuthSettings, isLoading: cloudAuthLoading } =
     useCloudAuthSettings(sandboxHostSupported);
@@ -85,11 +98,10 @@ export function AppSettingsView() {
     meta: {
       errorMessage: "Failed to rename host.",
     },
-    mutationFn: ({ id, name }: { id: string; name: string }) =>
+    mutationFn: ({ id, name }: RenameHostMutationRequest) =>
       api.updateHost(id, { name }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: hostsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: allHostQueryKeyPrefix() });
+      invalidateHostAvailabilityQueries({ queryClient });
       setRenameTarget(null);
     },
   });
@@ -98,11 +110,9 @@ export function AppSettingsView() {
     meta: {
       errorMessage: "Failed to remove host.",
     },
-    mutationFn: ({ id }: { id: string }) => api.deleteHost(id),
+    mutationFn: ({ id }: DeleteHostMutationRequest) => api.deleteHost(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: hostsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: allHostQueryKeyPrefix() });
-      queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
+      invalidateHostDeleteDependentQueries({ queryClient });
       setDeleteTarget(null);
     },
   });
@@ -155,7 +165,7 @@ export function AppSettingsView() {
     mutationFn: (providerId: CloudAuthProviderId) =>
       api.deleteCloudAuthProvider(providerId),
     onSuccess: (_, providerId) => {
-      queryClient.invalidateQueries({ queryKey: cloudAuthSettingsQueryKey() });
+      invalidateCloudAuthSettings({ queryClient });
       setCloudAuthNotices((current) => ({
         ...current,
         [providerId]:
@@ -174,17 +184,14 @@ export function AppSettingsView() {
     mutationFn: async ({
       toUpsert,
       toDelete,
-    }: {
-      toUpsert: EnvVarEntry[];
-      toDelete: string[];
-    }) => {
+    }: SaveEnvVarsMutationRequest) => {
       await Promise.all([
         ...toUpsert.map((entry) => api.upsertSandboxEnvVar(entry)),
         ...toDelete.map((name) => api.deleteSandboxEnvVar(name)),
       ]);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: sandboxEnvVarsQueryKey() });
+      invalidateSandboxEnvVars({ queryClient });
     },
   });
 
@@ -198,7 +205,7 @@ export function AppSettingsView() {
       return;
     }
 
-    queryClient.invalidateQueries({ queryKey: cloudAuthSettingsQueryKey() });
+    invalidateCloudAuthSettings({ queryClient });
     if (attempt.status !== "completed") {
       setCloudAuthNotices((current) => ({
         ...current,

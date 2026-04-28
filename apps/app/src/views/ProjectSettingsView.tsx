@@ -39,10 +39,20 @@ import {
   type LocalPathSubmitParams,
 } from "@/hooks/useLocalPathPicker";
 import { useProjects } from "@/hooks/queries/project-queries";
-import { projectsQueryKey } from "@/hooks/queries/query-keys";
-import { useGithubRepos, useHosts } from "@/hooks/queries/system-queries";
+import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
+import { useGithubRepos } from "@/hooks/queries/system-queries";
+import { invalidateProjectSourceQueries } from "@/hooks/cache-effects";
 import { githubConnectedAtom } from "@/lib/atoms";
 import * as api from "@/lib/api";
+
+interface DeleteSourceTarget {
+  id: string;
+  label: string;
+}
+
+interface DeleteProjectSourceMutationRequest {
+  sourceId: string;
+}
 
 function sourceLabel(
   source: ProjectSource,
@@ -57,14 +67,13 @@ function sourceLabel(
 export function ProjectSettingsView() {
   const { projectId } = useParams<{ projectId: string }>();
   const { data: projects, isLoading } = useProjects();
-  const { data: hosts = [] } = useHosts();
+  const { data: hosts = [] } = useEffectiveHosts();
   const queryClient = useQueryClient();
   const githubConnected = useAtomValue(githubConnectedAtom);
 
-  const [deleteTarget, setDeleteTarget] = useState<{
-    id: string;
-    label: string;
-  } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteSourceTarget | null>(
+    null,
+  );
   const [repoPickerOpen, setRepoPickerOpen] = useState(false);
   const [repoSearch, setRepoSearch] = useState("");
 
@@ -72,12 +81,12 @@ export function ProjectSettingsView() {
     meta: {
       errorMessage: "Failed to remove source.",
     },
-    mutationFn: ({ sourceId }: { sourceId: string }) => {
+    mutationFn: ({ sourceId }: DeleteProjectSourceMutationRequest) => {
       if (!projectId) return Promise.resolve();
       return api.removeProjectSource(projectId, sourceId);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
+      invalidateProjectSourceQueries({ queryClient });
       setDeleteTarget(null);
     },
   });
@@ -94,7 +103,7 @@ export function ProjectSettingsView() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
+      invalidateProjectSourceQueries({ queryClient });
       setRepoPickerOpen(false);
       setRepoSearch("");
     },
@@ -189,7 +198,7 @@ export function ProjectSettingsView() {
   const localHostId = localSourcePicker.localHostId;
 
   const localhostSourcePaths = useMemo(() => {
-    if (!localHostId) return [] as string[];
+    if (!localHostId) return [];
     return sources
       .filter(
         (source): source is LocalPathProjectSource =>

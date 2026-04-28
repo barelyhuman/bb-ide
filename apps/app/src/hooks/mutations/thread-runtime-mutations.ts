@@ -15,20 +15,24 @@ import { wsManager } from "@/lib/ws";
 import { collectPromptAttachments } from "@/lib/prompt-attachments";
 import type { SendThreadMessageMutationRequest } from "./mutation-request-types";
 import {
-  getPrimaryCheckoutWorkspaceStateInvalidationQueryKeys,
   insertOptimisticTimelineRow,
   optimisticallyInsertThread,
   removeOptimisticTimelineRow,
   updateCachedThread,
 } from "../queries/query-cache";
 import {
-  statusQueryKey,
-  threadDefaultExecutionOptionsQueryKey,
-  threadDraftsQueryKey,
   threadQueryKey,
-  threadTimelineQueryKeyPrefix,
   threadsQueryKey,
+  threadTimelineQueryKeyPrefix,
 } from "../queries/query-keys";
+import {
+  refetchThreadListsAfterComposerThreadCreate,
+  invalidateThreadDraftSendQueries,
+  invalidateThreadAcceptedMessageQueries,
+  invalidateThreadAcceptedMessageQueriesWithoutRealtime,
+  invalidateThreadQueueQueries,
+  invalidateThreadStopQueries,
+} from "../cache-effects";
 
 interface CreateThreadDraftMutationRequest extends CreateDraftRequest {
   id: string;
@@ -58,12 +62,7 @@ export function useCreateThread() {
     onSuccess: (thread) => {
       queryClient.setQueryData<Thread>(threadQueryKey(thread.id), thread);
       optimisticallyInsertThread(queryClient, thread);
-
-      void queryClient.refetchQueries({
-        queryKey: threadsQueryKey(),
-        type: "active",
-      });
-      queryClient.invalidateQueries({ queryKey: statusQueryKey() });
+      refetchThreadListsAfterComposerThreadCreate({ queryClient });
     },
   });
 }
@@ -179,22 +178,15 @@ export function useSendThreadMessage() {
       );
     },
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: threadDefaultExecutionOptionsQueryKey(variables.id),
+      const invalidateAcceptedMessageQueries =
+        wsManager.getConnectionState() === "connected"
+          ? invalidateThreadAcceptedMessageQueries
+          : invalidateThreadAcceptedMessageQueriesWithoutRealtime;
+
+      invalidateAcceptedMessageQueries({
+        queryClient,
+        threadId: variables.id,
       });
-      for (const queryKey of getPrimaryCheckoutWorkspaceStateInvalidationQueryKeys()) {
-        queryClient.invalidateQueries({ queryKey });
-      }
-      if (wsManager.getConnectionState() !== "connected") {
-        queryClient.invalidateQueries({
-          queryKey: threadQueryKey(variables.id),
-        });
-        queryClient.invalidateQueries({
-          queryKey: threadTimelineQueryKeyPrefix(variables.id),
-        });
-        queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-        queryClient.invalidateQueries({ queryKey: statusQueryKey() });
-      }
     },
   });
 }
@@ -223,10 +215,7 @@ export function useCreateThreadDraft() {
         permissionMode,
       }),
     onSuccess: (_queuedMessage, variables) => {
-      queryClient.invalidateQueries({ queryKey: threadQueryKey(variables.id) });
-      queryClient.invalidateQueries({
-        queryKey: threadDraftsQueryKey(variables.id),
-      });
+      invalidateThreadQueueQueries({ queryClient, threadId: variables.id });
     },
   });
 }
@@ -245,18 +234,7 @@ export function useSendThreadDraft() {
     }: SendThreadDraftMutationRequest): Promise<SendDraftResponse> =>
       api.sendThreadDraft(id, queuedMessageId),
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: threadQueryKey(variables.id) });
-      queryClient.invalidateQueries({
-        queryKey: threadDraftsQueryKey(variables.id),
-      });
-      queryClient.invalidateQueries({
-        queryKey: threadTimelineQueryKeyPrefix(variables.id),
-      });
-      queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: statusQueryKey() });
-      for (const queryKey of getPrimaryCheckoutWorkspaceStateInvalidationQueryKeys()) {
-        queryClient.invalidateQueries({ queryKey });
-      }
+      invalidateThreadDraftSendQueries({ queryClient, threadId: variables.id });
     },
   });
 }
@@ -272,10 +250,7 @@ export function useDeleteThreadDraft() {
     mutationFn: ({ id, queuedMessageId }: DeleteThreadDraftMutationRequest) =>
       api.deleteThreadDraft(id, queuedMessageId),
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: threadQueryKey(variables.id) });
-      queryClient.invalidateQueries({
-        queryKey: threadDraftsQueryKey(variables.id),
-      });
+      invalidateThreadQueueQueries({ queryClient, threadId: variables.id });
     },
   });
 }
@@ -289,9 +264,7 @@ export function useStopThread() {
     },
     mutationFn: (threadId: string) => api.stopThread(threadId),
     onSuccess: (_data, threadId) => {
-      queryClient.invalidateQueries({ queryKey: threadQueryKey(threadId) });
-      queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: statusQueryKey() });
+      invalidateThreadStopQueries({ queryClient, threadId });
     },
   });
 }

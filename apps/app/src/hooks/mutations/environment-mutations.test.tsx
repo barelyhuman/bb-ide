@@ -6,10 +6,10 @@ import type { Environment } from "@bb/domain";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import * as api from "@/lib/api";
 import {
-  environmentGitDiffQueryKeyPrefix,
-  environmentMergeBaseBranchesQueryKeyPrefix,
+  environmentGitDiffQueryKey,
+  environmentMergeBaseBranchesQueryKey,
   environmentQueryKey,
-  environmentWorkStatusQueryKeyPrefix,
+  environmentWorkStatusQueryKey,
   statusQueryKey,
 } from "../queries/query-keys";
 import { useUpdateEnvironment } from "./environment-mutations";
@@ -49,7 +49,23 @@ describe("useUpdateEnvironment", () => {
     const environment = createEnvironment();
     vi.mocked(api.updateEnvironment).mockResolvedValue(environment);
     const { queryClient, wrapper } = createQueryClientTestHarness();
-    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+    const workStatusQueryKey = environmentWorkStatusQueryKey(
+      environment.id,
+      null,
+    );
+    const gitDiffQueryKey = environmentGitDiffQueryKey(
+      environment.id,
+      null,
+      null,
+    );
+    const mergeBaseBranchesQueryKey = environmentMergeBaseBranchesQueryKey(
+      environment.id,
+    );
+    const statusKey = statusQueryKey();
+    queryClient.setQueryData(workStatusQueryKey, {});
+    queryClient.setQueryData(gitDiffQueryKey, {});
+    queryClient.setQueryData(mergeBaseBranchesQueryKey, []);
+    queryClient.setQueryData(statusKey, {});
 
     const { result } = renderHook(() => useUpdateEnvironment(), { wrapper });
 
@@ -63,20 +79,19 @@ describe("useUpdateEnvironment", () => {
     expect(
       queryClient.getQueryData(environmentQueryKey(environment.id)),
     ).toEqual(environment);
-    expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: environmentWorkStatusQueryKeyPrefix(environment.id),
-    });
-    expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: environmentGitDiffQueryKeyPrefix(environment.id),
-    });
-    expect(invalidateQueries).not.toHaveBeenCalledWith({
-      queryKey: environmentQueryKey(environment.id),
-    });
-    expect(invalidateQueries).not.toHaveBeenCalledWith({
-      queryKey: environmentMergeBaseBranchesQueryKeyPrefix(environment.id),
-    });
-    expect(invalidateQueries).not.toHaveBeenCalledWith({
-      queryKey: statusQueryKey(),
-    });
+    expect(queryClient.getQueryState(workStatusQueryKey)?.isInvalidated).toBe(
+      true,
+    );
+    expect(queryClient.getQueryState(gitDiffQueryKey)?.isInvalidated).toBe(
+      true,
+    );
+    expect(
+      queryClient.getQueryState(environmentQueryKey(environment.id))
+        ?.isInvalidated,
+    ).not.toBe(true);
+    expect(
+      queryClient.getQueryState(mergeBaseBranchesQueryKey)?.isInvalidated,
+    ).not.toBe(true);
+    expect(queryClient.getQueryState(statusKey)?.isInvalidated).not.toBe(true);
   });
 });

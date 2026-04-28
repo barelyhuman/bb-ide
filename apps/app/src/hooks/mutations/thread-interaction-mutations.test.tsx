@@ -9,7 +9,7 @@ import {
   statusQueryKey,
   threadPendingInteractionsQueryKey,
   threadQueryKey,
-  threadTimelineQueryKeyPrefix,
+  threadTimelineQueryKey,
   threadsQueryKey,
 } from "../queries/query-keys";
 import { useResolveThreadPendingInteraction } from "./thread-interaction-mutations";
@@ -62,7 +62,17 @@ describe("useResolveThreadPendingInteraction", () => {
       createResolvingInteraction(),
     );
     const { queryClient, wrapper } = createQueryClientTestHarness();
-    const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
+    const pendingInteractionsQueryKey =
+      threadPendingInteractionsQueryKey("thr_1");
+    const timelineQueryKey = threadTimelineQueryKey("thr_1", false);
+    const threadDetailQueryKey = threadQueryKey("thr_1");
+    const threadListQueryKey = threadsQueryKey();
+    const statusKey = statusQueryKey();
+    queryClient.setQueryData(pendingInteractionsQueryKey, []);
+    queryClient.setQueryData(timelineQueryKey, {});
+    queryClient.setQueryData(threadDetailQueryKey, {});
+    queryClient.setQueryData(threadListQueryKey, []);
+    queryClient.setQueryData(statusKey, {});
 
     const { result } = renderHook(() => useResolveThreadPendingInteraction(), {
       wrapper,
@@ -87,20 +97,18 @@ describe("useResolveThreadPendingInteraction", () => {
         grantedPermissions: null,
       },
     );
-    expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: threadPendingInteractionsQueryKey("thr_1"),
-    });
-    expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: threadTimelineQueryKeyPrefix("thr_1"),
-    });
-    expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: threadQueryKey("thr_1"),
-    });
-    expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: threadsQueryKey(),
-    });
-    expect(invalidateQueries).toHaveBeenCalledWith({
-      queryKey: statusQueryKey(),
-    });
+    expect(
+      queryClient.getQueryState(pendingInteractionsQueryKey)?.isInvalidated,
+    ).toBe(true);
+    expect(queryClient.getQueryState(timelineQueryKey)?.isInvalidated).toBe(
+      true,
+    );
+    expect(queryClient.getQueryState(threadDetailQueryKey)?.isInvalidated).toBe(
+      true,
+    );
+    expect(queryClient.getQueryState(threadListQueryKey)?.isInvalidated).toBe(
+      true,
+    );
+    expect(queryClient.getQueryState(statusKey)?.isInvalidated).toBe(true);
   });
 });

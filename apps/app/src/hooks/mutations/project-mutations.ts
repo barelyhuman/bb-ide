@@ -8,14 +8,14 @@ import type {
 } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import { optimisticallyInsertThread } from "../queries/query-cache";
+import { threadQueryKey } from "../queries/query-keys";
 import {
-  localPathExistenceQueryKeyPrefix,
-  projectFilesQueryKeyPrefix,
-  projectsQueryKey,
-  statusQueryKey,
-  threadQueryKey,
-  threadsQueryKey,
-} from "../queries/query-keys";
+  invalidateProjectListQueries,
+  invalidateProjectDeleteQueries,
+  invalidateProjectManagerHireQueries,
+  invalidateProjectSourceQueries,
+  invalidateProjectUpdateQueries,
+} from "../cache-effects";
 
 interface AddLocalProjectSourceRequest {
   projectId: string;
@@ -56,7 +56,7 @@ export function useCreateProject() {
     },
     mutationFn: (request: CreateProjectRequest) => api.createProject(request),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
+      invalidateProjectListQueries({ queryClient });
     },
   });
 }
@@ -87,10 +87,7 @@ export function useHireProjectManager() {
     onSuccess: (thread) => {
       queryClient.setQueryData<Thread>(threadQueryKey(thread.id), thread);
       optimisticallyInsertThread(queryClient, thread);
-
-      queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: statusQueryKey() });
+      invalidateProjectManagerHireQueries({ queryClient });
     },
   });
 }
@@ -105,11 +102,7 @@ export function useUpdateProject() {
     mutationFn: ({ id, ...request }: UpdateProjectMutationRequest) =>
       api.updateProject(id, request),
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
-      queryClient.invalidateQueries({
-        queryKey: projectFilesQueryKeyPrefix(variables.id),
-      });
-      queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
+      invalidateProjectUpdateQueries({ projectId: variables.id, queryClient });
     },
   });
 }
@@ -123,9 +116,7 @@ export function useDeleteProject() {
     },
     mutationFn: (projectId: string) => api.deleteProject(projectId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: statusQueryKey() });
+      invalidateProjectDeleteQueries({ queryClient });
     },
   });
 }
@@ -140,10 +131,7 @@ export function useAddLocalProjectSource() {
     mutationFn: ({ projectId, hostId, path }: AddLocalProjectSourceRequest) =>
       api.addProjectSource(projectId, { type: "local_path", hostId, path }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
-      queryClient.invalidateQueries({
-        queryKey: localPathExistenceQueryKeyPrefix(),
-      });
+      invalidateProjectSourceQueries({ queryClient });
     },
   });
 }
@@ -165,10 +153,7 @@ export function useUpdateLocalProjectSource() {
         path,
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
-      queryClient.invalidateQueries({
-        queryKey: localPathExistenceQueryKeyPrefix(),
-      });
+      invalidateProjectSourceQueries({ queryClient });
     },
   });
 }

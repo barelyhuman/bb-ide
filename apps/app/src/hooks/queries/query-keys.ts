@@ -31,6 +31,7 @@ export const SANDBOX_ENV_VARS_QUERY_KEY = "sandboxEnvVars";
 export const GITHUB_REPOS_QUERY_KEY = "githubRepos";
 export const STATUS_QUERY_KEY = "status";
 export const LOCAL_PATH_EXISTENCE_QUERY_KEY = "localPathExistence";
+export const REPLAY_CAPTURES_QUERY_KEY = "internalReplayCaptures";
 
 export interface ThreadListQueryFilters {
   projectId?: string;
@@ -44,6 +45,9 @@ export type HostQueryId = string | null | undefined;
 export type HostQueryKey = readonly [typeof HOST_QUERY_KEY, HostQueryId];
 export type AllHostQueryKeyPrefix = readonly [typeof HOST_QUERY_KEY];
 export type ProjectsQueryKey = readonly [typeof PROJECTS_QUERY_KEY];
+export type AllProjectFilesQueryKeyPrefix = readonly [
+  typeof PROJECT_FILES_QUERY_KEY,
+];
 export type ProjectFilesQueryKey = readonly [
   typeof PROJECT_FILES_QUERY_KEY,
   string | undefined,
@@ -69,6 +73,9 @@ export type ThreadListQueryKey = readonly [
 ];
 export type ThreadQueryKeyPrefix = readonly [typeof THREAD_QUERY_KEY];
 export type ThreadQueryKey = readonly [typeof THREAD_QUERY_KEY, string];
+export type ThreadDefaultExecutionOptionsQueryKeyPrefix = readonly [
+  typeof THREAD_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY,
+];
 export type ThreadDefaultExecutionOptionsQueryKey = readonly [
   typeof THREAD_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY,
   string,
@@ -91,6 +98,12 @@ export type ThreadStorageFilesQueryKey = readonly [
   typeof THREAD_STORAGE_FILES_QUERY_KEY,
   string,
 ];
+export type ThreadStorageFilesQueryKeyPrefix = readonly [
+  typeof THREAD_STORAGE_FILES_QUERY_KEY,
+];
+export type AllThreadStorageFilePreviewQueryKeyPrefix = readonly [
+  typeof THREAD_STORAGE_FILE_PREVIEW_QUERY_KEY,
+];
 export type ThreadStorageFilePreviewQueryKey = readonly [
   typeof THREAD_STORAGE_FILE_PREVIEW_QUERY_KEY,
   string,
@@ -100,9 +113,13 @@ export type ThreadStorageFilePreviewQueryKeyPrefix = readonly [
   typeof THREAD_STORAGE_FILE_PREVIEW_QUERY_KEY,
   string,
 ];
+export type EnvironmentQueryKeyPrefix = readonly [typeof ENVIRONMENT_QUERY_KEY];
 export type EnvironmentQueryKey = readonly [
   typeof ENVIRONMENT_QUERY_KEY,
   string | null | undefined,
+];
+export type EnvironmentWorkStatusQueryKeyRootPrefix = readonly [
+  typeof ENVIRONMENT_WORK_STATUS_QUERY_KEY,
 ];
 export type EnvironmentWorkStatusQueryKey = readonly [
   typeof ENVIRONMENT_WORK_STATUS_QUERY_KEY,
@@ -113,6 +130,9 @@ export type EnvironmentWorkStatusQueryKeyPrefix = readonly [
   typeof ENVIRONMENT_WORK_STATUS_QUERY_KEY,
   string,
 ];
+export type EnvironmentPromotionQueryKeyRootPrefix = readonly [
+  typeof ENVIRONMENT_PROMOTION_QUERY_KEY,
+];
 export type EnvironmentPromotionQueryKey = readonly [
   typeof ENVIRONMENT_PROMOTION_QUERY_KEY,
   string | null | undefined,
@@ -120,6 +140,9 @@ export type EnvironmentPromotionQueryKey = readonly [
 export type EnvironmentPromotionQueryKeyPrefix = readonly [
   typeof ENVIRONMENT_PROMOTION_QUERY_KEY,
   string,
+];
+export type EnvironmentMergeBaseBranchesQueryKeyRootPrefix = readonly [
+  typeof ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY,
 ];
 export type EnvironmentMergeBaseBranchesQueryKey = readonly [
   typeof ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY,
@@ -146,6 +169,9 @@ export type EnvironmentGitDiffQueryKey = readonly [
   string,
   string | null,
   string | null,
+];
+export type EnvironmentGitDiffQueryKeyRootPrefix = readonly [
+  typeof ENVIRONMENT_GIT_DIFF_QUERY_KEY,
 ];
 export type EnvironmentGitDiffQueryKeyPrefix = readonly [
   typeof ENVIRONMENT_GIT_DIFF_QUERY_KEY,
@@ -189,6 +215,9 @@ export type LocalPathExistenceQueryKey = readonly [
 export type LocalPathExistenceQueryKeyPrefix = readonly [
   typeof LOCAL_PATH_EXISTENCE_QUERY_KEY,
 ];
+export type ReplayCapturesQueryKey = readonly [
+  typeof REPLAY_CAPTURES_QUERY_KEY,
+];
 
 export function hostsQueryKey(): HostsQueryKey {
   return [HOSTS_QUERY_KEY];
@@ -212,6 +241,10 @@ export function projectFilesQueryKey(
   limit: number,
 ): ProjectFilesQueryKey {
   return [PROJECT_FILES_QUERY_KEY, projectId, query, limit];
+}
+
+export function allProjectFilesQueryKeyPrefix(): AllProjectFilesQueryKeyPrefix {
+  return [PROJECT_FILES_QUERY_KEY];
 }
 
 export function projectFilesQueryKeyPrefix(
@@ -255,6 +288,10 @@ export function threadDefaultExecutionOptionsQueryKey(
   return [THREAD_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY, threadId];
 }
 
+export function allThreadDefaultExecutionOptionsQueryKeyPrefix(): ThreadDefaultExecutionOptionsQueryKeyPrefix {
+  return [THREAD_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY];
+}
+
 export function threadDraftsQueryKey(threadId: string): ThreadDraftsQueryKey {
   return [THREAD_DRAFTS_QUERY_KEY, threadId];
 }
@@ -279,6 +316,10 @@ export function threadStorageFilesQueryKey(
   return [THREAD_STORAGE_FILES_QUERY_KEY, threadId];
 }
 
+export function allThreadStorageFilesQueryKeyPrefix(): ThreadStorageFilesQueryKeyPrefix {
+  return [THREAD_STORAGE_FILES_QUERY_KEY];
+}
+
 export function threadStorageFilePreviewQueryKey(
   threadId: string,
   path: string | null,
@@ -286,10 +327,18 @@ export function threadStorageFilePreviewQueryKey(
   return [THREAD_STORAGE_FILE_PREVIEW_QUERY_KEY, threadId, path];
 }
 
+export function allThreadStorageFilePreviewQueryKeyPrefix(): AllThreadStorageFilePreviewQueryKeyPrefix {
+  return [THREAD_STORAGE_FILE_PREVIEW_QUERY_KEY];
+}
+
 export function threadStorageFilePreviewQueryKeyPrefix(
   threadId: string,
 ): ThreadStorageFilePreviewQueryKeyPrefix {
   return [THREAD_STORAGE_FILE_PREVIEW_QUERY_KEY, threadId];
+}
+
+export function allEnvironmentQueryKeyPrefix(): EnvironmentQueryKeyPrefix {
+  return [ENVIRONMENT_QUERY_KEY];
 }
 
 export function environmentQueryKey(
@@ -305,6 +354,10 @@ export function environmentWorkStatusQueryKey(
   return [ENVIRONMENT_WORK_STATUS_QUERY_KEY, environmentId, mergeBaseBranch];
 }
 
+export function allEnvironmentWorkStatusQueryKeyPrefix(): EnvironmentWorkStatusQueryKeyRootPrefix {
+  return [ENVIRONMENT_WORK_STATUS_QUERY_KEY];
+}
+
 export function environmentWorkStatusQueryKeyPrefix(
   environmentId: string,
 ): EnvironmentWorkStatusQueryKeyPrefix {
@@ -317,6 +370,10 @@ export function environmentPromotionQueryKey(
   return [ENVIRONMENT_PROMOTION_QUERY_KEY, environmentId];
 }
 
+export function allEnvironmentPromotionQueryKeyPrefix(): EnvironmentPromotionQueryKeyRootPrefix {
+  return [ENVIRONMENT_PROMOTION_QUERY_KEY];
+}
+
 export function environmentPromotionQueryKeyPrefix(
   environmentId: string,
 ): EnvironmentPromotionQueryKeyPrefix {
@@ -327,6 +384,10 @@ export function environmentMergeBaseBranchesQueryKey(
   environmentId: string,
 ): EnvironmentMergeBaseBranchesQueryKey {
   return [ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY, environmentId];
+}
+
+export function allEnvironmentMergeBaseBranchesQueryKeyPrefix(): EnvironmentMergeBaseBranchesQueryKeyRootPrefix {
+  return [ENVIRONMENT_MERGE_BASE_BRANCHES_QUERY_KEY];
 }
 
 export function environmentMergeBaseBranchesQueryKeyPrefix(
@@ -358,6 +419,10 @@ export function environmentGitDiffQueryKey(
   targetKey: string | null,
 ): EnvironmentGitDiffQueryKey {
   return [ENVIRONMENT_GIT_DIFF_QUERY_KEY, environmentId, targetType, targetKey];
+}
+
+export function allEnvironmentGitDiffQueryKeyPrefix(): EnvironmentGitDiffQueryKeyRootPrefix {
+  return [ENVIRONMENT_GIT_DIFF_QUERY_KEY];
 }
 
 export function environmentGitDiffQueryKeyPrefix(
@@ -416,4 +481,8 @@ export function localPathExistenceQueryKey(
 
 export function localPathExistenceQueryKeyPrefix(): LocalPathExistenceQueryKeyPrefix {
   return [LOCAL_PATH_EXISTENCE_QUERY_KEY];
+}
+
+export function replayCapturesQueryKey(): ReplayCapturesQueryKey {
+  return [REPLAY_CAPTURES_QUERY_KEY];
 }

@@ -10,11 +10,18 @@ import {
   SplitButton,
   type SplitButtonAction,
 } from "@/components/ui/split-button";
+import { invalidateReplayCaptures } from "@/hooks/cache-effects";
+import { replayCapturesQueryKey } from "@/hooks/queries/query-keys";
 import { cn } from "@/lib/utils";
 import * as api from "@/lib/api";
 
 const DEFAULT_REPLAY_SPEED: ReplayRunSpeed = 1;
 const REPLAY_SPEEDS: readonly ReplayRunSpeed[] = [0.5, 1, 2, 5, 10];
+
+interface StartReplayMutationRequest {
+  captureId: string;
+  speed: ReplayRunSpeed;
+}
 
 function formatSpeed(speed: ReplayRunSpeed): string {
   return `${speed}×`;
@@ -23,8 +30,6 @@ function formatSpeed(speed: ReplayRunSpeed): string {
 function formatDate(timestamp: number): string {
   return new Date(timestamp).toLocaleString();
 }
-
-const REPLAY_CAPTURES_QUERY_KEY = ["internal-replay-captures"] as const;
 
 export function InternalReplayListView() {
   const navigate = useNavigate();
@@ -45,25 +50,18 @@ export function InternalReplayListView() {
   };
 
   const capturesQuery = useQuery({
-    queryKey: REPLAY_CAPTURES_QUERY_KEY,
+    queryKey: replayCapturesQueryKey(),
     queryFn: () => api.listReplayCaptures(),
   });
   const deleteCapture = useMutation({
     mutationFn: (captureId: string) => api.deleteReplayCapture(captureId),
     onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: REPLAY_CAPTURES_QUERY_KEY,
-      });
+      invalidateReplayCaptures({ queryClient });
     },
   });
   const startReplay = useMutation({
-    mutationFn: ({
-      captureId,
-      speed,
-    }: {
-      captureId: string;
-      speed: ReplayRunSpeed;
-    }) => api.startReplayRun(captureId, { speed }),
+    mutationFn: ({ captureId, speed }: StartReplayMutationRequest) =>
+      api.startReplayRun(captureId, { speed }),
     onSuccess: (result) => {
       navigate(
         `/projects/${result.projectId}/threads/${result.replayThreadId}`,

@@ -24,9 +24,9 @@ import { Input } from "@/components/ui/input";
 import { useHireProjectManager } from "@/hooks/mutations/project-mutations";
 import {
   useAvailableModels,
-  useHosts,
   useSystemProviders,
 } from "@/hooks/queries/system-queries";
+import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { useProjects } from "@/hooks/queries/project-queries";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { formatModelLabel } from "@/hooks/useThreadCreationOptions";
@@ -69,7 +69,7 @@ export function HireManagerModal({
   const providersQuery = useSystemProviders();
   const providers = providersQuery.data ?? EMPTY_SYSTEM_PROVIDERS;
   const { data: projects } = useProjects();
-  const { data: hosts = [] } = useHosts();
+  const { data: hosts = [] } = useEffectiveHosts();
   const { isLocalHost } = useHostDaemon();
 
   const projectSources = useMemo(() => {

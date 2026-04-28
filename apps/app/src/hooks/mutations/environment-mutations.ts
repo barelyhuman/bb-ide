@@ -7,10 +7,10 @@ import type {
 import * as api from "@/lib/api";
 import type { RequestEnvironmentActionMutationRequest } from "./mutation-request-types";
 import {
-  getEnvironmentActionInvalidationQueryKeys,
-  getEnvironmentWorkspaceStateInvalidationQueryKeys,
-  getPrimaryCheckoutWorkspaceStateInvalidationQueryKeys,
-} from "../queries/query-cache";
+  invalidateEnvironmentActionQueries,
+  invalidateEnvironmentWorkspaceStateQueries,
+  invalidatePromoteOrDemoteEnvironmentActionQueries,
+} from "../cache-effects";
 import { environmentQueryKey } from "../queries/query-keys";
 type UpdateEnvironmentMutationRequest = {
   id: string;
@@ -30,16 +30,15 @@ export function useRequestEnvironmentAction() {
     }: RequestEnvironmentActionMutationRequest): Promise<EnvironmentActionResponse> =>
       api.requestEnvironmentAction(id, request),
     onSuccess: (_response, variables) => {
-      for (const queryKey of getEnvironmentActionInvalidationQueryKeys({
+      const invalidateActionRequestQueries =
+        variables.action === "promote" || variables.action === "demote"
+          ? invalidatePromoteOrDemoteEnvironmentActionQueries
+          : invalidateEnvironmentActionQueries;
+
+      invalidateActionRequestQueries({
         environmentId: variables.id,
-      })) {
-        queryClient.invalidateQueries({ queryKey });
-      }
-      if (variables.action === "promote" || variables.action === "demote") {
-        for (const queryKey of getPrimaryCheckoutWorkspaceStateInvalidationQueryKeys()) {
-          queryClient.invalidateQueries({ queryKey });
-        }
-      }
+        queryClient,
+      });
     },
   });
 }
@@ -59,11 +58,10 @@ export function useUpdateEnvironment() {
         environmentQueryKey(environment.id),
         environment,
       );
-      for (const queryKey of getEnvironmentWorkspaceStateInvalidationQueryKeys({
+      invalidateEnvironmentWorkspaceStateQueries({
         environmentId: environment.id,
-      })) {
-        queryClient.invalidateQueries({ queryKey });
-      }
+        queryClient,
+      });
     },
   });
 }

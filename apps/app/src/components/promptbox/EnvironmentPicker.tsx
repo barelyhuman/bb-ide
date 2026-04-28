@@ -19,7 +19,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
-import { useHosts, useSandboxBackends } from "@/hooks/queries/system-queries";
+import { useSandboxBackends } from "@/hooks/queries/system-queries";
+import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { sandboxHostSupportedAtom } from "@/lib/atoms";
 import { getEnvironmentWorkspaceLabelIcon } from "@/lib/environment-workspace-display";
 import {
@@ -139,7 +140,7 @@ export function EnvironmentPicker({
   sources,
 }: EnvironmentPickerProps) {
   const { isLocalHost } = useHostDaemon();
-  const { data: hosts = [] } = useHosts();
+  const { data: hosts = [] } = useEffectiveHosts();
   const sandboxHostSupported = useAtomValue(sandboxHostSupportedAtom);
   const { data: sandboxBackends = [] } =
     useSandboxBackends(sandboxHostSupported);
