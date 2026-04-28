@@ -275,7 +275,6 @@ function ToolBundleEntry({
   return (
     <div
       className={getExpandableRowWrapperClassName(isExpanded)}
-      style={{ overflowAnchor: "none" }}
     >
       <div className="mr-auto w-full">
         <ExpandablePanel
@@ -330,7 +329,6 @@ function AssistantStepSummaryEntry({
   return (
     <div
       className={getExpandableRowWrapperClassName(isExpanded)}
-      style={{ overflowAnchor: "none" }}
     >
       <div className="mr-auto w-full">
         <ExpandablePanel
@@ -399,7 +397,6 @@ function TurnSummaryEntry({
   return (
     <div
       className={getExpandableRowWrapperClassName(isExpanded)}
-      style={{ overflowAnchor: "none" }}
     >
       <div className="mr-auto w-full">
         <ExpandablePanel

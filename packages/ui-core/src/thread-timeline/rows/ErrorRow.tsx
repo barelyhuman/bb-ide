@@ -142,7 +142,7 @@ export function ErrorRow({
 
   if (!isExpandable) {
     return (
-      <div className="group w-full" style={{ overflowAnchor: "none" }}>
+      <div className="group w-full">
         <div className="mr-auto w-full rounded-md px-2 py-1 text-muted-foreground">
           <CollapsibleHeader
             toneClassName={headerToneClass}
@@ -155,7 +155,7 @@ export function ErrorRow({
   }
 
   return (
-    <div className="group w-full" style={{ overflowAnchor: "none" }}>
+    <div className="group w-full">
       <div className="mr-auto w-full">
         <ExpandablePanel
           isExpanded={isExpanded}

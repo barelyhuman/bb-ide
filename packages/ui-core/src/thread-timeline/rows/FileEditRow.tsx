@@ -375,7 +375,6 @@ export function FileEditRow({
   return (
     <div
       className={getExpandableRowWrapperClassName(isExpanded)}
-      style={{ overflowAnchor: "none" }}
     >
       <div className="mr-auto w-full">
         <ExpandablePanel

@@ -43,7 +43,7 @@ export function DebugEventRow({
   });
 
   return (
-    <div className="group w-full" style={{ overflowAnchor: "none" }}>
+    <div className="group w-full">
       <div className="mr-auto w-full">
         <button
           type="button"

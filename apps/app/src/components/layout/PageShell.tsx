@@ -2,6 +2,16 @@
 // not reintroduce custom ResizeObserver / MutationObserver / scroll-reconcile
 // machinery here. Past regressions: see git log --grep=scroll before
 // 2026-04-22.
+//
+// Browser scroll-anchoring is mostly disabled while the user is at the
+// bottom (via `[overflow-anchor:none]` toggled on the scroll container based
+// on `ctx.isAtBottom`). When at-bottom, the library is the only thing
+// driving scrollTop and there is no fight with the browser. When scrolled
+// up, browser anchoring is re-enabled so the user's reading position is
+// preserved as content above/below them reflows during a column resize.
+// Do not reintroduce inline `style={{ overflowAnchor: "none" }}` on
+// individual timeline rows — that disables browser anchoring even when
+// scrolled up, and the jitter returns.
 import type { ReactNode } from "react";
 import { StickToBottom, type StickToBottomContext } from "use-stick-to-bottom";
 import { cn } from "@/lib/utils";
@@ -90,6 +100,52 @@ function renderStickyFooter(
   );
 }
 
+interface StickyScrollAreaProps {
+  ctx: StickToBottomContext;
+  scrollAreaClassName?: string;
+  contentClassName?: string;
+  maxWidthClassName: string;
+  stickyFooter: ReactNode;
+  children: ReactNode;
+}
+
+function StickyScrollArea({
+  ctx,
+  scrollAreaClassName,
+  contentClassName,
+  maxWidthClassName,
+  stickyFooter,
+  children,
+}: StickyScrollAreaProps) {
+  // While at-bottom, opt the scroll container out of browser scroll-anchoring
+  // so the use-stick-to-bottom library is the sole driver of `scrollTop`
+  // during a column reflow. When scrolled up, leave anchoring on so the
+  // user's reading position is preserved as content reflows.
+  const disableBrowserAnchor = ctx.isAtBottom;
+  return (
+    <div
+      ref={ctx.scrollRef}
+      className={cn(
+        "@container/page min-h-0 flex-1 overflow-y-auto",
+        disableBrowserAnchor && "[overflow-anchor:none]",
+        scrollAreaClassName,
+      )}
+    >
+      <div
+        ref={ctx.contentRef}
+        className={cn(
+          "mx-auto flex w-full flex-col px-4 pt-2",
+          maxWidthClassName,
+          contentClassName,
+        )}
+      >
+        {children}
+        {stickyFooter}
+      </div>
+    </div>
+  );
+}
+
 export function PageShell({
   children,
   footer,
@@ -113,25 +169,15 @@ export function PageShell({
         className={cn(SHELL_BLEED_CLASS, shellClassName)}
       >
         {(ctx: StickToBottomContext) => (
-          <div
-            ref={ctx.scrollRef}
-            className={cn(
-              "@container/page min-h-0 flex-1 overflow-y-auto [overflow-anchor:none]",
-              scrollAreaClassName,
-            )}
+          <StickyScrollArea
+            ctx={ctx}
+            scrollAreaClassName={scrollAreaClassName}
+            contentClassName={contentClassName}
+            maxWidthClassName={maxWidthClassName}
+            stickyFooter={stickyFooter}
           >
-            <div
-              ref={ctx.contentRef}
-              className={cn(
-                "mx-auto flex w-full flex-col px-4 pt-2",
-                maxWidthClassName,
-                contentClassName,
-              )}
-            >
-              {children}
-              {stickyFooter}
-            </div>
-          </div>
+            {children}
+          </StickyScrollArea>
         )}
       </StickToBottom>
     );

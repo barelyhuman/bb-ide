@@ -22,7 +22,7 @@ export function ConversationWorkingIndicator({
 
   if (trimmedDetails.length > 0) {
     return (
-      <div style={{ overflowAnchor: "none" }} className={cn("mt-4", className)}>
+      <div className={cn("mt-4", className)}>
         <ExpandablePanel
           isExpanded={isExpanded}
           summaryContent={
@@ -40,11 +40,9 @@ export function ConversationWorkingIndicator({
   }
 
   return (
-    <div style={{ overflowAnchor: "none" }}>
-      <ConversationStatusIndicator
-        label={resolvedLabel}
-        className={cn("mt-4", className)}
-      />
-    </div>
+    <ConversationStatusIndicator
+      label={resolvedLabel}
+      className={cn("mt-4", className)}
+    />
   );
 }

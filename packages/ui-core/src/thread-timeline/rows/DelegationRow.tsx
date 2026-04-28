@@ -87,7 +87,7 @@ export function DelegationRow({
   const isWorking = message.status === "pending" || preferOngoingLabels;
 
   return (
-    <div className="group w-full" style={{ overflowAnchor: "none" }}>
+    <div className="group w-full">
       <div className="mr-auto w-full">
         <ExpandablePanel
           isExpanded={isExpanded}

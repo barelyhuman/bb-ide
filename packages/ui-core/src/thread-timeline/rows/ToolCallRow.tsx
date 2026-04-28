@@ -113,7 +113,7 @@ export function ToolCallRow({
   const headerToneClass = getEventHeaderToneClass(isExpanded, tone);
 
   return (
-    <div className="group w-full" style={{ overflowAnchor: "none" }}>
+    <div className="group w-full">
       <div className="mr-auto w-full">
         <ExpandablePanel
           isExpanded={isExpanded}

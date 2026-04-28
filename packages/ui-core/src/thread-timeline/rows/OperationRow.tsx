@@ -155,7 +155,7 @@ function StaticOperationRow({
   className,
 }: StaticOperationRowProps) {
   return (
-    <div className="group w-full" style={{ overflowAnchor: "none" }}>
+    <div className="group w-full">
       <div className="mr-auto w-full">
         <div className="rounded-md px-2 py-1 text-sm text-muted-foreground">
           <div
@@ -178,7 +178,7 @@ function ExpandableOperationRow({
   children,
 }: ExpandableOperationRowProps) {
   return (
-    <div className="group w-full" style={{ overflowAnchor: "none" }}>
+    <div className="group w-full">
       <div className="mr-auto w-full">
         <ExpandablePanel
           isExpanded={isExpanded}

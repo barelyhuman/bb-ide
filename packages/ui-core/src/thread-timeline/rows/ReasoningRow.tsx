@@ -61,7 +61,7 @@ export function ReasoningRow({
 
   if (!expandable) {
     return (
-      <div className="group w-full" style={{ overflowAnchor: "none" }}>
+      <div className="group w-full">
         <div className="mr-auto w-full">
           <div className="rounded-md px-2 py-1 text-muted-foreground">
             <div
@@ -79,7 +79,7 @@ export function ReasoningRow({
   }
 
   return (
-    <div className="group w-full" style={{ overflowAnchor: "none" }}>
+    <div className="group w-full">
       <div className="mr-auto w-full">
         <ExpandablePanel
           isExpanded={isExpanded}
