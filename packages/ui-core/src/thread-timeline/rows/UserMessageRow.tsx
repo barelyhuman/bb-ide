@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import type { ViewUserMessage } from "@bb/domain";
-import { Check, Copy } from "lucide-react";
 import { cn } from "../../cn.js";
+import { CopyButton } from "../../primitives/ui/copy-button.js";
 import { ImageLightbox, getWrappedImageIndex } from "../ImageLightbox.js";
 import { toUserAttachmentImageSrc } from "../userAttachmentImages.js";
 import type { UserAttachmentImageSrcResolver } from "../types.js";
@@ -21,7 +21,6 @@ export function UserMessageRow({
   const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(
     null,
   );
-  const [copied, setCopied] = useState(false);
   const attachments: string[] = [];
   if (message.attachments?.localFiles) {
     const count = message.attachments.localFiles;
@@ -50,28 +49,6 @@ export function UserMessageRow({
     expandedImageIndex !== null
       ? (imageItems[expandedImageIndex] ?? null)
       : null;
-
-  useEffect(() => {
-    if (!copied) {
-      return;
-    }
-    const timeoutId = window.setTimeout(() => {
-      setCopied(false);
-    }, 2000);
-    return () => window.clearTimeout(timeoutId);
-  }, [copied]);
-
-  const handleCopy = async () => {
-    if (!messageText || copied) {
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(messageText);
-      setCopied(true);
-    } catch {
-      setCopied(false);
-    }
-  };
 
   const showPreviousImage = useCallback(() => {
     setExpandedImageIndex((index) => {
@@ -141,21 +118,7 @@ export function UserMessageRow({
           </div>
           {messageText ? (
             <div className="mt-1 flex justify-end opacity-100 transition-opacity duration-150 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
-              <button
-                type="button"
-                className="inline-flex size-5 items-center justify-center text-muted-foreground hover:text-foreground focus-visible:opacity-100"
-                onClick={() => {
-                  void handleCopy();
-                }}
-                aria-label="Copy message"
-                title="Copy message"
-              >
-                {copied ? (
-                  <Check className="size-3" />
-                ) : (
-                  <Copy className="size-3" />
-                )}
-              </button>
+              <CopyButton text={messageText} label="Copy message" />
             </div>
           ) : null}
         </div>

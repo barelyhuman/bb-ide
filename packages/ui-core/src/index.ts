@@ -1,5 +1,6 @@
 export { cn } from "./cn.js";
 export { Skeleton } from "./primitives/ui/skeleton.js";
+export { CopyButton } from "./primitives/ui/copy-button.js";
 export {
   ThreePaneLayout,
   type ThreePaneLayoutProps,

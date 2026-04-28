@@ -10,6 +10,7 @@ import ReactMarkdown from "react-markdown";
 import type { ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cx } from "../utils.js";
+import { CopyButton } from "../primitives/ui/copy-button.js";
 import { ImageLightbox, getWrappedImageIndex } from "./ImageLightbox.js";
 import { parseThreadTimelineLocalFileLink } from "./localFileLinks.js";
 import type { ThreadTimelineLocalFileLinkHandler } from "./types.js";
@@ -94,17 +95,25 @@ function ConversationMarkdownComponent({
               const isBlock = codeText.includes("\n");
               if (isBlock) {
                 return (
-                  <pre className="my-2 overflow-x-auto rounded-md border border-border/70 bg-muted/35 p-3">
-                    <code
-                      className={cx(
-                        "font-mono text-xs",
-                        language ? `language-${language}` : "",
-                      )}
-                      {...props}
-                    >
-                      {codeText}
-                    </code>
-                  </pre>
+                  <div className="my-2 overflow-hidden rounded-md border border-border/70 bg-muted/35">
+                    <div className="flex items-center justify-between pl-3 pr-1.5 pt-1.5">
+                      <span className="font-mono text-[0.7rem] uppercase tracking-wide text-muted-foreground">
+                        {language ?? ""}
+                      </span>
+                      <CopyButton text={codeText} label="Copy code" />
+                    </div>
+                    <pre className="overflow-x-auto px-3 pb-3 pt-1">
+                      <code
+                        className={cx(
+                          "font-mono text-xs",
+                          language ? `language-${language}` : "",
+                        )}
+                        {...props}
+                      >
+                        {codeText}
+                      </code>
+                    </pre>
+                  </div>
                 );
               }
               return (
