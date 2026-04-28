@@ -4,48 +4,48 @@
   "type": "module",
   "exports": {
     "./common": {
-      "import": "./dist/common.js",
-      "types": "./dist/common.d.ts"
+      "types": "./dist/common.d.ts",
+      "import": "./dist/common.js"
     },
     "./server": {
-      "import": "./dist/server.js",
-      "types": "./dist/server.d.ts"
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js"
     },
     "./server-port": {
-      "import": "./dist/server-port.js",
-      "types": "./dist/server-port.d.ts"
+      "types": "./dist/server-port.d.ts",
+      "import": "./dist/server-port.js"
     },
     "./dev-env": {
-      "import": "./dist/dev-env.js",
-      "types": "./dist/dev-env.d.ts"
+      "types": "./dist/dev-env.d.ts",
+      "import": "./dist/dev-env.js"
     },
     "./host-daemon": {
-      "import": "./dist/host-daemon.js",
-      "types": "./dist/host-daemon.d.ts"
+      "types": "./dist/host-daemon.d.ts",
+      "import": "./dist/host-daemon.js"
     },
     "./host-daemon-entrypoint": {
-      "import": "./dist/host-daemon-entrypoint.js",
-      "types": "./dist/host-daemon-entrypoint.d.ts"
+      "types": "./dist/host-daemon-entrypoint.d.ts",
+      "import": "./dist/host-daemon-entrypoint.js"
     },
     "./cli": {
-      "import": "./dist/cli.js",
-      "types": "./dist/cli.d.ts"
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
     },
     "./defaults": {
-      "import": "./dist/defaults.js",
-      "types": "./dist/defaults.d.ts"
+      "types": "./dist/defaults.d.ts",
+      "import": "./dist/defaults.js"
     },
     "./database": {
-      "import": "./dist/database.js",
-      "types": "./dist/database.d.ts"
+      "types": "./dist/database.d.ts",
+      "import": "./dist/database.js"
     },
     "./data-dir": {
-      "import": "./dist/data-dir.js",
-      "types": "./dist/data-dir.d.ts"
+      "types": "./dist/data-dir.d.ts",
+      "import": "./dist/data-dir.js"
     },
     "./strings": {
-      "import": "./dist/strings.js",
-      "types": "./dist/strings.d.ts"
+      "types": "./dist/strings.d.ts",
+      "import": "./dist/strings.js"
     }
   },
   "files": [

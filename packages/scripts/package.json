@@ -5,36 +5,36 @@
   "private": true,
   "exports": {
     "./lib/run-dev-supervisor": {
-      "import": "./dist/lib/run-dev-supervisor.js",
-      "types": "./dist/lib/run-dev-supervisor.d.ts"
+      "types": "./dist/lib/run-dev-supervisor.d.ts",
+      "import": "./dist/lib/run-dev-supervisor.js"
     },
     "./request-dev-restart": {
-      "import": "./dist/commands/request-dev-restart.js",
-      "types": "./dist/commands/request-dev-restart.d.ts"
+      "types": "./dist/commands/request-dev-restart.d.ts",
+      "import": "./dist/commands/request-dev-restart.js"
     },
     "./run-cli": {
-      "import": "./dist/commands/run-cli.js",
-      "types": "./dist/commands/run-cli.d.ts"
+      "types": "./dist/commands/run-cli.d.ts",
+      "import": "./dist/commands/run-cli.js"
     },
     "./run-host-daemon": {
-      "import": "./dist/commands/run-host-daemon.js",
-      "types": "./dist/commands/run-host-daemon.d.ts"
+      "types": "./dist/commands/run-host-daemon.d.ts",
+      "import": "./dist/commands/run-host-daemon.js"
     },
     "./start-bb": {
-      "import": "./dist/commands/start-bb.js",
-      "types": "./dist/commands/start-bb.d.ts"
+      "types": "./dist/commands/start-bb.d.ts",
+      "import": "./dist/commands/start-bb.js"
     },
     "./start-host-daemon": {
-      "import": "./dist/commands/start-host-daemon.js",
-      "types": "./dist/commands/start-host-daemon.d.ts"
+      "types": "./dist/commands/start-host-daemon.d.ts",
+      "import": "./dist/commands/start-host-daemon.js"
     },
     "./reset-bb-data": {
-      "import": "./dist/commands/reset-bb-data.js",
-      "types": "./dist/commands/reset-bb-data.d.ts"
+      "types": "./dist/commands/reset-bb-data.d.ts",
+      "import": "./dist/commands/reset-bb-data.js"
     },
     "./archive-codex-tmp-bb-sessions": {
-      "import": "./dist/commands/archive-codex-tmp-bb-sessions.js",
-      "types": "./dist/commands/archive-codex-tmp-bb-sessions.d.ts"
+      "types": "./dist/commands/archive-codex-tmp-bb-sessions.d.ts",
+      "import": "./dist/commands/archive-codex-tmp-bb-sessions.js"
     }
   },
   "files": [

@@ -4,12 +4,12 @@
   "type": "module",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./internal-lifecycle": {
-      "import": "./dist/internal-lifecycle.js",
-      "types": "./dist/internal-lifecycle.d.ts"
+      "types": "./dist/internal-lifecycle.d.ts",
+      "import": "./dist/internal-lifecycle.js"
     }
   },
   "main": "./dist/index.js",

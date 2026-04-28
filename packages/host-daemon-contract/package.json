@@ -4,12 +4,12 @@
   "type": "module",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./local": {
-      "import": "./dist/local.js",
-      "types": "./dist/local.d.ts"
+      "types": "./dist/local.d.ts",
+      "import": "./dist/local.js"
     }
   },
   "main": "./dist/index.js",

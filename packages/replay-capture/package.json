@@ -4,20 +4,20 @@
   "type": "module",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./reader": {
-      "import": "./dist/reader.js",
-      "types": "./dist/reader.d.ts"
+      "types": "./dist/reader.d.ts",
+      "import": "./dist/reader.js"
     },
     "./playback": {
-      "import": "./dist/playback.js",
-      "types": "./dist/playback.d.ts"
+      "types": "./dist/playback.d.ts",
+      "import": "./dist/playback.js"
     },
     "./writer": {
-      "import": "./dist/writer.js",
-      "types": "./dist/writer.d.ts"
+      "types": "./dist/writer.d.ts",
+      "import": "./dist/writer.js"
     }
   },
   "main": "./dist/index.js",
