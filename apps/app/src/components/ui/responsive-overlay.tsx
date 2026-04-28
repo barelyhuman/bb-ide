@@ -2,6 +2,7 @@ import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
+import { getOverlayTriggerClassName } from "@/components/ui/overlay-trigger";
 import { useIsMobile } from "@/hooks/useMobile";
 
 // ---------------------------------------------------------------------------
@@ -68,9 +69,19 @@ export const MobileTrigger = React.forwardRef<
     >
 >(
   (
-    { asChild, open, onOpenChange, haspopup, onClick, children, ...domProps },
+    {
+      asChild,
+      open,
+      onOpenChange,
+      haspopup,
+      onClick,
+      children,
+      className,
+      ...domProps
+    },
     ref,
   ) => {
+    const triggerClassName = getOverlayTriggerClassName(className);
     const handleClick: React.MouseEventHandler<HTMLButtonElement> = (e) => {
       onClick?.(e);
       if (!e.defaultPrevented) {
@@ -86,7 +97,13 @@ export const MobileTrigger = React.forwardRef<
 
     if (asChild) {
       return (
-        <Slot ref={ref} onClick={handleClick} {...ariaProps} {...domProps}>
+        <Slot
+          ref={ref}
+          onClick={handleClick}
+          className={triggerClassName}
+          {...ariaProps}
+          {...domProps}
+        >
           {children}
         </Slot>
       );
@@ -97,6 +114,7 @@ export const MobileTrigger = React.forwardRef<
         ref={ref}
         type="button"
         onClick={handleClick}
+        className={triggerClassName}
         {...ariaProps}
         {...domProps}
       >

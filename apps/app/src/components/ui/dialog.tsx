@@ -15,6 +15,7 @@ import {
   ResponsiveDrawerShell,
   stripRadixContentProps,
 } from "@/components/ui/responsive-overlay";
+import { getOverlayTriggerClassName } from "@/components/ui/overlay-trigger";
 
 // ---------------------------------------------------------------------------
 // Context — separate instance from DropdownMenu / Popover.
@@ -69,7 +70,7 @@ function Dialog({
 const DialogTrigger = React.forwardRef<
   HTMLButtonElement,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Trigger>
->(({ asChild, children, ...props }, ref) => {
+>(({ asChild, children, className, ...props }, ref) => {
   const { isMobile, open, onOpenChange } = useResponsiveDialog();
 
   if (isMobile) {
@@ -80,6 +81,7 @@ const DialogTrigger = React.forwardRef<
         open={open}
         onOpenChange={onOpenChange}
         haspopup="dialog"
+        className={className}
         {...props}
       >
         {children}
@@ -88,7 +90,12 @@ const DialogTrigger = React.forwardRef<
   }
 
   return (
-    <DialogPrimitive.Trigger ref={ref} asChild={asChild} {...props}>
+    <DialogPrimitive.Trigger
+      ref={ref}
+      asChild={asChild}
+      className={getOverlayTriggerClassName(className)}
+      {...props}
+    >
       {children}
     </DialogPrimitive.Trigger>
   );

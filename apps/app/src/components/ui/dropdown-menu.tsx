@@ -10,6 +10,7 @@ import {
   ResponsiveDrawerShell,
   stripRadixContentProps,
 } from "@/components/ui/responsive-overlay";
+import { getOverlayTriggerClassName } from "@/components/ui/overlay-trigger";
 
 // ---------------------------------------------------------------------------
 // Context — separate instance from Popover to avoid cross-contamination
@@ -66,7 +67,7 @@ function DropdownMenu({
 const DropdownMenuTrigger = React.forwardRef<
   HTMLButtonElement,
   React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Trigger>
->(({ asChild, children, ...props }, ref) => {
+>(({ asChild, children, className, ...props }, ref) => {
   const { isMobile, open, onOpenChange } = useResponsiveMenu();
 
   if (isMobile) {
@@ -77,6 +78,7 @@ const DropdownMenuTrigger = React.forwardRef<
         open={open}
         onOpenChange={onOpenChange}
         haspopup="menu"
+        className={className}
         {...props}
       >
         {children}
@@ -85,7 +87,12 @@ const DropdownMenuTrigger = React.forwardRef<
   }
 
   return (
-    <DropdownMenuPrimitive.Trigger ref={ref} asChild={asChild} {...props}>
+    <DropdownMenuPrimitive.Trigger
+      ref={ref}
+      asChild={asChild}
+      className={getOverlayTriggerClassName(className)}
+      {...props}
+    >
       {children}
     </DropdownMenuPrimitive.Trigger>
   );

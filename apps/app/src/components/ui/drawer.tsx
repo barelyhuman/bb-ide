@@ -2,6 +2,7 @@ import * as React from "react";
 import { Drawer as DrawerPrimitive } from "vaul";
 
 import { cn } from "@/lib/utils";
+import { getOverlayTriggerClassName } from "@/components/ui/overlay-trigger";
 
 const Drawer = ({
   shouldScaleBackground = false,
@@ -14,7 +15,17 @@ const Drawer = ({
 );
 Drawer.displayName = "Drawer";
 
-const DrawerTrigger = DrawerPrimitive.Trigger;
+const DrawerTrigger = React.forwardRef<
+  React.ComponentRef<typeof DrawerPrimitive.Trigger>,
+  React.ComponentPropsWithoutRef<typeof DrawerPrimitive.Trigger>
+>(({ className, ...props }, ref) => (
+  <DrawerPrimitive.Trigger
+    ref={ref}
+    className={getOverlayTriggerClassName(className)}
+    {...props}
+  />
+));
+DrawerTrigger.displayName = DrawerPrimitive.Trigger.displayName;
 
 const DrawerPortal = DrawerPrimitive.Portal;
 
