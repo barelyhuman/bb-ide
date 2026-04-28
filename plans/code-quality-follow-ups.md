@@ -2,11 +2,25 @@
 
 Selected items from the agent-provider, host-daemon, ui, server, and data-domain boundary cleanup reviews. Each phase is independent unless noted.
 
+## Current Status (2026-04-28)
+
+Source review shows no phase is fully complete yet. Phase 2 has some work landed, and Phase 6 has partial resolved-execution plumbing, but both still miss their exit criteria.
+
+- Phase 1: Open. Credential refresh/error fields still use ambiguous `| null`.
+- Phase 2: Partial. Diff byte limits and required dispatch `eventSink` exist; commit policy and file-list policy still need cleanup.
+- Phase 3: Open. Workspace watch state still lives in `apps/host-daemon`.
+- Phase 4: Open. `core-ui` projections still depend on `getEvent*` field-accessor helpers.
+- Phase 5: Open. Projection state has not been extracted from `to-view-messages.ts`.
+- Phase 6: Partial. Resolved execution option types exist, but optional route/service inputs and service-side default resolution remain.
+- Phase 7: Open. At least one server route still imports `@bb/host-daemon-contract` directly.
+
 ## Phase 1: Fix credential nullable ambiguity in `agent-provider-auth`
 
 **Goal:** Eliminate fields where `null` carries two different meanings.
 
 In `agent-provider-auth`, `lastRefreshedAt: number | null` and `lastErrorMessage: string | null` let `null` mean both "never attempted" and "attempted with no value." AGENTS.md §Contracts: _"Use `required + nullable` only when `null` has a distinct meaning."_ This is the forbidden pattern.
+
+**Status (2026-04-28):** Open. The nullable fields still exist in `packages/agent-provider-auth/src/types.ts`, and `apps/server/src/services/cloud-auth/service.ts` still reads/writes `null` for these states.
 
 **Changes:**
 
@@ -27,11 +41,15 @@ In `agent-provider-auth`, `lastRefreshedAt: number | null` and `lastErrorMessage
 
 **Goal:** Daemon requires policy inputs from the server; no defaults, no hardcoded behavior.
 
+**Status (2026-04-28):** Partial. `workspace.diff` now requires `maxDiffBytes` and `maxFileListBytes` in the command contract, and server call sites supply them. `CommandDispatchOptions.eventSink` is required and `noopEventSink` exists for tests. Remaining: `workspace.commit` still lacks required server-owned hook policy, and `workspace.list_files` still only takes `query` and `limit`.
+
 **Changes:**
 
-- Remove `SYSTEM_MAX_DIFF_BYTES` and `SYSTEM_MAX_FILE_LIST_BYTES` fallbacks in `apps/host-daemon/src/command-dispatch.ts`. Make `maxDiffBytes` and `maxFileListBytes` required on the `workspace.diff` and `workspace.list_files` commands. Update the server to always supply them.
-- Add a required `skipHooks: boolean` field on the workspace commit command. Update the server to decide and pass it explicitly. Remove the hardcoded `noVerify: true` in the daemon handler.
-- Make `eventSink` required on `CommandDispatchOptions`. Provide a `noopEventSink` for tests that don't care about event flow. Remove the `eventSink?.flush()` / `eventSink?.emit()` optional chains.
+- [x] Remove `SYSTEM_MAX_DIFF_BYTES` and `SYSTEM_MAX_FILE_LIST_BYTES` fallbacks in `apps/host-daemon/src/command-dispatch.ts` for `workspace.diff`; make `maxDiffBytes` and `maxFileListBytes` required on the `workspace.diff` command; update the server to always supply them.
+- [ ] Decide whether `workspace.list_files` needs a byte limit in addition to `limit`; if yes, make `maxFileListBytes` required on the command and update server call sites.
+- [ ] Add a required `skipHooks: boolean` field on the workspace commit command. Update the server to decide and pass it explicitly. Remove the hardcoded `noVerify: true` in the daemon handler.
+- [x] Make `eventSink` required on `CommandDispatchOptions`. Provide a `noopEventSink` for tests that don't care about event flow. Remove the `eventSink?.flush()` / `eventSink?.emit()` optional chains in command dispatch.
+- [ ] Remove the optional `eventSink` branch from replay command options, or document why replay has a different boundary than normal command dispatch.
 
 **Exit criteria:**
 
@@ -43,6 +61,8 @@ In `agent-provider-auth`, `lastRefreshedAt: number | null` and `lastErrorMessage
 ## Phase 3: Consolidate workspace state ownership
 
 **Goal:** One source of truth for "what changed in this workspace and when."
+
+**Status (2026-04-28):** Open. `WorkspaceWatchState` is still defined in `apps/host-daemon/src/runtime-manager.ts`, and runtime-manager still tracks `lastLocalFingerprint` / `lastSharedRefsFingerprint` directly.
 
 **Changes:**
 
@@ -62,6 +82,8 @@ In `agent-provider-auth`, `lastRefreshedAt: number | null` and `lastErrorMessage
 
 `core-ui/src/event-decode.ts` exposes helpers like `getEventTurnId`, `getEventProviderThreadId`, `getEventParentToolCallId` that projection modules call throughout the codebase. These helpers walk around `ThreadEvent`'s discriminated union with runtime accessors, erasing the type system's knowledge of which variant carries which field. The right shape is: decode/narrow once at the boundary, then access variant-specific fields directly.
 
+**Status (2026-04-28):** Open. `getEventTurnId`, `getEventProviderThreadId`, and `getEventParentToolCallId` are still imported by `to-view-messages.ts` and other projection/lifecycle modules.
+
 **Changes:**
 
 - In `to-view-messages.ts` and the projection modules it calls, replace calls to `getEventTurnId`, `getEventProviderThreadId`, `getEventParentToolCallId`, and similar accessors with `switch (event.type)` blocks that narrow the union.
@@ -79,6 +101,8 @@ In `agent-provider-auth`, `lastRefreshedAt: number | null` and `lastErrorMessage
 **Goal:** Let the main loop be read top-to-bottom without paging through initialization and finalization helpers.
 
 `to-view-messages.ts` at 852 lines mixes state initialization, the event loop, subsidiary lifecycle handlers (tool activity, operations), and normalization passes.
+
+**Status (2026-04-28):** Open. `to-view-messages.ts` is now 1190 lines, `ProjectionState` is still defined inline there, and `packages/core-ui/src/projection-state.ts` does not exist.
 
 **Changes:**
 
@@ -100,6 +124,8 @@ In `agent-provider-auth`, `lastRefreshedAt: number | null` and `lastErrorMessage
 **Goal:** Move server policy decisions out of services and into a shared resolver that routes call before dispatching.
 
 Routes accept `model`, `serviceTier`, `reasoningLevel`, `permissionMode` as optional. Services then infer whether missing means "use project default" or "use user's last choice." The contract does not say which.
+
+**Status (2026-04-28):** Partial. `ResolvedThreadExecutionOptions` and related runtime plumbing exist, but `ThreadCreateServiceRequestInput` and `ExecutionOptionsRequest` still expose optional execution fields, and `resolveExecutionOptions()` still performs DB-backed default resolution inside the service layer.
 
 **Changes:**
 
@@ -124,6 +150,8 @@ Routes accept `model`, `serviceTier`, `reasoningLevel`, `permissionMode` as opti
 ## Phase 7: Remove daemon contract leakage from server routes
 
 **Goal:** Routes do not parse daemon response schemas inline.
+
+**Status (2026-04-28):** Open. `apps/server/src/routes/internal-replay.ts` still imports `hostDaemonCommandResultSchemaByType` from `@bb/host-daemon-contract`.
 
 **Changes:**
 
