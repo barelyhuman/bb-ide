@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useIsMobile } from "@/hooks/useMobile";
+import { usePointerCoarse } from "@/hooks/usePointerCoarse";
 
 interface HoverPopoverHandlers {
   onPointerEnter: () => void;
@@ -21,10 +21,15 @@ interface UseHoverPopoverResult {
 
 const DEFAULT_CLOSE_DELAY_MS = 160;
 
+const EMPTY_HOVER_PROPS: HoverPopoverHandlers = {
+  onPointerEnter: () => {},
+  onPointerLeave: () => {},
+};
+
 export function useHoverPopover({
   closeDelayMs = DEFAULT_CLOSE_DELAY_MS,
 }: UseHoverPopoverOptions = {}): UseHoverPopoverResult {
-  const isMobile = useIsMobile();
+  const isPointerCoarse = usePointerCoarse();
   const [open, setOpen] = useState(false);
   const [isPointerOverTrigger, setIsPointerOverTrigger] = useState(false);
   const [isPointerOverContent, setIsPointerOverContent] = useState(false);
@@ -39,9 +44,8 @@ export function useHoverPopover({
   }, []);
 
   useEffect(() => {
-    // On touch/narrow viewports, the popover opens via tap (MobileTrigger) and
-    // closes via drawer dismiss. Pointer-based hover state has no role.
-    if (isMobile) return;
+    // Touch pointers open via tap. Pointer-based hover state has no role.
+    if (isPointerCoarse) return;
 
     clearCloseTimeout();
 
@@ -59,7 +63,7 @@ export function useHoverPopover({
   }, [
     clearCloseTimeout,
     closeDelayMs,
-    isMobile,
+    isPointerCoarse,
     isPointerOverContent,
     isPointerOverTrigger,
   ]);
@@ -82,13 +86,8 @@ export function useHoverPopover({
     [clearCloseTimeout],
   );
 
-  const emptyHoverProps = {
-    onPointerEnter: () => {},
-    onPointerLeave: () => {},
-  };
-
-  const triggerHoverProps = isMobile
-    ? emptyHoverProps
+  const triggerHoverProps = isPointerCoarse
+    ? EMPTY_HOVER_PROPS
     : {
         onPointerEnter: () => {
           setIsPointerOverTrigger(true);
@@ -98,8 +97,8 @@ export function useHoverPopover({
         },
       };
 
-  const contentHoverProps = isMobile
-    ? emptyHoverProps
+  const contentHoverProps = isPointerCoarse
+    ? EMPTY_HOVER_PROPS
     : {
         onPointerEnter: () => {
           setIsPointerOverContent(true);

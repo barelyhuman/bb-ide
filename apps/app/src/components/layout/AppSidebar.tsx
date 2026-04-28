@@ -10,6 +10,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { COARSE_POINTER_CHILD_ICON_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing";
 import { ProjectList } from "./ProjectList";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme";
@@ -58,7 +59,7 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
             <SidebarMenuItem>
               <SidebarMenuButton
                 onClick={toggleTheme}
-                className="h-9 w-9 justify-center p-0 [&>svg]:size-5 md:h-8 md:w-8 md:[&>svg]:size-4"
+                className={COARSE_POINTER_CHILD_ICON_BUTTON_CLASS}
                 tooltip={
                   isDarkTheme ? "Switch to light mode" : "Switch to dark mode"
                 }
@@ -72,7 +73,7 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
             <SidebarMenuItem>
               <SidebarMenuButton
                 asChild
-                className="h-9 w-9 justify-center p-0 [&>svg]:size-5 md:h-8 md:w-8 md:[&>svg]:size-4"
+                className={COARSE_POINTER_CHILD_ICON_BUTTON_CLASS}
                 tooltip="App settings"
                 aria-label="App settings"
               >

@@ -10,11 +10,12 @@ import {
 import { StatusPill } from "@bb/ui-core";
 import { useIsMobile } from "@/hooks/useMobile";
 import { cn } from "@/lib/utils";
+import { COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing";
 import type { ThreadGitActionDialogTarget } from "@/components/thread/ThreadGitActionDialog";
 import type { ThreadEnvironmentPromotionDialogTarget } from "@/components/thread/ThreadEnvironmentPromotionDialog";
 
 const THREAD_HEADER_ACTION_BUTTON_CLASS =
-  "h-9 rounded-md border-border/70 bg-background/70 px-2 text-xs font-medium text-foreground/85 shadow-none hover:bg-muted/45 hover:text-foreground md:h-8";
+  COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS;
 
 interface ThreadHeaderGitAction {
   label: string;

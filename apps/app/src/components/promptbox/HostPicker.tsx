@@ -2,6 +2,7 @@ import { Check, ChevronDown, Monitor } from "lucide-react";
 import type { Host } from "@bb/domain";
 import { LocalhostBadge } from "@bb/ui-core";
 import { Button } from "@/components/ui/button";
+import { COARSE_POINTER_ICON_SIZE_SHRINK_CLASS } from "@/components/ui/coarse-pointer-sizing";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -76,7 +77,7 @@ export function HostPicker({
               </span>
               <Check
                 className={cn(
-                  "size-5 shrink-0 md:size-4",
+                  COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
                   host.id === selectedHostId ? "opacity-100" : "opacity-0",
                 )}
               />

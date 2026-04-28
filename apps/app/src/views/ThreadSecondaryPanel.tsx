@@ -24,6 +24,7 @@ import {
 } from "@/lib/workspace-change-summary";
 import { useIntersectionObserver } from "usehooks-ts";
 import { Button } from "@/components/ui/button";
+import { COARSE_POINTER_COMPACT_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing";
 import { Skeleton } from "@bb/ui-core";
 import {
   DropdownMenu,
@@ -182,7 +183,7 @@ function GitDiffSelector({
             </span>
             <Check
               className={cn(
-                "size-5 md:size-3.5",
+                COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
                 option.value === value ? "opacity-100" : "opacity-0",
               )}
             />

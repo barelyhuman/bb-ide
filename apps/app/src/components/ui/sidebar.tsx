@@ -9,6 +9,7 @@ import {
 import { useIsMobile } from "@/hooks/useMobile";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { COARSE_POINTER_HEADER_ICON_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@bb/ui-core";
@@ -295,7 +296,7 @@ const SidebarTrigger = React.forwardRef<
       variant="ghost"
       size="icon"
       className={cn(
-        "h-9 w-9 rounded-md p-0 [&_svg]:size-5 md:h-8 md:w-8 md:[&_svg]:size-4",
+        COARSE_POINTER_HEADER_ICON_BUTTON_CLASS,
         className,
       )}
       onClick={(event) => {

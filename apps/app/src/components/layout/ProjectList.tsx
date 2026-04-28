@@ -18,6 +18,7 @@ import {
 } from "@/hooks/queries/query-keys";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import * as api from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/shared/EmptyState";
 import {
   SidebarGroup,
@@ -27,6 +28,10 @@ import {
   SidebarMenuItem,
   SidebarMenuSkeleton,
 } from "@/components/ui/sidebar";
+import {
+  COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS,
+  COARSE_POINTER_ICON_SIZE_CLASS,
+} from "@/components/ui/coarse-pointer-sizing";
 import { ProjectRow } from "./project-list/ProjectRow";
 import {
   collapsedManagerIdsAtom,
@@ -200,9 +205,12 @@ export function ProjectList({
             disabled={isCreatingProject}
             title={isCreatingProject ? "Creating project..." : "Add project"}
             aria-label="Add project"
-            className="inline-flex size-7 items-center justify-center rounded text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground disabled:opacity-50 md:size-5"
+            className={cn(
+              "inline-flex items-center justify-center rounded text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground disabled:opacity-50",
+              COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS,
+            )}
           >
-            <Plus className="size-5 md:size-4" />
+            <Plus className={COARSE_POINTER_ICON_SIZE_CLASS} />
           </button>
         ) : null}
       </SidebarGroupLabel>

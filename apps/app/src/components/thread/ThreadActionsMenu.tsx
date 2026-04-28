@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing";
 import { cn } from "@/lib/utils";
 import { threadTypeLabel } from "@/lib/thread-title";
 import { isThreadRead } from "@/lib/thread-read-state";
@@ -64,7 +65,7 @@ export function ThreadActionsMenu({
             event.stopPropagation();
           }}
         >
-          <MoreHorizontal className="size-5 md:size-4" />
+          <MoreHorizontal className={COARSE_POINTER_ICON_SIZE_CLASS} />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align={align} className="w-44">

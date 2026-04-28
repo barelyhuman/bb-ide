@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { COARSE_POINTER_ICON_SIZE_SHRINK_CLASS } from "@/components/ui/coarse-pointer-sizing";
 import { Input } from "@/components/ui/input";
 import {
   Popover,
@@ -162,8 +163,14 @@ export function MergeBaseBranchPicker({
                 <Check
                   className={
                     branch === value
-                      ? "size-5 shrink-0 opacity-100 md:size-4"
-                      : "size-5 shrink-0 opacity-0 md:size-4"
+                      ? cn(
+                          "opacity-100",
+                          COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
+                        )
+                      : cn(
+                          "opacity-0",
+                          COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
+                        )
                   }
                 />
               </button>

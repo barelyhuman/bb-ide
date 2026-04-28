@@ -6,6 +6,12 @@ import { NavLink } from "react-router-dom";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ProjectActionsMenu } from "@/components/project/ProjectActionsMenu";
 import { SidebarMenuItem, SidebarMenuSkeleton } from "@/components/ui/sidebar";
+import {
+  COARSE_POINTER_ICON_SIZE_CLASS,
+  COARSE_POINTER_PROJECT_ROW_ACTION_SIZE_CLASS,
+  COARSE_POINTER_ROW_HEIGHT_CLASS,
+  COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+} from "@/components/ui/coarse-pointer-sizing";
 import { isBusyThread } from "@/lib/thread-activity";
 import { cn } from "@/lib/utils";
 import { ThreadRow } from "./ThreadRow";
@@ -103,7 +109,8 @@ export function ProjectRow({
     <SidebarMenuItem className="space-y-0.5">
       <div
         className={cn(
-          "group/project-row relative flex h-10 w-full items-center rounded-md text-sm transition-colors md:h-8",
+          "group/project-row relative flex w-full items-center rounded-md text-sm transition-colors",
+          COARSE_POINTER_ROW_HEIGHT_CLASS,
           isActive
             ? "bg-sidebar-border/80 text-sidebar-foreground"
             : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
@@ -127,19 +134,38 @@ export function ProjectRow({
           onClick={() => {
             onToggleProjectCollapsed(project.id);
           }}
-          className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2 md:h-8 md:w-8"
+          className={cn(
+            "relative z-10 flex shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2",
+            COARSE_POINTER_PROJECT_ROW_ACTION_SIZE_CLASS,
+          )}
         >
-          <span className="relative inline-flex size-5 items-center justify-center md:size-4">
+          <span
+            className={cn(
+              "relative inline-flex items-center justify-center",
+              COARSE_POINTER_ICON_SIZE_CLASS,
+            )}
+          >
             <ChevronRight
               className={cn(
-                "absolute size-5 opacity-0 transition-all duration-150 group-hover/project-row:opacity-100 md:size-4",
+                "absolute opacity-0 transition-all duration-150 group-hover/project-row:opacity-100",
+                COARSE_POINTER_ICON_SIZE_CLASS,
                 !isCollapsed && "rotate-90",
               )}
             />
             {isCollapsed ? (
-              <Folder className="absolute size-5 opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0 md:size-4" />
+              <Folder
+                className={cn(
+                  "absolute opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0",
+                  COARSE_POINTER_ICON_SIZE_CLASS,
+                )}
+              />
             ) : (
-              <FolderOpen className="absolute size-5 opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0 md:size-4" />
+              <FolderOpen
+                className={cn(
+                  "absolute opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0",
+                  COARSE_POINTER_ICON_SIZE_CLASS,
+                )}
+              />
             )}
           </span>
         </button>
@@ -155,14 +181,20 @@ export function ProjectRow({
             }}
             title="Project folder not found. Open project settings to fix."
             aria-label="Project folder not found"
-            className="relative z-10 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-destructive outline-none ring-sidebar-ring transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2 md:h-7 md:w-7"
+            className={cn(
+              "relative z-10 inline-flex shrink-0 items-center justify-center rounded-md text-destructive outline-none ring-sidebar-ring transition-colors hover:bg-destructive/10 hover:text-destructive focus-visible:ring-2",
+              COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+            )}
           >
-            <AlertTriangle className="size-5 md:size-4" />
+            <AlertTriangle className={COARSE_POINTER_ICON_SIZE_CLASS} />
           </NavLink>
         ) : null}
         <ProjectActionsMenu
           project={project}
-          triggerClassName="relative z-10 h-9 w-9 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground md:h-7 md:w-7"
+          triggerClassName={cn(
+            "relative z-10 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground",
+            COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+          )}
         />
       </div>
 

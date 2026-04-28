@@ -1,6 +1,7 @@
 import type { ComponentType, ReactNode } from "react";
 import { Check, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -163,7 +164,7 @@ export function PromptOptionPicker<T extends string>({
               </span>
               <Check
                 className={cn(
-                  "size-5 md:size-4",
+                  COARSE_POINTER_ICON_SIZE_CLASS,
                   option.value === value ? "opacity-100" : "opacity-0",
                 )}
               />

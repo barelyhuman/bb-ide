@@ -2,6 +2,7 @@ import { FolderPlus, MoreHorizontal, PencilLine, Trash2 } from "lucide-react";
 import { findLocalPathProjectSourceForHost } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import { Button } from "@/components/ui/button";
+import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,7 +50,7 @@ export function ProjectActionsMenu({
             event.stopPropagation();
           }}
         >
-          <MoreHorizontal className="size-5 md:size-4" />
+          <MoreHorizontal className={COARSE_POINTER_ICON_SIZE_CLASS} />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align={align} className="w-44">

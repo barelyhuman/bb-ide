@@ -5,6 +5,7 @@ import { Check, ChevronDown, ChevronRight, Copy, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Panel, PanelGroup } from "react-resizable-panels";
 import { Button } from "@/components/ui/button";
+import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing";
 import { ResponsiveDrawerShell } from "@/components/ui/responsive-overlay";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
@@ -184,8 +185,8 @@ function ThreadManagerSelector({
                 <Check
                   className={
                     managerSelectorValue === option.value
-                      ? "size-5 opacity-100 md:size-4"
-                      : "size-5 opacity-0 md:size-4"
+                      ? cn("opacity-100", COARSE_POINTER_ICON_SIZE_CLASS)
+                      : cn("opacity-0", COARSE_POINTER_ICON_SIZE_CLASS)
                   }
                 />
               </DropdownMenuItem>

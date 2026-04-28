@@ -26,6 +26,12 @@ import {
 } from "lucide-react";
 import type { PromptMentionSuggestion } from "@/hooks/usePromptMentions";
 import { Button } from "@/components/ui/button";
+import {
+  COARSE_POINTER_PROMPT_ACTION_BUTTON_CLASS,
+  COARSE_POINTER_PROMPT_COMBO_BUTTON_CLASS,
+  COARSE_POINTER_PROMPT_ICON_ACTION_BUTTON_CLASS,
+  COARSE_POINTER_TEXT_BASE_CLASS,
+} from "@/components/ui/coarse-pointer-sizing";
 import { useAutoGrow } from "@/hooks/useAutoGrow";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { transcribeVoiceInput } from "@/lib/api";
@@ -743,7 +749,8 @@ export function PromptBox({
         autoFocus={autoFocus}
         enterKeyHint="send"
         className={cn(
-          "w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pr-14 pt-3 text-base leading-relaxed md:text-sm outline-none placeholder:text-muted-foreground/60",
+          "w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pr-14 pt-3 leading-relaxed outline-none placeholder:text-muted-foreground/60",
+          COARSE_POINTER_TEXT_BASE_CLASS,
           isZenMode && "min-h-0 flex-1 px-6 pb-3 pt-8",
         )}
         style={{
@@ -803,7 +810,7 @@ export function PromptBox({
             title="Attach files"
             disabled={!onAttachFiles || isAttaching}
             onClick={() => attachmentInputRef.current?.click()}
-            className="size-auto h-10 px-2.5 transition-all md:h-8 md:px-2"
+            className={COARSE_POINTER_PROMPT_ICON_ACTION_BUTTON_CLASS}
           >
             {isAttaching ? (
               <Loader2 className="size-4 animate-spin" />
@@ -823,7 +830,7 @@ export function PromptBox({
               }
               disabled={!canStartVoiceInput}
               onClick={voiceInput.start}
-              className="size-auto h-10 px-2.5 transition-all md:h-8 md:px-2"
+              className={COARSE_POINTER_PROMPT_ICON_ACTION_BUTTON_CLASS}
             >
               <Mic className="size-4" />
             </Button>
@@ -835,7 +842,7 @@ export function PromptBox({
               variant="secondary"
               title="Stop run"
               onClick={onStop}
-              className="size-auto h-10 px-2.5 transition-all md:h-8 md:px-2"
+              className={COARSE_POINTER_PROMPT_ICON_ACTION_BUTTON_CLASS}
             >
               <Square
                 className="size-3.5"
@@ -851,7 +858,10 @@ export function PromptBox({
                 variant="default"
                 title="Stop and transcribe recording"
                 onClick={voiceInput.stop}
-                className="h-10 rounded-r-none px-2.5 md:h-8 md:px-2"
+                className={cn(
+                  "rounded-r-none",
+                  COARSE_POINTER_PROMPT_ACTION_BUTTON_CLASS,
+                )}
               >
                 <AudioLines className="size-4 animate-pulse" />
               </Button>
@@ -861,7 +871,7 @@ export function PromptBox({
                 variant="default"
                 title="Cancel recording"
                 onClick={voiceInput.cancel}
-                className="h-10 w-10 rounded-l-none border-l border-l-primary-foreground/20 px-0 transition-all hover:border-l-primary-foreground/30 md:h-8 md:w-8"
+                className={COARSE_POINTER_PROMPT_COMBO_BUTTON_CLASS}
               >
                 <X className="size-3.5" />
               </Button>
@@ -874,7 +884,10 @@ export function PromptBox({
                 variant="default"
                 title="Transcribing voice input..."
                 disabled
-                className="h-10 rounded-r-none px-2.5 md:h-8 md:px-2"
+                className={cn(
+                  "rounded-r-none",
+                  COARSE_POINTER_PROMPT_ACTION_BUTTON_CLASS,
+                )}
               >
                 <AudioLines className="size-4" />
                 <Loader2 className="size-4 animate-spin" />
@@ -885,7 +898,7 @@ export function PromptBox({
                 variant="default"
                 title="Cancel transcription"
                 onClick={voiceInput.cancel}
-                className="h-10 w-10 rounded-l-none border-l border-l-primary-foreground/20 px-0 transition-all hover:border-l-primary-foreground/30 md:h-8 md:w-8"
+                className={COARSE_POINTER_PROMPT_COMBO_BUTTON_CLASS}
               >
                 <X className="size-3.5" />
               </Button>
@@ -897,7 +910,7 @@ export function PromptBox({
               variant="default"
               title={effectiveSubmitTitle}
               disabled={!canSubmit}
-              className="h-10 px-2.5 transition-all md:h-8 md:px-2"
+              className={COARSE_POINTER_PROMPT_ACTION_BUTTON_CLASS}
             >
               {isSubmitting ? (
                 <Loader2 className="size-4 animate-spin" />

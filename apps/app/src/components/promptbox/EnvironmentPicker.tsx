@@ -18,6 +18,11 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
+  COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
+  COARSE_POINTER_ICON_SIZE_CLASS,
+} from "@/components/ui/coarse-pointer-sizing";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useSandboxBackends } from "@/hooks/queries/system-queries";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
@@ -192,7 +197,9 @@ export function EnvironmentPicker({
           )}
         >
           <span className={PROMPT_OPTION_CONTENT_CLASS_NAME}>
-            <selected.icon className="size-5 shrink-0 md:size-3.5" />
+            <selected.icon
+              className={COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS}
+            />
             <span className="truncate">
               {selected.modeLabel}
               {selected.hostLabel ? (
@@ -206,7 +213,12 @@ export function EnvironmentPicker({
               <HostStatusBadge connected={selected.hostConnected} />
             ) : null}
           </span>
-          <ChevronDown className="size-5 text-muted-foreground md:size-3.5" />
+          <ChevronDown
+            className={cn(
+              "text-muted-foreground",
+              COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
+            )}
+          />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent
@@ -382,12 +394,17 @@ function EnvironmentMenuItem({
       className="flex items-center justify-between gap-3"
     >
       <span className="flex min-w-0 items-center gap-2">
-        <Icon className="size-5 shrink-0 text-muted-foreground md:size-3.5" />
+        <Icon
+          className={cn(
+            "text-muted-foreground",
+            COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
+          )}
+        />
         <span className="truncate text-xs">{label}</span>
       </span>
       <Check
         className={cn(
-          "size-5 md:size-4",
+          COARSE_POINTER_ICON_SIZE_CLASS,
           itemValue === selectedValue ? "opacity-100" : "opacity-0",
         )}
       />

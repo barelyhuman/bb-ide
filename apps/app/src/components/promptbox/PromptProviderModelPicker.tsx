@@ -2,6 +2,12 @@ import { useCallback, useMemo, useState } from "react";
 import { Check, ChevronDown, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
+  COARSE_POINTER_ICON_SIZE_CLASS,
+  COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
+  COARSE_POINTER_PROVIDER_TAB_SIZE_CLASS,
+  COARSE_POINTER_TEXT_SM_CLASS,
+} from "@/components/ui/coarse-pointer-sizing";
+import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -184,16 +190,22 @@ export function PromptProviderModelPicker({
                     }
                   }}
                   className={cn(
-                    "flex h-9 w-9 items-center justify-center border-b-2 transition-colors md:h-7 md:w-6",
+                    "flex items-center justify-center border-b-2 transition-colors",
+                    COARSE_POINTER_PROVIDER_TAB_SIZE_CLASS,
                     isActive
                       ? "border-foreground text-foreground"
                       : "border-transparent text-muted-foreground hover:text-foreground",
                   )}
                 >
                   {Icon ? (
-                    <Icon className="size-5 md:size-4" />
+                    <Icon className={COARSE_POINTER_ICON_SIZE_CLASS} />
                   ) : (
-                    <span className="text-sm font-medium md:text-xs">
+                    <span
+                      className={cn(
+                        "font-medium",
+                        COARSE_POINTER_TEXT_SM_CLASS,
+                      )}
+                    >
                       {provider.label.charAt(0)}
                     </span>
                   )}
@@ -236,7 +248,7 @@ export function PromptProviderModelPicker({
                 </span>
                 <Check
                   className={cn(
-                    "size-5 shrink-0 md:size-4",
+                    COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
                     !isPreviewing && option.value === modelValue
                       ? "opacity-100"
                       : "opacity-0",

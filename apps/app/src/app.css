@@ -68,10 +68,10 @@
  * Typography scale overrides.
  *
  * Desktop gets tighter copy (~13px text-sm, ~15px text-base) for denser UI.
- * On narrow viewports (<768px) we bump xs/sm/base back up so dense copy
- * lands at a legible size. The 767px breakpoint matches Tailwind's md:,
- * which is where the sidebar switches to a drawer and the rest of the
- * app's responsive sizing fires — keeping these in sync avoids an
+ * On narrow touch viewports (<768px with a coarse pointer) we bump xs/sm/base
+ * back up so dense copy lands at a legible size. The 767px breakpoint matches
+ * Tailwind's md:, where the sidebar switches to a drawer and the rest of the
+ * app's responsive sizing fires. Keeping these in sync avoids an
  * intermediate state where icons have grown but text hasn't.
  *
  * Overriding the --text-* tokens (rather than the .text-* classes) ensures
@@ -84,7 +84,7 @@
   --text-base--line-height: 1.375rem;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 767px) and (pointer: coarse) {
   :root {
     --text-xs: 0.875rem;
     --text-xs--line-height: 1.25rem;

@@ -5,6 +5,7 @@ import { Check, ChevronDown, MoreHorizontal } from "lucide-react";
 import { timeAgo } from "@bb/core-ui";
 import type { CloudAuthProviderId } from "@bb/agent-providers";
 import { Button } from "@/components/ui/button";
+import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,6 +48,7 @@ import {
 } from "@/hooks/cache-effects";
 import { sandboxHostSupportedAtom } from "@/lib/atoms";
 import * as api from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 interface CloudAuthAttemptState {
   attemptId: string;
@@ -239,8 +241,11 @@ export function AppSettingsView() {
                   <Check
                     className={
                       theme === "light"
-                        ? "ml-auto size-5 md:size-4"
-                        : "ml-auto size-5 opacity-0 md:size-4"
+                        ? cn("ml-auto", COARSE_POINTER_ICON_SIZE_CLASS)
+                        : cn(
+                            "ml-auto opacity-0",
+                            COARSE_POINTER_ICON_SIZE_CLASS,
+                          )
                     }
                   />
                 </DropdownMenuItem>
@@ -249,8 +254,11 @@ export function AppSettingsView() {
                   <Check
                     className={
                       theme === "dark"
-                        ? "ml-auto size-5 md:size-4"
-                        : "ml-auto size-5 opacity-0 md:size-4"
+                        ? cn("ml-auto", COARSE_POINTER_ICON_SIZE_CLASS)
+                        : cn(
+                            "ml-auto opacity-0",
+                            COARSE_POINTER_ICON_SIZE_CLASS,
+                          )
                     }
                   />
                 </DropdownMenuItem>

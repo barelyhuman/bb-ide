@@ -11,6 +11,15 @@ import { NavLink } from "react-router-dom";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
 import { SidebarMenuBadge } from "@/components/ui/sidebar";
 import {
+  COARSE_POINTER_DOT_SIZE_CLASS,
+  COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS,
+  COARSE_POINTER_GLYPH_BOX_CLASS,
+  COARSE_POINTER_ICON_SIZE_CLASS,
+  COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
+  COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+  COARSE_POINTER_ROW_HEIGHT_CLASS,
+} from "@/components/ui/coarse-pointer-sizing";
+import {
   getEnvironmentWorkspaceDisplayIcon,
   getEnvironmentWorkspaceDisplayIconLabel,
 } from "@/lib/environment-workspace-display";
@@ -73,18 +82,30 @@ function ManagerChevron({
         event.stopPropagation();
         onToggle();
       }}
-      className="relative z-10 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-sidebar-foreground/60 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2 md:h-4 md:w-4"
+      className={cn(
+        "relative z-10 inline-flex shrink-0 items-center justify-center rounded-md text-sidebar-foreground/60 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2",
+        COARSE_POINTER_GLYPH_BOX_CLASS,
+      )}
     >
-      <span className="relative inline-flex size-5 items-center justify-center md:size-4">
+      <span
+        className={cn(
+          "relative inline-flex items-center justify-center",
+          COARSE_POINTER_ICON_SIZE_CLASS,
+        )}
+      >
         {isBusy ? (
           <CircleDashed
-            className="absolute size-5 animate-spin opacity-100 transition-opacity duration-150 group-hover/thread-row:opacity-0 md:size-4"
+            className={cn(
+              "absolute animate-spin opacity-100 transition-opacity duration-150 group-hover/thread-row:opacity-0",
+              COARSE_POINTER_ICON_SIZE_CLASS,
+            )}
             aria-hidden
           />
         ) : null}
         <ChevronRight
           className={cn(
-            "absolute size-5 transition-all duration-150 md:size-4",
+            "absolute transition-all duration-150",
+            COARSE_POINTER_ICON_SIZE_CLASS,
             !isCollapsed && "rotate-90",
             isBusy
               ? "opacity-0 group-hover/thread-row:opacity-100"
@@ -110,23 +131,36 @@ function ThreadLeadingGlyph({
   showUnreadBadge,
 }: ThreadLeadingGlyphProps) {
   return (
-    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center text-sidebar-foreground/60 md:h-4 md:w-4">
+    <span
+      className={cn(
+        "inline-flex shrink-0 items-center justify-center text-sidebar-foreground/60",
+        COARSE_POINTER_GLYPH_BOX_CLASS,
+      )}
+    >
       {isManagedChild ? (
         <ChevronDown
           aria-hidden="true"
-          className="size-5 shrink-0 rotate-45 md:size-4"
+          className={cn("rotate-45", COARSE_POINTER_ICON_SIZE_SHRINK_CLASS)}
         />
       ) : hasPendingInteraction ? (
         <span
-          className="size-2 rounded-full bg-attention md:size-1.5"
+          className={cn(
+            "rounded-full bg-attention",
+            COARSE_POINTER_DOT_SIZE_CLASS,
+          )}
           aria-label="Pending interaction requires attention"
           title="Pending interaction"
         />
       ) : isBusy ? (
-        <CircleDashed className="size-5 animate-spin md:size-4" />
+        <CircleDashed
+          className={cn("animate-spin", COARSE_POINTER_ICON_SIZE_CLASS)}
+        />
       ) : showUnreadBadge ? (
         <span
-          className="size-2 rounded-full bg-primary md:size-1.5"
+          className={cn(
+            "rounded-full bg-primary",
+            COARSE_POINTER_DOT_SIZE_CLASS,
+          )}
           aria-label="Unread thread requires attention"
           title="Unread thread requires attention"
         />
@@ -171,7 +205,9 @@ export function ThreadRow({
     <div
       className={cn(
         "group/thread-row relative flex w-full items-center gap-2 rounded-md pr-0 text-sm transition-colors",
-        isManagedChild ? "h-9 md:h-7" : "h-10 md:h-8",
+        isManagedChild
+          ? COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS
+          : COARSE_POINTER_ROW_HEIGHT_CLASS,
         isManagedChild ? "pl-6 text-sidebar-foreground/60" : "pl-2",
         isActive
           ? "bg-sidebar-border/80 text-sidebar-foreground"
@@ -208,10 +244,18 @@ export function ThreadRow({
           promoted
         </Pill>
       ) : null}
-      <span className="flex h-9 shrink-0 items-center justify-end md:h-7">
+      <span
+        className={cn(
+          "flex shrink-0 items-center justify-end",
+          COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS,
+        )}
+      >
         {isManager && managedChildCount > 0 ? (
           <span
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center md:h-7 md:w-7"
+            className={cn(
+              "inline-flex shrink-0 items-center justify-center",
+              COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+            )}
             aria-label={`${managedChildCount} managed thread${managedChildCount === 1 ? "" : "s"}`}
             title={`${managedChildCount} managed thread${managedChildCount === 1 ? "" : "s"}`}
           >
@@ -220,7 +264,12 @@ export function ThreadRow({
             </SidebarMenuBadge>
           </span>
         ) : null}
-        <span className="relative h-9 w-9 shrink-0 md:h-7 md:w-7">
+        <span
+          className={cn(
+            "relative shrink-0",
+            COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+          )}
+        >
           <span
             className={cn(
               "absolute inset-0 flex items-center justify-center transition-opacity",
@@ -229,14 +278,25 @@ export function ThreadRow({
           >
             {isManager ? (
               <UserRound
-                className="size-5 text-sidebar-foreground/70 md:size-4"
+                className={cn(
+                  "text-sidebar-foreground/70",
+                  COARSE_POINTER_ICON_SIZE_CLASS,
+                )}
                 aria-label="Manager"
               />
             ) : isManagedChild && threadIsBusy ? (
-              <CircleDashed className="size-5 animate-spin text-sidebar-foreground/70 md:size-4" />
+              <CircleDashed
+                className={cn(
+                  "animate-spin text-sidebar-foreground/70",
+                  COARSE_POINTER_ICON_SIZE_CLASS,
+                )}
+              />
             ) : EnvironmentIcon ? (
               <EnvironmentIcon
-                className="size-5 text-sidebar-foreground/70 md:size-4"
+                className={cn(
+                  "text-sidebar-foreground/70",
+                  COARSE_POINTER_ICON_SIZE_CLASS,
+                )}
                 aria-label={environmentIconLabel ?? undefined}
               />
             ) : null}
@@ -251,7 +311,10 @@ export function ThreadRow({
           >
             <ThreadActionsMenu
               thread={thread}
-              triggerClassName="h-9 w-9 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground md:h-7 md:w-7"
+              triggerClassName={cn(
+                "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+              )}
               onOpenChange={setIsActionsOpen}
             />
           </div>

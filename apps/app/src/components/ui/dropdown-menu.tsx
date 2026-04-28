@@ -3,6 +3,7 @@ import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { Check, ChevronRight, Circle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { COARSE_POINTER_CHECK_SLOT_CLASS } from "@/components/ui/coarse-pointer-sizing";
 import {
   type ResponsiveOverlayContextValue,
   useResponsiveRoot,
@@ -285,9 +286,14 @@ const DropdownMenuCheckboxItem = React.forwardRef<
             }
           }}
         >
-          <span className="absolute right-2 flex h-5 w-5 items-center justify-center md:h-3.5 md:w-3.5">
+          <span
+            className={cn(
+              "absolute right-2 flex items-center justify-center",
+              COARSE_POINTER_CHECK_SLOT_CLASS,
+            )}
+          >
             {(checked === true || checked === "indeterminate") && (
-              <Check className="h-5 w-5 md:h-3.5 md:w-3.5" />
+              <Check className={COARSE_POINTER_CHECK_SLOT_CLASS} />
             )}
           </span>
           {children}
@@ -309,9 +315,14 @@ const DropdownMenuCheckboxItem = React.forwardRef<
         textValue={_textValue}
         {...domProps}
       >
-        <span className="absolute right-2 flex h-5 w-5 items-center justify-center md:h-3.5 md:w-3.5">
+        <span
+          className={cn(
+            "absolute right-2 flex items-center justify-center",
+            COARSE_POINTER_CHECK_SLOT_CLASS,
+          )}
+        >
           <DropdownMenuPrimitive.ItemIndicator>
-            <Check className="h-5 w-5 md:h-3.5 md:w-3.5" />
+            <Check className={COARSE_POINTER_CHECK_SLOT_CLASS} />
           </DropdownMenuPrimitive.ItemIndicator>
         </span>
         {children}
