@@ -1,5 +1,6 @@
 import path from "node:path";
 import { listDrafts } from "@bb/db";
+import { FILE_LIST_LIMIT_MAX } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
 import { threadEventTypeSchema } from "@bb/domain";
 import {
@@ -60,7 +61,7 @@ interface RequireThreadStorageTargetArgs {
 function parseThreadStorageFileListLimit(rawLimit: string | undefined): number {
   const limit = Math.min(
     parseOptionalInteger(rawLimit, "limit") ?? 1000,
-    10000,
+    FILE_LIST_LIMIT_MAX,
   );
   if (limit <= 0) {
     throw new ApiError(

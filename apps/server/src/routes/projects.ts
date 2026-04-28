@@ -13,6 +13,7 @@ import {
   updateProject,
   updateProjectSource,
 } from "@bb/db";
+import { FILE_LIST_LIMIT_MAX } from "@bb/host-daemon-contract";
 import {
   createManagerThreadRequestSchema,
   createProjectRequestSchema,
@@ -276,7 +277,7 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
 
       const limit = Math.min(
         parseOptionalInteger(query.limit, "limit") ?? 1000,
-        10000,
+        FILE_LIST_LIMIT_MAX,
       );
       if (limit <= 0) {
         throw new ApiError(

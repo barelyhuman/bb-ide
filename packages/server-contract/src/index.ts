@@ -15,6 +15,7 @@ export type { ApiError, DomainErrorCode } from "./errors.js";
 
 export {
   AUTOMATION_NAME_MAX_LENGTH,
+  FILE_LIST_QUERY_MAX_LENGTH,
   archiveThreadRequestSchema,
   automationActionSchema,
   automationNameSchema,

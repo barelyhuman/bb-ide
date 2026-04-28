@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { fuzzyMatchPaths } from "@bb/fuzzy-match";
 
 export interface FinalizeListedFilesArgs {
   filePaths: string[];
@@ -17,10 +18,13 @@ export function finalizeListedFiles(
 ): FinalizedFileList {
   let filePaths = args.filePaths;
   if (args.query) {
-    const lowerQuery = args.query.toLowerCase();
-    filePaths = filePaths.filter((filePath) =>
-      filePath.toLowerCase().includes(lowerQuery),
-    );
+    const matchLimit = args.limit + 1;
+    filePaths = fuzzyMatchPaths({
+      items: filePaths,
+      query: args.query,
+      getPath: (filePath) => filePath,
+      limit: matchLimit,
+    }).map((match) => match.item);
   }
 
   let truncated = false;

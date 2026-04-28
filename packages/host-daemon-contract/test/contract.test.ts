@@ -631,6 +631,54 @@ describe("host-daemon command schemas", () => {
     });
   });
 
+  it("bounds file list command queries and limits", () => {
+    const longQuery = "a".repeat(contract.FILE_LIST_QUERY_MAX_LENGTH + 1);
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "host.list_files",
+        path: "/tmp/bb-data/thread-storage/thread-123",
+        query: longQuery,
+        limit: 100,
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "host.list_files",
+        path: "/tmp/bb-data/thread-storage/thread-123",
+        limit: contract.FILE_LIST_LIMIT_MAX + 1,
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "workspace.list_files",
+        environmentId: "env_123",
+        environmentStatus: "ready",
+        workspaceContext: {
+          workspacePath: "/tmp/workspace",
+          workspaceProvisionType: "unmanaged",
+        },
+        query: longQuery,
+        limit: 100,
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "workspace.list_files",
+        environmentId: "env_123",
+        environmentStatus: "ready",
+        workspaceContext: {
+          workspacePath: "/tmp/workspace",
+          workspaceProvisionType: "unmanaged",
+        },
+        limit: contract.FILE_LIST_LIMIT_MAX + 1,
+      }),
+    ).toThrow();
+  });
+
   it("keeps typed per-command result schemas", () => {
     expect(
       hostDaemonCommandResultSchemaByType["workspace.promote"].parse({

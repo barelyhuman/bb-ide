@@ -1,0 +1,31 @@
+{
+  "name": "@bb/fuzzy-match",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "rimraf dist tsconfig.tsbuildinfo && tsc",
+    "clean": "rimraf dist tsconfig.tsbuildinfo",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "fastest-levenshtein": "^1.0.16",
+    "fzf": "^0.5.2"
+  },
+  "devDependencies": {
+    "@bb/tsconfig": "workspace:*",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.1"
+  }
+}

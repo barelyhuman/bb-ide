@@ -676,6 +676,24 @@ describe("server-contract clients", () => {
     expect(contractSource).not.toMatch(/form:\s*Record</);
   });
 
+  it("bounds public file list search queries", () => {
+    const maxQuery = "a".repeat(contract.FILE_LIST_QUERY_MAX_LENGTH);
+    const longQuery = `${maxQuery}a`;
+
+    expect(
+      contract.projectFilesQuerySchema.parse({ query: maxQuery }),
+    ).toMatchObject({ query: maxQuery });
+    expect(() =>
+      contract.projectFilesQuerySchema.parse({ query: longQuery }),
+    ).toThrow();
+    expect(
+      contract.threadStorageFilesQuerySchema.parse({ query: maxQuery }),
+    ).toMatchObject({ query: maxQuery });
+    expect(() =>
+      contract.threadStorageFilesQuerySchema.parse({ query: longQuery }),
+    ).toThrow();
+  });
+
   it("keeps contract optional fields on an explicit allowlist", () => {
     const optionalFieldPaths = collectOptionalFieldPaths({
       apiErrorSchema: contract.apiErrorSchema,

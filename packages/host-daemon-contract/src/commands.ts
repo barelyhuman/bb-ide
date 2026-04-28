@@ -23,6 +23,9 @@ import { hostRuntimeMaterialSnapshotSchema } from "./local-state.js";
 
 export const HOST_DAEMON_PROTOCOL_VERSION = 10 as const;
 
+export const FILE_LIST_QUERY_MAX_LENGTH = 256;
+export const FILE_LIST_LIMIT_MAX = 10_000;
+
 export const HOST_DAEMON_COMMAND_TYPES = [
   "thread.start",
   "turn.submit",
@@ -211,8 +214,8 @@ export const hostReadFileCommandSchema = z.object({
 export const hostListFilesCommandSchema = z.object({
   type: z.literal("host.list_files"),
   path: z.string().min(1),
-  query: z.string().optional(),
-  limit: z.number().int().positive(),
+  query: z.string().max(FILE_LIST_QUERY_MAX_LENGTH).optional(),
+  limit: z.number().int().positive().max(FILE_LIST_LIMIT_MAX),
 });
 
 export const providerListCommandSchema = z.object({
@@ -352,8 +355,8 @@ export const workspaceDemoteCommandSchema =
 export const workspaceListFilesCommandSchema =
   hostDaemonWorkspaceTargetSchema.extend({
     type: z.literal("workspace.list_files"),
-    query: z.string().optional(),
-    limit: z.number().int().positive(),
+    query: z.string().max(FILE_LIST_QUERY_MAX_LENGTH).optional(),
+    limit: z.number().int().positive().max(FILE_LIST_LIMIT_MAX),
   });
 
 export const workspaceListBranchesCommandSchema =

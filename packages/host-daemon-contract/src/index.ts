@@ -55,6 +55,8 @@ export type {
 } from "./local.js";
 
 export {
+  FILE_LIST_LIMIT_MAX,
+  FILE_LIST_QUERY_MAX_LENGTH,
   HOST_DAEMON_COMMAND_TYPES,
   HOST_DAEMON_PROTOCOL_VERSION,
   environmentDestroyCommandSchema,
