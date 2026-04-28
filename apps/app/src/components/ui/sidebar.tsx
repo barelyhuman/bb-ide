@@ -287,7 +287,7 @@ const SidebarTrigger = React.forwardRef<
   React.ComponentRef<typeof Button>,
   React.ComponentProps<typeof Button>
 >(({ className, onClick, ...props }, ref) => {
-  const { toggleSidebar, isMobile } = useSidebar();
+  const { toggleSidebar } = useSidebar();
 
   return (
     <Button
@@ -305,7 +305,8 @@ const SidebarTrigger = React.forwardRef<
       }}
       {...props}
     >
-      {isMobile ? <MobileSidebarIcon /> : <DesktopSidebarIcon />}
+      <DesktopSidebarIcon className="max-md:pointer-coarse:hidden" />
+      <MobileSidebarIcon className="hidden max-md:pointer-coarse:block" />
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
   );
