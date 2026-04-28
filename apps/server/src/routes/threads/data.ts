@@ -101,6 +101,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
         deps.db,
         requirePublicThread(deps.db, context.req.param("id")),
         {
+          isDevelopment: deps.config.isDevelopment,
           showAllManagerEvents: query.showAllManagerEvents === "true",
           includeNestedRows: query.includeNestedRows === "true",
         },
@@ -117,6 +118,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
           deps.db,
           requirePublicThread(deps.db, context.req.param("id")),
           {
+            isDevelopment: deps.config.isDevelopment,
             sourceSeqStart:
               parseOptionalInteger(query.sourceSeqStart, "sourceSeqStart") ?? 0,
             sourceSeqEnd:

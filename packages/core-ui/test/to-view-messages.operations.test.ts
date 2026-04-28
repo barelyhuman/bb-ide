@@ -655,6 +655,7 @@ describe("toViewMessages operations", () => {
           scope: turnScope("turn-1"),
         },
       ]),
+      { includeProviderUnhandledOperations: true },
     );
     const op = projected.find(
       (message): message is Extract<ViewMessage, { kind: "operation" }> =>
@@ -667,6 +668,33 @@ describe("toViewMessages operations", () => {
     expect(op?.detail).toContain("Raw event: item/tool/requestUserInput");
     expect(op?.detail).toContain('"message": "Tool is waiting for input"');
     expect(op?.detail).toContain('"tool": "prompt_user"');
+  });
+
+  it("hides provider/unhandled operations by default", () => {
+    const projected = toViewMessages(
+      fromRows([
+        {
+          id: "evt-1",
+          threadId: "thread-1",
+          seq: 1,
+          type: "provider/unhandled",
+          data: {
+            providerThreadId: "provider-thread-1",
+            providerId: "codex",
+            rawType: "item/tool/requestUserInput",
+            rawEvent: {
+              jsonrpc: "2.0",
+              method: "item/tool/requestUserInput",
+              params: {},
+            },
+          },
+          createdAt: 1,
+          scope: threadScope(),
+        },
+      ]),
+    );
+
+    expect(projected).toEqual([]);
   });
 
   it("projects provisioning events as operations", () => {

@@ -526,6 +526,7 @@ describe("toViewProjection turn lifecycle", () => {
     ];
 
     const projection = toViewProjection(fromRows(events), {
+      includeProviderUnhandledOperations: true,
       threadStatus: "idle",
       turnMessageDetail: "full",
     });

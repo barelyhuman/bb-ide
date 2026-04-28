@@ -1027,6 +1027,8 @@ function buildFlatProjectionData(
     }
 
     const operation = parseOperationMessage(decoded, meta, {
+      includeProviderUnhandledOperations:
+        args.options?.includeProviderUnhandledOperations,
       includeOptionalOperations: args.options?.includeOptionalOperations,
     });
     if (operation) {

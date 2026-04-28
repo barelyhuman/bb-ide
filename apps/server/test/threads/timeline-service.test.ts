@@ -146,7 +146,9 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const timeline = buildThreadTimeline(harness.db, thread, {});
+    const timeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
 
     expect(timeline.rows).toHaveLength(1);
     expect(timeline.rows[0]).toMatchObject({
@@ -163,6 +165,77 @@ describe("buildThreadTimeline", () => {
       usedTokens: 42,
       modelContextWindow: 200_000,
       estimated: false,
+    });
+  });
+
+  it("shows provider unhandled rows in development or debug views only", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: threadScope(),
+      sequence: 1,
+      type: "provider/unhandled",
+      data: {
+        providerId: "codex",
+        rawType: "item/tool/requestUserInput",
+        rawEvent: {
+          jsonrpc: "2.0",
+          method: "item/tool/requestUserInput",
+          params: {
+            threadId: thread.id,
+          },
+        },
+      },
+    });
+
+    expect(
+      buildThreadTimeline(harness.db, thread, { isDevelopment: false }).rows,
+    ).toEqual([]);
+
+    const developmentTimeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
+    const developmentRows = developmentTimeline.rows.filter(
+      (row): row is TimelineMessageRow => row.kind === "message",
+    );
+
+    expect(developmentRows).toHaveLength(1);
+    expect(developmentRows[0]?.message).toMatchObject({
+      kind: "operation",
+      opType: "provider-unhandled",
+      title: "Unhandled Codex event",
+    });
+
+    const debugTimeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: false,
+      showAllManagerEvents: true,
+    });
+    const debugRows = debugTimeline.rows.filter(
+      (row): row is TimelineMessageRow => row.kind === "message",
+    );
+
+    expect(debugRows).toHaveLength(1);
+    expect(debugRows[0]?.message).toMatchObject({
+      kind: "operation",
+      opType: "provider-unhandled",
+      title: "Unhandled Codex event",
     });
   });
 
@@ -212,7 +285,9 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const timeline = buildThreadTimeline(harness.db, thread, {});
+    const timeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
 
     expect(timeline.activeThinking).toMatchObject({
       id: "reasoning-1",
@@ -265,7 +340,9 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const timeline = buildThreadTimeline(harness.db, thread, {});
+    const timeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
 
     expect(timeline.activeThinking).toMatchObject({
       id: "reasoning-1",
@@ -318,7 +395,9 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const timeline = buildThreadTimeline(harness.db, thread, {});
+    const timeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
 
     expect(timeline.activeThinking).toMatchObject({
       id: "reasoning-1",
@@ -401,7 +480,9 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const timeline = buildThreadTimeline(harness.db, thread, {});
+    const timeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
 
     expect(timeline.activeThinking).toMatchObject({
       id: "reasoning-1",
@@ -495,7 +576,9 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const timeline = buildThreadTimeline(harness.db, thread, {});
+    const timeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
 
     expect(timeline.activeThinking).toBeNull();
     expect(timeline.rows).toHaveLength(1);
@@ -576,7 +659,9 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const timeline = buildThreadTimeline(harness.db, thread, {});
+    const timeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
 
     expect(timeline.activeThinking).toBeNull();
   });
@@ -625,14 +710,16 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const activeTimeline = buildThreadTimeline(harness.db, thread, {});
+    const activeTimeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
     const provisioningTimeline = buildThreadTimeline(
       harness.db,
       {
         ...thread,
         status: "provisioning",
       },
-      {},
+      { isDevelopment: true },
     );
     const idleTimeline = buildThreadTimeline(
       harness.db,
@@ -640,7 +727,7 @@ describe("buildThreadTimeline", () => {
         ...thread,
         status: "idle",
       },
-      {},
+      { isDevelopment: true },
     );
 
     expect(activeTimeline.activeThinking).toMatchObject({
@@ -723,7 +810,9 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const timeline = buildThreadTimeline(harness.db, thread, {});
+    const timeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
 
     expect(timeline.activeThinking).toBeNull();
   });
@@ -779,7 +868,9 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const timeline = buildThreadTimeline(harness.db, thread, {});
+    const timeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
 
     expect(timeline.activeThinking).toBeNull();
   });
@@ -856,7 +947,9 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const timeline = buildThreadTimeline(harness.db, thread, {});
+    const timeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
 
     expect(timeline.activeThinking).toMatchObject({
       id: "reasoning-2",
@@ -912,7 +1005,9 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const timeline = buildThreadTimeline(harness.db, thread, {});
+    const timeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
 
     expect(timeline.contextWindowUsage).toEqual({
       usedTokens: 60,
@@ -993,6 +1088,7 @@ describe("buildThreadTimeline", () => {
 
     expect(() =>
       buildTimelineTurnSummaryDetails(harness.db, thread, {
+        isDevelopment: true,
         sourceSeqStart: 1,
         sourceSeqEnd: 5,
       }),
@@ -1102,8 +1198,12 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const timeline = buildThreadTimeline(harness.db, thread, {});
-    const turnSummary = timeline.rows.find((row) => row.kind === "turn-summary");
+    const timeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
+    const turnSummary = timeline.rows.find(
+      (row) => row.kind === "turn-summary",
+    );
 
     expect(turnSummary).toMatchObject({
       sourceSeqStart: 1,
@@ -1111,6 +1211,7 @@ describe("buildThreadTimeline", () => {
     });
 
     const details = buildTimelineTurnSummaryDetails(harness.db, thread, {
+      isDevelopment: true,
       sourceSeqStart: 1,
       sourceSeqEnd: 5,
     });
@@ -1244,8 +1345,12 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const timeline = buildThreadTimeline(harness.db, thread, {});
-    const turnSummary = timeline.rows.find((row) => row.kind === "turn-summary");
+    const timeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
+    const turnSummary = timeline.rows.find(
+      (row) => row.kind === "turn-summary",
+    );
 
     expect(turnSummary).toMatchObject({
       sourceSeqStart: 1,
@@ -1253,6 +1358,7 @@ describe("buildThreadTimeline", () => {
     });
 
     const details = buildTimelineTurnSummaryDetails(harness.db, thread, {
+      isDevelopment: true,
       sourceSeqStart: 1,
       sourceSeqEnd: 5,
     });
@@ -1329,6 +1435,7 @@ describe("buildThreadTimeline", () => {
     });
 
     const details = buildTimelineTurnSummaryDetails(harness.db, thread, {
+      isDevelopment: true,
       sourceSeqStart: 1,
       sourceSeqEnd: 3,
     });
@@ -1339,6 +1446,104 @@ describe("buildThreadTimeline", () => {
     if (detailMessages[0]?.message.kind === "assistant-text") {
       expect(detailMessages[0].message.text).toBe("Nothing to expand.");
     }
+  });
+
+  it("applies provider unhandled gating to turn-summary details", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 1,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 2,
+      type: "provider/unhandled",
+      data: {
+        providerId: "codex",
+        rawType: "item/tool/requestUserInput",
+        rawEvent: {
+          jsonrpc: "2.0",
+          method: "item/tool/requestUserInput",
+          params: {
+            threadId: thread.id,
+            turnId: "turn-1",
+          },
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 3,
+      type: "turn/completed",
+      data: {
+        status: "completed",
+      },
+    });
+
+    expect(
+      buildTimelineTurnSummaryDetails(harness.db, thread, {
+        isDevelopment: false,
+        sourceSeqStart: 1,
+        sourceSeqEnd: 3,
+      }).rows,
+    ).toEqual([]);
+
+    const developmentDetails = buildTimelineTurnSummaryDetails(
+      harness.db,
+      thread,
+      {
+        isDevelopment: true,
+        sourceSeqStart: 1,
+        sourceSeqEnd: 3,
+      },
+    );
+    const debugDetails = buildTimelineTurnSummaryDetails(harness.db, thread, {
+      isDevelopment: false,
+      showAllManagerEvents: true,
+      sourceSeqStart: 1,
+      sourceSeqEnd: 3,
+    });
+    const developmentRows = flattenTimelineMessageRows(developmentDetails.rows);
+    const debugRows = flattenTimelineMessageRows(debugDetails.rows);
+
+    expect(developmentRows).toHaveLength(1);
+    expect(developmentRows[0]?.message).toMatchObject({
+      kind: "operation",
+      opType: "provider-unhandled",
+      title: "Unhandled Codex event",
+    });
+    expect(debugRows).toHaveLength(1);
+    expect(debugRows[0]?.message).toMatchObject({
+      kind: "operation",
+      opType: "provider-unhandled",
+      title: "Unhandled Codex event",
+    });
   });
 
   it("filters manager thread timeline to user messages, message_user output, and operations", async () => {
@@ -1391,7 +1596,7 @@ describe("buildThreadTimeline", () => {
       type: "system/thread-provisioning",
       scope: threadScope(),
       data: {
-          provisioningId: "tpv-1",
+        provisioningId: "tpv-1",
         status: "completed",
         environmentId: environment.id,
         entries: [
@@ -1502,7 +1707,9 @@ describe("buildThreadTimeline", () => {
     });
 
     // Default view — should show only operation, message_user, and user message
-    const defaultTimeline = buildThreadTimeline(harness.db, thread, {});
+    const defaultTimeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
     const defaultKinds = defaultTimeline.rows.map((row) =>
       row.kind === "message" ? row.message.kind : row.kind,
     );
@@ -1523,6 +1730,7 @@ describe("buildThreadTimeline", () => {
 
     // Show all events — should show everything
     const debugTimeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: false,
       showAllManagerEvents: true,
     });
     expect(debugTimeline.rows.length).toBeGreaterThan(
@@ -1624,7 +1832,9 @@ describe("buildThreadTimeline", () => {
       },
     });
 
-    const timeline = buildThreadTimeline(harness.db, thread, {});
+    const timeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
     const rows = timeline.rows.filter(
       (row): row is TimelineMessageRow => row.kind === "message",
     );

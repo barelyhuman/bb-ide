@@ -154,7 +154,8 @@ function createTimelineBenchmarkScenario(
   const decodedSummaryEvents = summaryEventRows.map((row) =>
     toThreadEventWithMeta(row),
   );
-  const buildSummary = () => buildThreadTimeline(db, thread, {});
+  const buildSummary = () =>
+    buildThreadTimeline(db, thread, { isDevelopment: true });
 
   const buildAndSerializeSummary = () => JSON.stringify(buildSummary());
   const loadSummaryStoredRows = () =>

@@ -137,7 +137,7 @@ const CODEX_NOTIFICATION_COVERAGE = {
   "model/rerouted": "unknown",
   "rawResponseItem/completed": "noise",
   "serverRequest/resolved": "unknown",
-  "skills/changed": "unknown",
+  "skills/changed": "noise",
   "thread/archived": "unknown",
   "thread/closed": "unknown",
   "thread/compacted": "normalized",

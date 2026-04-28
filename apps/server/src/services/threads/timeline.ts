@@ -40,11 +40,13 @@ interface TimelineSourceSeqRange {
 type TimelineMessageRow = Extract<TimelineRow, { kind: "message" }>;
 
 interface BuildThreadTimelineOptions {
+  isDevelopment: boolean;
   showAllManagerEvents?: boolean;
   includeNestedRows?: boolean;
 }
 
 interface BuildTimelineTurnSummaryDetailsOptions extends TimelineSourceSeqRange {
+  isDevelopment: boolean;
   showAllManagerEvents?: boolean;
 }
 
@@ -240,6 +242,8 @@ export function buildThreadTimeline(
   options: BuildThreadTimelineOptions,
 ): ThreadTimelineResponse {
   const includeNestedRows = options.includeNestedRows ?? false;
+  const includeProviderUnhandledOperations =
+    options.isDevelopment || options.showAllManagerEvents === true;
   const rawEventRows = listRecentStoredEventRows(db, {
     threadId: thread.id,
     ...(options.showAllManagerEvents === true
@@ -259,6 +263,7 @@ export function buildThreadTimeline(
   if (isDefaultManagerView) {
     const projection = toViewProjectionEntries(decodedEvents, {
       includeInternalSystemMessages: options.showAllManagerEvents,
+      includeProviderUnhandledOperations,
       threadStatus: thread.status,
       threadType: thread.type,
       turnMessageDetail: "full",
@@ -275,6 +280,7 @@ export function buildThreadTimeline(
 
   const projection = toViewProjection(decodedEvents, {
     includeInternalSystemMessages: options.showAllManagerEvents,
+    includeProviderUnhandledOperations,
     threadStatus: thread.status,
     threadType: thread.type,
     turnMessageDetail: "summary",
@@ -298,6 +304,8 @@ export function buildTimelineTurnSummaryDetails(
   thread: Thread,
   options: BuildTimelineTurnSummaryDetailsOptions,
 ): TimelineTurnSummaryDetailsResponse {
+  const includeProviderUnhandledOperations =
+    options.isDevelopment || options.showAllManagerEvents === true;
   const exactEventRows = listStoredEventRowsInRange(db, {
     threadId: thread.id,
     seqStart: options.sourceSeqStart,
@@ -322,6 +330,7 @@ export function buildTimelineTurnSummaryDetails(
     ),
     {
       includeInternalSystemMessages: options.showAllManagerEvents,
+      includeProviderUnhandledOperations,
       threadStatus: thread.status,
       threadType: thread.type,
       turnMessageDetail: "full",

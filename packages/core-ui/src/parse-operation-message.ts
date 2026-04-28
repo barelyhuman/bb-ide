@@ -18,6 +18,11 @@ import type {
   ViewThreadOperationMetadata,
 } from "@bb/domain";
 
+type ParseOperationMessageOptions = Pick<
+  ToViewMessagesOptions,
+  "includeOptionalOperations" | "includeProviderUnhandledOperations"
+>;
+
 function providerDisplayName(providerId: string): string {
   switch (providerId) {
     case "claude-code":
@@ -199,7 +204,7 @@ function formatPlanStepStatus(
 export function parseOperationMessage(
   decoded: ThreadEvent,
   meta: EventMeta,
-  options?: { includeOptionalOperations?: boolean },
+  options?: ParseOperationMessageOptions,
 ): ViewOperationMessage | ViewPermissionGrantLifecycleMessage | null {
   if (decoded.type === "turn/plan/updated") {
     const steps = decoded.plan
@@ -228,6 +233,10 @@ export function parseOperationMessage(
   }
 
   if (decoded.type === "provider/unhandled") {
+    if (options?.includeProviderUnhandledOperations !== true) {
+      return null;
+    }
+
     return op(decoded, meta, "provider-unhandled", {
       opType: "provider-unhandled",
       title: `Unhandled ${providerDisplayName(decoded.providerId)} event`,

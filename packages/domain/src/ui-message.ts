@@ -342,6 +342,7 @@ export type ViewMessage =
 
 export interface ToViewMessagesOptions {
   includeDebugRawEvents?: boolean;
+  includeProviderUnhandledOperations?: boolean;
   includeOptionalOperations?: boolean;
   includeInternalSystemMessages?: boolean;
   threadStatus?: Thread["status"];
