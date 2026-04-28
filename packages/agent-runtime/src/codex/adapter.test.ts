@@ -769,6 +769,18 @@ describe("codex provider adapter", () => {
     );
   });
 
+  it("translateEvent ignores resolved Codex server requests", () => {
+    const adapter = createCodexProviderAdapter();
+    const events = adapter.translateEvent(
+      codexEvent("serverRequest/resolved", {
+        threadId: "t1",
+        requestId: 0,
+      }),
+    );
+
+    expect(events).toEqual([]);
+  });
+
   it("translateEvent turn/completed with status and error", () => {
     const adapter = createCodexProviderAdapter();
     const events = adapter.translateEvent(
