@@ -1,14 +1,14 @@
-import { useStickToBottomContext } from "use-stick-to-bottom";
+import { useBottomAnchoredScroll } from "@/components/layout/BottomAnchoredScrollBody";
 import { ScrollToBottomButton } from "@/components/shared/ScrollToBottomButton";
 
 export function ThreadTimelineScrollToBottomButton() {
-  const { isAtBottom, scrollToBottom } = useStickToBottomContext();
+  const bottomAnchor = useBottomAnchoredScroll();
+  if (!bottomAnchor) return null;
+
   return (
     <ScrollToBottomButton
-      visible={!isAtBottom}
-      onClick={() => {
-        void scrollToBottom();
-      }}
+      visible={!bottomAnchor.isAtBottom}
+      onClick={bottomAnchor.scrollToBottom}
     />
   );
 }

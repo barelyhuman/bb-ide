@@ -269,9 +269,8 @@ function ConversationMarkdownComponent({
   );
 }
 
-// Memoized so that re-renders of ancestors (e.g. the StickToBottom subtree
-// during resize, when its internal state flips on every ResizeObserver tick)
-// do not re-run the markdown parser/renderer when `content` and `className`
-// haven't changed. ReactMarkdown's parsing + custom-component setup is the
-// hot path on resize when many messages are mounted.
+// Memoized so ancestor re-renders during resize do not re-run the markdown
+// parser/renderer when `content` and `className` haven't changed.
+// ReactMarkdown's parsing + custom-component setup is the hot path on resize
+// when many messages are mounted.
 export const ConversationMarkdown = memo(ConversationMarkdownComponent);

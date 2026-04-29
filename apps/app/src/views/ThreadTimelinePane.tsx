@@ -72,7 +72,7 @@ export function ThreadTimelinePane({
       {header}
       <PageShell
         key={threadId}
-        scrollBehavior="stick-to-bottom"
+        scrollBehavior="bottom-anchor"
         shellClassName="!mx-0 !mt-0 md:!mx-0 md:!mt-0"
         contentClassName="min-h-full gap-2 pt-0"
         footerUsesPromptPadding

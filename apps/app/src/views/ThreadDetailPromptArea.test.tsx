@@ -7,8 +7,6 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { JSX, ReactNode } from "react";
-import { StickToBottom } from "use-stick-to-bottom";
 import type { AvailableModel, PendingInteraction, Thread } from "@bb/domain";
 import type { SystemProviderInfo } from "@bb/server-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -17,16 +15,6 @@ import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { ThreadDetailPromptArea } from "./ThreadDetailPromptArea";
 
 const PROMPT_DRAFT_STORAGE_KEY = "bb.promptbox.contents-proj_1-thr_1-3";
-
-function renderWithStickToBottomContext(
-  Wrapper: (props: { children: ReactNode }) => JSX.Element,
-): (props: { children: ReactNode }) => JSX.Element {
-  return ({ children }) => (
-    <Wrapper>
-      <StickToBottom>{children}</StickToBottom>
-    </Wrapper>
-  );
-}
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -235,7 +223,7 @@ describe("ThreadDetailPromptArea", () => {
         showPromptGitStatsBanner={false}
         thread={createThread()}
       />,
-      { wrapper: renderWithStickToBottomContext(wrapper) },
+      { wrapper },
     );
 
     const textarea = await screen.findByRole<HTMLTextAreaElement>("textbox");

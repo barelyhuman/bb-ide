@@ -3,7 +3,6 @@ import {
   type ComponentType,
   type ReactNode,
 } from "react";
-import { useStickToBottomContext } from "use-stick-to-bottom";
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import {
   CornerDownRight,
@@ -34,6 +33,7 @@ import {
   PromptExecutionControls,
   PromptPermissionModePicker,
 } from "@/components/promptbox/PromptExecutionControls";
+import { useBottomAnchoredScroll } from "@/components/layout/BottomAnchoredScrollBody";
 import { Button } from "@/components/ui/button";
 import { ThreadTimelineScrollToBottomButton } from "./ThreadTimelineScrollToBottomButton";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
@@ -48,14 +48,16 @@ import {
   formatQueuedFollowUpPreview,
 } from "./threadQueuedMessages";
 
+type PromptBoxWithScrollAnchorProps = ComponentProps<typeof PromptBox>;
+
 function PromptBoxWithScrollAnchor({
   onSubmit,
   ...promptBoxProps
-}: ComponentProps<typeof PromptBox>) {
-  const { scrollToBottom } = useStickToBottomContext();
+}: PromptBoxWithScrollAnchorProps) {
+  const bottomAnchor = useBottomAnchoredScroll();
   const handleSubmit = () => {
     onSubmit();
-    void scrollToBottom({ wait: true });
+    bottomAnchor?.scrollToBottom();
   };
   return <PromptBox {...promptBoxProps} onSubmit={handleSubmit} />;
 }
