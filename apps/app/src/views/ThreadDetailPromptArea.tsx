@@ -120,6 +120,7 @@ export function ThreadDetailPromptArea({
   const promptMentions = usePromptMentions(projectId, {
     threadSuggestionMode: thread.type === "manager" ? "all" : "managers",
     currentThreadId: thread.id,
+    environmentId: thread.environmentId ?? null,
   });
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [isChangeListExpanded, setIsChangeListExpanded] = useState(false);
@@ -493,12 +494,6 @@ export function ThreadDetailPromptArea({
       mentions={{
         mentionError: promptMentions.isError,
         mentionLoading: promptMentions.isLoading,
-        mentionSearchScope:
-          promptMentions.threadSuggestionMode === "all"
-            ? "files-and-threads"
-            : promptMentions.threadSuggestionMode === "managers"
-              ? "files-and-managers"
-              : "files",
         mentionSuggestions: promptMentions.suggestions,
         onMentionQueryChange: promptMentions.setQuery,
       }}

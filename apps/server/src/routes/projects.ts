@@ -40,7 +40,9 @@ import {
   requireNonDestroyedHostWithStatus,
   requireProject,
   requirePublicProject,
+  requireReadyEnvironment,
 } from "../services/lib/entity-lookup.js";
+import type { WorkspaceProvisionType } from "@bb/domain";
 import {
   ensureProjectSourceEnvironment,
   createThreadFromRequest,
@@ -96,6 +98,56 @@ function requireProjectSource(
     throw new ApiError(404, "invalid_request", "Project source not found");
   }
   return source;
+}
+
+interface ResolveProjectFilesWorkspaceArgs {
+  projectId: string;
+  environmentId: string | null;
+}
+
+interface ResolvedProjectFilesWorkspace {
+  hostId: string;
+  path: string;
+  environmentId: string;
+  workspaceProvisionType: WorkspaceProvisionType;
+}
+
+async function resolveProjectFilesWorkspace(
+  deps: AppDeps,
+  args: ResolveProjectFilesWorkspaceArgs,
+): Promise<ResolvedProjectFilesWorkspace> {
+  if (args.environmentId !== null) {
+    const environment = requireReadyEnvironment(deps.db, args.environmentId);
+    if (environment.projectId !== args.projectId) {
+      throw new ApiError(
+        404,
+        "environment_not_found",
+        "Environment not found",
+      );
+    }
+    return {
+      hostId: environment.hostId,
+      path: environment.path,
+      environmentId: environment.id,
+      workspaceProvisionType: environment.workspaceProvisionType,
+    };
+  }
+
+  const source = getDefaultProjectSource(deps.db, args.projectId);
+  if (!source || source.type !== "local_path") {
+    throw new ApiError(409, "invalid_request", "Project has no default source");
+  }
+  const environment = await ensureProjectSourceEnvironment(deps, {
+    hostId: source.hostId,
+    path: source.path,
+    projectId: args.projectId,
+  });
+  return {
+    hostId: source.hostId,
+    path: source.path,
+    environmentId: environment.id,
+    workspaceProvisionType: environment.workspaceProvisionType,
+  };
 }
 
 export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
@@ -265,15 +317,8 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
     "/projects/:id/files",
     projectFilesQuerySchema,
     async (context, query) => {
-      requirePublicProject(deps.db, context.req.param("id"));
-      const source = getDefaultProjectSource(deps.db, context.req.param("id"));
-      if (!source || source.type !== "local_path") {
-        throw new ApiError(
-          409,
-          "invalid_request",
-          "Project has no default source",
-        );
-      }
+      const projectId = context.req.param("id");
+      requirePublicProject(deps.db, projectId);
 
       const limit = Math.min(
         parseOptionalInteger(query.limit, "limit") ?? 1000,
@@ -286,20 +331,21 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
           "limit must be a positive integer",
         );
       }
-      const environment = await ensureProjectSourceEnvironment(deps, {
-        hostId: source.hostId,
-        path: source.path,
-        projectId: context.req.param("id"),
+
+      const workspace = await resolveProjectFilesWorkspace(deps, {
+        projectId,
+        environmentId: query.environmentId,
       });
+
       const result = await queueCommandAndWait(deps, {
-        hostId: source.hostId,
+        hostId: workspace.hostId,
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: {
           type: "workspace.list_files",
-          environmentId: environment.id,
+          environmentId: workspace.environmentId,
           workspaceContext: {
-            workspacePath: source.path,
-            workspaceProvisionType: environment.workspaceProvisionType,
+            workspacePath: workspace.path,
+            workspaceProvisionType: workspace.workspaceProvisionType,
           },
           ...(query.query ? { query: query.query } : {}),
           limit,

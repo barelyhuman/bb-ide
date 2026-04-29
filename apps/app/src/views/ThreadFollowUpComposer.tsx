@@ -257,7 +257,6 @@ export interface ComposerExecutionProps {
 export interface ComposerMentionsProps {
   mentionError: boolean;
   mentionLoading: boolean;
-  mentionSearchScope?: PromptBoxMentionsConfig["searchScope"];
   mentionSuggestions: PromptBoxMentionsConfig["suggestions"];
   onMentionQueryChange: NonNullable<PromptBoxMentionsConfig["onQueryChange"]>;
 }
@@ -429,7 +428,6 @@ export function ThreadFollowUpComposer({
           }}
           mentions={{
             suggestions: mentions.mentionSuggestions,
-            searchScope: mentions.mentionSearchScope,
             isLoading: mentions.mentionLoading,
             isError: mentions.mentionError,
             onQueryChange: mentions.onMentionQueryChange,

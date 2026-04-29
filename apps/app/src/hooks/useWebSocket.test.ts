@@ -311,7 +311,7 @@ describe("useWebSocket", () => {
       hostsQueryKey(),
       hostQueryKey("host-1"),
       projectsQueryKey(),
-      projectFilesQueryKey("proj-1", "query", 10),
+      projectFilesQueryKey("proj-1", "query", 10, null),
       threadsQueryKey(),
       threadQueryKey("thread-1"),
       threadTimelineQueryKey("thread-1", false),

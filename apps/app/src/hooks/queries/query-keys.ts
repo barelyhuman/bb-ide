@@ -53,6 +53,7 @@ export type ProjectFilesQueryKey = readonly [
   string | undefined,
   string,
   number,
+  string | null,
 ];
 export type ProjectFilesQueryKeyPrefix = readonly [
   typeof PROJECT_FILES_QUERY_KEY,
@@ -239,8 +240,9 @@ export function projectFilesQueryKey(
   projectId: string | undefined,
   query: string,
   limit: number,
+  environmentId: string | null,
 ): ProjectFilesQueryKey {
-  return [PROJECT_FILES_QUERY_KEY, projectId, query, limit];
+  return [PROJECT_FILES_QUERY_KEY, projectId, query, limit, environmentId];
 }
 
 export function allProjectFilesQueryKeyPrefix(): AllProjectFilesQueryKeyPrefix {

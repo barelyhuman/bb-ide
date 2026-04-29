@@ -28,16 +28,29 @@ export function useProjects() {
   });
 }
 
-export function useProjectFileSuggestions(
-  projectId: string | undefined,
-  query: string | null,
-  limit: number = 8,
-) {
+export function useProjectFileSuggestions(args: {
+  projectId: string | undefined;
+  query: string | null;
+  limit?: number;
+  environmentId: string | null;
+}) {
+  const { projectId, query, limit = 8, environmentId } = args;
   const trimmedQuery = query?.trim() ?? "";
 
   return useQuery<WorkspaceFileListResponse>({
-    queryKey: projectFilesQueryKey(projectId, trimmedQuery, limit),
-    queryFn: () => api.searchProjectFiles(projectId ?? "", trimmedQuery, limit),
+    queryKey: projectFilesQueryKey(
+      projectId,
+      trimmedQuery,
+      limit,
+      environmentId,
+    ),
+    queryFn: () =>
+      api.searchProjectFiles({
+        projectId: projectId ?? "",
+        query: trimmedQuery,
+        limit,
+        environmentId,
+      }),
     enabled: Boolean(projectId) && trimmedQuery.length > 0,
     staleTime: 15_000,
     retry: false,

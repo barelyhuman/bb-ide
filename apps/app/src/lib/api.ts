@@ -359,15 +359,20 @@ export async function removeProjectSource(
   );
 }
 
-export async function searchProjectFiles(
-  projectId: string,
-  query: string,
-  limit: number = 8,
-): Promise<WorkspaceFileListResponse> {
+export async function searchProjectFiles(args: {
+  projectId: string;
+  query: string;
+  limit: number;
+  environmentId: string | null;
+}): Promise<WorkspaceFileListResponse> {
   return request<WorkspaceFileListResponse>(
     apiClient.projects[":id"].files.$get({
-      param: { id: projectId },
-      query: { query, limit: String(limit) },
+      param: { id: args.projectId },
+      query: {
+        query: args.query,
+        limit: String(args.limit),
+        environmentId: args.environmentId ?? "",
+      },
     }),
   );
 }

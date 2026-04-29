@@ -16,7 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { FileDiff as DiffView } from "@pierre/diffs/react";
-import { DiffStatsTally } from "@bb/ui-core";
+import { DiffStatsTally, TruncateStart } from "@bb/ui-core";
 import { Panel, PanelResizeHandle } from "react-resizable-panels";
 import {
   formatChangeSummary,
@@ -288,16 +288,16 @@ const GitDiffFileCard = memo(function GitDiffFileCard({
             {canOpenFile && openablePath && onOpenFile ? (
               <button
                 type="button"
-                className="block min-w-0 truncate text-left underline-offset-2 hover:underline"
+                className="block min-w-0 text-left underline-offset-2 hover:underline"
                 title={fileDiffLabel}
                 onClick={() => onOpenFile(openablePath)}
               >
-                {fileDiffLabel}
+                <TruncateStart>{fileDiffLabel}</TruncateStart>
               </button>
             ) : (
-              <span className="block min-w-0 truncate" title={fileDiffLabel}>
+              <TruncateStart title={fileDiffLabel}>
                 {fileDiffLabel}
-              </span>
+              </TruncateStart>
             )}
           </span>
           <DiffStatsTally

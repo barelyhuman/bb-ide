@@ -73,7 +73,6 @@ export interface PromptBoxSubmissionConfig {
 
 export interface PromptBoxMentionsConfig {
   suggestions?: PromptMentionSuggestion[];
-  searchScope?: "files" | "files-and-managers" | "files-and-threads";
   isLoading?: boolean;
   isError?: boolean;
   onQueryChange?: (query: string | null) => void;
@@ -187,7 +186,6 @@ export function PromptBox({
   } = submission;
   const {
     suggestions: mentionSuggestions = [],
-    searchScope: mentionSearchScope = "files",
     isLoading: mentionLoading = false,
     isError: mentionError = false,
     onQueryChange: onMentionQueryChange,
@@ -763,7 +761,6 @@ export function PromptBox({
       {showMentionMenu ? (
         <PromptMentionMenu
           showQueryHint={showQueryHint}
-          mentionSearchScope={mentionSearchScope}
           mentionLoading={mentionLoading}
           mentionError={mentionError}
           mentionSuggestions={mentionSuggestions}

@@ -938,7 +938,7 @@ describe("public project and host routes", () => {
       });
 
       const responsePromise = harness.app.request(
-        `/api/v1/projects/${project.id}/files?query=src&limit=1`,
+        `/api/v1/projects/${project.id}/files?query=src&limit=1&environmentId=`,
       );
       const queued = await waitForQueuedCommand(
         harness,
@@ -964,6 +964,124 @@ describe("public project and host routes", () => {
       await expect(readJson(response)).resolves.toEqual({
         files: [{ path: "src/index.ts", name: "index.ts" }],
         truncated: true,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("scopes workspace.list_files to a worktree environment when provided", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-project-files-worktree",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-files-primary",
+      });
+      const worktree = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/project-files-worktree",
+        managed: true,
+        status: "ready",
+        workspaceProvisionType: "managed-worktree",
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/projects/${project.id}/files?query=src&limit=1&environmentId=${worktree.id}`,
+      );
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "workspace.list_files" &&
+          command.environmentId === worktree.id,
+      );
+      expect(queued.command).toMatchObject({
+        workspaceContext: {
+          workspacePath: "/tmp/project-files-worktree",
+          workspaceProvisionType: "managed-worktree",
+        },
+        query: "src",
+        limit: 1,
+      });
+      await reportQueuedCommandSuccess(harness, queued, {
+        files: [{ path: "src/new-file.ts", name: "new-file.ts" }],
+        truncated: false,
+      });
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        files: [{ path: "src/new-file.ts", name: "new-file.ts" }],
+        truncated: false,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects an environmentId that belongs to a different project", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-project-files-cross",
+      });
+      const { project: projectA } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-files-a",
+      });
+      const { project: projectB } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-files-b",
+      });
+      const otherEnv = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: projectB.id,
+        path: "/tmp/project-files-b",
+        managed: true,
+        status: "ready",
+        workspaceProvisionType: "managed-worktree",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${projectA.id}/files?query=src&environmentId=${otherEnv.id}`,
+      );
+      expect(response.status).toBe(404);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "environment_not_found",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects a non-ready environmentId on the project files route", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-project-files-not-ready",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-files-not-ready",
+      });
+      const provisioning = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/project-files-not-ready-worktree",
+        managed: true,
+        status: "provisioning",
+        workspaceProvisionType: "managed-worktree",
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${project.id}/files?query=src&environmentId=${provisioning.id}`,
+      );
+      expect(response.status).toBe(409);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_request",
       });
     } finally {
       await harness.cleanup();

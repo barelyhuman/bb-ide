@@ -423,12 +423,20 @@ export type CreateManagerThreadRequest = z.infer<
   typeof createManagerThreadRequestSchema
 >;
 
-export const projectFilesQuerySchema = z
-  .object({
-    query: z.string().min(1).max(FILE_LIST_QUERY_MAX_LENGTH),
-    limit: z.string().regex(/^\d+$/),
-  })
-  .partial();
+export const projectFilesQuerySchema = z.object({
+  query: z.string().min(1).max(FILE_LIST_QUERY_MAX_LENGTH).optional(),
+  limit: z.string().regex(/^\d+$/).optional(),
+  /**
+   * Required + nullable. Pass an environment id to scope the file list to that
+   * environment's workspace (e.g. a worktree); pass `null` to use the project's
+   * default source. Encoded as the empty string on the wire because URL query
+   * params can't represent JSON null directly.
+   */
+  environmentId: z.preprocess(
+    (value) => (value === "" ? null : value),
+    z.string().min(1).nullable(),
+  ),
+});
 export type ProjectFilesQuery = z.infer<typeof projectFilesQuerySchema>;
 
 export const projectAttachmentContentQuerySchema = z.object({

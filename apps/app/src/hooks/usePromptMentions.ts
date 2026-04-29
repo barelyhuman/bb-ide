@@ -48,9 +48,10 @@ function areSuggestionsEqual(
 
 export function usePromptMentions(
   projectId: string | undefined,
-  options?: {
+  options: {
     threadSuggestionMode?: "none" | "managers" | "all";
     currentThreadId?: string;
+    environmentId: string | null;
   },
 ) {
   const [query, setQuery] = useState<string | null>(null);
@@ -60,12 +61,13 @@ export function usePromptMentions(
     PromptMentionSuggestion[]
   >([]);
 
-  const search = useProjectFileSuggestions(
+  const search = useProjectFileSuggestions({
     projectId,
-    debouncedQuery,
-    FILE_MENTION_LIMIT,
-  );
-  const threadSuggestionMode = options?.threadSuggestionMode ?? "none";
+    query: debouncedQuery,
+    limit: FILE_MENTION_LIMIT,
+    environmentId: options.environmentId,
+  });
+  const threadSuggestionMode = options.threadSuggestionMode ?? "none";
   const threadsQuery = useThreads(
     { projectId },
     { enabled: threadSuggestionMode !== "none" },
@@ -74,7 +76,7 @@ export function usePromptMentions(
   const hasQuery = (query?.trim().length ?? 0) > 0;
   const isDebouncing = hasQuery && query !== debouncedQuery;
   const trimmedQuery = query?.trim().toLowerCase() ?? "";
-  const currentThreadId = options?.currentThreadId;
+  const currentThreadId = options.currentThreadId;
   const fileSuggestions = useMemo(
     () =>
       (search.data?.files ?? []).map<PromptMentionSuggestion>((item) => ({
@@ -153,7 +155,6 @@ export function usePromptMentions(
     query,
     setQuery,
     suggestions,
-    threadSuggestionMode,
     isLoading:
       hasQuery &&
       suggestions.length === 0 &&

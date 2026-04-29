@@ -34,7 +34,7 @@ export function ProjectMainView() {
   const { localHostId } = useHostDaemon();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId: null });
-  const promptMentions = usePromptMentions(projectId);
+  const promptMentions = usePromptMentions(projectId, { environmentId: null });
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const prompt = promptDraft.text;
   const promptInput = useMemo(

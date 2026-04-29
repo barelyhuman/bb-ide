@@ -1,11 +1,11 @@
 import type { MutableRefObject } from "react";
 import { Loader2 } from "lucide-react";
+import { TruncateStart } from "@bb/ui-core";
 import type { PromptMentionSuggestion } from "@/hooks/usePromptMentions";
 import { cn } from "@/lib/utils";
 
 interface PromptMentionMenuProps {
   showQueryHint: boolean;
-  mentionSearchScope: "files" | "files-and-managers" | "files-and-threads";
   mentionLoading: boolean;
   mentionError: boolean;
   mentionSuggestions: PromptMentionSuggestion[];
@@ -28,7 +28,6 @@ function splitFilePath(filePath: string): { name: string; directory: string } {
 
 export function PromptMentionMenu({
   showQueryHint,
-  mentionSearchScope,
   mentionLoading,
   mentionError,
   mentionSuggestions,
@@ -36,26 +35,17 @@ export function PromptMentionMenu({
   mentionItemRefs,
   onApplyMention,
 }: PromptMentionMenuProps) {
-  const searchLabel =
-    mentionSearchScope === "files-and-threads"
-      ? "files, managers, and threads"
-      : mentionSearchScope === "files-and-managers"
-        ? "files and managers"
-        : "files";
-
   return (
     <div className="mx-3 mb-1 mt-1 overflow-hidden rounded-md border border-border/70 bg-popover text-popover-foreground shadow-sm">
       <div className="max-h-48 overflow-y-auto p-1">
         {showQueryHint ? (
           <div className="rounded px-2 py-1.5 text-xs text-muted-foreground">
-            {mentionSearchScope === "files"
-              ? "Type to search project files"
-              : `Type to search ${searchLabel}`}
+            Type to search files
           </div>
         ) : mentionLoading ? (
           <div className="flex items-center gap-2 rounded px-2 py-1.5 text-xs text-muted-foreground">
             <Loader2 className="size-3.5 animate-spin" />
-            <span>{`Searching ${searchLabel}\u2026`}</span>
+            <span>Searching files&hellip;</span>
           </div>
         ) : mentionError ? (
           <div className="rounded px-2 py-1.5 text-xs text-destructive">
@@ -105,9 +95,11 @@ export function PromptMentionMenu({
                   ) : null}
                   <span className="truncate">{primary}</span>
                   {secondary !== null ? (
-                    <span className="ml-auto shrink-0 truncate pl-2 text-muted-foreground">
+                    // Directory shrinks before the filename does so a long path
+                    // never crowds out the basename in the row.
+                    <TruncateStart className="ml-auto pl-2 text-muted-foreground [flex-shrink:9999]">
                       {secondary}
-                    </span>
+                    </TruncateStart>
                   ) : null}
                 </div>
               </button>
@@ -115,9 +107,7 @@ export function PromptMentionMenu({
           })
         ) : (
           <div className="rounded px-2 py-1.5 text-xs text-muted-foreground">
-            {mentionSearchScope === "files"
-              ? "No matching files"
-              : `No matching ${searchLabel}`}
+            No matching files
           </div>
         )}
       </div>

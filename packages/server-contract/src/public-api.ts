@@ -171,7 +171,9 @@ export type PublicApiSchema = {
   "/projects/:id/files": {
     /**
      * Search files in the project. Used for file mentions in the prompt box.
-     * Proxies to `workspace.list_files` on the project's default source host.
+     * Proxies to `workspace.list_files` on the workspace identified by
+     * `environmentId` (e.g. a worktree) when provided, falling back to the
+     * project's default source when `environmentId` is null.
      */
     $get: Endpoint<
       PathProjectId & { query: ProjectFilesQuery },

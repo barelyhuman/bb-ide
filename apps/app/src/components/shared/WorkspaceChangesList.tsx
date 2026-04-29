@@ -1,4 +1,5 @@
 import type { WorkspaceStatus } from "@bb/domain";
+import { TruncateStart } from "@bb/ui-core";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { cn } from "@/lib/utils";
 import { formatWorkspaceFileStatus } from "@/lib/workspace-change-summary";
@@ -35,7 +36,7 @@ export function WorkspaceChangesList({
           {canClick ? (
             <button
               type="button"
-              className="min-w-0 truncate text-left text-xs leading-5 underline-offset-2 hover:underline"
+              className="block min-w-0 text-left text-xs leading-5 underline-offset-2 hover:underline"
               title={file.path}
               onClick={() => {
                 if (onFileClick) {
@@ -45,12 +46,12 @@ export function WorkspaceChangesList({
                 onOpenFile?.(file.path);
               }}
             >
-              {file.path}
+              <TruncateStart>{file.path}</TruncateStart>
             </button>
           ) : (
-            <span className="min-w-0 truncate text-xs leading-5">
+            <TruncateStart className="text-xs leading-5">
               {file.path}
-            </span>
+            </TruncateStart>
           )}
         </li>
       ))}

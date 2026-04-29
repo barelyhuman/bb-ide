@@ -681,10 +681,16 @@ describe("server-contract clients", () => {
     const longQuery = `${maxQuery}a`;
 
     expect(
-      contract.projectFilesQuerySchema.parse({ query: maxQuery }),
-    ).toMatchObject({ query: maxQuery });
+      contract.projectFilesQuerySchema.parse({
+        query: maxQuery,
+        environmentId: "",
+      }),
+    ).toMatchObject({ query: maxQuery, environmentId: null });
     expect(() =>
-      contract.projectFilesQuerySchema.parse({ query: longQuery }),
+      contract.projectFilesQuerySchema.parse({
+        query: longQuery,
+        environmentId: "",
+      }),
     ).toThrow();
     expect(
       contract.threadStorageFilesQuerySchema.parse({ query: maxQuery }),
