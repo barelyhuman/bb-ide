@@ -3,7 +3,7 @@ import {
   formatTimelineAsText,
   type TimelineTextFormatOptions,
 } from "../src/format-timeline-text.js";
-import { buildTimelineRows } from "../src/thread-detail-rows.js";
+import { buildGroupedTimelineRows } from "../src/timeline-grouping.js";
 import type {
   TimelineRow,
   ViewMessage,
@@ -161,7 +161,7 @@ function withFixtureDefaults(message: ViewMessage): ViewMessage {
 }
 
 function timelineRowsFromMessages(messages: ViewMessage[]): TimelineRow[] {
-  return buildTimelineRows(projectionFromMessages(messages));
+  return buildGroupedTimelineRows(projectionFromMessages(messages));
 }
 
 function formatMessagesAsText(
