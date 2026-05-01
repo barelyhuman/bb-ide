@@ -205,7 +205,8 @@ Progress:
       removed from the primitive.
 - [x] Step 3 — reorganize the remaining ui-core primitives into the visible
       layer structure and document the package boundary.
-- [ ] Step 4 — scaffold ui-core Ladle and add example stories.
+- [x] Step 4 — scaffold ui-core Ladle and add a primitive story. The timeline
+      domain story is deferred until the React timeline renderer exists again.
 - [ ] Step 5 — extract the first app primitive batch with stories.
 - [ ] Step 6 — evaluate criteria-gated domain composition moves.
 
@@ -293,18 +294,20 @@ Progress:
 2. Add `vite.config.ts` with `@tailwindcss/vite`.
 3. Add `ladle` and `ladle:build` scripts to `packages/ui-core/package.json`.
 4. Add Ladle to `devDependencies`.
-5. Write **two example stories**:
-   - `stories/primitives/ui/button.stories.tsx` — visual catalog of every
-     button variant and size. Validates that shadcn primitives now live in
-     ui-core.
-   - `stories/thread-timeline/tool-call-row.stories.tsx` — a handful of realistic
-     `ToolCallRow` states (running, succeeded, failed, with output, without
-     output). Validates the complex end.
+5. Write `stories/primitives/ui/button.stories.tsx` as a visual catalog of every
+   button variant and size. This validates that shadcn primitives now live in
+   ui-core.
+
+The original plan also asked for a thread-timeline `ToolCallRow` story here.
+That would currently be fake coverage: the thread timeline React renderer is
+stubbed until the later React pass, and there is no `ToolCallRow` component to
+story. Add the thread-timeline domain story in the React timeline renderer pass,
+when it can render real rows.
 
 **Validation:**
 
-- `pnpm --filter @bb/ui-core ladle` (run by the user) opens with both stories
-  visible and rendering correctly.
+- `pnpm --filter @bb/ui-core ladle` (run by the user) opens with the button
+  story visible and rendering correctly.
 - `pnpm exec turbo run build --filter=@bb/ui-core` still passes.
 
 ### Step 5 — Extract first batch of primitives
@@ -383,8 +386,8 @@ The following are explicitly out of scope for this plan:
       `packages/agent-provider-audit` reaches across the monorepo for it.
 - [ ] `packages/ui-core/.ladle/` exists. `pnpm --filter @bb/ui-core ladle`
       starts and shows working stories.
-- [ ] At least one primitive story (visual catalog style) and one domain story
-      (scenario style) exist.
+- [ ] At least one primitive story exists. Add the domain story in the React
+      timeline renderer pass once real timeline rows render again.
 - [ ] Five primitives are extracted from `apps/app` into
       `ui-core/src/primitives/`, each with a story.
 - [ ] Domain compositions are moved only when they meet the ≥2-consumer
