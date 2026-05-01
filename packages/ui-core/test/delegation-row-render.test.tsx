@@ -74,6 +74,23 @@ describe("DelegationRow rendering", () => {
     expect(html).toContain("Explore");
   });
 
+  it("keeps completed standalone subagents in past tense", () => {
+    const html = renderToStaticMarkup(
+      <DelegationRow
+        message={{
+          ...baseDelegationMessage(),
+          subagentType: "Explore",
+          description: "Inspect the docs tree",
+        }}
+        preferOngoingLabels={true}
+        renderMessage={renderMessage}
+      />,
+    );
+
+    expect(html).toContain("Ran subagent:");
+    expect(html).not.toContain("Running subagent:");
+  });
+
   it("renders subagent output as markdown", () => {
     const html = renderToStaticMarkup(
       <DelegationRow

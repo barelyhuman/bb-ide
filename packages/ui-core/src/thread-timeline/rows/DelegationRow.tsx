@@ -3,7 +3,7 @@ import {
   buildCollapsedGroupedTimelineRows,
   buildGroupedTimelineRows,
   findLatestActivityRowId,
-  getDelegationSummaryParts,
+  getThreadTimelineRowTitle,
 } from "@bb/thread-view";
 import type {
   TimelineRow,
@@ -106,11 +106,19 @@ export function DelegationRow({
     () => createTurnSummaryRowsController(),
     [],
   );
-  const isWorking = message.status === "pending" || preferOngoingLabels;
-  const prefix = isWorking ? "Running subagent:" : "Ran subagent:";
-  const summaryParts = getDelegationSummaryParts(message);
+  const isWorking = message.status === "pending";
+  const title = getThreadTimelineRowTitle(
+    {
+      kind: "message",
+      id: message.id,
+      message,
+    },
+    {
+      preferOngoingLabels: false,
+    },
+  );
   const suffix = formatDelegationRowSuffix(
-    summaryParts.metadata,
+    title.rich.metadata ?? undefined,
     formatSummaryDuration(message.durationMs ?? undefined),
   );
 
@@ -121,8 +129,8 @@ export function DelegationRow({
           isExpanded={isExpanded}
           summaryContent={
             <EventTitle
-              prefix={prefix}
-              emphasis={summaryParts.label}
+              prefix={title.rich.prefix ?? title.rich.content}
+              emphasis={title.rich.prefix ? title.rich.content : undefined}
               suffix={suffix}
               suffixClassName="min-w-0 shrink"
               tone={message.status === "error" ? "destructive" : "default"}
