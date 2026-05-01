@@ -92,7 +92,9 @@ describe("parseExecLifecycleEvent", () => {
     };
     const result = parseExecLifecycleEvent(decoded, meta);
     expect(result?.kind).toBe("output");
-    expect(result?.call.output).toBe("output text");
+    expect(result?.kind === "output" ? result.output.output : null).toBe(
+      "output text",
+    );
     expect(result?.appendOutput).toBe(true);
   });
 
@@ -106,7 +108,9 @@ describe("parseExecLifecycleEvent", () => {
     };
     const result = parseExecLifecycleEvent(decoded, meta);
     expect(result?.kind).toBe("output");
-    expect(result?.call.output).toBe("replacement output");
+    expect(result?.kind === "output" ? result.output.output : null).toBe(
+      "replacement output",
+    );
     expect(result?.replaceOutput).toBe(true);
     expect(result?.appendOutput).toBeUndefined();
   });
@@ -293,7 +297,9 @@ describe("parseToolCallLifecycleEvent", () => {
 
     const result = parseToolCallLifecycleEvent(decoded, meta);
     expect(result?.kind).toBe("begin");
-    expect(result?.call.messageKind).toBe("delegation");
+    expect(result?.kind === "begin" ? result.call.kind : null).toBe(
+      "delegation",
+    );
     expect(result?.call.toolArgs).toBeUndefined();
     expect(result?.call.subagentType).toBe("Explore");
     expect(result?.call.description).toBe("Explore docs directory");

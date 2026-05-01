@@ -952,7 +952,7 @@ function buildFlatProjectionData(
         onExecOutput(
           state,
           meta,
-          execEvent.call,
+          execEvent.output,
           execEvent.appendOutput,
           execEvent.replaceOutput,
         );
@@ -982,35 +982,37 @@ function buildFlatProjectionData(
     if (toolCallEvent) {
       const toolCallName = getToolCallName(decoded);
       const toolCallReceiverThreadIds = getToolCallReceiverThreadIds(decoded);
-      if (
-        !toolCallEvent.call.parentToolCallId &&
-        toolCallName &&
-        PROVIDER_THREAD_CHILD_INTERACTION_TOOL_NAMES.has(toolCallName)
-      ) {
-        const inferredParentToolCallId = toolCallReceiverThreadIds
-          .map((receiverThreadId) =>
-            state.delegationParentToolCallIdsByProviderThreadId.get(
-              receiverThreadId,
-            ),
-          )
-          .find(
-            (parentToolCallId): parentToolCallId is string =>
-              typeof parentToolCallId === "string" &&
-              parentToolCallId.length > 0,
-          );
-        if (inferredParentToolCallId) {
-          toolCallEvent.call.parentToolCallId = inferredParentToolCallId;
+      if (toolCallEvent.kind !== "output") {
+        if (
+          !toolCallEvent.call.parentToolCallId &&
+          toolCallName &&
+          PROVIDER_THREAD_CHILD_INTERACTION_TOOL_NAMES.has(toolCallName)
+        ) {
+          const inferredParentToolCallId = toolCallReceiverThreadIds
+            .map((receiverThreadId) =>
+              state.delegationParentToolCallIdsByProviderThreadId.get(
+                receiverThreadId,
+              ),
+            )
+            .find(
+              (parentToolCallId): parentToolCallId is string =>
+                typeof parentToolCallId === "string" &&
+                parentToolCallId.length > 0,
+            );
+          if (inferredParentToolCallId) {
+            toolCallEvent.call.parentToolCallId = inferredParentToolCallId;
+          }
         }
-      }
-      if (
-        toolCallName &&
-        PROVIDER_THREAD_DELEGATION_TOOL_NAMES.has(toolCallName)
-      ) {
-        for (const receiverThreadId of toolCallReceiverThreadIds) {
-          state.delegationParentToolCallIdsByProviderThreadId.set(
-            receiverThreadId,
-            toolCallEvent.call.callId,
-          );
+        if (
+          toolCallName &&
+          PROVIDER_THREAD_DELEGATION_TOOL_NAMES.has(toolCallName)
+        ) {
+          for (const receiverThreadId of toolCallReceiverThreadIds) {
+            state.delegationParentToolCallIdsByProviderThreadId.set(
+              receiverThreadId,
+              toolCallEvent.call.callId,
+            );
+          }
         }
       }
       if (toolCallEvent.kind === "begin") {
@@ -1025,7 +1027,7 @@ function buildFlatProjectionData(
         onExecOutput(
           state,
           meta,
-          toolCallEvent.call,
+          toolCallEvent.output,
           toolCallEvent.appendOutput,
           toolCallEvent.replaceOutput,
         );

@@ -1976,6 +1976,102 @@ describe("toViewMessages tool activity", () => {
     expect(toolCall?.output).toContain("partial output");
   });
 
+  it("buffers command output until the command lifecycle identifies the row", () => {
+    const projected = toViewMessages(
+      fromRows([
+        {
+          id: "evt-1",
+          threadId: "thread-1",
+          seq: 1,
+          type: "item/commandExecution/outputDelta",
+          data: {
+            providerThreadId: "thread-1",
+            turnId: "turn-1",
+            itemId: "call-1",
+            delta: "early output\n",
+          },
+          createdAt: 1,
+          scope: turnScope("turn-1"),
+        },
+        {
+          id: "evt-2",
+          threadId: "thread-1",
+          seq: 2,
+          type: "item/started",
+          data: {
+            providerThreadId: "thread-1",
+            turnId: "turn-1",
+            item: {
+              type: "commandExecution",
+              id: "call-1",
+              command: "/bin/zsh -lc 'echo hello'",
+              cwd: "/repo",
+              status: "pending",
+            },
+          },
+          createdAt: 2,
+          scope: turnScope("turn-1"),
+        },
+      ]),
+      {
+        threadStatus: "active",
+      },
+    );
+    const command = projected.find(isCommandMessage);
+
+    expect(command).toBeDefined();
+    expect(command?.command).toBe("echo hello");
+    expect(command?.output).toContain("early output");
+  });
+
+  it("buffers tool progress until the tool lifecycle identifies the row", () => {
+    const projected = toViewMessages(
+      fromRows([
+        {
+          id: "evt-1",
+          threadId: "thread-1",
+          seq: 1,
+          type: "item/toolCall/progress",
+          data: {
+            providerThreadId: "thread-1",
+            turnId: "turn-1",
+            itemId: "tool-1",
+            message: "early progress",
+          },
+          createdAt: 1,
+          scope: turnScope("turn-1"),
+        },
+        {
+          id: "evt-2",
+          threadId: "thread-1",
+          seq: 2,
+          type: "item/started",
+          data: {
+            providerThreadId: "thread-1",
+            turnId: "turn-1",
+            item: {
+              type: "toolCall",
+              id: "tool-1",
+              tool: "bash",
+              arguments: { command: "npm test" },
+              status: "pending",
+            },
+          },
+          createdAt: 2,
+          scope: turnScope("turn-1"),
+        },
+      ]),
+      {
+        threadStatus: "active",
+      },
+    );
+    const toolCall = projected.find(isToolCallMessage);
+
+    expect(toolCall).toBeDefined();
+    expect(toolCall?.toolName).toBe("bash");
+    expect(toolCall?.output).toContain("early progress");
+  });
+
   it("keeps tool calls open through progress events until the completion event arrives", () => {
     const projected = toViewMessages(
       fromRows([

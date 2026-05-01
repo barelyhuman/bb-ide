@@ -98,31 +98,62 @@ export function itemStatusToFileEditStatus(
   return itemStatusToExecStatus(status);
 }
 
-export type ExecMessageKind = "command" | "tool-call" | "delegation";
-
-export interface ExecCallUpdate extends DelegationMetadata {
+export interface ExecutionUpdateBase {
   callId: string;
-  messageKind?: ExecMessageKind;
-  toolName?: string;
-  command?: string;
-  toolArgs?: JsonObject | null;
-  cwd?: string | null;
-  parsedIntents: ViewToolParsedIntent[];
-  source?: string | null;
   output?: string;
-  exitCode?: number | null;
   durationMs?: number | null;
-  approvalStatus?: ViewApprovalLifecycleStatus | null;
   status?: ViewToolCallMessage["status"];
   parentToolCallId?: string;
 }
 
-export interface ExecLifecycleEvent {
-  kind: "begin" | "end" | "output";
-  call: ExecCallUpdate;
-  appendOutput?: boolean;
-  replaceOutput?: boolean;
+export interface CommandExecutionUpdate extends ExecutionUpdateBase {
+  kind: "command";
+  command?: string;
+  cwd?: string | null;
+  parsedIntents?: ViewToolParsedIntent[];
+  source?: string | null;
+  exitCode?: number | null;
+  approvalStatus?: ViewApprovalLifecycleStatus | null;
 }
+
+export interface ToolCallExecutionUpdate extends ExecutionUpdateBase {
+  kind: "tool-call";
+  toolName?: string;
+  toolArgs?: JsonObject | null;
+  parsedIntents?: ViewToolParsedIntent[];
+  approvalStatus?: ViewApprovalLifecycleStatus | null;
+}
+
+export interface DelegationExecutionUpdate
+  extends ExecutionUpdateBase,
+    DelegationMetadata {
+  kind: "delegation";
+  toolName?: string;
+}
+
+export type ProviderExecutionUpdate =
+  | CommandExecutionUpdate
+  | ToolCallExecutionUpdate
+  | DelegationExecutionUpdate;
+
+export interface ExecutionOutputUpdate {
+  callId: string;
+  output: string;
+  status?: ViewToolCallMessage["status"];
+  parentToolCallId?: string;
+}
+
+export type ExecLifecycleEvent =
+  | {
+      kind: "begin" | "end";
+      call: ProviderExecutionUpdate;
+    }
+  | {
+      kind: "output";
+      output: ExecutionOutputUpdate;
+      appendOutput?: boolean;
+      replaceOutput?: boolean;
+    };
 
 function toExecDefaultStatus(
   kind: "begin" | "end",
@@ -275,10 +306,8 @@ export function parseExecLifecycleEvent(
     if (!callId) return null;
     return {
       kind: "output",
-      call: {
+      output: {
         callId,
-        messageKind: "command",
-        parsedIntents: [],
         output: decoded.delta,
         status: "pending",
         ...(parentToolCallId ? { parentToolCallId } : {}),
@@ -318,8 +347,8 @@ export function parseExecLifecycleEvent(
     return {
       kind,
       call: {
+        kind: "command",
         callId,
-        messageKind: "command",
         command,
         cwd: decoded.item.cwd,
         parsedIntents: parseShellCommandIntents(command),
@@ -350,10 +379,8 @@ export function parseToolCallLifecycleEvent(
   ) {
     return {
       kind: "output",
-      call: {
+      output: {
         callId: decoded.itemId,
-        messageKind: "tool-call",
-        parsedIntents: [],
         output: decoded.message ?? "Progress update",
         status: "pending",
         ...(parentToolCallId ? { parentToolCallId } : {}),
@@ -404,7 +431,7 @@ export function parseToolCallLifecycleEvent(
       fullToolName,
       parsedArgs,
     );
-    const messageKind = isDelegationToolName(fullToolName)
+    const executionKind = isDelegationToolName(fullToolName)
       ? "delegation"
       : "tool-call";
     const delegationMetadata = getDelegationMetadata(fullToolName, parsedArgs);
@@ -413,19 +440,18 @@ export function parseToolCallLifecycleEvent(
     const baseCall = {
       callId,
       toolName: fullToolName,
-      parsedIntents,
       output: kind === "end" ? (output ?? errorField) : undefined,
       durationMs,
       status,
       ...(parentToolCallId ? { parentToolCallId } : {}),
     };
 
-    if (messageKind === "delegation") {
+    if (executionKind === "delegation") {
       return {
         kind,
         call: {
           ...baseCall,
-          messageKind,
+          kind: executionKind,
           ...delegationMetadata,
         },
       };
@@ -435,8 +461,9 @@ export function parseToolCallLifecycleEvent(
       kind,
       call: {
         ...baseCall,
-        messageKind,
+        kind: executionKind,
         toolArgs,
+        parsedIntents,
         ...delegationMetadata,
       },
     };
