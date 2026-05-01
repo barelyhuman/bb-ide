@@ -1,4 +1,4 @@
-export { cn } from "./cn.js";
+export { cn } from "./primitives/cn.js";
 export {
   Button,
   buttonVariants,
@@ -128,14 +128,14 @@ export { useMediaQuery } from "./primitives/hooks/use-media-query.js";
 export {
   ThreePaneLayout,
   type ThreePaneLayoutProps,
-} from "./three-pane-layout.js";
+} from "./primitives/three-pane-layout.js";
 export {
   ConversationTimeline,
   ConversationEmptyState,
   type ConversationTimelineProps,
   type ConversationEmptyStateProps,
-} from "./conversation.js";
-export { LocalhostBadge } from "./localhost-badge.js";
+} from "./primitives/conversation.js";
+export { LocalhostBadge } from "./primitives/localhost-badge.js";
 export {
   DetailCard,
   DetailRow,
@@ -143,21 +143,21 @@ export {
   type DetailCardProps,
   type DetailRowProps,
   type DetailMessageRowProps,
-} from "./detail-card.js";
+} from "./primitives/detail-card.js";
 export {
   DiffStatsTally,
   type DiffStatsTallyProps,
-} from "./diff-stats-tally.js";
-export { Pill, type PillProps, type PillVariant } from "./pill.js";
+} from "./primitives/diff-stats-tally.js";
+export { Pill, type PillProps, type PillVariant } from "./primitives/pill.js";
 export {
   StatusPill,
   type StatusPillProps,
   type StatusPillVariant,
-} from "./status-pill.js";
+} from "./primitives/status-pill.js";
 export {
   ExpandableLine,
   type ExpandableLineProps,
-} from "./expandable-line.js";
+} from "./primitives/expandable-line.js";
 export {
   CollapsibleHeader,
   ExpandablePanel,
@@ -169,16 +169,19 @@ export {
   COLLAPSIBLE_HEADER_TEXT_CLASS,
   type CollapsibleHeaderProps,
   type ExpandablePanelProps,
-} from "./disclosure.js";
+} from "./primitives/disclosure.js";
 export {
   DEFAULT_SCROLL_STICK_THRESHOLD_PX,
   getScrollAnimationBehavior,
-} from "./scroll.js";
-export { EventCodeBlock, type EventCodeBlockProps } from "./event-content.js";
+} from "./primitives/scroll.js";
+export {
+  EventCodeBlock,
+  type EventCodeBlockProps,
+} from "./primitives/event-content.js";
 export {
   getDetailScrollMaxHeightClass,
   type DetailScrollSize,
-} from "./detail-scroll-size.js";
+} from "./primitives/detail-scroll-size.js";
 export { ThreadTimelineRows } from "./thread-timeline/ThreadTimelineRows.js";
 export type {
   ThreadTimelineLocalFileLink,

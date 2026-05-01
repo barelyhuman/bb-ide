@@ -203,7 +203,7 @@ Progress:
 - [x] Step 2 — generic shadcn/Radix primitives moved into ui-core, app imports
       migrated, app-owned toast integration split, and sidebar cookie writes
       removed from the primitive.
-- [ ] Step 3 — reorganize the remaining ui-core primitives into the visible
+- [x] Step 3 — reorganize the remaining ui-core primitives into the visible
       layer structure and document the package boundary.
 - [ ] Step 4 — scaffold ui-core Ladle and add example stories.
 - [ ] Step 5 — extract the first app primitive batch with stories.

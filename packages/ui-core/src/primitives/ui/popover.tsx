@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 
-import { cn } from "../../cn.js";
+import { cn } from "../cn.js";
 import {
   type ResponsiveOverlayContextValue,
   useResponsiveRoot,
