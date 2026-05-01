@@ -9,60 +9,59 @@ import type {
   TimelineSourceRow,
   TimelineTurnRow,
 } from "@bb/server-contract";
+import type { ActiveThinking, Thread } from "@bb/domain";
 import type {
-  ActiveThinking,
-  Thread,
-  ViewFileEditChange,
-  ViewMessage,
-  ViewProjection,
-  ViewToolParsedIntent,
-  ViewTurn,
-  ViewTimelineEntry,
-} from "@bb/domain";
+  EventProjectionFileEditChange,
+  EventProjectionMessage,
+  EventProjection,
+  EventProjectionToolParsedIntent,
+  EventProjectionTurn,
+  EventProjectionEntry,
+} from "./event-projection-types.js";
 import { toPositiveNumber } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 import { getMessageStartedAt } from "./format-helpers.js";
-import { getViewMessageScopeTurnId } from "./message-scope.js";
+import { getEventProjectionMessageScopeTurnId } from "./message-scope.js";
 import { formatToolCallCommand } from "./tool-call-parsing.js";
-import { flattenProjectionMessagesDeep } from "./projection-flatten.js";
+import { flattenEventProjectionMessagesDeep } from "./event-projection-flatten.js";
 import {
-  toViewProjection,
-  toViewProjectionEntries,
+  buildEventProjection,
+  buildEventProjectionEntries,
   type ThreadEventWithMeta,
-} from "./to-view-messages.js";
+} from "./build-event-projection.js";
 
-export type TimelineTurnMessageDetail = "summary" | "full";
+export type ThreadTimelineTurnMessageDetail = "summary" | "full";
 
 export type ThreadTimelineViewMode = "standard" | "manager-conversation";
 
-interface ThreadTimelineProjectionBaseOptions {
+interface ThreadTimelineFromEventsBaseOptions {
   includeDebugRawEvents: boolean;
   includeOptionalOperations: boolean;
   includeProviderUnhandledOperations: boolean;
   threadStatus: Thread["status"];
 }
 
-export interface StandardThreadTimelineProjectionOptions extends ThreadTimelineProjectionBaseOptions {
+export interface StandardThreadTimelineFromEventsOptions extends ThreadTimelineFromEventsBaseOptions {
   includeNestedRows: boolean;
-  turnMessageDetail: TimelineTurnMessageDetail;
+  turnMessageDetail: ThreadTimelineTurnMessageDetail;
   viewMode: "standard";
 }
 
-export interface ManagerConversationTimelineProjectionOptions extends ThreadTimelineProjectionBaseOptions {
+export interface ManagerConversationTimelineFromEventsOptions extends ThreadTimelineFromEventsBaseOptions {
   viewMode: "manager-conversation";
 }
 
-export type ThreadTimelineProjectionOptions =
-  | StandardThreadTimelineProjectionOptions
-  | ManagerConversationTimelineProjectionOptions;
+export type ThreadTimelineFromEventsOptions =
+  | StandardThreadTimelineFromEventsOptions
+  | ManagerConversationTimelineFromEventsOptions;
 
-export interface BuildThreadTimelineProjectionArgs {
+export interface BuildThreadTimelineFromEventsArgs {
   contextWindowEvents: ThreadEventWithMeta[];
   events: ThreadEventWithMeta[];
-  options: ThreadTimelineProjectionOptions;
+  options: ThreadTimelineFromEventsOptions;
 }
 
-export interface ThreadTimelineProjection {
+export interface ThreadTimelineFromEventsResult {
   activeThinking: ActiveThinking | null;
   contextWindowUsage: ThreadContextWindowUsage | null;
   rows: TimelineRow[];
@@ -73,19 +72,19 @@ export interface ThreadTimelineSourceSeqRange {
   sourceSeqStart: number;
 }
 
-export interface BuildThreadTimelineTurnSummaryChildrenOptions extends ThreadTimelineSourceSeqRange {
+export interface BuildThreadTimelineTurnDetailsFromEventsOptions extends ThreadTimelineSourceSeqRange {
   includeOptionalOperations: boolean;
   includeProviderUnhandledOperations: boolean;
   threadStatus: Thread["status"];
   viewMode: ThreadTimelineViewMode;
 }
 
-export interface BuildThreadTimelineTurnSummaryChildrenArgs {
+export interface BuildThreadTimelineTurnDetailsFromEventsArgs {
   events: ThreadEventWithMeta[];
-  options: BuildThreadTimelineTurnSummaryChildrenOptions;
+  options: BuildThreadTimelineTurnDetailsFromEventsOptions;
 }
 
-export type ThreadTimelineTurnSummaryChildrenResult =
+export type ThreadTimelineTurnDetailsFromEventsResult =
   | {
       kind: "matched";
       rows: TimelineRow[];
@@ -106,13 +105,13 @@ interface ThreadContextWindowSignal {
 
 interface BuildTurnRowsArgs {
   includeNestedRows: boolean;
-  turn: ViewTurn;
+  turn: EventProjectionTurn;
 }
 
 interface CompletedTurnMessageSlices {
-  summaryMessages: ViewMessage[];
-  terminalMessages: ViewMessage[];
-  trailingMessages: ViewMessage[];
+  summaryMessages: EventProjectionMessage[];
+  terminalMessages: EventProjectionMessage[];
+  trailingMessages: EventProjectionMessage[];
 }
 
 interface BuildTimelineRowsOptions {
@@ -198,11 +197,13 @@ function extractThreadContextWindowUsage(
   };
 }
 
-function buildTimelineRowBase(message: ViewMessage): TimelineRowBase {
+function buildTimelineRowBase(
+  message: EventProjectionMessage,
+): TimelineRowBase {
   return {
     id: message.id,
     threadId: message.threadId,
-    turnId: getViewMessageScopeTurnId(message),
+    turnId: getEventProjectionMessageScopeTurnId(message),
     sourceSeqStart: message.sourceSeqStart,
     sourceSeqEnd: message.sourceSeqEnd,
     startedAt: getMessageStartedAt(message),
@@ -217,7 +218,7 @@ function toTimelineStatus(
 }
 
 function toConversationAttachments(
-  attachments: Extract<ViewMessage, { kind: "user" }>["attachments"],
+  attachments: Extract<EventProjectionMessage, { kind: "user" }>["attachments"],
 ): TimelineConversationAttachments | null {
   if (!attachments) {
     return null;
@@ -233,7 +234,7 @@ function toConversationAttachments(
 }
 
 function convertActivityIntent(
-  intent: ViewToolParsedIntent,
+  intent: EventProjectionToolParsedIntent,
 ): TimelineActivityIntent {
   switch (intent.type) {
     case "read":
@@ -289,7 +290,9 @@ function getDiffStats(
   return { added, removed };
 }
 
-function toTimelineFileChange(change: ViewFileEditChange): TimelineFileChange {
+function toTimelineFileChange(
+  change: EventProjectionFileEditChange,
+): TimelineFileChange {
   return {
     path: change.path,
     kind: change.kind ?? null,
@@ -299,7 +302,7 @@ function toTimelineFileChange(change: ViewFileEditChange): TimelineFileChange {
   };
 }
 
-function convertMessage(message: ViewMessage): TimelineSourceRow[] {
+function convertMessage(message: EventProjectionMessage): TimelineSourceRow[] {
   switch (message.kind) {
     case "user":
       return [
@@ -502,8 +505,8 @@ function appendRows(target: TimelineRow[], rows: readonly TimelineRow[]): void {
 }
 
 function splitCompletedTurnMessages(
-  messages: readonly ViewMessage[],
-  terminalMessage: ViewMessage | undefined,
+  messages: readonly EventProjectionMessage[],
+  terminalMessage: EventProjectionMessage | undefined,
 ): CompletedTurnMessageSlices {
   if (!terminalMessage) {
     return {
@@ -583,7 +586,9 @@ function buildTurnRows({
  * Everything else (assistant text, delegations, other tool calls, etc.) is
  * internal manager machinery.
  */
-function isManagerConversationMessage(message: ViewMessage): boolean {
+function isManagerConversationMessage(
+  message: EventProjectionMessage,
+): boolean {
   if (message.kind === "user") return true;
   if (message.kind === "operation") return true;
   return (
@@ -592,11 +597,13 @@ function isManagerConversationMessage(message: ViewMessage): boolean {
 }
 
 function buildManagerConversationRows(
-  projection: ViewProjection,
+  projection: EventProjection,
 ): TimelineRow[] {
-  const entries: ViewTimelineEntry[] = flattenProjectionMessagesDeep(projection)
+  const entries: EventProjectionEntry[] = flattenEventProjectionMessagesDeep(
+    projection,
+  )
     .filter(isManagerConversationMessage)
-    .map((message) => ({ kind: "message", message }));
+    .map((message) => ({ kind: "projected-message", message }));
   return buildTimelineRows(
     {
       entries,
@@ -629,7 +636,7 @@ function hasTurnSummaryRows(rows: TimelineRow[]): boolean {
 }
 
 function buildTimelineRows(
-  projection: ViewProjection,
+  projection: EventProjection,
   options: BuildTimelineRowsOptions,
 ): TimelineRow[] {
   const { includeNestedRows } = options;
@@ -637,7 +644,7 @@ function buildTimelineRows(
 
   for (const entry of projection.entries) {
     switch (entry.kind) {
-      case "message":
+      case "projected-message":
         appendRows(rows, convertMessage(entry.message));
         break;
       case "turn":
@@ -657,9 +664,9 @@ function buildTimelineRows(
   return rows;
 }
 
-export function buildThreadTimelineProjection(
-  args: BuildThreadTimelineProjectionArgs,
-): ThreadTimelineProjection {
+export function buildThreadTimelineFromEvents(
+  args: BuildThreadTimelineFromEventsArgs,
+): ThreadTimelineFromEventsResult {
   const projectionOptions = {
     includeDebugRawEvents: args.options.includeDebugRawEvents,
     includeOptionalOperations: args.options.includeOptionalOperations,
@@ -672,11 +679,11 @@ export function buildThreadTimelineProjection(
       args.options.viewMode === "manager-conversation"
         ? "full"
         : args.options.turnMessageDetail,
-  } satisfies Parameters<typeof toViewProjection>[1];
+  } satisfies Parameters<typeof buildEventProjection>[1];
   const projection =
     args.options.viewMode === "manager-conversation"
-      ? toViewProjectionEntries(args.events, projectionOptions)
-      : toViewProjection(args.events, projectionOptions);
+      ? buildEventProjectionEntries(args.events, projectionOptions)
+      : buildEventProjection(args.events, projectionOptions);
 
   return {
     activeThinking:
@@ -695,10 +702,10 @@ export function buildThreadTimelineProjection(
   };
 }
 
-export function buildThreadTimelineTurnSummaryChildren(
-  args: BuildThreadTimelineTurnSummaryChildrenArgs,
-): ThreadTimelineTurnSummaryChildrenResult {
-  const projection = toViewProjectionEntries(args.events, {
+export function buildThreadTimelineTurnDetailsFromEvents(
+  args: BuildThreadTimelineTurnDetailsFromEventsArgs,
+): ThreadTimelineTurnDetailsFromEventsResult {
+  const projection = buildEventProjectionEntries(args.events, {
     includeDebugRawEvents: false,
     includeOptionalOperations: args.options.includeOptionalOperations,
     includeProviderUnhandledOperations:

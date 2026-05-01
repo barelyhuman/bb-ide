@@ -3,8 +3,6 @@ import type {
   SystemThreadProvisioningStatus,
   SystemThreadInterruptedReason,
   PendingInteractionStatus,
-  ViewThreadOperationKind,
-  ViewThreadOperationStatus,
 } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 import { getCompactionKey } from "./compaction-lifecycle.js";
@@ -13,14 +11,16 @@ import { capitalize, messageId } from "./format-helpers.js";
 import { buildProviderUnhandledDetail } from "./provider-unhandled-detail.js";
 import { readProvisioningTranscript } from "./provisioning-helpers.js";
 import type {
-  ToViewMessagesOptions,
-  ViewPermissionGrantLifecycleMessage,
-  ViewOperationMessage,
-  ViewThreadOperationMetadata,
-} from "@bb/domain";
+  BuildEventProjectionMessagesOptions,
+  EventProjectionPermissionGrantLifecycleMessage,
+  EventProjectionOperationMessage,
+  EventProjectionThreadOperationMetadata,
+  EventProjectionThreadOperationKind,
+  EventProjectionThreadOperationStatus,
+} from "./event-projection-types.js";
 
 type ParseOperationMessageOptions = Pick<
-  ToViewMessagesOptions,
+  BuildEventProjectionMessagesOptions,
   "includeOptionalOperations" | "includeProviderUnhandledOperations"
 >;
 
@@ -39,14 +39,14 @@ function providerDisplayName(providerId: string): string {
 
 function normalizeThreadOperationKind(
   rawOperation: string,
-): ViewThreadOperationKind {
+): EventProjectionThreadOperationKind {
   if (rawOperation === "ownership_change") return "ownership_change";
   return "other";
 }
 
 function normalizeThreadOperationStatus(
   rawStatus: string,
-): ViewThreadOperationStatus {
+): EventProjectionThreadOperationStatus {
   switch (rawStatus) {
     case "requested":
     case "queued":
@@ -63,7 +63,7 @@ function normalizeThreadOperationStatus(
 
 function createThreadOperationMetadata(
   decoded: Extract<ThreadEvent, { type: "system/operation" }>,
-): ViewThreadOperationMetadata {
+): EventProjectionThreadOperationMetadata {
   return {
     operation: normalizeThreadOperationKind(decoded.operation),
     rawOperation: decoded.operation,
@@ -74,9 +74,7 @@ function createThreadOperationMetadata(
   };
 }
 
-function threadInterruptedTitle(
-  reason: SystemThreadInterruptedReason,
-): string {
+function threadInterruptedTitle(reason: SystemThreadInterruptedReason): string {
   switch (reason) {
     case "manual-stop":
       return "Stopped manually";
@@ -88,7 +86,7 @@ function threadInterruptedTitle(
 }
 
 export function threadOperationTitle(
-  meta: ViewThreadOperationMetadata | null,
+  meta: EventProjectionThreadOperationMetadata | null,
 ): string {
   if (!meta) return "Operation update";
 
@@ -115,8 +113,8 @@ export function threadOperationTitle(
 }
 
 export function threadOperationStatus(
-  meta: ViewThreadOperationMetadata | null,
-): ViewOperationMessage["status"] {
+  meta: EventProjectionThreadOperationMetadata | null,
+): EventProjectionOperationMessage["status"] {
   if (!meta) return undefined;
   switch (meta.status) {
     case "requested":
@@ -136,7 +134,7 @@ export function threadOperationStatus(
 
 function provisioningOperationStatus(
   status: SystemThreadProvisioningStatus,
-): ViewOperationMessage["status"] {
+): EventProjectionOperationMessage["status"] {
   switch (status) {
     case "active":
       return "pending";
@@ -151,7 +149,7 @@ function provisioningOperationStatus(
 
 function permissionGrantLifecycleStatus(
   status: PendingInteractionStatus,
-): ViewPermissionGrantLifecycleMessage["status"] {
+): EventProjectionPermissionGrantLifecycleMessage["status"] {
   switch (status) {
     case "pending":
     case "resolving":
@@ -171,7 +169,7 @@ function op(
   meta: EventMeta,
   idKey: string,
   fields: ViewOperationFields,
-): ViewOperationMessage {
+): EventProjectionOperationMessage {
   return {
     kind: "operation",
     id: messageId(decoded.threadId, "op", `${idKey}:${meta.seq}`),
@@ -186,7 +184,7 @@ function op(
 }
 
 type ViewOperationFields = Omit<
-  ViewOperationMessage,
+  EventProjectionOperationMessage,
   | "kind"
   | "id"
   | "threadId"
@@ -202,7 +200,10 @@ export function parseOperationMessage(
   decoded: ThreadEvent,
   meta: EventMeta,
   options?: ParseOperationMessageOptions,
-): ViewOperationMessage | ViewPermissionGrantLifecycleMessage | null {
+):
+  | EventProjectionOperationMessage
+  | EventProjectionPermissionGrantLifecycleMessage
+  | null {
   if (decoded.type === "provider/unhandled") {
     if (options?.includeProviderUnhandledOperations !== true) {
       return null;
@@ -350,7 +351,9 @@ export function parseOperationMessage(
   return null;
 }
 
-export function interruptOperationMessage(message: ViewOperationMessage): void {
+export function interruptOperationMessage(
+  message: EventProjectionOperationMessage,
+): void {
   if (message.status !== "pending") return;
   message.status = "interrupted";
 
@@ -370,8 +373,8 @@ export function interruptOperationMessage(message: ViewOperationMessage): void {
 }
 
 export function finalizeOperationMessage(
-  message: ViewOperationMessage,
-  options: ToViewMessagesOptions | undefined,
+  message: EventProjectionOperationMessage,
+  options: BuildEventProjectionMessagesOptions | undefined,
 ): void {
   if (message.status !== "pending") return;
 

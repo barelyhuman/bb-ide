@@ -1,11 +1,11 @@
+import type { ThreadEvent } from "@bb/domain";
 import type {
-  ThreadEvent,
-  ViewMessage,
-  ViewProjection,
-  ViewTimelineEntry,
-  ViewTurn,
-  ViewTurnStatus,
-} from "@bb/domain";
+  EventProjectionMessage,
+  EventProjection,
+  EventProjectionEntry,
+  EventProjectionTurn,
+  EventProjectionTurnStatus,
+} from "./event-projection-types.js";
 import { requireThreadEventScopeTurnId } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 import type { EventMeta } from "./event-decode.js";
@@ -25,8 +25,8 @@ type TurnCompletedEvent = Extract<ThreadEvent, { type: "turn/completed" }>;
 type TurnStartedEvent = Extract<ThreadEvent, { type: "turn/started" }>;
 
 interface ProjectionTurnDraft {
-  messages: ViewMessage[];
-  turn: ViewTurn;
+  messages: EventProjectionMessage[];
+  turn: EventProjectionTurn;
 }
 
 interface ProjectionTurnBoundsUpdate {
@@ -36,9 +36,9 @@ interface ProjectionTurnBoundsUpdate {
   threadId: string;
 }
 
-interface BuildViewProjectionArgs {
+interface GroupEventProjectionTurnsArgs {
   events: ThreadEventWithMeta[];
-  messages: ViewMessage[];
+  messages: EventProjectionMessage[];
 }
 
 interface TurnEntryDraft {
@@ -49,9 +49,9 @@ interface TurnEntryDraft {
 }
 
 interface StandaloneMessageEntryDraft {
-  kind: "message";
+  kind: "projected-message";
   createdAt: number;
-  message: ViewMessage;
+  message: EventProjectionMessage;
   sourceSeqStart: number;
 }
 
@@ -73,9 +73,9 @@ export function getOrderedThreadEvents(
     : [...events].sort((a, b) => a.meta.seq - b.meta.seq);
 }
 
-function toViewTurnStatus(
+function toEventProjectionTurnStatus(
   status: TurnCompletedEvent["status"],
-): ViewTurnStatus {
+): EventProjectionTurnStatus {
   switch (status) {
     case "completed":
       return "completed";
@@ -144,7 +144,7 @@ function updateProjectionTurnCompletion(
     createdAt: meta.createdAt,
   });
   draft.turn.completedAt = meta.createdAt;
-  draft.turn.status = toViewTurnStatus(event.status);
+  draft.turn.status = toEventProjectionTurnStatus(event.status);
   draft.turn.durationMs = getTurnDurationMs(
     draft.turn.startedAt,
     meta.createdAt,
@@ -153,7 +153,7 @@ function updateProjectionTurnCompletion(
 
 function addProjectionTurnMessage(
   draft: ProjectionTurnDraft,
-  message: ViewMessage,
+  message: EventProjectionMessage,
 ): void {
   draft.messages.push(message);
   updateProjectionTurnBounds(draft, {
@@ -164,13 +164,13 @@ function addProjectionTurnMessage(
   });
 }
 
-function createViewTimelineEntry(
+function createEventProjectionEntry(
   draft: ProjectionEntryDraft,
   turnsById: Map<string, ProjectionTurnDraft>,
-): ViewTimelineEntry {
-  if (draft.kind === "message") {
+): EventProjectionEntry {
+  if (draft.kind === "projected-message") {
     return {
-      kind: "message",
+      kind: "projected-message",
       message: draft.message,
     };
   }
@@ -183,7 +183,7 @@ function createViewTimelineEntry(
   }
 
   const terminalMessage = findProjectionTerminalMessage(turnDraft.messages);
-  const turn: ViewTurn = {
+  const turn: EventProjectionTurn = {
     ...turnDraft.turn,
     summaryCount: getProjectionSummaryCount(
       turnDraft.messages,
@@ -201,9 +201,9 @@ function createViewTimelineEntry(
   };
 }
 
-export function buildViewProjection(
-  args: BuildViewProjectionArgs,
-): ViewProjection {
+export function groupEventProjectionTurns(
+  args: GroupEventProjectionTurnsArgs,
+): EventProjection {
   const turnsById = new Map<string, ProjectionTurnDraft>();
   const entryDrafts: ProjectionEntryDraft[] = [];
 
@@ -247,7 +247,7 @@ export function buildViewProjection(
   for (const message of args.messages) {
     if (message.scope.kind === "thread") {
       entryDrafts.push({
-        kind: "message",
+        kind: "projected-message",
         message,
         sourceSeqStart: message.sourceSeqStart,
         createdAt: message.createdAt,
@@ -281,7 +281,7 @@ export function buildViewProjection(
       activeThinking: null,
     },
     entries: orderedEntryDrafts.map((entryDraft) =>
-      createViewTimelineEntry(entryDraft, turnsById),
+      createEventProjectionEntry(entryDraft, turnsById),
     ),
   };
 }

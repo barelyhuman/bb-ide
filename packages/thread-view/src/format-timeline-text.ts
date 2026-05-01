@@ -23,14 +23,9 @@ import type {
   TimelineViewWorkRow,
 } from "./timeline-view.js";
 
-export type TimelineFormat = "json" | "minimal" | "verbose";
+export type ThreadTimelineTextFormat = "json" | "minimal" | "verbose";
 
-export interface FormatTimelineOptions {
-  format: TimelineFormat;
-  color?: boolean;
-}
-
-export interface TimelineTextFormatOptions {
+export interface ThreadTimelineTextOptions {
   verbose?: boolean;
   color?: boolean;
   truncateForAudit?: boolean;
@@ -672,9 +667,9 @@ function formatRows(
   return rows.map((row) => formatRow(row, context)).join("\n\n");
 }
 
-export function formatTimelineAsText(
+export function formatThreadTimelineText(
   rows: readonly TimelineRow[],
-  options?: TimelineTextFormatOptions,
+  options?: ThreadTimelineTextOptions,
 ): string {
   const viewRows = buildTimelineViewRows(rows);
   return formatRows(viewRows, {

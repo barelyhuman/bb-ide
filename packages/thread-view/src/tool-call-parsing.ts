@@ -1,4 +1,4 @@
-import type { ViewToolParsedIntent } from "@bb/domain";
+import type { EventProjectionToolParsedIntent } from "./event-projection-types.js";
 import { getFirstStringField } from "./format-helpers.js";
 import { toRecord } from "./unknown-helpers.js";
 
@@ -11,7 +11,7 @@ const DELEGATION_TOOL_NAMES = new Set([
 ]);
 
 type ToolArguments = Record<string, unknown>;
-type ToolIntentKind = ViewToolParsedIntent["type"];
+type ToolIntentKind = EventProjectionToolParsedIntent["type"];
 
 type ToolCommandFormatter = (toolName: string, args: ToolArguments) => string;
 
@@ -583,7 +583,7 @@ const NO_FLAGS_WITH_VALUE: ReadonlySet<string> = new Set();
 
 type SegmentClassification =
   | { kind: "write" }
-  | { kind: "intent"; intent: ViewToolParsedIntent }
+  | { kind: "intent"; intent: EventProjectionToolParsedIntent }
   | { kind: "none" };
 
 interface RedirectScan {
@@ -883,7 +883,7 @@ export function hasShellWriteShape(command: string): boolean {
 
 export function parseShellCommandIntents(
   command: string | undefined,
-): ViewToolParsedIntent[] {
+): EventProjectionToolParsedIntent[] {
   if (!command) return [];
 
   const segments = splitShellCommandSegments(command);
@@ -948,7 +948,9 @@ function formatUnknownToolCommand(
   return `${toolName} { ${compact} }`;
 }
 
-export function isExploringIntent(intent: ViewToolParsedIntent): boolean {
+export function isExploringIntent(
+  intent: EventProjectionToolParsedIntent,
+): boolean {
   return (
     intent.type === "read" ||
     intent.type === "list_files" ||
@@ -957,7 +959,7 @@ export function isExploringIntent(intent: ViewToolParsedIntent): boolean {
 }
 
 export function isExploringCall(call: {
-  parsedIntents: ViewToolParsedIntent[];
+  parsedIntents: EventProjectionToolParsedIntent[];
 }): boolean {
   if (call.parsedIntents.length === 0) return false;
   return call.parsedIntents.every((intent) => isExploringIntent(intent));

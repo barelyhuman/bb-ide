@@ -26,7 +26,7 @@ That gives us enough data to regenerate:
 - `ThreadEvent[]`
 - `ThreadEventRow[]`
 - semantic timeline rows
-- CLI-friendly text via `formatTimelineAsText()`
+- CLI-friendly text via `formatThreadTimelineText()`
 - generated fixture data for future visual review
 - audit summaries
 
@@ -50,7 +50,7 @@ The rendering stack has a few boundaries:
 This package gives us a stable offline corpus so we can improve that pipeline without repeatedly spending live provider turns.
 
 The replay output currently feeds the CLI/audit review loop via
-`formatTimelineAsText()`. React visual review is intentionally deferred until
+`formatThreadTimelineText()`. React visual review is intentionally deferred until
 the `ui-core` design-system work gives that renderer a stable foundation.
 
 ## Corpora

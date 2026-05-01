@@ -1,13 +1,13 @@
 import type { PromptInput, ThreadEvent } from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
 import type {
-  ToViewMessagesOptions,
-  ViewAssistantTextMessage,
-  ViewUserMessage,
-} from "@bb/domain";
+  BuildEventProjectionMessagesOptions,
+  EventProjectionAssistantTextMessage,
+  EventProjectionUserMessage,
+} from "./event-projection-types.js";
 import { messageId } from "./format-helpers.js";
 import { assertNever } from "./assert-never.js";
-import { viewMessageTurnScopeFields } from "./message-scope.js";
+import { eventProjectionMessageTurnScopeFields } from "./message-scope.js";
 
 export function parsePromptInput(
   input: ReadonlyArray<PromptInput> | undefined,
@@ -75,7 +75,7 @@ export function parsePromptInput(
 }
 
 export function shouldRenderClientRequestedInput(
-  threadStatus: ToViewMessagesOptions["threadStatus"] | undefined,
+  threadStatus: BuildEventProjectionMessagesOptions["threadStatus"] | undefined,
 ): boolean {
   if (!threadStatus) return false;
   switch (threadStatus) {
@@ -91,7 +91,7 @@ export function shouldRenderClientRequestedInput(
 }
 
 export function shouldPreservePendingMessages(
-  threadStatus: ToViewMessagesOptions["threadStatus"] | undefined,
+  threadStatus: BuildEventProjectionMessagesOptions["threadStatus"] | undefined,
 ): boolean {
   if (!threadStatus) return false;
   switch (threadStatus) {
@@ -109,7 +109,7 @@ export function shouldPreservePendingMessages(
 
 function buildAttachments(
   parsed: NonNullable<ReturnType<typeof parsePromptInput>>,
-): ViewUserMessage["attachments"] {
+): EventProjectionUserMessage["attachments"] {
   return {
     webImages: parsed.webImages,
     localImages: parsed.localImages,
@@ -127,13 +127,13 @@ function buildAttachments(
 export interface ParseUserFromClientRequestArgs {
   decoded: ThreadEvent;
   meta: EventMeta;
-  options?: ToViewMessagesOptions;
+  options?: BuildEventProjectionMessagesOptions;
   resolvedTurnId?: string;
 }
 
 export function parseUserFromClientRequest(
   args: ParseUserFromClientRequestArgs,
-): ViewUserMessage | null {
+): EventProjectionUserMessage | null {
   const { decoded, meta, options, resolvedTurnId } = args;
   if (decoded.type !== "client/turn/requested") {
     return null;
@@ -163,7 +163,7 @@ export function parseUserFromClientRequest(
     sourceSeqEnd: meta.seq,
     createdAt: meta.createdAt,
     ...(targetTurnId
-      ? viewMessageTurnScopeFields(targetTurnId)
+      ? eventProjectionMessageTurnScopeFields(targetTurnId)
       : { scope: decoded.scope }),
     text: parsedInput.text,
     attachments: buildAttachments(parsedInput),
@@ -173,7 +173,7 @@ export function parseUserFromClientRequest(
 export function parseManagerUserMessage(
   decoded: ThreadEvent,
   meta: EventMeta,
-): ViewAssistantTextMessage | null {
+): EventProjectionAssistantTextMessage | null {
   if (decoded.type !== "system/manager/user_message") {
     return null;
   }

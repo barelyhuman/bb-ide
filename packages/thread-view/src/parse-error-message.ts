@@ -3,10 +3,10 @@ import type { ThreadEvent, ThreadEventType } from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
 import { messageId } from "./format-helpers.js";
 import type {
-  ViewDebugRawEventMessage,
-  ViewErrorMessage,
-  ViewMessage,
-} from "@bb/domain";
+  EventProjectionDebugRawEventMessage,
+  EventProjectionErrorMessage,
+  EventProjectionMessage,
+} from "./event-projection-types.js";
 
 interface ReconnectState {
   attempt: number;
@@ -68,7 +68,7 @@ function getReconnectState(decoded: ThreadEvent): ReconnectState | null {
 export function parseErrorMessage(
   decoded: ThreadEvent,
   meta: EventMeta,
-): ViewErrorMessage | null {
+): EventProjectionErrorMessage | null {
   if (decoded.type !== "provider/error" && decoded.type !== "system/error")
     return null;
 
@@ -127,10 +127,10 @@ export function isIgnoredItemCompletedEvent(decoded: ThreadEvent): boolean {
 }
 
 export function appendDebugEvent(
-  out: ViewMessage[],
+  out: EventProjectionMessage[],
   decoded: ThreadEvent,
   meta: EventMeta,
-  reason: ViewDebugRawEventMessage["reason"],
+  reason: EventProjectionDebugRawEventMessage["reason"],
 ): void {
   out.push({
     kind: "debug/raw-event",

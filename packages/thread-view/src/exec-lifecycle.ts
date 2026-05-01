@@ -7,11 +7,11 @@ import {
 } from "@bb/domain";
 import { getEventParentToolCallId, type EventMeta } from "./event-decode.js";
 import type {
-  ViewApprovalLifecycleStatus,
-  ViewFileEditMessage,
-  ViewToolCallMessage,
-  ViewToolParsedIntent,
-} from "@bb/domain";
+  EventProjectionApprovalLifecycleStatus,
+  EventProjectionFileEditMessage,
+  EventProjectionToolCallMessage,
+  EventProjectionToolParsedIntent,
+} from "./event-projection-types.js";
 import { getFirstStringField } from "./format-helpers.js";
 import {
   baseToolName,
@@ -56,7 +56,7 @@ export function createExecLifecycleContext(): ExecLifecycleContext {
   };
 }
 
-type ExecItemViewStatus = ViewToolCallMessage["status"];
+type ExecItemViewStatus = EventProjectionToolCallMessage["status"];
 
 function itemStatusToExecStatus(
   status: ThreadEventItemStatus,
@@ -75,7 +75,7 @@ function itemStatusToExecStatus(
 
 export function itemStatusToApprovalStatus(
   status: ThreadEventItemApprovalStatus,
-): ViewApprovalLifecycleStatus | null {
+): EventProjectionApprovalLifecycleStatus | null {
   switch (status) {
     case "waiting_for_approval":
       return "waiting_for_approval";
@@ -88,13 +88,13 @@ export function itemStatusToApprovalStatus(
 
 export function itemStatusToToolStatus(
   status: ThreadEventItemStatus,
-): ViewToolCallMessage["status"] {
+): EventProjectionToolCallMessage["status"] {
   return itemStatusToExecStatus(status);
 }
 
 export function itemStatusToFileEditStatus(
   status: ThreadEventItemStatus,
-): ViewFileEditMessage["status"] {
+): EventProjectionFileEditMessage["status"] {
   return itemStatusToExecStatus(status);
 }
 
@@ -102,7 +102,7 @@ export interface ExecutionUpdateBase {
   callId: string;
   output?: string;
   durationMs?: number | null;
-  status?: ViewToolCallMessage["status"];
+  status?: EventProjectionToolCallMessage["status"];
   parentToolCallId?: string;
 }
 
@@ -110,23 +110,22 @@ export interface CommandExecutionUpdate extends ExecutionUpdateBase {
   kind: "command";
   command?: string;
   cwd?: string | null;
-  parsedIntents?: ViewToolParsedIntent[];
+  parsedIntents?: EventProjectionToolParsedIntent[];
   source?: string | null;
   exitCode?: number | null;
-  approvalStatus?: ViewApprovalLifecycleStatus | null;
+  approvalStatus?: EventProjectionApprovalLifecycleStatus | null;
 }
 
 export interface ToolCallExecutionUpdate extends ExecutionUpdateBase {
   kind: "tool-call";
   toolName?: string;
   toolArgs?: JsonObject | null;
-  parsedIntents?: ViewToolParsedIntent[];
-  approvalStatus?: ViewApprovalLifecycleStatus | null;
+  parsedIntents?: EventProjectionToolParsedIntent[];
+  approvalStatus?: EventProjectionApprovalLifecycleStatus | null;
 }
 
 export interface DelegationExecutionUpdate
-  extends ExecutionUpdateBase,
-    DelegationMetadata {
+  extends ExecutionUpdateBase, DelegationMetadata {
   kind: "delegation";
   toolName?: string;
 }
@@ -139,7 +138,7 @@ export type ProviderExecutionUpdate =
 export interface ExecutionOutputUpdate {
   callId: string;
   output: string;
-  status?: ViewToolCallMessage["status"];
+  status?: EventProjectionToolCallMessage["status"];
   parentToolCallId?: string;
 }
 
@@ -157,7 +156,7 @@ export type ExecLifecycleEvent =
 
 function toExecDefaultStatus(
   kind: "begin" | "end",
-): ViewToolCallMessage["status"] {
+): EventProjectionToolCallMessage["status"] {
   if (kind === "begin") return "pending";
   return "completed";
 }
@@ -165,7 +164,7 @@ function toExecDefaultStatus(
 function buildStructuredReadIntents(
   toolName: string,
   args: Record<string, unknown> | null,
-): ViewToolParsedIntent[] {
+): EventProjectionToolParsedIntent[] {
   const path = getFirstStringField(args, ["file_path", "file", "path"]);
   if (!path) {
     return [];
@@ -184,7 +183,7 @@ function buildStructuredReadIntents(
 function buildStructuredSearchIntents(
   toolName: string,
   args: Record<string, unknown> | null,
-): ViewToolParsedIntent[] {
+): EventProjectionToolParsedIntent[] {
   const query = getFirstStringField(args, ["pattern", "query"]);
   if (!query) {
     return [];
@@ -203,7 +202,7 @@ function buildStructuredSearchIntents(
 function buildStructuredListIntents(
   toolName: string,
   args: Record<string, unknown> | null,
-): ViewToolParsedIntent[] {
+): EventProjectionToolParsedIntent[] {
   const path = getFirstStringField(args, ["path", "pattern"]);
   if (!path) {
     return [];
@@ -221,7 +220,7 @@ function buildStructuredListIntents(
 function getStructuredToolParsedIntents(
   toolName: string,
   args: Record<string, unknown> | null,
-): ViewToolParsedIntent[] {
+): EventProjectionToolParsedIntent[] {
   const baseName = baseToolName(toolName);
   if (isStructuredReadToolName(baseName)) {
     return buildStructuredReadIntents(toolName, args);

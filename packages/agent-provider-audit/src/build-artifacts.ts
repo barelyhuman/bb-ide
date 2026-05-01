@@ -2,9 +2,9 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  buildThreadTimelineProjection,
+  buildThreadTimelineFromEvents,
   decodeThreadEventRow,
-  formatTimelineAsText,
+  formatThreadTimelineText,
 } from "@bb/thread-view";
 import { threadEventTypeValues, type ThreadEventType } from "@bb/domain";
 import { timelineRowSchema, type TimelineRow } from "@bb/server-contract";
@@ -310,7 +310,7 @@ function trimTrailingWhitespace(text: string): string {
 
 function buildVerboseTimelineText(bundle: ProviderAuditBundle): string {
   return trimTrailingWhitespace(
-    formatTimelineAsText(bundle.timelineVerboseRows, {
+    formatThreadTimelineText(bundle.timelineVerboseRows, {
       color: false,
       truncateForAudit: true,
       verbose: true,
@@ -320,7 +320,7 @@ function buildVerboseTimelineText(bundle: ProviderAuditBundle): string {
 
 function buildAuditTimelineText(bundle: ProviderAuditBundle): string {
   return trimTrailingWhitespace(
-    formatTimelineAsText(bundle.timelineRows, {
+    formatThreadTimelineText(bundle.timelineRows, {
       color: false,
       truncateForAudit: true,
       verbose: false,
@@ -383,7 +383,7 @@ function buildPrefixSnapshot(
       ? "idle"
       : "active";
   const decodedRows = prefixRows.map((row) => decodeThreadEventRow(row));
-  const timelineRows = buildThreadTimelineProjection({
+  const timelineRows = buildThreadTimelineFromEvents({
     contextWindowEvents: decodedRows,
     events: decodedRows,
     options: {
@@ -396,7 +396,7 @@ function buildPrefixSnapshot(
       viewMode: "standard",
     },
   }).rows;
-  const timelineText = formatTimelineAsText(timelineRows, {
+  const timelineText = formatThreadTimelineText(timelineRows, {
     color: false,
     truncateForAudit: true,
     verbose: false,

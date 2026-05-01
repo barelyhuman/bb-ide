@@ -29,17 +29,17 @@ import {
 } from "./parse-error-message.js";
 import { isIgnoredNoiseType } from "./timeline-noise-events.js";
 import {
-  normalizeSemanticViewMessages,
-  normalizeSemanticViewProjection,
-  sortViewMessagesBySource,
-} from "./semantic-view-messages.js";
+  normalizeEventProjectionMessages,
+  normalizeEventProjection,
+  sortEventProjectionMessagesBySource,
+} from "./normalize-event-projection.js";
 import { applyProjectionTurnMessageDetail } from "./apply-turn-message-detail.js";
 import {
-  buildViewProjection,
+  groupEventProjectionTurns,
   getOrderedThreadEvents,
   type ThreadEventWithMeta,
-} from "./build-view-projection.js";
-export type { ThreadEventWithMeta } from "./build-view-projection.js";
+} from "./group-event-projection-turns.js";
+export type { ThreadEventWithMeta } from "./group-event-projection-turns.js";
 import { shouldSuppressLowValueToolCall } from "./tool-call-suppression.js";
 import {
   shouldPreservePendingMessages,
@@ -89,18 +89,17 @@ import {
   setVisibleTextBuffer,
   type VisibleTextBuffer,
 } from "./visible-text-buffer.js";
+import type { ActiveThinking, BufferedTextInstanceIdentity } from "@bb/domain";
 import type {
-  ActiveThinking,
-  BufferedTextInstanceIdentity,
-  ToViewMessagesOptions,
-  ToViewProjectionOptions,
-  ViewAssistantTextMessage,
-  ViewFileEditMessage,
-  ViewMessage,
-  ViewOperationMessage,
-  ViewProjection,
-  ViewTurnStatus,
-} from "@bb/domain";
+  BuildEventProjectionMessagesOptions,
+  BuildEventProjectionOptions,
+  EventProjectionAssistantTextMessage,
+  EventProjectionFileEditMessage,
+  EventProjectionMessage,
+  EventProjectionOperationMessage,
+  EventProjection,
+  EventProjectionTurnStatus,
+} from "./event-projection-types.js";
 import {
   createBufferedTextInstanceKey,
   resolveBufferedTextIdentity,
@@ -108,21 +107,26 @@ import {
 
 // --- Projection state machine ---
 
-type ProjectedUserMessage = Extract<ViewMessage, { kind: "user" }>;
-type BufferedTextViewMessage = ViewAssistantTextMessage;
+type ProjectedUserMessage = Extract<EventProjectionMessage, { kind: "user" }>;
+type BufferedTextEventProjectionMessage = EventProjectionAssistantTextMessage;
 
 interface CompactionTurnFinalization {
   status: CompactionTurnFinalizationStatus;
   detail: string | undefined;
 }
 
-type TurnPendingFinalizationStatus = Extract<ViewTurnStatus, "interrupted">;
+type TurnPendingFinalizationStatus = Extract<
+  EventProjectionTurnStatus,
+  "interrupted"
+>;
 type TurnCompletedStatus = Extract<
   ThreadEvent,
   { type: "turn/completed" }
 >["status"];
 
-interface BufferedTextProjectionRefs<TMessage extends BufferedTextViewMessage> {
+interface BufferedTextProjectionRefs<
+  TMessage extends BufferedTextEventProjectionMessage,
+> {
   finalizedKeys: Set<string>;
   openMessages: Map<string, TMessage>;
   textBuffers: Map<string, VisibleTextBuffer>;
@@ -130,7 +134,7 @@ interface BufferedTextProjectionRefs<TMessage extends BufferedTextViewMessage> {
 }
 
 interface ProjectBufferedTextEventArgs<
-  TMessage extends BufferedTextViewMessage,
+  TMessage extends BufferedTextEventProjectionMessage,
 > {
   createMessage: (messageKey: string) => TMessage;
   identity: BufferedTextInstanceIdentity | null;
@@ -154,36 +158,36 @@ interface ActiveThinkingLifecycle {
 interface BuildFlatProjectionDataArgs {
   events: ThreadEventWithMeta[];
   includeActiveThinking: boolean;
-  options?: ToViewMessagesOptions;
+  options?: BuildEventProjectionMessagesOptions;
 }
 
 interface BuildFlatProjectionDataResult {
   activeThinking: ActiveThinking | null;
-  messages: ViewMessage[];
+  messages: EventProjectionMessage[];
 }
 
 interface ProjectionState {
-  messages: ViewMessage[];
+  messages: EventProjectionMessage[];
   seenUserKeys: Set<string>;
   openTurnIds: Set<string>;
   closedTurnIds: Set<string>;
   pendingFinalizationByTurnId: Map<string, TurnPendingFinalizationStatus>;
-  openAssistantMessagesByKey: Map<string, ViewAssistantTextMessage>;
+  openAssistantMessagesByKey: Map<string, EventProjectionAssistantTextMessage>;
   assistantTextBuffersByKey: Map<string, VisibleTextBuffer>;
   visibleAssistantMessageKeys: Set<string>;
   finalizedAssistantMessageKeys: Set<string>;
   openReasoningLifecyclesByKey: Map<string, ActiveThinkingLifecycle>;
   reasoningTextBuffersByKey: Map<string, VisibleTextBuffer>;
   finalizedReasoningKeys: Set<string>;
-  openCompactionsByKey: Map<string, ViewOperationMessage>;
+  openCompactionsByKey: Map<string, EventProjectionOperationMessage>;
   finalizedCompactionKeys: Set<string>;
-  provisioningOperationsByKey: Map<string, ViewOperationMessage>;
+  provisioningOperationsByKey: Map<string, EventProjectionOperationMessage>;
   permissionGrantsByInteractionId: Map<
     string,
-    Extract<ViewMessage, { kind: "permission-grant-lifecycle" }>
+    Extract<EventProjectionMessage, { kind: "permission-grant-lifecycle" }>
   >;
-  threadOperationsById: Map<string, ViewOperationMessage>;
-  fileEditsByCallId: Map<string, ViewFileEditMessage[]>;
+  threadOperationsById: Map<string, EventProjectionOperationMessage>;
+  fileEditsByCallId: Map<string, EventProjectionFileEditMessage[]>;
   fileEditStdoutBuffersByCallId: Map<string, VisibleTextBuffer>;
   delegationParentToolCallIdsByProviderThreadId: Map<string, string>;
   toolActivity: ToolActivityState;
@@ -299,7 +303,7 @@ function getCompactionTurnFinalization(
 }
 
 function resolveBufferedTextMessageKey<
-  TMessage extends BufferedTextViewMessage,
+  TMessage extends BufferedTextEventProjectionMessage,
 >(
   args: Omit<
     ProjectBufferedTextEventArgs<TMessage>,
@@ -322,7 +326,9 @@ function resolveBufferedTextMessageKey<
   return messageKey;
 }
 
-function upsertBufferedTextMessage<TMessage extends BufferedTextViewMessage>(
+function upsertBufferedTextMessage<
+  TMessage extends BufferedTextEventProjectionMessage,
+>(
   args: Pick<
     ProjectBufferedTextEventArgs<TMessage>,
     "createMessage" | "meta" | "refs"
@@ -340,9 +346,9 @@ function upsertBufferedTextMessage<TMessage extends BufferedTextViewMessage>(
   return existing;
 }
 
-function projectBufferedTextEvent<TMessage extends BufferedTextViewMessage>(
-  args: ProjectBufferedTextEventArgs<TMessage>,
-): boolean {
+function projectBufferedTextEvent<
+  TMessage extends BufferedTextEventProjectionMessage,
+>(args: ProjectBufferedTextEventArgs<TMessage>): boolean {
   if (!args.text) {
     return false;
   }
@@ -469,7 +475,7 @@ function getActiveThinkingText(
 
 function buildProjectionActiveThinking(
   state: ProjectionState,
-  threadStatus: ToViewMessagesOptions["threadStatus"],
+  threadStatus: BuildEventProjectionMessagesOptions["threadStatus"],
 ): ActiveThinking | null {
   if (threadStatus !== "active") {
     return null;
@@ -590,7 +596,7 @@ function onThreadInterrupted(state: ProjectionState): void {
 
 function finalizePendingMessages(
   state: ProjectionState,
-  options: ToViewMessagesOptions | undefined,
+  options: BuildEventProjectionMessagesOptions | undefined,
 ): void {
   const shouldPreservePending = shouldPreservePendingMessages(
     options?.threadStatus,
@@ -627,7 +633,7 @@ function finalizePendingMessages(
 }
 
 function isMessageScopedToFinalizedTurn(
-  message: ViewMessage,
+  message: EventProjectionMessage,
   pendingFinalizationByTurnId: ReadonlyMap<
     string,
     TurnPendingFinalizationStatus
@@ -639,7 +645,9 @@ function isMessageScopedToFinalizedTurn(
   );
 }
 
-function finalizePendingMessageForInterruptedTurn(message: ViewMessage): void {
+function finalizePendingMessageForInterruptedTurn(
+  message: EventProjectionMessage,
+): void {
   switch (message.kind) {
     case "command":
     case "tool-call":
@@ -1145,21 +1153,21 @@ function buildFlatProjectionData(
     activeThinking: args.includeActiveThinking
       ? buildProjectionActiveThinking(state, args.options?.threadStatus)
       : null,
-    messages: sortViewMessagesBySource(state.messages),
+    messages: sortEventProjectionMessagesBySource(state.messages),
   };
 }
 
 function buildDetailedProjection(args: {
   activeThinking: ActiveThinking | null;
   events: ThreadEventWithMeta[];
-  messages: ViewMessage[];
-  turnMessageDetail: ToViewProjectionOptions["turnMessageDetail"];
-}): ViewProjection {
-  const projection = buildViewProjection({
+  messages: EventProjectionMessage[];
+  turnMessageDetail: BuildEventProjectionOptions["turnMessageDetail"];
+}): EventProjection {
+  const projection = groupEventProjectionTurns({
     events: args.events,
     messages: args.messages,
   });
-  const semanticProjection = normalizeSemanticViewProjection({
+  const semanticProjection = normalizeEventProjection({
     ...projection,
     state: {
       activeThinking: args.activeThinking,
@@ -1171,10 +1179,10 @@ function buildDetailedProjection(args: {
   );
 }
 
-function toFullProjection(
+function buildFullEventProjection(
   events: ThreadEventWithMeta[],
-  options: ToViewProjectionOptions,
-): ViewProjection {
+  options: BuildEventProjectionOptions,
+): EventProjection {
   const flatProjection = buildFlatProjectionData({
     events,
     includeActiveThinking: true,
@@ -1188,16 +1196,16 @@ function toFullProjection(
   });
 }
 
-export function toViewMessages(
+export function buildEventProjectionMessages(
   events: ThreadEventWithMeta[] | undefined,
-  options?: ToViewMessagesOptions,
-): ViewMessage[] {
+  options?: BuildEventProjectionMessagesOptions,
+): EventProjectionMessage[] {
   if (!events || events.length === 0) {
     return [];
   }
 
   const orderedEvents = getOrderedThreadEvents(events);
-  return normalizeSemanticViewMessages(
+  return normalizeEventProjectionMessages(
     buildFlatProjectionData({
       events: orderedEvents,
       includeActiveThinking: false,
@@ -1206,10 +1214,10 @@ export function toViewMessages(
   );
 }
 
-export function toViewProjectionEntries(
+export function buildEventProjectionEntries(
   events: ThreadEventWithMeta[] | undefined,
-  options: ToViewProjectionOptions,
-): ViewProjection {
+  options: BuildEventProjectionOptions,
+): EventProjection {
   if (!events || events.length === 0) {
     return {
       state: {
@@ -1233,10 +1241,10 @@ export function toViewProjectionEntries(
   });
 }
 
-export function toViewProjection(
+export function buildEventProjection(
   events: ThreadEventWithMeta[] | undefined,
-  options: ToViewProjectionOptions,
-): ViewProjection {
+  options: BuildEventProjectionOptions,
+): EventProjection {
   if (!events || events.length === 0) {
     return {
       state: {
@@ -1247,5 +1255,5 @@ export function toViewProjection(
   }
 
   const orderedEvents = getOrderedThreadEvents(events);
-  return toFullProjection(orderedEvents, options);
+  return buildFullEventProjection(orderedEvents, options);
 }

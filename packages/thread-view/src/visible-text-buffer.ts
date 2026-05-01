@@ -33,8 +33,7 @@ function movePendingTextToVisible(buffer: VisibleTextBuffer): boolean {
 }
 
 function buildFullText(buffer: VisibleTextBuffer): string {
-  const visibleText =
-    buffer.visibleTextCache ?? buffer.visibleChunks.join("");
+  const visibleText = buffer.visibleTextCache ?? buffer.visibleChunks.join("");
   if (buffer.pendingLength === 0) {
     return visibleText;
   }

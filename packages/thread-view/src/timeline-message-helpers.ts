@@ -1,20 +1,24 @@
-import type { ViewMessage } from "@bb/domain";
+import type { EventProjectionMessage } from "./event-projection-types.js";
 
 export interface IndexedTimelineMessage {
   index: number;
-  message: ViewMessage;
+  message: EventProjectionMessage;
 }
 
-export function isTimelineTerminalMessage(message: ViewMessage): boolean {
+export function isTimelineTerminalMessage(
+  message: EventProjectionMessage,
+): boolean {
   return message.kind === "assistant-text" || message.kind === "error";
 }
 
-export function isTimelineUngroupableMessage(message: ViewMessage): boolean {
+export function isTimelineUngroupableMessage(
+  message: EventProjectionMessage,
+): boolean {
   return message.kind === "user" || message.kind === "debug/raw-event";
 }
 
 export function toIndexedTimelineMessages(
-  messages: readonly ViewMessage[],
+  messages: readonly EventProjectionMessage[],
 ): IndexedTimelineMessage[] {
   return messages.map((message, index) => ({ index, message }));
 }
@@ -32,8 +36,8 @@ export function findLastTerminalTimelineMessageIndex(
 }
 
 export function findLastTerminalTimelineMessage(
-  messages: readonly ViewMessage[],
-): ViewMessage | undefined {
+  messages: readonly EventProjectionMessage[],
+): EventProjectionMessage | undefined {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message && isTimelineTerminalMessage(message)) {

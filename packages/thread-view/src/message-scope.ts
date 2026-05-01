@@ -1,5 +1,6 @@
 import { threadScope, turnScope } from "@bb/domain";
-import type { ThreadEventScope, ViewMessageBase } from "@bb/domain";
+import type { ThreadEventScope } from "@bb/domain";
+import type { EventProjectionMessageBase } from "./event-projection-types.js";
 
 export function areThreadEventScopesEqual(
   left: ThreadEventScope,
@@ -14,27 +15,27 @@ export function areThreadEventScopesEqual(
   return right.kind === "turn" && left.turnId === right.turnId;
 }
 
-export function haveCompatibleViewMessageScope(
-  left: Pick<ViewMessageBase, "scope">,
-  right: Pick<ViewMessageBase, "scope">,
+export function haveCompatibleEventProjectionMessageScope(
+  left: Pick<EventProjectionMessageBase, "scope">,
+  right: Pick<EventProjectionMessageBase, "scope">,
 ): boolean {
   return areThreadEventScopesEqual(left.scope, right.scope);
 }
 
-export function getViewMessageScopeTurnId(
-  message: Pick<ViewMessageBase, "scope">,
+export function getEventProjectionMessageScopeTurnId(
+  message: Pick<EventProjectionMessageBase, "scope">,
 ): string | null {
   return message.scope.kind === "turn" ? message.scope.turnId : null;
 }
 
-export function viewMessageTurnScopeFields(
+export function eventProjectionMessageTurnScopeFields(
   turnId: string,
-): Pick<ViewMessageBase, "scope"> {
+): Pick<EventProjectionMessageBase, "scope"> {
   return { scope: turnScope(turnId) };
 }
 
-export function viewMessageThreadScopeFields(): Pick<
-  ViewMessageBase,
+export function eventProjectionMessageThreadScopeFields(): Pick<
+  EventProjectionMessageBase,
   "scope"
 > {
   return { scope: threadScope() };

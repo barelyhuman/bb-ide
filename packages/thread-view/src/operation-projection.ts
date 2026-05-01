@@ -1,10 +1,10 @@
 import type {
-  ViewFileEditChange,
-  ViewFileEditMessage,
-  ViewMessage,
-  ViewOperationMessage,
-  ViewPermissionGrantLifecycleMessage,
-} from "@bb/domain";
+  EventProjectionFileEditChange,
+  EventProjectionFileEditMessage,
+  EventProjectionMessage,
+  EventProjectionOperationMessage,
+  EventProjectionPermissionGrantLifecycleMessage,
+} from "./event-projection-types.js";
 import type { CompactionLifecycleEvent } from "./compaction-lifecycle.js";
 import type { EventMeta } from "./event-decode.js";
 import type { FileEditPartial } from "./file-edit-parsing.js";
@@ -19,9 +19,9 @@ import {
   buildApprovalStatusDelta,
 } from "./tool-activity-projection.js";
 import {
-  haveCompatibleViewMessageScope,
-  viewMessageThreadScopeFields,
-  viewMessageTurnScopeFields,
+  haveCompatibleEventProjectionMessageScope,
+  eventProjectionMessageThreadScopeFields,
+  eventProjectionMessageTurnScopeFields,
 } from "./message-scope.js";
 import {
   appendVisibleTextBuffer,
@@ -33,21 +33,21 @@ import {
 } from "./visible-text-buffer.js";
 
 export interface OperationProjectionState {
-  messages: ViewMessage[];
-  fileEditsByCallId: Map<string, ViewFileEditMessage[]>;
+  messages: EventProjectionMessage[];
+  fileEditsByCallId: Map<string, EventProjectionFileEditMessage[]>;
   fileEditStdoutBuffersByCallId: Map<string, VisibleTextBuffer>;
-  openCompactionsByKey: Map<string, ViewOperationMessage>;
+  openCompactionsByKey: Map<string, EventProjectionOperationMessage>;
   finalizedCompactionKeys: Set<string>;
-  provisioningOperationsByKey: Map<string, ViewOperationMessage>;
+  provisioningOperationsByKey: Map<string, EventProjectionOperationMessage>;
   permissionGrantsByInteractionId: Map<
     string,
-    ViewPermissionGrantLifecycleMessage
+    EventProjectionPermissionGrantLifecycleMessage
   >;
-  threadOperationsById: Map<string, ViewOperationMessage>;
+  threadOperationsById: Map<string, EventProjectionOperationMessage>;
 }
 
 export type CompactionTurnFinalizationStatus = Extract<
-  ViewOperationMessage["status"],
+  EventProjectionOperationMessage["status"],
   "error" | "interrupted"
 >;
 
@@ -61,15 +61,16 @@ interface FinalizeOpenCompactionsForTurnArgs {
 }
 
 type LifecycleStatus = Extract<
-  ViewOperationMessage["status"],
+  EventProjectionOperationMessage["status"],
   "pending" | "completed" | "error" | "interrupted"
 >;
 
-type LifecycleViewMessage =
-  | ViewOperationMessage
-  | ViewPermissionGrantLifecycleMessage;
-type ViewMessageScopeFields = ReturnType<
-  typeof viewMessageThreadScopeFields | typeof viewMessageTurnScopeFields
+type LifecycleEventProjectionMessage =
+  | EventProjectionOperationMessage
+  | EventProjectionPermissionGrantLifecycleMessage;
+type EventProjectionMessageScopeFields = ReturnType<
+  | typeof eventProjectionMessageThreadScopeFields
+  | typeof eventProjectionMessageTurnScopeFields
 >;
 
 interface OperationDetailMergeArgs {
@@ -78,7 +79,7 @@ interface OperationDetailMergeArgs {
 }
 
 interface UpsertKeyedLifecycleMessageArgs<
-  TMessage extends LifecycleViewMessage,
+  TMessage extends LifecycleEventProjectionMessage,
 > {
   index: Map<string, TMessage>;
   incoming: TMessage;
@@ -113,9 +114,9 @@ function mergeOperationDetail(
   return [...new Set(details)].join("\n");
 }
 
-function upsertKeyedLifecycleMessage<TMessage extends LifecycleViewMessage>(
-  args: UpsertKeyedLifecycleMessageArgs<TMessage>,
-): void {
+function upsertKeyedLifecycleMessage<
+  TMessage extends LifecycleEventProjectionMessage,
+>(args: UpsertKeyedLifecycleMessageArgs<TMessage>): void {
   if (!args.key) {
     args.state.messages.push(args.incoming);
     return;
@@ -135,7 +136,7 @@ function upsertKeyedLifecycleMessage<TMessage extends LifecycleViewMessage>(
 
 function lifecycleMessageKey(
   key: string,
-  message: LifecycleViewMessage,
+  message: LifecycleEventProjectionMessage,
 ): string {
   if (message.scope.kind === "thread") {
     return `thread:${key}`;
@@ -144,8 +145,8 @@ function lifecycleMessageKey(
 }
 
 function mergeProvisioningOperation(
-  existing: ViewOperationMessage,
-  incoming: ViewOperationMessage,
+  existing: EventProjectionOperationMessage,
+  incoming: EventProjectionOperationMessage,
 ): void {
   existing.status = mergeLifecycleStatus(
     existing.status ?? "pending",
@@ -164,7 +165,7 @@ function mergeProvisioningOperation(
 
 export function upsertProvisioningOperation(
   state: OperationProjectionState,
-  incoming: ViewOperationMessage,
+  incoming: EventProjectionOperationMessage,
 ): void {
   upsertKeyedLifecycleMessage({
     index: state.provisioningOperationsByKey,
@@ -176,10 +177,10 @@ export function upsertProvisioningOperation(
 }
 
 function updateMessageBounds(
-  existing: LifecycleViewMessage,
-  incoming: LifecycleViewMessage,
+  existing: LifecycleEventProjectionMessage,
+  incoming: LifecycleEventProjectionMessage,
 ): void {
-  if (!haveCompatibleViewMessageScope(existing, incoming)) {
+  if (!haveCompatibleEventProjectionMessageScope(existing, incoming)) {
     throw new Error(
       `Cannot merge ${existing.kind} messages with different scopes`,
     );
@@ -201,7 +202,7 @@ function updateMessageBounds(
 
 export function upsertThreadOperationMessage(
   state: OperationProjectionState,
-  incoming: ViewOperationMessage,
+  incoming: EventProjectionOperationMessage,
 ): void {
   upsertKeyedLifecycleMessage({
     index: state.threadOperationsById,
@@ -213,8 +214,8 @@ export function upsertThreadOperationMessage(
 }
 
 function mergeThreadOperationMessage(
-  existing: ViewOperationMessage,
-  incoming: ViewOperationMessage,
+  existing: EventProjectionOperationMessage,
+  incoming: EventProjectionOperationMessage,
 ): void {
   const mergedStatus = mergeLifecycleStatus(
     existing.status ?? "pending",
@@ -234,7 +235,7 @@ function mergeThreadOperationMessage(
 
 export function upsertPermissionGrantLifecycleMessage(
   state: OperationProjectionState,
-  incoming: ViewPermissionGrantLifecycleMessage,
+  incoming: EventProjectionPermissionGrantLifecycleMessage,
 ): void {
   upsertKeyedLifecycleMessage({
     index: state.permissionGrantsByInteractionId,
@@ -246,8 +247,8 @@ export function upsertPermissionGrantLifecycleMessage(
 }
 
 function mergePermissionGrantLifecycleMessage(
-  existing: ViewPermissionGrantLifecycleMessage,
-  incoming: ViewPermissionGrantLifecycleMessage,
+  existing: EventProjectionPermissionGrantLifecycleMessage,
+  incoming: EventProjectionPermissionGrantLifecycleMessage,
 ): void {
   const mergedStatus = mergeLifecycleStatus(existing.status, incoming.status);
   const shouldUseIncomingLifecycle = existing.status !== mergedStatus;
@@ -259,9 +260,9 @@ function mergePermissionGrantLifecycleMessage(
 }
 
 function mergeFileChange(
-  existing: ViewFileEditChange | undefined,
-  incoming: ViewFileEditChange,
-): ViewFileEditChange {
+  existing: EventProjectionFileEditChange | undefined,
+  incoming: EventProjectionFileEditChange,
+): EventProjectionFileEditChange {
   if (!existing) {
     return { ...incoming };
   }
@@ -275,7 +276,7 @@ function mergeFileChange(
 }
 
 function isTerminalFileEditStatus(
-  status: ViewFileEditMessage["status"] | undefined,
+  status: EventProjectionFileEditMessage["status"] | undefined,
 ): boolean {
   return status !== undefined && status !== "pending";
 }
@@ -296,11 +297,11 @@ export function flushPendingFileEditOutput(
 
 interface CreateFileEditMessageArgs {
   callId: string;
-  change: ViewFileEditChange | null;
+  change: EventProjectionFileEditChange | null;
   changeIndex: number;
   meta: EventMeta;
   partial: FileEditPartial;
-  scopeFields: ViewMessageScopeFields;
+  scopeFields: EventProjectionMessageScopeFields;
   stdout: string | undefined;
   threadId: string;
 }
@@ -314,7 +315,7 @@ function createFileEditMessage({
   scopeFields,
   stdout,
   threadId,
-}: CreateFileEditMessageArgs): ViewFileEditMessage {
+}: CreateFileEditMessageArgs): EventProjectionFileEditMessage {
   return {
     kind: "file-edit",
     id: messageId(threadId, "file-edit", `${callId}:${changeIndex}`),
@@ -337,14 +338,14 @@ function createFileEditMessage({
 }
 
 function updateFileEditMessage(
-  existing: ViewFileEditMessage,
+  existing: EventProjectionFileEditMessage,
   meta: EventMeta,
   partial: FileEditPartial,
-  scopeFields: ViewMessageScopeFields,
-  change: ViewFileEditChange | null,
+  scopeFields: EventProjectionMessageScopeFields,
+  change: EventProjectionFileEditChange | null,
   stdout: string | undefined,
 ): void {
-  if (!haveCompatibleViewMessageScope(existing, scopeFields)) {
+  if (!haveCompatibleEventProjectionMessageScope(existing, scopeFields)) {
     throw new Error(
       `Cannot merge file-edit messages with different scopes for call ${partial.callId}`,
     );
@@ -393,8 +394,8 @@ export function upsertFileEdit(
   partial: FileEditPartial,
 ): void {
   const scopeFields = turnId
-    ? viewMessageTurnScopeFields(turnId)
-    : viewMessageThreadScopeFields();
+    ? eventProjectionMessageTurnScopeFields(turnId)
+    : eventProjectionMessageThreadScopeFields();
   const existingRows = state.fileEditsByCallId.get(partial.callId) ?? [];
   const stdoutBuffer =
     state.fileEditStdoutBuffersByCallId.get(partial.callId) ??
@@ -475,7 +476,7 @@ export function onCompactionBegin(
     return;
   }
 
-  const message: ViewOperationMessage = {
+  const message: EventProjectionOperationMessage = {
     kind: "operation",
     id: messageId(threadId, "op", `compaction:${payload.key}`),
     threadId,
@@ -484,8 +485,8 @@ export function onCompactionBegin(
     createdAt: meta.createdAt,
     startedAt: meta.createdAt,
     ...(turnId
-      ? viewMessageTurnScopeFields(turnId)
-      : viewMessageThreadScopeFields()),
+      ? eventProjectionMessageTurnScopeFields(turnId)
+      : eventProjectionMessageThreadScopeFields()),
     opType: "compaction",
     title: "Context compacting...",
     detail: payload.detail,
@@ -527,8 +528,8 @@ export function onCompactionEnd(
     createdAt: meta.createdAt,
     startedAt: meta.createdAt,
     ...(turnId
-      ? viewMessageTurnScopeFields(turnId)
-      : viewMessageThreadScopeFields()),
+      ? eventProjectionMessageTurnScopeFields(turnId)
+      : eventProjectionMessageThreadScopeFields()),
     opType: "compaction",
     title: "Context compacted",
     detail: payload.detail,

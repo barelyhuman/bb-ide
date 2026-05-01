@@ -15,8 +15,8 @@ import {
   upsertHost,
 } from "@bb/db";
 import {
-  buildThreadTimelineProjection,
-  TIMELINE_NOISE_EVENT_TYPES,
+  buildThreadTimelineFromEvents,
+  THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
   type ThreadEventWithMeta,
 } from "@bb/thread-view";
 import { replayFixtures } from "@bb/agent-provider-audit";
@@ -144,7 +144,7 @@ function createTimelineBenchmarkScenario(
   );
   const storedEventRows = listRecentStoredEventRows(db, {
     threadId: thread.id,
-    excludedTypes: TIMELINE_NOISE_EVENT_TYPES,
+    excludedTypes: THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
   });
   const summaryEventRows = compactSummaryStoredEventRows(storedEventRows);
   const decodedSummaryEvents = summaryEventRows.map((row) =>
@@ -159,7 +159,7 @@ function createTimelineBenchmarkScenario(
   const loadSummaryStoredRows = () =>
     listRecentStoredEventRows(db, {
       threadId: thread.id,
-      excludedTypes: TIMELINE_NOISE_EVENT_TYPES,
+      excludedTypes: THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
     });
   const compactSummaryStoredRows = () =>
     compactSummaryStoredEventRows(storedEventRows);
@@ -170,7 +170,7 @@ function createTimelineBenchmarkScenario(
   const decodeSummaryEvents = () =>
     summaryEventRows.map((row) => toThreadEventWithMeta(row));
   const buildFullSummaryRowsOnly = () =>
-    buildThreadTimelineProjection({
+    buildThreadTimelineFromEvents({
       contextWindowEvents: [],
       events: decodedSummaryEvents,
       options:
@@ -193,7 +193,7 @@ function createTimelineBenchmarkScenario(
             },
     }).rows;
   const buildSummaryRowsOnly = () =>
-    buildThreadTimelineProjection({
+    buildThreadTimelineFromEvents({
       contextWindowEvents: [],
       events: decodedSummaryEvents,
       options:

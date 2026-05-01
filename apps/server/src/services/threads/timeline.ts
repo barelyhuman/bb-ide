@@ -1,7 +1,7 @@
 import {
-  buildThreadTimelineProjection,
-  TIMELINE_NOISE_EVENT_TYPES,
-  buildThreadTimelineTurnSummaryChildren,
+  buildThreadTimelineFromEvents,
+  THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
+  buildThreadTimelineTurnDetailsFromEvents,
   type ThreadEventWithMeta,
 } from "@bb/thread-view";
 import type { Thread } from "@bb/domain";
@@ -154,7 +154,7 @@ export function buildThreadTimeline(
   const includeProviderUnhandledOperations = options.isDevelopment;
   const rawEventRows = listRecentStoredEventRows(db, {
     threadId: thread.id,
-    excludedTypes: TIMELINE_NOISE_EVENT_TYPES,
+    excludedTypes: THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
   });
   const decodedRawEvents = rawEventRows.map((row) =>
     toThreadEventWithMeta(row),
@@ -173,7 +173,7 @@ export function buildThreadTimeline(
     includeProviderUnhandledOperations,
     threadStatus: thread.status,
   };
-  const timeline = buildThreadTimelineProjection({
+  const timeline = buildThreadTimelineFromEvents({
     contextWindowEvents: contextWindowUsageRows.map((row) =>
       toThreadEventWithMeta(row),
     ),
@@ -227,7 +227,7 @@ export function buildTimelineTurnSummaryDetails(
     managerTimelineView: options.managerTimelineView,
     thread,
   });
-  const children = buildThreadTimelineTurnSummaryChildren({
+  const children = buildThreadTimelineTurnDetailsFromEvents({
     events: [...exactEventRows, ...acceptedInputRows].map((row) =>
       toThreadEventWithMeta(row),
     ),

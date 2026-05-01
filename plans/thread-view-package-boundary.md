@@ -27,10 +27,10 @@ semantic rows.
 
 Two important pieces are intentionally still unfinished:
 
-- `@bb/thread-view` still uses the old `ViewMessage`/`ViewProjection` projector
-  internally before converting to semantic rows. That compatibility layer should
-  be replaced by a direct `ThreadEventWithMeta[] -> ThreadTimelineProjection`
-  projector, but it is not a React-renderer prerequisite.
+- `@bb/thread-view` still uses a private event-projection model before
+  converting to semantic rows. The old `ViewMessage`/`ViewProjection` names and
+  `@bb/domain` exports are gone, but the final direct flat source projection is
+  still future work.
 - React still renders through the current app/UI path. Do not start the React
   renderer cutover until `plans/ui-core-design-system.md` has been completed.
 
@@ -63,10 +63,16 @@ fixes stale package boundaries, or makes audit/server/CLI behavior clearer.
 
 `@bb/thread-view` root exports are limited to the stable timeline pipeline:
 
-- `projectThreadTimeline(events, options)`
-- `buildThreadTimeline(projection, options)`
+- `buildThreadTimelineFromEvents(events, options)`
+- `buildThreadTimelineTurnDetailsFromEvents(events, options)`
 - `formatThreadTimelineText(timeline, options)`
+- `decodeThreadEventRow(row)`
+- `THREAD_TIMELINE_EXCLUDED_EVENT_TYPES` for the server DB query
 - stable public timeline types that consumers need to compile
+
+Temporary exception: `extractShellCommandFromString` remains exported only
+because the React pending-interaction banner still imports it. Remove that
+export when the React/pending-interaction surface is touched.
 
 Everything else is internal by default. Helpers such as shell-tool detection,
 file-name summaries, activity label builders, duration formatting, latest

@@ -12,31 +12,33 @@ import type {
   ThreadEventWarningCategory,
   ThreadTurnInitiator,
   TurnRequestTarget,
-  ViewMessage,
-  ViewProjection,
 } from "@bb/domain";
 import type { TimelineRow } from "@bb/server-contract";
-import type { ToViewProjectionOptions } from "@bb/domain";
+import type {
+  BuildEventProjectionOptions,
+  EventProjection,
+  EventProjectionMessage,
+} from "../src/event-projection-types.js";
 import {
-  buildThreadTimelineProjection,
+  buildThreadTimelineFromEvents,
   decodeThreadEventRow,
-  formatTimelineAsText,
+  formatThreadTimelineText,
 } from "../src/index.js";
-import { flattenProjectionMessagesDeep } from "../src/projection-flatten.js";
-import { toViewProjection } from "../src/to-view-messages.js";
-import type { ThreadEventWithMeta } from "../src/to-view-messages.js";
+import { flattenEventProjectionMessagesDeep } from "../src/event-projection-flatten.js";
+import { buildEventProjection } from "../src/build-event-projection.js";
+import type { ThreadEventWithMeta } from "../src/build-event-projection.js";
 
 export interface RenderTimelineFixtureArgs {
   events: ThreadEventRow[];
   includeNestedRows?: boolean;
-  projectionOptions: ToViewProjectionOptions;
+  projectionOptions: BuildEventProjectionOptions;
   verbose?: boolean;
 }
 
 export interface RenderedTimelineFixture {
   events: ThreadEventRow[];
-  messages: ViewMessage[];
-  projection: ViewProjection;
+  messages: EventProjectionMessage[];
+  projection: EventProjection;
   rows: TimelineRow[];
   text: string;
   turnRows: Extract<TimelineRow, { kind: "turn" }>[];
@@ -349,12 +351,12 @@ export function fromRows(rows: ThreadEventRow[]): ThreadEventWithMeta[] {
   );
 }
 
-export function flattenProjectionMessages(
-  projection: ViewProjection,
-): ViewMessage[] {
-  const messages: ViewMessage[] = [];
+export function flattenEventProjectionMessages(
+  projection: EventProjection,
+): EventProjectionMessage[] {
+  const messages: EventProjectionMessage[] = [];
   for (const entry of projection.entries) {
-    if (entry.kind === "message") {
+    if (entry.kind === "projected-message") {
       messages.push(entry.message);
       continue;
     }
@@ -373,7 +375,9 @@ export function unique<T>(values: T[]): T[] {
   return [...new Set(values)];
 }
 
-export function assertMonotonicSourceSeq(messages: ViewMessage[]): void {
+export function assertMonotonicSourceSeq(
+  messages: EventProjectionMessage[],
+): void {
   for (let i = 1; i < messages.length; i += 1) {
     const prev = messages[i - 1];
     const next = messages[i];
@@ -1018,7 +1022,7 @@ export function renderTimelineFixture(
 ): RenderedTimelineFixture {
   const decodedEvents = args.events.map((row) => decodeThreadEventRow(row));
   const includeNestedRows = args.includeNestedRows ?? true;
-  const projection = toViewProjection(decodedEvents, {
+  const projection = buildEventProjection(decodedEvents, {
     ...args.projectionOptions,
     turnMessageDetail: includeNestedRows
       ? "full"
@@ -1037,7 +1041,7 @@ export function renderTimelineFixture(
       args.projectionOptions.includeProviderUnhandledOperations ?? false,
     threadStatus: args.projectionOptions.threadStatus ?? "idle",
   };
-  const rows = buildThreadTimelineProjection({
+  const rows = buildThreadTimelineFromEvents({
     contextWindowEvents: [],
     events: decodedEvents,
     options:
@@ -1055,8 +1059,8 @@ export function renderTimelineFixture(
             viewMode,
           },
   }).rows;
-  const messages = flattenProjectionMessagesDeep(projection);
-  const text = formatTimelineAsText(rows, {
+  const messages = flattenEventProjectionMessagesDeep(projection);
+  const text = formatThreadTimelineText(rows, {
     color: false,
     verbose: args.verbose ?? true,
   });
@@ -1091,6 +1095,8 @@ export function renderTimelinePrefixes(
     );
 }
 
-export function messageKinds(messages: readonly ViewMessage[]): string[] {
+export function messageKinds(
+  messages: readonly EventProjectionMessage[],
+): string[] {
   return messages.map((message) => message.kind);
 }

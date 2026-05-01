@@ -4,7 +4,7 @@ import {
   messageKinds,
   renderTimelineFixture,
 } from "./timeline-test-harness.js";
-import { formatTimelineAsText } from "../src/format-timeline-text.js";
+import { formatThreadTimelineText } from "../src/format-timeline-text.js";
 import type { TimelineEventFactory } from "./timeline-test-harness.js";
 
 type TimelineFixtureEvent = ReturnType<
@@ -87,7 +87,7 @@ describe("timeline CLI rendering snapshots", () => {
       event.turnCompleted(),
     ]);
 
-    const auditText = formatTimelineAsText(timeline.rows, {
+    const auditText = formatThreadTimelineText(timeline.rows, {
       color: false,
       truncateForAudit: true,
       verbose: true,
@@ -102,7 +102,9 @@ describe("timeline CLI rendering snapshots", () => {
     );
     expect(auditText).toContain("      ... [truncated 6 lines]");
     expect(auditText).not.toContain("Remove legacy timeline bundle renderer");
-    expect(auditText).not.toContain("packages/core-ui/src/thread-detail-rows.ts");
+    expect(auditText).not.toContain(
+      "packages/core-ui/src/thread-detail-rows.ts",
+    );
     expect(auditText).toMatchInlineSnapshot(`
       "── User ────────────────────────────────────────────────────
       User message body body body body body body body body body body body body body body body body body bo... [truncated 62 chars]
@@ -718,17 +720,20 @@ describe("timeline CLI rendering snapshots", () => {
       event.webSearchCompleted({
         itemId: "web-search-1",
         queries: ["EyeDropper API browser compatibility"],
-        resultText: "Large search result payload that should stay out of the summary.",
+        resultText:
+          "Large search result payload that should stay out of the summary.",
       }),
       event.webFetchCompleted({
         itemId: "web-fetch-1",
         url: "https://developer.mozilla.org/en-US/docs/Web/API/EyeDropper_API",
-        resultText: "Large MDN page payload that should stay out of the summary.",
+        resultText:
+          "Large MDN page payload that should stay out of the summary.",
       }),
       event.webFetchCompleted({
         itemId: "web-fetch-2",
         url: "https://caniuse.com/mdn-api_eyedropper",
-        resultText: "Large caniuse page payload that should stay out of the summary.",
+        resultText:
+          "Large caniuse page payload that should stay out of the summary.",
       }),
       event.assistantCompleted({
         itemId: "assistant-1",
@@ -758,12 +763,14 @@ describe("timeline CLI rendering snapshots", () => {
       event.webSearchStarted({
         itemId: "web-search-1",
         queries: ["React Suspense docs"],
-        resultText: "Streaming search payload that should stay out of the summary.",
+        resultText:
+          "Streaming search payload that should stay out of the summary.",
       }),
       event.webFetchStarted({
         itemId: "web-fetch-1",
         url: "https://react.dev/reference/react/Suspense",
-        resultText: "Streaming fetch payload that should stay out of the summary.",
+        resultText:
+          "Streaming fetch payload that should stay out of the summary.",
       }),
     ]);
 

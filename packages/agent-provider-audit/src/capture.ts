@@ -8,9 +8,9 @@ import {
 } from "@bb/agent-runtime";
 import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime/capture";
 import {
-  buildThreadTimelineProjection,
+  buildThreadTimelineFromEvents,
   decodeThreadEventRow,
-  formatTimelineAsText,
+  formatThreadTimelineText,
 } from "@bb/thread-view";
 import { buildThreadEvent, buildThreadEventRow, threadScope } from "@bb/domain";
 import type {
@@ -1157,7 +1157,7 @@ export function buildBundle(args: {
     threadId: args.manifest.threadId,
   });
   const decodedRows = threadEventRows.map((row) => decodeThreadEventRow(row));
-  const timelineProjection = buildThreadTimelineProjection({
+  const timelineProjection = buildThreadTimelineFromEvents({
     contextWindowEvents: decodedRows,
     events: decodedRows,
     options: {
@@ -1170,7 +1170,7 @@ export function buildBundle(args: {
       viewMode: "standard",
     },
   });
-  const verboseTimelineProjection = buildThreadTimelineProjection({
+  const verboseTimelineProjection = buildThreadTimelineFromEvents({
     contextWindowEvents: decodedRows,
     events: decodedRows,
     options: {
@@ -1183,7 +1183,7 @@ export function buildBundle(args: {
       viewMode: "standard",
     },
   });
-  const debugTimelineProjection = buildThreadTimelineProjection({
+  const debugTimelineProjection = buildThreadTimelineFromEvents({
     contextWindowEvents: decodedRows,
     events: decodedRows,
     options: {
@@ -1199,11 +1199,11 @@ export function buildBundle(args: {
   const timelineRows = timelineProjection.rows;
   const verboseTimelineRows = verboseTimelineProjection.rows;
   const debugTimelineRows = debugTimelineProjection.rows;
-  const timelineText = formatTimelineAsText(timelineRows, {
+  const timelineText = formatThreadTimelineText(timelineRows, {
     verbose: false,
     color: false,
   });
-  const timelineVerboseText = formatTimelineAsText(verboseTimelineRows, {
+  const timelineVerboseText = formatThreadTimelineText(verboseTimelineRows, {
     verbose: true,
     color: false,
   });

@@ -1,12 +1,12 @@
 import type {
-  ViewDelegationMessage,
-  ViewMessage,
-  ViewMessageStatus,
-  ViewProjection,
-  ViewTimelineEntry,
-  ViewTurn,
-  ViewTurnStatus,
-} from "@bb/domain";
+  EventProjectionDelegationMessage,
+  EventProjectionMessage,
+  EventProjectionMessageStatus,
+  EventProjection,
+  EventProjectionEntry,
+  EventProjectionTurn,
+  EventProjectionTurnStatus,
+} from "./event-projection-types.js";
 import { findLastTerminalTimelineMessage } from "./timeline-message-helpers.js";
 import { getProjectionSummaryCount } from "./apply-turn-message-detail.js";
 
@@ -23,18 +23,18 @@ interface ProjectionMessageBounds {
 }
 
 interface StandaloneMessageContext {
-  kind: "message";
+  kind: "projected-message";
   entryIndex: number;
-  message: ViewMessage;
+  message: EventProjectionMessage;
   messageIndex: number;
 }
 
 interface TurnMessageContext {
   kind: "turn";
   entryIndex: number;
-  message: ViewMessage;
+  message: EventProjectionMessage;
   messageIndex: number;
-  turn: ViewTurn;
+  turn: EventProjectionTurn;
 }
 
 type SemanticMessageContext = StandaloneMessageContext | TurnMessageContext;
@@ -44,9 +44,9 @@ function getStartedAt(message: MessageTimingSource): number {
   return message.startedAt ?? message.createdAt;
 }
 
-export function sortViewMessagesBySource(
-  messages: ViewMessage[],
-): ViewMessage[] {
+export function sortEventProjectionMessagesBySource(
+  messages: EventProjectionMessage[],
+): EventProjectionMessage[] {
   return messages
     .map((message, index) => ({ index, message }))
     .sort((left, right) => {
@@ -62,8 +62,8 @@ export function sortViewMessagesBySource(
 }
 
 function isDelegationSourceMessage(
-  message: ViewMessage,
-): message is ViewDelegationMessage {
+  message: EventProjectionMessage,
+): message is EventProjectionDelegationMessage {
   return message.kind === "delegation";
 }
 
@@ -78,16 +78,16 @@ function maybeStartedAt(
 }
 
 function toDelegationMessage(
-  message: ViewDelegationMessage,
-  childProjection: ViewProjection,
-): ViewDelegationMessage {
+  message: EventProjectionDelegationMessage,
+  childProjection: EventProjection,
+): EventProjectionDelegationMessage {
   const resolvedChildProjection = mergeChildProjections(
     message.childProjection,
     childProjection,
   );
   const childBounds = getProjectionMessageBounds(resolvedChildProjection);
   const startedAt = maybeStartedAt(message, childBounds);
-  const delegation: ViewDelegationMessage = {
+  const delegation: EventProjectionDelegationMessage = {
     ...message,
     sourceSeqStart: childBounds
       ? Math.min(message.sourceSeqStart, childBounds.sourceSeqStart)
@@ -110,9 +110,9 @@ function toDelegationMessage(
 }
 
 function mergeChildProjections(
-  existingProjection: ViewProjection,
-  discoveredProjection: ViewProjection,
-): ViewProjection {
+  existingProjection: EventProjection,
+  discoveredProjection: EventProjection,
+): EventProjection {
   if (existingProjection.entries.length === 0) {
     return discoveredProjection;
   }
@@ -141,8 +141,10 @@ function mergeChildProjections(
   };
 }
 
-function getEntryMessages(entry: ViewTimelineEntry): readonly ViewMessage[] {
-  if (entry.kind === "message") {
+function getEntryMessages(
+  entry: EventProjectionEntry,
+): readonly EventProjectionMessage[] {
+  if (entry.kind === "projected-message") {
     return [entry.message];
   }
   if (entry.turn.messages) {
@@ -155,7 +157,7 @@ function getEntryMessages(entry: ViewTimelineEntry): readonly ViewMessage[] {
 }
 
 function getProjectionMessageBounds(
-  projection: ViewProjection,
+  projection: EventProjection,
 ): ProjectionMessageBounds | null {
   let bounds: ProjectionMessageBounds | null = null;
   for (const entry of projection.entries) {
@@ -182,7 +184,9 @@ function getProjectionMessageBounds(
   return bounds;
 }
 
-function getMessageStatus(message: ViewMessage): ViewMessageStatus {
+function getMessageStatus(
+  message: EventProjectionMessage,
+): EventProjectionMessageStatus {
   switch (message.kind) {
     case "assistant-text":
     case "command":
@@ -203,7 +207,9 @@ function getMessageStatus(message: ViewMessage): ViewMessageStatus {
   }
 }
 
-function getScopedTurnStatus(messages: ViewMessage[]): ViewTurnStatus {
+function getScopedTurnStatus(
+  messages: EventProjectionMessage[],
+): EventProjectionTurnStatus {
   const statuses = messages.map((message) => getMessageStatus(message));
   if (statuses.includes("error")) {
     return "error";
@@ -228,9 +234,9 @@ function getDurationMs(
 }
 
 function buildScopedTurn(
-  sourceTurn: ViewTurn,
-  messages: ViewMessage[],
-): ViewTurn {
+  sourceTurn: EventProjectionTurn,
+  messages: EventProjectionMessage[],
+): EventProjectionTurn {
   const firstMessage = messages[0];
   if (!firstMessage) {
     throw new Error(
@@ -251,7 +257,7 @@ function buildScopedTurn(
   const status = getScopedTurnStatus(messages);
   const completedAt = status === "pending" ? null : createdAt;
   const terminalMessage = findLastTerminalTimelineMessage(messages);
-  const turn: ViewTurn = {
+  const turn: EventProjectionTurn = {
     turnId: sourceTurn.turnId,
     threadId: firstMessage.threadId,
     sourceSeqStart,
@@ -275,11 +281,11 @@ function buildScopedTurn(
 }
 
 function buildSourceTurn(
-  sourceTurn: ViewTurn,
-  messages: ViewMessage[],
-): ViewTurn {
+  sourceTurn: EventProjectionTurn,
+  messages: EventProjectionMessage[],
+): EventProjectionTurn {
   const terminalMessage = findLastTerminalTimelineMessage(messages);
-  const turn: ViewTurn = {
+  const turn: EventProjectionTurn = {
     ...sourceTurn,
     summaryCount: getProjectionSummaryCount(messages, terminalMessage),
     messages,
@@ -292,15 +298,15 @@ function buildSourceTurn(
 }
 
 function collectProjectionMessageContexts(
-  projection: ViewProjection,
+  projection: EventProjection,
 ): SemanticMessageContext[] {
   const contexts: SemanticMessageContext[] = [];
   let messageIndex = 0;
 
   projection.entries.forEach((entry, entryIndex) => {
-    if (entry.kind === "message") {
+    if (entry.kind === "projected-message") {
       contexts.push({
-        kind: "message",
+        kind: "projected-message",
         entryIndex,
         message: entry.message,
         messageIndex,
@@ -325,10 +331,10 @@ function collectProjectionMessageContexts(
 }
 
 function collectFlatMessageContexts(
-  messages: ViewMessage[],
+  messages: EventProjectionMessage[],
 ): SemanticMessageContext[] {
   return messages.map((message, index) => ({
-    kind: "message",
+    kind: "projected-message",
     entryIndex: index,
     message,
     messageIndex: index,
@@ -379,11 +385,11 @@ class SemanticProjectionBuilder {
     );
   }
 
-  buildRootProjection(): ViewProjection {
+  buildRootProjection(): EventProjection {
     return this.buildProjection(this.rootContexts, "source");
   }
 
-  buildRootMessages(): ViewMessage[] {
+  buildRootMessages(): EventProjectionMessage[] {
     return this.rootContexts.map((context) =>
       this.toSemanticMessage(context.message),
     );
@@ -392,8 +398,8 @@ class SemanticProjectionBuilder {
   private buildProjection(
     contexts: SemanticMessageContext[],
     turnMetadataMode: TurnMetadataMode,
-  ): ViewProjection {
-    const entries: ViewTimelineEntry[] = [];
+  ): EventProjection {
+    const entries: EventProjectionEntry[] = [];
     let index = 0;
 
     while (index < contexts.length) {
@@ -402,9 +408,9 @@ class SemanticProjectionBuilder {
         break;
       }
 
-      if (context.kind === "message") {
+      if (context.kind === "projected-message") {
         entries.push({
-          kind: "message",
+          kind: "projected-message",
           message: this.toSemanticMessage(context.message),
         });
         index += 1;
@@ -412,7 +418,7 @@ class SemanticProjectionBuilder {
       }
 
       const sourceTurn = context.turn;
-      const messages: ViewMessage[] = [];
+      const messages: EventProjectionMessage[] = [];
       messages.push(this.toSemanticMessage(context.message));
       index += 1;
 
@@ -442,7 +448,9 @@ class SemanticProjectionBuilder {
     };
   }
 
-  private toSemanticMessage(message: ViewMessage): ViewMessage {
+  private toSemanticMessage(
+    message: EventProjectionMessage,
+  ): EventProjectionMessage {
     if (!isDelegationSourceMessage(message)) {
       return message;
     }
@@ -455,9 +463,9 @@ class SemanticProjectionBuilder {
   }
 }
 
-export function normalizeSemanticViewProjection(
-  projection: ViewProjection,
-): ViewProjection {
+export function normalizeEventProjection(
+  projection: EventProjection,
+): EventProjection {
   const normalizedProjection = new SemanticProjectionBuilder(
     collectProjectionMessageContexts(projection),
   ).buildRootProjection();
@@ -467,10 +475,10 @@ export function normalizeSemanticViewProjection(
   };
 }
 
-export function normalizeSemanticViewMessages(
-  messages: ViewMessage[],
-): ViewMessage[] {
-  const orderedMessages = sortViewMessagesBySource(messages);
+export function normalizeEventProjectionMessages(
+  messages: EventProjectionMessage[],
+): EventProjectionMessage[] {
+  const orderedMessages = sortEventProjectionMessagesBySource(messages);
   return new SemanticProjectionBuilder(
     collectFlatMessageContexts(orderedMessages),
   ).buildRootMessages();

@@ -1,15 +1,15 @@
 import type { ThreadEventType } from "@bb/domain";
 
-export const TIMELINE_NOISE_EVENT_TYPES: readonly ThreadEventType[] = [
+export const THREAD_TIMELINE_EXCLUDED_EVENT_TYPES = [
   "thread/started",
   "thread/identity",
   "thread/contextWindowUsage/updated",
   "thread/tokenUsage/updated",
   "turn/plan/updated",
-] as const;
+] as const satisfies readonly ThreadEventType[];
 
 const timelineNoiseEventTypeSet = new Set<ThreadEventType>(
-  TIMELINE_NOISE_EVENT_TYPES,
+  THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
 );
 
 export function isIgnoredNoiseType(eventType: ThreadEventType): boolean {

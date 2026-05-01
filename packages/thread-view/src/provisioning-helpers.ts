@@ -1,18 +1,18 @@
+import type { ProvisioningTranscriptEntry } from "@bb/domain";
 import type {
-  ProvisioningTranscriptEntry,
-  ViewOperationMessage,
-  ViewProvisioningMetadata,
-  ViewProvisioningTranscriptEntry,
-} from "@bb/domain";
+  EventProjectionOperationMessage,
+  EventProjectionProvisioningMetadata,
+  EventProjectionProvisioningTranscriptEntry,
+} from "./event-projection-types.js";
 
-// --- Helpers used by to-view-messages.ts (event -> view decoding) ---
+// --- Helpers used by build-event-projection.ts (event -> draft projection) ---
 
 export function readProvisioningTranscript(
   entries: ProvisioningTranscriptEntry[] | undefined,
-): ViewProvisioningTranscriptEntry[] | undefined {
+): EventProjectionProvisioningTranscriptEntry[] | undefined {
   if (!Array.isArray(entries) || entries.length === 0) return undefined;
 
-  const result: ViewProvisioningTranscriptEntry[] = [];
+  const result: EventProjectionProvisioningTranscriptEntry[] = [];
   for (const entry of entries) {
     const key = entry.key?.trim();
     if (!key) continue;
@@ -47,12 +47,14 @@ export function readProvisioningTranscript(
   return result.length > 0 ? result : undefined;
 }
 
-export function provisioningKey(message: ViewOperationMessage): string {
+export function provisioningKey(
+  message: EventProjectionOperationMessage,
+): string {
   return message.provisioning?.provisioningId ?? message.id;
 }
 
 export function provisioningTitleForStatus(
-  status: ViewOperationMessage["status"],
+  status: EventProjectionOperationMessage["status"],
 ): string {
   switch (status) {
     case "completed":
@@ -68,9 +70,9 @@ export function provisioningTitleForStatus(
 }
 
 function mergeProvisioningTranscript(
-  existing: ViewProvisioningTranscriptEntry[] | undefined,
-  incoming: ViewProvisioningTranscriptEntry[] | undefined,
-): ViewProvisioningTranscriptEntry[] | undefined {
+  existing: EventProjectionProvisioningTranscriptEntry[] | undefined,
+  incoming: EventProjectionProvisioningTranscriptEntry[] | undefined,
+): EventProjectionProvisioningTranscriptEntry[] | undefined {
   if (!incoming) {
     return existing?.map((entry) => ({ ...entry }));
   }
@@ -85,9 +87,9 @@ function mergeProvisioningTranscript(
 }
 
 export function mergeProvisioningMetadata(
-  existing: ViewProvisioningMetadata | undefined,
-  incoming: ViewProvisioningMetadata | undefined,
-): ViewProvisioningMetadata | undefined {
+  existing: EventProjectionProvisioningMetadata | undefined,
+  incoming: EventProjectionProvisioningMetadata | undefined,
+): EventProjectionProvisioningMetadata | undefined {
   if (!incoming) {
     return existing ? { ...existing } : undefined;
   }

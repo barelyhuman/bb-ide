@@ -419,67 +419,6 @@ export { activeThinkingSchema } from "./active-thinking.js";
 export type { ActiveThinking } from "./active-thinking.js";
 
 export {
-  viewMessageSchema,
-  viewOperationTypeSchema,
-  viewOperationTypeValues,
-  viewApprovalLifecycleStatusSchema,
-  viewApprovalLifecycleStatusValues,
-  viewThreadOperationKindSchema,
-  viewThreadOperationKindValues,
-  viewThreadOperationStatusSchema,
-  viewThreadOperationStatusValues,
-  viewMessageStatusSchema,
-  viewMessageStatusValues,
-} from "./ui-message.js";
-export type {
-  ToViewMessagesOptions,
-  ViewPermissionGrantLifecycleMessage,
-  ViewApprovalTarget,
-  ViewApprovalLifecycleStatus,
-  ViewAssistantTextMessage,
-  ViewCommandMessage,
-  ViewDelegationMessage,
-  ViewDebugRawEventMessage,
-  ViewErrorMessage,
-  ViewFileEditChange,
-  ViewFileEditMessage,
-  ViewMessage,
-  ViewMessageBase,
-  ViewMessageStatus,
-  ViewOperationMessage,
-  ViewOperationType,
-  ViewProvisioningMetadata,
-  ViewProvisioningTranscriptEntry,
-  ViewThreadOperationKind,
-  ViewThreadOperationMetadata,
-  ViewThreadOperationStatus,
-  ViewToolCallMessage,
-  ViewToolParsedIntent,
-  ViewUserMessage,
-  ViewWebFetchMessage,
-  ViewWebSearchMessage,
-} from "./ui-message.js";
-
-export {
-  viewProjectionStateSchema,
-  viewTurnMessageDetailSchema,
-  viewTurnMessageDetailValues,
-  viewTurnStatusSchema,
-  viewTurnStatusValues,
-} from "./timeline-projection.js";
-export type {
-  ToViewProjectionOptions,
-  ViewProjection,
-  ViewProjectionState,
-  ViewStandaloneTimelineEntry,
-  ViewTimelineEntry,
-  ViewTurn,
-  ViewTurnMessageDetail,
-  ViewTurnStatus,
-  ViewTurnTimelineEntry,
-} from "./timeline-projection.js";
-
-export {
   REALTIME_ENTITIES,
   THREAD_CHANGE_KINDS,
   PROJECT_CHANGE_KINDS,

@@ -1,21 +1,23 @@
 import type {
-  ViewMessage,
-  ViewProjection,
-  ViewTurn,
-  ViewTurnMessageDetail,
-} from "@bb/domain";
+  EventProjectionMessage,
+  EventProjection,
+  EventProjectionTurn,
+  EventProjectionTurnMessageDetail,
+} from "./event-projection-types.js";
 import {
   findLastTerminalTimelineMessage,
   isTimelineUngroupableMessage,
 } from "./timeline-message-helpers.js";
 
 export function findProjectionTerminalMessage(
-  messages: ViewMessage[],
-): ViewMessage | undefined {
+  messages: EventProjectionMessage[],
+): EventProjectionMessage | undefined {
   return findLastTerminalTimelineMessage(messages);
 }
 
-function getProjectionMessageSummaryCount(message: ViewMessage): number {
+function getProjectionMessageSummaryCount(
+  message: EventProjectionMessage,
+): number {
   if (message.kind === "file-edit") {
     return Math.max(1, message.changes.length);
   }
@@ -23,8 +25,8 @@ function getProjectionMessageSummaryCount(message: ViewMessage): number {
 }
 
 export function getProjectionSummaryCount(
-  messages: ViewMessage[],
-  terminalMessage: ViewMessage | undefined,
+  messages: EventProjectionMessage[],
+  terminalMessage: EventProjectionMessage | undefined,
 ): number {
   let count = 0;
   for (const message of messages) {
@@ -40,8 +42,8 @@ export function getProjectionSummaryCount(
 }
 
 function shouldIncludeSummaryTurnMessages(
-  messages: ViewMessage[],
-  terminalMessage: ViewMessage | undefined,
+  messages: EventProjectionMessage[],
+  terminalMessage: EventProjectionMessage | undefined,
 ): boolean {
   let foundTerminalMessage = false;
   for (const message of messages) {
@@ -59,7 +61,9 @@ function shouldIncludeSummaryTurnMessages(
   return false;
 }
 
-export function assertTerminalMessageIncludedInMessages(turn: ViewTurn): void {
+export function assertTerminalMessageIncludedInMessages(
+  turn: EventProjectionTurn,
+): void {
   const messages = turn.messages;
   const terminalMessage = turn.terminalMessage;
   if (!messages || !terminalMessage) {
@@ -73,7 +77,9 @@ export function assertTerminalMessageIncludedInMessages(turn: ViewTurn): void {
   );
 }
 
-function withChildProjectionDetail(message: ViewMessage): ViewMessage {
+function withChildProjectionDetail(
+  message: EventProjectionMessage,
+): EventProjectionMessage {
   if (message.kind !== "delegation") {
     return message;
   }
@@ -87,9 +93,9 @@ function withChildProjectionDetail(message: ViewMessage): ViewMessage {
 }
 
 function applyTurnMessageDetail(
-  turn: ViewTurn,
-  turnMessageDetail: ViewTurnMessageDetail,
-): ViewTurn {
+  turn: EventProjectionTurn,
+  turnMessageDetail: EventProjectionTurnMessageDetail,
+): EventProjectionTurn {
   const messages = (turn.messages ?? []).map((message) =>
     withChildProjectionDetail(message),
   );
@@ -100,7 +106,7 @@ function applyTurnMessageDetail(
     turnMessageDetail === "full" ||
     shouldIncludeSummaryTurnMessages(messages, terminalMessage);
 
-  const detailedTurn: ViewTurn = {
+  const detailedTurn: EventProjectionTurn = {
     ...turn,
     summaryCount,
   };
@@ -117,15 +123,15 @@ function applyTurnMessageDetail(
 }
 
 export function applyProjectionTurnMessageDetail(
-  projection: ViewProjection,
-  turnMessageDetail: ViewTurnMessageDetail,
-): ViewProjection {
+  projection: EventProjection,
+  turnMessageDetail: EventProjectionTurnMessageDetail,
+): EventProjection {
   return {
     state: projection.state,
     entries: projection.entries.map((entry) => {
-      if (entry.kind === "message") {
+      if (entry.kind === "projected-message") {
         return {
-          kind: "message",
+          kind: "projected-message",
           message: withChildProjectionDetail(entry.message),
         };
       }

@@ -1,16 +1,15 @@
+import type { JsonObject, ThreadEventScope } from "@bb/domain";
 import type {
-  JsonObject,
-  ThreadEventScope,
-  ViewApprovalLifecycleStatus,
-  ViewCommandMessage,
-  ViewDelegationMessage,
-  ViewWebFetchMessage,
-  ViewMessage,
-  ViewProjection,
-  ViewToolCallMessage,
-  ViewToolParsedIntent,
-  ViewWebSearchMessage,
-} from "@bb/domain";
+  EventProjectionApprovalLifecycleStatus,
+  EventProjectionCommandMessage,
+  EventProjectionDelegationMessage,
+  EventProjectionWebFetchMessage,
+  EventProjectionMessage,
+  EventProjection,
+  EventProjectionToolCallMessage,
+  EventProjectionToolParsedIntent,
+  EventProjectionWebSearchMessage,
+} from "./event-projection-types.js";
 import type { EventMeta } from "./event-decode.js";
 import type {
   CommandExecutionUpdate,
@@ -22,8 +21,8 @@ import type {
 import { messageId } from "./format-helpers.js";
 import {
   areThreadEventScopesEqual,
-  viewMessageThreadScopeFields,
-  viewMessageTurnScopeFields,
+  eventProjectionMessageThreadScopeFields,
+  eventProjectionMessageTurnScopeFields,
 } from "./message-scope.js";
 import {
   appendVisibleTextBuffer,
@@ -37,10 +36,12 @@ import {
 import type { WebActivityLifecycleEvent } from "./web-activity-lifecycle.js";
 
 type ViewProviderExecutionMessage =
-  | ViewCommandMessage
-  | ViewToolCallMessage
-  | ViewDelegationMessage;
-type ViewWebActivityMessage = ViewWebSearchMessage | ViewWebFetchMessage;
+  | EventProjectionCommandMessage
+  | EventProjectionToolCallMessage
+  | EventProjectionDelegationMessage;
+type ViewWebActivityMessage =
+  | EventProjectionWebSearchMessage
+  | EventProjectionWebFetchMessage;
 type WebActivityKind = ViewWebActivityMessage["kind"];
 type InterruptibleToolMessage =
   | ViewProviderExecutionMessage
@@ -82,18 +83,18 @@ interface RunningCommandExecution extends RunningExecutionBase {
   kind: "command";
   command: string;
   cwd: string | null;
-  parsedIntents: ViewToolParsedIntent[];
+  parsedIntents: EventProjectionToolParsedIntent[];
   source: string | null;
   exitCode: number | null;
-  approvalStatus: ViewApprovalLifecycleStatus | null;
+  approvalStatus: EventProjectionApprovalLifecycleStatus | null;
 }
 
 interface RunningToolCallExecution extends RunningExecutionBase {
   kind: "tool-call";
   toolName: string | null;
   toolArgs: JsonObject | null;
-  parsedIntents: ViewToolParsedIntent[];
-  approvalStatus: ViewApprovalLifecycleStatus | null;
+  parsedIntents: EventProjectionToolParsedIntent[];
+  approvalStatus: EventProjectionApprovalLifecycleStatus | null;
 }
 
 interface RunningDelegationExecution extends RunningExecutionBase {
@@ -109,17 +110,17 @@ type RunningExecCall =
   | RunningDelegationExecution;
 
 type MaybeProviderExecutionMessage =
-  | ViewMessage
+  | EventProjectionMessage
   | ViewProviderExecutionMessage
   | ViewWebActivityMessage
   | null;
 
 type ApprovalStatusDelta =
   | { kind: "keep" }
-  | { kind: "set"; value: ViewApprovalLifecycleStatus | null };
+  | { kind: "set"; value: EventProjectionApprovalLifecycleStatus | null };
 
 export interface ToolActivityProjectionState {
-  messages: ViewMessage[];
+  messages: EventProjectionMessage[];
   toolActivity: ToolActivityState;
 }
 
@@ -153,7 +154,7 @@ export function createToolActivityState(): ToolActivityState {
   };
 }
 
-function emptyViewProjection(): ViewProjection {
+function emptyEventProjection(): EventProjection {
   return {
     entries: [],
     state: {
@@ -173,7 +174,7 @@ function isProviderExecutionMessage(
 }
 
 function getCallStatusRank(
-  status: ViewToolCallMessage["status"] | undefined,
+  status: EventProjectionToolCallMessage["status"] | undefined,
 ): number {
   if (!status) return 0;
   if (status === "pending") return 1;
@@ -184,9 +185,9 @@ function getCallStatusRank(
 }
 
 function mergeCallStatus(
-  current: ViewToolCallMessage["status"] | undefined,
-  incoming: ViewToolCallMessage["status"] | undefined,
-): ViewToolCallMessage["status"] | undefined {
+  current: EventProjectionToolCallMessage["status"] | undefined,
+  incoming: EventProjectionToolCallMessage["status"] | undefined,
+): EventProjectionToolCallMessage["status"] | undefined {
   if (!incoming) return current;
   if (!current) return incoming;
   return getCallStatusRank(incoming) >= getCallStatusRank(current)
@@ -195,8 +196,8 @@ function mergeCallStatus(
 }
 
 export function buildApprovalStatusDelta(
-  incoming: ViewApprovalLifecycleStatus | null | undefined,
-  incomingStatus: ViewToolCallMessage["status"] | undefined,
+  incoming: EventProjectionApprovalLifecycleStatus | null | undefined,
+  incomingStatus: EventProjectionToolCallMessage["status"] | undefined,
 ): ApprovalStatusDelta {
   if (incoming !== undefined) {
     return { kind: "set", value: incoming };
@@ -208,9 +209,9 @@ export function buildApprovalStatusDelta(
 }
 
 export function applyApprovalStatusDelta(
-  current: ViewApprovalLifecycleStatus | null,
+  current: EventProjectionApprovalLifecycleStatus | null,
   delta: ApprovalStatusDelta,
-): ViewApprovalLifecycleStatus | null {
+): EventProjectionApprovalLifecycleStatus | null {
   switch (delta.kind) {
     case "keep":
       return current;
@@ -219,14 +220,16 @@ export function applyApprovalStatusDelta(
   }
 }
 
-function hasSemanticIntent(intents: ViewToolParsedIntent[]): boolean {
+function hasSemanticIntent(
+  intents: EventProjectionToolParsedIntent[],
+): boolean {
   return intents.some((intent) => intent.type !== "unknown");
 }
 
 function chooseParsedIntents(
-  existing: ViewToolParsedIntent[],
-  incoming: ViewToolParsedIntent[],
-): ViewToolParsedIntent[] {
+  existing: EventProjectionToolParsedIntent[],
+  incoming: EventProjectionToolParsedIntent[],
+): EventProjectionToolParsedIntent[] {
   if (incoming.length === 0) return existing;
   if (existing.length === 0) return incoming;
   if (!hasSemanticIntent(existing) && hasSemanticIntent(incoming)) {
@@ -237,7 +240,7 @@ function chooseParsedIntents(
 }
 
 function isTerminalToolCallStatus(
-  status: ViewToolCallMessage["status"] | undefined,
+  status: EventProjectionToolCallMessage["status"] | undefined,
 ): boolean {
   return status !== undefined && status !== "pending";
 }
@@ -449,8 +452,8 @@ function upsertRunningExecCall(
   turnId: string | undefined,
 ): RunningExecCall {
   const scopeFields = turnId
-    ? viewMessageTurnScopeFields(turnId)
-    : viewMessageThreadScopeFields();
+    ? eventProjectionMessageTurnScopeFields(turnId)
+    : eventProjectionMessageThreadScopeFields();
   if (!existing) {
     return createRunningExecCall(incoming, meta, threadId, scopeFields.scope);
   }
@@ -527,7 +530,8 @@ function applyExecutionOutputUpdate(
     return;
   }
   if (
-    incoming.output.length >= getVisibleTextBufferFullLength(target.outputBuffer)
+    incoming.output.length >=
+    getVisibleTextBufferFullLength(target.outputBuffer)
   ) {
     setBufferedExecutionOutput(target, incoming.output, true);
   }
@@ -635,7 +639,7 @@ function interruptPendingToolMessage(message: InterruptibleToolMessage): void {
 }
 
 function isInterruptibleToolMessage(
-  message: ViewMessage,
+  message: EventProjectionMessage,
 ): message is InterruptibleToolMessage {
   return (
     isProviderExecutionMessage(message) ||
@@ -733,13 +737,15 @@ type ExecutionMergeSource =
   | RunningExecCall
   | ProviderExecutionUpdate
   | ExecutionOutputUpdate;
-type CommandExecutionMergeTarget = RunningCommandExecution | ViewCommandMessage;
+type CommandExecutionMergeTarget =
+  | RunningCommandExecution
+  | EventProjectionCommandMessage;
 type ToolCallExecutionMergeTarget =
   | RunningToolCallExecution
-  | ViewToolCallMessage;
+  | EventProjectionToolCallMessage;
 type DelegationExecutionMergeTarget =
   | RunningDelegationExecution
-  | ViewDelegationMessage;
+  | EventProjectionDelegationMessage;
 type CommandExecutionMergeSource =
   | RunningCommandExecution
   | CommandExecutionUpdate;
@@ -1015,7 +1021,7 @@ function createExecMessage(
       toolName: call.toolName ?? "Agent",
       subagentType: call.subagentType,
       description: call.description,
-      childProjection: emptyViewProjection(),
+      childProjection: emptyEventProjection(),
     };
   }
 
@@ -1255,8 +1261,8 @@ function createWebActivityMessage(
       createdAt: meta.createdAt,
       startedAt: meta.createdAt,
       ...(turnId
-        ? viewMessageTurnScopeFields(turnId)
-        : viewMessageThreadScopeFields()),
+        ? eventProjectionMessageTurnScopeFields(turnId)
+        : eventProjectionMessageThreadScopeFields()),
       ...(payload.parentToolCallId
         ? { parentToolCallId: payload.parentToolCallId }
         : {}),
@@ -1276,8 +1282,8 @@ function createWebActivityMessage(
     createdAt: meta.createdAt,
     startedAt: meta.createdAt,
     ...(turnId
-      ? viewMessageTurnScopeFields(turnId)
-      : viewMessageThreadScopeFields()),
+      ? eventProjectionMessageTurnScopeFields(turnId)
+      : eventProjectionMessageThreadScopeFields()),
     ...(payload.parentToolCallId
       ? { parentToolCallId: payload.parentToolCallId }
       : {}),
@@ -1297,8 +1303,8 @@ function mergeWebActivityMessage(
   payload: WebActivityLifecycleEvent,
 ): void {
   const scopeFields = turnId
-    ? viewMessageTurnScopeFields(turnId)
-    : viewMessageThreadScopeFields();
+    ? eventProjectionMessageTurnScopeFields(turnId)
+    : eventProjectionMessageThreadScopeFields();
   if (!areThreadEventScopesEqual(target.scope, scopeFields.scope)) {
     throw new Error(
       `Cannot merge ${target.kind} messages with different scopes for call ${payload.callId}`,

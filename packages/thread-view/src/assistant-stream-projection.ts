@@ -1,4 +1,7 @@
-import type { ViewAssistantTextMessage, ViewMessage } from "@bb/domain";
+import type {
+  EventProjectionAssistantTextMessage,
+  EventProjectionMessage,
+} from "./event-projection-types.js";
 import {
   flushToolActivityBeforeNonToolMessage,
   type ToolActivityProjectionState,
@@ -10,8 +13,8 @@ import {
 } from "./visible-text-buffer.js";
 
 export interface AssistantStreamProjectionState extends ToolActivityProjectionState {
-  messages: ViewMessage[];
-  openAssistantMessagesByKey: Map<string, ViewAssistantTextMessage>;
+  messages: EventProjectionMessage[];
+  openAssistantMessagesByKey: Map<string, EventProjectionAssistantTextMessage>;
   assistantTextBuffersByKey: Map<string, VisibleTextBuffer>;
   visibleAssistantMessageKeys: Set<string>;
   finalizedAssistantMessageKeys: Set<string>;
@@ -20,16 +23,16 @@ export interface AssistantStreamProjectionState extends ToolActivityProjectionSt
 interface SyncBufferedTextMessageArgs {
   buffer: VisibleTextBuffer;
   messageKey: string;
-  message: ViewAssistantTextMessage;
+  message: EventProjectionAssistantTextMessage;
   state: AssistantStreamProjectionState;
-  status: ViewAssistantTextMessage["status"];
+  status: EventProjectionAssistantTextMessage["status"];
   visibleKeys: Set<string>;
 }
 
 interface FlushBufferedTextMessagesArgs {
   buffers: Map<string, VisibleTextBuffer>;
   finalizedKeys: Set<string>;
-  openMessages: Map<string, ViewAssistantTextMessage>;
+  openMessages: Map<string, EventProjectionAssistantTextMessage>;
   state: AssistantStreamProjectionState;
   visibleKeys: Set<string>;
 }
@@ -41,7 +44,9 @@ export function finalizeProjectionKey(
   finalizedKeys.add(messageKey);
 }
 
-export function syncBufferedTextMessage(args: SyncBufferedTextMessageArgs): void {
+export function syncBufferedTextMessage(
+  args: SyncBufferedTextMessageArgs,
+): void {
   const text = getVisibleTextBufferText(args.buffer);
   if (!text) {
     if (args.status === "completed") {

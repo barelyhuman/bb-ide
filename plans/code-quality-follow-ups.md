@@ -9,8 +9,8 @@ Source review shows no phase is fully complete yet. Phase 2 has some work landed
 - Phase 1: Open. Credential refresh/error fields still use ambiguous `| null`.
 - Phase 2: Partial. Diff byte limits and required dispatch `eventSink` exist; commit policy and file-list policy still need cleanup.
 - Phase 3: Open. Workspace watch state still lives in `apps/host-daemon`.
-- Phase 4: Open. `core-ui` projections still depend on `getEvent*` field-accessor helpers.
-- Phase 5: Open. Projection state has not been extracted from `to-view-messages.ts`.
+- Phase 4: Open. `thread-view` projections still depend on `getEvent*` field-accessor helpers.
+- Phase 5: Open. Projection state has not been extracted from `build-event-projection.ts`.
 - Phase 6: Partial. Resolved execution option types exist, but optional route/service inputs and service-side default resolution remain.
 - Phase 7: Open. At least one server route still imports `@bb/host-daemon-contract` directly.
 
@@ -80,44 +80,44 @@ In `agent-provider-auth`, `lastRefreshedAt: number | null` and `lastErrorMessage
 
 **Goal:** Replace `getEventTurnId(event)`-style calls with type-narrowed access to the specific variant.
 
-`core-ui/src/event-decode.ts` exposes helpers like `getEventTurnId`, `getEventProviderThreadId`, `getEventParentToolCallId` that projection modules call throughout the codebase. These helpers walk around `ThreadEvent`'s discriminated union with runtime accessors, erasing the type system's knowledge of which variant carries which field. The right shape is: decode/narrow once at the boundary, then access variant-specific fields directly.
+`thread-view/src/event-decode.ts` exposes helpers like `getEventTurnId`, `getEventProviderThreadId`, `getEventParentToolCallId` that projection modules call throughout the codebase. These helpers walk around `ThreadEvent`'s discriminated union with runtime accessors, erasing the type system's knowledge of which variant carries which field. The right shape is: decode/narrow once at the boundary, then access variant-specific fields directly.
 
-**Status (2026-04-28):** Open. `getEventTurnId`, `getEventProviderThreadId`, and `getEventParentToolCallId` are still imported by `to-view-messages.ts` and other projection/lifecycle modules.
+**Status (2026-05-01):** Open. `getEventTurnId`, `getEventProviderThreadId`, and `getEventParentToolCallId` are still imported by `build-event-projection.ts` and other projection/lifecycle modules.
 
 **Changes:**
 
-- In `to-view-messages.ts` and the projection modules it calls, replace calls to `getEventTurnId`, `getEventProviderThreadId`, `getEventParentToolCallId`, and similar accessors with `switch (event.type)` blocks that narrow the union.
-- Where a projection genuinely needs "turnId if the event has one" across heterogeneous variants, add a single helper in `core-ui` that returns `string | undefined` with a strongly-typed parameter (`event: Extract<ThreadEvent, { turnId: string }>` or similar). Do not create a parallel union type.
+- In `build-event-projection.ts` and the projection modules it calls, replace calls to `getEventTurnId`, `getEventProviderThreadId`, `getEventParentToolCallId`, and similar accessors with `switch (event.type)` blocks that narrow the union.
+- Where a projection genuinely needs "turnId if the event has one" across heterogeneous variants, add a single helper in `thread-view` that returns `string | undefined` with a strongly-typed parameter (`event: Extract<ThreadEvent, { turnId: string }>` or similar). Do not create a parallel union type.
 - Delete the `getEvent*` accessors once call sites migrate.
 
 **Exit criteria:**
 
-- `grep -r "getEventTurnId\|getEventProviderThreadId\|getEventParentToolCallId" packages/core-ui/src` returns zero matches outside the file being deleted.
+- `grep -r "getEventTurnId\|getEventProviderThreadId\|getEventParentToolCallId" packages/thread-view/src` returns zero matches outside the file being deleted.
 - No new types added that mirror `ThreadEvent`.
-- `pnpm exec turbo run test --filter=@bb/core-ui` passes.
+- `pnpm exec turbo run test --filter=@bb/thread-view` passes.
 
-## Phase 5: Extract projection state lifecycle from `to-view-messages.ts`
+## Phase 5: Extract projection state lifecycle from `build-event-projection.ts`
 
 **Goal:** Let the main loop be read top-to-bottom without paging through initialization and finalization helpers.
 
-`to-view-messages.ts` at 852 lines mixes state initialization, the event loop, subsidiary lifecycle handlers (tool activity, operations), and normalization passes.
+`build-event-projection.ts` mixes state initialization, the event loop, subsidiary lifecycle handlers (tool activity, operations), and normalization passes.
 
-**Status (2026-04-28):** Open. `to-view-messages.ts` is now 1190 lines, `ProjectionState` is still defined inline there, and `packages/core-ui/src/projection-state.ts` does not exist.
+**Status (2026-05-01):** Open. `build-event-projection.ts` is still large, `ProjectionState` is still defined inline there, and `packages/thread-view/src/event-projection-state.ts` does not exist.
 
 **Changes:**
 
-- Create `packages/core-ui/src/projection-state.ts`:
-  - `ProjectionState` interface (currently declared inline in `to-view-messages.ts`).
+- Create `packages/thread-view/src/event-projection-state.ts`:
+  - `ProjectionState` interface (currently declared inline in `build-event-projection.ts`).
   - `initProjectionState()` factory.
   - `finalizeProjectionState(state, options)` (encapsulates the current `finalizePendingMessages()` logic).
-- Have `tool-activity-projection.ts` and `operation-projection.ts` register their state initialization/teardown through `projection-state.ts` rather than being set up inline in `to-view-messages.ts`.
-- `to-view-messages.ts` becomes: `initProjectionState()` → loop over events → `finalizeProjectionState()` → return.
+- Have `tool-activity-projection.ts` and `operation-projection.ts` register their state initialization/teardown through `event-projection-state.ts` rather than being set up inline in `build-event-projection.ts`.
+- `build-event-projection.ts` becomes: `initProjectionState()` → loop over events → `finalizeProjectionState()` → return.
 
 **Exit criteria:**
 
-- `to-view-messages.ts` drops below 600 lines (sanity check that the extraction pulled weight, not a prescriptive limit).
-- `ProjectionState` interface has exactly one definition, in `projection-state.ts`.
-- `pnpm exec turbo run test --filter=@bb/core-ui` passes.
+- `build-event-projection.ts` drops below 600 lines (sanity check that the extraction pulled weight, not a prescriptive limit).
+- `ProjectionState` interface has exactly one definition, in `event-projection-state.ts`.
+- `pnpm exec turbo run test --filter=@bb/thread-view` passes.
 
 ## Phase 6: Resolve server contract defaults at the route boundary
 

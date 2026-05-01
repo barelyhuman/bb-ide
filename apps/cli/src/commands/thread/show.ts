@@ -1,5 +1,8 @@
 import { Command } from "commander";
-import { formatTimelineAsText, type TimelineFormat } from "@bb/thread-view";
+import {
+  formatThreadTimelineText,
+  type ThreadTimelineTextFormat,
+} from "@bb/thread-view";
 import {
   type Environment,
   type Thread,
@@ -327,7 +330,7 @@ export function registerShowCommand(
         const client = createClient(getUrl());
         const threadId = resolved.id;
         printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
-        const format = resolveTimelineFormat(opts);
+        const format = resolveThreadTimelineTextFormat(opts);
 
         if (format !== "json" && (opts.limit || opts.afterSeq)) {
           throw new Error(
@@ -356,7 +359,7 @@ export function registerShowCommand(
           }),
         );
         const color = process.stdout.isTTY === true && !process.env.NO_COLOR;
-        const text = formatTimelineAsText(timeline.rows, {
+        const text = formatThreadTimelineText(timeline.rows, {
           verbose: format === "verbose",
           color,
         });
@@ -413,7 +416,9 @@ function printThreadStatus(
   console.log(`  Updated: ${new Date(thread.updatedAt).toLocaleString()}`);
 }
 
-function resolveTimelineFormat(opts: ThreadLogCommandOptions): TimelineFormat {
+function resolveThreadTimelineTextFormat(
+  opts: ThreadLogCommandOptions,
+): ThreadTimelineTextFormat {
   if (opts.json) {
     return "json";
   }

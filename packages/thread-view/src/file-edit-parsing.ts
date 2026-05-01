@@ -4,11 +4,14 @@ import {
   itemStatusToFileEditStatus,
 } from "./exec-lifecycle.js";
 import { getEventParentToolCallId } from "./event-decode.js";
-import type { ViewFileEditChange, ViewFileEditMessage } from "@bb/domain";
+import type {
+  EventProjectionFileEditChange,
+  EventProjectionFileEditMessage,
+} from "./event-projection-types.js";
 
 export function mapFileChanges(
   changes: ThreadEventFileChange[],
-): ViewFileEditChange[] {
+): EventProjectionFileEditChange[] {
   return changes.map((change) => ({
     path: change.path,
     kind: change.kind,
@@ -17,7 +20,7 @@ export function mapFileChanges(
   }));
 }
 
-export interface FileEditPartial extends Partial<ViewFileEditMessage> {
+export interface FileEditPartial extends Partial<EventProjectionFileEditMessage> {
   callId: string;
   appendStdout?: boolean;
   parentToolCallId?: string;
