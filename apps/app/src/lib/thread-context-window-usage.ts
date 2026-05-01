@@ -1,13 +1,9 @@
-import { extractThreadContextWindowUsage as extractThreadContextWindowUsageFromEvents } from "@bb/thread-view";
 import type { ThreadContextWindowUsage } from "@bb/server-contract";
 
 const TOKEN_COMPACT_FORMATTER = new Intl.NumberFormat("en-US", {
   notation: "compact",
   maximumFractionDigits: 0,
 });
-
-export const extractThreadContextWindowUsage =
-  extractThreadContextWindowUsageFromEvents;
 
 export function calculateContextWindowUsagePercent(
   usage: ThreadContextWindowUsage,

@@ -2,9 +2,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  buildTimelineRowsFromEvents,
+  buildThreadTimelineProjection,
   decodeThreadEventRow,
-  extractThreadContextWindowUsage,
   formatTimelineAsText,
 } from "@bb/thread-view";
 import { threadEventTypeValues, type ThreadEventType } from "@bb/domain";
@@ -384,11 +383,17 @@ function buildPrefixSnapshot(
       ? "idle"
       : "active";
   const decodedRows = prefixRows.map((row) => decodeThreadEventRow(row));
-  const timelineRows = buildTimelineRowsFromEvents({
+  const timelineRows = buildThreadTimelineProjection({
+    contextWindowEvents: decodedRows,
     events: decodedRows,
     options: {
+      includeDebugRawEvents: false,
+      includeNestedRows: false,
+      includeOptionalOperations: false,
+      includeProviderUnhandledOperations: false,
       threadStatus,
       turnMessageDetail: "summary",
+      viewMode: "standard",
     },
   }).rows;
   const timelineText = formatTimelineAsText(timelineRows, {
@@ -448,7 +453,7 @@ function buildFixtureContextWindowSnapshot(
   return {
     fixture: fixtureId,
     providerId,
-    contextWindowUsage: extractThreadContextWindowUsage(bundle.threadEventRows),
+    contextWindowUsage: bundle.contextWindowUsage,
     tokenUsageSummary: {
       tokenUsageEventCount: tokenUsageEvents.length,
       nonNullModelContextWindowCount: tokenUsageEvents.filter(

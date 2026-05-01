@@ -1,9 +1,7 @@
 import {
-  buildManagerTimelineRowsFromEvents,
-  buildTimelineRowsFromEvents,
-  extractThreadContextWindowUsage,
+  buildThreadTimelineProjection,
   TIMELINE_NOISE_EVENT_TYPES,
-  resolveTimelineTurnSummaryDetailsFromEvents,
+  resolveThreadTimelineTurnSummaryDetails,
   type ThreadEventWithMeta,
 } from "@bb/thread-view";
 import type { Thread } from "@bb/domain";
@@ -23,7 +21,7 @@ import {
   listStoredTurnInputAcceptedRowsByClientRequestSequences,
 } from "@bb/db";
 import type { DbConnection, StoredEventRow } from "@bb/db";
-import { parseStoredEvent, parseStoredEventRow } from "./thread-data.js";
+import { parseStoredEvent } from "./thread-data.js";
 
 const MIN_AGENT_MESSAGE_DELTAS_FOR_SUMMARY_COMPACTION = 1000;
 
@@ -41,6 +39,19 @@ interface BuildThreadTimelineOptions {
 interface BuildTimelineTurnSummaryDetailsOptions extends TimelineSourceSeqRange {
   isDevelopment: boolean;
   managerTimelineView?: ManagerTimelineView;
+}
+
+function resolveTimelineViewMode(args: {
+  managerTimelineView: ManagerTimelineView | undefined;
+  thread: Thread;
+}): "manager-conversation" | "standard" {
+  if (
+    args.thread.type === "manager" &&
+    args.managerTimelineView !== "standard"
+  ) {
+    return "manager-conversation";
+  }
+  return "standard";
 }
 
 export function toThreadEventWithMeta(
@@ -140,8 +151,6 @@ export function buildThreadTimeline(
   options: BuildThreadTimelineOptions,
 ): ThreadTimelineResponse {
   const includeNestedRows = options.includeNestedRows ?? false;
-  const useStandardManagerTimeline =
-    options.managerTimelineView === "standard";
   const includeProviderUnhandledOperations = options.isDevelopment;
   const rawEventRows = listRecentStoredEventRows(db, {
     threadId: thread.id,
@@ -151,50 +160,42 @@ export function buildThreadTimeline(
     toThreadEventWithMeta(row),
   );
   const decodedEvents = compactSummaryThreadEvents(decodedRawEvents);
-  const isDefaultManagerView =
-    thread.type === "manager" && !useStandardManagerTimeline;
   const contextWindowUsageRows = listContextWindowUsageRows(db, {
     threadId: thread.id,
   });
-
-  if (isDefaultManagerView) {
-    const timeline = buildManagerTimelineRowsFromEvents({
-      events: decodedEvents,
-      options: {
-        includeProviderUnhandledOperations,
-        threadStatus: thread.status,
-        threadType: thread.type,
-        turnMessageDetail: "full",
-      },
-    });
-    return {
-      rows: timeline.rows,
-      activeThinking: timeline.activeThinking,
-      contextWindowUsage:
-        extractThreadContextWindowUsage(
-          contextWindowUsageRows.map((row) => parseStoredEventRow(row)),
-        ) ?? undefined,
-    };
-  }
-
-  const timeline = buildTimelineRowsFromEvents({
+  const viewMode = resolveTimelineViewMode({
+    managerTimelineView: options.managerTimelineView,
+    thread,
+  });
+  const commonProjectionOptions = {
+    includeDebugRawEvents: false,
+    includeOptionalOperations: false,
+    includeProviderUnhandledOperations,
+    threadStatus: thread.status,
+  };
+  const timeline = buildThreadTimelineProjection({
+    contextWindowEvents: contextWindowUsageRows.map((row) =>
+      toThreadEventWithMeta(row),
+    ),
     events: decodedEvents,
-    options: {
-      includeNestedRows,
-      includeProviderUnhandledOperations,
-      threadStatus: thread.status,
-      threadType: thread.type,
-      turnMessageDetail: includeNestedRows ? "full" : "summary",
-    },
+    options:
+      viewMode === "manager-conversation"
+        ? {
+            ...commonProjectionOptions,
+            viewMode,
+          }
+        : {
+            ...commonProjectionOptions,
+            includeNestedRows,
+            turnMessageDetail: includeNestedRows ? "full" : "summary",
+            viewMode,
+          },
   });
 
   return {
     rows: timeline.rows,
     activeThinking: timeline.activeThinking,
-    contextWindowUsage:
-      extractThreadContextWindowUsage(
-        contextWindowUsageRows.map((row) => parseStoredEventRow(row)),
-      ) ?? undefined,
+    contextWindowUsage: timeline.contextWindowUsage ?? undefined,
   };
 }
 
@@ -222,17 +223,21 @@ export function buildTimelineTurnSummaryDetails(
       afterSequence: options.sourceSeqEnd,
       clientRequestSequences,
     });
-  const resolution = resolveTimelineTurnSummaryDetailsFromEvents({
+  const viewMode = resolveTimelineViewMode({
+    managerTimelineView: options.managerTimelineView,
+    thread,
+  });
+  const resolution = resolveThreadTimelineTurnSummaryDetails({
     events: [...exactEventRows, ...acceptedInputRows].map((row) =>
       toThreadEventWithMeta(row),
     ),
     options: {
+      includeOptionalOperations: false,
       includeProviderUnhandledOperations,
       sourceSeqEnd: options.sourceSeqEnd,
       sourceSeqStart: options.sourceSeqStart,
       threadStatus: thread.status,
-      threadType: thread.type,
-      turnMessageDetail: "full",
+      viewMode,
     },
   });
 

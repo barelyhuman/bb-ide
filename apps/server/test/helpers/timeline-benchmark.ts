@@ -15,7 +15,7 @@ import {
   upsertHost,
 } from "@bb/db";
 import {
-  buildTimelineRowsFromEvents,
+  buildThreadTimelineProjection,
   TIMELINE_NOISE_EVENT_TYPES,
   type ThreadEventWithMeta,
 } from "@bb/thread-view";
@@ -150,6 +150,8 @@ function createTimelineBenchmarkScenario(
   const decodedSummaryEvents = summaryEventRows.map((row) =>
     toThreadEventWithMeta(row),
   );
+  const timelineViewMode =
+    thread.type === "manager" ? "manager-conversation" : "standard";
   const buildSummary = () =>
     buildThreadTimeline(db, thread, { isDevelopment: true });
 
@@ -168,24 +170,50 @@ function createTimelineBenchmarkScenario(
   const decodeSummaryEvents = () =>
     summaryEventRows.map((row) => toThreadEventWithMeta(row));
   const buildFullSummaryRowsOnly = () =>
-    buildTimelineRowsFromEvents({
+    buildThreadTimelineProjection({
+      contextWindowEvents: [],
       events: decodedSummaryEvents,
-      options: {
-        includeNestedRows: true,
-        threadStatus: thread.status,
-        threadType: thread.type,
-        turnMessageDetail: "full",
-      },
+      options:
+        timelineViewMode === "manager-conversation"
+          ? {
+              includeDebugRawEvents: false,
+              includeOptionalOperations: false,
+              includeProviderUnhandledOperations: false,
+              threadStatus: thread.status,
+              viewMode: timelineViewMode,
+            }
+          : {
+              includeDebugRawEvents: false,
+              includeNestedRows: true,
+              includeOptionalOperations: false,
+              includeProviderUnhandledOperations: false,
+              threadStatus: thread.status,
+              turnMessageDetail: "full",
+              viewMode: timelineViewMode,
+            },
     }).rows;
   const buildSummaryRowsOnly = () =>
-    buildTimelineRowsFromEvents({
+    buildThreadTimelineProjection({
+      contextWindowEvents: [],
       events: decodedSummaryEvents,
-      options: {
-        includeNestedRows: false,
-        threadStatus: thread.status,
-        threadType: thread.type,
-        turnMessageDetail: "summary",
-      },
+      options:
+        timelineViewMode === "manager-conversation"
+          ? {
+              includeDebugRawEvents: false,
+              includeOptionalOperations: false,
+              includeProviderUnhandledOperations: false,
+              threadStatus: thread.status,
+              viewMode: timelineViewMode,
+            }
+          : {
+              includeDebugRawEvents: false,
+              includeNestedRows: false,
+              includeOptionalOperations: false,
+              includeProviderUnhandledOperations: false,
+              threadStatus: thread.status,
+              turnMessageDetail: "summary",
+              viewMode: timelineViewMode,
+            },
     }).rows;
   const summaryBytes = Buffer.byteLength(buildAndSerializeSummary(), "utf8");
   const fullBytes = Buffer.byteLength(

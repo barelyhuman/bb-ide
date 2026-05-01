@@ -8,7 +8,7 @@ import {
 } from "@bb/agent-runtime";
 import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime/capture";
 import {
-  buildTimelineRowsFromEvents,
+  buildThreadTimelineProjection,
   decodeThreadEventRow,
   formatTimelineAsText,
 } from "@bb/thread-view";
@@ -1156,32 +1156,49 @@ export function buildBundle(args: {
     model: args.model,
     threadId: args.manifest.threadId,
   });
-  const decodedRows = threadEventRows.map((row) =>
-    decodeThreadEventRow(row),
-  );
-  const timelineRows = buildTimelineRowsFromEvents({
+  const decodedRows = threadEventRows.map((row) => decodeThreadEventRow(row));
+  const timelineProjection = buildThreadTimelineProjection({
+    contextWindowEvents: decodedRows,
     events: decodedRows,
     options: {
+      includeDebugRawEvents: false,
+      includeNestedRows: false,
+      includeOptionalOperations: false,
+      includeProviderUnhandledOperations: false,
       threadStatus: "idle",
       turnMessageDetail: "summary",
+      viewMode: "standard",
     },
-  }).rows;
-  const verboseTimelineRows = buildTimelineRowsFromEvents({
+  });
+  const verboseTimelineProjection = buildThreadTimelineProjection({
+    contextWindowEvents: decodedRows,
     events: decodedRows,
     options: {
+      includeDebugRawEvents: false,
       includeNestedRows: true,
+      includeOptionalOperations: false,
+      includeProviderUnhandledOperations: false,
       threadStatus: "idle",
       turnMessageDetail: "full",
+      viewMode: "standard",
     },
-  }).rows;
-  const debugTimelineRows = buildTimelineRowsFromEvents({
+  });
+  const debugTimelineProjection = buildThreadTimelineProjection({
+    contextWindowEvents: decodedRows,
     events: decodedRows,
     options: {
       includeDebugRawEvents: true,
+      includeNestedRows: false,
+      includeOptionalOperations: false,
+      includeProviderUnhandledOperations: false,
       threadStatus: "idle",
       turnMessageDetail: "summary",
+      viewMode: "standard",
     },
-  }).rows;
+  });
+  const timelineRows = timelineProjection.rows;
+  const verboseTimelineRows = verboseTimelineProjection.rows;
+  const debugTimelineRows = debugTimelineProjection.rows;
   const timelineText = formatTimelineAsText(timelineRows, {
     verbose: false,
     color: false,
@@ -1213,6 +1230,7 @@ export function buildBundle(args: {
     processLifecycle,
     threadEvents,
     threadEventRows,
+    contextWindowUsage: timelineProjection.contextWindowUsage,
     timelineRows,
     timelineText,
     timelineVerboseRows: verboseTimelineRows,

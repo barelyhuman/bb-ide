@@ -1,4 +1,5 @@
 import type {
+  ThreadContextWindowUsage,
   TimelineActivityIntent,
   TimelineConversationAttachments,
   TimelineFileChange,
@@ -18,6 +19,7 @@ import type {
   ViewTurn,
   ViewTimelineEntry,
 } from "@bb/domain";
+import { toPositiveNumber } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 import { getMessageStartedAt } from "./format-helpers.js";
 import { getViewMessageScopeTurnId } from "./message-scope.js";
@@ -29,41 +31,41 @@ import {
   type ThreadEventWithMeta,
 } from "./to-view-messages.js";
 
-export interface BuildTimelineRowsOptions {
-  includeNestedRows?: boolean;
-}
-
 export type TimelineTurnMessageDetail = "summary" | "full";
 
-export interface TimelineRowsFromEventsOptions {
-  includeDebugRawEvents?: boolean;
-  includeInternalSystemMessages?: boolean;
-  includeNestedRows?: boolean;
-  includeOptionalOperations?: boolean;
-  includeProviderUnhandledOperations?: boolean;
-  threadStatus?: Thread["status"];
-  threadType?: Thread["type"];
+export type ThreadTimelineViewMode = "standard" | "manager-conversation";
+
+interface ThreadTimelineProjectionBaseOptions {
+  includeDebugRawEvents: boolean;
+  includeOptionalOperations: boolean;
+  includeProviderUnhandledOperations: boolean;
+  threadStatus: Thread["status"];
+}
+
+export interface StandardThreadTimelineProjectionOptions extends ThreadTimelineProjectionBaseOptions {
+  includeNestedRows: boolean;
   turnMessageDetail: TimelineTurnMessageDetail;
+  viewMode: "standard";
 }
 
-export interface BuildTimelineRowsFromEventsArgs {
+export interface ManagerConversationTimelineProjectionOptions extends ThreadTimelineProjectionBaseOptions {
+  viewMode: "manager-conversation";
+}
+
+export type ThreadTimelineProjectionOptions =
+  | StandardThreadTimelineProjectionOptions
+  | ManagerConversationTimelineProjectionOptions;
+
+export interface BuildThreadTimelineProjectionArgs {
+  contextWindowEvents: ThreadEventWithMeta[];
   events: ThreadEventWithMeta[];
-  options: TimelineRowsFromEventsOptions;
+  options: ThreadTimelineProjectionOptions;
 }
 
-export interface TimelineRowsFromEventsResult {
+export interface ThreadTimelineProjection {
   activeThinking: ActiveThinking | null;
+  contextWindowUsage: ThreadContextWindowUsage | null;
   rows: TimelineRow[];
-}
-
-export type ManagerTimelineRowsFromEventsOptions = Omit<
-  TimelineRowsFromEventsOptions,
-  "includeNestedRows"
->;
-
-export interface BuildManagerTimelineRowsFromEventsArgs {
-  events: ThreadEventWithMeta[];
-  options: ManagerTimelineRowsFromEventsOptions;
 }
 
 export interface TimelineSourceSeqRange {
@@ -71,9 +73,16 @@ export interface TimelineSourceSeqRange {
   sourceSeqStart: number;
 }
 
-export interface ResolveTimelineTurnSummaryDetailsFromEventsArgs {
+export interface ResolveThreadTimelineTurnSummaryDetailsOptions extends TimelineSourceSeqRange {
+  includeOptionalOperations: boolean;
+  includeProviderUnhandledOperations: boolean;
+  threadStatus: Thread["status"];
+  viewMode: ThreadTimelineViewMode;
+}
+
+export interface ResolveThreadTimelineTurnSummaryDetailsArgs {
   events: ThreadEventWithMeta[];
-  options: ManagerTimelineRowsFromEventsOptions & TimelineSourceSeqRange;
+  options: ResolveThreadTimelineTurnSummaryDetailsOptions;
 }
 
 export type TimelineTurnSummaryDetailsResolution =
@@ -89,6 +98,12 @@ export type TimelineTurnSummaryDetailsResolution =
       rows: TimelineRow[];
     };
 
+interface ThreadContextWindowSignal {
+  estimated: boolean;
+  modelContextWindow: number | null;
+  usedTokens: number | null;
+}
+
 interface BuildTurnRowsArgs {
   includeNestedRows: boolean;
   turn: ViewTurn;
@@ -98,6 +113,89 @@ interface CompletedTurnMessageSlices {
   summaryMessages: ViewMessage[];
   terminalMessages: ViewMessage[];
   trailingMessages: ViewMessage[];
+}
+
+interface BuildTimelineRowsOptions {
+  includeNestedRows: boolean;
+}
+
+function toNonNegativeNumber(value: number): number | null {
+  if (!Number.isFinite(value) || value < 0) {
+    return null;
+  }
+  return value;
+}
+
+function decodeContextWindowSignal(
+  eventWithMeta: ThreadEventWithMeta,
+): ThreadContextWindowSignal | null {
+  const { event } = eventWithMeta;
+  if (event.type !== "thread/contextWindowUsage/updated") {
+    return null;
+  }
+  const { contextWindowUsage } = event;
+  return {
+    usedTokens:
+      contextWindowUsage.usedTokens === null
+        ? null
+        : toNonNegativeNumber(contextWindowUsage.usedTokens),
+    modelContextWindow:
+      contextWindowUsage.modelContextWindow === null
+        ? null
+        : (toPositiveNumber(contextWindowUsage.modelContextWindow) ?? null),
+    estimated: contextWindowUsage.estimated,
+  };
+}
+
+function extractThreadContextWindowUsage(
+  events: readonly ThreadEventWithMeta[],
+): ThreadContextWindowUsage | null {
+  let estimated: boolean | undefined;
+  let modelContextWindow: number | undefined;
+  let usedTokens: number | undefined;
+  let usageIsUnknown = false;
+  const orderedEvents = [...events].sort(
+    (left, right) => left.meta.seq - right.meta.seq,
+  );
+
+  for (let index = orderedEvents.length - 1; index >= 0; index -= 1) {
+    const signal = decodeContextWindowSignal(orderedEvents[index]);
+    if (!signal) continue;
+
+    if (usedTokens === undefined && !usageIsUnknown) {
+      if (signal.usedTokens === null) {
+        usageIsUnknown = true;
+        estimated = signal.estimated;
+      } else {
+        usedTokens = signal.usedTokens;
+        estimated = signal.estimated;
+      }
+    }
+
+    if (
+      modelContextWindow === undefined &&
+      signal.modelContextWindow !== null
+    ) {
+      modelContextWindow = signal.modelContextWindow;
+    }
+
+    if (
+      (usedTokens !== undefined || usageIsUnknown) &&
+      modelContextWindow !== undefined
+    ) {
+      break;
+    }
+  }
+
+  if (usedTokens === undefined || modelContextWindow === undefined) {
+    return null;
+  }
+
+  return {
+    estimated: estimated ?? false,
+    modelContextWindow,
+    usedTokens,
+  };
 }
 
 function buildTimelineRowBase(message: ViewMessage): TimelineRowBase {
@@ -489,8 +587,7 @@ function isManagerConversationMessage(message: ViewMessage): boolean {
   if (message.kind === "user") return true;
   if (message.kind === "operation") return true;
   return (
-    message.kind === "assistant-text" &&
-    message.isManagerUserMessage === true
+    message.kind === "assistant-text" && message.isManagerUserMessage === true
   );
 }
 
@@ -500,10 +597,15 @@ function buildManagerConversationRows(
   const entries: ViewTimelineEntry[] = flattenProjectionMessagesDeep(projection)
     .filter(isManagerConversationMessage)
     .map((message) => ({ kind: "message", message }));
-  return buildTimelineRows({
-    entries,
-    state: projection.state,
-  });
+  return buildTimelineRows(
+    {
+      entries,
+      state: projection.state,
+    },
+    {
+      includeNestedRows: false,
+    },
+  );
 }
 
 type TimelineTurnSummaryRow = Extract<TimelineRow, { kind: "turn" }>;
@@ -526,11 +628,11 @@ function hasTurnSummaryRows(rows: TimelineRow[]): boolean {
   return rows.some((row) => row.kind === "turn");
 }
 
-export function buildTimelineRows(
+function buildTimelineRows(
   projection: ViewProjection,
-  options?: BuildTimelineRowsOptions,
+  options: BuildTimelineRowsOptions,
 ): TimelineRow[] {
-  const includeNestedRows = options?.includeNestedRows ?? false;
+  const { includeNestedRows } = options;
   const rows: TimelineRow[] = [];
 
   for (const entry of projection.entries) {
@@ -555,58 +657,56 @@ export function buildTimelineRows(
   return rows;
 }
 
-export function buildTimelineRowsFromEvents(
-  args: BuildTimelineRowsFromEventsArgs,
-): TimelineRowsFromEventsResult {
-  const projection = toViewProjection(args.events, {
+export function buildThreadTimelineProjection(
+  args: BuildThreadTimelineProjectionArgs,
+): ThreadTimelineProjection {
+  const projectionOptions = {
     includeDebugRawEvents: args.options.includeDebugRawEvents,
-    includeInternalSystemMessages: args.options.includeInternalSystemMessages,
     includeOptionalOperations: args.options.includeOptionalOperations,
     includeProviderUnhandledOperations:
       args.options.includeProviderUnhandledOperations,
     threadStatus: args.options.threadStatus,
-    threadType: args.options.threadType,
-    turnMessageDetail: args.options.turnMessageDetail,
-  });
+    threadType:
+      args.options.viewMode === "manager-conversation" ? "manager" : "standard",
+    turnMessageDetail:
+      args.options.viewMode === "manager-conversation"
+        ? "full"
+        : args.options.turnMessageDetail,
+  } satisfies Parameters<typeof toViewProjection>[1];
+  const projection =
+    args.options.viewMode === "manager-conversation"
+      ? toViewProjectionEntries(args.events, projectionOptions)
+      : toViewProjection(args.events, projectionOptions);
+
   return {
-    activeThinking: projection.state.activeThinking,
-    rows: buildTimelineRows(projection, {
-      includeNestedRows: args.options.includeNestedRows,
-    }),
+    activeThinking:
+      args.options.viewMode === "manager-conversation"
+        ? null
+        : projection.state.activeThinking,
+    contextWindowUsage: extractThreadContextWindowUsage(
+      args.contextWindowEvents,
+    ),
+    rows:
+      args.options.viewMode === "manager-conversation"
+        ? buildManagerConversationRows(projection)
+        : buildTimelineRows(projection, {
+            includeNestedRows: args.options.includeNestedRows,
+          }),
   };
 }
 
-export function buildManagerTimelineRowsFromEvents(
-  args: BuildManagerTimelineRowsFromEventsArgs,
-): TimelineRowsFromEventsResult {
-  const projection = toViewProjectionEntries(args.events, {
-    includeDebugRawEvents: args.options.includeDebugRawEvents,
-    includeInternalSystemMessages: args.options.includeInternalSystemMessages,
-    includeOptionalOperations: args.options.includeOptionalOperations,
-    includeProviderUnhandledOperations:
-      args.options.includeProviderUnhandledOperations,
-    threadStatus: args.options.threadStatus,
-    threadType: args.options.threadType,
-    turnMessageDetail: args.options.turnMessageDetail,
-  });
-  return {
-    activeThinking: null,
-    rows: buildManagerConversationRows(projection),
-  };
-}
-
-export function resolveTimelineTurnSummaryDetailsFromEvents(
-  args: ResolveTimelineTurnSummaryDetailsFromEventsArgs,
+export function resolveThreadTimelineTurnSummaryDetails(
+  args: ResolveThreadTimelineTurnSummaryDetailsArgs,
 ): TimelineTurnSummaryDetailsResolution {
   const projection = toViewProjectionEntries(args.events, {
-    includeDebugRawEvents: args.options.includeDebugRawEvents,
-    includeInternalSystemMessages: args.options.includeInternalSystemMessages,
+    includeDebugRawEvents: false,
     includeOptionalOperations: args.options.includeOptionalOperations,
     includeProviderUnhandledOperations:
       args.options.includeProviderUnhandledOperations,
     threadStatus: args.options.threadStatus,
-    threadType: args.options.threadType,
-    turnMessageDetail: args.options.turnMessageDetail,
+    threadType:
+      args.options.viewMode === "manager-conversation" ? "manager" : "standard",
+    turnMessageDetail: "full",
   });
   const nestedRows = buildTimelineRows(projection, {
     includeNestedRows: true,

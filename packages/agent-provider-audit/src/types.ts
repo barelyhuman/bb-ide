@@ -6,7 +6,10 @@ import type {
   ThreadEventRow,
   ToolCallResponse,
 } from "@bb/domain";
-import type { TimelineRow } from "@bb/server-contract";
+import type {
+  ThreadContextWindowUsage,
+  TimelineRow,
+} from "@bb/server-contract";
 import type {
   ProviderObservedToolCallCoverage,
   ProviderRawEventCoverage,
@@ -229,6 +232,7 @@ export interface ProviderAuditBundle {
   >;
   threadEvents: ThreadEvent[];
   threadEventRows: ThreadEventRow[];
+  contextWindowUsage: ThreadContextWindowUsage | null;
   timelineRows: TimelineRow[];
   timelineText: string;
   timelineVerboseRows: TimelineRow[];

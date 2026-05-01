@@ -18,7 +18,7 @@ import type {
 import type { TimelineRow } from "@bb/server-contract";
 import type { ToViewProjectionOptions } from "@bb/domain";
 import {
-  buildTimelineRowsFromEvents,
+  buildThreadTimelineProjection,
   decodeThreadEventRow,
   formatTimelineAsText,
 } from "../src/index.js";
@@ -1016,9 +1016,7 @@ export function createTimelineEventFactory(
 export function renderTimelineFixture(
   args: RenderTimelineFixtureArgs,
 ): RenderedTimelineFixture {
-  const decodedEvents = args.events.map((row) =>
-    decodeThreadEventRow(row),
-  );
+  const decodedEvents = args.events.map((row) => decodeThreadEventRow(row));
   const includeNestedRows = args.includeNestedRows ?? true;
   const projection = toViewProjection(decodedEvents, {
     ...args.projectionOptions,
@@ -1026,15 +1024,36 @@ export function renderTimelineFixture(
       ? "full"
       : args.projectionOptions.turnMessageDetail,
   });
-  const rows = buildTimelineRowsFromEvents({
+  const viewMode =
+    args.projectionOptions.threadType === "manager"
+      ? "manager-conversation"
+      : "standard";
+  const commonProjectionOptions = {
+    includeDebugRawEvents:
+      args.projectionOptions.includeDebugRawEvents ?? false,
+    includeOptionalOperations:
+      args.projectionOptions.includeOptionalOperations ?? false,
+    includeProviderUnhandledOperations:
+      args.projectionOptions.includeProviderUnhandledOperations ?? false,
+    threadStatus: args.projectionOptions.threadStatus ?? "idle",
+  };
+  const rows = buildThreadTimelineProjection({
+    contextWindowEvents: [],
     events: decodedEvents,
-    options: {
-      ...args.projectionOptions,
-      includeNestedRows,
-      turnMessageDetail: includeNestedRows
-        ? "full"
-        : args.projectionOptions.turnMessageDetail,
-    },
+    options:
+      viewMode === "manager-conversation"
+        ? {
+            ...commonProjectionOptions,
+            viewMode,
+          }
+        : {
+            ...commonProjectionOptions,
+            includeNestedRows,
+            turnMessageDetail: includeNestedRows
+              ? "full"
+              : args.projectionOptions.turnMessageDetail,
+            viewMode,
+          },
   }).rows;
   const messages = flattenProjectionMessagesDeep(projection);
   const text = formatTimelineAsText(rows, {

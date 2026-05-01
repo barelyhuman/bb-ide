@@ -226,7 +226,6 @@ describe("buildThreadTimeline", () => {
       systemKind: "operation",
       title: "Unhandled Codex event",
     });
-
   });
 
   it("reports active thinking even when a reasoning block has no visible text yet", async () => {
@@ -1000,6 +999,61 @@ describe("buildThreadTimeline", () => {
       modelContextWindow: 200_000,
       estimated: true,
     });
+  });
+
+  it("does not reuse older used-token values when the newest context usage is explicitly unknown", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 1,
+      type: "thread/contextWindowUsage/updated",
+      data: {
+        contextWindowUsage: {
+          usedTokens: 120_000,
+          modelContextWindow: 200_000,
+          estimated: false,
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-2"),
+      sequence: 2,
+      type: "thread/contextWindowUsage/updated",
+      data: {
+        contextWindowUsage: {
+          usedTokens: null,
+          modelContextWindow: 200_000,
+          estimated: true,
+        },
+      },
+    });
+
+    const timeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+    });
+
+    expect(timeline.contextWindowUsage).toBeUndefined();
   });
 
   it("fails loudly when turn summary details cannot match a projected turn-summary range", async () => {
