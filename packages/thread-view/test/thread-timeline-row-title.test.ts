@@ -136,7 +136,7 @@ function toolCallRow(status: ToolCallStatus): TimelineMessageRow {
     sourceSeqEnd: 1,
     createdAt: 1,
     scope: threadScope(),
-    toolName: "Bash",
+    toolName: "CustomTool",
     toolArgs: { command: "echo hello" },
     callId: "call-1",
     parsedIntents: [],
@@ -182,11 +182,11 @@ describe("getThreadTimelineRowTitle", () => {
   it("formats generic tool-call content from tool args", () => {
     const row = toolCallRow("completed");
 
-    expect(title(row)).toBe("Tool Call: Bash");
+    expect(title(row)).toBe("Tool Call: CustomTool");
     expect(richTitle(row)).toEqual({
       kind: "prefixed",
       prefix: "Completed",
-      content: "echo hello",
+      content: "CustomTool { command: echo hello }",
       metadata: null,
     });
   });
