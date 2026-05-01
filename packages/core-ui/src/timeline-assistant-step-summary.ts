@@ -118,7 +118,6 @@ function addPartOrder(
 
 function countFallbackMessage(message: ViewMessage): boolean {
   switch (message.kind) {
-    case "assistant-reasoning":
     case "assistant-text":
     case "debug/raw-event":
     case "user":
@@ -130,7 +129,6 @@ function countFallbackMessage(message: ViewMessage): boolean {
     case "permission-grant-lifecycle":
     case "tasks":
     case "tool-call":
-    case "tool-exploring":
     case "web-fetch":
     case "web-search":
       return true;
@@ -185,10 +183,8 @@ function addMessageRow(
     case "operation":
       return;
     case "error":
-    case "assistant-reasoning":
     case "assistant-text":
     case "debug/raw-event":
-    case "tool-exploring":
     case "user":
     case "web-fetch":
     case "web-search":
@@ -286,7 +282,8 @@ function mergeToolBundleSummary(
         ),
         lists: bundleRows.reduce(
           (total, row) =>
-            total + (row.summary.kind === "exploration" ? row.summary.lists : 0),
+            total +
+            (row.summary.kind === "exploration" ? row.summary.lists : 0),
           0,
         ),
       };
@@ -295,7 +292,8 @@ function mergeToolBundleSummary(
         kind: "commands",
         commands: bundleRows.reduce(
           (total, row) =>
-            total + (row.summary.kind === "commands" ? row.summary.commands : 0),
+            total +
+            (row.summary.kind === "commands" ? row.summary.commands : 0),
           0,
         ),
       };
@@ -313,9 +311,7 @@ function mergeToolBundleSummary(
         webSearches: bundleRows.reduce(
           (total, row) =>
             total +
-            (row.summary.kind === "web-research"
-              ? row.summary.webSearches
-              : 0),
+            (row.summary.kind === "web-research" ? row.summary.webSearches : 0),
           0,
         ),
       };
@@ -399,7 +395,9 @@ export function buildTimelineAssistantStepSummary(
             return assertNever(kind);
         }
       })
-      .filter((part): part is TimelineAssistantStepSummaryPart => part !== null),
+      .filter(
+        (part): part is TimelineAssistantStepSummaryPart => part !== null,
+      ),
   };
 }
 
@@ -447,11 +445,7 @@ export function formatTimelineAssistantStepSummary(
     : summary.parts;
 
   if (visibleParts.length === 0) {
-    return `Worked on ${pluralize(
-      summary.fallbackItemCount,
-      "item",
-      "items",
-    )}`;
+    return `Worked on ${pluralize(summary.fallbackItemCount, "item", "items")}`;
   }
 
   const visiblePartLabels = visibleParts

@@ -125,11 +125,9 @@ export function shouldPreferNestedOngoingLabels({
 
 function isPendingLikeMessage(message: ViewMessage): boolean {
   switch (message.kind) {
-    case "assistant-reasoning":
     case "assistant-text":
       return message.status === "streaming";
     case "tool-call":
-    case "tool-exploring":
     case "web-search":
     case "web-fetch":
     case "file-edit":

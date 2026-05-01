@@ -464,10 +464,7 @@ export function hasAssistantTimelineMessage(
   timeline: ThreadTimelineResponse,
 ): boolean {
   return timeline.rows.some(
-    (row) =>
-      row.kind === "message" &&
-      (row.message.kind === "assistant-text" ||
-        row.message.kind === "assistant-reasoning"),
+    (row) => row.kind === "message" && row.message.kind === "assistant-text",
   );
 }
 

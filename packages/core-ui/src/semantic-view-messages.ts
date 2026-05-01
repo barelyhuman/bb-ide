@@ -236,9 +236,7 @@ function getProjectionMessageBounds(
 
 function getMessageStatus(message: ViewMessage): ViewMessageStatus {
   switch (message.kind) {
-    case "assistant-reasoning":
     case "assistant-text":
-    case "tool-exploring":
     case "tool-call":
     case "web-search":
     case "web-fetch":

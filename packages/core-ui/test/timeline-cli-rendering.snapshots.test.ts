@@ -122,7 +122,7 @@ describe("timeline CLI rendering snapshots", () => {
         {
           "messageKinds": [
             "user",
-            "tool-exploring",
+            "tool-call",
           ],
           "prefixLength": 3,
           "text": "── User ────────────────────────────────────────────────────
@@ -134,7 +134,7 @@ describe("timeline CLI rendering snapshots", () => {
         {
           "messageKinds": [
             "user",
-            "tool-exploring",
+            "tool-call",
           ],
           "prefixLength": 5,
           "text": "── User ────────────────────────────────────────────────────
@@ -146,7 +146,7 @@ describe("timeline CLI rendering snapshots", () => {
         {
           "messageKinds": [
             "user",
-            "tool-exploring",
+            "tool-call",
             "web-search",
             "file-edit",
           ],

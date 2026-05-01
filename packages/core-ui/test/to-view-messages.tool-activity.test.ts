@@ -9,6 +9,12 @@ import {
   fromRows,
 } from "./timeline-test-harness.js";
 
+function isToolCallMessage(
+  message: ViewMessage,
+): message is Extract<ViewMessage, { kind: "tool-call" }> {
+  return message.kind === "tool-call";
+}
+
 describe("toViewMessages tool activity", () => {
   it("marks incomplete tools as interrupted when thread is not active", () => {
     const events: ThreadEventRow[] = [
@@ -36,24 +42,9 @@ describe("toViewMessages tool activity", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "idle",
     });
-    const toolMessage = projected.find(
-      (
-        message,
-      ): message is Extract<
-        ViewMessage,
-        { kind: "tool-call" | "tool-exploring" }
-      > => message.kind === "tool-call" || message.kind === "tool-exploring",
-    );
+    const toolMessage = projected.find(isToolCallMessage);
 
     expect(toolMessage).toBeDefined();
-    if (toolMessage?.kind === "tool-exploring") {
-      expect(toolMessage.calls).toHaveLength(1);
-      expect(toolMessage.calls[0]?.command).toBe("ls plans");
-      expect(toolMessage.calls[0]?.status).toBe("interrupted");
-      expect(toolMessage.calls[0]?.output).toContain("interrupted");
-      return;
-    }
-
     expect(toolMessage?.command).toBe("ls plans");
     expect(toolMessage?.status).toBe("interrupted");
     expect(toolMessage?.output).toContain("interrupted");
@@ -461,11 +452,10 @@ describe("toViewMessages tool activity", () => {
       ? flattenProjectionMessages(delegation.childProjection)
       : [];
     expect(childMessages).toHaveLength(1);
-    expect(childMessages[0]?.kind).toBe("tool-exploring");
-    if (childMessages[0]?.kind === "tool-exploring") {
-      expect(childMessages[0].calls).toHaveLength(1);
-      expect(childMessages[0].calls[0]?.callId).toBe("exec-1");
-      expect(childMessages[0].calls[0]?.status).toBe("completed");
+    expect(childMessages[0]?.kind).toBe("tool-call");
+    if (childMessages[0]?.kind === "tool-call") {
+      expect(childMessages[0].callId).toBe("exec-1");
+      expect(childMessages[0].status).toBe("completed");
     }
   });
 
@@ -611,13 +601,12 @@ describe("toViewMessages tool activity", () => {
       ? flattenProjectionMessages(delegation.childProjection)
       : [];
     expect(childMessages).toHaveLength(2);
-    expect(childMessages[0]?.kind).toBe("tool-exploring");
+    expect(childMessages[0]?.kind).toBe("tool-call");
     expect(childMessages[1]?.kind).toBe("tool-call");
 
-    if (childMessages[0]?.kind === "tool-exploring") {
-      expect(childMessages[0].calls).toHaveLength(1);
-      expect(childMessages[0].calls[0]?.callId).toBe("exec-1");
-      expect(childMessages[0].calls[0]?.status).toBe("completed");
+    if (childMessages[0]?.kind === "tool-call") {
+      expect(childMessages[0].callId).toBe("exec-1");
+      expect(childMessages[0].status).toBe("completed");
     }
 
     if (childMessages[1]?.kind === "tool-call") {
@@ -719,22 +708,9 @@ describe("toViewMessages tool activity", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "active",
     });
-    const toolMessage = projected.find(
-      (
-        message,
-      ): message is Extract<
-        ViewMessage,
-        { kind: "tool-call" | "tool-exploring" }
-      > => message.kind === "tool-call" || message.kind === "tool-exploring",
-    );
+    const toolMessage = projected.find(isToolCallMessage);
 
     expect(toolMessage).toBeDefined();
-    if (toolMessage?.kind === "tool-exploring") {
-      expect(toolMessage.calls).toHaveLength(1);
-      expect(toolMessage.calls[0]?.status).toBe("pending");
-      return;
-    }
-
     expect(toolMessage?.status).toBe("pending");
   });
 
@@ -867,24 +843,9 @@ describe("toViewMessages tool activity", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "idle",
     });
-    const toolMessage = projected.find(
-      (
-        message,
-      ): message is Extract<
-        ViewMessage,
-        { kind: "tool-call" | "tool-exploring" }
-      > => message.kind === "tool-call" || message.kind === "tool-exploring",
-    );
+    const toolMessage = projected.find(isToolCallMessage);
 
     expect(toolMessage).toBeDefined();
-    if (toolMessage?.kind === "tool-exploring") {
-      expect(toolMessage.calls).toHaveLength(1);
-      expect(toolMessage.calls[0]?.status).toBe("completed");
-      expect(toolMessage.calls[0]?.output).toContain("first");
-      expect(toolMessage.calls[0]?.output).toContain("second");
-      return;
-    }
-
     expect(toolMessage?.status).toBe("completed");
     expect(toolMessage?.output).toContain("first");
     expect(toolMessage?.output).toContain("second");
@@ -947,22 +908,9 @@ describe("toViewMessages tool activity", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "active",
     });
-    const toolMessage = projected.find(
-      (
-        message,
-      ): message is Extract<
-        ViewMessage,
-        { kind: "tool-call" | "tool-exploring" }
-      > => message.kind === "tool-call" || message.kind === "tool-exploring",
-    );
+    const toolMessage = projected.find(isToolCallMessage);
 
     expect(toolMessage).toBeDefined();
-    if (toolMessage?.kind === "tool-exploring") {
-      expect(toolMessage.calls).toHaveLength(1);
-      expect(toolMessage.calls[0]?.output).toBe("reset\n");
-      return;
-    }
-
     expect(toolMessage?.output).toBe("reset\n");
   });
 
@@ -1028,23 +976,9 @@ describe("toViewMessages tool activity", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "idle",
     });
-    const toolMessage = projected.find(
-      (
-        message,
-      ): message is Extract<
-        ViewMessage,
-        { kind: "tool-call" | "tool-exploring" }
-      > => message.kind === "tool-call" || message.kind === "tool-exploring",
-    );
+    const toolMessage = projected.find(isToolCallMessage);
 
     expect(toolMessage).toBeDefined();
-    if (toolMessage?.kind === "tool-exploring") {
-      expect(toolMessage.calls).toHaveLength(1);
-      expect(toolMessage.calls[0]?.status).toBe("completed");
-      expect(toolMessage.calls[0]?.output).toBe("first\nsecond\n");
-      return;
-    }
-
     expect(toolMessage?.status).toBe("completed");
     expect(toolMessage?.output).toBe("first\nsecond\n");
   });
@@ -1105,21 +1039,9 @@ describe("toViewMessages tool activity", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "active",
     });
-    const toolMessage = projected.find(
-      (
-        message,
-      ): message is Extract<
-        ViewMessage,
-        { kind: "tool-call" | "tool-exploring" }
-      > => message.kind === "tool-call" || message.kind === "tool-exploring",
-    );
+    const toolMessage = projected.find(isToolCallMessage);
 
     expect(toolMessage).toBeDefined();
-    if (toolMessage?.kind === "tool-exploring") {
-      expect(toolMessage.calls[0]?.output).toBe("partial\n");
-      return;
-    }
-
     expect(toolMessage?.output).toBe("partial\n");
     expect(toolMessage?.status).toBe("pending");
   });
@@ -1187,7 +1109,7 @@ describe("toViewMessages tool activity", () => {
     expect(toolMessage?.status).toBe("interrupted");
   });
 
-  it("coalesces consecutive exploring toolCall calls into one exploring cell", () => {
+  it("projects consecutive exploring toolCall calls as ordinary tool calls", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-1",
@@ -1272,19 +1194,20 @@ describe("toViewMessages tool activity", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "idle",
     });
-    const exploringRows = projected.filter(
-      (message): message is Extract<ViewMessage, { kind: "tool-exploring" }> =>
-        message.kind === "tool-exploring",
-    );
+    const toolCalls = projected.filter(isToolCallMessage);
 
-    expect(exploringRows).toHaveLength(1);
-    expect(exploringRows[0]?.calls).toHaveLength(2);
-    expect(exploringRows[0]?.status).toBe("completed");
-    expect(exploringRows[0]?.calls[0]).not.toHaveProperty("threadId");
-    expect(exploringRows[0]?.calls[0]).not.toHaveProperty("sourceSeqEnd");
+    expect(toolCalls).toHaveLength(2);
+    expect(toolCalls.map((message) => message.callId)).toEqual([
+      "call-1",
+      "call-2",
+    ]);
+    expect(toolCalls.map((message) => message.status)).toEqual([
+      "completed",
+      "completed",
+    ]);
   });
 
-  it("updates a flushed exploring cell when completion arrives later", () => {
+  it("updates a flushed exploring tool-call cell when completion arrives later", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-1",
@@ -1344,17 +1267,12 @@ describe("toViewMessages tool activity", () => {
       threadStatus: "active",
     });
 
-    const exploringRows = projected.filter(
-      (message): message is Extract<ViewMessage, { kind: "tool-exploring" }> =>
-        message.kind === "tool-exploring",
-    );
-    expect(exploringRows).toHaveLength(1);
-    expect(exploringRows[0]?.status).toBe("completed");
-    expect(exploringRows[0]?.sourceSeqStart).toBe(1);
-    expect(exploringRows[0]?.sourceSeqEnd).toBe(3);
-    expect(exploringRows[0]?.calls).toHaveLength(1);
-    expect(exploringRows[0]?.calls[0]?.status).toBe("completed");
-    expect(exploringRows[0]?.calls[0]).not.toHaveProperty("sourceSeqEnd");
+    const toolCalls = projected.filter(isToolCallMessage);
+    expect(toolCalls).toHaveLength(1);
+    expect(toolCalls[0]?.status).toBe("completed");
+    expect(toolCalls[0]?.sourceSeqStart).toBe(1);
+    expect(toolCalls[0]?.sourceSeqEnd).toBe(3);
+    expect(toolCalls[0]?.callId).toBe("call-1");
   });
 
   it("updates a flushed tool-call cell when completion arrives later", () => {
@@ -2280,12 +2198,11 @@ describe("toViewMessages tool activity", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "idle",
     });
-    // Read and Grep should be grouped into a single exploring message
-    const exploring = projected.filter((m) => m.kind === "tool-exploring");
-    expect(exploring.length).toBeGreaterThanOrEqual(1);
-    if (exploring[0]?.kind === "tool-exploring") {
-      expect(exploring[0].calls.length).toBe(2);
-    }
+    const toolCalls = projected.filter(isToolCallMessage);
+    expect(toolCalls.map((message) => message.callId)).toEqual([
+      "call-read-1",
+      "call-grep-1",
+    ]);
   });
 
   it("projects bridge Bash commandExecution with shell exploration intent", () => {
@@ -2337,20 +2254,8 @@ describe("toViewMessages tool activity", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "idle",
     });
-    const toolMessages = projected.filter(
-      (
-        m,
-      ): m is Extract<ViewMessage, { kind: "tool-call" | "tool-exploring" }> =>
-        m.kind === "tool-call" || m.kind === "tool-exploring",
-    );
+    const toolMessages = projected.filter(isToolCallMessage);
     expect(toolMessages).toHaveLength(1);
-    if (toolMessages[0]?.kind === "tool-exploring") {
-      expect(toolMessages[0].calls).toHaveLength(1);
-      expect(toolMessages[0].calls[0]?.command).toBe("ls -la");
-      expect(toolMessages[0].calls[0]?.output).toBe("total 8\ndrwxr-xr-x");
-      expect(toolMessages[0].calls[0]?.exitCode).toBe(0);
-      return;
-    }
 
     expect(toolMessages[0]?.command).toBe("ls -la");
     expect(toolMessages[0]?.output).toBe("total 8\ndrwxr-xr-x");
@@ -2498,9 +2403,7 @@ describe("toViewMessages tool activity", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "idle",
     });
-    const toolMessages = projected.filter(
-      (m) => m.kind === "tool-call" || m.kind === "tool-exploring",
-    );
+    const toolMessages = projected.filter(isToolCallMessage);
     expect(toolMessages).toHaveLength(2);
     expect(toolMessages[0]?.kind).toBe("tool-call");
     expect(toolMessages[1]?.kind).toBe("tool-call");

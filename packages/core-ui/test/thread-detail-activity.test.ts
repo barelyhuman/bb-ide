@@ -93,10 +93,20 @@ describe("threadDetailActivity", () => {
     const messages: ViewMessage[] = [
       {
         ...baseMessage("exploring-1", 1),
-        kind: "tool-exploring",
+        kind: "tool-call",
         turnId: "turn-1",
+        toolName: "Read",
+        callId: "read-1",
+        parsedCmd: [
+          {
+            type: "read",
+            cmd: "Read /repo/a.ts",
+            name: "Read",
+            path: "/repo/a.ts",
+          },
+        ],
+        approvalStatus: null,
         status: "completed",
-        calls: [],
       },
       {
         ...baseMessage("file-1", 2),

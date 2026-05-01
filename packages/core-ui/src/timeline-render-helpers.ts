@@ -1,7 +1,4 @@
-import type {
-  ViewToolExploringMessage,
-  ViewToolParsedIntent,
-} from "@bb/domain";
+import type { ViewToolCallSummary, ViewToolParsedIntent } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 import { fileNameFromPath } from "./file-change-summary.js";
 
@@ -86,14 +83,12 @@ function isReadIntent(
   return intent.type === "read";
 }
 
-function isReadOnlyCall(
-  call: ViewToolExploringMessage["calls"][number],
-): boolean {
+function isReadOnlyCall(call: ViewToolCallSummary): boolean {
   return call.parsedCmd.length > 0 && call.parsedCmd.every(isReadIntent);
 }
 
 export function buildExploringDetailLines(
-  calls: ViewToolExploringMessage["calls"],
+  calls: ViewToolCallSummary[],
   options: ExploringRenderOptions = DEFAULT_EXPLORING_RENDER_OPTIONS,
 ): string[] {
   const detailLines: string[] = [];
@@ -140,7 +135,7 @@ export function buildExploringDetailLines(
 }
 
 export function summarizeExploringCounts(
-  calls: ViewToolExploringMessage["calls"],
+  calls: ViewToolCallSummary[],
 ): ExploringCounts {
   const readNames = new Set<string>();
   let searches = 0;

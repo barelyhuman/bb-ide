@@ -70,21 +70,6 @@ function findToolCallMessage(
   );
 }
 
-function findToolExploringMessage(
-  messages: readonly ViewMessage[],
-  itemId: string,
-): Extract<ViewMessage, { kind: "tool-exploring" }> | null {
-  return (
-    messages.find(
-      (
-        message,
-      ): message is Extract<ViewMessage, { kind: "tool-exploring" }> =>
-        message.kind === "tool-exploring" &&
-        message.calls.some((call) => call.callId === itemId),
-    ) ?? null
-  );
-}
-
 function findDelegationMessage(
   messages: readonly ViewMessage[],
   itemId: string,
@@ -172,23 +157,6 @@ function expectToolCallInterrupted(args: MessageAssertionArgs): void {
 
 function expectToolCallPending(args: MessageAssertionArgs): void {
   expect(findToolCallMessage(args.messages, args.itemId)).toMatchObject({
-    status: "pending",
-  });
-}
-
-function expectToolExploringInterrupted(args: MessageAssertionArgs): void {
-  const message = findToolExploringMessage(args.messages, args.itemId);
-  const call = message?.calls.find((entry) => entry.callId === args.itemId);
-  expect(call).toMatchObject({
-    status: "interrupted",
-    output: "Tool execution interrupted",
-  });
-}
-
-function expectToolExploringPending(args: MessageAssertionArgs): void {
-  const message = findToolExploringMessage(args.messages, args.itemId);
-  const call = message?.calls.find((entry) => entry.callId === args.itemId);
-  expect(call).toMatchObject({
     status: "pending",
   });
 }
@@ -283,7 +251,7 @@ const scenarios: InterruptedTurnProjectionScenario[] = [
     assertPending: expectToolCallPending,
   },
   {
-    name: "tool-exploring",
+    name: "read tool-call",
     oldId: "read-old",
     newId: "read-new",
     buildPendingEvents: (args) => [
@@ -294,8 +262,8 @@ const scenarios: InterruptedTurnProjectionScenario[] = [
         arguments: { file_path: `/repo/${args.itemId}.md` },
       }),
     ],
-    assertInterrupted: expectToolExploringInterrupted,
-    assertPending: expectToolExploringPending,
+    assertInterrupted: expectToolCallInterrupted,
+    assertPending: expectToolCallPending,
   },
   {
     name: "delegation",

@@ -3,7 +3,6 @@ import type {
   TimelineRow,
   TimelineToolBundleRow,
   TimelineTurnSummaryRow,
-  ViewAssistantReasoningMessage,
   ViewAssistantTextMessage,
   ViewPermissionGrantLifecycleMessage,
   ViewDelegationMessage,
@@ -13,7 +12,6 @@ import type {
   ViewOperationMessage,
   ViewTasksMessage,
   ViewToolCallMessage,
-  ViewToolExploringMessage,
   ViewUserMessage,
   ViewWebFetchMessage,
   ViewWebSearchMessage,
@@ -35,12 +33,7 @@ import {
   buildToolBundleSummaryLabel,
 } from "./timeline-tool-bundle-summary.js";
 import { buildTurnSummaryParts } from "./timeline-turn-summary.js";
-import {
-  buildExploringDetailLines,
-  formatDelegationSummary,
-  formatExploringCountsLabel,
-  summarizeExploringCounts,
-} from "./timeline-render-helpers.js";
+import { formatDelegationSummary } from "./timeline-render-helpers.js";
 
 export type TimelineFormat = "json" | "minimal" | "verbose";
 
@@ -217,18 +210,6 @@ function formatAssistantText(
   return lines.join("\n");
 }
 
-function formatReasoning(
-  msg: ViewAssistantReasoningMessage,
-  verbose: boolean,
-  color: boolean,
-): string {
-  if (!verbose) return "";
-  const lines: string[] = [];
-  lines.push(separator("Reasoning", color));
-  lines.push(dim(msg.text, color));
-  return lines.join("\n");
-}
-
 function formatToolCall(
   msg: ViewToolCallMessage,
   verbose: boolean,
@@ -267,35 +248,6 @@ function formatToolCall(
   );
   if (exitCodeLine) {
     lines.push(exitCodeLine);
-  }
-
-  return lines.join("\n");
-}
-
-function formatExploring(
-  msg: ViewToolExploringMessage,
-  verbose: boolean,
-  color: boolean,
-): string {
-  const lines: string[] = [];
-  const countsLabel =
-    formatExploringCountsLabel(summarizeExploringCounts(msg.calls)) ||
-    "workspace";
-  lines.push(
-    separator(
-      `${msg.status === "pending" ? "Exploring" : "Explored"} ${countsLabel}`,
-      color,
-    ),
-  );
-
-  if (!verbose) {
-    return lines.join("\n");
-  }
-
-  for (const line of buildExploringDetailLines(msg.calls, {
-    readPathStyle: "full",
-  })) {
-    lines.push(`  ${line}`);
   }
 
   return lines.join("\n");
@@ -481,12 +433,8 @@ function formatMessage(
       return formatUser(msg, verbose, color);
     case "assistant-text":
       return formatAssistantText(msg, verbose, color);
-    case "assistant-reasoning":
-      return formatReasoning(msg, verbose, color);
     case "tool-call":
       return formatToolCall(msg, verbose, color);
-    case "tool-exploring":
-      return formatExploring(msg, verbose, color);
     case "file-edit":
       return formatFileEdit(msg, verbose, color);
     case "web-search":

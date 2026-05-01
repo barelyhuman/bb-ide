@@ -49,12 +49,6 @@ export interface ViewUserMessage extends ViewMessageBase {
   };
 }
 
-export interface ViewAssistantReasoningMessage extends ViewMessageBase {
-  kind: "assistant-reasoning";
-  text: string;
-  status: Extract<ViewMessageStatus, "streaming" | "completed">;
-}
-
 export interface ViewAssistantTextMessage extends ViewMessageBase {
   kind: "assistant-text";
   text: string;
@@ -106,12 +100,6 @@ export interface ViewToolCallSummary extends ViewDelegationMetadata {
     ViewMessageStatus,
     "pending" | "completed" | "error" | "interrupted"
   >;
-}
-
-export interface ViewToolExploringMessage extends ViewMessageBase {
-  kind: "tool-exploring";
-  status: Extract<ViewMessageStatus, "pending" | "completed">;
-  calls: ViewToolCallSummary[];
 }
 
 export interface ViewToolCallMessage
@@ -326,9 +314,7 @@ export interface ViewDebugRawEventMessage extends ViewMessageBase {
 
 export type ViewMessage =
   | ViewUserMessage
-  | ViewAssistantReasoningMessage
   | ViewAssistantTextMessage
-  | ViewToolExploringMessage
   | ViewToolCallMessage
   | ViewWebSearchMessage
   | ViewWebFetchMessage

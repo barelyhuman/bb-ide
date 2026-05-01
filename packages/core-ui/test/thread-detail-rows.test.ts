@@ -1236,30 +1236,27 @@ describe("buildTimelineRows tool group collapsing", () => {
         status: "completed",
       },
       {
-        kind: "tool-exploring",
-        id: "explore-1",
+        kind: "tool-call",
+        id: "read-1",
         threadId: "thread-1",
         sourceSeqStart: 2,
         sourceSeqEnd: 2,
         createdAt: 2,
         turnId: "turn-1",
-        status: "completed",
-        calls: [
+        toolName: "Read",
+        callId: "call-1",
+        command: "Read /src/main.ts",
+        parsedCmd: [
           {
-            callId: "call-1",
-            command: "Read /src/main.ts",
-            parsedCmd: [
-              {
-                type: "read",
-                cmd: "Read /src/main.ts",
-                name: "Read",
-                path: "/src/main.ts",
-              },
-            ],
-            output: "contents",
-            status: "completed",
+            type: "read",
+            cmd: "Read /src/main.ts",
+            name: "Read",
+            path: "/src/main.ts",
           },
         ],
+        output: "contents",
+        approvalStatus: null,
+        status: "completed",
       },
       {
         kind: "assistant-text",
@@ -1298,25 +1295,27 @@ describe("buildTimelineRows tool group collapsing", () => {
         status: "completed",
       },
       {
-        kind: "tool-exploring",
-        id: "explore-1",
+        kind: "tool-call",
+        id: "grep-1",
         threadId: "thread-1",
         sourceSeqStart: 2,
         sourceSeqEnd: 2,
         createdAt: 2,
         turnId: "turn-1",
-        status: "completed",
-        calls: [
+        toolName: "Grep",
+        callId: "call-2",
+        command: "Grep foo",
+        parsedCmd: [
           {
-            callId: "call-2",
-            command: "Grep foo",
-            parsedCmd: [
-              { type: "search", cmd: "Grep foo", query: "foo", path: null },
-            ],
-            output: "match",
-            status: "completed",
+            type: "search",
+            cmd: "Grep foo",
+            query: "foo",
+            path: null,
           },
         ],
+        output: "match",
+        approvalStatus: null,
+        status: "completed",
       },
       {
         kind: "tool-call",
@@ -1369,6 +1368,113 @@ describe("buildTimelineRows tool group collapsing", () => {
         "tool-bundle",
       ]);
     }
+  });
+
+  it("keeps assistant text as a boundary between derived exploration bundles", () => {
+    const rows = buildRowsFromMessages(
+      [
+        {
+          kind: "tool-call",
+          id: "read-1",
+          threadId: "thread-1",
+          sourceSeqStart: 1,
+          sourceSeqEnd: 1,
+          createdAt: 1,
+          turnId: "turn-1",
+          toolName: "Read",
+          callId: "call-read",
+          command: "Read src/deburr.ts",
+          parsedCmd: [
+            {
+              type: "read",
+              cmd: "Read src/deburr.ts",
+              name: "Read",
+              path: "src/deburr.ts",
+            },
+          ],
+          output: "contents",
+          approvalStatus: null,
+          status: "completed",
+        },
+        {
+          kind: "assistant-text",
+          id: "assistant-1",
+          threadId: "thread-1",
+          sourceSeqStart: 2,
+          sourceSeqEnd: 2,
+          createdAt: 2,
+          turnId: "turn-1",
+          text: "Now let me check the label.",
+          status: "completed",
+        },
+        {
+          kind: "tool-call",
+          id: "search-1",
+          threadId: "thread-1",
+          sourceSeqStart: 3,
+          sourceSeqEnd: 3,
+          createdAt: 3,
+          turnId: "turn-1",
+          toolName: "Grep",
+          callId: "call-search",
+          command: "Grep search src/locales/en.json",
+          parsedCmd: [
+            {
+              type: "search",
+              cmd: "Grep search src/locales/en.json",
+              query: "search",
+              path: "src/locales/en.json",
+            },
+          ],
+          output: "match",
+          approvalStatus: null,
+          status: "completed",
+        },
+        {
+          kind: "tool-call",
+          id: "command-1",
+          threadId: "thread-1",
+          sourceSeqStart: 4,
+          sourceSeqEnd: 4,
+          createdAt: 4,
+          turnId: "turn-1",
+          toolName: "exec_command",
+          callId: "call-command",
+          command: "python3 -c 'print(\"Search\")'",
+          output: "Search",
+          approvalStatus: null,
+          status: "completed",
+        },
+        {
+          kind: "assistant-text",
+          id: "assistant-2",
+          threadId: "thread-1",
+          sourceSeqStart: 5,
+          sourceSeqEnd: 5,
+          createdAt: 5,
+          turnId: "turn-1",
+          text: "The label resolves to Search.",
+          status: "completed",
+        },
+      ],
+      { includeNestedRows: true },
+    );
+
+    expect(rows.map((row) => row.kind)).toEqual(["turn-summary", "message"]);
+    const turnSummary = expectTurnSummaryRow(rows[0]);
+    const nested = turnSummary.rows ?? [];
+    expect(nested.map((row) => row.kind)).toEqual([
+      "tool-bundle",
+      "message",
+      "assistant-step-summary",
+    ]);
+    expect(collectLeafMessages(nested).map((message) => message.id)).toEqual([
+      "read-1",
+      "assistant-1",
+      "search-1",
+      "command-1",
+    ]);
+    expect(expectMessageRow(rows[1]).message.id).toBe("assistant-2");
   });
 
   it("marks a single pre-assistant tool bundle as an assistant-step-summary placeholder inside a turn summary", () => {

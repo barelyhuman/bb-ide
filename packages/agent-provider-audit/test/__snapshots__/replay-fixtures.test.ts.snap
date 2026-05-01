@@ -4,15 +4,15 @@ exports[`@bb/agent-provider-audit fixture replay > exports shared React story da
 [
   {
     "id": "dev-replays/claude-code/cap_mom0xkzo_3atb06ph",
-    "latestActivityRowId": "thr_2mp6rkmsxy:tool-exploring:toolu_013uHWrB4Suiar323CrQizJN:582",
+    "latestActivityRowId": "thr_2mp6rkmsxy:tool:toolu_01A7GEZs3xdRmrYmEGE9MkEf",
     "timelineRowCount": 3,
-    "viewMessageCount": 11,
+    "viewMessageCount": 22,
   },
   {
     "id": "dev-replays/codex/cap_mol1xza1_zclp97wz",
     "latestActivityRowId": "thr_4gfmxbsa64:tasks:plan:019ddce4-45da-70e3-bdf3-e9cd141b653a:2861",
     "timelineRowCount": 3,
-    "viewMessageCount": 175,
+    "viewMessageCount": 228,
   },
   {
     "id": "excalidraw/claude-code/collab-startup-explanation",
@@ -24,43 +24,43 @@ exports[`@bb/agent-provider-audit fixture replay > exports shared React story da
     "id": "excalidraw/claude-code/eyedropper-browser-compat",
     "latestActivityRowId": "provider-audit-claude-eyedropper-browser-compat-20260328T032935Z:tasks:todo:toolu_01F65zEq4vr8ffYUEeX6p8t4:336",
     "timelineRowCount": 8,
-    "viewMessageCount": 78,
+    "viewMessageCount": 94,
   },
   {
     "id": "excalidraw/claude-code/eyedropper-preview-bugfix",
-    "latestActivityRowId": "provider-audit-claude-code-eyedropper-preview-bugfix-20260327T080116Z-1549:tool-exploring:toolu_01SPfxoazMziy3ipEJDjGrGN:173",
+    "latestActivityRowId": "provider-audit-claude-code-eyedropper-preview-bugfix-20260327T080116Z-1549:tool:toolu_01R6kZvw8y4fXFQciKEq9PQU",
     "timelineRowCount": 6,
-    "viewMessageCount": 28,
+    "viewMessageCount": 37,
   },
   {
     "id": "excalidraw/claude-code/magicframe-feature",
-    "latestActivityRowId": "provider-audit-claude-code-magicframe-feature-20260327T080523Z-1549:tool-exploring:toolu_01YW6pcgi7eXgENH6GLUhLcN:354",
+    "latestActivityRowId": "provider-audit-claude-code-magicframe-feature-20260327T080523Z-1549:tool:toolu_01MSWAPYqTuSKgcsA75nbVhL",
     "timelineRowCount": 5,
-    "viewMessageCount": 65,
+    "viewMessageCount": 79,
   },
   {
     "id": "excalidraw/claude-code/search-bugfix",
     "latestActivityRowId": "provider-audit-thread:tool:toolu_01QzdpLn5qnE1pZ3aP6PdZgW",
     "timelineRowCount": 5,
-    "viewMessageCount": 24,
+    "viewMessageCount": 23,
   },
   {
     "id": "excalidraw/claude-code/search-feature",
     "latestActivityRowId": "provider-audit-thread:tool:toolu_01MdVSyThyzdvyUMSAcxj8xZ",
     "timelineRowCount": 5,
-    "viewMessageCount": 22,
+    "viewMessageCount": 24,
   },
   {
     "id": "excalidraw/claude-code/ttd-explanation",
-    "latestActivityRowId": "provider-audit-thread:tool-exploring:toolu_01MS6P17BmvN6kbodtpGcase:356",
+    "latestActivityRowId": "provider-audit-thread:tool:toolu_01UiW21ZCi9YhhxkdtWnZfTA",
     "timelineRowCount": 6,
-    "viewMessageCount": 12,
+    "viewMessageCount": 14,
   },
   {
     "id": "excalidraw/codex/collab-startup-explanation",
     "latestActivityRowId": "provider-audit-codex-collab-startup-probe-20260327T070956Z-47808:tasks:plan:019d2e20-d4c4-7c90-aeb2-f08f2b263ee1:225",
     "timelineRowCount": 5,
-    "viewMessageCount": 9,
+    "viewMessageCount": 56,
   },
   {
     "id": "excalidraw/codex/command-output-recovery",
@@ -72,79 +72,79 @@ exports[`@bb/agent-provider-audit fixture replay > exports shared React story da
     "id": "excalidraw/codex/eyedropper-preview-bugfix",
     "latestActivityRowId": "provider-audit-codex-eyedropper-probe-20260327T073956Z-98504:tool:call_KmSsvOrHmWvLkzW6iqQkBgFZ",
     "timelineRowCount": 5,
-    "viewMessageCount": 26,
+    "viewMessageCount": 43,
   },
   {
     "id": "excalidraw/codex/magicframe-feature",
     "latestActivityRowId": "provider-audit-codex-magicframe-probe-20260327T074604Z-99733:tasks:plan:019d2e41-eb99-72d1-8c9b-46519dc4f092:439",
     "timelineRowCount": 5,
-    "viewMessageCount": 33,
+    "viewMessageCount": 61,
   },
   {
     "id": "excalidraw/codex/search-bugfix",
     "latestActivityRowId": "provider-audit-thread:tasks:plan:019d2846-bc3a-7d53-85a5-959d7d27c395:200",
     "timelineRowCount": 5,
-    "viewMessageCount": 20,
+    "viewMessageCount": 36,
   },
   {
     "id": "excalidraw/codex/search-feature",
     "latestActivityRowId": "provider-audit-thread:tool:call_RyMDZ7ovDjGUA4QayByMyxco",
     "timelineRowCount": 5,
-    "viewMessageCount": 21,
+    "viewMessageCount": 38,
   },
   {
     "id": "excalidraw/codex/share-web-compat",
     "latestActivityRowId": "provider-audit-codex-share-web-compat-20260328T035907Z:tool:call_dmA0RMZK3v08aKwpKJPuRdXq",
     "timelineRowCount": 5,
-    "viewMessageCount": 35,
+    "viewMessageCount": 83,
   },
   {
     "id": "excalidraw/codex/ttd-explanation",
     "latestActivityRowId": "provider-audit-thread:tasks:plan:019d2831-dae1-75a3-a13e-89e2ec51c24d:225",
     "timelineRowCount": 5,
-    "viewMessageCount": 11,
+    "viewMessageCount": 54,
   },
   {
     "id": "excalidraw/pi/collab-startup-explanation",
-    "latestActivityRowId": "provider-audit-pi-collab-startup-explanation-20260327T081303Z-1549:tool-exploring:toolu_017wsNkrkNZMLKzVguNbnD7S:234",
+    "latestActivityRowId": "provider-audit-pi-collab-startup-explanation-20260327T081303Z-1549:tool:toolu_011GrmCiVLS2ZiyjkfU1qJRE",
     "timelineRowCount": 6,
-    "viewMessageCount": 10,
+    "viewMessageCount": 21,
   },
   {
     "id": "excalidraw/pi/command-palette-map",
     "latestActivityRowId": "provider-audit-pi-command-palette-map-20260328T041442Z:tool:toolu_01S7fZZycBGmTXd5395EeZ4R",
     "timelineRowCount": 8,
-    "viewMessageCount": 49,
+    "viewMessageCount": 80,
   },
   {
     "id": "excalidraw/pi/eyedropper-preview-bugfix",
     "latestActivityRowId": "provider-audit-pi-eyedropper-preview-bugfix-20260327T081548Z-1549:tool:toolu_011KSL1iQ1PEtLwvBrP7dZZ1",
     "timelineRowCount": 5,
-    "viewMessageCount": 19,
+    "viewMessageCount": 26,
   },
   {
     "id": "excalidraw/pi/magicframe-feature",
-    "latestActivityRowId": "provider-audit-pi-magicframe-feature-20260327T081823Z-1549:tool-exploring:toolu_01GMtP6vEiDui9SZ3TokT387:259",
-    "timelineRowCount": 4,
-    "viewMessageCount": 49,
+    "latestActivityRowId": "provider-audit-pi-magicframe-feature-20260327T081823Z-1549:tool:toolu_01UnpeJBnNFHMjvZx5pRo4bL",
+    "timelineRowCount": 5,
+    "viewMessageCount": 97,
   },
   {
     "id": "excalidraw/pi/search-bugfix",
     "latestActivityRowId": "provider-audit-thread:tool:toolu_011cYRkierWGBonHu7S3KYsH",
     "timelineRowCount": 5,
-    "viewMessageCount": 17,
+    "viewMessageCount": 19,
   },
   {
     "id": "excalidraw/pi/search-feature",
     "latestActivityRowId": "provider-audit-thread:tool:toolu_01FwaXHQNFWoFCii4NdfT9Wi",
     "timelineRowCount": 5,
-    "viewMessageCount": 13,
+    "viewMessageCount": 17,
   },
   {
     "id": "excalidraw/pi/ttd-explanation",
     "latestActivityRowId": null,
     "timelineRowCount": 4,
-    "viewMessageCount": 5,
+    "viewMessageCount": 4,
   },
 ]
 `;
@@ -169,12 +169,11 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 3,
     "translatedThreadEventCount": 789,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 11,
+    "viewMessageCount": 22,
     "viewMessageKinds": {
       "assistant-text": 3,
       "delegation": 4,
-      "tool-call": 2,
-      "tool-exploring": 1,
+      "tool-call": 14,
       "user": 1,
     },
   },
@@ -198,13 +197,12 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 3,
     "translatedThreadEventCount": 3095,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 175,
+    "viewMessageCount": 228,
     "viewMessageKinds": {
       "assistant-text": 39,
       "file-edit": 39,
       "tasks": 9,
-      "tool-call": 58,
-      "tool-exploring": 29,
+      "tool-call": 140,
       "user": 1,
     },
   },
@@ -266,14 +264,12 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 8,
     "translatedThreadEventCount": 407,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 78,
+    "viewMessageCount": 94,
     "viewMessageKinds": {
-      "assistant-reasoning": 3,
       "assistant-text": 27,
       "file-edit": 6,
       "tasks": 9,
-      "tool-call": 5,
-      "tool-exploring": 17,
+      "tool-call": 41,
       "user": 3,
       "web-fetch": 5,
       "web-search": 3,
@@ -301,15 +297,13 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 6,
     "translatedThreadEventCount": 220,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 28,
+    "viewMessageCount": 37,
     "viewMessageKinds": {
-      "assistant-reasoning": 2,
       "assistant-text": 11,
       "delegation": 1,
       "error": 1,
       "file-edit": 3,
-      "tool-call": 2,
-      "tool-exploring": 6,
+      "tool-call": 19,
       "user": 2,
     },
   },
@@ -337,14 +331,12 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 402,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 65,
+    "viewMessageCount": 79,
     "viewMessageKinds": {
-      "assistant-reasoning": 3,
       "assistant-text": 29,
       "delegation": 1,
       "file-edit": 6,
-      "tool-call": 3,
-      "tool-exploring": 21,
+      "tool-call": 41,
       "user": 2,
     },
   },
@@ -372,14 +364,12 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 267,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 24,
+    "viewMessageCount": 23,
     "viewMessageKinds": {
-      "assistant-reasoning": 3,
       "assistant-text": 8,
       "delegation": 1,
       "file-edit": 2,
-      "tool-call": 4,
-      "tool-exploring": 4,
+      "tool-call": 10,
       "user": 2,
     },
   },
@@ -407,14 +397,12 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 205,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 22,
+    "viewMessageCount": 24,
     "viewMessageKinds": {
-      "assistant-reasoning": 2,
       "assistant-text": 9,
       "delegation": 1,
       "file-edit": 3,
-      "tool-call": 2,
-      "tool-exploring": 3,
+      "tool-call": 9,
       "user": 2,
     },
   },
@@ -443,12 +431,11 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 6,
     "translatedThreadEventCount": 471,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 12,
+    "viewMessageCount": 14,
     "viewMessageKinds": {
-      "assistant-reasoning": 3,
       "assistant-text": 3,
       "delegation": 3,
-      "tool-exploring": 1,
+      "tool-call": 6,
       "user": 2,
     },
   },
@@ -476,12 +463,11 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 3512,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 9,
+    "viewMessageCount": 56,
     "viewMessageKinds": {
       "assistant-text": 2,
       "tasks": 2,
-      "tool-call": 2,
-      "tool-exploring": 1,
+      "tool-call": 50,
       "user": 2,
     },
   },
@@ -530,13 +516,12 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 936,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 26,
+    "viewMessageCount": 43,
     "viewMessageKinds": {
       "assistant-text": 5,
       "file-edit": 3,
       "tasks": 3,
-      "tool-call": 9,
-      "tool-exploring": 4,
+      "tool-call": 30,
       "user": 2,
     },
   },
@@ -564,13 +549,12 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 941,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 33,
+    "viewMessageCount": 61,
     "viewMessageKinds": {
       "assistant-text": 4,
       "file-edit": 4,
       "tasks": 2,
-      "tool-call": 16,
-      "tool-exploring": 5,
+      "tool-call": 49,
       "user": 2,
     },
   },
@@ -598,13 +582,12 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 658,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 20,
+    "viewMessageCount": 36,
     "viewMessageKinds": {
       "assistant-text": 3,
       "file-edit": 1,
       "tasks": 3,
-      "tool-call": 7,
-      "tool-exploring": 4,
+      "tool-call": 27,
       "user": 2,
     },
   },
@@ -632,13 +615,12 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 582,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 21,
+    "viewMessageCount": 38,
     "viewMessageKinds": {
       "assistant-text": 3,
       "file-edit": 1,
       "tasks": 3,
-      "tool-call": 9,
-      "tool-exploring": 3,
+      "tool-call": 29,
       "user": 2,
     },
   },
@@ -666,13 +648,12 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 1090,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 35,
+    "viewMessageCount": 83,
     "viewMessageKinds": {
       "assistant-text": 3,
       "file-edit": 5,
       "tasks": 2,
-      "tool-call": 17,
-      "tool-exploring": 6,
+      "tool-call": 71,
       "user": 2,
     },
   },
@@ -700,12 +681,11 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 3077,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 11,
+    "viewMessageCount": 54,
     "viewMessageKinds": {
       "assistant-text": 2,
       "tasks": 3,
-      "tool-call": 2,
-      "tool-exploring": 2,
+      "tool-call": 47,
       "user": 2,
     },
   },
@@ -734,11 +714,10 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 6,
     "translatedThreadEventCount": 337,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 10,
+    "viewMessageCount": 21,
     "viewMessageKinds": {
-      "assistant-reasoning": 2,
       "assistant-text": 4,
-      "tool-exploring": 2,
+      "tool-call": 15,
       "user": 2,
     },
   },
@@ -774,13 +753,11 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 8,
     "translatedThreadEventCount": 421,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 49,
+    "viewMessageCount": 80,
     "viewMessageKinds": {
-      "assistant-reasoning": 3,
       "assistant-text": 27,
       "file-edit": 3,
-      "tool-call": 6,
-      "tool-exploring": 7,
+      "tool-call": 47,
       "user": 3,
     },
   },
@@ -808,13 +785,11 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 128,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 19,
+    "viewMessageCount": 26,
     "viewMessageKinds": {
-      "assistant-reasoning": 1,
       "assistant-text": 8,
       "file-edit": 3,
-      "tool-call": 2,
-      "tool-exploring": 3,
+      "tool-call": 13,
       "user": 2,
     },
   },
@@ -828,19 +803,18 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
       "-- Worked for 9m 45s ---------------------------------------",
       "-- Assistant -----------------------------------------------",
       "OK the issue is that \`window.h.app.setState\` may not be the right way since the CommandPalette uses ... [truncated 120 chars]",
+      "-- Explored 3 searches -------------------------------------",
       "-- User ----------------------------------------------------",
       "Summarize the user-visible behavior and the validation you ran.",
     ],
-    "timelineRowCount": 4,
+    "timelineRowCount": 5,
     "translatedThreadEventCount": 283,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 49,
+    "viewMessageCount": 97,
     "viewMessageKinds": {
-      "assistant-reasoning": 2,
       "assistant-text": 24,
       "file-edit": 6,
-      "tool-call": 7,
-      "tool-exploring": 8,
+      "tool-call": 65,
       "user": 2,
     },
   },
@@ -868,13 +842,11 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 185,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 17,
+    "viewMessageCount": 19,
     "viewMessageKinds": {
-      "assistant-reasoning": 2,
       "assistant-text": 7,
       "file-edit": 2,
-      "tool-call": 1,
-      "tool-exploring": 3,
+      "tool-call": 8,
       "user": 2,
     },
   },
@@ -902,13 +874,11 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 100,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 13,
+    "viewMessageCount": 17,
     "viewMessageKinds": {
-      "assistant-reasoning": 1,
       "assistant-text": 6,
       "file-edit": 2,
-      "tool-call": 1,
-      "tool-exploring": 1,
+      "tool-call": 7,
       "user": 2,
     },
   },
@@ -935,9 +905,8 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 4,
     "translatedThreadEventCount": 201,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 5,
+    "viewMessageCount": 4,
     "viewMessageKinds": {
-      "assistant-reasoning": 1,
       "assistant-text": 2,
       "user": 2,
     },
@@ -4664,19 +4633,29 @@ Use the available repo_outline helper first for the command and search area. The
   -- Assistant -----------------------------------------------
   Now let me look at the CommandPalette files and the action index to see how things are wired toget... [truncated 4 chars]
 
-  -- Explored 6 files, 1 search ------------------------------
+  -- Explored 3 files ----------------------------------------
     Read packages/excalidraw/components/CommandPalette/CommandPalette.tsx
     Read packages/excalidraw/components/CommandPalette/defaultCommandPaletteItems.ts
     Read packages/excalidraw/components/CommandPalette/types.ts
-  ... [truncated 5 lines]
+  ... [truncated 1 lines]
   -- Assistant -----------------------------------------------
   Now let me check the actions index file to see how individual action modules are re-exported and r... [truncated 10 chars]
+
+  -- Explored 1 file -----------------------------------------
+    Read packages/excalidraw/actions/index.ts
 
   -- Assistant -----------------------------------------------
   Now let me look at a representative gated action to see the full pattern:
 
+  -- Explored 2 files ----------------------------------------
+    Read packages/excalidraw/actions/actionToggleSearchMenu.ts
+    Read packages/excalidraw/actions/actionElementLock.ts
+
   -- Assistant -----------------------------------------------
   Excellent. I now have a complete picture. Let me verify one more thing — how \`register.ts\`'s \`acti... [truncated 42 chars]
+
+  -- Explored 1 search ---------------------------------------
+    Search registerAll\\|register.*actions\\|from.*register in packages/excalidraw/components/App.tsx
 
 -- Assistant -----------------------------------------------
 Now I have the full picture. Here's the complete trace and recommendation:
@@ -4692,49 +4671,79 @@ Based on that map, add one small discoverability improvement for an existing gat
 
   Let me start by understanding the current state of the search action and its discoverability, then... [truncated 28 chars]
   ... [truncated 1 lines]
-  -- Explored 6 files, 7 searches, 4 lists -------------------
+  -- Explored 1 file, 2 searches -----------------------------
     Read packages/excalidraw/actions/actionToggleSearchMenu.ts
     Search keywords in packages/excalidraw/actions/action*.tsx
     Search keywords in packages/excalidraw/components/CommandPalette/CommandPalette.tsx
-  ... [truncated 16 lines]
+  ... [truncated 1 lines]
   -- Assistant -----------------------------------------------
   Good. Now let me see how the keyword haystack is built and searched — specifically that fuzzy matc... [truncated 14 chars]
+
+  -- Explored 1 file -----------------------------------------
+    Read packages/excalidraw/components/CommandPalette/CommandPalette.tsx
 
   -- Assistant -----------------------------------------------
   Now let me find existing tests:
 
+  -- Explored 2 lists ----------------------------------------
+    List packages/excalidraw
+    List packages/excalidraw
+
   -- Assistant -----------------------------------------------
   No existing CommandPalette tests. Let me check the test infrastructure so I know how to write one:
 
+  -- Explored 2 files, 2 lists -------------------------------
+    List packages/excalidraw/tests/
+    List packages/excalidraw/tests/helpers/
+    Read packages/excalidraw/tests/helpers/api.ts
+  ... [truncated 2 lines]
   -- Assistant -----------------------------------------------
   Now let me look at a simple action test for patterns:
+
+  -- Explored 1 file -----------------------------------------
+    Read packages/excalidraw/tests/actionStyles.test.tsx
 
   -- Assistant -----------------------------------------------
   Now let me check the test-utils to understand render and related utilities:
 
+  -- Explored 1 file -----------------------------------------
+    Read packages/excalidraw/tests/test-utils.ts
+
   -- Assistant -----------------------------------------------
   Now let me also check how the \`ActionManager\` is accessible in tests:
+
+  -- Explored 1 file, 1 search -------------------------------
+    Search actionManager\\|h\\.app in packages/excalidraw/tests/helpers/api.ts
+    Read packages/excalidraw/tests/helpers/api.ts
 
   -- Assistant -----------------------------------------------
   Good. Now I have full context. Let me also check the \`screen\` export to see if \`getByText\` is avai... [truncated 64 chars]
 
+  -- Explored 4 searches -------------------------------------
+    Search screen in packages/excalidraw/tests/test-utils.ts
+    Search export.*screen\\|screen in packages/excalidraw/tests/test-utils.ts
+    Search from.*test-utils in packages/excalidraw/tests/actionStyles.test.tsx
+  ... [truncated 2 lines]
   -- Assistant -----------------------------------------------
   Good — it re-exports everything from \`@testing-library/react\`, so \`screen\` is available. Now let m... [truncated 39 chars]
 
   **The improvement**: The \`actionToggleSearchMenu\` action has only \`["search", "find"]\` as keywords... [truncated 260 chars]
   ... [truncated 5 lines]
-  -- Explored 1 file, 1 search -------------------------------
+  -- Explored 1 file -----------------------------------------
     Read packages/excalidraw/deburr.ts
-    Search "search" in packages/excalidraw/locales/en.json
 
   -- Assistant -----------------------------------------------
   Now let me check what the search.title label resolves to, since the haystack includes the label:
 
-  -- Ran 1 command -------------------------------------------
-    -- Tool Call: exec_command ---------------------------------
-      [completed] python3 -c "
-    import json
-    with open('packages/excalidraw/locales/en.json') as f:
+  -- Explored 1 search, ran 1 command ------------------------
+    -- Explored 1 search ---------------------------------------
+      Search "search" in packages/excalidraw/locales/en.json
+
+    -- Ran 1 command -------------------------------------------
+      -- Tool Call: exec_command ---------------------------------
+        [completed] python3 -c "
+      import json
+      with open('packages/excalidraw/locales/en.json') as f:
   ... [truncated 6 lines]
   -- Assistant -----------------------------------------------
   So the haystack for the search action is currently: \`"find on canvas search find"\`. That means "fi... [truncated 211 chars]
@@ -4750,16 +4759,20 @@ Based on that map, add one small discoverability improvement for an existing gat
   -- Assistant -----------------------------------------------
   Now let me verify the final file:
 
-  -- Explored 2 files, 1 search ------------------------------
+  -- Explored 1 file -----------------------------------------
     Read packages/excalidraw/actions/actionToggleSearchMenu.ts
-    Search commandPalette\\|openDialog.*command in packages/excalidraw/tests/
-    Read packages/excalidraw/vitest.config.mts
-  ... [truncated 1 lines]
+
   -- Assistant -----------------------------------------------
   Now write the focused test. Let me check how the command palette is opened in existing test patter... [truncated 32 chars]
 
+  -- Explored 1 search ---------------------------------------
+    Search commandPalette\\|openDialog.*command in packages/excalidraw/tests/
+
   -- Assistant -----------------------------------------------
   No existing command palette tests at all. Let me check the vitest config for any relevant setup:
+
+  -- Explored 1 file -----------------------------------------
+    Read packages/excalidraw/vitest.config.mts
 
   -- Assistant -----------------------------------------------
   I'll write a unit test that directly tests the keyword-matching behavior at the data layer, withou... [truncated 81 chars]
@@ -4837,13 +4850,16 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots readable verbose CL
 There's a positioning bug in the eyedropper preview: near the viewport edges, the preview can end up... [truncated 186 chars]
 
 -- Worked for 2m 11s ---------------------------------------
-  -- Explored 2 files, 5 searches, 2 lists -------------------
+  -- Explored 1 file, 5 searches, 2 lists --------------------
     Search eyedropper in $EXCALIDRAW_REPO/packages/
     Search EyeDropper\\|eyeDropper\\|Eyedropper in $EXCALIDRAW_REPO/packages/excalidraw/
     Search eyedropper\\|EyeDropper in $EXCALIDRAW_REPO/packages/
-  ... [truncated 7 lines]
+  ... [truncated 6 lines]
   -- Assistant -----------------------------------------------
   Now I can see the bug. The FIXME comment on line ~100 says it all: the preview is always positione... [truncated 120 chars]
+
+  -- Explored 1 file -----------------------------------------
+    Read $EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.scss
 
   -- Assistant -----------------------------------------------
   The preview is \`3rem × 3rem\` and positioned with \`position: fixed\`. The offset is 20px from the cu... [truncated 88 chars]
@@ -4931,31 +4947,60 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
   -- Assistant -----------------------------------------------
   Now let me look at the related pieces:
 
-  -- Explored 8 files, 12 searches, 3 lists ------------------
+  -- Explored 4 searches -------------------------------------
     Search onMagicframeToolSelect\\|MagicIconThin\\|magicframe\\|MagicFrame in packages/excalidraw/comp... [truncated 14 chars]
     Search MagicIconThin\\|MagicIcon in packages/excalidraw/components/icons.tsx
     Search magicframe in packages/excalidraw/locales/en.json
-  ... [truncated 21 lines]
+  ... [truncated 2 lines]
   -- Assistant -----------------------------------------------
   Now let me check the MagicButton component for context on how the magicframe tool is used in the U... [truncated 2 chars]
+
+  -- Explored 1 file -----------------------------------------
+    Read packages/excalidraw/components/MagicButton.tsx
 
   -- Assistant -----------------------------------------------
   Now let me check the existing tests for the command palette:
 
+  -- Explored 2 files, 2 lists -------------------------------
+    List .
+    List .
+    Read packages/excalidraw/components/CommandPalette/defaultCommandPaletteItems.ts
+  ... [truncated 2 lines]
   -- Assistant -----------------------------------------------
   Now let me look at the test setup and how tests are structured:
 
+  -- Explored 2 files, 2 searches, 1 list --------------------
+    List .
+    Search import.*render\\|from.*test.*helper in packages/excalidraw/components/Sidebar/Sidebar.test... [truncated 4 chars]
+    Read packages/excalidraw/tests/helpers/api.ts
+  ... [truncated 3 lines]
   -- Assistant -----------------------------------------------
   Now I have a clear picture. Let me check how existing tests render \`<Excalidraw>\` with props like ... [truncated 12 chars]
 
+  -- Explored 1 file, 3 searches -----------------------------
+    Search aiEnabled
+    Search aiEnabled in packages/excalidraw/components/App.tsx
+    Search aiEnabled in packages/excalidraw/index.tsx
+  ... [truncated 2 lines]
   -- Assistant -----------------------------------------------
   Now let me check how existing tests use Excalidraw render for a reference:
+
+  -- Explored 1 file, 1 search -------------------------------
+    Search Excalidraw in packages/excalidraw/components/Sidebar/Sidebar.test.tsx
+    Read packages/excalidraw/components/Sidebar/Sidebar.test.tsx
 
   -- Assistant -----------------------------------------------
   Now I have enough context. Let me now look at the locale entries to make sure I reference the righ... [truncated 18 chars]
 
+  -- Explored 1 file, 1 search -------------------------------
+    Search magicframe\\|wireframe\\|magic in packages/excalidraw/locales/en.json
+    Read packages/excalidraw/locales/en.json
+
   -- Assistant -----------------------------------------------
   Now let me check what icon is used for the magic frame in the toolbar to find the right import:
+
+  -- Explored 1 search ---------------------------------------
+    Search MagicIconThin in packages/excalidraw/components/icons.tsx
 
   -- Assistant -----------------------------------------------
   Good. Now I have the full picture. Let me implement the changes:
@@ -4976,14 +5021,18 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
   -- Assistant -----------------------------------------------
   Now let's create the test file:
 
-  -- Explored 2 files, 4 searches ----------------------------
+  -- Explored 1 file, 1 search -------------------------------
     Search commandPalette in packages/excalidraw/locales/en.json
     Read packages/excalidraw/locales/en.json
-    Search openDialog.*commandPalette\\|commandPalette
-  ... [truncated 4 lines]
+
   -- Assistant -----------------------------------------------
   Now let me look at how the command palette is opened in tests, and how \`window.h\` works:
 
+  -- Explored 1 file, 3 searches -----------------------------
+    Search openDialog.*commandPalette\\|commandPalette
+    Search window.h in packages/excalidraw/tests/helpers/ui.ts
+    Search createTestHook\\|window\\.h\\. in packages/excalidraw/components/App.tsx
+  ... [truncated 2 lines]
   -- Assistant -----------------------------------------------
   Now let me write the test:
 
@@ -5045,13 +5094,17 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
   -- Assistant -----------------------------------------------
   The dialog still isn't rendering. Let me check how \`window.h.setState\` works and if the dialog cla... [truncated 20 chars]
 
-  -- Explored 3 files, 7 searches ----------------------------
+  -- Explored 3 files, 5 searches ----------------------------
     Search setState in packages/excalidraw/components/App.tsx
     Search h\\.setState\\|window\\.h in packages/excalidraw/tests/helpers/ui.ts
     Search declare.*Window\\|interface Window\\|h: in packages/excalidraw/global.d.ts
-  ... [truncated 9 lines]
+  ... [truncated 7 lines]
   -- Assistant -----------------------------------------------
   OK so \`h.setState\` is available. The issue might be that when \`withExcalidrawDimensions\` calls \`re... [truncated 109 chars]
+
+  -- Explored 2 searches -------------------------------------
+    Search class.*command-palette-dialog\\|className.*command-palette-dialog in packages/excalidraw/c... [truncated 43 chars]
+    Search formFactor\\|phone\\|desktop in packages/excalidraw/components/CommandPalette/CommandPalett... [truncated 5 chars]
 
   -- Assistant -----------------------------------------------
   The dialog should open. Let me check if \`h\` is actually set up correctly by writing a simpler test... [truncated 1 chars]
@@ -5071,14 +5124,18 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
   -- Assistant -----------------------------------------------
   The \`.command-palette-dialog\` selector is not finding the dialog. Let me check what the actual cla... [truncated 85 chars]
 
-  -- Explored 2 files, 3 searches ----------------------------
+  -- Explored 1 file, 1 search -------------------------------
     Search className.*command-palette\\|dialog in packages/excalidraw/components/CommandPalette/Comma... [truncated 14 chars]
     Read packages/excalidraw/components/CommandPalette/CommandPalette.scss
-    Search className\\|class in packages/excalidraw/components/Dialog.tsx
-  ... [truncated 3 lines]
+
   -- Assistant -----------------------------------------------
   So it's \`.excalidraw .command-palette-dialog\`. The Dialog component uses a portal and the class \`c... [truncated 87 chars]
 
+  -- Explored 1 file, 2 searches -----------------------------
+    Search className\\|class in packages/excalidraw/components/Dialog.tsx
+    Read packages/excalidraw/components/Dialog.tsx
+    Search Modal\\|portal\\|Portal in packages/excalidraw/components/Modal.tsx
+  ... [truncated 1 lines]
   -- Assistant -----------------------------------------------
   A portal. So the dialog is rendered outside the \`container\` div. Let me use \`document.body\` or \`do... [truncated 30 chars]
 
@@ -5097,14 +5154,18 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
   -- Assistant -----------------------------------------------
   The dialog still isn't rendering. The setState call might not be triggering a re-render correctly.... [truncated 119 chars]
 
-  -- Explored 1 file, 4 searches -----------------------------
+  -- Explored 1 file, 1 search -------------------------------
     Search useUIAppState in packages/excalidraw/context/ui-appState.ts
     Read packages/excalidraw/context/ui-appState.ts
-    Search h\\b.*setState\\|setState.*h\\b in packages/excalidraw/tests/helpers/ui.ts
-  ... [truncated 3 lines]
+
 -- Assistant -----------------------------------------------
 OK the issue is that \`window.h.app.setState\` may not be the right way since the CommandPalette uses ... [truncated 120 chars]
 
+-- Explored 3 searches -------------------------------------
+  Search h\\b.*setState\\|setState.*h\\b in packages/excalidraw/tests/helpers/ui.ts
+  Search ^.*h\\s*= in packages/excalidraw/tests/helpers/ui.ts
+  Search ^const.*h  in packages/excalidraw/tests/helpers/ui.ts
+  ... [truncated 1 lines]
 -- User ----------------------------------------------------
 Summarize the user-visible behavior and the validation you ran."
 `;
@@ -5120,8 +5181,14 @@ There's a usability bug in the canvas search sidebar: if I navigate to a later m
   -- Assistant -----------------------------------------------
   Now let me look at the \`onChange\` handler where the query changes and the \`focusIndex\` is set:
 
+  -- Explored 1 file -----------------------------------------
+    Read packages/excalidraw/components/SearchMenu.tsx
+
   -- Assistant -----------------------------------------------
   Now let me see the \`onChange\` handler:
+
+  -- Explored 1 file -----------------------------------------
+    Read packages/excalidraw/components/SearchMenu.tsx
 
   -- Assistant -----------------------------------------------
   Let me trace exactly how \`focusIndex\` is managed across the two search paths:
@@ -5178,13 +5245,17 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots readable verbose CL
 Add a small result summary to the canvas search sidebar: show \`N results\` when there are matches, sh... [truncated 210 chars]
 
 -- Worked for 1m 21s ---------------------------------------
-  -- Explored 4 files, 1 search, 1 list ----------------------
+  -- Explored 3 files, 1 list --------------------------------
     List packages
     Read packages/excalidraw/components/SearchMenu.tsx
     Read packages/excalidraw/components/SearchMenu.scss
-  ... [truncated 4 lines]
+  ... [truncated 2 lines]
   -- Assistant -----------------------------------------------
   Now let me check what i18n keys exist for search:
+
+  -- Explored 1 file, 1 search -------------------------------
+    Search "search" in packages/excalidraw/locales/en.json
+    Read packages/excalidraw/locales/en.json
 
   -- Assistant -----------------------------------------------
   Good. Now I have a complete picture. Let me look at the current rendering logic in the \`layer-ui__... [truncated 57 chars]
@@ -5341,12 +5412,11 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 6,
     "totalEventCount": 790,
-    "viewMessageCount": 10,
+    "viewMessageCount": 15,
     "viewMessageKinds": {
       "assistant-text": 2,
       "delegation": 4,
-      "tool-call": 2,
-      "tool-exploring": 1,
+      "tool-call": 8,
       "user": 1,
     },
   },
@@ -5430,13 +5500,12 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 19,
     "totalEventCount": 3096,
-    "viewMessageCount": 43,
+    "viewMessageCount": 72,
     "viewMessageKinds": {
       "assistant-text": 9,
       "file-edit": 13,
       "tasks": 3,
-      "tool-call": 9,
-      "tool-exploring": 8,
+      "tool-call": 46,
       "user": 1,
     },
   },
@@ -5506,13 +5575,12 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 33,
     "totalEventCount": 3096,
-    "viewMessageCount": 88,
+    "viewMessageCount": 134,
     "viewMessageKinds": {
       "assistant-text": 16,
       "file-edit": 28,
       "tasks": 4,
-      "tool-call": 20,
-      "tool-exploring": 19,
+      "tool-call": 85,
       "user": 1,
     },
   },
@@ -5621,13 +5689,12 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 59,
     "totalEventCount": 3096,
-    "viewMessageCount": 135,
+    "viewMessageCount": 185,
     "viewMessageKinds": {
       "assistant-text": 29,
       "file-edit": 33,
       "tasks": 7,
-      "tool-call": 42,
-      "tool-exploring": 23,
+      "tool-call": 115,
       "user": 1,
     },
   },
@@ -5806,13 +5873,11 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 12,
     "totalEventCount": 410,
-    "viewMessageCount": 22,
+    "viewMessageCount": 29,
     "viewMessageKinds": {
-      "assistant-reasoning": 3,
       "assistant-text": 6,
       "tasks": 2,
-      "tool-call": 1,
-      "tool-exploring": 6,
+      "tool-call": 17,
       "user": 1,
       "web-fetch": 2,
       "web-search": 1,
@@ -5914,13 +5979,12 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 31,
     "totalEventCount": 410,
-    "viewMessageCount": 36,
+    "viewMessageCount": 42,
     "viewMessageKinds": {
       "assistant-text": 15,
       "file-edit": 6,
       "tasks": 4,
-      "tool-call": 1,
-      "tool-exploring": 8,
+      "tool-call": 15,
       "user": 2,
     },
   },
@@ -5990,9 +6054,8 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 2,
     "totalEventCount": 222,
-    "viewMessageCount": 3,
+    "viewMessageCount": 2,
     "viewMessageKinds": {
-      "assistant-reasoning": 1,
       "delegation": 1,
       "user": 1,
     },
@@ -6016,11 +6079,11 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 6,
     "totalEventCount": 222,
-    "viewMessageCount": 5,
+    "viewMessageCount": 7,
     "viewMessageKinds": {
       "assistant-text": 1,
       "error": 1,
-      "tool-exploring": 1,
+      "tool-call": 3,
       "user": 2,
     },
   },
@@ -6063,14 +6126,12 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 19,
     "totalEventCount": 222,
-    "viewMessageCount": 21,
+    "viewMessageCount": 30,
     "viewMessageKinds": {
-      "assistant-reasoning": 1,
       "assistant-text": 8,
       "error": 1,
       "file-edit": 3,
-      "tool-call": 1,
-      "tool-exploring": 5,
+      "tool-call": 16,
       "user": 2,
     },
   },
@@ -6131,9 +6192,8 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 2,
     "totalEventCount": 404,
-    "viewMessageCount": 3,
+    "viewMessageCount": 2,
     "viewMessageKinds": {
-      "assistant-reasoning": 1,
       "delegation": 1,
       "user": 1,
     },
@@ -6170,13 +6230,12 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 12,
     "totalEventCount": 404,
-    "viewMessageCount": 16,
+    "viewMessageCount": 22,
     "viewMessageKinds": {
-      "assistant-reasoning": 3,
       "assistant-text": 5,
       "delegation": 1,
       "file-edit": 2,
-      "tool-exploring": 4,
+      "tool-call": 13,
       "user": 1,
     },
   },
@@ -6258,14 +6317,12 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 41,
     "totalEventCount": 404,
-    "viewMessageCount": 45,
+    "viewMessageCount": 56,
     "viewMessageKinds": {
-      "assistant-reasoning": 3,
       "assistant-text": 19,
       "delegation": 1,
       "file-edit": 5,
-      "tool-call": 2,
-      "tool-exploring": 14,
+      "tool-call": 30,
       "user": 1,
     },
   },
@@ -6356,12 +6413,11 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 7,
     "totalEventCount": 269,
-    "viewMessageCount": 9,
+    "viewMessageCount": 7,
     "viewMessageKinds": {
-      "assistant-reasoning": 2,
       "assistant-text": 3,
       "delegation": 1,
-      "tool-exploring": 2,
+      "tool-call": 2,
       "user": 1,
     },
   },
@@ -6401,12 +6457,10 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "totalEventCount": 269,
     "viewMessageCount": 20,
     "viewMessageKinds": {
-      "assistant-reasoning": 2,
       "assistant-text": 6,
       "delegation": 1,
       "file-edit": 2,
-      "tool-call": 4,
-      "tool-exploring": 4,
+      "tool-call": 10,
       "user": 1,
     },
   },
@@ -6498,7 +6552,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "viewMessageKinds": {
       "assistant-text": 2,
       "delegation": 1,
-      "tool-exploring": 1,
+      "tool-call": 1,
       "user": 1,
     },
   },
@@ -6534,11 +6588,10 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "totalEventCount": 207,
     "viewMessageCount": 13,
     "viewMessageKinds": {
-      "assistant-reasoning": 2,
       "assistant-text": 5,
       "delegation": 1,
       "file-edit": 2,
-      "tool-exploring": 2,
+      "tool-call": 4,
       "user": 1,
     },
   },
@@ -6602,9 +6655,8 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 4,
     "totalEventCount": 473,
-    "viewMessageCount": 5,
+    "viewMessageCount": 4,
     "viewMessageKinds": {
-      "assistant-reasoning": 1,
       "delegation": 3,
       "user": 1,
     },
@@ -6638,9 +6690,8 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 473,
-    "viewMessageCount": 6,
+    "viewMessageCount": 5,
     "viewMessageKinds": {
-      "assistant-reasoning": 1,
       "assistant-text": 1,
       "delegation": 3,
       "user": 1,
@@ -6667,9 +6718,8 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 473,
-    "viewMessageCount": 5,
+    "viewMessageCount": 4,
     "viewMessageKinds": {
-      "assistant-reasoning": 1,
       "assistant-text": 2,
       "user": 2,
     },
@@ -6742,12 +6792,11 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 6,
     "totalEventCount": 3514,
-    "viewMessageCount": 7,
+    "viewMessageCount": 54,
     "viewMessageKinds": {
       "assistant-text": 1,
       "tasks": 2,
-      "tool-call": 2,
-      "tool-exploring": 1,
+      "tool-call": 50,
       "user": 1,
     },
   },
@@ -6777,12 +6826,11 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 6,
     "totalEventCount": 3514,
-    "viewMessageCount": 7,
+    "viewMessageCount": 54,
     "viewMessageKinds": {
       "assistant-text": 1,
       "tasks": 2,
-      "tool-call": 2,
-      "tool-exploring": 1,
+      "tool-call": 50,
       "user": 1,
     },
   },
@@ -6812,12 +6860,11 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 6,
     "totalEventCount": 3514,
-    "viewMessageCount": 7,
+    "viewMessageCount": 54,
     "viewMessageKinds": {
       "assistant-text": 1,
       "tasks": 2,
-      "tool-call": 2,
-      "tool-exploring": 1,
+      "tool-call": 50,
       "user": 1,
     },
   },
@@ -6969,13 +7016,12 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 9,
     "totalEventCount": 938,
-    "viewMessageCount": 21,
+    "viewMessageCount": 38,
     "viewMessageKinds": {
       "assistant-text": 3,
       "file-edit": 3,
       "tasks": 3,
-      "tool-call": 7,
-      "tool-exploring": 4,
+      "tool-call": 28,
       "user": 1,
     },
   },
@@ -7004,13 +7050,12 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 8,
     "totalEventCount": 938,
-    "viewMessageCount": 24,
+    "viewMessageCount": 41,
     "viewMessageKinds": {
       "assistant-text": 4,
       "file-edit": 3,
       "tasks": 3,
-      "tool-call": 9,
-      "tool-exploring": 4,
+      "tool-call": 30,
       "user": 1,
     },
   },
@@ -7102,13 +7147,12 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 943,
-    "viewMessageCount": 13,
+    "viewMessageCount": 40,
     "viewMessageKinds": {
       "assistant-text": 2,
       "file-edit": 2,
       "tasks": 1,
-      "tool-call": 5,
-      "tool-exploring": 2,
+      "tool-call": 34,
       "user": 1,
     },
   },
@@ -7133,13 +7177,12 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 7,
     "totalEventCount": 943,
-    "viewMessageCount": 31,
+    "viewMessageCount": 59,
     "viewMessageKinds": {
       "assistant-text": 3,
       "file-edit": 4,
       "tasks": 2,
-      "tool-call": 16,
-      "tool-exploring": 5,
+      "tool-call": 49,
       "user": 1,
     },
   },
@@ -7166,13 +7209,12 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 7,
     "totalEventCount": 943,
-    "viewMessageCount": 31,
+    "viewMessageCount": 59,
     "viewMessageKinds": {
       "assistant-text": 3,
       "file-edit": 4,
       "tasks": 2,
-      "tool-call": 16,
-      "tool-exploring": 5,
+      "tool-call": 49,
       "user": 1,
     },
   },
@@ -7249,13 +7291,12 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 11,
     "totalEventCount": 660,
-    "viewMessageCount": 13,
+    "viewMessageCount": 29,
     "viewMessageKinds": {
       "assistant-text": 1,
       "file-edit": 1,
       "tasks": 2,
-      "tool-call": 5,
-      "tool-exploring": 3,
+      "tool-call": 24,
       "user": 1,
     },
   },
@@ -7285,13 +7326,12 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 7,
     "totalEventCount": 660,
-    "viewMessageCount": 18,
+    "viewMessageCount": 34,
     "viewMessageKinds": {
       "assistant-text": 2,
       "file-edit": 1,
       "tasks": 3,
-      "tool-call": 7,
-      "tool-exploring": 4,
+      "tool-call": 27,
       "user": 1,
     },
   },
@@ -7398,13 +7438,12 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 11,
     "totalEventCount": 584,
-    "viewMessageCount": 12,
+    "viewMessageCount": 29,
     "viewMessageKinds": {
       "assistant-text": 1,
       "file-edit": 1,
       "tasks": 2,
-      "tool-call": 4,
-      "tool-exploring": 3,
+      "tool-call": 24,
       "user": 1,
     },
   },
@@ -7427,13 +7466,12 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 4,
     "totalEventCount": 584,
-    "viewMessageCount": 19,
+    "viewMessageCount": 36,
     "viewMessageKinds": {
       "assistant-text": 2,
       "file-edit": 1,
       "tasks": 3,
-      "tool-call": 9,
-      "tool-exploring": 3,
+      "tool-call": 29,
       "user": 1,
     },
   },
@@ -7536,13 +7574,12 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 9,
     "totalEventCount": 1092,
-    "viewMessageCount": 10,
+    "viewMessageCount": 49,
     "viewMessageKinds": {
       "assistant-text": 1,
       "file-edit": 2,
       "tasks": 1,
-      "tool-call": 3,
-      "tool-exploring": 2,
+      "tool-call": 44,
       "user": 1,
     },
   },
@@ -7574,13 +7611,12 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 7,
     "totalEventCount": 1092,
-    "viewMessageCount": 33,
+    "viewMessageCount": 81,
     "viewMessageKinds": {
       "assistant-text": 2,
       "file-edit": 5,
       "tasks": 2,
-      "tool-call": 17,
-      "tool-exploring": 6,
+      "tool-call": 71,
       "user": 1,
     },
   },
@@ -7686,12 +7722,11 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 8,
     "totalEventCount": 3079,
-    "viewMessageCount": 9,
+    "viewMessageCount": 52,
     "viewMessageKinds": {
       "assistant-text": 1,
       "tasks": 3,
-      "tool-call": 2,
-      "tool-exploring": 2,
+      "tool-call": 47,
       "user": 1,
     },
   },
@@ -7726,12 +7761,11 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 8,
     "totalEventCount": 3079,
-    "viewMessageCount": 9,
+    "viewMessageCount": 52,
     "viewMessageKinds": {
       "assistant-text": 1,
       "tasks": 3,
-      "tool-call": 2,
-      "tool-exploring": 2,
+      "tool-call": 47,
       "user": 1,
     },
   },
@@ -7766,12 +7800,11 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 8,
     "totalEventCount": 3079,
-    "viewMessageCount": 9,
+    "viewMessageCount": 52,
     "viewMessageKinds": {
       "assistant-text": 1,
       "tasks": 3,
-      "tool-call": 2,
-      "tool-exploring": 2,
+      "tool-call": 47,
       "user": 1,
     },
   },
@@ -7838,11 +7871,10 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 3,
     "totalEventCount": 339,
-    "viewMessageCount": 4,
+    "viewMessageCount": 11,
     "viewMessageKinds": {
-      "assistant-reasoning": 1,
       "assistant-text": 1,
-      "tool-exploring": 1,
+      "tool-call": 9,
       "user": 1,
     },
   },
@@ -7863,11 +7895,10 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 3,
     "totalEventCount": 339,
-    "viewMessageCount": 4,
+    "viewMessageCount": 11,
     "viewMessageKinds": {
-      "assistant-reasoning": 1,
       "assistant-text": 1,
-      "tool-exploring": 1,
+      "tool-call": 9,
       "user": 1,
     },
   },
@@ -7896,11 +7927,10 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 6,
     "totalEventCount": 339,
-    "viewMessageCount": 6,
+    "viewMessageCount": 10,
     "viewMessageKinds": {
-      "assistant-reasoning": 1,
       "assistant-text": 2,
-      "tool-exploring": 1,
+      "tool-call": 6,
       "user": 2,
     },
   },
@@ -7973,12 +8003,10 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 4,
     "totalEventCount": 424,
-    "viewMessageCount": 7,
+    "viewMessageCount": 16,
     "viewMessageKinds": {
-      "assistant-reasoning": 2,
       "assistant-text": 1,
-      "tool-call": 1,
-      "tool-exploring": 2,
+      "tool-call": 14,
       "user": 1,
     },
   },
@@ -8005,11 +8033,10 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 7,
     "totalEventCount": 424,
-    "viewMessageCount": 8,
+    "viewMessageCount": 23,
     "viewMessageKinds": {
-      "assistant-reasoning": 1,
       "assistant-text": 3,
-      "tool-exploring": 2,
+      "tool-call": 18,
       "user": 2,
     },
   },
@@ -8051,13 +8078,11 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 16,
     "totalEventCount": 424,
-    "viewMessageCount": 18,
+    "viewMessageCount": 40,
     "viewMessageKinds": {
-      "assistant-reasoning": 1,
       "assistant-text": 4,
       "file-edit": 3,
-      "tool-call": 3,
-      "tool-exploring": 5,
+      "tool-call": 31,
       "user": 2,
     },
   },
@@ -8127,10 +8152,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 2,
     "totalEventCount": 130,
-    "viewMessageCount": 3,
+    "viewMessageCount": 10,
     "viewMessageKinds": {
-      "assistant-reasoning": 1,
-      "tool-exploring": 1,
+      "tool-call": 9,
       "user": 1,
     },
   },
@@ -8160,13 +8184,11 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 10,
     "totalEventCount": 130,
-    "viewMessageCount": 11,
+    "viewMessageCount": 18,
     "viewMessageKinds": {
-      "assistant-reasoning": 1,
       "assistant-text": 1,
       "file-edit": 3,
-      "tool-call": 2,
-      "tool-exploring": 3,
+      "tool-call": 13,
       "user": 1,
     },
   },
@@ -8254,11 +8276,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 3,
     "totalEventCount": 285,
-    "viewMessageCount": 6,
+    "viewMessageCount": 20,
     "viewMessageKinds": {
-      "assistant-reasoning": 2,
-      "tool-call": 1,
-      "tool-exploring": 2,
+      "tool-call": 19,
       "user": 1,
     },
   },
@@ -8283,13 +8303,11 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 7,
     "totalEventCount": 285,
-    "viewMessageCount": 10,
+    "viewMessageCount": 40,
     "viewMessageKinds": {
-      "assistant-reasoning": 2,
       "assistant-text": 1,
       "file-edit": 2,
-      "tool-call": 1,
-      "tool-exploring": 3,
+      "tool-call": 36,
       "user": 1,
     },
   },
@@ -8324,13 +8342,11 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 15,
     "totalEventCount": 285,
-    "viewMessageCount": 19,
+    "viewMessageCount": 58,
     "viewMessageKinds": {
-      "assistant-reasoning": 2,
       "assistant-text": 1,
       "file-edit": 4,
-      "tool-call": 5,
-      "tool-exploring": 6,
+      "tool-call": 52,
       "user": 1,
     },
   },
@@ -8345,14 +8361,17 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "-- Worked for 9m 45s ---------------------------------------",
       "-- Assistant -----------------------------------------------",
       "OK the issue is that \`window.h.app.setState\` may not be the right way since the CommandPalette uses ... [truncated 120 chars]",
+      "-- Explored 3 searches -------------------------------------",
       "-- User ----------------------------------------------------",
       "Summarize the user-visible behavior and the validation you ran.",
     ],
-    "timelineRowCount": 4,
+    "timelineRowCount": 5,
     "totalEventCount": 285,
-    "viewMessageCount": 3,
+    "viewMessageCount": 97,
     "viewMessageKinds": {
-      "assistant-text": 1,
+      "assistant-text": 24,
+      "file-edit": 6,
+      "tool-call": 65,
       "user": 2,
     },
   },
@@ -8384,10 +8403,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 2,
     "totalEventCount": 187,
-    "viewMessageCount": 4,
+    "viewMessageCount": 5,
     "viewMessageKinds": {
-      "assistant-reasoning": 2,
-      "tool-exploring": 1,
+      "tool-call": 4,
       "user": 1,
     },
   },
@@ -8403,10 +8421,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 2,
     "totalEventCount": 187,
-    "viewMessageCount": 4,
+    "viewMessageCount": 5,
     "viewMessageKinds": {
-      "assistant-reasoning": 2,
-      "tool-exploring": 1,
+      "tool-call": 4,
       "user": 1,
     },
   },
@@ -8432,13 +8449,11 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 187,
-    "viewMessageCount": 11,
+    "viewMessageCount": 13,
     "viewMessageKinds": {
-      "assistant-reasoning": 2,
       "assistant-text": 2,
       "file-edit": 2,
-      "tool-call": 1,
-      "tool-exploring": 3,
+      "tool-call": 8,
       "user": 1,
     },
   },
@@ -8500,10 +8515,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 2,
     "totalEventCount": 102,
-    "viewMessageCount": 3,
+    "viewMessageCount": 7,
     "viewMessageKinds": {
-      "assistant-reasoning": 1,
-      "tool-exploring": 1,
+      "tool-call": 6,
       "user": 1,
     },
   },
@@ -8528,12 +8542,11 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 102,
-    "viewMessageCount": 6,
+    "viewMessageCount": 10,
     "viewMessageKinds": {
-      "assistant-reasoning": 1,
       "assistant-text": 1,
       "file-edit": 2,
-      "tool-exploring": 1,
+      "tool-call": 6,
       "user": 1,
     },
   },
@@ -8560,13 +8573,11 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 102,
-    "viewMessageCount": 8,
+    "viewMessageCount": 12,
     "viewMessageKinds": {
-      "assistant-reasoning": 1,
       "assistant-text": 2,
       "file-edit": 2,
-      "tool-call": 1,
-      "tool-exploring": 1,
+      "tool-call": 7,
       "user": 1,
     },
   },
@@ -8632,9 +8643,8 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 2,
     "totalEventCount": 203,
-    "viewMessageCount": 3,
+    "viewMessageCount": 2,
     "viewMessageKinds": {
-      "assistant-reasoning": 1,
       "assistant-text": 1,
       "user": 1,
     },
@@ -8655,9 +8665,8 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 2,
     "totalEventCount": 203,
-    "viewMessageCount": 3,
+    "viewMessageCount": 2,
     "viewMessageKinds": {
-      "assistant-reasoning": 1,
       "assistant-text": 1,
       "user": 1,
     },

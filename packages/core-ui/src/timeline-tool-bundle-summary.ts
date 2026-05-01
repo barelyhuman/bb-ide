@@ -3,7 +3,8 @@ import type {
   TimelineGroupedRowStatus,
   TimelineToolBundleRow,
   TimelineToolBundleSummary,
-  ViewToolExploringMessage,
+  ViewToolCallMessage,
+  ViewToolCallSummary,
 } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 import {
@@ -141,16 +142,34 @@ export function buildToolBundleSummaryParts(
   });
 }
 
+function toToolCallSummary(message: ViewToolCallMessage): ViewToolCallSummary {
+  return {
+    callId: message.callId,
+    command: message.command,
+    cwd: message.cwd,
+    parsedCmd: message.parsedCmd ?? [],
+    source: message.source,
+    output: message.output,
+    exitCode: message.exitCode,
+    duration: message.duration,
+    durationMs: message.durationMs,
+    approvalStatus: message.approvalStatus,
+    status: message.status,
+    subagentType: message.subagentType,
+    description: message.description,
+  };
+}
+
 function getExplorationBundleCalls(
   rows: readonly TimelineMessageRow[],
-): ViewToolExploringMessage["calls"] {
-  return rows.flatMap((row) => {
-    if (row.message.kind !== "tool-exploring") {
+): ViewToolCallSummary[] {
+  return rows.map((row) => {
+    if (row.message.kind !== "tool-call") {
       throw new Error(
-        `Exploration tool bundles must only contain tool-exploring rows, got ${row.message.kind}`,
+        `Exploration tool bundles must only contain tool-call rows, got ${row.message.kind}`,
       );
     }
-    return row.message.calls;
+    return toToolCallSummary(row.message);
   });
 }
 

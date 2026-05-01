@@ -1,8 +1,4 @@
-import type {
-  ViewAssistantReasoningMessage,
-  ViewAssistantTextMessage,
-  ViewMessage,
-} from "@bb/domain";
+import type { ViewAssistantTextMessage, ViewMessage } from "@bb/domain";
 import {
   flushToolActivityBeforeNonToolMessage,
   type ToolActivityProjectionState,
@@ -19,33 +15,21 @@ export interface AssistantStreamProjectionState extends ToolActivityProjectionSt
   assistantTextBuffersByKey: Map<string, VisibleTextBuffer>;
   visibleAssistantMessageKeys: Set<string>;
   finalizedAssistantMessageKeys: Set<string>;
-  openReasoningMessagesByKey: Map<string, ViewAssistantReasoningMessage>;
-  reasoningTextBuffersByKey: Map<string, VisibleTextBuffer>;
-  visibleReasoningMessageKeys: Set<string>;
-  finalizedReasoningKeys: Set<string>;
 }
 
-type BufferedAssistantMessage =
-  | ViewAssistantTextMessage
-  | ViewAssistantReasoningMessage;
-
-interface SyncBufferedTextMessageArgs<
-  TMessage extends BufferedAssistantMessage,
-> {
+interface SyncBufferedTextMessageArgs {
   buffer: VisibleTextBuffer;
   messageKey: string;
-  message: TMessage;
+  message: ViewAssistantTextMessage;
   state: AssistantStreamProjectionState;
-  status: TMessage["status"];
+  status: ViewAssistantTextMessage["status"];
   visibleKeys: Set<string>;
 }
 
-interface FlushBufferedTextMessagesArgs<
-  TMessage extends BufferedAssistantMessage,
-> {
+interface FlushBufferedTextMessagesArgs {
   buffers: Map<string, VisibleTextBuffer>;
   finalizedKeys: Set<string>;
-  openMessages: Map<string, TMessage>;
+  openMessages: Map<string, ViewAssistantTextMessage>;
   state: AssistantStreamProjectionState;
   visibleKeys: Set<string>;
 }
@@ -57,9 +41,7 @@ export function finalizeProjectionKey(
   finalizedKeys.add(messageKey);
 }
 
-export function syncBufferedTextMessage<
-  TMessage extends BufferedAssistantMessage,
->(args: SyncBufferedTextMessageArgs<TMessage>): void {
+export function syncBufferedTextMessage(args: SyncBufferedTextMessageArgs): void {
   const text = getVisibleTextBufferText(args.buffer);
   if (!text) {
     if (args.status === "completed") {
@@ -79,9 +61,7 @@ export function syncBufferedTextMessage<
   args.visibleKeys.add(args.messageKey);
 }
 
-function flushBufferedTextMessages<TMessage extends BufferedAssistantMessage>(
-  args: FlushBufferedTextMessagesArgs<TMessage>,
-): void {
+function flushBufferedTextMessages(args: FlushBufferedTextMessagesArgs): void {
   const pendingMessages = Array.from(args.openMessages.entries()).sort(
     (left, right) =>
       left[1].sourceSeqStart - right[1].sourceSeqStart ||
@@ -122,29 +102,4 @@ export function flushBufferedAssistantMessages(
     state,
     visibleKeys: state.visibleAssistantMessageKeys,
   });
-}
-
-export function flushBufferedReasoningMessages(
-  state: AssistantStreamProjectionState,
-): void {
-  flushBufferedTextMessages({
-    buffers: state.reasoningTextBuffersByKey,
-    finalizedKeys: state.finalizedReasoningKeys,
-    openMessages: state.openReasoningMessagesByKey,
-    state,
-    visibleKeys: state.visibleReasoningMessageKeys,
-  });
-}
-
-export function completeOpenReasoningMessages(
-  state: AssistantStreamProjectionState,
-): void {
-  for (const reasoning of state.openReasoningMessagesByKey.values()) {
-    if (reasoning.status === "streaming") {
-      reasoning.status = "completed";
-    }
-  }
-  state.openReasoningMessagesByKey.clear();
-  state.reasoningTextBuffersByKey.clear();
-  state.visibleReasoningMessageKeys.clear();
 }

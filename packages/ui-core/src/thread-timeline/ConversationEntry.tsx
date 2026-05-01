@@ -12,7 +12,6 @@ import {
 } from "./rows/OperationRow.js";
 import { TasksRow } from "./rows/TasksRow.js";
 import { ToolCallRow } from "./rows/ToolCallRow.js";
-import { ToolExploringRow } from "./rows/ToolExploringRow.js";
 import { UserMessageRow } from "./rows/UserMessageRow.js";
 import { WebFetchRow, WebSearchRow } from "./rows/WebSearchRow.js";
 import type {
@@ -21,11 +20,6 @@ import type {
   ThreadTimelineTheme,
   UserAttachmentImageSrcResolver,
 } from "./types.js";
-
-type ConversationRenderableMessage = Exclude<
-  ViewMessage,
-  { kind: "assistant-reasoning" }
->;
 
 interface ConversationEntryProps {
   initialExpanded?: boolean;
@@ -41,18 +35,6 @@ interface NestedRenderOptions extends ThreadTimelineRenderOptions {
   preferOngoingLabels?: boolean;
 }
 
-function requireConversationRenderableMessage(
-  message: ViewMessage,
-): ConversationRenderableMessage {
-  if (message.kind === "assistant-reasoning") {
-    throw new Error(
-      "assistant-reasoning messages must be filtered before ConversationEntry renders",
-    );
-  }
-
-  return message;
-}
-
 function ConversationEntryComponent({
   message,
   onOpenLocalFileLink,
@@ -62,13 +44,11 @@ function ConversationEntryComponent({
   resolveUserAttachmentImageSrc,
   themeType,
 }: ConversationEntryProps) {
-  const renderableMessage = requireConversationRenderableMessage(message);
-
-  switch (renderableMessage.kind) {
+  switch (message.kind) {
     case "user":
       return (
         <UserMessageRow
-          message={renderableMessage}
+          message={message}
           projectId={projectId}
           resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
         />
@@ -76,22 +56,14 @@ function ConversationEntryComponent({
     case "assistant-text":
       return (
         <AssistantMessageRow
-          message={renderableMessage}
+          message={message}
           onOpenLocalFileLink={onOpenLocalFileLink}
-        />
-      );
-    case "tool-exploring":
-      return (
-        <ToolExploringRow
-          message={renderableMessage}
-          initialExpanded={initialExpanded}
-          preferOngoingLabels={preferOngoingLabels}
         />
       );
     case "tool-call":
       return (
         <ToolCallRow
-          message={renderableMessage}
+          message={message}
           initialExpanded={initialExpanded}
           preferOngoingLabels={preferOngoingLabels}
         />
@@ -99,21 +71,21 @@ function ConversationEntryComponent({
     case "web-search":
       return (
         <WebSearchRow
-          message={renderableMessage}
+          message={message}
           preferOngoingLabels={preferOngoingLabels}
         />
       );
     case "web-fetch":
       return (
         <WebFetchRow
-          message={renderableMessage}
+          message={message}
           preferOngoingLabels={preferOngoingLabels}
         />
       );
     case "file-edit":
       return (
         <FileEditRow
-          message={renderableMessage}
+          message={message}
           initialExpanded={initialExpanded}
           preferOngoingLabels={preferOngoingLabels}
           themeType={themeType}
@@ -121,26 +93,23 @@ function ConversationEntryComponent({
       );
     case "operation":
       return (
-        <OperationRow
-          message={renderableMessage}
-          initialExpanded={initialExpanded}
-        />
+        <OperationRow message={message} initialExpanded={initialExpanded} />
       );
     case "permission-grant-lifecycle":
       return (
         <PermissionGrantLifecycleRow
-          message={renderableMessage}
+          message={message}
           initialExpanded={initialExpanded}
         />
       );
     case "tasks":
       return (
-        <TasksRow message={renderableMessage} initialExpanded={initialExpanded} />
+        <TasksRow message={message} initialExpanded={initialExpanded} />
       );
     case "delegation":
       return (
         <DelegationRow
-          message={renderableMessage}
+          message={message}
           initialExpanded={initialExpanded}
           onOpenLocalFileLink={onOpenLocalFileLink}
           preferOngoingLabels={preferOngoingLabels}
@@ -161,14 +130,12 @@ function ConversationEntryComponent({
         />
       );
     case "error":
-      return (
-        <ErrorRow message={renderableMessage} initialExpanded={initialExpanded} />
-      );
+      return <ErrorRow message={message} initialExpanded={initialExpanded} />;
     case "debug/raw-event":
-      return <DebugEventRow message={renderableMessage} />;
+      return <DebugEventRow message={message} />;
     default:
       return assertNever(
-        renderableMessage,
+        message,
         "Unhandled conversation entry message kind",
       );
   }

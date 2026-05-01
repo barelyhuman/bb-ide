@@ -10,6 +10,7 @@ import type {
   TimelineTurnSummaryRow,
   ViewMessage,
   ViewProjection,
+  ViewToolCallSummary,
   ViewTurn,
 } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
@@ -18,12 +19,11 @@ import {
   findLastTerminalTimelineMessageIndex,
   isTimelineUngroupableMessage,
   toIndexedTimelineMessages,
-  toTimelineVisibleMessages,
   type IndexedTimelineMessage,
 } from "./timeline-message-helpers.js";
 import { mergeGroupedRowStatus } from "./timeline-grouped-row-status.js";
 import { summarizeExploringCounts } from "./timeline-render-helpers.js";
-import { isShellToolName } from "./tool-call-parsing.js";
+import { isExploringCall, isShellToolName } from "./tool-call-parsing.js";
 import {
   getViewMessageScopeTurnId,
   haveCompatibleViewMessageScope,
@@ -52,12 +52,6 @@ interface ToolBundleAccumulator {
   messages: ViewMessage[];
 }
 
-function isToolExploringMessage(
-  message: ViewMessage,
-): message is Extract<ViewMessage, { kind: "tool-exploring" }> {
-  return message.kind === "tool-exploring";
-}
-
 function isFileEditMessage(
   message: ViewMessage,
 ): message is Extract<ViewMessage, { kind: "file-edit" }> {
@@ -65,7 +59,10 @@ function isFileEditMessage(
 }
 
 function getTimelineRange(
-  messages: readonly Pick<ViewMessage, "createdAt" | "startedAt" | "sourceSeqEnd" | "sourceSeqStart">[],
+  messages: readonly Pick<
+    ViewMessage,
+    "createdAt" | "startedAt" | "sourceSeqEnd" | "sourceSeqStart"
+  >[],
 ): TimelineMessageRange | null {
   if (messages.length === 0) {
     return null;
@@ -83,9 +80,7 @@ function getTimelineRange(
   };
 }
 
-function getDurationMs(
-  range: TimelineMessageRange | null,
-): number | undefined {
+function getDurationMs(range: TimelineMessageRange | null): number | undefined {
   if (!range) {
     return undefined;
   }
@@ -96,7 +91,6 @@ function getDurationMs(
 
 function getGroupMessageStatus(message: ViewMessage): TimelineGroupedRowStatus {
   switch (message.kind) {
-    case "tool-exploring":
     case "tool-call":
     case "web-search":
     case "web-fetch":
@@ -105,7 +99,6 @@ function getGroupMessageStatus(message: ViewMessage): TimelineGroupedRowStatus {
     case "delegation":
     case "permission-grant-lifecycle":
       return message.status;
-    case "assistant-reasoning":
     case "assistant-text":
       return message.status === "streaming" ? "pending" : message.status;
     case "operation":
@@ -221,10 +214,7 @@ function mergeConsecutiveToolActivityMessages(
   messages: readonly ViewMessage[],
 ): ViewMessage[] {
   const merged: ViewMessage[] = [];
-  let active:
-    | Extract<ViewMessage, { kind: "tool-exploring" }>
-    | Extract<ViewMessage, { kind: "file-edit" }>
-    | null = null;
+  let active: Extract<ViewMessage, { kind: "file-edit" }> | null = null;
 
   const flush = () => {
     if (!active) {
@@ -235,102 +225,59 @@ function mergeConsecutiveToolActivityMessages(
   };
 
   for (const message of messages) {
-    if (!isToolExploringMessage(message) && !isFileEditMessage(message)) {
+    if (!isFileEditMessage(message)) {
       flush();
       merged.push(message);
       continue;
     }
 
     if (!active) {
-      active = isToolExploringMessage(message)
-        ? {
-            ...message,
-            calls: [...message.calls],
-          }
-        : {
-            ...message,
-            changes: message.changes.map((change) => ({ ...change })),
-          };
+      active = {
+        ...message,
+        changes: message.changes.map((change) => ({ ...change })),
+      };
       continue;
     }
 
     if (!haveCompatibleViewMessageScope(active, message)) {
       flush();
-      active = isToolExploringMessage(message)
-        ? {
-            ...message,
-            calls: [...message.calls],
-          }
-        : {
-            ...message,
-            changes: message.changes.map((change) => ({ ...change })),
-          };
+      active = {
+        ...message,
+        changes: message.changes.map((change) => ({ ...change })),
+      };
       continue;
     }
 
-    if (isToolExploringMessage(active) && isToolExploringMessage(message)) {
-      active.calls = [...active.calls, ...message.calls];
-      active.sourceSeqStart = Math.min(
-        active.sourceSeqStart,
-        message.sourceSeqStart,
-      );
-      active.sourceSeqEnd = Math.max(active.sourceSeqEnd, message.sourceSeqEnd);
-      active.createdAt = Math.max(active.createdAt, message.createdAt);
-      active.startedAt = Math.min(
-        getMessageStartedAt(active),
-        getMessageStartedAt(message),
-      );
-      active.status =
-        active.status === "pending" || message.status === "pending"
-          ? "pending"
-          : "completed";
+    if (active.callId !== message.callId) {
+      flush();
+      active = {
+        ...message,
+        changes: message.changes.map((change) => ({ ...change })),
+      };
       continue;
     }
 
-    if (isFileEditMessage(active) && isFileEditMessage(message)) {
-      if (active.callId !== message.callId) {
-        flush();
-        active = {
-          ...message,
-          changes: message.changes.map((change) => ({ ...change })),
-        };
-        continue;
-      }
-
-      active.changes = [
-        ...active.changes,
-        ...message.changes.map((change) => ({ ...change })),
-      ];
-      active.sourceSeqStart = Math.min(
-        active.sourceSeqStart,
-        message.sourceSeqStart,
-      );
-      active.sourceSeqEnd = Math.max(active.sourceSeqEnd, message.sourceSeqEnd);
-      active.createdAt = Math.max(active.createdAt, message.createdAt);
-      active.startedAt = Math.min(
-        getMessageStartedAt(active),
-        getMessageStartedAt(message),
-      );
-      active.status = mergeGroupedRowStatus(active.status, message.status);
-      if (message.stdout) {
-        active.stdout = message.stdout;
-      }
-      if (message.stderr) {
-        active.stderr = message.stderr;
-      }
-      continue;
+    active.changes = [
+      ...active.changes,
+      ...message.changes.map((change) => ({ ...change })),
+    ];
+    active.sourceSeqStart = Math.min(
+      active.sourceSeqStart,
+      message.sourceSeqStart,
+    );
+    active.sourceSeqEnd = Math.max(active.sourceSeqEnd, message.sourceSeqEnd);
+    active.createdAt = Math.max(active.createdAt, message.createdAt);
+    active.startedAt = Math.min(
+      getMessageStartedAt(active),
+      getMessageStartedAt(message),
+    );
+    active.status = mergeGroupedRowStatus(active.status, message.status);
+    if (message.stdout) {
+      active.stdout = message.stdout;
     }
-
-    flush();
-    active = isToolExploringMessage(message)
-      ? {
-          ...message,
-          calls: [...message.calls],
-        }
-      : {
-          ...message,
-          changes: message.changes.map((change) => ({ ...change })),
-        };
+    if (message.stderr) {
+      active.stderr = message.stderr;
+    }
   }
 
   flush();
@@ -339,9 +286,6 @@ function mergeConsecutiveToolActivityMessages(
 
 function getTurnSummaryCount(messages: readonly ViewMessage[]): number {
   return messages.reduce((count, message) => {
-    if (message.kind === "tool-exploring") {
-      return count + Math.max(1, message.calls.length);
-    }
     if (message.kind === "file-edit") {
       return count + Math.max(1, message.changes.length);
     }
@@ -349,10 +293,10 @@ function getTurnSummaryCount(messages: readonly ViewMessage[]): number {
   }, 0);
 }
 
-function prepareTimelineMessages(messages: readonly ViewMessage[]): ViewMessage[] {
-  const visibleMessages = toTimelineVisibleMessages(messages);
-  const reconnectMergedMessages =
-    mergeConsecutiveReconnectErrors(visibleMessages);
+function prepareTimelineMessages(
+  messages: readonly ViewMessage[],
+): ViewMessage[] {
+  const reconnectMergedMessages = mergeConsecutiveReconnectErrors(messages);
   return mergeConsecutiveToolActivityMessages(reconnectMergedMessages);
 }
 
@@ -364,7 +308,35 @@ function toMessageRow(message: ViewMessage): TimelineMessageRow {
   };
 }
 
-function getRowStatus(row: TimelineAssistantStepSummaryChildRow): TimelineGroupedRowStatus {
+function isExplorationToolCallMessage(
+  message: Extract<ViewMessage, { kind: "tool-call" }>,
+): boolean {
+  return isExploringCall({ parsedCmd: message.parsedCmd ?? [] });
+}
+
+function toToolCallSummary(
+  message: Extract<ViewMessage, { kind: "tool-call" }>,
+): ViewToolCallSummary {
+  return {
+    callId: message.callId,
+    command: message.command,
+    cwd: message.cwd,
+    parsedCmd: message.parsedCmd ?? [],
+    source: message.source,
+    output: message.output,
+    exitCode: message.exitCode,
+    duration: message.duration,
+    durationMs: message.durationMs,
+    approvalStatus: message.approvalStatus,
+    status: message.status,
+    subagentType: message.subagentType,
+    description: message.description,
+  };
+}
+
+function getRowStatus(
+  row: TimelineAssistantStepSummaryChildRow,
+): TimelineGroupedRowStatus {
   switch (row.kind) {
     case "message":
       return getGroupMessageStatus(row.message);
@@ -379,14 +351,14 @@ function getToolBundleKind(
   message: ViewMessage,
 ): TimelineToolBundleKind | null {
   switch (message.kind) {
-    case "tool-exploring":
-      return "exploration";
     case "tool-call":
+      if (isExplorationToolCallMessage(message)) {
+        return "exploration";
+      }
       return isShellToolName(message.toolName) ? "commands" : null;
     case "web-search":
     case "web-fetch":
       return "web-research";
-    case "assistant-reasoning":
     case "assistant-text":
     case "debug/raw-event":
     case "delegation":
@@ -408,11 +380,11 @@ function canAppendToToolBundle(
 ): boolean {
   switch (active.bundleKind) {
     case "exploration":
-      return message.kind === "tool-exploring";
-    case "commands":
       return (
-        message.kind === "tool-call" && isShellToolName(message.toolName)
+        message.kind === "tool-call" && isExplorationToolCallMessage(message)
       );
+    case "commands":
+      return message.kind === "tool-call" && isShellToolName(message.toolName);
     case "web-research":
       return message.kind === "web-search" || message.kind === "web-fetch";
     default:
@@ -426,11 +398,16 @@ function buildToolBundleSummary(
 ): TimelineToolBundleRow["summary"] {
   switch (bundleKind) {
     case "exploration": {
-      const calls = messages.flatMap((message) => {
-        if (message.kind !== "tool-exploring") {
-          throw new Error("Exploration bundles require tool-exploring messages");
+      const calls = messages.map((message) => {
+        if (
+          message.kind !== "tool-call" ||
+          !isExplorationToolCallMessage(message)
+        ) {
+          throw new Error(
+            `Exploration bundles require exploring tool-call messages, got ${message.kind}`,
+          );
         }
-        return message.calls;
+        return toToolCallSummary(message);
       });
       const counts = summarizeExploringCounts(calls);
       return {
@@ -585,12 +562,16 @@ function getRowRange(
     ),
     sourceSeqStart: Math.min(
       ...rows.map((row) =>
-        row.kind === "message" ? row.message.sourceSeqStart : row.sourceSeqStart,
+        row.kind === "message"
+          ? row.message.sourceSeqStart
+          : row.sourceSeqStart,
       ),
     ),
     startedAt: Math.min(
       ...rows.map((row) =>
-        row.kind === "message" ? getMessageStartedAt(row.message) : row.startedAt,
+        row.kind === "message"
+          ? getMessageStartedAt(row.message)
+          : row.startedAt,
       ),
     ),
   };
@@ -675,7 +656,9 @@ function buildAssistantStepSummaryRows(
     if (isAssistantBoundaryRow(row)) {
       if (bufferedRows.length > 0) {
         if (hasSeenAssistantMessage || mode === "completed") {
-          groupedRows.push(...materializeAssistantStepSummaryRows(bufferedRows));
+          groupedRows.push(
+            ...materializeAssistantStepSummaryRows(bufferedRows),
+          );
         } else {
           groupedRows.push(...bufferedRows);
         }
@@ -701,7 +684,9 @@ function buildAssistantStepSummaryRows(
   return groupedRows;
 }
 
-function isLossyActiveTurn(messages: readonly IndexedTimelineMessage[]): boolean {
+function isLossyActiveTurn(
+  messages: readonly IndexedTimelineMessage[],
+): boolean {
   return messages.some(
     ({ message }) => getGroupMessageStatus(message) === "pending",
   );
@@ -745,7 +730,10 @@ function getGroupedTerminalTurnMessages(
 function buildTurnSummaryRows(
   messages: readonly ViewMessage[],
 ): TimelineTurnSummaryChildRow[] {
-  return buildAssistantStepSummaryRows(buildToolBundleRows(messages), "completed");
+  return buildAssistantStepSummaryRows(
+    buildToolBundleRows(messages),
+    "completed",
+  );
 }
 
 function getTurnSummaryRowId(turn: ViewTurn): string {
@@ -858,7 +846,8 @@ function buildTerminalTurnRows(
         buildTurnSummaryRow({
           durationMs: collapseAll
             ? getDurationMs(getTimelineRange(collapseGroup))
-            : (turn.durationMs ?? getDurationMs(getTimelineRange(collapseGroup))),
+            : (turn.durationMs ??
+              getDurationMs(getTimelineRange(collapseGroup))),
           includeNestedRows,
           messages: collapseGroup,
           summaryCount: getTurnSummaryCount(collapseGroup),
@@ -883,11 +872,7 @@ function buildTurnRows(
   if (turn.status === "pending" && options.mode === "default") {
     return buildActiveTurnRows(turn);
   }
-  return buildTerminalTurnRows(
-    turn,
-    options.includeNestedRows,
-    options.mode,
-  );
+  return buildTerminalTurnRows(turn, options.includeNestedRows, options.mode);
 }
 
 function resolveBuildTimelineRowsOptions(
@@ -911,7 +896,9 @@ function buildTimelineRowsWithMode(
     if (standaloneMessages.length === 0) {
       return;
     }
-    rows.push(...buildToolBundleRows(prepareTimelineMessages(standaloneMessages)));
+    rows.push(
+      ...buildToolBundleRows(prepareTimelineMessages(standaloneMessages)),
+    );
     standaloneMessages.length = 0;
   };
 

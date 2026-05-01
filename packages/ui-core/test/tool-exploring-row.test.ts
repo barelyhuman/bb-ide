@@ -4,15 +4,12 @@ import {
   formatExploringIntentLine,
   summarizeExploringCounts,
 } from "@bb/core-ui";
-import type {
-  ViewToolExploringMessage,
-  ViewToolParsedIntent,
-} from "@bb/domain";
+import type { ViewToolCallSummary, ViewToolParsedIntent } from "@bb/domain";
 
 function buildCall(
   callId: string,
   parsedCmd: ViewToolParsedIntent[],
-): ViewToolExploringMessage["calls"][number] {
+): ViewToolCallSummary {
   return {
     callId,
     parsedCmd,

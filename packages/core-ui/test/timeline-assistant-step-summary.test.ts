@@ -5,7 +5,6 @@ import type {
   TimelineToolBundleRow,
   ViewFileEditMessage,
   ViewToolCallMessage,
-  ViewToolExploringMessage,
 } from "@bb/domain";
 import {
   buildTimelineAssistantStepSummary,
@@ -66,31 +65,27 @@ function buildCommandBundleRow({
 function buildExplorationBundleRow(
   status: TimelineToolBundleRow["status"],
 ): TimelineToolBundleRow {
-  const message: ViewToolExploringMessage = {
-    kind: "tool-exploring",
+  const message: ViewToolCallMessage = {
+    kind: "tool-call",
     id: "explore-1",
     threadId: "thread-1",
     turnId: "turn-1",
     sourceSeqStart: 1,
     sourceSeqEnd: 1,
     createdAt: 1,
-    status: status === "pending" ? "pending" : "completed",
-    calls: [
+    toolName: "Grep",
+    callId: "search-1",
+    command: "Grep button src",
+    parsedCmd: [
       {
-        callId: "search-1",
-        command: "Grep button src",
-        parsedCmd: [
-          {
-            type: "search",
-            cmd: "Grep button src",
-            query: "button",
-            path: "src",
-          },
-        ],
-        approvalStatus: null,
-        status,
+        type: "search",
+        cmd: "Grep button src",
+        query: "button",
+        path: "src",
       },
     ],
+    approvalStatus: null,
+    status: status === "pending" ? "pending" : "completed",
   };
 
   return {

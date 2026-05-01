@@ -5,7 +5,6 @@ import type {
   ViewMessage,
   ViewToolCallMessage,
   ViewToolCallSummary,
-  ViewToolExploringMessage,
   ViewToolParsedIntent,
   ViewWebSearchMessage,
 } from "@bb/domain";
@@ -17,7 +16,6 @@ import {
   viewMessageThreadScopeFields,
   viewMessageTurnScopeFields,
 } from "./message-scope.js";
-import { isExploringCall } from "./tool-call-parsing.js";
 import {
   appendVisibleTextBuffer,
   createVisibleTextBuffer,
@@ -29,18 +27,9 @@ import {
 } from "./visible-text-buffer.js";
 import type { WebActivityLifecycleEvent } from "./web-activity-lifecycle.js";
 
-interface ExploringCompatibilityContext {
-  scope: ThreadEventScope;
-  source?: string;
-  parentToolCallId?: string;
-}
-
 type ViewWebActivityMessage = ViewWebSearchMessage | ViewWebFetchMessage;
 type WebActivityKind = ViewWebActivityMessage["kind"];
-type InterruptibleToolMessage =
-  | ViewToolExploringMessage
-  | ViewToolCallMessage
-  | ViewWebActivityMessage;
+type InterruptibleToolMessage = ViewToolCallMessage | ViewWebActivityMessage;
 type InterruptibleToolCall = Pick<ViewToolCallSummary, "output" | "status">;
 
 type ApprovalStatusDelta =
@@ -66,14 +55,8 @@ interface RunningExecCall extends ViewToolCallSummary {
 
 export interface ToolActivityState {
   runningCallsById: Map<string, RunningExecCall>;
-  activeCell:
-    | ViewToolExploringMessage
-    | ViewToolCallMessage
-    | ViewWebActivityMessage
-    | null;
-  historyCells: Array<
-    ViewToolExploringMessage | ViewToolCallMessage | ViewWebActivityMessage
-  >;
+  activeCell: ViewToolCallMessage | ViewWebActivityMessage | null;
+  historyCells: Array<ViewToolCallMessage | ViewWebActivityMessage>;
   finalizedExecCallIds: Set<string>;
   finalizedWebActivityCallIds: Set<string>;
 }
@@ -267,7 +250,8 @@ function upsertRunningExecCall(
   if (incoming.output && incoming.output.length > 0) {
     if (
       isTerminalToolCallStatus(incoming.status) ||
-      incoming.output.length >= getVisibleTextBufferFullLength(existing.outputBuffer)
+      incoming.output.length >=
+        getVisibleTextBufferFullLength(existing.outputBuffer)
     ) {
       setRunningCallOutput(
         existing,
@@ -305,23 +289,6 @@ function appendExecOutputDelta(
   syncRunningCallVisibleOutput(call);
 }
 
-function areExploringCallsCompatible(
-  a: ExploringCompatibilityContext,
-  b: ExploringCompatibilityContext,
-): boolean {
-  const sameScope = areThreadEventScopesEqual(a.scope, b.scope);
-  const sameSource = (a.source ?? "agent") === (b.source ?? "agent");
-  const sameParent =
-    (a.parentToolCallId ?? null) === (b.parentToolCallId ?? null);
-  return sameScope && sameSource && sameParent;
-}
-
-function syncExploringStatus(cell: ViewToolExploringMessage): void {
-  cell.status = cell.calls.some((call) => call.status === "pending")
-    ? "pending"
-    : "completed";
-}
-
 function shouldInterruptToolScope(
   scope: ThreadEventScope,
   args: InterruptPendingToolActivityArgs,
@@ -347,12 +314,6 @@ function interruptPendingToolMessage(message: InterruptibleToolMessage): void {
     case "tool-call":
       interruptPendingToolCall(message);
       return;
-    case "tool-exploring":
-      for (const call of message.calls) {
-        interruptPendingToolCall(call);
-      }
-      syncExploringStatus(message);
-      return;
     case "web-search":
     case "web-fetch":
       if (message.status === "pending") {
@@ -367,7 +328,6 @@ function isInterruptibleToolMessage(
 ): message is InterruptibleToolMessage {
   return (
     message.kind === "tool-call" ||
-    message.kind === "tool-exploring" ||
     message.kind === "web-search" ||
     message.kind === "web-fetch"
   );
@@ -376,21 +336,20 @@ function isInterruptibleToolMessage(
 function findCallInActiveCell(
   activeCell: ToolActivityState["activeCell"],
   callId: string,
-): ViewToolCallSummary | ViewToolCallMessage | null {
+): ViewToolCallMessage | null {
   if (!activeCell) return null;
   if (activeCell.kind === "tool-call" && activeCell.callId === callId) {
     return activeCell;
   }
-  if (activeCell.kind !== "tool-exploring") return null;
-  return activeCell.calls.find((call) => call.callId === callId) ?? null;
+  return null;
 }
 
 function findCallInHistoryCells(
   state: ToolActivityProjectionState,
   callId: string,
 ): {
-  cell: ViewToolExploringMessage | ViewToolCallMessage;
-  call: ViewToolCallSummary | ViewToolCallMessage;
+  cell: ViewToolCallMessage;
+  call: ViewToolCallMessage;
 } | null {
   for (
     let index = state.toolActivity.historyCells.length - 1;
@@ -415,12 +374,7 @@ function findCallInHistoryCells(
 }
 
 function isWebActivityMessage(
-  cell:
-    | ViewToolExploringMessage
-    | ViewToolCallMessage
-    | ViewWebActivityMessage
-    | null
-    | undefined,
+  cell: ViewToolCallMessage | ViewWebActivityMessage | null | undefined,
 ): cell is ViewWebActivityMessage {
   return cell?.kind === "web-search" || cell?.kind === "web-fetch";
 }
@@ -481,14 +435,8 @@ function mergeCallSummary(
     target.output = visibleOutput;
   } else if (appendOutput && incoming.output && incoming.output.length > 0) {
     target.output = `${target.output ?? ""}${incoming.output}`;
-  } else if (
-    replaceOutput &&
-    incoming.output &&
-    incoming.output.length > 0
-  ) {
+  } else if (replaceOutput && incoming.output && incoming.output.length > 0) {
     target.output = incoming.output;
-  } else if (appendOutput && incoming.output && incoming.output.length > 0) {
-    target.output = `${target.output ?? ""}${incoming.output}`;
   } else if (
     !appendOutput &&
     incoming.output &&
@@ -521,7 +469,10 @@ function syncProjectedCallOutput(
   state: ToolActivityProjectionState,
   call: RunningExecCall,
 ): void {
-  const activeCall = findCallInActiveCell(state.toolActivity.activeCell, call.callId);
+  const activeCall = findCallInActiveCell(
+    state.toolActivity.activeCell,
+    call.callId,
+  );
   if (activeCall) {
     activeCall.output = call.output;
   }
@@ -536,14 +487,7 @@ export function flushActiveToolCell(state: ToolActivityProjectionState): void {
   const active = state.toolActivity.activeCell;
   if (!active) return;
 
-  if (active.kind === "tool-exploring") {
-    syncExploringStatus(active);
-    for (const call of active.calls) {
-      if (call.status !== "pending") {
-        state.toolActivity.finalizedExecCallIds.add(call.callId);
-      }
-    }
-  } else if (active.kind === "tool-call" && active.status !== "pending") {
+  if (active.kind === "tool-call" && active.status !== "pending") {
     state.toolActivity.finalizedExecCallIds.add(active.callId);
   }
 
@@ -603,9 +547,6 @@ export function interruptPendingToolActivity(
         ...call,
         parsedCmd: call.parsedCmd,
       });
-      if (historyMatch.cell.kind === "tool-exploring") {
-        syncExploringStatus(historyMatch.cell);
-      }
       interruptedRunningCallIds.push(call.callId);
       continue;
     }
@@ -671,48 +612,6 @@ function createToolCallMessage(call: RunningExecCall): ViewToolCallMessage {
   };
 }
 
-function createToolCallSummary(call: RunningExecCall): ViewToolCallSummary {
-  return {
-    callId: call.callId,
-    command: call.command,
-    cwd: call.cwd,
-    parsedCmd: call.parsedCmd,
-    source: call.source,
-    subagentType: call.subagentType,
-    description: call.description,
-    output: call.output,
-    exitCode: call.exitCode,
-    duration: call.duration,
-    durationMs: call.durationMs,
-    approvalStatus: call.approvalStatus,
-    status: call.status,
-  };
-}
-
-function createExploringMessage(
-  call: RunningExecCall,
-): ViewToolExploringMessage {
-  return {
-    kind: "tool-exploring",
-    id: messageId(
-      call.threadId,
-      "tool-exploring",
-      `${call.callId}:${call.sourceSeqStart}`,
-    ),
-    threadId: call.threadId,
-    sourceSeqStart: call.sourceSeqStart,
-    sourceSeqEnd: call.sourceSeqEnd,
-    createdAt: call.createdAt,
-    startedAt: call.startedAt,
-    scope: call.scope,
-    ...(call.parentToolCallId
-      ? { parentToolCallId: call.parentToolCallId }
-      : {}),
-    status: call.status === "pending" ? "pending" : "completed",
-    calls: [createToolCallSummary(call)],
-  };
-}
-
 export function onExecBegin(
   state: ToolActivityProjectionState,
   meta: EventMeta,
@@ -738,7 +637,7 @@ export function onExecBegin(
   );
   if (existingInActive) {
     mergeCallSummary(existingInActive, call);
-    if (state.toolActivity.activeCell?.kind === "tool-exploring") {
+    if (state.toolActivity.activeCell?.kind === "tool-call") {
       state.toolActivity.activeCell.sourceSeqEnd = Math.max(
         state.toolActivity.activeCell.sourceSeqEnd,
         call.sourceSeqEnd,
@@ -747,42 +646,11 @@ export function onExecBegin(
         state.toolActivity.activeCell.createdAt,
         call.createdAt,
       );
-      syncExploringStatus(state.toolActivity.activeCell);
     }
     return;
-  }
-
-  const exploring = isExploringCall(call);
-  const active = state.toolActivity.activeCell;
-
-  if (exploring && active?.kind === "tool-exploring") {
-    const lastCall = active.calls[active.calls.length - 1];
-    if (
-      lastCall &&
-      areExploringCallsCompatible(
-        {
-          scope: active.scope,
-          source: lastCall.source,
-          parentToolCallId: active.parentToolCallId,
-        },
-        call,
-      )
-    ) {
-      active.calls.push(createToolCallSummary(call));
-      active.sourceSeqEnd = Math.max(active.sourceSeqEnd, call.sourceSeqEnd);
-      active.createdAt = Math.max(active.createdAt, call.createdAt);
-      syncExploringStatus(active);
-      return;
-    }
   }
 
   flushActiveToolCell(state);
-
-  if (exploring) {
-    state.toolActivity.activeCell = createExploringMessage(call);
-    return;
-  }
-
   state.toolActivity.activeCell = createToolCallMessage(call);
 }
 
@@ -841,16 +709,7 @@ export function onExecOutput(
       replaceOutput,
       visibleOutput: existingRunning?.output,
     });
-    if (state.toolActivity.activeCell?.kind === "tool-exploring") {
-      state.toolActivity.activeCell.sourceSeqEnd = Math.max(
-        state.toolActivity.activeCell.sourceSeqEnd,
-        meta.seq,
-      );
-      state.toolActivity.activeCell.createdAt = Math.max(
-        state.toolActivity.activeCell.createdAt,
-        meta.createdAt,
-      );
-    } else if (state.toolActivity.activeCell?.kind === "tool-call") {
+    if (state.toolActivity.activeCell?.kind === "tool-call") {
       state.toolActivity.activeCell.sourceSeqEnd = Math.max(
         state.toolActivity.activeCell.sourceSeqEnd,
         meta.seq,
@@ -879,13 +738,9 @@ export function onExecOutput(
     meta.createdAt,
   );
 
-  if (historyMatch.cell.kind === "tool-exploring") {
-    syncExploringStatus(historyMatch.cell);
-  } else if (historyMatch.cell.kind === "tool-call") {
-    historyMatch.cell.status =
-      mergeCallStatus(historyMatch.cell.status, incoming.status) ??
-      historyMatch.cell.status;
-  }
+  historyMatch.cell.status =
+    mergeCallStatus(historyMatch.cell.status, incoming.status) ??
+    historyMatch.cell.status;
 }
 
 export function onExecEnd(
@@ -915,14 +770,6 @@ export function onExecEnd(
     mergeCallSummary(existingInActive, merged, {
       visibleOutput: merged.output,
     });
-    if (active?.kind === "tool-exploring") {
-      active.sourceSeqEnd = Math.max(active.sourceSeqEnd, merged.sourceSeqEnd);
-      active.createdAt = Math.max(active.createdAt, merged.createdAt);
-      syncExploringStatus(active);
-      state.toolActivity.finalizedExecCallIds.add(incoming.callId);
-      return;
-    }
-
     if (active?.kind === "tool-call") {
       active.sourceSeqEnd = Math.max(active.sourceSeqEnd, merged.sourceSeqEnd);
       active.createdAt = Math.max(active.createdAt, merged.createdAt);
@@ -956,34 +803,20 @@ export function onExecEnd(
       merged.createdAt,
     );
 
-    if (historyMatch.cell.kind === "tool-exploring") {
-      syncExploringStatus(historyMatch.cell);
-    } else {
-      historyMatch.cell.status =
-        mergeCallStatus(historyMatch.cell.status, merged.status) ??
-        historyMatch.cell.status;
-      historyMatch.cell.output = merged.output ?? historyMatch.cell.output;
-      historyMatch.cell.exitCode =
-        merged.exitCode ?? historyMatch.cell.exitCode;
-      historyMatch.cell.duration =
-        merged.duration ?? historyMatch.cell.duration;
-      historyMatch.cell.durationMs =
-        merged.durationMs ?? historyMatch.cell.durationMs;
-    }
+    historyMatch.cell.status =
+      mergeCallStatus(historyMatch.cell.status, merged.status) ??
+      historyMatch.cell.status;
+    historyMatch.cell.output = merged.output ?? historyMatch.cell.output;
+    historyMatch.cell.exitCode = merged.exitCode ?? historyMatch.cell.exitCode;
+    historyMatch.cell.duration = merged.duration ?? historyMatch.cell.duration;
+    historyMatch.cell.durationMs =
+      merged.durationMs ?? historyMatch.cell.durationMs;
 
     state.toolActivity.finalizedExecCallIds.add(incoming.callId);
     return;
   }
 
   flushActiveToolCell(state);
-
-  if (isExploringCall(merged)) {
-    const exploringMessage = createExploringMessage(merged);
-    syncExploringStatus(exploringMessage);
-    state.toolActivity.activeCell = exploringMessage;
-    flushActiveToolCell(state);
-    return;
-  }
 
   const toolCall = createToolCallMessage(merged);
   toolCall.status =

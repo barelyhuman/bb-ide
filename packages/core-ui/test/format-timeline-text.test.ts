@@ -301,43 +301,48 @@ describe("formatTimelineAsText", () => {
   it("collapses exploring calls in minimal mode", () => {
     const messages: ViewMessage[] = [
       {
-        kind: "tool-exploring",
-        id: "exp1",
+        kind: "tool-call",
+        id: "read-1",
         threadId: "t1",
         sourceSeqStart: 1,
-        sourceSeqEnd: 3,
+        sourceSeqEnd: 1,
         createdAt: 1,
-        status: "completed",
-        calls: [
+        toolName: "Read",
+        callId: "c1",
+        command: "Read /src/main.ts",
+        parsedCmd: [
           {
-            callId: "c1",
-            command: "Read /src/main.ts",
-            parsedCmd: [
-              {
-                type: "read",
-                cmd: "Read /src/main.ts",
-                name: "Read",
-                path: "/src/main.ts",
-              },
-            ],
-            output: "file contents here...",
-            status: "completed",
-          },
-          {
-            callId: "c2",
-            command: "Grep 'bug' in /src",
-            parsedCmd: [
-              {
-                type: "search",
-                cmd: "Grep 'bug' in /src",
-                query: "bug",
-                path: "/src",
-              },
-            ],
-            output: "found 3 matches",
-            status: "completed",
+            type: "read",
+            cmd: "Read /src/main.ts",
+            name: "Read",
+            path: "/src/main.ts",
           },
         ],
+        output: "file contents here...",
+        approvalStatus: null,
+        status: "completed",
+      },
+      {
+        kind: "tool-call",
+        id: "grep-1",
+        threadId: "t1",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+        createdAt: 2,
+        toolName: "Grep",
+        callId: "c2",
+        command: "Grep 'bug' in /src",
+        parsedCmd: [
+          {
+            type: "search",
+            cmd: "Grep 'bug' in /src",
+            query: "bug",
+            path: "/src",
+          },
+        ],
+        output: "found 3 matches",
+        approvalStatus: null,
+        status: "completed",
       },
     ];
 
@@ -373,18 +378,17 @@ describe("formatTimelineAsText", () => {
     }));
 
     const minimal = formatMessagesAsText(
-      [
-        {
-          kind: "tool-exploring",
-          id: "exp-large",
-          threadId: "t1",
-          sourceSeqStart: 1,
-          sourceSeqEnd: 10,
-          createdAt: 1,
-          status: "completed",
-          calls,
-        },
-      ],
+      calls.map((call, index) => ({
+        kind: "tool-call",
+        id: `read-${index + 1}`,
+        threadId: "t1",
+        sourceSeqStart: index + 1,
+        sourceSeqEnd: index + 1,
+        createdAt: index + 1,
+        toolName: "Read",
+        approvalStatus: null,
+        ...call,
+      })),
       { color: false },
     );
 

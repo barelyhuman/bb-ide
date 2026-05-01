@@ -7,7 +7,6 @@ import type {
 import {
   findLastTerminalTimelineMessage,
   isTimelineUngroupableMessage,
-  toTimelineVisibleMessages,
 } from "./timeline-message-helpers.js";
 
 export function findProjectionTerminalMessage(
@@ -17,9 +16,6 @@ export function findProjectionTerminalMessage(
 }
 
 function getProjectionMessageSummaryCount(message: ViewMessage): number {
-  if (message.kind === "tool-exploring") {
-    return Math.max(1, message.calls.length);
-  }
   if (message.kind === "file-edit") {
     return Math.max(1, message.changes.length);
   }
@@ -30,18 +26,8 @@ export function getProjectionSummaryCount(
   messages: ViewMessage[],
   terminalMessage: ViewMessage | undefined,
 ): number {
-  return getVisibleProjectionSummaryCount(
-    toTimelineVisibleMessages(messages),
-    terminalMessage,
-  );
-}
-
-function getVisibleProjectionSummaryCount(
-  visibleMessages: ViewMessage[],
-  terminalMessage: ViewMessage | undefined,
-): number {
   let count = 0;
-  for (const message of visibleMessages) {
+  for (const message of messages) {
     if (terminalMessage && message.id === terminalMessage.id) {
       break;
     }
@@ -54,11 +40,11 @@ function getVisibleProjectionSummaryCount(
 }
 
 function shouldIncludeSummaryTurnMessages(
-  visibleMessages: ViewMessage[],
+  messages: ViewMessage[],
   terminalMessage: ViewMessage | undefined,
 ): boolean {
   let foundTerminalMessage = false;
-  for (const message of visibleMessages) {
+  for (const message of messages) {
     if (terminalMessage && message.id === terminalMessage.id) {
       foundTerminalMessage = true;
       continue;
@@ -108,15 +94,11 @@ function applyTurnMessageDetail(
     withChildProjectionDetail(message),
   );
   const terminalMessage = findProjectionTerminalMessage(messages);
-  const visibleMessages = toTimelineVisibleMessages(messages);
-  const summaryCount = getVisibleProjectionSummaryCount(
-    visibleMessages,
-    terminalMessage,
-  );
+  const summaryCount = getProjectionSummaryCount(messages, terminalMessage);
   const includeMessages =
     turn.status === "pending" ||
     turnMessageDetail === "full" ||
-    shouldIncludeSummaryTurnMessages(visibleMessages, terminalMessage);
+    shouldIncludeSummaryTurnMessages(messages, terminalMessage);
 
   const detailedTurn: ViewTurn = {
     ...turn,

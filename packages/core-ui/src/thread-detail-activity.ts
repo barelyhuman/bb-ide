@@ -22,7 +22,6 @@ function isActivityMessage(message: ViewMessage): boolean {
     message.kind === "tool-call" ||
     message.kind === "delegation" ||
     message.kind === "file-edit" ||
-    message.kind === "tool-exploring" ||
     message.kind === "tasks" ||
     message.kind === "web-search" ||
     message.kind === "web-fetch" ||
@@ -51,14 +50,12 @@ function shouldPreferOngoingLabelsForMessage(message: ViewMessage): boolean {
   switch (message.kind) {
     case "tool-call":
     case "delegation":
-    case "tool-exploring":
     case "web-search":
     case "web-fetch":
     case "file-edit":
     case "permission-grant-lifecycle":
       return message.status === "completed";
     case "tasks":
-    case "assistant-reasoning":
     case "assistant-text":
     case "user":
     case "operation":
@@ -133,7 +130,9 @@ function rowContainsId(row: TimelineRow, targetId: string): boolean {
     case "assistant-step-summary":
       return row.rows.some((childRow) => rowContainsId(childRow, targetId));
     case "turn-summary":
-      return row.rows?.some((childRow) => rowContainsId(childRow, targetId)) ?? false;
+      return (
+        row.rows?.some((childRow) => rowContainsId(childRow, targetId)) ?? false
+      );
     default:
       return assertNever(row);
   }
