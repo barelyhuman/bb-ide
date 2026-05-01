@@ -1,6 +1,5 @@
 import type {
   ThreadEvent,
-  ThreadEventPlanStepStatus,
   SystemThreadProvisioningStatus,
   SystemThreadInterruptedReason,
   PendingInteractionStatus,
@@ -199,54 +198,11 @@ type ViewOperationFields = Omit<
   | "turnId"
 >;
 
-function formatPlanStepStatus(
-  status: ThreadEventPlanStepStatus | undefined,
-): string {
-  switch (status) {
-    case "active":
-      return "In progress";
-    case "pending":
-      return "Pending";
-    case "completed":
-      return "Completed";
-    case "failed":
-      return "Failed";
-    default:
-      return "";
-  }
-}
-
 export function parseOperationMessage(
   decoded: ThreadEvent,
   meta: EventMeta,
   options?: ParseOperationMessageOptions,
 ): ViewOperationMessage | ViewPermissionGrantLifecycleMessage | null {
-  if (decoded.type === "turn/plan/updated") {
-    const steps = decoded.plan
-      .map((entry) => {
-        const status = entry.status;
-        const text = entry.step;
-        if (!text) return null;
-        return status
-          ? `• [${formatPlanStepStatus(status)}] ${text}`
-          : `• ${text}`;
-      })
-      .filter((value): value is string => Boolean(value));
-
-    const detail =
-      decoded.explanation && steps.length > 0
-        ? `${decoded.explanation}\n${steps.join("\n")}`
-        : (decoded.explanation ??
-          (steps.length > 0 ? steps.join("\n") : undefined));
-
-    return op(decoded, meta, "plan", {
-      opType: "plan-updated",
-      title: "Plan updated",
-      detail,
-      status: "completed",
-    });
-  }
-
   if (decoded.type === "provider/unhandled") {
     if (options?.includeProviderUnhandledOperations !== true) {
       return null;

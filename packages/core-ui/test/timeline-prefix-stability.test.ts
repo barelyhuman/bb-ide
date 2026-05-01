@@ -781,7 +781,7 @@ describe("timeline prefix stability", () => {
     ]);
   });
 
-  it("does not compact completed task updates into later pending task updates", () => {
+  it("omits todo updates from timeline rows", () => {
     const event = createTimelineEventFactory({
       threadId: "thread-1",
       providerThreadId: "provider-thread-1",
@@ -817,16 +817,6 @@ describe("timeline prefix stability", () => {
       event.turnCompleted({}),
     ];
 
-    expectTerminalRowsNeverRegress({
-      events,
-      projectionOptions: {
-        threadStatus: "active",
-        turnMessageDetail: "full",
-      },
-      resolveRow: taskLogicalRow,
-      startAt: 3,
-    });
-
     const mixedPrefix = renderTimelineFixture({
       events: events.slice(0, 4),
       projectionOptions: {
@@ -840,18 +830,7 @@ describe("timeline prefix stability", () => {
         rows: mixedPrefix.rows,
         resolveRow: taskLogicalRow,
       }),
-    ).toEqual([
-      {
-        key: "tasks:todo-a",
-        status: "completed",
-        title: "Tasks updated",
-      },
-      {
-        key: "tasks:todo-b",
-        status: "pending",
-        title: "Updating tasks",
-      },
-    ]);
+    ).toEqual([]);
   });
 
   it("keeps assistant text stable after final content arrives", () => {

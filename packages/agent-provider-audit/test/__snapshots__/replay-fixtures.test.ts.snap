@@ -10,9 +10,9 @@ exports[`@bb/agent-provider-audit fixture replay > exports shared React story da
   },
   {
     "id": "dev-replays/codex/cap_mol1xza1_zclp97wz",
-    "latestActivityRowId": "thr_4gfmxbsa64:tasks:plan:019ddce4-45da-70e3-bdf3-e9cd141b653a:2861",
+    "latestActivityRowId": "thr_4gfmxbsa64:command:call_n4dDMA5ViKZWimG3zFFAaW7X",
     "timelineRowCount": 3,
-    "viewMessageCount": 228,
+    "viewMessageCount": 234,
   },
   {
     "id": "excalidraw/claude-code/collab-startup-explanation",
@@ -22,9 +22,9 @@ exports[`@bb/agent-provider-audit fixture replay > exports shared React story da
   },
   {
     "id": "excalidraw/claude-code/eyedropper-browser-compat",
-    "latestActivityRowId": "provider-audit-claude-eyedropper-browser-compat-20260328T032935Z:tasks:todo:toolu_01F65zEq4vr8ffYUEeX6p8t4:336",
+    "latestActivityRowId": "provider-audit-claude-eyedropper-browser-compat-20260328T032935Z:command:toolu_01B3uyHSqMLYBnF2X2wEbCRX",
     "timelineRowCount": 8,
-    "viewMessageCount": 94,
+    "viewMessageCount": 85,
   },
   {
     "id": "excalidraw/claude-code/eyedropper-preview-bugfix",
@@ -58,9 +58,9 @@ exports[`@bb/agent-provider-audit fixture replay > exports shared React story da
   },
   {
     "id": "excalidraw/codex/collab-startup-explanation",
-    "latestActivityRowId": "provider-audit-codex-collab-startup-probe-20260327T070956Z-47808:tasks:plan:019d2e20-d4c4-7c90-aeb2-f08f2b263ee1:225",
+    "latestActivityRowId": "provider-audit-codex-collab-startup-probe-20260327T070956Z-47808:command:call_EkokKGOIJWjvD8q7UbTfRgM7",
     "timelineRowCount": 5,
-    "viewMessageCount": 56,
+    "viewMessageCount": 54,
   },
   {
     "id": "excalidraw/codex/command-output-recovery",
@@ -72,19 +72,19 @@ exports[`@bb/agent-provider-audit fixture replay > exports shared React story da
     "id": "excalidraw/codex/eyedropper-preview-bugfix",
     "latestActivityRowId": "provider-audit-codex-eyedropper-probe-20260327T073956Z-98504:command:call_KmSsvOrHmWvLkzW6iqQkBgFZ",
     "timelineRowCount": 5,
-    "viewMessageCount": 43,
+    "viewMessageCount": 40,
   },
   {
     "id": "excalidraw/codex/magicframe-feature",
-    "latestActivityRowId": "provider-audit-codex-magicframe-probe-20260327T074604Z-99733:tasks:plan:019d2e41-eb99-72d1-8c9b-46519dc4f092:439",
+    "latestActivityRowId": "provider-audit-codex-magicframe-probe-20260327T074604Z-99733:command:call_PK9mVibNlYr2TSicEyQll7p3",
     "timelineRowCount": 5,
-    "viewMessageCount": 61,
+    "viewMessageCount": 59,
   },
   {
     "id": "excalidraw/codex/search-bugfix",
-    "latestActivityRowId": "provider-audit-thread:tasks:plan:019d2846-bc3a-7d53-85a5-959d7d27c395:200",
+    "latestActivityRowId": "provider-audit-thread:command:call_fp2RVtsCsShaiEmMTiqVJ5YK",
     "timelineRowCount": 5,
-    "viewMessageCount": 36,
+    "viewMessageCount": 34,
   },
   {
     "id": "excalidraw/codex/search-feature",
@@ -96,13 +96,13 @@ exports[`@bb/agent-provider-audit fixture replay > exports shared React story da
     "id": "excalidraw/codex/share-web-compat",
     "latestActivityRowId": "provider-audit-codex-share-web-compat-20260328T035907Z:command:call_dmA0RMZK3v08aKwpKJPuRdXq",
     "timelineRowCount": 5,
-    "viewMessageCount": 83,
+    "viewMessageCount": 81,
   },
   {
     "id": "excalidraw/codex/ttd-explanation",
-    "latestActivityRowId": "provider-audit-thread:tasks:plan:019d2831-dae1-75a3-a13e-89e2ec51c24d:225",
+    "latestActivityRowId": "provider-audit-thread:command:call_8mZOPBxRWUSilwqYeKpf9Q6G",
     "timelineRowCount": 5,
-    "viewMessageCount": 54,
+    "viewMessageCount": 51,
   },
   {
     "id": "excalidraw/pi/collab-startup-explanation",
@@ -198,12 +198,11 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 3,
     "translatedThreadEventCount": 3095,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 228,
+    "viewMessageCount": 234,
     "viewMessageKinds": {
       "assistant-text": 39,
       "command": 140,
-      "file-edit": 39,
-      "tasks": 9,
+      "file-edit": 54,
       "user": 1,
     },
   },
@@ -265,12 +264,11 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 8,
     "translatedThreadEventCount": 407,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 94,
+    "viewMessageCount": 85,
     "viewMessageKinds": {
       "assistant-text": 27,
       "command": 7,
       "file-edit": 6,
-      "tasks": 9,
       "tool-call": 34,
       "user": 3,
       "web-fetch": 5,
@@ -469,11 +467,10 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 3512,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 56,
+    "viewMessageCount": 54,
     "viewMessageKinds": {
       "assistant-text": 2,
       "command": 50,
-      "tasks": 2,
       "user": 2,
     },
   },
@@ -522,12 +519,11 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 936,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 43,
+    "viewMessageCount": 40,
     "viewMessageKinds": {
       "assistant-text": 5,
       "command": 30,
       "file-edit": 3,
-      "tasks": 3,
       "user": 2,
     },
   },
@@ -555,12 +551,11 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 941,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 61,
+    "viewMessageCount": 59,
     "viewMessageKinds": {
       "assistant-text": 4,
       "command": 49,
       "file-edit": 4,
-      "tasks": 2,
       "user": 2,
     },
   },
@@ -588,12 +583,11 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 658,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 36,
+    "viewMessageCount": 34,
     "viewMessageKinds": {
       "assistant-text": 3,
       "command": 27,
-      "file-edit": 1,
-      "tasks": 3,
+      "file-edit": 2,
       "user": 2,
     },
   },
@@ -625,8 +619,7 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "viewMessageKinds": {
       "assistant-text": 3,
       "command": 29,
-      "file-edit": 1,
-      "tasks": 3,
+      "file-edit": 4,
       "user": 2,
     },
   },
@@ -654,12 +647,11 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 1090,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 83,
+    "viewMessageCount": 81,
     "viewMessageKinds": {
       "assistant-text": 3,
       "command": 70,
       "file-edit": 5,
-      "tasks": 2,
       "tool-call": 1,
       "user": 2,
     },
@@ -688,11 +680,10 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "timelineRowCount": 5,
     "translatedThreadEventCount": 3077,
     "unexpectedUntranslatedRawEventCount": 0,
-    "viewMessageCount": 54,
+    "viewMessageCount": 51,
     "viewMessageKinds": {
       "assistant-text": 2,
       "command": 47,
-      "tasks": 3,
       "user": 2,
     },
   },
@@ -2024,15 +2015,9 @@ I want you to commit as you go
   I’ve got the plan and repo rules loaded. The plan has a note typo referring to “Phase 7,” but the ... [truncated 118 chars]
 
   -- Explored 3 searches, 1 list -----------------------------
-    -- Updated tasks -------------------------------------------
-      ◼ Inspect apps/app React state, hooks, atom patterns, and existing tests around the audited fi... [truncated 3 chars]
-      □ Phase 1: move listed local UI state into Jotai atoms, validate, commit, and review
-      □ Phase 2: extract reusable hooks, add focused tests, validate, commit, and review
-  ... [truncated 6 lines]
-    -- Explored 3 searches, 1 list -----------------------------
-      Search apps/app/src
-      Search atom|atomFamily|selectAtom|useAtom|useSetAtom|useAtomValue in apps/app/src
-      List apps/app/src
+    Search apps/app/src
+    Search atom|atomFamily|selectAtom|useAtom|useSetAtom|useAtomValue in apps/app/src
+    List apps/app/src
   ... [truncated 2 lines]
   -- Assistant -----------------------------------------------
   I’m inspecting the affected components and nearby atom/test patterns now. The first pass is to und... [truncated 120 chars]
@@ -2045,12 +2030,6 @@ I want you to commit as you go
   -- Assistant -----------------------------------------------
   I’ve finished the initial pass over the named files. Phase 1 has a few spots where simply replacin... [truncated 207 chars]
 
-  -- Worked on 1 item ----------------------------------------
-    -- Updated tasks -------------------------------------------
-      ☒ Inspect apps/app React state, hooks, atom patterns, and existing tests around the audited fi... [truncated 3 chars]
-      ◼ Phase 1: move listed local UI state into Jotai atoms, validate, commit, and review
-      □ Phase 2: extract reusable hooks, add focused tests, validate, commit, and review
-  ... [truncated 6 lines]
   -- Assistant -----------------------------------------------
   I’m adding the Phase 1 atom modules first, then I’ll wire each audited component to the atoms with... [truncated 61 chars]
 
@@ -2059,7 +2038,17 @@ I want you to commit as you go
       [completed] $BB_DEV_WORKSPACE/apps/app/src/views/appSettingsAtoms.ts (add)
       import type { CloudAuthProviderId } from "@bb/agent-providers";
       import { atom } from "jotai";
-  ... [truncated 72 lines]
+  ... [truncated 25 lines]
+    -- File Edit -----------------------------------------------
+      [completed] $BB_DEV_WORKSPACE/apps/app/src/views/projectSettingsAtoms.ts (add)
+      import { atom } from "jotai";
+      import { atomFamily } from "jotai-family";
+  ... [truncated 21 lines]
+    -- File Edit -----------------------------------------------
+      [completed] $BB_DEV_WORKSPACE/apps/app/src/views/promptComposerAtoms.ts (add)
+      import { atom } from "jotai";
+      import { atomFamily } from "jotai-family";
+  ... [truncated 30 lines]
     -- File Edit -----------------------------------------------
       [completed] $BB_DEV_WORKSPACE/apps/app/src/views/ThreadFollowUpComposer.tsx (update)
       @@ -1,2 +1,3 @@
@@ -2195,15 +2184,9 @@ I want you to commit as you go
   Commit \`f886a500d\` is clean: it covers Phase 1’s named state moves, uses scoped Jotai atom familie... [truncated 280 chars]
 
   -- Explored 4 files, 1 search ------------------------------
-    -- Updated tasks -------------------------------------------
-      ☒ Inspect apps/app React state, hooks, atom patterns, and existing tests around the audited fi... [truncated 3 chars]
-      ☒ Phase 1: move listed local UI state into Jotai atoms, validate, commit, and review
-      ◼ Phase 2: extract reusable hooks, add focused tests, validate, commit, and review
-  ... [truncated 6 lines]
-    -- Explored 4 files, 1 search ------------------------------
-      Search function useUploadPromptAttachment|useUploadPromptAttachment in apps/app/src/hooks/muta... [truncated 5 chars]
-      Read apps/app/src/hooks/mutations/project-mutations.ts
-      Read apps/app/src/views/ThreadDetailPromptArea.test.tsx
+    Search function useUploadPromptAttachment|useUploadPromptAttachment in apps/app/src/hooks/mutati... [truncated 3 chars]
+    Read apps/app/src/hooks/mutations/project-mutations.ts
+    Read apps/app/src/views/ThreadDetailPromptArea.test.tsx
   ... [truncated 3 lines]
   -- Assistant -----------------------------------------------
   For Phase 2, I’m going to extract the shared attachment upload handling into a hook. To keep depen... [truncated 148 chars]
@@ -2218,12 +2201,47 @@ I want you to commit as you go
       [completed] $BB_DEV_WORKSPACE/apps/app/src/views/ProjectMainView.tsx (update)
       @@ -28,3 +28,3 @@
          promptAttachmentErrorAtomFamily,
-  ... [truncated 17 lines]
+  ... [truncated 7 lines]
+    -- File Edit -----------------------------------------------
+      [completed] $BB_DEV_WORKSPACE/apps/app/src/views/ThreadDetailPromptArea.tsx (update)
+      @@ -41,3 +41,3 @@
+         promptAttachmentErrorAtomFamily,
+  ... [truncated 7 lines]
+    -- File Edit -----------------------------------------------
+      [completed] $BB_DEV_WORKSPACE/apps/app/src/views/ThreadFollowUpComposer.tsx (update)
+      @@ -47,3 +47,3 @@
+       } from "./threadQueuedMessages";
+  ... [truncated 7 lines]
     -- File Edit -----------------------------------------------
       [completed] $BB_DEV_WORKSPACE/apps/app/src/hooks/useDelayedVisible.ts (add)
       import { useEffect, useState } from "react";
 
-  ... [truncated 347 lines]
+  ... [truncated 28 lines]
+    -- File Edit -----------------------------------------------
+      [completed] $BB_DEV_WORKSPACE/apps/app/src/hooks/useProjectExecutionState.ts (add)
+      import { useMemo } from "react";
+      import type { ProjectResponse, CreateThreadRequest } from "@bb/server-contract";
+  ... [truncated 81 lines]
+    -- File Edit -----------------------------------------------
+      [completed] $BB_DEV_WORKSPACE/apps/app/src/hooks/usePromptAttachmentHandler.ts (add)
+      import { useCallback } from "react";
+      import { useAtom } from "jotai";
+  ... [truncated 79 lines]
+    -- File Edit -----------------------------------------------
+      [completed] $BB_DEV_WORKSPACE/apps/app/src/hooks/useShowAllEventsToggle.ts (add)
+      import { useCallback } from "react";
+      import { useStoredShowAllEvents } from "@/lib/show-all-events-preference";
+  ... [truncated 35 lines]
+    -- File Edit -----------------------------------------------
+      [completed] $BB_DEV_WORKSPACE/apps/app/src/hooks/useSidebarResize.ts (add)
+      import {
+        useCallback,
+  ... [truncated 78 lines]
+    -- File Edit -----------------------------------------------
+      [completed] $BB_DEV_WORKSPACE/apps/app/src/hooks/useThreadFollowUp.ts (add)
+      import { useCallback } from "react";
+      import type {
+  ... [truncated 71 lines]
     -- File Edit -----------------------------------------------
       [completed] $BB_DEV_WORKSPACE/apps/app/src/views/ThreadDetailPromptArea.tsx (update)
       @@ -1,3 +1,2 @@
@@ -2282,7 +2300,22 @@ I want you to commit as you go
       [completed] $BB_DEV_WORKSPACE/apps/app/src/hooks/useDelayedVisible.test.tsx (add)
       import { act, renderHook } from "@testing-library/react";
       import { afterEach, describe, expect, it, vi } from "vitest";
-  ... [truncated 196 lines]
+  ... [truncated 50 lines]
+    -- File Edit -----------------------------------------------
+      [completed] $BB_DEV_WORKSPACE/apps/app/src/hooks/usePromptAttachmentHandler.test.ts (add)
+      import { describe, expect, it } from "vitest";
+      import type { PromptDraftAttachment } from "@/lib/prompt-draft";
+  ... [truncated 57 lines]
+    -- File Edit -----------------------------------------------
+      [completed] $BB_DEV_WORKSPACE/apps/app/src/hooks/useSidebarResize.test.ts (add)
+      import { describe, expect, it } from "vitest";
+      import {
+  ... [truncated 21 lines]
+    -- File Edit -----------------------------------------------
+      [completed] $BB_DEV_WORKSPACE/apps/app/src/hooks/useThreadFollowUp.test.tsx (add)
+      import { renderHook } from "@testing-library/react";
+      import type { PromptInput } from "@bb/domain";
+  ... [truncated 77 lines]
     -- File Edit -----------------------------------------------
       [completed] $BB_DEV_WORKSPACE/apps/app/src/hooks/useThreadFollowUp.test.tsx (update)
       @@ -3,2 +3,3 @@
@@ -2342,7 +2375,17 @@ I want you to commit as you go
       [completed] $BB_DEV_WORKSPACE/apps/app/src/hooks/useDelayedVisible.test.tsx (update)
       @@ -1 +1,3 @@
       +// @vitest-environment jsdom
-  ... [truncated 17 lines]
+  ... [truncated 7 lines]
+    -- File Edit -----------------------------------------------
+      [completed] $BB_DEV_WORKSPACE/apps/app/src/hooks/useProjectExecutionState.test.tsx (update)
+      @@ -1 +1,3 @@
+      +// @vitest-environment jsdom
+  ... [truncated 7 lines]
+    -- File Edit -----------------------------------------------
+      [completed] $BB_DEV_WORKSPACE/apps/app/src/hooks/useThreadFollowUp.test.tsx (update)
+      @@ -1 +1,3 @@
+      +// @vitest-environment jsdom
+  ... [truncated 7 lines]
     -- Ran 1 command -------------------------------------------
       -- Tool Call: exec_command ---------------------------------
         [completed] pnpm exec turbo run test --filter=@bb/app > /tmp/bb-app-test-phase2.txt 2>&1
@@ -2406,12 +2449,6 @@ I want you to commit as you go
   -- Assistant -----------------------------------------------
   Commit \`11627cccb\` is clean. Review against Phase 2: the follow-up submit, attachment upload, proj... [truncated 311 chars]
 
-  -- Worked on 1 item ----------------------------------------
-    -- Updated tasks -------------------------------------------
-      ☒ Inspect apps/app React state, hooks, atom patterns, and existing tests around the audited fi... [truncated 3 chars]
-      ☒ Phase 1: move listed local UI state into Jotai atoms, validate, commit, and review
-      ☒ Phase 2: extract reusable hooks, add focused tests, validate, commit, and review
-  ... [truncated 6 lines]
   -- Assistant -----------------------------------------------
   I’m starting Phase 3 by stabilizing props where memoized or heavy child paths receive fresh object... [truncated 121 chars]
 
@@ -2496,12 +2533,6 @@ I want you to commit as you go
   -- Assistant -----------------------------------------------
   Commit \`20db9d673\` is clean. Review against Phase 3: \`ThreadFollowUpComposer\` and \`PromptBox\` now ... [truncated 262 chars]
 
-  -- Worked on 1 item ----------------------------------------
-    -- Updated tasks -------------------------------------------
-      ☒ Inspect apps/app React state, hooks, atom patterns, and existing tests around the audited fi... [truncated 3 chars]
-      ☒ Phase 1: move listed local UI state into Jotai atoms, validate, commit, and review
-      ☒ Phase 2: extract reusable hooks, add focused tests, validate, commit, and review
-  ... [truncated 6 lines]
   -- Assistant -----------------------------------------------
   Phase 4 is a small structural change: I’m extracting the queued follow-up row into a memoized item... [truncated 71 chars]
 
@@ -2562,12 +2593,6 @@ I want you to commit as you go
   -- Assistant -----------------------------------------------
   Commit \`7aa3cd7d9\` is clean. Review against Phase 4: \`QueuedFollowUpItem\` is \`React.memo\`’d, the l... [truncated 181 chars]
 
-  -- Worked on 1 item ----------------------------------------
-    -- Updated tasks -------------------------------------------
-      ☒ Inspect apps/app React state, hooks, atom patterns, and existing tests around the audited fi... [truncated 3 chars]
-      ☒ Phase 1: move listed local UI state into Jotai atoms, validate, commit, and review
-      ☒ Phase 2: extract reusable hooks, add focused tests, validate, commit, and review
-  ... [truncated 6 lines]
   -- Assistant -----------------------------------------------
   Phase 5 is the diff-panel subscription work. I’m moving per-file collapsed/loading reads into a sm... [truncated 123 chars]
 
@@ -2629,13 +2654,7 @@ I want you to commit as you go
   Commit \`e0afe7e6e\` is clean. Review against Phase 5: per-file cards subscribe with \`selectAtom\` by... [truncated 258 chars]
 
   -- Explored 1 search ---------------------------------------
-    -- Updated tasks -------------------------------------------
-      ☒ Inspect apps/app React state, hooks, atom patterns, and existing tests around the audited fi... [truncated 3 chars]
-      ☒ Phase 1: move listed local UI state into Jotai atoms, validate, commit, and review
-      ☒ Phase 2: extract reusable hooks, add focused tests, validate, commit, and review
-  ... [truncated 6 lines]
-    -- Explored 1 search ---------------------------------------
-      Search threadTimelineResponseSchema|ThreadTimelineResponse in packages/server-contract/src/api... [truncated 9 chars]
+    Search threadTimelineResponseSchema|ThreadTimelineResponse in packages/server-contract/src/api-t... [truncated 7 chars]
 
   -- Assistant -----------------------------------------------
   Phase 6’s audited lines have drifted since the plan, but the same timeline derivation chain is sti... [truncated 162 chars]
@@ -2645,7 +2664,12 @@ I want you to commit as you go
       [completed] $BB_DEV_WORKSPACE/apps/app/src/hooks/useThreadTimelineState.test.tsx (add)
       // @vitest-environment jsdom
 
-  ... [truncated 92 lines]
+  ... [truncated 63 lines]
+    -- File Edit -----------------------------------------------
+      [completed] $BB_DEV_WORKSPACE/apps/app/src/hooks/useThreadTimelineState.ts (add)
+      import { useMemo } from "react";
+      import type { ThreadTimelineResponse } from "@bb/server-contract";
+  ... [truncated 30 lines]
     -- Explored 1 file, 1 search -------------------------------
       Search activeThinkingSchema in packages/domain/src
       Read packages/domain/src/active-thinking.ts
@@ -2749,12 +2773,6 @@ I want you to commit as you go
   -- Assistant -----------------------------------------------
   Commit \`49928619f\` is clean. Review against Phase 6: \`ThreadDetailView\` no longer owns the timelin... [truncated 178 chars]
 
-  -- Worked on 1 item ----------------------------------------
-    -- Updated tasks -------------------------------------------
-      ☒ Inspect apps/app React state, hooks, atom patterns, and existing tests around the audited fi... [truncated 3 chars]
-      ☒ Phase 1: move listed local UI state into Jotai atoms, validate, commit, and review
-      ☒ Phase 2: extract reusable hooks, add focused tests, validate, commit, and review
-  ... [truncated 6 lines]
   -- Assistant -----------------------------------------------
   All implementation phases are committed. Per the repo planning workflow, a completed plan file sho... [truncated 129 chars]
 
@@ -2812,11 +2830,6 @@ I want you to commit as you go
         0ms
         ## bb/react-performance-audit-tasks-thr_4gfmxbsa64
   ... [truncated 9 lines]
-    -- Updated tasks -------------------------------------------
-      ☒ Inspect apps/app React state, hooks, atom patterns, and existing tests around the audited fi... [truncated 3 chars]
-      ☒ Phase 1: move listed local UI state into Jotai atoms, validate, commit, and review
-      ☒ Phase 2: extract reusable hooks, add focused tests, validate, commit, and review
-  ... [truncated 6 lines]
 -- Assistant -----------------------------------------------
 Done. The plan is complete and \`plans/react-perf-audit.md\` was removed per AGENTS.md.
 
@@ -2860,11 +2873,6 @@ I want to make Excalidraw's eyedropper experience friendlier on browsers with un
       16ms
       Matched tools: TodoWrite, WebSearch, WebFetch
   ... [truncated 1 lines]
-    -- Updated tasks -------------------------------------------
-      ◼ Find all eyedropper-related code in the repo
-      □ Web-search for EyeDropper API browser/platform support status
-      □ Read MDN and other docs on EyeDropper API compatibility
-  ... [truncated 3 lines]
     -- Explored 1 search ---------------------------------------
       Search eyeDropper|EyeDropper|eyedropper|EYEDROPPER
 
@@ -2903,15 +2911,9 @@ I want to make Excalidraw's eyedropper experience friendlier on browsers with un
   Good. Now let me check where the eye dropper button is rendered and how the native \`EyeDropper\` AP... [truncated 101 chars]
 
   -- Explored 2 files, 1 search ------------------------------
-    -- Updated tasks -------------------------------------------
-      ☒ Find all eyedropper-related code in the repo
-      ☒ Web-search for EyeDropper API browser/platform support status
-      ☒ Read MDN and other docs on EyeDropper API compatibility
-  ... [truncated 3 lines]
-    -- Explored 2 files, 1 search ------------------------------
-      Read $EXCALIDRAW_REPO/packages/excalidraw/components/ColorPicker/ColorInput.tsx
-      Read $EXCALIDRAW_REPO/packages/excalidraw/components/ColorPicker/keyboardNavHandlers.ts
-      Search window\\.EyeDropper|EyeDropper\\(|new EyeDropper|eyeDropper.*open|native.*eyedropper|isEy... [truncated 40 chars]
+    Read $EXCALIDRAW_REPO/packages/excalidraw/components/ColorPicker/ColorInput.tsx
+    Read $EXCALIDRAW_REPO/packages/excalidraw/components/ColorPicker/keyboardNavHandlers.ts
+    Search window\\.EyeDropper|EyeDropper\\(|new EyeDropper|eyeDropper.*open|native.*eyedropper|isEyeD... [truncated 38 chars]
   ... [truncated 1 lines]
   -- Assistant -----------------------------------------------
   Now let me see how the eyedropper is triggered in App.tsx and check if there's any feature detecti... [truncated 3 chars]
@@ -2959,20 +2961,9 @@ I want to make Excalidraw's eyedropper experience friendlier on browsers with un
         # WebKit/Apple's Position on EyeDropper API
 
   ... [truncated 12 lines]
-    -- Updated tasks -------------------------------------------
-      ☒ Find all eyedropper-related code in the repo
-      ☒ Web-search for EyeDropper API browser/platform support status
-      ☒ Read MDN and other docs on EyeDropper API compatibility
-  ... [truncated 3 lines]
   -- Assistant -----------------------------------------------
   Now I have a complete picture. Let me finalize my analysis and recommendation.
 
-  -- Worked on 1 item ----------------------------------------
-    -- Updated tasks -------------------------------------------
-      ☒ Find all eyedropper-related code in the repo
-      ☒ Web-search for EyeDropper API browser/platform support status
-      ☒ Read MDN and other docs on EyeDropper API compatibility
-  ... [truncated 3 lines]
 -- Assistant -----------------------------------------------
 ---
 
@@ -2985,12 +2976,6 @@ Implement that improvement with focused validation and keep the existing behavio
   -- Assistant -----------------------------------------------
   Let me start by planning the implementation carefully, then build it out.
 
-  -- Worked on 1 item ----------------------------------------
-    -- Updated tasks -------------------------------------------
-      ◼ Add supportsNativeEyeDropper() helper utility
-      □ Add TypeScript type declarations for the native EyeDropper API
-      □ Implement native EyeDropper path in EyeDropper.tsx with canvas fallback
-  ... [truncated 4 lines]
   -- Assistant -----------------------------------------------
   Let me first check the project structure for where types live, and read the full existing files I'... [truncated 18 chars]
 
@@ -3031,11 +3016,6 @@ Implement that improvement with focused validation and keep the existing behavio
       --- a/$EXCALIDRAW_REPO/packages/excalidraw/global.d.ts
       +++ b/$EXCALIDRAW_REPO/packages/excalidraw/global.d.ts
   ... [truncated 39 lines]
-    -- Updated tasks -------------------------------------------
-      ☒ Add supportsNativeEyeDropper() helper utility
-      ☒ Add TypeScript type declarations for the native EyeDropper API
-      ◼ Implement native EyeDropper path in EyeDropper.tsx with canvas fallback
-  ... [truncated 4 lines]
   -- Assistant -----------------------------------------------
   **Step 2: Rewrite \`EyeDropper.tsx\` with native API path + canvas fallback**
 
@@ -3045,11 +3025,6 @@ Implement that improvement with focused validation and keep the existing behavio
       --- /dev/null
       +++ b/$EXCALIDRAW_REPO/packages/excalidraw/components/EyeDropper.tsx
   ... [truncated 50 lines]
-    -- Updated tasks -------------------------------------------
-      ☒ Add supportsNativeEyeDropper() helper utility
-      ☒ Add TypeScript type declarations for the native EyeDropper API
-      ☒ Implement native EyeDropper path in EyeDropper.tsx with canvas fallback
-  ... [truncated 4 lines]
   -- Assistant -----------------------------------------------
   **Step 3: Update \`ColorInput.tsx\` to show capability-aware tooltip**
 
@@ -3080,11 +3055,6 @@ Implement that improvement with focused validation and keep the existing behavio
       [completed] $EXCALIDRAW_REPO/packages/excalidraw/locales/en.json (update)
       --- a/$EXCALIDRAW_REPO/packages/excalidraw/locales/en.json
       +++ b/$EXCALIDRAW_REPO/packages/excalidraw/locales/en.json
-  ... [truncated 4 lines]
-    -- Updated tasks -------------------------------------------
-      ☒ Add supportsNativeEyeDropper() helper utility
-      ☒ Add TypeScript type declarations for the native EyeDropper API
-      ☒ Implement native EyeDropper path in EyeDropper.tsx with canvas fallback
   ... [truncated 4 lines]
   -- Assistant -----------------------------------------------
   Now let me also check that the \`HelpDialog.tsx\` reference to the eyedropper label still works, and... [truncated 20 chars]
@@ -3156,12 +3126,6 @@ Implement that improvement with focused validation and keep the existing behavio
   -- Assistant -----------------------------------------------
   Clean lint too. Let me finalize:
 
-  -- Worked on 1 item ----------------------------------------
-    -- Updated tasks -------------------------------------------
-      ☒ Add supportsNativeEyeDropper() helper utility
-      ☒ Add TypeScript type declarations for the native EyeDropper API
-      ☒ Implement native EyeDropper path in EyeDropper.tsx with canvas fallback
-  ... [truncated 4 lines]
 -- Assistant -----------------------------------------------
 Here's a summary of everything that was changed and why:
 
@@ -3819,21 +3783,11 @@ I'm trying to understand Excalidraw's collaboration startup flow before changing
         0ms
         zsh:1: command not found: bb
   ... [truncated 2 lines]
-    -- Updated tasks -------------------------------------------
-      ◼ Locate collaboration UI entry points and startup handlers
-      □ Trace room initialization, socket setup, and first-scene load through current code
-      □ Summarize collaboration mode state flips, key types/state, and fallback/failure paths with f... [truncated 8 chars]
-  ... [truncated 1 lines]
     -- Explored 19 files, 12 searches, 2 lists -----------------
       List .
       List .
       Search startCollaboration|initializeRoom|setIsCollaborating|stopCollaboration|fallbackInitiali... [truncated 259 chars]
   ... [truncated 35 lines]
-    -- Updated tasks -------------------------------------------
-      ☒ Locate collaboration UI entry points and startup handlers
-      ☒ Trace room initialization, socket setup, and first-scene load through current code
-      ☒ Summarize collaboration mode state flips, key types/state, and fallback/failure paths with f... [truncated 8 chars]
-  ... [truncated 1 lines]
 -- Assistant -----------------------------------------------
 I traced the current **client-side** flow. The websocket server itself doesn’t appear to live in thi... [truncated 168 chars]
 
@@ -3891,11 +3845,6 @@ There's a positioning bug in the eyedropper preview: near the viewport edges, th
         0ms
         zsh:1: command not found: bb
   ... [truncated 2 lines]
-    -- Updated tasks -------------------------------------------
-      ◼ Inspect the existing eyedropper preview implementation and current test coverage
-      □ Fix viewport-edge positioning so the preview stays visible
-      □ Add focused tests for edge flipping/clamping behavior and run relevant test checks
-  ... [truncated 1 lines]
   -- Assistant -----------------------------------------------
   \`bb\` isn’t available in this environment, so I’m proceeding directly with repo inspection and the ... [truncated 4 chars]
 
@@ -3925,11 +3874,6 @@ There's a positioning bug in the eyedropper preview: near the viewport edges, th
       Read packages/excalidraw/components/EyeDropper.tsx
       Read packages/excalidraw/components/EyeDropper.test.ts
   ... [truncated 1 lines]
-    -- Updated tasks -------------------------------------------
-      ☒ Inspect the existing eyedropper preview implementation and current test coverage
-      ☒ Fix viewport-edge positioning so the preview stays visible
-      ◼ Add focused tests for edge flipping/clamping behavior and run relevant test checks
-  ... [truncated 1 lines]
     -- Ran 2 commands ------------------------------------------
       -- Tool Call: exec_command ---------------------------------
         [failed] yarn vitest run packages/excalidraw/components/EyeDropper.test.ts
@@ -3948,7 +3892,7 @@ There's a positioning bug in the eyedropper preview: near the viewport edges, th
     -- Explored 1 list -----------------------------------------
       List node_modules/.bin
 
-    -- Ran 3 commands ------------------------------------------
+    -- Ran 5 commands ------------------------------------------
       -- Tool Call: exec_command ---------------------------------
         [completed] node -v && npm -v && corepack --version || true
         0ms
@@ -3962,13 +3906,7 @@ There's a positioning bug in the eyedropper preview: near the viewport edges, th
         [completed] ./node_modules/.bin/vitest run packages/excalidraw/components/EyeDropper.test.ts
         770ms
         RUN  v3.0.6 $EXCALIDRAW_REPO
-  ... [truncated 8 lines]
-    -- Updated tasks -------------------------------------------
-      ☒ Inspect the existing eyedropper preview implementation and current test coverage
-      ☒ Fix viewport-edge positioning so the preview stays visible
-      ☒ Add focused tests for edge flipping/clamping behavior and run relevant test checks
-  ... [truncated 1 lines]
-    -- Ran 2 commands ------------------------------------------
+  ... [truncated 7 lines]
       -- Tool Call: exec_command ---------------------------------
         [completed] git diff -- packages/excalidraw/components/EyeDropper.tsx packages/excalidraw/co... [truncated 79 chars]
         0ms
@@ -4029,11 +3967,6 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
       Read packages/excalidraw/components/CommandPalette/CommandPalette.tsx
       Search Magic Frame|magicFrame|MagicFrame|AI in excalidraw-app
   ... [truncated 25 lines]
-    -- Updated tasks -------------------------------------------
-      ☒ Inspect desktop command/search surfaces and existing Magic Frame availability checks
-      ◼ Add Magic Frame command palette entry with matching availability gating and search keywords
-      □ Add focused tests for gating and action wiring, then run targeted test coverage
-  ... [truncated 1 lines]
     -- File Edit -----------------------------------------------
       [completed] $EXCALIDRAW_REPO/packages/excalidraw/components/CommandPalette/CommandPalette.tsx ... [truncated 8 chars]
       @@ -51,2 +51,3 @@
@@ -4135,11 +4068,6 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
         0ms
         M packages/excalidraw/components/CommandPalette/CommandPalette.tsx
   ... [truncated 2 lines]
-    -- Updated tasks -------------------------------------------
-      ☒ Inspect desktop command/search surfaces and existing Magic Frame availability checks
-      ☒ Add Magic Frame command palette entry with matching availability gating and search keywords
-      ☒ Add focused tests for gating and action wiring, then run targeted test coverage
-  ... [truncated 1 lines]
 -- Assistant -----------------------------------------------
 Implemented.
 
@@ -4172,11 +4100,6 @@ There's a usability bug in the canvas search sidebar: if I navigate to a later m
         0ms
         zsh:1: command not found: bb
   ... [truncated 2 lines]
-    -- Updated tasks -------------------------------------------
-      ◼ Inspect search sidebar state management and existing tests to identify the focus bug path
-      □ Implement query-change behavior to reset focused match to the first remaining match
-      □ Add/regress a test covering the focus reset when the query narrows results
-  ... [truncated 2 lines]
     -- Explored 6 files, 2 searches, 1 list --------------------
       List .
       Search search sidebar|canvas search|match in packages
@@ -4195,12 +4118,12 @@ There's a usability bug in the canvas search sidebar: if I navigate to a later m
       [completed] $EXCALIDRAW_REPO/packages/excalidraw/components/SearchMenu.tsx (update)
       @@ -367,3 +367,3 @@
                      });
-  ... [truncated 86 lines]
-    -- Updated tasks -------------------------------------------
-      ☒ Inspect search sidebar state management and existing tests to identify the focus bug path
-      ☒ Implement query-change behavior to reset focused match to the first remaining match
-      ☒ Add/regress a test covering the focus reset when the query narrows results
-  ... [truncated 2 lines]
+  ... [truncated 7 lines]
+    -- File Edit -----------------------------------------------
+      [completed] $EXCALIDRAW_REPO/packages/excalidraw/tests/search.test.tsx (update)
+      @@ -32,2 +32,13 @@
+
+  ... [truncated 80 lines]
     -- Ran 1 command -------------------------------------------
       -- Tool Call: exec_command ---------------------------------
         [failed] yarn test:app packages/excalidraw/tests/search.test.tsx --watch=false
@@ -4234,11 +4157,6 @@ There's a usability bug in the canvas search sidebar: if I navigate to a later m
         [completed] git status --short
         0ms
         M packages/excalidraw/components/SearchMenu.tsx
-  ... [truncated 2 lines]
-    -- Updated tasks -------------------------------------------
-      ☒ Inspect search sidebar state management and existing tests to identify the focus bug path
-      ☒ Implement query-change behavior to reset focused match to the first remaining match
-      ☒ Add/regress a test covering the focus reset when the query narrows results
   ... [truncated 2 lines]
 -- Assistant -----------------------------------------------
 Fixed.
@@ -4275,39 +4193,40 @@ Add a small result summary to the canvas search sidebar: show \`N results\` when
         0ms
         zsh:1: command not found: bb
   ... [truncated 2 lines]
-    -- Explored 1 file -----------------------------------------
+    -- Explored 10 files, 5 searches, 2 lists ------------------
       Read $HOME/.agents/skills/vercel-react-best-practices/SKILL.md
-
-    -- Updated tasks -------------------------------------------
-      ◼ Inspect the search sidebar component and its current tests/behavior
-      □ Implement result summary and empty-state UI while preserving navigation behavior
-      □ Update and run the focused test file
-  ... [truncated 1 lines]
-    -- Explored 9 files, 5 searches, 2 lists -------------------
       Search No matches|search sidebar|search results|search in .
       List .
-      Read packages/excalidraw/components/SearchMenu.tsx
-  ... [truncated 15 lines]
+  ... [truncated 16 lines]
     -- File Edit -----------------------------------------------
       [completed] $EXCALIDRAW_REPO/packages/excalidraw/components/SearchMenu.scss (update)
       @@ -42,2 +42,7 @@
 
-  ... [truncated 151 lines]
+  ... [truncated 29 lines]
+    -- File Edit -----------------------------------------------
+      [completed] $EXCALIDRAW_REPO/packages/excalidraw/components/SearchMenu.tsx (update)
+      @@ -348,2 +348,7 @@
+         }\`;
+  ... [truncated 73 lines]
+    -- File Edit -----------------------------------------------
+      [completed] $EXCALIDRAW_REPO/packages/excalidraw/locales/en.json (update)
+      @@ -208,3 +208,3 @@
+           "title": "Find on canvas",
+  ... [truncated 9 lines]
+    -- File Edit -----------------------------------------------
+      [completed] $EXCALIDRAW_REPO/packages/excalidraw/tests/search.test.tsx (update)
+      @@ -32,2 +32,7 @@
+
+  ... [truncated 49 lines]
     -- Explored 1 file -----------------------------------------
       Read packages/excalidraw/components/SearchMenu.tsx
 
-    -- Ran 1 command -------------------------------------------
+    -- Ran 7 commands ------------------------------------------
       -- Tool Call: exec_command ---------------------------------
         [completed] git diff -- packages/excalidraw/components/SearchMenu.tsx packages/excalidraw/co... [truncated 102 chars]
         0ms
         diff --git a/packages/excalidraw/components/SearchMenu.scss b/packages/excalidraw/components... [truncated 16 chars]
-  ... [truncated 216 lines]
-    -- Updated tasks -------------------------------------------
-      ☒ Inspect the search sidebar component and its current tests/behavior
-      ☒ Implement result summary and empty-state UI while preserving navigation behavior
-      ◼ Update and run the focused test file
-  ... [truncated 1 lines]
-    -- Ran 5 commands ------------------------------------------
+  ... [truncated 215 lines]
       -- Tool Call: exec_command ---------------------------------
         [failed] yarn test:app packages/excalidraw/tests/search.test.tsx --watch=false
         0ms
@@ -4329,13 +4248,7 @@ Add a small result summary to the canvas search sidebar: show \`N results\` when
         [completed] corepack yarn test:app packages/excalidraw/tests/search.test.tsx --watch=false
         4.8s
         RUN  v3.0.6 $EXCALIDRAW_REPO
-  ... [truncated 14 lines]
-    -- Updated tasks -------------------------------------------
-      ☒ Inspect the search sidebar component and its current tests/behavior
-      ☒ Implement result summary and empty-state UI while preserving navigation behavior
-      ☒ Update and run the focused test file
-  ... [truncated 1 lines]
-    -- Ran 1 command -------------------------------------------
+  ... [truncated 13 lines]
       -- Tool Call: exec_command ---------------------------------
         [completed] git status --short
         0ms
@@ -4378,11 +4291,6 @@ Use the available repo_outline helper first for the share and collaboration area
         0ms
         zsh:1: command not found: bb
   ... [truncated 2 lines]
-    -- Updated tasks -------------------------------------------
-      ◼ Inspect share dialog and unsupported-browser handling
-      □ Implement one minimal discoverability improvement
-      □ Run focused validation
-  ... [truncated 1 lines]
   -- Assistant -----------------------------------------------
   Using the repo outline first as requested; \`bb status\`/\`bb guide\` aren’t available in this environ... [truncated 92 chars]
 
@@ -4460,11 +4368,6 @@ Use the available repo_outline helper first for the share and collaboration area
         0ms
         M excalidraw-app/share/ShareDialog.scss
   ... [truncated 3 lines]
-    -- Updated tasks -------------------------------------------
-      ☒ Inspect share dialog and unsupported-browser handling
-      ☒ Implement one minimal discoverability improvement
-      ☒ Run focused validation
-  ... [truncated 1 lines]
     -- Explored 3 files ----------------------------------------
       Read excalidraw-app/share/ShareDialog.tsx
       Read excalidraw-app/share/ShareDialog.scss
@@ -4536,11 +4439,6 @@ I'm trying to understand Excalidraw's text-to-diagram flow before changing it. P
 
 -- Worked for 8m 16s ---------------------------------------
   -- Ran 2 commands, explored 33 files, 10 searches, 1 list --
-    -- Updated tasks -------------------------------------------
-      ◼ Inspect repo context and locate text-to-diagram entry points
-      □ Trace UI dialog -> state/history -> response handling -> scene update code
-      □ Summarize main files, types, transitions, and failure cases with references
-  ... [truncated 1 lines]
     -- Ran 2 commands ------------------------------------------
       -- Tool Call: exec_command ---------------------------------
         [failed] bb guide
@@ -4552,26 +4450,11 @@ I'm trying to understand Excalidraw's text-to-diagram flow before changing it. P
         0ms
         zsh:1: command not found: bb
   ... [truncated 2 lines]
-    -- Explored 32 files, 7 searches, 1 list -------------------
+    -- Explored 33 files, 10 searches, 1 list ------------------
       Search chatHistory|chat history|chatMessages|messages|responseToScene|scene update|generate.*s... [truncated 37 chars]
       Search text-to-diagram|Text to diagram|text to diagram|diagram generator|generate diagram|text... [truncated 88 chars]
       List packages/excalidraw/components/TTDDialog
-  ... [truncated 38 lines]
-    -- Updated tasks -------------------------------------------
-      ☒ Inspect repo context and locate text-to-diagram entry points
-      ☒ Trace UI dialog -> state/history -> response handling -> scene update code
-      ◼ Summarize main files, types, transitions, and failure cases with references
-  ... [truncated 1 lines]
-    -- Explored 1 file, 3 searches -----------------------------
-      Search openDialog: \\{ name: "ttd" in excalidraw-app
-      Search setOpenDialog\\(\\{ name: "ttd"|openDialog: \\{ name: "ttd" in packages/excalidraw/compone... [truncated 3 chars]
-      Search onTextSubmit=\\{async \\(props\\)|TTDStreamFetch\\( in packages
-  ... [truncated 2 lines]
-    -- Updated tasks -------------------------------------------
-      ☒ Inspect repo context and locate text-to-diagram entry points
-      ☒ Trace UI dialog -> state/history -> response handling -> scene update code
-      ☒ Summarize main files, types, transitions, and failure cases with references
-  ... [truncated 1 lines]
+  ... [truncated 42 lines]
 -- Assistant -----------------------------------------------
 Here’s the current end-to-end flow I found.
 
@@ -5485,7 +5368,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "-- Explored 18 files, 2 searches ---------------------------",
       "-- Assistant -----------------------------------------------",
       "I’ve finished the initial pass over the named files. Phase 1 has a few spots where simply replacing ... [truncated 205 chars]",
-      "-- Worked on 1 item ----------------------------------------",
       "-- Assistant -----------------------------------------------",
       "I’m adding the Phase 1 atom modules first, then I’ll wire each audited component to the atoms with s... [truncated 59 chars]",
       "-- Edited 8 files, explored 2 files, 3 searches, ran 1 command ",
@@ -5500,20 +5382,14 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "-- Ran 4 commands ------------------------------------------",
       "-- Assistant -----------------------------------------------",
       "Commit \`f886a500d\` is clean: it covers Phase 1’s named state moves, uses scoped Jotai atom families ... [truncated 278 chars]",
-      "-- Updated tasks -------------------------------------------",
-      "  ☒ Inspect apps/app React state, hooks, atom patterns, and existing tests around the audited files",
-      "  ☒ Phase 1: move listed local UI state into Jotai atoms, validate, commit, and review",
-      "  ◼ Phase 2: extract reusable hooks, add focused tests, validate, commit, and review",
-      "  ... [truncated 5 lines]",
     ],
-    "timelineRowCount": 19,
+    "timelineRowCount": 17,
     "totalEventCount": 3096,
-    "viewMessageCount": 72,
+    "viewMessageCount": 71,
     "viewMessageKinds": {
       "assistant-text": 9,
       "command": 46,
-      "file-edit": 13,
-      "tasks": 3,
+      "file-edit": 15,
       "user": 1,
     },
   },
@@ -5539,7 +5415,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "-- Explored 18 files, 2 searches ---------------------------",
       "-- Assistant -----------------------------------------------",
       "I’ve finished the initial pass over the named files. Phase 1 has a few spots where simply replacing ... [truncated 205 chars]",
-      "-- Worked on 1 item ----------------------------------------",
       "-- Assistant -----------------------------------------------",
       "I’m adding the Phase 1 atom modules first, then I’ll wire each audited component to the atoms with s... [truncated 59 chars]",
       "-- Edited 8 files, explored 2 files, 3 searches, ran 1 command ",
@@ -5575,20 +5450,14 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "-- Ran 5 commands ------------------------------------------",
       "-- Assistant -----------------------------------------------",
       "Commit \`11627cccb\` is clean. Review against Phase 2: the follow-up submit, attachment upload, projec... [truncated 309 chars]",
-      "-- Updated tasks -------------------------------------------",
-      "  ☒ Inspect apps/app React state, hooks, atom patterns, and existing tests around the audited files",
-      "  ☒ Phase 1: move listed local UI state into Jotai atoms, validate, commit, and review",
-      "  ☒ Phase 2: extract reusable hooks, add focused tests, validate, commit, and review",
-      "  ... [truncated 5 lines]",
     ],
-    "timelineRowCount": 33,
+    "timelineRowCount": 31,
     "totalEventCount": 3096,
-    "viewMessageCount": 134,
+    "viewMessageCount": 144,
     "viewMessageKinds": {
       "assistant-text": 16,
       "command": 85,
-      "file-edit": 28,
-      "tasks": 4,
+      "file-edit": 42,
       "user": 1,
     },
   },
@@ -5614,7 +5483,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "-- Explored 18 files, 2 searches ---------------------------",
       "-- Assistant -----------------------------------------------",
       "I’ve finished the initial pass over the named files. Phase 1 has a few spots where simply replacing ... [truncated 205 chars]",
-      "-- Worked on 1 item ----------------------------------------",
       "-- Assistant -----------------------------------------------",
       "I’m adding the Phase 1 atom modules first, then I’ll wire each audited component to the atoms with s... [truncated 59 chars]",
       "-- Edited 8 files, explored 2 files, 3 searches, ran 1 command ",
@@ -5650,7 +5518,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "-- Ran 5 commands ------------------------------------------",
       "-- Assistant -----------------------------------------------",
       "Commit \`11627cccb\` is clean. Review against Phase 2: the follow-up submit, attachment upload, projec... [truncated 309 chars]",
-      "-- Worked on 1 item ----------------------------------------",
       "-- Assistant -----------------------------------------------",
       "I’m starting Phase 3 by stabilizing props where memoized or heavy child paths receive fresh object a... [truncated 119 chars]",
       "-- Edited 3 files ------------------------------------------",
@@ -5665,7 +5532,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "-- Ran 4 commands ------------------------------------------",
       "-- Assistant -----------------------------------------------",
       "Commit \`20db9d673\` is clean. Review against Phase 3: \`ThreadFollowUpComposer\` and \`PromptBox\` now re... [truncated 260 chars]",
-      "-- Worked on 1 item ----------------------------------------",
       "-- Assistant -----------------------------------------------",
       "Phase 4 is a small structural change: I’m extracting the queued follow-up row into a memoized item c... [truncated 69 chars]",
       "-- Edited 1 file -------------------------------------------",
@@ -5677,7 +5543,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "-- Ran 4 commands ------------------------------------------",
       "-- Assistant -----------------------------------------------",
       "Commit \`7aa3cd7d9\` is clean. Review against Phase 4: \`QueuedFollowUpItem\` is \`React.memo\`’d, the lis... [truncated 179 chars]",
-      "-- Worked on 1 item ----------------------------------------",
       "-- Assistant -----------------------------------------------",
       "Phase 5 is the diff-panel subscription work. I’m moving per-file collapsed/loading reads into a smal... [truncated 121 chars]",
       "-- Edited 1 file -------------------------------------------",
@@ -5689,20 +5554,14 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "-- Ran 4 commands ------------------------------------------",
       "-- Assistant -----------------------------------------------",
       "Commit \`e0afe7e6e\` is clean. Review against Phase 5: per-file cards subscribe with \`selectAtom\` by f... [truncated 256 chars]",
-      "-- Updated tasks -------------------------------------------",
-      "  ☒ Inspect apps/app React state, hooks, atom patterns, and existing tests around the audited files",
-      "  ☒ Phase 1: move listed local UI state into Jotai atoms, validate, commit, and review",
-      "  ☒ Phase 2: extract reusable hooks, add focused tests, validate, commit, and review",
-      "  ... [truncated 5 lines]",
     ],
-    "timelineRowCount": 59,
+    "timelineRowCount": 54,
     "totalEventCount": 3096,
-    "viewMessageCount": 185,
+    "viewMessageCount": 192,
     "viewMessageKinds": {
       "assistant-text": 29,
       "command": 115,
-      "file-edit": 33,
-      "tasks": 7,
+      "file-edit": 47,
       "user": 1,
     },
   },
@@ -5881,11 +5740,10 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 12,
     "totalEventCount": 410,
-    "viewMessageCount": 29,
+    "viewMessageCount": 27,
     "viewMessageKinds": {
       "assistant-text": 6,
       "command": 1,
-      "tasks": 2,
       "tool-call": 16,
       "user": 1,
       "web-fetch": 2,
@@ -5910,18 +5768,12 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "Implement that improvement with focused validation and keep the existing behavior for unsupported br... [truncated 14 chars]",
       "-- Assistant -----------------------------------------------",
       "Let me start by planning the implementation carefully, then build it out.",
-      "-- Updated tasks -------------------------------------------",
-      "  ◼ Add supportsNativeEyeDropper() helper utility",
-      "  □ Add TypeScript type declarations for the native EyeDropper API",
-      "  □ Implement native EyeDropper path in EyeDropper.tsx with canvas fallback",
-      "  ... [truncated 3 lines]",
     ],
-    "timelineRowCount": 6,
+    "timelineRowCount": 5,
     "totalEventCount": 410,
-    "viewMessageCount": 5,
+    "viewMessageCount": 4,
     "viewMessageKinds": {
       "assistant-text": 2,
-      "tasks": 1,
       "user": 2,
     },
   },
@@ -5943,7 +5795,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "Implement that improvement with focused validation and keep the existing behavior for unsupported br... [truncated 14 chars]",
       "-- Assistant -----------------------------------------------",
       "Let me start by planning the implementation carefully, then build it out.",
-      "-- Worked on 1 item ----------------------------------------",
       "-- Assistant -----------------------------------------------",
       "Let me first check the project structure for where types live, and read the full existing files I'll... [truncated 16 chars]",
       "-- Explored 3 files, 1 list --------------------------------",
@@ -5986,14 +5837,13 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "-- Assistant -----------------------------------------------",
       "Clean compile — zero errors. Let me also check if there are any tests that relate to the color picke... [truncated 30 chars]",
     ],
-    "timelineRowCount": 31,
+    "timelineRowCount": 30,
     "totalEventCount": 410,
-    "viewMessageCount": 42,
+    "viewMessageCount": 38,
     "viewMessageKinds": {
       "assistant-text": 15,
       "command": 1,
       "file-edit": 6,
-      "tasks": 4,
       "tool-call": 14,
       "user": 2,
     },
@@ -6774,28 +6624,19 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "-- User ----------------------------------------------------",
       "I'm trying to understand Excalidraw's collaboration startup flow before changing it. Please trace th... [truncated 318 chars]",
       "-- Ran 2 commands ------------------------------------------",
-      "-- Updated tasks -------------------------------------------",
-      "  ◼ Locate collaboration UI entry points and startup handlers",
-      "  □ Trace room initialization, socket setup, and first-scene load through current code",
-      "  □ Summarize collaboration mode state flips, key types/state, and fallback/failure paths with file ... [truncated 4 chars]",
       "-- Explored 19 files, 12 searches, 2 lists -----------------",
-      "-- Updated tasks -------------------------------------------",
-      "  ☒ Locate collaboration UI entry points and startup handlers",
-      "  ☒ Trace room initialization, socket setup, and first-scene load through current code",
-      "  ☒ Summarize collaboration mode state flips, key types/state, and fallback/failure paths with file ... [truncated 4 chars]",
       "-- Assistant -----------------------------------------------",
       "I traced the current **client-side** flow. The websocket server itself doesn’t appear to live in thi... [truncated 168 chars]",
       "## Main files",
       "- \`excalidraw-app/App.tsx\`",
       "  ... [truncated 32 lines]",
     ],
-    "timelineRowCount": 6,
+    "timelineRowCount": 4,
     "totalEventCount": 3514,
-    "viewMessageCount": 54,
+    "viewMessageCount": 52,
     "viewMessageKinds": {
       "assistant-text": 1,
       "command": 50,
-      "tasks": 2,
       "user": 1,
     },
   },
@@ -6808,28 +6649,19 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "-- User ----------------------------------------------------",
       "I'm trying to understand Excalidraw's collaboration startup flow before changing it. Please trace th... [truncated 318 chars]",
       "-- Ran 2 commands ------------------------------------------",
-      "-- Updated tasks -------------------------------------------",
-      "  ◼ Locate collaboration UI entry points and startup handlers",
-      "  □ Trace room initialization, socket setup, and first-scene load through current code",
-      "  □ Summarize collaboration mode state flips, key types/state, and fallback/failure paths with file ... [truncated 4 chars]",
       "-- Explored 19 files, 12 searches, 2 lists -----------------",
-      "-- Updated tasks -------------------------------------------",
-      "  ☒ Locate collaboration UI entry points and startup handlers",
-      "  ☒ Trace room initialization, socket setup, and first-scene load through current code",
-      "  ☒ Summarize collaboration mode state flips, key types/state, and fallback/failure paths with file ... [truncated 4 chars]",
       "-- Assistant -----------------------------------------------",
       "I traced the current **client-side** flow. The websocket server itself doesn’t appear to live in thi... [truncated 168 chars]",
       "## Main files",
       "- \`excalidraw-app/App.tsx\`",
       "  ... [truncated 98 lines]",
     ],
-    "timelineRowCount": 6,
+    "timelineRowCount": 4,
     "totalEventCount": 3514,
-    "viewMessageCount": 54,
+    "viewMessageCount": 52,
     "viewMessageKinds": {
       "assistant-text": 1,
       "command": 50,
-      "tasks": 2,
       "user": 1,
     },
   },
@@ -6842,28 +6674,19 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "-- User ----------------------------------------------------",
       "I'm trying to understand Excalidraw's collaboration startup flow before changing it. Please trace th... [truncated 318 chars]",
       "-- Ran 2 commands ------------------------------------------",
-      "-- Updated tasks -------------------------------------------",
-      "  ◼ Locate collaboration UI entry points and startup handlers",
-      "  □ Trace room initialization, socket setup, and first-scene load through current code",
-      "  □ Summarize collaboration mode state flips, key types/state, and fallback/failure paths with file ... [truncated 4 chars]",
       "-- Explored 19 files, 12 searches, 2 lists -----------------",
-      "-- Updated tasks -------------------------------------------",
-      "  ☒ Locate collaboration UI entry points and startup handlers",
-      "  ☒ Trace room initialization, socket setup, and first-scene load through current code",
-      "  ☒ Summarize collaboration mode state flips, key types/state, and fallback/failure paths with file ... [truncated 4 chars]",
       "-- Assistant -----------------------------------------------",
       "I traced the current **client-side** flow. The websocket server itself doesn’t appear to live in thi... [truncated 168 chars]",
       "## Main files",
       "- \`excalidraw-app/App.tsx\`",
       "  ... [truncated 150 lines]",
     ],
-    "timelineRowCount": 6,
+    "timelineRowCount": 4,
     "totalEventCount": 3514,
-    "viewMessageCount": 54,
+    "viewMessageCount": 52,
     "viewMessageKinds": {
       "assistant-text": 1,
       "command": 50,
-      "tasks": 2,
       "user": 1,
     },
   },
@@ -7008,19 +6831,14 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "\`yarn\` isn’t on PATH here, so I’m switching to the local Node tooling to run the targeted checks.",
       "-- Explored 1 list -----------------------------------------",
       "-- Ran 3 commands ------------------------------------------",
-      "-- Updated tasks -------------------------------------------",
-      "  ☒ Inspect the existing eyedropper preview implementation and current test coverage",
-      "  ☒ Fix viewport-edge positioning so the preview stays visible",
-      "  ☒ Add focused tests for edge flipping/clamping behavior and run relevant test checks",
     ],
-    "timelineRowCount": 9,
+    "timelineRowCount": 8,
     "totalEventCount": 938,
-    "viewMessageCount": 38,
+    "viewMessageCount": 35,
     "viewMessageKinds": {
       "assistant-text": 3,
       "command": 28,
       "file-edit": 3,
-      "tasks": 3,
       "user": 1,
     },
   },
@@ -7049,12 +6867,11 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 8,
     "totalEventCount": 938,
-    "viewMessageCount": 41,
+    "viewMessageCount": 38,
     "viewMessageKinds": {
       "assistant-text": 4,
       "command": 30,
       "file-edit": 3,
-      "tasks": 3,
       "user": 1,
     },
   },
@@ -7146,12 +6963,11 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 5,
     "totalEventCount": 943,
-    "viewMessageCount": 40,
+    "viewMessageCount": 39,
     "viewMessageKinds": {
       "assistant-text": 2,
       "command": 34,
       "file-edit": 2,
-      "tasks": 1,
       "user": 1,
     },
   },
@@ -7176,12 +6992,11 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 7,
     "totalEventCount": 943,
-    "viewMessageCount": 59,
+    "viewMessageCount": 57,
     "viewMessageKinds": {
       "assistant-text": 3,
       "command": 49,
       "file-edit": 4,
-      "tasks": 2,
       "user": 1,
     },
   },
@@ -7208,12 +7023,11 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     ],
     "timelineRowCount": 7,
     "totalEventCount": 943,
-    "viewMessageCount": 59,
+    "viewMessageCount": 57,
     "viewMessageKinds": {
       "assistant-text": 3,
       "command": 49,
       "file-edit": 4,
-      "tasks": 2,
       "user": 1,
     },
   },
@@ -7267,35 +7081,25 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "-- User ----------------------------------------------------",
       "There's a usability bug in the canvas search sidebar: if I navigate to a later match and then change... [truncated 201 chars]",
       "-- Ran 2 commands ------------------------------------------",
-      "-- Updated tasks -------------------------------------------",
-      "  ◼ Inspect search sidebar state management and existing tests to identify the focus bug path",
-      "  □ Implement query-change behavior to reset focused match to the first remaining match",
-      "  □ Add/regress a test covering the focus reset when the query narrows results",
-      "  ... [truncated 1 lines]",
       "-- Explored 6 files, 2 searches, 1 list --------------------",
       "-- Assistant -----------------------------------------------",
       "Using \`vercel-react-best-practices\` for this React state fix so the change stays minimal and avoids ... [truncated 27 chars]",
       "-- Explored 3 files, 4 searches ----------------------------",
       "-- File Edit -----------------------------------------------",
       "  [completed] $EXCALIDRAW_REPO/packages/excalidraw/components/SearchMenu.tsx (update)",
+      "-- File Edit -----------------------------------------------",
       "  [completed] $EXCALIDRAW_REPO/packages/excalidraw/tests/search.test.tsx (update)",
-      "-- Updated tasks -------------------------------------------",
-      "  ☒ Inspect search sidebar state management and existing tests to identify the focus bug path",
-      "  ☒ Implement query-change behavior to reset focused match to the first remaining match",
-      "  ☒ Add/regress a test covering the focus reset when the query narrows results",
-      "  ... [truncated 1 lines]",
       "-- Ran 1 command -------------------------------------------",
       "-- Explored 1 list -----------------------------------------",
       "-- Running 2 commands --------------------------------------",
     ],
-    "timelineRowCount": 11,
+    "timelineRowCount": 10,
     "totalEventCount": 660,
-    "viewMessageCount": 29,
+    "viewMessageCount": 28,
     "viewMessageKinds": {
       "assistant-text": 1,
       "command": 24,
-      "file-edit": 1,
-      "tasks": 2,
+      "file-edit": 2,
       "user": 1,
     },
   },
@@ -7308,11 +7112,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "-- User ----------------------------------------------------",
       "There's a usability bug in the canvas search sidebar: if I navigate to a later match and then change... [truncated 201 chars]",
       "-- Ran 2 commands ------------------------------------------",
-      "-- Updated tasks -------------------------------------------",
-      "  ◼ Inspect search sidebar state management and existing tests to identify the focus bug path",
-      "  □ Implement query-change behavior to reset focused match to the first remaining match",
-      "  □ Add/regress a test covering the focus reset when the query narrows results",
-      "  ... [truncated 1 lines]",
       "-- Explored 6 files, 2 searches, 1 list --------------------",
       "-- Assistant -----------------------------------------------",
       "Using \`vercel-react-best-practices\` for this React state fix so the change stays minimal and avoids ... [truncated 27 chars]",
@@ -7323,14 +7122,13 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "- In \`packages/excalidraw/components/SearchMenu.tsx\`, query updates now set focus to the first match... [truncated 48 chars]",
       "  ... [truncated 7 lines]",
     ],
-    "timelineRowCount": 7,
+    "timelineRowCount": 6,
     "totalEventCount": 660,
-    "viewMessageCount": 34,
+    "viewMessageCount": 32,
     "viewMessageKinds": {
       "assistant-text": 2,
       "command": 27,
-      "file-edit": 1,
-      "tasks": 3,
+      "file-edit": 2,
       "user": 1,
     },
   },
@@ -7416,33 +7214,25 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "-- Assistant -----------------------------------------------",
       "Using the \`vercel-react-best-practices\` skill because this is a React UI change with tests.",
       "-- Ran 2 commands ------------------------------------------",
-      "-- Explored 1 file -----------------------------------------",
-      "-- Updated tasks -------------------------------------------",
-      "  ◼ Inspect the search sidebar component and its current tests/behavior",
-      "  □ Implement result summary and empty-state UI while preserving navigation behavior",
-      "  □ Update and run the focused test file",
-      "-- Explored 9 files, 5 searches, 2 lists -------------------",
+      "-- Explored 10 files, 5 searches, 2 lists ------------------",
       "-- File Edit -----------------------------------------------",
       "  [completed] $EXCALIDRAW_REPO/packages/excalidraw/components/SearchMenu.scss (update)",
+      "-- File Edit -----------------------------------------------",
       "  [completed] $EXCALIDRAW_REPO/packages/excalidraw/components/SearchMenu.tsx (update)",
+      "-- File Edit -----------------------------------------------",
       "  [completed] $EXCALIDRAW_REPO/packages/excalidraw/locales/en.json (update)",
-      "  ... [truncated 1 lines]",
+      "-- File Edit -----------------------------------------------",
+      "  [completed] $EXCALIDRAW_REPO/packages/excalidraw/tests/search.test.tsx (update)",
       "-- Explored 1 file -----------------------------------------",
-      "-- Ran 1 command -------------------------------------------",
-      "-- Updated tasks -------------------------------------------",
-      "  ☒ Inspect the search sidebar component and its current tests/behavior",
-      "  ☒ Implement result summary and empty-state UI while preserving navigation behavior",
-      "  ◼ Update and run the focused test file",
-      "-- Ran 1 command -------------------------------------------",
+      "-- Ran 2 commands ------------------------------------------",
     ],
-    "timelineRowCount": 11,
+    "timelineRowCount": 10,
     "totalEventCount": 584,
-    "viewMessageCount": 29,
+    "viewMessageCount": 30,
     "viewMessageKinds": {
       "assistant-text": 1,
       "command": 24,
-      "file-edit": 1,
-      "tasks": 2,
+      "file-edit": 4,
       "user": 1,
     },
   },
@@ -7469,8 +7259,7 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "viewMessageKinds": {
       "assistant-text": 2,
       "command": 29,
-      "file-edit": 1,
-      "tasks": 3,
+      "file-edit": 4,
       "user": 1,
     },
   },
@@ -7558,10 +7347,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "  High-level map for the share and collaboration area:",
       "  ... [truncated 2 lines]",
       "-- Ran 2 commands ------------------------------------------",
-      "-- Updated tasks -------------------------------------------",
-      "  ◼ Inspect share dialog and unsupported-browser handling",
-      "  □ Implement one minimal discoverability improvement",
-      "  □ Run focused validation",
       "-- Assistant -----------------------------------------------",
       "Using the repo outline first as requested; \`bb status\`/\`bb guide\` aren’t available in this environme... [truncated 90 chars]",
       "-- Explored 19 files, 13 searches, 4 lists -----------------",
@@ -7571,14 +7356,13 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "  [completed] $EXCALIDRAW_REPO/excalidraw-app/share/ShareDialog.scss (update)",
       "-- Explored 2 files, 1 search ------------------------------",
     ],
-    "timelineRowCount": 9,
+    "timelineRowCount": 8,
     "totalEventCount": 1092,
-    "viewMessageCount": 49,
+    "viewMessageCount": 48,
     "viewMessageKinds": {
       "assistant-text": 1,
       "command": 43,
       "file-edit": 2,
-      "tasks": 1,
       "tool-call": 1,
       "user": 1,
     },
@@ -7597,10 +7381,6 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "  High-level map for the share and collaboration area:",
       "  ... [truncated 2 lines]",
       "-- Ran 2 commands ------------------------------------------",
-      "-- Updated tasks -------------------------------------------",
-      "  ◼ Inspect share dialog and unsupported-browser handling",
-      "  □ Implement one minimal discoverability improvement",
-      "  □ Run focused validation",
       "-- Assistant -----------------------------------------------",
       "Using the repo outline first as requested; \`bb status\`/\`bb guide\` aren’t available in this environme... [truncated 90 chars]",
       "-- Explored 29 files, 19 searches, 4 lists, edited 3 files, ran 14 commands ",
@@ -7609,14 +7389,13 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
       "Changes:",
       "- \`excalidraw-app/share/ShareDialog.tsx:117\`",
     ],
-    "timelineRowCount": 7,
+    "timelineRowCount": 6,
     "totalEventCount": 1092,
-    "viewMessageCount": 81,
+    "viewMessageCount": 79,
     "viewMessageKinds": {
       "assistant-text": 2,
       "command": 70,
       "file-edit": 5,
-      "tasks": 2,
       "tool-call": 1,
       "user": 1,
     },
@@ -7700,34 +7479,20 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "timelinePreview": [
       "-- User ----------------------------------------------------",
       "I'm trying to understand Excalidraw's text-to-diagram flow before changing it. Please trace the flow... [truncated 279 chars]",
-      "-- Updated tasks -------------------------------------------",
-      "  ◼ Inspect repo context and locate text-to-diagram entry points",
-      "  □ Trace UI dialog -> state/history -> response handling -> scene update code",
-      "  □ Summarize main files, types, transitions, and failure cases with references",
       "-- Ran 2 commands ------------------------------------------",
-      "-- Explored 32 files, 7 searches, 1 list -------------------",
-      "-- Updated tasks -------------------------------------------",
-      "  ☒ Inspect repo context and locate text-to-diagram entry points",
-      "  ☒ Trace UI dialog -> state/history -> response handling -> scene update code",
-      "  ◼ Summarize main files, types, transitions, and failure cases with references",
-      "-- Explored 1 file, 3 searches -----------------------------",
-      "-- Updated tasks -------------------------------------------",
-      "  ☒ Inspect repo context and locate text-to-diagram entry points",
-      "  ☒ Trace UI dialog -> state/history -> response handling -> scene update code",
-      "  ☒ Summarize main files, types, transitions, and failure cases with references",
+      "-- Explored 33 files, 10 searches, 1 list ------------------",
       "-- Assistant -----------------------------------------------",
       "Here’s the current end-to-end flow I found.",
       "### 1) Entry points / dialog mounting",
       "- In the app wrapper, \`excalidraw-app/App.tsx:1019-1021\` mounts both \`AIComponents\` and \`TTDDialogTr... [truncated 7 chars]",
       "  ... [truncated 21 lines]",
     ],
-    "timelineRowCount": 8,
+    "timelineRowCount": 4,
     "totalEventCount": 3079,
-    "viewMessageCount": 52,
+    "viewMessageCount": 49,
     "viewMessageKinds": {
       "assistant-text": 1,
       "command": 47,
-      "tasks": 3,
       "user": 1,
     },
   },
@@ -7739,34 +7504,20 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "timelinePreview": [
       "-- User ----------------------------------------------------",
       "I'm trying to understand Excalidraw's text-to-diagram flow before changing it. Please trace the flow... [truncated 279 chars]",
-      "-- Updated tasks -------------------------------------------",
-      "  ◼ Inspect repo context and locate text-to-diagram entry points",
-      "  □ Trace UI dialog -> state/history -> response handling -> scene update code",
-      "  □ Summarize main files, types, transitions, and failure cases with references",
       "-- Ran 2 commands ------------------------------------------",
-      "-- Explored 32 files, 7 searches, 1 list -------------------",
-      "-- Updated tasks -------------------------------------------",
-      "  ☒ Inspect repo context and locate text-to-diagram entry points",
-      "  ☒ Trace UI dialog -> state/history -> response handling -> scene update code",
-      "  ◼ Summarize main files, types, transitions, and failure cases with references",
-      "-- Explored 1 file, 3 searches -----------------------------",
-      "-- Updated tasks -------------------------------------------",
-      "  ☒ Inspect repo context and locate text-to-diagram entry points",
-      "  ☒ Trace UI dialog -> state/history -> response handling -> scene update code",
-      "  ☒ Summarize main files, types, transitions, and failure cases with references",
+      "-- Explored 33 files, 10 searches, 1 list ------------------",
       "-- Assistant -----------------------------------------------",
       "Here’s the current end-to-end flow I found.",
       "### 1) Entry points / dialog mounting",
       "- In the app wrapper, \`excalidraw-app/App.tsx:1019-1021\` mounts both \`AIComponents\` and \`TTDDialogTr... [truncated 7 chars]",
       "  ... [truncated 63 lines]",
     ],
-    "timelineRowCount": 8,
+    "timelineRowCount": 4,
     "totalEventCount": 3079,
-    "viewMessageCount": 52,
+    "viewMessageCount": 49,
     "viewMessageKinds": {
       "assistant-text": 1,
       "command": 47,
-      "tasks": 3,
       "user": 1,
     },
   },
@@ -7778,34 +7529,20 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "timelinePreview": [
       "-- User ----------------------------------------------------",
       "I'm trying to understand Excalidraw's text-to-diagram flow before changing it. Please trace the flow... [truncated 279 chars]",
-      "-- Updated tasks -------------------------------------------",
-      "  ◼ Inspect repo context and locate text-to-diagram entry points",
-      "  □ Trace UI dialog -> state/history -> response handling -> scene update code",
-      "  □ Summarize main files, types, transitions, and failure cases with references",
       "-- Ran 2 commands ------------------------------------------",
-      "-- Explored 32 files, 7 searches, 1 list -------------------",
-      "-- Updated tasks -------------------------------------------",
-      "  ☒ Inspect repo context and locate text-to-diagram entry points",
-      "  ☒ Trace UI dialog -> state/history -> response handling -> scene update code",
-      "  ◼ Summarize main files, types, transitions, and failure cases with references",
-      "-- Explored 1 file, 3 searches -----------------------------",
-      "-- Updated tasks -------------------------------------------",
-      "  ☒ Inspect repo context and locate text-to-diagram entry points",
-      "  ☒ Trace UI dialog -> state/history -> response handling -> scene update code",
-      "  ☒ Summarize main files, types, transitions, and failure cases with references",
+      "-- Explored 33 files, 10 searches, 1 list ------------------",
       "-- Assistant -----------------------------------------------",
       "Here’s the current end-to-end flow I found.",
       "### 1) Entry points / dialog mounting",
       "- In the app wrapper, \`excalidraw-app/App.tsx:1019-1021\` mounts both \`AIComponents\` and \`TTDDialogTr... [truncated 7 chars]",
       "  ... [truncated 113 lines]",
     ],
-    "timelineRowCount": 8,
+    "timelineRowCount": 4,
     "totalEventCount": 3079,
-    "viewMessageCount": 52,
+    "viewMessageCount": 49,
     "viewMessageKinds": {
       "assistant-text": 1,
       "command": 47,
-      "tasks": 3,
       "user": 1,
     },
   },

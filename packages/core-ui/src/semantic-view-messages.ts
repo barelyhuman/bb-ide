@@ -3,14 +3,12 @@ import type {
   ViewMessage,
   ViewMessageStatus,
   ViewProjection,
-  ViewTasksMessage,
   ViewTimelineEntry,
   ViewTurn,
   ViewTurnStatus,
 } from "@bb/domain";
 import { findLastTerminalTimelineMessage } from "./timeline-message-helpers.js";
 import { getProjectionSummaryCount } from "./apply-turn-message-detail.js";
-import { haveCompatibleViewMessageScope } from "./message-scope.js";
 
 interface MessageTimingSource {
   createdAt: number;
@@ -44,78 +42,6 @@ type TurnMetadataMode = "source" | "scoped";
 
 function getStartedAt(message: MessageTimingSource): number {
   return message.startedAt ?? message.createdAt;
-}
-
-function mergeTaskMessages(
-  previous: ViewTasksMessage,
-  next: ViewTasksMessage,
-): ViewTasksMessage {
-  const status = mergeTaskMessageStatus(previous.status, next.status);
-  const title = status === next.status ? next.title : previous.title;
-  return {
-    ...next,
-    sourceSeqStart: Math.min(previous.sourceSeqStart, next.sourceSeqStart),
-    sourceSeqEnd: Math.max(previous.sourceSeqEnd, next.sourceSeqEnd),
-    startedAt: Math.min(getStartedAt(previous), getStartedAt(next)),
-    createdAt: Math.max(previous.createdAt, next.createdAt),
-    status,
-    title,
-  };
-}
-
-function isTerminalTaskMessageStatus(
-  status: ViewTasksMessage["status"],
-): boolean {
-  return status !== "pending";
-}
-
-function mergeTaskMessageStatus(
-  previous: ViewTasksMessage["status"],
-  next: ViewTasksMessage["status"],
-): ViewTasksMessage["status"] {
-  if (isTerminalTaskMessageStatus(previous)) {
-    return previous;
-  }
-  return next;
-}
-
-function canCompactTaskMessages(
-  previous: ViewTasksMessage,
-  next: ViewTasksMessage,
-): boolean {
-  if (previous.source !== next.source) {
-    return false;
-  }
-  if (!haveCompatibleViewMessageScope(previous, next)) {
-    return false;
-  }
-  if ((previous.parentToolCallId ?? null) !== (next.parentToolCallId ?? null)) {
-    return false;
-  }
-  if (previous.source === "todo" || next.source === "todo") {
-    return Boolean(previous.callId && previous.callId === next.callId);
-  }
-  return true;
-}
-
-export function compactTaskMessages(messages: ViewMessage[]): ViewMessage[] {
-  const compacted: ViewMessage[] = [];
-
-  for (const message of messages) {
-    const previous = compacted[compacted.length - 1];
-    if (
-      previous?.kind === "tasks" &&
-      message.kind === "tasks" &&
-      canCompactTaskMessages(previous, message)
-    ) {
-      compacted[compacted.length - 1] = mergeTaskMessages(previous, message);
-      continue;
-    }
-
-    compacted.push(message);
-  }
-
-  return compacted;
 }
 
 export function sortViewMessagesBySource(
@@ -545,9 +471,7 @@ export function normalizeSemanticViewProjection(
 export function normalizeSemanticViewMessages(
   messages: ViewMessage[],
 ): ViewMessage[] {
-  const orderedMessages = sortViewMessagesBySource(
-    compactTaskMessages(messages),
-  );
+  const orderedMessages = sortViewMessagesBySource(messages);
   return new SemanticProjectionBuilder(
     collectFlatMessageContexts(orderedMessages),
   ).buildRootMessages();

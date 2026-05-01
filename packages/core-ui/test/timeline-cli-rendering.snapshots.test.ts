@@ -424,7 +424,7 @@ describe("timeline CLI rendering snapshots", () => {
     expect(timeline.text).toMatchInlineSnapshot(`""`);
   });
 
-  it("shows tasks, web search, file edit, and assistant output", () => {
+  it("shows web search, file edit, and assistant output without task updates", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
     const timeline = renderActiveTimeline([
       event.turnStarted(),
@@ -457,18 +457,12 @@ describe("timeline CLI rendering snapshots", () => {
     ]);
 
     expect(messageKinds(timeline.messages)).toEqual([
-      "tasks",
       "web-search",
       "file-edit",
       "assistant-text",
     ]);
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Updated tasks ───────────────────────────────────────────
-        ☒ Read the route
-        ◼ Patch the projection
-        □ Run focused tests
-
-      ── Ran 1 web search ────────────────────────────────────────
+      "── Ran 1 web search ────────────────────────────────────────
         ── Searched React suspense docs ────────────────────────────
           [completed] React suspense docs
           Found the React Suspense docs

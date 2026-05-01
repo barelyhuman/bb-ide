@@ -161,7 +161,7 @@ describe("toViewMessages tool activity", () => {
     expect(tool?.durationMs).toBe(400);
   });
 
-  it("projects provider plan updates into tasks messages", () => {
+  it("omits provider plan updates from timeline rows", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-1",
@@ -185,21 +185,10 @@ describe("toViewMessages tool activity", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "idle",
     });
-    const tasks = projected.find(
-      (message): message is Extract<ViewMessage, { kind: "tasks" }> =>
-        message.kind === "tasks",
-    );
-
-    expect(tasks).toBeDefined();
-    expect(tasks?.source).toBe("plan");
-    expect(tasks?.title).toBe("Tasks updated");
-    expect(tasks?.tasks).toEqual([
-      { text: "Inspect SearchMenu.tsx", status: "completed" },
-      { text: "Implement better empty state", status: "active" },
-    ]);
+    expect(projected).toEqual([]);
   });
 
-  it("projects TodoWrite tool calls into a compact tasks message", () => {
+  it("omits TodoWrite tool calls from timeline rows", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-1",
@@ -265,24 +254,7 @@ describe("toViewMessages tool activity", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "idle",
     });
-    const tasksMessages = projected.filter(
-      (message): message is Extract<ViewMessage, { kind: "tasks" }> =>
-        message.kind === "tasks",
-    );
-
-    expect(tasksMessages).toHaveLength(1);
-    expect(tasksMessages[0]).toMatchObject({
-      source: "todo",
-      title: "Tasks updated",
-      status: "completed",
-      callId: "todo-1",
-      sourceSeqStart: 1,
-      sourceSeqEnd: 2,
-    });
-    expect(tasksMessages[0]?.tasks).toEqual([
-      { text: "Trace SearchMenu implementation", status: "completed" },
-      { text: "Add better no-results copy", status: "completed" },
-    ]);
+    expect(projected).toEqual([]);
   });
 
   it("suppresses low-value TodoRead tool churn", () => {

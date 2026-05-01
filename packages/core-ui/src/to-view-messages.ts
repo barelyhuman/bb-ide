@@ -29,7 +29,6 @@ import {
 } from "./parse-error-message.js";
 import { isIgnoredNoiseType } from "./timeline-noise-events.js";
 import {
-  compactTaskMessages,
   normalizeSemanticViewMessages,
   normalizeSemanticViewProjection,
   sortViewMessagesBySource,
@@ -41,10 +40,7 @@ import {
   type ThreadEventWithMeta,
 } from "./build-view-projection.js";
 export type { ThreadEventWithMeta } from "./build-view-projection.js";
-import {
-  parseTaskMessage,
-  shouldSuppressLowValueToolCall,
-} from "./task-message-parsing.js";
+import { shouldSuppressLowValueToolCall } from "./tool-call-suppression.js";
 import {
   shouldPreservePendingMessages,
   parseUserFromClientRequest,
@@ -964,13 +960,6 @@ function buildFlatProjectionData(
       continue;
     }
 
-    const taskMessage = parseTaskMessage(decoded, meta, eventParentToolCallId);
-    if (taskMessage) {
-      flushToolActivityBeforeNonToolMessage(state);
-      state.messages.push(taskMessage);
-      continue;
-    }
-
     if (shouldSuppressLowValueToolCall(decoded)) {
       continue;
     }
@@ -1157,7 +1146,7 @@ function buildFlatProjectionData(
     activeThinking: args.includeActiveThinking
       ? buildProjectionActiveThinking(state, args.options?.threadStatus)
       : null,
-    messages: sortViewMessagesBySource(compactTaskMessages(state.messages)),
+    messages: sortViewMessagesBySource(state.messages),
   };
 }
 

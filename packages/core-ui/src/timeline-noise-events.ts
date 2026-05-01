@@ -5,6 +5,7 @@ export const TIMELINE_NOISE_EVENT_TYPES: readonly ThreadEventType[] = [
   "thread/identity",
   "thread/contextWindowUsage/updated",
   "thread/tokenUsage/updated",
+  "turn/plan/updated",
 ] as const;
 
 const timelineNoiseEventTypeSet = new Set<ThreadEventType>(

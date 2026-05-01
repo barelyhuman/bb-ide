@@ -76,7 +76,7 @@ describe("toViewMessages operations", () => {
     expect(messageRows[0].message.title).toBe("Provisioning thread");
   });
 
-  it("projects turn plan updates as tasks rows", () => {
+  it("omits turn plan updates from timeline rows", () => {
     const events: ThreadEventRow[] = [
       {
         id: "evt-1",
@@ -101,21 +101,7 @@ describe("toViewMessages operations", () => {
     const projected = toViewMessages(fromRows(events), {
       threadStatus: "active",
     });
-    const tasks = projected.find(
-      (message): message is Extract<ViewMessage, { kind: "tasks" }> =>
-        message.kind === "tasks",
-    );
-
-    expect(tasks).toBeDefined();
-    expect(tasks).toMatchObject({
-      source: "plan",
-      title: "Tasks updated",
-      status: "completed",
-    });
-    expect(tasks?.tasks).toEqual([
-      { text: "Inspect project", status: "completed" },
-      { text: "Apply fix", status: "active" },
-    ]);
+    expect(projected).toEqual([]);
   });
 
   it("projects deprecation and config warnings as operations", () => {
