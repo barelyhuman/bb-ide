@@ -14,31 +14,13 @@ export type {
 } from "./thread-timeline-row-title.js";
 export { durationToCompactString, timeAgo } from "./format-helpers.js";
 export {
-  buildTimelineAssistantStepSummary,
-  buildTimelineAssistantStepSummaryLabel,
-  formatTimelineAssistantStepSummary,
-} from "./timeline-assistant-step-summary.js";
-export type { TimelineAssistantStepSummary } from "./timeline-assistant-step-summary.js";
-export {
-  countUniqueChangedFiles,
   fileChangeIdentity,
   fileNameFromPath,
-  formatFileChangeName,
   summarizeChangedFileNames,
 } from "./file-change-summary.js";
-export type { ChangedFileNamesSummary } from "./file-change-summary.js";
 export {
   buildToolBundleDetailLines,
-  buildToolBundleSummaryLabel,
-  buildToolBundleSummaryParts,
-  formatToolBundleSummaryLabel,
 } from "./timeline-tool-bundle-summary.js";
-export type { ToolBundleSummaryParts } from "./timeline-tool-bundle-summary.js";
-export {
-  buildTurnSummaryParts,
-  formatTurnSummaryCountLabel,
-} from "./timeline-turn-summary.js";
-export type { TurnSummaryParts } from "./timeline-turn-summary.js";
 export {
   buildTimelineRowActivityInfoMap,
   findLatestActivityMessageId,
@@ -53,15 +35,10 @@ export {
 } from "./timeline-noise-events.js";
 export {
   buildExploringDetailLines,
-  formatDelegationSummary,
-  formatExploringCountsLabel,
   formatExploringIntentLine,
-  getDelegationSummaryParts,
   summarizeExploringCounts,
 } from "./timeline-render-helpers.js";
 export type {
-  DelegationSummaryParts,
-  ExploringCounts,
   ToolIntentSummary,
 } from "./timeline-render-helpers.js";
 export {
