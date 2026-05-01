@@ -6,6 +6,11 @@ export type {
   TimelineTextFormatOptions,
   TimelineFormat,
 } from "./format-timeline-text.js";
+export { getThreadTimelineRowTitle } from "./thread-timeline-row-title.js";
+export type {
+  ThreadTimelineRowTitle,
+  ThreadTimelineTitleContext,
+} from "./thread-timeline-row-title.js";
 export { durationToCompactString, timeAgo } from "./format-helpers.js";
 export {
   buildTimelineAssistantStepSummary,

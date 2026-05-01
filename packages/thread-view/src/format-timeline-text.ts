@@ -17,8 +17,7 @@ import type {
   ViewWebFetchMessage,
   ViewWebSearchMessage,
 } from "@bb/domain";
-import { buildTimelineAssistantStepSummaryLabel } from "./timeline-assistant-step-summary.js";
-import { durationToCompactString, durationToString } from "./format-helpers.js";
+import { durationToString } from "./format-helpers.js";
 import { taskStatusGlyph } from "./task-status.js";
 import { buildCollapsedGroupedTimelineRows } from "./timeline-grouping.js";
 import {
@@ -31,10 +30,8 @@ import {
 } from "./timeline-display-status.js";
 import {
   buildToolBundleDetailLines,
-  buildToolBundleSummaryLabel,
 } from "./timeline-tool-bundle-summary.js";
-import { buildTurnSummaryParts } from "./timeline-turn-summary.js";
-import { formatDelegationSummary } from "./timeline-render-helpers.js";
+import { getThreadTimelineRowTitle } from "./thread-timeline-row-title.js";
 import { formatToolCallCommand } from "./tool-call-parsing.js";
 
 export type TimelineFormat = "json" | "minimal" | "verbose";
@@ -98,15 +95,6 @@ function formatLifecycleLabel(
     case "warning":
       return yellow(statusInfo.cliLabel, color);
   }
-}
-
-function formatSummaryDuration(
-  durationMs: number | null | undefined,
-): string | undefined {
-  if (durationMs === null || durationMs === undefined || durationMs < 1_000) {
-    return undefined;
-  }
-  return durationToCompactString(durationMs);
 }
 
 function formatDurationLine(
@@ -183,11 +171,12 @@ function formatOperationLifecycleLabel(
 
 function formatUser(
   msg: ViewUserMessage,
+  title: string,
   _verbose: boolean,
   color: boolean,
 ): string {
   const lines: string[] = [];
-  lines.push(separator("User", color));
+  lines.push(separator(title, color));
   lines.push(msg.text);
   if (msg.attachments) {
     const parts: string[] = [];
@@ -202,11 +191,12 @@ function formatUser(
 
 function formatAssistantText(
   msg: ViewAssistantTextMessage,
+  title: string,
   _verbose: boolean,
   color: boolean,
 ): string {
   const lines: string[] = [];
-  lines.push(separator("Assistant", color));
+  lines.push(separator(title, color));
   lines.push(msg.text);
   return lines.join("\n");
 }
@@ -264,6 +254,7 @@ function formatExecutionCall(
 
 function formatToolCall(
   msg: ViewToolCallMessage,
+  title: string,
   verbose: boolean,
   color: boolean,
 ): string {
@@ -284,6 +275,7 @@ function formatToolCall(
 
 function formatCommand(
   msg: ViewCommandMessage,
+  title: string,
   verbose: boolean,
   color: boolean,
 ): string {
@@ -304,6 +296,7 @@ function formatCommand(
 
 function formatFileEdit(
   msg: ViewFileEditMessage,
+  title: string,
   verbose: boolean,
   color: boolean,
 ): string {
@@ -315,7 +308,7 @@ function formatFileEdit(
     }),
     color,
   );
-  lines.push(separator("File Edit", color));
+  lines.push(separator(title, color));
   if (msg.changes.length === 0) {
     lines.push(`  ${lifecycleLabel} ${cyan("file changes", color)}`);
   }
@@ -337,6 +330,7 @@ function formatFileEdit(
 
 function formatWebSearch(
   msg: ViewWebSearchMessage,
+  title: string,
   verbose: boolean,
   color: boolean,
 ): string {
@@ -348,7 +342,7 @@ function formatWebSearch(
     }),
     color,
   );
-  lines.push(separator(`Searched ${query}`, color));
+  lines.push(separator(title, color));
   lines.push(`  ${lifecycleLabel} ${cyan(query, color)}`);
   if (verbose && msg.resultText) {
     lines.push(dim(`  ${truncate(msg.resultText.trim(), 500)}`, color));
@@ -358,6 +352,7 @@ function formatWebSearch(
 
 function formatWebFetch(
   msg: ViewWebFetchMessage,
+  title: string,
   verbose: boolean,
   color: boolean,
 ): string {
@@ -368,7 +363,7 @@ function formatWebFetch(
     }),
     color,
   );
-  lines.push(separator(`Fetched ${msg.url}`, color));
+  lines.push(separator(title, color));
   lines.push(`  ${lifecycleLabel} ${cyan(msg.url, color)}`);
   if (verbose && msg.resultText) {
     lines.push(dim(`  ${truncate(msg.resultText.trim(), 500)}`, color));
@@ -378,11 +373,12 @@ function formatWebFetch(
 
 function formatOperation(
   msg: ViewOperationMessage,
+  title: string,
   verbose: boolean,
   color: boolean,
 ): string {
   const lines: string[] = [];
-  lines.push(separator(`Operation: ${msg.title}`, color));
+  lines.push(separator(title, color));
   const lifecycleLabel = formatOperationLifecycleLabel(msg, color);
   if (lifecycleLabel) {
     lines.push(`  ${lifecycleLabel}`);
@@ -393,11 +389,12 @@ function formatOperation(
 
 function formatPermissionGrantLifecycle(
   msg: ViewPermissionGrantLifecycleMessage,
+  title: string,
   verbose: boolean,
   color: boolean,
 ): string {
   const lines: string[] = [];
-  lines.push(separator(msg.title, color));
+  lines.push(separator(title, color));
   lines.push(`  ${formatPermissionLifecycleLabel(msg, color)}`);
   if (verbose) {
     lines.push(`  item: ${msg.approvalTarget.itemId}`);
@@ -410,11 +407,12 @@ function formatPermissionGrantLifecycle(
 
 function formatTasks(
   msg: ViewTasksMessage,
+  title: string,
   _verbose: boolean,
   color: boolean,
 ): string {
   const lines: string[] = [];
-  lines.push(separator("Updated tasks", color));
+  lines.push(separator(title, color));
   for (const task of msg.tasks) {
     lines.push(`  ${taskStatusGlyph(task.status)} ${task.text}`);
   }
@@ -423,14 +421,12 @@ function formatTasks(
 
 function formatDelegation(
   msg: ViewDelegationMessage,
+  title: string,
   verbose: boolean,
   color: boolean,
 ): string {
   const lines: string[] = [];
-  const verb = msg.status === "pending" ? "Running" : "Ran";
-  lines.push(
-    separator(`${verb} subagent: ${formatDelegationSummary(msg)}`, color),
-  );
+  lines.push(separator(title, color));
 
   const durationLine = formatDurationLine(msg.durationMs, color);
   if (durationLine) {
@@ -466,60 +462,52 @@ function formatDelegation(
 
 function formatError(
   msg: ViewErrorMessage,
+  title: string,
   _verbose: boolean,
   color: boolean,
 ): string {
   const lines: string[] = [];
-  lines.push(separator("Error", color));
+  lines.push(separator(title, color));
   lines.push(red(`  ${msg.message}`, color));
   return lines.join("\n");
 }
 
 function formatMessage(
   msg: ViewMessage,
+  title: string,
   verbose: boolean,
   color: boolean,
 ): string {
   switch (msg.kind) {
     case "user":
-      return formatUser(msg, verbose, color);
+      return formatUser(msg, title, verbose, color);
     case "assistant-text":
-      return formatAssistantText(msg, verbose, color);
+      return formatAssistantText(msg, title, verbose, color);
     case "command":
-      return formatCommand(msg, verbose, color);
+      return formatCommand(msg, title, verbose, color);
     case "tool-call":
-      return formatToolCall(msg, verbose, color);
+      return formatToolCall(msg, title, verbose, color);
     case "file-edit":
-      return formatFileEdit(msg, verbose, color);
+      return formatFileEdit(msg, title, verbose, color);
     case "web-search":
-      return formatWebSearch(msg, verbose, color);
+      return formatWebSearch(msg, title, verbose, color);
     case "web-fetch":
-      return formatWebFetch(msg, verbose, color);
+      return formatWebFetch(msg, title, verbose, color);
     case "operation":
-      return formatOperation(msg, verbose, color);
+      return formatOperation(msg, title, verbose, color);
     case "permission-grant-lifecycle":
-      return formatPermissionGrantLifecycle(msg, verbose, color);
+      return formatPermissionGrantLifecycle(msg, title, verbose, color);
     case "tasks":
-      return formatTasks(msg, verbose, color);
+      return formatTasks(msg, title, verbose, color);
     case "delegation":
-      return formatDelegation(msg, verbose, color);
+      return formatDelegation(msg, title, verbose, color);
     case "error":
-      return formatError(msg, verbose, color);
+      return formatError(msg, title, verbose, color);
     case "debug/raw-event":
       return "";
     default:
       return "";
   }
-}
-
-function formatTurnSummary(entry: TimelineTurnSummaryRow): string {
-  const duration = formatSummaryDuration(entry.durationMs);
-  const parts = buildTurnSummaryParts({
-    duration,
-    status: entry.status,
-    summaryCount: entry.summaryCount,
-  });
-  return [parts.prefix, parts.emphasis].join(" ");
 }
 
 function formatNestedTimelineRows(
@@ -539,13 +527,12 @@ function formatNestedTimelineRows(
 
 function formatAssistantStepSummaryRow(
   row: TimelineAssistantStepSummaryRow,
+  title: string,
   verbose: boolean,
   color: boolean,
 ): string {
   const lines: string[] = [];
-  lines.push(
-    separator(buildTimelineAssistantStepSummaryLabel(row.rows), color),
-  );
+  lines.push(separator(title, color));
 
   if (!verbose) {
     return lines.join("\n");
@@ -561,11 +548,12 @@ function formatAssistantStepSummaryRow(
 
 function formatToolBundleRow(
   row: TimelineToolBundleRow,
+  title: string,
   verbose: boolean,
   color: boolean,
 ): string {
   const lines: string[] = [];
-  lines.push(separator(buildToolBundleSummaryLabel(row), color));
+  lines.push(separator(title, color));
 
   if (!verbose) {
     return lines.join("\n");
@@ -581,7 +569,7 @@ function formatToolBundleRow(
   }
 
   for (const messageRow of row.rows) {
-    const block = formatMessage(messageRow.message, true, color);
+    const block = formatTimelineRow(messageRow, true, color);
     if (block.length > 0) {
       lines.push(indentBlock(block, "  "));
     }
@@ -592,11 +580,12 @@ function formatToolBundleRow(
 
 function formatTurnSummaryRow(
   row: TimelineTurnSummaryRow,
+  title: string,
   verbose: boolean,
   color: boolean,
 ): string {
   const lines: string[] = [];
-  lines.push(separator(formatTurnSummary(row), color));
+  lines.push(separator(title, color));
 
   if (!verbose || !row.rows) {
     return lines.join("\n");
@@ -615,15 +604,18 @@ function formatTimelineRow(
   verbose: boolean,
   color: boolean,
 ): string {
+  const title = getThreadTimelineRowTitle(row, {
+    preferOngoingLabels: false,
+  }).plain;
   switch (row.kind) {
     case "message":
-      return formatMessage(row.message, verbose, color);
+      return formatMessage(row.message, title, verbose, color);
     case "assistant-step-summary":
-      return formatAssistantStepSummaryRow(row, verbose, color);
+      return formatAssistantStepSummaryRow(row, title, verbose, color);
     case "tool-bundle":
-      return formatToolBundleRow(row, verbose, color);
+      return formatToolBundleRow(row, title, verbose, color);
     case "turn-summary":
-      return formatTurnSummaryRow(row, verbose, color);
+      return formatTurnSummaryRow(row, title, verbose, color);
     default:
       return "";
   }
