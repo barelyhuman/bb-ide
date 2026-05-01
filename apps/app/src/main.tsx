@@ -4,7 +4,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { WorkerPoolContextProvider } from "@pierre/diffs/react";
 import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
-import { Toaster } from "./components/ui/sonner";
+import { AppToaster } from "./components/AppToaster";
 import { initializePreferredTheme } from "./hooks/useTheme";
 import { createAppQueryClient } from "./lib/query-client";
 import "./app.css";
@@ -51,7 +51,7 @@ createRoot(document.getElementById("root")!).render(
           <App />
         </BrowserRouter>
       </WorkerPoolContextProvider>
-      <Toaster position="bottom-right" />
+      <AppToaster position="bottom-right" />
     </QueryClientProvider>
   </StrictMode>,
 );

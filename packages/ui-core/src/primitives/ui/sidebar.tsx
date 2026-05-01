@@ -6,22 +6,20 @@ import {
   PanelLeft as DesktopSidebarIcon,
 } from "lucide-react";
 
-import { useIsMobile } from "@/hooks/useMobile";
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { COARSE_POINTER_HEADER_ICON_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing";
-import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@bb/ui-core";
+import { useIsMobile } from "../hooks/use-mobile.js";
+import { cn } from "../../cn.js";
+import { Button } from "./button.js";
+import { COARSE_POINTER_HEADER_ICON_BUTTON_CLASS } from "./coarse-pointer-sizing.js";
+import { Input } from "./input.js";
+import { Separator } from "./separator.js";
+import { Skeleton } from "./skeleton.js";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from "@/components/ui/tooltip";
+} from "./tooltip.js";
 
-const SIDEBAR_COOKIE_NAME = "sidebar_state";
-const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 const SIDEBAR_WIDTH = "16rem";
 const SIDEBAR_WIDTH_MOBILE = "min(90vw, 320px)";
 const SIDEBAR_WIDTH_ICON = "3rem";
@@ -71,8 +69,6 @@ const SidebarProvider = React.forwardRef<
     const isMobile = useIsMobile();
     const [openMobile, setOpenMobile] = React.useState(false);
 
-    // This is the internal state of the sidebar.
-    // We use openProp and setOpenProp for control from outside the component.
     const [_open, _setOpen] = React.useState(defaultOpen);
     const open = openProp ?? _open;
     const setOpen = React.useCallback(
@@ -83,9 +79,6 @@ const SidebarProvider = React.forwardRef<
         } else {
           _setOpen(openState);
         }
-
-        // This sets the cookie to keep the sidebar state.
-        document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`;
       },
       [setOpenProp, open],
     );

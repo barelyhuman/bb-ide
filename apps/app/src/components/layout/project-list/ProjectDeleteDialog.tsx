@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+import { Button } from "@bb/ui-core";
 import {
   Dialog,
   DialogContent,
@@ -6,7 +6,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@bb/ui-core";
 
 export interface ProjectDeleteDialogTarget {
   id: string;

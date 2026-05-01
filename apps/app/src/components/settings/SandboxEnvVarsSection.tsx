@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { SandboxEnvVar } from "@bb/server-contract";
 import { sandboxEnvVarNameSchema } from "@bb/server-contract";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@bb/ui-core";
+import { Input } from "@bb/ui-core";
 import { SettingsCard } from "@/components/settings/SettingsCard";
 import { looksLikeEnvContent, parseEnvContent } from "@/lib/parse-env";
 

@@ -1,16 +1,16 @@
 import type { ReactNode } from "react";
 import { PanelBottom, PanelRight } from "lucide-react";
 import { useIsSecondaryPanelOpen } from "@/lib/thread-secondary-panel";
-import { Button } from "@/components/ui/button";
-import { SplitButton } from "@/components/ui/split-button";
+import { Button } from "@bb/ui-core";
+import { SplitButton } from "@bb/ui-core";
 import {
   AppPageHeader,
   HEADER_ICON_BUTTON_CLASS,
 } from "@/components/layout/AppPageHeader";
 import { StatusPill } from "@bb/ui-core";
-import { useIsMobile } from "@/hooks/useMobile";
+import { useIsMobile } from "@bb/ui-core";
 import { cn } from "@/lib/utils";
-import { COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing";
+import { COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS } from "@bb/ui-core";
 import type { ThreadGitActionDialogTarget } from "@/components/thread/ThreadGitActionDialog";
 import type { ThreadEnvironmentPromotionDialogTarget } from "@/components/thread/ThreadEnvironmentPromotionDialog";
 

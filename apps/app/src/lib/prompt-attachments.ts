@@ -1,6 +1,13 @@
-import type { PromptInput, ViewUserMessage } from "@bb/domain";
+import type { PromptInput } from "@bb/domain";
 
-type PromptAttachmentCounts = NonNullable<ViewUserMessage["attachments"]>;
+interface PromptAttachmentCounts {
+  webImages: number;
+  localImages: number;
+  localFiles: number;
+  imageUrls?: string[];
+  localImagePaths?: string[];
+  localFilePaths?: string[];
+}
 
 export function collectPromptAttachments(
   input: PromptInput[],

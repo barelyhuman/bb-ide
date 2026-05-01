@@ -15,7 +15,7 @@ import {
   SidebarProvider,
   SidebarInset,
   SidebarTrigger,
-} from "@/components/ui/sidebar";
+} from "@bb/ui-core";
 import { AppSidebar } from "./AppSidebar";
 import { AppPageHeader, HEADER_ICON_BUTTON_CLASS } from "./AppPageHeader";
 import { useHireProjectManager } from "@/hooks/mutations/project-mutations";

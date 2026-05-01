@@ -9,8 +9,8 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   useSidebar,
-} from "@/components/ui/sidebar";
-import { COARSE_POINTER_CHILD_ICON_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing";
+} from "@bb/ui-core";
+import { COARSE_POINTER_CHILD_ICON_BUTTON_CLASS } from "@bb/ui-core";
 import { ProjectList } from "./ProjectList";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 import { setPreferredTheme, usePreferredTheme } from "@/hooks/useTheme";

@@ -1,8 +1,8 @@
 import { Fragment, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { buttonVariants } from "@/components/ui/button";
-import { COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing";
+import { cn } from "../../cn.js";
+import { buttonVariants } from "./button.js";
+import { COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS } from "./coarse-pointer-sizing.js";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,7 +10,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "./dropdown-menu.js";
 
 const SPLIT_BUTTON_TOOLBAR_CLASS = COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS;
 

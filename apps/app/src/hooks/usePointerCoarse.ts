@@ -1,4 +1,4 @@
-import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { useMediaQuery } from "@bb/ui-core";
 
 export const POINTER_COARSE_QUERY = "(pointer: coarse)";
 

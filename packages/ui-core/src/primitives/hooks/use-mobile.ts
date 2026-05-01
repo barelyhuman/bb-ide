@@ -1,4 +1,4 @@
-import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { useMediaQuery } from "./use-media-query.js";
 
 export const MOBILE_QUERY = "(max-width: 767px)";
 

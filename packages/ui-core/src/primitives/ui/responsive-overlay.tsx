@@ -1,9 +1,9 @@
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 
-import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
-import { getOverlayTriggerClassName } from "@/components/ui/overlay-trigger";
-import { useIsMobile } from "@/hooks/useMobile";
+import { Drawer, DrawerContent, DrawerTitle } from "./drawer.js";
+import { getOverlayTriggerClassName } from "./overlay-trigger.js";
+import { useIsMobile } from "../hooks/use-mobile.js";
 
 // ---------------------------------------------------------------------------
 // Shared context value for responsive overlays (dropdown menus, popovers)

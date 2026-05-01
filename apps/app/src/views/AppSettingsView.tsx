@@ -4,14 +4,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown, MoreHorizontal } from "lucide-react";
 import { timeAgo } from "@bb/core-ui";
 import type { CloudAuthProviderId } from "@bb/agent-providers";
-import { Button } from "@/components/ui/button";
-import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing";
+import { Button } from "@bb/ui-core";
+import { COARSE_POINTER_ICON_SIZE_CLASS } from "@bb/ui-core";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@bb/ui-core";
 import { PageShell } from "@/components/layout/PageShell";
 import { CloudAuthSettingsSection } from "@/components/settings/CloudAuthSettingsSection";
 import { CONNECTED_DOT_CLASS } from "@/components/settings/constants";

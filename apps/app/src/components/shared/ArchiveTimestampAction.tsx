@@ -1,6 +1,6 @@
 import type { ThreadType } from "@bb/domain";
 import { ArchiveRestore, LoaderCircle } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@bb/ui-core";
 import { threadTypeLabel } from "@/lib/thread-title";
 
 export function ArchiveTimestampAction({

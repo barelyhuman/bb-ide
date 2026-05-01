@@ -1,14 +1,14 @@
 import { Check, ChevronDown, Monitor } from "lucide-react";
 import type { Host } from "@bb/domain";
 import { LocalhostBadge } from "@bb/ui-core";
-import { Button } from "@/components/ui/button";
-import { COARSE_POINTER_ICON_SIZE_SHRINK_CLASS } from "@/components/ui/coarse-pointer-sizing";
+import { Button } from "@bb/ui-core";
+import { COARSE_POINTER_ICON_SIZE_SHRINK_CLASS } from "@bb/ui-core";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@bb/ui-core";
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import { cn } from "@/lib/utils";
 import {

@@ -5,11 +5,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { DetailCard, DetailRow, Pill } from "@bb/ui-core";
 import type { ReplayRunSpeed } from "@bb/server-contract";
 import { PageShell } from "@/components/layout/PageShell";
-import { Button } from "@/components/ui/button";
+import { Button } from "@bb/ui-core";
 import {
   SplitButton,
   type SplitButtonAction,
-} from "@/components/ui/split-button";
+} from "@bb/ui-core";
 import { invalidateReplayCaptures } from "@/hooks/cache-effects";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { replayCapturesQueryKey } from "@/hooks/queries/query-keys";

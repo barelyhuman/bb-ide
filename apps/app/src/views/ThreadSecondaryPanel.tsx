@@ -23,15 +23,15 @@ import {
   renderChangeSummary,
 } from "@/lib/workspace-change-summary";
 import { useIntersectionObserver } from "usehooks-ts";
-import { Button } from "@/components/ui/button";
-import { COARSE_POINTER_COMPACT_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing";
+import { Button } from "@bb/ui-core";
+import { COARSE_POINTER_COMPACT_ICON_SIZE_CLASS } from "@bb/ui-core";
 import { Skeleton } from "@bb/ui-core";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@bb/ui-core";
 import { cn } from "@/lib/utils";
 import { type ThreadSecondaryPanel as ThreadSecondaryPanelTab } from "@/lib/thread-secondary-panel";
 import {

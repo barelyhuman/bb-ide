@@ -2,17 +2,14 @@
 
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogTrigger } from "@/components/ui/dialog";
-import {
-  Drawer,
-  DrawerTrigger,
-} from "@/components/ui/drawer";
+import { Button } from "../src/primitives/ui/button.js";
+import { Dialog, DialogTrigger } from "../src/primitives/ui/dialog.js";
+import { Drawer, DrawerTrigger } from "../src/primitives/ui/drawer.js";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Popover, PopoverTrigger } from "@/components/ui/popover";
+} from "../src/primitives/ui/dropdown-menu.js";
+import { Popover, PopoverTrigger } from "../src/primitives/ui/popover.js";
 
 let mobileMatches = false;
 

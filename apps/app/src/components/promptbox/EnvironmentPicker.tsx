@@ -9,7 +9,7 @@ import {
   findLocalPathProjectSourceForHost,
   isGitHubRepoProjectSource,
 } from "@bb/domain";
-import { Button } from "@/components/ui/button";
+import { Button } from "@bb/ui-core";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,12 +17,12 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@bb/ui-core";
 import {
   COARSE_POINTER_COMPACT_ICON_SIZE_CLASS,
   COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,
   COARSE_POINTER_ICON_SIZE_CLASS,
-} from "@/components/ui/coarse-pointer-sizing";
+} from "@bb/ui-core";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useSandboxBackends } from "@/hooks/queries/system-queries";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";

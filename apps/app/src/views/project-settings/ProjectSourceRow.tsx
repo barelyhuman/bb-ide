@@ -6,13 +6,13 @@ import {
 } from "@bb/domain";
 import { LocalhostBadge, StatusPill } from "@bb/ui-core";
 import { GitHubIcon } from "@/components/icons/GitHubIcon";
-import { Button } from "@/components/ui/button";
+import { Button } from "@bb/ui-core";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@bb/ui-core";
 import { SettingsRow } from "@/components/settings/SettingsRow";
 
 interface ProjectSourceRowProps {

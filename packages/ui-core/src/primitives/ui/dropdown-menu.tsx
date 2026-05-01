@@ -2,16 +2,16 @@ import * as React from "react";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
 import { Check, ChevronRight, Circle } from "lucide-react";
 
-import { cn } from "@/lib/utils";
-import { COARSE_POINTER_CHECK_SLOT_CLASS } from "@/components/ui/coarse-pointer-sizing";
+import { cn } from "../../cn.js";
+import { COARSE_POINTER_CHECK_SLOT_CLASS } from "./coarse-pointer-sizing.js";
 import {
   type ResponsiveOverlayContextValue,
   useResponsiveRoot,
   MobileTrigger,
   ResponsiveDrawerShell,
   stripRadixContentProps,
-} from "@/components/ui/responsive-overlay";
-import { getOverlayTriggerClassName } from "@/components/ui/overlay-trigger";
+} from "./responsive-overlay.js";
+import { getOverlayTriggerClassName } from "./overlay-trigger.js";
 
 // ---------------------------------------------------------------------------
 // Context — separate instance from Popover to avoid cross-contamination
@@ -346,12 +346,6 @@ function DropdownMenuRadioGroup({
   const { isMobile } = useResponsiveMenu();
 
   if (isMobile) {
-    if (process.env.NODE_ENV === "development") {
-      console.warn(
-        "DropdownMenuRadioGroup is not supported on mobile. " +
-          "Add a mobile fallback or use DropdownMenuItem with manual check rendering.",
-      );
-    }
     return null;
   }
 
@@ -369,12 +363,6 @@ const DropdownMenuRadioItem = React.forwardRef<
   const { isMobile } = useResponsiveMenu();
 
   if (isMobile) {
-    if (process.env.NODE_ENV === "development") {
-      console.warn(
-        "DropdownMenuRadioItem is not supported on mobile. " +
-          "Add a mobile fallback or use DropdownMenuItem with manual check rendering.",
-      );
-    }
     return null;
   }
 

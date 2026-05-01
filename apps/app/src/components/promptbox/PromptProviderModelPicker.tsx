@@ -1,21 +1,21 @@
 import { useCallback, useMemo, useState } from "react";
 import { Check, ChevronDown, Zap } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@bb/ui-core";
 import {
   COARSE_POINTER_ICON_SIZE_CLASS,
   COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
   COARSE_POINTER_PROVIDER_TAB_SIZE_CLASS,
   COARSE_POINTER_TEXT_SM_CLASS,
-} from "@/components/ui/coarse-pointer-sizing";
+} from "@bb/ui-core";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import { Switch } from "@/components/ui/switch";
+} from "@bb/ui-core";
+import { Switch } from "@bb/ui-core";
 import { cn } from "@/lib/utils";
 import { useAvailableModels } from "@/hooks/queries/system-queries";
-import { useIsMobile } from "@/hooks/useMobile";
+import { useIsMobile } from "@bb/ui-core";
 import {
   PROMPT_OPTION_BASE_CLASS_NAME,
   PROMPT_OPTION_INTERACTIVE_CLASS_NAME,

@@ -25,13 +25,13 @@ import {
   X,
 } from "lucide-react";
 import type { PromptMentionSuggestion } from "@/hooks/usePromptMentions";
-import { Button } from "@/components/ui/button";
+import { Button } from "@bb/ui-core";
 import {
   COARSE_POINTER_PROMPT_ACTION_BUTTON_CLASS,
   COARSE_POINTER_PROMPT_COMBO_BUTTON_CLASS,
   COARSE_POINTER_PROMPT_ICON_ACTION_BUTTON_CLASS,
   COARSE_POINTER_TEXT_BASE_CLASS,
-} from "@/components/ui/coarse-pointer-sizing";
+} from "@bb/ui-core";
 import { useAutoGrow } from "@/hooks/useAutoGrow";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { transcribeVoiceInput } from "@/lib/api";

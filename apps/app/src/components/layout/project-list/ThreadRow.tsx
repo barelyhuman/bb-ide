@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
-import { SidebarMenuBadge } from "@/components/ui/sidebar";
+import { SidebarMenuBadge } from "@bb/ui-core";
 import {
   COARSE_POINTER_DOT_SIZE_CLASS,
   COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS,
@@ -18,7 +18,7 @@ import {
   COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
   COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
   COARSE_POINTER_ROW_HEIGHT_CLASS,
-} from "@/components/ui/coarse-pointer-sizing";
+} from "@bb/ui-core";
 import {
   getEnvironmentWorkspaceDisplayIcon,
   getEnvironmentWorkspaceDisplayIconLabel,

@@ -1,14 +1,14 @@
 import type { ComponentType, ReactNode } from "react";
 import { Check, ChevronDown } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing";
+import { Button } from "@bb/ui-core";
+import { COARSE_POINTER_ICON_SIZE_CLASS } from "@bb/ui-core";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@bb/ui-core";
 import { cn } from "@/lib/utils";
 
 export const PROMPT_OPTION_BASE_CLASS_NAME =

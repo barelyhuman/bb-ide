@@ -1,15 +1,15 @@
 import * as React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 
-import { cn } from "@/lib/utils";
+import { cn } from "../../cn.js";
 import {
   type ResponsiveOverlayContextValue,
   useResponsiveRoot,
   MobileTrigger,
   ResponsiveDrawerShell,
   stripRadixContentProps,
-} from "@/components/ui/responsive-overlay";
-import { getOverlayTriggerClassName } from "@/components/ui/overlay-trigger";
+} from "./responsive-overlay.js";
+import { getOverlayTriggerClassName } from "./overlay-trigger.js";
 
 // ---------------------------------------------------------------------------
 // Context — separate instance from DropdownMenu

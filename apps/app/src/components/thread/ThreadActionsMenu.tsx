@@ -7,9 +7,9 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Button } from "@/components/ui/button";
-import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing";
+} from "@bb/ui-core";
+import { Button } from "@bb/ui-core";
+import { COARSE_POINTER_ICON_SIZE_CLASS } from "@bb/ui-core";
 import { cn } from "@/lib/utils";
 import { threadTypeLabel } from "@/lib/thread-title";
 import { isThreadRead } from "@/lib/thread-read-state";

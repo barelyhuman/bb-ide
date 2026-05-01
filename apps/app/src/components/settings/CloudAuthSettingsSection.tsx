@@ -1,7 +1,7 @@
 import type { CloudAuthProviderId } from "@bb/agent-providers";
 import type { CloudAuthConnection } from "@bb/server-contract";
 import { StatusPill, type StatusPillVariant } from "@bb/ui-core";
-import { Button } from "@/components/ui/button";
+import { Button } from "@bb/ui-core";
 import { SettingsCard } from "@/components/settings/SettingsCard";
 import { SettingsRowList } from "@/components/settings/SettingsRow";
 import { CONNECTED_DOT_CLASS } from "@/components/settings/constants";

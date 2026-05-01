@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { SidebarTrigger } from "@/components/ui/sidebar";
-import { COARSE_POINTER_HEADER_ICON_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing";
+import { SidebarTrigger } from "@bb/ui-core";
+import { COARSE_POINTER_HEADER_ICON_BUTTON_CLASS } from "@bb/ui-core";
 import { cn } from "@/lib/utils";
 
 /**

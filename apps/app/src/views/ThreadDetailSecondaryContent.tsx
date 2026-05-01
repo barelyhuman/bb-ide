@@ -4,16 +4,16 @@ import { HostStatusBadge } from "@/components/HostStatusIndicator";
 import { Check, ChevronDown, ChevronRight, Copy, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Panel, PanelGroup } from "react-resizable-panels";
-import { Button } from "@/components/ui/button";
-import { COARSE_POINTER_ICON_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing";
-import { ResponsiveDrawerShell } from "@/components/ui/responsive-overlay";
-import { useIsMobile } from "@/hooks/useMobile";
+import { Button } from "@bb/ui-core";
+import { COARSE_POINTER_ICON_SIZE_CLASS } from "@bb/ui-core";
+import { ResponsiveDrawerShell } from "@bb/ui-core";
+import { useIsMobile } from "@bb/ui-core";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@bb/ui-core";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
 import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
 import { MergeBaseBranchPicker } from "@/components/thread/MergeBaseBranchPicker";

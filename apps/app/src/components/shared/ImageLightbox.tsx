@@ -1,12 +1,12 @@
 import { useEffect } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@bb/ui-core";
 import {
   Dialog,
   DialogClose,
   DialogContent,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@bb/ui-core";
 
 export const imageLightboxKeyActionValues = [
   "close",

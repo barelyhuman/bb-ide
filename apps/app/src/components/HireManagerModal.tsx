@@ -17,10 +17,10 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+} from "@bb/ui-core";
+import { Button } from "@bb/ui-core";
 import { FormError } from "@/components/shared/FormError";
-import { Input } from "@/components/ui/input";
+import { Input } from "@bb/ui-core";
 import { useHireProjectManager } from "@/hooks/mutations/project-mutations";
 import {
   useAvailableModels,

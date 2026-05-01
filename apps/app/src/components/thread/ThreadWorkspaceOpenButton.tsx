@@ -17,7 +17,7 @@ import xcodeIcon from "@/assets/workspace-open-target-icons/xcode.png";
 import {
   SplitButton,
   type SplitButtonAction,
-} from "@/components/ui/split-button";
+} from "@bb/ui-core";
 
 const WORKSPACE_OPEN_TARGET_ICONS: Record<WorkspaceOpenTargetId, string> = {
   vscode: vscodeIcon,

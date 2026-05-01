@@ -6,7 +6,7 @@ import { DetailCard, DetailRow } from "@bb/ui-core";
 import type { ThreadGitStatusDisplay } from "@/lib/workspace-status";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
 import { FormError } from "@/components/shared/FormError";
-import { Button } from "@/components/ui/button";
+import { Button } from "@bb/ui-core";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +14,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@bb/ui-core";
 import {
   getMergeBaseBranchCandidates,
   MergeBaseBranchPicker,

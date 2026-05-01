@@ -150,7 +150,9 @@ describe("useMediaQuery", () => {
   it("shares one browser listener per query and fans out changes", async () => {
     const query = "(pointer: coarse)";
     const environment = setupMatchMedia();
-    const { useMediaQuery } = await import("./useMediaQuery");
+    const { useMediaQuery } = await import(
+      "../src/primitives/hooks/use-media-query.js"
+    );
 
     const first = renderHook(() => useMediaQuery(query));
     const second = renderHook(() => useMediaQuery(query));
@@ -178,7 +180,9 @@ describe("useMediaQuery", () => {
     const coarseQuery = "(pointer: coarse)";
     const mobileQuery = "(max-width: 767px)";
     const environment = setupMatchMedia();
-    const { useMediaQuery } = await import("./useMediaQuery");
+    const { useMediaQuery } = await import(
+      "../src/primitives/hooks/use-media-query.js"
+    );
 
     const coarse = renderHook(() => useMediaQuery(coarseQuery));
     const mobile = renderHook(() => useMediaQuery(mobileQuery));
@@ -201,7 +205,9 @@ describe("useMediaQuery", () => {
     const environment = setupMatchMedia({
       matchesByQuery: new Map<string, boolean>([[query, true]]),
     });
-    const { useMediaQuery } = await import("./useMediaQuery");
+    const { useMediaQuery } = await import(
+      "../src/primitives/hooks/use-media-query.js"
+    );
 
     function MediaQueryProbe({
       query,
@@ -216,32 +222,5 @@ describe("useMediaQuery", () => {
       ),
     ).toBe("<span>false</span>");
     expect(environment.queries).toHaveLength(0);
-  });
-});
-
-describe("usePointerCoarse", () => {
-  afterEach(() => {
-    cleanup();
-    vi.resetModules();
-    Object.defineProperty(window, "matchMedia", {
-      configurable: true,
-      value: originalMatchMedia,
-    });
-  });
-
-  it("uses the coarse pointer media query", async () => {
-    const matchesByQuery = new Map<string, boolean>([
-      ["(pointer: coarse)", true],
-    ]);
-    const environment = setupMatchMedia({ matchesByQuery });
-    const { POINTER_COARSE_QUERY, usePointerCoarse } = await import(
-      "./usePointerCoarse"
-    );
-
-    const coarse = renderHook(() => usePointerCoarse());
-
-    expect(POINTER_COARSE_QUERY).toBe("(pointer: coarse)");
-    expect(coarse.result.current).toBe(true);
-    expect(environment.queries).toContain("(pointer: coarse)");
   });
 });

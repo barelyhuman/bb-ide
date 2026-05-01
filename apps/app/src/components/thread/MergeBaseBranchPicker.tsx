@@ -1,13 +1,13 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Search } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { COARSE_POINTER_ICON_SIZE_SHRINK_CLASS } from "@/components/ui/coarse-pointer-sizing";
-import { Input } from "@/components/ui/input";
+import { Button } from "@bb/ui-core";
+import { COARSE_POINTER_ICON_SIZE_SHRINK_CLASS } from "@bb/ui-core";
+import { Input } from "@bb/ui-core";
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@bb/ui-core";
 import { cn } from "@/lib/utils";
 
 export function getMergeBaseBranchCandidates({

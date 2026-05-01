@@ -2,7 +2,7 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
+} from "@bb/ui-core";
 import { useHoverPopover } from "@/hooks/useHoverPopover";
 import type { ThreadContextWindowUsage } from "@bb/server-contract";
 import {

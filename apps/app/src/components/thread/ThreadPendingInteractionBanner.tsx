@@ -18,7 +18,7 @@ import { useResolveThreadPendingInteraction } from "@/hooks/mutations/thread-int
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { cn } from "@/lib/utils";
 import { labelForApprovalDecision } from "./pending-interactions/banner-helpers";
-import { Button } from "../ui/button";
+import { Button } from "@bb/ui-core";
 
 interface ThreadPendingInteractionBannerProps {
   interaction: PendingInteraction;

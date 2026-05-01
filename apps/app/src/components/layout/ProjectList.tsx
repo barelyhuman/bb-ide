@@ -27,11 +27,11 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuSkeleton,
-} from "@/components/ui/sidebar";
+} from "@bb/ui-core";
 import {
   COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS,
   COARSE_POINTER_ICON_SIZE_CLASS,
-} from "@/components/ui/coarse-pointer-sizing";
+} from "@bb/ui-core";
 import { ProjectRow } from "./project-list/ProjectRow";
 import {
   collapsedManagerIdsAtom,

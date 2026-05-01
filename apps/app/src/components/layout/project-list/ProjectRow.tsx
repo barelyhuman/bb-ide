@@ -5,13 +5,13 @@ import { AlertTriangle, ChevronRight, Folder, FolderOpen } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ProjectActionsMenu } from "@/components/project/ProjectActionsMenu";
-import { SidebarMenuItem, SidebarMenuSkeleton } from "@/components/ui/sidebar";
+import { SidebarMenuItem, SidebarMenuSkeleton } from "@bb/ui-core";
 import {
   COARSE_POINTER_ICON_SIZE_CLASS,
   COARSE_POINTER_PROJECT_ROW_ACTION_SIZE_CLASS,
   COARSE_POINTER_ROW_HEIGHT_CLASS,
   COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
-} from "@/components/ui/coarse-pointer-sizing";
+} from "@bb/ui-core";
 import { isBusyThread } from "@/lib/thread-activity";
 import { cn } from "@/lib/utils";
 import { ThreadRow } from "./ThreadRow";

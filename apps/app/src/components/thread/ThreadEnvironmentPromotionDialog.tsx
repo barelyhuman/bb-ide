@@ -3,7 +3,7 @@ import { Loader2 } from "lucide-react";
 import { assertNever } from "@bb/core-ui";
 import { DetailCard, DetailRow } from "@bb/ui-core";
 import { FormError } from "@/components/shared/FormError";
-import { Button } from "@/components/ui/button";
+import { Button } from "@bb/ui-core";
 import {
   Dialog,
   DialogContent,
@@ -11,7 +11,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "@bb/ui-core";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 
 export type ThreadEnvironmentPromotionDialogTarget =
