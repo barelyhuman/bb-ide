@@ -12,6 +12,7 @@ import {
   resolveBufferedTextIdentity,
 } from "@bb/domain";
 import type {
+  ManagerTimelineView,
   ThreadTimelineResponse,
   TimelineTurnSummaryDetailsResponse,
 } from "@bb/server-contract";
@@ -33,13 +34,13 @@ interface TimelineSourceSeqRange {
 
 interface BuildThreadTimelineOptions {
   isDevelopment: boolean;
-  showAllManagerEvents?: boolean;
   includeNestedRows?: boolean;
+  managerTimelineView?: ManagerTimelineView;
 }
 
 interface BuildTimelineTurnSummaryDetailsOptions extends TimelineSourceSeqRange {
   isDevelopment: boolean;
-  showAllManagerEvents?: boolean;
+  managerTimelineView?: ManagerTimelineView;
 }
 
 export function toThreadEventWithMeta(
@@ -139,20 +140,19 @@ export function buildThreadTimeline(
   options: BuildThreadTimelineOptions,
 ): ThreadTimelineResponse {
   const includeNestedRows = options.includeNestedRows ?? false;
-  const includeProviderUnhandledOperations =
-    options.isDevelopment || options.showAllManagerEvents === true;
+  const useStandardManagerTimeline =
+    options.managerTimelineView === "standard";
+  const includeProviderUnhandledOperations = options.isDevelopment;
   const rawEventRows = listRecentStoredEventRows(db, {
     threadId: thread.id,
-    ...(options.showAllManagerEvents === true
-      ? {}
-      : { excludedTypes: TIMELINE_NOISE_EVENT_TYPES }),
+    excludedTypes: TIMELINE_NOISE_EVENT_TYPES,
   });
   const decodedRawEvents = rawEventRows.map((row) =>
     toThreadEventWithMeta(row),
   );
   const decodedEvents = compactSummaryThreadEvents(decodedRawEvents);
   const isDefaultManagerView =
-    thread.type === "manager" && !options.showAllManagerEvents;
+    thread.type === "manager" && !useStandardManagerTimeline;
   const contextWindowUsageRows = listContextWindowUsageRows(db, {
     threadId: thread.id,
   });
@@ -161,7 +161,6 @@ export function buildThreadTimeline(
     const timeline = buildManagerTimelineRowsFromEvents({
       events: decodedEvents,
       options: {
-        includeInternalSystemMessages: options.showAllManagerEvents,
         includeProviderUnhandledOperations,
         threadStatus: thread.status,
         threadType: thread.type,
@@ -181,7 +180,6 @@ export function buildThreadTimeline(
   const timeline = buildTimelineRowsFromEvents({
     events: decodedEvents,
     options: {
-      includeInternalSystemMessages: options.showAllManagerEvents,
       includeNestedRows,
       includeProviderUnhandledOperations,
       threadStatus: thread.status,
@@ -205,8 +203,7 @@ export function buildTimelineTurnSummaryDetails(
   thread: Thread,
   options: BuildTimelineTurnSummaryDetailsOptions,
 ): TimelineTurnSummaryDetailsResponse {
-  const includeProviderUnhandledOperations =
-    options.isDevelopment || options.showAllManagerEvents === true;
+  const includeProviderUnhandledOperations = options.isDevelopment;
   const exactEventRows = listStoredEventRowsInRange(db, {
     threadId: thread.id,
     seqStart: options.sourceSeqStart,
@@ -230,7 +227,6 @@ export function buildTimelineTurnSummaryDetails(
       toThreadEventWithMeta(row),
     ),
     options: {
-      includeInternalSystemMessages: options.showAllManagerEvents,
       includeProviderUnhandledOperations,
       sourceSeqEnd: options.sourceSeqEnd,
       sourceSeqStart: options.sourceSeqStart,

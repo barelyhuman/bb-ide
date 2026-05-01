@@ -172,7 +172,7 @@ describe("buildThreadTimeline", () => {
     });
   });
 
-  it("shows provider unhandled rows in development or debug views only", async () => {
+  it("shows provider unhandled rows in development only", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);
 
@@ -227,20 +227,6 @@ describe("buildThreadTimeline", () => {
       title: "Unhandled Codex event",
     });
 
-    const debugTimeline = buildThreadTimeline(harness.db, thread, {
-      isDevelopment: false,
-      showAllManagerEvents: true,
-    });
-    const debugRows = debugTimeline.rows.filter(
-      (row): row is Extract<TimelineRow, { kind: "system" }> =>
-        row.kind === "system",
-    );
-
-    expect(debugRows).toHaveLength(1);
-    expect(debugRows[0]).toMatchObject({
-      systemKind: "operation",
-      title: "Unhandled Codex event",
-    });
   });
 
   it("reports active thinking even when a reasoning block has no visible text yet", async () => {
@@ -1522,14 +1508,20 @@ describe("buildThreadTimeline", () => {
         sourceSeqEnd: 3,
       },
     );
-    const debugDetails = buildTimelineTurnSummaryDetails(harness.db, thread, {
-      isDevelopment: false,
-      showAllManagerEvents: true,
-      sourceSeqStart: 1,
-      sourceSeqEnd: 3,
-    });
+    const standardManagerDetails = buildTimelineTurnSummaryDetails(
+      harness.db,
+      thread,
+      {
+        isDevelopment: false,
+        managerTimelineView: "standard",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 3,
+      },
+    );
     const developmentRows = flattenTimelineSourceRows(developmentDetails.rows);
-    const debugRows = flattenTimelineSourceRows(debugDetails.rows);
+    const standardManagerRows = flattenTimelineSourceRows(
+      standardManagerDetails.rows,
+    );
 
     expect(developmentRows).toHaveLength(1);
     expect(developmentRows[0]).toMatchObject({
@@ -1537,12 +1529,7 @@ describe("buildThreadTimeline", () => {
       systemKind: "operation",
       title: "Unhandled Codex event",
     });
-    expect(debugRows).toHaveLength(1);
-    expect(debugRows[0]).toMatchObject({
-      kind: "system",
-      systemKind: "operation",
-      title: "Unhandled Codex event",
-    });
+    expect(standardManagerRows).toEqual([]);
   });
 
   it("filters manager thread timeline to user messages, message_user output, and operations", async () => {
@@ -1723,12 +1710,12 @@ describe("buildThreadTimeline", () => {
       expect(assistantRow.text).toBe("Hello from manager");
     }
 
-    // Show all events — should show everything
-    const debugTimeline = buildThreadTimeline(harness.db, thread, {
+    // Standard manager timeline uses the same row builder as ordinary threads.
+    const standardTimeline = buildThreadTimeline(harness.db, thread, {
       isDevelopment: false,
-      showAllManagerEvents: true,
+      managerTimelineView: "standard",
     });
-    expect(debugTimeline.rows.length).toBeGreaterThan(
+    expect(standardTimeline.rows.length).toBeGreaterThan(
       defaultTimeline.rows.length,
     );
   });

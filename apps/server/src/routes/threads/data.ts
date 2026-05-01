@@ -103,7 +103,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
         requirePublicThread(deps.db, context.req.param("id")),
         {
           isDevelopment: deps.config.isDevelopment,
-          showAllManagerEvents: query.showAllManagerEvents === "true",
+          managerTimelineView: query.managerTimelineView,
           includeNestedRows: query.includeNestedRows === "true",
         },
       ),
@@ -124,7 +124,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
               parseOptionalInteger(query.sourceSeqStart, "sourceSeqStart") ?? 0,
             sourceSeqEnd:
               parseOptionalInteger(query.sourceSeqEnd, "sourceSeqEnd") ?? 0,
-            showAllManagerEvents: query.showAllManagerEvents === "true",
+            managerTimelineView: query.managerTimelineView,
           },
         ),
       ),

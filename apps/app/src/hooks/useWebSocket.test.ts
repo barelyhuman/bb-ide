@@ -318,7 +318,7 @@ describe("useWebSocket", () => {
       projectFilesQueryKey("proj-1", "query", 10, null),
       threadsQueryKey(),
       threadQueryKey("thread-1"),
-      threadTimelineQueryKey("thread-1", false),
+      threadTimelineQueryKey("thread-1", undefined),
       threadDraftsQueryKey("thread-1"),
       threadPendingInteractionsQueryKey("thread-1"),
       threadDefaultExecutionOptionsQueryKey("thread-1"),
@@ -603,7 +603,7 @@ describe("useWebSocket", () => {
   it("debounces pure thread event appends within the single invalidation window", () => {
     vi.useFakeTimers();
     const { queryClient, wrapper } = createQueryClientTestHarness();
-    const timelineQueryKey = threadTimelineQueryKey("thread-1", false);
+    const timelineQueryKey = threadTimelineQueryKey("thread-1", undefined);
     const threadDetailQueryKey = threadQueryKey("thread-1");
     cacheQueries({
       queryClient,
@@ -647,7 +647,7 @@ describe("useWebSocket", () => {
   it("invalidates successive thread append bursts after each debounce window", () => {
     vi.useFakeTimers();
     const { queryClient, wrapper } = createQueryClientTestHarness();
-    const timelineQueryKey = threadTimelineQueryKey("thread-1", false);
+    const timelineQueryKey = threadTimelineQueryKey("thread-1", undefined);
     cacheQuery({ queryClient, queryKey: timelineQueryKey });
 
     renderHook(() => useWebSocket(), { wrapper });
@@ -683,7 +683,7 @@ describe("useWebSocket", () => {
     vi.useFakeTimers();
     const { queryClient, wrapper } = createQueryClientTestHarness();
     const queryKeys = [
-      threadTimelineQueryKey("thread-1", false),
+      threadTimelineQueryKey("thread-1", undefined),
       threadQueryKey("thread-1"),
       threadsQueryKey(),
       statusQueryKey(),
@@ -711,7 +711,7 @@ describe("useWebSocket", () => {
     const { queryClient, wrapper } = createQueryClientTestHarness();
     const queryKeys = [
       threadPendingInteractionsQueryKey("thread-1"),
-      threadTimelineQueryKey("thread-1", false),
+      threadTimelineQueryKey("thread-1", undefined),
       threadQueryKey("thread-1"),
     ];
     cacheQueries({ queryClient, queryKeys });
@@ -730,7 +730,7 @@ describe("useWebSocket", () => {
 
     expectQueryInvalidated({
       queryClient,
-      queryKey: threadTimelineQueryKey("thread-1", false),
+      queryKey: threadTimelineQueryKey("thread-1", undefined),
     });
     expectQueryInvalidated({
       queryClient,
@@ -758,7 +758,7 @@ describe("useWebSocket", () => {
       queryClient,
       queryKeys: [
         threadPendingInteractionsQueryKey("thread-1"),
-        threadTimelineQueryKey("thread-1", false),
+        threadTimelineQueryKey("thread-1", undefined),
         threadQueryKey("thread-1"),
       ],
     });
@@ -796,7 +796,7 @@ describe("useWebSocket", () => {
       threadQueryKey("thread-1"),
       threadDraftsQueryKey("thread-1"),
       threadPendingInteractionsQueryKey("thread-1"),
-      threadTimelineQueryKey("thread-1", false),
+      threadTimelineQueryKey("thread-1", undefined),
     ];
     cacheQueries({ queryClient, queryKeys });
 

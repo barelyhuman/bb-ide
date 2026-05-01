@@ -35,7 +35,7 @@ import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useLocalOpenTargets } from "@/hooks/useLocalOpenTargets";
 import { useEffectiveHost } from "@/hooks/queries/effective-hosts";
 import { getEnvironmentWorkspaceLabelIcon } from "@/lib/environment-workspace-display";
-import { useStoredShowAllEvents } from "@/lib/show-all-events-preference";
+import { useStandardManagerTimelinePreference } from "@/lib/manager-timeline-view-preference";
 import { getGitStatusDisplay } from "@/lib/workspace-status";
 import {
   renderChangeSummary,
@@ -107,9 +107,15 @@ export function ThreadDetailView() {
   const hasPendingInteraction =
     getLatestPendingInteraction(pendingInteractions) !== null;
   const isManagerThread = thread?.type === "manager";
-  const [storedShowAllEvents, setStoredShowAllEvents] =
-    useStoredShowAllEvents();
-  const showAllEvents = isManagerThread ? storedShowAllEvents : false;
+  const [
+    storedUseStandardManagerTimeline,
+    setStoredUseStandardManagerTimeline,
+  ] = useStandardManagerTimelinePreference();
+  const useStandardManagerTimeline =
+    isManagerThread && storedUseStandardManagerTimeline;
+  const managerTimelineView = useStandardManagerTimeline
+    ? "standard"
+    : undefined;
   const {
     isThreadStorageFilePreviewLoading,
     threadStorageFilePreview,
@@ -121,15 +127,15 @@ export function ThreadDetailView() {
     threadId,
     threadType: thread?.type,
   });
-  const handleShowAllEventsChange = useCallback(
+  const handleUseStandardManagerTimelineChange = useCallback(
     (checked: boolean) => {
       if (!isManagerThread) {
         return;
       }
 
-      setStoredShowAllEvents(checked);
+      setStoredUseStandardManagerTimeline(checked);
     },
-    [isManagerThread, setStoredShowAllEvents],
+    [isManagerThread, setStoredUseStandardManagerTimeline],
   );
   const { data: allProjectThreads } = useThreads({ projectId });
   const managerThreads = useMemo(
@@ -145,7 +151,7 @@ export function ThreadDetailView() {
     error: timelineError,
   } = useThreadTimeline(threadId ?? "", {
     refetchOnMount: "always",
-    includeAllEvents: showAllEvents,
+    managerTimelineView,
   });
   const timelineTurnSummaryDetails = useThreadTimelineTurnSummaryDetails();
   const sendMessage = useSendThreadMessage();
@@ -228,7 +234,7 @@ export function ThreadDetailView() {
     loadTurnSummaryRows: (args) =>
       timelineTurnSummaryDetails.mutateAsync({
         ...args,
-        includeAllEvents: showAllEvents,
+        managerTimelineView,
       }),
   });
   useThreadReadTracking({
@@ -473,10 +479,14 @@ export function ThreadDetailView() {
       thread={thread}
       triggerClassName={HEADER_ICON_BUTTON_CLASS}
       align="end"
-      viewerToggleLabel={isManagerThread ? "Show all events" : undefined}
-      viewerToggleChecked={isManagerThread ? showAllEvents : undefined}
+      viewerToggleLabel={isManagerThread ? "Use standard timeline" : undefined}
+      viewerToggleChecked={
+        isManagerThread ? useStandardManagerTimeline : undefined
+      }
       onViewerToggleCheckedChange={
-        isManagerThread ? handleShowAllEventsChange : undefined
+        isManagerThread
+          ? handleUseStandardManagerTimelineChange
+          : undefined
       }
     />
   );

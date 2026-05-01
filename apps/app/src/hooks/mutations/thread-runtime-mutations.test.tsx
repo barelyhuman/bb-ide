@@ -108,7 +108,7 @@ describe("thread runtime mutations", () => {
     );
     const { queryClient, wrapper } = createQueryClientTestHarness();
     queryClient.setQueryData<ThreadTimelineResponse>(
-      threadTimelineQueryKey("thread-1", false),
+      threadTimelineQueryKey("thread-1", undefined),
       { rows: [], activeThinking: null },
     );
     const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
@@ -124,12 +124,12 @@ describe("thread runtime mutations", () => {
 
     await waitFor(() => {
       const timeline = queryClient.getQueryData<ThreadTimelineResponse>(
-        threadTimelineQueryKey("thread-1", false),
+        threadTimelineQueryKey("thread-1", undefined),
       );
       expect(timeline?.rows).toHaveLength(1);
     });
     const optimisticTimeline = queryClient.getQueryData<ThreadTimelineResponse>(
-      threadTimelineQueryKey("thread-1", false),
+      threadTimelineQueryKey("thread-1", undefined),
     );
     const onlyRow = optimisticTimeline?.rows[0];
     expect(onlyRow?.kind).toBe("conversation");
@@ -185,7 +185,7 @@ describe("thread runtime mutations", () => {
     vi.mocked(api.sendThreadMessage).mockRejectedValue(new Error("boom"));
     const { queryClient, wrapper } = createQueryClientTestHarness();
     queryClient.setQueryData<ThreadTimelineResponse>(
-      threadTimelineQueryKey("thread-1", false),
+      threadTimelineQueryKey("thread-1", undefined),
       { rows: [], activeThinking: null },
     );
     const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
@@ -201,7 +201,7 @@ describe("thread runtime mutations", () => {
     });
 
     const finalTimeline = queryClient.getQueryData<ThreadTimelineResponse>(
-      threadTimelineQueryKey("thread-1", false),
+      threadTimelineQueryKey("thread-1", undefined),
     );
     expect(finalTimeline?.rows).toHaveLength(0);
   });

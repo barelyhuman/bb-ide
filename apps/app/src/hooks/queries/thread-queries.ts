@@ -6,6 +6,7 @@ import type {
 import type {
   ThreadDraftListResponse,
   ThreadListResponse,
+  ManagerTimelineView,
   ThreadPendingInteractionsResponse,
   ThreadResponse,
   ThreadTimelineResponse,
@@ -49,7 +50,7 @@ interface ThreadTimelineTurnSummaryDetailsRequest {
   id: string;
   sourceSeqStart: number;
   sourceSeqEnd: number;
-  includeAllEvents?: boolean;
+  managerTimelineView?: ManagerTimelineView;
 }
 
 function requireThreadId(id: string, hookName: string): string {
@@ -166,18 +167,18 @@ export function useThreadTimeline(
   options?: {
     enabled?: boolean;
     refetchOnMount?: boolean | "always";
-    includeAllEvents?: boolean;
+    managerTimelineView?: ManagerTimelineView;
   },
 ) {
-  const includeAllEvents = options?.includeAllEvents ?? false;
+  const managerTimelineView = options?.managerTimelineView;
 
   return useQuery<ThreadTimelineResponse>({
-    queryKey: threadTimelineQueryKey(id, includeAllEvents),
+    queryKey: threadTimelineQueryKey(id, managerTimelineView),
     queryFn: () =>
       api.getThreadTimeline(
         requireThreadId(id, "useThreadTimeline"),
         false,
-        includeAllEvents,
+        managerTimelineView,
       ),
     enabled: (options?.enabled ?? true) && Boolean(id),
     refetchOnMount: options?.refetchOnMount ?? true,
@@ -200,13 +201,13 @@ export function useThreadTimelineTurnSummaryDetails() {
       id,
       sourceSeqStart,
       sourceSeqEnd,
-      includeAllEvents,
+      managerTimelineView,
     }: ThreadTimelineTurnSummaryDetailsRequest): Promise<TimelineTurnSummaryDetailsResponse> =>
       api.getThreadTimelineTurnSummaryDetails(
         id,
         sourceSeqStart,
         sourceSeqEnd,
-        includeAllEvents ?? false,
+        managerTimelineView,
       ),
   });
 }

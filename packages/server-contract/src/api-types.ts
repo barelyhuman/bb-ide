@@ -495,9 +495,12 @@ export const threadListQuerySchema = z.object({
 });
 export type ThreadListQuery = z.infer<typeof threadListQuerySchema>;
 
+export const managerTimelineViewSchema = z.enum(["conversation", "standard"]);
+export type ManagerTimelineView = z.infer<typeof managerTimelineViewSchema>;
+
 export const threadTimelineQuerySchema = z
   .object({
-    showAllManagerEvents: z.enum(["true", "false"]),
+    managerTimelineView: managerTimelineViewSchema,
     includeNestedRows: z.enum(["true", "false"]),
   })
   .partial();
@@ -506,7 +509,7 @@ export type ThreadTimelineQuery = z.infer<typeof threadTimelineQuerySchema>;
 export const timelineTurnSummaryDetailsQuerySchema = z.object({
   sourceSeqStart: z.string().regex(/^\d+$/),
   sourceSeqEnd: z.string().regex(/^\d+$/),
-  showAllManagerEvents: z.enum(["true", "false"]).optional(),
+  managerTimelineView: managerTimelineViewSchema.optional(),
 });
 export type TimelineTurnSummaryDetailsQuery = z.infer<
   typeof timelineTurnSummaryDetailsQuerySchema
@@ -898,7 +901,7 @@ export const timelineTurnSummaryDetailsRequestSchema = z.object({
   turnId: z.string(),
   sourceSeqStart: z.number(),
   sourceSeqEnd: z.number(),
-  showAllManagerEvents: z.boolean().optional(),
+  managerTimelineView: managerTimelineViewSchema.optional(),
 });
 export type TimelineTurnSummaryDetailsRequest = z.infer<
   typeof timelineTurnSummaryDetailsRequestSchema

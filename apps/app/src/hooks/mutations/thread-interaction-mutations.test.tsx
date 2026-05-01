@@ -64,7 +64,7 @@ describe("useResolveThreadPendingInteraction", () => {
     const { queryClient, wrapper } = createQueryClientTestHarness();
     const pendingInteractionsQueryKey =
       threadPendingInteractionsQueryKey("thr_1");
-    const timelineQueryKey = threadTimelineQueryKey("thr_1", false);
+    const timelineQueryKey = threadTimelineQueryKey("thr_1", undefined);
     const threadDetailQueryKey = threadQueryKey("thr_1");
     const threadListQueryKey = threadsQueryKey();
     const statusKey = statusQueryKey();

@@ -1,4 +1,5 @@
 import type { ThreadListFilters } from "@/lib/api";
+import type { ManagerTimelineView } from "@bb/server-contract";
 
 export const HOSTS_QUERY_KEY = "hosts";
 export const HOST_QUERY_KEY = "host";
@@ -156,7 +157,7 @@ export type EnvironmentMergeBaseBranchesQueryKeyPrefix = readonly [
 export type ThreadTimelineQueryKey = readonly [
   typeof THREAD_TIMELINE_QUERY_KEY,
   string,
-  boolean,
+  ManagerTimelineView | undefined,
 ];
 export type ThreadTimelineQueryKeyPrefix = readonly [
   typeof THREAD_TIMELINE_QUERY_KEY,
@@ -400,9 +401,9 @@ export function environmentMergeBaseBranchesQueryKeyPrefix(
 
 export function threadTimelineQueryKey(
   threadId: string,
-  includeAllEvents: boolean,
+  managerTimelineView: ManagerTimelineView | undefined,
 ): ThreadTimelineQueryKey {
-  return [THREAD_TIMELINE_QUERY_KEY, threadId, includeAllEvents];
+  return [THREAD_TIMELINE_QUERY_KEY, threadId, managerTimelineView];
 }
 
 export function threadTimelineQueryKeyPrefix(

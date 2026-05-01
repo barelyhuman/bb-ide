@@ -34,6 +34,7 @@ import type {
   SendDraftResponse,
   SendMessageRequest,
   SystemProviderInfo,
+  ManagerTimelineView,
   SandboxEnvVar,
   SandboxEnvVarsResponse,
   SystemVoiceTranscriptionResponse,
@@ -672,14 +673,14 @@ export async function requestEnvironmentAction(
 export async function getThreadTimeline(
   id: string,
   includeNestedRows: boolean = false,
-  includeAllEvents: boolean = false,
+  managerTimelineView?: ManagerTimelineView,
 ): Promise<ThreadTimelineResponse> {
   return request<ThreadTimelineResponse>(
     apiClient.threads[":id"].timeline.$get({
       param: { id },
       query: {
         ...(includeNestedRows ? { includeNestedRows: "true" } : {}),
-        ...(includeAllEvents ? { showAllManagerEvents: "true" } : {}),
+        ...(managerTimelineView ? { managerTimelineView } : {}),
       },
     }),
   );
@@ -689,7 +690,7 @@ export async function getThreadTimelineTurnSummaryDetails(
   id: string,
   sourceSeqStart: number,
   sourceSeqEnd: number,
-  includeAllEvents: boolean = false,
+  managerTimelineView?: ManagerTimelineView,
 ): Promise<TimelineTurnSummaryDetailsResponse> {
   return request<TimelineTurnSummaryDetailsResponse>(
     apiClient.threads[":id"].timeline["turn-summary-details"].$get({
@@ -697,7 +698,7 @@ export async function getThreadTimelineTurnSummaryDetails(
       query: {
         sourceSeqStart: String(sourceSeqStart),
         sourceSeqEnd: String(sourceSeqEnd),
-        ...(includeAllEvents ? { showAllManagerEvents: "true" } : {}),
+        ...(managerTimelineView ? { managerTimelineView } : {}),
       },
     }),
   );
