@@ -1,0 +1,390 @@
+import type {
+  ThreadEvent,
+  SystemThreadProvisioningStatus,
+  SystemThreadInterruptedReason,
+  PendingInteractionStatus,
+  ViewThreadOperationKind,
+  ViewThreadOperationStatus,
+} from "@bb/domain";
+import { assertNever } from "./assert-never.js";
+import { getCompactionKey } from "./compaction-lifecycle.js";
+import type { EventMeta } from "./event-decode.js";
+import { capitalize, messageId } from "./format-helpers.js";
+import { buildProviderUnhandledDetail } from "./provider-unhandled-detail.js";
+import { readProvisioningTranscript } from "./provisioning-helpers.js";
+import type {
+  ToViewMessagesOptions,
+  ViewPermissionGrantLifecycleMessage,
+  ViewOperationMessage,
+  ViewThreadOperationMetadata,
+} from "@bb/domain";
+
+type ParseOperationMessageOptions = Pick<
+  ToViewMessagesOptions,
+  "includeOptionalOperations" | "includeProviderUnhandledOperations"
+>;
+
+function providerDisplayName(providerId: string): string {
+  switch (providerId) {
+    case "claude-code":
+      return "Claude Code";
+    case "codex":
+      return "Codex";
+    case "pi":
+      return "Pi";
+    default:
+      return providerId;
+  }
+}
+
+function normalizeThreadOperationKind(
+  rawOperation: string,
+): ViewThreadOperationKind {
+  if (rawOperation === "ownership_change") return "ownership_change";
+  return "other";
+}
+
+function normalizeThreadOperationStatus(
+  rawStatus: string,
+): ViewThreadOperationStatus {
+  switch (rawStatus) {
+    case "requested":
+    case "queued":
+    case "running":
+    case "started":
+    case "completed":
+    case "failed":
+    case "noop":
+      return rawStatus;
+    default:
+      return "other";
+  }
+}
+
+function createThreadOperationMetadata(
+  decoded: Extract<ThreadEvent, { type: "system/operation" }>,
+): ViewThreadOperationMetadata {
+  return {
+    operation: normalizeThreadOperationKind(decoded.operation),
+    rawOperation: decoded.operation,
+    status: normalizeThreadOperationStatus(decoded.status),
+    rawStatus: decoded.status,
+    operationId: decoded.operationId,
+    ...(decoded.metadata ? { metadata: decoded.metadata } : {}),
+  };
+}
+
+function threadInterruptedTitle(
+  reason: SystemThreadInterruptedReason,
+): string {
+  switch (reason) {
+    case "manual-stop":
+      return "Stopped manually";
+    case "host-daemon-restarted":
+      return "Host daemon restarted";
+    default:
+      return assertNever(reason);
+  }
+}
+
+export function threadOperationTitle(
+  meta: ViewThreadOperationMetadata | null,
+): string {
+  if (!meta) return "Operation update";
+
+  const { operation, rawOperation, status, rawStatus, metadata } = meta;
+
+  switch (operation) {
+    case "ownership_change": {
+      const action =
+        typeof metadata?.action === "string" ? metadata.action : undefined;
+      switch (status) {
+        case "completed":
+          return action === "release"
+            ? "Thread management transferred"
+            : "Thread assigned to manager";
+        case "failed":
+          return "Ownership change failed";
+        default:
+          return `Ownership change ${rawStatus}`;
+      }
+    }
+    case "other":
+      return `${capitalize(rawOperation.replace(/_/g, " "))} ${rawStatus}`;
+  }
+}
+
+export function threadOperationStatus(
+  meta: ViewThreadOperationMetadata | null,
+): ViewOperationMessage["status"] {
+  if (!meta) return undefined;
+  switch (meta.status) {
+    case "requested":
+    case "queued":
+    case "running":
+    case "started":
+      return "pending";
+    case "completed":
+    case "noop":
+      return "completed";
+    case "failed":
+      return "error";
+    case "other":
+      return "pending";
+  }
+}
+
+function provisioningOperationStatus(
+  status: SystemThreadProvisioningStatus,
+): ViewOperationMessage["status"] {
+  switch (status) {
+    case "active":
+      return "pending";
+    case "completed":
+      return "completed";
+    case "failed":
+      return "error";
+    default:
+      return "pending";
+  }
+}
+
+function permissionGrantLifecycleStatus(
+  status: PendingInteractionStatus,
+): ViewPermissionGrantLifecycleMessage["status"] {
+  switch (status) {
+    case "pending":
+    case "resolving":
+      return "pending";
+    case "resolved":
+      return "completed";
+    case "interrupted":
+      return "interrupted";
+    case "expired":
+      return "error";
+  }
+}
+
+/** Build the common scaffolding shared by all operation messages. */
+function op(
+  decoded: ThreadEvent,
+  meta: EventMeta,
+  idKey: string,
+  fields: ViewOperationFields,
+): ViewOperationMessage {
+  return {
+    kind: "operation",
+    id: messageId(decoded.threadId, "op", `${idKey}:${meta.seq}`),
+    threadId: decoded.threadId,
+    sourceSeqStart: meta.seq,
+    sourceSeqEnd: meta.seq,
+    createdAt: meta.createdAt,
+    startedAt: meta.createdAt,
+    scope: decoded.scope,
+    ...fields,
+  };
+}
+
+type ViewOperationFields = Omit<
+  ViewOperationMessage,
+  | "kind"
+  | "id"
+  | "threadId"
+  | "sourceSeqStart"
+  | "sourceSeqEnd"
+  | "createdAt"
+  | "startedAt"
+  | "scope"
+  | "turnId"
+>;
+
+export function parseOperationMessage(
+  decoded: ThreadEvent,
+  meta: EventMeta,
+  options?: ParseOperationMessageOptions,
+): ViewOperationMessage | ViewPermissionGrantLifecycleMessage | null {
+  if (decoded.type === "provider/unhandled") {
+    if (options?.includeProviderUnhandledOperations !== true) {
+      return null;
+    }
+
+    return op(decoded, meta, "provider-unhandled", {
+      opType: "provider-unhandled",
+      title: `Unhandled ${providerDisplayName(decoded.providerId)} event`,
+      detail: buildProviderUnhandledDetail(decoded),
+      status: "completed",
+    });
+  }
+
+  if (decoded.type === "provider/warning") {
+    const category = decoded.category ?? "general";
+    const isDeprecation = category === "deprecation";
+    const isConfig = category === "config";
+    const title = isDeprecation
+      ? "Deprecation notice"
+      : isConfig
+        ? "Configuration warning"
+        : decoded.summary?.trim() || "Warning";
+    const detail = (
+      isDeprecation || isConfig
+        ? [decoded.summary, decoded.details]
+        : [decoded.details]
+    )
+      .filter((line): line is string => Boolean(line))
+      .join("\n");
+    return op(decoded, meta, isDeprecation ? "deprecation" : "warning", {
+      opType: isDeprecation ? "deprecation" : "warning",
+      title,
+      detail: detail.length > 0 ? detail : undefined,
+      status: "completed",
+    });
+  }
+
+  if (decoded.type === "system/thread/interrupted") {
+    return op(decoded, meta, "thread-interrupted", {
+      opType: "thread-interrupted",
+      title: threadInterruptedTitle(decoded.reason),
+      status: "interrupted",
+    });
+  }
+
+  if (decoded.type === "system/thread-provisioning") {
+    const { status, environmentId, provisioningId } = decoded;
+    const transcript = readProvisioningTranscript(decoded.entries);
+    const title = (() => {
+      switch (status) {
+        case "active":
+          return "Provisioning thread";
+        case "completed":
+          return "Provisioned thread";
+        case "failed":
+          return "Provisioning thread failed";
+        default:
+          return "Provisioning thread";
+      }
+    })();
+    return op(decoded, meta, "thread-provisioning", {
+      opType: "thread-provisioning",
+      title,
+      status: provisioningOperationStatus(status),
+      provisioning: {
+        environmentId,
+        provisioningId,
+        ...(transcript ? { transcript } : {}),
+      },
+    });
+  }
+
+  if (decoded.type === "thread/name/updated") {
+    return null;
+  }
+
+  if (decoded.type === "system/operation") {
+    const threadOperation = createThreadOperationMetadata(decoded);
+    const title = threadOperationTitle(threadOperation);
+
+    const branch =
+      typeof decoded.metadata?.branch === "string"
+        ? decoded.metadata.branch
+        : undefined;
+    const detailParts = [
+      decoded.message,
+      branch ? `Branch: ${branch}` : undefined,
+    ].filter((value): value is string => Boolean(value));
+
+    return op(decoded, meta, "operation", {
+      opType: "operation",
+      title,
+      detail: detailParts.length > 0 ? detailParts.join(" • ") : undefined,
+      status: threadOperationStatus(threadOperation),
+      threadOperation,
+    });
+  }
+
+  if (decoded.type === "system/permissionGrant/lifecycle") {
+    return {
+      kind: "permission-grant-lifecycle",
+      id: messageId(decoded.threadId, "approval", decoded.interactionId),
+      threadId: decoded.threadId,
+      sourceSeqStart: meta.seq,
+      sourceSeqEnd: meta.seq,
+      createdAt: meta.createdAt,
+      startedAt: meta.createdAt,
+      scope: decoded.scope,
+      interactionId: decoded.interactionId,
+      title: decoded.message,
+      status: permissionGrantLifecycleStatus(decoded.status),
+      approvalTarget: {
+        itemId: decoded.subject.itemId,
+        toolName: decoded.subject.toolName,
+      },
+    };
+  }
+
+  if (decoded.type === "thread/compacted") {
+    return {
+      ...op(decoded, meta, `compaction`, {
+        opType: "compaction",
+        title: "Context compacted",
+        status: "completed",
+      }),
+      id: messageId(
+        decoded.threadId,
+        "op",
+        `compaction:${getCompactionKey(decoded, meta)}`,
+      ),
+    };
+  }
+
+  if (
+    options?.includeOptionalOperations &&
+    decoded.type === "turn/diff/updated"
+  ) {
+    return op(decoded, meta, "turn-diff", {
+      opType: "turn-diff",
+      title: "Turn diff updated",
+      detail: decoded.diff,
+    });
+  }
+
+  return null;
+}
+
+export function interruptOperationMessage(message: ViewOperationMessage): void {
+  if (message.status !== "pending") return;
+  message.status = "interrupted";
+
+  switch (message.opType) {
+    case "operation":
+      message.title = "Operation interrupted";
+      return;
+    case "thread-provisioning":
+      message.title = "Provisioning thread interrupted";
+      return;
+    case "compaction":
+      message.title = "Context compaction interrupted";
+      return;
+    default:
+      return;
+  }
+}
+
+export function finalizeOperationMessage(
+  message: ViewOperationMessage,
+  options: ToViewMessagesOptions | undefined,
+): void {
+  if (message.status !== "pending") return;
+
+  if (options?.threadStatus === "error") {
+    switch (message.opType) {
+      case "thread-provisioning":
+        message.status = "error";
+        message.title = "Provisioning thread failed";
+        return;
+      default:
+        break;
+    }
+  }
+
+  interruptOperationMessage(message);
+}

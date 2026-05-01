@@ -1067,6 +1067,22 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  packages/thread-view:
+    dependencies:
+      '@bb/domain':
+        specifier: workspace:*
+        version: link:../domain
+    devDependencies:
+      '@bb/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.10
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   packages/tsconfig: {}
 
   packages/ui-core:
