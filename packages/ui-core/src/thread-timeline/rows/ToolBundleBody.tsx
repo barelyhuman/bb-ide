@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from "react";
-import { buildToolBundleDetailLines } from "@bb/core-ui";
+import { buildToolBundleDetailLines } from "@bb/thread-view";
 import type { TimelineMessageRow, TimelineToolBundleRow } from "@bb/domain";
 import { ExplorationDetailList } from "./ExplorationDetailList.js";
 

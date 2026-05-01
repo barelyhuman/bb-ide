@@ -1,5 +1,5 @@
 import { type ReactNode, type Ref, type UIEvent } from "react";
-import { durationToCompactString } from "@bb/core-ui";
+import { durationToCompactString } from "@bb/thread-view";
 import {
   getDetailScrollMaxHeightClass,
   type DetailScrollSize,

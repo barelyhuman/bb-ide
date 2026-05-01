@@ -7,7 +7,7 @@ import {
   buildTurnSummaryParts,
   shouldPreferOngoingLabelsForRow,
   type TimelineRowActivityInfo,
-} from "@bb/core-ui";
+} from "@bb/thread-view";
 import type {
   TimelineAssistantStepSummaryRow,
   TimelineGroupedRowStatus,

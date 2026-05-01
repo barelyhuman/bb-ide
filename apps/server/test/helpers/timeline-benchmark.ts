@@ -20,7 +20,7 @@ import {
   toViewMessages,
   toViewProjection,
   type ThreadEventWithMeta,
-} from "@bb/core-ui";
+} from "@bb/thread-view";
 import { replayFixtures } from "@bb/agent-provider-audit";
 import { buildThreadEvent } from "@bb/domain";
 import type { ViewMessage } from "@bb/domain";

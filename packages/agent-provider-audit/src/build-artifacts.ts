@@ -7,7 +7,7 @@ import {
   extractThreadContextWindowUsage,
   formatTimelineAsText,
   toViewProjection,
-} from "@bb/core-ui";
+} from "@bb/thread-view";
 import {
   threadEventTypeValues,
   timelineRowSchema,

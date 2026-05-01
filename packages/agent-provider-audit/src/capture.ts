@@ -13,7 +13,7 @@ import {
   formatTimelineAsText,
   toViewMessages,
   toViewProjection,
-} from "@bb/core-ui";
+} from "@bb/thread-view";
 import { buildThreadEvent, buildThreadEventRow, threadScope } from "@bb/domain";
 import type {
   ThreadEventRow,

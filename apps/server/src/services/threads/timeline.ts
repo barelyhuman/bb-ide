@@ -6,7 +6,7 @@ import {
   toViewProjectionEntries,
   toViewProjection,
   type ThreadEventWithMeta,
-} from "@bb/core-ui";
+} from "@bb/thread-view";
 import type {
   Thread,
   TimelineRow,

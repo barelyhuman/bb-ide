@@ -4,7 +4,7 @@ import {
   buildGroupedTimelineRows,
   findLatestActivityRowId,
   getDelegationSummaryParts,
-} from "@bb/core-ui";
+} from "@bb/thread-view";
 import type {
   TimelineRow,
   TimelineTurnSummaryRow,

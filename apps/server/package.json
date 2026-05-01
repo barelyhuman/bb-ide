@@ -29,6 +29,7 @@
     "@bb/secret-storage": "workspace:*",
     "@bb/server-contract": "workspace:*",
     "@bb/templates": "workspace:*",
+    "@bb/thread-view": "workspace:*",
     "@better-auth/api-key": "^1.5.6",
     "@better-auth/drizzle-adapter": "^1.5.6",
     "@hono/node-server": "^1.19.11",

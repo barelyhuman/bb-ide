@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { formatTimelineAsText, type TimelineFormat } from "@bb/core-ui";
+import { formatTimelineAsText, type TimelineFormat } from "@bb/thread-view";
 import {
   type Environment,
   type Thread,

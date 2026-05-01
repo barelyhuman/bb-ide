@@ -8,7 +8,7 @@ import {
   type RefObject,
   type UIEvent,
 } from "react";
-import { durationToCompactString } from "@bb/core-ui";
+import { durationToCompactString } from "@bb/thread-view";
 import {
   DEFAULT_SCROLL_STICK_THRESHOLD_PX,
   getScrollAnimationBehavior,

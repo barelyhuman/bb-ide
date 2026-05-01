@@ -4,7 +4,7 @@ import {
   fileChangeIdentity,
   fileNameFromPath,
   summarizeChangedFileNames,
-} from "@bb/core-ui";
+} from "@bb/thread-view";
 import type { ViewFileEditMessage } from "@bb/domain";
 import { DiffStatsTally } from "../../diff-stats-tally.js";
 import { getDetailScrollMaxHeightClass } from "../../detail-scroll-size.js";

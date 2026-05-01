@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { TimelineRow, ViewMessage } from "@bb/domain";
-import { findLatestActivityRowId } from "@bb/core-ui";
+import { findLatestActivityRowId } from "@bb/thread-view";
 import { shouldPreferNestedOngoingLabels } from "../src/thread-timeline/rows/DelegationRow.js";
 
 function baseMessage(

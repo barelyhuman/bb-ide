@@ -56,6 +56,9 @@ importers:
       '@bb/templates':
         specifier: workspace:*
         version: link:../../packages/templates
+      '@bb/thread-view':
+        specifier: workspace:*
+        version: link:../../packages/thread-view
       '@bb/ui-core':
         specifier: workspace:*
         version: link:../../packages/ui-core
@@ -204,6 +207,9 @@ importers:
       '@bb/templates':
         specifier: workspace:*
         version: link:../../packages/templates
+      '@bb/thread-view':
+        specifier: workspace:*
+        version: link:../../packages/thread-view
       cli-table3:
         specifier: ^0.6.5
         version: 0.6.5
@@ -362,6 +368,9 @@ importers:
       '@bb/templates':
         specifier: workspace:*
         version: link:../../packages/templates
+      '@bb/thread-view':
+        specifier: workspace:*
+        version: link:../../packages/thread-view
       '@better-auth/api-key':
         specifier: ^1.5.6
         version: 1.5.6(@better-auth/core@1.5.6(@better-auth/utils@0.3.1)(@better-fetch/fetch@1.1.21)(@opentelemetry/api@1.9.1)(better-call@1.3.2(zod@4.3.6))(jose@6.2.2)(kysely@0.28.15)(nanostores@1.2.0))(@better-auth/utils@0.3.1)(better-auth@1.5.6(@opentelemetry/api@1.9.1)(drizzle-orm@0.38.4(@opentelemetry/api@1.9.1)(@types/better-sqlite3@7.6.13)(@types/react@19.2.13)(kysely@0.28.15)(react@19.2.4))(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vitest@4.1.1(@opentelemetry/api@1.9.1)(@types/node@22.19.10)(jsdom@29.0.1(@noble/hashes@2.0.1))(msw@2.12.14(@types/node@22.19.10)(typescript@5.9.3))(vite@7.3.1(@types/node@22.19.10)(jiti@2.6.1)(lightningcss@1.30.2)(tsx@4.21.0)(yaml@2.8.2))))
@@ -435,12 +444,12 @@ importers:
       '@bb/agent-runtime':
         specifier: workspace:*
         version: link:../agent-runtime
-      '@bb/core-ui':
-        specifier: workspace:*
-        version: link:../core-ui
       '@bb/domain':
         specifier: workspace:*
         version: link:../domain
+      '@bb/thread-view':
+        specifier: workspace:*
+        version: link:../thread-view
       '@bb/ui-core':
         specifier: workspace:*
         version: link:../ui-core
@@ -1093,6 +1102,9 @@ importers:
       '@bb/domain':
         specifier: workspace:*
         version: link:../domain
+      '@bb/thread-view':
+        specifier: workspace:*
+        version: link:../thread-view
       '@pierre/diffs':
         specifier: ^1.0.11
         version: 1.0.11(react-dom@19.2.4(react@19.2.4))(react@19.2.4)

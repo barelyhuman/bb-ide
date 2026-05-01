@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   assertNever,
   buildPendingInteractionApprovalResolution,
-  extractShellCommandFromString,
   formatPendingInteractionSubjectDetailLines,
 } from "@bb/core-ui";
+import { extractShellCommandFromString } from "@bb/thread-view";
 import {
   type PendingInteraction,
   type PendingInteractionResolution,

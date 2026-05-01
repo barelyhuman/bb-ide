@@ -371,7 +371,7 @@ export type PublicApiSchema = {
     $post: Endpoint<PathId, ThreadResponse>;
   };
   "/threads/:id/timeline": {
-    /** Get thread timeline for UI rendering. Events transformed via `@bb/core-ui`. */
+    /** Get thread timeline for UI rendering. Events transformed via `@bb/thread-view`. */
     $get: Endpoint<
       PathId & { query?: ThreadTimelineQuery },
       ThreadTimelineResponse

@@ -4,7 +4,7 @@ import {
   formatToolCallCommand,
   getTimelineDisplayStatus,
   getTimelineDisplayStatusInfo,
-} from "@bb/core-ui";
+} from "@bb/thread-view";
 import type { ViewCommandMessage, ViewToolCallMessage } from "@bb/domain";
 import { ExpandablePanel } from "../../disclosure.js";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";

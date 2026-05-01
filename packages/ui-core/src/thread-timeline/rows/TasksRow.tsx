@@ -1,4 +1,4 @@
-import { taskStatusGlyph } from "@bb/core-ui";
+import { taskStatusGlyph } from "@bb/thread-view";
 import type { ViewTasksMessage } from "@bb/domain";
 import { ExpandablePanel } from "../../disclosure.js";
 import { useLatestInitialExpanded } from "../latestInitialExpanded.js";

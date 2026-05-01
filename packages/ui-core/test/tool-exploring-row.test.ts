@@ -4,7 +4,7 @@ import {
   formatExploringIntentLine,
   summarizeExploringCounts,
   type ToolIntentSummary,
-} from "@bb/core-ui";
+} from "@bb/thread-view";
 import type { ViewToolParsedIntent } from "@bb/domain";
 
 function buildCall(
