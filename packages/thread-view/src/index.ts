@@ -6,5 +6,6 @@ export {
   buildThreadTimelineFromEvents,
   buildThreadTimelineTurnDetailsFromEvents,
 } from "./build-thread-timeline.js";
+export { compactThreadTimelineSummaryEvents } from "./summary-event-compaction.js";
 export { decodeThreadEventRow } from "./event-decode.js";
 export type { ThreadEventWithMeta } from "./group-event-projection-turns.js";

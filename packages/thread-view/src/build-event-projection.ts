@@ -2,12 +2,10 @@ import type { ThreadEvent } from "@bb/domain";
 import { requireThreadEventScopeTurnId } from "@bb/domain";
 import { parseCompactionLifecycleEvent } from "./compaction-lifecycle.js";
 import {
-  type EventMeta,
   getEventParentToolCallId,
   getEventProviderThreadId,
   getEventTurnId,
 } from "./event-decode.js";
-import { messageId } from "./format-helpers.js";
 import {
   createExecLifecycleContext,
   parseExecLifecycleEvent,
@@ -15,11 +13,7 @@ import {
 } from "./exec-lifecycle.js";
 import { parseFileEditFromItemEvent } from "./file-edit-parsing.js";
 import { parseWebActivityLifecycleEvent } from "./web-activity-lifecycle.js";
-import {
-  parseOperationMessage,
-  finalizeOperationMessage,
-  interruptOperationMessage,
-} from "./parse-operation-message.js";
+import { parseOperationMessage } from "./parse-operation-message.js";
 import {
   parseErrorMessage,
   isDuplicateEventType,
@@ -42,118 +36,49 @@ import {
 export type { ThreadEventWithMeta } from "./group-event-projection-turns.js";
 import { shouldSuppressLowValueToolCall } from "./tool-call-suppression.js";
 import {
-  shouldPreservePendingMessages,
   parseUserFromClientRequest,
   parseManagerUserMessage,
 } from "./user-message-parsing.js";
+import { isTerminalBufferedTextFlushEvent } from "./assistant-buffering.js";
 import {
-  parseAssistantDeltaText,
-  parseAssistantFinalText,
-  parseReasoningDeltaText,
-  parseReasoningFinalText,
-  isTerminalBufferedTextFlushEvent,
-} from "./assistant-buffering.js";
-import {
-  createToolActivityState,
-  flushActiveToolCell,
-  flushPendingToolActivityOutput,
   flushToolActivityBeforeNonToolMessage,
-  interruptPendingToolActivity,
   onExecBegin,
   onExecEnd,
   onExecOutput,
   onWebActivityBegin,
   onWebActivityEnd,
-  type ToolActivityState,
 } from "./tool-activity-projection.js";
 import {
   finalizeOpenCompactionsForTurn,
-  flushPendingFileEditOutput,
   onCompactionBegin,
   onCompactionEnd,
   upsertPermissionGrantLifecycleMessage,
-  type CompactionTurnFinalizationStatus,
   upsertFileEdit,
   upsertProvisioningOperation,
   upsertThreadOperationMessage,
 } from "./operation-projection.js";
-import {
-  finalizeProjectionKey,
-  flushBufferedAssistantMessages,
-  syncBufferedTextMessage,
-} from "./assistant-stream-projection.js";
-import {
-  appendVisibleTextBuffer,
-  createVisibleTextBuffer,
-  getVisibleTextBufferText,
-  setVisibleTextBuffer,
-  type VisibleTextBuffer,
-} from "./visible-text-buffer.js";
-import type { ActiveThinking, BufferedTextInstanceIdentity } from "@bb/domain";
+import type { ActiveThinking } from "@bb/domain";
 import type {
   BuildEventProjectionMessagesOptions,
   BuildEventProjectionOptions,
-  EventProjectionAssistantTextMessage,
-  EventProjectionFileEditMessage,
   EventProjectionMessage,
-  EventProjectionOperationMessage,
   EventProjection,
-  EventProjectionTurnStatus,
 } from "./event-projection-types.js";
 import {
-  createBufferedTextInstanceKey,
-  resolveBufferedTextIdentity,
-} from "@bb/domain";
+  buildProjectionActiveThinking,
+  createProjectionState,
+  finalizeProjectionState,
+  flushProjectionBufferedOutputs,
+  onThreadInterrupted,
+  onTurnCompleted,
+  onTurnStarted,
+  type CompactionTurnFinalization,
+} from "./event-projection-state.js";
+import { projectAssistantAndReasoningEvent } from "./assistant-event-projection.js";
 
 // --- Projection state machine ---
 
 type ProjectedUserMessage = Extract<EventProjectionMessage, { kind: "user" }>;
-type BufferedTextEventProjectionMessage = EventProjectionAssistantTextMessage;
-
-interface CompactionTurnFinalization {
-  status: CompactionTurnFinalizationStatus;
-  detail: string | undefined;
-}
-
-type TurnPendingFinalizationStatus = Extract<
-  EventProjectionTurnStatus,
-  "interrupted"
->;
-type TurnCompletedStatus = Extract<
-  ThreadEvent,
-  { type: "turn/completed" }
->["status"];
-
-interface BufferedTextProjectionRefs<
-  TMessage extends BufferedTextEventProjectionMessage,
-> {
-  finalizedKeys: Set<string>;
-  openMessages: Map<string, TMessage>;
-  textBuffers: Map<string, VisibleTextBuffer>;
-  visibleKeys: Set<string>;
-}
-
-interface ProjectBufferedTextEventArgs<
-  TMessage extends BufferedTextEventProjectionMessage,
-> {
-  createMessage: (messageKey: string) => TMessage;
-  identity: BufferedTextInstanceIdentity | null;
-  meta: EventMeta;
-  mode: "delta" | "final";
-  refs: BufferedTextProjectionRefs<TMessage>;
-  state: ProjectionState;
-  text: string | null;
-}
-
-interface ActiveThinkingLifecycle {
-  itemId: string;
-  messageKey: string;
-  startedAt: number;
-  threadId: string;
-  turnId: string;
-  updatedAt: number;
-  updatedSeq: number;
-}
 
 interface BuildFlatProjectionDataArgs {
   events: ThreadEventWithMeta[];
@@ -166,57 +91,11 @@ interface BuildFlatProjectionDataResult {
   messages: EventProjectionMessage[];
 }
 
-interface ProjectionState {
+interface BuildDetailedProjectionArgs {
+  activeThinking: ActiveThinking | null;
+  events: ThreadEventWithMeta[];
   messages: EventProjectionMessage[];
-  seenUserKeys: Set<string>;
-  openTurnIds: Set<string>;
-  closedTurnIds: Set<string>;
-  pendingFinalizationByTurnId: Map<string, TurnPendingFinalizationStatus>;
-  openAssistantMessagesByKey: Map<string, EventProjectionAssistantTextMessage>;
-  assistantTextBuffersByKey: Map<string, VisibleTextBuffer>;
-  visibleAssistantMessageKeys: Set<string>;
-  finalizedAssistantMessageKeys: Set<string>;
-  openReasoningLifecyclesByKey: Map<string, ActiveThinkingLifecycle>;
-  reasoningTextBuffersByKey: Map<string, VisibleTextBuffer>;
-  finalizedReasoningKeys: Set<string>;
-  openCompactionsByKey: Map<string, EventProjectionOperationMessage>;
-  finalizedCompactionKeys: Set<string>;
-  provisioningOperationsByKey: Map<string, EventProjectionOperationMessage>;
-  permissionGrantsByInteractionId: Map<
-    string,
-    Extract<EventProjectionMessage, { kind: "permission-grant-lifecycle" }>
-  >;
-  threadOperationsById: Map<string, EventProjectionOperationMessage>;
-  fileEditsByCallId: Map<string, EventProjectionFileEditMessage[]>;
-  fileEditStdoutBuffersByCallId: Map<string, VisibleTextBuffer>;
-  delegationParentToolCallIdsByProviderThreadId: Map<string, string>;
-  toolActivity: ToolActivityState;
-}
-
-function createProjectionState(): ProjectionState {
-  return {
-    messages: [],
-    seenUserKeys: new Set(),
-    openTurnIds: new Set(),
-    closedTurnIds: new Set(),
-    pendingFinalizationByTurnId: new Map(),
-    openAssistantMessagesByKey: new Map(),
-    assistantTextBuffersByKey: new Map(),
-    visibleAssistantMessageKeys: new Set(),
-    finalizedAssistantMessageKeys: new Set(),
-    openReasoningLifecyclesByKey: new Map(),
-    reasoningTextBuffersByKey: new Map(),
-    finalizedReasoningKeys: new Set(),
-    openCompactionsByKey: new Map(),
-    finalizedCompactionKeys: new Set(),
-    provisioningOperationsByKey: new Map(),
-    permissionGrantsByInteractionId: new Map(),
-    threadOperationsById: new Map(),
-    fileEditsByCallId: new Map(),
-    fileEditStdoutBuffersByCallId: new Map(),
-    delegationParentToolCallIdsByProviderThreadId: new Map(),
-    toolActivity: createToolActivityState(),
-  };
+  turnMessageDetail: BuildEventProjectionOptions["turnMessageDetail"];
 }
 
 const PROVIDER_THREAD_DELEGATION_TOOL_NAMES = new Set([
@@ -302,403 +181,6 @@ function getCompactionTurnFinalization(
   return undefined;
 }
 
-function resolveBufferedTextMessageKey<
-  TMessage extends BufferedTextEventProjectionMessage,
->(
-  args: Omit<
-    ProjectBufferedTextEventArgs<TMessage>,
-    "createMessage" | "mode" | "text"
-  >,
-): string | null {
-  if (!args.identity) {
-    return null;
-  }
-
-  const messageKey = createBufferedTextInstanceKey(args.identity);
-  if (args.state.closedTurnIds.has(args.identity.turnId)) {
-    return null;
-  }
-  if (args.refs.finalizedKeys.has(messageKey)) {
-    return null;
-  }
-
-  args.state.openTurnIds.add(args.identity.turnId);
-  return messageKey;
-}
-
-function upsertBufferedTextMessage<
-  TMessage extends BufferedTextEventProjectionMessage,
->(
-  args: Pick<
-    ProjectBufferedTextEventArgs<TMessage>,
-    "createMessage" | "meta" | "refs"
-  > & { messageKey: string },
-): TMessage {
-  let existing = args.refs.openMessages.get(args.messageKey);
-  if (!existing) {
-    existing = args.createMessage(args.messageKey);
-    args.refs.openMessages.set(args.messageKey, existing);
-    return existing;
-  }
-
-  existing.sourceSeqEnd = args.meta.seq;
-  existing.createdAt = args.meta.createdAt;
-  return existing;
-}
-
-function projectBufferedTextEvent<
-  TMessage extends BufferedTextEventProjectionMessage,
->(args: ProjectBufferedTextEventArgs<TMessage>): boolean {
-  if (!args.text) {
-    return false;
-  }
-
-  const messageKey = resolveBufferedTextMessageKey(args);
-  if (!messageKey) {
-    return true;
-  }
-
-  const message = upsertBufferedTextMessage({
-    createMessage: args.createMessage,
-    meta: args.meta,
-    refs: args.refs,
-    messageKey,
-  });
-  const buffer =
-    args.refs.textBuffers.get(messageKey) ?? createVisibleTextBuffer();
-  args.refs.textBuffers.set(messageKey, buffer);
-
-  if (args.mode === "delta") {
-    appendVisibleTextBuffer(buffer, args.text);
-    syncBufferedTextMessage({
-      buffer,
-      messageKey,
-      message,
-      state: args.state,
-      status: "streaming",
-      visibleKeys: args.refs.visibleKeys,
-    });
-    return true;
-  }
-
-  setVisibleTextBuffer(buffer, args.text, true);
-  syncBufferedTextMessage({
-    buffer,
-    messageKey,
-    message,
-    state: args.state,
-    status: "completed",
-    visibleKeys: args.refs.visibleKeys,
-  });
-  args.refs.openMessages.delete(messageKey);
-  args.refs.textBuffers.delete(messageKey);
-  args.refs.visibleKeys.delete(messageKey);
-  finalizeProjectionKey(args.refs.finalizedKeys, messageKey);
-  return true;
-}
-
-interface ProjectReasoningTextEventArgs {
-  identity: BufferedTextInstanceIdentity | null;
-  mode: "delta" | "final";
-  state: ProjectionState;
-  text: string | null;
-}
-
-function projectReasoningTextEvent(
-  args: ProjectReasoningTextEventArgs,
-): boolean {
-  if (!args.text) {
-    return false;
-  }
-
-  if (!args.identity) {
-    return true;
-  }
-
-  const messageKey = createBufferedTextInstanceKey(args.identity);
-  if (args.state.closedTurnIds.has(args.identity.turnId)) {
-    return true;
-  }
-  if (args.state.finalizedReasoningKeys.has(messageKey)) {
-    return true;
-  }
-  args.state.openTurnIds.add(args.identity.turnId);
-
-  const buffer =
-    args.state.reasoningTextBuffersByKey.get(messageKey) ??
-    createVisibleTextBuffer();
-  args.state.reasoningTextBuffersByKey.set(messageKey, buffer);
-
-  if (args.mode === "delta") {
-    appendVisibleTextBuffer(buffer, args.text);
-    return true;
-  }
-
-  setVisibleTextBuffer(buffer, args.text, true);
-  args.state.reasoningTextBuffersByKey.delete(messageKey);
-  finalizeProjectionKey(args.state.finalizedReasoningKeys, messageKey);
-  return true;
-}
-
-function isNewerActiveThinkingLifecycle(
-  candidate: ActiveThinkingLifecycle,
-  current: ActiveThinkingLifecycle,
-): boolean {
-  if (candidate.updatedSeq !== current.updatedSeq) {
-    return candidate.updatedSeq > current.updatedSeq;
-  }
-  return candidate.updatedAt > current.updatedAt;
-}
-
-function findLatestActiveThinkingLifecycle(
-  openLifecycles: ReadonlyMap<string, ActiveThinkingLifecycle>,
-): ActiveThinkingLifecycle | null {
-  let latestLifecycle: ActiveThinkingLifecycle | null = null;
-  for (const lifecycle of openLifecycles.values()) {
-    if (
-      latestLifecycle === null ||
-      isNewerActiveThinkingLifecycle(lifecycle, latestLifecycle)
-    ) {
-      latestLifecycle = lifecycle;
-    }
-  }
-  return latestLifecycle;
-}
-
-function getActiveThinkingText(
-  state: ProjectionState,
-  messageKey: string,
-): string {
-  const buffer = state.reasoningTextBuffersByKey.get(messageKey);
-  return (buffer ? getVisibleTextBufferText(buffer) : undefined) ?? "";
-}
-
-function buildProjectionActiveThinking(
-  state: ProjectionState,
-  threadStatus: BuildEventProjectionMessagesOptions["threadStatus"],
-): ActiveThinking | null {
-  if (threadStatus !== "active") {
-    return null;
-  }
-
-  const latestLifecycle = findLatestActiveThinkingLifecycle(
-    state.openReasoningLifecyclesByKey,
-  );
-  if (!latestLifecycle) {
-    return null;
-  }
-
-  return {
-    id: latestLifecycle.itemId,
-    text: getActiveThinkingText(state, latestLifecycle.messageKey),
-    startedAt: latestLifecycle.startedAt,
-    updatedAt: latestLifecycle.updatedAt,
-  };
-}
-
-function upsertReasoningLifecycle(args: {
-  identity: BufferedTextInstanceIdentity | null;
-  meta: EventMeta;
-  state: ProjectionState;
-  threadId: string;
-}): void {
-  if (!args.identity) {
-    return;
-  }
-
-  const messageKey = createBufferedTextInstanceKey(args.identity);
-  if (args.state.closedTurnIds.has(args.identity.turnId)) {
-    return;
-  }
-  if (args.state.finalizedReasoningKeys.has(messageKey)) {
-    return;
-  }
-
-  args.state.openTurnIds.add(args.identity.turnId);
-
-  const existingLifecycle =
-    args.state.openReasoningLifecyclesByKey.get(messageKey);
-  if (existingLifecycle) {
-    existingLifecycle.updatedAt = args.meta.createdAt;
-    existingLifecycle.updatedSeq = args.meta.seq;
-    return;
-  }
-
-  args.state.openReasoningLifecyclesByKey.set(messageKey, {
-    itemId: args.identity.itemId,
-    messageKey,
-    startedAt: args.meta.createdAt,
-    threadId: args.threadId,
-    turnId: args.identity.turnId,
-    updatedAt: args.meta.createdAt,
-    updatedSeq: args.meta.seq,
-  });
-}
-
-function trackReasoningTurn(
-  state: ProjectionState,
-  identity: BufferedTextInstanceIdentity | null,
-): void {
-  if (!identity || state.closedTurnIds.has(identity.turnId)) {
-    return;
-  }
-  state.openTurnIds.add(identity.turnId);
-}
-
-function finalizeReasoningLifecycle(
-  state: ProjectionState,
-  identity: BufferedTextInstanceIdentity | null,
-): void {
-  if (!identity) {
-    return;
-  }
-
-  const messageKey = createBufferedTextInstanceKey(identity);
-  state.openReasoningLifecyclesByKey.delete(messageKey);
-  state.finalizedReasoningKeys.add(messageKey);
-}
-
-function closeOpenTurns(state: ProjectionState): void {
-  for (const turnId of state.openTurnIds) {
-    state.closedTurnIds.add(turnId);
-  }
-  state.openTurnIds.clear();
-}
-
-function finalizeOpenReasoningLifecycles(state: ProjectionState): void {
-  for (const messageKey of state.openReasoningLifecyclesByKey.keys()) {
-    state.finalizedReasoningKeys.add(messageKey);
-  }
-  state.openReasoningLifecyclesByKey.clear();
-}
-
-function onTurnStarted(state: ProjectionState, turnId: string): void {
-  state.openTurnIds.add(turnId);
-}
-
-function onTurnCompleted(
-  state: ProjectionState,
-  turnId: string,
-  status: TurnCompletedStatus,
-): void {
-  state.closedTurnIds.add(turnId);
-  state.openTurnIds.delete(turnId);
-  if (status === "interrupted") {
-    state.pendingFinalizationByTurnId.set(turnId, "interrupted");
-  }
-  finalizeOpenReasoningLifecycles(state);
-}
-
-function onThreadInterrupted(state: ProjectionState): void {
-  closeOpenTurns(state);
-  finalizeOpenReasoningLifecycles(state);
-}
-
-function finalizePendingMessages(
-  state: ProjectionState,
-  options: BuildEventProjectionMessagesOptions | undefined,
-): void {
-  const shouldPreservePending = shouldPreservePendingMessages(
-    options?.threadStatus,
-  );
-  const shouldFinalizeBufferedAssistants =
-    options?.threadStatus !== undefined && !shouldPreservePending;
-  if (shouldPreservePending) {
-    flushActiveToolCell(state);
-    return;
-  }
-
-  flushPendingToolActivityOutput(state);
-  flushPendingFileEditOutput(state);
-  interruptPendingToolActivity(state);
-
-  for (const fileEdits of state.fileEditsByCallId.values()) {
-    for (const fileEdit of fileEdits) {
-      if (fileEdit.status === "pending") {
-        fileEdit.status = "interrupted";
-      }
-    }
-  }
-
-  if (shouldFinalizeBufferedAssistants) {
-    flushBufferedAssistantMessages(state);
-  }
-
-  for (const message of state.messages) {
-    if (message.kind !== "operation") continue;
-    finalizeOperationMessage(message, options);
-  }
-
-  flushActiveToolCell(state);
-}
-
-function isMessageScopedToFinalizedTurn(
-  message: EventProjectionMessage,
-  pendingFinalizationByTurnId: ReadonlyMap<
-    string,
-    TurnPendingFinalizationStatus
-  >,
-): boolean {
-  return (
-    message.scope.kind === "turn" &&
-    pendingFinalizationByTurnId.has(message.scope.turnId)
-  );
-}
-
-function finalizePendingMessageForInterruptedTurn(
-  message: EventProjectionMessage,
-): void {
-  switch (message.kind) {
-    case "command":
-    case "tool-call":
-    case "web-search":
-    case "web-fetch":
-      return;
-    case "file-edit":
-      if (message.status === "pending") {
-        message.status = "interrupted";
-      }
-      return;
-    case "operation":
-      interruptOperationMessage(message);
-      return;
-    case "permission-grant-lifecycle":
-      if (message.status === "pending") {
-        message.status = "interrupted";
-        message.title = "Permission grant interrupted";
-      }
-      return;
-    case "assistant-text":
-    case "debug/raw-event":
-    case "delegation":
-    case "error":
-    case "user":
-      return;
-  }
-}
-
-function finalizeInterruptedTurnPendingMessages(state: ProjectionState): void {
-  if (state.pendingFinalizationByTurnId.size === 0) {
-    return;
-  }
-
-  interruptPendingToolActivity(state, {
-    turnIds: new Set(state.pendingFinalizationByTurnId.keys()),
-  });
-
-  for (const message of state.messages) {
-    if (
-      !isMessageScopedToFinalizedTurn(
-        message,
-        state.pendingFinalizationByTurnId,
-      )
-    ) {
-      continue;
-    }
-    finalizePendingMessageForInterruptedTurn(message);
-  }
-}
-
 // --- Main entry point ---
 
 function buildFlatProjectionData(
@@ -750,20 +232,18 @@ function buildFlatProjectionData(
 
     if (isTerminalBufferedTextFlushEvent(eventType)) {
       if (decoded.type === "turn/completed") {
-        onTurnCompleted(
+        onTurnCompleted({
           state,
-          requireThreadEventScopeTurnId({
+          turnId: requireThreadEventScopeTurnId({
             type: decoded.type,
             scope: decoded.scope,
           }),
-          decoded.status,
-        );
+          status: decoded.status,
+        });
       } else {
         onThreadInterrupted(state);
       }
-      flushBufferedAssistantMessages(state);
-      flushPendingToolActivityOutput(state);
-      flushPendingFileEditOutput(state);
+      flushProjectionBufferedOutputs(state);
     }
 
     const userFromClientRequest = parseUserFromClientRequest({
@@ -790,158 +270,18 @@ function buildFlatProjectionData(
       continue;
     }
 
-    const assistantIdentity = resolveBufferedTextIdentity({
-      decoded,
-      kind: "assistant",
-      parentToolCallId: eventParentToolCallId,
-      turnId: eventTurnId,
-    });
-    const reasoningIdentity = resolveBufferedTextIdentity({
-      decoded,
-      kind: "reasoning",
-      parentToolCallId: eventParentToolCallId,
-      turnId: eventTurnId,
-    });
-
-    if (decoded.type === "item/started" && decoded.item.type === "reasoning") {
-      trackReasoningTurn(state, reasoningIdentity);
-      if (shouldTrackActiveThinking) {
-        upsertReasoningLifecycle({
-          identity: reasoningIdentity,
-          meta,
-          state,
-          threadId: decoded.threadId,
-        });
-      }
-    }
-
     if (
-      projectBufferedTextEvent({
-        createMessage: (messageKey) => ({
-          kind: "assistant-text",
-          id: messageId(decoded.threadId, "assistant", messageKey),
-          threadId: decoded.threadId,
-          sourceSeqStart: meta.seq,
-          sourceSeqEnd: meta.seq,
-          createdAt: meta.createdAt,
-          startedAt: meta.createdAt,
-          scope: decoded.scope,
-          ...(eventParentToolCallId
-            ? { parentToolCallId: eventParentToolCallId }
-            : {}),
-          text: "",
-          status: "streaming",
-        }),
-        identity: assistantIdentity,
+      projectAssistantAndReasoningEvent({
+        decoded,
+        eventParentToolCallId,
+        eventTurnId,
         meta,
-        mode: "delta",
-        refs: {
-          finalizedKeys: state.finalizedAssistantMessageKeys,
-          openMessages: state.openAssistantMessagesByKey,
-          textBuffers: state.assistantTextBuffersByKey,
-          visibleKeys: state.visibleAssistantMessageKeys,
-        },
+        options: args.options,
+        shouldTrackActiveThinking,
         state,
-        text:
-          args.options?.threadType === "manager"
-            ? null
-            : parseAssistantDeltaText(decoded),
       })
     ) {
       continue;
-    }
-
-    if (
-      projectBufferedTextEvent({
-        createMessage: (messageKey) => ({
-          kind: "assistant-text",
-          id: messageId(decoded.threadId, "assistant", messageKey),
-          threadId: decoded.threadId,
-          sourceSeqStart: meta.seq,
-          sourceSeqEnd: meta.seq,
-          createdAt: meta.createdAt,
-          startedAt: meta.createdAt,
-          scope: decoded.scope,
-          ...(eventParentToolCallId
-            ? { parentToolCallId: eventParentToolCallId }
-            : {}),
-          text: "",
-          status: "streaming",
-        }),
-        identity: assistantIdentity,
-        meta,
-        mode: "final",
-        refs: {
-          finalizedKeys: state.finalizedAssistantMessageKeys,
-          openMessages: state.openAssistantMessagesByKey,
-          textBuffers: state.assistantTextBuffersByKey,
-          visibleKeys: state.visibleAssistantMessageKeys,
-        },
-        state,
-        text:
-          args.options?.threadType === "manager"
-            ? null
-            : parseAssistantFinalText(decoded),
-      })
-    ) {
-      continue;
-    }
-
-    if (
-      (decoded.type === "item/reasoning/summaryTextDelta" ||
-        decoded.type === "item/reasoning/textDelta") &&
-      reasoningIdentity
-    ) {
-      trackReasoningTurn(state, reasoningIdentity);
-      if (shouldTrackActiveThinking) {
-        upsertReasoningLifecycle({
-          identity: reasoningIdentity,
-          meta,
-          state,
-          threadId: decoded.threadId,
-        });
-      }
-    }
-
-    if (
-      projectReasoningTextEvent({
-        identity: reasoningIdentity,
-        mode: "delta",
-        state,
-        text:
-          args.options?.threadType === "manager"
-            ? null
-            : parseReasoningDeltaText(decoded),
-      })
-    ) {
-      continue;
-    }
-
-    if (
-      projectReasoningTextEvent({
-        identity: reasoningIdentity,
-        mode: "final",
-        state,
-        text:
-          args.options?.threadType === "manager"
-            ? null
-            : parseReasoningFinalText(decoded),
-      })
-    ) {
-      if (
-        decoded.type === "item/completed" &&
-        decoded.item.type === "reasoning"
-      ) {
-        finalizeReasoningLifecycle(state, reasoningIdentity);
-      }
-      continue;
-    }
-
-    if (
-      decoded.type === "item/completed" &&
-      decoded.item.type === "reasoning"
-    ) {
-      finalizeReasoningLifecycle(state, reasoningIdentity);
     }
 
     const execEvent = parseExecLifecycleEvent(
@@ -1147,8 +487,7 @@ function buildFlatProjectionData(
     }
   }
 
-  finalizePendingMessages(state, args.options);
-  finalizeInterruptedTurnPendingMessages(state);
+  finalizeProjectionState({ state, options: args.options });
   return {
     activeThinking: args.includeActiveThinking
       ? buildProjectionActiveThinking(state, args.options?.threadStatus)
@@ -1157,12 +496,9 @@ function buildFlatProjectionData(
   };
 }
 
-function buildDetailedProjection(args: {
-  activeThinking: ActiveThinking | null;
-  events: ThreadEventWithMeta[];
-  messages: EventProjectionMessage[];
-  turnMessageDetail: BuildEventProjectionOptions["turnMessageDetail"];
-}): EventProjection {
+function buildDetailedProjection(
+  args: BuildDetailedProjectionArgs,
+): EventProjection {
   const projection = groupEventProjectionTurns({
     events: args.events,
     messages: args.messages,

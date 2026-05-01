@@ -1,13 +1,7 @@
-import type { ThreadEvent } from "./provider-event.js";
-import { getThreadEventScopeTurnId } from "./thread-event-scope.js";
+import type { ThreadEvent } from "@bb/domain";
+import { getThreadEventScopeTurnId } from "@bb/domain";
 
-export const bufferedTextInstanceKindValues = [
-  "assistant",
-  "reasoning",
-] as const;
-
-export type BufferedTextInstanceKind =
-  (typeof bufferedTextInstanceKindValues)[number];
+type BufferedTextInstanceKind = "assistant" | "reasoning";
 
 export interface BufferedTextInstanceIdentity {
   itemId: string;
@@ -16,7 +10,7 @@ export interface BufferedTextInstanceIdentity {
   turnId: string;
 }
 
-export interface ResolveBufferedTextIdentityArgs {
+interface ResolveBufferedTextIdentityArgs {
   decoded: ThreadEvent;
   kind: BufferedTextInstanceKind;
   parentToolCallId?: string;

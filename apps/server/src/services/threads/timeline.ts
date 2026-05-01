@@ -2,13 +2,10 @@ import {
   buildThreadTimelineFromEvents,
   THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
   buildThreadTimelineTurnDetailsFromEvents,
+  compactThreadTimelineSummaryEvents,
   type ThreadEventWithMeta,
 } from "@bb/thread-view";
 import type { Thread } from "@bb/domain";
-import {
-  createBufferedTextInstanceKey,
-  resolveBufferedTextIdentity,
-} from "@bb/domain";
 import type {
   ManagerTimelineView,
   ThreadTimelineResponse,
@@ -22,8 +19,6 @@ import {
 } from "@bb/db";
 import type { DbConnection, StoredEventRow } from "@bb/db";
 import { parseStoredEvent } from "./thread-data.js";
-
-const MIN_AGENT_MESSAGE_DELTAS_FOR_SUMMARY_COMPACTION = 1000;
 
 interface TimelineTurnSummarySourceRange {
   sourceSeqEnd: number;
@@ -67,74 +62,11 @@ export function toThreadEventWithMeta(
   };
 }
 
-function compactSummaryThreadEvents(
-  events: ThreadEventWithMeta[],
-): ThreadEventWithMeta[] {
-  let agentMessageDeltaCount = 0;
-  const completedAssistantKeys = new Set<string>();
-  for (const eventWithMeta of events) {
-    const { event } = eventWithMeta;
-    if (event.type === "item/agentMessage/delta") {
-      agentMessageDeltaCount += 1;
-      continue;
-    }
-    if (event.type === "item/completed" && event.item.type === "agentMessage") {
-      const identity = resolveBufferedTextIdentity({
-        decoded: event,
-        kind: "assistant",
-      });
-      if (identity) {
-        completedAssistantKeys.add(createBufferedTextInstanceKey(identity));
-      }
-    }
-  }
-
-  if (
-    agentMessageDeltaCount < MIN_AGENT_MESSAGE_DELTAS_FOR_SUMMARY_COMPACTION ||
-    completedAssistantKeys.size === 0
-  ) {
-    return events;
-  }
-
-  const retainedCompletedDeltaKeys = new Set<string>();
-  const compactedEvents: ThreadEventWithMeta[] = [];
-
-  for (const eventWithMeta of events) {
-    const { event } = eventWithMeta;
-    if (event.type !== "item/agentMessage/delta") {
-      compactedEvents.push(eventWithMeta);
-      continue;
-    }
-
-    const identity = resolveBufferedTextIdentity({
-      decoded: event,
-      kind: "assistant",
-    });
-    if (!identity) {
-      compactedEvents.push(eventWithMeta);
-      continue;
-    }
-
-    const assistantKey = createBufferedTextInstanceKey(identity);
-    if (!completedAssistantKeys.has(assistantKey)) {
-      compactedEvents.push(eventWithMeta);
-      continue;
-    }
-    if (retainedCompletedDeltaKeys.has(assistantKey)) {
-      continue;
-    }
-    retainedCompletedDeltaKeys.add(assistantKey);
-    compactedEvents.push(eventWithMeta);
-  }
-
-  return compactedEvents;
-}
-
 export function compactSummaryStoredEventRows(
   rows: readonly StoredEventRow[],
 ): readonly StoredEventRow[] {
   const events = rows.map((row) => toThreadEventWithMeta(row));
-  const compactedEvents = compactSummaryThreadEvents(events);
+  const compactedEvents = compactThreadTimelineSummaryEvents(events);
   if (compactedEvents === events) {
     return rows;
   }
@@ -159,7 +91,7 @@ export function buildThreadTimeline(
   const decodedRawEvents = rawEventRows.map((row) =>
     toThreadEventWithMeta(row),
   );
-  const decodedEvents = compactSummaryThreadEvents(decodedRawEvents);
+  const decodedEvents = compactThreadTimelineSummaryEvents(decodedRawEvents);
   const contextWindowUsageRows = listContextWindowUsageRows(db, {
     threadId: thread.id,
   });

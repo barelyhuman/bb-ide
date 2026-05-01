@@ -10,7 +10,7 @@ Source review shows no phase is fully complete yet. Phase 2 has some work landed
 - Phase 2: Partial. Diff byte limits and required dispatch `eventSink` exist; commit policy and file-list policy still need cleanup.
 - Phase 3: Open. Workspace watch state still lives in `apps/host-daemon`.
 - Phase 4: Open. `thread-view` projections still depend on `getEvent*` field-accessor helpers.
-- Phase 5: Open. Projection state has not been extracted from `build-event-projection.ts`.
+- Phase 5: Complete. Projection state and assistant/reasoning buffering now live outside `build-event-projection.ts`; buffered-text identity is private to `thread-view`.
 - Phase 6: Partial. Resolved execution option types exist, but optional route/service inputs and service-side default resolution remain.
 - Phase 7: Open. At least one server route still imports `@bb/host-daemon-contract` directly.
 
@@ -102,22 +102,23 @@ In `agent-provider-auth`, `lastRefreshedAt: number | null` and `lastErrorMessage
 
 `build-event-projection.ts` mixes state initialization, the event loop, subsidiary lifecycle handlers (tool activity, operations), and normalization passes.
 
-**Status (2026-05-01):** Open. `build-event-projection.ts` is still large, `ProjectionState` is still defined inline there, and `packages/thread-view/src/event-projection-state.ts` does not exist.
+**Status (2026-05-01):** Complete. `ProjectionState` now lives in `packages/thread-view/src/event-projection-state.ts`, assistant/reasoning buffering lives in `packages/thread-view/src/assistant-event-projection.ts` and `packages/thread-view/src/buffered-text-projection.ts`, and buffered-text identity was moved out of `@bb/domain` into private `thread-view` internals.
 
 **Changes:**
 
-- Create `packages/thread-view/src/event-projection-state.ts`:
+- [x] Create `packages/thread-view/src/event-projection-state.ts`:
   - `ProjectionState` interface (currently declared inline in `build-event-projection.ts`).
-  - `initProjectionState()` factory.
-  - `finalizeProjectionState(state, options)` (encapsulates the current `finalizePendingMessages()` logic).
-- Have `tool-activity-projection.ts` and `operation-projection.ts` register their state initialization/teardown through `event-projection-state.ts` rather than being set up inline in `build-event-projection.ts`.
-- `build-event-projection.ts` becomes: `initProjectionState()` → loop over events → `finalizeProjectionState()` → return.
+  - `createProjectionState()` factory.
+  - `finalizeProjectionState({ state, options })` (encapsulates the current `finalizePendingMessages()` logic).
+- [x] Have `tool-activity-projection.ts` and `operation-projection.ts` state initialization/teardown flow through `event-projection-state.ts` rather than being set up inline in `build-event-projection.ts`.
+- [x] Keep `build-event-projection.ts` readable as: `createProjectionState()` → loop over events → `finalizeProjectionState()` → return.
+- [x] Move buffered-text identity out of `@bb/domain`; expose only `compactThreadTimelineSummaryEvents()` from `@bb/thread-view` for the server's summary compaction caller.
 
 **Exit criteria:**
 
-- `build-event-projection.ts` drops below 600 lines (sanity check that the extraction pulled weight, not a prescriptive limit).
-- `ProjectionState` interface has exactly one definition, in `event-projection-state.ts`.
-- `pnpm exec turbo run test --filter=@bb/thread-view` passes.
+- `build-event-projection.ts` drops below 600 lines (sanity check that the extraction pulled weight, not a prescriptive limit). Completed: 595 lines.
+- `ProjectionState` interface has exactly one definition, in `event-projection-state.ts`. Completed.
+- `pnpm exec turbo run test --filter=@bb/thread-view` passes. Completed.
 
 ## Phase 6: Resolve server contract defaults at the route boundary
 
