@@ -1,11 +1,9 @@
-# Thread View Package Boundary
+# Thread View Salvage Plan
 
 ## Goal
 
-End with one shared package for thread timeline rendering, not both
-`@bb/core-ui` and `@bb/thread-view`.
-
-The package owns the thread view pipeline:
+Keep the good work already on `main`, salvage the useful architecture from
+`codex/timeline-bundle-unification`, and end with one thread timeline path:
 
 ```text
 ThreadEvent[]
@@ -14,202 +12,105 @@ ThreadEvent[]
   -> React renderer | CLI text renderer | audit output
 ```
 
-The immediate problem is shared row grouping and row titles. We should not
-invent a full presentation tree until body/detail rendering has a concrete
-duplication problem.
+The frontend must render timeline rows through one generic path. Old
+per-message row components are deleted as the generic row renderer takes over.
 
 ## Locked Decisions
 
-- `@bb/core-ui` is not a final package. It must be deleted or emptied during
-  this cleanup.
-- `@bb/thread-view` is the only shared package for thread timeline rendering.
-- `ThreadTimeline` is the semantic grouped model. Grouping lives there, not in
-  a presentation layer.
-- The near-term presentation boundary is row titles only.
-- React and CLI keep rendering bodies/details from semantic `ThreadTimelineRow`
-  data for now.
-- Shared title logic is exposed through one title presenter, not through helper
-  exports such as `buildToolBundleSummaryLabel`,
-  `getTimelineDisplayStatus`, `formatToolCallCommand`, or
-  `fileChangeIdentity`.
-- Root exports stay small: pipeline functions, row title presenter, text
-  formatter, and public types.
-- Compatibility re-exports from `@bb/core-ui` are forbidden.
+- `@bb/thread-view` is the only shared package for thread timeline projection,
+  grouping, labels, and text formatting.
+- `@bb/core-ui` is deleted. Its remaining helpers move to concrete owners or
+  are inlined.
+- We do not reset to the abandoned branch. We port its good ideas into the
+  current `@bb/thread-view` boundary.
+- Semantic grouped timeline rows are the stable server response shape.
+- Grouping lives in `ThreadTimeline`, not in React.
+- React uses one generic timeline row renderer for conversation, work, system,
+  group, and turn rows.
+- Renderer layout decides truncation. Shared model/presenter decides facts and
+  wording.
+- Tasks/todo/plan updates are not timeline rows unless a real producer and
+  product requirement reintroduces them end to end.
+- Existing useful fixture/audit coverage stays. Deleted row tests must either
+  be preserved or replaced by behavior tests that catch the same regressions.
 
-## Public Interface
+## Salvage From Main
 
-Root exports should converge to this shape:
+- Provider audit fixture improvements and dev replay captures.
+- File changes split so each changed file is one source row.
+- Delegation rows with child progress.
+- Command/delegation semantic projection cleanup.
+- `@bb/thread-view` package boundary and Turbo wiring.
+- CLI snapshot coverage and provider-audit artifacts.
 
-```ts
-function projectThreadView(
-  events: ThreadEventWithMeta[],
-  options: ProjectThreadViewOptions,
-): ThreadViewProjection;
+## Salvage From Abandoned Branch
 
-function buildThreadTimeline(
-  projection: ThreadViewProjection,
-  options: BuildThreadTimelineOptions,
-): ThreadTimeline;
+- Semantic row contract:
+  conversation rows, work rows, system rows, group rows, and turn rows.
+- Source projection before grouping.
+- Turn rows with lazy `children: null` for collapsed completed turns.
+- Single React renderer that switches on semantic row kind.
+- Work row details for commands, file diffs, generic tools, and delegation
+  children.
+- Step-summary and semantic-bundle grouping rules, adjusted to match the locked
+  decisions here.
 
-function getThreadTimelineRowTitle(
-  row: ThreadTimelineRow,
-  context: ThreadTimelineTitleContext,
-): ThreadTimelineRowTitle;
+## Reject From Abandoned Branch
 
-function formatThreadTimelineText(
-  timeline: ThreadTimeline,
-  options: FormatThreadTimelineTextOptions,
-): string;
-```
-
-The root should also export the stable public types used by these functions:
-
-- `ThreadEventWithMeta`
-- `ThreadViewProjection`
-- `ThreadViewState`
-- `ThreadTimeline`
-- `ThreadTimelineRow`
-- `ThreadTimelineRowTitle`
-- `RichTitle`
-- option/result/context types for the public functions
-
-Everything else is internal unless there is a concrete public use case that
-cannot be represented by `ThreadTimelineRow` plus `ThreadTimelineRowTitle`.
-
-## Title Model
-
-Start with plain text:
-
-```ts
-interface ThreadTimelineRowTitle {
-  plain: string;
-}
-```
-
-Then add rich title after the plain title path is proven:
-
-```ts
-interface ThreadTimelineRowTitle {
-  plain: string;
-  rich?: RichTitle;
-}
-
-interface RichTitle {
-  prefix?: RichTitlePart;
-  content: RichTitlePart;
-  suffix?: RichTitleSuffix;
-  active?: boolean;
-}
-
-interface RichTitlePart {
-  text: string;
-  tone: "muted" | "default" | "emphasis" | "danger";
-}
-
-type RichTitleSuffix =
-  | { kind: "duration"; ms: number }
-  | { kind: "diff-stats"; insertions: number; deletions: number }
-  | { kind: "text"; text: string; tone: "muted" | "default" | "emphasis" };
-```
-
-Layout behavior such as truncation belongs to the renderer. The presenter
-defines title meaning and wording, not CSS behavior.
-
-## Export Policy
-
-### Public
-
-- Pipeline functions.
-- `getThreadTimelineRowTitle`.
-- `formatThreadTimelineText`.
-- Stable source/timeline/title types.
-
-### Internal
-
-These should stop being root exports and become private implementation details:
-
-- tool bundle label builders
-- assistant step summary label builders
-- turn summary part builders
-- display-status helpers
-- command formatting helpers
-- file-change identity/name summary helpers
-- lifecycle parsers/projection internals
-- message-scope helpers
-- activity/highlight internals unless a public renderer genuinely needs them
-
-### Not Thread View
-
-The remaining `@bb/core-ui` exports must not force a second shared package.
-They need concrete owners:
-
-- `assertNever`: move to an existing shared owner or inline locally where small.
-- `extractErrorMessage` / `toRecord`: move to API/client error handling owner or
-  inline in app/CLI clients.
-- `formatEnvironmentDisplay`: move to the environment display owner or local
-  app/CLI presentation module.
-- pending-interaction formatting: either fold into a pending-interaction
-  presentation owner or keep local to the current callers.
-- `timeAgo` / generic duration helpers: only stay in thread view if used by the
-  thread title/text formatter; otherwise move to concrete callers.
+- Keeping timeline ownership in `@bb/core-ui`.
+- Deleting targeted tests without equivalent replacement.
+- Presentation DSL as a public API.
+- Caller-controlled truncation flags in shared model data.
+- Unrelated DB/app/server churn mixed into timeline rendering.
+- Special-case semantic bundle rules that exclude delegations or contradict
+  the active-turn grouping rules.
 
 ## Implementation Steps
 
-1. Define the public title boundary in code.
-   - Add `ThreadTimelineRowTitle`.
-   - Add `getThreadTimelineRowTitle(row, context)`.
-   - Keep `rich` out until `plain` is used by app and CLI.
+1. Delete `@bb/core-ui`.
+   - Inline or move `assertNever`, error extraction, environment display,
+     duration, and pending-interaction helpers.
+   - Remove `@bb/core-ui` dependencies and package files.
+   - Commit once no imports remain.
 
-2. Route existing title/helper logic through the title presenter.
-   - Convert tool bundle, assistant step, turn summary, command, file edit,
-     delegation, task, error, web, and operation title logic into internal
-     presenter functions.
-   - Add focused title tests for active and completed rows.
+2. Introduce semantic `ThreadTimeline` rows in `@bb/thread-view`.
+   - Add source rows for conversation, work, and system facts.
+   - Add grouped rows for turns and work groups.
+   - Port useful abandoned-branch model tests without losing current regression
+     coverage.
 
-3. Move CLI/audit title rendering onto `getThreadTimelineRowTitle`.
-   - CLI text output still renders existing bodies/details.
-   - Snapshots verify title output without importing label helpers.
+3. Serve semantic timeline rows from the server.
+   - Keep `ThreadTimelineResponse` stable and explicit.
+   - Preserve `activeThinking` and `contextWindowUsage`.
+   - Keep lazy turn details behavior.
 
-4. Move React row headers onto `getThreadTimelineRowTitle`.
-   - React continues rendering details from semantic `ThreadTimelineRow`.
-   - Remove direct React imports of title/status/file/command helper functions.
+4. Move CLI and provider audit to semantic rows.
+   - CLI output uses shared thread-view text formatting.
+   - Audit snapshots stay readable and focused on structure.
 
-5. Remove helper exports.
-   - Root exports contain only the agreed public API.
-   - Search confirms app/CLI/audit/server do not import private helpers.
+5. Replace frontend timeline rendering with one generic renderer.
+   - Delete `ConversationEntry` branching over old `ViewMessage` rows.
+   - Delete old row components as they become unreachable:
+     command/tool/web/file/delegation/operation/error/debug/tasks/bundle rows.
+   - Keep user, assistant, terminal output, diff, markdown, and shared
+     disclosure primitives where they are still useful.
 
-6. Eliminate `@bb/core-ui`.
-   - Move or inline remaining non-thread helpers into concrete owners.
-   - Remove the package from workspace dependencies.
-   - Delete the package once no package imports it.
-
-7. Rename domain/view vocabulary after the title boundary is in place.
-   - `ViewProjection` -> `ThreadViewProjection`
-   - `ViewMessage` -> `ThreadTimelineSourceRow` or the agreed source-row name
-   - `TimelineRow` -> `ThreadTimelineRow`
-   - File names should match the public concepts, not old implementation names.
-
-## Deferred
-
-- Full `ThreadTimelinePresentation` tree.
-- Structured body/details DSL.
-- Rich titles.
-- Moving lazy child loading into presentation.
-
-These can be added later if the semantic-row renderers keep duplicating logic.
+6. Remove old projection/grouping code.
+   - Delete old `ViewMessage` timeline grouping path once no consumers remain.
+   - Remove old helper exports from `@bb/thread-view`.
+   - Rename remaining public types to match the final pipeline.
 
 ## Exit Criteria
 
-- There is one shared thread rendering package.
-- `@bb/core-ui` is gone or contains no public exports and no dependents.
-- Root `@bb/thread-view` exports are limited to the public pipeline, title
-  presenter, text formatter, and stable public types.
-- App, CLI, audit, and server code do not import label/status/file/command
-  helper functions.
-- React and CLI get row titles from the same title presenter.
-- Existing body/detail rendering is preserved.
-- CLI snapshots and focused title tests cover active and completed row
-  examples.
+- `rg "@bb/core-ui"` returns no product imports and the package is gone.
+- `ThreadTimelineResponse.rows` is the semantic row tree used by app, CLI, and
+  audit.
+- React timeline rendering enters through one generic row renderer.
+- Old row components for obsolete message kinds are deleted.
+- Tasks/todo/plan rows are absent from timeline projection and rendering.
+- CLI/provider-audit snapshots still cover app and CLI formatting.
+- Focused tests cover source projection, grouping, lazy turn children, command
+  rows, file-change rows, delegation rows, and active-tail grouping.
 - The completed plan file is deleted.
 
 ## Validation
