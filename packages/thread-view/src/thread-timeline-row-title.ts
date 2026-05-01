@@ -13,11 +13,31 @@ import { buildToolBundleSummaryParts } from "./timeline-tool-bundle-summary.js";
 import { buildTurnSummaryParts } from "./timeline-turn-summary.js";
 import { getDelegationSummaryParts } from "./timeline-render-helpers.js";
 
-export interface ThreadTimelineRichTitle {
-  prefix: string | null;
-  content: string;
-  metadata: string | null;
-}
+type ViewWebSearchStatus = Extract<
+  ViewMessage,
+  { kind: "web-search" }
+>["status"];
+type ViewWebFetchStatus = Extract<
+  ViewMessage,
+  { kind: "web-fetch" }
+>["status"];
+
+export type ThreadTimelineRichTitle =
+  | {
+      kind: "plain";
+      text: string;
+    }
+  | {
+      kind: "prefixed";
+      prefix: string;
+      content: string;
+      metadata: string | null;
+    };
+
+type ThreadTimelinePrefixedRichTitle = Extract<
+  ThreadTimelineRichTitle,
+  { kind: "prefixed" }
+>;
 
 export interface ThreadTimelineRowTitle {
   plain: string;
@@ -48,7 +68,14 @@ function applyOngoingLabelPreference(
 }
 
 function titleFromRich(rich: ThreadTimelineRichTitle): ThreadTimelineRowTitle {
-  const text = rich.prefix ? `${rich.prefix} ${rich.content}` : rich.content;
+  if (rich.kind === "plain") {
+    return {
+      plain: rich.text,
+      rich,
+    };
+  }
+
+  const text = `${rich.prefix} ${rich.content}`;
   return {
     plain: rich.metadata ? `${text} (${rich.metadata})` : text,
     rich,
@@ -57,10 +84,45 @@ function titleFromRich(rich: ThreadTimelineRichTitle): ThreadTimelineRowTitle {
 
 function titleFromPlain(plain: string): ThreadTimelineRowTitle {
   return titleFromRich({
-    prefix: null,
-    content: plain,
-    metadata: null,
+    kind: "plain",
+    text: plain,
   });
+}
+
+function titleWithPlain(
+  plain: string,
+  rich: ThreadTimelinePrefixedRichTitle,
+): ThreadTimelineRowTitle {
+  return {
+    plain,
+    rich,
+  };
+}
+
+function webSearchPrefix(status: ViewWebSearchStatus): string {
+  switch (status) {
+    case "pending":
+      return "Searching";
+    case "interrupted":
+      return "Search interrupted";
+    case "completed":
+      return "Searched";
+    default:
+      return assertNever(status);
+  }
+}
+
+function webFetchPrefix(status: ViewWebFetchStatus): string {
+  switch (status) {
+    case "pending":
+      return "Fetching";
+    case "interrupted":
+      return "Fetch interrupted";
+    case "completed":
+      return "Fetched";
+    default:
+      return assertNever(status);
+  }
 }
 
 function getTimelineMessageRowTitle(
@@ -77,10 +139,22 @@ function getTimelineMessageRowTitle(
       return titleFromPlain(`Tool Call: ${message.toolName}`);
     case "file-edit":
       return titleFromPlain("File Edit");
-    case "web-search":
-      return titleFromPlain(`Searched ${message.queries[0] ?? "web search"}`);
+    case "web-search": {
+      const query = message.queries[0] ?? "web search";
+      return titleWithPlain(`Searched ${query}`, {
+        kind: "prefixed",
+        prefix: webSearchPrefix(message.status),
+        content: query,
+        metadata: null,
+      });
+    }
     case "web-fetch":
-      return titleFromPlain(`Fetched ${message.url}`);
+      return titleWithPlain(`Fetched ${message.url}`, {
+        kind: "prefixed",
+        prefix: webFetchPrefix(message.status),
+        content: message.url,
+        metadata: null,
+      });
     case "operation":
       return titleFromPlain(`Operation: ${message.title}`);
     case "permission-grant-lifecycle":
@@ -91,6 +165,7 @@ function getTimelineMessageRowTitle(
       const verb = message.status === "pending" ? "Running" : "Ran";
       const parts = getDelegationSummaryParts(message);
       return titleFromRich({
+        kind: "prefixed",
         prefix: `${verb} subagent:`,
         content: parts.label,
         metadata: parts.metadata ?? null,
@@ -115,6 +190,7 @@ function getToolBundleRowTitle(
   };
   const parts = buildToolBundleSummaryParts(titleRow);
   return titleFromRich({
+    kind: "prefixed",
     prefix: parts.prefix,
     content: parts.emphasis,
     metadata: null,
@@ -138,6 +214,7 @@ function getTurnSummaryRowTitle(
     summaryCount: row.summaryCount,
   });
   return titleFromRich({
+    kind: "prefixed",
     prefix: parts.prefix,
     content: parts.emphasis,
     metadata: null,

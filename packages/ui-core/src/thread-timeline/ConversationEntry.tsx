@@ -77,19 +77,9 @@ function ConversationEntryComponent({
         />
       );
     case "web-search":
-      return (
-        <WebSearchRow
-          message={message}
-          preferOngoingLabels={preferOngoingLabels}
-        />
-      );
+      return <WebSearchRow message={message} />;
     case "web-fetch":
-      return (
-        <WebFetchRow
-          message={message}
-          preferOngoingLabels={preferOngoingLabels}
-        />
-      );
+      return <WebFetchRow message={message} />;
     case "file-edit":
       return (
         <FileEditRow

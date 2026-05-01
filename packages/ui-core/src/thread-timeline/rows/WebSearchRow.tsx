@@ -1,67 +1,49 @@
 import type { ViewWebFetchMessage, ViewWebSearchMessage } from "@bb/domain";
+import {
+  getThreadTimelineRowTitle,
+  type ThreadTimelineRowTitle,
+} from "@bb/thread-view";
 import { cn } from "../../cn.js";
 import { COLLAPSIBLE_HEADER_STATIC_TONE_CLASS } from "../../disclosure.js";
 import { EventTitle } from "./shared.js";
 
 type WebActivityRowMessage = ViewWebSearchMessage | ViewWebFetchMessage;
 
-interface WebActivityLabelArgs {
-  completed: string;
-  interrupted: string;
-  pending: string;
-}
-
 interface WebActivityRowProps {
   message: WebActivityRowMessage;
-  preferOngoingLabels?: boolean;
 }
 
-function getWebActivitySummaryDetail(message: WebActivityRowMessage): string {
-  return message.kind === "web-search"
-    ? (message.queries[0] ?? "the web")
-    : message.url;
-}
-
-function getWebActivitySummaryLabel(
-  message: WebActivityRowMessage,
-  preferOngoingLabels: boolean,
-): WebActivityLabelArgs {
-  if (message.kind === "web-search") {
-    return {
-      completed: "Searched",
-      interrupted: "Search interrupted",
-      pending: "Searching",
-    };
+function renderWebActivityTitle(
+  title: ThreadTimelineRowTitle,
+  isPending: boolean,
+) {
+  switch (title.rich.kind) {
+    case "plain":
+      return <EventTitle prefix={title.rich.text} shimmerPrefix={isPending} />;
+    case "prefixed":
+      return (
+        <EventTitle
+          prefix={title.rich.prefix}
+          detail={title.rich.content}
+          shimmerPrefix={isPending}
+        />
+      );
   }
-
-  return {
-    completed: "Fetched",
-    interrupted: "Fetch interrupted",
-    pending: "Fetching",
-  };
 }
 
-function WebActivityRow({
-  message,
-  preferOngoingLabels = false,
-}: WebActivityRowProps) {
-  const labels = getWebActivitySummaryLabel(message, preferOngoingLabels);
-  const isPending =
-    message.status === "pending" ||
-    (message.status !== "interrupted" && preferOngoingLabels);
-  const prefix =
-    message.status === "interrupted"
-      ? labels.interrupted
-      : isPending
-        ? labels.pending
-        : labels.completed;
-  const summary = (
-    <EventTitle
-      prefix={prefix}
-      detail={getWebActivitySummaryDetail(message)}
-      shimmerPrefix={isPending}
-    />
+function WebActivityRow({ message }: WebActivityRowProps) {
+  const title = getThreadTimelineRowTitle(
+    {
+      kind: "message",
+      id: message.id,
+      message,
+    },
+    {
+      preferOngoingLabels: false,
+    },
   );
+  const isPending = message.status === "pending";
+  const summary = renderWebActivityTitle(title, isPending);
 
   return (
     <div className="group w-full">
@@ -78,7 +60,6 @@ function WebActivityRow({
 
 interface WebSearchRowProps {
   message: ViewWebSearchMessage;
-  preferOngoingLabels?: boolean;
 }
 
 export function WebSearchRow(props: WebSearchRowProps) {
@@ -87,7 +68,6 @@ export function WebSearchRow(props: WebSearchRowProps) {
 
 interface WebFetchRowProps {
   message: ViewWebFetchMessage;
-  preferOngoingLabels?: boolean;
 }
 
 export function WebFetchRow(props: WebFetchRowProps) {

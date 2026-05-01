@@ -243,14 +243,14 @@ function renderGroupedTimelineTitle({
   title,
   tone,
 }: RenderGroupedTimelineTitleArgs): ReactNode {
-  if (!title.rich.prefix && !title.rich.metadata) {
+  if (title.rich.kind === "plain") {
     return <GroupedSummaryText text={title.plain} />;
   }
 
   return (
     <EventTitle
-      prefix={title.rich.prefix ?? title.rich.content}
-      emphasis={title.rich.prefix ? title.rich.content : undefined}
+      prefix={title.rich.prefix}
+      emphasis={title.rich.content}
       suffix={title.rich.metadata ?? undefined}
       shimmerPrefix={shimmerPrefix}
       suffixClassName="truncate"

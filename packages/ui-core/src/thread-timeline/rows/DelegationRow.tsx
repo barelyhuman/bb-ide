@@ -4,6 +4,7 @@ import {
   buildGroupedTimelineRows,
   findLatestActivityRowId,
   getThreadTimelineRowTitle,
+  type ThreadTimelineRowTitle,
 } from "@bb/thread-view";
 import type {
   TimelineRow,
@@ -40,6 +41,15 @@ interface DelegationRowProps {
     message: ViewMessage,
     options?: NestedTimelineMessageRenderOptions,
   ) => ReactNode;
+}
+
+type DelegationRowTone = "default" | "destructive";
+
+interface RenderDelegationRowTitleArgs {
+  isWorking: boolean;
+  suffix: ReactNode;
+  title: ThreadTimelineRowTitle;
+  tone: DelegationRowTone;
 }
 
 function getNestedPresentationOptions(
@@ -82,6 +92,46 @@ function formatDelegationRowSuffix(
   );
 }
 
+function getDelegationRowMetadata(
+  title: ThreadTimelineRowTitle,
+): string | undefined {
+  if (title.rich.kind === "plain") {
+    return undefined;
+  }
+  return title.rich.metadata ?? undefined;
+}
+
+function renderDelegationRowTitle({
+  isWorking,
+  suffix,
+  title,
+  tone,
+}: RenderDelegationRowTitleArgs) {
+  switch (title.rich.kind) {
+    case "plain":
+      return (
+        <EventTitle
+          prefix={title.rich.text}
+          suffix={suffix}
+          suffixClassName="min-w-0 shrink"
+          tone={tone}
+          shimmerPrefix={isWorking}
+        />
+      );
+    case "prefixed":
+      return (
+        <EventTitle
+          prefix={title.rich.prefix}
+          emphasis={title.rich.content}
+          suffix={suffix}
+          suffixClassName="min-w-0 shrink"
+          tone={tone}
+          shimmerPrefix={isWorking}
+        />
+      );
+  }
+}
+
 export function DelegationRow({
   message,
   initialExpanded = false,
@@ -118,9 +168,10 @@ export function DelegationRow({
     },
   );
   const suffix = formatDelegationRowSuffix(
-    title.rich.metadata ?? undefined,
+    getDelegationRowMetadata(title),
     formatSummaryDuration(message.durationMs ?? undefined),
   );
+  const tone = message.status === "error" ? "destructive" : "default";
 
   return (
     <div className="group w-full">
@@ -128,20 +179,15 @@ export function DelegationRow({
         <ExpandablePanel
           isExpanded={isExpanded}
           summaryContent={
-            <EventTitle
-              prefix={title.rich.prefix ?? title.rich.content}
-              emphasis={title.rich.prefix ? title.rich.content : undefined}
-              suffix={suffix}
-              suffixClassName="min-w-0 shrink"
-              tone={message.status === "error" ? "destructive" : "default"}
-              shimmerPrefix={isWorking}
-            />
+            renderDelegationRowTitle({
+              isWorking,
+              suffix,
+              title,
+              tone,
+            })
           }
           summaryContentClassName="min-w-0"
-          headerToneClass={getEventHeaderToneClass(
-            isExpanded,
-            message.status === "error" ? "destructive" : "default",
-          )}
+          headerToneClass={getEventHeaderToneClass(isExpanded, tone)}
           onToggle={onToggle}
         >
           <div

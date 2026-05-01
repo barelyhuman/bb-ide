@@ -5,6 +5,7 @@ import type {
   TimelineToolBundleRow,
   TimelineTurnSummaryRow,
   ViewDelegationMessage,
+  ViewWebSearchMessage,
   ViewProjection,
 } from "@bb/domain";
 import { threadScope } from "@bb/domain";
@@ -15,6 +16,7 @@ import {
 } from "../src/thread-timeline-row-title.js";
 
 type DelegationStatus = ViewDelegationMessage["status"];
+type WebSearchStatus = ViewWebSearchMessage["status"];
 
 const titleContext: ThreadTimelineTitleContext = {
   preferOngoingLabels: false,
@@ -68,6 +70,27 @@ function delegationRow(status: DelegationStatus): TimelineMessageRow {
   };
 }
 
+function webSearchRow(status: WebSearchStatus): TimelineMessageRow {
+  const message: ViewWebSearchMessage = {
+    kind: "web-search",
+    id: "web-search-1",
+    threadId: "thread-1",
+    sourceSeqStart: 1,
+    sourceSeqEnd: 1,
+    createdAt: 1,
+    scope: threadScope(),
+    callId: "web-call-1",
+    queries: ["react suspense"],
+    resultText: null,
+    status,
+  };
+  return {
+    kind: "message",
+    id: message.id,
+    message,
+  };
+}
+
 describe("getThreadTimelineRowTitle", () => {
   it("formats command bundle titles and active-label preference", () => {
     const row: TimelineToolBundleRow = {
@@ -90,6 +113,7 @@ describe("getThreadTimelineRowTitle", () => {
 
     expect(title(row)).toBe("Ran 2 commands");
     expect(richTitle(row)).toEqual({
+      kind: "prefixed",
       prefix: "Ran",
       content: "2 commands",
       metadata: null,
@@ -121,6 +145,7 @@ describe("getThreadTimelineRowTitle", () => {
 
     expect(title(row)).toBe("Ran subagent: Inspect the docs tree (Explore)");
     expect(richTitle(row)).toEqual({
+      kind: "prefixed",
       prefix: "Ran subagent:",
       content: "Inspect the docs tree",
       metadata: "Explore",
@@ -133,5 +158,17 @@ describe("getThreadTimelineRowTitle", () => {
     expect(titleWithOngoingPreference(row)).toBe(
       "Ran subagent: Inspect the docs tree (Explore)",
     );
+  });
+
+  it("keeps CLI-compatible plain text and status-rich text for web rows", () => {
+    const row = webSearchRow("pending");
+
+    expect(title(row)).toBe("Searched react suspense");
+    expect(richTitle(row)).toEqual({
+      kind: "prefixed",
+      prefix: "Searching",
+      content: "react suspense",
+      metadata: null,
+    });
   });
 });

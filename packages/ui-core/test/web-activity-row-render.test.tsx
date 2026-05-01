@@ -60,4 +60,13 @@ describe("web activity row rendering", () => {
     expect(html).toContain("Fetched");
     expect(html).toContain("https://example.com");
   });
+
+  it("uses active copy only for pending web rows", () => {
+    const html = renderToStaticMarkup(
+      <WebSearchRow message={buildWebSearchMessage("pending")} />,
+    );
+
+    expect(html).toContain("Searching");
+    expect(html).not.toContain("Searched");
+  });
 });
