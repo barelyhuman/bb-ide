@@ -8,10 +8,12 @@ import type {
   TimelineCommandWorkRow,
   TimelineConversationAttachments,
   TimelineConversationRow,
+  TimelineDelegationWorkRow,
   TimelineFileChangeWorkRow,
   TimelineRow,
   TimelineRowBase,
   TimelineRowStatus,
+  TimelineSystemRow,
   TimelineTurnRow,
   TimelineWebFetchWorkRow,
   TimelineWebSearchWorkRow,
@@ -41,6 +43,17 @@ interface ConversationRowArgs {
   id?: string;
   role?: TimelineConversationRow["role"];
   text: string;
+}
+
+interface FileChangeRowArgs {
+  diff?: string;
+  diffStats?: {
+    added: number;
+    removed: number;
+  };
+  id?: string;
+  kind?: string;
+  path?: string;
 }
 
 function baseRow({ id, sourceSeqStart }: BaseRowArgs): TimelineRowBase {
@@ -125,26 +138,65 @@ function webSearchRow(): TimelineWebSearchWorkRow {
   };
 }
 
-function fileChangeRow(): TimelineFileChangeWorkRow {
+function fileChangeRow({
+  diff = "@@ -1 +1 @@\n-before\n+after",
+  diffStats = {
+    added: 1,
+    removed: 1,
+  },
+  id = "file-change-1",
+  kind = "update",
+  path = "src/app.ts",
+}: FileChangeRowArgs = {}): TimelineFileChangeWorkRow {
   return {
-    ...baseRow({ id: "file-change-1", sourceSeqStart: 1 }),
+    ...baseRow({ id, sourceSeqStart: 1 }),
     kind: "work",
     workKind: "file-change",
     status: "completed",
-    callId: "file-change-1",
+    callId: id,
     change: {
-      path: "src/app.ts",
-      kind: "update",
+      path,
+      kind,
       movePath: null,
-      diff: "@@ -1 +1 @@\n-before\n+after",
-      diffStats: {
-        added: 1,
-        removed: 1,
-      },
+      diff,
+      diffStats,
     },
     stdout: "applied",
     stderr: null,
     approvalStatus: null,
+  };
+}
+
+function delegationRow(): TimelineDelegationWorkRow {
+  return {
+    ...baseRow({ id: "delegation-1", sourceSeqStart: 1 }),
+    kind: "work",
+    workKind: "delegation",
+    status: "completed",
+    callId: "delegation-1",
+    toolName: "spawnAgent",
+    subagentType: "general-purpose",
+    description: "Review renderer",
+    output: "Final subagent answer.",
+    durationMs: 2_000,
+    childRows: [
+      commandRow({
+        id: "delegation-child-command-1",
+        command: "rg timeline packages/ui-core",
+        sourceSeqStart: 2,
+      }),
+    ],
+  };
+}
+
+function systemRow(): TimelineSystemRow {
+  return {
+    ...baseRow({ id: "system-1", sourceSeqStart: 1 }),
+    kind: "system",
+    systemKind: "operation",
+    title: "Provisioned thread",
+    detail: "Running setup\nProvisioned thread (2s)",
+    status: "completed",
   };
 }
 
@@ -239,15 +291,42 @@ describe("ThreadTimelineRows", () => {
 
     fireEvent.click(screen.getByRole("button"));
 
-    expect(view.container.textContent ?? "").toContain("Read src/app.ts");
-    expect(view.container.textContent ?? "").toContain(
-      "Searched for TODO in src",
-    );
+    expect(
+      view.container.querySelector('[aria-label="Read app.ts"]'),
+    ).not.toBeNull();
+    expect(view.container.textContent ?? "").not.toContain("Read src/app.ts");
+    expect(
+      view.container.querySelector('[aria-label="Searched for TODO in src"]'),
+    ).not.toBeNull();
     expect(view.container.textContent ?? "").not.toContain("$ cat src/app.ts");
     expect(view.container.textContent ?? "").not.toContain(
       "large file contents",
     );
     expect(screen.getAllByRole("button")).toHaveLength(1);
+  });
+
+  it("renders delegation child progress and final output when both are present", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[delegationRow()]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    expect(view.container.textContent ?? "").not.toContain(
+      "Final subagent answer.",
+    );
+
+    fireEvent.click(screen.getByRole("button"));
+
+    expect(view.container.textContent ?? "").toContain(
+      "rg timeline packages/ui-core",
+    );
+    expect(view.container.textContent ?? "").toContain("Final subagent answer.");
   });
 
   it("does not render web search and fetch leaves as expandable rows", () => {
@@ -326,6 +405,59 @@ describe("ThreadTimelineRows", () => {
     expect(view.container.textContent ?? "").toContain("exit code 0");
   });
 
+  it("renders error command titles with normal command styling", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[
+          commandRow({
+            id: "command-error-1",
+            command: "pnpm test",
+            status: "error",
+          }),
+        ]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    const button = screen.getByRole("button", {
+      name: /Ran\s+pnpm test\s+2s/u,
+    });
+    expect(button.textContent ?? "").not.toContain("(error");
+    expect(view.container.innerHTML).not.toContain("text-destructive");
+  });
+
+  it("omits command cwd metadata and mutes exit code detail", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[
+          {
+            ...commandRow({
+              id: "command-detail-1",
+              command: "pwd",
+            }),
+            cwd: "/repo",
+            output: "done",
+          },
+        ]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button"));
+
+    expect(view.container.textContent ?? "").not.toContain("cwd:");
+    expect(view.container.textContent ?? "").toContain("exit code 0");
+    expect(view.container.innerHTML).toContain("text-muted-foreground");
+  });
+
   it("renders ANSI command output without leaking escape codes", () => {
     const view = render(
       <ThreadTimelineRows
@@ -373,11 +505,154 @@ describe("ThreadTimelineRows", () => {
     expect(view.container.textContent ?? "").toContain("applied");
   });
 
-  it("renders plain conversation rows through the timeline path", () => {
+  it("renders raw created-file diffs with the same diff viewer", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[
+          fileChangeRow({
+            id: "created-file-change-1",
+            kind: "add",
+            path: "src/new-file.ts",
+            diff: "first line\nsecond line\n",
+            diffStats: {
+              added: 2,
+              removed: 0,
+            },
+          }),
+        ]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /Created\s+new-file\.ts\s+\+2/u }),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button"));
+
+    expect(
+      view.container.querySelector("[data-timeline-file-diff]"),
+    ).not.toBeNull();
+    expect(view.container.textContent ?? "").not.toContain("No diff available");
+  });
+
+  it("renders assistant conversation rows without a role label", () => {
     const html = renderRowsToStaticMarkup([conversationRow({ text: "Done." })]);
 
-    expect(html).toContain("Assistant");
+    expect(html).not.toContain("Assistant");
     expect(html).toContain("Done.");
+  });
+
+  it("renders user conversation rows as a right-aligned message bubble", () => {
+    const html = renderRowsToStaticMarkup([
+      conversationRow({ role: "user", text: "Please patch this." }),
+    ]);
+
+    expect(html).not.toContain("User");
+    expect(html).toContain("ml-auto w-fit max-w-[80%]");
+    expect(html).toContain("bg-primary/10");
+    expect(html).toContain("Please patch this.");
+  });
+
+  it("preserves top-level user message spacing", () => {
+    const html = renderRowsToStaticMarkup([
+      conversationRow({ id: "assistant-1", text: "Before." }),
+      conversationRow({
+        id: "user-1",
+        role: "user",
+        text: "Please patch this.",
+      }),
+    ]);
+
+    expect(html).toContain('class="pt-1"');
+  });
+
+  it("renders assistant markdown with the custom timeline markdown styling", () => {
+    const html = renderRowsToStaticMarkup([
+      conversationRow({
+        text: [
+          "Here is code:",
+          "",
+          "```ts",
+          "const value = 1;",
+          "const next = value + 1;",
+          "```",
+        ].join("\n"),
+      }),
+    ]);
+
+    expect(html).not.toContain("Assistant");
+    expect(html).toContain("Copy code");
+    expect(html).toContain("border border-border/70 bg-muted/35");
+    expect(html).toContain("language-ts");
+  });
+
+  it("keeps nested lazy-loaded bundles expandable", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[turnRow()]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{
+          "turn-summary-1": [
+            commandRow({
+              id: "command-1",
+              command: "echo one",
+              sourceSeqStart: 11,
+            }),
+            commandRow({
+              id: "command-2",
+              command: "echo two",
+              sourceSeqStart: 12,
+            }),
+          ],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Worked for\s*4s/u }));
+
+    const bundleButton = screen.getByRole("button", {
+      name: /Ran 2 commands/u,
+    });
+    expect(bundleButton.getAttribute("aria-expanded")).toBe("false");
+    expect(view.container.textContent ?? "").not.toContain("echo one");
+
+    fireEvent.click(bundleButton);
+
+    expect(bundleButton.getAttribute("aria-expanded")).toBe("true");
+    expect(view.container.textContent ?? "").toContain("echo one");
+    expect(view.container.textContent ?? "").toContain("echo two");
+  });
+
+  it("renders system rows with detail as expandable", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[systemRow()]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    const systemButton = screen.getByRole("button", {
+      name: /Provisioned thread/u,
+    });
+    expect(systemButton.getAttribute("aria-expanded")).toBe("false");
+    expect(view.container.textContent ?? "").not.toContain("Running setup");
+
+    fireEvent.click(systemButton);
+
+    expect(systemButton.getAttribute("aria-expanded")).toBe("true");
+    expect(view.container.textContent ?? "").toContain("Running setup");
   });
 
   it("routes markdown local file links through the timeline handler", () => {

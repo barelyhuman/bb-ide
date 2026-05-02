@@ -14,13 +14,18 @@ import type {
   EventProjectionFileEditChange,
   EventProjectionMessage,
   EventProjection,
+  EventProjectionProvisioningTranscriptEntry,
   EventProjectionToolParsedIntent,
   EventProjectionTurn,
   EventProjectionEntry,
 } from "./event-projection-types.js";
 import { toPositiveNumber } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
-import { getMessageStartedAt } from "./format-helpers.js";
+import {
+  durationToCompactString,
+  getMessageStartedAt,
+} from "./format-helpers.js";
+import { getFileChangeDiffStats } from "./file-change-summary.js";
 import { getEventProjectionMessageScopeTurnId } from "./message-scope.js";
 import { formatToolCallCommand } from "./tool-call-parsing.js";
 import { flattenEventProjectionMessagesDeep } from "./event-projection-flatten.js";
@@ -117,6 +122,11 @@ interface CompletedTurnMessageSlices {
 interface BuildTimelineRowsOptions {
   includeNestedRows: boolean;
 }
+
+type TimelineOperationMessage = Extract<
+  EventProjectionMessage,
+  { kind: "operation" }
+>;
 
 function toNonNegativeNumber(value: number): number | null {
   if (!Number.isFinite(value) || value < 0) {
@@ -267,29 +277,6 @@ function convertActivityIntent(
   }
 }
 
-function getDiffStats(
-  diff: string | undefined,
-): TimelineFileChange["diffStats"] {
-  if (!diff) {
-    return { added: 0, removed: 0 };
-  }
-  let added = 0;
-  let removed = 0;
-  for (const line of diff.split("\n")) {
-    if (line.startsWith("+++") || line.startsWith("---")) {
-      continue;
-    }
-    if (line.startsWith("+")) {
-      added += 1;
-      continue;
-    }
-    if (line.startsWith("-")) {
-      removed += 1;
-    }
-  }
-  return { added, removed };
-}
-
 function toTimelineFileChange(
   change: EventProjectionFileEditChange,
 ): TimelineFileChange {
@@ -298,8 +285,78 @@ function toTimelineFileChange(
     kind: change.kind ?? null,
     movePath: change.movePath ?? null,
     diff: change.diff ?? null,
-    diffStats: getDiffStats(change.diff),
+    diffStats: getFileChangeDiffStats(change),
   };
+}
+
+function formatProvisioningTranscriptEntry(
+  entry: EventProjectionProvisioningTranscriptEntry,
+): string {
+  const durationMs =
+    typeof entry.metadata?.durationMs === "number"
+      ? entry.metadata.durationMs
+      : null;
+  if (
+    durationMs !== null &&
+    (entry.status === "completed" || entry.status === "failed")
+  ) {
+    return `${entry.text} (${durationToCompactString(durationMs)})`;
+  }
+  return entry.text;
+}
+
+function provisioningTerminalDetailLine(
+  message: TimelineOperationMessage,
+): string | null {
+  if (
+    message.opType !== "thread-provisioning" ||
+    message.status === "pending" ||
+    message.status === undefined ||
+    message.startedAt === undefined ||
+    message.createdAt < message.startedAt
+  ) {
+    return null;
+  }
+
+  const elapsedMs = message.createdAt - message.startedAt;
+  if (elapsedMs <= 1_000) {
+    return null;
+  }
+
+  const label =
+    message.status === "completed"
+      ? "Provisioned thread"
+      : message.status === "error"
+        ? "Provisioning thread failed"
+        : "Provisioning thread interrupted";
+  return `${label} (${durationToCompactString(elapsedMs)})`;
+}
+
+function buildTimelineOperationDetail(
+  message: TimelineOperationMessage,
+): string | null {
+  if (message.opType !== "thread-provisioning") {
+    return message.detail ?? null;
+  }
+
+  const transcriptLines =
+    message.provisioning?.transcript?.map(formatProvisioningTranscriptEntry) ??
+    [];
+  const terminalLine = provisioningTerminalDetailLine(message);
+  const detailLines = (message.detail ?? "")
+    .split(/\n|•/u)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  const lines = [...transcriptLines];
+  if (terminalLine) {
+    lines.push(terminalLine);
+  }
+  for (const line of detailLines) {
+    if (!lines.includes(line)) {
+      lines.push(line);
+    }
+  }
+  return lines.length > 0 ? lines.join("\n") : null;
 }
 
 function convertMessage(message: EventProjectionMessage): TimelineSourceRow[] {
@@ -454,7 +511,7 @@ function convertMessage(message: EventProjectionMessage): TimelineSourceRow[] {
           kind: "system",
           systemKind: "operation",
           title: message.title,
-          detail: message.detail ?? null,
+          detail: buildTimelineOperationDetail(message),
           status: message.status ? toTimelineStatus(message.status) : null,
         },
       ];

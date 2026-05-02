@@ -27,8 +27,21 @@ function contentToneClass(title: TimelineTitle): string {
     return "text-muted-foreground/60";
   }
   return title.contentTone === "emphasis"
-    ? "font-semibold text-foreground/90"
+    ? "font-semibold text-foreground/85"
     : "text-muted-foreground/90";
+}
+
+function suffixToneClass(title: TimelineTitle): string {
+  switch (title.tone) {
+    case "default":
+      return "text-muted-foreground/75";
+    case "destructive":
+      return "text-destructive/80";
+    case "summary":
+      return "text-muted-foreground/60";
+  }
+  const exhaustiveTone: never = title.tone;
+  return exhaustiveTone;
 }
 
 function renderDiffStatsSuffix(added: number, removed: number) {
@@ -55,7 +68,7 @@ function renderSuffix(title: TimelineTitle) {
       return (
         <span
           className={cn(
-            titleToneClass(title),
+            suffixToneClass(title),
             title.suffix.truncate
               ? "min-w-0 truncate whitespace-pre"
               : "shrink-0 whitespace-pre",
@@ -75,6 +88,7 @@ export function TimelineTitleView({ title, className }: TimelineTitleViewProps) 
         className,
       )}
       title={title.plain}
+      aria-label={title.plain}
     >
       {title.prefix ? (
         <span

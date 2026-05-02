@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type CSSProperties } from "react";
 import Convert from "ansi-to-html";
 import { cn } from "../primitives/cn.js";
+import { getDetailScrollMaxHeightClass } from "../primitives/detail-scroll-size.js";
+import { ExpandableLine } from "../primitives/expandable-line.js";
 
 export interface TerminalOutputBlockProps {
   output: string;
@@ -9,6 +11,12 @@ export interface TerminalOutputBlockProps {
   maxHeightClassName?: string;
   metadataLines?: readonly string[];
 }
+
+const COMMAND_LINE_CLAMP_STYLE: CSSProperties = {
+  display: "-webkit-box",
+  WebkitBoxOrient: "vertical",
+  WebkitLineClamp: 2,
+};
 
 const ANSI_TO_HTML = new Convert({
   escapeXML: true,
@@ -38,7 +46,11 @@ export function TerminalOutputBlock({
 }: TerminalOutputBlockProps) {
   const scrollRef = useRef<HTMLPreElement>(null);
   const shouldStickToBottomRef = useRef(true);
-  const outputHtml = useMemo(() => ANSI_TO_HTML.toHtml(output), [output]);
+  const outputText = output.trimEnd();
+  const renderedOutputHtml = useMemo(
+    () => (outputText.length > 0 ? ANSI_TO_HTML.toHtml(outputText) : null),
+    [outputText],
+  );
 
   useEffect(() => {
     const element = scrollRef.current;
@@ -46,43 +58,62 @@ export function TerminalOutputBlock({
       return;
     }
     scrollToBottom(element);
-  }, [commandLine, metadataLines, outputHtml, exitCode]);
+  }, [commandLine, metadataLines, renderedOutputHtml, exitCode]);
 
-  const showExitCode =
-    exitCode !== null && (exitCode !== 0 || output.trim().length === 0);
+  const showExitCode = exitCode !== null;
+  const outputMaxHeightClassName =
+    maxHeightClassName === "max-h-96"
+      ? getDetailScrollMaxHeightClass("regular")
+      : maxHeightClassName;
 
   return (
-    <pre
-      ref={scrollRef}
-      className={cn(
-        "overflow-auto whitespace-pre-wrap break-words rounded-md border border-border/70 bg-background/70 px-2 py-1.5 font-mono text-xs leading-tight text-muted-foreground",
-        maxHeightClassName,
-      )}
-      onScroll={(event) => {
-        shouldStickToBottomRef.current = isNearBottom(event.currentTarget);
-      }}
-    >
-      {commandLine ? (
-        <>
-          <span className="text-foreground/85">{commandLine}</span>
-          {"\n"}
-        </>
-      ) : null}
-      {metadataLines.map((line) => (
-        <span key={line}>
-          {line}
-          {"\n"}
-        </span>
-      ))}
-      {output.trim().length > 0 ? (
-        <span dangerouslySetInnerHTML={{ __html: outputHtml }} />
-      ) : null}
-      {showExitCode ? (
-        <>
-          {output.trim().length > 0 ? "\n" : null}
-          <span>exit code {exitCode}</span>
-        </>
-      ) : null}
-    </pre>
+    <div className="overflow-hidden rounded-lg border border-border bg-card">
+      <div className="px-4 py-3 font-mono text-xs leading-tight text-foreground">
+        {commandLine ? (
+          <ExpandableLine
+            fullText={commandLine}
+            collapsedClassName="max-h-[2lh] overflow-hidden whitespace-pre-wrap break-words"
+            collapsedStyle={COMMAND_LINE_CLAMP_STYLE}
+            expandedClassName={cn(
+              "overflow-auto whitespace-pre-wrap break-words",
+              getDetailScrollMaxHeightClass("regular"),
+            )}
+          >
+            {commandLine}
+          </ExpandableLine>
+        ) : null}
+        {metadataLines.map((line) => (
+          <div key={line} className="mt-1 text-muted-foreground">
+            {line}
+          </div>
+        ))}
+        {renderedOutputHtml ? (
+          <pre
+            ref={scrollRef}
+            className={cn(
+              commandLine || metadataLines.length > 0 ? "mt-1.5" : null,
+              outputMaxHeightClassName,
+              "overflow-auto whitespace-pre leading-tight text-foreground",
+            )}
+            onScroll={(event) => {
+              shouldStickToBottomRef.current = isNearBottom(event.currentTarget);
+            }}
+            dangerouslySetInnerHTML={{
+              __html: renderedOutputHtml,
+            }}
+          />
+        ) : null}
+        {showExitCode ? (
+          <div
+            className={cn(
+              renderedOutputHtml ? "mt-1.5" : commandLine ? "mt-1.5" : null,
+              "font-mono text-xs leading-tight text-muted-foreground",
+            )}
+          >
+            exit code {exitCode}
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }

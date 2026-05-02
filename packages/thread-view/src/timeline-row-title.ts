@@ -1,4 +1,5 @@
 import type {
+  TimelineActivityIntent,
   TimelineApprovalStatus,
   TimelineCommandWorkRow,
   TimelineFileChange,
@@ -9,6 +10,12 @@ import type {
   TimelineWebSearchWorkRow,
 } from "@bb/server-contract";
 import { assertNever } from "./assert-never.js";
+import {
+  formatFileChangeName,
+  getFileChangeAction,
+  getFileChangeActionPastTense,
+  getFileChangeActionPresentTense,
+} from "./file-change-summary.js";
 import { durationToCompactString } from "./format-helpers.js";
 import {
   formatTimelineActivityIntentDetail,
@@ -186,29 +193,6 @@ function diffStatsSuffix(
   };
 }
 
-function fileName(path: string): string {
-  const normalized = path.replaceAll("\\", "/");
-  return normalized.split("/").pop() || path;
-}
-
-function normalizedFileChangeKind(kind: string | null): string {
-  return (kind ?? "").toLowerCase().replaceAll(/[^a-z0-9]/gu, "");
-}
-
-function completedFileChangeVerb(change: TimelineFileChange): string {
-  if (change.movePath) {
-    return "Renamed";
-  }
-  const normalizedKind = normalizedFileChangeKind(change.kind);
-  if (normalizedKind.includes("add") || normalizedKind.includes("create")) {
-    return "Created";
-  }
-  if (normalizedKind.includes("delete") || normalizedKind.includes("remove")) {
-    return "Deleted";
-  }
-  return "Edited";
-}
-
 function displayStatus({
   approvalStatus,
   preferOngoingLabel,
@@ -258,7 +242,8 @@ function executionPrefix(
 function titleToneForExecution(
   row: TimelineExecutionWorkRow,
 ): TimelineTitleTone {
-  return row.status === "error" || row.approvalStatus === "denied"
+  return (row.workKind === "tool" && row.status === "error") ||
+    row.approvalStatus === "denied"
     ? "destructive"
     : "default";
 }
@@ -270,7 +255,7 @@ function buildExecutionTitle(
   const prefix = executionPrefix(row, options.preferOngoingLabel);
   const content = row.workKind === "command" ? row.command : row.label;
   const statusSuffix =
-    row.status === "error"
+    row.status === "error" && row.workKind === "tool"
       ? statusDurationSuffix("error", row.durationMs)
       : row.status === "interrupted"
         ? statusDurationSuffix("interrupted", row.durationMs)
@@ -294,15 +279,16 @@ function buildFileChangeTitle(
     status: row.status,
   });
   const prefix = (() => {
+    const action = getFileChangeAction(row.change);
     switch (status) {
       case "waiting":
         return "Waiting for approval to edit";
       case "denied":
         return "Permission denied:";
       case "pending":
-        return "Applying";
+        return getFileChangeActionPresentTense(action);
       case "completed":
-        return completedFileChangeVerb(row.change);
+        return getFileChangeActionPastTense(action);
       case "error":
         return "Failed";
       case "interrupted":
@@ -311,10 +297,9 @@ function buildFileChangeTitle(
         return assertNever(status);
     }
   })();
-  const targetPath = row.change.movePath ?? row.change.path;
   return titleFromParts({
     prefix,
-    content: fileName(targetPath),
+    content: formatFileChangeName(row.change),
     suffix: diffStatsSuffix(row.change),
     shimmerPrefix: status === "pending",
     tone: status === "denied" || status === "error" ? "destructive" : "default",
@@ -411,6 +396,24 @@ function buildApprovalTitle(row: TimelineApprovalWorkRow): TimelineTitle {
     contentTone: "muted",
     shimmerPrefix: row.status === "pending",
     tone: row.status === "error" ? "destructive" : "default",
+  });
+}
+
+function buildTimelineActivityIntentTitle(
+  intent: TimelineActivityIntent,
+): TimelineTitle {
+  const detail = formatTimelineActivityIntentDetail(intent);
+  const spaceIndex = detail.indexOf(" ");
+  if (spaceIndex === -1) {
+    return titleFromParts({
+      content: detail,
+      contentTone: "muted",
+    });
+  }
+  return titleFromParts({
+    prefix: detail.slice(0, spaceIndex),
+    content: detail.slice(spaceIndex + 1),
+    contentTone: "muted",
   });
 }
 
@@ -533,11 +536,7 @@ export function buildTimelineActivityIntentTitles(
     }
     titles.push({
       id: `${row.id}:activity-intent:${index}`,
-      title: titleFromParts({
-        content: formatTimelineActivityIntentDetail(intent),
-        contentTone: "muted",
-        tone: "summary",
-      }),
+      title: buildTimelineActivityIntentTitle(intent),
     });
   });
 

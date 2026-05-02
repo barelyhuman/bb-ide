@@ -1,7 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { cx } from "./utils.js";
-
-const EXPANDABLE_PANEL_TRANSITION_MS = 200;
 
 export const COLLAPSIBLE_HEADER_COLLAPSED_TONE_CLASS =
   "text-muted-foreground/90 transition-colors group-hover:text-foreground/90 group-focus-within:text-foreground/90";
@@ -67,7 +65,12 @@ export function CollapsibleHeader({
   }
 
   return (
-    <button type="button" onClick={onToggle} className={rootClassName}>
+    <button
+      type="button"
+      aria-expanded={isExpanded}
+      onClick={onToggle}
+      className={rootClassName}
+    >
       <span className={summaryClass}>{summaryContent}</span>
       <Chevron
         className={cx(
@@ -108,31 +111,6 @@ export function ExpandablePanel({
   bodyClassName,
   contentClassName,
 }: ExpandablePanelProps) {
-  // Mount children strictly while expanded; keep them mounted through the
-  // close animation so grid-template-rows can transition from 1fr → 0fr with
-  // real content, then unmount once the animation settles. Collapsed panels
-  // pay zero DOM/layout cost for their body.
-  const [shouldRenderChildren, setShouldRenderChildren] = useState(isExpanded);
-  const [prevIsExpanded, setPrevIsExpanded] = useState(isExpanded);
-  if (prevIsExpanded !== isExpanded) {
-    // Sync mount with the isExpanded flip so grid-template-rows can
-    // transition 0fr → 1fr with actual content already in the DOM.
-    setPrevIsExpanded(isExpanded);
-    if (isExpanded) {
-      setShouldRenderChildren(true);
-    }
-  }
-  useEffect(() => {
-    if (isExpanded || !shouldRenderChildren) {
-      return;
-    }
-    const timeout = setTimeout(
-      () => setShouldRenderChildren(false),
-      EXPANDABLE_PANEL_TRANSITION_MS,
-    );
-    return () => clearTimeout(timeout);
-  }, [isExpanded, shouldRenderChildren]);
-
   return (
     <div className={cx("rounded-md text-muted-foreground", className)}>
       <div className={cx("px-2 py-1", headerClassName)}>
@@ -167,7 +145,7 @@ export function ExpandablePanel({
               contentClassName,
             )}
           >
-            {shouldRenderChildren ? children : null}
+            {isExpanded ? children : null}
           </div>
         </div>
       </div>

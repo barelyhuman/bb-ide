@@ -92,6 +92,29 @@ function deletedFileRow(): TimelineFileChangeWorkRow {
   };
 }
 
+function createdFileRow(): TimelineFileChangeWorkRow {
+  return {
+    ...baseRow("file-created-1"),
+    kind: "work",
+    workKind: "file-change",
+    status: "completed",
+    callId: "file-call-2",
+    change: {
+      path: "src/new-file.ts",
+      kind: "add",
+      movePath: null,
+      diff: "first\nsecond\n",
+      diffStats: {
+        added: 2,
+        removed: 0,
+      },
+    },
+    stdout: null,
+    stderr: null,
+    approvalStatus: null,
+  };
+}
+
 function webSearchRow(): TimelineWebSearchWorkRow {
   return {
     ...baseRow("web-search-1"),
@@ -171,10 +194,8 @@ describe("buildTimelineRowTitle", () => {
 
     const title = buildTimelineRowTitle(row, DEFAULT_OPTIONS);
 
-    expect(title.plain).toBe(
-      "Ran pnpm exec turbo run test --filter=@bb/app (error, 2s)",
-    );
-    expect(title.tone).toBe("destructive");
+    expect(title.plain).toBe("Ran pnpm exec turbo run test --filter=@bb/app 2s");
+    expect(title.tone).toBe("default");
   });
 
   it("omits zero-sided diff stats from file change suffixes", () => {
@@ -185,6 +206,19 @@ describe("buildTimelineRowTitle", () => {
       kind: "diff-stats",
       added: 0,
       removed: 2,
+    });
+  });
+
+  it("keeps created file diff stats in the title suffix", () => {
+    const title = buildTimelineRowTitle(createdFileRow(), DEFAULT_OPTIONS);
+
+    expect(title.plain).toBe("Created new-file.ts +2");
+    expect(title.prefix).toBe("Created");
+    expect(title.content).toBe("new-file.ts");
+    expect(title.suffix).toEqual({
+      kind: "diff-stats",
+      added: 2,
+      removed: 0,
     });
   });
 
@@ -244,9 +278,11 @@ describe("buildTimelineRowTitle", () => {
     const titles = buildTimelineActivityIntentTitles(row);
 
     expect(titles.map((entry) => entry.title.plain)).toEqual([
-      "Read src/app.ts",
+      "Read app.ts",
       "Searched for TODO in src",
     ]);
+    expect(titles[0]?.title.prefix).toBe("Read");
+    expect(titles[0]?.title.content).toBe("app.ts");
     expect(titles.every((entry) => entry.title.contentTone === "muted")).toBe(
       true,
     );

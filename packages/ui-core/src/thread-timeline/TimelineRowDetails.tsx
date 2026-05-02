@@ -37,7 +37,6 @@ export function WorkRowBody({ row, themeType }: WorkRowBodyProps) {
         <TerminalOutputBlock
           commandLine={`$ ${row.command}`}
           metadataLines={compactDetailLines([
-            row.cwd ? `cwd: ${row.cwd}` : null,
             row.source ? `source: ${row.source}` : null,
           ])}
           output={row.output}

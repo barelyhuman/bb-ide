@@ -23,13 +23,20 @@ export function hasTimelineExplorationIntent(
   return primaryTimelineActivityIntent(row) !== null;
 }
 
+function fileName(path: string): string {
+  const normalized = path.replaceAll("\\", "/");
+  return normalized.split("/").pop() || path;
+}
+
 export function formatTimelineActivityIntentTitle(
   intent: TimelineActivityIntent,
   pending: boolean,
 ): string {
   switch (intent.type) {
     case "read":
-      return `${pending ? "Reading" : "Read"} ${intent.path ?? intent.name}`;
+      return `${pending ? "Reading" : "Read"} ${
+        intent.path ? fileName(intent.path) : intent.name
+      }`;
     case "list_files":
       return `${pending ? "Listing" : "Listed"} ${intent.path ?? "files"}`;
     case "search":
@@ -49,7 +56,7 @@ export function formatTimelineActivityIntentDetail(
 ): string {
   switch (intent.type) {
     case "read":
-      return `Read ${intent.path ?? intent.name}`;
+      return `Read ${intent.path ? fileName(intent.path) : intent.name}`;
     case "list_files":
       return intent.path ? `Listed files in ${intent.path}` : "Listed files";
     case "search":

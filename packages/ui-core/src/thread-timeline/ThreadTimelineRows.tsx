@@ -56,6 +56,7 @@ interface TimelineRendererContext {
 interface TimelineRowsListProps extends TimelineRendererContext {
   rows: readonly ThreadTimelineViewRow[];
   scopeActive: boolean;
+  topLevel?: boolean;
 }
 
 interface TimelineRowViewProps extends TimelineRendererContext {
@@ -81,6 +82,7 @@ interface TimelineExpansionIds {
 interface CollectTimelineExpansionIdsArgs {
   rows: readonly ThreadTimelineViewRow[];
   scopeActive: boolean;
+  turnSummaryRowsById: Record<string, TimelineRow[]>;
 }
 
 interface RowActivityContext {
@@ -218,6 +220,7 @@ function shouldAutoExpandRow({
 function collectTimelineExpansionIds({
   rows,
   scopeActive,
+  turnSummaryRowsById,
 }: CollectTimelineExpansionIdsArgs): TimelineExpansionIds {
   const rowIds = new Set<string>();
   const autoExpandedRowIds = new Set<string>();
@@ -237,8 +240,15 @@ function collectTimelineExpansionIds({
         visitRows(row.children, false);
       } else if (row.kind === "work" && row.workKind === "delegation") {
         visitRows(row.childRows, row.status === "pending");
-      } else if (row.kind === "turn" && row.children) {
-        visitRows(row.children, row.status === "pending");
+      } else if (row.kind === "turn") {
+        const turnChildRows =
+          row.children ??
+          (turnSummaryRowsById[row.id]
+            ? buildTimelineViewRows(turnSummaryRowsById[row.id] ?? [])
+            : null);
+        if (turnChildRows) {
+          visitRows(turnChildRows, row.status === "pending");
+        }
       }
     });
   };
@@ -271,27 +281,29 @@ function TimelineStaticRow({ children, className }: TimelineStaticRowProps) {
   );
 }
 
+function timelineRowSpacingClassName(
+  _row: ThreadTimelineViewRow,
+  _index: number,
+  topLevel: boolean,
+): string {
+  return topLevel ? "pt-1" : "";
+}
+
 function ConversationRow({
   onOpenLocalFileLink,
   projectId,
   resolveUserAttachmentImageSrc,
   row,
 }: ConversationRowProps) {
-  const title = buildTimelineRowTitle(row, {
-    preferOngoingLabel: false,
-    summaryStyle: "background",
-  });
   return (
-    <TimelineStaticRow>
-      <TimelineTitleView title={title} />
-      <ConversationMessageContent
-        attachments={row.attachments}
-        onOpenLocalFileLink={onOpenLocalFileLink}
-        projectId={projectId}
-        resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
-        text={row.text}
-      />
-    </TimelineStaticRow>
+    <ConversationMessageContent
+      attachments={row.attachments}
+      onOpenLocalFileLink={onOpenLocalFileLink}
+      projectId={projectId}
+      resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
+      role={row.role}
+      text={row.text}
+    />
   );
 }
 
@@ -343,22 +355,41 @@ function TimelineExpandableBody({
         />
       );
     case "work":
-      if (row.workKind === "delegation" && row.childRows.length > 0) {
+      if (row.workKind === "delegation") {
         return (
-          <TimelineRowsList
-            rows={row.childRows}
-            scopeActive={row.status === "pending"}
-            compactActivityIntents={false}
-            expansion={expansion}
-            loadingTurnSummaryIds={loadingTurnSummaryIds}
-            erroredTurnSummaryIds={erroredTurnSummaryIds}
-            onLoadTurnSummaryRows={onLoadTurnSummaryRows}
-            onOpenLocalFileLink={onOpenLocalFileLink}
-            projectId={projectId}
-            resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
-            themeType={themeType}
-            turnSummaryRowsById={turnSummaryRowsById}
-          />
+          <div className="overflow-auto rounded-md border border-border/60 bg-background/40">
+            {row.childRows.length > 0 ? (
+              <div className="px-1 py-1">
+                <TimelineRowsList
+                  rows={row.childRows}
+                  scopeActive={row.status === "pending"}
+                  compactActivityIntents={false}
+                  topLevel={false}
+                  expansion={expansion}
+                  loadingTurnSummaryIds={loadingTurnSummaryIds}
+                  erroredTurnSummaryIds={erroredTurnSummaryIds}
+                  onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+                  onOpenLocalFileLink={onOpenLocalFileLink}
+                  projectId={projectId}
+                  resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
+                  themeType={themeType}
+                  turnSummaryRowsById={turnSummaryRowsById}
+                />
+              </div>
+            ) : null}
+            {row.output.trim().length > 0 ? (
+              <div className="px-2 py-2">
+                <ConversationMessageContent
+                  attachments={null}
+                  onOpenLocalFileLink={onOpenLocalFileLink}
+                  projectId={projectId}
+                  resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
+                  role="assistant"
+                  text={row.output}
+                />
+              </div>
+            ) : null}
+          </div>
         );
       }
       return <WorkRowBody row={row} themeType={themeType} />;
@@ -439,6 +470,7 @@ function TurnRowBody({
         rows={rows}
         scopeActive={row.status === "pending"}
         compactActivityIntents={compactActivityIntents}
+        topLevel={false}
         expansion={expansion}
         loadingTurnSummaryIds={loadingTurnSummaryIds}
         erroredTurnSummaryIds={erroredTurnSummaryIds}
@@ -517,7 +549,7 @@ function TimelineRowView({
       title={title}
       isExpanded={expansion.isExpanded(row.id)}
       onToggle={() => expansion.toggle(row.id)}
-      body={
+      renderBody={() => (
         <TimelineExpandableBody
           row={row}
           compactActivityIntents={compactActivityIntents}
@@ -531,7 +563,7 @@ function TimelineRowView({
           themeType={themeType}
           turnSummaryRowsById={turnSummaryRowsById}
         />
-      }
+      )}
     />
   );
 }
@@ -547,28 +579,33 @@ function TimelineRowsList({
   resolveUserAttachmentImageSrc,
   rows,
   scopeActive,
+  topLevel = false,
   themeType,
   turnSummaryRowsById,
 }: TimelineRowsListProps) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
       {rows.map((row, index) => (
-        <TimelineRowView
+        <div
           key={row.id}
-          row={row}
-          isTail={index === rows.length - 1}
-          scopeActive={scopeActive}
-          compactActivityIntents={compactActivityIntents}
-          expansion={expansion}
-          loadingTurnSummaryIds={loadingTurnSummaryIds}
-          erroredTurnSummaryIds={erroredTurnSummaryIds}
-          onLoadTurnSummaryRows={onLoadTurnSummaryRows}
-          onOpenLocalFileLink={onOpenLocalFileLink}
-          projectId={projectId}
-          resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
-          themeType={themeType}
-          turnSummaryRowsById={turnSummaryRowsById}
-        />
+          className={timelineRowSpacingClassName(row, index, topLevel)}
+        >
+          <TimelineRowView
+            row={row}
+            isTail={index === rows.length - 1}
+            scopeActive={scopeActive}
+            compactActivityIntents={compactActivityIntents}
+            expansion={expansion}
+            loadingTurnSummaryIds={loadingTurnSummaryIds}
+            erroredTurnSummaryIds={erroredTurnSummaryIds}
+            onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+            onOpenLocalFileLink={onOpenLocalFileLink}
+            projectId={projectId}
+            resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
+            themeType={themeType}
+            turnSummaryRowsById={turnSummaryRowsById}
+          />
+        </div>
       ))}
     </div>
   );
@@ -582,8 +619,13 @@ export function ThreadTimelineRows(props: ThreadTimelineRowsProps) {
   const scopeActive = isRuntimeScopeActive(props.threadRuntimeDisplayStatus);
   const themeType = props.themeType ?? "light";
   const expansionIds = useMemo(
-    () => collectTimelineExpansionIds({ rows, scopeActive }),
-    [rows, scopeActive],
+    () =>
+      collectTimelineExpansionIds({
+        rows,
+        scopeActive,
+        turnSummaryRowsById: props.turnSummaryRowsById,
+      }),
+    [rows, scopeActive, props.turnSummaryRowsById],
   );
   const expansion = useTimelineExpansionState(expansionIds);
 
@@ -592,6 +634,7 @@ export function ThreadTimelineRows(props: ThreadTimelineRowsProps) {
       rows={rows}
       scopeActive={scopeActive}
       compactActivityIntents={false}
+      topLevel={true}
       expansion={expansion}
       loadingTurnSummaryIds={props.loadingTurnSummaryIds}
       erroredTurnSummaryIds={props.erroredTurnSummaryIds}

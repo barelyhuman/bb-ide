@@ -8,9 +8,9 @@ import { cn } from "../primitives/cn.js";
 import { TimelineTitleView } from "./TimelineTitleView.js";
 
 export interface ExpandableTimelineRowProps {
-  body: ReactNode;
   isExpanded: boolean;
   onToggle: () => void;
+  renderBody: () => ReactNode;
   title: TimelineTitle;
   className?: string;
 }
@@ -26,10 +26,10 @@ function headerToneClass(title: TimelineTitle, isExpanded: boolean): string {
 }
 
 export function ExpandableTimelineRow({
-  body,
   className,
   isExpanded,
   onToggle,
+  renderBody,
   title,
 }: ExpandableTimelineRowProps) {
   return (
@@ -39,11 +39,12 @@ export function ExpandableTimelineRow({
       headerToneClass={headerToneClass(title, isExpanded)}
       summaryContent={<TimelineTitleView title={title} />}
       summaryContentClassName="min-w-0 max-w-full"
-      className={cn("group w-full", className)}
+      className={cn(isExpanded ? "w-full" : "group w-full", className)}
       headerClassName="px-2 py-1"
+      headerButtonClassName="w-full max-w-full justify-start"
       contentClassName="px-2 pb-2 pt-0"
     >
-      {body}
+      {isExpanded ? renderBody() : null}
     </ExpandablePanel>
   );
 }

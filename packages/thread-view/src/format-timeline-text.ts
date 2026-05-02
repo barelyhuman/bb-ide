@@ -15,6 +15,12 @@ import {
   buildTimelineViewRows,
 } from "./timeline-view.js";
 import {
+  formatFileChangeName,
+  getFileChangeAction,
+  getFileChangeActionPastTense,
+  getFileChangeActionPresentTense,
+} from "./file-change-summary.js";
+import {
   formatTimelineActivityIntentDetail,
   formatTimelineActivityIntentTitle,
   getTimelineActivityIntentDetailDedupeKey,
@@ -239,11 +245,6 @@ function workStatusLabel(row: TimelineViewWorkRow, color: boolean): string {
   return statusLabel(row.status, color);
 }
 
-function fileName(path: string): string {
-  const normalized = path.replaceAll("\\", "/");
-  return normalized.split("/").pop() || path;
-}
-
 function formatDiffStats(change: TimelineFileChange): string | null {
   const { added, removed } = change.diffStats;
   if (added === 0 && removed === 0) {
@@ -260,21 +261,14 @@ function formatDiffStats(change: TimelineFileChange): string | null {
 
 function formatFileChangeTitle(row: TimelineFileChangeWorkRow): string {
   const change = row.change;
-  const targetPath = change.movePath ?? change.path;
-  const completedVerb =
-    change.kind === "create"
-      ? "Created"
-      : change.kind === "delete"
-        ? "Deleted"
-        : change.kind === "rename"
-          ? "Renamed"
-          : "Edited";
+  const action = getFileChangeAction(change);
+  const completedVerb = getFileChangeActionPastTense(action);
   const verb =
     row.status === "pending"
-      ? "Editing"
+      ? getFileChangeActionPresentTense(action)
       : statusVerb(row.status, "Editing", completedVerb);
   const stats = formatDiffStats(change);
-  return [verb, fileName(targetPath), stats].filter(Boolean).join(" ");
+  return [verb, formatFileChangeName(change), stats].filter(Boolean).join(" ");
 }
 
 function formatStatusDurationSuffix(
@@ -298,6 +292,13 @@ function formatCommandTitle(row: TimelineCommandWorkRow): string {
   }
   if (row.approvalStatus === "denied") {
     return "Command (denied)";
+  }
+  if (row.status === "error") {
+    const duration =
+      row.durationMs !== null
+        ? ` ${durationToCompactString(row.durationMs)}`
+        : "";
+    return `Ran command${duration}`;
   }
   const verb = row.status === "pending" ? "Running" : "Ran";
   return `${verb} command ${formatStatusDurationSuffix(row.status, row.durationMs)}`;
@@ -437,7 +438,9 @@ function formatWorkBody(
         lines.push(`  ${workStatusLabel(row, context.color)}`);
       }
       if (context.verbose && row.change.diff) {
-        lines.push(dim(indentBlock(row.change.diff, "  "), context.color));
+        lines.push(
+          dim(indentBlock(row.change.diff.trimEnd(), "  "), context.color),
+        );
       }
       return lines;
     case "web-search":
@@ -579,7 +582,7 @@ function formatRow(
       }
       return [
         rowHeader(row.title, context),
-        row.detail ? dim(row.detail, context.color) : "",
+        row.detail ? dim(indentBlock(row.detail, "  "), context.color) : "",
       ]
         .filter((line) => line.length > 0)
         .join("\n");

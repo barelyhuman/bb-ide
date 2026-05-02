@@ -411,6 +411,8 @@ describe("timeline CLI rendering snapshots", () => {
       Start the failing workspace
 
       ── Provisioning thread failed ──────────────────────────────
+        Running setup
+        pnpm install failed
 
       ── Error ───────────────────────────────────────────────────
         Provisioning thread failed - pnpm install failed"
@@ -530,7 +532,7 @@ describe("timeline CLI rendering snapshots", () => {
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Worked on 5 items ───────────────────────────────────────
         ── Explored 1 file, 1 search, 2 lists
-          ── Read src/a.ts
+          ── Read a.ts
           ── Listed files in src
           ── Listed files in test
           ── Searched for TODO in src
@@ -594,7 +596,7 @@ describe("timeline CLI rendering snapshots", () => {
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Worked on 4 items ───────────────────────────────────────
         ── Edited 3 files
-          ── Edited a.ts +1
+          ── Created a.ts +1
             @@ -0,0 +1 @@
             +first
           ── Edited a.ts +1 -1
@@ -611,6 +613,40 @@ describe("timeline CLI rendering snapshots", () => {
 
       ── Assistant ───────────────────────────────────────────────
       Done."
+    `);
+  });
+
+  it("computes file-change stats from raw created and deleted file bodies", () => {
+    const event = createTimelineEventFactory({ threadId: "thread-1" });
+    const timeline = renderIdleTimeline([
+      event.turnStarted(),
+      event.fileChangeCompleted({
+        itemId: "edit-1",
+        changes: [
+          {
+            path: "/repo/src/created.ts",
+            kind: "add",
+            diff: "first line\nsecond line\n",
+          },
+          {
+            path: "/repo/src/deleted.ts",
+            kind: "delete",
+            diff: "old first\nold second\n",
+          },
+        ],
+      }),
+      event.turnCompleted(),
+    ]);
+
+    expect(timeline.text).toMatchInlineSnapshot(`
+      "── Worked on 2 items ───────────────────────────────────────
+        ── Edited 2 files
+          ── Created created.ts +2
+            first line
+            second line
+          ── Deleted deleted.ts -2
+            old first
+            old second"
     `);
   });
 
@@ -827,7 +863,7 @@ describe("timeline CLI rendering snapshots", () => {
     `);
   });
 
-  it("keeps failed command title as ran command with error status", () => {
+  it("keeps failed command titles in the normal command title style", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
     const timeline = renderActiveTimeline([
       event.turnStarted({ createdAt: 1 }),
@@ -847,7 +883,7 @@ describe("timeline CLI rendering snapshots", () => {
     ]);
 
     expect(timeline.text).toMatchInlineSnapshot(`
-      "── Ran command (error, 2s) ─────────────────────────────────
+      "── Ran command 2s ──────────────────────────────────────────
         $ pnpm test
         Tests failed
         exit 1"

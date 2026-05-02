@@ -460,47 +460,35 @@ export function ThreadDetailSecondaryContent({
     }
   }, [isMobile, isSecondaryPanelOpen, secondaryPanel]);
 
-  const secondaryPanelContent = (
+  const metadataContent = showThreadMetadata ? (
+    <ThreadMetadataContent {...metadata} />
+  ) : (
+    <div className="pt-1 text-sm text-muted-foreground">
+      No thread details available.
+    </div>
+  );
+  const threadStorageContent = threadStorage ? (
+    <ThreadStorageContent {...threadStorage} />
+  ) : undefined;
+  const desktopSecondaryPanelContent = !isMobile ? (
     <ThreadSecondaryPanel
       {...secondaryPanel}
-      isMobile={isMobile}
-      metadataContent={
-        showThreadMetadata ? (
-          <ThreadMetadataContent {...metadata} />
-        ) : (
-          <div className="pt-1 text-sm text-muted-foreground">
-            No thread details available.
-          </div>
-        )
-      }
-      threadStorageContent={
-        threadStorage ? <ThreadStorageContent {...threadStorage} /> : undefined
-      }
+      isMobile={false}
+      metadataContent={metadataContent}
+      threadStorageContent={threadStorageContent}
     />
-  );
-
-  if (isMobile) {
-    return (
-      <div className="-mx-4 -mb-4 -mt-4 flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <ThreadTimelinePane {...timeline} footer={footer} header={header} />
-        <ResponsiveDrawerShell
-          open={isSecondaryPanelOpen}
-          onOpenChange={(open) => {
-            if (!open) secondaryPanel.onClose();
-          }}
-          srLabel="Thread details"
-          contentClassName="h-[92dvh] max-h-[92dvh]"
-        >
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {secondaryPanelContent}
-          </div>
-        </ResponsiveDrawerShell>
-      </div>
-    );
-  }
+  ) : null;
+  const mobileSecondaryPanelContent = isMobile ? (
+    <ThreadSecondaryPanel
+      {...secondaryPanel}
+      isMobile={true}
+      metadataContent={metadataContent}
+      threadStorageContent={threadStorageContent}
+    />
+  ) : null;
 
   return (
-    <div className="-mx-4 -mb-4 -mt-4 flex h-full min-h-0 min-w-0 flex-1 overflow-hidden md:-mx-5 md:-mb-5 md:-mt-5">
+    <div className="-mx-4 -mb-4 -mt-4 flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:-mx-5 md:-mb-5 md:-mt-5">
       <PanelGroup
         direction="horizontal"
         className="h-full w-full min-w-0"
@@ -509,7 +497,7 @@ export function ThreadDetailSecondaryContent({
         <Panel
           id="thread-detail-timeline-panel"
           defaultSize={
-            isSecondaryPanelOpen
+            isSecondaryPanelOpen && !isMobile
               ? TIMELINE_PANEL_DEFAULT_SIZE_PERCENT
               : CLOSED_TIMELINE_PANEL_SIZE_PERCENT
           }
@@ -519,8 +507,22 @@ export function ThreadDetailSecondaryContent({
         >
           <ThreadTimelinePane {...timeline} footer={footer} header={header} />
         </Panel>
-        {secondaryPanelContent}
+        {desktopSecondaryPanelContent}
       </PanelGroup>
+      {isMobile ? (
+        <ResponsiveDrawerShell
+          open={isSecondaryPanelOpen}
+          onOpenChange={(open) => {
+            if (!open) secondaryPanel.onClose();
+          }}
+          srLabel="Thread details"
+          contentClassName="h-[92dvh] max-h-[92dvh]"
+        >
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {mobileSecondaryPanelContent}
+          </div>
+        </ResponsiveDrawerShell>
+      ) : null}
     </div>
   );
 }

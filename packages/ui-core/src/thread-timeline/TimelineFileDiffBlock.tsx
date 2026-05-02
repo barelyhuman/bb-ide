@@ -15,86 +15,259 @@ interface TimelineDiffViewStyle extends CSSProperties {
   "--diffs-line-height": string;
 }
 
+interface RenderablePatch {
+  disableLineNumbers: boolean;
+  patch: string;
+}
+
+interface RenderedFileChange {
+  plainDiff: string | null;
+  renderablePatch: RenderablePatch | null;
+}
+
+type FileChangeAction = "created" | "deleted" | "renamed" | "edited";
+type SyntheticPatchAction = "created" | "deleted";
+
+const DIFF_VIEW_BASE_OPTIONS = {
+  overflow: "scroll",
+  diffStyle: "unified",
+  disableFileHeader: true,
+} as const;
+
 const DIFF_VIEW_STYLE: TimelineDiffViewStyle = {
   "--diffs-font-size": "12px",
   "--diffs-line-height": "18px",
 };
 
-function normalizedFileChangeKind(kind: string | null): string {
+function splitPatchLines(diff: string): string[] {
+  const normalizedDiff = diff.replaceAll("\r\n", "\n");
+  if (normalizedDiff.length === 0) {
+    return [];
+  }
+  const lines = normalizedDiff.split("\n");
+  const lastLine = lines[lines.length - 1];
+  if (lastLine === "") {
+    lines.pop();
+  }
+  return lines;
+}
+
+function isPatchMetadataLine(line: string): boolean {
+  return (
+    line.startsWith("diff --git ") ||
+    line.startsWith("index ") ||
+    line.startsWith("new file mode ") ||
+    line.startsWith("deleted file mode ") ||
+    line.startsWith("similarity index ") ||
+    line.startsWith("rename from ") ||
+    line.startsWith("rename to ") ||
+    line.startsWith("--- ") ||
+    line.startsWith("+++ ") ||
+    line.startsWith("@@") ||
+    line === "\\ No newline at end of file"
+  );
+}
+
+function getPatchBodyLines(diff: string | null): string[] {
+  if (!diff) {
+    return [];
+  }
+  return splitPatchLines(diff).filter((line) => !isPatchMetadataLine(line));
+}
+
+function ensurePrefixedBodyLines(lines: string[], prefix: "+" | "-"): string[] {
+  return lines.map((line) =>
+    line.startsWith(prefix) ? line : `${prefix}${line}`,
+  );
+}
+
+function normalizePatchPath(path: string): string {
+  return path.replaceAll("\\", "/").replace(/^\/+/u, "");
+}
+
+function normalizeFileChangeKind(kind: string | null): string {
   return (kind ?? "").toLowerCase().replaceAll(/[^a-z0-9]/gu, "");
 }
 
-function isCreateChange(change: TimelineFileChange): boolean {
-  const kind = normalizedFileChangeKind(change.kind);
-  return kind.includes("add") || kind.includes("create");
+function hasSubstantiveDiff(change: TimelineFileChange): boolean {
+  const diff = change.diff;
+  if (!diff) return false;
+  for (const line of diff.split("\n")) {
+    if (line.startsWith("+++ ") || line.startsWith("--- ")) continue;
+    if (line.startsWith("+") || line.startsWith("-")) return true;
+  }
+  return false;
 }
 
-function isDeleteChange(change: TimelineFileChange): boolean {
-  const kind = normalizedFileChangeKind(change.kind);
-  return kind.includes("delete") || kind.includes("remove");
+function getFileChangeAction(change: TimelineFileChange): FileChangeAction {
+  if (change.movePath) {
+    return hasSubstantiveDiff(change) ? "edited" : "renamed";
+  }
+
+  const kind = normalizeFileChangeKind(change.kind);
+  if (kind.includes("add") || kind.includes("create")) return "created";
+  if (kind.includes("delete") || kind.includes("remove")) return "deleted";
+  return "edited";
 }
 
-function buildSyntheticPatch(change: TimelineFileChange): string | null {
-  if (!change.diff) {
+function toSyntheticPatch(
+  change: TimelineFileChange,
+  action: SyntheticPatchAction,
+): string | null {
+  const lines = getPatchBodyLines(change.diff);
+  if (lines.length === 0) return null;
+  const normalizedPath = normalizePatchPath(change.path);
+  const fromPath = action === "created" ? "/dev/null" : `a/${normalizedPath}`;
+  const toPath = action === "created" ? `b/${normalizedPath}` : "/dev/null";
+  const bodyLines = ensurePrefixedBodyLines(
+    lines,
+    action === "created" ? "+" : "-",
+  );
+  const oldCount = action === "created" ? 0 : bodyLines.length;
+  const newCount = action === "created" ? bodyLines.length : 0;
+  const body = bodyLines.join("\n");
+  return `diff --git a/${normalizedPath} b/${normalizedPath}\n--- ${fromPath}\n+++ ${toPath}\n@@ -1,${oldCount} +1,${newCount} @@\n${body}\n`;
+}
+
+function toSyntheticUpdatePatch(change: TimelineFileChange): string | null {
+  const bodyLines = getPatchBodyLines(change.diff);
+  if (bodyLines.length === 0) {
     return null;
   }
-  if (change.diff.includes("diff --git ")) {
-    return change.diff;
+  const hasUnifiedLines = bodyLines.some(
+    (line) => line.startsWith("+") || line.startsWith("-"),
+  );
+  if (!hasUnifiedLines) {
+    return null;
   }
 
-  const oldPath = isCreateChange(change) ? "/dev/null" : `a/${change.path}`;
-  const nextPath = isDeleteChange(change)
-    ? "/dev/null"
-    : `b/${change.movePath ?? change.path}`;
-  return [
-    `diff --git a/${change.path} b/${change.movePath ?? change.path}`,
-    `--- ${oldPath}`,
-    `+++ ${nextPath}`,
-    change.diff,
-  ].join("\n");
+  const normalizedPath = normalizePatchPath(change.movePath ?? change.path);
+  const removedCount = bodyLines.filter((line) => line.startsWith("-")).length;
+  const addedCount = bodyLines.filter((line) => line.startsWith("+")).length;
+  return `diff --git a/${normalizedPath} b/${normalizedPath}\n--- a/${normalizedPath}\n+++ b/${normalizedPath}\n@@ -1,${Math.max(removedCount, 1)} +1,${Math.max(addedCount, 1)} @@\n${bodyLines.join("\n")}\n`;
+}
+
+function getRenderablePatch(change: TimelineFileChange): RenderablePatch | null {
+  const patch = change.diff;
+  if (patch && patch.trim().length > 0) {
+    const trimmedPatch = patch.trimEnd();
+    if (
+      trimmedPatch.startsWith("diff --git") ||
+      (trimmedPatch.includes("--- ") &&
+        trimmedPatch.includes("+++ ") &&
+        trimmedPatch.includes("@@"))
+    ) {
+      return {
+        patch,
+        disableLineNumbers: false,
+      };
+    }
+    if (patch.includes("@@")) {
+      const normalizedPath = normalizePatchPath(change.movePath ?? change.path);
+      return {
+        patch: `--- a/${normalizedPath}\n+++ b/${normalizedPath}\n${patch.trimEnd()}\n`,
+        disableLineNumbers: false,
+      };
+    }
+  }
+
+  const action = getFileChangeAction(change);
+  const syntheticPatch =
+    (action === "created"
+      ? toSyntheticPatch(change, "created")
+      : action === "deleted"
+        ? toSyntheticPatch(change, "deleted")
+        : null) ?? toSyntheticUpdatePatch(change);
+  if (!syntheticPatch) {
+    return null;
+  }
+  return {
+    patch: syntheticPatch,
+    disableLineNumbers: true,
+  };
 }
 
 function canRenderPatch(patch: string): boolean {
   try {
-    return parsePatchFiles(patch).some((parsedPatch) => parsedPatch.files.length > 0);
+    return parsePatchFiles(patch).some(
+      (parsedPatch) => parsedPatch.files.length > 0,
+    );
   } catch {
     return false;
   }
+}
+
+function getPlainDiffFallback(
+  change: TimelineFileChange,
+  hasRenderablePatch: boolean,
+): string | null {
+  if (hasRenderablePatch) {
+    return null;
+  }
+  const diff = change.diff?.trimEnd();
+  return diff && diff.length > 0 ? diff : null;
+}
+
+function buildRenderedFileChange(
+  change: TimelineFileChange,
+): RenderedFileChange {
+  const renderablePatch = getRenderablePatch(change);
+  const hasRenderablePatch =
+    renderablePatch !== null && canRenderPatch(renderablePatch.patch);
+  return {
+    renderablePatch: hasRenderablePatch ? renderablePatch : null,
+    plainDiff: getPlainDiffFallback(change, hasRenderablePatch),
+  };
 }
 
 export function TimelineFileDiffBlock({
   change,
   themeType,
 }: TimelineFileDiffBlockProps) {
-  const patch = useMemo(() => buildSyntheticPatch(change), [change]);
-  const canRender = useMemo(
-    () => (patch ? canRenderPatch(patch) : false),
-    [patch],
+  const diffViewOptions = useMemo(
+    () => ({
+      ...DIFF_VIEW_BASE_OPTIONS,
+      themeType,
+    }),
+    [themeType],
+  );
+  const renderedChange = useMemo(
+    () => buildRenderedFileChange(change),
+    [change],
   );
 
-  if (!patch) {
-    return null;
-  }
-  if (!canRender) {
+  if (
+    renderedChange.renderablePatch === null &&
+    renderedChange.plainDiff === null
+  ) {
     return (
-      <EventCodeBlock maxHeightClassName="max-h-96">{change.diff}</EventCodeBlock>
+      <div className="rounded-md border border-border/60 bg-background/40 px-2 py-1.5 text-xs text-muted-foreground">
+        No diff available.
+      </div>
     );
   }
 
   return (
-    <div
-      data-timeline-file-diff=""
-      className="overflow-hidden rounded-md border border-border/70 bg-background/70"
-      style={DIFF_VIEW_STYLE}
-    >
-      <PatchDiff
-        patch={patch}
-        options={{
-          disableFileHeader: false,
-          overflow: "scroll",
-          themeType,
-        }}
-      />
+    <div className="mt-1 max-h-96 overflow-auto rounded-md border border-border/60 bg-background/40">
+      <div className="min-w-fit">
+        {renderedChange.renderablePatch ? (
+          <div data-timeline-file-diff="" style={DIFF_VIEW_STYLE}>
+            <PatchDiff
+              patch={renderedChange.renderablePatch.patch}
+              options={{
+                ...diffViewOptions,
+                disableLineNumbers:
+                  renderedChange.renderablePatch.disableLineNumbers,
+              }}
+            />
+          </div>
+        ) : null}
+        {renderedChange.plainDiff ? (
+          <EventCodeBlock className="rounded-none border-0 bg-transparent">
+            {renderedChange.plainDiff}
+          </EventCodeBlock>
+        ) : null}
+      </div>
     </div>
   );
 }
