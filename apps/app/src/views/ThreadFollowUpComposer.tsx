@@ -38,7 +38,7 @@ import {
   getMergeBaseBranchCandidates,
   MergeBaseBranchPicker,
 } from "@/components/thread/MergeBaseBranchPicker";
-import { ThreadContextWindowIndicator } from "@/components/thread/ThreadContextWindowIndicator";
+import { ThreadContextWindowIndicator } from "@bb/ui-core";
 import { cn } from "@/lib/utils";
 import {
   countQueuedMessageAttachments,

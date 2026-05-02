@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "../primitives/cn.js";
 
-interface ConversationStatusIndicatorProps {
+export interface ConversationStatusIndicatorProps {
   label: ReactNode;
   className?: string;
 }

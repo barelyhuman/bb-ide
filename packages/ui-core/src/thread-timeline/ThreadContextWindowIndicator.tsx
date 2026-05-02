@@ -2,16 +2,16 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@bb/ui-core";
-import { useHoverPopover } from "@/hooks/useHoverPopover";
+} from "../primitives/ui/popover.js";
 import type { ThreadContextWindowUsage } from "@bb/server-contract";
+import { useHoverPopover } from "../primitives/hooks/use-hover-popover.js";
+import { cn } from "../primitives/cn.js";
 import {
   calculateContextWindowUsagePercent,
   formatCompactTokenCount,
-} from "@/lib/thread-context-window-usage";
-import { cn } from "@/lib/utils";
+} from "./thread-context-window-usage.js";
 
-interface ThreadContextWindowIndicatorProps {
+export interface ThreadContextWindowIndicatorProps {
   usage: ThreadContextWindowUsage;
   className?: string;
 }

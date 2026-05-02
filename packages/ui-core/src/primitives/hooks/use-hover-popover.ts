@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePointerCoarse } from "@/hooks/usePointerCoarse";
+import { usePointerCoarse } from "./use-pointer-coarse.js";
 
 interface HoverPopoverHandlers {
   onPointerEnter: () => void;
@@ -20,10 +20,11 @@ interface UseHoverPopoverResult {
 }
 
 const DEFAULT_CLOSE_DELAY_MS = 160;
+const noop = () => undefined;
 
 const EMPTY_HOVER_PROPS: HoverPopoverHandlers = {
-  onPointerEnter: () => {},
-  onPointerLeave: () => {},
+  onPointerEnter: noop,
+  onPointerLeave: noop,
 };
 
 export function useHoverPopover({

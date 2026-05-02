@@ -10,8 +10,8 @@ import {
   type ThreadTimelineLocalFileLinkHandler,
 } from "@bb/ui-core";
 import { PageShell } from "@bb/ui-core";
-import { ConversationStatusIndicator } from "@/components/messages/ConversationStatusIndicator";
-import { ConversationWorkingIndicator } from "@/components/messages/ConversationWorkingIndicator";
+import { ConversationStatusIndicator } from "@bb/ui-core";
+import { ConversationWorkingIndicator } from "@bb/ui-core";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { toUserAttachmentImageSrc } from "@/lib/user-attachment-images";
 

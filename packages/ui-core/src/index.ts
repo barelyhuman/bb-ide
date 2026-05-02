@@ -200,6 +200,18 @@ export {
   type DetailScrollSize,
 } from "./primitives/detail-scroll-size.js";
 export { ThreadTimelineRows } from "./thread-timeline/ThreadTimelineRows.js";
+export {
+  ConversationStatusIndicator,
+  type ConversationStatusIndicatorProps,
+} from "./thread-timeline/ConversationStatusIndicator.js";
+export {
+  ConversationWorkingIndicator,
+  type ConversationWorkingIndicatorProps,
+} from "./thread-timeline/ConversationWorkingIndicator.js";
+export {
+  ThreadContextWindowIndicator,
+  type ThreadContextWindowIndicatorProps,
+} from "./thread-timeline/ThreadContextWindowIndicator.js";
 export type {
   ThreadTimelineLocalFileLink,
   ThreadTimelineLocalFileLinkHandler,

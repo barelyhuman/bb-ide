@@ -208,7 +208,7 @@ Progress:
 - [x] Step 4 — scaffold ui-core Ladle and add a primitive story. The timeline
       domain story is deferred until the React timeline renderer exists again.
 - [x] Step 5 — extract the first app primitive batch with stories.
-- [ ] Step 6 — evaluate criteria-gated domain composition moves.
+- [x] Step 6 — evaluate criteria-gated domain composition moves.
 
 ### Step 1 — Extract shared theme CSS
 
@@ -386,11 +386,12 @@ The following are explicitly out of scope for this plan:
       `packages/agent-provider-audit` reaches across the monorepo for it.
 - [ ] `packages/ui-core/.ladle/` exists. `pnpm --filter @bb/ui-core ladle`
       starts and shows working stories.
-- [ ] At least one primitive story exists. Add the domain story in the React
-      timeline renderer pass once real timeline rows render again.
+- [ ] At least one primitive story and one thread-timeline domain indicator
+      story exist. Add the row-level domain story in the React timeline
+      renderer pass once real timeline rows render again.
 - [ ] Five primitives are extracted from `apps/app` into
       `ui-core/src/primitives/`, each with a story.
-- [ ] Domain compositions are moved only when they meet the ≥2-consumer
+- [x] Domain compositions are moved only when they meet the ≥2-consumer
       criterion. Components that don't qualify are documented (in PR
       descriptions) as intentionally staying in `apps/app`.
 - [ ] App and ui-core builds pass:

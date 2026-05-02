@@ -1,9 +1,12 @@
 import { useState } from "react";
-import { ExpandablePanel, getCollapsibleHeaderToneClass } from "@bb/ui-core";
-import { ConversationStatusIndicator } from "@/components/messages/ConversationStatusIndicator";
-import { cn } from "@/lib/utils";
+import {
+  ExpandablePanel,
+  getCollapsibleHeaderToneClass,
+} from "../primitives/disclosure.js";
+import { cn } from "../primitives/cn.js";
+import { ConversationStatusIndicator } from "./ConversationStatusIndicator.js";
 
-interface ConversationWorkingIndicatorProps {
+export interface ConversationWorkingIndicatorProps {
   label?: string;
   isThinking?: boolean;
   details?: string;
