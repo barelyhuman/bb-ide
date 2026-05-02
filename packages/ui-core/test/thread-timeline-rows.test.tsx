@@ -434,6 +434,27 @@ describe("ThreadTimelineRows", () => {
     expect(bundleList?.classList.contains("gap-0.5")).toBe(false);
   });
 
+  it("uses compact padding for static title rows inside activity summaries", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[webSearchRow(), webFetchRow()]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Ran 1 web search/u }));
+
+    const staticTitle = view.container.querySelector(
+      '[aria-label="Ran web search: timeline renderer"]',
+    );
+    expect(staticTitle?.parentElement?.classList.contains("py-0.5")).toBe(true);
+    expect(staticTitle?.parentElement?.classList.contains("py-1")).toBe(false);
+  });
+
   it("loads lazy turn details once for one expansion", () => {
     const onLoadTurnSummaryRows = vi.fn();
     const view = render(

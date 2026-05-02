@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cx } from "./utils.js";
+import { cn } from "./cn.js";
 
 export const COLLAPSIBLE_HEADER_COLLAPSED_TONE_CLASS =
   "text-muted-foreground/90 transition-colors group-hover:text-foreground/90 group-focus-within:text-foreground/90";
@@ -18,7 +18,7 @@ function Chevron({ className }: { className?: string }) {
       strokeWidth="1.8"
       strokeLinecap="round"
       strokeLinejoin="round"
-      className={cx("lucide lucide-chevron-right", className)}
+      className={cn("lucide lucide-chevron-right", className)}
       aria-hidden="true"
     >
       <path d="M6 4l4 4-4 4" />
@@ -49,7 +49,7 @@ export function CollapsibleHeader({
   isExpanded = false,
   onToggle,
 }: CollapsibleHeaderProps) {
-  const rootClassName = cx(
+  const rootClassName = cn(
     COLLAPSIBLE_HEADER_BUTTON_BASE_CLASS,
     toneClassName,
     className,
@@ -73,7 +73,7 @@ export function CollapsibleHeader({
     >
       <span className={summaryClass}>{summaryContent}</span>
       <Chevron
-        className={cx(
+        className={cn(
           "size-4 shrink-0 origin-center transition-[opacity,rotate] duration-200 ease-out",
           isExpanded
             ? "rotate-90"
@@ -112,8 +112,8 @@ export function ExpandablePanel({
   contentClassName,
 }: ExpandablePanelProps) {
   return (
-    <div className={cx("rounded-md text-muted-foreground", className)}>
-      <div className={cx("px-2 py-1", headerClassName)}>
+    <div className={cn("rounded-md text-muted-foreground", className)}>
+      <div className={cn("px-2 py-1", headerClassName)}>
         <CollapsibleHeader
           isExpanded={isExpanded}
           onToggle={onToggle}
@@ -127,7 +127,7 @@ export function ExpandablePanel({
       </div>
       <div
         aria-hidden={!isExpanded}
-        className={cx(
+        className={cn(
           "grid transition-[grid-template-rows,opacity] duration-200 ease-out",
           isExpanded
             ? "grid-rows-[1fr] opacity-100"
@@ -137,7 +137,7 @@ export function ExpandablePanel({
       >
         <div className="overflow-hidden">
           <div
-            className={cx(
+            className={cn(
               "px-2 pb-1 pt-0 transition-[transform,opacity] duration-200 ease-out will-change-transform",
               isExpanded
                 ? "translate-y-0 opacity-100"

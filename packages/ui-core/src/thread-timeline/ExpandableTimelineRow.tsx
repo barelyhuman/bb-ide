@@ -40,9 +40,9 @@ export function ExpandableTimelineRow({
       summaryContent={<TimelineTitleView title={title} />}
       summaryContentClassName="min-w-0 max-w-full"
       className={cn(isExpanded ? "w-full" : "group w-full", className)}
-      headerClassName="px-2 py-1"
-      headerButtonClassName="w-full max-w-full justify-start"
-      contentClassName="px-2 pb-2 pt-0"
+      headerClassName="px-2 py-0.5"
+      headerButtonClassName="w-full max-w-full justify-start py-0"
+      contentClassName="px-2 pb-1 pt-0"
     >
       {isExpanded ? renderBody() : null}
     </ExpandablePanel>

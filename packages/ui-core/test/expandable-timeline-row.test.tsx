@@ -116,6 +116,23 @@ describe("ExpandableTimelineRow", () => {
     );
   });
 
+  it("uses compact timeline header padding", () => {
+    const view = render(
+      <ExpandableTimelineRow
+        title={TITLE}
+        isExpanded={false}
+        onToggle={() => {}}
+        renderBody={() => <div>details</div>}
+      />,
+    );
+
+    const button = screen.getByRole("button");
+    expect(button.className).toContain("py-0");
+    expect(button.className).not.toContain("py-0.5");
+    expect(button.parentElement?.className).toContain("py-0.5");
+    expect(view.container.innerHTML).not.toContain("py-1");
+  });
+
   it("drops wrapper group class while expanded so hover does not leak to nested rows", () => {
     const view = render(
       <ExpandableTimelineRow
