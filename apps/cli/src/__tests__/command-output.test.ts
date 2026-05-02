@@ -72,6 +72,7 @@ function makeTimelineBase(args: TimelineBaseArgs): TimelineRowBase {
 function makeTimelineResponse(rows: TimelineRow[]): ThreadTimelineResponse {
   return {
     rows,
+    pendingSteers: [],
     activeThinking: null,
   };
 }
@@ -2802,6 +2803,7 @@ describe("CLI JSON output contracts", () => {
           role: "user",
           text: "Say hello",
           attachments: null,
+          userRequest: { kind: "message", status: "accepted" },
         },
         {
           ...makeTimelineBase({
@@ -2826,6 +2828,7 @@ describe("CLI JSON output contracts", () => {
           role: "assistant",
           text: "Hello!",
           attachments: null,
+          userRequest: null,
         },
       ]),
     );
@@ -2940,7 +2943,11 @@ describe("CLI JSON output contracts", () => {
   it("bb thread log --self resolves from BB_THREAD_ID", async () => {
     vi.stubEnv("BB_THREAD_ID", "thread-log-self");
     const getEvents = vi.fn(async () => []);
-    const getTimeline = vi.fn(async () => ({ rows: [], activeThinking: null }));
+    const getTimeline = vi.fn(async () => ({
+      rows: [],
+      pendingSteers: [],
+      activeThinking: null,
+    }));
     createClientMock.mockReturnValue(
       asServerClient({
         api: {

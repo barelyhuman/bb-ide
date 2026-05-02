@@ -109,7 +109,7 @@ describe("thread runtime mutations", () => {
     const { queryClient, wrapper } = createQueryClientTestHarness();
     queryClient.setQueryData<ThreadTimelineResponse>(
       threadTimelineQueryKey("thread-1", undefined),
-      { rows: [], activeThinking: null },
+      { rows: [], pendingSteers: [], activeThinking: null },
     );
     const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
 
@@ -181,12 +181,62 @@ describe("thread runtime mutations", () => {
     });
   });
 
+  it("optimistically appends an active-turn steer to pending steers", async () => {
+    let resolveSend: (() => void) | null = null;
+    vi.mocked(api.sendThreadMessage).mockImplementation(
+      () =>
+        new Promise<undefined>((resolve) => {
+          resolveSend = () => resolve(undefined);
+        }),
+    );
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    queryClient.setQueryData<ThreadWithRuntime>(
+      threadQueryKey("thread-1"),
+      makeThreadWithRuntime({ status: "active" }),
+    );
+    queryClient.setQueryData<ThreadTimelineResponse>(
+      threadTimelineQueryKey("thread-1", undefined),
+      { rows: [], pendingSteers: [], activeThinking: null },
+    );
+    const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
+
+    let mutationPromise: Promise<void> | undefined;
+    act(() => {
+      mutationPromise = result.current.mutateAsync({
+        id: "thread-1",
+        input: [{ type: "text", text: "Keep this in mind" }],
+        mode: "auto",
+      });
+    });
+
+    await waitFor(() => {
+      const timeline = queryClient.getQueryData<ThreadTimelineResponse>(
+        threadTimelineQueryKey("thread-1", undefined),
+      );
+      expect(timeline?.rows).toHaveLength(0);
+      expect(timeline?.pendingSteers).toHaveLength(1);
+    });
+    const timeline = queryClient.getQueryData<ThreadTimelineResponse>(
+      threadTimelineQueryKey("thread-1", undefined),
+    );
+    expect(timeline?.pendingSteers[0]?.text).toBe("Keep this in mind");
+    expect(timeline?.pendingSteers[0]?.userRequest).toEqual({
+      kind: "steer",
+      status: "pending",
+    });
+
+    await act(async () => {
+      resolveSend?.();
+      await mutationPromise;
+    });
+  });
+
   it("rolls back the optimistic timeline row when send fails", async () => {
     vi.mocked(api.sendThreadMessage).mockRejectedValue(new Error("boom"));
     const { queryClient, wrapper } = createQueryClientTestHarness();
     queryClient.setQueryData<ThreadTimelineResponse>(
       threadTimelineQueryKey("thread-1", undefined),
-      { rows: [], activeThinking: null },
+      { rows: [], pendingSteers: [], activeThinking: null },
     );
     const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
 
@@ -204,6 +254,36 @@ describe("thread runtime mutations", () => {
       threadTimelineQueryKey("thread-1", undefined),
     );
     expect(finalTimeline?.rows).toHaveLength(0);
+  });
+
+  it("rolls back the optimistic pending steer when send fails", async () => {
+    vi.mocked(api.sendThreadMessage).mockRejectedValue(new Error("boom"));
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    queryClient.setQueryData<ThreadWithRuntime>(
+      threadQueryKey("thread-1"),
+      makeThreadWithRuntime({ status: "active" }),
+    );
+    queryClient.setQueryData<ThreadTimelineResponse>(
+      threadTimelineQueryKey("thread-1", undefined),
+      { rows: [], pendingSteers: [], activeThinking: null },
+    );
+    const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({
+          id: "thread-1",
+          input: [{ type: "text", text: "Keep this in mind" }],
+          mode: "auto",
+        }),
+      ).rejects.toThrow("boom");
+    });
+
+    const finalTimeline = queryClient.getQueryData<ThreadTimelineResponse>(
+      threadTimelineQueryKey("thread-1", undefined),
+    );
+    expect(finalTimeline?.rows).toHaveLength(0);
+    expect(finalTimeline?.pendingSteers).toHaveLength(0);
   });
 
   it("invalidates primary checkout status after sending a queued draft", async () => {

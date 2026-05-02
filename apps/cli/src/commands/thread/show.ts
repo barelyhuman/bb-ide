@@ -359,10 +359,13 @@ export function registerShowCommand(
           }),
         );
         const color = process.stdout.isTTY === true && !process.env.NO_COLOR;
-        const text = formatThreadTimelineText(timeline.rows, {
-          verbose: format === "verbose",
-          color,
-        });
+        const text = formatThreadTimelineText(
+          [...timeline.rows, ...timeline.pendingSteers],
+          {
+            verbose: format === "verbose",
+            color,
+          },
+        );
         console.log(text);
       }),
     );

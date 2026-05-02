@@ -35,6 +35,9 @@ export type {
   EventProjectionToolCallMessage,
   EventProjectionToolParsedIntent,
   EventProjectionUserMessage,
+  EventProjectionUserRequest,
+  EventProjectionUserRequestKind,
+  EventProjectionUserRequestStatus,
   EventProjectionWebFetchMessage,
   EventProjectionWebSearchMessage,
 } from "./event-projection-message.js";

@@ -15,6 +15,7 @@ import remarkGfm from "remark-gfm";
 import type {
   TimelineConversationAttachments,
   TimelineConversationRow,
+  TimelineConversationUserRequest,
 } from "@bb/server-contract";
 import {
   ImageLightbox,
@@ -35,6 +36,7 @@ export interface ConversationMessageContentProps {
   resolveUserAttachmentImageSrc?: UserAttachmentImageSrcResolver;
   role: TimelineConversationRow["role"];
   text: string;
+  userRequest: TimelineConversationRow["userRequest"];
 }
 
 interface ConversationImageItem {
@@ -88,6 +90,15 @@ interface CountPreWrappedLinesInput {
 }
 
 type ConversationMarkdownAnchorEvent = ReactMouseEvent<HTMLAnchorElement>;
+
+function userRequestLabel(
+  userRequest: TimelineConversationUserRequest | null,
+): string | null {
+  if (userRequest?.kind !== "steer") {
+    return null;
+  }
+  return userRequest.status === "pending" ? "steer pending" : "steer";
+}
 
 function fileName(path: string): string {
   const normalized = path.replaceAll("\\", "/");
@@ -657,8 +668,10 @@ function UserConversationMessage({
   attachmentItems,
   onOpenLocalFileLink,
   text,
+  userRequest,
 }: UserConversationMessageProps) {
   const messageText = text.trim();
+  const requestLabel = userRequestLabel(userRequest);
 
   return (
     <div className="group mt-2 w-full">
@@ -676,6 +689,13 @@ function UserConversationMessage({
             onOpenLocalFileLink={onOpenLocalFileLink}
           />
         </div>
+        {requestLabel ? (
+          <div className="mt-1 flex justify-end">
+            <span className="text-xs leading-none text-muted-foreground">
+              {requestLabel}
+            </span>
+          </div>
+        ) : null}
         {messageText ? (
           <div className="mt-1 flex justify-end opacity-100 transition-opacity duration-150 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
             <CopyButton text={messageText} label="Copy message" />
@@ -717,6 +737,7 @@ export function ConversationMessageContent({
   resolveUserAttachmentImageSrc,
   role,
   text,
+  userRequest,
 }: ConversationMessageContentProps) {
   const attachmentItems = useMemo(
     () =>
@@ -737,6 +758,7 @@ export function ConversationMessageContent({
         projectId={projectId}
         resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
         text={text}
+        userRequest={userRequest}
       />
     );
   }
@@ -749,6 +771,7 @@ export function ConversationMessageContent({
       projectId={projectId}
       resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
       text={text}
+      userRequest={userRequest}
     />
   );
 }

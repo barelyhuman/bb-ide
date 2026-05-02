@@ -36,6 +36,8 @@ import {
 export type { ThreadEventWithMeta } from "./group-event-projection-turns.js";
 import { shouldSuppressLowValueToolCall } from "./tool-call-suppression.js";
 import {
+  buildAcceptedClientRequestBySequence,
+  parseAcceptedSteerFromClientRequest,
   parseUserFromClientRequest,
   parseManagerUserMessage,
 } from "./user-message-parsing.js";
@@ -73,12 +75,17 @@ import {
   onTurnCompleted,
   onTurnStarted,
   type CompactionTurnFinalization,
+  type ProjectionState,
 } from "./event-projection-state.js";
 import { projectAssistantAndReasoningEvent } from "./assistant-event-projection.js";
 
 // --- Projection state machine ---
 
 type ProjectedUserMessage = Extract<EventProjectionMessage, { kind: "user" }>;
+interface ClientTurnRequestedWithMeta {
+  event: Extract<ThreadEvent, { type: "client/turn/requested" }>;
+  meta: ThreadEventWithMeta["meta"];
+}
 
 interface BuildFlatProjectionDataArgs {
   events: ThreadEventWithMeta[];
@@ -108,23 +115,33 @@ const PROVIDER_THREAD_CHILD_INTERACTION_TOOL_NAMES = new Set([
   "closeAgent",
 ]);
 
-function buildClientRequestTurnIdBySequence(
+function buildClientTurnRequestBySequence(
   events: ThreadEventWithMeta[],
-): Map<number, string> {
-  const turnIdBySequence = new Map<number, string>();
-  for (const { event } of events) {
-    if (event.type !== "turn/input/accepted") {
+): Map<number, ClientTurnRequestedWithMeta> {
+  const requestBySequence = new Map<number, ClientTurnRequestedWithMeta>();
+  for (const eventWithMeta of events) {
+    if (eventWithMeta.event.type !== "client/turn/requested") {
       continue;
     }
-    turnIdBySequence.set(
-      event.clientRequestSequence,
-      requireThreadEventScopeTurnId({
-        type: event.type,
-        scope: event.scope,
-      }),
-    );
+    requestBySequence.set(eventWithMeta.meta.seq, {
+      event: eventWithMeta.event,
+      meta: eventWithMeta.meta,
+    });
   }
-  return turnIdBySequence;
+  return requestBySequence;
+}
+
+function appendProjectedUserMessage(
+  state: ProjectionState,
+  projectedClientUser: ProjectedUserMessage,
+): void {
+  const key = projectedClientUser.id;
+  if (state.seenUserKeys.has(key)) {
+    return;
+  }
+  state.seenUserKeys.add(key);
+  flushToolActivityBeforeNonToolMessage(state);
+  state.messages.push(projectedClientUser);
 }
 
 function getToolCallName(decoded: ThreadEvent): string | undefined {
@@ -191,8 +208,10 @@ function buildFlatProjectionData(
   const shouldTrackActiveThinking = args.includeActiveThinking;
 
   const orderedEvents = args.events;
-  const clientRequestTurnIdBySequence =
-    buildClientRequestTurnIdBySequence(orderedEvents);
+  const acceptedClientRequestBySequence =
+    buildAcceptedClientRequestBySequence(orderedEvents);
+  const clientRequestBySequence =
+    buildClientTurnRequestBySequence(orderedEvents);
   const execLifecycleContext = createExecLifecycleContext();
 
   for (const { event: decoded, meta } of orderedEvents) {
@@ -246,20 +265,36 @@ function buildFlatProjectionData(
       flushProjectionBufferedOutputs(state);
     }
 
+    if (decoded.type === "turn/input/accepted") {
+      const clientRequest = clientRequestBySequence.get(
+        decoded.clientRequestSequence,
+      );
+      const acceptedClientRequest = acceptedClientRequestBySequence.get(
+        decoded.clientRequestSequence,
+      );
+      const acceptedSteer =
+        clientRequest && acceptedClientRequest
+          ? parseAcceptedSteerFromClientRequest({
+              acceptedClientRequest,
+              decoded: clientRequest.event,
+              meta: clientRequest.meta,
+              options: args.options,
+            })
+          : null;
+      if (acceptedSteer) {
+        appendProjectedUserMessage(state, acceptedSteer);
+      }
+      continue;
+    }
+
     const userFromClientRequest = parseUserFromClientRequest({
+      acceptedClientRequest: acceptedClientRequestBySequence.get(meta.seq),
       decoded,
       meta,
       options: args.options,
-      resolvedTurnId: clientRequestTurnIdBySequence.get(meta.seq),
     });
     if (userFromClientRequest) {
-      const projectedClientUser: ProjectedUserMessage = userFromClientRequest;
-      const key = projectedClientUser.id;
-      if (!state.seenUserKeys.has(key)) {
-        state.seenUserKeys.add(key);
-        flushToolActivityBeforeNonToolMessage(state);
-        state.messages.push(projectedClientUser);
-      }
+      appendProjectedUserMessage(state, userFromClientRequest);
       continue;
     }
 

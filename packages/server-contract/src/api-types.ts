@@ -20,7 +20,10 @@ import {
   workspaceStatusSchema,
 } from "@bb/domain";
 import { apiErrorSchema } from "./errors.js";
-import { timelineRowSchema } from "./thread-timeline.js";
+import {
+  timelineRowSchema,
+  timelineUserConversationRowSchema,
+} from "./thread-timeline.js";
 
 export const sendMessageModeSchema = z.enum(["auto", "start", "steer"]);
 export type SendMessageMode = z.infer<typeof sendMessageModeSchema>;
@@ -916,6 +919,7 @@ export type TimelineTurnSummaryDetailsResponse = z.infer<
 
 export const threadTimelineResponseSchema = z.object({
   rows: z.array(timelineRowSchema),
+  pendingSteers: z.array(timelineUserConversationRowSchema),
   activeThinking: activeThinkingSchema.nullable(),
   contextWindowUsage: threadContextWindowUsageSchema.optional(),
 });

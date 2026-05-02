@@ -4,7 +4,11 @@ import type {
   ThreadListEntry,
   ThreadWithRuntime,
 } from "@bb/domain";
-import type { ThreadTimelineResponse, TimelineRow } from "@bb/server-contract";
+import type {
+  ThreadTimelineResponse,
+  TimelineRow,
+  TimelineUserConversationRow,
+} from "@bb/server-contract";
 import {
   ENVIRONMENT_GIT_DIFF_QUERY_KEY,
   ENVIRONMENT_WORK_STATUS_QUERY_KEY,
@@ -24,6 +28,14 @@ import {
   type EnvironmentWorkStatusQueryKey,
   type ThreadListQueryFilters,
 } from "./query-keys";
+
+type TimelineRowsUpdater = (
+  rows: readonly TimelineRow[],
+) => readonly TimelineRow[] | null;
+
+type PendingSteersUpdater = (
+  rows: readonly TimelineUserConversationRow[],
+) => readonly TimelineUserConversationRow[] | null;
 
 export interface EnvironmentInvalidationParams {
   environmentId: string;
@@ -260,7 +272,7 @@ export function optimisticallyInsertThread(
 function updateCachedTimelineRows(
   queryClient: QueryClient,
   threadId: string,
-  updater: (rows: readonly TimelineRow[]) => readonly TimelineRow[] | null,
+  updater: TimelineRowsUpdater,
 ): void {
   const timelineQueries = queryClient.getQueriesData<ThreadTimelineResponse>({
     queryKey: threadTimelineQueryKeyPrefix(threadId),
@@ -283,11 +295,52 @@ function updateCachedTimelineRows(
   }
 }
 
+function updateCachedPendingSteers(
+  queryClient: QueryClient,
+  threadId: string,
+  updater: PendingSteersUpdater,
+): void {
+  const timelineQueries = queryClient.getQueriesData<ThreadTimelineResponse>({
+    queryKey: threadTimelineQueryKeyPrefix(threadId),
+  });
+
+  for (const [queryKey, response] of timelineQueries) {
+    if (!response) {
+      continue;
+    }
+
+    const nextRows = updater(response.pendingSteers);
+    if (nextRows === null) {
+      continue;
+    }
+
+    queryClient.setQueryData<ThreadTimelineResponse>(queryKey, {
+      ...response,
+      pendingSteers: [...nextRows],
+    });
+  }
+}
+
+function isPendingSteerRow(
+  row: TimelineRow,
+): row is TimelineUserConversationRow {
+  return (
+    row.kind === "conversation" &&
+    row.role === "user" &&
+    row.userRequest.kind === "steer" &&
+    row.userRequest.status === "pending"
+  );
+}
+
 export function insertOptimisticTimelineRow(
   queryClient: QueryClient,
   threadId: string,
   row: TimelineRow,
 ): void {
+  if (isPendingSteerRow(row)) {
+    updateCachedPendingSteers(queryClient, threadId, (rows) => [...rows, row]);
+    return;
+  }
   updateCachedTimelineRows(queryClient, threadId, (rows) => [...rows, row]);
 }
 
@@ -296,6 +349,10 @@ export function removeOptimisticTimelineRow(
   threadId: string,
   rowId: string,
 ): void {
+  updateCachedPendingSteers(queryClient, threadId, (rows) => {
+    const nextRows = rows.filter((row) => row.id !== rowId);
+    return nextRows.length === rows.length ? null : nextRows;
+  });
   updateCachedTimelineRows(queryClient, threadId, (rows) => {
     const nextRows = rows.filter((row) => row.id !== rowId);
     return nextRows.length === rows.length ? null : nextRows;

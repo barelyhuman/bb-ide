@@ -4,6 +4,7 @@ import type {
   TimelineCommandWorkRow,
   TimelineConversationAttachments,
   TimelineConversationRow,
+  TimelineConversationUserRequest,
   TimelineDelegationWorkRow,
   TimelineFileChange,
   TimelineFileChangeWorkRow,
@@ -33,6 +34,7 @@ interface ConversationRowArgs {
   role: TimelineConversationRow["role"];
   seq: number;
   text: string;
+  userRequest?: TimelineConversationUserRequest;
 }
 
 interface CommandRowArgs {
@@ -77,14 +79,25 @@ function conversationRow({
   role,
   seq,
   text,
+  userRequest,
 }: ConversationRowArgs): TimelineConversationRow {
-  return {
-    ...baseRow({ id, seq }),
-    kind: "conversation",
-    role,
-    text,
-    attachments,
-  };
+  return role === "user"
+    ? {
+        ...baseRow({ id, seq }),
+        kind: "conversation",
+        role,
+        text,
+        attachments,
+        userRequest: userRequest ?? { kind: "message", status: "accepted" },
+      }
+    : {
+        ...baseRow({ id, seq }),
+        kind: "conversation",
+        role,
+        text,
+        attachments,
+        userRequest: null,
+      };
 }
 
 function readIntent(path: string): TimelineActivityIntent {

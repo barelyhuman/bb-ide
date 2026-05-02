@@ -71,15 +71,38 @@ export function useCreateThread() {
 }
 
 interface BuildOptimisticUserMessageRowParams {
-  threadId: string;
-  input: SendThreadMessageMutationRequest["input"];
   createdAt: number;
+  input: SendThreadMessageMutationRequest["input"];
+  mode: SendThreadMessageMutationRequest["mode"];
+  threadId: string;
+  threadStatus: ThreadWithRuntime["status"] | null;
+}
+
+type OptimisticUserRequestKind = "message" | "steer";
+type OptimisticUserRequestKindArgs = Pick<
+  BuildOptimisticUserMessageRowParams,
+  "mode" | "threadStatus"
+>;
+
+function optimisticUserRequestKind({
+  mode,
+  threadStatus,
+}: OptimisticUserRequestKindArgs): OptimisticUserRequestKind {
+  if (mode === "steer") {
+    return "steer";
+  }
+  if (mode === "auto" && threadStatus === "active") {
+    return "steer";
+  }
+  return "message";
 }
 
 function buildOptimisticUserMessageRow({
-  threadId,
-  input,
   createdAt,
+  input,
+  mode,
+  threadId,
+  threadStatus,
 }: BuildOptimisticUserMessageRowParams): TimelineRow {
   const id = `optimistic-user-${crypto.randomUUID()}`;
   const text = input
@@ -113,6 +136,10 @@ function buildOptimisticUserMessageRow({
     createdAt,
     text,
     attachments: timelineAttachments,
+    userRequest: {
+      kind: optimisticUserRequestKind({ mode, threadStatus }),
+      status: "pending",
+    },
   };
 }
 
@@ -161,9 +188,11 @@ export function useSendThreadMessage() {
       }));
 
       const optimisticRow = buildOptimisticUserMessageRow({
-        threadId: variables.id,
-        input: variables.input,
         createdAt: optimisticCreatedAt,
+        input: variables.input,
+        mode: variables.mode,
+        threadId: variables.id,
+        threadStatus: previousThread?.status ?? null,
       });
       insertOptimisticTimelineRow(queryClient, variables.id, optimisticRow);
 

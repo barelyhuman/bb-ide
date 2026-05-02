@@ -8,6 +8,7 @@ import type {
   TimelineRowStatus,
   TimelineSourceRow,
   TimelineTurnRow,
+  TimelineUserConversationRow,
 } from "@bb/server-contract";
 import type { ActiveThinking, Thread } from "@bb/domain";
 import type {
@@ -34,6 +35,11 @@ import {
   buildEventProjectionEntries,
   type ThreadEventWithMeta,
 } from "./build-event-projection.js";
+import {
+  buildAcceptedClientRequestBySequence,
+  parsePendingSteerFromClientRequest,
+} from "./user-message-parsing.js";
+import { getOrderedThreadEvents } from "./group-event-projection-turns.js";
 
 export type ThreadTimelineTurnMessageDetail = "summary" | "full";
 
@@ -69,6 +75,7 @@ export interface BuildThreadTimelineFromEventsArgs {
 export interface ThreadTimelineFromEventsResult {
   activeThinking: ActiveThinking | null;
   contextWindowUsage: ThreadContextWindowUsage | null;
+  pendingSteers: TimelineUserConversationRow[];
   rows: TimelineRow[];
 }
 
@@ -377,6 +384,7 @@ function convertMessage(
           role: "user",
           text: message.text,
           attachments: toConversationAttachments(message.attachments),
+          userRequest: message.request,
         },
       ];
     case "assistant-text":
@@ -387,6 +395,7 @@ function convertMessage(
           role: "assistant",
           text: message.text,
           attachments: null,
+          userRequest: null,
         },
       ];
     case "command":
@@ -555,6 +564,50 @@ function convertMessage(
     default:
       return assertNever(message);
   }
+}
+
+function convertPendingSteerMessage(
+  message: EventProjectionMessage,
+  rowIdPrefix: string,
+): TimelineUserConversationRow {
+  if (message.kind !== "user" || message.request.kind !== "steer") {
+    throw new Error(`Expected pending steer message, received ${message.kind}`);
+  }
+  return {
+    ...buildTimelineRowBase(message, rowIdPrefix),
+    kind: "conversation",
+    role: "user",
+    text: message.text,
+    attachments: toConversationAttachments(message.attachments),
+    userRequest: message.request,
+  };
+}
+
+function buildPendingSteerRowsFromEvents(
+  events: ThreadEventWithMeta[],
+  options: ThreadTimelineFromEventsBaseOptions,
+): TimelineUserConversationRow[] {
+  const orderedEvents = getOrderedThreadEvents(events);
+  const acceptedClientRequestBySequence =
+    buildAcceptedClientRequestBySequence(orderedEvents);
+  const pendingSteers: TimelineUserConversationRow[] = [];
+
+  for (const { event, meta } of orderedEvents) {
+    const pendingSteer = parsePendingSteerFromClientRequest({
+      acceptedClientRequest: acceptedClientRequestBySequence.get(meta.seq),
+      decoded: event,
+      meta,
+      options,
+    });
+    if (!pendingSteer) {
+      continue;
+    }
+    pendingSteers.push(
+      convertPendingSteerMessage(pendingSteer, ROOT_TIMELINE_ROW_ID_PREFIX),
+    );
+  }
+
+  return pendingSteers;
 }
 
 function isReconnectSystemRow(row: TimelineRow): boolean {
@@ -776,6 +829,10 @@ export function buildThreadTimelineFromEvents(
     contextWindowUsage: extractThreadContextWindowUsage(
       args.contextWindowEvents,
     ),
+    pendingSteers:
+      args.options.viewMode === "manager-conversation"
+        ? []
+        : buildPendingSteerRowsFromEvents(args.events, args.options),
     rows:
       args.options.viewMode === "manager-conversation"
         ? buildManagerConversationRows(projection)

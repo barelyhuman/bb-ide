@@ -205,7 +205,14 @@ export function groupEventProjectionTurns(
   args: GroupEventProjectionTurnsArgs,
 ): EventProjection {
   const turnsById = new Map<string, ProjectionTurnDraft>();
+  const clientRequestMetaBySequence = new Map<number, EventMeta>();
   const entryDrafts: ProjectionEntryDraft[] = [];
+
+  for (const { event, meta } of args.events) {
+    if (event.type === "client/turn/requested") {
+      clientRequestMetaBySequence.set(meta.seq, meta);
+    }
+  }
 
   for (const { event, meta } of args.events) {
     if (event.type === "turn/started") {
@@ -241,6 +248,31 @@ export function groupEventProjectionTurns(
         );
       }
       updateProjectionTurnCompletion(existing, event, meta);
+      continue;
+    }
+
+    if (event.type === "turn/input/accepted") {
+      const turnId = requireThreadEventScopeTurnId({
+        type: event.type,
+        scope: event.scope,
+      });
+      const existing = turnsById.get(turnId);
+      if (!existing) {
+        throw new Error(
+          `Timeline projection found turn/input/accepted without turn/started for ${turnId}`,
+        );
+      }
+      const clientRequestMeta = clientRequestMetaBySequence.get(
+        event.clientRequestSequence,
+      );
+      if (clientRequestMeta) {
+        updateProjectionTurnBounds(existing, {
+          threadId: event.threadId,
+          sourceSeqStart: clientRequestMeta.seq,
+          sourceSeqEnd: clientRequestMeta.seq,
+          createdAt: clientRequestMeta.createdAt,
+        });
+      }
     }
   }
 

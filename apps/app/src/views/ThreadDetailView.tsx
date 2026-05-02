@@ -160,7 +160,10 @@ export function ThreadDetailView() {
   const markThreadRead = useMarkThreadRead();
   const updateEnvironment = useUpdateEnvironment();
   const updateThread = useUpdateThread();
-  const timelineRows = useMemo(() => timeline?.rows ?? [], [timeline?.rows]);
+  const timelineRows = useMemo(
+    () => [...(timeline?.rows ?? []), ...(timeline?.pendingSteers ?? [])],
+    [timeline?.pendingSteers, timeline?.rows],
+  );
   const hostConnectionNotice = useMemo(
     () => (thread ? buildHostConnectionNotice(thread) : null),
     [thread],

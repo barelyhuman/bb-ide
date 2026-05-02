@@ -198,6 +198,7 @@ describe("resolveThreadTimelinePlaceholder", () => {
   it("keeps previous timeline rows when the same thread query refreshes", () => {
     const previousTimeline: ThreadTimelineResponse = {
       activeThinking: null,
+      pendingSteers: [],
       rows: [
         {
           id: "assistant-1",
@@ -211,6 +212,7 @@ describe("resolveThreadTimelinePlaceholder", () => {
           startedAt: 1,
           createdAt: 1,
           attachments: null,
+          userRequest: null,
         },
       ],
     };
@@ -227,6 +229,7 @@ describe("resolveThreadTimelinePlaceholder", () => {
   it("drops previous timeline rows when switching to a different thread", () => {
     const previousTimeline: ThreadTimelineResponse = {
       activeThinking: null,
+      pendingSteers: [],
       rows: [],
     };
 

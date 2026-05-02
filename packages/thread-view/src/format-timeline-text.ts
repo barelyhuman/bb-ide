@@ -51,6 +51,11 @@ interface TimelineTextFormatContext {
   truncateForAudit: boolean;
 }
 
+type TimelineConversationViewRow = Extract<
+  ThreadTimelineViewRow,
+  { kind: "conversation" }
+>;
+
 interface AuditTruncationNoticeOptions {
   skippedLineCount: number;
   indent: number;
@@ -554,6 +559,15 @@ function formatTurnTitle(row: TimelineViewTurnRow): string {
   return "Turn";
 }
 
+function formatConversationRequestLabel(
+  row: TimelineConversationViewRow,
+): string | null {
+  if (row.role !== "user" || row.userRequest.kind !== "steer") {
+    return null;
+  }
+  return row.userRequest.status === "pending" ? "steer pending" : "steer";
+}
+
 function formatRow(
   row: ThreadTimelineViewRow,
   context: TimelineTextFormatContext,
@@ -565,7 +579,10 @@ function formatRow(
         maybeTruncateBodyLinesForAudit(row.text.split("\n"), context).join(
           "\n",
         ),
-      ].join("\n");
+        formatConversationRequestLabel(row),
+      ]
+        .filter((line): line is string => line !== null)
+        .join("\n");
     case "work":
       return formatWorkRow(row, context);
     case "system":

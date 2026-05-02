@@ -387,6 +387,7 @@ function ConversationRow({
       resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
       role={row.role}
       text={row.text}
+      userRequest={row.userRequest}
     />
   );
 }
@@ -503,6 +504,7 @@ function TimelineExpandableBody({
                   resolveUserAttachmentImageSrc={resolveUserAttachmentImageSrc}
                   role="assistant"
                   text={row.output}
+                  userRequest={null}
                 />
               </div>
             ) : null}

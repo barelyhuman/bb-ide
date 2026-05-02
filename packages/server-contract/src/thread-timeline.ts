@@ -71,12 +71,50 @@ export type TimelineConversationAttachments = z.infer<
   typeof timelineConversationAttachmentsSchema
 >;
 
-export const timelineConversationRowSchema = timelineRowBaseSchema.extend({
+export const timelineConversationUserRequestKindValues = [
+  "message",
+  "steer",
+] as const;
+export const timelineConversationUserRequestStatusValues = [
+  "pending",
+  "accepted",
+] as const;
+export const timelineConversationUserRequestSchema = z.object({
+  kind: z.enum(timelineConversationUserRequestKindValues),
+  status: z.enum(timelineConversationUserRequestStatusValues),
+});
+export type TimelineConversationUserRequest = z.infer<
+  typeof timelineConversationUserRequestSchema
+>;
+
+const timelineConversationRowBaseSchema = timelineRowBaseSchema.extend({
   kind: z.literal("conversation"),
-  role: z.enum(["user", "assistant"]),
   text: z.string(),
   attachments: timelineConversationAttachmentsSchema.nullable(),
 });
+
+export const timelineUserConversationRowSchema =
+  timelineConversationRowBaseSchema.extend({
+    role: z.literal("user"),
+    userRequest: timelineConversationUserRequestSchema,
+  });
+export type TimelineUserConversationRow = z.infer<
+  typeof timelineUserConversationRowSchema
+>;
+
+export const timelineAssistantConversationRowSchema =
+  timelineConversationRowBaseSchema.extend({
+    role: z.literal("assistant"),
+    userRequest: z.null(),
+  });
+export type TimelineAssistantConversationRow = z.infer<
+  typeof timelineAssistantConversationRowSchema
+>;
+
+export const timelineConversationRowSchema = z.discriminatedUnion("role", [
+  timelineUserConversationRowSchema,
+  timelineAssistantConversationRowSchema,
+]);
 export type TimelineConversationRow = z.infer<
   typeof timelineConversationRowSchema
 >;

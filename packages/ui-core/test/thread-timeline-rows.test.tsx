@@ -8,6 +8,7 @@ import type {
   TimelineCommandWorkRow,
   TimelineConversationAttachments,
   TimelineConversationRow,
+  TimelineConversationUserRequest,
   TimelineDelegationWorkRow,
   TimelineFileChangeWorkRow,
   TimelineRow,
@@ -43,6 +44,7 @@ interface ConversationRowArgs {
   id?: string;
   role?: TimelineConversationRow["role"];
   text: string;
+  userRequest?: TimelineConversationUserRequest;
 }
 
 interface FileChangeRowArgs {
@@ -77,14 +79,25 @@ function conversationRow({
   id = "conversation-1",
   role = "assistant",
   text,
+  userRequest,
 }: ConversationRowArgs): TimelineConversationRow {
-  return {
-    ...baseRow({ id, sourceSeqStart: 1 }),
-    kind: "conversation",
-    role,
-    text,
-    attachments,
-  };
+  return role === "user"
+    ? {
+        ...baseRow({ id, sourceSeqStart: 1 }),
+        kind: "conversation",
+        role,
+        text,
+        attachments,
+        userRequest: userRequest ?? { kind: "message", status: "accepted" },
+      }
+    : {
+        ...baseRow({ id, sourceSeqStart: 1 }),
+        kind: "conversation",
+        role,
+        text,
+        attachments,
+        userRequest: null,
+      };
 }
 
 function commandRow({
@@ -235,6 +248,19 @@ function turnRow(): TimelineTurnRow {
 
 function renderRowsToStaticMarkup(timelineRows: TimelineRow[]): string {
   return renderToStaticMarkup(
+    <ThreadTimelineRows
+      loadingTurnSummaryIds={new Set()}
+      erroredTurnSummaryIds={new Set()}
+      onLoadTurnSummaryRows={() => {}}
+      timelineRows={timelineRows}
+      threadRuntimeDisplayStatus="idle"
+      turnSummaryRowsById={{}}
+    />,
+  );
+}
+
+function renderTimelineRows(timelineRows: TimelineRow[]) {
+  return render(
     <ThreadTimelineRows
       loadingTurnSummaryIds={new Set()}
       erroredTurnSummaryIds={new Set()}
@@ -919,6 +945,32 @@ describe("ThreadTimelineRows", () => {
     expect(html).toContain("ml-auto w-fit max-w-[80%]");
     expect(html).toContain("bg-primary/10");
     expect(html).toContain("Please patch this.");
+  });
+
+  it("renders accepted steer metadata below the user message bubble", () => {
+    renderTimelineRows([
+      conversationRow({
+        role: "user",
+        text: "Use the existing renderer.",
+        userRequest: { kind: "steer", status: "accepted" },
+      }),
+    ]);
+
+    expect(screen.getByText("Use the existing renderer.")).toBeTruthy();
+    expect(screen.getByText("steer")).toBeTruthy();
+  });
+
+  it("renders pending steer metadata below the user message bubble", () => {
+    renderTimelineRows([
+      conversationRow({
+        role: "user",
+        text: "Still apply this steer.",
+        userRequest: { kind: "steer", status: "pending" },
+      }),
+    ]);
+
+    expect(screen.getByText("Still apply this steer.")).toBeTruthy();
+    expect(screen.getByText("steer pending")).toBeTruthy();
   });
 
   it("puts top spacing on user messages instead of every timeline row", () => {

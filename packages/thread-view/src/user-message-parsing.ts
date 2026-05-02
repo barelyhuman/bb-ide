@@ -1,9 +1,14 @@
-import type { PromptInput, ThreadEvent } from "@bb/domain";
+import {
+  requireThreadEventScopeTurnId,
+  type PromptInput,
+  type ThreadEvent,
+} from "@bb/domain";
 import type { EventMeta } from "./event-decode.js";
 import type {
   BuildEventProjectionMessagesOptions,
   EventProjectionAssistantTextMessage,
   EventProjectionUserMessage,
+  EventProjectionUserRequest,
 } from "./event-projection-types.js";
 import { messageId } from "./format-helpers.js";
 import { assertNever } from "./assert-never.js";
@@ -125,16 +130,123 @@ function buildAttachments(
 }
 
 export interface ParseUserFromClientRequestArgs {
+  acceptedClientRequest?: AcceptedClientRequest;
   decoded: ThreadEvent;
   meta: EventMeta;
   options?: BuildEventProjectionMessagesOptions;
-  resolvedTurnId?: string;
+}
+
+export interface ParseAcceptedSteerFromClientRequestArgs
+  extends ParseUserFromClientRequestArgs {
+  acceptedClientRequest: AcceptedClientRequest;
+}
+
+export interface ParsePendingSteerFromClientRequestArgs
+  extends ParseUserFromClientRequestArgs {
+  acceptedClientRequest: AcceptedClientRequest | undefined;
+}
+
+type ClientTurnRequestedEvent = Extract<
+  ThreadEvent,
+  { type: "client/turn/requested" }
+>;
+
+export interface AcceptedClientRequest {
+  meta: EventMeta;
+  turnId: string;
+}
+
+export interface ThreadEventWithMetaLike {
+  event: ThreadEvent;
+  meta: EventMeta;
+}
+
+export function buildAcceptedClientRequestBySequence(
+  events: readonly ThreadEventWithMetaLike[],
+): Map<number, AcceptedClientRequest> {
+  const acceptedBySequence = new Map<number, AcceptedClientRequest>();
+  for (const { event, meta } of events) {
+    if (event.type !== "turn/input/accepted") {
+      continue;
+    }
+    acceptedBySequence.set(event.clientRequestSequence, {
+      meta,
+      turnId: requireThreadEventScopeTurnId({
+        type: event.type,
+        scope: event.scope,
+      }),
+    });
+  }
+  return acceptedBySequence;
+}
+
+export function isSteerRequest(decoded: ClientTurnRequestedEvent): boolean {
+  switch (decoded.target.kind) {
+    case "auto":
+      return decoded.target.expectedTurnId !== null;
+    case "steer":
+      return true;
+    case "thread-start":
+    case "new-turn":
+      return false;
+    default:
+      return assertNever(decoded.target);
+  }
+}
+
+function buildUserRequest(
+  decoded: ClientTurnRequestedEvent,
+  status: EventProjectionUserRequest["status"],
+): EventProjectionUserRequest {
+  return {
+    kind: isSteerRequest(decoded) ? "steer" : "message",
+    status,
+  };
+}
+
+interface BuildClientUserMessageArgs {
+  acceptedClientRequest?: AcceptedClientRequest;
+  decoded: ClientTurnRequestedEvent;
+  meta: EventMeta;
+  parsedInput: NonNullable<ReturnType<typeof parsePromptInput>>;
+  requestStatus: EventProjectionUserRequest["status"];
+}
+
+function buildClientUserMessage({
+  acceptedClientRequest,
+  decoded,
+  meta,
+  parsedInput,
+  requestStatus,
+}: BuildClientUserMessageArgs): EventProjectionUserMessage {
+  const targetTurnId =
+    acceptedClientRequest?.turnId ??
+    ("expectedTurnId" in decoded.target ? decoded.target.expectedTurnId : null);
+  const rowMeta =
+    isSteerRequest(decoded) && acceptedClientRequest
+      ? acceptedClientRequest.meta
+      : meta;
+
+  return {
+    kind: "user",
+    id: messageId(decoded.threadId, "user-seed", `${meta.seq}`),
+    threadId: decoded.threadId,
+    sourceSeqStart: rowMeta.seq,
+    sourceSeqEnd: rowMeta.seq,
+    createdAt: rowMeta.createdAt,
+    ...(targetTurnId
+      ? eventProjectionMessageTurnScopeFields(targetTurnId)
+      : { scope: decoded.scope }),
+    request: buildUserRequest(decoded, requestStatus),
+    text: parsedInput.text,
+    attachments: buildAttachments(parsedInput),
+  };
 }
 
 export function parseUserFromClientRequest(
   args: ParseUserFromClientRequestArgs,
 ): EventProjectionUserMessage | null {
-  const { decoded, meta, options, resolvedTurnId } = args;
+  const { acceptedClientRequest, decoded, meta, options } = args;
   if (decoded.type !== "client/turn/requested") {
     return null;
   }
@@ -151,23 +263,82 @@ export function parseUserFromClientRequest(
     return null;
   }
 
-  const targetTurnId =
-    resolvedTurnId ??
-    ("expectedTurnId" in decoded.target ? decoded.target.expectedTurnId : null);
+  if (isSteerRequest(decoded)) {
+    return null;
+  }
 
-  return {
-    kind: "user",
-    id: messageId(decoded.threadId, "user-seed", `${meta.seq}`),
-    threadId: decoded.threadId,
-    sourceSeqStart: meta.seq,
-    sourceSeqEnd: meta.seq,
-    createdAt: meta.createdAt,
-    ...(targetTurnId
-      ? eventProjectionMessageTurnScopeFields(targetTurnId)
-      : { scope: decoded.scope }),
-    text: parsedInput.text,
-    attachments: buildAttachments(parsedInput),
-  };
+  return buildClientUserMessage({
+    acceptedClientRequest,
+    decoded,
+    meta,
+    parsedInput,
+    requestStatus: acceptedClientRequest ? "accepted" : "pending",
+  });
+}
+
+export function parsePendingSteerFromClientRequest(
+  args: ParsePendingSteerFromClientRequestArgs,
+): EventProjectionUserMessage | null {
+  const { acceptedClientRequest, decoded, meta, options } = args;
+  if (acceptedClientRequest || decoded.type !== "client/turn/requested") {
+    return null;
+  }
+  if (!isSteerRequest(decoded)) {
+    return null;
+  }
+  if (
+    decoded.initiator === "system" &&
+    !options?.includeInternalSystemMessages
+  ) {
+    return null;
+  }
+  if (!shouldPreservePendingMessages(options?.threadStatus)) {
+    return null;
+  }
+  const parsedInput = parsePromptInput(decoded.input);
+  if (!parsedInput) {
+    return null;
+  }
+
+  return buildClientUserMessage({
+    decoded,
+    meta,
+    parsedInput,
+    requestStatus: "pending",
+  });
+}
+
+export function parseAcceptedSteerFromClientRequest(
+  args: ParseAcceptedSteerFromClientRequestArgs,
+): EventProjectionUserMessage | null {
+  const { acceptedClientRequest, decoded, meta, options } = args;
+  if (decoded.type !== "client/turn/requested") {
+    return null;
+  }
+  if (!isSteerRequest(decoded)) {
+    return null;
+  }
+  if (
+    decoded.initiator === "system" &&
+    !options?.includeInternalSystemMessages
+  ) {
+    return null;
+  }
+  const parsedInput = parsePromptInput(decoded.input);
+  if (!parsedInput) {
+    return null;
+  }
+  if (!shouldRenderClientRequestedInput(options?.threadStatus)) {
+    return null;
+  }
+
+  return buildClientUserMessage({
+    acceptedClientRequest,
+    decoded,
+    meta,
+    parsedInput,
+    requestStatus: "accepted",
+  });
 }
 
 export function parseManagerUserMessage(

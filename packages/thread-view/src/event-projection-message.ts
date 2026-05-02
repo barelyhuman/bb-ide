@@ -34,8 +34,28 @@ export interface EventProjectionMessageBase {
   parentToolCallId?: string;
 }
 
+export const eventProjectionUserRequestKindValues = [
+  "message",
+  "steer",
+] as const;
+export type EventProjectionUserRequestKind =
+  (typeof eventProjectionUserRequestKindValues)[number];
+
+export const eventProjectionUserRequestStatusValues = [
+  "pending",
+  "accepted",
+] as const;
+export type EventProjectionUserRequestStatus =
+  (typeof eventProjectionUserRequestStatusValues)[number];
+
+export interface EventProjectionUserRequest {
+  kind: EventProjectionUserRequestKind;
+  status: EventProjectionUserRequestStatus;
+}
+
 export interface EventProjectionUserMessage extends EventProjectionMessageBase {
   kind: "user";
+  request: EventProjectionUserRequest;
   text: string;
   attachments?: {
     webImages: number;

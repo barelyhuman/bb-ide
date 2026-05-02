@@ -287,7 +287,7 @@ describe("timeline CLI rendering snapshots", () => {
 
   it("shows an unacknowledged active-turn steer from the client request", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
-    const timeline = renderIdleTimeline([
+    const timeline = renderActiveTimeline([
       event.turnStarted(),
       event.commandCompleted({
         itemId: "tool-before-steer",
@@ -307,33 +307,38 @@ describe("timeline CLI rendering snapshots", () => {
 
     expect(messageKinds(timeline.messages)).toEqual([
       "command",
-      "user",
       "command",
       "assistant-text",
     ]);
-    const steerMessage = timeline.messages.find(
-      (message) => message.kind === "user",
-    );
-    expect(steerMessage?.sourceSeqStart).toBe(3);
+    expect(
+      timeline.rows.some(
+        (row) => row.kind === "conversation" && row.role === "user",
+      ),
+    ).toBe(false);
+    expect(timeline.pendingSteers).toHaveLength(1);
+    expect(timeline.pendingSteers[0]?.sourceSeqStart).toBe(3);
+    expect(timeline.pendingSteers[0]?.userRequest).toEqual({
+      kind: "steer",
+      status: "pending",
+    });
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Worked on 2 items ───────────────────────────────────────
-        ── Ran 1 command
+        ── Ran 2 commands
           ── Ran command (completed)
             $ pnpm test
-
-        ── User
-        Please account for the restart
-
-        ── Ran 1 command
           ── Ran command (completed)
             $ sqlite3 ~/.bb-dev/bb.db '.tables'
 
       ── Assistant ───────────────────────────────────────────────
-      Done."
+      Done.
+
+      ── User ────────────────────────────────────────────────────
+      Please account for the restart
+      steer pending"
     `);
   });
 
-  it("uses active-turn input acceptance only as request correlation", () => {
+  it("places accepted active-turn steers at the acceptance position", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
     const timeline = renderIdleTimeline([
       event.turnStarted(),
@@ -365,7 +370,20 @@ describe("timeline CLI rendering snapshots", () => {
     const steerMessage = timeline.messages.find(
       (message) => message.kind === "user",
     );
-    expect(steerMessage?.sourceSeqStart).toBe(3);
+    expect(steerMessage?.sourceSeqStart).toBe(4);
+    expect(steerMessage?.request).toEqual({
+      kind: "steer",
+      status: "accepted",
+    });
+    expect(timeline.pendingSteers).toHaveLength(0);
+    const steerRow = timeline.turnRows[0]?.children?.find(
+      (row) => row.kind === "conversation" && row.role === "user",
+    );
+    expect(steerRow?.sourceSeqStart).toBe(4);
+    expect(steerRow?.userRequest).toEqual({
+      kind: "steer",
+      status: "accepted",
+    });
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Worked on 2 items ───────────────────────────────────────
         ── Ran 1 command
@@ -374,6 +392,7 @@ describe("timeline CLI rendering snapshots", () => {
 
         ── User
         Please account for the restart
+        steer
 
         ── Ran 1 command
           ── Ran command (completed)
