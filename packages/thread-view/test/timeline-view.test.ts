@@ -20,9 +20,21 @@ function baseRow(id: string): TimelineRowBase {
   };
 }
 
-function commandRow(): TimelineCommandWorkRow {
+interface CommandRowOverrides {
+  id?: string;
+  sourceSeqStart?: number;
+  sourceSeqEnd?: number;
+}
+
+function commandRow({
+  id = "command-1",
+  sourceSeqEnd = 1,
+  sourceSeqStart = 1,
+}: CommandRowOverrides = {}): TimelineCommandWorkRow {
   return {
-    ...baseRow("command-1"),
+    ...baseRow(id),
+    sourceSeqStart,
+    sourceSeqEnd,
     kind: "work",
     workKind: "command",
     status: "completed",
@@ -75,5 +87,43 @@ describe("buildTimelineViewRows", () => {
     expect(buildTimelineActivitySummaryLabel(row)).toBe("Denied 1 command");
     expect(row.children).toHaveLength(1);
     expect(row.children[0]?.id).toBe("command-denied-1");
+  });
+
+  it("keeps activity summary identity stable as a run grows", () => {
+    const firstRows = buildTimelineViewRows([
+      commandRow({
+        id: "command-1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+      }),
+    ]);
+    const nextRows = buildTimelineViewRows([
+      commandRow({
+        id: "command-1",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 1,
+      }),
+      commandRow({
+        id: "command-2",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 2,
+      }),
+    ]);
+    const firstSummary = firstRows[0];
+    const nextSummary = nextRows[0];
+    if (
+      !firstSummary ||
+      firstSummary.kind !== "activity-summary" ||
+      !nextSummary ||
+      nextSummary.kind !== "activity-summary"
+    ) {
+      throw new Error("Expected both work runs to be summarized");
+    }
+
+    expect(nextSummary.id).toBe(firstSummary.id);
+    expect(nextSummary.sourceSeqEnd).toBe(2);
+    expect(buildTimelineActivitySummaryLabel(nextSummary)).toBe(
+      "Ran 2 commands",
+    );
   });
 });

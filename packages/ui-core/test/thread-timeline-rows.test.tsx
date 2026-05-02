@@ -600,6 +600,57 @@ describe("ThreadTimelineRows", () => {
     expect(bundledCommandButton.classList.contains("px-2")).toBe(false);
   });
 
+  it("keeps mounted activity summary rows when streaming appends to the run", () => {
+    const firstCommand = commandRow({
+      id: "command-1",
+      command: "pnpm test",
+      sourceSeqStart: 1,
+    });
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[firstCommand]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    const summaryButton = screen.getByRole("button", {
+      name: /Ran 1 command/u,
+    });
+    fireEvent.click(summaryButton);
+    const childButton = screen.getByRole("button", {
+      name: /Ran\s+pnpm test\s+2s/u,
+    });
+
+    view.rerender(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[
+          firstCommand,
+          commandRow({
+            id: "command-2",
+            command: "pnpm lint",
+            sourceSeqStart: 2,
+          }),
+        ]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /Ran 2 commands/u }),
+    ).toBe(summaryButton);
+    expect(
+      screen.getByRole("button", { name: /Ran\s+pnpm test\s+2s/u }),
+    ).toBe(childButton);
+  });
+
   it("uses flush horizontal padding for static title rows inside activity summaries", () => {
     const view = render(
       <ThreadTimelineRows
