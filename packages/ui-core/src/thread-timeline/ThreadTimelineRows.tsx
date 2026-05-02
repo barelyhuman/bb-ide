@@ -56,7 +56,7 @@ interface TimelineRendererContext {
 interface TimelineRowsListProps extends TimelineRendererContext {
   rows: readonly ThreadTimelineViewRow[];
   scopeActive: boolean;
-  topLevel?: boolean;
+  spacing: TimelineRowsListSpacing;
 }
 
 interface TimelineRowViewProps extends TimelineRendererContext {
@@ -100,6 +100,8 @@ type TimelineConversationViewRow = Extract<
   ThreadTimelineViewRow,
   { kind: "conversation" }
 >;
+
+type TimelineRowsListSpacing = "top-level" | "nested" | "bundle";
 
 interface ConversationRowProps {
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
@@ -268,9 +270,15 @@ function TimelineStaticRow({ children, className }: TimelineStaticRowProps) {
 function timelineRowSpacingClassName(
   _row: ThreadTimelineViewRow,
   _index: number,
-  topLevel: boolean,
+  spacing: TimelineRowsListSpacing,
 ): string {
-  return topLevel ? "pt-1" : "";
+  return spacing === "top-level" ? "pt-1" : "";
+}
+
+function timelineRowsListGapClassName(
+  spacing: TimelineRowsListSpacing,
+): string {
+  return spacing === "bundle" ? "gap-0" : "gap-0.5";
 }
 
 function ConversationRow({
@@ -339,6 +347,7 @@ function TimelineExpandableBody({
           rows={row.children}
           scopeActive={false}
           compactActivityIntents={true}
+          spacing="bundle"
           expansion={expansion}
           loadingTurnSummaryIds={loadingTurnSummaryIds}
           erroredTurnSummaryIds={erroredTurnSummaryIds}
@@ -376,7 +385,7 @@ function TimelineExpandableBody({
                   rows={row.childRows}
                   scopeActive={row.status === "pending"}
                   compactActivityIntents={false}
-                  topLevel={false}
+                  spacing="nested"
                   expansion={expansion}
                   loadingTurnSummaryIds={loadingTurnSummaryIds}
                   erroredTurnSummaryIds={erroredTurnSummaryIds}
@@ -483,7 +492,7 @@ function TurnRowBody({
         rows={rows}
         scopeActive={row.status === "pending"}
         compactActivityIntents={compactActivityIntents}
-        topLevel={false}
+        spacing="nested"
         expansion={expansion}
         loadingTurnSummaryIds={loadingTurnSummaryIds}
         erroredTurnSummaryIds={erroredTurnSummaryIds}
@@ -592,16 +601,22 @@ function TimelineRowsList({
   resolveUserAttachmentImageSrc,
   rows,
   scopeActive,
-  topLevel = false,
+  spacing,
   themeType,
   turnSummaryRowsById,
 }: TimelineRowsListProps) {
   return (
-    <div className="flex min-w-0 flex-col gap-0.5">
+    <div
+      className={cn(
+        "flex min-w-0 flex-col",
+        timelineRowsListGapClassName(spacing),
+      )}
+      data-timeline-row-list={spacing}
+    >
       {rows.map((row, index) => (
         <div
           key={row.id}
-          className={timelineRowSpacingClassName(row, index, topLevel)}
+          className={timelineRowSpacingClassName(row, index, spacing)}
         >
           <TimelineRowView
             row={row}
@@ -647,7 +662,7 @@ export function ThreadTimelineRows(props: ThreadTimelineRowsProps) {
       rows={rows}
       scopeActive={scopeActive}
       compactActivityIntents={false}
-      topLevel={true}
+      spacing="top-level"
       expansion={expansion}
       loadingTurnSummaryIds={props.loadingTurnSummaryIds}
       erroredTurnSummaryIds={props.erroredTurnSummaryIds}

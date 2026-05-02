@@ -401,6 +401,39 @@ describe("ThreadTimelineRows", () => {
     expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 
+  it("renders rows inside activity summaries with no list gap", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[
+          commandRow({
+            id: "command-1",
+            command: "pnpm test",
+            sourceSeqStart: 1,
+          }),
+          commandRow({
+            id: "command-2",
+            command: "pnpm lint",
+            sourceSeqStart: 2,
+          }),
+        ]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Ran 2 commands/u }));
+
+    const bundleList = view.container.querySelector(
+      '[data-timeline-row-list="bundle"]',
+    );
+    expect(bundleList).not.toBeNull();
+    expect(bundleList?.classList.contains("gap-0")).toBe(true);
+    expect(bundleList?.classList.contains("gap-0.5")).toBe(false);
+  });
+
   it("loads lazy turn details once for one expansion", () => {
     const onLoadTurnSummaryRows = vi.fn();
     const view = render(
