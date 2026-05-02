@@ -115,7 +115,7 @@ grep -E "(✓|×|Test Files|Tests )" /tmp/integ-out.txt
 pnpm exec turbo run build --filter=@bb/agent-runtime --force
 ```
 
-**Tests run concurrently across providers.** All 3 provider suites run in parallel via `describe.concurrent`. This means the total wall time is roughly the slowest provider, not the sum. Cross-provider tests also run concurrently with each other.
+**Tests run concurrently within each scenario file.** All 3 provider variants in a file run in parallel via `describe.concurrent`. Scenario files run serially because Pi and other real providers share local auth state and external provider limits; running every scenario file at once has caused real-provider flakes where a turn completes without the expected tool execution.
 
 **When a test hangs**, the provider is likely not responding to a JSON-RPC request. Common causes:
 

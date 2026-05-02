@@ -35,6 +35,10 @@ export default defineConfig({
     exclude: ["dist/**", "node_modules/**"],
     testTimeout: 45_000,
     hookTimeout: 10_000,
+    // Real-provider tests share local provider credentials and external API
+    // limits. Keep files serial so one Pi scenario runs at a time; individual
+    // files still use provider-level concurrent tests where that is intentional.
+    fileParallelism: false,
     maxConcurrency: 16,
     env: dotEnv,
   },
