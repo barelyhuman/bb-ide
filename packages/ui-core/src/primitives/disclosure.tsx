@@ -1,5 +1,7 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "./cn.js";
+
+const EXPANDABLE_PANEL_TRANSITION_MS = 200;
 
 export const COLLAPSIBLE_HEADER_COLLAPSED_TONE_CLASS =
   "text-muted-foreground/90 transition-colors hover:text-foreground/90 focus-visible:text-foreground/90";
@@ -93,6 +95,7 @@ export interface ExpandablePanelProps {
   headerButtonClassName?: string;
   summaryContentClassName?: string;
   children?: ReactNode;
+  renderBody?: () => ReactNode;
   className?: string;
   headerClassName?: string;
   bodyClassName?: string;
@@ -107,6 +110,7 @@ export function ExpandablePanel({
   headerButtonClassName,
   summaryContentClassName,
   children,
+  renderBody,
   className,
   headerClassName,
   bodyClassName,
@@ -117,6 +121,38 @@ export function ExpandablePanel({
     headerClassName,
     headerButtonClassName,
   );
+  const [shouldRenderBody, setShouldRenderBody] = useState(isExpanded);
+  const [previousIsExpanded, setPreviousIsExpanded] = useState(isExpanded);
+  const renderedBodyRef = useRef<ReactNode>(null);
+  if (previousIsExpanded !== isExpanded) {
+    setPreviousIsExpanded(isExpanded);
+    if (isExpanded) {
+      setShouldRenderBody(true);
+    }
+  }
+  useEffect(() => {
+    if (isExpanded || !shouldRenderBody) {
+      return;
+    }
+    const timeout = setTimeout(
+      () => setShouldRenderBody(false),
+      EXPANDABLE_PANEL_TRANSITION_MS,
+    );
+    return () => clearTimeout(timeout);
+  }, [isExpanded, shouldRenderBody]);
+  const renderedBody =
+    shouldRenderBody && isExpanded
+      ? renderBody
+        ? renderBody()
+        : children
+      : shouldRenderBody
+        ? renderedBodyRef.current
+        : null;
+  if (isExpanded) {
+    renderedBodyRef.current = renderedBody;
+  } else if (!shouldRenderBody) {
+    renderedBodyRef.current = null;
+  }
 
   return (
     <div className={cn("rounded-md text-muted-foreground", className)}>
@@ -150,7 +186,7 @@ export function ExpandablePanel({
               contentClassName,
             )}
           >
-            {isExpanded ? children : null}
+            {renderedBody}
           </div>
         </div>
       </div>

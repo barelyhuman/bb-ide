@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import type { ReactNode } from "react";
+import type { MutableRefObject, ReactNode } from "react";
 import type { ThreadRuntimeDisplayStatus } from "@bb/domain";
 import type { TimelineRow, TimelineTurnRow } from "@bb/server-contract";
 import {
@@ -46,6 +46,7 @@ export interface ThreadTimelineRowsProps {
 interface TimelineRendererContext {
   compactActivityIntents: boolean;
   expansion: TimelineExpansionState;
+  requestedTurnSummaryRowIdsRef: MutableRefObject<Set<string>>;
   loadingTurnSummaryIds: ReadonlySet<string>;
   erroredTurnSummaryIds: ReadonlySet<string>;
   onLoadTurnSummaryRows: (entry: TimelineTurnRow) => void;
@@ -94,6 +95,12 @@ interface TimelineExpansionIds {
   rowIds: ReadonlySet<string>;
 }
 
+interface RequestLazyTurnRowsArgs {
+  onLoadTurnSummaryRows: (entry: TimelineTurnRow) => void;
+  requestedTurnSummaryRowIdsRef: MutableRefObject<Set<string>>;
+  row: TimelineViewTurnRow;
+}
+
 interface CollectTimelineExpansionIdsArgs {
   rows: readonly ThreadTimelineViewRow[];
   scopeActive: boolean;
@@ -126,6 +133,35 @@ interface TurnRowBodyProps extends TimelineRendererContext {
 
 function assertNever(value: never): never {
   throw new Error(`Unhandled timeline row: ${String(value)}`);
+}
+
+function toLazyTurnRequest(row: TimelineViewTurnRow): TimelineTurnRow {
+  return {
+    id: row.id,
+    threadId: row.threadId,
+    turnId: row.turnId,
+    sourceSeqStart: row.sourceSeqStart,
+    sourceSeqEnd: row.sourceSeqEnd,
+    startedAt: row.startedAt,
+    createdAt: row.createdAt,
+    kind: "turn",
+    status: row.status,
+    summaryCount: row.summaryCount,
+    durationMs: row.durationMs,
+    children: null,
+  };
+}
+
+function requestLazyTurnRows({
+  onLoadTurnSummaryRows,
+  requestedTurnSummaryRowIdsRef,
+  row,
+}: RequestLazyTurnRowsArgs): void {
+  if (requestedTurnSummaryRowIdsRef.current.has(row.id)) {
+    return;
+  }
+  requestedTurnSummaryRowIdsRef.current.add(row.id);
+  onLoadTurnSummaryRows(toLazyTurnRequest(row));
 }
 
 function isRuntimeScopeActive(status: ThreadRuntimeDisplayStatus): boolean {
@@ -392,6 +428,7 @@ function TimelineExpandableBody({
   onOpenLocalFileLink,
   projectId,
   resolveUserAttachmentImageSrc,
+  requestedTurnSummaryRowIdsRef,
   row,
   themeType,
   turnSummaryRowsById,
@@ -405,6 +442,7 @@ function TimelineExpandableBody({
           compactActivityIntents={true}
           spacing="bundle"
           expansion={expansion}
+          requestedTurnSummaryRowIdsRef={requestedTurnSummaryRowIdsRef}
           loadingTurnSummaryIds={loadingTurnSummaryIds}
           erroredTurnSummaryIds={erroredTurnSummaryIds}
           onLoadTurnSummaryRows={onLoadTurnSummaryRows}
@@ -421,6 +459,7 @@ function TimelineExpandableBody({
           row={row}
           compactActivityIntents={compactActivityIntents}
           expansion={expansion}
+          requestedTurnSummaryRowIdsRef={requestedTurnSummaryRowIdsRef}
           loadingTurnSummaryIds={loadingTurnSummaryIds}
           erroredTurnSummaryIds={erroredTurnSummaryIds}
           onLoadTurnSummaryRows={onLoadTurnSummaryRows}
@@ -443,6 +482,7 @@ function TimelineExpandableBody({
                   compactActivityIntents={false}
                   spacing="nested"
                   expansion={expansion}
+                  requestedTurnSummaryRowIdsRef={requestedTurnSummaryRowIdsRef}
                   loadingTurnSummaryIds={loadingTurnSummaryIds}
                   erroredTurnSummaryIds={erroredTurnSummaryIds}
                   onLoadTurnSummaryRows={onLoadTurnSummaryRows}
@@ -493,11 +533,11 @@ function TurnRowBody({
   onOpenLocalFileLink,
   projectId,
   resolveUserAttachmentImageSrc,
+  requestedTurnSummaryRowIdsRef,
   row,
   themeType,
   turnSummaryRowsById,
 }: TurnRowBodyProps) {
-  const requestedTurnIdRef = useRef<string | null>(null);
   const loadedRows = turnSummaryRowsById[row.id];
   const hasInlineChildren = row.children !== null;
   const rows = hasInlineChildren
@@ -513,27 +553,24 @@ function TurnRowBody({
       hasInlineChildren ||
       rows !== null ||
       isLoading ||
-      isError ||
-      requestedTurnIdRef.current === row.id
+      isError
     ) {
       return;
     }
-    requestedTurnIdRef.current = row.id;
-    onLoadTurnSummaryRows({
-      id: row.id,
-      threadId: row.threadId,
-      turnId: row.turnId,
-      sourceSeqStart: row.sourceSeqStart,
-      sourceSeqEnd: row.sourceSeqEnd,
-      startedAt: row.startedAt,
-      createdAt: row.createdAt,
-      kind: "turn",
-      status: row.status,
-      summaryCount: row.summaryCount,
-      durationMs: row.durationMs,
-      children: null,
+    requestLazyTurnRows({
+      onLoadTurnSummaryRows,
+      requestedTurnSummaryRowIdsRef,
+      row,
     });
-  }, [hasInlineChildren, isError, isLoading, onLoadTurnSummaryRows, row, rows]);
+  }, [
+    hasInlineChildren,
+    isError,
+    isLoading,
+    onLoadTurnSummaryRows,
+    requestedTurnSummaryRowIdsRef,
+    row,
+    rows,
+  ]);
 
   if (isError) {
     return (
@@ -550,6 +587,7 @@ function TurnRowBody({
         compactActivityIntents={compactActivityIntents}
         spacing="nested"
         expansion={expansion}
+        requestedTurnSummaryRowIdsRef={requestedTurnSummaryRowIdsRef}
         loadingTurnSummaryIds={loadingTurnSummaryIds}
         erroredTurnSummaryIds={erroredTurnSummaryIds}
         onLoadTurnSummaryRows={onLoadTurnSummaryRows}
@@ -576,6 +614,7 @@ function TimelineRowView({
   onOpenLocalFileLink,
   projectId,
   resolveUserAttachmentImageSrc,
+  requestedTurnSummaryRowIdsRef,
   row,
   scopeActive,
   spacing,
@@ -628,17 +667,37 @@ function TimelineRowView({
     );
   }
 
+  const isExpanded = expansion.isExpanded(row.id);
+  const handleToggle = (): void => {
+    if (
+      row.kind === "turn" &&
+      !isExpanded &&
+      row.children === null &&
+      !turnSummaryRowsById[row.id] &&
+      !loadingTurnSummaryIds.has(row.id) &&
+      !erroredTurnSummaryIds.has(row.id)
+    ) {
+      requestLazyTurnRows({
+        onLoadTurnSummaryRows,
+        requestedTurnSummaryRowIdsRef,
+        row,
+      });
+    }
+    expansion.toggle(row.id);
+  };
+
   return (
     <ExpandableTimelineRow
       title={title}
       horizontalPadding={horizontalPadding}
-      isExpanded={expansion.isExpanded(row.id)}
-      onToggle={() => expansion.toggle(row.id)}
+      isExpanded={isExpanded}
+      onToggle={handleToggle}
       renderBody={() => (
         <TimelineExpandableBody
           row={row}
           compactActivityIntents={compactActivityIntents}
           expansion={expansion}
+          requestedTurnSummaryRowIdsRef={requestedTurnSummaryRowIdsRef}
           loadingTurnSummaryIds={loadingTurnSummaryIds}
           erroredTurnSummaryIds={erroredTurnSummaryIds}
           onLoadTurnSummaryRows={onLoadTurnSummaryRows}
@@ -662,6 +721,7 @@ function TimelineRowsList({
   onOpenLocalFileLink,
   projectId,
   resolveUserAttachmentImageSrc,
+  requestedTurnSummaryRowIdsRef,
   rows,
   scopeActive,
   spacing,
@@ -688,6 +748,7 @@ function TimelineRowsList({
             spacing={spacing}
             compactActivityIntents={compactActivityIntents}
             expansion={expansion}
+            requestedTurnSummaryRowIdsRef={requestedTurnSummaryRowIdsRef}
             loadingTurnSummaryIds={loadingTurnSummaryIds}
             erroredTurnSummaryIds={erroredTurnSummaryIds}
             onLoadTurnSummaryRows={onLoadTurnSummaryRows}
@@ -720,6 +781,7 @@ export function ThreadTimelineRows(props: ThreadTimelineRowsProps) {
     [rows, scopeActive, props.turnSummaryRowsById],
   );
   const expansion = useTimelineExpansionState(expansionIds);
+  const requestedTurnSummaryRowIdsRef = useRef(new Set<string>());
 
   return (
     <TimelineRowsList
@@ -728,6 +790,7 @@ export function ThreadTimelineRows(props: ThreadTimelineRowsProps) {
       compactActivityIntents={false}
       spacing="top-level"
       expansion={expansion}
+      requestedTurnSummaryRowIdsRef={requestedTurnSummaryRowIdsRef}
       loadingTurnSummaryIds={props.loadingTurnSummaryIds}
       erroredTurnSummaryIds={props.erroredTurnSummaryIds}
       onLoadTurnSummaryRows={props.onLoadTurnSummaryRows}

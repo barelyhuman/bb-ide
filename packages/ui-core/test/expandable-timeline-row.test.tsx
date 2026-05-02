@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TimelineTitle } from "@bb/thread-view";
 import { ExpandableTimelineRow } from "../src/thread-timeline/ExpandableTimelineRow.js";
@@ -35,40 +35,54 @@ describe("ExpandableTimelineRow", () => {
     expect(view.container.textContent ?? "").not.toContain("expensive details");
   });
 
-  it("renders body children only while expanded", () => {
+  it("renders body children while expanded and through the close animation", () => {
+    vi.useFakeTimers();
     const renderBody = vi.fn(() => <div>expensive details</div>);
-    const view = render(
-      <ExpandableTimelineRow
-        title={TITLE}
-        isExpanded={false}
-        onToggle={() => {}}
-        renderBody={renderBody}
-      />,
-    );
+    try {
+      const view = render(
+        <ExpandableTimelineRow
+          title={TITLE}
+          isExpanded={false}
+          onToggle={() => {}}
+          renderBody={renderBody}
+        />,
+      );
 
-    view.rerender(
-      <ExpandableTimelineRow
-        title={TITLE}
-        isExpanded={true}
-        onToggle={() => {}}
-        renderBody={renderBody}
-      />,
-    );
+      view.rerender(
+        <ExpandableTimelineRow
+          title={TITLE}
+          isExpanded={true}
+          onToggle={() => {}}
+          renderBody={renderBody}
+        />,
+      );
 
-    expect(renderBody).toHaveBeenCalledTimes(1);
-    expect(view.container.textContent ?? "").toContain("expensive details");
+      expect(renderBody).toHaveBeenCalledTimes(1);
+      expect(view.container.textContent ?? "").toContain("expensive details");
 
-    view.rerender(
-      <ExpandableTimelineRow
-        title={TITLE}
-        isExpanded={false}
-        onToggle={() => {}}
-        renderBody={renderBody}
-      />,
-    );
+      view.rerender(
+        <ExpandableTimelineRow
+          title={TITLE}
+          isExpanded={false}
+          onToggle={() => {}}
+          renderBody={renderBody}
+        />,
+      );
 
-    expect(renderBody).toHaveBeenCalledTimes(1);
-    expect(view.container.textContent ?? "").not.toContain("expensive details");
+      expect(renderBody).toHaveBeenCalledTimes(1);
+      expect(view.container.textContent ?? "").toContain("expensive details");
+
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+
+      expect(renderBody).toHaveBeenCalledTimes(1);
+      expect(view.container.textContent ?? "").not.toContain(
+        "expensive details",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("exposes expansion state on the toggle button", () => {

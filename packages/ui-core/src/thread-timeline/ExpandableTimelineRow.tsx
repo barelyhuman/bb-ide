@@ -60,8 +60,7 @@ export function ExpandableTimelineRow({
       headerClassName={cn(horizontalPaddingClass, "py-0")}
       headerButtonClassName="w-full max-w-full justify-start py-0 leading-none"
       contentClassName={cn(horizontalPaddingClass, "pb-1 pt-0.5")}
-    >
-      {isExpanded ? renderBody() : null}
-    </ExpandablePanel>
+      renderBody={renderBody}
+    />
   );
 }
