@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   TimelineActivityIntent,
   TimelineCommandWorkRow,
+  TimelineFileChangeWorkRow,
   TimelineRow,
   TimelineRowBase,
   TimelineRowStatus,
@@ -84,6 +85,29 @@ function webSearchRow(): TimelineWebSearchWorkRow {
     callId: "web-search-1",
     queries: ["timeline renderer"],
     resultText: "search result body",
+  };
+}
+
+function fileChangeRow(): TimelineFileChangeWorkRow {
+  return {
+    ...baseRow({ id: "file-change-1", sourceSeqStart: 1 }),
+    kind: "work",
+    workKind: "file-change",
+    status: "completed",
+    callId: "file-change-1",
+    change: {
+      path: "src/app.ts",
+      kind: "update",
+      movePath: null,
+      diff: "@@ -1 +1 @@\n-before\n+after",
+      diffStats: {
+        added: 1,
+        removed: 1,
+      },
+    },
+    stdout: "applied",
+    stderr: null,
+    approvalStatus: null,
   };
 }
 
@@ -226,6 +250,53 @@ describe("ThreadTimelineRows", () => {
 
     expect(view.container.textContent ?? "").toContain("$ true");
     expect(view.container.textContent ?? "").toContain("exit code 0");
+  });
+
+  it("renders ANSI command output without leaking escape codes", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[
+          commandRow({
+            id: "command-ansi-1",
+            command: "printf red",
+            output: "\u001b[31mred\u001b[0m",
+          }),
+        ]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button"));
+
+    expect(view.container.textContent ?? "").toContain("red");
+    expect(view.container.textContent ?? "").not.toContain("\u001b");
+  });
+
+  it("hides file diff detail until the row is expanded", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[fileChangeRow()]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    expect(view.container.textContent ?? "").toContain("Edited");
+    expect(view.container.querySelector("[data-timeline-file-diff]")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button"));
+
+    expect(
+      view.container.querySelector("[data-timeline-file-diff]"),
+    ).not.toBeNull();
+    expect(view.container.textContent ?? "").toContain("applied");
   });
 
   it("renders plain conversation rows through the timeline path", () => {

@@ -19,6 +19,7 @@ import type {
 } from "./types.js";
 import { ExpandableTimelineRow } from "./ExpandableTimelineRow.js";
 import { TimelineTitleView } from "./TimelineTitleView.js";
+import { WorkRowBody } from "./TimelineRowDetails.js";
 import {
   useTimelineExpansionState,
   type TimelineExpansionState,
@@ -42,6 +43,7 @@ interface TimelineRendererContext {
   loadingTurnSummaryIds: ReadonlySet<string>;
   erroredTurnSummaryIds: ReadonlySet<string>;
   onLoadTurnSummaryRows: (entry: TimelineTurnRow) => void;
+  themeType: ThreadTimelineTheme;
   turnSummaryRowsById: Record<string, TimelineRow[]>;
 }
 
@@ -63,7 +65,6 @@ interface TimelineStaticRowProps {
 
 interface TimelineExpandableBodyProps extends TimelineRendererContext {
   row: ThreadTimelineViewRow;
-  scopeActive: boolean;
 }
 
 interface TimelineExpansionIds {
@@ -89,10 +90,6 @@ type TimelineConversationViewRow = Extract<
 
 interface ConversationRowProps {
   row: TimelineConversationViewRow;
-}
-
-interface WorkRowBodyProps {
-  row: TimelineViewWorkRow;
 }
 
 interface TurnRowBodyProps extends TimelineRendererContext {
@@ -270,78 +267,13 @@ function ConversationRow({ row }: ConversationRowProps) {
   );
 }
 
-function WorkRowBody({ row }: WorkRowBodyProps) {
-  switch (row.workKind) {
-    case "command":
-      return (
-        <EventCodeBlock maxHeightClassName="max-h-96">
-          {[
-            `$ ${row.command}`,
-            row.cwd ? `cwd: ${row.cwd}` : null,
-            row.source ? `source: ${row.source}` : null,
-            row.output.trim().length > 0 ? row.output : null,
-            row.exitCode !== null && row.exitCode !== 0
-              ? `exit code ${row.exitCode}`
-              : null,
-            row.exitCode === 0 && row.output.trim().length === 0
-              ? "exit code 0"
-              : null,
-          ]
-            .filter((line): line is string => line !== null)
-            .join("\n")}
-        </EventCodeBlock>
-      );
-    case "tool":
-      return (
-        <EventCodeBlock maxHeightClassName="max-h-96">
-          {[
-            row.toolArgs ? JSON.stringify(row.toolArgs, null, 2) : null,
-            row.output.trim().length > 0 ? row.output : null,
-          ]
-            .filter((line): line is string => line !== null)
-            .join("\n\n")}
-        </EventCodeBlock>
-      );
-    case "file-change":
-      return (
-        <div className="space-y-2">
-          {row.change.diff ? (
-            <EventCodeBlock maxHeightClassName="max-h-96">
-              {row.change.diff}
-            </EventCodeBlock>
-          ) : null}
-          {row.stdout ? (
-            <EventCodeBlock maxHeightClassName="max-h-48">
-              {row.stdout}
-            </EventCodeBlock>
-          ) : null}
-          {row.stderr ? (
-            <EventCodeBlock tone="danger" maxHeightClassName="max-h-48">
-              {row.stderr}
-            </EventCodeBlock>
-          ) : null}
-        </div>
-      );
-    case "delegation":
-      return row.output.trim().length > 0 ? (
-        <EventCodeBlock maxHeightClassName="max-h-96">{row.output}</EventCodeBlock>
-      ) : null;
-    case "approval":
-    case "web-search":
-    case "web-fetch":
-      return null;
-    default:
-      return assertNever(row);
-  }
-}
-
 function TimelineExpandableBody({
   erroredTurnSummaryIds,
   expansion,
   loadingTurnSummaryIds,
   onLoadTurnSummaryRows,
   row,
-  scopeActive,
+  themeType,
   turnSummaryRowsById,
 }: TimelineExpandableBodyProps) {
   switch (row.kind) {
@@ -354,6 +286,7 @@ function TimelineExpandableBody({
           loadingTurnSummaryIds={loadingTurnSummaryIds}
           erroredTurnSummaryIds={erroredTurnSummaryIds}
           onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+          themeType={themeType}
           turnSummaryRowsById={turnSummaryRowsById}
         />
       );
@@ -365,6 +298,7 @@ function TimelineExpandableBody({
           loadingTurnSummaryIds={loadingTurnSummaryIds}
           erroredTurnSummaryIds={erroredTurnSummaryIds}
           onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+          themeType={themeType}
           turnSummaryRowsById={turnSummaryRowsById}
         />
       );
@@ -378,11 +312,12 @@ function TimelineExpandableBody({
             loadingTurnSummaryIds={loadingTurnSummaryIds}
             erroredTurnSummaryIds={erroredTurnSummaryIds}
             onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+            themeType={themeType}
             turnSummaryRowsById={turnSummaryRowsById}
           />
         );
       }
-      return <WorkRowBody row={row} />;
+      return <WorkRowBody row={row} themeType={themeType} />;
     case "system":
       return row.detail ? (
         <EventCodeBlock tone={row.systemKind === "error" ? "danger" : "default"}>
@@ -402,6 +337,7 @@ function TurnRowBody({
   loadingTurnSummaryIds,
   onLoadTurnSummaryRows,
   row,
+  themeType,
   turnSummaryRowsById,
 }: TurnRowBodyProps) {
   const requestedTurnIdRef = useRef<string | null>(null);
@@ -458,6 +394,7 @@ function TurnRowBody({
         loadingTurnSummaryIds={loadingTurnSummaryIds}
         erroredTurnSummaryIds={erroredTurnSummaryIds}
         onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+        themeType={themeType}
         turnSummaryRowsById={turnSummaryRowsById}
       />
     );
@@ -475,6 +412,7 @@ function TimelineRowView({
   onLoadTurnSummaryRows,
   row,
   scopeActive,
+  themeType,
   turnSummaryRowsById,
 }: TimelineRowViewProps) {
   if (row.kind === "conversation") {
@@ -502,11 +440,11 @@ function TimelineRowView({
       body={
         <TimelineExpandableBody
           row={row}
-          scopeActive={scopeActive}
           expansion={expansion}
           loadingTurnSummaryIds={loadingTurnSummaryIds}
           erroredTurnSummaryIds={erroredTurnSummaryIds}
           onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+          themeType={themeType}
           turnSummaryRowsById={turnSummaryRowsById}
         />
       }
@@ -521,6 +459,7 @@ function TimelineRowsList({
   onLoadTurnSummaryRows,
   rows,
   scopeActive,
+  themeType,
   turnSummaryRowsById,
 }: TimelineRowsListProps) {
   return (
@@ -535,6 +474,7 @@ function TimelineRowsList({
           loadingTurnSummaryIds={loadingTurnSummaryIds}
           erroredTurnSummaryIds={erroredTurnSummaryIds}
           onLoadTurnSummaryRows={onLoadTurnSummaryRows}
+          themeType={themeType}
           turnSummaryRowsById={turnSummaryRowsById}
         />
       ))}
@@ -548,6 +488,7 @@ export function ThreadTimelineRows(props: ThreadTimelineRowsProps) {
     [props.timelineRows],
   );
   const scopeActive = isRuntimeScopeActive(props.threadRuntimeDisplayStatus);
+  const themeType = props.themeType ?? "light";
   const expansionIds = useMemo(
     () => collectTimelineExpansionIds({ rows, scopeActive }),
     [rows, scopeActive],
@@ -562,6 +503,7 @@ export function ThreadTimelineRows(props: ThreadTimelineRowsProps) {
       loadingTurnSummaryIds={props.loadingTurnSummaryIds}
       erroredTurnSummaryIds={props.erroredTurnSummaryIds}
       onLoadTurnSummaryRows={props.onLoadTurnSummaryRows}
+      themeType={themeType}
       turnSummaryRowsById={props.turnSummaryRowsById}
     />
   );
