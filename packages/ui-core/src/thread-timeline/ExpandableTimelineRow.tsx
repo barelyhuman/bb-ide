@@ -23,7 +23,7 @@ function headerToneClass(title: TimelineTitle, isExpanded: boolean): string {
     return "text-destructive";
   }
   if (title.tone === "summary") {
-    return "text-muted-foreground/60 transition-colors group-hover:text-muted-foreground/80 group-focus-within:text-muted-foreground/80";
+    return "text-muted-foreground/60 transition-colors hover:text-muted-foreground/80 focus:text-muted-foreground/80";
   }
   return getCollapsibleHeaderToneClass(isExpanded);
 }
@@ -56,7 +56,7 @@ export function ExpandableTimelineRow({
       headerToneClass={headerToneClass(title, isExpanded)}
       summaryContent={<TimelineTitleView title={title} />}
       summaryContentClassName="min-w-0 max-w-full"
-      className={cn(isExpanded ? "w-full" : "group w-full", className)}
+      className={cn("w-full", className)}
       headerClassName={cn(horizontalPaddingClass, "py-0")}
       headerButtonClassName="w-full max-w-full justify-start py-0 leading-4"
       contentClassName={cn(horizontalPaddingClass, "pb-1 pt-0.5")}

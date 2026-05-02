@@ -156,9 +156,29 @@ describe("ExpandableTimelineRow", () => {
 
     expect(screen.getByRole("button").className).toContain("w-full");
     expect(screen.getByRole("button").className).toContain("justify-start");
+    expect(screen.getByRole("button").className).toContain("group/toggle");
     expect(screen.getByRole("button").className).not.toContain(
       "justify-between",
     );
+  });
+
+  it("shows the chevron from the clickable button hover state", () => {
+    const view = render(
+      <ExpandableTimelineRow
+        title={TITLE}
+        isExpanded={false}
+        onToggle={() => {}}
+        renderBody={() => <div>details</div>}
+      />,
+    );
+
+    const chevron = view.container.querySelector("svg");
+    const chevronClassName = chevron?.getAttribute("class") ?? "";
+
+    expect(screen.getByRole("button").className).toContain("group/toggle");
+    expect(chevronClassName).toContain("group-hover/toggle:opacity-100");
+    expect(chevronClassName).not.toContain("group-hover:opacity-100");
+    expect(view.container.firstElementChild?.className).not.toContain("group");
   });
 
   it("uses compact timeline header padding", () => {
@@ -211,7 +231,7 @@ describe("ExpandableTimelineRow", () => {
     expect(view.container.innerHTML).not.toContain("pt-0 ");
   });
 
-  it("drops wrapper group class while expanded so hover does not leak to nested rows", () => {
+  it("does not put hover group state on the row wrapper", () => {
     const view = render(
       <ExpandableTimelineRow
         title={TITLE}
@@ -221,7 +241,7 @@ describe("ExpandableTimelineRow", () => {
       />,
     );
 
-    expect(view.container.firstElementChild?.className).toContain("group");
+    expect(view.container.firstElementChild?.className).not.toContain("group");
 
     view.rerender(
       <ExpandableTimelineRow

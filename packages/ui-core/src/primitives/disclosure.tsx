@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { cn } from "./cn.js";
 
 export const COLLAPSIBLE_HEADER_COLLAPSED_TONE_CLASS =
-  "text-muted-foreground/90 transition-colors group-hover:text-foreground/90 group-focus-within:text-foreground/90";
+  "text-muted-foreground/90 transition-colors hover:text-foreground/90 focus:text-foreground/90";
 export const COLLAPSIBLE_HEADER_EXPANDED_TONE_CLASS = "text-foreground/90";
 export const COLLAPSIBLE_HEADER_STATIC_TONE_CLASS = "text-muted-foreground/90";
 export const COLLAPSIBLE_HEADER_BUTTON_BASE_CLASS =
@@ -52,6 +52,7 @@ export function CollapsibleHeader({
   const rootClassName = cn(
     COLLAPSIBLE_HEADER_BUTTON_BASE_CLASS,
     toneClassName,
+    onToggle ? "group/toggle" : null,
     className,
   );
   const summaryClass = summaryClassName ?? COLLAPSIBLE_HEADER_TEXT_CLASS;
@@ -77,7 +78,7 @@ export function CollapsibleHeader({
           "pointer-events-none size-4 shrink-0 origin-center transition-[opacity,rotate] duration-200 ease-out",
           isExpanded
             ? "rotate-90"
-            : "opacity-0 group-hover:opacity-100 max-md:pointer-coarse:opacity-100",
+            : "opacity-0 group-hover/toggle:opacity-100 group-focus/toggle:opacity-100 max-md:pointer-coarse:opacity-100",
         )}
       />
     </button>
