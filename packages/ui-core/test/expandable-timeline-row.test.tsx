@@ -178,7 +178,11 @@ describe("ExpandableTimelineRow", () => {
 
     expect(screen.getByRole("button").className).toContain("group/toggle");
     expect(chevronClassName).toContain("group-hover/toggle:opacity-100");
+    expect(chevronClassName).toContain(
+      "group-focus-visible/toggle:opacity-100",
+    );
     expect(chevronClassName).not.toContain("group-hover:opacity-100");
+    expect(chevronClassName).not.toContain("group-focus/toggle:opacity-100");
     expect(view.container.firstElementChild?.className).not.toContain("group");
   });
 
