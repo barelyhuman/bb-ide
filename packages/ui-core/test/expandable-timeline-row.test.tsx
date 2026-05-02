@@ -135,6 +135,20 @@ describe("ExpandableTimelineRow", () => {
     expect(view.container.innerHTML).not.toContain("py-1");
   });
 
+  it("keeps a small gap between an expanded title and its contents", () => {
+    const view = render(
+      <ExpandableTimelineRow
+        title={TITLE}
+        isExpanded={true}
+        onToggle={() => {}}
+        renderBody={() => <div>details</div>}
+      />,
+    );
+
+    expect(view.container.innerHTML).toContain("pt-0.5");
+    expect(view.container.innerHTML).not.toContain("pt-0 ");
+  });
+
   it("drops wrapper group class while expanded so hover does not leak to nested rows", () => {
     const view = render(
       <ExpandableTimelineRow
