@@ -153,33 +153,6 @@ function isRowExpandable(row: ThreadTimelineViewRow): boolean {
   }
 }
 
-function isErrorRow(row: ThreadTimelineViewRow): boolean {
-  switch (row.kind) {
-    case "conversation":
-      return false;
-    case "system":
-      return row.systemKind === "error" || row.status === "error";
-    case "activity-summary":
-    case "turn":
-      return row.status === "error";
-    case "work":
-      if (row.status === "error") {
-        return true;
-      }
-      if (
-        row.workKind === "approval" ||
-        row.workKind === "delegation" ||
-        row.workKind === "web-fetch" ||
-        row.workKind === "web-search"
-      ) {
-        return false;
-      }
-      return row.approvalStatus === "denied";
-    default:
-      return assertNever(row);
-  }
-}
-
 function rowHasPendingStatus(row: ThreadTimelineViewRow): boolean {
   switch (row.kind) {
     case "conversation":
@@ -215,10 +188,16 @@ function shouldAutoExpandRow({
   if (!isRowExpandable(row)) {
     return false;
   }
-  if (row.kind === "activity-summary" && scopeActive && isTail) {
-    return true;
+  if (!scopeActive) {
+    return false;
   }
-  return rowHasPendingStatus(row) || isErrorRow(row);
+  if (!rowHasPendingStatus(row)) {
+    return false;
+  }
+  if (row.kind === "activity-summary") {
+    return scopeActive && isTail;
+  }
+  return true;
 }
 
 function collectTimelineExpansionIds({

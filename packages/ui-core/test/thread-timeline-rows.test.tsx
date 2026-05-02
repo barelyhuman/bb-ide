@@ -430,6 +430,96 @@ describe("ThreadTimelineRows", () => {
     expect(view.container.innerHTML).not.toContain("text-destructive");
   });
 
+  it("does not auto-expand error command details", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[
+          commandRow({
+            id: "command-error-1",
+            command: "pnpm test",
+            output: "test failure",
+            status: "error",
+          }),
+        ]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    const button = screen.getByRole("button", { name: /Ran\s+pnpm test/u });
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    expect(view.container.textContent ?? "").not.toContain("test failure");
+  });
+
+  it("auto-expands pending direct work in an active turn", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[
+          commandRow({
+            id: "command-pending-1",
+            command: "pnpm test",
+            output: "still running",
+            status: "pending",
+          }),
+        ]}
+        threadRuntimeDisplayStatus="active"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    const button = screen.getByRole("button", {
+      name: /Running\s+pnpm test/u,
+    });
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    expect(view.container.textContent ?? "").toContain("still running");
+  });
+
+  it("does not auto-expand pending work already summarized by an active bundle", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[
+          commandRow({
+            id: "command-pending-1",
+            command: "pnpm test",
+            output: "first output",
+            sourceSeqStart: 1,
+            status: "pending",
+          }),
+          commandRow({
+            id: "command-pending-2",
+            command: "pnpm lint",
+            output: "second output",
+            sourceSeqStart: 2,
+            status: "pending",
+          }),
+        ]}
+        threadRuntimeDisplayStatus="active"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    const bundleButton = screen.getByRole("button", {
+      name: /Running 2 commands/u,
+    });
+    expect(bundleButton.getAttribute("aria-expanded")).toBe("true");
+
+    const commandButton = screen.getByRole("button", {
+      name: /Running\s+pnpm test/u,
+    });
+    expect(commandButton.getAttribute("aria-expanded")).toBe("false");
+    expect(view.container.textContent ?? "").not.toContain("first output");
+    expect(view.container.textContent ?? "").not.toContain("second output");
+  });
+
   it("omits command cwd metadata and mutes exit code detail", () => {
     const view = render(
       <ThreadTimelineRows
