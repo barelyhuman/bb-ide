@@ -12,6 +12,7 @@ import type {
   TimelineWorkRow,
 } from "@bb/server-contract";
 import { assertNever } from "./assert-never.js";
+import { hasTimelineExplorationIntent } from "./timeline-activity-intents.js";
 
 export interface TimelineViewDelegationWorkRow extends Omit<
   TimelineDelegationWorkRow,
@@ -76,12 +77,6 @@ function lowerFirst(value: string): string {
   return value.length === 0
     ? value
     : `${value.charAt(0).toLowerCase()}${value.slice(1)}`;
-}
-
-function hasExplorationIntent(
-  row: TimelineCommandWorkRow | TimelineToolWorkRow,
-): boolean {
-  return row.activityIntents.some((intent) => intent.type !== "unknown");
 }
 
 function getExploredFileIdentity(
@@ -151,14 +146,14 @@ export function summarizeTimelineActivity(
   for (const row of rows) {
     switch (row.workKind) {
       case "command":
-        if (hasExplorationIntent(row)) {
+        if (hasTimelineExplorationIntent(row)) {
           countExplorationIntents(row, counts, exploredFileIdentities);
         } else {
           counts.commands += 1;
         }
         break;
       case "tool":
-        if (hasExplorationIntent(row)) {
+        if (hasTimelineExplorationIntent(row)) {
           countExplorationIntents(row, counts, exploredFileIdentities);
         } else {
           counts.tools += 1;
@@ -257,9 +252,9 @@ function getTimelineActivitySummaryCategory(
 ): TimelineActivitySummaryCategory | null {
   switch (row.workKind) {
     case "command":
-      return hasExplorationIntent(row) ? "exploration" : "commands";
+      return hasTimelineExplorationIntent(row) ? "exploration" : "commands";
     case "tool":
-      return hasExplorationIntent(row) ? "exploration" : "tools";
+      return hasTimelineExplorationIntent(row) ? "exploration" : "tools";
     case "file-change":
       return "fileChanges";
     case "web-fetch":
@@ -460,7 +455,7 @@ function shouldSummarizeRun(rows: readonly TimelineViewWorkRow[]): boolean {
   }
   if (
     (only.workKind === "command" || only.workKind === "tool") &&
-    hasExplorationIntent(only)
+    hasTimelineExplorationIntent(only)
   ) {
     return true;
   }

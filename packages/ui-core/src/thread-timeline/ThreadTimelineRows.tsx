@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { ThreadRuntimeDisplayStatus } from "@bb/domain";
 import type { TimelineRow, TimelineTurnRow } from "@bb/server-contract";
 import {
+  buildTimelineActivityIntentTitles,
   buildTimelineRowTitle,
   buildTimelineViewRows,
   type BuildTimelineRowTitleOptions,
@@ -40,6 +41,7 @@ export interface ThreadTimelineRowsProps {
 }
 
 interface TimelineRendererContext {
+  compactActivityIntents: boolean;
   expansion: TimelineExpansionState;
   loadingTurnSummaryIds: ReadonlySet<string>;
   erroredTurnSummaryIds: ReadonlySet<string>;
@@ -187,6 +189,18 @@ function rowHasPendingStatus(row: ThreadTimelineViewRow): boolean {
   }
 }
 
+function shouldRenderCompactActivityIntentRows(
+  row: ThreadTimelineViewRow,
+): row is Extract<TimelineViewWorkRow, { workKind: "command" | "tool" }> {
+  return (
+    row.kind === "work" &&
+    (row.workKind === "command" || row.workKind === "tool") &&
+    row.approvalStatus === null &&
+    row.status !== "error" &&
+    row.status !== "interrupted"
+  );
+}
+
 function shouldAutoExpandRow({
   isTail,
   row,
@@ -282,6 +296,7 @@ function ConversationRow({
 }
 
 function TimelineExpandableBody({
+  compactActivityIntents,
   erroredTurnSummaryIds,
   expansion,
   loadingTurnSummaryIds,
@@ -299,6 +314,7 @@ function TimelineExpandableBody({
         <TimelineRowsList
           rows={row.children}
           scopeActive={false}
+          compactActivityIntents={true}
           expansion={expansion}
           loadingTurnSummaryIds={loadingTurnSummaryIds}
           erroredTurnSummaryIds={erroredTurnSummaryIds}
@@ -314,6 +330,7 @@ function TimelineExpandableBody({
       return (
         <TurnRowBody
           row={row}
+          compactActivityIntents={compactActivityIntents}
           expansion={expansion}
           loadingTurnSummaryIds={loadingTurnSummaryIds}
           erroredTurnSummaryIds={erroredTurnSummaryIds}
@@ -331,6 +348,7 @@ function TimelineExpandableBody({
           <TimelineRowsList
             rows={row.childRows}
             scopeActive={row.status === "pending"}
+            compactActivityIntents={false}
             expansion={expansion}
             loadingTurnSummaryIds={loadingTurnSummaryIds}
             erroredTurnSummaryIds={erroredTurnSummaryIds}
@@ -358,6 +376,7 @@ function TimelineExpandableBody({
 }
 
 function TurnRowBody({
+  compactActivityIntents,
   erroredTurnSummaryIds,
   expansion,
   loadingTurnSummaryIds,
@@ -419,6 +438,7 @@ function TurnRowBody({
       <TimelineRowsList
         rows={rows}
         scopeActive={row.status === "pending"}
+        compactActivityIntents={compactActivityIntents}
         expansion={expansion}
         loadingTurnSummaryIds={loadingTurnSummaryIds}
         erroredTurnSummaryIds={erroredTurnSummaryIds}
@@ -437,6 +457,7 @@ function TurnRowBody({
 }
 
 function TimelineRowView({
+  compactActivityIntents,
   erroredTurnSummaryIds,
   expansion,
   isTail,
@@ -460,6 +481,23 @@ function TimelineRowView({
       />
     );
   }
+  if (
+    compactActivityIntents &&
+    shouldRenderCompactActivityIntentRows(row)
+  ) {
+    const titles = buildTimelineActivityIntentTitles(row);
+    if (titles.length > 0) {
+      return (
+        <>
+          {titles.map((entry) => (
+            <TimelineStaticRow key={entry.id}>
+              <TimelineTitleView title={entry.title} />
+            </TimelineStaticRow>
+          ))}
+        </>
+      );
+    }
+  }
 
   const title = buildTimelineRowTitle(
     row,
@@ -482,6 +520,7 @@ function TimelineRowView({
       body={
         <TimelineExpandableBody
           row={row}
+          compactActivityIntents={compactActivityIntents}
           expansion={expansion}
           loadingTurnSummaryIds={loadingTurnSummaryIds}
           erroredTurnSummaryIds={erroredTurnSummaryIds}
@@ -498,6 +537,7 @@ function TimelineRowView({
 }
 
 function TimelineRowsList({
+  compactActivityIntents,
   erroredTurnSummaryIds,
   expansion,
   loadingTurnSummaryIds,
@@ -518,6 +558,7 @@ function TimelineRowsList({
           row={row}
           isTail={index === rows.length - 1}
           scopeActive={scopeActive}
+          compactActivityIntents={compactActivityIntents}
           expansion={expansion}
           loadingTurnSummaryIds={loadingTurnSummaryIds}
           erroredTurnSummaryIds={erroredTurnSummaryIds}
@@ -550,6 +591,7 @@ export function ThreadTimelineRows(props: ThreadTimelineRowsProps) {
     <TimelineRowsList
       rows={rows}
       scopeActive={scopeActive}
+      compactActivityIntents={false}
       expansion={expansion}
       loadingTurnSummaryIds={props.loadingTurnSummaryIds}
       erroredTurnSummaryIds={props.erroredTurnSummaryIds}

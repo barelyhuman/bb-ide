@@ -11,6 +11,12 @@ import type {
 import { assertNever } from "./assert-never.js";
 import { durationToCompactString } from "./format-helpers.js";
 import {
+  formatTimelineActivityIntentDetail,
+  getTimelineActivityIntentDetailDedupeKey,
+  hasTimelineExplorationIntent,
+  type TimelineExplorationWorkRow,
+} from "./timeline-activity-intents.js";
+import {
   buildTimelineActivitySummaryLabel,
   type ThreadTimelineViewRow,
   type TimelineActivitySummaryRow,
@@ -47,6 +53,11 @@ export interface TimelineTitle {
 export interface BuildTimelineRowTitleOptions {
   preferOngoingLabel: boolean;
   summaryStyle: "bundle" | "background";
+}
+
+export interface TimelineActivityIntentTitle {
+  id: string;
+  title: TimelineTitle;
 }
 
 interface TitlePartsArgs {
@@ -497,6 +508,40 @@ function buildConversationTitle(
     content: row.role === "user" ? "User" : "Assistant",
     contentTone: "muted",
   });
+}
+
+export function buildTimelineActivityIntentTitles(
+  row: TimelineExplorationWorkRow,
+): TimelineActivityIntentTitle[] {
+  if (!hasTimelineExplorationIntent(row)) {
+    return [];
+  }
+
+  const dedupedDetailKeys = new Set<string>();
+  const titles: TimelineActivityIntentTitle[] = [];
+
+  row.activityIntents.forEach((intent, index) => {
+    if (intent.type === "unknown") {
+      return;
+    }
+    const dedupeKey = getTimelineActivityIntentDetailDedupeKey(intent);
+    if (dedupeKey !== null) {
+      if (dedupedDetailKeys.has(dedupeKey)) {
+        return;
+      }
+      dedupedDetailKeys.add(dedupeKey);
+    }
+    titles.push({
+      id: `${row.id}:activity-intent:${index}`,
+      title: titleFromParts({
+        content: formatTimelineActivityIntentDetail(intent),
+        contentTone: "muted",
+        tone: "summary",
+      }),
+    });
+  });
+
+  return titles;
 }
 
 export function buildTimelineRowTitle(

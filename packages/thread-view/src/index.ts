@@ -1,8 +1,12 @@
 export { formatThreadTimelineText } from "./format-timeline-text.js";
 export type { ThreadTimelineTextFormat } from "./format-timeline-text.js";
-export { buildTimelineRowTitle } from "./timeline-row-title.js";
+export {
+  buildTimelineActivityIntentTitles,
+  buildTimelineRowTitle,
+} from "./timeline-row-title.js";
 export type {
   BuildTimelineRowTitleOptions,
+  TimelineActivityIntentTitle,
   TimelineTitle,
   TimelineTitleContentTone,
   TimelineTitleSuffix,

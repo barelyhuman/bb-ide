@@ -104,6 +104,15 @@ function readIntent(path: string): TimelineActivityIntent {
   };
 }
 
+function searchIntent(query: string, path: string): TimelineActivityIntent {
+  return {
+    type: "search",
+    command: `rg ${query} ${path}`,
+    query,
+    path,
+  };
+}
+
 function webSearchRow(): TimelineWebSearchWorkRow {
   return {
     ...baseRow({ id: "web-search-1", sourceSeqStart: 1 }),
@@ -202,6 +211,43 @@ describe("ThreadTimelineRows", () => {
 
     expect(html).toContain("Exploring");
     expect(html).toContain("1 file");
+  });
+
+  it("renders activity summary exploration details as compact static rows", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[
+          commandRow({
+            id: "exploration-1",
+            command: "cat src/app.ts && rg TODO src",
+            activityIntents: [
+              readIntent("src/app.ts"),
+              searchIntent("TODO", "src"),
+            ],
+            output: "large file contents",
+          }),
+        ]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{}}
+      />,
+    );
+
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button"));
+
+    expect(view.container.textContent ?? "").toContain("Read src/app.ts");
+    expect(view.container.textContent ?? "").toContain(
+      "Searched for TODO in src",
+    );
+    expect(view.container.textContent ?? "").not.toContain("$ cat src/app.ts");
+    expect(view.container.textContent ?? "").not.toContain(
+      "large file contents",
+    );
+    expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 
   it("does not render web search and fetch leaves as expandable rows", () => {

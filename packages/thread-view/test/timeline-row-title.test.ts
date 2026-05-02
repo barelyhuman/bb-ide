@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type {
+  TimelineActivityIntent,
   TimelineCommandWorkRow,
   TimelineFileChangeWorkRow,
   TimelineRowBase,
@@ -7,6 +8,7 @@ import type {
   TimelineWebSearchWorkRow,
 } from "@bb/server-contract";
 import {
+  buildTimelineActivityIntentTitles,
   buildTimelineRowTitle,
   type BuildTimelineRowTitleOptions,
   type TimelineActivitySummaryRow,
@@ -46,6 +48,24 @@ function commandRow(): TimelineCommandWorkRow {
     durationMs: 2_100,
     approvalStatus: null,
     activityIntents: [],
+  };
+}
+
+function readIntent(path: string): TimelineActivityIntent {
+  return {
+    type: "read",
+    command: `cat ${path}`,
+    name: path.split("/").pop() ?? path,
+    path,
+  };
+}
+
+function searchIntent(query: string, path: string): TimelineActivityIntent {
+  return {
+    type: "search",
+    command: `rg ${query} ${path}`,
+    query,
+    path,
   };
 }
 
@@ -209,5 +229,26 @@ describe("buildTimelineRowTitle", () => {
 
     expect(title.plain).toBe("Running 1 web search");
     expect(title.shimmerPrefix).toBe(true);
+  });
+
+  it("builds compact exploration intent titles with read de-duping", () => {
+    const row = {
+      ...commandRow(),
+      activityIntents: [
+        readIntent("src/app.ts"),
+        readIntent("src/app.ts"),
+        searchIntent("TODO", "src"),
+      ],
+    } satisfies TimelineCommandWorkRow;
+
+    const titles = buildTimelineActivityIntentTitles(row);
+
+    expect(titles.map((entry) => entry.title.plain)).toEqual([
+      "Read src/app.ts",
+      "Searched for TODO in src",
+    ]);
+    expect(titles.every((entry) => entry.title.contentTone === "muted")).toBe(
+      true,
+    );
   });
 });

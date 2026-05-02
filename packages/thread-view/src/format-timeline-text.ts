@@ -1,5 +1,4 @@
 import type {
-  TimelineActivityIntent,
   TimelineCommandWorkRow,
   TimelineFileChange,
   TimelineFileChangeWorkRow,
@@ -15,6 +14,14 @@ import {
   buildTimelineActivitySummaryLabel,
   buildTimelineViewRows,
 } from "./timeline-view.js";
+import {
+  formatTimelineActivityIntentDetail,
+  formatTimelineActivityIntentTitle,
+  getTimelineActivityIntentDetailDedupeKey,
+  hasTimelineExplorationIntent,
+  primaryTimelineActivityIntent,
+  type TimelineExplorationWorkRow,
+} from "./timeline-activity-intents.js";
 import type {
   ThreadTimelineViewRow,
   TimelineActivitySummaryRow,
@@ -30,8 +37,6 @@ export interface ThreadTimelineTextOptions {
   color?: boolean;
   truncateForAudit?: boolean;
 }
-
-type TimelineExplorationWorkRow = TimelineCommandWorkRow | TimelineToolWorkRow;
 
 interface TimelineTextFormatContext {
   verbose: boolean;
@@ -239,79 +244,6 @@ function fileName(path: string): string {
   return normalized.split("/").pop() || path;
 }
 
-function primaryActivityIntent(
-  row: TimelineExplorationWorkRow,
-): TimelineActivityIntent | null {
-  return (
-    row.activityIntents.find((intent) => intent.type !== "unknown") ?? null
-  );
-}
-
-function hasExplorationIntent(row: TimelineExplorationWorkRow): boolean {
-  return primaryActivityIntent(row) !== null;
-}
-
-function formatActivityIntentTitle(
-  intent: TimelineActivityIntent,
-  status: TimelineRowStatus,
-): string {
-  const isPending = status === "pending";
-  switch (intent.type) {
-    case "read":
-      return `${isPending ? "Reading" : "Read"} ${intent.path ?? intent.name}`;
-    case "list_files":
-      return `${isPending ? "Listing" : "Listed"} ${intent.path ?? "files"}`;
-    case "search":
-      if (intent.path) {
-        return `${isPending ? "Searching" : "Searched"} ${intent.path}`;
-      }
-      return `${isPending ? "Searching" : "Searched"} ${intent.query ?? "files"}`;
-    case "unknown":
-      return intent.command;
-    default:
-      return assertNever(intent);
-  }
-}
-
-function formatActivityIntentDetail(intent: TimelineActivityIntent): string {
-  switch (intent.type) {
-    case "read":
-      return `Read ${intent.path ?? intent.name}`;
-    case "list_files":
-      return intent.path ? `Listed files in ${intent.path}` : "Listed files";
-    case "search":
-      if (intent.query && intent.path) {
-        return `Searched for ${intent.query} in ${intent.path}`;
-      }
-      if (intent.path) {
-        return `Searched in ${intent.path}`;
-      }
-      if (intent.query) {
-        return `Searched for ${intent.query}`;
-      }
-      return "Searched files";
-    case "unknown":
-      return intent.command;
-    default:
-      return assertNever(intent);
-  }
-}
-
-function getActivityIntentDetailDedupeKey(
-  intent: TimelineActivityIntent,
-): string | null {
-  switch (intent.type) {
-    case "read":
-      return `file:${intent.path ?? intent.name}`;
-    case "list_files":
-    case "search":
-    case "unknown":
-      return null;
-    default:
-      return assertNever(intent);
-  }
-}
-
 function formatDiffStats(change: TimelineFileChange): string | null {
   const { added, removed } = change.diffStats;
   if (added === 0 && removed === 0) {
@@ -357,9 +289,9 @@ function formatStatusDurationSuffix(
 }
 
 function formatCommandTitle(row: TimelineCommandWorkRow): string {
-  const intent = primaryActivityIntent(row);
+  const intent = primaryTimelineActivityIntent(row);
   if (intent) {
-    return formatActivityIntentTitle(intent, row.status);
+    return formatTimelineActivityIntentTitle(intent, row.status === "pending");
   }
   if (row.approvalStatus === "waiting_for_approval") {
     return "Command (waiting)";
@@ -372,9 +304,9 @@ function formatCommandTitle(row: TimelineCommandWorkRow): string {
 }
 
 function formatToolTitle(row: TimelineToolWorkRow): string {
-  const intent = primaryActivityIntent(row);
+  const intent = primaryTimelineActivityIntent(row);
   if (intent) {
-    return formatActivityIntentTitle(intent, row.status);
+    return formatTimelineActivityIntentTitle(intent, row.status === "pending");
   }
   if (row.approvalStatus === "waiting_for_approval") {
     return `Tool (waiting): ${row.label}`;
@@ -476,7 +408,11 @@ function formatWorkBody(
   switch (row.workKind) {
     case "command":
       lines.push(`  $ ${cyan(row.command, context.color)}`);
-      if (context.verbose && row.output.trim() && !hasExplorationIntent(row)) {
+      if (
+        context.verbose &&
+        row.output.trim() &&
+        !hasTimelineExplorationIntent(row)
+      ) {
         lines.push(formatWorkOutput(row.output, context.color));
       }
       const exitCodeLine = formatCommandExitCodeLine(row, context.color);
@@ -488,7 +424,11 @@ function formatWorkBody(
       if (row.approvalStatus !== null) {
         lines.push(`  ${workStatusLabel(row, context.color)}`);
       }
-      if (context.verbose && row.output.trim() && !hasExplorationIntent(row)) {
+      if (
+        context.verbose &&
+        row.output.trim() &&
+        !hasTimelineExplorationIntent(row)
+      ) {
         lines.push(formatWorkOutput(row.output, context.color));
       }
       return lines;
@@ -547,14 +487,14 @@ function formatExplorationWorkDetails(
     if (intent.type === "unknown") {
       continue;
     }
-    const dedupeKey = getActivityIntentDetailDedupeKey(intent);
+    const dedupeKey = getTimelineActivityIntentDetailDedupeKey(intent);
     if (dedupeKey !== null) {
       if (dedupedDetailKeys.has(dedupeKey)) {
         continue;
       }
       dedupedDetailKeys.add(dedupeKey);
     }
-    details.push(formatActivityIntentDetail(intent));
+    details.push(formatTimelineActivityIntentDetail(intent));
   }
   return details;
 }
@@ -569,7 +509,7 @@ function formatActivitySummaryDetails(
   for (const child of row.children) {
     if (
       (child.workKind === "command" || child.workKind === "tool") &&
-      hasExplorationIntent(child)
+      hasTimelineExplorationIntent(child)
     ) {
       lines.push(
         ...formatExplorationWorkDetails(child, dedupedDetailKeys).map(
