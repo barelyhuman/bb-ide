@@ -624,7 +624,7 @@ describe("ThreadTimelineRows", () => {
       true,
     );
     expect(staticTitle?.parentElement?.classList.contains("leading-none")).toBe(
-      true,
+      false,
     );
     expect(staticTitle?.parentElement?.classList.contains("py-0")).toBe(true);
     expect(staticTitle?.parentElement?.classList.contains("py-0.5")).toBe(

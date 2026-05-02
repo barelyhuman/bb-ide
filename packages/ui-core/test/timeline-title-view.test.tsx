@@ -25,7 +25,7 @@ describe("TimelineTitleView", () => {
     );
 
     expect(html).toContain("shrink-0 whitespace-pre");
-    expect(html).toContain("leading-none");
+    expect(html).not.toContain("leading-none");
     expect(html).not.toContain("leading-4");
     expect(html).not.toContain("leading-5");
     expect(html).toContain(">Ran</span>");
