@@ -25,6 +25,7 @@ import {
   useTimelineExpansionState,
   type TimelineExpansionState,
 } from "./useTimelineExpansionState.js";
+import { useStickyBottomScroll } from "./useStickyBottomScroll.js";
 
 export interface ThreadTimelineRowsProps {
   erroredTurnSummaryIds: ReadonlySet<string>;
@@ -294,8 +295,18 @@ function TimelineSystemDetailBlock({
   detail,
   tone,
 }: TimelineSystemDetailBlockProps) {
+  const detailScroll = useStickyBottomScroll<HTMLPreElement>({
+    contentKey: detail,
+  });
+
   return (
     <pre
+      ref={detailScroll.ref}
+      onPointerDown={detailScroll.onPointerDown}
+      onScroll={detailScroll.onScroll}
+      onTouchMove={detailScroll.onTouchMove}
+      onTouchStart={detailScroll.onTouchStart}
+      onWheel={detailScroll.onWheel}
       className={cn(
         "max-h-96 overflow-auto whitespace-pre rounded-md border px-3 py-2 font-mono text-xs leading-5",
         tone === "danger"

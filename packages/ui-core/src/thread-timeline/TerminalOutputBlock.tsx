@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { useMemo, type CSSProperties } from "react";
 import Convert from "ansi-to-html";
 import { cn } from "../primitives/cn.js";
 import { getDetailScrollMaxHeightClass } from "../primitives/detail-scroll-size.js";
 import { ExpandableLine } from "../primitives/expandable-line.js";
+import { useStickyBottomScroll } from "./useStickyBottomScroll.js";
 
 export interface TerminalOutputBlockProps {
   output: string;
@@ -24,19 +25,6 @@ const ANSI_TO_HTML = new Convert({
   stream: false,
 });
 
-const STICKY_BOTTOM_THRESHOLD_PX = 4;
-
-function isNearBottom(element: HTMLElement): boolean {
-  return (
-    element.scrollHeight - element.clientHeight - element.scrollTop <=
-    STICKY_BOTTOM_THRESHOLD_PX
-  );
-}
-
-function scrollToBottom(element: HTMLElement): void {
-  element.scrollTop = Math.max(0, element.scrollHeight - element.clientHeight);
-}
-
 export function TerminalOutputBlock({
   commandLine,
   exitCode = null,
@@ -44,21 +32,20 @@ export function TerminalOutputBlock({
   metadataLines = [],
   output,
 }: TerminalOutputBlockProps) {
-  const scrollRef = useRef<HTMLPreElement>(null);
-  const shouldStickToBottomRef = useRef(true);
   const outputText = output.trimEnd();
+  const scrollContentKey = [
+    commandLine ?? "",
+    metadataLines.join("\n"),
+    outputText,
+    exitCode ?? "",
+  ].join("\u0000");
+  const outputScroll = useStickyBottomScroll<HTMLPreElement>({
+    contentKey: scrollContentKey,
+  });
   const renderedOutputHtml = useMemo(
     () => (outputText.length > 0 ? ANSI_TO_HTML.toHtml(outputText) : null),
     [outputText],
   );
-
-  useEffect(() => {
-    const element = scrollRef.current;
-    if (!element || !shouldStickToBottomRef.current) {
-      return;
-    }
-    scrollToBottom(element);
-  }, [commandLine, metadataLines, renderedOutputHtml, exitCode]);
 
   const showExitCode = exitCode !== null;
   const outputMaxHeightClassName =
@@ -89,15 +76,17 @@ export function TerminalOutputBlock({
         ))}
         {renderedOutputHtml ? (
           <pre
-            ref={scrollRef}
+            ref={outputScroll.ref}
+            onPointerDown={outputScroll.onPointerDown}
+            onScroll={outputScroll.onScroll}
+            onTouchMove={outputScroll.onTouchMove}
+            onTouchStart={outputScroll.onTouchStart}
+            onWheel={outputScroll.onWheel}
             className={cn(
               commandLine || metadataLines.length > 0 ? "mt-1.5" : null,
               outputMaxHeightClassName,
               "overflow-auto whitespace-pre leading-tight text-foreground",
             )}
-            onScroll={(event) => {
-              shouldStickToBottomRef.current = isNearBottom(event.currentTarget);
-            }}
             dangerouslySetInnerHTML={{
               __html: renderedOutputHtml,
             }}

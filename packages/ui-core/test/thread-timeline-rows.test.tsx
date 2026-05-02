@@ -58,6 +58,8 @@ interface FileChangeRowArgs {
   stdout?: string | null;
 }
 
+type ElementScrollMetricName = "clientHeight" | "scrollHeight";
+
 function baseRow({ id, sourceSeqStart }: BaseRowArgs): TimelineRowBase {
   return {
     id,
@@ -193,13 +195,15 @@ function delegationRow(): TimelineDelegationWorkRow {
   };
 }
 
-function systemRow(): TimelineSystemRow {
+function systemRow(
+  detail = "Running setup\nProvisioned thread (2s)",
+): TimelineSystemRow {
   return {
     ...baseRow({ id: "system-1", sourceSeqStart: 1 }),
     kind: "system",
     systemKind: "operation",
     title: "Provisioned thread",
-    detail: "Running setup\nProvisioned thread (2s)",
+    detail,
     status: "completed",
   };
 }
@@ -240,6 +244,47 @@ function renderRowsToStaticMarkup(timelineRows: TimelineRow[]): string {
       turnSummaryRowsById={{}}
     />,
   );
+}
+
+function restoreElementScrollMetric(
+  name: ElementScrollMetricName,
+  descriptor: PropertyDescriptor | undefined,
+): void {
+  if (descriptor) {
+    Object.defineProperty(HTMLElement.prototype, name, descriptor);
+    return;
+  }
+  delete HTMLElement.prototype[name];
+}
+
+function withElementScrollMetrics(run: () => void): void {
+  const originalClientHeight = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    "clientHeight",
+  );
+  const originalScrollHeight = Object.getOwnPropertyDescriptor(
+    HTMLElement.prototype,
+    "scrollHeight",
+  );
+  Object.defineProperty(HTMLElement.prototype, "clientHeight", {
+    configurable: true,
+    get() {
+      return 100;
+    },
+  });
+  Object.defineProperty(HTMLElement.prototype, "scrollHeight", {
+    configurable: true,
+    get() {
+      return 1_000;
+    },
+  });
+
+  try {
+    run();
+  } finally {
+    restoreElementScrollMetric("clientHeight", originalClientHeight);
+    restoreElementScrollMetric("scrollHeight", originalScrollHeight);
+  }
 }
 
 afterEach(() => {
@@ -751,30 +796,87 @@ describe("ThreadTimelineRows", () => {
   });
 
   it("renders system rows with detail as expandable", () => {
-    const view = render(
-      <ThreadTimelineRows
-        loadingTurnSummaryIds={new Set()}
-        erroredTurnSummaryIds={new Set()}
-        onLoadTurnSummaryRows={() => {}}
-        timelineRows={[systemRow()]}
-        threadRuntimeDisplayStatus="idle"
-        turnSummaryRowsById={{}}
-      />,
-    );
+    withElementScrollMetrics(() => {
+      const view = render(
+        <ThreadTimelineRows
+          loadingTurnSummaryIds={new Set()}
+          erroredTurnSummaryIds={new Set()}
+          onLoadTurnSummaryRows={() => {}}
+          timelineRows={[systemRow()]}
+          threadRuntimeDisplayStatus="idle"
+          turnSummaryRowsById={{}}
+        />,
+      );
 
-    const systemButton = screen.getByRole("button", {
-      name: /Provisioned thread/u,
+      const systemButton = screen.getByRole("button", {
+        name: /Provisioned thread/u,
+      });
+      expect(systemButton.getAttribute("aria-expanded")).toBe("false");
+      expect(view.container.textContent ?? "").not.toContain("Running setup");
+
+      fireEvent.click(systemButton);
+
+      expect(systemButton.getAttribute("aria-expanded")).toBe("true");
+      expect(view.container.textContent ?? "").toContain("Running setup");
+      const detail = view.container.querySelector("pre");
+      expect(detail?.className).toContain("whitespace-pre");
+      expect(detail?.className).not.toContain("whitespace-pre-wrap");
+      expect(detail?.scrollTop).toBe(900);
     });
-    expect(systemButton.getAttribute("aria-expanded")).toBe("false");
-    expect(view.container.textContent ?? "").not.toContain("Running setup");
+  });
 
-    fireEvent.click(systemButton);
+  it("keeps expanded system details pinned unless the user scrolls up", () => {
+    withElementScrollMetrics(() => {
+      const view = render(
+        <ThreadTimelineRows
+          loadingTurnSummaryIds={new Set()}
+          erroredTurnSummaryIds={new Set()}
+          onLoadTurnSummaryRows={() => {}}
+          timelineRows={[systemRow("first\nsecond")]}
+          threadRuntimeDisplayStatus="idle"
+          turnSummaryRowsById={{}}
+        />,
+      );
 
-    expect(systemButton.getAttribute("aria-expanded")).toBe("true");
-    expect(view.container.textContent ?? "").toContain("Running setup");
-    const detail = view.container.querySelector("pre");
-    expect(detail?.className).toContain("whitespace-pre");
-    expect(detail?.className).not.toContain("whitespace-pre-wrap");
+      fireEvent.click(
+        screen.getByRole("button", { name: /Provisioned thread/u }),
+      );
+      const detail = view.container.querySelector("pre");
+      expect(detail?.scrollTop).toBe(900);
+
+      if (!detail) {
+        throw new Error("Expected system detail to render");
+      }
+
+      detail.scrollTop = 500;
+      fireEvent.scroll(detail);
+      view.rerender(
+        <ThreadTimelineRows
+          loadingTurnSummaryIds={new Set()}
+          erroredTurnSummaryIds={new Set()}
+          onLoadTurnSummaryRows={() => {}}
+          timelineRows={[systemRow("first\nsecond\nthird")]}
+          threadRuntimeDisplayStatus="idle"
+          turnSummaryRowsById={{}}
+        />,
+      );
+      expect(detail.scrollTop).toBe(900);
+
+      detail.scrollTop = 500;
+      fireEvent.wheel(detail);
+      fireEvent.scroll(detail);
+      view.rerender(
+        <ThreadTimelineRows
+          loadingTurnSummaryIds={new Set()}
+          erroredTurnSummaryIds={new Set()}
+          onLoadTurnSummaryRows={() => {}}
+          timelineRows={[systemRow("first\nsecond\nthird\nfourth")]}
+          threadRuntimeDisplayStatus="idle"
+          turnSummaryRowsById={{}}
+        />,
+      );
+      expect(detail.scrollTop).toBe(500);
+    });
   });
 
   it("routes markdown local file links through the timeline handler", () => {
