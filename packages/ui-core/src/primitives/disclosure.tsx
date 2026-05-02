@@ -112,20 +112,24 @@ export function ExpandablePanel({
   bodyClassName,
   contentClassName,
 }: ExpandablePanelProps) {
+  const headerRootClassName = cn(
+    "px-2 py-1",
+    headerClassName,
+    headerButtonClassName,
+  );
+
   return (
     <div className={cn("rounded-md text-muted-foreground", className)}>
-      <div className={cn("px-2 py-1", headerClassName)}>
-        <CollapsibleHeader
-          isExpanded={isExpanded}
-          onToggle={onToggle}
-          toneClassName={headerToneClass}
-          className={headerButtonClassName}
-          summaryClassName={
-            summaryContentClassName ?? COLLAPSIBLE_HEADER_TEXT_CLASS
-          }
-          summaryContent={summaryContent}
-        />
-      </div>
+      <CollapsibleHeader
+        isExpanded={isExpanded}
+        onToggle={onToggle}
+        toneClassName={headerToneClass}
+        className={headerRootClassName}
+        summaryClassName={
+          summaryContentClassName ?? COLLAPSIBLE_HEADER_TEXT_CLASS
+        }
+        summaryContent={summaryContent}
+      />
       <div
         aria-hidden={!isExpanded}
         className={cn(

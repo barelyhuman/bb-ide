@@ -536,12 +536,8 @@ describe("ThreadTimelineRows", () => {
     const bundledCommandButton = screen.getByRole("button", {
       name: /Ran\s+pnpm test\s+2s/u,
     });
-    expect(bundledCommandButton.parentElement?.classList.contains("px-0")).toBe(
-      true,
-    );
-    expect(bundledCommandButton.parentElement?.classList.contains("px-2")).toBe(
-      false,
-    );
+    expect(bundledCommandButton.classList.contains("px-0")).toBe(true);
+    expect(bundledCommandButton.classList.contains("px-2")).toBe(false);
   });
 
   it("uses flush horizontal padding for static title rows inside activity summaries", () => {

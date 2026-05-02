@@ -157,6 +157,7 @@ describe("ExpandableTimelineRow", () => {
     expect(screen.getByRole("button").className).toContain("w-full");
     expect(screen.getByRole("button").className).toContain("justify-start");
     expect(screen.getByRole("button").className).toContain("group/toggle");
+    expect(screen.getByRole("button").className).toContain("px-2");
     expect(screen.getByRole("button").className).not.toContain(
       "justify-between",
     );
@@ -195,7 +196,7 @@ describe("ExpandableTimelineRow", () => {
     expect(button.className).toContain("leading-4");
     expect(button.className).toContain("py-0");
     expect(button.className).not.toContain("py-0.5");
-    expect(button.parentElement?.className).toContain("py-0");
+    expect(button.parentElement?.className).not.toContain("py-0");
     expect(button.parentElement?.className).not.toContain("py-0.5");
     expect(view.container.innerHTML).not.toContain("py-1");
   });
@@ -212,8 +213,8 @@ describe("ExpandableTimelineRow", () => {
     );
 
     const button = screen.getByRole("button");
-    expect(button.parentElement?.className).toContain("px-0");
-    expect(button.parentElement?.className).not.toContain("px-2");
+    expect(button.className).toContain("px-0");
+    expect(button.className).not.toContain("px-2");
     expect(view.container.innerHTML).toContain("px-0");
   });
 
