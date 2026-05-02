@@ -499,9 +499,19 @@ describe("ThreadTimelineRows", () => {
         child.classList.contains("pb-2"),
       ),
     ).toBe(false);
+
+    const bundledCommandButton = screen.getByRole("button", {
+      name: /Ran\s+pnpm test\s+2s/u,
+    });
+    expect(bundledCommandButton.parentElement?.classList.contains("px-0")).toBe(
+      true,
+    );
+    expect(bundledCommandButton.parentElement?.classList.contains("px-2")).toBe(
+      false,
+    );
   });
 
-  it("uses compact padding for static title rows inside activity summaries", () => {
+  it("uses flush horizontal padding for static title rows inside activity summaries", () => {
     const view = render(
       <ThreadTimelineRows
         loadingTurnSummaryIds={new Set()}
@@ -518,6 +528,8 @@ describe("ThreadTimelineRows", () => {
     const staticTitle = view.container.querySelector(
       '[aria-label="Ran web search: timeline renderer"]',
     );
+    expect(staticTitle?.parentElement?.classList.contains("px-0")).toBe(true);
+    expect(staticTitle?.parentElement?.classList.contains("px-2")).toBe(false);
     expect(staticTitle?.parentElement?.classList.contains("py-0")).toBe(true);
     expect(staticTitle?.parentElement?.classList.contains("py-0.5")).toBe(
       false,

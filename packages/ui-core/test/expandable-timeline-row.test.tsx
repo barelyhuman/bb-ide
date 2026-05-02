@@ -135,6 +135,23 @@ describe("ExpandableTimelineRow", () => {
     expect(view.container.innerHTML).not.toContain("py-1");
   });
 
+  it("can render flush horizontal padding for bundled rows", () => {
+    const view = render(
+      <ExpandableTimelineRow
+        title={TITLE}
+        horizontalPadding="flush"
+        isExpanded={true}
+        onToggle={() => {}}
+        renderBody={() => <div>details</div>}
+      />,
+    );
+
+    const button = screen.getByRole("button");
+    expect(button.parentElement?.className).toContain("px-0");
+    expect(button.parentElement?.className).not.toContain("px-2");
+    expect(view.container.innerHTML).toContain("px-0");
+  });
+
   it("keeps a small gap between an expanded title and its contents", () => {
     const view = render(
       <ExpandableTimelineRow

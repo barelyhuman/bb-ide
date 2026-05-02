@@ -13,7 +13,10 @@ export interface ExpandableTimelineRowProps {
   renderBody: () => ReactNode;
   title: TimelineTitle;
   className?: string;
+  horizontalPadding?: TimelineRowHorizontalPadding;
 }
+
+export type TimelineRowHorizontalPadding = "default" | "flush";
 
 function headerToneClass(title: TimelineTitle, isExpanded: boolean): string {
   if (title.tone === "destructive") {
@@ -25,13 +28,27 @@ function headerToneClass(title: TimelineTitle, isExpanded: boolean): string {
   return getCollapsibleHeaderToneClass(isExpanded);
 }
 
+function horizontalPaddingClassName(
+  horizontalPadding: TimelineRowHorizontalPadding,
+): string {
+  switch (horizontalPadding) {
+    case "default":
+      return "px-2";
+    case "flush":
+      return "px-0";
+  }
+}
+
 export function ExpandableTimelineRow({
   className,
+  horizontalPadding = "default",
   isExpanded,
   onToggle,
   renderBody,
   title,
 }: ExpandableTimelineRowProps) {
+  const horizontalPaddingClass = horizontalPaddingClassName(horizontalPadding);
+
   return (
     <ExpandablePanel
       isExpanded={isExpanded}
@@ -40,9 +57,9 @@ export function ExpandableTimelineRow({
       summaryContent={<TimelineTitleView title={title} />}
       summaryContentClassName="min-w-0 max-w-full"
       className={cn(isExpanded ? "w-full" : "group w-full", className)}
-      headerClassName="px-2 py-0"
+      headerClassName={cn(horizontalPaddingClass, "py-0")}
       headerButtonClassName="w-full max-w-full justify-start py-0 leading-4"
-      contentClassName="px-2 pb-1 pt-0.5"
+      contentClassName={cn(horizontalPaddingClass, "pb-1 pt-0.5")}
     >
       {isExpanded ? renderBody() : null}
     </ExpandablePanel>

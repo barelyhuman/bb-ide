@@ -18,7 +18,10 @@ import type {
   UserAttachmentImageSrcResolver,
 } from "./types.js";
 import { ConversationMessageContent } from "./ConversationMessageContent.js";
-import { ExpandableTimelineRow } from "./ExpandableTimelineRow.js";
+import {
+  ExpandableTimelineRow,
+  type TimelineRowHorizontalPadding,
+} from "./ExpandableTimelineRow.js";
 import { TimelineTitleView } from "./TimelineTitleView.js";
 import { WorkRowBody } from "./TimelineRowDetails.js";
 import {
@@ -68,11 +71,13 @@ interface TimelineRowViewProps extends TimelineRendererContext {
   isTail: boolean;
   row: ThreadTimelineViewRow;
   scopeActive: boolean;
+  spacing: TimelineRowsListSpacing;
 }
 
 interface TimelineStaticRowProps {
   children: ReactNode;
   className?: string;
+  horizontalPadding?: TimelineRowHorizontalPadding;
 }
 
 interface TimelineExpandableBodyProps extends TimelineRendererContext {
@@ -264,10 +269,44 @@ function timelineRowTitleOptions({
   };
 }
 
-function TimelineStaticRow({ children, className }: TimelineStaticRowProps) {
+function timelineRowHorizontalPadding(
+  spacing: TimelineRowsListSpacing,
+): TimelineRowHorizontalPadding {
+  switch (spacing) {
+    case "top-level":
+    case "nested":
+      return "default";
+    case "bundle":
+      return "flush";
+  }
+}
+
+function timelineRowHorizontalPaddingClassName(
+  horizontalPadding: TimelineRowHorizontalPadding,
+): string {
+  switch (horizontalPadding) {
+    case "default":
+      return "px-2";
+    case "flush":
+      return "px-0";
+  }
+}
+
+function TimelineStaticRow({
+  children,
+  className,
+  horizontalPadding = "default",
+}: TimelineStaticRowProps) {
   return (
     <div className={cn("group w-full", className)}>
-      <div className="px-2 py-0">{children}</div>
+      <div
+        className={cn(
+          timelineRowHorizontalPaddingClassName(horizontalPadding),
+          "py-0",
+        )}
+      >
+        {children}
+      </div>
     </div>
   );
 }
@@ -539,9 +578,12 @@ function TimelineRowView({
   resolveUserAttachmentImageSrc,
   row,
   scopeActive,
+  spacing,
   themeType,
   turnSummaryRowsById,
 }: TimelineRowViewProps) {
+  const horizontalPadding = timelineRowHorizontalPadding(spacing);
+
   if (row.kind === "conversation") {
     return (
       <ConversationRow
@@ -561,7 +603,10 @@ function TimelineRowView({
       return (
         <>
           {titles.map((entry) => (
-            <TimelineStaticRow key={entry.id}>
+            <TimelineStaticRow
+              key={entry.id}
+              horizontalPadding={horizontalPadding}
+            >
               <TimelineTitleView title={entry.title} />
             </TimelineStaticRow>
           ))}
@@ -577,7 +622,7 @@ function TimelineRowView({
 
   if (!isRowExpandable(row)) {
     return (
-      <TimelineStaticRow>
+      <TimelineStaticRow horizontalPadding={horizontalPadding}>
         <TimelineTitleView title={title} />
       </TimelineStaticRow>
     );
@@ -586,6 +631,7 @@ function TimelineRowView({
   return (
     <ExpandableTimelineRow
       title={title}
+      horizontalPadding={horizontalPadding}
       isExpanded={expansion.isExpanded(row.id)}
       onToggle={() => expansion.toggle(row.id)}
       renderBody={() => (
@@ -639,6 +685,7 @@ function TimelineRowsList({
             row={row}
             isTail={index === rows.length - 1}
             scopeActive={scopeActive}
+            spacing={spacing}
             compactActivityIntents={compactActivityIntents}
             expansion={expansion}
             loadingTurnSummaryIds={loadingTurnSummaryIds}
