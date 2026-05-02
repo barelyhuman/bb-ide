@@ -661,7 +661,7 @@ function UserConversationMessage({
   const messageText = text.trim();
 
   return (
-    <div className="group w-full">
+    <div className="group mt-2 w-full">
       <div className="ml-auto w-fit max-w-[80%]">
         <div className="rounded-md bg-primary/10 p-2 text-sm leading-relaxed text-foreground">
           {messageText ? (

@@ -783,12 +783,13 @@ describe("ThreadTimelineRows", () => {
     ]);
 
     expect(html).not.toContain("User");
+    expect(html).toContain("group mt-2 w-full");
     expect(html).toContain("ml-auto w-fit max-w-[80%]");
     expect(html).toContain("bg-primary/10");
     expect(html).toContain("Please patch this.");
   });
 
-  it("preserves top-level user message spacing", () => {
+  it("puts top spacing on user messages instead of every timeline row", () => {
     const html = renderRowsToStaticMarkup([
       conversationRow({ id: "assistant-1", text: "Before." }),
       conversationRow({
@@ -798,7 +799,8 @@ describe("ThreadTimelineRows", () => {
       }),
     ]);
 
-    expect(html).toContain('class="pt-1"');
+    expect(html).not.toContain('class="pt-1"');
+    expect(html).toContain("group mt-2 w-full");
   });
 
   it("renders assistant markdown with the custom timeline markdown styling", () => {

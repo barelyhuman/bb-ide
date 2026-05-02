@@ -267,14 +267,6 @@ function TimelineStaticRow({ children, className }: TimelineStaticRowProps) {
   );
 }
 
-function timelineRowSpacingClassName(
-  _row: ThreadTimelineViewRow,
-  _index: number,
-  spacing: TimelineRowsListSpacing,
-): string {
-  return spacing === "top-level" ? "pt-1" : "";
-}
-
 function timelineRowsListGapClassName(
   spacing: TimelineRowsListSpacing,
 ): string {
@@ -614,10 +606,7 @@ function TimelineRowsList({
       data-timeline-row-list={spacing}
     >
       {rows.map((row, index) => (
-        <div
-          key={row.id}
-          className={timelineRowSpacingClassName(row, index, spacing)}
-        >
+        <div key={row.id}>
           <TimelineRowView
             row={row}
             isTail={index === rows.length - 1}
