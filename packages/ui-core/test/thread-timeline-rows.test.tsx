@@ -451,7 +451,10 @@ describe("ThreadTimelineRows", () => {
     const staticTitle = view.container.querySelector(
       '[aria-label="Ran web search: timeline renderer"]',
     );
-    expect(staticTitle?.parentElement?.classList.contains("py-0.5")).toBe(true);
+    expect(staticTitle?.parentElement?.classList.contains("py-0")).toBe(true);
+    expect(staticTitle?.parentElement?.classList.contains("py-0.5")).toBe(
+      false,
+    );
     expect(staticTitle?.parentElement?.classList.contains("py-1")).toBe(false);
   });
 

@@ -129,7 +129,8 @@ describe("ExpandableTimelineRow", () => {
     const button = screen.getByRole("button");
     expect(button.className).toContain("py-0");
     expect(button.className).not.toContain("py-0.5");
-    expect(button.parentElement?.className).toContain("py-0.5");
+    expect(button.parentElement?.className).toContain("py-0");
+    expect(button.parentElement?.className).not.toContain("py-0.5");
     expect(view.container.innerHTML).not.toContain("py-1");
   });
 
