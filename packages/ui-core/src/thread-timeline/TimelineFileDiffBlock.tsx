@@ -1,6 +1,6 @@
-import { useMemo, type CSSProperties } from "react";
-import { parsePatchFiles } from "@pierre/diffs";
-import { PatchDiff } from "@pierre/diffs/react";
+import { memo, useMemo, type CSSProperties } from "react";
+import { parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs";
+import { FileDiff } from "@pierre/diffs/react";
 import type { TimelineFileChange } from "@bb/server-contract";
 import { EventCodeBlock } from "../primitives/event-content.js";
 import type { ThreadTimelineTheme } from "./types.js";
@@ -16,6 +16,11 @@ interface TimelineDiffViewStyle extends CSSProperties {
 }
 
 interface RenderablePatch {
+  disableLineNumbers: boolean;
+  fileDiff: FileDiffMetadata;
+}
+
+interface RenderablePatchText {
   disableLineNumbers: boolean;
   patch: string;
 }
@@ -38,6 +43,11 @@ const DIFF_VIEW_STYLE: TimelineDiffViewStyle = {
   "--diffs-font-size": "12px",
   "--diffs-line-height": "18px",
 };
+
+const renderedFileChangeCache = new WeakMap<
+  TimelineFileChange,
+  RenderedFileChange
+>();
 
 function splitPatchLines(diff: string): string[] {
   const normalizedDiff = diff.replaceAll("\r\n", "\n");
@@ -147,7 +157,9 @@ function toSyntheticUpdatePatch(change: TimelineFileChange): string | null {
   return `diff --git a/${normalizedPath} b/${normalizedPath}\n--- a/${normalizedPath}\n+++ b/${normalizedPath}\n@@ -1,${Math.max(removedCount, 1)} +1,${Math.max(addedCount, 1)} @@\n${bodyLines.join("\n")}\n`;
 }
 
-function getRenderablePatch(change: TimelineFileChange): RenderablePatch | null {
+function getRenderablePatchText(
+  change: TimelineFileChange,
+): RenderablePatchText | null {
   const patch = change.diff;
   if (patch && patch.trim().length > 0) {
     const trimmedPatch = patch.trimEnd();
@@ -187,13 +199,28 @@ function getRenderablePatch(change: TimelineFileChange): RenderablePatch | null 
   };
 }
 
-function canRenderPatch(patch: string): boolean {
+function parseRenderablePatch(
+  patchText: RenderablePatchText,
+): RenderablePatch | null {
   try {
-    return parsePatchFiles(patch).some(
-      (parsedPatch) => parsedPatch.files.length > 0,
-    );
+    const parsedPatches = parsePatchFiles(patchText.patch);
+    if (parsedPatches.length !== 1) {
+      return null;
+    }
+    const parsedPatch = parsedPatches[0];
+    if (!parsedPatch || parsedPatch.files.length !== 1) {
+      return null;
+    }
+    const fileDiff = parsedPatch.files[0];
+    if (!fileDiff) {
+      return null;
+    }
+    return {
+      disableLineNumbers: patchText.disableLineNumbers,
+      fileDiff,
+    };
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -211,16 +238,25 @@ function getPlainDiffFallback(
 function buildRenderedFileChange(
   change: TimelineFileChange,
 ): RenderedFileChange {
-  const renderablePatch = getRenderablePatch(change);
-  const hasRenderablePatch =
-    renderablePatch !== null && canRenderPatch(renderablePatch.patch);
-  return {
-    renderablePatch: hasRenderablePatch ? renderablePatch : null,
-    plainDiff: getPlainDiffFallback(change, hasRenderablePatch),
+  const cached = renderedFileChangeCache.get(change);
+  if (cached) {
+    return cached;
+  }
+
+  const renderablePatchText = getRenderablePatchText(change);
+  const renderablePatch =
+    renderablePatchText === null
+      ? null
+      : parseRenderablePatch(renderablePatchText);
+  const renderedChange: RenderedFileChange = {
+    renderablePatch,
+    plainDiff: getPlainDiffFallback(change, renderablePatch !== null),
   };
+  renderedFileChangeCache.set(change, renderedChange);
+  return renderedChange;
 }
 
-export function TimelineFileDiffBlock({
+export const TimelineFileDiffBlock = memo(function TimelineFileDiffBlock({
   change,
   themeType,
 }: TimelineFileDiffBlockProps) {
@@ -234,6 +270,17 @@ export function TimelineFileDiffBlock({
   const renderedChange = useMemo(
     () => buildRenderedFileChange(change),
     [change],
+  );
+  const renderablePatch = renderedChange.renderablePatch;
+  const fileDiffOptions = useMemo(
+    () =>
+      renderablePatch
+        ? {
+            ...diffViewOptions,
+            disableLineNumbers: renderablePatch.disableLineNumbers,
+          }
+        : null,
+    [diffViewOptions, renderablePatch],
   );
 
   if (
@@ -250,15 +297,11 @@ export function TimelineFileDiffBlock({
   return (
     <div className="mt-1 max-h-96 overflow-auto rounded-md border border-border/60 bg-background/40">
       <div className="min-w-fit">
-        {renderedChange.renderablePatch ? (
+        {renderablePatch && fileDiffOptions ? (
           <div data-timeline-file-diff="" style={DIFF_VIEW_STYLE}>
-            <PatchDiff
-              patch={renderedChange.renderablePatch.patch}
-              options={{
-                ...diffViewOptions,
-                disableLineNumbers:
-                  renderedChange.renderablePatch.disableLineNumbers,
-              }}
+            <FileDiff
+              fileDiff={renderablePatch.fileDiff}
+              options={fileDiffOptions}
             />
           </div>
         ) : null}
@@ -270,4 +313,4 @@ export function TimelineFileDiffBlock({
       </div>
     </div>
   );
-}
+});
