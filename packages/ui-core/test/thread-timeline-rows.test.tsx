@@ -463,6 +463,39 @@ describe("ThreadTimelineRows", () => {
     expect(topLevelRows[2]?.classList.contains("pb-2")).toBe(true);
   });
 
+  it("does not add bottom padding to nested rows", () => {
+    const view = render(
+      <ThreadTimelineRows
+        loadingTurnSummaryIds={new Set()}
+        erroredTurnSummaryIds={new Set()}
+        onLoadTurnSummaryRows={() => {}}
+        timelineRows={[turnRow()]}
+        threadRuntimeDisplayStatus="idle"
+        turnSummaryRowsById={{
+          "turn-summary-1": [
+            commandRow({
+              id: "nested-command-1",
+              command: "pnpm test",
+              sourceSeqStart: 11,
+            }),
+          ],
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Worked for\s*4s/u }));
+
+    const nestedList = view.container.querySelector(
+      '[data-timeline-row-list="nested"]',
+    );
+    const nestedRows = Array.from(nestedList?.children ?? []);
+
+    expect(nestedRows.length).toBeGreaterThan(0);
+    expect(nestedRows.some((row) => row.classList.contains("pb-2"))).toBe(
+      false,
+    );
+  });
+
   it("renders rows inside activity summaries with no list gap", () => {
     const view = render(
       <ThreadTimelineRows

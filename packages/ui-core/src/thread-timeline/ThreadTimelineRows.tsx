@@ -328,7 +328,7 @@ function timelineRowWrapperClassName({
   row,
   spacing,
 }: TimelineRowWrapperClassNameArgs): string | undefined {
-  if (spacing === "bundle") {
+  if (spacing !== "top-level") {
     return undefined;
   }
   if (row.kind === "conversation" && row.role === "user") {
