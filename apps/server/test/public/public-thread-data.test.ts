@@ -50,7 +50,7 @@ const threadEventWaitResponseSchema = z.object({
 type TimelineTurnRow = Extract<TimelineRow, { kind: "turn" }>;
 
 describe("public thread data routes", () => {
-  it("returns timeline rows and timeline tool details from thread events", async () => {
+  it("returns timeline rows from thread events", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -97,25 +97,12 @@ describe("public thread data routes", () => {
         }),
       );
 
-      const toolDetailsResponse = await harness.app.request(
-        `/api/v1/threads/${thread.id}/timeline/turn-summary-details?sourceSeqStart=2&sourceSeqEnd=2`,
-      );
-      expect(toolDetailsResponse.status).toBe(200);
-      const toolDetails = timelineTurnSummaryDetailsResponseSchema.parse(
-        await readJson(toolDetailsResponse),
-      );
-      expect(toolDetails.rows).toHaveLength(1);
-      expect(toolDetails.rows[0]?.kind).toBe("conversation");
-      if (toolDetails.rows[0]?.kind === "conversation") {
-        expect(toolDetails.rows[0].role).toBe("assistant");
-        expect(toolDetails.rows[0].text).toBe("Manager note two");
-      }
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("hydrates timeline turn-summary details from the summary row range", async () => {
+  it("hydrates timeline turn-summary details from the summary row identity and range", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -201,7 +188,7 @@ describe("public thread data routes", () => {
       expect(turnRow.children).toBeNull();
 
       const toolDetailsResponse = await harness.app.request(
-        `/api/v1/threads/${thread.id}/timeline/turn-summary-details?sourceSeqStart=${turnRow.sourceSeqStart}&sourceSeqEnd=${turnRow.sourceSeqEnd}`,
+        `/api/v1/threads/${thread.id}/timeline/turn-summary-details?turnId=${turnRow.turnId}&sourceSeqStart=${turnRow.sourceSeqStart}&sourceSeqEnd=${turnRow.sourceSeqEnd}`,
       );
       expect(toolDetailsResponse.status).toBe(200);
       const toolDetails = timelineTurnSummaryDetailsResponseSchema.parse(
@@ -213,6 +200,79 @@ describe("public thread data routes", () => {
       if (toolDetails.rows[0]?.kind === "work") {
         expect(toolDetails.rows[0].workKind).toBe("tool");
         expect(toolDetails.rows[0].callId).toBe("tool-1");
+      }
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("hydrates a single-event turn-summary detail range", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+      });
+
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-thread-1",
+        scope: turnScope("turn-1"),
+        sequence: 1,
+        type: "turn/started",
+        data: {},
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-thread-1",
+        scope: turnScope("turn-1"),
+        sequence: 2,
+        type: "item/completed",
+        data: {
+          item: {
+            type: "agentMessage",
+            id: "assistant-1",
+            text: "Single detail.",
+          },
+        },
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-thread-1",
+        scope: turnScope("turn-1"),
+        sequence: 3,
+        type: "turn/completed",
+        data: {
+          status: "completed",
+        },
+      });
+
+      const detailsResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/timeline/turn-summary-details?turnId=turn-1&sourceSeqStart=2&sourceSeqEnd=2`,
+      );
+      expect(detailsResponse.status).toBe(200);
+      const details = timelineTurnSummaryDetailsResponseSchema.parse(
+        await readJson(detailsResponse),
+      );
+
+      expect(details.rows).toHaveLength(1);
+      expect(details.rows[0]?.kind).toBe("conversation");
+      if (details.rows[0]?.kind === "conversation") {
+        expect(details.rows[0].role).toBe("assistant");
+        expect(details.rows[0].text).toBe("Single detail.");
+        expect(details.rows[0].sourceSeqStart).toBe(2);
+        expect(details.rows[0].sourceSeqEnd).toBe(2);
       }
     } finally {
       await harness.cleanup();
@@ -236,7 +296,7 @@ describe("public thread data routes", () => {
       });
 
       const response = await harness.app.request(
-        `/api/v1/threads/${thread.id}/timeline/turn-summary-details?sourceSeqStart=oops&sourceSeqEnd=2`,
+        `/api/v1/threads/${thread.id}/timeline/turn-summary-details?turnId=turn-1&sourceSeqStart=oops&sourceSeqEnd=2`,
       );
       expect(response.status).toBe(400);
       await expect(readJson(response)).resolves.toMatchObject({

@@ -593,6 +593,24 @@ function getTimelineMessageBounds(
   };
 }
 
+function getTimelineMessageDurationMs(
+  messages: readonly EventProjectionMessage[],
+): number | null {
+  if (messages.length === 0) {
+    return null;
+  }
+
+  let startedAt = getMessageStartedAt(messages[0]);
+  let completedAt = messages[0].createdAt;
+
+  for (const message of messages.slice(1)) {
+    startedAt = Math.min(startedAt, getMessageStartedAt(message));
+    completedAt = Math.max(completedAt, message.createdAt);
+  }
+
+  return Math.max(0, completedAt - startedAt);
+}
+
 function getTurnBounds(turn: EventProjectionTurn): TimelineMessageBounds {
   return {
     createdAt: turn.createdAt,
@@ -624,6 +642,8 @@ function buildTurnSummaryRow({
     segmentIndex === null
       ? `${rowIdPrefix}${turn.threadId}:${turn.turnId}:turn`
       : `${rowIdPrefix}${turn.threadId}:${turn.turnId}:turn:${segmentIndex}`;
+  const resolvedDurationMs =
+    durationMs ?? getTimelineMessageDurationMs(sourceMessages);
 
   return {
     id: rowId,
@@ -636,7 +656,7 @@ function buildTurnSummaryRow({
     kind: "turn",
     status: turn.status,
     summaryCount,
-    durationMs,
+    durationMs: resolvedDurationMs,
     children: includeNestedRows ? sourceRows : null,
   };
 }

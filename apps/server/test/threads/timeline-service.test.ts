@@ -27,6 +27,7 @@ interface TimelineTurnSummaryDetailsTestOptions {
   isDevelopment: boolean;
   sourceSeqEnd: number;
   sourceSeqStart: number;
+  turnId: string;
 }
 
 type TimelineSourceTestRow = Extract<
@@ -1235,6 +1236,7 @@ describe("buildThreadTimeline", () => {
     expect(() =>
       buildTimelineTurnSummaryDetails(harness.db, thread, {
         isDevelopment: true,
+        turnId: "turn-1",
         sourceSeqStart: 1,
         sourceSeqEnd: 5,
       }),
@@ -1356,6 +1358,7 @@ describe("buildThreadTimeline", () => {
 
     const details = buildTimelineTurnSummaryDetails(harness.db, thread, {
       isDevelopment: true,
+      turnId: "turn-1",
       sourceSeqStart: 1,
       sourceSeqEnd: 5,
     });
@@ -1506,6 +1509,7 @@ describe("buildThreadTimeline", () => {
 
     const details = buildTimelineTurnSummaryDetails(harness.db, thread, {
       isDevelopment: true,
+      turnId: "turn-1",
       sourceSeqStart: 1,
       sourceSeqEnd: 5,
     });
@@ -1581,6 +1585,7 @@ describe("buildThreadTimeline", () => {
 
     const details = buildTimelineTurnSummaryDetails(harness.db, thread, {
       isDevelopment: true,
+      turnId: "turn-1",
       sourceSeqStart: 1,
       sourceSeqEnd: 3,
     });
@@ -1591,6 +1596,176 @@ describe("buildThreadTimeline", () => {
     if (detailRows[0]?.kind === "conversation") {
       expect(detailRows[0].text).toBe("Nothing to expand.");
     }
+  });
+
+  it("returns details for turn-scoped ranges that start after turn/started", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 1,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 2,
+      type: "item/started",
+      data: {
+        item: {
+          type: "commandExecution",
+          id: "command-1",
+          command: "pnpm test",
+          cwd: "/repo",
+          status: "pending",
+          approvalStatus: null,
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 3,
+      type: "item/commandExecution/outputDelta",
+      data: {
+        itemId: "command-1",
+        delta: "pass\n",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 4,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "commandExecution",
+          id: "command-1",
+          command: "pnpm test",
+          cwd: "/repo",
+          status: "completed",
+          approvalStatus: null,
+          aggregatedOutput: "pass\n",
+          exitCode: 0,
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 5,
+      type: "turn/completed",
+      data: {
+        status: "completed",
+      },
+    });
+
+    const details = buildTimelineTurnSummaryDetails(harness.db, thread, {
+      isDevelopment: true,
+      turnId: "turn-1",
+      sourceSeqStart: 2,
+      sourceSeqEnd: 4,
+    });
+    const detailRows = flattenTimelineSourceRows(details.rows);
+
+    expect(detailRows).toEqual([
+      expect.objectContaining({
+        kind: "work",
+        workKind: "command",
+        sourceSeqStart: 2,
+        sourceSeqEnd: 4,
+        command: "pnpm test",
+      }),
+    ]);
+  });
+
+  it("rejects turn-summary detail ranges that do not match the requested turn", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const thread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+    });
+
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 1,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 2,
+      type: "item/completed",
+      data: {
+        item: {
+          type: "agentMessage",
+          id: "assistant-1",
+          text: "Done.",
+        },
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 3,
+      type: "turn/completed",
+      data: {
+        status: "completed",
+      },
+    });
+
+    expect(() =>
+      buildTimelineTurnSummaryDetails(harness.db, thread, {
+        isDevelopment: true,
+        turnId: "turn-2",
+        sourceSeqStart: 1,
+        sourceSeqEnd: 3,
+      }),
+    ).toThrow(/includes turn turn-1 instead of turn-2/);
   });
 
   it("applies provider unhandled gating to turn-summary details", async () => {
@@ -1654,6 +1829,7 @@ describe("buildThreadTimeline", () => {
     expect(
       buildTimelineTurnSummaryDetails(harness.db, thread, {
         isDevelopment: false,
+        turnId: "turn-1",
         sourceSeqStart: 1,
         sourceSeqEnd: 3,
       }).rows,
@@ -1664,6 +1840,7 @@ describe("buildThreadTimeline", () => {
       thread,
       {
         isDevelopment: true,
+        turnId: "turn-1",
         sourceSeqStart: 1,
         sourceSeqEnd: 3,
       },
@@ -1673,6 +1850,7 @@ describe("buildThreadTimeline", () => {
       thread,
       {
         isDevelopment: false,
+        turnId: "turn-1",
         sourceSeqStart: 1,
         sourceSeqEnd: 3,
       },
@@ -1967,6 +2145,15 @@ describe("buildThreadTimeline", () => {
           },
         },
       });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-thread-1",
+        scope: turnScope("turn-1"),
+        sequence: 2,
+        type: "turn/started",
+        data: {},
+      });
     }
 
     const defaultTimeline = buildManagerConversationTimeline(
@@ -2009,7 +2196,8 @@ describe("buildThreadTimeline", () => {
       managerThread,
       {
         isDevelopment: false,
-        sourceSeqEnd: 1,
+        turnId: "turn-1",
+        sourceSeqEnd: 2,
         sourceSeqStart: 1,
       },
     );
@@ -2028,7 +2216,8 @@ describe("buildThreadTimeline", () => {
       managerThread,
       {
         isDevelopment: false,
-        sourceSeqEnd: 1,
+        turnId: "turn-1",
+        sourceSeqEnd: 2,
         sourceSeqStart: 1,
       },
     );

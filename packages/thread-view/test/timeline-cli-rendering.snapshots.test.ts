@@ -75,6 +75,55 @@ function flattenTimelineRows(rows: readonly TimelineRow[]): TimelineRow[] {
 }
 
 describe("timeline CLI rendering snapshots", () => {
+  it("preserves segment durations when a turn summary is split by a steer", () => {
+    const event = createTimelineEventFactory({ threadId: "thread-1" });
+    const timeline = renderIdleTimeline([
+      event.turnStarted({ createdAt: 0 }),
+      event.commandStarted({
+        itemId: "cmd-1",
+        command: "pnpm test",
+        createdAt: 1_000,
+      }),
+      event.commandCompleted({
+        itemId: "cmd-1",
+        command: "pnpm test",
+        createdAt: 6_000,
+      }),
+      event.clientTurnRequested({
+        seq: 4,
+        createdAt: 7_000,
+        text: "Please keep going",
+        target: {
+          kind: "steer",
+          expectedTurnId: "turn-1",
+        },
+      }),
+      event.inputAccepted({
+        seq: 5,
+        createdAt: 8_000,
+        clientRequestSequence: 4,
+      }),
+      event.commandStarted({
+        itemId: "cmd-2",
+        command: "pnpm lint",
+        createdAt: 10_000,
+      }),
+      event.commandCompleted({
+        itemId: "cmd-2",
+        command: "pnpm lint",
+        createdAt: 16_000,
+      }),
+      event.turnCompleted({ createdAt: 17_000 }),
+    ]);
+
+    expect(timeline.turnRows.map((row) => row.durationMs)).toEqual([
+      5_000,
+      6_000,
+    ]);
+    expect(timeline.text).toContain("Worked for 5s");
+    expect(timeline.text).toContain("Worked for 6s");
+  });
+
   it("truncates audit output only inside conversation and leaf row bodies", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
     const longUserLine = `User message ${"body ".repeat(30).trimEnd()}`;

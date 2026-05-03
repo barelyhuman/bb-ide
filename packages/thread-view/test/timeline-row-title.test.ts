@@ -13,6 +13,7 @@ import {
   buildTimelineRowTitle,
   type BuildTimelineRowTitleOptions,
   type TimelineViewDelegationWorkRow,
+  type TimelineViewTurnRow,
   type TimelineViewWorkRow,
 } from "../src/index.js";
 import type { TimelineActivitySummaryRow } from "../src/timeline-view.js";
@@ -211,6 +212,17 @@ function activitySummaryRow(
   };
 }
 
+function turnRow(): TimelineViewTurnRow {
+  return {
+    ...baseRow("turn-1"),
+    kind: "turn",
+    status: "completed",
+    summaryCount: 1,
+    durationMs: 3_661_000,
+    children: null,
+  };
+}
+
 describe("buildTimelineRowTitle", () => {
   it("keeps command content separate from fixed prefix and duration suffix", () => {
     const title = buildTimelineRowTitle(commandRow(), DEFAULT_OPTIONS);
@@ -294,6 +306,12 @@ describe("buildTimelineRowTitle", () => {
       text: "(general-purpose-review-agent-with-a-long-name) 45s",
       truncate: true,
     });
+  });
+
+  it("formats turn durations over 60 minutes as hours", () => {
+    const title = buildTimelineRowTitle(turnRow(), DEFAULT_OPTIONS);
+
+    expect(title.plain).toBe("Worked for 1h 1m 1s");
   });
 
   it("can render activity summaries as bundle titles or muted background summaries", () => {

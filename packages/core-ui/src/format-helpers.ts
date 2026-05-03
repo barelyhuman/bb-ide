@@ -37,11 +37,7 @@ export function durationToString(
   const seconds = durationMs / 1_000;
   if (seconds < 60)
     return `${Number.isInteger(seconds) ? seconds : seconds.toFixed(1)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = Math.round(seconds % 60);
-  return remainingSeconds === 0
-    ? `${minutes}m`
-    : `${minutes}m ${remainingSeconds}s`;
+  return formatRoundedDurationSeconds(Math.round(seconds));
 }
 
 export function durationToCompactString(durationMs: number): string;
@@ -54,9 +50,26 @@ export function durationToCompactString(
   if (durationMs < 1_000) return `${Math.round(durationMs)}ms`;
   const totalSeconds = Math.round(durationMs / 1_000);
   if (totalSeconds < 60) return `${totalSeconds}s`;
-  const minutes = Math.floor(totalSeconds / 60);
+  return formatRoundedDurationSeconds(totalSeconds);
+}
+
+function formatRoundedDurationSeconds(totalSeconds: number): string {
+  const hours = Math.floor(totalSeconds / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
   const seconds = totalSeconds % 60;
-  return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
+  const parts: string[] = [];
+
+  if (hours > 0) {
+    parts.push(`${hours}h`);
+  }
+  if (minutes > 0) {
+    parts.push(`${minutes}m`);
+  }
+  if (seconds > 0) {
+    parts.push(`${seconds}s`);
+  }
+
+  return parts.join(" ");
 }
 
 export function timeAgo(timestamp: number): string {

@@ -10,6 +10,7 @@ import type {
   ThreadPendingInteractionsResponse,
   ThreadResponse,
   ThreadTimelineResponse,
+  TimelineTurnSummaryDetailsRequest,
   TimelineTurnSummaryDetailsResponse,
   WorkspaceFileListResponse,
 } from "@bb/server-contract";
@@ -46,11 +47,9 @@ export interface UseThreadsFilters extends Omit<
   projectId?: string;
 }
 
-interface ThreadTimelineTurnSummaryDetailsRequest {
+interface ThreadTimelineTurnSummaryDetailsMutationRequest
+  extends TimelineTurnSummaryDetailsRequest {
   id: string;
-  sourceSeqStart: number;
-  sourceSeqEnd: number;
-  managerTimelineView?: ManagerTimelineView;
 }
 
 function requireThreadId(id: string, hookName: string): string {
@@ -197,18 +196,10 @@ export function useThreadTimelineTurnSummaryDetails() {
       errorMessage: "Failed to load turn summary details.",
       showErrorToast: false,
     },
-    mutationFn: ({
-      id,
-      sourceSeqStart,
-      sourceSeqEnd,
-      managerTimelineView,
-    }: ThreadTimelineTurnSummaryDetailsRequest): Promise<TimelineTurnSummaryDetailsResponse> =>
-      api.getThreadTimelineTurnSummaryDetails(
-        id,
-        sourceSeqStart,
-        sourceSeqEnd,
-        managerTimelineView,
-      ),
+    mutationFn: (
+      request: ThreadTimelineTurnSummaryDetailsMutationRequest,
+    ): Promise<TimelineTurnSummaryDetailsResponse> =>
+      api.getThreadTimelineTurnSummaryDetails(request),
   });
 }
 

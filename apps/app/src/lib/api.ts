@@ -43,6 +43,7 @@ import type {
   ThreadListResponse,
   ThreadResponse,
   ThreadTimelineResponse,
+  TimelineTurnSummaryDetailsRequest,
   TimelineTurnSummaryDetailsResponse,
   ResolvePendingInteractionRequest,
   UpdateEnvironmentRequest,
@@ -65,6 +66,11 @@ import {
 } from "./file-preview";
 import { buildThreadStorageContentUrl } from "./file-content-urls";
 export type { FilePreview } from "./file-preview";
+
+interface GetThreadTimelineTurnSummaryDetailsArgs
+  extends TimelineTurnSummaryDetailsRequest {
+  id: string;
+}
 
 const MAX_ERROR_MESSAGE_LENGTH = 180;
 const HTML_DOCUMENT_PATTERN = /<!doctype html|<html[\s>]/i;
@@ -686,16 +692,20 @@ export async function getThreadTimeline(
   );
 }
 
-export async function getThreadTimelineTurnSummaryDetails(
-  id: string,
-  sourceSeqStart: number,
-  sourceSeqEnd: number,
-  managerTimelineView?: ManagerTimelineView,
-): Promise<TimelineTurnSummaryDetailsResponse> {
+export async function getThreadTimelineTurnSummaryDetails({
+  id,
+  turnId,
+  sourceSeqStart,
+  sourceSeqEnd,
+  managerTimelineView,
+}: GetThreadTimelineTurnSummaryDetailsArgs): Promise<
+  TimelineTurnSummaryDetailsResponse
+> {
   return request<TimelineTurnSummaryDetailsResponse>(
     apiClient.threads[":id"].timeline["turn-summary-details"].$get({
       param: { id },
       query: {
+        turnId,
         sourceSeqStart: String(sourceSeqStart),
         sourceSeqEnd: String(sourceSeqEnd),
         ...(managerTimelineView ? { managerTimelineView } : {}),

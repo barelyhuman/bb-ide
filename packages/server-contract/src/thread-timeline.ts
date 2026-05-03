@@ -275,6 +275,7 @@ export const timelineWorkRowSchema: z.ZodType<TimelineWorkRow> = z.union([
 
 export interface TimelineTurnRow extends TimelineRowBase {
   kind: "turn";
+  turnId: string;
   status: TimelineRowStatus;
   summaryCount: number;
   durationMs: number | null;
@@ -284,6 +285,7 @@ export interface TimelineTurnRow extends TimelineRowBase {
 export const timelineTurnRowSchema: z.ZodType<TimelineTurnRow> = z.lazy(() =>
   timelineRowBaseSchema.extend({
     kind: z.literal("turn"),
+    turnId: z.string().min(1),
     status: timelineRowStatusSchema,
     summaryCount: z.number().int().nonnegative(),
     durationMs: z.number().nullable(),

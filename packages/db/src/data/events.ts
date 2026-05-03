@@ -315,6 +315,12 @@ export interface ListStoredTurnInputAcceptedRowsByClientRequestSequencesArgs {
   threadId: string;
 }
 
+export interface ListStoredTurnStartedRowsByTurnIdsUpToSequenceArgs {
+  sequenceCutoff: number;
+  threadId: string;
+  turnIds: readonly string[];
+}
+
 export interface ListRecentStoredEventRowsArgs {
   excludedTypes?: readonly ThreadEventType[];
   threadId: string;
@@ -459,6 +465,29 @@ export function listStoredTurnInputAcceptedRowsByClientRequestSequences(
         eq(events.type, "turn/input/accepted"),
         gt(events.sequence, args.afterSequence),
         or(...clientRequestSequenceConditions),
+      ),
+    )
+    .orderBy(events.sequence)
+    .all();
+}
+
+export function listStoredTurnStartedRowsByTurnIdsUpToSequence(
+  db: DbConnection,
+  args: ListStoredTurnStartedRowsByTurnIdsUpToSequenceArgs,
+): StoredEventRow[] {
+  if (args.turnIds.length === 0) {
+    return [];
+  }
+
+  return db
+    .select(storedEventRowFields)
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, args.threadId),
+        eq(events.type, "turn/started"),
+        inArray(events.turnId, [...args.turnIds]),
+        lte(events.sequence, args.sequenceCutoff),
       ),
     )
     .orderBy(events.sequence)

@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import type { TimelineRow, TimelineTurnRow } from "@bb/server-contract";
+import type {
+  TimelineRow,
+  TimelineTurnRow,
+  TimelineTurnSummaryDetailsRequest,
+} from "@bb/server-contract";
 import { shouldLoadNestedRows } from "./turnSummaryRowLoaderHelpers";
 
-interface LoadTurnSummaryRowsArgs {
+interface LoadTurnSummaryRowsArgs extends TimelineTurnSummaryDetailsRequest {
   id: string;
-  sourceSeqStart: number;
-  sourceSeqEnd: number;
 }
 
 interface UseTurnSummaryRowLoaderParams {
@@ -56,6 +58,7 @@ export function useTurnSummaryRowLoader({
       });
       void loadTurnSummaryRows({
         id: currentThreadId,
+        turnId: entry.turnId,
         sourceSeqStart: entry.sourceSeqStart,
         sourceSeqEnd: entry.sourceSeqEnd,
       })

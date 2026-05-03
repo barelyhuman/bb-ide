@@ -32,6 +32,12 @@ describe("durationToString", () => {
     expect(durationToString(90_000)).toBe("1m 30s");
     expect(durationToString(125_000)).toBe("2m 5s");
   });
+
+  it("formats durations over 60 minutes as hours + minutes + seconds", () => {
+    expect(durationToString(3_600_000)).toBe("1h");
+    expect(durationToString(3_660_000)).toBe("1h 1m");
+    expect(durationToString(3_661_000)).toBe("1h 1m 1s");
+  });
 });
 
 describe("durationToCompactString", () => {
@@ -60,6 +66,12 @@ describe("durationToCompactString", () => {
     expect(durationToCompactString(60_000)).toBe("1m");
     expect(durationToCompactString(89_600)).toBe("1m 30s");
     expect(durationToCompactString(125_000)).toBe("2m 5s");
+  });
+
+  it("formats durations over 60 minutes as hours + minutes + seconds", () => {
+    expect(durationToCompactString(3_600_000)).toBe("1h");
+    expect(durationToCompactString(3_660_000)).toBe("1h 1m");
+    expect(durationToCompactString(3_661_000)).toBe("1h 1m 1s");
   });
 });
 

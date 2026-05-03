@@ -642,6 +642,7 @@ describe("server-contract clients", () => {
       publicClient.threads[":id"].timeline["turn-summary-details"].$url({
         param: { id: "thr_123" },
         query: {
+          turnId: "turn_123",
           sourceSeqStart: "1",
           sourceSeqEnd: "2",
         },

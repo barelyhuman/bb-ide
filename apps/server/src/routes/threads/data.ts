@@ -38,7 +38,10 @@ import {
   listThreadEventRows,
 } from "../../services/threads/thread-data.js";
 import { getLastExecutionOptions } from "../../services/threads/thread-events.js";
-import { parseOptionalInteger } from "../../services/lib/validation.js";
+import {
+  parseInteger,
+  parseOptionalInteger,
+} from "../../services/lib/validation.js";
 
 function validateFilePath(filePath: string): void {
   if (
@@ -119,10 +122,9 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
       return context.json(
         buildTimelineTurnSummaryDetails(deps.db, thread, {
           isDevelopment: deps.config.isDevelopment,
-          sourceSeqStart:
-            parseOptionalInteger(query.sourceSeqStart, "sourceSeqStart") ?? 0,
-          sourceSeqEnd:
-            parseOptionalInteger(query.sourceSeqEnd, "sourceSeqEnd") ?? 0,
+          turnId: query.turnId,
+          sourceSeqStart: parseInteger(query.sourceSeqStart, "sourceSeqStart"),
+          sourceSeqEnd: parseInteger(query.sourceSeqEnd, "sourceSeqEnd"),
           timelineViewMode: resolveThreadTimelineServiceViewMode({
             managerTimelineView: query.managerTimelineView,
             thread,

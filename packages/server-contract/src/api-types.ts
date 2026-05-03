@@ -510,6 +510,7 @@ export const threadTimelineQuerySchema = z
 export type ThreadTimelineQuery = z.infer<typeof threadTimelineQuerySchema>;
 
 export const timelineTurnSummaryDetailsQuerySchema = z.object({
+  turnId: z.string().min(1),
   sourceSeqStart: z.string().regex(/^\d+$/),
   sourceSeqEnd: z.string().regex(/^\d+$/),
   managerTimelineView: managerTimelineViewSchema.optional(),
@@ -901,9 +902,9 @@ export type EnvironmentActionApiError = z.infer<
 >;
 
 export const timelineTurnSummaryDetailsRequestSchema = z.object({
-  turnId: z.string(),
-  sourceSeqStart: z.number(),
-  sourceSeqEnd: z.number(),
+  turnId: z.string().min(1),
+  sourceSeqStart: z.number().int().nonnegative(),
+  sourceSeqEnd: z.number().int().nonnegative(),
   managerTimelineView: managerTimelineViewSchema.optional(),
 });
 export type TimelineTurnSummaryDetailsRequest = z.infer<
