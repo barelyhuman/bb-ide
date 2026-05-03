@@ -468,6 +468,42 @@ describe("server-contract canonical schemas", () => {
       }),
     ).toThrow();
 
+    expect(() =>
+      contract.environmentActionResponseSchema.parse({
+        action: "commit",
+        commitSha: "sha",
+        commitSubject: "subject",
+        message: "",
+        ok: true,
+      }),
+    ).toThrow();
+
+    expect(() =>
+      contract.environmentActionResponseSchema.parse({
+        action: "squash_merge",
+        commitSha: "sha",
+        merged: true,
+        message: "",
+        ok: true,
+      }),
+    ).toThrow();
+
+    expect(() =>
+      contract.environmentActionResponseSchema.parse({
+        action: "promote",
+        message: "",
+        ok: true,
+      }),
+    ).toThrow();
+
+    expect(() =>
+      contract.environmentActionResponseSchema.parse({
+        action: "demote",
+        message: "",
+        ok: true,
+      }),
+    ).toThrow();
+
     expect(
       updateEnvironmentRequestSchema.parse({
         mergeBaseBranch: null,

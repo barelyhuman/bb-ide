@@ -697,8 +697,6 @@ export function ThreadDetailView() {
       {canUseGitUi ? (
         <ThreadGitActionDialog
           target={gitActions.threadGitActionDialog.target}
-          pending={requestEnvironmentAction.isPending}
-          askAgentPending={sendMessage.isPending}
           branchName={threadBranchName}
           gitStatusDisplay={threadGitStatusDisplay}
           changedFiles={workspaceWorkingTree?.files}
@@ -718,7 +716,6 @@ export function ThreadDetailView() {
           }}
           onCommit={gitActions.handleCommitThread}
           onSquashMerge={gitActions.handleSquashMergeThread}
-          onAskAgentToFix={gitActions.handleAskAgentToFixGitAction}
         />
       ) : null}
       <ThreadEnvironmentPromotionDialog

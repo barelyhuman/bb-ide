@@ -1,17 +1,19 @@
 import { useCallback, useMemo } from "react";
+import { toast } from "sonner";
 import type {
   Environment,
   PromptInput,
   Thread,
   WorkspaceStatus,
 } from "@bb/domain";
-import type { EnvironmentActionFailureDetails } from "@bb/server-contract";
+import type {
+  CommitActionResponse,
+  EnvironmentActionFailureDetails,
+  SquashMergeActionResponse,
+} from "@bb/server-contract";
 import { environmentActionFailureDetailsSchema } from "@bb/server-contract";
 import { useDialogState } from "@/hooks/useDialogState";
-import {
-  ThreadGitActionDialogError,
-  type ThreadGitActionDialogTarget,
-} from "@/components/thread/ThreadGitActionDialog";
+import type { ThreadGitActionDialogTarget } from "@/components/thread/ThreadGitActionDialog";
 import {
   buildCommitFailureFollowUpInstruction,
   buildSquashMergeCommitFailureFollowUpInstruction,
@@ -29,9 +31,36 @@ interface BuildAskAgentInputForGitOperationParams {
   mergeBaseBranch?: string;
 }
 
-interface ToThreadGitActionDialogErrorParams {
+interface GitActionFailure {
+  askAgentInput?: PromptInput[];
+  message: string;
+}
+
+interface ToGitActionFailureParams {
   error: unknown;
   mergeBaseBranch?: string;
+}
+
+interface AskAgentToFixGitActionParams {
+  input: PromptInput[];
+  threadId: string;
+}
+
+type AskAgentToFixGitAction = (
+  params: AskAgentToFixGitActionParams,
+) => void;
+
+interface ShowGitActionErrorToastParams {
+  error: unknown;
+  mergeBaseBranch?: string;
+  onAskAgentToFix: AskAgentToFixGitAction;
+  threadId: string;
+  toastId: string | number;
+}
+
+interface ShowGitActionSuccessToastParams {
+  response: GitActionSuccessResponse;
+  toastId: string | number;
 }
 
 interface SquashMergeThreadParams {
@@ -50,6 +79,10 @@ interface ThreadHeaderGitAction {
   label: string;
   target: ThreadGitActionDialogTarget;
 }
+
+type GitActionSuccessResponse =
+  | CommitActionResponse
+  | SquashMergeActionResponse;
 
 function toEnvironmentActionFailureDetails(
   error: unknown,
@@ -134,20 +167,61 @@ function buildAskAgentInputForGitOperation({
   }
 }
 
-function toThreadGitActionDialogError({
+function toGitActionFailure({
   error,
   mergeBaseBranch,
-}: ToThreadGitActionDialogErrorParams): ThreadGitActionDialogError {
+}: ToGitActionFailureParams): GitActionFailure {
   const message = getMutationErrorMessage({
     error,
     fallbackMessage: "Failed to start git action.",
   });
 
-  return new ThreadGitActionDialogError(message, {
+  return {
+    message,
     askAgentInput: buildAskAgentInputForGitOperation({
       error,
       mergeBaseBranch,
     }),
+  };
+}
+
+function showGitActionSuccessToast({
+  response,
+  toastId,
+}: ShowGitActionSuccessToastParams): void {
+  const description =
+    response.action === "commit" ? response.commitSubject : undefined;
+
+  toast.success(response.message, {
+    id: toastId,
+    ...(description ? { description } : {}),
+  });
+}
+
+function showGitActionErrorToast({
+  error,
+  mergeBaseBranch,
+  onAskAgentToFix,
+  threadId,
+  toastId,
+}: ShowGitActionErrorToastParams): void {
+  const failure = toGitActionFailure({ error, mergeBaseBranch });
+  const askAgentInput = failure.askAgentInput;
+
+  toast.error(failure.message, {
+    id: toastId,
+    ...(askAgentInput
+      ? {
+          action: {
+            label: "Ask agent to fix",
+            onClick: () =>
+              onAskAgentToFix({
+                input: askAgentInput,
+                threadId,
+              }),
+          },
+        }
+      : {}),
   });
 }
 
@@ -209,21 +283,64 @@ export function useThreadGitActions({
     workspaceWorkingTree?.hasUncommittedChanges,
   ]);
 
+  const handleAskAgentToFixGitAction = useCallback(
+    async ({ input, threadId }: AskAgentToFixGitActionParams) => {
+      if (sendMessage.isPending) {
+        return;
+      }
+
+      const toastId = toast.loading("Asking the agent to fix this...");
+
+      try {
+        await sendMessage.mutateAsync({
+          id: threadId,
+          input,
+          mode: "auto",
+        });
+        toast.success("Asked the agent to fix this.", { id: toastId });
+      } catch (error) {
+        toast.error(
+          getMutationErrorMessage({
+            error,
+            fallbackMessage: "Failed to ask the agent to fix this.",
+          }),
+          { id: toastId },
+        );
+      }
+    },
+    [sendMessage],
+  );
+
   const handleCommitThread = useCallback(async () => {
     const attachedEnvironmentId = thread?.environmentId;
     if (!thread || !attachedEnvironmentId) {
       return;
     }
+    const threadId = thread.id;
+
+    const toastId = toast.loading("Committing changes...");
 
     try {
-      await requestEnvironmentAction.mutateAsync({
+      const response = await requestEnvironmentAction.mutateAsync({
         id: attachedEnvironmentId,
         action: "commit",
       });
+      if (response.action !== "commit") {
+        throw new Error("Expected commit action response.");
+      }
+      showGitActionSuccessToast({
+        response,
+        toastId,
+      });
     } catch (nextError) {
-      throw toThreadGitActionDialogError({ error: nextError });
+      showGitActionErrorToast({
+        error: nextError,
+        onAskAgentToFix: (params) => void handleAskAgentToFixGitAction(params),
+        threadId,
+        toastId,
+      });
     }
-  }, [requestEnvironmentAction, thread]);
+  }, [handleAskAgentToFixGitAction, requestEnvironmentAction, thread]);
 
   const handleSquashMergeThread = useCallback(
     async ({ mergeBaseBranch }: SquashMergeThreadParams) => {
@@ -231,38 +348,37 @@ export function useThreadGitActions({
       if (!thread || !attachedEnvironmentId) {
         return;
       }
+      const threadId = thread.id;
+
+      const toastId = toast.loading("Squash merge in progress...");
 
       try {
-        await requestEnvironmentAction.mutateAsync({
+        const response = await requestEnvironmentAction.mutateAsync({
           id: attachedEnvironmentId,
           action: "squash_merge",
           options: {
             mergeBaseBranch,
           },
         });
+        if (response.action !== "squash_merge") {
+          throw new Error("Expected squash merge action response.");
+        }
+        showGitActionSuccessToast({
+          response,
+          toastId,
+        });
       } catch (nextError) {
-        throw toThreadGitActionDialogError({
+        showGitActionErrorToast({
           error: nextError,
+          onAskAgentToFix: (params) =>
+            void handleAskAgentToFixGitAction(params),
           mergeBaseBranch,
+          threadId,
+          toastId,
         });
       }
     },
-    [requestEnvironmentAction, thread],
-  );
-
-  const handleAskAgentToFixGitAction = useCallback(
-    async (input: PromptInput[]) => {
-      if (!thread) {
-        return;
-      }
-
-      await sendMessage.mutateAsync({
-        id: thread.id,
-        input,
-        mode: "auto",
-      });
-    },
-    [sendMessage, thread],
+    [handleAskAgentToFixGitAction, requestEnvironmentAction, thread],
   );
 
   return {

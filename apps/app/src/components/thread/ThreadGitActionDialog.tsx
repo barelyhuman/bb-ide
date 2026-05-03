@@ -1,7 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { Loader2 } from "lucide-react";
 import { assertNever } from "@bb/core-ui";
-import type { PromptInput, ThreadType, WorkspaceStatus } from "@bb/domain";
+import type { ThreadType, WorkspaceStatus } from "@bb/domain";
 import { DetailCard, DetailRow } from "@bb/ui-core";
 import type { ThreadGitStatusDisplay } from "@/lib/workspace-status";
 import { WorkspaceChangesList } from "@/components/shared/WorkspaceChangesList";
@@ -19,27 +18,14 @@ import {
   getMergeBaseBranchCandidates,
   MergeBaseBranchPicker,
 } from "@/components/thread/MergeBaseBranchPicker";
-import { getMutationErrorMessage } from "@/lib/mutation-errors";
 
 export type ThreadGitActionDialogTarget =
   | { kind: "commit" }
   | { kind: "commit_and_squash_merge" }
   | { kind: "squash_merge" };
 
-export class ThreadGitActionDialogError extends Error {
-  readonly askAgentInput?: PromptInput[];
-
-  constructor(message: string, options?: { askAgentInput?: PromptInput[] }) {
-    super(message);
-    this.name = "ThreadGitActionDialogError";
-    this.askAgentInput = options?.askAgentInput;
-  }
-}
-
 interface ThreadGitActionDialogProps {
   target: ThreadGitActionDialogTarget | null;
-  pending?: boolean;
-  askAgentPending?: boolean;
   branchName?: string;
   gitStatusDisplay?: ThreadGitStatusDisplay;
   changedFiles?: WorkspaceStatus["workingTree"]["files"];
@@ -53,7 +39,6 @@ interface ThreadGitActionDialogProps {
   onOpenChange: (open: boolean) => void;
   onCommit: () => Promise<void>;
   onSquashMerge: (args: { mergeBaseBranch: string }) => Promise<void>;
-  onAskAgentToFix?: (input: PromptInput[]) => Promise<void>;
 }
 
 function getDialogCopy(target: ThreadGitActionDialogTarget) {
@@ -90,8 +75,6 @@ function getDialogCopy(target: ThreadGitActionDialogTarget) {
 
 export function ThreadGitActionDialog({
   target,
-  pending = false,
-  askAgentPending = false,
   branchName,
   gitStatusDisplay,
   changedFiles,
@@ -105,7 +88,6 @@ export function ThreadGitActionDialog({
   onOpenChange,
   onCommit,
   onSquashMerge,
-  onAskAgentToFix,
 }: ThreadGitActionDialogProps) {
   const dialogCopy = useMemo(
     () => (target ? getDialogCopy(target) : null),
@@ -119,8 +101,6 @@ export function ThreadGitActionDialog({
           <ThreadGitActionDialogContent
             key={target.kind}
             target={target}
-            pending={pending}
-            askAgentPending={askAgentPending}
             branchName={branchName}
             gitStatusDisplay={gitStatusDisplay}
             changedFiles={changedFiles}
@@ -134,7 +114,6 @@ export function ThreadGitActionDialog({
             onOpenChange={onOpenChange}
             onCommit={onCommit}
             onSquashMerge={onSquashMerge}
-            onAskAgentToFix={onAskAgentToFix}
           />
         ) : null}
       </DialogContent>
@@ -144,8 +123,6 @@ export function ThreadGitActionDialog({
 
 function ThreadGitActionDialogContent({
   target,
-  pending,
-  askAgentPending,
   branchName,
   gitStatusDisplay,
   changedFiles,
@@ -159,14 +136,10 @@ function ThreadGitActionDialogContent({
   onOpenChange,
   onCommit,
   onSquashMerge,
-  onAskAgentToFix,
 }: Omit<ThreadGitActionDialogProps, "target"> & {
   target: ThreadGitActionDialogTarget;
 }) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [askAgentInput, setAskAgentInput] = useState<PromptInput[] | null>(
-    null,
-  );
   const dialogCopy = getDialogCopy(target);
   const mergeBaseCandidates = getMergeBaseBranchCandidates({
     mergeBaseBranch,
@@ -186,64 +159,38 @@ function ThreadGitActionDialogContent({
     changedFiles && changedFiles.length > 0,
   );
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (pending) {
-      return;
-    }
     setErrorMessage(null);
-    setAskAgentInput(null);
 
-    try {
-      switch (target.kind) {
-        case "commit":
-          await onCommit();
-          break;
-        case "commit_and_squash_merge":
-          if (!selectedMergeBaseBranch) {
-            setErrorMessage("A merge base branch is required");
-            return;
-          }
-          await onSquashMerge({
-            mergeBaseBranch: selectedMergeBaseBranch,
-          });
-          break;
-        case "squash_merge":
-          if (!selectedMergeBaseBranch) {
-            setErrorMessage("A merge base branch is required");
-            return;
-          }
-          await onSquashMerge({
-            mergeBaseBranch: selectedMergeBaseBranch,
-          });
-          break;
-        default:
-          assertNever(target);
-      }
-      onOpenChange(false);
-    } catch (error) {
-      setAskAgentInput(
-        error instanceof ThreadGitActionDialogError && error.askAgentInput
-          ? error.askAgentInput
-          : null,
-      );
-      setErrorMessage(
-        getMutationErrorMessage({
-          error,
-          fallbackMessage: "Failed to start git action.",
-        }),
-      );
+    switch (target.kind) {
+      case "commit":
+        onOpenChange(false);
+        void onCommit();
+        break;
+      case "commit_and_squash_merge":
+        if (!selectedMergeBaseBranch) {
+          setErrorMessage("A merge base branch is required");
+          return;
+        }
+        onOpenChange(false);
+        void onSquashMerge({
+          mergeBaseBranch: selectedMergeBaseBranch,
+        });
+        break;
+      case "squash_merge":
+        if (!selectedMergeBaseBranch) {
+          setErrorMessage("A merge base branch is required");
+          return;
+        }
+        onOpenChange(false);
+        void onSquashMerge({
+          mergeBaseBranch: selectedMergeBaseBranch,
+        });
+        break;
+      default:
+        assertNever(target);
     }
-  };
-
-  const handleAskAgentToFix = async () => {
-    if (!askAgentInput || !onAskAgentToFix || askAgentPending) {
-      return;
-    }
-    await onAskAgentToFix(askAgentInput);
-    setErrorMessage(null);
-    setAskAgentInput(null);
-    onOpenChange(false);
   };
 
   return (
@@ -287,7 +234,6 @@ function ThreadGitActionDialogContent({
                     value={selectedMergeBaseBranch}
                     options={mergeBaseCandidates}
                     loading={mergeBaseBranchOptionsLoading}
-                    disabled={pending}
                     onChange={(branch) => onMergeBaseBranchChange?.(branch)}
                     className="max-w-full"
                   />
@@ -316,26 +262,11 @@ function ThreadGitActionDialogContent({
           </DetailCard>
         ) : null}
         <FormError message={errorMessage} />
-        <DialogFooter className="sm:justify-between">
-          {askAgentInput && onAskAgentToFix ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void handleAskAgentToFix()}
-              disabled={pending || askAgentPending}
-            >
-              {askAgentPending ? "Asking agent..." : "Ask the agent to fix"}
-            </Button>
-          ) : (
-            <span />
-          )}
+        <DialogFooter>
           <Button
             type="submit"
-            disabled={
-              pending || (dialogCopy.showMergeBase && !selectedMergeBaseBranch)
-            }
+            disabled={dialogCopy.showMergeBase && !selectedMergeBaseBranch}
           >
-            {pending ? <Loader2 className="size-4 animate-spin" /> : null}
             {dialogCopy.submitLabel}
           </Button>
         </DialogFooter>

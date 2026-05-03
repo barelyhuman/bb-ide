@@ -774,7 +774,7 @@ export type EnvironmentActionRequest = z.infer<
 export const commitActionResponseSchema = z.object({
   ok: z.literal(true),
   action: z.literal("commit"),
-  message: z.string(),
+  message: z.string().min(1),
   commitSha: z.string().min(1),
   commitSubject: z.string().min(1),
 });
@@ -784,7 +784,7 @@ export const squashMergeActionResponseSchema = z.object({
   ok: z.literal(true),
   action: z.literal("squash_merge"),
   merged: z.boolean(),
-  message: z.string(),
+  message: z.string().min(1),
   commitSha: z.string().min(1),
 });
 export type SquashMergeActionResponse = z.infer<
@@ -794,13 +794,13 @@ export type SquashMergeActionResponse = z.infer<
 const promoteActionResponseSchema = z.object({
   ok: z.literal(true),
   action: z.literal("promote"),
-  message: z.string(),
+  message: z.string().min(1),
 });
 
 const demoteActionResponseSchema = z.object({
   ok: z.literal(true),
   action: z.literal("demote"),
-  message: z.string(),
+  message: z.string().min(1),
 });
 
 export const environmentActionResponseSchema = z.discriminatedUnion("action", [

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type {
   Environment,
   PromptInput,
@@ -14,7 +14,7 @@ import {
   makeWorkspaceWorkingTree,
 } from "@bb/test-helpers";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ThreadGitActionDialogError } from "@/components/thread/ThreadGitActionDialog";
+import { toast } from "sonner";
 import { HttpError } from "@/lib/api";
 import {
   buildCommitFailureFollowUpInstruction,
@@ -25,6 +25,14 @@ import type {
   SendMessageMutationLike,
 } from "./threadDetailMutationTypes";
 import { useThreadGitActions } from "./useThreadGitActions";
+
+vi.mock("sonner", () => ({
+  toast: {
+    error: vi.fn(),
+    loading: vi.fn(() => "toast-id"),
+    success: vi.fn(),
+  },
+}));
 
 interface ThreadOverrides extends Partial<Thread> {}
 
@@ -121,6 +129,16 @@ function makeCommitActionResponse(): EnvironmentActionResponse {
   };
 }
 
+function makeSquashMergeActionResponse(): EnvironmentActionResponse {
+  return {
+    action: "squash_merge",
+    commitSha: "def456",
+    merged: true,
+    message: "Squash merge completed",
+    ok: true,
+  };
+}
+
 function createRequestEnvironmentActionMutation(
   options: RequestEnvironmentActionMutationOptions = {},
 ): RequestEnvironmentActionMutationLike {
@@ -143,7 +161,22 @@ function createSendMessageMutation(
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.mocked(toast.loading).mockReturnValue("toast-id");
 });
+
+function clickLatestErrorToastAction(): void {
+  const errorToastOptions = vi.mocked(toast.error).mock.calls.at(-1)?.[1];
+  if (
+    !errorToastOptions?.action ||
+    typeof errorToastOptions.action !== "object" ||
+    !("onClick" in errorToastOptions.action) ||
+    typeof errorToastOptions.action.onClick !== "function"
+  ) {
+    throw new Error("Expected an ask-agent toast action");
+  }
+
+  errorToastOptions.action.onClick(undefined as never);
+}
 
 describe("useThreadGitActions", () => {
   it("shows a commit action for direct thread environments with uncommitted changes", () => {
@@ -244,9 +277,54 @@ describe("useThreadGitActions", () => {
       action: "commit",
       id: "environment-commit",
     });
+    expect(toast.loading).toHaveBeenCalledWith("Committing changes...");
+    expect(toast.success).toHaveBeenCalledWith("Committed changes", {
+      description: "Commit subject",
+      id: "toast-id",
+    });
   });
 
-  it("maps squash-merge conflicts into a dialog error with ask-agent guidance", async () => {
+  it("forwards squash merge requests to the environment mutation", async () => {
+    const requestEnvironmentAction = createRequestEnvironmentActionMutation({
+      mutateAsync: vi.fn(async () => makeSquashMergeActionResponse()),
+    });
+    const thread = makeThread({
+      environmentId: "environment-merge",
+    });
+    const { result } = renderHook(() =>
+      useThreadGitActions({
+        environment: makeEnvironment({
+          managed: true,
+        }),
+        requestEnvironmentAction,
+        sendMessage: createSendMessageMutation(),
+        thread,
+        workspaceStatus: makeWorkspaceStatus({
+          hasCommittedUnmergedChanges: true,
+        }),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleSquashMergeThread({
+        mergeBaseBranch: "main",
+      });
+    });
+
+    expect(requestEnvironmentAction.mutateAsync).toHaveBeenCalledWith({
+      action: "squash_merge",
+      id: "environment-merge",
+      options: {
+        mergeBaseBranch: "main",
+      },
+    });
+    expect(toast.loading).toHaveBeenCalledWith("Squash merge in progress...");
+    expect(toast.success).toHaveBeenCalledWith("Squash merge completed", {
+      id: "toast-id",
+    });
+  });
+
+  it("maps squash-merge conflicts into an error toast with ask-agent guidance", async () => {
     const thread = makeThread({
       environmentId: "environment-merge",
     });
@@ -280,44 +358,26 @@ describe("useThreadGitActions", () => {
       }),
     );
 
-    let thrownError: unknown;
-
     await act(async () => {
-      try {
-        await result.current.handleSquashMergeThread({
-          mergeBaseBranch,
-        });
-      } catch (error) {
-        thrownError = error;
-      }
+      await result.current.handleSquashMergeThread({
+        mergeBaseBranch,
+      });
     });
 
-    expect(thrownError).toBeInstanceOf(ThreadGitActionDialogError);
-
-    if (!(thrownError instanceof ThreadGitActionDialogError)) {
-      throw new Error("Expected a ThreadGitActionDialogError");
-    }
-
-    expect(thrownError.message).toBe("Squash merge failed");
-    expect(thrownError.askAgentInput).toEqual([
-      {
-        text: buildSquashMergeConflictFollowUpInstruction(
-          {
-            action: "squash_merge",
-            options: {
-              mergeBaseBranch,
-            },
-          },
-          {
-            conflictFiles: ["src/thread.ts"],
-          },
-        ),
-        type: "text",
-      },
-    ]);
+    expect(toast.loading).toHaveBeenCalledWith("Squash merge in progress...");
+    expect(toast.error).toHaveBeenCalledWith(
+      "Squash merge failed",
+      expect.objectContaining({
+        action: expect.objectContaining({
+          label: "Ask agent to fix",
+          onClick: expect.any(Function),
+        }),
+        id: "toast-id",
+      }),
+    );
   });
 
-  it("maps commit failures into ask-agent instructions", async () => {
+  it("maps commit failures into an error toast with ask-agent guidance", async () => {
     const thread = makeThread({
       environmentId: "environment-commit-failure",
     });
@@ -348,30 +408,145 @@ describe("useThreadGitActions", () => {
       }),
     );
 
-    let thrownError: unknown;
-
     await act(async () => {
-      try {
-        await result.current.handleCommitThread();
-      } catch (error) {
-        thrownError = error;
-      }
+      await result.current.handleCommitThread();
     });
 
-    expect(thrownError).toBeInstanceOf(ThreadGitActionDialogError);
-
-    if (!(thrownError instanceof ThreadGitActionDialogError)) {
-      throw new Error("Expected a ThreadGitActionDialogError");
-    }
-
-    expect(thrownError.askAgentInput).toEqual([
-      {
-        text: buildCommitFailureFollowUpInstruction({
-          errorMessage: "Git commit exited with status 1",
+    expect(toast.error).toHaveBeenCalledWith(
+      "Commit failed",
+      expect.objectContaining({
+        action: expect.objectContaining({
+          label: "Ask agent to fix",
+          onClick: expect.any(Function),
         }),
-        type: "text",
+        id: "toast-id",
+      }),
+    );
+  });
+
+  it("asks the agent with generated squash-merge conflict guidance from the error toast action", async () => {
+    const thread = makeThread({
+      environmentId: "environment-merge",
+    });
+    const mergeBaseBranch = "main";
+    const conflictError = new HttpError({
+      body: {
+        details: {
+          conflictFiles: ["src/thread.ts"],
+          kind: "squash_merge_conflict",
+        },
       },
-    ]);
+      message: "Squash merge failed",
+      status: 409,
+    });
+    const requestEnvironmentAction = createRequestEnvironmentActionMutation({
+      mutateAsync: vi.fn(async () => {
+        throw conflictError;
+      }),
+    });
+    const sendMessage = createSendMessageMutation();
+    const { result } = renderHook(() =>
+      useThreadGitActions({
+        environment: makeEnvironment({
+          managed: true,
+        }),
+        requestEnvironmentAction,
+        sendMessage,
+        thread,
+        workspaceStatus: makeWorkspaceStatus({
+          hasCommittedUnmergedChanges: true,
+        }),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleSquashMergeThread({
+        mergeBaseBranch,
+      });
+    });
+
+    act(() => {
+      clickLatestErrorToastAction();
+    });
+
+    await waitFor(() => {
+      expect(sendMessage.mutateAsync).toHaveBeenCalledWith({
+        id: thread.id,
+        input: [
+          {
+            text: buildSquashMergeConflictFollowUpInstruction(
+              {
+                action: "squash_merge",
+                options: {
+                  mergeBaseBranch,
+                },
+              },
+              {
+                conflictFiles: ["src/thread.ts"],
+              },
+            ),
+            type: "text",
+          },
+        ],
+        mode: "auto",
+      });
+    });
+  });
+
+  it("asks the agent with generated commit failure guidance from the error toast action", async () => {
+    const thread = makeThread({
+      environmentId: "environment-commit-failure",
+    });
+    const commitError = new HttpError({
+      body: {
+        details: {
+          errorMessage: "Git commit exited with status 1",
+          kind: "commit_failed",
+        },
+      },
+      message: "Commit failed",
+      status: 409,
+    });
+    const requestEnvironmentAction = createRequestEnvironmentActionMutation({
+      mutateAsync: vi.fn(async () => {
+        throw commitError;
+      }),
+    });
+    const sendMessage = createSendMessageMutation();
+    const { result } = renderHook(() =>
+      useThreadGitActions({
+        environment: makeEnvironment(),
+        requestEnvironmentAction,
+        sendMessage,
+        thread,
+        workspaceStatus: makeWorkspaceStatus({
+          hasUncommittedChanges: true,
+        }),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleCommitThread();
+    });
+
+    act(() => {
+      clickLatestErrorToastAction();
+    });
+
+    await waitFor(() => {
+      expect(sendMessage.mutateAsync).toHaveBeenCalledWith({
+        id: thread.id,
+        input: [
+          {
+            text: buildCommitFailureFollowUpInstruction({
+              errorMessage: "Git commit exited with status 1",
+            }),
+            type: "text",
+          },
+        ],
+        mode: "auto",
+      });
+    });
   });
 
   it("sends ask-agent follow-up messages through the thread mutation", async () => {
@@ -396,13 +571,70 @@ describe("useThreadGitActions", () => {
     );
 
     await act(async () => {
-      await result.current.handleAskAgentToFixGitAction(input);
+      await result.current.handleAskAgentToFixGitAction({
+        input,
+        threadId: thread.id,
+      });
     });
 
     expect(sendMessage.mutateAsync).toHaveBeenCalledWith({
       id: thread.id,
       input,
       mode: "auto",
+    });
+    expect(toast.loading).toHaveBeenCalledWith(
+      "Asking the agent to fix this...",
+    );
+    expect(toast.success).toHaveBeenCalledWith(
+      "Asked the agent to fix this.",
+      {
+        id: "toast-id",
+      },
+    );
+  });
+
+  it("updates the ask-agent toast when the follow-up message fails", async () => {
+    const input: PromptInput[] = [
+      {
+        text: "Resolve the merge conflict and continue.",
+        type: "text",
+      },
+    ];
+    const sendMessage = createSendMessageMutation({
+      mutateAsync: vi.fn(async () => {
+        throw new Error("Queue unavailable");
+      }),
+    });
+    const thread = makeThread({
+      id: "thread-follow-up-failure",
+    });
+    const { result } = renderHook(() =>
+      useThreadGitActions({
+        environment: makeEnvironment(),
+        requestEnvironmentAction: createRequestEnvironmentActionMutation(),
+        sendMessage,
+        thread,
+        workspaceStatus: makeWorkspaceStatus(),
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleAskAgentToFixGitAction({
+        input,
+        threadId: thread.id,
+      });
+    });
+
+    expect(sendMessage.mutateAsync).toHaveBeenCalledWith({
+      id: thread.id,
+      input,
+      mode: "auto",
+    });
+    expect(toast.loading).toHaveBeenCalledWith(
+      "Asking the agent to fix this...",
+    );
+    expect(toast.error).toHaveBeenCalledWith("Queue unavailable", {
+      id: "toast-id",
     });
   });
 });
