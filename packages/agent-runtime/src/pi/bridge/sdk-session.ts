@@ -35,6 +35,14 @@ type PiSessionEventHandler = (event: AgentSessionEvent) => void;
 type PiSessionDoneHandler = (error?: unknown) => void;
 type AppendSystemPromptOverride = (base: string[]) => string[];
 
+interface RunPromptArgs {
+  images?: ImageContent[];
+  text: string;
+}
+
+const PI_TRANSIENT_AUTH_MAX_RETRIES = 2;
+const PI_TRANSIENT_AUTH_RETRY_DELAY_MS = 250;
+
 interface CreateBashToolWithShellEnvOverlayArgs {
   cwd: string;
   shellEnvOverrides: ShellEnvOverrides;
@@ -102,6 +110,16 @@ function buildSessionCustomTools(
     );
   }
   return customTools;
+}
+
+function isTransientPiAuthStorageError(error: Error): boolean {
+  return error.message.startsWith("No API key found for ");
+}
+
+async function waitForTransientAuthRetry(): Promise<void> {
+  await new Promise((resolve) =>
+    setTimeout(resolve, PI_TRANSIENT_AUTH_RETRY_DELAY_MS),
+  );
 }
 
 /**
@@ -210,17 +228,10 @@ export class PiSdkSession {
     if (!this.session) return;
     this.isProcessing = true;
     try {
-      this.ensureCustomToolsActive();
-      if (this.session.isStreaming) {
-        await this.session.prompt(text, {
-          streamingBehavior: "steer",
-          ...(images && images.length > 0 ? { images } : {}),
-        });
-      } else {
-        await this.session.prompt(text, {
-          ...(images && images.length > 0 ? { images } : {}),
-        });
-      }
+      await this.runPromptWithTransientAuthRetry({
+        images,
+        text,
+      });
     } catch (error) {
       this.isProcessing = false;
       this.onDone(error);
@@ -230,17 +241,10 @@ export class PiSdkSession {
   async steer(text: string, images?: ImageContent[]): Promise<void> {
     if (!this.session) return;
     try {
-      this.ensureCustomToolsActive();
-      if (this.session.isStreaming) {
-        await this.session.prompt(text, {
-          streamingBehavior: "steer",
-          ...(images && images.length > 0 ? { images } : {}),
-        });
-      } else {
-        await this.session.prompt(text, {
-          ...(images && images.length > 0 ? { images } : {}),
-        });
-      }
+      await this.runPromptWithTransientAuthRetry({
+        images,
+        text,
+      });
     } catch (error) {
       this.onDone(error);
     }
@@ -322,6 +326,47 @@ export class PiSdkSession {
     if (missingCustomTool) {
       this.session.setActiveToolsByName(Array.from(activeToolNames));
     }
+  }
+
+  private async runPromptWithTransientAuthRetry(
+    args: RunPromptArgs,
+  ): Promise<void> {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        await this.runPromptOnce(args);
+        return;
+      } catch (error) {
+        if (
+          !(error instanceof Error) ||
+          !isTransientPiAuthStorageError(error) ||
+          attempt >= PI_TRANSIENT_AUTH_MAX_RETRIES
+        ) {
+          throw error;
+        }
+        await waitForTransientAuthRetry();
+      }
+    }
+  }
+
+  private async runPromptOnce(args: RunPromptArgs): Promise<void> {
+    if (!this.session) {
+      return;
+    }
+    this.ensureCustomToolsActive();
+    if (this.session.isStreaming) {
+      await this.session.prompt(args.text, {
+        streamingBehavior: "steer",
+        ...(args.images && args.images.length > 0
+          ? { images: args.images }
+          : {}),
+      });
+      return;
+    }
+    await this.session.prompt(args.text, {
+      ...(args.images && args.images.length > 0
+        ? { images: args.images }
+        : {}),
+    });
   }
 }
 

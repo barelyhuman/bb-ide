@@ -15,7 +15,7 @@ import {
   buildTimelineViewRows,
 } from "./timeline-view.js";
 import {
-  formatFileChangeName,
+  formatFileChangePath,
   getFileChangeAction,
   getFileChangeActionPastTense,
   getFileChangeActionPresentTense,
@@ -273,7 +273,9 @@ function formatFileChangeTitle(row: TimelineFileChangeWorkRow): string {
       ? getFileChangeActionPresentTense(action)
       : statusVerb(row.status, "Editing", completedVerb);
   const stats = formatDiffStats(change);
-  return [verb, formatFileChangeName(change), stats].filter(Boolean).join(" ");
+  return [verb, formatFileChangePath({ change, mode: "full" }), stats]
+    .filter(Boolean)
+    .join(" ");
 }
 
 function formatStatusDurationSuffix(
@@ -290,7 +292,11 @@ function formatStatusDurationSuffix(
 function formatCommandTitle(row: TimelineCommandWorkRow): string {
   const intent = primaryTimelineActivityIntent(row);
   if (intent) {
-    return formatTimelineActivityIntentTitle(intent, row.status === "pending");
+    return formatTimelineActivityIntentTitle({
+      intent,
+      pathMode: "full",
+      pending: row.status === "pending",
+    });
   }
   if (row.approvalStatus === "waiting_for_approval") {
     return "Command (waiting)";
@@ -312,7 +318,11 @@ function formatCommandTitle(row: TimelineCommandWorkRow): string {
 function formatToolTitle(row: TimelineToolWorkRow): string {
   const intent = primaryTimelineActivityIntent(row);
   if (intent) {
-    return formatTimelineActivityIntentTitle(intent, row.status === "pending");
+    return formatTimelineActivityIntentTitle({
+      intent,
+      pathMode: "full",
+      pending: row.status === "pending",
+    });
   }
   if (row.approvalStatus === "waiting_for_approval") {
     return `Tool (waiting): ${row.label}`;
@@ -502,7 +512,9 @@ function formatExplorationWorkDetails(
       }
       dedupedDetailKeys.add(dedupeKey);
     }
-    details.push(formatTimelineActivityIntentDetail(intent));
+    details.push(
+      formatTimelineActivityIntentDetail({ intent, pathMode: "full" }),
+    );
   }
   return details;
 }

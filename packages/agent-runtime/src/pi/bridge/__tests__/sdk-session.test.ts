@@ -48,6 +48,7 @@ const {
   mockCreateAgentSession,
   mockAbort,
   mockDispose,
+  mockPrompt,
   mockGetModel,
 } = vi.hoisted(() => {
   const mockSubscribe = vi.fn(() => () => {});
@@ -105,6 +106,7 @@ const {
     mockCreateAgentSession,
     mockAbort,
     mockDispose,
+    mockPrompt,
     mockGetModel,
   };
 });
@@ -339,6 +341,20 @@ describe("PiSdkSession", () => {
       "bash",
       "message_user",
     ]);
+  });
+
+  it("retries transient Pi auth storage misses before failing the session", async () => {
+    mockPrompt
+      .mockRejectedValueOnce(new Error("No API key found for anthropic."))
+      .mockResolvedValueOnce(undefined);
+    const onDone = vi.fn();
+    const session = new PiSdkSession({ cwd: "/tmp/project" }, vi.fn(), onDone);
+
+    await session.start();
+    await session.prompt("retry after auth storage miss");
+
+    expect(mockPrompt).toHaveBeenCalledTimes(2);
+    expect(onDone).not.toHaveBeenCalled();
   });
 
   it("waits for abort before disposing during graceful close", async () => {

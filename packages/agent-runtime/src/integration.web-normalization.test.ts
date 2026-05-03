@@ -16,6 +16,7 @@ import {
 
 const webQuery = "IANA example domains";
 const webUrl = "https://example.com";
+const codexOpenPageUrl = "https://example.com/?bb-web-normalization=open-page";
 
 type ThreadItemLifecycleEvent = Extract<
   ThreadEvent,
@@ -77,9 +78,9 @@ function buildCodexSearchPrompt(): string {
 
 function buildCodexOpenPagePrompt(): string {
   return (
-    `Open ${webUrl} and check the page title. ` +
-    "Do not use shell commands. " +
-    'After you have opened the page, reply with exactly "DONE".'
+    `Use the native open-page web tool to open exactly ${codexOpenPageUrl}. ` +
+    "Do not answer from memory. Do not use shell commands or web search. " +
+    'After the open-page tool completes, reply with exactly "DONE".'
   );
 }
 

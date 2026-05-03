@@ -255,7 +255,7 @@ describe("timeline CLI rendering snapshots", () => {
       ── Working on 3 items ──────────────────────────────────────
         ── Searched for timeline in packages/core-ui
         ── Ran web search: timeline rendering
-        ── Editing format-timeline-text.ts",
+        ── Editing /repo/packages/core-ui/src/format-timeline-text.ts",
         },
         {
           "messageKinds": [
@@ -273,7 +273,7 @@ describe("timeline CLI rendering snapshots", () => {
         ── Explored 1 search, ran 1 web search, edited 1 file
           ── Searched for timeline in packages/core-ui
           ── Ran web search: timeline rendering
-          ── Edited format-timeline-text.ts +1 -1
+          ── Edited /repo/packages/core-ui/src/format-timeline-text.ts +1 -1
             @@ -1 +1 @@
             -before
             +after
@@ -725,7 +725,7 @@ describe("timeline CLI rendering snapshots", () => {
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Worked on 5 items ───────────────────────────────────────
         ── Explored 1 file, 1 search, 2 lists
-          ── Read a.ts
+          ── Read src/a.ts
           ── Listed files in src
           ── Listed files in test
           ── Searched for TODO in src
@@ -789,18 +789,18 @@ describe("timeline CLI rendering snapshots", () => {
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Worked on 4 items ───────────────────────────────────────
         ── Created 1 file, deleted 1 file, edited 2 files
-          ── Created a.ts +1
+          ── Created /repo/src/a.ts +1
             @@ -0,0 +1 @@
             +first
-          ── Edited a.ts +1 -1
+          ── Edited /repo/src/a.ts +1 -1
             @@ -1 +1 @@
             -first
             +second
-          ── Edited b.ts +1 -1
+          ── Edited /repo/src/b.ts +1 -1
             @@ -1 +1 @@
             -before
             +after
-          ── Deleted c.ts -1
+          ── Deleted /repo/src/c.ts -1
             @@ -1 +0,0 @@
             -old
 
@@ -834,10 +834,10 @@ describe("timeline CLI rendering snapshots", () => {
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Worked on 2 items ───────────────────────────────────────
         ── Created 1 file, deleted 1 file
-          ── Created created.ts +2
+          ── Created /repo/src/created.ts +2
             first line
             second line
-          ── Deleted deleted.ts -2
+          ── Deleted /repo/src/deleted.ts -2
             old first
             old second"
     `);
@@ -933,7 +933,7 @@ describe("timeline CLI rendering snapshots", () => {
     expect(timeline.text).toMatchInlineSnapshot(`
       "── Ran 1 web search, edited 1 file ─────────────────────────
         ── Ran web search: React suspense docs
-        ── Edited timeline.ts +1 -1
+        ── Edited /repo/packages/core-ui/src/timeline.ts +1 -1
           @@ -1 +1 @@
           -before
           +after

@@ -4,10 +4,29 @@ import type {
   TimelineToolWorkRow,
 } from "@bb/server-contract";
 import { assertNever } from "./assert-never.js";
+import {
+  formatTimelinePath,
+  type TimelinePathDisplayMode,
+} from "./timeline-path-display.js";
 
 export type TimelineExplorationWorkRow =
   | TimelineCommandWorkRow
   | TimelineToolWorkRow;
+type TimelineReadActivityIntent = Extract<
+  TimelineActivityIntent,
+  { type: "read" }
+>;
+
+export interface FormatTimelineActivityIntentTitleArgs {
+  intent: TimelineActivityIntent;
+  pathMode: TimelinePathDisplayMode;
+  pending: boolean;
+}
+
+export interface FormatTimelineActivityIntentDetailArgs {
+  intent: TimelineActivityIntent;
+  pathMode: TimelinePathDisplayMode;
+}
 
 export function primaryTimelineActivityIntent(
   row: TimelineExplorationWorkRow,
@@ -23,20 +42,28 @@ export function hasTimelineExplorationIntent(
   return primaryTimelineActivityIntent(row) !== null;
 }
 
-function fileName(path: string): string {
-  const normalized = path.replaceAll("\\", "/");
-  return normalized.split("/").pop() || path;
+function readTarget(intent: TimelineReadActivityIntent): string {
+  return intent.path ?? intent.name;
 }
 
-export function formatTimelineActivityIntentTitle(
-  intent: TimelineActivityIntent,
-  pending: boolean,
+function formatReadTarget(
+  intent: TimelineReadActivityIntent,
+  pathMode: TimelinePathDisplayMode,
 ): string {
+  return formatTimelinePath({ path: readTarget(intent), mode: pathMode });
+}
+
+export function formatTimelineActivityIntentTitle({
+  intent,
+  pathMode,
+  pending,
+}: FormatTimelineActivityIntentTitleArgs): string {
   switch (intent.type) {
     case "read":
-      return `${pending ? "Reading" : "Read"} ${
-        intent.path ? fileName(intent.path) : intent.name
-      }`;
+      return `${pending ? "Reading" : "Read"} ${formatReadTarget(
+        intent,
+        pathMode,
+      )}`;
     case "list_files":
       return `${pending ? "Listing" : "Listed"} ${intent.path ?? "files"}`;
     case "search":
@@ -51,12 +78,13 @@ export function formatTimelineActivityIntentTitle(
   }
 }
 
-export function formatTimelineActivityIntentDetail(
-  intent: TimelineActivityIntent,
-): string {
+export function formatTimelineActivityIntentDetail({
+  intent,
+  pathMode,
+}: FormatTimelineActivityIntentDetailArgs): string {
   switch (intent.type) {
     case "read":
-      return `Read ${intent.path ? fileName(intent.path) : intent.name}`;
+      return `Read ${formatReadTarget(intent, pathMode)}`;
     case "list_files":
       return intent.path ? `Listed files in ${intent.path}` : "Listed files";
     case "search":

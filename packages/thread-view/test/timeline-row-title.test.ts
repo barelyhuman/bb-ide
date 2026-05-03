@@ -261,7 +261,8 @@ describe("buildTimelineRowTitle", () => {
   it("omits zero-sided diff stats from file change suffixes", () => {
     const title = buildTimelineRowTitle(deletedFileRow(), DEFAULT_OPTIONS);
 
-    expect(title.plain).toBe("Deleted react-perf-audit.md -2");
+    expect(title.plain).toBe("Deleted docs/react-perf-audit.md -2");
+    expect(title.content).toBe("react-perf-audit.md");
     expect(title.suffix).toEqual({
       kind: "diff-stats",
       added: 0,
@@ -272,7 +273,7 @@ describe("buildTimelineRowTitle", () => {
   it("keeps created file diff stats in the title suffix", () => {
     const title = buildTimelineRowTitle(createdFileRow(), DEFAULT_OPTIONS);
 
-    expect(title.plain).toBe("Created new-file.ts +2");
+    expect(title.plain).toBe("Created src/new-file.ts +2");
     expect(title.prefix).toBe("Created");
     expect(title.content).toBe("new-file.ts");
     expect(title.suffix).toEqual({
@@ -351,7 +352,7 @@ describe("buildTimelineRowTitle", () => {
     const titles = buildTimelineActivityIntentTitles(row);
 
     expect(titles.map((entry) => entry.title.plain)).toEqual([
-      "Read app.ts",
+      "Read src/app.ts",
       "Searched for TODO in src",
     ]);
     expect(titles[0]?.title.prefix).toBe("Read");

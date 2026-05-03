@@ -34,6 +34,28 @@ describe("TimelineTitleView", () => {
     expect(html).toContain(">2s</span>");
   });
 
+  it("uses the full plain title as the browser title while rendering compact content", () => {
+    const html = renderToStaticMarkup(
+      <TimelineTitleView
+        title={title({
+          content: "appSettingsAtoms.ts",
+          contentTone: "muted",
+          plain: "Created apps/app/src/state/appSettingsAtoms.ts +16",
+          prefix: "Created",
+          suffix: { kind: "diff-stats", added: 16, removed: 0 },
+        })}
+      />,
+    );
+
+    expect(html).toContain(
+      'title="Created apps/app/src/state/appSettingsAtoms.ts +16"',
+    );
+    expect(html).toContain(">appSettingsAtoms.ts</span>");
+    expect(html).not.toContain(
+      ">apps/app/src/state/appSettingsAtoms.ts</span>",
+    );
+  });
+
   it("allows long suffix metadata to shrink and truncate", () => {
     const html = renderToStaticMarkup(
       <TimelineTitleView

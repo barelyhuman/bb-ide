@@ -19,9 +19,30 @@ function fixtureRoot(): string {
   return join(dirname(fileURLToPath(import.meta.url)), "../fixtures");
 }
 
+function escapeNonAsciiSnapshotCharacter(character: string): string {
+  const codePoint = character.codePointAt(0);
+  if (codePoint === undefined) {
+    return "";
+  }
+  return `<U+${codePoint.toString(16).toUpperCase().padStart(4, "0")}>`;
+}
+
 function normalizeTimelineSnapshotText(text: string): string {
   return text
-    .replaceAll("─", "-")
+    .replaceAll("\u2500", "-")
+    .replaceAll("\u2018", "'")
+    .replaceAll("\u2019", "'")
+    .replaceAll("\u201C", '"')
+    .replaceAll("\u201D", '"')
+    .replaceAll("\u2013", "-")
+    .replaceAll("\u2014", "-")
+    .replaceAll("\u2026", "...")
+    .replaceAll("\u00A0", " ")
+    .replaceAll("\u00B7", ".")
+    .replaceAll("\u00D7", "x")
+    .replaceAll("\u23CE", "<newline>")
+    .replaceAll("\u2713", "[ok]")
+    .replace(/[^\x00-\x7F]/gu, escapeNonAsciiSnapshotCharacter)
     .replaceAll("\t", "  ")
     .replace(/[ \t]+$/u, "");
 }
@@ -61,6 +82,16 @@ afterEach(() => {
 describe("@bb/agent-provider-audit fixture replay", () => {
   beforeAll(() => {
     checkedInArtifact = loadProviderAuditReplayBuildArtifact();
+  });
+
+  it("normalizes UTF-8 punctuation in review snapshots", () => {
+    expect(
+      compactTimelineSnapshotText(
+        "I\u2019m checking \u201Cquoted\u201D text \u2014 then truncating\u2026 \u2713 \u23CE\u00B7\u00B7 \u00D7 \u03C0 \u{1F642}",
+      ),
+    ).toBe(
+      `I'm checking "quoted" text - then truncating... [ok] <newline>.. x <U+03C0> <U+1F642>`,
+    );
   });
 
   it("replays every checked-in fixture into stable summaries", () => {

@@ -1,3 +1,8 @@
+import {
+  formatTimelinePath,
+  type TimelinePathDisplayMode,
+} from "./timeline-path-display.js";
+
 export type FileChangeAction = "created" | "deleted" | "renamed" | "edited";
 
 export interface FileChangeDiffStats {
@@ -12,17 +17,15 @@ export interface FileChangeLike {
   diff?: string | null;
 }
 
+export interface FormatFileChangePathArgs {
+  change: FileChangeLike;
+  mode: TimelinePathDisplayMode;
+}
+
 const EMPTY_DIFF_STATS: FileChangeDiffStats = {
   added: 0,
   removed: 0,
 };
-
-export function fileNameFromPath(path: string): string {
-  const normalizedPath = path.replaceAll("\\", "/");
-  const segments = normalizedPath.split("/");
-  const candidate = segments[segments.length - 1];
-  return candidate && candidate.length > 0 ? candidate : path;
-}
 
 function normalizeFileChangeKind(kind: string | null | undefined): string {
   return (kind ?? "").toLowerCase().replaceAll(/[^a-z0-9]/gu, "");
@@ -95,15 +98,21 @@ export function getFileChangeActionPresentTense(
   }
 }
 
-export function formatFileChangeName(change: FileChangeLike): string {
-  const sourceName = fileNameFromPath(change.path);
+export function formatFileChangePath({
+  change,
+  mode,
+}: FormatFileChangePathArgs): string {
+  const sourcePath = formatTimelinePath({ path: change.path, mode });
   if (!change.movePath) {
-    return sourceName;
+    return sourcePath;
   }
   if (getFileChangeAction(change) === "edited") {
-    return fileNameFromPath(change.movePath);
+    return formatTimelinePath({ path: change.movePath, mode });
   }
-  return `${sourceName} -> ${fileNameFromPath(change.movePath)}`;
+  return `${sourcePath} -> ${formatTimelinePath({
+    path: change.movePath,
+    mode,
+  })}`;
 }
 
 function countPlainContentLines(diff: string): number {

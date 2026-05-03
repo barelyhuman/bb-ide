@@ -17,6 +17,7 @@ const ASSISTANT_ROW = {
   role: "assistant",
   text: "Done",
   attachments: null,
+  userRequest: null,
 } satisfies TimelineRow;
 
 const USER_ROW = {
@@ -31,6 +32,7 @@ const USER_ROW = {
   role: "user",
   text: "Hello",
   attachments: null,
+  userRequest: { kind: "message", status: "accepted" },
 } satisfies TimelineRow;
 
 describe("timeline response helpers", () => {
@@ -52,6 +54,7 @@ describe("timeline response helpers", () => {
           children: [ASSISTANT_ROW],
         },
       ],
+      pendingSteers: [],
       activeThinking: null,
     } satisfies ThreadTimelineResponse;
 
@@ -84,6 +87,7 @@ describe("timeline response helpers", () => {
           childRows: [ASSISTANT_ROW],
         },
       ],
+      pendingSteers: [],
       activeThinking: null,
     } satisfies ThreadTimelineResponse;
 
@@ -96,6 +100,7 @@ describe("timeline response helpers", () => {
   it("does not treat user conversation rows as assistant output", () => {
     const timeline = {
       rows: [USER_ROW],
+      pendingSteers: [],
       activeThinking: null,
     } satisfies ThreadTimelineResponse;
 

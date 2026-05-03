@@ -11,7 +11,7 @@ import type {
 } from "@bb/server-contract";
 import { assertNever } from "./assert-never.js";
 import {
-  formatFileChangeName,
+  formatFileChangePath,
   getFileChangeAction,
   getFileChangeActionPastTense,
   getFileChangeActionPresentTense,
@@ -70,6 +70,7 @@ export interface TimelineActivityIntentTitle {
 interface TitlePartsArgs {
   content: string;
   contentTone?: TimelineTitleContentTone;
+  plainContent?: string;
   prefix?: string | null;
   shimmerPrefix?: boolean;
   suffix?: TimelineTitleSuffix | null;
@@ -115,12 +116,14 @@ function plainSuffixText(suffix: TimelineTitleSuffix | null): string {
 function titleFromParts({
   content,
   contentTone = "emphasis",
+  plainContent,
   prefix = null,
   shimmerPrefix = false,
   suffix = null,
   tone = "default",
 }: TitlePartsArgs): TimelineTitle {
-  const head = prefix ? `${prefix} ${content}` : content;
+  const plainContentText = plainContent ?? content;
+  const head = prefix ? `${prefix} ${plainContentText}` : plainContentText;
   return {
     content,
     contentTone,
@@ -294,7 +297,8 @@ function buildFileChangeTitle(
   })();
   return titleFromParts({
     prefix,
-    content: formatFileChangeName(row.change),
+    content: formatFileChangePath({ change: row.change, mode: "compact" }),
+    plainContent: formatFileChangePath({ change: row.change, mode: "full" }),
     suffix: diffStatsSuffix(row.change),
     shimmerPrefix: status === "pending",
     tone: status === "denied" || status === "error" ? "destructive" : "default",
@@ -397,18 +401,31 @@ function buildApprovalTitle(row: TimelineApprovalWorkRow): TimelineTitle {
 function buildTimelineActivityIntentTitle(
   intent: TimelineActivityIntent,
 ): TimelineTitle {
-  const detail = formatTimelineActivityIntentDetail(intent);
+  const detail = formatTimelineActivityIntentDetail({
+    intent,
+    pathMode: "compact",
+  });
+  const plainDetail = formatTimelineActivityIntentDetail({
+    intent,
+    pathMode: "full",
+  });
   const spaceIndex = detail.indexOf(" ");
   if (spaceIndex === -1) {
     return titleFromParts({
       content: detail,
       contentTone: "muted",
+      plainContent: plainDetail,
     });
   }
+  const plainSpaceIndex = plainDetail.indexOf(" ");
   return titleFromParts({
     prefix: detail.slice(0, spaceIndex),
     content: detail.slice(spaceIndex + 1),
     contentTone: "muted",
+    plainContent:
+      plainSpaceIndex === -1
+        ? plainDetail
+        : plainDetail.slice(plainSpaceIndex + 1),
   });
 }
 
