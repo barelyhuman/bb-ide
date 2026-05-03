@@ -2,7 +2,11 @@ import { memo, useMemo, type CSSProperties } from "react";
 import { parsePatchFiles, type FileDiffMetadata } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
 import type { TimelineFileChange } from "@bb/server-contract";
-import { getFileChangeAction, type FileChangeAction } from "@bb/thread-view";
+import {
+  getFileChangeAction,
+  isPatchMetadataLine,
+  type FileChangeAction,
+} from "@bb/thread-view";
 import { EventCodeBlock } from "../primitives/event-content.js";
 import type { ThreadTimelineTheme } from "./types.js";
 
@@ -60,22 +64,6 @@ function splitPatchLines(diff: string): string[] {
     lines.pop();
   }
   return lines;
-}
-
-function isPatchMetadataLine(line: string): boolean {
-  return (
-    line.startsWith("diff --git ") ||
-    line.startsWith("index ") ||
-    line.startsWith("new file mode ") ||
-    line.startsWith("deleted file mode ") ||
-    line.startsWith("similarity index ") ||
-    line.startsWith("rename from ") ||
-    line.startsWith("rename to ") ||
-    line.startsWith("--- ") ||
-    line.startsWith("+++ ") ||
-    line.startsWith("@@") ||
-    line === "\\ No newline at end of file"
-  );
 }
 
 function getPatchBodyLines(diff: string | null): string[] {

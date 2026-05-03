@@ -31,19 +31,20 @@ function normalizeFileChangeKind(kind: string | null | undefined): string {
   return (kind ?? "").toLowerCase().replaceAll(/[^a-z0-9]/gu, "");
 }
 
-function isPatchMetadataLine(line: string): boolean {
+export function isPatchMetadataLine(line: string): boolean {
+  const normalizedLine = line.trimEnd();
   return (
-    line.startsWith("diff --git ") ||
-    line.startsWith("index ") ||
-    line.startsWith("new file mode ") ||
-    line.startsWith("deleted file mode ") ||
-    line.startsWith("similarity index ") ||
-    line.startsWith("rename from ") ||
-    line.startsWith("rename to ") ||
-    line.startsWith("--- ") ||
-    line.startsWith("+++ ") ||
-    line.startsWith("@@") ||
-    line === "\\ No newline at end of file"
+    normalizedLine.startsWith("diff --git ") ||
+    normalizedLine.startsWith("index ") ||
+    normalizedLine.startsWith("new file mode ") ||
+    normalizedLine.startsWith("deleted file mode ") ||
+    normalizedLine.startsWith("similarity index ") ||
+    normalizedLine.startsWith("rename from ") ||
+    normalizedLine.startsWith("rename to ") ||
+    normalizedLine.startsWith("--- ") ||
+    normalizedLine.startsWith("+++ ") ||
+    normalizedLine.startsWith("@@") ||
+    normalizedLine === "\\ No newline at end of file"
   );
 }
 
