@@ -95,6 +95,17 @@ function buildTimelineTurnSummaryDetails(
   });
 }
 
+function buildManagerConversationTurnSummaryDetails(
+  db: DbConnection,
+  thread: Thread,
+  options: TimelineTurnSummaryDetailsTestOptions,
+) {
+  return buildTimelineTurnSummaryDetailsWithResolvedMode(db, thread, {
+    ...options,
+    timelineViewMode: "manager-conversation",
+  });
+}
+
 describe("buildThreadTimeline", () => {
   const scenarios = getTimelineBenchmarkScenarios();
   const harnesses: Array<Awaited<ReturnType<typeof createTestAppHarness>>> = [];
@@ -1698,7 +1709,7 @@ describe("buildThreadTimeline", () => {
       type: "manager",
     });
 
-    // System-initiated welcome message (should be hidden)
+    // System-initiated welcome message (hidden by default manager conversation view)
     seedEvent(harness.deps, {
       threadId: thread.id,
       environmentId: environment.id,
@@ -1874,6 +1885,9 @@ describe("buildThreadTimeline", () => {
     expect(JSON.stringify(defaultTimeline.rows)).not.toContain(
       "buffered manager delta",
     );
+    expect(JSON.stringify(defaultTimeline.rows)).not.toContain(
+      "[bb system] Welcome!",
+    );
 
     // Standard manager timeline uses the same row builder as ordinary threads.
     const standardTimeline = buildThreadTimeline(harness.db, thread, {
@@ -1886,6 +1900,232 @@ describe("buildThreadTimeline", () => {
     expect(standardRowsText).toContain("buffered manager delta");
     expect(standardRowsText).toContain("ToolSearch");
     expect(standardRowsText).toContain("found something");
+    expect(standardRowsText).toContain("[bb system] Welcome!");
+
+    const standardSourceRows = flattenTimelineSourceRows(
+      standardTimeline.rows,
+    );
+    expect(standardSourceRows).toContainEqual(
+      expect.objectContaining({
+        kind: "conversation",
+        role: "assistant",
+        text: "buffered manager delta",
+      }),
+    );
+    expect(standardSourceRows).toContainEqual(
+      expect.objectContaining({
+        kind: "conversation",
+        role: "user",
+        text: "[bb system] Welcome!",
+      }),
+    );
+  });
+
+  it("shows system client requests only in manager standard timeline details", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const managerThread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      type: "manager",
+    });
+    const standardThread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      type: "standard",
+    });
+
+    for (const thread of [managerThread, standardThread]) {
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 1,
+        type: "client/turn/requested",
+        scope: threadScope(),
+        data: {
+          direction: "outbound",
+          source: "tell",
+          initiator: "system",
+          input: [{ type: "text", text: "system-start-message" }],
+          target: { kind: "thread-start" },
+          request: { method: "thread/start", params: {} },
+          execution: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            source: "client/turn/requested",
+          },
+        },
+      });
+    }
+
+    const defaultTimeline = buildManagerConversationTimeline(
+      harness.db,
+      managerThread,
+      {
+        isDevelopment: false,
+      },
+    );
+    expect(JSON.stringify(defaultTimeline.rows)).not.toContain(
+      "system-start-message",
+    );
+
+    const managerStandardTimeline = buildThreadTimeline(
+      harness.db,
+      managerThread,
+      {
+        isDevelopment: false,
+      },
+    );
+    expect(
+      flattenTimelineSourceRows(managerStandardTimeline.rows),
+    ).toContainEqual(
+      expect.objectContaining({
+        kind: "conversation",
+        role: "user",
+        text: "system-start-message",
+      }),
+    );
+
+    const standardTimeline = buildThreadTimeline(harness.db, standardThread, {
+      isDevelopment: false,
+    });
+    expect(JSON.stringify(standardTimeline.rows)).not.toContain(
+      "system-start-message",
+    );
+
+    const managerStandardDetails = buildTimelineTurnSummaryDetails(
+      harness.db,
+      managerThread,
+      {
+        isDevelopment: false,
+        sourceSeqEnd: 1,
+        sourceSeqStart: 1,
+      },
+    );
+    expect(
+      flattenTimelineSourceRows(managerStandardDetails.rows),
+    ).toContainEqual(
+      expect.objectContaining({
+        kind: "conversation",
+        role: "user",
+        text: "system-start-message",
+      }),
+    );
+
+    const defaultDetails = buildManagerConversationTurnSummaryDetails(
+      harness.db,
+      managerThread,
+      {
+        isDevelopment: false,
+        sourceSeqEnd: 1,
+        sourceSeqStart: 1,
+      },
+    );
+    expect(JSON.stringify(defaultDetails.rows)).not.toContain(
+      "system-start-message",
+    );
+  });
+
+  it("shows system pending steers only for manager standard timelines", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const host = seedHost(harness.deps);
+    const { project } = seedProjectWithSource(harness.deps, {
+      hostId: host.id,
+    });
+    const environment = seedEnvironment(harness.deps, {
+      hostId: host.id,
+      projectId: project.id,
+    });
+    const managerThread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      status: "active",
+      type: "manager",
+    });
+    const standardThread = seedThread(harness.deps, {
+      projectId: project.id,
+      environmentId: environment.id,
+      status: "active",
+      type: "standard",
+    });
+
+    for (const thread of [managerThread, standardThread]) {
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-1",
+        scope: turnScope("turn-1"),
+        sequence: 1,
+        type: "turn/started",
+        data: {},
+      });
+      seedEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        sequence: 2,
+        type: "client/turn/requested",
+        scope: threadScope(),
+        data: {
+          direction: "outbound",
+          source: "tell",
+          initiator: "system",
+          input: [{ type: "text", text: "system-pending-steer" }],
+          target: { kind: "auto", expectedTurnId: "turn-1" },
+          request: { method: "turn/start", params: {} },
+          execution: {
+            model: "gpt-5",
+            serviceTier: "default",
+            reasoningLevel: "medium",
+            permissionMode: "full",
+            source: "client/turn/requested",
+          },
+        },
+      });
+    }
+
+    const defaultTimeline = buildManagerConversationTimeline(
+      harness.db,
+      managerThread,
+      {
+        isDevelopment: false,
+      },
+    );
+    expect(defaultTimeline.pendingSteers).toEqual([]);
+
+    const managerStandardTimeline = buildThreadTimeline(
+      harness.db,
+      managerThread,
+      {
+        isDevelopment: false,
+      },
+    );
+    expect(managerStandardTimeline.pendingSteers).toHaveLength(1);
+    expect(managerStandardTimeline.pendingSteers[0]).toMatchObject({
+      role: "user",
+      text: "system-pending-steer",
+      userRequest: {
+        kind: "steer",
+        status: "pending",
+      },
+    });
+
+    const standardTimeline = buildThreadTimeline(harness.db, standardThread, {
+      isDevelopment: false,
+    });
+    expect(standardTimeline.pendingSteers).toEqual([]);
   });
 
   it("keeps manager-visible messages that would otherwise be buried in turn summaries", async () => {

@@ -179,6 +179,7 @@ function createTimelineBenchmarkScenario(
               includeDebugRawEvents: false,
               includeOptionalOperations: false,
               includeProviderUnhandledOperations: false,
+              systemClientRequestVisibility: "hidden",
               threadStatus: thread.status,
               viewMode: timelineViewMode,
             }
@@ -187,6 +188,7 @@ function createTimelineBenchmarkScenario(
               includeNestedRows: true,
               includeOptionalOperations: false,
               includeProviderUnhandledOperations: false,
+              systemClientRequestVisibility: "hidden",
               threadStatus: thread.status,
               turnMessageDetail: "full",
               viewMode: timelineViewMode,
@@ -202,6 +204,7 @@ function createTimelineBenchmarkScenario(
               includeDebugRawEvents: false,
               includeOptionalOperations: false,
               includeProviderUnhandledOperations: false,
+              systemClientRequestVisibility: "hidden",
               threadStatus: thread.status,
               viewMode: timelineViewMode,
             }
@@ -210,6 +213,7 @@ function createTimelineBenchmarkScenario(
               includeNestedRows: false,
               includeOptionalOperations: false,
               includeProviderUnhandledOperations: false,
+              systemClientRequestVisibility: "hidden",
               threadStatus: thread.status,
               turnMessageDetail: "summary",
               viewMode: timelineViewMode,

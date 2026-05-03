@@ -1040,6 +1040,8 @@ export function renderTimelineFixture(
       args.projectionOptions.includeOptionalOperations ?? false,
     includeProviderUnhandledOperations:
       args.projectionOptions.includeProviderUnhandledOperations ?? false,
+    systemClientRequestVisibility:
+      args.projectionOptions.systemClientRequestVisibility,
     threadStatus: args.projectionOptions.threadStatus ?? "idle",
   };
   const timeline = buildThreadTimelineFromEvents({

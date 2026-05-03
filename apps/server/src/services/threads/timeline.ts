@@ -3,6 +3,7 @@ import {
   THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
   buildThreadTimelineTurnDetailsFromEvents,
   compactThreadTimelineSummaryEvents,
+  type SystemClientRequestVisibility,
   type ThreadEventWithMeta,
 } from "@bb/thread-view";
 import type { Thread } from "@bb/domain";
@@ -43,6 +44,11 @@ export interface ResolveThreadTimelineServiceViewModeArgs {
   thread: Thread;
 }
 
+export interface ResolveSystemClientRequestVisibilityArgs {
+  thread: Thread;
+  timelineViewMode: ThreadTimelineServiceViewMode;
+}
+
 export function resolveThreadTimelineServiceViewMode({
   managerTimelineView,
   thread,
@@ -54,6 +60,15 @@ export function resolveThreadTimelineServiceViewMode({
     return "manager-conversation";
   }
   return "standard";
+}
+
+export function resolveSystemClientRequestVisibility({
+  thread,
+  timelineViewMode,
+}: ResolveSystemClientRequestVisibilityArgs): SystemClientRequestVisibility {
+  return thread.type === "manager" && timelineViewMode === "standard"
+    ? "visible"
+    : "hidden";
 }
 
 export function toThreadEventWithMeta(
@@ -103,10 +118,15 @@ export function buildThreadTimeline(
     threadId: thread.id,
   });
   const viewMode = options.timelineViewMode;
+  const systemClientRequestVisibility = resolveSystemClientRequestVisibility({
+    thread,
+    timelineViewMode: viewMode,
+  });
   const commonProjectionOptions = {
     includeDebugRawEvents: false,
     includeOptionalOperations: false,
     includeProviderUnhandledOperations,
+    systemClientRequestVisibility,
     threadStatus: thread.status,
   };
   const timeline = buildThreadTimelineFromEvents({
@@ -161,6 +181,10 @@ export function buildTimelineTurnSummaryDetails(
       clientRequestSequences,
     });
   const viewMode = options.timelineViewMode;
+  const systemClientRequestVisibility = resolveSystemClientRequestVisibility({
+    thread,
+    timelineViewMode: viewMode,
+  });
   const children = buildThreadTimelineTurnDetailsFromEvents({
     events: [...exactEventRows, ...acceptedInputRows].map((row) =>
       toThreadEventWithMeta(row),
@@ -168,6 +192,7 @@ export function buildTimelineTurnSummaryDetails(
     options: {
       includeOptionalOperations: false,
       includeProviderUnhandledOperations,
+      systemClientRequestVisibility,
       sourceSeqEnd: options.sourceSeqEnd,
       sourceSeqStart: options.sourceSeqStart,
       threadStatus: thread.status,

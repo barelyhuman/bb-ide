@@ -22,6 +22,7 @@ export {
   buildThreadTimelineFromEvents,
   buildThreadTimelineTurnDetailsFromEvents,
 } from "./build-thread-timeline.js";
+export type { SystemClientRequestVisibility } from "./event-projection-message.js";
 export { buildTimelineViewRows } from "./timeline-view.js";
 export type {
   ThreadTimelineViewRow,

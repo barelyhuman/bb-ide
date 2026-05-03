@@ -397,6 +397,7 @@ function buildPrefixSnapshot(
       includeNestedRows: false,
       includeOptionalOperations: false,
       includeProviderUnhandledOperations: false,
+      systemClientRequestVisibility: "hidden",
       threadStatus,
       turnMessageDetail: "summary",
       viewMode: "standard",

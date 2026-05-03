@@ -16,6 +16,7 @@ function renderIdleTimeline(events: TimelineFixtureEvent[]) {
   return renderTimelineFixture({
     events,
     projectionOptions: {
+      systemClientRequestVisibility: "hidden",
       threadStatus: "idle",
       turnMessageDetail: "summary",
     },
@@ -26,6 +27,7 @@ function renderActiveTimeline(events: TimelineFixtureEvent[]) {
   return renderTimelineFixture({
     events,
     projectionOptions: {
+      systemClientRequestVisibility: "hidden",
       threadStatus: "active",
       turnMessageDetail: "summary",
     },
@@ -37,6 +39,7 @@ function renderPrefixSnapshots(events: TimelineFixtureEvent[]) {
     const timeline = renderTimelineFixture({
       events: events.slice(0, prefixLength),
       projectionOptions: {
+        systemClientRequestVisibility: "hidden",
         threadStatus: prefixLength === events.length ? "idle" : "active",
         turnMessageDetail: "summary",
       },
@@ -557,6 +560,7 @@ describe("timeline CLI rendering snapshots", () => {
         }),
       ],
       projectionOptions: {
+        systemClientRequestVisibility: "hidden",
         threadStatus: "error",
         turnMessageDetail: "summary",
       },
@@ -1158,6 +1162,7 @@ describe("timeline CLI rendering snapshots", () => {
         event.managerUserMessage({ text: "Visible manager update" }),
       ],
       projectionOptions: {
+        systemClientRequestVisibility: "hidden",
         threadStatus: "idle",
         threadType: "manager",
         turnMessageDetail: "summary",

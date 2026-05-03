@@ -18,6 +18,7 @@ import type {
   EventProjectionToolParsedIntent,
   EventProjectionTurn,
   EventProjectionEntry,
+  SystemClientRequestVisibility,
 } from "./event-projection-types.js";
 import { assertNever } from "./assert-never.js";
 import {
@@ -52,6 +53,7 @@ interface ThreadTimelineFromEventsBaseOptions {
   includeDebugRawEvents: boolean;
   includeOptionalOperations: boolean;
   includeProviderUnhandledOperations: boolean;
+  systemClientRequestVisibility: SystemClientRequestVisibility;
   threadStatus: Thread["status"];
 }
 
@@ -90,6 +92,7 @@ export interface ThreadTimelineSourceSeqRange {
 export interface BuildThreadTimelineTurnDetailsFromEventsOptions extends ThreadTimelineSourceSeqRange {
   includeOptionalOperations: boolean;
   includeProviderUnhandledOperations: boolean;
+  systemClientRequestVisibility: SystemClientRequestVisibility;
   threadStatus: Thread["status"];
   viewMode: ThreadTimelineViewMode;
 }
@@ -802,6 +805,7 @@ export function buildThreadTimelineFromEvents(
     includeOptionalOperations: args.options.includeOptionalOperations,
     includeProviderUnhandledOperations:
       args.options.includeProviderUnhandledOperations,
+    systemClientRequestVisibility: args.options.systemClientRequestVisibility,
     threadStatus: args.options.threadStatus,
     threadType:
       args.options.viewMode === "manager-conversation" ? "manager" : "standard",
@@ -845,6 +849,7 @@ export function buildThreadTimelineTurnDetailsFromEvents(
     includeOptionalOperations: args.options.includeOptionalOperations,
     includeProviderUnhandledOperations:
       args.options.includeProviderUnhandledOperations,
+    systemClientRequestVisibility: args.options.systemClientRequestVisibility,
     threadStatus: args.options.threadStatus,
     threadType:
       args.options.viewMode === "manager-conversation" ? "manager" : "standard",

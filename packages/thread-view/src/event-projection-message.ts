@@ -16,6 +16,13 @@ export const eventProjectionMessageStatusValues = [
 export type EventProjectionMessageStatus =
   (typeof eventProjectionMessageStatusValues)[number];
 
+export const systemClientRequestVisibilityValues = [
+  "hidden",
+  "visible",
+] as const;
+export type SystemClientRequestVisibility =
+  (typeof systemClientRequestVisibilityValues)[number];
+
 export const eventProjectionApprovalLifecycleStatusValues = [
   "waiting_for_approval",
   "denied",
@@ -313,6 +320,7 @@ export interface BuildEventProjectionMessagesOptions {
   includeDebugRawEvents?: boolean;
   includeProviderUnhandledOperations?: boolean;
   includeOptionalOperations?: boolean;
+  systemClientRequestVisibility: SystemClientRequestVisibility;
   threadStatus?: Thread["status"];
   threadType?: Thread["type"];
 }
