@@ -30,15 +30,14 @@ async function loadSystemConfig(): Promise<SystemConfigResponse> {
 
 // ---------------------------------------------------------------------------
 // System config — fetched from the server on startup and re-fetched on
-// websocket reconnects (the initial load may fail if the server isn't ready).
+// first websocket connection and reconnects (the initial load may fail if the
+// server isn't ready).
 // ---------------------------------------------------------------------------
 
 const systemConfigRefreshTickAtom = atom(0);
 systemConfigRefreshTickAtom.onMount = (setRefreshTick) => {
-  const unsubscribe = wsManager.onConnected(({ reconnected }) => {
-    if (reconnected) {
-      setRefreshTick((count) => count + 1);
-    }
+  const unsubscribe = wsManager.onConnected(() => {
+    setRefreshTick((count) => count + 1);
   });
   return unsubscribe;
 };
@@ -49,8 +48,8 @@ export const systemConfigAtom = atom(async (get) => {
 });
 
 // ---------------------------------------------------------------------------
-// Local host ID — probed from the host daemon on startup.
-// Re-probes on host status changes and websocket reconnects while some UI is
+// Local host ID — probed from the host daemon on startup. Re-probes on host
+// status changes, first websocket connection, and reconnects while some UI is
 // subscribed to it. No-daemon is a normal state (e.g., mobile browser).
 // ---------------------------------------------------------------------------
 
@@ -65,11 +64,7 @@ localHostIdRefreshTickAtom.onMount = (setRefreshTick) => {
       refresh();
     }
   });
-  const unsubscribeConnected = wsManager.onConnected(({ reconnected }) => {
-    if (reconnected) {
-      refresh();
-    }
-  });
+  const unsubscribeConnected = wsManager.onConnected(refresh);
 
   return () => {
     unsubscribeChanged();

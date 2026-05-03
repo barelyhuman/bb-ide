@@ -29,6 +29,7 @@ import {
   invalidateHostChangeDependentQueries,
   invalidateHostsAfterServerInitialConnection,
   invalidateRealtimeQueriesAfterServerReconnect,
+  refetchErroredRealtimeQueriesOnInitialConnect,
 } from "./system-cache-effects";
 import { invalidateProjectListQueries } from "./mutation-cache-effects";
 import { createBufferedEnvironmentInvalidator } from "./buffered-environment-invalidator";
@@ -401,6 +402,7 @@ export function createRealtimeCacheEffects({
         invalidateRealtimeQueriesAfterServerReconnect({ queryClient });
         return;
       }
+      refetchErroredRealtimeQueriesOnInitialConnect({ queryClient });
       invalidateHostsAfterServerInitialConnection({ queryClient });
     },
   };

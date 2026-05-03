@@ -16,10 +16,21 @@ import { isBusyThread } from "@/lib/thread-activity";
 import { cn } from "@/lib/utils";
 import { ThreadRow } from "./ThreadRow";
 
+export type ProjectThreadListState =
+  | {
+      status: "loading";
+    }
+  | {
+      status: "ready";
+      threads: ThreadListEntry[];
+    }
+  | {
+      status: "unavailable";
+    };
+
 interface ProjectRowProps {
   project: ProjectResponse;
-  projectThreads: ThreadListEntry[];
-  threadsLoading: boolean;
+  threadListState: ProjectThreadListState;
   selectedThreadId?: string;
   isActive: boolean;
   isCollapsed: boolean;
@@ -37,6 +48,8 @@ interface ProjectThreadGroups {
   managedThreadsByManagerId: Map<string, ThreadListEntry[]>;
   otherThreads: ThreadListEntry[];
 }
+
+const EMPTY_PROJECT_THREADS: ThreadListEntry[] = [];
 
 function buildProjectThreadGroups(
   projectThreads: ThreadListEntry[],
@@ -81,8 +94,7 @@ function buildProjectThreadGroups(
 
 export function ProjectRow({
   project,
-  projectThreads,
-  threadsLoading,
+  threadListState,
   selectedThreadId,
   isActive,
   isCollapsed,
@@ -94,6 +106,10 @@ export function ProjectRow({
   onToggleManagerCollapsed,
   promotedBranchName,
 }: ProjectRowProps) {
+  const projectThreads =
+    threadListState.status === "ready"
+      ? threadListState.threads
+      : EMPTY_PROJECT_THREADS;
   const { managerThreads, managedThreadsByManagerId, otherThreads } = useMemo(
     () => buildProjectThreadGroups(projectThreads),
     [projectThreads],
@@ -199,7 +215,7 @@ export function ProjectRow({
       </div>
 
       {!isCollapsed ? (
-        threadsLoading ? (
+        threadListState.status === "loading" ? (
           <div className="group-data-[collapsible=icon]:hidden">
             <SidebarMenuSkeleton />
           </div>
@@ -260,7 +276,11 @@ export function ProjectRow({
           </div>
         ) : (
           <EmptyState
-            message="No threads"
+            message={
+              threadListState.status === "unavailable"
+                ? "Threads unavailable"
+                : "No threads"
+            }
             className="py-0.5 pl-8 pr-2 group-data-[collapsible=icon]:hidden"
             messageClassName="text-xs leading-4 text-sidebar-foreground/60"
           />

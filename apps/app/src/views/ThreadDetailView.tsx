@@ -33,6 +33,7 @@ import { ThreadWorkspaceOpenButton } from "@/components/thread/ThreadWorkspaceOp
 import { formatEnvironmentDisplay } from "@bb/core-ui";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { useLocalOpenTargets } from "@/hooks/useLocalOpenTargets";
+import { useConnectionAwareQueryState } from "@/hooks/queries/connection-aware-query-state";
 import { useEffectiveHost } from "@/hooks/queries/effective-hosts";
 import { getEnvironmentWorkspaceLabelIcon } from "@/lib/environment-workspace-display";
 import { useStandardManagerTimelinePreference } from "@/lib/manager-timeline-view-preference";
@@ -95,10 +96,17 @@ export function ThreadDetailView() {
   useThreadSecondaryPanelUrlSync();
   const {
     data: thread,
-    isLoading,
+    isFetching,
+    isLoadingError,
+    isPlaceholderData,
     error,
   } = useThread(threadId ?? "", {
     refetchOnMount: "always",
+  });
+  const threadQueryState = useConnectionAwareQueryState({
+    hasResolvedData: thread !== undefined && !isPlaceholderData,
+    isFetching,
+    isLoadingError,
   });
   const { data: parentThread } = useThread(thread?.parentThreadId ?? "");
   const { data: pendingInteractions = [] } = useThreadPendingInteractions(
@@ -366,7 +374,7 @@ export function ThreadDetailView() {
       </PageShell>
     );
   }
-  if (isLoading) {
+  if (threadQueryState.status === "loading") {
     return (
       <PageShell contentClassName="min-h-full items-center justify-center">
         <p className="py-12 text-center text-sm text-muted-foreground">

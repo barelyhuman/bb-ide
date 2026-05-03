@@ -27,7 +27,10 @@ import {
   threadsQueryKey,
 } from "./queries/query-keys";
 import type { QueryClientArg } from "./cache-effect-types";
-import { invalidateQueryKeys } from "./cache-effect-utils";
+import {
+  invalidateQueryKeys,
+  refetchFailedActiveQueryKeys,
+} from "./cache-effect-utils";
 
 export function invalidateHostsAfterServerInitialConnection({
   queryClient,
@@ -39,6 +42,15 @@ export function invalidateRealtimeQueriesAfterServerReconnect({
   queryClient,
 }: QueryClientArg): void {
   invalidateQueryKeys({
+    queryClient,
+    queryKeys: getServerReconnectInvalidationQueryKeys(),
+  });
+}
+
+export function refetchErroredRealtimeQueriesOnInitialConnect({
+  queryClient,
+}: QueryClientArg): void {
+  refetchFailedActiveQueryKeys({
     queryClient,
     queryKeys: getServerReconnectInvalidationQueryKeys(),
   });

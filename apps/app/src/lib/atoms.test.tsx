@@ -98,7 +98,7 @@ afterEach(() => {
 });
 
 describe("atoms", () => {
-  it("re-fetches config after websocket reconnects", async () => {
+  it("re-fetches config after the websocket first connects", async () => {
     installAtomFetchRoutes({
       configs: [
         {
@@ -126,12 +126,67 @@ describe("atoms", () => {
       wsManager.connect();
       const socket = FakeReconnectingWebSocket.latest();
       socket.open();
+
+      await waitFor(async () => {
+        expect(await store.get(systemConfigAtom)).toMatchObject({
+          hostDaemonPort: 4123,
+        });
+      });
+
+      wsManager.disconnect();
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("re-fetches config after the websocket reconnects", async () => {
+    installAtomFetchRoutes({
+      configs: [
+        {
+          hostDaemonPort: null,
+          voiceTranscriptionEnabled: false,
+        },
+        {
+          hostDaemonPort: null,
+          voiceTranscriptionEnabled: true,
+        },
+        {
+          hostDaemonPort: 4123,
+          voiceTranscriptionEnabled: true,
+        },
+      ],
+      daemonStatuses: [],
+    });
+
+    const { FakeReconnectingWebSocket, systemConfigAtom, wsManager } =
+      await importFreshAtomModules();
+    const store = createStore();
+    const unsubscribe = store.sub(systemConfigAtom, () => {});
+
+    try {
+      expect(await store.get(systemConfigAtom)).toMatchObject({
+        hostDaemonPort: null,
+        voiceTranscriptionEnabled: false,
+      });
+
+      wsManager.connect();
+      const socket = FakeReconnectingWebSocket.latest();
+      socket.open();
+
+      await waitFor(async () => {
+        expect(await store.get(systemConfigAtom)).toMatchObject({
+          hostDaemonPort: null,
+          voiceTranscriptionEnabled: true,
+        });
+      });
+
       socket.close();
       socket.open();
 
       await waitFor(async () => {
         expect(await store.get(systemConfigAtom)).toMatchObject({
           hostDaemonPort: 4123,
+          voiceTranscriptionEnabled: true,
         });
       });
 
@@ -148,8 +203,19 @@ describe("atoms", () => {
           hostDaemonPort: 4123,
           voiceTranscriptionEnabled: false,
         },
+        {
+          hostDaemonPort: 4123,
+          voiceTranscriptionEnabled: false,
+        },
       ],
       daemonStatuses: [
+        {
+          connected: true,
+          hostId: "host-1",
+          serverUrl: "http://localhost:3334",
+          supportsNativeFolderPicker: true,
+          platform: "darwin",
+        },
         {
           connected: true,
           hostId: "host-1",
@@ -180,6 +246,141 @@ describe("atoms", () => {
 
       await waitFor(async () => {
         expect(await store.get(localHostIdAtom)).toBeNull();
+      });
+
+      wsManager.disconnect();
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("re-probes local host status after the websocket first connects", async () => {
+    installAtomFetchRoutes({
+      configs: [
+        {
+          hostDaemonPort: 4123,
+          voiceTranscriptionEnabled: false,
+        },
+        {
+          hostDaemonPort: 4123,
+          voiceTranscriptionEnabled: false,
+        },
+      ],
+      daemonStatuses: [
+        null,
+        {
+          connected: true,
+          hostId: "host-1",
+          serverUrl: "http://localhost:3334",
+          supportsNativeFolderPicker: true,
+          platform: "darwin",
+        },
+        {
+          connected: true,
+          hostId: "host-1",
+          serverUrl: "http://localhost:3334",
+          supportsNativeFolderPicker: true,
+          platform: "darwin",
+        },
+      ],
+    });
+
+    const { FakeReconnectingWebSocket, localHostIdAtom, wsManager } =
+      await importFreshAtomModules();
+    const store = createStore();
+    const unsubscribe = store.sub(localHostIdAtom, () => {});
+
+    try {
+      expect(await store.get(localHostIdAtom)).toBeNull();
+
+      wsManager.connect();
+      const socket = FakeReconnectingWebSocket.latest();
+      socket.open();
+
+      await waitFor(async () => {
+        expect(await store.get(localHostIdAtom)).toBe("host-1");
+      });
+
+      wsManager.disconnect();
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("re-probes local host status after the websocket reconnects", async () => {
+    installAtomFetchRoutes({
+      configs: [
+        {
+          hostDaemonPort: 4123,
+          voiceTranscriptionEnabled: false,
+        },
+        {
+          hostDaemonPort: 4123,
+          voiceTranscriptionEnabled: false,
+        },
+        {
+          hostDaemonPort: 4123,
+          voiceTranscriptionEnabled: false,
+        },
+        {
+          hostDaemonPort: 4123,
+          voiceTranscriptionEnabled: false,
+        },
+      ],
+      daemonStatuses: [
+        null,
+        {
+          connected: true,
+          hostId: "host-1",
+          serverUrl: "http://localhost:3334",
+          supportsNativeFolderPicker: true,
+          platform: "darwin",
+        },
+        {
+          connected: true,
+          hostId: "host-1",
+          serverUrl: "http://localhost:3334",
+          supportsNativeFolderPicker: true,
+          platform: "darwin",
+        },
+        {
+          connected: true,
+          hostId: "host-2",
+          serverUrl: "http://localhost:3334",
+          supportsNativeFolderPicker: true,
+          platform: "darwin",
+        },
+        {
+          connected: true,
+          hostId: "host-2",
+          serverUrl: "http://localhost:3334",
+          supportsNativeFolderPicker: true,
+          platform: "darwin",
+        },
+      ],
+    });
+
+    const { FakeReconnectingWebSocket, localHostIdAtom, wsManager } =
+      await importFreshAtomModules();
+    const store = createStore();
+    const unsubscribe = store.sub(localHostIdAtom, () => {});
+
+    try {
+      expect(await store.get(localHostIdAtom)).toBeNull();
+
+      wsManager.connect();
+      const socket = FakeReconnectingWebSocket.latest();
+      socket.open();
+
+      await waitFor(async () => {
+        expect(await store.get(localHostIdAtom)).toBe("host-1");
+      });
+
+      socket.close();
+      socket.open();
+
+      await waitFor(async () => {
+        expect(await store.get(localHostIdAtom)).toBe("host-2");
       });
 
       wsManager.disconnect();

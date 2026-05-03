@@ -7,6 +7,11 @@ import {
 } from "@bb/domain";
 import { Folder, Plus } from "lucide-react";
 import { useLocation } from "react-router-dom";
+import {
+  getConnectionAwareQueryState,
+  useConnectionAwareQueryState,
+  type ConnectionAwareQueryStatus,
+} from "@/hooks/queries/connection-aware-query-state";
 import { useProjects } from "@/hooks/queries/project-queries";
 import {
   isLocalPathMissing,
@@ -17,6 +22,8 @@ import {
   threadListQueryKey,
 } from "@/hooks/queries/query-keys";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
+import { useServerConnectionState } from "@/hooks/useServerConnectionState";
+import type { WebSocketConnectionState } from "@/lib/ws";
 import * as api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@bb/ui-core";
@@ -33,6 +40,7 @@ import {
   COARSE_POINTER_ICON_SIZE_CLASS,
 } from "@bb/ui-core";
 import { ProjectRow } from "./project-list/ProjectRow";
+import type { ProjectThreadListState } from "./project-list/ProjectRow";
 import {
   collapsedManagerIdsAtom,
   collapsedProjectIdsAtom,
@@ -50,28 +58,119 @@ interface ProjectSourceStatusTarget {
   sourceId: string;
 }
 
+interface ProjectThreadQueryState {
+  status: ConnectionAwareQueryStatus;
+}
+
+interface ProjectThreadQueryResult {
+  data: ThreadListEntry[] | undefined;
+  isFetching: boolean;
+  isLoadingError: boolean;
+}
+
+interface ProjectThreadQueryAggregation {
+  threads: ThreadListEntry[];
+  threadStatesByProjectId: Map<string, ProjectThreadQueryState>;
+}
+
+interface BuildProjectThreadQueryAggregationArgs {
+  projectIds: readonly string[];
+  queryResults: readonly ProjectThreadQueryResult[];
+  serverConnectionState: WebSocketConnectionState;
+}
+
+interface ProjectThreadListStateArgs {
+  status: ConnectionAwareQueryStatus | undefined;
+  threads: ThreadListEntry[] | undefined;
+}
+
+function buildProjectThreadQueryAggregation({
+  projectIds,
+  queryResults,
+  serverConnectionState,
+}: BuildProjectThreadQueryAggregationArgs): ProjectThreadQueryAggregation {
+  const threads: ThreadListEntry[] = [];
+  const threadStatesByProjectId = new Map<string, ProjectThreadQueryState>();
+
+  for (let index = 0; index < queryResults.length; index += 1) {
+    const projectId = projectIds[index];
+    const result = queryResults[index];
+    if (!projectId || !result) {
+      continue;
+    }
+
+    if (result.data !== undefined) {
+      threads.push(...result.data);
+    }
+    threadStatesByProjectId.set(projectId, {
+      status: getConnectionAwareQueryState({
+        hasResolvedData: result.data !== undefined,
+        isFetching: result.isFetching,
+        isLoadingError: result.isLoadingError,
+        serverConnectionState,
+      }).status,
+    });
+  }
+
+  return {
+    threads,
+    threadStatesByProjectId,
+  };
+}
+
+function getProjectThreadListState({
+  status,
+  threads,
+}: ProjectThreadListStateArgs): ProjectThreadListState {
+  switch (status) {
+    case "ready":
+      return {
+        status: "ready",
+        threads: threads ?? [],
+      };
+    case "unavailable":
+      return { status: "unavailable" };
+    case "loading":
+    case undefined:
+      return { status: "loading" };
+  }
+}
+
 export function ProjectList({
   onNewProject,
   onProjectSelect,
   selectedProjectId,
   isCreatingProject = false,
 }: ProjectListProps) {
-  const { data: projects, isLoading: projectsLoading } = useProjects();
+  const projectsQuery = useProjects();
+  const {
+    data: projects,
+    isFetching: projectsFetching,
+    isLoadingError: projectsLoadingError,
+  } = projectsQuery;
+  const serverConnectionState = useServerConnectionState();
+  const projectsState = useConnectionAwareQueryState({
+    hasResolvedData: projects !== undefined,
+    isFetching: projectsFetching,
+    isLoadingError: projectsLoadingError,
+  });
   const projectIds = useMemo(
     () => (projects ?? []).map((project) => project.id),
     [projects],
   );
-  const { threads, threadsLoading } = useQueries({
+  const { threads, threadStatesByProjectId } = useQueries({
     queries: projectIds.map((projectId) => ({
       queryKey: threadListQueryKey({ projectId, archived: false }),
       queryFn: ({ signal }) =>
         api.listThreads({ projectId, archived: false }, signal),
       staleTime: 10_000,
     })),
-    combine: (results) => ({
-      threads: results.flatMap((result) => result.data ?? []),
-      threadsLoading: results.some((result) => result.isLoading),
-    }),
+    combine: (results) =>
+      buildProjectThreadQueryAggregation({
+        projectIds,
+        queryResults: results,
+        serverConnectionState,
+      }),
   });
   const { localHostId } = useHostDaemon();
   const location = useLocation();
@@ -216,13 +315,18 @@ export function ProjectList({
       </SidebarGroupLabel>
       <SidebarGroupContent>
         <SidebarMenu className="gap-2">
-          {projectsLoading ? (
+          {projectsState.status === "loading" ? (
             <>
               <SidebarMenuSkeleton />
               <SidebarMenuSkeleton />
             </>
           ) : projects && projects.length > 0 ? (
             projects.map((project) => {
+              const threadState = threadStatesByProjectId.get(project.id);
+              const threadListState = getProjectThreadListState({
+                status: threadState?.status,
+                threads: threadsByProject.get(project.id),
+              });
               const localSourcePath = localHostId
                 ? findLocalPathProjectSourceForHost(
                     project.sources,
@@ -237,8 +341,7 @@ export function ProjectList({
                 <ProjectRow
                   key={project.id}
                   project={project}
-                  projectThreads={threadsByProject.get(project.id) ?? []}
-                  threadsLoading={threadsLoading}
+                  threadListState={threadListState}
                   selectedThreadId={selectedThreadId}
                   isActive={
                     selectedProjectId === project.id && !selectedThreadId
@@ -259,7 +362,11 @@ export function ProjectList({
           ) : (
             <SidebarMenuItem>
               <EmptyState
-                message="No projects"
+                message={
+                  projectsState.status === "unavailable"
+                    ? "Projects unavailable"
+                    : "No projects"
+                }
                 icon={Folder}
                 className="px-2 py-1.5"
                 iconClassName="size-3.5"

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
 import type { PendingInteraction, Thread, ThreadListEntry } from "@bb/domain";
@@ -39,6 +39,7 @@ import {
   shouldFlushThreadChangesImmediately,
   useWebSocket,
 } from "./useWebSocket";
+import { useProjects } from "./queries/project-queries";
 
 interface ConnectedEvent {
   reconnected: boolean;
@@ -307,6 +308,42 @@ describe("useWebSocket", () => {
     for (const queryKey of unrelatedQueryKeys) {
       expectQueryNotInvalidated({ queryClient, queryKey });
     }
+  });
+
+  it("refetches failed active realtime-backed queries on initial connection", async () => {
+    let projectsRequestCount = 0;
+    const fetchMock = installFetchRoutes([
+      {
+        pathname: "/api/v1/projects",
+        handler: () => {
+          projectsRequestCount += 1;
+          return projectsRequestCount === 1
+            ? new Response("starting", { status: 503 })
+            : jsonResponse([]);
+        },
+      },
+    ]);
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () => {
+        useWebSocket();
+        return useProjects();
+      },
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.isError).toBe(true);
+    });
+
+    act(() => {
+      connectedCallbacks[0]?.({ reconnected: false });
+    });
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual([]);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("scopes reconnect invalidation to websocket-backed cache", () => {
