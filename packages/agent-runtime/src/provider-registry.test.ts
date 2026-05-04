@@ -29,9 +29,11 @@ describe("provider registry", () => {
 
   it("passes the configured bridge bundle directory to bundled providers", () => {
     const claudeProvider = createProviderForId("claude-code", {
+      additionalWorkspaceWriteRoots: [],
       bridgeBundleDir: "/tmp",
     });
     const piProvider = createProviderForId("pi", {
+      additionalWorkspaceWriteRoots: [],
       bridgeBundleDir: "/tmp",
     });
 
@@ -43,9 +45,11 @@ describe("provider registry", () => {
 
   it("passes the configured turn id prefix to bundled providers", () => {
     const claudeProvider = createProviderForId("claude-code", {
+      additionalWorkspaceWriteRoots: [],
       turnIdPrefix: "turn_runtime_",
     });
     const piProvider = createProviderForId("pi", {
+      additionalWorkspaceWriteRoots: [],
       turnIdPrefix: "turn_runtime_",
     });
 

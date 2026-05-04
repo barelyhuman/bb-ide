@@ -499,7 +499,11 @@ export class RuntimeManager {
     }
 
     const workspace = await this.provisionWorkspace(provision);
-    const workspaceWatchState = await this.createWorkspaceWatchState(workspace);
+    const [workspaceWatchState, additionalWorkspaceWriteRoots] =
+      await Promise.all([
+        this.createWorkspaceWatchState(workspace),
+        workspace.getAdditionalWorkspaceWriteRoots(),
+      ]);
     const stopWatchingStatus = this.hostWatcher
       ? this.hostWatcher.watchWorkspace({
           environmentId: args.environmentId,
@@ -525,6 +529,7 @@ export class RuntimeManager {
     try {
       runtime = this.createRuntime({
         workspacePath: workspace.path,
+        additionalWorkspaceWriteRoots,
         shellEnv: this.getShellEnv(),
         bridgeBundleDir: this.options.bridgeBundleDir,
         onCapture: this.options.onCapture,

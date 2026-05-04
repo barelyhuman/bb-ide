@@ -26,11 +26,15 @@ export interface ProviderAcceptedCommandTranslationArgs {
 }
 
 export interface ProviderAdapterFactoryOptions {
+  additionalWorkspaceWriteRoots: readonly string[];
   bridgeBundleDir?: string;
   turnIdPrefix?: string;
 }
 
-export type ProviderAdapterFactory = (providerId: string) => ProviderAdapter;
+export type ProviderAdapterFactory = (
+  providerId: string,
+  options: ProviderAdapterFactoryOptions,
+) => ProviderAdapter;
 
 export type ProviderCommandProcessEffect = "restart-provider";
 

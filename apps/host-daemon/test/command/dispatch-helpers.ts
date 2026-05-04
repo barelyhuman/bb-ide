@@ -62,6 +62,9 @@ export function createFakeWorkspace(pathname: string) {
         remoteHead: "refs/remotes/origin/main",
       });
     },
+    async getAdditionalWorkspaceWriteRoots() {
+      return [];
+    },
     async getStatus(options?: { mergeBaseBranch?: string }) {
       state.statusReads += 1;
       return makeWorkspaceStatus({

@@ -633,6 +633,38 @@ describe("codex provider adapter", () => {
     });
   });
 
+  it("buildCommand turn/start includes additional workspace-write roots", () => {
+    const adapter = createCodexProviderAdapter({
+      additionalWorkspaceWriteRoots: [
+        "/repo/.git/worktrees/bb13",
+        "/repo/.git/objects",
+        "/repo/.git/refs",
+        "/repo/.git/logs",
+      ],
+    });
+    const cmd = adapter.buildCommandPlan({
+      type: "turn/start",
+      threadId: "t1",
+      providerThreadId: "codex-1",
+      input: [{ type: "text", text: "commit it" }],
+      options: workspaceWriteAskProviderExecutionContext,
+    });
+    expect(cmd).toMatchObject({
+      method: "turn/start",
+      params: {
+        sandboxPolicy: {
+          type: "workspaceWrite",
+          writableRoots: [
+            "/repo/.git/worktrees/bb13",
+            "/repo/.git/objects",
+            "/repo/.git/refs",
+            "/repo/.git/logs",
+          ],
+        },
+      },
+    });
+  });
+
   it("buildCommand turn/start maps readonly permissions to a read-only sandbox policy", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommandPlan({
@@ -640,7 +672,10 @@ describe("codex provider adapter", () => {
       threadId: "t1",
       providerThreadId: "codex-1",
       input: [{ type: "text", text: "inspect it" }],
-      options: { permissionMode: "readonly", permissionEscalation: "ask" },
+      options: {
+        permissionMode: "readonly",
+        permissionEscalation: "ask",
+      },
     });
     expect(cmd).toMatchObject({
       method: "turn/start",
@@ -662,7 +697,10 @@ describe("codex provider adapter", () => {
       threadId: "t1",
       providerThreadId: "codex-1",
       input: [{ type: "text", text: "inspect it" }],
-      options: { permissionMode: "readonly", permissionEscalation: "deny" },
+      options: {
+        permissionMode: "readonly",
+        permissionEscalation: "deny",
+      },
     });
     expect(cmd).toMatchObject({
       method: "turn/start",

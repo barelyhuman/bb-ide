@@ -31,6 +31,9 @@ export interface AgentRuntimeOptions {
   /** Working directory for provider processes. */
   workspacePath: string;
 
+  /** Extra paths workspace-write providers may mutate in addition to workspacePath. */
+  additionalWorkspaceWriteRoots?: readonly string[];
+
   /** Environment variables passed to ALL provider processes. */
   env?: Record<string, string>;
 

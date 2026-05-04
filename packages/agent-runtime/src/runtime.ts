@@ -141,6 +141,8 @@ export function createAgentRuntimeWithAdapters(
 function createAgentRuntimeInternal(
   options: AgentRuntimeInternalOptions,
 ): AgentRuntime {
+  const additionalWorkspaceWriteRoots =
+    options.additionalWorkspaceWriteRoots ?? [];
   let nextRequestId = 1;
   let nextCaptureId = 1;
   const threadIdentityRegistry = new RuntimeThreadIdentityRegistry();
@@ -159,6 +161,7 @@ function createAgentRuntimeInternal(
   }
 
   const providerProcesses = new RuntimeProviderProcessManager({
+    additionalWorkspaceWriteRoots,
     adapterFactory: options.adapterFactory,
     bridgeBundleDir: options.bridgeBundleDir,
     createProviderIdentityState: (providerId) =>

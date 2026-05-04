@@ -35,6 +35,7 @@ function createWorkspace(): HostWorkspace {
     getHeadSha: unexpectedWorkspaceCall,
     getLocalStateFingerprint: unexpectedWorkspaceCall,
     getSharedGitRefsFingerprint: unexpectedWorkspaceCall,
+    getAdditionalWorkspaceWriteRoots: unexpectedWorkspaceCall,
     getStatus: unexpectedWorkspaceCall,
     getDiff: unexpectedWorkspaceCall,
     listBranches: unexpectedWorkspaceCall,

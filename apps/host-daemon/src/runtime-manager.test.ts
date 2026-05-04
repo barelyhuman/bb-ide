@@ -1,4 +1,9 @@
-import type { AgentRuntime } from "@bb/agent-runtime";
+import { execFile } from "node:child_process";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
+import type { AgentRuntime, AgentRuntimeOptions } from "@bb/agent-runtime";
 import type {
   HostWatcher,
   ThreadStorageWatchError,
@@ -6,9 +11,13 @@ import type {
   WatchWorkspaceArgs,
   WorkspaceWatchError,
 } from "@bb/host-watcher";
-import type { HostWorkspace, ProvisionWorkspaceArgs } from "@bb/host-workspace";
+import {
+  provisionWorkspace,
+  type HostWorkspace,
+  type ProvisionWorkspaceArgs,
+} from "@bb/host-workspace";
 import { makeWorkspaceMergeBase, makeWorkspaceStatus } from "@bb/test-helpers";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { RuntimeManager } from "./runtime-manager.js";
 
 type GetCurrentBranchArgs = Parameters<HostWorkspace["getCurrentBranch"]>;
@@ -44,6 +53,51 @@ type WatchWorkspaceImplementation = (
 type WatchThreadStorageRootImplementation = (
   args: WatchThreadStorageRootArgs,
 ) => StopWatchingPathChanges;
+interface RunGitOptions {
+  cwd: string;
+}
+
+interface RuntimeOptionsRef {
+  current: AgentRuntimeOptions | null;
+}
+
+const execFileAsync = promisify(execFile);
+const tempDirs: string[] = [];
+
+async function makeTempDir(prefix: string): Promise<string> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+}
+
+async function runGit(
+  args: readonly string[],
+  options: RunGitOptions,
+): Promise<string> {
+  const result = await execFileAsync("git", [...args], {
+    cwd: options.cwd,
+  });
+  return result.stdout;
+}
+
+async function initRepo(): Promise<string> {
+  const repoPath = await makeTempDir("bb-runtime-manager-repo-");
+  await runGit(["init", "-b", "main"], { cwd: repoPath });
+  await runGit(["config", "user.name", "BB Tests"], { cwd: repoPath });
+  await runGit(["config", "user.email", "bb@example.com"], { cwd: repoPath });
+  await fs.writeFile(path.join(repoPath, "README.md"), "hello\n", "utf8");
+  await runGit(["add", "."], { cwd: repoPath });
+  await runGit(["commit", "-m", "Initial commit"], { cwd: repoPath });
+  return repoPath;
+}
+
+afterEach(async () => {
+  await Promise.all(
+    tempDirs
+      .splice(0)
+      .map((dir) => fs.rm(dir, { recursive: true, force: true })),
+  );
+});
 
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
@@ -104,6 +158,7 @@ function createFakeWorkspace(path: string) {
       }
       return sharedGitRefsFingerprint;
     }),
+    getAdditionalWorkspaceWriteRoots: vi.fn(async () => []),
     getStatus: vi.fn(async () => status),
     getDiff: vi.fn(async () => diff),
     listBranches: vi.fn(async () => ["main"]),
@@ -214,6 +269,88 @@ describe("RuntimeManager", () => {
     expect(provisionWorkspace).toHaveBeenCalledTimes(1);
     expect(createRuntime).toHaveBeenCalledTimes(1);
     expect(entry.path).toBe("/tmp/env-1");
+  });
+
+  it("passes managed worktree git metadata roots to created runtimes", async () => {
+    const repoPath = await initRepo();
+    const parentDir = await makeTempDir("bb-runtime-manager-worktree-");
+    const targetPath = path.join(parentDir, "env");
+    const runtimeOptions: RuntimeOptionsRef = { current: null };
+    const manager = new RuntimeManager({
+      provisionWorkspace,
+      createRuntime: (options) => {
+        runtimeOptions.current = options;
+        return createFakeRuntime();
+      },
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-roots",
+      provision: {
+        workspaceProvisionType: "managed-worktree",
+        sourcePath: repoPath,
+        targetPath,
+        branchName: "bb/env-roots",
+        timeoutMs: 900000,
+      },
+    });
+    const gitDir = (
+      await runGit(["rev-parse", "--absolute-git-dir"], { cwd: targetPath })
+    ).trim();
+    const commonGitDir = path.resolve(
+      targetPath,
+      (
+        await runGit(["rev-parse", "--git-common-dir"], { cwd: targetPath })
+      ).trim(),
+    );
+
+    expect(runtimeOptions.current?.additionalWorkspaceWriteRoots).toEqual([
+      path.resolve(gitDir),
+      path.join(commonGitDir, "objects"),
+      path.join(commonGitDir, "refs"),
+      path.join(commonGitDir, "logs"),
+    ]);
+  });
+
+  it("passes unmanaged linked worktree git metadata roots to created runtimes", async () => {
+    const repoPath = await initRepo();
+    const parentDir = await makeTempDir("bb-runtime-manager-unmanaged-wt-");
+    const worktreePath = path.join(parentDir, "env");
+    await runGit(["worktree", "add", "-B", "bb/unmanaged", worktreePath], {
+      cwd: repoPath,
+    });
+    const runtimeOptions: RuntimeOptionsRef = { current: null };
+    const manager = new RuntimeManager({
+      provisionWorkspace,
+      createRuntime: (options) => {
+        runtimeOptions.current = options;
+        return createFakeRuntime();
+      },
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-unmanaged-roots",
+      provision: {
+        workspaceProvisionType: "unmanaged",
+        path: worktreePath,
+      },
+    });
+    const gitDir = (
+      await runGit(["rev-parse", "--absolute-git-dir"], { cwd: worktreePath })
+    ).trim();
+    const commonGitDir = path.resolve(
+      worktreePath,
+      (
+        await runGit(["rev-parse", "--git-common-dir"], { cwd: worktreePath })
+      ).trim(),
+    );
+
+    expect(runtimeOptions.current?.additionalWorkspaceWriteRoots).toEqual([
+      path.resolve(gitDir),
+      path.join(commonGitDir, "objects"),
+      path.join(commonGitDir, "refs"),
+      path.join(commonGitDir, "logs"),
+    ]);
   });
 
   it("passes shell env through to created runtimes", async () => {

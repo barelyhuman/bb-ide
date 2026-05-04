@@ -8,6 +8,7 @@ import type { ClaudePermissionMode } from "../interactive-contract.js";
 import type { SdkSessionOptions } from "./sdk-session.js";
 
 export interface BuildSessionOptionsArgs {
+  additionalWorkspaceWriteRoots?: readonly string[];
   baseInstructions?: string;
   cwd: string;
   instructionMode: InstructionMode;
@@ -88,10 +89,14 @@ function buildWorkspaceWriteSandbox(
     return undefined;
   }
 
+  const allowWrite = params.additionalWorkspaceWriteRoots ?? [];
   return {
     enabled: true,
     autoAllowBashIfSandboxed: true,
     allowUnsandboxedCommands: params.permissionEscalation === "ask",
+    ...(allowWrite.length > 0
+      ? { filesystem: { allowWrite: [...allowWrite] } }
+      : {}),
   };
 }
 
@@ -112,6 +117,10 @@ export function buildSessionOptions(
   const model = params.model;
   const sandbox = buildWorkspaceWriteSandbox(params);
   const hooks = buildReadonlyHooks(params);
+  const additionalDirectories =
+    params.permissionMode === "acceptEdits"
+      ? (params.additionalWorkspaceWriteRoots ?? [])
+      : [];
 
   return {
     cwd: params.cwd,
@@ -125,5 +134,8 @@ export function buildSessionOptions(
       : {}),
     ...(sandbox ? { sandbox } : {}),
     ...(hooks ? { hooks } : {}),
+    ...(additionalDirectories.length > 0
+      ? { additionalDirectories: [...additionalDirectories] }
+      : {}),
   };
 }

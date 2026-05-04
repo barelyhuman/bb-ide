@@ -18,6 +18,7 @@ import {
   removeDirectory,
 } from "./provisioning.js";
 import { detectGitRepo, pathExists, runGit, WorkspaceError } from "./git.js";
+import { resolveAdditionalWorkspaceWriteRoots } from "./workspace-write-roots.js";
 
 // ---------------------------------------------------------------------------
 // Options (discriminated union on workspaceProvisionType from @bb/domain)
@@ -93,6 +94,7 @@ export interface HostWorkspace {
   getHeadSha(): Promise<string | null>;
   getLocalStateFingerprint(): Promise<string>;
   getSharedGitRefsFingerprint(): Promise<string>;
+  getAdditionalWorkspaceWriteRoots(): Promise<string[]>;
   getStatus(options?: StatusOptions): Promise<WorkspaceStatus>;
   getDiff(options?: DiffOptions): Promise<DiffResult>;
   listBranches(): Promise<string[]>;
@@ -175,6 +177,13 @@ class ProvisionedHostWorkspace implements HostWorkspace {
 
   getSharedGitRefsFingerprint(): Promise<string> {
     return this.ws.getSharedGitRefsFingerprint();
+  }
+
+  getAdditionalWorkspaceWriteRoots(): Promise<string[]> {
+    if (!this.isGitRepo || !this.isWorktree) {
+      return Promise.resolve([]);
+    }
+    return resolveAdditionalWorkspaceWriteRoots(this.path);
   }
 
   getStatus(options?: StatusOptions): Promise<WorkspaceStatus> {

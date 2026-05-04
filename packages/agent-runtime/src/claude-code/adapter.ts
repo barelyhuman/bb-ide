@@ -60,6 +60,7 @@ import type {
   ProviderCommandPlan,
   ProviderTranslationContext,
   ProviderAdapter,
+  ProviderAdapterFactoryOptions,
 } from "../provider-adapter.js";
 import { noPreparedProviderCommandDispatch } from "../provider-adapter.js";
 import {
@@ -111,6 +112,18 @@ interface ClaudeBashCommand {
 interface ClaudeNormalizedWebFetch {
   url: string;
   prompt: string | null;
+}
+
+interface AdditionalWorkspaceWriteRootsParams {
+  additionalWorkspaceWriteRoots: string[];
+}
+
+function buildAdditionalWorkspaceWriteRootsParams(
+  roots: readonly string[],
+): AdditionalWorkspaceWriteRootsParams | undefined {
+  return roots.length > 0
+    ? { additionalWorkspaceWriteRoots: [...roots] }
+    : undefined;
 }
 
 function parseClaudeBashCommand(input: unknown): ClaudeBashCommand | null {
@@ -512,7 +525,8 @@ function buildClaudeCodeConfig(
 // ---------------------------------------------------------------------------
 
 /** Options for overriding claude-code adapter defaults. Used by test infrastructure. */
-export interface CreateClaudeCodeProviderAdapterOptions {
+export interface CreateClaudeCodeProviderAdapterOptions
+  extends ProviderAdapterFactoryOptions {
   /** Override the bridge binary. */
   processCommand?: string;
   /** Override the bridge binary args. */
@@ -536,6 +550,7 @@ interface ResolveClaudeInteractiveRequestTurnIdArgs {
 export function createClaudeCodeProviderAdapter(
   opts?: CreateClaudeCodeProviderAdapterOptions,
 ): ProviderAdapter {
+  const additionalWorkspaceWriteRoots = opts?.additionalWorkspaceWriteRoots ?? [];
   const providerInfo = getBuiltInAgentProviderInfo("claude-code");
   const capabilities: ProviderCapabilities = {
     supportsRename: providerInfo.capabilities.supportsRename,
@@ -775,6 +790,12 @@ export function createClaudeCodeProviderAdapter(
           const permissionPolicy = resolveAdapterPermissionPolicy(
             command.options,
           );
+          const additionalWorkspaceWriteRootsParams =
+            permissionPolicy.permissionMode === "workspace-write"
+              ? buildAdditionalWorkspaceWriteRootsParams(
+                  additionalWorkspaceWriteRoots,
+                )
+              : undefined;
           return {
             kind: "request",
             method: "thread/start",
@@ -785,6 +806,9 @@ export function createClaudeCodeProviderAdapter(
               instructionMode: command.instructionMode,
               permissionMode: toClaudePermissionMode(permissionPolicy),
               permissionEscalation: permissionPolicy.permissionEscalation,
+              ...(additionalWorkspaceWriteRootsParams
+                ? additionalWorkspaceWriteRootsParams
+                : {}),
               ...(config ? { config } : {}),
               ...(command.options?.model
                 ? { model: command.options.model }
@@ -819,6 +843,12 @@ export function createClaudeCodeProviderAdapter(
           const permissionPolicy = resolveAdapterPermissionPolicy(
             command.options,
           );
+          const additionalWorkspaceWriteRootsParams =
+            permissionPolicy.permissionMode === "workspace-write"
+              ? buildAdditionalWorkspaceWriteRootsParams(
+                  additionalWorkspaceWriteRoots,
+                )
+              : undefined;
           return {
             kind: "request",
             method: "thread/resume",
@@ -830,6 +860,9 @@ export function createClaudeCodeProviderAdapter(
               instructionMode: command.instructionMode,
               permissionMode: toClaudePermissionMode(permissionPolicy),
               permissionEscalation: permissionPolicy.permissionEscalation,
+              ...(additionalWorkspaceWriteRootsParams
+                ? additionalWorkspaceWriteRootsParams
+                : {}),
               ...(resumeConfig ? { config: resumeConfig } : {}),
               ...(command.options?.model
                 ? { model: command.options.model }

@@ -31,6 +31,7 @@ export interface RuntimeProviderProcessLineArgs {
 }
 
 export interface RuntimeProviderProcessManagerArgs {
+  additionalWorkspaceWriteRoots: readonly string[];
   adapterFactory?: ProviderAdapterFactory;
   bridgeBundleDir: string | undefined;
   createProviderIdentityState: (
@@ -193,13 +194,16 @@ export class RuntimeProviderProcessManager {
   }
 
   private getAdapter(providerId: string): ProviderAdapter {
-    if (this.args.adapterFactory) {
-      return this.args.adapterFactory(providerId);
-    }
-    return createProviderForId(providerId, {
+    const adapterOptions = {
+      additionalWorkspaceWriteRoots: this.args.additionalWorkspaceWriteRoots,
       bridgeBundleDir: this.args.bridgeBundleDir,
       turnIdPrefix: createAdapterTurnIdPrefix(),
-    });
+    };
+
+    if (this.args.adapterFactory) {
+      return this.args.adapterFactory(providerId, adapterOptions);
+    }
+    return createProviderForId(providerId, adapterOptions);
   }
 
   private spawnProvider(

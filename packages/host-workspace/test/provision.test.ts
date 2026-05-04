@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { DEFAULT_ENV_SETUP_SCRIPT_NAME } from "@bb/domain";
-import { provisionWorkspace } from "../src/provision.js";
+import { provisionWorkspace } from "../src/index.js";
 import { runGit } from "../src/git.js";
 
 const tempDirs: string[] = [];
@@ -87,6 +87,34 @@ describe("provisionWorkspace", () => {
       expect(ws.isWorktree).toBe(true);
     });
 
+    it("resolves external git metadata roots for unmanaged worktrees", async () => {
+      const repoPath = await initRepo();
+      const parentDir = await makeTempDir("bb-provision-unmanaged-wt-roots-");
+      const wtPath = path.join(parentDir, "wt");
+      await runGit(["worktree", "add", "-B", "feature", wtPath], {
+        cwd: repoPath,
+      });
+      const ws = await provisionWorkspace({
+        workspaceProvisionType: "unmanaged",
+        path: wtPath,
+      });
+      const gitDir = (
+        await runGit(["rev-parse", "--absolute-git-dir"], { cwd: ws.path })
+      ).stdout.trim();
+      const commonGitDir = path.resolve(
+        ws.path,
+        (await runGit(["rev-parse", "--git-common-dir"], { cwd: ws.path }))
+          .stdout.trim(),
+      );
+
+      await expect(ws.getAdditionalWorkspaceWriteRoots()).resolves.toEqual([
+        path.resolve(gitDir),
+        path.join(commonGitDir, "objects"),
+        path.join(commonGitDir, "refs"),
+        path.join(commonGitDir, "logs"),
+      ]);
+    });
+
     it("throws for non-existent path", async () => {
       await expect(
         provisionWorkspace({
@@ -129,6 +157,37 @@ describe("provisionWorkspace", () => {
       expect(ws.isGitRepo).toBe(true);
       expect(ws.isWorktree).toBe(true);
       expect(await ws.getCurrentBranch()).toBe("bb/env-test");
+    });
+
+    it("resolves external git metadata roots for workspace-write sandboxes", async () => {
+      const repoPath = await initRepo();
+      const parentDir = await makeTempDir("bb-provision-mwt-roots-");
+      const targetPath = path.join(parentDir, "env");
+
+      const ws = await provisionWorkspace({
+        workspaceProvisionType: "managed-worktree",
+        sourcePath: repoPath,
+        targetPath,
+        branchName: "bb/env-roots",
+        timeoutMs: 900000,
+      });
+      const gitDir = (
+        await runGit(["rev-parse", "--absolute-git-dir"], { cwd: ws.path })
+      ).stdout.trim();
+      const commonGitDir = path.resolve(
+        ws.path,
+        (await runGit(["rev-parse", "--git-common-dir"], { cwd: ws.path }))
+          .stdout.trim(),
+      );
+
+      await expect(
+        ws.getAdditionalWorkspaceWriteRoots(),
+      ).resolves.toEqual([
+        path.resolve(gitDir),
+        path.join(commonGitDir, "objects"),
+        path.join(commonGitDir, "refs"),
+        path.join(commonGitDir, "logs"),
+      ]);
     });
 
     it("destroy() removes the worktree", async () => {
@@ -216,6 +275,22 @@ describe("provisionWorkspace", () => {
       expect(ws.isGitRepo).toBe(true);
       expect(ws.isWorktree).toBe(false);
       expect(await ws.getCurrentBranch()).toBe("bb/clone-branch");
+    });
+
+    it("does not add external git metadata roots for managed clones", async () => {
+      const repoPath = await initRepo();
+      const parentDir = await makeTempDir("bb-provision-mc-roots-");
+      const targetPath = path.join(parentDir, "clone");
+
+      const ws = await provisionWorkspace({
+        workspaceProvisionType: "managed-clone",
+        sourcePath: repoPath,
+        targetPath,
+        branchName: "bb/clone-roots",
+        timeoutMs: 900000,
+      });
+
+      await expect(ws.getAdditionalWorkspaceWriteRoots()).resolves.toEqual([]);
     });
 
     it("destroy() removes the cloned directory", async () => {

@@ -13,6 +13,7 @@ export interface SdkSessionOptions {
   cwd: string;
   systemPrompt: Exclude<Options["systemPrompt"], undefined>;
   model?: string;
+  additionalDirectories?: readonly string[];
   effort?: Options["effort"];
   sessionId?: string;
   permissionMode?: ClaudePermissionMode;
@@ -100,6 +101,9 @@ export class SdkSession {
         ? { sessionId: this.options.sessionId }
         : {}),
       ...(this.options.model ? { model: this.options.model } : {}),
+      ...(this.options.additionalDirectories
+        ? { additionalDirectories: [...this.options.additionalDirectories] }
+        : {}),
       ...(this.options.effort ? { effort: this.options.effort } : {}),
       ...(this.options.thinking ? { thinking: this.options.thinking } : {}),
     };

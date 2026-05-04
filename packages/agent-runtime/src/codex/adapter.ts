@@ -44,6 +44,7 @@ import type {
   DecodedToolCallRequest,
   PreparedProviderCommandDispatch,
   ProviderAdapter,
+  ProviderAdapterFactoryOptions,
   ProviderCommandPlan,
   ProviderExecutionContext,
 } from "../provider-adapter.js";
@@ -69,6 +70,16 @@ interface CodexPermissionSettings {
   sandboxPolicy: SandboxPolicy;
 }
 
+interface CodexThreadPermissionSettings {
+  approvalPolicy: AskForApproval;
+  sandbox: CodexSandboxMode;
+}
+
+interface ToCodexPermissionSettingsArgs {
+  additionalWorkspaceWriteRoots: readonly string[];
+  options: ProviderExecutionContext;
+}
+
 type CodexInstructionCommand = Extract<
   AdapterCommand,
   { type: "thread/start" | "thread/resume" }
@@ -92,10 +103,12 @@ function resolveCodexInstructionOverrides(
   return { developerInstructions: instructions };
 }
 
-function toWorkspaceWriteCodexSandboxPolicy(): SandboxPolicy {
+function toWorkspaceWriteCodexSandboxPolicy(
+  additionalWorkspaceWriteRoots: readonly string[],
+): SandboxPolicy {
   return {
     type: "workspaceWrite",
-    writableRoots: [],
+    writableRoots: [...additionalWorkspaceWriteRoots],
     readOnlyAccess: { type: "fullAccess" },
     networkAccess: true,
     excludeTmpdirEnvVar: false,
@@ -117,10 +130,37 @@ function toEscalationApprovalPolicy(
   return escalation === "deny" ? "never" : "on-request";
 }
 
-function toCodexPermissionSettings(
+function toCodexThreadPermissionSettings(
   options: ProviderExecutionContext,
-): CodexPermissionSettings {
+): CodexThreadPermissionSettings {
   const permissionPolicy = resolveAdapterPermissionPolicy(options);
+  switch (permissionPolicy.permissionMode) {
+    case "readonly":
+      return {
+        approvalPolicy: toEscalationApprovalPolicy(
+          permissionPolicy.permissionEscalation,
+        ),
+        sandbox: "read-only",
+      };
+    case "workspace-write":
+      return {
+        approvalPolicy: toEscalationApprovalPolicy(
+          permissionPolicy.permissionEscalation,
+        ),
+        sandbox: "workspace-write",
+      };
+    case "full":
+      return {
+        approvalPolicy: "never",
+        sandbox: "danger-full-access",
+      };
+  }
+}
+
+function toCodexPermissionSettings(
+  args: ToCodexPermissionSettingsArgs,
+): CodexPermissionSettings {
+  const permissionPolicy = resolveAdapterPermissionPolicy(args.options);
   switch (permissionPolicy.permissionMode) {
     case "readonly":
       return {
@@ -136,7 +176,9 @@ function toCodexPermissionSettings(
           permissionPolicy.permissionEscalation,
         ),
         sandbox: "workspace-write",
-        sandboxPolicy: toWorkspaceWriteCodexSandboxPolicy(),
+        sandboxPolicy: toWorkspaceWriteCodexSandboxPolicy(
+          args.additionalWorkspaceWriteRoots,
+        ),
       };
     case "full":
       return {
@@ -379,7 +421,8 @@ function extractRecoveredCommandOutput(
 // Adapter factory
 // ---------------------------------------------------------------------------
 
-export interface CreateCodexProviderAdapterOptions {
+export interface CreateCodexProviderAdapterOptions
+  extends ProviderAdapterFactoryOptions {
   processCommand?: string;
   processArgs?: string[];
 }
@@ -387,6 +430,7 @@ export interface CreateCodexProviderAdapterOptions {
 export function createCodexProviderAdapter(
   opts?: CreateCodexProviderAdapterOptions,
 ): ProviderAdapter {
+  const additionalWorkspaceWriteRoots = opts?.additionalWorkspaceWriteRoots ?? [];
   const providerInfo = getBuiltInAgentProviderInfo("codex");
   const capabilities: ProviderCapabilities = {
     supportsRename: providerInfo.capabilities.supportsRename,
@@ -769,7 +813,9 @@ export function createCodexProviderAdapter(
           };
         case "thread/start": {
           const dynamicTools = toCodexDynamicTools(command.dynamicTools);
-          const permissionSettings = toCodexPermissionSettings(command.options);
+          const permissionSettings = toCodexThreadPermissionSettings(
+            command.options,
+          );
           const params: ThreadStartParams = {
             approvalPolicy: permissionSettings.approvalPolicy,
             sandbox: permissionSettings.sandbox,
@@ -794,7 +840,9 @@ export function createCodexProviderAdapter(
         }
         case "thread/resume": {
           const dynamicTools = toCodexDynamicTools(command.dynamicTools);
-          const permissionSettings = toCodexPermissionSettings(command.options);
+          const permissionSettings = toCodexThreadPermissionSettings(
+            command.options,
+          );
           const params: ThreadResumeParams = {
             threadId: command.providerThreadId ?? command.threadId,
             approvalPolicy: permissionSettings.approvalPolicy,
@@ -817,7 +865,10 @@ export function createCodexProviderAdapter(
           };
         }
         case "turn/start": {
-          const permissionSettings = toCodexPermissionSettings(command.options);
+          const permissionSettings = toCodexPermissionSettings({
+            additionalWorkspaceWriteRoots,
+            options: command.options,
+          });
           return {
             kind: "request",
             method: "turn/start",

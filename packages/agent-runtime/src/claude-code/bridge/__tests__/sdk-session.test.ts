@@ -223,6 +223,7 @@ describe("SdkSession", () => {
     const session = new SdkSession(
       {
         ...defaultOptions,
+        additionalDirectories: ["/repo/.git/worktrees/bb13"],
         sandbox: {
           enabled: true,
           autoAllowBashIfSandboxed: true,
@@ -239,6 +240,7 @@ describe("SdkSession", () => {
     expect(queryMock).toHaveBeenCalledWith(
       expect.objectContaining({
         options: expect.objectContaining({
+          additionalDirectories: ["/repo/.git/worktrees/bb13"],
           sandbox: {
             enabled: true,
             autoAllowBashIfSandboxed: true,

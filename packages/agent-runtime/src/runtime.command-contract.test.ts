@@ -24,6 +24,37 @@ describe("createAgentRuntime command contracts", () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it("passes runtime workspace-write roots to adapter construction", async () => {
+    let capturedAdditionalWorkspaceWriteRoots: readonly string[] | undefined;
+    const runtime = createAgentRuntimeWithAdapters({
+      workspacePath: tmpDir,
+      additionalWorkspaceWriteRoots: [
+        "/repo/.git/worktrees/bb13",
+        "/repo/.git/objects",
+      ],
+      onEvent: () => {},
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: (_providerId, options) => {
+        capturedAdditionalWorkspaceWriteRoots =
+          options.additionalWorkspaceWriteRoots;
+        return createFakeAdapter(scriptPath);
+      },
+    });
+
+    try {
+      await runtime.ensureProvider({ providerId: "fake" });
+      expect(capturedAdditionalWorkspaceWriteRoots).toEqual([
+        "/repo/.git/worktrees/bb13",
+        "/repo/.git/objects",
+      ]);
+    } finally {
+      await runtime.shutdown();
+    }
+  });
+
   it("rejects required adapter commands that return no-op plans", async () => {
     const baseAdapter = createFakeAdapter(scriptPath);
     const runtime = createAgentRuntimeWithAdapters({

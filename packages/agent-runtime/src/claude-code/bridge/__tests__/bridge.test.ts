@@ -180,6 +180,36 @@ describe("bridge", () => {
     });
   });
 
+  it("configures workspace-write sessions with additional writable roots", () => {
+    const options = buildSessionOptions(
+      {
+        additionalWorkspaceWriteRoots: [
+          "/repo/.git/worktrees/bb13",
+          "/repo/.git/objects",
+        ],
+        baseInstructions: "You are a coder.",
+        cwd: "/tmp/worktree",
+        instructionMode: "append",
+        permissionEscalation: "deny",
+        permissionMode: "acceptEdits",
+      },
+      {},
+    );
+
+    expect(options.additionalDirectories).toEqual([
+      "/repo/.git/worktrees/bb13",
+      "/repo/.git/objects",
+    ]);
+    expect(options.sandbox).toEqual({
+      enabled: true,
+      autoAllowBashIfSandboxed: true,
+      allowUnsandboxedCommands: false,
+      filesystem: {
+        allowWrite: ["/repo/.git/worktrees/bb13", "/repo/.git/objects"],
+      },
+    });
+  });
+
   it("configures readonly sessions with PreToolUse policy hooks", async () => {
     const askOptions = buildSessionOptions(
       {
@@ -335,6 +365,112 @@ describe("bridge", () => {
       );
 
       bridge.sendRequest(2, "thread/stop", { threadId: "thread-reasoning" });
+      await bridge.flushWork();
+      queries[0]?.finish();
+      await bridge.waitForResponse(2);
+    } finally {
+      bridge.restore();
+    }
+  });
+
+  it("passes thread/start additional workspace-write roots to Claude SDK options", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    const queries: ControlledClaudeQuery[] = [];
+    queryMock.mockImplementation(() => {
+      const query = createControlledClaudeQuery();
+      queries.push(query);
+      return query;
+    });
+
+    try {
+      bridge.sendRequest(1, "thread/start", {
+        additionalWorkspaceWriteRoots: [
+          "/repo/.git/worktrees/bb13",
+          "/repo/.git/objects",
+        ],
+        baseInstructions: "test",
+        cwd: "/tmp/worktree",
+        instructionMode: "append",
+        permissionEscalation: "deny",
+        permissionMode: "acceptEdits",
+        threadId: "thread-roots",
+      });
+      await bridge.waitForResponse(1);
+
+      expect(queryMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: expect.objectContaining({
+            additionalDirectories: [
+              "/repo/.git/worktrees/bb13",
+              "/repo/.git/objects",
+            ],
+            sandbox: expect.objectContaining({
+              filesystem: {
+                allowWrite: [
+                  "/repo/.git/worktrees/bb13",
+                  "/repo/.git/objects",
+                ],
+              },
+            }),
+          }),
+        }),
+      );
+
+      bridge.sendRequest(2, "thread/stop", { threadId: "thread-roots" });
+      await bridge.flushWork();
+      queries[0]?.finish();
+      await bridge.waitForResponse(2);
+    } finally {
+      bridge.restore();
+    }
+  });
+
+  it("passes thread/resume additional workspace-write roots to Claude SDK options", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    const queries: ControlledClaudeQuery[] = [];
+    queryMock.mockImplementation(() => {
+      const query = createControlledClaudeQuery();
+      queries.push(query);
+      return query;
+    });
+
+    try {
+      bridge.sendRequest(1, "thread/resume", {
+        additionalWorkspaceWriteRoots: [
+          "/repo/.git/worktrees/bb13",
+          "/repo/.git/objects",
+        ],
+        cwd: "/tmp/worktree",
+        instructionMode: "append",
+        permissionEscalation: "deny",
+        permissionMode: "acceptEdits",
+        providerThreadId: "provider-thread-roots",
+        threadId: "thread-resume-roots",
+      });
+      await bridge.waitForResponse(1);
+
+      expect(queryMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          options: expect.objectContaining({
+            additionalDirectories: [
+              "/repo/.git/worktrees/bb13",
+              "/repo/.git/objects",
+            ],
+            sandbox: expect.objectContaining({
+              filesystem: {
+                allowWrite: [
+                  "/repo/.git/worktrees/bb13",
+                  "/repo/.git/objects",
+                ],
+              },
+            }),
+          }),
+        }),
+      );
+
+      bridge.sendRequest(2, "thread/stop", {
+        threadId: "thread-resume-roots",
+      });
       await bridge.flushWork();
       queries[0]?.finish();
       await bridge.waitForResponse(2);

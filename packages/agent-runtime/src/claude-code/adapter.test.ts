@@ -29,6 +29,11 @@ const fullProviderExecutionContext = {
   permissionEscalation: null,
 } satisfies ProviderExecutionContext;
 
+const workspaceWriteProviderExecutionContext = {
+  permissionMode: "workspace-write",
+  permissionEscalation: "deny",
+} satisfies ProviderExecutionContext;
+
 describe("claude-code provider adapter", () => {
   // -- Identity & capabilities ---------------------------------------------
 
@@ -47,6 +52,7 @@ describe("claude-code provider adapter", () => {
 
   it("uses the configured bridge bundle directory when present", () => {
     const adapter = createClaudeCodeProviderAdapter({
+      additionalWorkspaceWriteRoots: [],
       bridgeBundleDir: "/tmp",
     });
     expect(adapter.process.args[0]).toBe("/tmp/bb-claude-code-bridge.mjs");
@@ -139,6 +145,79 @@ describe("claude-code provider adapter", () => {
       permissionEscalation: null,
       cwd: "/tmp/worktree",
     });
+  });
+
+  it("buildCommand thread/start includes construction-level workspace-write roots", () => {
+    const adapter = createClaudeCodeProviderAdapter({
+      additionalWorkspaceWriteRoots: [
+        "/repo/.git/worktrees/bb13",
+        "/repo/.git/objects",
+      ],
+    });
+    const cmd = adapter.buildCommandPlan({
+      type: "thread/start",
+      cwd: "/tmp/worktree",
+      threadId: "bb-thread-1",
+      input: [{ type: "text", text: "hello" }],
+      instructionMode: "append",
+      options: workspaceWriteProviderExecutionContext,
+    });
+
+    expect(cmd?.params).toMatchObject({
+      additionalWorkspaceWriteRoots: [
+        "/repo/.git/worktrees/bb13",
+        "/repo/.git/objects",
+      ],
+    });
+  });
+
+  it("buildCommand thread/start omits empty workspace-write roots", () => {
+    const adapter = createClaudeCodeProviderAdapter({
+      additionalWorkspaceWriteRoots: [],
+    });
+    const cmd = adapter.buildCommandPlan({
+      type: "thread/start",
+      cwd: "/tmp/worktree",
+      threadId: "bb-thread-1",
+      input: [{ type: "text", text: "hello" }],
+      instructionMode: "append",
+      options: workspaceWriteProviderExecutionContext,
+    });
+
+    expect(cmd?.params).not.toHaveProperty("additionalWorkspaceWriteRoots");
+  });
+
+  it("buildCommand thread/start omits workspace roots outside workspace-write mode", () => {
+    const adapter = createClaudeCodeProviderAdapter({
+      additionalWorkspaceWriteRoots: [
+        "/repo/.git/worktrees/bb13",
+        "/repo/.git/objects",
+      ],
+    });
+    const readonlyCmd = adapter.buildCommandPlan({
+      type: "thread/start",
+      cwd: "/tmp/worktree",
+      threadId: "bb-thread-readonly",
+      input: [{ type: "text", text: "hello" }],
+      instructionMode: "append",
+      options: {
+        permissionMode: "readonly",
+        permissionEscalation: "ask",
+      },
+    });
+    const fullCmd = adapter.buildCommandPlan({
+      type: "thread/start",
+      cwd: "/tmp/worktree",
+      threadId: "bb-thread-full",
+      input: [{ type: "text", text: "hello" }],
+      instructionMode: "append",
+      options: fullProviderExecutionContext,
+    });
+
+    expect(readonlyCmd?.params).not.toHaveProperty(
+      "additionalWorkspaceWriteRoots",
+    );
+    expect(fullCmd?.params).not.toHaveProperty("additionalWorkspaceWriteRoots");
   });
 
   it("buildCommand thread/start passes through model, env vars, instructions, reasoning level, and dynamic tools", () => {
@@ -302,7 +381,7 @@ describe("claude-code provider adapter", () => {
       threadId: "bb-thread-1",
       providerThreadId: undefined,
       instructionMode: "append",
-      options: fullProviderExecutionContext,
+      options: workspaceWriteProviderExecutionContext,
     });
     expect(cmd?.params).toMatchObject({
       threadId: "bb-thread-1",
@@ -327,6 +406,79 @@ describe("claude-code provider adapter", () => {
       permissionEscalation: "deny",
       permissionMode: "dontAsk",
     });
+  });
+
+  it("buildCommand thread/resume includes construction-level workspace-write roots", () => {
+    const adapter = createClaudeCodeProviderAdapter({
+      additionalWorkspaceWriteRoots: [
+        "/repo/.git/worktrees/bb13",
+        "/repo/.git/objects",
+      ],
+    });
+    const cmd = adapter.buildCommandPlan({
+      type: "thread/resume",
+      cwd: "/tmp/worktree",
+      threadId: "bb-thread-1",
+      providerThreadId: "claude-session-1",
+      instructionMode: "append",
+      options: workspaceWriteProviderExecutionContext,
+    });
+
+    expect(cmd?.params).toMatchObject({
+      additionalWorkspaceWriteRoots: [
+        "/repo/.git/worktrees/bb13",
+        "/repo/.git/objects",
+      ],
+    });
+  });
+
+  it("buildCommand thread/resume omits empty workspace-write roots", () => {
+    const adapter = createClaudeCodeProviderAdapter({
+      additionalWorkspaceWriteRoots: [],
+    });
+    const cmd = adapter.buildCommandPlan({
+      type: "thread/resume",
+      cwd: "/tmp/worktree",
+      threadId: "bb-thread-1",
+      providerThreadId: "claude-session-1",
+      instructionMode: "append",
+      options: workspaceWriteProviderExecutionContext,
+    });
+
+    expect(cmd?.params).not.toHaveProperty("additionalWorkspaceWriteRoots");
+  });
+
+  it("buildCommand thread/resume omits workspace roots outside workspace-write mode", () => {
+    const adapter = createClaudeCodeProviderAdapter({
+      additionalWorkspaceWriteRoots: [
+        "/repo/.git/worktrees/bb13",
+        "/repo/.git/objects",
+      ],
+    });
+    const readonlyCmd = adapter.buildCommandPlan({
+      type: "thread/resume",
+      cwd: "/tmp/worktree",
+      threadId: "bb-thread-readonly",
+      providerThreadId: "claude-session-readonly",
+      instructionMode: "append",
+      options: {
+        permissionMode: "readonly",
+        permissionEscalation: "ask",
+      },
+    });
+    const fullCmd = adapter.buildCommandPlan({
+      type: "thread/resume",
+      cwd: "/tmp/worktree",
+      threadId: "bb-thread-full",
+      providerThreadId: "claude-session-full",
+      instructionMode: "append",
+      options: fullProviderExecutionContext,
+    });
+
+    expect(readonlyCmd?.params).not.toHaveProperty(
+      "additionalWorkspaceWriteRoots",
+    );
+    expect(fullCmd?.params).not.toHaveProperty("additionalWorkspaceWriteRoots");
   });
 
   it("buildCommand thread/resume passes through options and dynamic tools", () => {

@@ -12,6 +12,11 @@ const bridgePermissionEscalationSchema = z
   .enum(permissionEscalationValues)
   .nullable();
 const bridgeReasoningLevelSchema = z.enum(reasoningLevelValues);
+// Omission means the session has no extra writable roots; this keeps older
+// bridge messages compatible and avoids sending an empty protocol field.
+const bridgeAdditionalWorkspaceWriteRootsSchema = z
+  .array(z.string())
+  .optional();
 
 const dynamicToolSchema = z.object({
   name: z.string(),
@@ -38,6 +43,7 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
       threadId: z.string(),
       cwd: z.string(),
       baseInstructions: z.string(),
+      additionalWorkspaceWriteRoots: bridgeAdditionalWorkspaceWriteRootsSchema,
       permissionMode: claudePermissionModeSchema,
       permissionEscalation: bridgePermissionEscalationSchema,
       config: z.record(z.string(), z.unknown()).optional(),
@@ -54,6 +60,7 @@ const claudeCodeCommandSchema = z.discriminatedUnion("method", [
       cwd: z.string(),
       providerThreadId: z.string().nullable(),
       baseInstructions: z.string().optional(),
+      additionalWorkspaceWriteRoots: bridgeAdditionalWorkspaceWriteRootsSchema,
       permissionMode: claudePermissionModeSchema,
       permissionEscalation: bridgePermissionEscalationSchema,
       config: z.record(z.string(), z.unknown()).optional(),

@@ -28,7 +28,7 @@ import type { ProviderVisibilityMetadata } from "./provider-visibility.js";
 // ---------------------------------------------------------------------------
 
 type ProviderFactory = (
-  options?: ProviderAdapterFactoryOptions,
+  options: ProviderAdapterFactoryOptions,
 ) => ProviderAdapter;
 interface BuiltInProviderDescriptor {
   createAdapter: ProviderFactory;
@@ -40,7 +40,7 @@ const builtInProviders = [
   {
     // Codex app-server events already carry Codex-owned turn ids; the
     // runtime-generated prefix is only for adapters that synthesize bb turn ids.
-    createAdapter: () => createCodexProviderAdapter(),
+    createAdapter: (options) => createCodexProviderAdapter(options),
     info: getBuiltInAgentProviderInfo("codex"),
     visibility: codexVisibilityMetadata,
   },
@@ -89,7 +89,17 @@ export function createProviderForId(
     );
   }
 
-  return descriptor.createAdapter(options);
+  const adapterOptions: ProviderAdapterFactoryOptions = {
+    additionalWorkspaceWriteRoots: options?.additionalWorkspaceWriteRoots ?? [],
+    ...(options?.bridgeBundleDir !== undefined
+      ? { bridgeBundleDir: options.bridgeBundleDir }
+      : {}),
+    ...(options?.turnIdPrefix !== undefined
+      ? { turnIdPrefix: options.turnIdPrefix }
+      : {}),
+  };
+
+  return descriptor.createAdapter(adapterOptions);
 }
 
 export function getProviderVisibilityMetadata(

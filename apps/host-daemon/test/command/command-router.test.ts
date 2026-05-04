@@ -60,6 +60,7 @@ function createFakeWorkspace(path: string): FakeWorkspace {
         remoteHead: null,
       }),
     ),
+    getAdditionalWorkspaceWriteRoots: vi.fn(async () => []),
     getStatus: vi.fn(async () => ({
       workingTree: {
         hasUncommittedChanges: false,
