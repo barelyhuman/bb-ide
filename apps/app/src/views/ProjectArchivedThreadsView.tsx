@@ -1,9 +1,14 @@
 import { Link, useParams } from "react-router-dom";
-import { PageShell } from "@bb/ui-core";
+import type { ThreadListEntry } from "@bb/domain";
+import { PageShell, Pill } from "@bb/ui-core";
 import { ArchiveTimestampAction } from "@/components/shared/ArchiveTimestampAction";
 import { useUnarchiveThread } from "@/hooks/mutations/thread-state-mutations";
 import { useThreads } from "@/hooks/queries/thread-queries";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
+
+function isManagedThread(thread: ThreadListEntry): boolean {
+  return thread.parentThreadId !== null;
+}
 
 export function ProjectArchivedThreadsView() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -25,9 +30,8 @@ export function ProjectArchivedThreadsView() {
 
   const archivedThreads =
     threads
-      ?.filter(
-        (thread) => thread.archivedAt != null && thread.parentThreadId == null,
-      )
+      // Keep optimistic unarchive updates hidden while the archived list refetches.
+      ?.filter((thread) => thread.archivedAt != null)
       .sort((a, b) => (b.archivedAt ?? 0) - (a.archivedAt ?? 0)) ?? [];
 
   return (
@@ -50,9 +54,18 @@ export function ProjectArchivedThreadsView() {
               >
                 <Link
                   to={`/projects/${projectId}/threads/${thread.id}`}
-                  className="min-w-0 flex-1 truncate"
+                  className="min-w-0 flex-1"
                 >
-                  {getThreadDisplayTitle(thread)}
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate">
+                      {getThreadDisplayTitle(thread)}
+                    </span>
+                    {isManagedThread(thread) ? (
+                      <Pill variant="secondary" className="shrink-0">
+                        managed
+                      </Pill>
+                    ) : null}
+                  </span>
                 </Link>
                 <ArchiveTimestampAction
                   isPending={

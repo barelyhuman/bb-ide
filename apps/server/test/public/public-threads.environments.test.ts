@@ -4,6 +4,7 @@ import {
 } from "./public-thread-test-harness.js";
 
 import {
+  archiveThread,
   createPendingInteraction,
   getEnvironment,
   getThread,
@@ -74,6 +75,72 @@ describe("public thread environment routes", () => {
             hasPendingInteraction: true,
           }),
         ]),
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("includes archived managed child threads in archived thread lists", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-list-archived-managed",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-list-archived-managed/environment",
+        projectId: project.id,
+      });
+      const managerThread = seedThread(harness.deps, {
+        environmentId: environment.id,
+        projectId: project.id,
+        title: "Manager thread",
+        type: "manager",
+      });
+      const managedThread = seedThread(harness.deps, {
+        environmentId: environment.id,
+        parentThreadId: managerThread.id,
+        projectId: project.id,
+        title: "Managed archived thread",
+      });
+      const rootThread = seedThread(harness.deps, {
+        environmentId: environment.id,
+        projectId: project.id,
+        title: "Root archived thread",
+      });
+      const liveManagedThread = seedThread(harness.deps, {
+        environmentId: environment.id,
+        parentThreadId: managerThread.id,
+        projectId: project.id,
+        title: "Live managed thread",
+      });
+
+      archiveThread(harness.db, harness.deps.hub, managedThread.id);
+      archiveThread(harness.db, harness.deps.hub, rootThread.id);
+
+      const response = await harness.app.request(
+        `/api/v1/threads?projectId=${project.id}&archived=true`,
+      );
+
+      expect(response.status).toBe(200);
+      const body = threadListResponseSchema.parse(await readJson(response));
+      expect(body).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: managedThread.id,
+            parentThreadId: managerThread.id,
+          }),
+          expect.objectContaining({
+            id: rootThread.id,
+            parentThreadId: null,
+          }),
+        ]),
+      );
+      expect(body.map((thread) => thread.id)).not.toContain(
+        liveManagedThread.id,
       );
     } finally {
       await harness.cleanup();
