@@ -6,14 +6,10 @@ import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { Provider as JotaiProvider } from "jotai";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { createAppQueryClient } from "@/lib/query-client";
 import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider";
 import { ThreadRow } from "./ThreadRow";
-
-vi.mock("sonner", () => ({
-  toast: { error: vi.fn(), success: vi.fn() },
-}));
 
 function createThread(
   overrides: Partial<ThreadListEntry> = {},
@@ -86,7 +82,6 @@ function renderThreadRow(
 
 afterEach(() => {
   cleanup();
-  vi.clearAllMocks();
 });
 
 describe("ThreadRow", () => {

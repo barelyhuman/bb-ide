@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { ThreadListEntry } from "@bb/domain";
-import { Pill } from "@bb/ui-core";
+import { Pill, SidebarStickyTier } from "@bb/ui-core";
 import {
   ChevronDown,
   ChevronRight,
@@ -200,20 +200,22 @@ export function ThreadRow({
   const environmentIconLabel = getEnvironmentWorkspaceDisplayIconLabel(
     thread.environmentWorkspaceDisplayKind,
   );
-
-  return (
-    <div
-      className={cn(
-        "group/thread-row relative flex w-full items-center gap-2 rounded-md pr-0 text-sm transition-colors",
-        isManagedChild
-          ? COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS
-          : COARSE_POINTER_ROW_HEIGHT_CLASS,
-        isManagedChild ? "pl-6 text-sidebar-foreground/60" : "pl-2",
-        isActive
-          ? "bg-sidebar-border/80 text-sidebar-foreground"
-          : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-      )}
-    >
+  const rowClassName = cn(
+    "group/thread-row flex w-full items-center gap-2 rounded-md pr-0 text-sm transition-colors",
+    !isManager && "relative",
+    isManager
+      ? undefined
+      : isManagedChild
+        ? COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS
+        : COARSE_POINTER_ROW_HEIGHT_CLASS,
+    isManagedChild ? "pl-6 text-sidebar-foreground/60" : "pl-2",
+    isActive
+      ? "bg-sidebar-border/80 text-sidebar-foreground"
+      : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+  );
+  const showManagerFade = hasManagedChildren && !isManagerCollapsed;
+  const rowContent = (
+    <>
       <NavLink
         to={`/projects/${projectId}/threads/${thread.id}`}
         onClick={onProjectSelect}
@@ -320,6 +322,20 @@ export function ThreadRow({
           </div>
         </span>
       </span>
-    </div>
+    </>
   );
+
+  if (isManager) {
+    return (
+      <SidebarStickyTier
+        tier="manager"
+        showBelowFade={showManagerFade}
+        className={rowClassName}
+      >
+        {rowContent}
+      </SidebarStickyTier>
+    );
+  }
+
+  return <div className={rowClassName}>{rowContent}</div>;
 }

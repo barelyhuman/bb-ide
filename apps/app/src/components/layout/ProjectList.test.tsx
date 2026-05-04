@@ -1,13 +1,7 @@
 // @vitest-environment jsdom
 
 import { Suspense, type ReactNode } from "react";
-import {
-  act,
-  cleanup,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { BrowserRouter } from "react-router-dom";
 import type { QueryClient } from "@tanstack/react-query";
 import type { ProjectResponse } from "@bb/server-contract";
@@ -102,6 +96,49 @@ afterEach(() => {
 });
 
 describe("ProjectList", () => {
+  it("renders the sticky project heading with a sidebar overflow fade", async () => {
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/projects",
+        handler: () => jsonResponse([]),
+      },
+      {
+        pathname: "/api/v1/system/config",
+        handler: () =>
+          jsonResponse({
+            githubConnected: false,
+            hostDaemonPort: null,
+            sandboxHostSupported: false,
+            voiceTranscriptionEnabled: false,
+          }),
+      },
+      {
+        pathname: "/api/v1/hosts",
+        handler: () => jsonResponse([]),
+      },
+    ]);
+
+    await renderProjectList();
+
+    const projectHeading = screen.getByText("Projects");
+    const projectGroup = projectHeading.parentElement;
+
+    expect(projectHeading.getAttribute("data-sidebar-sticky-tier")).toBe(
+      "label",
+    );
+    expect(
+      projectGroup?.hasAttribute("data-sidebar-sticky-stack") ?? false,
+    ).toBe(true);
+
+    const fade = projectHeading.querySelector("[data-overflow-fade]");
+    expect(fade?.getAttribute("data-overflow-fade")).toBe("below");
+    expect(fade?.getAttribute("data-overflow-fade-tone")).toBe("sidebar");
+
+    // JSDOM does not simulate sticky scroll attachment; this test covers the
+    // sticky tier DOM contract, while browser verification should confirm the
+    // heading remains fixed as sidebar content scrolls underneath the fade.
+  });
+
   it("keeps showing project skeletons when the project request fails before the websocket connects", async () => {
     const fetchMock = installFetchRoutes([
       {

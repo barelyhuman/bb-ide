@@ -3,13 +3,12 @@ import type { ThreadListEntry } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import { AlertTriangle, ChevronRight, Folder, FolderOpen } from "lucide-react";
 import { NavLink } from "react-router-dom";
-import { EmptyState } from "@bb/ui-core";
+import { EmptyState, SidebarStickyTier } from "@bb/ui-core";
 import { ProjectActionsMenu } from "@/components/project/ProjectActionsMenu";
 import { SidebarMenuItem, SidebarMenuSkeleton } from "@bb/ui-core";
 import {
   COARSE_POINTER_ICON_SIZE_CLASS,
   COARSE_POINTER_PROJECT_ROW_ACTION_SIZE_CLASS,
-  COARSE_POINTER_ROW_HEIGHT_CLASS,
   COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
 } from "@bb/ui-core";
 import { isBusyThread } from "@/lib/thread-activity";
@@ -120,13 +119,17 @@ export function ProjectRow({
     thread.environmentHostId === localHostId &&
     thread.environmentBranchName === promotedBranchName &&
     thread.environmentWorkspaceDisplayKind !== "other";
+  const hasVisibleProjectBody =
+    !isCollapsed &&
+    (threadListState.status === "loading" || projectThreads.length > 0);
 
   return (
-    <SidebarMenuItem className="space-y-0.5">
-      <div
+    <SidebarMenuItem data-sidebar-sticky-project-item="">
+      <SidebarStickyTier
+        tier="project"
+        showBelowFade={hasVisibleProjectBody}
         className={cn(
-          "group/project-row relative flex w-full items-center rounded-md text-sm transition-colors",
-          COARSE_POINTER_ROW_HEIGHT_CLASS,
+          "group/project-row flex w-full items-center rounded-md text-sm transition-colors",
           isActive
             ? "bg-sidebar-border/80 text-sidebar-foreground"
             : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
@@ -212,7 +215,7 @@ export function ProjectRow({
             COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
           )}
         />
-      </div>
+      </SidebarStickyTier>
 
       {!isCollapsed ? (
         threadListState.status === "loading" ? (

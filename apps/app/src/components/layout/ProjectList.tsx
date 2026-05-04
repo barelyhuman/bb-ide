@@ -28,12 +28,12 @@ import * as api from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@bb/ui-core";
 import {
-  SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuSkeleton,
+  SidebarStickyStack,
+  SidebarStickyTier,
 } from "@bb/ui-core";
 import {
   COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS,
@@ -294,8 +294,12 @@ export function ProjectList({
   );
 
   return (
-    <SidebarGroup>
-      <SidebarGroupLabel className="mb-1 flex items-center justify-between pr-1">
+    <SidebarStickyStack>
+      <SidebarStickyTier
+        tier="label"
+        showBelowFade
+        className="justify-between pr-1"
+      >
         Projects
         {onNewProject ? (
           <button
@@ -312,7 +316,7 @@ export function ProjectList({
             <Plus className={COARSE_POINTER_ICON_SIZE_CLASS} />
           </button>
         ) : null}
-      </SidebarGroupLabel>
+      </SidebarStickyTier>
       <SidebarGroupContent>
         <SidebarMenu className="gap-2">
           {projectsState.status === "loading" ? (
@@ -376,6 +380,6 @@ export function ProjectList({
           )}
         </SidebarMenu>
       </SidebarGroupContent>
-    </SidebarGroup>
+    </SidebarStickyStack>
   );
 }

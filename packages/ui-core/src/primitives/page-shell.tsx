@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { BottomAnchoredScrollBody } from "./bottom-anchored-scroll-body.js";
 import { cn } from "./cn.js";
+import { OverflowFade } from "./overflow-fade.js";
 
 export type PageShellScrollBehavior = "bottom-anchor" | "static";
 
@@ -34,10 +35,7 @@ function renderStaticFooter(
   if (!footer) return null;
   return (
     <div className="relative shrink-0">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-b from-transparent to-background"
-      />
+      <OverflowFade placement="above" tone="background" />
       <div
         className={cn(
           "mx-auto w-full bg-background px-4 pb-4",

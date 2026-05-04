@@ -54,7 +54,7 @@ export function AppSidebar({ onResizeMouseDown, isResizing }: AppSidebarProps) {
             isCreatingProject={quickCreateProject.isCreating}
           />
         </SidebarContent>
-        <SidebarFooter>
+        <SidebarFooter overflowFadePlacement="above">
           <SidebarMenu className="flex-row items-center">
             <SidebarMenuItem>
               <SidebarMenuButton

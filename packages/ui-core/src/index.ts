@@ -90,7 +90,10 @@ export {
   SidebarProvider,
   SidebarRail,
   SidebarSeparator,
+  SidebarStickyStack,
+  SidebarStickyTier,
   SidebarTrigger,
+  type SidebarStickyTierKind,
   useSidebar,
 } from "./primitives/ui/sidebar.js";
 export {
@@ -194,6 +197,12 @@ export {
   type WrappedImageIndexInput,
 } from "./primitives/image-lightbox.js";
 export { PageShell, type PageShellProps } from "./primitives/page-shell.js";
+export {
+  OverflowFade,
+  type OverflowFadePlacement,
+  type OverflowFadeProps,
+  type OverflowFadeTone,
+} from "./primitives/overflow-fade.js";
 export {
   ScrollToBottomButton,
   type ScrollToBottomButtonProps,

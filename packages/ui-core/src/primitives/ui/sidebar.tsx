@@ -8,6 +8,7 @@ import {
 
 import { useIsMobile } from "../hooks/use-mobile.js";
 import { cn } from "../cn.js";
+import { OverflowFade, type OverflowFadePlacement } from "../overflow-fade.js";
 import { Button } from "./button.js";
 import { COARSE_POINTER_HEADER_ICON_BUTTON_CLASS } from "./coarse-pointer-sizing.js";
 import { Input } from "./input.js";
@@ -24,6 +25,11 @@ const SIDEBAR_WIDTH = "16rem";
 const SIDEBAR_WIDTH_MOBILE = "min(90vw, 320px)";
 const SIDEBAR_WIDTH_ICON = "3rem";
 const SIDEBAR_KEYBOARD_SHORTCUT = "b";
+const SIDEBAR_GROUP_LABEL_BASE_CLASS =
+  "duration-200 flex shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-[margin,opa] ease-linear focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0";
+const SIDEBAR_GROUP_LABEL_COLLAPSED_CLASS =
+  "group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0";
+const SIDEBAR_GROUP_LABEL_HEIGHT_CLASS = "h-8";
 
 type SidebarContext = {
   state: "expanded" | "collapsed";
@@ -386,19 +392,32 @@ const SidebarHeader = React.forwardRef<
 });
 SidebarHeader.displayName = "SidebarHeader";
 
-const SidebarFooter = React.forwardRef<
-  HTMLDivElement,
-  React.ComponentProps<"div">
->(({ className, ...props }, ref) => {
-  return (
-    <div
-      ref={ref}
-      data-sidebar="footer"
-      className={cn("flex flex-col gap-2 p-2", className)}
-      {...props}
-    />
-  );
-});
+interface SidebarFooterProps extends React.ComponentProps<"div"> {
+  /** Omit to render a plain footer with no anchored overflow fade. */
+  overflowFadePlacement?: OverflowFadePlacement;
+}
+
+const SidebarFooter = React.forwardRef<HTMLDivElement, SidebarFooterProps>(
+  ({ children, className, overflowFadePlacement, ...props }, ref) => {
+    return (
+      <div
+        ref={ref}
+        data-sidebar="footer"
+        className={cn(
+          "flex flex-col gap-2 p-2",
+          overflowFadePlacement && "relative bg-sidebar",
+          className,
+        )}
+        {...props}
+      >
+        {overflowFadePlacement ? (
+          <OverflowFade placement={overflowFadePlacement} tone="sidebar" />
+        ) : null}
+        {children}
+      </div>
+    );
+  },
+);
 SidebarFooter.displayName = "SidebarFooter";
 
 const SidebarSeparator = React.forwardRef<
@@ -460,8 +479,9 @@ const SidebarGroupLabel = React.forwardRef<
       ref={ref}
       data-sidebar="group-label"
       className={cn(
-        "duration-200 flex h-8 shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-[margin,opa] ease-linear focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0",
-        "group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0",
+        SIDEBAR_GROUP_LABEL_BASE_CLASS,
+        SIDEBAR_GROUP_LABEL_HEIGHT_CLASS,
+        SIDEBAR_GROUP_LABEL_COLLAPSED_CLASS,
         className,
       )}
       {...props}
@@ -469,6 +489,54 @@ const SidebarGroupLabel = React.forwardRef<
   );
 });
 SidebarGroupLabel.displayName = "SidebarGroupLabel";
+
+export type SidebarStickyTierKind = "label" | "project" | "manager";
+
+type SidebarStickyStackProps = React.ComponentProps<"div">;
+
+interface SidebarStickyTierProps extends React.ComponentProps<"div"> {
+  showBelowFade: boolean;
+  tier: SidebarStickyTierKind;
+}
+
+const SidebarStickyStack = React.forwardRef<
+  HTMLDivElement,
+  SidebarStickyStackProps
+>(({ className, ...props }, ref) => {
+  return (
+    <div
+      ref={ref}
+      data-sidebar="group"
+      data-sidebar-sticky-stack=""
+      className={cn("relative flex w-full min-w-0 flex-col", className)}
+      {...props}
+    />
+  );
+});
+SidebarStickyStack.displayName = "SidebarStickyStack";
+
+const SidebarStickyTier = React.forwardRef<
+  HTMLDivElement,
+  SidebarStickyTierProps
+>(({ children, className, showBelowFade, tier, ...props }, ref) => {
+  return (
+    <div
+      ref={ref}
+      {...props}
+      data-sidebar={tier === "label" ? "group-label" : undefined}
+      data-sidebar-sticky-tier={tier}
+      className={cn(
+        tier === "label" && SIDEBAR_GROUP_LABEL_BASE_CLASS,
+        tier === "label" && SIDEBAR_GROUP_LABEL_COLLAPSED_CLASS,
+        className,
+      )}
+    >
+      {showBelowFade ? <OverflowFade placement="below" tone="sidebar" /> : null}
+      {children}
+    </div>
+  );
+});
+SidebarStickyTier.displayName = "SidebarStickyTier";
 
 const SidebarGroupAction = React.forwardRef<
   HTMLButtonElement,
@@ -771,6 +839,8 @@ export {
   SidebarProvider,
   SidebarRail,
   SidebarSeparator,
+  SidebarStickyStack,
+  SidebarStickyTier,
   SidebarTrigger,
   useSidebar,
 };
