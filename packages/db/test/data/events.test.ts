@@ -1355,6 +1355,274 @@ describe("events", () => {
     ).toEqual([1, 3, 4, 5]);
   });
 
+  it("prunes resolved command output deltas but preserves the first delta row", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        scope: turnScope("turn-1"),
+        type: "item/commandExecution/outputDelta",
+        itemId: "cmd-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "cmd-1", delta: "Hel" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        scope: turnScope("turn-1"),
+        type: "item/commandExecution/outputDelta",
+        itemId: "cmd-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "cmd-1", delta: "lo" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 3,
+        scope: turnScope("turn-1"),
+        type: "item/completed",
+        itemId: "cmd-1",
+        itemKind: "commandExecution",
+        data: JSON.stringify({
+          item: {
+            id: "cmd-1",
+            type: "commandExecution",
+            command: "printf hello",
+            cwd: "/workspace",
+            status: "completed",
+            approvalStatus: null,
+            aggregatedOutput: "Hello",
+            exitCode: 0,
+          },
+        }),
+      },
+    ]);
+
+    const removed = pruneResolvedItemDeltas(db, {
+      threadId: thread.id,
+    });
+
+    expect(removed).toBe(1);
+    expect(
+      listEvents(db, { threadId: thread.id }).map((event) => event.sequence),
+    ).toEqual([1, 3]);
+  });
+
+  it("keeps command output deltas when completion has no aggregated output", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        scope: turnScope("turn-1"),
+        type: "item/commandExecution/outputDelta",
+        itemId: "cmd-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "cmd-1", delta: "Hel" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        scope: turnScope("turn-1"),
+        type: "item/commandExecution/outputDelta",
+        itemId: "cmd-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "cmd-1", delta: "lo" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 3,
+        scope: turnScope("turn-1"),
+        type: "item/completed",
+        itemId: "cmd-1",
+        itemKind: "commandExecution",
+        data: JSON.stringify({
+          item: {
+            id: "cmd-1",
+            type: "commandExecution",
+            command: "printf hello",
+            cwd: "/workspace",
+            status: "completed",
+            approvalStatus: null,
+            exitCode: 0,
+          },
+        }),
+      },
+    ]);
+
+    const removed = pruneResolvedItemDeltas(db, {
+      threadId: thread.id,
+    });
+
+    expect(removed).toBe(0);
+    expect(
+      listEvents(db, { threadId: thread.id }).map((event) => event.sequence),
+    ).toEqual([1, 2, 3]);
+  });
+
+  it("does not prune later-turn command deltas when the same item id is reused", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        scope: turnScope("turn-1"),
+        type: "item/commandExecution/outputDelta",
+        itemId: "cmd-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "cmd-1", delta: "Hel" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        scope: turnScope("turn-1"),
+        type: "item/commandExecution/outputDelta",
+        itemId: "cmd-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "cmd-1", delta: "lo" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 3,
+        scope: turnScope("turn-1"),
+        type: "item/completed",
+        itemId: "cmd-1",
+        itemKind: "commandExecution",
+        data: JSON.stringify({
+          item: {
+            id: "cmd-1",
+            type: "commandExecution",
+            command: "printf hello",
+            cwd: "/workspace",
+            status: "completed",
+            approvalStatus: null,
+            aggregatedOutput: "Hello",
+            exitCode: 0,
+          },
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 4,
+        scope: turnScope("turn-2"),
+        type: "item/commandExecution/outputDelta",
+        itemId: "cmd-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "cmd-1", delta: "New " }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 5,
+        scope: turnScope("turn-2"),
+        type: "item/commandExecution/outputDelta",
+        itemId: "cmd-1",
+        itemKind: null,
+        data: JSON.stringify({ itemId: "cmd-1", delta: "output" }),
+      },
+    ]);
+
+    const removed = pruneResolvedItemDeltas(db, {
+      threadId: thread.id,
+    });
+
+    expect(removed).toBe(1);
+    expect(
+      listEvents(db, { threadId: thread.id }).map((event) => event.sequence),
+    ).toEqual([1, 3, 4, 5]);
+  });
+
+  it("does not prune same-turn command deltas for a different parent tool call", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        scope: turnScope("turn-1"),
+        type: "item/commandExecution/outputDelta",
+        itemId: "cmd-1",
+        itemKind: null,
+        data: JSON.stringify({
+          itemId: "cmd-1",
+          parentToolCallId: "tool-1",
+          delta: "Hel",
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        scope: turnScope("turn-1"),
+        type: "item/commandExecution/outputDelta",
+        itemId: "cmd-1",
+        itemKind: null,
+        data: JSON.stringify({
+          itemId: "cmd-1",
+          parentToolCallId: "tool-1",
+          delta: "lo",
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 3,
+        scope: turnScope("turn-1"),
+        type: "item/completed",
+        itemId: "cmd-1",
+        itemKind: "commandExecution",
+        data: JSON.stringify({
+          item: {
+            id: "cmd-1",
+            type: "commandExecution",
+            command: "printf hello",
+            cwd: "/workspace",
+            status: "completed",
+            approvalStatus: null,
+            aggregatedOutput: "Hello",
+            exitCode: 0,
+            parentToolCallId: "tool-1",
+          },
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 4,
+        scope: turnScope("turn-1"),
+        type: "item/commandExecution/outputDelta",
+        itemId: "cmd-1",
+        itemKind: null,
+        data: JSON.stringify({
+          itemId: "cmd-1",
+          parentToolCallId: "tool-2",
+          delta: "New ",
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 5,
+        scope: turnScope("turn-1"),
+        type: "item/commandExecution/outputDelta",
+        itemId: "cmd-1",
+        itemKind: null,
+        data: JSON.stringify({
+          itemId: "cmd-1",
+          parentToolCallId: "tool-2",
+          delta: "output",
+        }),
+      },
+    ]);
+
+    const removed = pruneResolvedItemDeltas(db, {
+      threadId: thread.id,
+    });
+
+    expect(removed).toBe(1);
+    expect(
+      listEvents(db, { threadId: thread.id }).map((event) => event.sequence),
+    ).toEqual([1, 3, 4, 5]);
+  });
+
   it("prunes resolved reasoning deltas but preserves the first delta row per stream type", () => {
     const { db, thread } = setup();
 

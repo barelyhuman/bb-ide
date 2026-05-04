@@ -960,13 +960,41 @@ export function pruneResolvedItemDeltas(
   db: DbConnection,
   args: PruneResolvedItemDeltasArgs,
 ): number {
+  type PrunableResolvedDeltaEventType = Extract<
+    ThreadEventType,
+    | "item/agentMessage/delta"
+    | "item/commandExecution/outputDelta"
+    | "item/reasoning/summaryTextDelta"
+    | "item/reasoning/textDelta"
+  >;
+  type PrunableResolvedDeltaCompletionItemKind = Extract<
+    ThreadEventItemType,
+    "agentMessage" | "commandExecution" | "reasoning"
+  >;
+
+  // File-change output deltas and plan deltas are intentionally excluded here:
+  // their completed events do not carry a replayable aggregate for the streamed
+  // text. Once a completed command row has aggregatedOutput, all matching
+  // command output deltas are redundant regardless of reset markers.
+  const prunableDeltaMatches = {
+    "item/agentMessage/delta": "agentMessage",
+    "item/commandExecution/outputDelta": "commandExecution",
+    "item/reasoning/summaryTextDelta": "reasoning",
+    "item/reasoning/textDelta": "reasoning",
+  } satisfies Record<
+    PrunableResolvedDeltaEventType,
+    PrunableResolvedDeltaCompletionItemKind
+  >;
+  const itemCompletedType = "item/completed" satisfies ThreadEventType;
+
   const result = db.run(
     sql`DELETE FROM events
         WHERE ${events.threadId} = ${args.threadId}
           AND ${events.type} IN (
-            'item/agentMessage/delta',
-            'item/reasoning/summaryTextDelta',
-            'item/reasoning/textDelta'
+            ${"item/agentMessage/delta" satisfies PrunableResolvedDeltaEventType},
+            ${"item/commandExecution/outputDelta" satisfies PrunableResolvedDeltaEventType},
+            ${"item/reasoning/summaryTextDelta" satisfies PrunableResolvedDeltaEventType},
+            ${"item/reasoning/textDelta" satisfies PrunableResolvedDeltaEventType}
           )
           AND ${events.itemId} IS NOT NULL
           AND ${events.turnId} IS NOT NULL
@@ -975,12 +1003,22 @@ export function pruneResolvedItemDeltas(
             FROM events completed
             WHERE completed.thread_id = ${events.threadId}
               AND completed.turn_id = ${events.turnId}
-              AND completed.type = 'item/completed'
+              AND completed.type = ${itemCompletedType}
               AND completed.item_kind = CASE
-                WHEN ${events.type} = 'item/agentMessage/delta' THEN 'agentMessage'
-                ELSE 'reasoning'
+                WHEN ${events.type} = ${"item/agentMessage/delta" satisfies PrunableResolvedDeltaEventType}
+                  THEN ${prunableDeltaMatches["item/agentMessage/delta"]}
+                WHEN ${events.type} = ${"item/commandExecution/outputDelta" satisfies PrunableResolvedDeltaEventType}
+                  THEN ${prunableDeltaMatches["item/commandExecution/outputDelta"]}
+                WHEN ${events.type} = ${"item/reasoning/summaryTextDelta" satisfies PrunableResolvedDeltaEventType}
+                  THEN ${prunableDeltaMatches["item/reasoning/summaryTextDelta"]}
+                WHEN ${events.type} = ${"item/reasoning/textDelta" satisfies PrunableResolvedDeltaEventType}
+                  THEN ${prunableDeltaMatches["item/reasoning/textDelta"]}
               END
               AND completed.item_id = ${events.itemId}
+              AND (
+                ${events.type} <> ${"item/commandExecution/outputDelta" satisfies PrunableResolvedDeltaEventType}
+                OR json_type(completed.data, '$.item.aggregatedOutput') IS NOT NULL
+              )
               AND COALESCE(json_extract(completed.data, '$.item.parentToolCallId'), '') =
                 COALESCE(json_extract(${events.data}, '$.parentToolCallId'), '')
           )
