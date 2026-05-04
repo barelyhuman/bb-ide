@@ -1,9 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  type PromptHistoryEntry,
   type ThreadWithRuntime,
   type ThreadQueuedMessage,
 } from "@bb/domain";
 import type {
+  PromptHistoryResponse,
   CreateDraftRequest,
   SendDraftResponse,
   TimelineConversationAttachments,
@@ -11,6 +13,7 @@ import type {
 } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import type { AppCreateThreadRequest } from "@/lib/api";
+import { prependPromptHistoryEntry } from "@/lib/prompt-history";
 import { wsManager } from "@/lib/ws";
 import { collectPromptAttachments } from "@/lib/prompt-attachments";
 import type { SendThreadMessageMutationRequest } from "./mutation-request-types";
@@ -21,11 +24,14 @@ import {
   updateCachedThread,
 } from "../queries/query-cache";
 import {
+  projectPromptHistoryQueryKey,
   threadQueryKey,
+  threadPromptHistoryQueryKey,
   threadsQueryKey,
   threadTimelineQueryKeyPrefix,
 } from "../queries/query-keys";
 import {
+  invalidateProjectPromptHistoryQueries,
   refetchThreadListsAfterComposerThreadCreate,
   invalidateThreadDraftSendQueries,
   invalidateThreadAcceptedMessageQueries,
@@ -48,6 +54,49 @@ interface DeleteThreadDraftMutationRequest {
   queuedMessageId: string;
 }
 
+function buildAcceptedPromptHistoryEntry(args: {
+  createdAt: number;
+  input: PromptHistoryEntry["input"];
+}): PromptHistoryEntry {
+  return {
+    id: `optimistic-prompt-history:${crypto.randomUUID()}`,
+    createdAt: args.createdAt,
+    input: args.input,
+  };
+}
+
+function buildQueuedPromptHistoryEntry(
+  queuedMessage: ThreadQueuedMessage,
+): PromptHistoryEntry {
+  return {
+    id: `draft:${queuedMessage.id}`,
+    createdAt: queuedMessage.createdAt,
+    input: queuedMessage.content,
+  };
+}
+
+function prependProjectPromptHistory(
+  queryClient: ReturnType<typeof useQueryClient>,
+  projectId: string,
+  entry: PromptHistoryEntry,
+): void {
+  queryClient.setQueryData<PromptHistoryResponse>(
+    projectPromptHistoryQueryKey(projectId),
+    (currentEntries) => prependPromptHistoryEntry(currentEntries, entry),
+  );
+}
+
+function prependThreadPromptHistory(
+  queryClient: ReturnType<typeof useQueryClient>,
+  threadId: string,
+  entry: PromptHistoryEntry,
+): void {
+  queryClient.setQueryData<PromptHistoryResponse>(
+    threadPromptHistoryQueryKey(threadId),
+    (currentEntries) => prependPromptHistoryEntry(currentEntries, entry),
+  );
+}
+
 export function useCreateThread() {
   const queryClient = useQueryClient();
 
@@ -59,12 +108,24 @@ export function useCreateThread() {
     onMutate: async () => {
       await queryClient.cancelQueries({ queryKey: threadsQueryKey() });
     },
-    onSuccess: (thread) => {
+    onSuccess: (thread, variables) => {
       queryClient.setQueryData<ThreadWithRuntime>(
         threadQueryKey(thread.id),
         thread,
       );
       optimisticallyInsertThread(queryClient, thread);
+      prependProjectPromptHistory(
+        queryClient,
+        variables.projectId,
+        buildAcceptedPromptHistoryEntry({
+          createdAt: thread.createdAt,
+          input: variables.input,
+        }),
+      );
+      invalidateProjectPromptHistoryQueries({
+        queryClient,
+        projectId: variables.projectId,
+      });
       refetchThreadListsAfterComposerThreadCreate({ queryClient });
     },
   });
@@ -198,6 +259,7 @@ export function useSendThreadMessage() {
 
       return {
         previousThread,
+        optimisticCreatedAt,
         optimisticRowId: optimisticRow.id,
       };
     },
@@ -218,7 +280,15 @@ export function useSendThreadMessage() {
         context.previousThread,
       );
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (_data, variables, context) => {
+      prependThreadPromptHistory(
+        queryClient,
+        variables.id,
+        buildAcceptedPromptHistoryEntry({
+          createdAt: context?.optimisticCreatedAt ?? Date.now(),
+          input: variables.input,
+        }),
+      );
       const invalidateAcceptedMessageQueries =
         wsManager.getConnectionState() === "connected"
           ? invalidateThreadAcceptedMessageQueries
@@ -255,7 +325,12 @@ export function useCreateThreadDraft() {
         reasoningLevel,
         permissionMode,
       }),
-    onSuccess: (_queuedMessage, variables) => {
+    onSuccess: (queuedMessage, variables) => {
+      prependThreadPromptHistory(
+        queryClient,
+        variables.id,
+        buildQueuedPromptHistoryEntry(queuedMessage),
+      );
       invalidateThreadQueueQueries({ queryClient, threadId: variables.id });
     },
   });

@@ -2,11 +2,13 @@ import { useQuery } from "@tanstack/react-query";
 import type {
   ProjectResponse,
   ProjectSourceWorkspaceStatusResponse,
+  PromptHistoryResponse,
   WorkspaceFileListResponse,
 } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import {
   projectFilesQueryKey,
+  projectPromptHistoryQueryKey,
   projectsQueryKey,
   projectSourceWorkspaceStatusQueryKey,
 } from "./query-keys";
@@ -20,11 +22,38 @@ interface RequireProjectSourceWorkspaceStatusIdsArgs {
   sourceId: string | null | undefined;
 }
 
+function requireProjectId(
+  projectId: string | undefined,
+  hookName: string,
+): string {
+  if (!projectId) {
+    throw new Error(`${hookName}: projectId is required when query is enabled`);
+  }
+
+  return projectId;
+}
+
 export function useProjects() {
   return useQuery<ProjectResponse[]>({
     queryKey: projectsQueryKey(),
     queryFn: () => api.listProjects(),
     staleTime: 30_000,
+  });
+}
+
+export function useProjectPromptHistory(
+  projectId: string | undefined,
+  options?: QueryOptions,
+) {
+  return useQuery<PromptHistoryResponse>({
+    queryKey: projectPromptHistoryQueryKey(projectId),
+    queryFn: ({ signal }) =>
+      api.listProjectPromptHistory(
+        requireProjectId(projectId, "useProjectPromptHistory"),
+        signal,
+      ),
+    enabled: (options?.enabled ?? true) && Boolean(projectId),
+    staleTime: 10_000,
   });
 }
 

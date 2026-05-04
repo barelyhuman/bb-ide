@@ -9,6 +9,16 @@ export {
 export type { CreateProjectInput, UpdateProjectInput } from "./projects.js";
 
 export {
+  listStoredProjectPromptHistoryEventRows,
+  listStoredThreadPromptHistoryEventRows,
+} from "./prompt-history.js";
+export type {
+  ListStoredProjectPromptHistoryArgs,
+  ListStoredThreadPromptHistoryArgs,
+  StoredPromptHistoryEventRow,
+} from "./prompt-history.js";
+
+export {
   getProjectExecutionDefaults,
   upsertProjectExecutionDefaults,
 } from "./project-execution-defaults.js";

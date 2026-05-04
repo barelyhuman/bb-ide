@@ -6,6 +6,7 @@ import {
   activeThinkingSchema,
   pendingInteractionResolutionSchema,
   pendingInteractionSchema,
+  promptHistoryEntrySchema,
   projectSchema,
   projectSourceSchema,
   promptInputSchema,
@@ -460,6 +461,16 @@ export const projectDefaultExecutionOptionsQuerySchema = z.object({
 export type ProjectDefaultExecutionOptionsQuery = z.infer<
   typeof projectDefaultExecutionOptionsQuerySchema
 >;
+
+export const promptHistoryQuerySchema = z
+  .object({
+    limit: z.string().regex(/^\d+$/),
+  })
+  .partial();
+export type PromptHistoryQuery = z.infer<typeof promptHistoryQuerySchema>;
+
+export const promptHistoryResponseSchema = z.array(promptHistoryEntrySchema);
+export type PromptHistoryResponse = z.infer<typeof promptHistoryResponseSchema>;
 
 const mergeBaseBranchQuerySchema = z
   .string("A merge base branch is required")

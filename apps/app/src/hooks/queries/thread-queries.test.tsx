@@ -5,7 +5,10 @@ import type { PendingInteraction } from "@bb/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as api from "@/lib/api";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
-import { useThreadPendingInteractions } from "./thread-queries";
+import {
+  useThreadPendingInteractions,
+  useThreadPromptHistory,
+} from "./thread-queries";
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -13,6 +16,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
   return {
     ...actual,
     listThreadPendingInteractions: vi.fn(),
+    listThreadPromptHistory: vi.fn(),
   };
 });
 
@@ -79,5 +83,31 @@ describe("useThreadPendingInteractions", () => {
 
     expect(result.current.fetchStatus).toBe("idle");
     expect(api.listThreadPendingInteractions).not.toHaveBeenCalled();
+  });
+});
+
+describe("useThreadPromptHistory", () => {
+  it("fetches prompt history for a thread", async () => {
+    vi.mocked(api.listThreadPromptHistory).mockResolvedValue([
+      {
+        id: "event:1",
+        createdAt: 1,
+        input: [{ type: "text", text: "Continue" }],
+      },
+    ]);
+
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(() => useThreadPromptHistory("thr_1"), {
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(result.current.data?.[0]?.id).toBe("event:1");
+    });
+
+    expect(api.listThreadPromptHistory).toHaveBeenCalledWith(
+      "thr_1",
+      expect.anything(),
+    );
   });
 });

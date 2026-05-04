@@ -29,6 +29,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
     getThreadDefaultExecutionOptions: vi.fn(),
     listSystemProviders: vi.fn(),
     listThreadDrafts: vi.fn(),
+    listThreadPromptHistory: vi.fn(),
     listThreadPendingInteractions: vi.fn(),
     listThreads: vi.fn(),
     stopThread: vi.fn(),
@@ -160,6 +161,7 @@ describe("ThreadDetailPromptArea", () => {
     mockMatchMedia();
     vi.mocked(api.getThreadDefaultExecutionOptions).mockResolvedValue(null);
     vi.mocked(api.listThreadDrafts).mockResolvedValue([]);
+    vi.mocked(api.listThreadPromptHistory).mockResolvedValue([]);
     vi.mocked(api.listSystemProviders).mockResolvedValue([makeProvider()]);
     vi.mocked(api.getAvailableModels).mockResolvedValue([makeModel()]);
     vi.mocked(api.listThreads).mockResolvedValue([]);
@@ -200,6 +202,7 @@ describe("ThreadDetailPromptArea", () => {
     mockMatchMedia();
     vi.mocked(api.getThreadDefaultExecutionOptions).mockResolvedValue(null);
     vi.mocked(api.listThreadDrafts).mockResolvedValue([]);
+    vi.mocked(api.listThreadPromptHistory).mockResolvedValue([]);
     vi.mocked(api.listSystemProviders).mockResolvedValue([makeProvider()]);
     vi.mocked(api.getAvailableModels).mockResolvedValue([makeModel()]);
     vi.mocked(api.listThreads).mockResolvedValue([]);
@@ -256,6 +259,7 @@ describe("ThreadDetailPromptArea", () => {
     mockMatchMedia();
     vi.mocked(api.getThreadDefaultExecutionOptions).mockResolvedValue(null);
     vi.mocked(api.listThreadDrafts).mockResolvedValue([]);
+    vi.mocked(api.listThreadPromptHistory).mockResolvedValue([]);
     vi.mocked(api.listSystemProviders).mockResolvedValue([makeProvider()]);
     vi.mocked(api.getAvailableModels).mockResolvedValue([makeModel()]);
     vi.mocked(api.listThreads).mockResolvedValue([]);

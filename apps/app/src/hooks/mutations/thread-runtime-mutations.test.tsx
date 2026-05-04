@@ -4,22 +4,29 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ThreadWithRuntime } from "@bb/domain";
 import type {
+  PromptHistoryResponse,
   SendDraftResponse,
   ThreadTimelineResponse,
 } from "@bb/server-contract";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import * as api from "@/lib/api";
 import {
+  projectPromptHistoryQueryKey,
   projectSourceWorkspaceStatusQueryKey,
   threadQueryKey,
+  threadPromptHistoryQueryKey,
   threadTimelineQueryKey,
 } from "../queries/query-keys";
 import {
+  useCreateThread,
+  useCreateThreadDraft,
   useSendThreadDraft,
   useSendThreadMessage,
 } from "./thread-runtime-mutations";
 
 vi.mock("@/lib/api", () => ({
+  createThread: vi.fn(),
+  createThreadDraft: vi.fn(),
   sendThreadDraft: vi.fn(),
   sendThreadMessage: vi.fn(),
 }));
@@ -40,6 +47,30 @@ const queuedMessage = {
   createdAt: 1,
   updatedAt: 1,
 } satisfies SendDraftResponse["queuedMessage"];
+
+const createdThread = {
+  id: "thread-created",
+  projectId: "project-1",
+  automationId: null,
+  providerId: "codex",
+  type: "standard",
+  createdAt: 10,
+  status: "idle",
+  updatedAt: 10,
+  lastReadAt: null,
+  latestAttentionAt: 10,
+  environmentId: "env-1",
+  title: null,
+  titleFallback: null,
+  parentThreadId: null,
+  archivedAt: null,
+  stopRequestedAt: null,
+  deletedAt: null,
+  runtime: {
+    displayStatus: "idle",
+    hostReconnectGraceExpiresAt: null,
+  },
+} satisfies ThreadWithRuntime;
 
 function makeThreadWithRuntime(
   thread: Partial<ThreadWithRuntime> = {},
@@ -75,6 +106,41 @@ afterEach(() => {
 });
 
 describe("thread runtime mutations", () => {
+  it("adds project create history immediately after thread creation succeeds", async () => {
+    vi.mocked(api.createThread).mockResolvedValue(createdThread);
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(() => useCreateThread(), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        input: [{ type: "text", text: "Open a debugging thread" }],
+        projectId: "project-1",
+        providerId: "codex",
+        environment: {
+          type: "host",
+          hostId: "host-1",
+          workspace: { type: "managed-clone" },
+        },
+      });
+    });
+
+    expect(
+      queryClient.getQueryData<PromptHistoryResponse>(
+        projectPromptHistoryQueryKey("project-1"),
+      ),
+    ).toEqual([
+      {
+        id: expect.stringMatching(/^optimistic-prompt-history:/u),
+        createdAt: 10,
+        input: [{ type: "text", text: "Open a debugging thread" }],
+      },
+    ]);
+    expect(
+      queryClient.getQueryState(projectPromptHistoryQueryKey("project-1"))
+        ?.isInvalidated,
+    ).toBe(true);
+  });
+
   it("invalidates primary checkout status after sending a message", async () => {
     vi.mocked(api.sendThreadMessage).mockResolvedValue(undefined);
     const { queryClient, wrapper } = createQueryClientTestHarness();
@@ -309,5 +375,78 @@ describe("thread runtime mutations", () => {
     expect(
       queryClient.getQueryState(workspaceStatusQueryKey)?.isInvalidated,
     ).toBe(true);
+  });
+
+  it("adds thread follow-up history immediately after sending succeeds", async () => {
+    vi.mocked(api.sendThreadMessage).mockResolvedValue(undefined);
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        id: "thread-1",
+        input: [{ type: "text", text: "Continue" }],
+        mode: "auto",
+      });
+    });
+
+    expect(
+      queryClient.getQueryData<PromptHistoryResponse>(
+        threadPromptHistoryQueryKey("thread-1"),
+      ),
+    ).toEqual([
+      {
+        id: expect.stringMatching(/^optimistic-prompt-history:/u),
+        createdAt: expect.any(Number),
+        input: [{ type: "text", text: "Continue" }],
+      },
+    ]);
+  });
+
+  it("does not create thread follow-up history when sending fails", async () => {
+    vi.mocked(api.sendThreadMessage).mockRejectedValue(new Error("boom"));
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(() => useSendThreadMessage(), { wrapper });
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({
+          id: "thread-1",
+          input: [{ type: "text", text: "Continue" }],
+          mode: "auto",
+        }),
+      ).rejects.toThrow("boom");
+    });
+
+    expect(
+      queryClient.getQueryData<PromptHistoryResponse>(
+        threadPromptHistoryQueryKey("thread-1"),
+      ),
+    ).toBeUndefined();
+  });
+
+  it("adds queued follow-up history immediately after draft creation succeeds", async () => {
+    vi.mocked(api.createThreadDraft).mockResolvedValue(queuedMessage);
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(() => useCreateThreadDraft(), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        id: "thread-1",
+        input: [{ type: "text", text: "Continue" }],
+      });
+    });
+
+    expect(
+      queryClient.getQueryData<PromptHistoryResponse>(
+        threadPromptHistoryQueryKey("thread-1"),
+      ),
+    ).toEqual([
+      {
+        id: "draft:queued-1",
+        createdAt: 1,
+        input: [{ type: "text", text: "Continue" }],
+      },
+    ]);
   });
 });

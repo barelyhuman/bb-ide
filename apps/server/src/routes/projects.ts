@@ -21,6 +21,7 @@ import {
   projectAttachmentContentQuerySchema,
   projectDefaultExecutionOptionsQuerySchema,
   projectFilesQuerySchema,
+  promptHistoryQuerySchema,
   typedRoutes,
   updateProjectRequestSchema,
   updateProjectSourceRequestSchema,
@@ -42,7 +43,10 @@ import {
   requirePublicProject,
   requireReadyEnvironment,
 } from "../services/lib/entity-lookup.js";
-import type { WorkspaceProvisionType } from "@bb/domain";
+import {
+  PROMPT_HISTORY_ENTRY_LIMIT,
+  type WorkspaceProvisionType,
+} from "@bb/domain";
 import {
   ensureProjectSourceEnvironment,
   createThreadFromRequest,
@@ -55,6 +59,7 @@ import {
   requestProjectDeletion,
 } from "../services/projects/project-deletion.js";
 import { readProjectSourceWorkspaceStatus } from "../services/environments/environment-promotion.js";
+import { listProjectPromptHistory } from "../services/prompt-history.js";
 
 function buildProjectResponses(
   deps: AppDeps,
@@ -120,11 +125,7 @@ async function resolveProjectFilesWorkspace(
   if (args.environmentId !== null) {
     const environment = requireReadyEnvironment(deps.db, args.environmentId);
     if (environment.projectId !== args.projectId) {
-      throw new ApiError(
-        404,
-        "environment_not_found",
-        "Environment not found",
-      );
+      throw new ApiError(404, "environment_not_found", "Environment not found");
     }
     return {
       hostId: environment.hostId,
@@ -184,6 +185,34 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
         getProjectExecutionDefaults(deps.db, {
           projectId,
           threadType: query.threadType,
+        }),
+      );
+    },
+  );
+
+  get(
+    "/projects/:id/prompt-history",
+    promptHistoryQuerySchema,
+    (context, query) => {
+      const projectId = context.req.param("id");
+      requirePublicProject(deps.db, projectId);
+      const limit = Math.min(
+        parseOptionalInteger(query.limit, "limit") ??
+          PROMPT_HISTORY_ENTRY_LIMIT,
+        PROMPT_HISTORY_ENTRY_LIMIT,
+      );
+      if (limit <= 0) {
+        throw new ApiError(
+          400,
+          "invalid_request",
+          "limit must be a positive integer",
+        );
+      }
+
+      return context.json(
+        listProjectPromptHistory(deps, {
+          projectId,
+          limit,
         }),
       );
     },

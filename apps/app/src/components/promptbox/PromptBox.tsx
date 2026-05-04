@@ -36,7 +36,11 @@ import { useAutoGrow } from "@/hooks/useAutoGrow";
 import { useVoiceInput } from "@/hooks/useVoiceInput";
 import { transcribeVoiceInput } from "@/lib/api";
 import { createJsonLocalStorage } from "@/lib/browser-storage";
-import type { PromptDraftAttachment } from "@/lib/prompt-draft";
+import {
+  arePromptDraftStatesEqual,
+  type PromptDraftAttachment,
+  type PromptDraftState,
+} from "@/lib/prompt-draft";
 import { cn } from "@/lib/utils";
 import { PromptAttachmentPreview } from "./PromptAttachmentPreview";
 import { PromptMentionMenu } from "./PromptMentionMenu";
@@ -94,6 +98,13 @@ export interface PromptBoxZenModeConfig {
   resetOnSubmit?: boolean;
 }
 
+export interface PromptBoxHistoryConfig {
+  currentDraft: PromptDraftState;
+  entries: readonly PromptDraftState[];
+  onSelectEntry: (draft: PromptDraftState) => void;
+  resetKey?: string | number;
+}
+
 export interface PromptBoxProps {
   id?: string;
   value: string;
@@ -107,6 +118,7 @@ export interface PromptBoxProps {
   mentions?: PromptBoxMentionsConfig;
   attachments?: PromptBoxAttachmentsConfig;
   zenMode?: PromptBoxZenModeConfig;
+  history?: PromptBoxHistoryConfig;
 }
 
 interface DismissedMentionRange {
@@ -175,6 +187,7 @@ export function PromptBox({
   mentions = {},
   attachments: attachmentConfig = {},
   zenMode = {},
+  history,
 }: PromptBoxProps) {
   const {
     isSubmitting = false,
@@ -223,6 +236,13 @@ export function PromptBox({
   const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(
     null,
   );
+  const [activeHistoryIndex, setActiveHistoryIndex] = useState<number | null>(
+    null,
+  );
+  const [temporaryHistoryDraft, setTemporaryHistoryDraft] =
+    useState<PromptDraftState | null>(null);
+  const [recalledHistoryDraft, setRecalledHistoryDraft] =
+    useState<PromptDraftState | null>(null);
   const resolvedZenModeStorageKey =
     zenModeStorageKey ?? ZEN_MODE_STORAGE_KEY[zenModeLayout];
   const zenModeAtom = useMemo(
@@ -262,6 +282,51 @@ export function PromptBox({
     }
     setIsZenMode(false);
   }, [resolvedZenModeStorageKey, setIsZenMode, zenModeResetKey]);
+
+  const resetHistorySession = useCallback(() => {
+    setActiveHistoryIndex(null);
+    setTemporaryHistoryDraft(null);
+    setRecalledHistoryDraft(null);
+  }, []);
+
+  useEffect(() => {
+    if (!history) {
+      resetHistorySession();
+      return;
+    }
+    if (history.entries.length === 0) {
+      resetHistorySession();
+      return;
+    }
+    if (
+      activeHistoryIndex !== null &&
+      activeHistoryIndex >= history.entries.length
+    ) {
+      resetHistorySession();
+    }
+  }, [activeHistoryIndex, history, resetHistorySession]);
+
+  useEffect(() => {
+    resetHistorySession();
+  }, [history?.resetKey, resetHistorySession]);
+
+  useEffect(() => {
+    if (!history || activeHistoryIndex === null || !recalledHistoryDraft) {
+      return;
+    }
+    const activeHistoryEntry = history.entries[activeHistoryIndex];
+    if (
+      !activeHistoryEntry ||
+      !arePromptDraftStatesEqual(activeHistoryEntry, recalledHistoryDraft)
+    ) {
+      resetHistorySession();
+      return;
+    }
+    if (arePromptDraftStatesEqual(history.currentDraft, recalledHistoryDraft)) {
+      return;
+    }
+    resetHistorySession();
+  }, [activeHistoryIndex, history, recalledHistoryDraft, resetHistorySession]);
 
   useLayoutEffect(() => {
     const fromHeight = heightAnimationFromRef.current;
@@ -560,6 +625,33 @@ export function PromptBox({
     setIsZenMode,
   ]);
 
+  const applyHistoryDraft = useCallback(
+    (draft: PromptDraftState, caret: "start" | "end") => {
+      if (!history) {
+        return;
+      }
+
+      history.onSelectEntry(draft);
+      requestAnimationFrame(() => {
+        const textarea = textareaRef.current;
+        if (!textarea) {
+          return;
+        }
+
+        textarea.focus();
+        const caretPosition = caret === "start" ? 0 : textarea.value.length;
+        textarea.setSelectionRange(caretPosition, caretPosition);
+        if (isZenMode) {
+          textarea.style.height = "100%";
+        } else {
+          resizeTextarea(textarea);
+        }
+        syncMentionState(textarea);
+      });
+    },
+    [history, isZenMode, resizeTextarea, syncMentionState],
+  );
+
   const toggleZenMode = useCallback(() => {
     const textarea = textareaRef.current;
     const formElement = formRef.current;
@@ -633,6 +725,59 @@ export function PromptBox({
         mentionKeyRef.current = "";
         setActiveMention(null);
         onMentionQueryChange?.(null);
+        return;
+      }
+    }
+
+    if (history) {
+      const selectionStart = event.currentTarget.selectionStart;
+      const selectionEnd = event.currentTarget.selectionEnd;
+      const hasCollapsedSelection =
+        selectionStart !== null &&
+        selectionEnd !== null &&
+        selectionStart === selectionEnd;
+
+      if (
+        event.key === "ArrowUp" &&
+        hasCollapsedSelection &&
+        selectionStart === 0 &&
+        history.entries.length > 0
+      ) {
+        event.preventDefault();
+        const nextHistoryIndex =
+          activeHistoryIndex === null
+            ? 0
+            : Math.min(activeHistoryIndex + 1, history.entries.length - 1);
+        if (activeHistoryIndex === null) {
+          setTemporaryHistoryDraft(history.currentDraft);
+        }
+        setActiveHistoryIndex(nextHistoryIndex);
+        const nextDraft = history.entries[nextHistoryIndex];
+        setRecalledHistoryDraft(nextDraft);
+        applyHistoryDraft(nextDraft, "start");
+        return;
+      }
+
+      if (
+        event.key === "ArrowDown" &&
+        hasCollapsedSelection &&
+        selectionStart === event.currentTarget.value.length &&
+        activeHistoryIndex !== null
+      ) {
+        event.preventDefault();
+        if (activeHistoryIndex === 0) {
+          if (temporaryHistoryDraft) {
+            applyHistoryDraft(temporaryHistoryDraft, "end");
+          }
+          resetHistorySession();
+          return;
+        }
+
+        const nextHistoryIndex = activeHistoryIndex - 1;
+        setActiveHistoryIndex(nextHistoryIndex);
+        const nextDraft = history.entries[nextHistoryIndex];
+        setRecalledHistoryDraft(nextDraft);
+        applyHistoryDraft(nextDraft, "end");
         return;
       }
     }

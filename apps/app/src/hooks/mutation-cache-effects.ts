@@ -1,11 +1,14 @@
 import {
   localPathExistenceQueryKeyPrefix,
   projectFilesQueryKeyPrefix,
+  projectPromptHistoryQueryKey,
+  projectPromptHistoryQueryKeyPrefix,
   projectsQueryKey,
   statusQueryKey,
   threadDefaultExecutionOptionsQueryKey,
   threadDraftsQueryKey,
   threadPendingInteractionsQueryKey,
+  threadPromptHistoryQueryKey,
   threadQueryKey,
   threadsQueryKey,
   threadStorageFilePreviewQueryKeyPrefix,
@@ -89,10 +92,28 @@ export function invalidateThreadListMembershipQueries({
   queryClient.invalidateQueries({ queryKey: statusQueryKey() });
 }
 
+export function invalidateProjectPromptHistoryQueries({
+  projectId,
+  queryClient,
+}: ProjectArg): void {
+  queryClient.invalidateQueries({
+    queryKey: projectPromptHistoryQueryKey(projectId),
+  });
+}
+
+export function invalidateAllProjectsPromptHistoryQueries({
+  queryClient,
+}: QueryClientArg): void {
+  queryClient.invalidateQueries({
+    queryKey: projectPromptHistoryQueryKeyPrefix(),
+  });
+}
+
 export function invalidateThreadDeleteQueries({
   queryClient,
 }: QueryClientArg): void {
   queryClient.invalidateQueries({ queryKey: projectsQueryKey() });
+  invalidateAllProjectsPromptHistoryQueries({ queryClient });
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
   queryClient.invalidateQueries({ queryKey: statusQueryKey() });
 }
@@ -109,6 +130,9 @@ export function invalidateThreadQueueQueries({
 }: ThreadArg): void {
   queryClient.invalidateQueries({ queryKey: threadQueryKey(threadId) });
   queryClient.invalidateQueries({ queryKey: threadDraftsQueryKey(threadId) });
+  queryClient.invalidateQueries({
+    queryKey: threadPromptHistoryQueryKey(threadId),
+  });
 }
 
 export function invalidateThreadDraftSendQueries({
@@ -130,6 +154,9 @@ export function invalidateThreadAcceptedMessageQueries({
 }: ThreadArg): void {
   queryClient.invalidateQueries({
     queryKey: threadDefaultExecutionOptionsQueryKey(threadId),
+  });
+  queryClient.invalidateQueries({
+    queryKey: threadPromptHistoryQueryKey(threadId),
   });
   invalidatePrimaryCheckoutWorkspaceStateQueries({ queryClient });
 }
@@ -183,6 +210,9 @@ export function removeThreadScopedQueries({
     queryKey: threadDefaultExecutionOptionsQueryKey(threadId),
   });
   queryClient.removeQueries({ queryKey: threadDraftsQueryKey(threadId) });
+  queryClient.removeQueries({
+    queryKey: threadPromptHistoryQueryKey(threadId),
+  });
   queryClient.removeQueries({ queryKey: threadStorageFilesQueryKey(threadId) });
   queryClient.removeQueries({
     queryKey: threadStorageFilePreviewQueryKeyPrefix(threadId),

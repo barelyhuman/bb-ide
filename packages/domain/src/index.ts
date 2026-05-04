@@ -32,6 +32,17 @@ export type {
 } from "./shared-types.js";
 
 export {
+  PROMPT_HISTORY_ENTRY_LIMIT,
+  promptHistoryEntrySchema,
+  arePromptHistoryInputsEqual,
+  takeVisiblePromptHistoryEntries,
+} from "./prompt-history.js";
+export type {
+  PromptHistoryEntry,
+  PromptHistoryComparableEntry,
+} from "./prompt-history.js";
+
+export {
   approvalPendingInteractionPayloadSchema,
   approvalPendingInteractionResolutionSchema,
   pendingInteractionApprovalDecisionSchema,

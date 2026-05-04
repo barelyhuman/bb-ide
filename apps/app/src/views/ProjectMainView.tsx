@@ -13,12 +13,16 @@ import { PromptOptionPicker } from "@/components/promptbox/PromptOptionPicker";
 import { PageShell } from "@bb/ui-core";
 import { useUploadPromptAttachment } from "@/hooks/mutations/project-mutations";
 import { useCreateThread } from "@/hooks/mutations/thread-runtime-mutations";
-import { useProjects } from "@/hooks/queries/project-queries";
+import {
+  useProjectPromptHistory,
+  useProjects,
+} from "@/hooks/queries/project-queries";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
 import { usePromptDraftStorage } from "@/hooks/usePromptDraftStorage";
 import { usePromptMentions } from "@/hooks/usePromptMentions";
 import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
+import { promptHistoryEntriesToDrafts } from "@/lib/prompt-history";
 import { getProjectScopedStorageKey } from "@/lib/project-scoped-storage";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import type { CreateThreadRequest } from "@bb/server-contract";
@@ -34,6 +38,8 @@ export function ProjectMainView() {
   const { localHostId } = useHostDaemon();
   const uploadPromptAttachment = useUploadPromptAttachment();
   const promptDraft = usePromptDraftStorage({ projectId, threadId: null });
+  const { data: projectPromptHistory = [] } =
+    useProjectPromptHistory(projectId);
   const promptMentions = usePromptMentions(projectId, { environmentId: null });
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const prompt = promptDraft.text;
@@ -49,6 +55,10 @@ export function ProjectMainView() {
     () =>
       getProjectScopedStorageKey(PROJECT_MAIN_ZEN_MODE_STORAGE_KEY, projectId),
     [projectId],
+  );
+  const promptHistoryDrafts = useMemo(
+    () => promptHistoryEntriesToDrafts(projectPromptHistory),
+    [projectPromptHistory],
   );
   const {
     selectedProviderId,
@@ -272,6 +282,15 @@ export function ProjectMainView() {
           value={prompt}
           onChange={promptDraft.setText}
           onSubmit={submitPrompt}
+          history={{
+            currentDraft: {
+              text: promptDraft.text,
+              attachments: promptDraft.attachments,
+            },
+            entries: promptHistoryDrafts,
+            onSelectEntry: promptDraft.setDraft,
+            resetKey: projectId,
+          }}
           submission={{
             isSubmitting: createThread.isPending,
             disabled: isSubmitDisabled,

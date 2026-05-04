@@ -73,6 +73,17 @@ export function arePromptDraftStatesEqual(
   );
 }
 
+function getFileNameFromPath(path: string): string {
+  const trimmedPath = path.trim();
+  if (trimmedPath.length === 0) {
+    return "Attachment";
+  }
+
+  const segments = trimmedPath.split("/");
+  const lastSegment = segments[segments.length - 1];
+  return lastSegment && lastSegment.length > 0 ? lastSegment : trimmedPath;
+}
+
 export function promptDraftToInput(draft: PromptDraftState): PromptInput[] {
   const input: PromptInput[] = [];
   const text = draft.text.trim();
@@ -99,4 +110,45 @@ export function promptDraftToInput(draft: PromptDraftState): PromptInput[] {
   }
 
   return input;
+}
+
+export function promptInputToDraft(
+  input: readonly PromptInput[],
+): PromptDraftState {
+  const textSegments: string[] = [];
+  const attachments: PromptDraftState["attachments"] = [];
+
+  for (const chunk of input) {
+    if (chunk.type === "text") {
+      if (chunk.text.trim().length > 0) {
+        textSegments.push(chunk.text);
+      }
+      continue;
+    }
+
+    if (chunk.type === "localImage") {
+      attachments.push({
+        type: "localImage",
+        path: chunk.path,
+        name: getFileNameFromPath(chunk.path),
+        sizeBytes: 0,
+      });
+      continue;
+    }
+
+    if (chunk.type === "localFile") {
+      attachments.push({
+        type: "localFile",
+        path: chunk.path,
+        name: chunk.name ?? getFileNameFromPath(chunk.path),
+        sizeBytes: chunk.sizeBytes ?? 0,
+        ...(chunk.mimeType ? { mimeType: chunk.mimeType } : {}),
+      });
+    }
+  }
+
+  return {
+    text: textSegments.join("\n\n"),
+    attachments,
+  };
 }

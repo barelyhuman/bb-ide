@@ -1,5 +1,6 @@
 import {
   useCallback,
+  useMemo,
   useState,
   type ComponentType,
   type ReactNode,
@@ -33,8 +34,10 @@ import {
   getLatestPendingInteraction,
   useThreadDefaultExecutionOptions,
   useThreadDrafts,
+  useThreadPromptHistory,
 } from "@/hooks/queries/thread-queries";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
+import { promptHistoryEntriesToDrafts } from "@/lib/prompt-history";
 import { promptDraftToInput } from "@/lib/prompt-draft";
 import { toast } from "sonner";
 import { ThreadFollowUpComposer } from "./ThreadFollowUpComposer";
@@ -146,6 +149,7 @@ export function ThreadDetailPromptArea({
     thread.id,
   );
   const { data: queuedMessages = [] } = useThreadDrafts(thread.id);
+  const { data: promptHistoryEntries = [] } = useThreadPromptHistory(thread.id);
   const createDraft = useCreateThreadDraft();
   const sendDraft = useSendThreadDraft();
   const deleteDraft = useDeleteThreadDraft();
@@ -165,6 +169,10 @@ export function ThreadDetailPromptArea({
   const [processingQueuedMessageId, setProcessingQueuedMessageId] = useState<
     string | null
   >(null);
+  const promptHistoryDrafts = useMemo(
+    () => promptHistoryEntriesToDrafts(promptHistoryEntries),
+    [promptHistoryEntries],
+  );
   const {
     selectedProviderId,
     providerOptions,
@@ -389,8 +397,7 @@ export function ThreadDetailPromptArea({
         })
         .then(() => {
           const restoredDraft = queuedInputToDraft(queuedMessage.content);
-          promptDraft.setText(restoredDraft.text);
-          promptDraft.setAttachments(restoredDraft.attachments);
+          promptDraft.setDraft(restoredDraft);
           setAttachmentError(null);
         })
         .catch((nextError) => {
@@ -488,6 +495,15 @@ export function ThreadDetailPromptArea({
       }}
       composer={{
         canSendFollowUp,
+        history: {
+          currentDraft: {
+            text: promptDraft.text,
+            attachments: promptDraft.attachments,
+          },
+          entries: promptHistoryDrafts,
+          onSelectEntry: promptDraft.setDraft,
+          resetKey: thread.id,
+        },
         isFollowUpSubmitting,
         message: promptDraft.text,
         onChangeMessage: promptDraft.setText,

@@ -31,7 +31,10 @@ import {
   invalidateRealtimeQueriesAfterServerReconnect,
   refetchErroredRealtimeQueriesOnInitialConnect,
 } from "./system-cache-effects";
-import { invalidateProjectListQueries } from "./mutation-cache-effects";
+import {
+  invalidateAllProjectsPromptHistoryQueries,
+  invalidateProjectListQueries,
+} from "./mutation-cache-effects";
 import { createBufferedEnvironmentInvalidator } from "./buffered-environment-invalidator";
 import * as api from "../lib/api";
 
@@ -57,6 +60,7 @@ export interface RealtimeCacheEffectsOptions {
 interface ThreadChangeFlags {
   interactionsChanged: boolean;
   listChanged: boolean;
+  projectPromptHistoryChanged: boolean;
   queueChanged: boolean;
   threadChanged: boolean;
   timelineChanged: boolean;
@@ -68,6 +72,7 @@ interface ThreadChangeState {
   globalChangeKinds: Set<ThreadChangeKind>;
   shouldInvalidateAllThreadDrafts: boolean;
   shouldInvalidateAllThreadPendingInteractions: boolean;
+  shouldInvalidateAllProjectPromptHistory: boolean;
   shouldInvalidateAllThreadTimeline: boolean;
   shouldInvalidateAllThreadsById: boolean;
   shouldInvalidateStatus: boolean;
@@ -95,6 +100,7 @@ function createThreadChangeState(): ThreadChangeState {
     globalChangeKinds: new Set<ThreadChangeKind>(),
     shouldInvalidateAllThreadDrafts: false,
     shouldInvalidateAllThreadPendingInteractions: false,
+    shouldInvalidateAllProjectPromptHistory: false,
     shouldInvalidateAllThreadTimeline: false,
     shouldInvalidateAllThreadsById: false,
     shouldInvalidateStatus: false,
@@ -107,6 +113,7 @@ function resetThreadChangeState(state: ThreadChangeState): void {
   state.globalChangeKinds.clear();
   state.shouldInvalidateAllThreadDrafts = false;
   state.shouldInvalidateAllThreadPendingInteractions = false;
+  state.shouldInvalidateAllProjectPromptHistory = false;
   state.shouldInvalidateAllThreadTimeline = false;
   state.shouldInvalidateAllThreadsById = false;
   state.shouldInvalidateStatus = false;
@@ -119,6 +126,7 @@ function getThreadChangeFlags(
   const flags: ThreadChangeFlags = {
     interactionsChanged: false,
     listChanged: false,
+    projectPromptHistoryChanged: false,
     queueChanged: false,
     threadChanged: false,
     timelineChanged: false,
@@ -126,6 +134,14 @@ function getThreadChangeFlags(
   };
 
   for (const change of changes) {
+    if (
+      change === "thread-created" ||
+      change === "thread-deleted" ||
+      change === "archived-changed"
+    ) {
+      flags.projectPromptHistoryChanged = true;
+    }
+
     switch (change) {
       case "thread-created":
       case "thread-deleted":
@@ -221,6 +237,9 @@ function flushThreadInvalidations(
   if (state.shouldInvalidateAllThreadsById) {
     queryClient.invalidateQueries({ queryKey: allThreadQueryKeyPrefix() });
   }
+  if (state.shouldInvalidateAllProjectPromptHistory) {
+    invalidateAllProjectsPromptHistoryQueries({ queryClient });
+  }
   if (state.shouldInvalidateAllThreadDrafts) {
     queryClient.invalidateQueries({
       queryKey: allThreadDraftsQueryKeyPrefix(),
@@ -302,6 +321,9 @@ function recordThreadChange(
       state.shouldInvalidateThreads = true;
       state.shouldInvalidateStatus = true;
     }
+    if (flags.projectPromptHistoryChanged) {
+      state.shouldInvalidateAllProjectPromptHistory = true;
+    }
     return;
   }
 
@@ -313,6 +335,8 @@ function recordThreadChange(
     state.shouldInvalidateThreads = true;
     state.shouldInvalidateStatus = true;
   }
+  state.shouldInvalidateAllProjectPromptHistory =
+    globalFlags.projectPromptHistoryChanged;
   state.shouldInvalidateAllThreadsById = globalFlags.threadChanged;
   state.shouldInvalidateAllThreadDrafts = globalFlags.queueChanged;
   state.shouldInvalidateAllThreadPendingInteractions =
@@ -390,6 +414,9 @@ export function createRealtimeCacheEffects({
           break;
         case "project":
           invalidateProjectListQueries({ queryClient });
+          if (message.changes.includes("threads-changed")) {
+            invalidateAllProjectsPromptHistoryQueries({ queryClient });
+          }
           break;
         case "system":
           break;

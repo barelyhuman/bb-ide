@@ -2,8 +2,9 @@ import path from "node:path";
 import { listDrafts } from "@bb/db";
 import { FILE_LIST_LIMIT_MAX } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
-import { threadEventTypeSchema } from "@bb/domain";
+import { PROMPT_HISTORY_ENTRY_LIMIT, threadEventTypeSchema } from "@bb/domain";
 import {
+  promptHistoryQuerySchema,
   threadStorageContentQuerySchema,
   threadStorageFilesQuerySchema,
   threadEventWaitQuerySchema,
@@ -38,6 +39,7 @@ import {
   listThreadEventRows,
 } from "../../services/threads/thread-data.js";
 import { getLastExecutionOptions } from "../../services/threads/thread-events.js";
+import { listThreadPromptHistory } from "../../services/prompt-history.js";
 import {
   parseInteger,
   parseOptionalInteger,
@@ -148,6 +150,34 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
       listDrafts(deps.db, threadId).map((draft) => toQueuedMessage(draft)),
     );
   });
+
+  get(
+    "/threads/:id/prompt-history",
+    promptHistoryQuerySchema,
+    (context, query) => {
+      const threadId = context.req.param("id");
+      requirePublicThread(deps.db, threadId);
+      const limit = Math.min(
+        parseOptionalInteger(query.limit, "limit") ??
+          PROMPT_HISTORY_ENTRY_LIMIT,
+        PROMPT_HISTORY_ENTRY_LIMIT,
+      );
+      if (limit <= 0) {
+        throw new ApiError(
+          400,
+          "invalid_request",
+          "limit must be a positive integer",
+        );
+      }
+
+      return context.json(
+        listThreadPromptHistory(deps, {
+          threadId,
+          limit,
+        }),
+      );
+    },
+  );
 
   get("/threads/:id/events", threadEventsQuerySchema, (context, query) => {
     requirePublicThread(deps.db, context.req.param("id"));

@@ -20,6 +20,7 @@ import {
 import {
   PromptBox,
   type PromptBoxAttachmentsConfig,
+  type PromptBoxHistoryConfig,
   type PromptBoxMentionsConfig,
 } from "@/components/promptbox/PromptBox";
 import {
@@ -208,6 +209,7 @@ export interface ComposerBannerProps {
 
 export interface ComposerCoreProps {
   canSendFollowUp: boolean;
+  history: PromptBoxHistoryConfig;
   isFollowUpSubmitting: boolean;
   message: string;
   onChangeMessage: (value: string) => void;
@@ -416,6 +418,7 @@ export function ThreadFollowUpComposer({
           value={composer.message}
           onChange={composer.onChangeMessage}
           onSubmit={composer.onSubmit}
+          history={composer.history}
           placeholder={composer.promptPlaceholder}
           autoFocus
           submission={{

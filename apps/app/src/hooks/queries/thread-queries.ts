@@ -4,6 +4,7 @@ import type {
   ResolvedThreadExecutionOptions,
 } from "@bb/domain";
 import type {
+  PromptHistoryResponse,
   ThreadDraftListResponse,
   ThreadListResponse,
   ManagerTimelineView,
@@ -26,6 +27,7 @@ import {
   threadDraftsQueryKey,
   threadListQueryKey,
   threadPendingInteractionsQueryKey,
+  threadPromptHistoryQueryKey,
   threadQueryKey,
   threadStorageFilesQueryKey,
   threadStorageFilePreviewQueryKey,
@@ -47,8 +49,7 @@ export interface UseThreadsFilters extends Omit<
   projectId?: string;
 }
 
-interface ThreadTimelineTurnSummaryDetailsMutationRequest
-  extends TimelineTurnSummaryDetailsRequest {
+interface ThreadTimelineTurnSummaryDetailsMutationRequest extends TimelineTurnSummaryDetailsRequest {
   id: string;
 }
 
@@ -114,6 +115,19 @@ export function useThreadDrafts(id: string, options?: QueryOptions) {
     queryFn: () => api.listThreadDrafts(requireThreadId(id, "useThreadDrafts")),
     enabled: (options?.enabled ?? true) && Boolean(id),
     refetchOnWindowFocus: false,
+  });
+}
+
+export function useThreadPromptHistory(id: string, options?: QueryOptions) {
+  return useQuery<PromptHistoryResponse>({
+    queryKey: threadPromptHistoryQueryKey(id),
+    queryFn: ({ signal }) =>
+      api.listThreadPromptHistory(
+        requireThreadId(id, "useThreadPromptHistory"),
+        signal,
+      ),
+    enabled: (options?.enabled ?? true) && Boolean(id),
+    staleTime: 10_000,
   });
 }
 

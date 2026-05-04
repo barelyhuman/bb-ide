@@ -1,6 +1,6 @@
 import { type PromptInput } from "@bb/domain";
 import { fileNameFromPath } from "@bb/thread-view";
-import { type PromptDraftState } from "@/lib/prompt-draft";
+import { promptInputToDraft, type PromptDraftState } from "@/lib/prompt-draft";
 
 const QUEUED_FOLLOW_UP_PREVIEW_MAX_CHARS = 220;
 
@@ -60,44 +60,5 @@ export function formatQueuedFollowUpPreview(input: PromptInput[]): string {
 }
 
 export function queuedInputToDraft(input: PromptInput[]): PromptDraftState {
-  const textSegments: string[] = [];
-  const attachments: PromptDraftState["attachments"] = [];
-
-  for (const chunk of input) {
-    if (chunk.type === "text") {
-      if (chunk.text.trim().length > 0) {
-        textSegments.push(chunk.text);
-      }
-      continue;
-    }
-
-    if (chunk.type === "localImage") {
-      attachments.push({
-        type: "localImage",
-        path: chunk.path,
-        name: getAttachmentNameFromPath(chunk.path),
-        sizeBytes: 0,
-      });
-      continue;
-    }
-
-    if (chunk.type === "localFile") {
-      attachments.push({
-        type: "localFile",
-        path: chunk.path,
-        name: chunk.name ?? getAttachmentNameFromPath(chunk.path),
-        sizeBytes: chunk.sizeBytes ?? 0,
-        ...(chunk.mimeType ? { mimeType: chunk.mimeType } : {}),
-      });
-      continue;
-    }
-
-    // Open provider/runtime input variant: URL images are intentionally ignored
-    // by the prompt draft editor because we cannot map them to local attachments.
-  }
-
-  return {
-    text: textSegments.join("\n\n"),
-    attachments,
-  };
+  return promptInputToDraft(input);
 }

@@ -4,6 +4,7 @@ import {
   isPromptDraftEmpty,
   parsePromptDraftStorage,
   promptDraftToInput,
+  promptInputToDraft,
   serializePromptDraftStorage,
 } from "./prompt-draft";
 
@@ -100,5 +101,39 @@ describe("prompt draft helpers", () => {
         mimeType: "text/markdown",
       },
     ]);
+  });
+
+  it("maps prompt input back to an editable draft", () => {
+    const draft = promptInputToDraft([
+      { type: "text", text: "Investigate" },
+      { type: "image", url: "https://example.com/image.png" },
+      { type: "localImage", path: "/tmp/screenshot.png" },
+      {
+        type: "localFile",
+        path: "/tmp/spec.md",
+        name: "spec.md",
+        sizeBytes: 42,
+        mimeType: "text/markdown",
+      },
+    ]);
+
+    expect(draft).toEqual({
+      text: "Investigate",
+      attachments: [
+        {
+          type: "localImage",
+          path: "/tmp/screenshot.png",
+          name: "screenshot.png",
+          sizeBytes: 0,
+        },
+        {
+          type: "localFile",
+          path: "/tmp/spec.md",
+          name: "spec.md",
+          sizeBytes: 42,
+          mimeType: "text/markdown",
+        },
+      ],
+    });
   });
 });

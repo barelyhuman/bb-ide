@@ -50,6 +50,8 @@ import type {
   ProjectDefaultExecutionOptionsQuery,
   ProjectAttachmentUploadForm,
   ProjectFilesQuery,
+  PromptHistoryQuery,
+  PromptHistoryResponse,
   ProjectResponse,
   ProjectSourceWorkspaceStatusResponse,
   SendDraftRequest,
@@ -133,6 +135,12 @@ export type PublicApiSchema = {
     $get: Endpoint<
       PathProjectId & { query: ProjectDefaultExecutionOptionsQuery },
       ProjectExecutionDefaults | null
+    >;
+  };
+  "/projects/:id/prompt-history": {
+    $get: Endpoint<
+      PathProjectId & { query?: PromptHistoryQuery },
+      PromptHistoryResponse
     >;
   };
   "/projects/:id/sources": {
@@ -323,6 +331,12 @@ export type PublicApiSchema = {
     $post: Endpoint<
       PathThreadAndDraft & { json: SendDraftRequest },
       SendDraftResponse
+    >;
+  };
+  "/threads/:id/prompt-history": {
+    $get: Endpoint<
+      PathId & { query?: PromptHistoryQuery },
+      PromptHistoryResponse
     >;
   };
   "/threads/:id/drafts/:draftId": {

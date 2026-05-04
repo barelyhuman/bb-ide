@@ -5,11 +5,13 @@ export const HOSTS_QUERY_KEY = "hosts";
 export const HOST_QUERY_KEY = "host";
 export const PROJECTS_QUERY_KEY = "projects";
 export const PROJECT_FILES_QUERY_KEY = "projectFiles";
+export const PROJECT_PROMPT_HISTORY_QUERY_KEY = "projectPromptHistory";
 export const THREADS_QUERY_KEY = "threads";
 export const THREAD_QUERY_KEY = "thread";
 export const THREAD_DEFAULT_EXECUTION_OPTIONS_QUERY_KEY =
   "threadDefaultExecutionOptions";
 export const THREAD_DRAFTS_QUERY_KEY = "threadDrafts";
+export const THREAD_PROMPT_HISTORY_QUERY_KEY = "threadPromptHistory";
 export const THREAD_PENDING_INTERACTIONS_QUERY_KEY =
   "threadPendingInteractions";
 export const THREAD_STORAGE_FILES_QUERY_KEY = "threadStorageFiles";
@@ -49,6 +51,13 @@ export type ProjectsQueryKey = readonly [typeof PROJECTS_QUERY_KEY];
 export type AllProjectFilesQueryKeyPrefix = readonly [
   typeof PROJECT_FILES_QUERY_KEY,
 ];
+export type ProjectPromptHistoryQueryKeyPrefix = readonly [
+  typeof PROJECT_PROMPT_HISTORY_QUERY_KEY,
+];
+export type ProjectPromptHistoryQueryKey = readonly [
+  typeof PROJECT_PROMPT_HISTORY_QUERY_KEY,
+  string | null | undefined,
+];
 export type ProjectFilesQueryKey = readonly [
   typeof PROJECT_FILES_QUERY_KEY,
   string | undefined,
@@ -87,6 +96,13 @@ export type ThreadDraftsQueryKeyPrefix = readonly [
 ];
 export type ThreadDraftsQueryKey = readonly [
   typeof THREAD_DRAFTS_QUERY_KEY,
+  string,
+];
+export type ThreadPromptHistoryQueryKeyPrefix = readonly [
+  typeof THREAD_PROMPT_HISTORY_QUERY_KEY,
+];
+export type ThreadPromptHistoryQueryKey = readonly [
+  typeof THREAD_PROMPT_HISTORY_QUERY_KEY,
   string,
 ];
 export type ThreadPendingInteractionsQueryKeyPrefix = readonly [
@@ -250,6 +266,16 @@ export function allProjectFilesQueryKeyPrefix(): AllProjectFilesQueryKeyPrefix {
   return [PROJECT_FILES_QUERY_KEY];
 }
 
+export function projectPromptHistoryQueryKey(
+  projectId: string | null | undefined,
+): ProjectPromptHistoryQueryKey {
+  return [PROJECT_PROMPT_HISTORY_QUERY_KEY, projectId];
+}
+
+export function projectPromptHistoryQueryKeyPrefix(): ProjectPromptHistoryQueryKeyPrefix {
+  return [PROJECT_PROMPT_HISTORY_QUERY_KEY];
+}
+
 export function projectFilesQueryKeyPrefix(
   projectId: string,
 ): ProjectFilesQueryKeyPrefix {
@@ -301,6 +327,16 @@ export function threadDraftsQueryKey(threadId: string): ThreadDraftsQueryKey {
 
 export function allThreadDraftsQueryKeyPrefix(): ThreadDraftsQueryKeyPrefix {
   return [THREAD_DRAFTS_QUERY_KEY];
+}
+
+export function threadPromptHistoryQueryKey(
+  threadId: string,
+): ThreadPromptHistoryQueryKey {
+  return [THREAD_PROMPT_HISTORY_QUERY_KEY, threadId];
+}
+
+export function threadPromptHistoryQueryKeyPrefix(): ThreadPromptHistoryQueryKeyPrefix {
+  return [THREAD_PROMPT_HISTORY_QUERY_KEY];
 }
 
 export function threadPendingInteractionsQueryKey(

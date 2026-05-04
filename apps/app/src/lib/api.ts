@@ -31,6 +31,7 @@ import type {
   CreateThreadRequest,
   ProjectResponse,
   ProjectSourceWorkspaceStatusResponse,
+  PromptHistoryResponse,
   SendDraftResponse,
   SendMessageRequest,
   SystemProviderInfo,
@@ -67,8 +68,7 @@ import {
 import { buildThreadStorageContentUrl } from "./file-content-urls";
 export type { FilePreview } from "./file-preview";
 
-interface GetThreadTimelineTurnSummaryDetailsArgs
-  extends TimelineTurnSummaryDetailsRequest {
+interface GetThreadTimelineTurnSummaryDetailsArgs extends TimelineTurnSummaryDetailsRequest {
   id: string;
 }
 export type AppCreateManagerThreadRequest = Omit<
@@ -331,6 +331,18 @@ export async function listProjects(): Promise<ProjectResponse[]> {
   return request<ProjectResponse[]>(apiClient.projects.$get());
 }
 
+export async function listProjectPromptHistory(
+  projectId: string,
+  signal?: AbortSignal,
+): Promise<PromptHistoryResponse> {
+  return request<PromptHistoryResponse>(
+    apiClient.projects[":id"]["prompt-history"].$get(
+      { param: { id: projectId } },
+      requestOptions(signal),
+    ),
+  );
+}
+
 export async function deleteProject(id: string): Promise<void> {
   await requestVoid(apiClient.projects[":id"].$delete({ param: { id } }));
 }
@@ -540,6 +552,18 @@ export async function listThreadDrafts(
   );
 }
 
+export async function listThreadPromptHistory(
+  id: string,
+  signal?: AbortSignal,
+): Promise<PromptHistoryResponse> {
+  return request<PromptHistoryResponse>(
+    apiClient.threads[":id"]["prompt-history"].$get(
+      { param: { id } },
+      requestOptions(signal),
+    ),
+  );
+}
+
 export async function sendThreadDraft(
   id: string,
   queuedMessageId: string,
@@ -703,9 +727,7 @@ export async function getThreadTimelineTurnSummaryDetails({
   sourceSeqStart,
   sourceSeqEnd,
   managerTimelineView,
-}: GetThreadTimelineTurnSummaryDetailsArgs): Promise<
-  TimelineTurnSummaryDetailsResponse
-> {
+}: GetThreadTimelineTurnSummaryDetailsArgs): Promise<TimelineTurnSummaryDetailsResponse> {
   return request<TimelineTurnSummaryDetailsResponse>(
     apiClient.threads[":id"].timeline["turn-summary-details"].$get({
       param: { id },

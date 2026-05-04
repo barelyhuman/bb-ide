@@ -297,6 +297,7 @@ export function usePromptDraftStorage(scope: PromptDraftScope) {
     value: draft.text,
     text: draft.text,
     attachments: draft.attachments,
+    setDraft: setDraftAndPersist,
     setValue: setText,
     setText,
     setAttachments,
