@@ -523,12 +523,23 @@ export type PublicApiSchema = {
 
 export type PublicApiRoutes = Hono<{}, PublicApiSchema, "/">;
 
-export function createPublicApiClient(baseUrl: string) {
-  return hc<PublicApiRoutes>(`${baseUrl}/api/v1`);
+/** Omit the options object to use global fetch; provide it to override fetch. */
+export interface PublicApiClientOptions {
+  fetch: typeof fetch;
 }
 
-export function createApiClient(baseUrl: string) {
-  const apiClient = createPublicApiClient(baseUrl);
+export function createPublicApiClient(
+  baseUrl: string,
+  options?: PublicApiClientOptions,
+) {
+  return hc<PublicApiRoutes>(`${baseUrl}/api/v1`, options);
+}
+
+export function createApiClient(
+  baseUrl: string,
+  options?: PublicApiClientOptions,
+) {
+  const apiClient = createPublicApiClient(baseUrl, options);
   return {
     api: {
       v1: apiClient,
