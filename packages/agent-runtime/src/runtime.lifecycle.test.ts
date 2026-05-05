@@ -112,6 +112,73 @@ rl.on("line", (line) => {
       await runtime.shutdown();
     });
 
+    it("passes Codex-shaped thread/start ids to accepted command translation", async () => {
+      const codexIdentityScriptPath = join(
+        tmpDir,
+        "codex-identity-provider.cjs",
+      );
+      writeFileSync(
+        codexIdentityScriptPath,
+        `
+const readline = require("node:readline");
+
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + "\\n");
+}
+
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.method === "initialize") {
+    send({ jsonrpc: "2.0", id: message.id, result: {} });
+    return;
+  }
+
+  if (message.method === "thread/start") {
+    send({
+      jsonrpc: "2.0",
+      id: message.id,
+      result: { thread: { id: "codex-thread-nested" } },
+    });
+  }
+});
+`,
+        "utf8",
+      );
+      const acceptedProviderThreadIds = new Array<string | undefined>();
+      const baseAdapter = createFakeAdapter(codexIdentityScriptPath);
+      const runtime = createAgentRuntimeWithAdapters({
+        workspacePath: tmpDir,
+        onEvent: () => undefined,
+        onToolCall: async () => ({
+          contentItems: [{ type: "inputText", text: "ok" }],
+          success: true,
+        }),
+        adapterFactory: () => ({
+          ...baseAdapter,
+          translateAcceptedCommand(args) {
+            acceptedProviderThreadIds.push(args.providerThreadId);
+            return baseAdapter.translateAcceptedCommand(args);
+          },
+        }),
+      });
+
+      try {
+        const { providerThreadId } = await runtime.startThread({
+          environmentId: "env-1",
+          threadId: "t1",
+          projectId: "p1",
+          providerId: "fake",
+          options: fullRuntimeOptions,
+        });
+
+        expect(providerThreadId).toBe("codex-thread-nested");
+        expect(acceptedProviderThreadIds).toEqual(["codex-thread-nested"]);
+      } finally {
+        await runtime.shutdown();
+      }
+    });
+
     it("merges runtime shell env with per-thread context on start", async () => {
       const recordedCommands: AdapterCommand[] = [];
       const runtime = createAgentRuntimeWithAdapters({

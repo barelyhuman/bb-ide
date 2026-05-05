@@ -1,3 +1,13 @@
+import {
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { turnScope } from "@bb/domain";
 
@@ -5,6 +15,7 @@ import { createCodexProviderAdapter } from "./adapter.js";
 import type { CodexEvent } from "./adapter.js";
 import { ProviderRequestDecodeError } from "../runtime-json-rpc.js";
 import type {
+  AdapterCommand,
   ProviderExecutionContext,
   TurnStartAdapterCommand,
 } from "../provider-adapter.js";
@@ -35,12 +46,194 @@ const workspaceWriteAskProviderExecutionContext = {
 } satisfies ProviderExecutionContext;
 
 type CodexProviderAdapter = ReturnType<typeof createCodexProviderAdapter>;
+type CodexProviderCommandPlan = ReturnType<
+  CodexProviderAdapter["buildCommandPlan"]
+>;
+type ThreadStartAdapterCommand = Extract<
+  AdapterCommand,
+  { type: "thread/start" }
+>;
+type ThreadResumeAdapterCommand = Extract<
+  AdapterCommand,
+  { type: "thread/resume" }
+>;
+
+interface LinkedWorktreeFixture {
+  cleanup(): void;
+  commonDir: string;
+  expectedWritableRoots: string[];
+  gitDir: string;
+  rootPath: string;
+  workspacePath: string;
+}
+
+interface OptionalGitRootEscapeCase {
+  label: string;
+  outsidePrefix: string;
+  relativePath: string;
+}
+
+interface UnsafeHeadRefCase {
+  headContent: string;
+  label: string;
+}
+
+interface InvalidCommonDirCase {
+  label: string;
+  setup(fixture: LinkedWorktreeFixture): void;
+}
+
+interface BuildLinkedWorktreeThreadStartCommandArgs {
+  fixture: LinkedWorktreeFixture;
+  threadId?: string;
+}
+
+interface AcceptThreadCommandArgs {
+  adapter: CodexProviderAdapter;
+  command: ThreadResumeAdapterCommand | ThreadStartAdapterCommand;
+  providerThreadId: string;
+}
+
+const optionalGitRootEscapeCases: readonly OptionalGitRootEscapeCase[] = [
+  {
+    label: "refs",
+    outsidePrefix: "bb-codex-refs-escape-",
+    relativePath: "refs",
+  },
+  {
+    label: "logs refs",
+    outsidePrefix: "bb-codex-logs-refs-escape-",
+    relativePath: path.join("logs", "refs"),
+  },
+];
+
+const unsafeHeadRefCases: readonly UnsafeHeadRefCase[] = [
+  {
+    label: "parent traversal",
+    headContent: "ref: refs/heads/../main\n",
+  },
+  {
+    label: "absolute path",
+    headContent: "ref: /tmp/bb-main\n",
+  },
+  {
+    label: "empty path segment",
+    headContent: "ref: refs/heads//main\n",
+  },
+];
+
+const invalidCommonDirCases: readonly InvalidCommonDirCase[] = [
+  {
+    label: "missing commondir",
+    setup(fixture) {
+      rmSync(path.join(fixture.gitDir, "commondir"), { force: true });
+    },
+  },
+  {
+    label: "empty commondir",
+    setup(fixture) {
+      writeFileSync(path.join(fixture.gitDir, "commondir"), "\n");
+    },
+  },
+];
+
+function createLinkedWorktreeFixture(): LinkedWorktreeFixture {
+  const rootPath = realpathSync.native(
+    mkdtempSync(path.join(tmpdir(), "bb-codex-worktree-")),
+  );
+  const workspacePath = path.join(rootPath, "worktree");
+  const commonDir = path.join(rootPath, "repo.git");
+  const gitDir = path.join(commonDir, "worktrees", "bb1");
+  const headRef = "refs/heads/bb/probe";
+  const headRefParent = path.join(commonDir, "refs", "heads", "bb");
+  const headLogParent = path.join(commonDir, "logs", "refs", "heads", "bb");
+
+  mkdirSync(workspacePath, { recursive: true });
+  mkdirSync(gitDir, { recursive: true });
+  mkdirSync(path.join(commonDir, "objects"), { recursive: true });
+  mkdirSync(headRefParent, { recursive: true });
+  mkdirSync(headLogParent, { recursive: true });
+  writeFileSync(path.join(workspacePath, ".git"), `gitdir: ${gitDir}\n`);
+  writeFileSync(
+    path.join(gitDir, "gitdir"),
+    `${path.join(workspacePath, ".git")}\n`,
+  );
+  writeFileSync(path.join(gitDir, "commondir"), "../..\n");
+  writeFileSync(path.join(gitDir, "HEAD"), `ref: ${headRef}\n`);
+
+  return {
+    cleanup() {
+      rmSync(rootPath, { recursive: true, force: true });
+    },
+    commonDir,
+    expectedWritableRoots: [
+      gitDir,
+      path.join(commonDir, "objects"),
+      headRefParent,
+      headLogParent,
+    ],
+    gitDir,
+    rootPath,
+    workspacePath,
+  };
+}
 
 function prepareTurnStart(
   adapter: CodexProviderAdapter,
   command: TurnStartAdapterCommand,
 ): void {
   expect(adapter.prepareTurnStart(command)).not.toBeNull();
+}
+
+function expectWorkspaceWriteWritableRootsConfigAbsent(
+  command: CodexProviderCommandPlan,
+): void {
+  expect(command).toMatchObject({
+    params: {
+      config: expect.not.objectContaining({
+        "sandbox_workspace_write.writable_roots": expect.anything(),
+      }),
+    },
+  });
+}
+
+function dedupeRoots(roots: readonly string[]): string[] {
+  return [...new Set(roots)];
+}
+
+function buildLinkedWorktreeThreadStartCommand(
+  args: BuildLinkedWorktreeThreadStartCommandArgs,
+): ThreadStartAdapterCommand {
+  return {
+    type: "thread/start",
+    cwd: args.fixture.workspacePath,
+    threadId: args.threadId ?? "bb-thread-1",
+    input: [{ type: "text", text: "hello" }],
+    instructionMode: "append",
+    options: workspaceWriteAskProviderExecutionContext,
+  };
+}
+
+function buildLinkedWorktreeThreadResumeCommand(
+  args: BuildLinkedWorktreeThreadStartCommandArgs & {
+    providerThreadId?: string;
+  },
+): ThreadResumeAdapterCommand {
+  return {
+    type: "thread/resume",
+    cwd: args.fixture.workspacePath,
+    threadId: args.threadId ?? "bb-thread-1",
+    providerThreadId: args.providerThreadId ?? "codex-thread-1",
+    instructionMode: "append",
+    options: workspaceWriteAskProviderExecutionContext,
+  };
+}
+
+function acceptThreadCommand(args: AcceptThreadCommandArgs): void {
+  args.adapter.translateAcceptedCommand({
+    command: args.command,
+    providerThreadId: args.providerThreadId,
+  });
 }
 
 describe("codex provider adapter", () => {
@@ -299,6 +492,830 @@ describe("codex provider adapter", () => {
         sandbox: "workspace-write",
       },
     });
+  });
+
+  it("buildCommand thread/start and turn/start include captured linked worktree git writable roots", () => {
+    const fixture = createLinkedWorktreeFixture();
+    const adapter = createCodexProviderAdapter();
+    try {
+      const startCommand = buildLinkedWorktreeThreadStartCommand({ fixture });
+      const startCmd = adapter.buildCommandPlan(startCommand);
+
+      expect(startCmd).toMatchObject({
+        method: "thread/start",
+        params: {
+          config: {
+            "sandbox_workspace_write.writable_roots":
+              fixture.expectedWritableRoots,
+          },
+        },
+      });
+      acceptThreadCommand({
+        adapter,
+        command: startCommand,
+        providerThreadId: "codex-thread-1",
+      });
+
+      writeFileSync(path.join(fixture.workspacePath, ".git"), "gitdir: /\n");
+
+      const turnCmd = adapter.buildCommandPlan({
+        type: "turn/start",
+        threadId: "bb-thread-1",
+        providerThreadId: "codex-thread-1",
+        input: [{ type: "text", text: "edit it" }],
+        options: workspaceWriteAskProviderExecutionContext,
+      });
+
+      expect(turnCmd).toMatchObject({
+        method: "turn/start",
+        params: {
+          sandboxPolicy: {
+            type: "workspaceWrite",
+            writableRoots: fixture.expectedWritableRoots,
+          },
+        },
+      });
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it("buildCommand combines additional workspace roots with captured linked worktree git roots", () => {
+    const fixture = createLinkedWorktreeFixture();
+    const additionalWorkspaceWriteRoots = [
+      path.join(fixture.rootPath, "host-extra-root"),
+      fixture.gitDir,
+    ];
+    const expectedWritableRoots = dedupeRoots([
+      ...additionalWorkspaceWriteRoots,
+      ...fixture.expectedWritableRoots,
+    ]);
+    const adapter = createCodexProviderAdapter({
+      additionalWorkspaceWriteRoots,
+    });
+    try {
+      const startCommand = buildLinkedWorktreeThreadStartCommand({
+        fixture,
+        threadId: "bb-thread-start",
+      });
+      const startCmd = adapter.buildCommandPlan(startCommand);
+
+      expect(startCmd).toMatchObject({
+        method: "thread/start",
+        params: {
+          config: {
+            "sandbox_workspace_write.writable_roots": expectedWritableRoots,
+          },
+        },
+      });
+      acceptThreadCommand({
+        adapter,
+        command: startCommand,
+        providerThreadId: "codex-thread-start",
+      });
+
+      const resumeCommand = buildLinkedWorktreeThreadResumeCommand({
+        fixture,
+        providerThreadId: "codex-thread-resume",
+        threadId: "bb-thread-resume",
+      });
+      const resumeCmd = adapter.buildCommandPlan(resumeCommand);
+
+      expect(resumeCmd).toMatchObject({
+        method: "thread/resume",
+        params: {
+          config: {
+            "sandbox_workspace_write.writable_roots": expectedWritableRoots,
+          },
+        },
+      });
+      acceptThreadCommand({
+        adapter,
+        command: resumeCommand,
+        providerThreadId: "codex-thread-resume",
+      });
+
+      writeFileSync(path.join(fixture.workspacePath, ".git"), "gitdir: /\n");
+
+      const startTurnCmd = adapter.buildCommandPlan({
+        type: "turn/start",
+        threadId: "bb-thread-start",
+        providerThreadId: "codex-thread-start",
+        input: [{ type: "text", text: "commit it" }],
+        options: workspaceWriteAskProviderExecutionContext,
+      });
+      const resumeTurnCmd = adapter.buildCommandPlan({
+        type: "turn/start",
+        threadId: "bb-thread-resume",
+        providerThreadId: "codex-thread-resume",
+        input: [{ type: "text", text: "commit it" }],
+        options: workspaceWriteAskProviderExecutionContext,
+      });
+
+      expect(startTurnCmd).toMatchObject({
+        method: "turn/start",
+        params: {
+          sandboxPolicy: {
+            type: "workspaceWrite",
+            writableRoots: expectedWritableRoots,
+          },
+        },
+      });
+      expect(resumeTurnCmd).toMatchObject({
+        method: "turn/start",
+        params: {
+          sandboxPolicy: {
+            type: "workspaceWrite",
+            writableRoots: expectedWritableRoots,
+          },
+        },
+      });
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it("buildCommand turn/start waits for successful thread/start before using linked worktree git writable roots", () => {
+    const fixture = createLinkedWorktreeFixture();
+    const adapter = createCodexProviderAdapter();
+    try {
+      const startCommand = buildLinkedWorktreeThreadStartCommand({ fixture });
+      const startCmd = adapter.buildCommandPlan(startCommand);
+
+      expect(startCmd).toMatchObject({
+        method: "thread/start",
+        params: {
+          config: {
+            "sandbox_workspace_write.writable_roots":
+              fixture.expectedWritableRoots,
+          },
+        },
+      });
+
+      const turnCmd = adapter.buildCommandPlan({
+        type: "turn/start",
+        threadId: "bb-thread-1",
+        providerThreadId: "codex-thread-1",
+        input: [{ type: "text", text: "edit it" }],
+        options: workspaceWriteAskProviderExecutionContext,
+      });
+
+      expect(turnCmd).toMatchObject({
+        method: "turn/start",
+        params: {
+          sandboxPolicy: {
+            type: "workspaceWrite",
+            writableRoots: [],
+          },
+        },
+      });
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it("translateAcceptedCommand binds git roots to the accepted provider thread id", () => {
+    const firstFixture = createLinkedWorktreeFixture();
+    const secondFixture = createLinkedWorktreeFixture();
+    const adapter = createCodexProviderAdapter();
+    try {
+      const firstStartCommand = buildLinkedWorktreeThreadStartCommand({
+        fixture: firstFixture,
+        threadId: "bb-thread-1",
+      });
+      const secondStartCommand = buildLinkedWorktreeThreadStartCommand({
+        fixture: secondFixture,
+        threadId: "bb-thread-2",
+      });
+      adapter.buildCommandPlan(firstStartCommand);
+      adapter.buildCommandPlan(secondStartCommand);
+
+      acceptThreadCommand({
+        adapter,
+        command: secondStartCommand,
+        providerThreadId: "codex-thread-2",
+      });
+      acceptThreadCommand({
+        adapter,
+        command: firstStartCommand,
+        providerThreadId: "codex-thread-1",
+      });
+
+      adapter.translateEvent(
+        codexEvent("thread/closed", {
+          threadId: "codex-thread-1",
+        }),
+      );
+
+      const firstTurnCmd = adapter.buildCommandPlan({
+        type: "turn/start",
+        threadId: "bb-thread-1",
+        providerThreadId: "codex-thread-1",
+        input: [{ type: "text", text: "edit it" }],
+        options: workspaceWriteAskProviderExecutionContext,
+      });
+      const secondTurnCmd = adapter.buildCommandPlan({
+        type: "turn/start",
+        threadId: "bb-thread-2",
+        providerThreadId: "codex-thread-2",
+        input: [{ type: "text", text: "edit it" }],
+        options: workspaceWriteAskProviderExecutionContext,
+      });
+
+      expect(firstTurnCmd).toMatchObject({
+        method: "turn/start",
+        params: {
+          sandboxPolicy: {
+            type: "workspaceWrite",
+            writableRoots: [],
+          },
+        },
+      });
+      expect(secondTurnCmd).toMatchObject({
+        method: "turn/start",
+        params: {
+          sandboxPolicy: {
+            type: "workspaceWrite",
+            writableRoots: secondFixture.expectedWritableRoots,
+          },
+        },
+      });
+    } finally {
+      firstFixture.cleanup();
+      secondFixture.cleanup();
+    }
+  });
+
+  it("buildCommand thread/start rejects linked worktree git roots that escape canonical containment", () => {
+    const fixture = createLinkedWorktreeFixture();
+    const adapter = createCodexProviderAdapter();
+    try {
+      writeFileSync(path.join(fixture.workspacePath, ".git"), "gitdir: /\n");
+
+      const startCmd = adapter.buildCommandPlan({
+        type: "thread/start",
+        cwd: fixture.workspacePath,
+        threadId: "bb-thread-1",
+        input: [{ type: "text", text: "hello" }],
+        instructionMode: "append",
+        options: workspaceWriteAskProviderExecutionContext,
+      });
+
+      expect(startCmd).not.toMatchObject({
+        params: {
+          config: {
+            "sandbox_workspace_write.writable_roots": expect.any(Array),
+          },
+        },
+      });
+
+      const turnCmd = adapter.buildCommandPlan({
+        type: "turn/start",
+        threadId: "bb-thread-1",
+        providerThreadId: "codex-thread-1",
+        input: [{ type: "text", text: "edit it" }],
+        options: workspaceWriteAskProviderExecutionContext,
+      });
+
+      expect(turnCmd).toMatchObject({
+        method: "turn/start",
+        params: {
+          sandboxPolicy: {
+            type: "workspaceWrite",
+            writableRoots: [],
+          },
+        },
+      });
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it("buildCommand thread/start rejects linked worktree git roots from a foreign workspace", () => {
+    const fixture = createLinkedWorktreeFixture();
+    const foreignFixture = createLinkedWorktreeFixture();
+    const adapter = createCodexProviderAdapter();
+    try {
+      writeFileSync(
+        path.join(fixture.workspacePath, ".git"),
+        `gitdir: ${foreignFixture.gitDir}\n`,
+      );
+
+      const startCmd = adapter.buildCommandPlan({
+        type: "thread/start",
+        cwd: fixture.workspacePath,
+        threadId: "bb-thread-1",
+        input: [{ type: "text", text: "hello" }],
+        instructionMode: "append",
+        options: workspaceWriteAskProviderExecutionContext,
+      });
+
+      expect(startCmd).not.toMatchObject({
+        params: {
+          config: {
+            "sandbox_workspace_write.writable_roots": expect.any(Array),
+          },
+        },
+      });
+
+      const turnCmd = adapter.buildCommandPlan({
+        type: "turn/start",
+        threadId: "bb-thread-1",
+        providerThreadId: "codex-thread-1",
+        input: [{ type: "text", text: "edit it" }],
+        options: workspaceWriteAskProviderExecutionContext,
+      });
+
+      expect(turnCmd).toMatchObject({
+        method: "turn/start",
+        params: {
+          sandboxPolicy: {
+            type: "workspaceWrite",
+            writableRoots: [],
+          },
+        },
+      });
+    } finally {
+      fixture.cleanup();
+      foreignFixture.cleanup();
+    }
+  });
+
+  it("buildCommand thread/start rejects symlinked workspace .git files", () => {
+    const fixture = createLinkedWorktreeFixture();
+    const foreignFixture = createLinkedWorktreeFixture();
+    const adapter = createCodexProviderAdapter();
+    try {
+      rmSync(path.join(fixture.workspacePath, ".git"), { force: true });
+      symlinkSync(
+        path.join(foreignFixture.workspacePath, ".git"),
+        path.join(fixture.workspacePath, ".git"),
+      );
+
+      const startCommand = buildLinkedWorktreeThreadStartCommand({ fixture });
+      const startCmd = adapter.buildCommandPlan(startCommand);
+
+      expectWorkspaceWriteWritableRootsConfigAbsent(startCmd);
+      acceptThreadCommand({
+        adapter,
+        command: startCommand,
+        providerThreadId: "codex-thread-1",
+      });
+
+      const turnCmd = adapter.buildCommandPlan({
+        type: "turn/start",
+        threadId: "bb-thread-1",
+        providerThreadId: "codex-thread-1",
+        input: [{ type: "text", text: "edit it" }],
+        options: workspaceWriteAskProviderExecutionContext,
+      });
+
+      expect(turnCmd).toMatchObject({
+        method: "turn/start",
+        params: {
+          sandboxPolicy: {
+            type: "workspaceWrite",
+            writableRoots: [],
+          },
+        },
+      });
+    } finally {
+      fixture.cleanup();
+      foreignFixture.cleanup();
+    }
+  });
+
+  it("buildCommand thread/start tolerates missing linked worktree ref and reflog dirs", () => {
+    const fixture = createLinkedWorktreeFixture();
+    const adapter = createCodexProviderAdapter();
+    const expectedWritableRoots = [
+      fixture.gitDir,
+      path.join(fixture.commonDir, "objects"),
+    ];
+    try {
+      rmSync(path.join(fixture.commonDir, "refs"), {
+        recursive: true,
+        force: true,
+      });
+      rmSync(path.join(fixture.commonDir, "logs"), {
+        recursive: true,
+        force: true,
+      });
+
+      const startCmd = adapter.buildCommandPlan({
+        type: "thread/start",
+        cwd: fixture.workspacePath,
+        threadId: "bb-thread-1",
+        input: [{ type: "text", text: "hello" }],
+        instructionMode: "append",
+        options: workspaceWriteAskProviderExecutionContext,
+      });
+
+      expect(startCmd).toMatchObject({
+        method: "thread/start",
+        params: {
+          config: {
+            "sandbox_workspace_write.writable_roots": expectedWritableRoots,
+          },
+        },
+      });
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it.each(unsafeHeadRefCases)(
+    "buildCommand thread/start skips linked worktree ref/log roots for unsafe HEAD ref: $label",
+    (testCase) => {
+      const fixture = createLinkedWorktreeFixture();
+      const adapter = createCodexProviderAdapter();
+      const expectedWritableRoots = [
+        fixture.gitDir,
+        path.join(fixture.commonDir, "objects"),
+      ];
+      try {
+        writeFileSync(path.join(fixture.gitDir, "HEAD"), testCase.headContent);
+
+        const startCmd = adapter.buildCommandPlan({
+          type: "thread/start",
+          cwd: fixture.workspacePath,
+          threadId: "bb-thread-1",
+          input: [{ type: "text", text: "hello" }],
+          instructionMode: "append",
+          options: workspaceWriteAskProviderExecutionContext,
+        });
+
+        expect(startCmd).toMatchObject({
+          method: "thread/start",
+          params: {
+            config: {
+              "sandbox_workspace_write.writable_roots": expectedWritableRoots,
+            },
+          },
+        });
+      } finally {
+        fixture.cleanup();
+      }
+    },
+  );
+
+  it("buildCommand thread/start includes branch ref roots for detached HEAD so later branch commits can update refs", () => {
+    const fixture = createLinkedWorktreeFixture();
+    const adapter = createCodexProviderAdapter();
+    const expectedWritableRoots = [
+      fixture.gitDir,
+      path.join(fixture.commonDir, "objects"),
+      path.join(fixture.commonDir, "refs", "heads"),
+      path.join(fixture.commonDir, "logs", "refs", "heads"),
+    ];
+    try {
+      writeFileSync(
+        path.join(fixture.gitDir, "HEAD"),
+        "0123456789abcdef0123456789abcdef01234567\n",
+      );
+
+      const startCommand = buildLinkedWorktreeThreadStartCommand({ fixture });
+      const startCmd = adapter.buildCommandPlan(startCommand);
+
+      expect(startCmd).toMatchObject({
+        method: "thread/start",
+        params: {
+          config: {
+            "sandbox_workspace_write.writable_roots": expectedWritableRoots,
+          },
+        },
+      });
+      acceptThreadCommand({
+        adapter,
+        command: startCommand,
+        providerThreadId: "codex-thread-1",
+      });
+
+      const turnCmd = adapter.buildCommandPlan({
+        type: "turn/start",
+        threadId: "bb-thread-1",
+        providerThreadId: "codex-thread-1",
+        input: [{ type: "text", text: "edit it" }],
+        options: workspaceWriteAskProviderExecutionContext,
+      });
+
+      expect(turnCmd).toMatchObject({
+        method: "turn/start",
+        params: {
+          sandboxPolicy: {
+            type: "workspaceWrite",
+            writableRoots: expectedWritableRoots,
+          },
+        },
+      });
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it.each(invalidCommonDirCases)(
+    "buildCommand thread/start rejects linked worktree git roots for $label",
+    (testCase) => {
+      const fixture = createLinkedWorktreeFixture();
+      const adapter = createCodexProviderAdapter();
+      try {
+        testCase.setup(fixture);
+
+        const startCmd = adapter.buildCommandPlan({
+          type: "thread/start",
+          cwd: fixture.workspacePath,
+          threadId: "bb-thread-1",
+          input: [{ type: "text", text: "hello" }],
+          instructionMode: "append",
+          options: workspaceWriteAskProviderExecutionContext,
+        });
+
+        expectWorkspaceWriteWritableRootsConfigAbsent(startCmd);
+
+        const turnCmd = adapter.buildCommandPlan({
+          type: "turn/start",
+          threadId: "bb-thread-1",
+          providerThreadId: "codex-thread-1",
+          input: [{ type: "text", text: "edit it" }],
+          options: workspaceWriteAskProviderExecutionContext,
+        });
+
+        expect(turnCmd).toMatchObject({
+          method: "turn/start",
+          params: {
+            sandboxPolicy: {
+              type: "workspaceWrite",
+              writableRoots: [],
+            },
+          },
+        });
+      } finally {
+        fixture.cleanup();
+      }
+    },
+  );
+
+  it("buildCommand thread/start rejects linked worktree git roots when objects symlink escapes common dir", () => {
+    const fixture = createLinkedWorktreeFixture();
+    const outsideObjectsPath = realpathSync.native(
+      mkdtempSync(path.join(tmpdir(), "bb-codex-objects-escape-")),
+    );
+    const adapter = createCodexProviderAdapter();
+    try {
+      rmSync(path.join(fixture.commonDir, "objects"), {
+        recursive: true,
+        force: true,
+      });
+      symlinkSync(
+        outsideObjectsPath,
+        path.join(fixture.commonDir, "objects"),
+        "dir",
+      );
+
+      const startCmd = adapter.buildCommandPlan({
+        type: "thread/start",
+        cwd: fixture.workspacePath,
+        threadId: "bb-thread-1",
+        input: [{ type: "text", text: "hello" }],
+        instructionMode: "append",
+        options: workspaceWriteAskProviderExecutionContext,
+      });
+
+      const startCmdText = JSON.stringify(startCmd);
+      expect(startCmdText).not.toContain(outsideObjectsPath);
+      expectWorkspaceWriteWritableRootsConfigAbsent(startCmd);
+
+      const turnCmd = adapter.buildCommandPlan({
+        type: "turn/start",
+        threadId: "bb-thread-1",
+        providerThreadId: "codex-thread-1",
+        input: [{ type: "text", text: "edit it" }],
+        options: workspaceWriteAskProviderExecutionContext,
+      });
+
+      expect(turnCmd).toMatchObject({
+        method: "turn/start",
+        params: {
+          sandboxPolicy: {
+            type: "workspaceWrite",
+            writableRoots: [],
+          },
+        },
+      });
+    } finally {
+      fixture.cleanup();
+      rmSync(outsideObjectsPath, { recursive: true, force: true });
+    }
+  });
+
+  it("buildCommand thread/start rejects linked worktree git roots when worktrees symlink escapes common dir", () => {
+    const fixture = createLinkedWorktreeFixture();
+    const outsideWorktreesPath = realpathSync.native(
+      mkdtempSync(path.join(tmpdir(), "bb-codex-worktrees-escape-")),
+    );
+    const adapter = createCodexProviderAdapter();
+    try {
+      rmSync(path.join(fixture.commonDir, "worktrees"), {
+        recursive: true,
+        force: true,
+      });
+
+      const escapedGitDir = path.join(outsideWorktreesPath, "bb1");
+      mkdirSync(escapedGitDir, { recursive: true });
+      writeFileSync(
+        path.join(escapedGitDir, "gitdir"),
+        `${path.join(fixture.workspacePath, ".git")}\n`,
+      );
+      writeFileSync(
+        path.join(escapedGitDir, "commondir"),
+        `${fixture.commonDir}\n`,
+      );
+      writeFileSync(
+        path.join(escapedGitDir, "HEAD"),
+        "ref: refs/heads/bb/probe\n",
+      );
+      symlinkSync(
+        outsideWorktreesPath,
+        path.join(fixture.commonDir, "worktrees"),
+        "dir",
+      );
+
+      const startCmd = adapter.buildCommandPlan({
+        type: "thread/start",
+        cwd: fixture.workspacePath,
+        threadId: "bb-thread-1",
+        input: [{ type: "text", text: "hello" }],
+        instructionMode: "append",
+        options: workspaceWriteAskProviderExecutionContext,
+      });
+
+      const startCmdText = JSON.stringify(startCmd);
+      expect(startCmdText).not.toContain(outsideWorktreesPath);
+      expectWorkspaceWriteWritableRootsConfigAbsent(startCmd);
+
+      const turnCmd = adapter.buildCommandPlan({
+        type: "turn/start",
+        threadId: "bb-thread-1",
+        providerThreadId: "codex-thread-1",
+        input: [{ type: "text", text: "edit it" }],
+        options: workspaceWriteAskProviderExecutionContext,
+      });
+
+      expect(turnCmd).toMatchObject({
+        method: "turn/start",
+        params: {
+          sandboxPolicy: {
+            type: "workspaceWrite",
+            writableRoots: [],
+          },
+        },
+      });
+    } finally {
+      fixture.cleanup();
+      rmSync(outsideWorktreesPath, { recursive: true, force: true });
+    }
+  });
+
+  it.each(optionalGitRootEscapeCases)(
+    "buildCommand thread/start rejects linked worktree git roots when $label symlink escapes common dir",
+    (escapeCase) => {
+      const fixture = createLinkedWorktreeFixture();
+      const outsidePath = realpathSync.native(
+        mkdtempSync(path.join(tmpdir(), escapeCase.outsidePrefix)),
+      );
+      const adapter = createCodexProviderAdapter();
+      try {
+        const escapePath = path.join(
+          fixture.commonDir,
+          escapeCase.relativePath,
+        );
+        rmSync(escapePath, {
+          recursive: true,
+          force: true,
+        });
+        symlinkSync(outsidePath, escapePath, "dir");
+
+        const startCmd = adapter.buildCommandPlan({
+          type: "thread/start",
+          cwd: fixture.workspacePath,
+          threadId: "bb-thread-1",
+          input: [{ type: "text", text: "hello" }],
+          instructionMode: "append",
+          options: workspaceWriteAskProviderExecutionContext,
+        });
+
+        const startCmdText = JSON.stringify(startCmd);
+        expect(startCmdText).not.toContain(outsidePath);
+        expectWorkspaceWriteWritableRootsConfigAbsent(startCmd);
+
+        const turnCmd = adapter.buildCommandPlan({
+          type: "turn/start",
+          threadId: "bb-thread-1",
+          providerThreadId: "codex-thread-1",
+          input: [{ type: "text", text: "edit it" }],
+          options: workspaceWriteAskProviderExecutionContext,
+        });
+
+        expect(turnCmd).toMatchObject({
+          method: "turn/start",
+          params: {
+            sandboxPolicy: {
+              type: "workspaceWrite",
+              writableRoots: [],
+            },
+          },
+        });
+      } finally {
+        fixture.cleanup();
+        rmSync(outsidePath, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it("translateEvent clears captured Codex workspace-write git roots when a thread closes", () => {
+    const fixture = createLinkedWorktreeFixture();
+    const adapter = createCodexProviderAdapter();
+    try {
+      const resumeCommand: ThreadResumeAdapterCommand = {
+        type: "thread/resume",
+        cwd: fixture.workspacePath,
+        threadId: "bb-thread-1",
+        providerThreadId: "codex-thread-1",
+        instructionMode: "append",
+        options: workspaceWriteAskProviderExecutionContext,
+      };
+      adapter.buildCommandPlan(resumeCommand);
+      acceptThreadCommand({
+        adapter,
+        command: resumeCommand,
+        providerThreadId: "codex-thread-1",
+      });
+
+      adapter.translateEvent(
+        codexEvent("thread/closed", {
+          threadId: "codex-thread-1",
+        }),
+      );
+
+      const turnCmd = adapter.buildCommandPlan({
+        type: "turn/start",
+        threadId: "bb-thread-1",
+        providerThreadId: "codex-thread-1",
+        input: [{ type: "text", text: "edit it" }],
+        options: workspaceWriteAskProviderExecutionContext,
+      });
+
+      expect(turnCmd).toMatchObject({
+        method: "turn/start",
+        params: {
+          sandboxPolicy: {
+            type: "workspaceWrite",
+            writableRoots: [],
+          },
+        },
+      });
+    } finally {
+      fixture.cleanup();
+    }
+  });
+
+  it("translateEvent clears captured Codex workspace-write git roots after accepted start provider identity", () => {
+    const fixture = createLinkedWorktreeFixture();
+    const adapter = createCodexProviderAdapter();
+    try {
+      const startCommand = buildLinkedWorktreeThreadStartCommand({ fixture });
+      adapter.buildCommandPlan(startCommand);
+      acceptThreadCommand({
+        adapter,
+        command: startCommand,
+        providerThreadId: "codex-thread-1",
+      });
+      adapter.translateEvent(
+        codexEvent("thread/closed", {
+          threadId: "codex-thread-1",
+        }),
+      );
+
+      const turnCmd = adapter.buildCommandPlan({
+        type: "turn/start",
+        threadId: "bb-thread-1",
+        providerThreadId: "codex-thread-1",
+        input: [{ type: "text", text: "edit it" }],
+        options: workspaceWriteAskProviderExecutionContext,
+      });
+
+      expect(turnCmd).toMatchObject({
+        method: "turn/start",
+        params: {
+          sandboxPolicy: {
+            type: "workspaceWrite",
+            writableRoots: [],
+          },
+        },
+      });
+    } finally {
+      fixture.cleanup();
+    }
   });
 
   it("buildCommand thread/start maps deny escalation to no approval prompts", () => {

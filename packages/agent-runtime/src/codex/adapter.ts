@@ -8,6 +8,8 @@
  * Reference: https://github.com/openai/codex (codex-rs/app-server-protocol/)
  */
 
+import fs from "node:fs";
+import path from "node:path";
 import { getBuiltInAgentProviderInfo } from "@bb/agent-providers";
 import {
   jsonValueSchema,
@@ -77,8 +79,97 @@ interface CodexThreadPermissionSettings {
 
 interface ToCodexPermissionSettingsArgs {
   additionalWorkspaceWriteRoots: readonly string[];
+  gitWritableRoots: readonly string[];
   options: ProviderExecutionContext;
 }
+
+interface BuildCodexConfigArgs {
+  additionalWorkspaceWriteRoots: readonly string[];
+  gitWritableRoots: readonly string[];
+  options?: ProviderExecutionContext;
+  threadId: string;
+}
+
+interface RealpathContainedDirectoryArgs {
+  candidatePath: string;
+  trustedParentPath: string;
+}
+
+interface RegularFileInsideDirectoryArgs {
+  filePath: string;
+  trustedParentPath: string;
+}
+
+interface AddRefWritableRootsArgs {
+  commonDir: string;
+  headRef: string | null;
+  writableRoots: string[];
+}
+
+interface AddDetachedHeadWritableRootsArgs {
+  commonDir: string;
+  writableRoots: string[];
+}
+
+interface AddOptionalContainedDirectoryArgs extends RealpathContainedDirectoryArgs {
+  writableRoots: string[];
+}
+
+interface LinkedWorktreeGitDirBelongsToWorkspaceArgs {
+  gitDir: string;
+  workspaceGitFile: string;
+  workspacePath: string;
+}
+
+interface RecordThreadGitWritableRootsArgs {
+  threadId: string;
+  writableRoots: readonly string[];
+}
+
+interface ActivateThreadGitWritableRootsArgs {
+  providerThreadId: string;
+  threadId: string;
+}
+
+interface ClearGitWritableRootsByBbThreadIdArgs {
+  threadId: string;
+}
+
+interface ClearGitWritableRootsByProviderThreadIdArgs {
+  providerThreadId: string;
+}
+
+interface PreparedWorkspaceWriteGitRoots {
+  config: { [key in string]?: JsonValue } | undefined;
+  permissionSettings: CodexThreadPermissionSettings;
+}
+
+interface PrepareWorkspaceWriteGitRootsArgs {
+  command: CodexInstructionCommand;
+}
+
+interface ContainedDirectoryResult {
+  path: string;
+  status: "contained";
+}
+
+interface MissingDirectoryResult {
+  status: "missing";
+}
+
+interface EscapedDirectoryResult {
+  status: "escaped";
+}
+
+type RealpathContainedDirectoryResult =
+  | ContainedDirectoryResult
+  | MissingDirectoryResult
+  | EscapedDirectoryResult;
+
+type GitHeadState =
+  | { type: "detached" }
+  | { ref: string; type: "ref" }
+  | { type: "unsafe" };
 
 type CodexInstructionCommand = Extract<
   AdapterCommand,
@@ -104,11 +195,11 @@ function resolveCodexInstructionOverrides(
 }
 
 function toWorkspaceWriteCodexSandboxPolicy(
-  additionalWorkspaceWriteRoots: readonly string[],
+  writableRoots: readonly string[],
 ): SandboxPolicy {
   return {
     type: "workspaceWrite",
-    writableRoots: [...additionalWorkspaceWriteRoots],
+    writableRoots: [...writableRoots],
     readOnlyAccess: { type: "fullAccess" },
     networkAccess: true,
     excludeTmpdirEnvVar: false,
@@ -128,6 +219,332 @@ function toEscalationApprovalPolicy(
   escalation: PermissionEscalation,
 ): AskForApproval {
   return escalation === "deny" ? "never" : "on-request";
+}
+
+function readTextFileIfPresent(filePath: string): string | null {
+  try {
+    return fs.readFileSync(filePath, "utf8");
+  } catch {
+    return null;
+  }
+}
+
+function realpathDirectoryIfPresent(directoryPath: string): string | null {
+  try {
+    if (!fs.statSync(directoryPath).isDirectory()) {
+      return null;
+    }
+    return fs.realpathSync.native(directoryPath);
+  } catch {
+    return null;
+  }
+}
+
+function regularFilePathInsideDirectoryIfPresent(
+  args: RegularFileInsideDirectoryArgs,
+): string | null {
+  try {
+    const filePath = path.normalize(args.filePath);
+    if (
+      !fs.lstatSync(filePath).isFile() ||
+      !isPathInsideOrEqual(args.trustedParentPath, filePath)
+    ) {
+      return null;
+    }
+    return filePath;
+  } catch {
+    return null;
+  }
+}
+
+function resolveGitPath(cwd: string, rawPath: string): string {
+  return path.isAbsolute(rawPath)
+    ? path.normalize(rawPath)
+    : path.normalize(path.resolve(cwd, rawPath));
+}
+
+function parseGitDirPointer(content: string): string | null {
+  const firstLine = content.split(/\r?\n/u)[0]?.trim();
+  if (!firstLine?.startsWith("gitdir:")) {
+    return null;
+  }
+  const rawGitDir = firstLine.slice("gitdir:".length).trim();
+  return rawGitDir.length > 0 ? rawGitDir : null;
+}
+
+function parseGitHeadState(content: string | null): GitHeadState {
+  const firstLine = content?.split(/\r?\n/u)[0]?.trim();
+  if (!firstLine) {
+    return { type: "unsafe" };
+  }
+  if (!firstLine.startsWith("ref:")) {
+    return /^[0-9a-fA-F]{40}([0-9a-fA-F]{24})?$/u.test(firstLine)
+      ? { type: "detached" }
+      : { type: "unsafe" };
+  }
+  const ref = firstLine.slice("ref:".length).trim();
+  return ref.length > 0 ? { type: "ref", ref } : { type: "unsafe" };
+}
+
+function resolveCommonGitDir(gitDir: string): string | null {
+  const commonDirContent = readTextFileIfPresent(
+    path.join(gitDir, "commondir"),
+  );
+  const commonDir = commonDirContent?.split(/\r?\n/u)[0]?.trim();
+  if (!commonDir) {
+    return null;
+  }
+  return path.isAbsolute(commonDir)
+    ? path.normalize(commonDir)
+    : path.normalize(path.resolve(gitDir, commonDir));
+}
+
+function linkedWorktreeGitDirBelongsToWorkspace(
+  args: LinkedWorktreeGitDirBelongsToWorkspaceArgs,
+): boolean {
+  const rawBacklink = readTextFileIfPresent(path.join(args.gitDir, "gitdir"))
+    ?.split(/\r?\n/u)[0]
+    ?.trim();
+  if (!rawBacklink) {
+    return false;
+  }
+
+  const linkedGitFile = regularFilePathInsideDirectoryIfPresent({
+    filePath: resolveGitPath(args.gitDir, rawBacklink),
+    trustedParentPath: args.workspacePath,
+  });
+  return linkedGitFile === args.workspaceGitFile;
+}
+
+function isPathInsideOrEqual(
+  parentPath: string,
+  candidatePath: string,
+): boolean {
+  const relative = path.relative(parentPath, candidatePath);
+  return (
+    relative === "" ||
+    (relative.length > 0 &&
+      !relative.startsWith("..") &&
+      !path.isAbsolute(relative))
+  );
+}
+
+/**
+ * Resolves directory symlinks before containment checks so mutable Git metadata
+ * cannot smuggle Codex writable roots outside the trusted common dir.
+ */
+function realpathContainedDirectory(
+  args: RealpathContainedDirectoryArgs,
+): RealpathContainedDirectoryResult {
+  const realCandidatePath = realpathDirectoryIfPresent(args.candidatePath);
+  if (!realCandidatePath) {
+    return { status: "missing" };
+  }
+  if (!isPathInsideOrEqual(args.trustedParentPath, realCandidatePath)) {
+    return { status: "escaped" };
+  }
+  return { status: "contained", path: realCandidatePath };
+}
+
+function isSafeGitHeadRef(ref: string): boolean {
+  return (
+    ref.startsWith("refs/") &&
+    !path.isAbsolute(ref) &&
+    !ref.includes("\\") &&
+    !ref.split("/").some((part) => part === "" || part === "." || part === "..")
+  );
+}
+
+function addOptionalContainedDirectory(
+  args: AddOptionalContainedDirectoryArgs,
+): boolean {
+  const result = realpathContainedDirectory({
+    trustedParentPath: args.trustedParentPath,
+    candidatePath: args.candidatePath,
+  });
+  switch (result.status) {
+    case "contained":
+      args.writableRoots.push(result.path);
+      return true;
+    case "missing":
+      return true;
+    case "escaped":
+      return false;
+  }
+}
+
+function addRefWritableRoots(args: AddRefWritableRootsArgs): boolean {
+  if (!args.headRef || !isSafeGitHeadRef(args.headRef)) {
+    return true;
+  }
+
+  // Missing ref/log dirs are valid; escaped existing dirs make the linked
+  // worktree metadata untrusted, so reject all extra Git roots.
+  const refsRoot = realpathContainedDirectory({
+    trustedParentPath: args.commonDir,
+    candidatePath: path.join(args.commonDir, "refs"),
+  });
+  if (refsRoot.status === "escaped") {
+    return false;
+  }
+  if (
+    refsRoot.status === "contained" &&
+    !addOptionalContainedDirectory({
+      trustedParentPath: refsRoot.path,
+      candidatePath: path.dirname(path.join(args.commonDir, args.headRef)),
+      writableRoots: args.writableRoots,
+    })
+  ) {
+    return false;
+  }
+
+  const logsRefsRoot = realpathContainedDirectory({
+    trustedParentPath: args.commonDir,
+    candidatePath: path.join(args.commonDir, "logs", "refs"),
+  });
+  if (logsRefsRoot.status === "escaped") {
+    return false;
+  }
+  if (
+    logsRefsRoot.status === "contained" &&
+    !addOptionalContainedDirectory({
+      trustedParentPath: logsRefsRoot.path,
+      candidatePath: path.dirname(
+        path.join(args.commonDir, "logs", args.headRef),
+      ),
+      writableRoots: args.writableRoots,
+    })
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function addDetachedHeadWritableRoots(
+  args: AddDetachedHeadWritableRootsArgs,
+): boolean {
+  return (
+    addOptionalContainedDirectory({
+      trustedParentPath: args.commonDir,
+      candidatePath: path.join(args.commonDir, "refs", "heads"),
+      writableRoots: args.writableRoots,
+    }) &&
+    addOptionalContainedDirectory({
+      trustedParentPath: args.commonDir,
+      candidatePath: path.join(args.commonDir, "logs", "refs", "heads"),
+      writableRoots: args.writableRoots,
+    })
+  );
+}
+
+function gitWritableRootsForWorkspace(cwd: string | undefined): string[] {
+  const workspacePath = cwd ? realpathDirectoryIfPresent(cwd) : null;
+  if (!workspacePath) {
+    return [];
+  }
+
+  const dotGitPath = path.join(workspacePath, ".git");
+  const workspaceGitFile = regularFilePathInsideDirectoryIfPresent({
+    filePath: dotGitPath,
+    trustedParentPath: workspacePath,
+  });
+  if (!workspaceGitFile) {
+    return [];
+  }
+  const dotGitContent = readTextFileIfPresent(workspaceGitFile);
+  if (!dotGitContent) {
+    return [];
+  }
+  const rawGitDir = parseGitDirPointer(dotGitContent);
+  if (!rawGitDir) {
+    return [];
+  }
+  const gitDir = realpathDirectoryIfPresent(
+    resolveGitPath(workspacePath, rawGitDir),
+  );
+  if (!gitDir) {
+    return [];
+  }
+  if (
+    !linkedWorktreeGitDirBelongsToWorkspace({
+      gitDir,
+      workspaceGitFile,
+      workspacePath,
+    })
+  ) {
+    return [];
+  }
+
+  const commonDirCandidate = resolveCommonGitDir(gitDir);
+  const commonDir = commonDirCandidate
+    ? realpathDirectoryIfPresent(commonDirCandidate)
+    : null;
+  if (!commonDir) {
+    return [];
+  }
+
+  const worktreesRoot = realpathContainedDirectory({
+    trustedParentPath: commonDir,
+    candidatePath: path.join(commonDir, "worktrees"),
+  });
+  if (
+    worktreesRoot.status !== "contained" ||
+    !isPathInsideOrEqual(worktreesRoot.path, gitDir)
+  ) {
+    return [];
+  }
+
+  const objectsRoot = realpathContainedDirectory({
+    trustedParentPath: commonDir,
+    candidatePath: path.join(commonDir, "objects"),
+  });
+  if (objectsRoot.status !== "contained") {
+    // Missing objects or shared object stores/alternates may be legitimate Git
+    // layouts, but Codex workspace-write should not follow object storage
+    // outside this worktree's trusted common dir. Fall back to workspace-only
+    // access.
+    return [];
+  }
+
+  const writableRoots = [gitDir, objectsRoot.path];
+  const headState = parseGitHeadState(
+    readTextFileIfPresent(path.join(gitDir, "HEAD")),
+  );
+  switch (headState.type) {
+    case "detached":
+      if (!addDetachedHeadWritableRoots({ commonDir, writableRoots })) {
+        return [];
+      }
+      break;
+    case "ref":
+      if (
+        !addRefWritableRoots({
+          commonDir,
+          headRef: headState.ref,
+          writableRoots,
+        })
+      ) {
+        return [];
+      }
+      break;
+    case "unsafe":
+      break;
+  }
+
+  return [...new Set(writableRoots)];
+}
+
+function combineWorkspaceWriteRoots(
+  roots: readonly string[],
+  additionalRoots: readonly string[],
+): string[] {
+  return [...new Set([...additionalRoots, ...roots])];
+}
+
+function shouldCaptureWorkspaceWriteGitRoots(
+  options: ProviderExecutionContext,
+): boolean {
+  return options.permissionMode === "workspace-write";
 }
 
 function toCodexThreadPermissionSettings(
@@ -177,7 +594,10 @@ function toCodexPermissionSettings(
         ),
         sandbox: "workspace-write",
         sandboxPolicy: toWorkspaceWriteCodexSandboxPolicy(
-          args.additionalWorkspaceWriteRoots,
+          combineWorkspaceWriteRoots(
+            args.gitWritableRoots,
+            args.additionalWorkspaceWriteRoots,
+          ),
         ),
       };
     case "full":
@@ -220,23 +640,31 @@ function toCodexUserInput(input: PromptInput[]): CodexUserInput[] {
 }
 
 function buildCodexConfig(
-  threadId: string,
-  options?: ProviderExecutionContext,
+  args: BuildCodexConfigArgs,
 ): { [key in string]?: JsonValue } | undefined {
   const config: { [key in string]?: JsonValue } = {};
-  if (threadId) {
-    config["shell_environment_policy.set.BB_THREAD_ID"] = threadId;
+  if (args.threadId) {
+    config["shell_environment_policy.set.BB_THREAD_ID"] = args.threadId;
   }
   const shellEnvironmentConfig = buildShellEnvironmentPolicyConfig(
-    options?.envVars,
+    args.options?.envVars,
   );
   if (shellEnvironmentConfig) {
     Object.assign(config, shellEnvironmentConfig);
   }
-  if (options?.reasoningLevel) {
-    config["model_reasoning_effort"] = options.reasoningLevel;
+  if (args.options?.reasoningLevel) {
+    config["model_reasoning_effort"] = args.options.reasoningLevel;
   }
   config["features.default_mode_request_user_input"] = false;
+  if (args.options?.permissionMode === "workspace-write") {
+    const writableRoots = combineWorkspaceWriteRoots(
+      args.gitWritableRoots,
+      args.additionalWorkspaceWriteRoots,
+    );
+    if (writableRoots.length > 0) {
+      config["sandbox_workspace_write.writable_roots"] = [...writableRoots];
+    }
+  }
   return Object.keys(config).length > 0 ? config : undefined;
 }
 
@@ -421,8 +849,7 @@ function extractRecoveredCommandOutput(
 // Adapter factory
 // ---------------------------------------------------------------------------
 
-export interface CreateCodexProviderAdapterOptions
-  extends ProviderAdapterFactoryOptions {
+export interface CreateCodexProviderAdapterOptions extends ProviderAdapterFactoryOptions {
   processCommand?: string;
   processArgs?: string[];
 }
@@ -430,7 +857,8 @@ export interface CreateCodexProviderAdapterOptions
 export function createCodexProviderAdapter(
   opts?: CreateCodexProviderAdapterOptions,
 ): ProviderAdapter {
-  const additionalWorkspaceWriteRoots = opts?.additionalWorkspaceWriteRoots ?? [];
+  const additionalWorkspaceWriteRoots =
+    opts?.additionalWorkspaceWriteRoots ?? [];
   const providerInfo = getBuiltInAgentProviderInfo("codex");
   const capabilities: ProviderCapabilities = {
     supportsRename: providerInfo.capabilities.supportsRename,
@@ -442,10 +870,92 @@ export function createCodexProviderAdapter(
     string,
     number[]
   >();
+  const pendingWorkspaceWriteGitWritableRootsByThreadId = new Map<
+    string,
+    string[]
+  >();
+  const workspaceWriteGitWritableRootsByThreadId = new Map<string, string[]>();
+  const bbThreadIdByProviderThreadId = new Map<string, string>();
   const rawCommandOutputStateByProviderThreadId = new Map<
     string,
     CodexRawCommandOutputState
   >();
+
+  function stageThreadGitWritableRoots(
+    args: RecordThreadGitWritableRootsArgs,
+  ): void {
+    pendingWorkspaceWriteGitWritableRootsByThreadId.set(args.threadId, [
+      ...args.writableRoots,
+    ]);
+  }
+
+  function activateThreadGitWritableRoots(
+    args: ActivateThreadGitWritableRootsArgs,
+  ): void {
+    const writableRoots = pendingWorkspaceWriteGitWritableRootsByThreadId.get(
+      args.threadId,
+    );
+    if (!writableRoots) {
+      return;
+    }
+    pendingWorkspaceWriteGitWritableRootsByThreadId.delete(args.threadId);
+    workspaceWriteGitWritableRootsByThreadId.set(args.threadId, [
+      ...writableRoots,
+    ]);
+    bbThreadIdByProviderThreadId.set(args.providerThreadId, args.threadId);
+  }
+
+  function clearGitWritableRootsByBbThreadId(
+    args: ClearGitWritableRootsByBbThreadIdArgs,
+  ): void {
+    pendingWorkspaceWriteGitWritableRootsByThreadId.delete(args.threadId);
+    workspaceWriteGitWritableRootsByThreadId.delete(args.threadId);
+    for (const [providerThreadId, threadId] of bbThreadIdByProviderThreadId) {
+      if (threadId === args.threadId) {
+        bbThreadIdByProviderThreadId.delete(providerThreadId);
+      }
+    }
+  }
+
+  function clearGitWritableRootsByProviderThreadId(
+    args: ClearGitWritableRootsByProviderThreadIdArgs,
+  ): void {
+    const threadId = bbThreadIdByProviderThreadId.get(args.providerThreadId);
+    bbThreadIdByProviderThreadId.delete(args.providerThreadId);
+    if (!threadId) {
+      return;
+    }
+    clearGitWritableRootsByBbThreadId({ threadId });
+  }
+
+  function prepareWorkspaceWriteGitRoots(
+    args: PrepareWorkspaceWriteGitRootsArgs,
+  ): PreparedWorkspaceWriteGitRoots {
+    const command = args.command;
+    const captureWorkspaceWriteGitRoots = shouldCaptureWorkspaceWriteGitRoots(
+      command.options,
+    );
+    const writableRoots = captureWorkspaceWriteGitRoots
+      ? gitWritableRootsForWorkspace(command.cwd)
+      : [];
+    if (captureWorkspaceWriteGitRoots) {
+      stageThreadGitWritableRoots({
+        threadId: command.threadId,
+        writableRoots,
+      });
+    } else {
+      clearGitWritableRootsByBbThreadId({ threadId: command.threadId });
+    }
+    return {
+      config: buildCodexConfig({
+        additionalWorkspaceWriteRoots,
+        gitWritableRoots: writableRoots,
+        options: command.options,
+        threadId: command.threadId,
+      }),
+      permissionSettings: toCodexThreadPermissionSettings(command.options),
+    };
+  }
 
   function getRawCommandOutputState(
     providerThreadId: string,
@@ -480,9 +990,7 @@ export function createCodexProviderAdapter(
     }
   }
 
-  function clearRawCommandOutputStateForClosedThread(
-    event: ProviderRuntimeEvent,
-  ): void {
+  function clearClosedThreadState(event: ProviderRuntimeEvent): void {
     const rawEvent = toCodexRawNotification(event, "thread/closed");
     if (!rawEvent) {
       return;
@@ -494,6 +1002,9 @@ export function createCodexProviderAdapter(
       return;
     }
     rawCommandOutputStateByProviderThreadId.delete(paramsResult.data.threadId);
+    clearGitWritableRootsByProviderThreadId({
+      providerThreadId: paramsResult.data.threadId,
+    });
   }
 
   function queueNativeTurnStartClientRequestSequence(args: {
@@ -813,18 +1324,15 @@ export function createCodexProviderAdapter(
           };
         case "thread/start": {
           const dynamicTools = toCodexDynamicTools(command.dynamicTools);
-          const permissionSettings = toCodexThreadPermissionSettings(
-            command.options,
-          );
+          const preparedGitRoots = prepareWorkspaceWriteGitRoots({ command });
           const params: ThreadStartParams = {
-            approvalPolicy: permissionSettings.approvalPolicy,
-            sandbox: permissionSettings.sandbox,
+            approvalPolicy: preparedGitRoots.permissionSettings.approvalPolicy,
+            sandbox: preparedGitRoots.permissionSettings.sandbox,
             cwd: command.cwd,
             ...resolveCodexInstructionOverrides(command),
             model: command.options?.model ?? undefined,
             serviceTier: toCodexServiceTier(command.options?.serviceTier),
-            config:
-              buildCodexConfig(command.threadId, command.options) ?? undefined,
+            config: preparedGitRoots.config ?? undefined,
             // Codex only exposes raw Responses items as a thread/start opt-in.
             experimentalRawEvents: true,
             persistExtendedHistory: false,
@@ -840,19 +1348,17 @@ export function createCodexProviderAdapter(
         }
         case "thread/resume": {
           const dynamicTools = toCodexDynamicTools(command.dynamicTools);
-          const permissionSettings = toCodexThreadPermissionSettings(
-            command.options,
-          );
+          const providerThreadId = command.providerThreadId ?? command.threadId;
+          const preparedGitRoots = prepareWorkspaceWriteGitRoots({ command });
           const params: ThreadResumeParams = {
-            threadId: command.providerThreadId ?? command.threadId,
-            approvalPolicy: permissionSettings.approvalPolicy,
-            sandbox: permissionSettings.sandbox,
+            threadId: providerThreadId,
+            approvalPolicy: preparedGitRoots.permissionSettings.approvalPolicy,
+            sandbox: preparedGitRoots.permissionSettings.sandbox,
             cwd: command.cwd,
             ...resolveCodexInstructionOverrides(command),
             model: command.options?.model ?? undefined,
             serviceTier: toCodexServiceTier(command.options?.serviceTier),
-            config:
-              buildCodexConfig(command.threadId, command.options) ?? undefined,
+            config: preparedGitRoots.config ?? undefined,
             persistExtendedHistory: false,
             ...(dynamicTools && dynamicTools.length > 0
               ? { dynamicTools }
@@ -865,8 +1371,12 @@ export function createCodexProviderAdapter(
           };
         }
         case "turn/start": {
+          const writableRoots =
+            workspaceWriteGitWritableRootsByThreadId.get(command.threadId) ??
+            [];
           const permissionSettings = toCodexPermissionSettings({
             additionalWorkspaceWriteRoots,
+            gitWritableRoots: writableRoots,
             options: command.options,
           });
           return {
@@ -928,7 +1438,7 @@ export function createCodexProviderAdapter(
     },
 
     translateEvent(event: ProviderRuntimeEvent) {
-      clearRawCommandOutputStateForClosedThread(event);
+      clearClosedThreadState(event);
       if (consumeCodexRawResponseItem(event)) {
         return [];
       }
@@ -940,7 +1450,16 @@ export function createCodexProviderAdapter(
       return applyRecoveredCommandOutput(translatedEvents);
     },
 
-    translateAcceptedCommand({ command }) {
+    translateAcceptedCommand({ command, providerThreadId }) {
+      if (
+        (command.type === "thread/start" || command.type === "thread/resume") &&
+        providerThreadId
+      ) {
+        activateThreadGitWritableRoots({
+          providerThreadId,
+          threadId: command.threadId,
+        });
+      }
       if (command.type !== "turn/steer") {
         return [];
       }

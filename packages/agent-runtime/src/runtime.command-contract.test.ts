@@ -1,8 +1,16 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ThreadEvent } from "@bb/domain";
+import { createCodexProviderAdapter } from "./codex/adapter.js";
 import { createAgentRuntimeWithAdapters } from "./runtime.js";
 import { fakeProviderScriptPath } from "./test/index.js";
 import {
@@ -10,6 +18,48 @@ import {
   fullRuntimeOptions,
   waitForThreadTurnStarted,
 } from "./test/runtime-test-harness.js";
+import type { AgentRuntimeExecutionOptions } from "./types.js";
+
+interface RuntimeLinkedWorktreeFixture {
+  expectedWritableRoots: string[];
+  workspacePath: string;
+}
+
+interface CreateRuntimeLinkedWorktreeFixtureArgs {
+  rootPath: string;
+}
+
+function createRuntimeLinkedWorktreeFixture(
+  args: CreateRuntimeLinkedWorktreeFixtureArgs,
+): RuntimeLinkedWorktreeFixture {
+  const rootPath = realpathSync.native(args.rootPath);
+  const workspacePath = join(rootPath, "worktree");
+  const commonDir = join(rootPath, "repo.git");
+  const gitDir = join(commonDir, "worktrees", "bb1");
+  const headRef = "refs/heads/bb/probe";
+  const headRefParent = join(commonDir, "refs", "heads", "bb");
+  const headLogParent = join(commonDir, "logs", "refs", "heads", "bb");
+
+  mkdirSync(workspacePath, { recursive: true });
+  mkdirSync(gitDir, { recursive: true });
+  mkdirSync(join(commonDir, "objects"), { recursive: true });
+  mkdirSync(headRefParent, { recursive: true });
+  mkdirSync(headLogParent, { recursive: true });
+  writeFileSync(join(workspacePath, ".git"), `gitdir: ${gitDir}\n`);
+  writeFileSync(join(gitDir, "gitdir"), `${join(workspacePath, ".git")}\n`);
+  writeFileSync(join(gitDir, "commondir"), "../..\n");
+  writeFileSync(join(gitDir, "HEAD"), `ref: ${headRef}\n`);
+
+  return {
+    expectedWritableRoots: [
+      gitDir,
+      join(commonDir, "objects"),
+      headRefParent,
+      headLogParent,
+    ],
+    workspacePath,
+  };
+}
 
 describe("createAgentRuntime command contracts", () => {
   let tmpDir: string;
@@ -50,6 +100,97 @@ describe("createAgentRuntime command contracts", () => {
         "/repo/.git/worktrees/bb13",
         "/repo/.git/objects",
       ]);
+    } finally {
+      await runtime.shutdown();
+    }
+  });
+
+  it("preserves Codex captured linked-worktree git roots from start to turn/start", async () => {
+    const fixture = createRuntimeLinkedWorktreeFixture({ rootPath: tmpDir });
+    const providerScriptPath = join(tmpDir, "codex-runtime-provider.cjs");
+    const turnStartLogPath = join(tmpDir, "turn-start.json");
+    const workspaceWriteOptions = {
+      ...fullRuntimeOptions,
+      permissionEscalation: "ask",
+      permissionMode: "workspace-write",
+    } satisfies AgentRuntimeExecutionOptions;
+
+    writeFileSync(
+      providerScriptPath,
+      `
+const fs = require("node:fs");
+const readline = require("node:readline");
+const turnStartLogPath = ${JSON.stringify(turnStartLogPath)};
+
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + "\\n");
+}
+
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+  if (message.method === "initialize") {
+    send({ jsonrpc: "2.0", id: message.id, result: {} });
+    return;
+  }
+
+  if (message.method === "thread/start") {
+    send({
+      jsonrpc: "2.0",
+      id: message.id,
+      result: { thread: { id: "codex-thread-runtime" } },
+    });
+    return;
+  }
+
+  if (message.method === "turn/start") {
+    fs.writeFileSync(turnStartLogPath, JSON.stringify(message.params), "utf8");
+    send({ jsonrpc: "2.0", id: message.id, result: {} });
+  }
+});
+`,
+      "utf8",
+    );
+
+    const runtime = createAgentRuntimeWithAdapters({
+      workspacePath: fixture.workspacePath,
+      onEvent: () => {},
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: (_providerId, options) =>
+        createCodexProviderAdapter({
+          additionalWorkspaceWriteRoots: options.additionalWorkspaceWriteRoots,
+          processArgs: [providerScriptPath],
+          processCommand: "node",
+        }),
+    });
+
+    try {
+      const { providerThreadId } = await runtime.startThread({
+        environmentId: "env-1",
+        options: workspaceWriteOptions,
+        projectId: "p1",
+        providerId: "codex",
+        threadId: "t1",
+      });
+
+      expect(providerThreadId).toBe("codex-thread-runtime");
+
+      await runtime.runTurn({
+        input: [{ type: "text", text: "commit" }],
+        options: workspaceWriteOptions,
+        threadId: "t1",
+      });
+
+      expect(JSON.parse(readFileSync(turnStartLogPath, "utf8"))).toMatchObject({
+        sandboxPolicy: {
+          type: "workspaceWrite",
+          writableRoots: fixture.expectedWritableRoots,
+        },
+        threadId: "codex-thread-runtime",
+      });
     } finally {
       await runtime.shutdown();
     }

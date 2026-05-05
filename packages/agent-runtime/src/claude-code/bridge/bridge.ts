@@ -51,7 +51,7 @@ import {
   buildSessionOptions,
   buildWorkspaceWriteDenialMessage,
 } from "./session-options.js";
-export { buildSessionOptions } from "./session-options.js";
+import { buildReadonlyBashUpdatedInput } from "./readonly-bash-policy.js";
 import {
   buildBridgeMcpServer,
   getAllowedToolNames,
@@ -69,6 +69,7 @@ import {
   shouldRequestClaudePermissionApproval,
   toPendingInteractionPermissionProfile,
 } from "../interactive-contract.js";
+export { buildSessionOptions } from "./session-options.js";
 
 const promptTextInputSchema = z.object({
   type: z.literal("text"),
@@ -710,6 +711,24 @@ function createCanUseTool(threadIdRef: ThreadIdRef): CanUseTool {
         toolUseID: options.toolUseID,
         decisionClassification: "user_permanent",
       };
+    }
+
+    if (
+      toolName === "Bash" &&
+      (threadSession.permissionMode === "default" ||
+        threadSession.permissionMode === "dontAsk")
+    ) {
+      // Defensive mirror of the readonly PreToolUse allowlist: Claude may still
+      // call canUseTool after hook input rewriting, and safe policy allows are
+      // not user decisions, so no decisionClassification is attached.
+      const updatedInput = buildReadonlyBashUpdatedInput(input);
+      if (updatedInput) {
+        return {
+          behavior: "allow",
+          updatedInput,
+          toolUseID: options.toolUseID,
+        };
+      }
     }
 
     const shouldRequestApproval =

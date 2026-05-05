@@ -2,6 +2,12 @@ import { z } from "zod";
 
 export const threadIdentityResultSchema = z.object({
   providerThreadId: z.string().nullable().optional(),
+  thread: z
+    .object({
+      id: z.string(),
+    })
+    .nullable()
+    .optional(),
   threadId: z.string().nullable().optional(),
 });
 
@@ -17,6 +23,9 @@ export function resolveThreadIdentityResult(
 ): string | undefined {
   if (args.result.providerThreadId) {
     return args.result.providerThreadId;
+  }
+  if (args.result.thread?.id) {
+    return args.result.thread.id;
   }
   if (args.result.threadId && args.result.threadId !== args.threadId) {
     return args.result.threadId;

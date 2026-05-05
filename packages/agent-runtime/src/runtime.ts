@@ -113,6 +113,7 @@ interface EmitAcceptedCommandEventsArgs {
   command: AdapterCommand;
   proc: ProviderProcess;
   providerId: string;
+  providerThreadId?: string;
   rawMethod: string;
   sourceThreadId?: string;
 }
@@ -346,6 +347,7 @@ function createAgentRuntimeInternal(
         command: adapterCommand,
         proc,
         providerId: currentConfig.providerId,
+        ...(providerThreadId !== undefined ? { providerThreadId } : {}),
         rawMethod: plan.method,
         sourceThreadId: args.threadId,
       });
@@ -455,6 +457,9 @@ function createAgentRuntimeInternal(
   ): void {
     const events = args.proc.adapter.translateAcceptedCommand({
       command: args.command,
+      ...(args.providerThreadId !== undefined
+        ? { providerThreadId: args.providerThreadId }
+        : {}),
     });
     if (events.length === 0) {
       return;
@@ -643,6 +648,7 @@ function createAgentRuntimeInternal(
         command: adapterCommand,
         proc,
         providerId,
+        ...(providerThreadId !== undefined ? { providerThreadId } : {}),
         rawMethod: cmd.method,
         sourceThreadId: threadId,
       });
@@ -765,6 +771,7 @@ function createAgentRuntimeInternal(
         command: adapterCommand,
         proc,
         providerId,
+        providerThreadId: resolvedId,
         rawMethod: cmd.method,
         sourceThreadId: threadId,
       });

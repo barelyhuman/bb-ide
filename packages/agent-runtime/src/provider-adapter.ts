@@ -23,6 +23,7 @@ export interface ProviderTranslationContext {
 
 export interface ProviderAcceptedCommandTranslationArgs {
   command: AdapterCommand;
+  providerThreadId?: string;
 }
 
 export interface ProviderAdapterFactoryOptions {

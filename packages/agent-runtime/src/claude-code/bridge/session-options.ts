@@ -5,6 +5,7 @@ import type {
   ReasoningLevel,
 } from "@bb/domain";
 import type { ClaudePermissionMode } from "../interactive-contract.js";
+import { buildReadonlyBashUpdatedInput } from "./readonly-bash-policy.js";
 import type { SdkSessionOptions } from "./sdk-session.js";
 
 export interface BuildSessionOptionsArgs {
@@ -19,19 +20,23 @@ export interface BuildSessionOptionsArgs {
 }
 
 const READONLY_ALLOWED_TOOLS = new Set([
+  // Agent is a read/delegation tool here; child Bash calls still flow through
+  // this same readonly session hook policy before execution.
+  "Agent",
   "Glob",
   "Grep",
   "LS",
   "Read",
   "TodoRead",
 ]);
+const READONLY_BASH_TOOL_NAME = "Bash";
 const SUMMARIZED_ADAPTIVE_THINKING = {
   type: "adaptive",
   display: "summarized",
 } satisfies Exclude<Options["thinking"], undefined>;
 
 export function buildReadonlyDenialMessage(): string {
-  return "bb readonly mode allows reading and analysis only. Continue with a read-only answer; do not modify files, run shell commands, use network, or use mutating tools.";
+  return "bb readonly mode allows reading and analysis only. Continue with a read-only answer; do not modify files, run mutating shell commands, use network, or use mutating tools.";
 }
 
 export function buildWorkspaceWriteDenialMessage(): string {
@@ -65,6 +70,21 @@ function buildReadonlyHooks(
               READONLY_ALLOWED_TOOLS.has(input.tool_name)
             ) {
               return { continue: true };
+            }
+            if (input.tool_name === READONLY_BASH_TOOL_NAME) {
+              const updatedInput = buildReadonlyBashUpdatedInput(
+                input.tool_input,
+              );
+              if (updatedInput) {
+                return {
+                  continue: true,
+                  hookSpecificOutput: {
+                    hookEventName: "PreToolUse",
+                    permissionDecision: "allow",
+                    updatedInput,
+                  },
+                };
+              }
             }
 
             return {
