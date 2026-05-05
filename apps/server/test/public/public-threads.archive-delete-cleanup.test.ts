@@ -15,6 +15,8 @@ import {
   threads,
 } from "@bb/db";
 import { threadSchema, turnScope, type Thread } from "@bb/domain";
+import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
+import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import {
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
@@ -61,6 +63,20 @@ function seedManagerWithAssignedChild(
     parentThreadId: managerThread.id,
   });
   return { childThread, managerThread };
+}
+
+function listQueuedThreadCommands(
+  harness: TestAppHarness,
+  type: HostDaemonCommand["type"],
+  threadId: string,
+): HostDaemonCommand[] {
+  return harness.db
+    .select({ payload: hostDaemonCommands.payload })
+    .from(hostDaemonCommands)
+    .where(eq(hostDaemonCommands.type, type))
+    .all()
+    .map((row) => hostDaemonCommandSchema.parse(JSON.parse(row.payload)))
+    .filter((command) => command.threadId === threadId);
 }
 
 describe("public thread archive delete cleanup routes", () => {
@@ -193,7 +209,7 @@ describe("public thread archive delete cleanup routes", () => {
     }
   });
 
-  it("queues Codex thread archive with the stored provider thread id", async () => {
+  it("skips Codex archive forwarding so unarchived BB threads can continue", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -228,21 +244,9 @@ describe("public thread archive delete cleanup routes", () => {
       );
 
       expect(response.status).toBe(200);
-      const queued = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "thread.archive" && command.threadId === thread.id,
-      );
-      expect(queued.command).toMatchObject({
-        environmentId: environment.id,
-        providerId: thread.providerId,
-        providerThreadId: "provider-archive-forward",
-        threadId: thread.id,
-        workspaceContext: {
-          workspacePath: environment.path,
-          workspaceProvisionType: environment.workspaceProvisionType,
-        },
-      });
+      expect(
+        listQueuedThreadCommands(harness, "thread.archive", thread.id),
+      ).toEqual([]);
     } finally {
       await harness.cleanup();
     }
@@ -467,7 +471,7 @@ describe("public thread archive delete cleanup routes", () => {
     }
   });
 
-  it("queues Codex thread unarchive with the stored provider thread id", async () => {
+  it("skips Codex unarchive forwarding because archive is BB-owned state", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -496,24 +500,15 @@ describe("public thread archive delete cleanup routes", () => {
       );
 
       expect(response.status).toBe(200);
-      const queued = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "thread.unarchive" &&
-          command.threadId === thread.id,
-      );
-      expect(queued.command).toEqual({
-        type: "thread.unarchive",
-        providerId: thread.providerId,
-        providerThreadId: "provider-unarchive-forward",
-        threadId: thread.id,
-      });
+      expect(
+        listQueuedThreadCommands(harness, "thread.unarchive", thread.id),
+      ).toEqual([]);
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("queues provider-only Codex unarchive after managed environment cleanup", async () => {
+  it("skips provider-only Codex unarchive after managed environment cleanup", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps);
@@ -546,18 +541,9 @@ describe("public thread archive delete cleanup routes", () => {
       );
 
       expect(response.status).toBe(200);
-      const queued = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "thread.unarchive" &&
-          command.threadId === thread.id,
-      );
-      expect(queued.command).toEqual({
-        type: "thread.unarchive",
-        providerId: thread.providerId,
-        providerThreadId: "provider-unarchive-cleaned",
-        threadId: thread.id,
-      });
+      expect(
+        listQueuedThreadCommands(harness, "thread.unarchive", thread.id),
+      ).toEqual([]);
     } finally {
       await harness.cleanup();
     }

@@ -48,6 +48,7 @@ for (const providerId of providers) {
         });
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_222222222r",
           threadId,
           options,
           input: [{ type: "text", text: createDelayedOutputPrompt() }],

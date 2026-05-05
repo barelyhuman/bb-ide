@@ -10,7 +10,12 @@ import {
   hostDaemonCommands,
   threads,
 } from "@bb/db";
-import { threadScope, threadSchema, turnScope } from "@bb/domain";
+import {
+  encodeClientTurnRequestIdNumber,
+  threadScope,
+  threadSchema,
+  turnScope,
+} from "@bb/domain";
 import { waitForQueuedCommand } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
 import {
@@ -161,6 +166,7 @@ describe("public thread send and steer routes", () => {
         scope: threadScope(),
         data: {
           direction: "outbound",
+          requestId: encodeClientTurnRequestIdNumber({ value: 601 }),
           input: [{ type: "text", text: "Prior task" }],
           target: { kind: "new-turn" },
           execution: {
@@ -196,6 +202,7 @@ describe("public thread send and steer routes", () => {
         scope: threadScope(),
         data: {
           direction: "outbound",
+          requestId: encodeClientTurnRequestIdNumber({ value: 602 }),
           input: [{ type: "text", text: "Prior task" }],
           target: { kind: "new-turn" },
           execution: {
@@ -329,6 +336,7 @@ describe("public thread send and steer routes", () => {
         scope: threadScope(),
         data: {
           direction: "outbound",
+          requestId: encodeClientTurnRequestIdNumber({ value: 701 }),
           input: [{ type: "text", text: "Prior task" }],
           target: { kind: "new-turn" },
           execution: {

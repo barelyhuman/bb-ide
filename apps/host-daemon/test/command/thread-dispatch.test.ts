@@ -1,6 +1,10 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
+import {
+  encodeClientTurnRequestIdNumber,
+  type ClientTurnRequestId,
+} from "@bb/domain";
 import { afterEach, describe, expect, it } from "vitest";
 import { dispatchCommand, noopEventSink } from "../../src/command-dispatch.js";
 import { RuntimeManager } from "../../src/runtime-manager.js";
@@ -13,6 +17,16 @@ import {
 } from "./dispatch-helpers.js";
 
 afterEach(cleanupTempDirs);
+
+let nextClientRequestIdValue = 1;
+
+function nextClientRequestId(): ClientTurnRequestId {
+  const requestId = encodeClientTurnRequestIdNumber({
+    value: nextClientRequestIdValue,
+  });
+  nextClientRequestIdValue += 1;
+  return requestId;
+}
 
 describe("thread command dispatch", () => {
   it("covers thread lifecycle commands", async () => {
@@ -29,7 +43,7 @@ describe("thread command dispatch", () => {
         },
         projectId: "project-1",
         providerId: "fake",
-        eventSequence: 1,
+        requestId: nextClientRequestId(),
         input: [{ type: "text", text: "hello" }],
         options: {
           model: "gpt-5",
@@ -174,6 +188,8 @@ describe("thread command dispatch", () => {
 
   it("covers turn.submit start and auto targets", async () => {
     const harness = createHarness();
+    const runRequestId = nextClientRequestId();
+    const steerRequestId = nextClientRequestId();
     await harness.manager.ensureEnvironment({
       environmentId: "env-1",
       workspacePath: "/tmp/env-1",
@@ -185,7 +201,7 @@ describe("thread command dispatch", () => {
         type: "turn.submit",
         environmentId: "env-1",
         threadId: "thread-1",
-        eventSequence: 3,
+        requestId: runRequestId,
         input: [{ type: "text", text: "hello" }],
         options: {
           model: "gpt-5",
@@ -215,7 +231,7 @@ describe("thread command dispatch", () => {
         type: "turn.submit",
         environmentId: "env-1",
         threadId: "thread-1",
-        eventSequence: 4,
+        requestId: steerRequestId,
         input: [{ type: "text", text: "adjust" }],
         options: {
           model: "gpt-5",
@@ -244,9 +260,9 @@ describe("thread command dispatch", () => {
     expect(runResult).toEqual({ appliedAs: "new-turn" });
     expect(steerResult).toEqual({ appliedAs: "steer" });
     expect(harness.runtimeState.ranTurnText).toBe("hello");
-    expect(harness.runtimeState.ranTurnClientRequestSequence).toBe(3);
+    expect(harness.runtimeState.ranTurnClientRequestId).toBe(runRequestId);
     expect(harness.runtimeState.steeredTurnId).toBe("turn-1");
-    expect(harness.runtimeState.steeredClientRequestSequence).toBe(4);
+    expect(harness.runtimeState.steeredClientRequestId).toBe(steerRequestId);
     expect(harness.runtimeState.steeredTurnInstructions).toBe(
       "Be a helpful coding agent.",
     );
@@ -289,7 +305,7 @@ describe("thread command dispatch", () => {
         type: "turn.submit",
         environmentId: "env-1",
         threadId: "thread-1",
-        eventSequence: 4,
+        requestId: nextClientRequestId(),
         input: [{ type: "text", text: "finish this" }],
         options: {
           model: "gpt-5",
@@ -327,7 +343,7 @@ describe("thread command dispatch", () => {
         type: "turn.submit",
         environmentId: "env-1",
         threadId: "thread-1",
-        eventSequence: 5,
+        requestId: nextClientRequestId(),
         input: [{ type: "text", text: "resume work" }],
         options: {
           model: "gpt-5",
@@ -382,7 +398,7 @@ describe("thread command dispatch", () => {
         type: "turn.submit",
         environmentId: "env-1",
         threadId: "thread-1",
-        eventSequence: 5,
+        requestId: nextClientRequestId(),
         input: [{ type: "text", text: "adjust course" }],
         options: {
           model: "gpt-5",
@@ -419,6 +435,7 @@ describe("thread command dispatch", () => {
 
   it("falls back to a new turn when auto turn.submit sees a stale turn", async () => {
     const harness = createHarness();
+    const requestId = nextClientRequestId();
     await harness.manager.ensureEnvironment({
       environmentId: "env-1",
       workspacePath: "/tmp/env-1",
@@ -426,8 +443,7 @@ describe("thread command dispatch", () => {
     harness.manager.markThreadActive("env-1", "thread-1", "provider-1");
     harness.runtime.steerTurn = async (args) => {
       harness.runtimeState.steeredTurnId = args.expectedTurnId;
-      harness.runtimeState.steeredClientRequestSequence =
-        args.clientRequestSequence;
+      harness.runtimeState.steeredClientRequestId = args.clientRequestId;
       return {
         status: "stale",
         activeTurnId: null,
@@ -439,7 +455,7 @@ describe("thread command dispatch", () => {
         type: "turn.submit",
         environmentId: "env-1",
         threadId: "thread-1",
-        eventSequence: 6,
+        requestId,
         input: [{ type: "text", text: "send anyway" }],
         options: {
           model: "gpt-5",
@@ -467,13 +483,14 @@ describe("thread command dispatch", () => {
 
     expect(result).toEqual({ appliedAs: "new-turn" });
     expect(harness.runtimeState.steeredTurnId).toBe("turn-old");
-    expect(harness.runtimeState.steeredClientRequestSequence).toBe(6);
+    expect(harness.runtimeState.steeredClientRequestId).toBe(requestId);
     expect(harness.runtimeState.ranTurnText).toBe("send anyway");
-    expect(harness.runtimeState.ranTurnClientRequestSequence).toBe(6);
+    expect(harness.runtimeState.ranTurnClientRequestId).toBe(requestId);
   });
 
   it("falls back to a new turn when explicit steer sees a stale turn", async () => {
     const harness = createHarness();
+    const requestId = nextClientRequestId();
     await harness.manager.ensureEnvironment({
       environmentId: "env-1",
       workspacePath: "/tmp/env-1",
@@ -489,7 +506,7 @@ describe("thread command dispatch", () => {
         type: "turn.submit",
         environmentId: "env-1",
         threadId: "thread-1",
-        eventSequence: 7,
+        requestId,
         input: [{ type: "text", text: "strict steer" }],
         options: {
           model: "gpt-5",
@@ -517,11 +534,12 @@ describe("thread command dispatch", () => {
 
     expect(result).toEqual({ appliedAs: "new-turn" });
     expect(harness.runtimeState.ranTurnText).toBe("strict steer");
-    expect(harness.runtimeState.ranTurnClientRequestSequence).toBe(7);
+    expect(harness.runtimeState.ranTurnClientRequestId).toBe(requestId);
   });
 
   it("starts a new turn when explicit steer has no expected turn", async () => {
     const harness = createHarness();
+    const requestId = nextClientRequestId();
     await harness.manager.ensureEnvironment({
       environmentId: "env-1",
       workspacePath: "/tmp/env-1",
@@ -533,7 +551,7 @@ describe("thread command dispatch", () => {
         type: "turn.submit",
         environmentId: "env-1",
         threadId: "thread-1",
-        eventSequence: 8,
+        requestId,
         input: [{ type: "text", text: "send without active turn" }],
         options: {
           model: "gpt-5",
@@ -561,7 +579,7 @@ describe("thread command dispatch", () => {
 
     expect(result).toEqual({ appliedAs: "new-turn" });
     expect(harness.runtimeState.ranTurnText).toBe("send without active turn");
-    expect(harness.runtimeState.ranTurnClientRequestSequence).toBe(8);
+    expect(harness.runtimeState.ranTurnClientRequestId).toBe(requestId);
     expect(harness.runtimeState.steeredTurnId).toBeUndefined();
   });
 
@@ -573,7 +591,7 @@ describe("thread command dispatch", () => {
         type: "turn.submit",
         environmentId: "env-lazy",
         threadId: "thread-1",
-        eventSequence: 1,
+        requestId: nextClientRequestId(),
         input: [{ type: "text", text: "hello" }],
         options: {
           model: "gpt-5",
@@ -647,7 +665,7 @@ describe("thread command dispatch", () => {
         type: "turn.submit",
         environmentId: "env-exit",
         threadId: "thread-1",
-        eventSequence: 2,
+        requestId: nextClientRequestId(),
         input: [{ type: "text", text: "after exit" }],
         options: {
           model: "gpt-5",
@@ -786,7 +804,7 @@ describe("thread command dispatch", () => {
         },
         projectId: "project-1",
         providerId: "fake",
-        eventSequence: 1,
+        requestId: nextClientRequestId(),
         input: [{ type: "text", text: "hello" }],
         options: {
           model: "claude-opus-4-7",
@@ -840,7 +858,7 @@ describe("thread command dispatch", () => {
         },
         projectId: "project-1",
         providerId: "fake",
-        eventSequence: 1,
+        requestId: nextClientRequestId(),
         input: [{ type: "text", text: "hello" }],
         options: {
           model: "gpt-5",
@@ -875,7 +893,7 @@ describe("thread command dispatch", () => {
         },
         projectId: "project-1",
         providerId: "fake",
-        eventSequence: 1,
+        requestId: nextClientRequestId(),
         input: [{ type: "text", text: "hello" }],
         options: {
           model: "gpt-5",
@@ -984,7 +1002,7 @@ describe("thread command dispatch", () => {
           },
           projectId: "project-1",
           providerId: "fake",
-          eventSequence: 1,
+          requestId: nextClientRequestId(),
           input: [{ type: "text", text: "hello" }],
           options: {
             model: "gpt-5",

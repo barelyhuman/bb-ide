@@ -48,6 +48,7 @@ for (const providerId of providers) {
         providerThreadId = startResult.providerThreadId || undefined;
 
         await ctx1.runtime.runTurn({
+          clientRequestId: "creq_2222222222",
           threadId: firstThreadId,
           input: [
             {
@@ -97,6 +98,7 @@ for (const providerId of providers) {
           });
 
           await ctx2.runtime.runTurn({
+            clientRequestId: "creq_2222222223",
             threadId,
             input: [
               {
@@ -192,6 +194,7 @@ describe.concurrent("codex resume scenarios", () => {
       providerThreadId = startResult.providerThreadId || undefined;
 
       await ctx1.runtime.runTurn({
+        clientRequestId: "creq_2222222224",
         threadId: firstThreadId,
         input: [
           { type: "text", text: "Call the bb_test_ping tool right now." },
@@ -264,6 +267,7 @@ describe.concurrent("codex resume scenarios", () => {
       });
 
       await ctx2.runtime.runTurn({
+        clientRequestId: "creq_2222222225",
         threadId,
         input: [
           { type: "text", text: "Call the bb_test_ping tool again right now." },
@@ -312,6 +316,7 @@ describe.concurrent("codex resume scenarios", () => {
       providerThreadId = startResult.providerThreadId || undefined;
 
       await ctx1.runtime.runTurn({
+        clientRequestId: "creq_2222222226",
         threadId: firstThreadId,
         input: [
           {
@@ -361,6 +366,7 @@ describe.concurrent("codex resume scenarios", () => {
       });
 
       await ctx2.runtime.runTurn({
+        clientRequestId: "creq_2222222227",
         threadId,
         input: [
           {
@@ -387,169 +393,175 @@ describe.concurrent("codex resume scenarios", () => {
   }, 45_000);
 
   // Memory + dynamic tools across runtime shutdown
-  it("preserves memory and dynamic tools across runtime restart", async () => {
-    const providerId = "codex";
-    let toolCalledInRuntime1 = false;
-    let toolCalledInRuntime2 = false;
+  it(
+    "preserves memory and dynamic tools across runtime restart",
+    async () => {
+      const providerId = "codex";
+      let toolCalledInRuntime1 = false;
+      let toolCalledInRuntime2 = false;
 
-    const dynamicTools = [
-      {
-        name: "bb_test_ping",
-        description:
-          "Returns a test ping response. Always call this tool when asked to use it.",
-        inputSchema: {
-          type: "object" as const,
-          properties: {},
-        },
-      },
-    ];
-
-    // Runtime 1: start thread, remember word and call tool
-    const ctx1 = createTestRuntime(providerId, {
-      onToolCall: async (req) => {
-        if (req.tool === "bb_test_ping") {
-          toolCalledInRuntime1 = true;
-          return {
-            contentItems: [{ type: "inputText" as const, text: "PONG_R1" }],
-            success: true,
-          };
-        }
-        return {
-          contentItems: [{ type: "inputText" as const, text: "unknown" }],
-          success: false,
-        };
-      },
-    });
-
-    let providerThreadId: string | undefined;
-    const firstThreadId = newThreadId();
-
-    try {
-      const options = await resolveRuntimeOptions({
-        ctx: ctx1,
-        providerId,
-        preset: "full",
-      });
-      const startResult = await ctx1.runtime.startThread({
-        environmentId: "env-1",
-        threadId: firstThreadId,
-        projectId: "test-project",
-        providerId,
-        options,
-        instructions: CODEX_PING_REQUIRED_INSTRUCTIONS,
-        dynamicTools,
-      });
-
-      providerThreadId = startResult.providerThreadId || undefined;
-
-      await ctx1.runtime.runTurn({
-        threadId: firstThreadId,
-        input: [
-          {
-            type: "text",
-            text: "PING_REQUIRED. Call the bb_test_ping tool now before any assistant text. After the tool returns, remember the word BANANA and reply with BANANA_STORED.",
+      const dynamicTools = [
+        {
+          name: "bb_test_ping",
+          description:
+            "Returns a test ping response. Always call this tool when asked to use it.",
+          inputSchema: {
+            type: "object" as const,
+            properties: {},
           },
-        ],
-        options,
-        instructions: CODEX_PING_REQUIRED_INSTRUCTIONS,
+        },
+      ];
+
+      // Runtime 1: start thread, remember word and call tool
+      const ctx1 = createTestRuntime(providerId, {
+        onToolCall: async (req) => {
+          if (req.tool === "bb_test_ping") {
+            toolCalledInRuntime1 = true;
+            return {
+              contentItems: [{ type: "inputText" as const, text: "PONG_R1" }],
+              success: true,
+            };
+          }
+          return {
+            contentItems: [{ type: "inputText" as const, text: "unknown" }],
+            success: false,
+          };
+        },
       });
 
-      await waitForToolCallBeforeTurnCompletion({
-        ctx: ctx1,
-        threadId: firstThreadId,
-        toolName: "bb_test_ping",
-        timeoutMs: CODEX_TOOL_CALL_TIMEOUT_MS,
-        label: "runtime 1 tool call",
-      });
-      await waitForThreadTurnCompleted({
-        ctx: ctx1,
-        threadId: firstThreadId,
-        timeoutMs: CODEX_TOOL_CALL_TIMEOUT_MS,
-        label: "runtime 1 turn/completed",
-      });
+      let providerThreadId: string | undefined;
+      const firstThreadId = newThreadId();
 
-      if (!providerThreadId) {
-        const identityEvent = ctx1.events.find(
-          (e) => e.type === "thread/identity",
-        );
-        if (identityEvent && identityEvent.type === "thread/identity") {
-          providerThreadId = identityEvent.providerThreadId;
+      try {
+        const options = await resolveRuntimeOptions({
+          ctx: ctx1,
+          providerId,
+          preset: "full",
+        });
+        const startResult = await ctx1.runtime.startThread({
+          environmentId: "env-1",
+          threadId: firstThreadId,
+          projectId: "test-project",
+          providerId,
+          options,
+          instructions: CODEX_PING_REQUIRED_INSTRUCTIONS,
+          dynamicTools,
+        });
+
+        providerThreadId = startResult.providerThreadId || undefined;
+
+        await ctx1.runtime.runTurn({
+          clientRequestId: "creq_2222222228",
+          threadId: firstThreadId,
+          input: [
+            {
+              type: "text",
+              text: "PING_REQUIRED. Call the bb_test_ping tool now before any assistant text. After the tool returns, remember the word BANANA and reply with BANANA_STORED.",
+            },
+          ],
+          options,
+          instructions: CODEX_PING_REQUIRED_INSTRUCTIONS,
+        });
+
+        await waitForToolCallBeforeTurnCompletion({
+          ctx: ctx1,
+          threadId: firstThreadId,
+          toolName: "bb_test_ping",
+          timeoutMs: CODEX_TOOL_CALL_TIMEOUT_MS,
+          label: "runtime 1 tool call",
+        });
+        await waitForThreadTurnCompleted({
+          ctx: ctx1,
+          threadId: firstThreadId,
+          timeoutMs: CODEX_TOOL_CALL_TIMEOUT_MS,
+          label: "runtime 1 turn/completed",
+        });
+
+        if (!providerThreadId) {
+          const identityEvent = ctx1.events.find(
+            (e) => e.type === "thread/identity",
+          );
+          if (identityEvent && identityEvent.type === "thread/identity") {
+            providerThreadId = identityEvent.providerThreadId;
+          }
         }
+
+        await ctx1.runtime.shutdown();
+      } finally {
+        cleanup(ctx1);
       }
 
-      await ctx1.runtime.shutdown();
-    } finally {
-      cleanup(ctx1);
-    }
+      expect(toolCalledInRuntime1).toBe(true);
 
-    expect(toolCalledInRuntime1).toBe(true);
-
-    // Runtime 2: resume thread, ask what word was remembered, call tool again
-    const ctx2 = createTestRuntime(providerId, {
-      onToolCall: async (req) => {
-        if (req.tool === "bb_test_ping") {
-          toolCalledInRuntime2 = true;
+      // Runtime 2: resume thread, ask what word was remembered, call tool again
+      const ctx2 = createTestRuntime(providerId, {
+        onToolCall: async (req) => {
+          if (req.tool === "bb_test_ping") {
+            toolCalledInRuntime2 = true;
+            return {
+              contentItems: [{ type: "inputText" as const, text: "PONG_R2" }],
+              success: true,
+            };
+          }
           return {
-            contentItems: [{ type: "inputText" as const, text: "PONG_R2" }],
-            success: true,
+            contentItems: [{ type: "inputText" as const, text: "unknown" }],
+            success: false,
           };
-        }
-        return {
-          contentItems: [{ type: "inputText" as const, text: "unknown" }],
-          success: false,
-        };
-      },
-    });
-
-    try {
-      const threadId = newThreadId();
-      const options = await resolveRuntimeOptions({
-        ctx: ctx2,
-        providerId,
-        preset: "full",
-      });
-      await ctx2.runtime.resumeThread({
-        environmentId: "env-1",
-        threadId,
-        providerThreadId,
-        providerId,
-        dynamicTools,
-        options,
-        instructions: CODEX_PING_REQUIRED_INSTRUCTIONS,
+        },
       });
 
-      await ctx2.runtime.runTurn({
-        threadId,
-        input: [
-          {
-            type: "text",
-            text: "PING_REQUIRED. Call the bb_test_ping tool now before any assistant text. After the tool returns, answer with the word I asked you to remember.",
-          },
-        ],
-        options,
-        instructions: CODEX_PING_REQUIRED_INSTRUCTIONS,
-      });
+      try {
+        const threadId = newThreadId();
+        const options = await resolveRuntimeOptions({
+          ctx: ctx2,
+          providerId,
+          preset: "full",
+        });
+        await ctx2.runtime.resumeThread({
+          environmentId: "env-1",
+          threadId,
+          providerThreadId,
+          providerId,
+          dynamicTools,
+          options,
+          instructions: CODEX_PING_REQUIRED_INSTRUCTIONS,
+        });
 
-      await waitForToolCallBeforeTurnCompletion({
-        ctx: ctx2,
-        threadId,
-        toolName: "bb_test_ping",
-        timeoutMs: CODEX_TOOL_CALL_TIMEOUT_MS,
-        label: "runtime 2 tool call",
-      });
-      await waitForThreadTurnCompleted({
-        ctx: ctx2,
-        threadId,
-        timeoutMs: CODEX_TOOL_CALL_TIMEOUT_MS,
-        label: "runtime 2 turn/completed",
-      });
+        await ctx2.runtime.runTurn({
+          clientRequestId: "creq_2222222229",
+          threadId,
+          input: [
+            {
+              type: "text",
+              text: "PING_REQUIRED. Call the bb_test_ping tool now before any assistant text. After the tool returns, answer with the word I asked you to remember.",
+            },
+          ],
+          options,
+          instructions: CODEX_PING_REQUIRED_INSTRUCTIONS,
+        });
 
-      const text = getAgentText(ctx2.events) || getStreamedText(ctx2.events);
-      expect(text.toUpperCase()).toContain("BANANA");
-      expect(toolCalledInRuntime2).toBe(true);
-    } finally {
-      await ctx2.runtime.shutdown();
-      cleanup(ctx2);
-    }
-  }, CODEX_MEMORY_TOOL_TEST_TIMEOUT_MS);
+        await waitForToolCallBeforeTurnCompletion({
+          ctx: ctx2,
+          threadId,
+          toolName: "bb_test_ping",
+          timeoutMs: CODEX_TOOL_CALL_TIMEOUT_MS,
+          label: "runtime 2 tool call",
+        });
+        await waitForThreadTurnCompleted({
+          ctx: ctx2,
+          threadId,
+          timeoutMs: CODEX_TOOL_CALL_TIMEOUT_MS,
+          label: "runtime 2 turn/completed",
+        });
+
+        const text = getAgentText(ctx2.events) || getStreamedText(ctx2.events);
+        expect(text.toUpperCase()).toContain("BANANA");
+        expect(toolCalledInRuntime2).toBe(true);
+      } finally {
+        await ctx2.runtime.shutdown();
+        cleanup(ctx2);
+      }
+    },
+    CODEX_MEMORY_TOOL_TEST_TIMEOUT_MS,
+  );
 });

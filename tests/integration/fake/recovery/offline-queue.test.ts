@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { queueCommand } from "@bb/db";
+import { appendStoredThreadEvent, queueCommand } from "@bb/db";
+import {
+  clientTurnRequestIdSchema,
+  threadScope,
+  turnRequestEventDataSchema,
+} from "@bb/domain";
 import { hostDaemonCommandSchema } from "@bb/host-daemon-contract";
 import {
   getThreadEvents,
@@ -54,6 +59,31 @@ describe.sequential("fake provider offline queue recovery integration", () => {
           "Expected queued recovery turn to have provider context",
         );
       }
+      const requestId = clientTurnRequestIdSchema.parse("creq_23456789ae");
+      const queuedRequest = turnRequestEventDataSchema.parse({
+        direction: "outbound",
+        requestId,
+        source: "tell",
+        initiator: "user",
+        input: [{ type: "text", text: "queued while offline" }],
+        target: { kind: "new-turn" },
+        request: { method: "turn/start", params: {} },
+        execution: {
+          model: `${thread.providerId}-model`,
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+          serviceTier: "default",
+          source: "client/turn/requested",
+        },
+      });
+      appendStoredThreadEvent(harness.db, harness.hub, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        type: "client/turn/requested",
+        scope: threadScope(),
+        data: queuedRequest,
+      });
       const queuedTurnSubmitCommand = hostDaemonCommandSchema.parse({
         type: "turn.submit",
         environmentId: environment.id,
@@ -65,8 +95,8 @@ describe.sequential("fake provider offline queue recovery integration", () => {
           permissionEscalation: null,
           serviceTier: "default",
         },
-        eventSequence: eventsBefore.length + 1,
-        input: [{ type: "text", text: "queued while offline" }],
+        requestId,
+        input: queuedRequest.input,
         resumeContext: {
           workspaceContext: {
             workspacePath: environment.path,
@@ -81,12 +111,16 @@ describe.sequential("fake provider offline queue recovery integration", () => {
         },
         target: { mode: "start" },
       });
+      if (queuedTurnSubmitCommand.type !== "turn.submit") {
+        throw new Error("Expected queued offline turn.submit command");
+      }
       queueCommand(harness.db, harness.hub, {
         hostId: harness.hostId,
         sessionId: null,
         type: queuedTurnSubmitCommand.type,
         payload: JSON.stringify(queuedTurnSubmitCommand),
       });
+      expect(queuedTurnSubmitCommand.requestId).toBe(queuedRequest.requestId);
 
       await harness.startDaemon();
       await waitForHostConnected(harness.api, RECOVERY_TIMEOUT_MS);

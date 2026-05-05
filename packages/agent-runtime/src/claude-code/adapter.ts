@@ -525,8 +525,7 @@ function buildClaudeCodeConfig(
 // ---------------------------------------------------------------------------
 
 /** Options for overriding claude-code adapter defaults. Used by test infrastructure. */
-export interface CreateClaudeCodeProviderAdapterOptions
-  extends ProviderAdapterFactoryOptions {
+export interface CreateClaudeCodeProviderAdapterOptions extends ProviderAdapterFactoryOptions {
   /** Override the bridge binary. */
   processCommand?: string;
   /** Override the bridge binary args. */
@@ -550,7 +549,8 @@ interface ResolveClaudeInteractiveRequestTurnIdArgs {
 export function createClaudeCodeProviderAdapter(
   opts?: CreateClaudeCodeProviderAdapterOptions,
 ): ProviderAdapter {
-  const additionalWorkspaceWriteRoots = opts?.additionalWorkspaceWriteRoots ?? [];
+  const additionalWorkspaceWriteRoots =
+    opts?.additionalWorkspaceWriteRoots ?? [];
   const providerInfo = getBuiltInAgentProviderInfo("claude-code");
   const capabilities: ProviderCapabilities = {
     supportsArchive: providerInfo.capabilities.supportsArchive,
@@ -681,10 +681,8 @@ export function createClaudeCodeProviderAdapter(
 
     const identityEnvelope = threadIdentityEnvelopeSchema.safeParse(event);
     if (identityEnvelope.success) {
-      const {
-        threadId = UNSTAMPED_THREAD_ID,
-        providerThreadId,
-      } = identityEnvelope.data.params;
+      const { threadId = UNSTAMPED_THREAD_ID, providerThreadId } =
+        identityEnvelope.data.params;
       return providerThreadId
         ? [
             {
@@ -954,21 +952,21 @@ export function createClaudeCodeProviderAdapter(
         const turnId = turnState.getCurrentOrLastTurnId({ state });
         if (turnId) {
           return buildAcceptedUserMessageEvent({
-            clientRequestSequence: command.clientRequestSequence,
+            clientRequestId: command.clientRequestId,
             providerThreadId: command.providerThreadId,
             threadId: command.threadId,
             turnId,
           });
         }
         queueAcceptedUserMessage({
-          clientRequestSequence: command.clientRequestSequence,
+          clientRequestId: command.clientRequestId,
           state,
         });
       }
 
       if (command.type === "turn/steer") {
         return buildAcceptedUserMessageEvent({
-          clientRequestSequence: command.clientRequestSequence,
+          clientRequestId: command.clientRequestId,
           providerThreadId: command.providerThreadId,
           threadId: command.threadId,
           turnId: command.expectedTurnId,

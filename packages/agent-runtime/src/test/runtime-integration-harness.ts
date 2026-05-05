@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { expect } from "vitest";
 import { getAgentDir } from "@mariozechner/pi-coding-agent";
 import type {
+  ClientTurnRequestId,
   PendingInteractionCreate,
   PendingInteractionResolution,
   ReasoningLevel,
@@ -226,13 +227,13 @@ export function findLatestTurnStartedForThread(
 export function findInputAcceptedForThread(
   events: ThreadEvent[],
   threadId: string,
-  clientRequestSequence: number,
+  clientRequestId: ClientTurnRequestId,
 ): InputAcceptedEvent | null {
   const event = getInputAcceptedEvents(
     getEventsForThread(events, threadId),
   ).find(
     (inputAcceptedEvent) =>
-      inputAcceptedEvent.clientRequestSequence === clientRequestSequence,
+      inputAcceptedEvent.clientRequestId === clientRequestId,
   );
   return event ?? null;
 }
@@ -240,11 +241,9 @@ export function findInputAcceptedForThread(
 export function hasInputAcceptedForThread(
   events: ThreadEvent[],
   threadId: string,
-  clientRequestSequence: number,
+  clientRequestId: ClientTurnRequestId,
 ): boolean {
-  return (
-    findInputAcceptedForThread(events, threadId, clientRequestSequence) !== null
-  );
+  return findInputAcceptedForThread(events, threadId, clientRequestId) !== null;
 }
 
 export function turnStartedCountForThread(
@@ -759,9 +758,7 @@ interface PreparePiAgentDirArgs {
   tmpDir: string;
 }
 
-function copyPiAgentFileIfPresent(
-  args: CopyPiAgentFileIfPresentArgs,
-): void {
+function copyPiAgentFileIfPresent(args: CopyPiAgentFileIfPresentArgs): void {
   const sourcePath = join(args.sourceAgentDir, args.fileName);
   if (!existsSync(sourcePath)) {
     return;

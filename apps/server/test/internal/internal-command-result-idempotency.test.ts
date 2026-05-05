@@ -55,7 +55,7 @@ import {
 import { createTestAppHarness } from "../helpers/test-app.js";
 
 interface ReuseThreadProvisionOperationArgs {
-  clientRequestSequence: number;
+  clientRequestId: string;
   environmentId: string;
   inputText: string;
   provisionEventSequence: number;
@@ -69,7 +69,7 @@ function buildReuseThreadProvisionOperation(
   return {
     payload: JSON.stringify({
       branchSlug: null,
-      clientRequestSequence: args.clientRequestSequence,
+      clientRequestId: args.clientRequestId,
       environmentIntent: {
         type: "reuse",
         environmentId: args.environmentId,
@@ -116,7 +116,7 @@ describe("internal command result idempotency", () => {
         environmentId: environment.id,
         status: "provisioning",
       });
-      const provisionEventSequence = appendClientTurnEvent(harness.deps, {
+      const provisionRequest = appendClientTurnEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
         type: "client/turn/requested",
@@ -137,10 +137,10 @@ describe("internal command result idempotency", () => {
         threadId: thread.id,
         kind: "provision",
         ...buildReuseThreadProvisionOperation({
-          clientRequestSequence: provisionEventSequence,
+          clientRequestId: provisionRequest.requestId,
           environmentId: environment.id,
           inputText: "Retry partial result",
-          provisionEventSequence,
+          provisionEventSequence: provisionRequest.sequence,
           provisioningId: "tpv-idempotency-1",
           titleProvided: true,
         }),
@@ -155,7 +155,6 @@ describe("internal command result idempotency", () => {
           initiator: {
             threadId: thread.id,
             provisioningId: "tpv-idempotency-1",
-            eventSequence: 0,
           },
           workspaceProvisionType: "unmanaged",
           path: "/tmp/retry-partial-provision",
@@ -242,7 +241,7 @@ describe("internal command result idempotency", () => {
         threadId: thread.id,
         kind: "provision",
         payload: buildReuseThreadProvisionOperation({
-          clientRequestSequence: 0,
+          clientRequestId: "creq_23456789ab",
           environmentId: environment.id,
           inputText: "Side-effect failure",
           provisionEventSequence: 0,
@@ -315,7 +314,7 @@ describe("internal command result idempotency", () => {
         environmentId: environment.id,
         status: "provisioning",
       });
-      const provisionEventSequence = appendClientTurnEvent(harness.deps, {
+      const provisionRequest = appendClientTurnEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
         type: "client/turn/requested",
@@ -336,10 +335,10 @@ describe("internal command result idempotency", () => {
         threadId: thread.id,
         kind: "provision",
         ...buildReuseThreadProvisionOperation({
-          clientRequestSequence: provisionEventSequence,
+          clientRequestId: provisionRequest.requestId,
           environmentId: environment.id,
           inputText: "Start once",
-          provisionEventSequence,
+          provisionEventSequence: provisionRequest.sequence,
           provisioningId: "tpv-idempotency-2",
           titleProvided: true,
         }),
@@ -354,7 +353,6 @@ describe("internal command result idempotency", () => {
           initiator: {
             threadId: thread.id,
             provisioningId: "tpv-idempotency-2",
-            eventSequence: 0,
           },
           workspaceProvisionType: "unmanaged",
           path: "/tmp/idempotent-provision",
@@ -429,7 +427,7 @@ describe("internal command result idempotency", () => {
         environmentId: environment.id,
         status: "provisioning",
       });
-      const provisionEventSequence = appendClientTurnEvent(harness.deps, {
+      const provisionRequest = appendClientTurnEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
         type: "client/turn/requested",
@@ -451,10 +449,10 @@ describe("internal command result idempotency", () => {
         threadId: thread.id,
         kind: "provision",
         ...buildReuseThreadProvisionOperation({
-          clientRequestSequence: provisionEventSequence,
+          clientRequestId: provisionRequest.requestId,
           environmentId: environment.id,
           inputText: "Concurrent start handoff",
-          provisionEventSequence,
+          provisionEventSequence: provisionRequest.sequence,
           provisioningId: "tpv-concurrent-start-handoff",
           titleProvided: true,
         }),
@@ -462,7 +460,7 @@ describe("internal command result idempotency", () => {
 
       const requestArgs: Omit<
         QueueThreadStartCommandArgs,
-        "eventSequence" | "input"
+        "input" | "requestId"
       > = {
         thread,
         environment: {
@@ -486,12 +484,12 @@ describe("internal command result idempotency", () => {
       await Promise.all([
         requestThreadStart(harness.deps, {
           ...requestArgs,
-          eventSequence: provisionEventSequence,
+          requestId: provisionRequest.requestId,
           input: [{ type: "text", text: "First concurrent start" }],
         }),
         requestThreadStart(harness.deps, {
           ...requestArgs,
-          eventSequence: provisionEventSequence + 1,
+          requestId: "creq_23456789ac",
           input: [{ type: "text", text: "Second concurrent start" }],
         }),
       ]);
@@ -541,9 +539,7 @@ describe("internal command result idempotency", () => {
         return data.status === "completed";
       });
       expect(completedProvisioningEvent).toBeDefined();
-      expect(queuedStart.command.eventSequence).toBe(
-        completedProvisioningEvent?.sequence,
-      );
+      expect(queuedStart.command.requestId).toBe(provisionRequest.requestId);
     } finally {
       await harness.cleanup();
     }
@@ -569,7 +565,7 @@ describe("internal command result idempotency", () => {
         environmentId: environment.id,
         status: "provisioning",
       });
-      const provisionEventSequence = appendClientTurnEvent(harness.deps, {
+      const provisionRequest = appendClientTurnEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
         type: "client/turn/requested",
@@ -591,10 +587,10 @@ describe("internal command result idempotency", () => {
         threadId: thread.id,
         kind: "provision",
         ...buildReuseThreadProvisionOperation({
-          clientRequestSequence: provisionEventSequence,
+          clientRequestId: provisionRequest.requestId,
           environmentId: environment.id,
           inputText: "Atomic start handoff",
-          provisionEventSequence,
+          provisionEventSequence: provisionRequest.sequence,
           provisioningId: "tpv-atomic-start-handoff",
           titleProvided: true,
         }),
@@ -621,7 +617,7 @@ describe("internal command result idempotency", () => {
               path: environment.path,
               workspaceProvisionType: environment.workspaceProvisionType,
             },
-            eventSequence: provisionEventSequence,
+            requestId: provisionRequest.requestId,
             input: [{ type: "text", text: "Atomic start handoff" }],
             execution: {
               model: "gpt-5",
@@ -703,7 +699,7 @@ describe("internal command result idempotency", () => {
           path: environment.path,
           workspaceProvisionType: environment.workspaceProvisionType,
         },
-        eventSequence: 1,
+        requestId: "creq_23456789ab",
         input: [{ type: "text", text: "Start retry guard thread" }],
         execution: {
           model: "gpt-5",
@@ -1093,10 +1089,14 @@ describe("internal command result idempotency", () => {
         resultPayload: JSON.stringify({}),
       });
 
-      const retryResponse = await reportQueuedCommandError(harness, queuedStop, {
-        errorCode: "stop_failed",
-        errorMessage: "Retry stop failure",
-      });
+      const retryResponse = await reportQueuedCommandError(
+        harness,
+        queuedStop,
+        {
+          errorCode: "stop_failed",
+          errorMessage: "Retry stop failure",
+        },
+      );
       expect(retryResponse.status).toBe(200);
 
       await expect(
@@ -1285,7 +1285,7 @@ describe("internal command result idempotency", () => {
           path: environment.path,
           workspaceProvisionType: environment.workspaceProvisionType,
         },
-        eventSequence: 1,
+        requestId: "creq_23456789ab",
         input: [{ type: "text", text: "Start stale op thread" }],
         execution: {
           model: "gpt-5",
@@ -1316,7 +1316,7 @@ describe("internal command result idempotency", () => {
           path: environment.path,
           workspaceProvisionType: environment.workspaceProvisionType,
         },
-        eventSequence: 2,
+        requestId: "creq_23456789ac",
         input: [{ type: "text", text: "Restart stale op thread" }],
         execution: {
           model: "gpt-5",
@@ -1491,7 +1491,6 @@ describe("internal command result idempotency", () => {
           initiator: {
             threadId: thread.id,
             provisioningId: "tpv-idempotency-3",
-            eventSequence: 0,
           },
           workspaceProvisionType: "unmanaged",
           path: "/tmp/direct-provision-failure",

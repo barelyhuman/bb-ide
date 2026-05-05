@@ -49,7 +49,7 @@ describe("thread command failure side effects", () => {
           },
           projectId: project.id,
           providerId: "codex",
-          eventSequence: 1,
+          requestId: "creq_23456789ab",
           input: [{ type: "text", text: "Hello" }],
           options: {
             model: "gpt-5",
@@ -126,7 +126,7 @@ describe("thread command failure side effects", () => {
           type: "turn.submit",
           environmentId: environment.id,
           threadId: thread.id,
-          eventSequence: 1,
+          requestId: "creq_23456789ab",
           input: [{ type: "text", text: "Continue" }],
           options: {
             model: "gpt-5",
@@ -223,7 +223,7 @@ describe("thread command failure side effects", () => {
           type: "turn.submit",
           environmentId: environment.id,
           threadId: thread.id,
-          eventSequence: 1,
+          requestId: "creq_23456789ab",
           input: [{ type: "text", text: "Continue" }],
           options: {
             model: "gpt-5",
@@ -309,7 +309,7 @@ describe("thread command failure side effects", () => {
           },
           projectId: project.id,
           providerId: "codex",
-          eventSequence: 1,
+          requestId: "creq_23456789ab",
           input: [{ type: "text", text: "Hello" }],
           options: {
             model: "gpt-5",

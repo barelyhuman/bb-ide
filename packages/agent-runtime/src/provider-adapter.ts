@@ -1,5 +1,6 @@
 import type {
   AvailableModel,
+  ClientTurnRequestId,
   DynamicTool,
   InstructionMode,
   PendingInteractionPayload,
@@ -122,7 +123,7 @@ export type AdapterCommand =
       threadId: string;
       providerThreadId: string;
       input: PromptInput[];
-      clientRequestSequence?: number;
+      clientRequestId: ClientTurnRequestId;
       options: ProviderExecutionContext;
     }
   | {
@@ -131,7 +132,7 @@ export type AdapterCommand =
       providerThreadId: string;
       expectedTurnId: string;
       input: PromptInput[];
-      clientRequestSequence?: number;
+      clientRequestId: ClientTurnRequestId;
       options: ProviderExecutionContext;
     }
   | {

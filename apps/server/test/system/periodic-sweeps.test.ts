@@ -139,7 +139,7 @@ function buildThreadStartCommand(args: ThreadStartCommandArgs) {
     },
     projectId: args.projectId,
     providerId: args.providerId,
-    eventSequence: 1,
+    requestId: "creq_23456789ab",
     input: [{ type: "text" as const, text: "Resume work" }],
     options: {
       model: "gpt-5",
@@ -509,7 +509,7 @@ describe("periodic sweeps", () => {
         threadId: thread.id,
         kind: "provision",
         payload: JSON.stringify({
-          clientRequestSequence: 1,
+          clientRequestId: "creq_23456789ab",
           environmentIntent: {
             type: "reuse",
             environmentId: environment.id,

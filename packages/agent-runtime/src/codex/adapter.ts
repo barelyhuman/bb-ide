@@ -17,6 +17,7 @@ import {
   turnScope,
 } from "@bb/domain";
 import type {
+  ClientTurnRequestId,
   PermissionEscalation,
   PromptInput,
   ProviderCapabilities,
@@ -867,9 +868,9 @@ export function createCodexProviderAdapter(
     supportedPermissionModes:
       providerInfo.capabilities.supportedPermissionModes,
   };
-  const nativeTurnStartClientRequestSequencesByProviderThreadId = new Map<
+  const nativeTurnStartClientRequestIdsByProviderThreadId = new Map<
     string,
-    number[]
+    ClientTurnRequestId[]
   >();
   const pendingWorkspaceWriteGitWritableRootsByThreadId = new Map<
     string,
@@ -1008,89 +1009,83 @@ export function createCodexProviderAdapter(
     });
   }
 
-  function queueNativeTurnStartClientRequestSequence(args: {
-    clientRequestSequence: number | undefined;
+  function queueNativeTurnStartClientRequestId(args: {
+    clientRequestId: ClientTurnRequestId | undefined;
     providerThreadId: string | undefined;
   }): PreparedProviderCommandDispatch | null {
     if (
-      args.clientRequestSequence === undefined ||
+      args.clientRequestId === undefined ||
       args.providerThreadId === undefined
     ) {
       return null;
     }
-    const clientRequestSequence = args.clientRequestSequence;
+    const clientRequestId = args.clientRequestId;
     const providerThreadId = args.providerThreadId;
-    nativeTurnStartClientRequestSequencesByProviderThreadId.set(
-      providerThreadId,
-      [
-        ...(nativeTurnStartClientRequestSequencesByProviderThreadId.get(
-          providerThreadId,
-        ) ?? []),
-        clientRequestSequence,
-      ],
-    );
+    nativeTurnStartClientRequestIdsByProviderThreadId.set(providerThreadId, [
+      ...(nativeTurnStartClientRequestIdsByProviderThreadId.get(
+        providerThreadId,
+      ) ?? []),
+      clientRequestId,
+    ]);
 
     return {
       rollback: () => {
-        removeNativeTurnStartClientRequestSequence({
-          clientRequestSequence,
+        removeNativeTurnStartClientRequestId({
+          clientRequestId,
           providerThreadId,
         });
       },
     };
   }
 
-  function removeNativeTurnStartClientRequestSequence(args: {
-    clientRequestSequence: number;
+  function removeNativeTurnStartClientRequestId(args: {
+    clientRequestId: ClientTurnRequestId;
     providerThreadId: string;
   }): void {
-    const sequences =
-      nativeTurnStartClientRequestSequencesByProviderThreadId.get(
-        args.providerThreadId,
-      );
+    const sequences = nativeTurnStartClientRequestIdsByProviderThreadId.get(
+      args.providerThreadId,
+    );
     if (!sequences || sequences.length === 0) {
       return;
     }
     const nextSequences = [...sequences];
-    const sequenceIndex = nextSequences.indexOf(args.clientRequestSequence);
+    const sequenceIndex = nextSequences.indexOf(args.clientRequestId);
     if (sequenceIndex === -1) {
       return;
     }
     nextSequences.splice(sequenceIndex, 1);
     if (nextSequences.length === 0) {
-      nativeTurnStartClientRequestSequencesByProviderThreadId.delete(
+      nativeTurnStartClientRequestIdsByProviderThreadId.delete(
         args.providerThreadId,
       );
       return;
     }
-    nativeTurnStartClientRequestSequencesByProviderThreadId.set(
+    nativeTurnStartClientRequestIdsByProviderThreadId.set(
       args.providerThreadId,
       nextSequences,
     );
   }
 
-  function shiftNativeTurnStartClientRequestSequence(
+  function shiftNativeTurnStartClientRequestId(
     providerThreadId: string,
-  ): number | undefined {
+  ): ClientTurnRequestId | undefined {
     const sequences =
-      nativeTurnStartClientRequestSequencesByProviderThreadId.get(
-        providerThreadId,
-      );
+      nativeTurnStartClientRequestIdsByProviderThreadId.get(providerThreadId);
     if (!sequences || sequences.length === 0) {
       return undefined;
     }
-    const [clientRequestSequence, ...remainingSequences] = sequences;
+    const [clientRequestId, ...remainingSequences] = sequences;
     if (remainingSequences.length === 0) {
-      nativeTurnStartClientRequestSequencesByProviderThreadId.delete(
+      nativeTurnStartClientRequestIdsByProviderThreadId.delete(
         providerThreadId,
       );
     } else {
-      nativeTurnStartClientRequestSequencesByProviderThreadId.set(
+      nativeTurnStartClientRequestIdsByProviderThreadId.set(
         providerThreadId,
         remainingSequences,
       );
     }
-    return clientRequestSequence;
+    return clientRequestId;
   }
 
   function attachAcceptedUserMessageCorrelation(
@@ -1098,7 +1093,7 @@ export function createCodexProviderAdapter(
   ): ThreadEvent[] {
     if (event.type === "turn/completed") {
       if (event.providerThreadId !== null) {
-        nativeTurnStartClientRequestSequencesByProviderThreadId.delete(
+        nativeTurnStartClientRequestIdsByProviderThreadId.delete(
           event.providerThreadId,
         );
       }
@@ -1106,10 +1101,10 @@ export function createCodexProviderAdapter(
     }
 
     if (event.type === "turn/started") {
-      const clientRequestSequence = shiftNativeTurnStartClientRequestSequence(
+      const clientRequestId = shiftNativeTurnStartClientRequestId(
         event.providerThreadId,
       );
-      if (clientRequestSequence === undefined) {
+      if (clientRequestId === undefined) {
         return [event];
       }
       const turnId = requireThreadEventScopeTurnId({
@@ -1123,7 +1118,7 @@ export function createCodexProviderAdapter(
           threadId: event.threadId,
           providerThreadId: event.providerThreadId,
           scope: turnScope(turnId),
-          clientRequestSequence,
+          clientRequestId,
         },
       ];
     }
@@ -1453,8 +1448,8 @@ export function createCodexProviderAdapter(
     },
 
     prepareTurnStart(command) {
-      return queueNativeTurnStartClientRequestSequence({
-        clientRequestSequence: command.clientRequestSequence,
+      return queueNativeTurnStartClientRequestId({
+        clientRequestId: command.clientRequestId,
         providerThreadId: command.providerThreadId,
       });
     },
@@ -1486,7 +1481,7 @@ export function createCodexProviderAdapter(
         return [];
       }
       return buildAcceptedUserMessageEvent({
-        clientRequestSequence: command.clientRequestSequence,
+        clientRequestId: command.clientRequestId,
         providerThreadId: command.providerThreadId,
         threadId: command.threadId,
         turnId: command.expectedTurnId,

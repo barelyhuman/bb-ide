@@ -1,36 +1,33 @@
 import {
+  appendDaemonEventsInTransaction,
   archiveThread,
   getAutomation,
   deriveStoredEventItemFields,
-  getHighWaterMarks,
   getThread,
-  insertEvents,
   listCompletedTurnsByThreadIds,
-  listStoredEventRowsByThreadSequences,
   listThreadEnvironmentAssignmentsOnHost,
-  noopNotifier,
+  ProducerEventPayloadMismatchError,
   updateThread,
 } from "@bb/db";
 import type {
-  DbQueryConnection,
-  InsertEventInput,
-  InsertEventsResult,
-  StoredEventSequenceRow,
+  AcceptedDaemonEvent,
+  AppendDaemonEventInput,
+  AppendDaemonEventsResult,
 } from "@bb/db";
 import {
+  HOST_DAEMON_PROTOCOL_VERSION,
   hostDaemonEventBatchRequestSchema,
   typedRoutes,
   type HostDaemonEventEnvelope,
   type HostDaemonInternalSchema,
 } from "@bb/host-daemon-contract";
 import {
-  getThreadEventScopeTurnId,
-  jsonValueSchema,
+  canonicalizeProducerEventPayload,
   requireThreadEventScopeTurnId,
 } from "@bb/domain";
-import type { JsonValue } from "@bb/domain";
 import { renderTemplate } from "@bb/templates";
 import type { Hono } from "hono";
+import { createHash } from "node:crypto";
 import { ApiError } from "../errors.js";
 import type {
   AppDeps,
@@ -78,31 +75,12 @@ interface ResolveEventsToApplyArgs {
   insertedEventIndexes: number[];
 }
 
-interface EventSequenceConflict {
-  acceptedSequences: StoredEventSequenceKey[];
-  threadHighWaterMarks: Record<string, number>;
-}
-
-interface EventBatchInsertedTransactionResult {
-  kind: "inserted";
-  insertResult: InsertEventsResult;
-}
-
-interface EventBatchSequenceConflictTransactionResult {
-  kind: "sequence-conflict";
-  sequenceConflict: EventSequenceConflict;
-}
-
-type EventBatchTransactionResult =
-  | EventBatchInsertedTransactionResult
-  | EventBatchSequenceConflictTransactionResult;
-
-interface InsertEventInputsAtomicallyDeps {
+interface AppendDaemonEventInputsAtomicallyDeps {
   db: AppDeps["db"];
 }
 
-interface InsertEventInputsAtomicallyArgs {
-  eventInputs: InsertEventInput[];
+interface AppendDaemonEventInputsAtomicallyArgs {
+  eventInputs: AppendDaemonEventInput[];
 }
 
 interface NotifyInsertedEventThreadsDeps {
@@ -110,22 +88,8 @@ interface NotifyInsertedEventThreadsDeps {
 }
 
 interface NotifyInsertedEventThreadsArgs {
-  eventInputs: InsertEventInput[];
+  eventInputs: AppendDaemonEventInput[];
   insertedInputIndexes: number[];
-}
-
-interface CanonicalizeStoredEventDataArgs {
-  data: string;
-}
-
-interface FindEventSequenceConflictArgs {
-  db: DbQueryConnection;
-  eventInputs: InsertEventInput[];
-}
-
-interface StoredEventSequenceKey {
-  sequence: number;
-  threadId: string;
 }
 
 interface ShouldApplyEventEffectArgs {
@@ -146,6 +110,7 @@ interface ActivePruneCandidate {
 }
 
 interface ResolveActivePruneCandidatesArgs {
+  acceptedEvents: AcceptedDaemonEvent[];
   events: HostDaemonEventEnvelope[];
   insertedEventIndexes: number[];
 }
@@ -317,201 +282,40 @@ function resolveProviderIdentifiers(event: HostDaemonEventEnvelope["event"]): {
   }
 }
 
-function toStoredEvent(args: ToStoredEventArgs): InsertEventInput {
+function hashProducerEventPayload(args: ToStoredEventArgs): string {
+  return createHash("sha256")
+    .update(
+      canonicalizeProducerEventPayload({
+        event: args.envelope.event,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        threadId: args.envelope.threadId,
+      }),
+    )
+    .digest("hex");
+}
+
+function toStoredEvent(args: ToStoredEventArgs): AppendDaemonEventInput {
   const envelope = args.envelope;
   const { scope, type, threadId, ...data } = envelope.event;
   return {
     threadId: envelope.threadId,
     environmentId: args.environmentId,
+    producerEventId: envelope.producerEventId,
+    producerEventPayloadHash: hashProducerEventPayload(args),
     ...resolveProviderIdentifiers(envelope.event),
     scope,
-    sequence: envelope.sequence,
     type,
-    // Provider events keep the daemon timestamp even though server-originated
-    // events still use server time.
-    createdAt: envelope.createdAt,
     ...deriveStoredEventItemFields(envelope.event),
     data: JSON.stringify(data),
   };
 }
 
-function canonicalizeJsonValue(value: JsonValue): JsonValue {
-  if (Array.isArray(value)) {
-    return value.map((entry) => canonicalizeJsonValue(entry));
-  }
-  if (value === null || typeof value !== "object") {
-    return value;
-  }
-
-  const canonicalValue: Record<string, JsonValue> = {};
-  for (const key of Object.keys(value).sort()) {
-    const entryValue = value[key];
-    if (entryValue !== undefined) {
-      canonicalValue[key] = canonicalizeJsonValue(entryValue);
-    }
-  }
-  return canonicalValue;
-}
-
-function canonicalizeStoredEventData(
-  args: CanonicalizeStoredEventDataArgs,
-): string {
-  try {
-    return JSON.stringify(
-      canonicalizeJsonValue(jsonValueSchema.parse(JSON.parse(args.data))),
-    );
-  } catch {
-    throw new Error("Invalid event JSON while comparing stored event data");
-  }
-}
-
-function storedEventMatchesInput(
-  row: StoredEventSequenceRow,
-  input: InsertEventInput,
-): boolean {
-  const storedData = canonicalizeStoredEventData({
-    data: row.data,
-  });
-  const inputData = canonicalizeStoredEventData({
-    data: input.data,
-  });
-  return (
-    row.threadId === input.threadId &&
-    row.environmentId === (input.environmentId ?? null) &&
-    row.scopeKind === input.scope.kind &&
-    row.turnId === (getThreadEventScopeTurnId(input.scope) ?? null) &&
-    row.providerThreadId === (input.providerThreadId ?? null) &&
-    row.sequence === input.sequence &&
-    row.type === input.type &&
-    row.itemId === input.itemId &&
-    row.itemKind === input.itemKind &&
-    storedData === inputData
-  );
-}
-
-function storedEventSequenceKey(key: StoredEventSequenceKey): string {
-  return `${key.threadId}:${key.sequence}`;
-}
-
-function eventInputsMatch(
-  left: InsertEventInput,
-  right: InsertEventInput,
-): boolean {
-  const leftData = canonicalizeStoredEventData({
-    data: left.data,
-  });
-  const rightData = canonicalizeStoredEventData({
-    data: right.data,
-  });
-  return (
-    left.threadId === right.threadId &&
-    (left.environmentId ?? null) === (right.environmentId ?? null) &&
-    left.scope.kind === right.scope.kind &&
-    getThreadEventScopeTurnId(left.scope) ===
-      getThreadEventScopeTurnId(right.scope) &&
-    (left.providerThreadId ?? null) === (right.providerThreadId ?? null) &&
-    left.sequence === right.sequence &&
-    left.type === right.type &&
-    left.itemId === right.itemId &&
-    left.itemKind === right.itemKind &&
-    leftData === rightData
-  );
-}
-
-function findEventSequenceConflict(
-  args: FindEventSequenceConflictArgs,
-): EventSequenceConflict | null {
-  if (args.eventInputs.length === 0) {
-    return null;
-  }
-
-  const rows = listStoredEventRowsByThreadSequences(args.db, {
-    keys: args.eventInputs.map((input) => ({
-      threadId: input.threadId,
-      sequence: input.sequence,
-    })),
-  });
-
-  const existingRowsByThreadSequence = new Map<
-    string,
-    StoredEventSequenceRow
-  >();
-  for (const row of rows) {
-    existingRowsByThreadSequence.set(storedEventSequenceKey(row), row);
-  }
-
-  const acceptedSequences: StoredEventSequenceKey[] = [];
-  const acceptedSequenceKeys = new Set<string>();
-  const firstInputByThreadSequence = new Map<string, InsertEventInput>();
-  let hasSequenceConflict = false;
-
-  function addAcceptedSequence(input: InsertEventInput): void {
-    const sequenceKey = storedEventSequenceKey(input);
-    if (acceptedSequenceKeys.has(sequenceKey)) {
-      return;
-    }
-    acceptedSequenceKeys.add(sequenceKey);
-    acceptedSequences.push({
-      sequence: input.sequence,
-      threadId: input.threadId,
-    });
-  }
-
-  for (const input of args.eventInputs) {
-    const sequenceKey = storedEventSequenceKey(input);
-    const firstInput = firstInputByThreadSequence.get(sequenceKey);
-    if (firstInput === undefined) {
-      firstInputByThreadSequence.set(sequenceKey, input);
-    } else if (!eventInputsMatch(firstInput, input)) {
-      hasSequenceConflict = true;
-    }
-
-    const existing = existingRowsByThreadSequence.get(sequenceKey);
-    if (!existing) {
-      continue;
-    }
-    if (storedEventMatchesInput(existing, input)) {
-      addAcceptedSequence(input);
-      continue;
-    }
-    hasSequenceConflict = true;
-  }
-
-  if (!hasSequenceConflict) {
-    return null;
-  }
-
-  return {
-    acceptedSequences,
-    threadHighWaterMarks: getHighWaterMarks(
-      args.db,
-      args.eventInputs.map((eventInput) => eventInput.threadId),
-    ),
-  };
-}
-
-function insertEventInputsAtomically(
-  deps: InsertEventInputsAtomicallyDeps,
-  args: InsertEventInputsAtomicallyArgs,
-): EventBatchTransactionResult {
+function appendDaemonEventInputsAtomically(
+  deps: AppendDaemonEventInputsAtomicallyDeps,
+  args: AppendDaemonEventInputsAtomicallyArgs,
+): AppendDaemonEventsResult {
   return deps.db.transaction(
-    (tx): EventBatchTransactionResult => {
-      const sequenceConflict = findEventSequenceConflict({
-        db: tx,
-        eventInputs: args.eventInputs,
-      });
-      if (sequenceConflict) {
-        return {
-          kind: "sequence-conflict",
-          sequenceConflict,
-        };
-      }
-
-      return {
-        kind: "inserted",
-        insertResult: insertEvents(tx, noopNotifier, args.eventInputs),
-      };
-    },
+    (tx) => appendDaemonEventsInTransaction(tx, args.eventInputs),
     { behavior: "immediate" },
   );
 }
@@ -633,7 +437,7 @@ async function applyEventEffects(
         {
           err: error,
           eventType: entry.event.type,
-          sequence: entry.sequence,
+          producerEventId: entry.producerEventId,
           threadId: entry.threadId,
         },
         "Failed to apply event side effects",
@@ -830,12 +634,22 @@ function resolveActivePruneCandidates(
     if (!isAgePrunableThreadEventType(entry.event.type)) {
       continue;
     }
+    const acceptedEvent = args.acceptedEvents[index];
+    if (acceptedEvent === undefined) {
+      throw new Error("Missing accepted event for inserted daemon event");
+    }
 
     const previousSequence = latestPrunableSequenceByThreadId.get(
       entry.threadId,
     );
-    if (previousSequence === undefined || entry.sequence > previousSequence) {
-      latestPrunableSequenceByThreadId.set(entry.threadId, entry.sequence);
+    if (
+      previousSequence === undefined ||
+      acceptedEvent.sequence > previousSequence
+    ) {
+      latestPrunableSequenceByThreadId.set(
+        entry.threadId,
+        acceptedEvent.sequence,
+      );
     }
   }
 
@@ -886,13 +700,6 @@ function validateAndResolveCanonicalEventBatchEnvironments(
     if (!canonicalEnvironmentId) {
       throw new Error("Validated thread is missing a canonical environment");
     }
-    if (entry.environmentId !== canonicalEnvironmentId) {
-      throw new ApiError(
-        400,
-        "invalid_request",
-        "Event batch contains environmentIds that do not match the thread environment",
-      );
-    }
     canonicalEnvironmentIds.push(canonicalEnvironmentId);
   }
 
@@ -942,28 +749,35 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
               environmentId,
             });
           });
-          const eventBatchTransactionResult = insertEventInputsAtomically(deps, {
-            eventInputs,
-          });
-          if (eventBatchTransactionResult.kind === "sequence-conflict") {
-            const { sequenceConflict } = eventBatchTransactionResult;
-            return {
-              followUps: [],
-              response: context.json(
+          let appendResult: AppendDaemonEventsResult;
+          try {
+            appendResult = appendDaemonEventInputsAtomically(deps, {
+              eventInputs,
+            });
+          } catch (error) {
+            if (error instanceof ProducerEventPayloadMismatchError) {
+              deps.logger.error(
                 {
-                  acceptedSequences: sequenceConflict.acceptedSequences,
-                  code: "sequence_conflict",
-                  threadHighWaterMarks: sequenceConflict.threadHighWaterMarks,
+                  existingHash: error.details.existingHash,
+                  hostId: session.hostId,
+                  producerEventId: error.details.producerEventId,
+                  receivedHash: error.details.receivedHash,
+                  sessionId: session.id,
                 },
+                "Producer event id payload mismatch",
+              );
+              throw new ApiError(
                 409,
-              ),
-            };
+                "producer_event_payload_mismatch",
+                "Producer event id was reused with a different payload",
+              );
+            }
+            throw error;
           }
 
-          const { insertResult } = eventBatchTransactionResult;
           notifyInsertedEventThreads(deps, {
             eventInputs,
-            insertedInputIndexes: insertResult.insertedInputIndexes,
+            insertedInputIndexes: appendResult.insertedInputIndexes,
           });
 
           const eventEffectResult = await applyEventEffects(
@@ -971,12 +785,13 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
             resolveEventsToApply({
               db: deps.db,
               events: payload.events,
-              insertedEventIndexes: insertResult.insertedInputIndexes,
+              insertedEventIndexes: appendResult.insertedInputIndexes,
             }),
           );
           for (const candidate of resolveActivePruneCandidates({
+            acceptedEvents: appendResult.acceptedEvents,
             events: payload.events,
-            insertedEventIndexes: insertResult.insertedInputIndexes,
+            insertedEventIndexes: appendResult.insertedInputIndexes,
           })) {
             maybePruneActiveThreadEventHistory(deps, candidate);
           }
@@ -984,10 +799,7 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
           return {
             followUps: eventEffectResult.followUps,
             response: context.json({
-              threadHighWaterMarks: getHighWaterMarks(
-                deps.db,
-                payload.events.map((event) => event.threadId),
-              ),
+              acceptedEvents: appendResult.acceptedEvents,
             }),
           };
         },

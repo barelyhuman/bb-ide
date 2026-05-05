@@ -15,6 +15,7 @@ import {
   threadEventScopeSchema,
   validateThreadEventScope,
 } from "./thread-event-scope.js";
+import { clientTurnRequestIdSchema } from "./protocol-ids.js";
 
 export const threadEventItemStatusSchema = z.enum([
   "pending",
@@ -170,13 +171,15 @@ export const toolCallProgressEventSchema = z.object({
 export type ToolCallProgressEvent = z.infer<typeof toolCallProgressEventSchema>;
 
 export const threadEventItemSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("userMessage"),
-    id: z.string(),
-    content: z.array(threadEventUserContentSchema),
-    clientRequestSequence: z.number().int().nonnegative().optional(),
-    parentToolCallId: z.string().optional(),
-  }),
+  z
+    .object({
+      type: z.literal("userMessage"),
+      id: z.string(),
+      content: z.array(threadEventUserContentSchema),
+      clientRequestId: clientTurnRequestIdSchema.optional(),
+      parentToolCallId: z.string().optional(),
+    })
+    .strict(),
   z.object({
     type: z.literal("agentMessage"),
     id: z.string(),
@@ -271,12 +274,15 @@ const unscopedProviderEventSchema = z.discriminatedUnion("type", [
     status: threadEventTurnStatusSchema,
     error: z.object({ message: z.string() }).optional(),
   }),
-  z.object({
-    type: z.literal("turn/input/accepted"),
-    threadId: z.string(),
-    providerThreadId: z.string(),
-    clientRequestSequence: z.number().int().nonnegative(),
-  }),
+  z
+    .object({
+      type: z.literal("turn/input/accepted"),
+      threadId: z.string(),
+      providerThreadId: z.string(),
+      clientRequestId: clientTurnRequestIdSchema,
+      scope: threadEventScopeSchema,
+    })
+    .strict(),
   z.object({
     type: z.literal("thread/name/updated"),
     threadId: z.string(),
@@ -493,24 +499,58 @@ export const systemEventSchema = unscopedSystemEventSchema.and(
 );
 export type SystemEvent = z.infer<typeof systemEventSchema>;
 
-/** All thread events — provider-originated or system-originated. */
-export const threadEventSchema = z
-  .union([providerEventSchema, systemEventSchema])
-  .superRefine((event, ctx) => {
-    const result = validateThreadEventScope({
-      type: event.type,
-      scope: event.scope,
-    });
-    if (!result.valid) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: result.message ?? "Invalid thread event scope",
-        path: ["scope"],
-      });
+const eventPropertyBagSchema = z.record(z.string(), z.unknown());
+const legacyClientRequestKey = ["clientRequest", "Sequence"].join("");
+const rejectLegacyClientRequestSequenceSchema = z
+  .unknown()
+  .superRefine((value, ctx) => {
+    const eventResult = eventPropertyBagSchema.safeParse(value);
+    if (!eventResult.success) {
       return;
     }
 
+    if (Object.hasOwn(eventResult.data, legacyClientRequestKey)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "legacy request sequence field is no longer accepted",
+        path: [legacyClientRequestKey],
+      });
+    }
+
+    const itemResult = eventPropertyBagSchema.safeParse(eventResult.data.item);
+    if (
+      itemResult.success &&
+      itemResult.data.type === "userMessage" &&
+      Object.hasOwn(itemResult.data, legacyClientRequestKey)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "legacy user-message request sequence field is no longer accepted",
+        path: ["item", legacyClientRequestKey],
+      });
+    }
   });
+
+/** All thread events — provider-originated or system-originated. */
+export const threadEventSchema = rejectLegacyClientRequestSequenceSchema.pipe(
+  z
+    .union([providerEventSchema, systemEventSchema])
+    .superRefine((event, ctx) => {
+      const result = validateThreadEventScope({
+        type: event.type,
+        scope: event.scope,
+      });
+      if (!result.valid) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: result.message ?? "Invalid thread event scope",
+          path: ["scope"],
+        });
+        return;
+      }
+    }),
+);
 export type ThreadEvent = z.infer<typeof threadEventSchema>;
 export type ThreadEventType = ThreadEvent["type"];
 export const threadEventTypeValues = [

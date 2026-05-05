@@ -5,6 +5,8 @@ import { promisify } from "node:util";
 import { expect } from "vitest";
 import {
   requireThreadEventScopeTurnId,
+  turnRequestEventDataSchema,
+  type ClientTurnRequestId,
   type ThreadEventRow,
   type ThreadExecutionOptions,
 } from "@bb/domain";
@@ -71,7 +73,7 @@ export interface WaitForTurnStartedResult {
 }
 
 export interface WaitForInputAcceptedResult {
-  clientRequestSequence: number;
+  clientRequestId: ClientTurnRequestId;
   sequence: number;
   turnId: string;
 }
@@ -154,20 +156,25 @@ export function countTurnEvents(
   return events.filter((event) => event.type === type).length;
 }
 
-function findLatestClientTurnRequestSequenceAfter(
+interface ClientTurnRequestAfterBaseline {
+  requestId: ClientTurnRequestId;
+  sequence: number;
+}
+
+function findLatestClientTurnRequestAfter(
   events: ThreadEventRow[],
   sequence: number,
-): number | null {
+): ClientTurnRequestAfterBaseline | null {
   const request = [...events]
     .reverse()
     .find(
-      (event) =>
-        event.seq > sequence &&
-        (event.type === "client/thread/start" ||
-          event.type === "client/turn/requested" ||
-          event.type === "client/turn/start"),
+      (event) => event.seq > sequence && event.type === "client/turn/requested",
     );
-  return request?.seq ?? null;
+  if (!request) {
+    return null;
+  }
+  const data = turnRequestEventDataSchema.parse(request.data);
+  return { requestId: data.requestId, sequence: request.seq };
 }
 
 function hasCompletedAgentMessageAfter(
@@ -202,22 +209,19 @@ function findInputAcceptedAfter(
   events: ThreadEventRow[],
   sequence: number,
 ): WaitForInputAcceptedResult | null {
-  const requestSequence = findLatestClientTurnRequestSequenceAfter(
-    events,
-    sequence,
-  );
-  if (requestSequence === null) {
+  const request = findLatestClientTurnRequestAfter(events, sequence);
+  if (request === null) {
     return null;
   }
 
   for (const event of events) {
     if (
-      event.seq > requestSequence &&
+      event.seq > request.sequence &&
       event.type === "turn/input/accepted" &&
-      event.data.clientRequestSequence === requestSequence
+      event.data.clientRequestId === request.requestId
     ) {
       return {
-        clientRequestSequence: requestSequence,
+        clientRequestId: request.requestId,
         sequence: event.seq,
         turnId: requireThreadEventScopeTurnId(event),
       };
@@ -508,11 +512,11 @@ export async function sendAndWaitForIdle(args: SendAndWaitForIdleArgs) {
     text: args.text,
   });
   try {
-    const requestSequence = findLatestClientTurnRequestSequenceAfter(
+    const request = findLatestClientTurnRequestAfter(
       await getThreadEvents(args.harness.api, args.threadId),
       baselineSequence,
     );
-    if (requestSequence === null) {
+    if (request === null) {
       throw new Error(
         `Thread ${args.threadId} did not record a client turn request`,
       );
@@ -526,11 +530,11 @@ export async function sendAndWaitForIdle(args: SendAndWaitForIdleArgs) {
         getThreadEvents(args.harness.api, args.threadId),
       ]);
       if (thread.status === "idle") {
-        if (hasCompletedAgentMessageAfter(events, requestSequence)) {
+        if (hasCompletedAgentMessageAfter(events, request.sequence)) {
           reachedIdle = true;
           break;
         }
-        if (hasTurnCompletedAfter(events, requestSequence)) {
+        if (hasTurnCompletedAfter(events, request.sequence)) {
           throw new Error(
             `Thread ${args.threadId} returned to idle without a completed agent message`,
           );

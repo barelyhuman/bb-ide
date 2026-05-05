@@ -12,6 +12,7 @@ import {
   upsertHost,
 } from "@bb/db";
 import {
+  encodeClientTurnRequestIdNumber,
   threadScope,
   type PromptInput,
   type TurnRequestTarget,
@@ -66,6 +67,7 @@ function insertTurnRequestEvent(args: {
       createdAt: args.createdAt,
       data: JSON.stringify({
         direction: "outbound",
+        requestId: encodeClientTurnRequestIdNumber({ value: args.sequence }),
         source: "tell",
         initiator: args.initiator,
         input: args.input,

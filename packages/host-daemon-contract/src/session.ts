@@ -2,6 +2,7 @@ import type { Hono } from "hono";
 import { hc } from "hono/client";
 import {
   ENVIRONMENT_CHANGE_KINDS,
+  hostDaemonProducerEventIdSchema,
   hostTypeSchema,
   pendingInteractionCreateSchema,
   pendingInteractionStatusSchema,
@@ -105,13 +106,13 @@ export type HostDaemonCommandBatch = z.infer<
   typeof hostDaemonCommandBatchSchema
 >;
 
-export const hostDaemonEventEnvelopeSchema = z.object({
-  environmentId: z.string().min(1),
-  threadId: z.string().min(1),
-  sequence: z.number().int().nonnegative(),
-  createdAt: z.number().int().nonnegative(),
-  event: threadEventSchema,
-});
+export const hostDaemonEventEnvelopeSchema = z
+  .object({
+    producerEventId: hostDaemonProducerEventIdSchema,
+    threadId: z.string().min(1),
+    event: threadEventSchema,
+  })
+  .strict();
 export type HostDaemonEventEnvelope = z.infer<
   typeof hostDaemonEventEnvelopeSchema
 >;
@@ -124,28 +125,21 @@ export type HostDaemonEventBatchRequest = z.infer<
   typeof hostDaemonEventBatchRequestSchema
 >;
 
-export const hostDaemonEventBatchResponseSchema = z.object({
-  threadHighWaterMarks: z.record(z.string(), z.number().int().nonnegative()),
-});
+export const hostDaemonEventBatchResponseSchema = z
+  .object({
+    acceptedEvents: z.array(
+      z
+        .object({
+          producerEventId: hostDaemonProducerEventIdSchema,
+          threadId: z.string().min(1),
+          sequence: z.number().int().nonnegative(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
 export type HostDaemonEventBatchResponse = z.infer<
   typeof hostDaemonEventBatchResponseSchema
->;
-
-export const hostDaemonEventSequenceKeySchema = z.object({
-  sequence: z.number().int().nonnegative(),
-  threadId: z.string().min(1),
-});
-export type HostDaemonEventSequenceKey = z.infer<
-  typeof hostDaemonEventSequenceKeySchema
->;
-
-export const hostDaemonEventBatchSequenceConflictResponseSchema = z.object({
-  acceptedSequences: z.array(hostDaemonEventSequenceKeySchema),
-  code: z.literal("sequence_conflict"),
-  threadHighWaterMarks: z.record(z.string(), z.number().int().nonnegative()),
-});
-export type HostDaemonEventBatchSequenceConflictResponse = z.infer<
-  typeof hostDaemonEventBatchSequenceConflictResponseSchema
 >;
 
 export const hostDaemonCommandResultResponseSchema = z.object({
@@ -326,16 +320,10 @@ export type HostDaemonInternalSchema = {
   };
   "/session/events": {
     /** Used by the daemon to stream provider events (turn progress, completions, errors) back to the server. */
-    $post:
-      | Endpoint<
-          { json: HostDaemonEventBatchRequest },
-          HostDaemonEventBatchResponse
-        >
-      | Endpoint<
-          { json: HostDaemonEventBatchRequest },
-          HostDaemonEventBatchSequenceConflictResponse,
-          409
-        >;
+    $post: Endpoint<
+      { json: HostDaemonEventBatchRequest },
+      HostDaemonEventBatchResponse
+    >;
   };
   "/session/environment-change": {
     /** Used by the daemon to report raw environment workspace change hints for server-side validation and fan-out. */

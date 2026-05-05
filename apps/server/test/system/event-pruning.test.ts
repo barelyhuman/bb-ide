@@ -10,7 +10,10 @@ import {
   buildThreadTimeline,
   THREAD_TIMELINE_OLDER_ROW_LIMIT,
 } from "../../src/services/threads/timeline.js";
-import { internalAuthHeaders } from "../helpers/commands.js";
+import {
+  createTestDaemonEventEnvelope,
+  internalAuthHeaders,
+} from "../helpers/commands.js";
 import {
   seedEnvironment,
   seedHost,
@@ -485,11 +488,8 @@ describe("thread event pruning", () => {
         body: JSON.stringify({
           sessionId: session.id,
           events: [
-            {
-              environmentId: environment.id,
-              threadId: thread.id,
-              sequence: 1_006,
-              createdAt: Date.now(),
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 1,
               event: {
                 type: "thread/tokenUsage/updated",
                 threadId: thread.id,
@@ -514,7 +514,7 @@ describe("thread event pruning", () => {
                   modelContextWindow: 200_000,
                 },
               },
-            },
+            }),
           ],
         }),
       });

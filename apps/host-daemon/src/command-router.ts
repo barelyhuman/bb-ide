@@ -26,7 +26,6 @@ export interface CommandRouterOptions {
   persistRuntimeMaterial: CommandDispatchOptions["persistRuntimeMaterial"];
   runtimeManager: RuntimeManager;
   reportResult?: (result: CommandResultReport) => Promise<void>;
-  seedThreadHighWaterMark?: CommandDispatchOptions["seedThreadHighWaterMark"];
   eventSink: CommandDispatchOptions["eventSink"];
   listModels?: CommandDispatchOptions["listModels"];
   resolveInteractiveRequest?: CommandDispatchOptions["resolveInteractiveRequest"];
@@ -172,7 +171,6 @@ export class CommandRouter {
         persistRuntimeMaterial: this.options.persistRuntimeMaterial,
         runtimeManager: this.options.runtimeManager,
         dataDir: this.options.dataDir,
-        seedThreadHighWaterMark: this.options.seedThreadHighWaterMark,
         eventSink: this.options.eventSink,
         listModels: this.options.listModels,
         resolveInteractiveRequest: this.options.resolveInteractiveRequest,

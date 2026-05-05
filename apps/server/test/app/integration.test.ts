@@ -10,6 +10,7 @@ import {
 import { createPublicApiClient } from "@bb/server-contract";
 import { turnScope } from "@bb/domain";
 import { describe, expect, it } from "vitest";
+import { createTestDaemonEventEnvelope } from "../helpers/commands.js";
 import {
   createTestDaemonHostKey,
   startTestServer,
@@ -120,20 +121,6 @@ async function fetchSingleCommand(
       : body.commands.filter((command) => command.cursor > afterCursor);
   expect(commands).toHaveLength(1);
   return commands[0];
-}
-
-async function getNextEventSequence(
-  publicClient: ReturnType<typeof createPublicApiClient>,
-  threadId: string,
-): Promise<number> {
-  const response = await publicClient.threads[":id"].events.$get({
-    param: { id: threadId },
-    query: { limit: "10000" },
-  });
-  expect(response.status).toBe(200);
-  const events = await response.json();
-  const lastSequence = events.at(-1)?.seq ?? 0;
-  return lastSequence + 1;
 }
 
 describe("server integration", () => {
@@ -341,7 +328,6 @@ describe("server integration", () => {
         provisionCommand.cursor,
       );
       expect(threadStartCommand.command.type).toBe("thread.start");
-      const environmentId = threadStartCommand.command.environmentId;
       await daemonClient.session["command-result"].$post({
         json: {
           sessionId: session.sessionId,
@@ -380,17 +366,12 @@ describe("server integration", () => {
           Array.isArray(message.changes) &&
           message.changes.includes("events-appended"),
       );
-      const nextSequence = await getNextEventSequence(publicClient, thread.id);
-
       const eventResponse = await daemonClient.session.events.$post({
         json: {
           sessionId: session.sessionId,
           events: [
-            {
-              environmentId,
-              threadId: thread.id,
-              sequence: nextSequence,
-              createdAt: Date.now(),
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 1,
               event: {
                 type: "turn/started",
                 threadId: thread.id,
@@ -398,7 +379,7 @@ describe("server integration", () => {
                 turnId: "turn-1",
                 scope: turnScope("turn-1"),
               },
-            },
+            }),
           ],
         },
       });
@@ -492,7 +473,6 @@ describe("server integration", () => {
         provisionCommand.cursor,
       );
       expect(initialThreadStartCommand.command.type).toBe("thread.start");
-      const environmentId = initialThreadStartCommand.command.environmentId;
 
       await daemonClient.session["command-result"].$post({
         json: {
@@ -507,19 +487,12 @@ describe("server integration", () => {
         },
       });
 
-      const initialNextSequence = await getNextEventSequence(
-        publicClient,
-        thread.id,
-      );
       const initialEventsResponse = await daemonClient.session.events.$post({
         json: {
           sessionId: session.sessionId,
           events: [
-            {
-              environmentId,
-              threadId: thread.id,
-              sequence: initialNextSequence,
-              createdAt: Date.now(),
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 2,
               event: {
                 type: "turn/started",
                 threadId: thread.id,
@@ -527,12 +500,9 @@ describe("server integration", () => {
                 turnId: "turn-initial",
                 scope: turnScope("turn-initial"),
               },
-            },
-            {
-              environmentId,
-              threadId: thread.id,
-              sequence: initialNextSequence + 1,
-              createdAt: Date.now(),
+            }),
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 3,
               event: {
                 type: "turn/completed",
                 threadId: thread.id,
@@ -541,7 +511,7 @@ describe("server integration", () => {
                 scope: turnScope("turn-initial"),
                 status: "completed",
               },
-            },
+            }),
           ],
         },
       });
@@ -579,16 +549,12 @@ describe("server integration", () => {
         },
       });
 
-      const nextSequence = await getNextEventSequence(publicClient, thread.id);
       const eventsResponse = await daemonClient.session.events.$post({
         json: {
           sessionId: session.sessionId,
           events: [
-            {
-              environmentId,
-              threadId: thread.id,
-              sequence: nextSequence,
-              createdAt: Date.now(),
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 4,
               event: {
                 type: "turn/started",
                 threadId: thread.id,
@@ -596,12 +562,9 @@ describe("server integration", () => {
                 turnId: "turn-1",
                 scope: turnScope("turn-1"),
               },
-            },
-            {
-              environmentId,
-              threadId: thread.id,
-              sequence: nextSequence + 1,
-              createdAt: Date.now(),
+            }),
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 5,
               event: {
                 type: "turn/completed",
                 threadId: thread.id,
@@ -610,7 +573,7 @@ describe("server integration", () => {
                 scope: turnScope("turn-1"),
                 status: "completed",
               },
-            },
+            }),
           ],
         },
       });

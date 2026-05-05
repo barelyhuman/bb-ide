@@ -47,11 +47,13 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
         // Run turns concurrently
         await Promise.all([
           ctx.runtime.runTurn({
+            clientRequestId: "creq_2222222245",
             threadId: threadA,
             input: [{ type: "text", text: "Reply with exactly: THREAD_A_OK" }],
             options,
           }),
           ctx.runtime.runTurn({
+            clientRequestId: "creq_2222222246",
             threadId: threadB,
             input: [{ type: "text", text: "Reply with exactly: THREAD_B_OK" }],
             options,
@@ -120,11 +122,13 @@ describe.concurrent("cross-provider and multi-thread scenarios", () => {
         // Run turns concurrently on both providers
         await Promise.all([
           ctx.runtime.runTurn({
+            clientRequestId: "creq_2222222247",
             threadId: codexThread,
             input: [{ type: "text", text: "Reply with exactly: CODEX_OK" }],
             options: codexOptions,
           }),
           ctx.runtime.runTurn({
+            clientRequestId: "creq_2222222248",
             threadId: claudeThread,
             input: [{ type: "text", text: "Reply with exactly: CLAUDE_OK" }],
             options: claudeOptions,
@@ -200,6 +204,7 @@ describe.concurrent("multi-provider resume scenarios", () => {
       // Run turns concurrently: codex remembers APPLE, claude-code remembers ORANGE
       await Promise.all([
         ctx1.runtime.runTurn({
+          clientRequestId: "creq_2222222249",
           threadId: codexThreadId1,
           input: [
             {
@@ -210,6 +215,7 @@ describe.concurrent("multi-provider resume scenarios", () => {
           options: codexOptions,
         }),
         ctx1.runtime.runTurn({
+          clientRequestId: "creq_222222224a",
           threadId: claudeThreadId1,
           input: [
             {
@@ -280,6 +286,7 @@ describe.concurrent("multi-provider resume scenarios", () => {
 
         await Promise.all([
           ctx2.runtime.runTurn({
+            clientRequestId: "creq_222222224b",
             threadId: codexThreadId2,
             input: [
               {
@@ -290,6 +297,7 @@ describe.concurrent("multi-provider resume scenarios", () => {
             options: codexOptions,
           }),
           ctx2.runtime.runTurn({
+            clientRequestId: "creq_222222224c",
             threadId: claudeThreadId2,
             input: [
               {

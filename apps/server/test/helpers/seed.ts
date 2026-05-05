@@ -9,7 +9,11 @@ import {
   upsertHost,
 } from "@bb/db";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
-import { parseStoredThreadEvent, threadScope } from "@bb/domain";
+import {
+  encodeClientTurnRequestIdNumber,
+  parseStoredThreadEvent,
+  threadScope,
+} from "@bb/domain";
 import type {
   EnvironmentStatus,
   PermissionMode,
@@ -235,6 +239,7 @@ export function seedThreadRuntimeState(
     scope: threadScope(),
     data: {
       direction: "outbound",
+      requestId: encodeClientTurnRequestIdNumber({ value: sequenceStart }),
       input: [
         {
           type: "text",

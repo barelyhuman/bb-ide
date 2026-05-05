@@ -36,7 +36,7 @@ import {
 export type { ThreadEventWithMeta } from "./group-event-projection-turns.js";
 import { shouldSuppressLowValueToolCall } from "./tool-call-suppression.js";
 import {
-  buildAcceptedClientRequestBySequence,
+  buildAcceptedClientRequestById,
   parseAcceptedSteerFromClientRequest,
   parseUserFromClientRequest,
   parseManagerUserMessage,
@@ -115,20 +115,20 @@ const PROVIDER_THREAD_CHILD_INTERACTION_TOOL_NAMES = new Set([
   "closeAgent",
 ]);
 
-function buildClientTurnRequestBySequence(
+function buildClientTurnRequestById(
   events: ThreadEventWithMeta[],
-): Map<number, ClientTurnRequestedWithMeta> {
-  const requestBySequence = new Map<number, ClientTurnRequestedWithMeta>();
+): Map<string, ClientTurnRequestedWithMeta> {
+  const requestById = new Map<string, ClientTurnRequestedWithMeta>();
   for (const eventWithMeta of events) {
     if (eventWithMeta.event.type !== "client/turn/requested") {
       continue;
     }
-    requestBySequence.set(eventWithMeta.meta.seq, {
+    requestById.set(eventWithMeta.event.requestId, {
       event: eventWithMeta.event,
       meta: eventWithMeta.meta,
     });
   }
-  return requestBySequence;
+  return requestById;
 }
 
 function appendProjectedUserMessage(
@@ -208,10 +208,9 @@ function buildFlatProjectionData(
   const shouldTrackActiveThinking = args.includeActiveThinking;
 
   const orderedEvents = args.events;
-  const acceptedClientRequestBySequence =
-    buildAcceptedClientRequestBySequence(orderedEvents);
-  const clientRequestBySequence =
-    buildClientTurnRequestBySequence(orderedEvents);
+  const acceptedClientRequestById =
+    buildAcceptedClientRequestById(orderedEvents);
+  const clientRequestById = buildClientTurnRequestById(orderedEvents);
   const execLifecycleContext = createExecLifecycleContext();
 
   for (const { event: decoded, meta } of orderedEvents) {
@@ -266,11 +265,9 @@ function buildFlatProjectionData(
     }
 
     if (decoded.type === "turn/input/accepted") {
-      const clientRequest = clientRequestBySequence.get(
-        decoded.clientRequestSequence,
-      );
-      const acceptedClientRequest = acceptedClientRequestBySequence.get(
-        decoded.clientRequestSequence,
+      const clientRequest = clientRequestById.get(decoded.clientRequestId);
+      const acceptedClientRequest = acceptedClientRequestById.get(
+        decoded.clientRequestId,
       );
       const acceptedSteer =
         clientRequest && acceptedClientRequest
@@ -288,7 +285,10 @@ function buildFlatProjectionData(
     }
 
     const userFromClientRequest = parseUserFromClientRequest({
-      acceptedClientRequest: acceptedClientRequestBySequence.get(meta.seq),
+      acceptedClientRequest:
+        decoded.type === "client/turn/requested"
+          ? acceptedClientRequestById.get(decoded.requestId)
+          : undefined,
       decoded,
       meta,
       options: args.options,

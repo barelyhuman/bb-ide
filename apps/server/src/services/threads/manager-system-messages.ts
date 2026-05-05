@@ -50,7 +50,7 @@ async function queueReadyManagerSystemMessage(
       ? getActiveTurnId(deps, args.thread.id)
       : null;
 
-  const eventSequence = appendClientTurnEvent(deps, {
+  const request = appendClientTurnEvent(deps, {
     threadId: args.thread.id,
     environmentId: args.environment.id,
     type: "client/turn/requested",
@@ -76,7 +76,7 @@ async function queueReadyManagerSystemMessage(
     await queueTurnSubmitCommand(deps, {
       thread: args.thread,
       input: args.input,
-      eventSequence,
+      requestId: request.requestId,
       execution: args.execution,
       permissionEscalation,
       target: {
@@ -97,7 +97,7 @@ async function queueReadyManagerSystemMessage(
   const queuedMode = await queueReadyThreadTurnCommand(deps, {
     thread: args.thread,
     input: args.input,
-    eventSequence,
+    requestId: request.requestId,
     execution: args.execution,
     permissionEscalation,
     environment: {

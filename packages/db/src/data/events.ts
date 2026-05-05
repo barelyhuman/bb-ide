@@ -13,12 +13,14 @@ import {
   sql,
 } from "drizzle-orm";
 import type {
+  HostDaemonProducerEventId,
+  ClientTurnRequestId,
   StoredThreadEventDataForType,
   ThreadEventItemType,
   ThreadEventScope,
   ThreadEventType,
 } from "@bb/domain";
-import { getThreadEventScopeTurnId } from "@bb/domain";
+import { clientTurnRequestIdSchema, getThreadEventScopeTurnId } from "@bb/domain";
 import type {
   DbConnection,
   DbQueryConnection,
@@ -47,6 +49,58 @@ export interface InsertEventInput {
 export interface InsertEventsResult {
   insertedCount: number;
   insertedInputIndexes: number[];
+}
+
+export interface AppendDaemonEventInput {
+  data: string;
+  environmentId: string | null;
+  itemId: string | null;
+  itemKind: ThreadEventItemType | null;
+  producerEventId: HostDaemonProducerEventId;
+  producerEventPayloadHash: string;
+  providerThreadId: string | null;
+  scope: ThreadEventScope;
+  threadId: string;
+  type: ThreadEventType;
+}
+
+export interface AcceptedDaemonEvent {
+  producerEventId: HostDaemonProducerEventId;
+  sequence: number;
+  threadId: string;
+}
+
+export interface AppendDaemonEventsResult {
+  acceptedEvents: AcceptedDaemonEvent[];
+  insertedInputIndexes: number[];
+}
+
+interface StoredProducerEventRow {
+  producerEventId: string;
+  producerEventPayloadHash: string | null;
+  sequence: number;
+  threadId: string;
+}
+
+interface AssertProducerPayloadMatchesArgs {
+  existingHash: string | null;
+  input: AppendDaemonEventInput;
+}
+
+export interface ProducerEventPayloadMismatchDetails {
+  existingHash: string | null;
+  producerEventId: HostDaemonProducerEventId;
+  receivedHash: string;
+}
+
+export class ProducerEventPayloadMismatchError extends Error {
+  readonly details: ProducerEventPayloadMismatchDetails;
+
+  constructor(details: ProducerEventPayloadMismatchDetails) {
+    super("Producer event id was reused with a different payload");
+    this.name = "ProducerEventPayloadMismatchError";
+    this.details = details;
+  }
 }
 
 export type AppendStoredThreadEventArgs<
@@ -132,6 +186,161 @@ export function insertEvents(
 
   return {
     insertedCount,
+    insertedInputIndexes,
+  };
+}
+
+function listStoredProducerEventRows(
+  db: DbQueryConnection,
+  producerEventIds: readonly HostDaemonProducerEventId[],
+): StoredProducerEventRow[] {
+  if (producerEventIds.length === 0) {
+    return [];
+  }
+
+  const rows = db
+    .select({
+      producerEventId: events.producerEventId,
+      producerEventPayloadHash: events.producerEventPayloadHash,
+      sequence: events.sequence,
+      threadId: events.threadId,
+    })
+    .from(events)
+    .where(inArray(events.producerEventId, [...producerEventIds]))
+    .all();
+
+  const storedRows: StoredProducerEventRow[] = [];
+  for (const row of rows) {
+    if (row.producerEventId === null) {
+      continue;
+    }
+    storedRows.push({
+      producerEventId: row.producerEventId,
+      producerEventPayloadHash: row.producerEventPayloadHash,
+      sequence: row.sequence,
+      threadId: row.threadId,
+    });
+  }
+  return storedRows;
+}
+
+function assertProducerPayloadMatches(
+  args: AssertProducerPayloadMatchesArgs,
+): void {
+  if (args.existingHash === args.input.producerEventPayloadHash) {
+    return;
+  }
+  throw new ProducerEventPayloadMismatchError({
+    existingHash: args.existingHash,
+    producerEventId: args.input.producerEventId,
+    receivedHash: args.input.producerEventPayloadHash,
+  });
+}
+
+export function appendDaemonEventsInTransaction(
+  db: DbTransaction,
+  eventInputs: readonly AppendDaemonEventInput[],
+): AppendDaemonEventsResult {
+  if (eventInputs.length === 0) {
+    return {
+      acceptedEvents: [],
+      insertedInputIndexes: [],
+    };
+  }
+
+  const existingRowsByProducerEventId = new Map<
+    string,
+    StoredProducerEventRow
+  >();
+  const uniqueProducerEventIds = [
+    ...new Set(eventInputs.map((input) => input.producerEventId)),
+  ];
+  for (const row of listStoredProducerEventRows(db, uniqueProducerEventIds)) {
+    existingRowsByProducerEventId.set(row.producerEventId, row);
+  }
+
+  const threadIds = [...new Set(eventInputs.map((input) => input.threadId))];
+  const highWaterMarks = getHighWaterMarks(db, threadIds);
+  const nextSequencesByThreadId = new Map(
+    threadIds.map((threadId) => [
+      threadId,
+      (highWaterMarks[threadId] ?? 0) + 1,
+    ]),
+  );
+  const acceptedEvents: AcceptedDaemonEvent[] = [];
+  const insertedInputIndexes: number[] = [];
+  const acceptedByProducerEventId = new Map<
+    string,
+    AcceptedDaemonEvent & { producerEventPayloadHash: string | null }
+  >();
+
+  for (const row of existingRowsByProducerEventId.values()) {
+    acceptedByProducerEventId.set(row.producerEventId, {
+      producerEventId: row.producerEventId,
+      producerEventPayloadHash: row.producerEventPayloadHash,
+      sequence: row.sequence,
+      threadId: row.threadId,
+    });
+  }
+
+  const now = Date.now();
+  for (const [index, input] of eventInputs.entries()) {
+    const accepted = acceptedByProducerEventId.get(input.producerEventId);
+    if (accepted !== undefined) {
+      assertProducerPayloadMatches({
+        existingHash: accepted.producerEventPayloadHash,
+        input,
+      });
+      acceptedEvents.push({
+        producerEventId: input.producerEventId,
+        sequence: accepted.sequence,
+        threadId: accepted.threadId,
+      });
+      continue;
+    }
+
+    const sequence = nextSequencesByThreadId.get(input.threadId);
+    if (sequence === undefined) {
+      throw new Error(`Missing event sequence for thread: ${input.threadId}`);
+    }
+    const turnId = getThreadEventScopeTurnId(input.scope) ?? null;
+    db.run(
+      sql`INSERT INTO events
+        (id, thread_id, environment_id, scope_kind, turn_id, provider_thread_id, sequence, type, item_id, item_kind, producer_event_id, producer_event_payload_hash, data, created_at)
+        VALUES (
+          ${createEventId()},
+          ${input.threadId},
+          ${input.environmentId},
+          ${input.scope.kind},
+          ${turnId},
+          ${input.providerThreadId},
+          ${sequence},
+          ${input.type},
+          ${input.itemId},
+          ${input.itemKind},
+          ${input.producerEventId},
+          ${input.producerEventPayloadHash},
+          ${input.data},
+          ${now}
+        )`,
+    );
+
+    const acceptedEvent: AcceptedDaemonEvent = {
+      producerEventId: input.producerEventId,
+      sequence,
+      threadId: input.threadId,
+    };
+    acceptedEvents.push(acceptedEvent);
+    insertedInputIndexes.push(index);
+    acceptedByProducerEventId.set(input.producerEventId, {
+      ...acceptedEvent,
+      producerEventPayloadHash: input.producerEventPayloadHash,
+    });
+    nextSequencesByThreadId.set(input.threadId, sequence + 1);
+  }
+
+  return {
+    acceptedEvents,
     insertedInputIndexes,
   };
 }
@@ -326,9 +535,20 @@ export interface StoredEventSequenceRow extends StoredEventRow {
   environmentId: string | null;
 }
 
-export interface ListStoredTurnInputAcceptedRowsByClientRequestSequencesArgs {
+export interface ListStoredTurnInputAcceptedRowsByClientRequestIdsArgs {
   afterSequence: number;
-  clientRequestSequences: readonly number[];
+  clientRequestIds: readonly ClientTurnRequestId[];
+  threadId: string;
+}
+
+export interface ListStoredClientTurnRequestIdsInRangeArgs {
+  seqEnd: number;
+  seqStart: number;
+  threadId: string;
+}
+
+export interface ListStoredThreadProvisioningRowsByProvisioningIdArgs {
+  provisioningId: string;
   threadId: string;
 }
 
@@ -535,17 +755,40 @@ export function listStoredEventRowsByThreadSequences(
   return rows.sort(compareStoredEventSequenceRows);
 }
 
-export function listStoredTurnInputAcceptedRowsByClientRequestSequences(
+export function listStoredClientTurnRequestIdsInRange(
   db: DbConnection,
-  args: ListStoredTurnInputAcceptedRowsByClientRequestSequencesArgs,
+  args: ListStoredClientTurnRequestIdsInRangeArgs,
+): ClientTurnRequestId[] {
+  const rows = db
+    .select({
+      requestId: sql<string | null>`json_extract(${events.data}, '$.requestId')`,
+    })
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, args.threadId),
+        eq(events.type, "client/turn/requested"),
+        gte(events.sequence, args.seqStart),
+        lte(events.sequence, args.seqEnd),
+      ),
+    )
+    .orderBy(events.sequence)
+    .all();
+
+  return rows.map((row) => clientTurnRequestIdSchema.parse(row.requestId));
+}
+
+export function listStoredTurnInputAcceptedRowsByClientRequestIds(
+  db: DbConnection,
+  args: ListStoredTurnInputAcceptedRowsByClientRequestIdsArgs,
 ): StoredEventRow[] {
-  if (args.clientRequestSequences.length === 0) {
+  if (args.clientRequestIds.length === 0) {
     return [];
   }
 
-  const clientRequestSequenceConditions = args.clientRequestSequences.map(
-    (clientRequestSequence) =>
-      sql`json_extract(${events.data}, '$.clientRequestSequence') = ${clientRequestSequence}`,
+  const clientRequestIdConditions = args.clientRequestIds.map(
+    (clientRequestId) =>
+      sql`json_extract(${events.data}, '$.clientRequestId') = ${clientRequestId}`,
   );
 
   return db
@@ -556,7 +799,25 @@ export function listStoredTurnInputAcceptedRowsByClientRequestSequences(
         eq(events.threadId, args.threadId),
         eq(events.type, "turn/input/accepted"),
         gt(events.sequence, args.afterSequence),
-        or(...clientRequestSequenceConditions),
+        or(...clientRequestIdConditions),
+      ),
+    )
+    .orderBy(events.sequence)
+    .all();
+}
+
+export function listStoredThreadProvisioningRowsByProvisioningId(
+  db: DbConnection,
+  args: ListStoredThreadProvisioningRowsByProvisioningIdArgs,
+): StoredEventRow[] {
+  return db
+    .select(storedEventRowFields)
+    .from(events)
+    .where(
+      and(
+        eq(events.threadId, args.threadId),
+        eq(events.type, "system/thread-provisioning"),
+        sql`json_extract(${events.data}, '$.provisioningId') = ${args.provisioningId}`,
       ),
     )
     .orderBy(events.sequence)

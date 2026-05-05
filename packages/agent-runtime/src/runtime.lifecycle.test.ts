@@ -255,6 +255,7 @@ rl.on("line", (line) => {
       });
 
       await runtime.runTurn({
+        clientRequestId: "creq_222222223h",
         threadId: "t1",
         input: [{ type: "text", text: "follow up" }],
         instructions: "Updated instructions",
@@ -356,6 +357,7 @@ rl.on("line", (line) => {
       });
 
       await runtime.runTurn({
+        clientRequestId: "creq_222222223i",
         threadId: "t1",
         input: [{ type: "text", text: "follow up" }],
         options: fullRuntimeOptions,
@@ -416,6 +418,7 @@ rl.on("line", (line) => {
       });
 
       await runtime.runTurn({
+        clientRequestId: "creq_222222223j",
         threadId: "t1",
         input: [{ type: "text", text: "follow up" }],
         options: {
@@ -474,6 +477,7 @@ rl.on("line", (line) => {
         options: fullRuntimeOptions,
       });
       await runtime.runTurn({
+        clientRequestId: "creq_222222223k",
         threadId: "t1",
         input: [{ type: "text", text: "hello" }],
         options: fullRuntimeOptions,
@@ -553,6 +557,7 @@ rl.on("line", (line) => {
         options: fullRuntimeOptions,
       });
       await runtime.runTurn({
+        clientRequestId: "creq_222222223m",
         threadId: "t1",
         input: [{ type: "text", text: "hello" }],
         options: fullRuntimeOptions,
@@ -582,6 +587,7 @@ rl.on("line", (line) => {
         threadId: "t1",
         projectId: "p1",
         providerId: "fake",
+        clientRequestId: "creq_222222223n",
         input: [{ type: "text", text: "hello from start" }],
         options: fullRuntimeOptions,
       });
@@ -623,6 +629,7 @@ rl.on("line", (line) => {
       );
 
       await runtime.runTurn({
+        clientRequestId: "creq_222222223n",
         threadId: "t1",
         input: [{ type: "text", text: "hello after start" }],
         options: fullRuntimeOptions,
@@ -660,6 +667,7 @@ rl.on("line", (line) => {
 
       // Should be able to run a turn on the resumed thread
       await runtime.runTurn({
+        clientRequestId: "creq_222222223p",
         threadId: "t1",
         input: [{ type: "text", text: "after resume" }],
         options: fullRuntimeOptions,
@@ -744,6 +752,7 @@ rl.on("line", (line) => {
         options: fullRuntimeOptions,
       });
       await runtime.runTurn({
+        clientRequestId: "creq_222222223q",
         threadId: "t1",
         input: [{ type: "text", text: "delay:500" }],
         options: fullRuntimeOptions,
@@ -761,6 +770,7 @@ rl.on("line", (line) => {
       );
 
       await runtime.steerTurn({
+        clientRequestId: "creq_222222223r",
         threadId: "t1",
         expectedTurnId: "turn-1",
         input: [{ type: "text", text: "still active" }],
@@ -819,6 +829,7 @@ rl.on("line", (line) => {
         options: fullRuntimeOptions,
       });
       await runtime.runTurn({
+        clientRequestId: "creq_222222223s",
         threadId: "t1",
         input: [{ type: "text", text: "after restart" }],
         options: fullRuntimeOptions,
@@ -854,6 +865,7 @@ rl.on("line", (line) => {
         options: fullRuntimeOptions,
       });
       await runtime.runTurn({
+        clientRequestId: "creq_222222223t",
         threadId: "t1",
         input: [{ type: "text", text: "delay:500" }],
         options: fullRuntimeOptions,
@@ -866,6 +878,7 @@ rl.on("line", (line) => {
         turnId: "turn-1",
       });
       await runtime.steerTurn({
+        clientRequestId: "creq_222222223u",
         threadId: "t1",
         expectedTurnId: "turn-1",
         input: [{ type: "text", text: "steer input" }],
@@ -904,6 +917,7 @@ rl.on("line", (line) => {
       builtCommands.length = 0;
 
       await runtime.runTurn({
+        clientRequestId: "creq_222222223v",
         threadId: "t1",
         input: [{ type: "text", text: "use a different setup" }],
         options: { ...fullRuntimeOptions, model: "fake-model-2" },
@@ -920,6 +934,7 @@ rl.on("line", (line) => {
       });
       expect(builtCommands[1]).toMatchObject({
         type: "turn/start",
+        clientRequestId: "creq_222222223v",
         options: {
           instructions: "Updated instructions",
           model: "fake-model-2",
@@ -957,6 +972,7 @@ rl.on("line", (line) => {
         instructions: "Initial instructions",
       });
       await runtime.runTurn({
+        clientRequestId: "creq_222222223w",
         threadId: "t1",
         input: [{ type: "text", text: "delay:500" }],
         options: { ...fullRuntimeOptions, model: "fake-model" },
@@ -972,6 +988,7 @@ rl.on("line", (line) => {
       builtCommands.length = 0;
 
       await runtime.steerTurn({
+        clientRequestId: "creq_222222223x",
         threadId: "t1",
         expectedTurnId: "turn-1",
         input: [{ type: "text", text: "apply a new setup now" }],
@@ -990,6 +1007,7 @@ rl.on("line", (line) => {
       expect(builtCommands[1]).toMatchObject({
         expectedTurnId: "turn-1",
         type: "turn/steer",
+        clientRequestId: "creq_222222223x",
         options: {
           instructions: "Updated instructions",
           model: "fake-model-2",
@@ -1033,6 +1051,7 @@ rl.on("line", (line) => {
 
       await expect(
         runtime.runTurn({
+          clientRequestId: "creq_222222223y",
           threadId: "nonexistent",
           input: [{ type: "text", text: "hi" }],
           options: fullRuntimeOptions,

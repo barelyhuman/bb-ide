@@ -591,6 +591,7 @@ function createAgentRuntimeInternal(
       threadId,
       projectId,
       providerId,
+      clientRequestId,
       input,
       options: execOpts,
       instructions,
@@ -682,9 +683,15 @@ function createAgentRuntimeInternal(
       }
 
       if (input && input.length > 0) {
+        if (clientRequestId === undefined) {
+          throw new Error(
+            `Thread start with input requires a client request id for ${threadId}`,
+          );
+        }
         await runtime.runTurn({
           threadId,
           input,
+          clientRequestId,
           options: execOpts,
           instructions,
         });
@@ -797,7 +804,7 @@ function createAgentRuntimeInternal(
     async runTurn({
       threadId,
       input,
-      clientRequestSequence,
+      clientRequestId,
       options: execOpts,
       instructions,
     }) {
@@ -819,9 +826,7 @@ function createAgentRuntimeInternal(
         threadId,
         providerThreadId: requireProviderThreadId(threadId),
         input,
-        ...(clientRequestSequence !== undefined
-          ? { clientRequestSequence }
-          : {}),
+        clientRequestId,
         options: toProviderExecutionContext({
           envVars: {},
           execOpts,
@@ -859,7 +864,7 @@ function createAgentRuntimeInternal(
       threadId,
       expectedTurnId,
       input,
-      clientRequestSequence,
+      clientRequestId,
       options: execOpts,
       instructions,
     }) {
@@ -894,9 +899,7 @@ function createAgentRuntimeInternal(
         providerThreadId: requireProviderThreadId(threadId),
         expectedTurnId,
         input,
-        ...(clientRequestSequence !== undefined
-          ? { clientRequestSequence }
-          : {}),
+        clientRequestId,
         options: toProviderExecutionContext({
           envVars: {},
           execOpts,

@@ -10,12 +10,17 @@ import {
   type StoredTurnRequestEventRow,
 } from "@bb/db";
 import {
+  CLIENT_TURN_REQUEST_ID_ALPHABET,
+  CLIENT_TURN_REQUEST_ID_SUFFIX_LENGTH,
+  encodeClientTurnRequestIdAlphabetIndexes,
   parseStoredThreadEvent,
   systemErrorEventDataSchema,
   threadScope,
   turnRequestEventDataSchema,
 } from "@bb/domain";
+import { randomBytes } from "node:crypto";
 import type {
+  ClientTurnRequestId,
   ClientTurnLifecycleEventData,
   PromptInput,
   ProvisioningTranscriptEntry,
@@ -58,6 +63,11 @@ export interface ClientTurnLifecycleEventArgs {
 export type ClientTurnEventArgs =
   | ClientTurnLifecycleEventArgs
   | ClientTurnRequestedEventArgs;
+
+export interface AppendedClientTurnRequest {
+  requestId: ClientTurnRequestId;
+  sequence: number;
+}
 
 export type ThreadOwnershipChangeAction = "assign" | "release" | "transfer";
 
@@ -164,19 +174,10 @@ function resolveReconnectProgress(
   return parseReconnectProgress(args.message);
 }
 
-function buildClientTurnEventData(
-  args: ClientTurnRequestedEventArgs,
-): TurnRequestEventData;
-function buildClientTurnEventData(
-  args: ClientTurnLifecycleEventArgs,
-): ClientTurnLifecycleEventData;
-function buildClientTurnEventData(
+function buildClientTurnBaseEventData(
   args: ClientTurnEventArgs,
-): ClientTurnLifecycleEventData | TurnRequestEventData;
-function buildClientTurnEventData(
-  args: ClientTurnEventArgs,
-): ClientTurnLifecycleEventData | TurnRequestEventData {
-  const base: ClientTurnLifecycleEventData = {
+): ClientTurnLifecycleEventData {
+  return {
     direction: "outbound",
     source: args.source,
     initiator: args.initiator,
@@ -185,13 +186,21 @@ function buildClientTurnEventData(
       params: {},
     },
   };
+}
 
-  if (args.type !== "client/turn/requested") {
-    return base;
-  }
+function buildClientTurnLifecycleEventData(
+  args: ClientTurnLifecycleEventArgs,
+): ClientTurnLifecycleEventData {
+  return buildClientTurnBaseEventData(args);
+}
 
+function buildClientTurnRequestedEventData(
+  args: ClientTurnRequestedEventArgs,
+  requestId: ClientTurnRequestId,
+): TurnRequestEventData {
   return {
-    ...base,
+    ...buildClientTurnBaseEventData(args),
+    requestId,
     input: args.input,
     target: args.target,
     execution: args.execution,
@@ -200,10 +209,19 @@ function buildClientTurnEventData(
 
 type AppendClientTurnEvent = (args: AppendThreadEventArgs) => number;
 
+function createClientTurnRequestId(): ClientTurnRequestId {
+  const bytes = randomBytes(CLIENT_TURN_REQUEST_ID_SUFFIX_LENGTH);
+  return encodeClientTurnRequestIdAlphabetIndexes({
+    indexes: [...bytes].map(
+      (byte) => byte % CLIENT_TURN_REQUEST_ID_ALPHABET.length,
+    ),
+  });
+}
+
 function appendBuiltClientTurnEvent(
   append: AppendClientTurnEvent,
   args: ClientTurnEventArgs,
-): number {
+): number | AppendedClientTurnRequest {
   switch (args.type) {
     case "client/thread/start":
     case "client/turn/start":
@@ -212,16 +230,19 @@ function appendBuiltClientTurnEvent(
         environmentId: args.environmentId,
         type: args.type,
         scope: threadScope(),
-        data: buildClientTurnEventData(args),
+        data: buildClientTurnLifecycleEventData(args),
       });
-    case "client/turn/requested":
-      return append({
+    case "client/turn/requested": {
+      const requestId = createClientTurnRequestId();
+      const sequence = append({
         threadId: args.threadId,
         environmentId: args.environmentId,
         type: args.type,
         scope: threadScope(),
-        data: buildClientTurnEventData(args),
+        data: buildClientTurnRequestedEventData(args, requestId),
       });
+      return { requestId, sequence };
+    }
   }
 }
 
@@ -256,8 +277,16 @@ export function appendThreadEventsInTransaction(
 
 export function appendClientTurnEvent(
   deps: Pick<AppDeps, "db" | "hub">,
+  args: ClientTurnRequestedEventArgs,
+): AppendedClientTurnRequest;
+export function appendClientTurnEvent(
+  deps: Pick<AppDeps, "db" | "hub">,
+  args: ClientTurnLifecycleEventArgs,
+): number;
+export function appendClientTurnEvent(
+  deps: Pick<AppDeps, "db" | "hub">,
   args: ClientTurnEventArgs,
-): number {
+): number | AppendedClientTurnRequest {
   return appendBuiltClientTurnEvent(
     (eventArgs) => appendThreadEvent(deps, eventArgs),
     args,
@@ -266,8 +295,16 @@ export function appendClientTurnEvent(
 
 export function appendClientTurnEventInTransaction(
   db: DbTransaction,
+  args: ClientTurnRequestedEventArgs,
+): AppendedClientTurnRequest;
+export function appendClientTurnEventInTransaction(
+  db: DbTransaction,
+  args: ClientTurnLifecycleEventArgs,
+): number;
+export function appendClientTurnEventInTransaction(
+  db: DbTransaction,
   args: ClientTurnEventArgs,
-): number {
+): number | AppendedClientTurnRequest {
   return appendBuiltClientTurnEvent(
     (eventArgs) => appendThreadEventInTransaction(db, eventArgs),
     args,
@@ -316,6 +353,7 @@ export function parseStoredTurnRequestEvent(
   if (event.type === "client/turn/requested") {
     return {
       direction: event.direction,
+      requestId: event.requestId,
       source: event.source,
       ...(event.initiator ? { initiator: event.initiator } : {}),
       input: event.input,

@@ -686,7 +686,7 @@ export async function advanceEnvironmentProvisioning(
 export const MANAGED_REPROVISION_QUEUED = "queued" as const;
 export const MANAGED_REPROVISION_IN_PROGRESS = "already-provisioning" as const;
 export interface QueuedManagedReprovision {
-  eventSequence: number;
+  provisionEventSequence: number;
   status: typeof MANAGED_REPROVISION_QUEUED;
 }
 export type ManagedReprovisionResult =
@@ -760,7 +760,6 @@ export async function queueManagedEnvironmentReprovision(
     initiator: {
       threadId: args.threadId,
       provisioningId: args.provisioningId,
-      eventSequence: args.provisionEventSequence,
     },
     sourcePath: source.path,
     targetPath,
@@ -782,7 +781,7 @@ export async function queueManagedEnvironmentReprovision(
     kind: "reprovision",
   });
   return {
-    eventSequence: args.provisionEventSequence,
+    provisionEventSequence: args.provisionEventSequence,
     status: MANAGED_REPROVISION_QUEUED,
   };
 }

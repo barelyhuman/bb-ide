@@ -48,15 +48,6 @@ export interface CommandDispatchOptions {
   readPersistedRuntimeMaterial: () => Promise<HostRuntimeMaterialState | null>;
   persistRuntimeMaterial: (state: HostRuntimeMaterialState) => Promise<void>;
   runtimeManager: RuntimeManager;
-  /**
-   * Establishes the daemon's initial sequence floor for a command before any
-   * provider events can be emitted. Command-result rebasing only adjusts events
-   * still buffered after the RPC returns.
-   */
-  seedThreadHighWaterMark?: (args: {
-    sequence: number;
-    threadId: string;
-  }) => void;
   eventSink: EventSink;
   listModels?: (args: ListModelsDispatchArgs) => Promise<AvailableModel[]>;
   listProviders?: () => ProviderInfo[];

@@ -19,6 +19,7 @@ import type {
   ResolvedThreadExecutionOptions,
   RuntimeThreadExecutionOptions,
   Thread,
+  ClientTurnRequestId,
   WorkspaceProvisionType,
 } from "@bb/domain";
 import type { CreateThreadRequest } from "@bb/server-contract";
@@ -67,30 +68,29 @@ export interface ThreadCommandHost {
   hostId: string;
 }
 
-export interface ThreadWorkspaceCommandEnvironment
-  extends ThreadHostCommandEnvironment {
+export interface ThreadWorkspaceCommandEnvironment extends ThreadHostCommandEnvironment {
   path: string | null;
   workspaceProvisionType: WorkspaceProvisionType;
 }
 
 export interface QueueThreadStartCommandArgs {
-  eventSequence: number;
   environment: QueueThreadStartCommandEnvironment;
   execution: ResolvedThreadExecutionOptions;
   permissionEscalation: PermissionEscalation;
   input: PromptInput[];
   projectId: string;
   providerId: string;
+  requestId: ClientTurnRequestId;
   thread: Thread;
 }
 
 export interface TurnSubmitCommandPayloadArgs {
   environmentId: string;
-  eventSequence: number;
   execution: ResolvedThreadExecutionOptions;
   permissionEscalation: PermissionEscalation;
   input: PromptInput[];
   providerThreadId: string;
+  requestId: ClientTurnRequestId;
   runtimeContext: ResolvedThreadRuntimeCommandConfig;
   target: TurnSubmitTarget;
   threadId: string;
@@ -107,21 +107,21 @@ export interface PrepareTurnSubmitCommandPayloadArgs {
 }
 
 export interface CreateTurnSubmitCommandPayloadArgs extends PrepareTurnSubmitCommandPayloadArgs {
-  eventSequence: number;
+  requestId: ClientTurnRequestId;
 }
 
 export interface FinalizeTurnSubmitCommandPayloadArgs {
-  eventSequence: number;
+  requestId: ClientTurnRequestId;
   preparedCommand: PreparedTurnSubmitCommandPayload;
 }
 
 export type PreparedTurnSubmitCommandPayload = Omit<
   Extract<HostDaemonCommand, { type: "turn.submit" }>,
-  "eventSequence"
+  "requestId"
 >;
 type PreparedTurnSubmitCommandBuildArgs = Omit<
   TurnSubmitCommandPayloadArgs,
-  "eventSequence"
+  "requestId"
 >;
 
 interface RuntimeExecutionOptionsArgs {
@@ -146,7 +146,7 @@ interface QueueTurnSubmitCommandInTransactionArgs {
 }
 
 export interface QueueTurnSubmitCommandArgs extends PrepareTurnSubmitCommandPayloadArgs {
-  eventSequence: number;
+  requestId: ClientTurnRequestId;
 }
 
 export interface QueueThreadRenameCommandArgs {
@@ -181,8 +181,15 @@ function providerSupportsThreadRename(providerId: string): boolean {
   return getBuiltInAgentProviderInfo(providerId).capabilities.supportsRename;
 }
 
-function providerSupportsThreadArchive(providerId: string): boolean {
+function providerSupportsThreadArchiveForwarding(providerId: string): boolean {
   if (!isAgentProviderId(providerId)) {
+    return false;
+  }
+
+  // BB archive is server-owned product state. Codex native archive removes the
+  // provider thread before our async unarchive command is guaranteed to drain,
+  // so forwarding it can break the next unarchived turn.
+  if (providerId === "codex") {
     return false;
   }
 
@@ -253,7 +260,7 @@ export async function buildThreadStartCommand(
     },
     projectId: args.projectId,
     providerId: args.providerId,
-    eventSequence: args.eventSequence,
+    requestId: args.requestId,
     input: args.input,
     options: toRuntimeExecutionOptions(args),
     instructions: runtimeContext.instructions,
@@ -288,12 +295,12 @@ function buildPreparedTurnSubmitCommandPayload(
   };
 }
 
-export function addEventSequenceToTurnSubmitCommandPayload(
+export function addRequestIdToTurnSubmitCommandPayload(
   args: FinalizeTurnSubmitCommandPayloadArgs,
 ): Extract<HostDaemonCommand, { type: "turn.submit" }> {
   return {
     ...args.preparedCommand,
-    eventSequence: args.eventSequence,
+    requestId: args.requestId,
   };
 }
 
@@ -326,8 +333,8 @@ async function createTurnSubmitCommandPayload(
   args: CreateTurnSubmitCommandPayloadArgs,
 ): Promise<Extract<HostDaemonCommand, { type: "turn.submit" }>> {
   const preparedCommand = await prepareTurnSubmitCommandPayload(deps, args);
-  return addEventSequenceToTurnSubmitCommandPayload({
-    eventSequence: args.eventSequence,
+  return addRequestIdToTurnSubmitCommandPayload({
+    requestId: args.requestId,
     preparedCommand,
   });
 }
@@ -466,7 +473,7 @@ export function queueThreadArchiveCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: QueueThreadArchiveCommandArgs,
 ): void {
-  if (!providerSupportsThreadArchive(args.thread.providerId)) {
+  if (!providerSupportsThreadArchiveForwarding(args.thread.providerId)) {
     return;
   }
 
@@ -499,7 +506,7 @@ export function queueThreadUnarchiveCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: QueueThreadUnarchiveCommandArgs,
 ): void {
-  if (!providerSupportsThreadArchive(args.thread.providerId)) {
+  if (!providerSupportsThreadArchiveForwarding(args.thread.providerId)) {
     return;
   }
 

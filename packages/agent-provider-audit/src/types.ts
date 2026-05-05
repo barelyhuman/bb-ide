@@ -1,4 +1,5 @@
 import type {
+  ClientTurnRequestId,
   DynamicTool,
   TurnRequestTarget,
   ThreadExecutionOptions,
@@ -15,6 +16,13 @@ import type {
   ProviderRawEventCoverage,
 } from "@bb/agent-runtime";
 import type { AgentRuntimeCaptureEntry } from "@bb/agent-runtime/capture";
+import { encodeClientTurnRequestIdNumber } from "@bb/domain";
+
+export function buildProviderAuditClientRequestId(
+  turnIndex: number,
+): ClientTurnRequestId {
+  return encodeClientTurnRequestIdNumber({ value: turnIndex + 1 });
+}
 
 export interface ProviderAuditScenarioExecutionOptions {
   permissionMode?: ThreadExecutionOptions["permissionMode"];
@@ -114,6 +122,7 @@ export interface ProviderAuditManifest {
 
 export interface ProviderAuditClientRequest {
   id: string;
+  requestId: ClientTurnRequestId;
   turnIndex: number;
   type: "client/turn/requested";
   target: TurnRequestTarget;

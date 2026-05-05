@@ -118,21 +118,6 @@ function recordReplayTurnRequest(
   });
 }
 
-function seedThreadHighWaterMarkIfPresent(
-  command:
-    | Extract<HostDaemonCommand, { type: "thread.start" }>
-    | Extract<HostDaemonCommand, { type: "turn.submit" }>,
-  options: CommandDispatchOptions,
-): void {
-  if (command.eventSequence === undefined) {
-    return;
-  }
-  options.seedThreadHighWaterMark?.({
-    threadId: command.threadId,
-    sequence: command.eventSequence,
-  });
-}
-
 type CommandHandlerMap = {
   [TType in HostDaemonCommandType]: (
     command: Extract<HostDaemonCommand, { type: TType }>,
@@ -147,7 +132,6 @@ const commandHandlers: CommandHandlerMap = {
   ) => {
     recordReplayThreadMetadata(command, options);
     recordReplayTurnRequest(command, options);
-    seedThreadHighWaterMarkIfPresent(command, options);
     return startThread(command, options);
   },
   "turn.submit": async (
@@ -156,7 +140,6 @@ const commandHandlers: CommandHandlerMap = {
   ) => {
     recordReplayThreadMetadata(command, options);
     recordReplayTurnRequest(command, options);
-    seedThreadHighWaterMarkIfPresent(command, options);
     const entry = await ensureThreadRuntime(command, options);
     return submitTurn(command, entry);
   },
@@ -219,11 +202,10 @@ const commandHandlers: CommandHandlerMap = {
     command: Extract<HostDaemonCommand, { type: "thread.unarchive" }>,
     options: CommandDispatchOptions,
   ) => {
-    const runtime = await options.runtimeManager.ensureProviderMaintenanceRuntime(
-      {
+    const runtime =
+      await options.runtimeManager.ensureProviderMaintenanceRuntime({
         dataDir: options.dataDir,
-      },
-    );
+      });
     await runtime.unarchiveThread({
       threadId: command.threadId,
       providerId: command.providerId,

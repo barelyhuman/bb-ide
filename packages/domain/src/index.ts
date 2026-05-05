@@ -144,6 +144,27 @@ export type {
 export { DEFAULT_ENV_SETUP_SCRIPT_NAME } from "./setup-script.js";
 
 export {
+  CLIENT_TURN_REQUEST_ID_ALPHABET,
+  CLIENT_TURN_REQUEST_ID_PREFIX,
+  CLIENT_TURN_REQUEST_ID_SUFFIX_LENGTH,
+  clientTurnRequestIdSchema,
+  encodeClientTurnRequestIdAlphabetIndexes,
+  encodeClientTurnRequestIdNumber,
+  formatClientTurnRequestIdSuffix,
+  hostDaemonProducerEventIdSchema,
+} from "./protocol-ids.js";
+export type {
+  ClientTurnRequestId,
+  EncodeClientTurnRequestIdAlphabetIndexesArgs,
+  EncodeClientTurnRequestIdNumberArgs,
+  FormatClientTurnRequestIdSuffixArgs,
+  HostDaemonProducerEventId,
+} from "./protocol-ids.js";
+
+export { canonicalizeProducerEventPayload } from "./producer-event-payload.js";
+export type { CanonicalizeProducerEventPayloadArgs } from "./producer-event-payload.js";
+
+export {
   activeLifecycleOperationStates,
   environmentOperationKindSchema,
   environmentOperationKindValues,

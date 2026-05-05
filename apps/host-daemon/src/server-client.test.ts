@@ -110,27 +110,24 @@ describe("createServerClient", () => {
     expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 
-  it("returns sequence conflicts when posting events", async () => {
+  it("returns accepted event mappings when posting events", async () => {
     const fetchFn = vi.fn<typeof fetch>(async (input) => {
       expect(String(input)).toContain("/internal/session/events");
       return new Response(
         JSON.stringify({
-          acceptedSequences: [
+          acceptedEvents: [
             {
+              producerEventId: "hdevt_23456789abcdefghijkm",
               sequence: 6,
               threadId: "thr_123",
             },
           ],
-          code: "sequence_conflict",
-          threadHighWaterMarks: {
-            thr_123: 7,
-          },
         }),
         {
           headers: {
             "content-type": "application/json",
           },
-          status: 409,
+          status: 200,
         },
       );
     });
@@ -145,10 +142,8 @@ describe("createServerClient", () => {
     await expect(
       client.postEvents([
         {
-          environmentId: "env_123",
+          producerEventId: "hdevt_23456789abcdefghijkm",
           threadId: "thr_123",
-          sequence: 7,
-          createdAt: 1_700_000_000_000,
           event: {
             type: "turn/started",
             threadId: "thr_123",
@@ -158,16 +153,14 @@ describe("createServerClient", () => {
         },
       ]),
     ).resolves.toEqual({
-      acceptedSequences: [
+      acceptedEvents: [
         {
+          producerEventId: "hdevt_23456789abcdefghijkm",
           sequence: 6,
           threadId: "thr_123",
         },
       ],
-      kind: "sequence-conflict",
-      threadHighWaterMarks: {
-        thr_123: 7,
-      },
+      kind: "accepted",
     });
   });
 

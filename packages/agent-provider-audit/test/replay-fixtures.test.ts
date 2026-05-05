@@ -161,15 +161,14 @@ describe("@bb/agent-provider-audit fixture replay", () => {
       ),
     ).toBe(true);
 
-    const activeSubagentPrefix =
-      checkedInArtifact.timelinePrefixSnapshots.find(
-        (snapshot) =>
-          snapshot.fixture === "excalidraw/claude-code/search-feature" &&
-          snapshot.threadStatus === "active" &&
-          snapshot.timelinePreview.some((line) =>
-            line.includes("Running subagent:"),
-          ),
-      );
+    const activeSubagentPrefix = checkedInArtifact.timelinePrefixSnapshots.find(
+      (snapshot) =>
+        snapshot.fixture === "excalidraw/claude-code/search-feature" &&
+        snapshot.threadStatus === "active" &&
+        snapshot.timelinePreview.some((line) =>
+          line.includes("Running subagent:"),
+        ),
+    );
     expect(activeSubagentPrefix).toBeDefined();
     expect(activeSubagentPrefix?.lastEventType).toBe("item/started");
     expect(activeSubagentPrefix?.semanticTimelineRowCount).toBeGreaterThan(0);
@@ -195,14 +194,31 @@ describe("@bb/agent-provider-audit fixture replay", () => {
     expect(contextWindowSnapshotRows).toMatchSnapshot();
   });
 
-  it("replayed Pi fixtures preserve model context-window metadata even without bridge-side usage samples", () => {
+  it("replayed Pi token-usage fixtures preserve model context-window metadata even without bridge-side usage samples", () => {
     const piSnapshots = checkedInArtifact.contextWindowSnapshots.filter(
       (snapshot) => snapshot.providerId === "pi",
     );
+    const piCoverage = checkedInArtifact.coverageSummary.providers.find(
+      (provider) => provider.providerId === "pi",
+    );
+    const piProviderErrorFixtureIds = new Set(
+      piCoverage?.translatedEventTypes.find(
+        (eventType) => eventType.type === "provider/error",
+      )?.fixtureIds ?? [],
+    );
 
     expect(piSnapshots.length).toBeGreaterThan(0);
+    let tokenUsageFixtureCount = 0;
     for (const snapshot of piSnapshots) {
       expect(snapshot.contextWindowUsage).toBeNull();
+      if (snapshot.tokenUsageSummary.tokenUsageEventCount === 0) {
+        expect(
+          piProviderErrorFixtureIds.has(snapshot.fixture),
+          `Expected ${snapshot.fixture} without Pi token usage to have provider/error coverage`,
+        ).toBe(true);
+        continue;
+      }
+      tokenUsageFixtureCount += 1;
       expect(
         snapshot.tokenUsageSummary.nonNullModelContextWindowCount,
       ).toBeGreaterThan(0);
@@ -210,6 +226,7 @@ describe("@bb/agent-provider-audit fixture replay", () => {
         snapshot.tokenUsageSummary.distinctModelContextWindows.length,
       ).toBeGreaterThan(0);
     }
+    expect(tokenUsageFixtureCount).toBeGreaterThan(0);
   });
 
   it("has no unresolved coverage issues in the checked-in fixtures", () => {

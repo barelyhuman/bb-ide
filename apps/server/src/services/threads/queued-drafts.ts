@@ -24,7 +24,7 @@ import {
   requireThreadEnvironment,
 } from "../lib/entity-lookup.js";
 import {
-  addEventSequenceToTurnSubmitCommandPayload,
+  addRequestIdToTurnSubmitCommandPayload,
   buildExecutionOptions,
   prepareTurnSubmitCommandPayload,
 } from "./thread-commands.js";
@@ -178,7 +178,7 @@ async function sendClaimedDraftForIdleProviderThread(
       if (!consumed) {
         return false;
       }
-      const eventSequence = appendClientTurnEventInTransaction(tx, {
+      const request = appendClientTurnEventInTransaction(tx, {
         environmentId: environment.id,
         execution,
         initiator: "user",
@@ -189,8 +189,8 @@ async function sendClaimedDraftForIdleProviderThread(
         threadId: thread.id,
         type: "client/turn/requested",
       });
-      const command = addEventSequenceToTurnSubmitCommandPayload({
-        eventSequence,
+      const command = addRequestIdToTurnSubmitCommandPayload({
+        requestId: request.requestId,
         preparedCommand,
       });
       queueCommandInTransaction(tx, {

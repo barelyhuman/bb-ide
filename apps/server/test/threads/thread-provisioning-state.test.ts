@@ -107,7 +107,7 @@ describe("thread provisioning operation state", () => {
     const environmentProvisioning = upsertThreadOperationRecord(db, {
       threadId: thread.id,
       kind: "provision",
-      payload: JSON.stringify({ clientRequestSequence: 7 }),
+      payload: JSON.stringify({ clientRequestId: "creq_23456789ab" }),
       provisioningState: {
         environmentId: environment.id,
         provisionEventSequence: 13,
@@ -116,20 +116,20 @@ describe("thread provisioning operation state", () => {
         workspaceReadyEventSequence: null,
       },
     });
-    expect(readThreadProvisioningStateFromRecord(environmentProvisioning)).toEqual(
-      {
-        environmentId: environment.id,
-        provisionEventSequence: 13,
-        provisioningId: "tpv_progress",
-        stage: "environment-provisioning",
-        workspaceReadyEventSequence: null,
-      },
-    );
+    expect(
+      readThreadProvisioningStateFromRecord(environmentProvisioning),
+    ).toEqual({
+      environmentId: environment.id,
+      provisionEventSequence: 13,
+      provisioningId: "tpv_progress",
+      stage: "environment-provisioning",
+      workspaceReadyEventSequence: null,
+    });
 
     const workspaceReady = upsertThreadOperationRecord(db, {
       threadId: thread.id,
       kind: "provision",
-      payload: JSON.stringify({ clientRequestSequence: 8 }),
+      payload: JSON.stringify({ clientRequestId: "creq_23456789ac" }),
       provisioningState: {
         environmentId: environment.id,
         provisionEventSequence: 13,

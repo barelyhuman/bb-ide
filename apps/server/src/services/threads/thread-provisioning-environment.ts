@@ -137,7 +137,6 @@ interface AttachThreadToEnvironmentArgs {
 interface BuildEnvironmentProvisionRequestArgs {
   context: ThreadProvisionEnvironmentProvisioningContext;
   environment: Environment;
-  eventSequence: number;
 }
 
 interface ThreadProvisionEnvironmentPlan {
@@ -150,8 +149,7 @@ interface ThreadProvisionEnvironmentPlan {
   hostInput: UpsertHostInput | null;
 }
 
-interface CreateProvisioningEnvironmentWithOperationArgs
-  extends ThreadProvisionEnvironmentPlan {
+interface CreateProvisioningEnvironmentWithOperationArgs extends ThreadProvisionEnvironmentPlan {
   context: ThreadProvisionEnvironmentPendingContext;
   thread: Thread;
 }
@@ -180,14 +178,12 @@ interface ManagedEnvironmentPlanCommonArgs {
   workspaceProvisionType: "managed-clone" | "managed-worktree";
 }
 
-interface DirectManagedEnvironmentPlanArgs
-  extends ManagedEnvironmentPlanCommonArgs {
+interface DirectManagedEnvironmentPlanArgs extends ManagedEnvironmentPlanCommonArgs {
   hostInput: null;
   requestMode: "direct";
 }
 
-interface SandboxManagedEnvironmentPlanArgs
-  extends ManagedEnvironmentPlanCommonArgs {
+interface SandboxManagedEnvironmentPlanArgs extends ManagedEnvironmentPlanCommonArgs {
   hostInput: UpsertHostInput;
   requestMode: "sandbox-host";
   sandboxType: string;
@@ -319,7 +315,7 @@ export function ensureWorkspaceReadyEvent(
         },
       );
 
-      const eventSequence = appendThreadProvisioningEventInTransaction(tx, {
+      const appendedSequence = appendThreadProvisioningEventInTransaction(tx, {
         threadId: args.threadId,
         environmentId: args.environmentId,
         provisioningId: context.state.provisioningId,
@@ -329,10 +325,10 @@ export function ensureWorkspaceReadyEvent(
       upsertThreadProvisionOperation(tx, {
         threadId: args.threadId,
         context: createWorkspaceReadyContext(provisionableContext, {
-          workspaceReadyEventSequence: eventSequence,
+          workspaceReadyEventSequence: appendedSequence,
         }),
       });
-      return eventSequence;
+      return appendedSequence;
     },
     { behavior: "immediate" },
   );
@@ -508,7 +504,7 @@ function appendProvisioningStartedEvent(
     return existingContext;
   }
 
-  const eventSequence = appendThreadProvisioningEvent(deps, {
+  const appendedSequence = appendThreadProvisioningEvent(deps, {
     threadId: args.thread.id,
     environmentId: args.environment.id,
     provisioningId: args.context.state.provisioningId,
@@ -516,7 +512,7 @@ function appendProvisioningStartedEvent(
     entries: initialProvisioningEntries(args.environment),
   });
   const updatedContext = createEnvironmentProvisioningContext(args.context, {
-    provisionEventSequence: eventSequence,
+    provisionEventSequence: appendedSequence,
   });
   saveThreadProvisionContext(deps, {
     threadId: args.thread.id,
@@ -581,7 +577,7 @@ function createProvisioningEnvironmentWithOperation(
       const attachedContext = createEnvironmentAttachedContext(args.context, {
         attachedEnvironmentId: environment.id,
       });
-      const eventSequence = appendThreadProvisioningEventInTransaction(tx, {
+      const appendedSequence = appendThreadProvisioningEventInTransaction(tx, {
         threadId: args.thread.id,
         environmentId: environment.id,
         provisioningId: attachedContext.state.provisioningId,
@@ -589,7 +585,7 @@ function createProvisioningEnvironmentWithOperation(
         entries: initialProvisioningEntries(environment),
       });
       const context = createEnvironmentProvisioningContext(attachedContext, {
-        provisionEventSequence: eventSequence,
+        provisionEventSequence: appendedSequence,
       });
       upsertThreadProvisionOperation(tx, {
         threadId: args.thread.id,
@@ -602,7 +598,6 @@ function createProvisioningEnvironmentWithOperation(
           args.buildRequest({
             context,
             environment,
-            eventSequence,
           }),
         ),
       });
@@ -626,7 +621,7 @@ function buildDirectUnmanagedEnvironmentPlan(
       status: "provisioning",
     },
     hostInput: null,
-    buildRequest: ({ context, environment, eventSequence }) =>
+    buildRequest: ({ context, environment }) =>
       buildDirectEnvironmentProvisionRequest({
         command: buildEnvironmentProvisionCommand({
           environmentId: environment.id,
@@ -634,7 +629,6 @@ function buildDirectUnmanagedEnvironmentPlan(
           initiator: {
             threadId: args.thread.id,
             provisioningId: context.state.provisioningId,
-            eventSequence,
           },
           path: args.intent.path,
           workspaceProvisionType: "unmanaged",
@@ -656,7 +650,7 @@ function buildManagedEnvironmentPlan(
       status: "provisioning",
     },
     hostInput: args.hostInput,
-    buildRequest: ({ context, environment, eventSequence }) => {
+    buildRequest: ({ context, environment }) => {
       const command = buildEnvironmentProvisionCommand({
         branchName: buildManagedBranchName({
           branchSlug: context.request.branchSlug,
@@ -667,7 +661,6 @@ function buildManagedEnvironmentPlan(
         initiator: {
           threadId: args.thread.id,
           provisioningId: context.state.provisioningId,
-          eventSequence,
         },
         sourcePath: args.sourcePath,
         targetPath: resolveManagedTargetPath({
@@ -843,7 +836,7 @@ export async function ensureThreadProvisionEnvironmentReady(
 
   const readyEnvironment =
     environment.status === "provisioning"
-      ? getEnvironment(deps.db, environment.id) ?? environment
+      ? (getEnvironment(deps.db, environment.id) ?? environment)
       : environment;
 
   return {

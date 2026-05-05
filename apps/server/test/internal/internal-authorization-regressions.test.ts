@@ -67,7 +67,6 @@ describe("internal authorization regressions", () => {
           initiator: {
             threadId: thread.id,
             provisioningId: "tpv-auth-regression",
-            eventSequence: 0,
           },
           workspaceProvisionType: "unmanaged",
           path: "/tmp/cross-host-command",
@@ -149,10 +148,8 @@ describe("internal authorization regressions", () => {
           sessionId: hostA.session.id,
           events: [
             {
-              environmentId: environment.id,
+              producerEventId: "hdevt_23456789abcdefghijkm",
               threadId: thread.id,
-              sequence: 1,
-              createdAt: Date.now(),
               event: {
                 type: "turn/started",
                 threadId: thread.id,
@@ -166,71 +163,6 @@ describe("internal authorization regressions", () => {
       });
 
       expect(response.status).toBe(403);
-      await expect(readJson(response)).resolves.toMatchObject({
-        code: "invalid_request",
-      });
-      expect(
-        harness.db
-          .select()
-          .from(events)
-          .where(eq(events.threadId, thread.id))
-          .all(),
-      ).toHaveLength(0);
-      expect(getThread(harness.db, thread.id)?.status).toBe("idle");
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("rejects event batches whose environmentId does not match the thread environment", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host, session } = seedHostSession(harness.deps, {
-        id: "host-events-environment-check",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const threadEnvironment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: "/tmp/thread-environment",
-      });
-      const otherEnvironment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: "/tmp/other-environment",
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: threadEnvironment.id,
-        status: "idle",
-      });
-
-      const response = await harness.app.request("/internal/session/events", {
-        method: "POST",
-        headers: internalAuthHeaders(harness, { hostId: host.id }),
-        body: JSON.stringify({
-          sessionId: session.id,
-          events: [
-            {
-              environmentId: otherEnvironment.id,
-              threadId: thread.id,
-              sequence: 1,
-              createdAt: Date.now(),
-              event: {
-                type: "turn/started",
-                threadId: thread.id,
-                providerThreadId: "provider-environment-mismatch",
-                turnId: "turn-environment-mismatch",
-                scope: turnScope("turn-environment-mismatch"),
-              },
-            },
-          ],
-        }),
-      });
-
-      expect(response.status).toBe(400);
       await expect(readJson(response)).resolves.toMatchObject({
         code: "invalid_request",
       });

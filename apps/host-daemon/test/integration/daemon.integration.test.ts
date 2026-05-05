@@ -198,6 +198,124 @@ rl.on("line", (line) => {
   );
 }
 
+async function writeWorkspaceEchoProviderScript(
+  scriptPath: string,
+): Promise<void> {
+  await fs.writeFile(
+    scriptPath,
+    `
+const path = require("node:path");
+const readline = require("node:readline");
+const threads = new Map();
+let nextThreadId = 1;
+
+function send(message) {
+  process.stdout.write(JSON.stringify(message) + "\\n");
+}
+
+function getParams(message) {
+  return message && typeof message.params === "object" && message.params !== null
+    ? message.params
+    : {};
+}
+
+function inputText(input) {
+  if (!Array.isArray(input)) {
+    return "";
+  }
+  return input
+    .filter((item) => item && item.type === "text" && typeof item.text === "string")
+    .map((item) => item.text)
+    .join(" ");
+}
+
+function delayMsForInput(input) {
+  const match = /(?:^|\\s)delay:(\\d+)(?:\\s|$)/.exec(inputText(input));
+  return match ? Number(match[1]) : 0;
+}
+
+function completeTurn(threadId, turnId, providerThreadId, input) {
+  send({
+    jsonrpc: "2.0",
+    method: "item/completed",
+    params: {
+      threadId,
+      turnId,
+      providerThreadId,
+      item: {
+        type: "agentMessage",
+        id: "msg-" + turnId,
+        text: "workspace:" + path.basename(process.cwd()) + " input:" + inputText(input),
+      },
+    },
+  });
+  send({
+    jsonrpc: "2.0",
+    method: "turn/completed",
+    params: {
+      threadId,
+      turnId,
+      providerThreadId,
+      status: "completed",
+    },
+  });
+}
+
+function beginTurn(threadId, input) {
+  const thread = threads.get(threadId);
+  if (!thread) {
+    return;
+  }
+  thread.turnCount += 1;
+  const turnId = "turn-" + String(thread.turnCount);
+  send({
+    jsonrpc: "2.0",
+    method: "turn/started",
+    params: { threadId, turnId, providerThreadId: thread.providerThreadId },
+  });
+  setTimeout(
+    () => completeTurn(threadId, turnId, thread.providerThreadId, input),
+    delayMsForInput(input),
+  );
+}
+
+const rl = readline.createInterface({ input: process.stdin });
+rl.on("line", (line) => {
+  const message = JSON.parse(line);
+  const params = getParams(message);
+
+  if (message.method === "initialize" || message.method === "model/list") {
+    send({ jsonrpc: "2.0", id: message.id, result: message.method === "model/list" ? [] : {} });
+    return;
+  }
+
+  if (message.method === "thread/start") {
+    const threadId = params.threadId || "unknown";
+    const providerThreadId = "prov-" + String(nextThreadId++);
+    threads.set(threadId, { providerThreadId, turnCount: 0 });
+    send({ jsonrpc: "2.0", id: message.id, result: { providerThreadId } });
+    send({ jsonrpc: "2.0", method: "thread/identity", params: { threadId, providerThreadId } });
+    if (Array.isArray(params.input) && params.input.length > 0) {
+      beginTurn(threadId, params.input);
+    }
+    return;
+  }
+
+  if (message.method === "turn/start") {
+    const threadId = params.threadId || "unknown";
+    if (!threads.has(threadId)) {
+      send({ jsonrpc: "2.0", id: message.id, error: { code: -32000, message: "Unknown thread: " + threadId } });
+      return;
+    }
+    send({ jsonrpc: "2.0", id: message.id, result: { ok: true } });
+    beginTurn(threadId, params.input);
+  }
+});
+`,
+    "utf8",
+  );
+}
+
 function createInteractiveRequestAdapter(scriptPath: string): ProviderAdapter {
   const adapter = createFakeAdapter({ scriptPath });
   return {
@@ -245,10 +363,10 @@ function createInteractiveRequestAdapter(scriptPath: string): ProviderAdapter {
 
 function createStandardThreadStartCommand(args: {
   environmentId: string;
-  eventSequence: number;
   input: Array<{ text: string; type: "text" }>;
   projectId: string;
   providerId: string;
+  requestId: string;
   threadId: string;
   workspacePath: string;
 }) {
@@ -262,7 +380,7 @@ function createStandardThreadStartCommand(args: {
     },
     projectId: args.projectId,
     providerId: args.providerId,
-    eventSequence: args.eventSequence,
+    requestId: args.requestId,
     input: args.input,
     options: {
       model: "gpt-5",
@@ -279,11 +397,11 @@ function createStandardThreadStartCommand(args: {
 
 function createTurnSubmitCommand(args: {
   environmentId: string;
-  eventSequence: number;
   input: Array<{ text: string; type: "text" }>;
   projectId: string;
   providerId: string;
   providerThreadId: string;
+  requestId: string;
   threadId: string;
   workspacePath: string;
 }) {
@@ -291,7 +409,7 @@ function createTurnSubmitCommand(args: {
     type: "turn.submit" as const,
     environmentId: args.environmentId,
     threadId: args.threadId,
-    eventSequence: args.eventSequence,
+    requestId: args.requestId,
     input: args.input,
     options: {
       model: "gpt-5",
@@ -378,7 +496,7 @@ describe("host daemon integration", () => {
           workspacePath: harness.envAPath,
           projectId: "project-1",
           providerId: "fake",
-          eventSequence: 1,
+          requestId: "creq_23456789ab",
           input: [{ type: "text", text: "start" }],
         }),
       });
@@ -415,7 +533,7 @@ describe("host daemon integration", () => {
           workspacePath: harness.envAPath,
           projectId: "project-1",
           providerId: "fake",
-          eventSequence: 1,
+          requestId: "creq_23456789ab",
           input: [{ type: "text", text: "start" }],
         }),
       });
@@ -430,7 +548,7 @@ describe("host daemon integration", () => {
           projectId: "project-1",
           providerId: "fake",
           providerThreadId: "provider-thread-a",
-          eventSequence: 1,
+          requestId: "creq_23456789ab",
           input: [{ type: "text", text: "hello" }],
         }),
       });
@@ -460,14 +578,8 @@ describe("host daemon integration", () => {
     }
   });
 
-  it("seeds subsequent provider event sequences from command-result high-water marks", async () => {
-    const harness = await setupDaemonHarness({
-      serverOptions: {
-        commandResultThreadHighWaterMarks: {
-          "thread-a": 10,
-        },
-      },
-    });
+  it("continues posting provider events across commands without daemon-side sequence state", async () => {
+    const harness = await setupDaemonHarness();
 
     try {
       harness.server.queueCommand({
@@ -477,7 +589,7 @@ describe("host daemon integration", () => {
           workspacePath: harness.envAPath,
           projectId: "project-1",
           providerId: "fake",
-          eventSequence: 1,
+          requestId: "creq_23456789ab",
           input: [{ type: "text", text: "start" }],
         }),
       });
@@ -496,7 +608,11 @@ describe("host daemon integration", () => {
         (event) => event.threadId === "thread-a",
       );
       expect(startEvents.length).toBeGreaterThan(0);
-      expect(Math.min(...startEvents.map((event) => event.sequence))).toBe(2);
+      expect(
+        startEvents.every((event) =>
+          event.producerEventId.startsWith("hdevt_"),
+        ),
+      ).toBe(true);
 
       const eventCountBeforeFollowUp = harness.server.events.length;
       harness.server.queueCommand({
@@ -507,7 +623,7 @@ describe("host daemon integration", () => {
           projectId: "project-1",
           providerId: "fake",
           providerThreadId: startResult.result.providerThreadId,
-          eventSequence: 1,
+          requestId: "creq_23456789ab",
           input: [{ type: "text", text: "follow up" }],
         }),
       });
@@ -527,8 +643,11 @@ describe("host daemon integration", () => {
         .filter((event) => event.threadId === "thread-a");
       expect(followUpEvents.length).toBeGreaterThan(0);
       expect(
-        Math.min(...followUpEvents.map((event) => event.sequence)),
-      ).toBeGreaterThan(10);
+        new Set([
+          ...startEvents.map((event) => event.producerEventId),
+          ...followUpEvents.map((event) => event.producerEventId),
+        ]).size,
+      ).toBe(startEvents.length + followUpEvents.length);
     } finally {
       await harness.daemon.shutdown("test");
       await harness.server.close();
@@ -553,7 +672,7 @@ describe("host daemon integration", () => {
             workspacePath: harness.envAPath,
             projectId: "project-1",
             providerId: "fake",
-            eventSequence: 1,
+            requestId: "creq_23456789ab",
             input: [{ type: "text", text: "start" }],
           }),
         });
@@ -568,7 +687,7 @@ describe("host daemon integration", () => {
             projectId: "project-1",
             providerId: "fake",
             providerThreadId: "prov-1",
-            eventSequence: 1,
+            requestId: "creq_23456789ab",
             input: [{ type: "text", text: "trigger approval" }],
           }),
         });
@@ -649,7 +768,7 @@ describe("host daemon integration", () => {
           workspacePath: harness.envAPath,
           projectId: "project-1",
           providerId: "fake",
-          eventSequence: 1,
+          requestId: "creq_23456789ab",
           input: [{ type: "text", text: "start" }],
         }),
       });
@@ -682,7 +801,12 @@ describe("host daemon integration", () => {
   });
 
   it("routes events to the correct environment across multiple runtimes", async () => {
-    const harness = await setupDaemonHarness();
+    const scriptDir = await makeTempDir("bb-host-daemon-workspace-provider-");
+    const scriptPath = path.join(scriptDir, "workspace-echo-provider.cjs");
+    await writeWorkspaceEchoProviderScript(scriptPath);
+    const harness = await setupDaemonHarness({
+      adapterFactory: () => createFakeAdapter({ scriptPath }),
+    });
 
     try {
       harness.server.queueCommand({
@@ -692,7 +816,7 @@ describe("host daemon integration", () => {
           workspacePath: harness.envAPath,
           projectId: "project-1",
           providerId: "fake",
-          eventSequence: 1,
+          requestId: "creq_23456789ab",
           input: [{ type: "text", text: "start" }],
         }),
       });
@@ -703,7 +827,7 @@ describe("host daemon integration", () => {
           workspacePath: harness.envBPath,
           projectId: "project-1",
           providerId: "fake",
-          eventSequence: 1,
+          requestId: "creq_23456789ab",
           input: [{ type: "text", text: "start" }],
         }),
       });
@@ -718,7 +842,7 @@ describe("host daemon integration", () => {
           projectId: "project-1",
           providerId: "fake",
           providerThreadId: "provider-thread-a",
-          eventSequence: 1,
+          requestId: "creq_23456789ab",
           input: [{ type: "text", text: "delay:200 slow" }],
         }),
       });
@@ -730,7 +854,7 @@ describe("host daemon integration", () => {
           projectId: "project-1",
           providerId: "fake",
           providerThreadId: "provider-thread-b",
-          eventSequence: 1,
+          requestId: "creq_23456789ab",
           input: [{ type: "text", text: "fast" }],
         }),
       });
@@ -741,26 +865,43 @@ describe("host daemon integration", () => {
           harness.server.events.some(
             (event) =>
               event.threadId === "thread-a" &&
-              event.event.type === "turn/completed",
+              event.event.type === "item/completed" &&
+              event.event.item.type === "agentMessage" &&
+              event.event.item.text === "workspace:env-a input:delay:200 slow",
           ) &&
           harness.server.events.some(
             (event) =>
               event.threadId === "thread-b" &&
-              event.event.type === "turn/completed",
+              event.event.type === "item/completed" &&
+              event.event.item.type === "agentMessage" &&
+              event.event.item.text === "workspace:env-b input:fast",
           ),
       );
 
       const completedEvents = harness.server.events.filter(
         (event) => event.event.type === "turn/completed",
       );
+      expect(new Set(completedEvents.map((event) => event.threadId))).toEqual(
+        new Set(["thread-a", "thread-b"]),
+      );
       expect(
-        completedEvents.find((event) => event.threadId === "thread-a")
-          ?.environmentId,
-      ).toBe("env-a");
+        harness.server.events.some(
+          (event) =>
+            event.threadId === "thread-a" &&
+            event.event.type === "item/completed" &&
+            event.event.item.type === "agentMessage" &&
+            event.event.item.text === "workspace:env-a input:delay:200 slow",
+        ),
+      ).toBe(true);
       expect(
-        completedEvents.find((event) => event.threadId === "thread-b")
-          ?.environmentId,
-      ).toBe("env-b");
+        harness.server.events.some(
+          (event) =>
+            event.threadId === "thread-b" &&
+            event.event.type === "item/completed" &&
+            event.event.item.type === "agentMessage" &&
+            event.event.item.text === "workspace:env-b input:fast",
+        ),
+      ).toBe(true);
     } finally {
       await harness.daemon.shutdown("test");
       await harness.server.close();

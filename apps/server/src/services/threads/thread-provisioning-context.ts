@@ -3,6 +3,8 @@ import { createThreadProvisioningId } from "@bb/db";
 import {
   promptInputSchema,
   resolvedThreadExecutionOptionsSchema,
+  clientTurnRequestIdSchema,
+  type ClientTurnRequestId,
   type ThreadProvisioningState,
   type PromptInput,
   type ResolvedThreadExecutionOptions,
@@ -44,7 +46,7 @@ export const threadProvisionEnvironmentIntentSchema = z.discriminatedUnion(
 
 export const threadProvisionCommonPayloadSchema = z.object({
   branchSlug: z.string().nullable().default(null),
-  clientRequestSequence: z.number().int().nonnegative(),
+  clientRequestId: clientTurnRequestIdSchema,
   environmentIntent: threadProvisionEnvironmentIntentSchema,
   execution: resolvedThreadExecutionOptionsSchema,
   input: z.array(promptInputSchema),
@@ -122,7 +124,7 @@ export type ThreadProvisionProvisionableContext =
   | ThreadProvisionWorkspaceReadyContext;
 
 export interface CreateMetadataPendingContextArgs {
-  clientRequestSequence: number;
+  clientRequestId: ClientTurnRequestId;
   environmentIntent: ThreadProvisionEnvironmentIntent;
   execution: ResolvedThreadExecutionOptions;
   input: PromptInput[];
@@ -142,9 +144,9 @@ export interface CreateEnvironmentProvisioningContextArgs {
 }
 
 export interface CreateReprovisioningContextArgs {
-  clientRequestSequence: number;
+  clientRequestId: ClientTurnRequestId;
   environmentId: string;
-  eventSequence: number;
+  provisionEventSequence: number;
   execution: ResolvedThreadExecutionOptions;
   input: PromptInput[];
   provisioningId: string;
@@ -238,7 +240,7 @@ export function createMetadataPendingContext(
   return {
     request: {
       branchSlug: null,
-      clientRequestSequence: args.clientRequestSequence,
+      clientRequestId: args.clientRequestId,
       environmentIntent: args.environmentIntent,
       execution: args.execution,
       input: args.input,
@@ -315,14 +317,14 @@ export function createReprovisioningContext(
         type: "reuse",
         environmentId: args.environmentId,
       },
-      clientRequestSequence: args.clientRequestSequence,
+      clientRequestId: args.clientRequestId,
       execution: args.execution,
       input: args.input,
       titleProvided: true,
     },
     state: {
       environmentId: args.environmentId,
-      provisionEventSequence: args.eventSequence,
+      provisionEventSequence: args.provisionEventSequence,
       provisioningId: args.provisioningId,
       stage: "environment-provisioning",
       workspaceReadyEventSequence: null,

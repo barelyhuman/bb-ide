@@ -100,7 +100,7 @@ function getOnlyTimelineWebWorkRow(
 describe("timeline CLI rendering snapshots", () => {
   it("keeps accepted steer segments out of turn summaries", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
-    const timeline = renderIdleTimeline([
+    const events: TimelineFixtureEvent[] = [
       event.turnStarted({ createdAt: 0 }),
       event.commandStarted({
         itemId: "cmd-1",
@@ -112,19 +112,22 @@ describe("timeline CLI rendering snapshots", () => {
         command: "pnpm test",
         createdAt: 6_000,
       }),
-      event.clientTurnRequested({
-        seq: 4,
-        createdAt: 7_000,
-        text: "Please keep going",
-        target: {
-          kind: "steer",
-          expectedTurnId: "turn-1",
-        },
-      }),
+    ];
+    const steerRequest = event.clientTurnRequested({
+      seq: 4,
+      createdAt: 7_000,
+      text: "Please keep going",
+      target: {
+        kind: "steer",
+        expectedTurnId: "turn-1",
+      },
+    });
+    events.push(
+      steerRequest,
       event.inputAccepted({
         seq: 5,
         createdAt: 8_000,
-        clientRequestSequence: 4,
+        clientRequestId: steerRequest.data.requestId,
       }),
       event.commandStarted({
         itemId: "cmd-2",
@@ -137,7 +140,8 @@ describe("timeline CLI rendering snapshots", () => {
         createdAt: 16_000,
       }),
       event.turnCompleted({ createdAt: 17_000 }),
-    ]);
+    );
+    const timeline = renderIdleTimeline(events);
 
     expect(timeline.turnRows).toHaveLength(0);
     expect(timeline.text).not.toContain("Worked for");
@@ -462,7 +466,9 @@ describe("timeline CLI rendering snapshots", () => {
       },
     );
 
-    expect(text).toMatchInlineSnapshot(`"── Worked ──────────────────────────────────────────────────"`);
+    expect(text).toMatchInlineSnapshot(
+      `"── Worked ──────────────────────────────────────────────────"`,
+    );
   });
 
   it("shows an unacknowledged active-turn steer from the client request", () => {
@@ -530,18 +536,19 @@ describe("timeline CLI rendering snapshots", () => {
 
   it("places accepted active-turn steers at the acceptance position", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
+    const steerRequest = event.clientTurnRequested({
+      target: { kind: "auto", expectedTurnId: "turn-1" },
+      text: "Please account for the restart",
+    });
     const timeline = renderIdleTimeline([
       event.turnStarted(),
       event.commandCompleted({
         itemId: "tool-before-steer",
         command: "pnpm test",
       }),
-      event.clientTurnRequested({
-        target: { kind: "auto", expectedTurnId: "turn-1" },
-        text: "Please account for the restart",
-      }),
+      steerRequest,
       event.inputAccepted({
-        clientRequestSequence: 3,
+        clientRequestId: steerRequest.data.requestId,
       }),
       event.commandCompleted({
         itemId: "tool-after-steer",
@@ -607,7 +614,7 @@ describe("timeline CLI rendering snapshots", () => {
       firstRequest,
       event.turnStarted({ turnId: "turn-1" }),
       event.inputAccepted({
-        clientRequestSequence: firstRequest.seq,
+        clientRequestId: firstRequest.data.requestId,
         turnId: "turn-1",
       }),
       event.assistantCompleted({
@@ -625,7 +632,7 @@ describe("timeline CLI rendering snapshots", () => {
       followUpRequest,
       event.turnStarted({ turnId: "turn-2" }),
       event.inputAccepted({
-        clientRequestSequence: followUpRequest.seq,
+        clientRequestId: followUpRequest.data.requestId,
         turnId: "turn-2",
       }),
       event.commandCompleted({
@@ -923,7 +930,9 @@ describe("timeline CLI rendering snapshots", () => {
         row.kind === "turn",
     );
     const delegation = allRows.find(
-      (row): row is Extract<
+      (
+        row,
+      ): row is Extract<
         TimelineRow,
         { kind: "work"; workKind: "delegation" }
       > => row.kind === "work" && row.workKind === "delegation",
@@ -936,9 +945,7 @@ describe("timeline CLI rendering snapshots", () => {
     expect(rootTurn).toBeDefined();
     expect(delegation).toBeDefined();
     expect(nestedTurn).toBeDefined();
-    expect(nestedTurn?.id).toBe(
-      `${delegation?.id}:child:thread-1:turn-1:turn`,
-    );
+    expect(nestedTurn?.id).toBe(`${delegation?.id}:child:thread-1:turn-1:turn`);
     expect(nestedTurn?.id).not.toBe(rootTurn?.id);
   });
 

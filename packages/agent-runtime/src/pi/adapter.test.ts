@@ -174,7 +174,7 @@ describe("pi provider adapter", () => {
           threadId: "thread-1",
           providerThreadId: "provider-thread-1",
           expectedTurnId: "turn-1",
-          clientRequestSequence: 9,
+          clientRequestId: "creq_23456789ad",
           input: [{ type: "text", text: "steer turn" }],
           options: fullProviderExecutionContext,
         },
@@ -185,7 +185,7 @@ describe("pi provider adapter", () => {
         threadId: "thread-1",
         providerThreadId: "provider-thread-1",
         scope: turnScope("turn-1"),
-        clientRequestSequence: 9,
+        clientRequestId: "creq_23456789ad",
       },
     ]);
   });
@@ -430,6 +430,7 @@ describe("pi provider adapter", () => {
     const adapter = createPiProviderAdapter();
     const cmd = adapter.buildCommandPlan({
       type: "turn/start",
+      clientRequestId: "creq_222222228c",
       threadId: "t1",
       providerThreadId: "pi-1",
       input: [{ type: "text", text: "do it" }],
@@ -445,6 +446,7 @@ describe("pi provider adapter", () => {
     const adapter = createPiProviderAdapter();
     const cmd = adapter.buildCommandPlan({
       type: "turn/steer",
+      clientRequestId: "creq_222222228d",
       threadId: "t1",
       providerThreadId: "pi-1",
       expectedTurnId: "turn-1",
@@ -547,7 +549,10 @@ describe("pi provider adapter", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "item/completed",
-        item: expect.objectContaining({ type: "agentMessage" }),
+        item: expect.objectContaining({
+          type: "agentMessage",
+          text: "I've updated the configuration file to use the new database connection string. The change affects `/src/config/database.ts` and should resolve the timeout issues you were experiencing.",
+        }),
       }),
     );
     expect(events).toContainEqual(
@@ -557,6 +562,73 @@ describe("pi provider adapter", () => {
         status: "completed",
       }),
     );
+    expect(events.some((event) => event.type === "provider/error")).toBe(false);
+  });
+
+  it("translateEvent agent_end surfaces Pi assistant stop errors as failed turns", () => {
+    const adapter = createPiProviderAdapter();
+    const context = { threadId: "bb-thread-1" };
+    const quotaMessage =
+      '400 {"type":"error","error":{"type":"invalid_request_error","message":"You\'re out of extra usage. Add more at claude.ai/settings/usage and keep going."},"request_id":"req_011CajgGfxCAhmznZJw7t6Br"}';
+
+    adapter.translateEvent(loadFixture("agent-start.json"), context);
+
+    const events = adapter.translateEvent(
+      {
+        type: "agent_end",
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "Say exactly: PI SDK DIAGNOSTIC" }],
+            timestamp: 1777995780000,
+          },
+          {
+            role: "assistant",
+            content: [],
+            stopReason: "error",
+            errorMessage: quotaMessage,
+            api: "anthropic-messages",
+            provider: "anthropic",
+            model: "claude-haiku-4-5",
+            usage: {
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 0,
+              cost: {
+                input: 0,
+                output: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+                total: 0,
+              },
+            },
+            timestamp: 1777995781000,
+          },
+        ],
+      } satisfies AgentSessionEvent,
+      context,
+    );
+
+    expect(events).toEqual([
+      {
+        type: "provider/error",
+        threadId: "",
+        providerThreadId: "",
+        scope: turnScope("turn-1"),
+        message: "Provider error",
+        detail: quotaMessage,
+      },
+      {
+        type: "turn/completed",
+        threadId: "",
+        providerThreadId: "",
+        scope: turnScope("turn-1"),
+        status: "failed",
+      },
+    ]);
+    expect(events.some((event) => event.type === "item/completed")).toBe(false);
   });
 
   it("translateEvent compaction_start emits a compaction item", () => {
@@ -1861,6 +1933,8 @@ describe("pi provider adapter", () => {
       selectedModel: "anthropic/claude-opus-4-6",
     });
 
-    expect(models.map((model) => model.id)).toEqual(["anthropic/claude-opus-4-7"]);
+    expect(models.map((model) => model.id)).toEqual([
+      "anthropic/claude-opus-4-7",
+    ]);
   });
 });

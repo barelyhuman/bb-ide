@@ -10,11 +10,7 @@ import {
   upsertHost,
   updateManagerThreadNudge,
 } from "@bb/db";
-import {
-  threadScope,
-  turnRequestEventDataSchema,
-  turnScope,
-} from "@bb/domain";
+import { threadScope, turnRequestEventDataSchema, turnScope } from "@bb/domain";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { sweepDueNudges } from "../../src/services/scheduling/nudge-sweep.js";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
@@ -336,7 +332,7 @@ describe("nudge sweep", () => {
             type: "turn.submit",
             environmentId: environment.id,
             threadId: thread.id,
-            eventSequence: 2,
+            requestId: "creq_23456789ab",
             input: [{ type: "text", text: "Existing pending nudge" }],
             options: {
               model: "gpt-5",

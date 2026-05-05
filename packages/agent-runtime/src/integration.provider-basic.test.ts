@@ -71,7 +71,7 @@ for (const providerId of providers) {
 
         await ctx.runtime.runTurn({
           threadId,
-          clientRequestSequence: 1,
+          clientRequestId: "creq_23456789ab",
           options,
           input: [{ type: "text", text: "Reply with exactly: PONG" }],
         });
@@ -117,7 +117,7 @@ for (const providerId of providers) {
         // Turn 1
         await ctx.runtime.runTurn({
           threadId,
-          clientRequestSequence: 1,
+          clientRequestId: "creq_23456789ab",
           input: [{ type: "text", text: "Say hello in one word." }],
           options,
         });
@@ -133,7 +133,7 @@ for (const providerId of providers) {
         // Turn 2
         await ctx.runtime.runTurn({
           threadId,
-          clientRequestSequence: 2,
+          clientRequestId: "creq_23456789ac",
           input: [{ type: "text", text: "Now say goodbye in one word." }],
           options,
         });
@@ -177,7 +177,7 @@ for (const providerId of providers) {
 
         await ctx.runtime.runTurn({
           threadId,
-          clientRequestSequence: 1,
+          clientRequestId: "creq_23456789ab",
           input: [
             {
               type: "text",
@@ -208,7 +208,7 @@ for (const providerId of providers) {
         await ctx.runtime.steerTurn({
           threadId,
           expectedTurnId: activeTurnId,
-          clientRequestSequence: 2,
+          clientRequestId: "creq_23456789ac",
           input: [{ type: "text", text: steerText }],
           options,
         });
@@ -216,7 +216,8 @@ for (const providerId of providers) {
         await waitForRuntimeCondition({
           ctx,
           threadId,
-          predicate: () => hasInputAcceptedForThread(ctx.events, threadId, 2),
+          predicate: () =>
+            hasInputAcceptedForThread(ctx.events, threadId, "creq_23456789ac"),
           timeoutMs: 30_000,
           label: "steer input accepted",
         });
@@ -224,7 +225,7 @@ for (const providerId of providers) {
         const steerInputAccepted = findInputAcceptedForThread(
           ctx.events,
           threadId,
-          2,
+          "creq_23456789ac",
         );
         expect(steerInputAccepted?.type).toBe("turn/input/accepted");
         if (steerInputAccepted?.type !== "turn/input/accepted") {
@@ -264,7 +265,7 @@ for (const providerId of providers) {
 
         await ctx.runtime.runTurn({
           threadId,
-          clientRequestSequence: 1,
+          clientRequestId: "creq_23456789ab",
           input: [
             {
               type: "text",
@@ -312,7 +313,7 @@ for (const providerId of providers) {
         );
         await ctx.runtime.runTurn({
           threadId,
-          clientRequestSequence: 2,
+          clientRequestId: "creq_23456789ac",
           input: [
             {
               type: "text",
@@ -372,6 +373,7 @@ for (const providerId of providers) {
         });
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_222222224d",
           threadId,
           input: [{ type: "text", text: "What is 2+2?" }],
           options,
@@ -412,6 +414,7 @@ for (const providerId of providers) {
 
         // Good turn 1
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_222222224e",
           threadId,
           input: [{ type: "text", text: "Say hello in one word." }],
           options,
@@ -429,6 +432,7 @@ for (const providerId of providers) {
         let badRequestFailed = false;
         try {
           await ctx.runtime.runTurn({
+            clientRequestId: "creq_222222224f",
             threadId: badThreadId,
             input: [{ type: "text", text: "This should fail." }],
             options,
@@ -440,6 +444,7 @@ for (const providerId of providers) {
 
         // Good turn 2 — same session should still work
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_222222224g",
           threadId,
           input: [{ type: "text", text: "Say goodbye in one word." }],
           options,
@@ -510,6 +515,7 @@ for (const providerId of providers) {
         });
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_222222224h",
           threadId,
           input: [
             {

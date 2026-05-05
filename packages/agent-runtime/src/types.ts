@@ -1,5 +1,6 @@
 import type {
   AvailableModel,
+  ClientTurnRequestId,
   DynamicTool,
   InstructionMode,
   PendingInteractionCreate,
@@ -81,6 +82,7 @@ export interface StartThreadArgs {
   threadId: string;
   projectId: string;
   providerId: string;
+  clientRequestId?: ClientTurnRequestId;
   input?: PromptInput[];
   options: AgentRuntimeExecutionOptions;
   instructions?: string;
@@ -111,7 +113,7 @@ export interface ResumeThreadResult {
 export interface RunTurnArgs {
   threadId: string;
   input: PromptInput[];
-  clientRequestSequence?: number;
+  clientRequestId: ClientTurnRequestId;
   options: AgentRuntimeExecutionOptions;
   instructions?: string;
 }
@@ -120,7 +122,7 @@ export interface SteerTurnArgs {
   threadId: string;
   expectedTurnId: string;
   input: PromptInput[];
-  clientRequestSequence?: number;
+  clientRequestId: ClientTurnRequestId;
   options: AgentRuntimeExecutionOptions;
   instructions?: string;
 }

@@ -337,8 +337,10 @@ Steps:
     `clientRequestSequence`; every `clientRequestId` references an existing
     `client/turn/requested` in the same thread; every daemon-produced event has
     a unique `producerEventId`; no stored daemon command payload contains
-    `eventSequence`; and every thread has a dense, increasing server-owned
-    sequence history.
+    `eventSequence`; and every stored event has a positive integer sequence
+    with a unique `(threadId, sequence)` key. Server append continues from each
+    thread's current high-water `MAX(sequence)`. Pruning-created sequence gaps
+    are expected and valid; do not resequence historical events.
 13. Start the dev server and host daemon against the migrated DB.
 
 Exit criteria:

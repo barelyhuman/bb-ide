@@ -8,6 +8,7 @@ import {
   resolvedThreadExecutionOptionsSchema,
 } from "./shared-types.js";
 import { jsonValueSchema } from "./json-value.js";
+import { clientTurnRequestIdSchema } from "./protocol-ids.js";
 
 export const systemEventTypeValues = [
   "client/thread/start",
@@ -85,6 +86,7 @@ export type ClientTurnLifecycleEventData = z.infer<
 
 export const turnRequestEventDataSchema = z.object({
   direction: z.literal("outbound"),
+  requestId: clientTurnRequestIdSchema,
   source: z.enum(["spawn", "tell"]),
   initiator: threadTurnInitiatorSchema.optional(),
   input: z.array(promptInputSchema),
@@ -97,36 +99,38 @@ export const turnRequestEventDataSchema = z.object({
 });
 export type TurnRequestEventData = z.infer<typeof turnRequestEventDataSchema>;
 
-export const systemErrorEventDataSchema = z.object({
-  code: z.string().optional(),
-  message: z.string(),
-  detail: z.string().optional(),
-  reconnectAttempt: z.number().int().positive().optional(),
-  reconnectTotal: z.number().int().positive().optional(),
-}).superRefine((value, ctx) => {
-  const hasReconnectAttempt = value.reconnectAttempt !== undefined;
-  const hasReconnectTotal = value.reconnectTotal !== undefined;
-  if (hasReconnectAttempt !== hasReconnectTotal) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message:
-        "system/error reconnectAttempt and reconnectTotal must be provided together",
-    });
-    return;
-  }
+export const systemErrorEventDataSchema = z
+  .object({
+    code: z.string().optional(),
+    message: z.string(),
+    detail: z.string().optional(),
+    reconnectAttempt: z.number().int().positive().optional(),
+    reconnectTotal: z.number().int().positive().optional(),
+  })
+  .superRefine((value, ctx) => {
+    const hasReconnectAttempt = value.reconnectAttempt !== undefined;
+    const hasReconnectTotal = value.reconnectTotal !== undefined;
+    if (hasReconnectAttempt !== hasReconnectTotal) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "system/error reconnectAttempt and reconnectTotal must be provided together",
+      });
+      return;
+    }
 
-  if (
-    value.reconnectAttempt !== undefined &&
-    value.reconnectTotal !== undefined &&
-    value.reconnectAttempt > value.reconnectTotal
-  ) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message:
-        "system/error reconnectAttempt cannot be greater than reconnectTotal",
-    });
-  }
-});
+    if (
+      value.reconnectAttempt !== undefined &&
+      value.reconnectTotal !== undefined &&
+      value.reconnectAttempt > value.reconnectTotal
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "system/error reconnectAttempt cannot be greater than reconnectTotal",
+      });
+    }
+  });
 export type SystemErrorEventData = z.infer<typeof systemErrorEventDataSchema>;
 
 export const ownershipChangeOperationActionValues = [

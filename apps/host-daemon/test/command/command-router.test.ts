@@ -6,6 +6,10 @@ import {
   readRuntimeMaterialState,
   writeRuntimeMaterialState,
 } from "@bb/host-runtime-material";
+import {
+  encodeClientTurnRequestIdNumber,
+  type ClientTurnRequestId,
+} from "@bb/domain";
 import type { HostWorkspace } from "@bb/host-workspace";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CommandRouter } from "../../src/command-router.js";
@@ -13,6 +17,7 @@ import { noopEventSink } from "../../src/command-dispatch-support.js";
 import { RuntimeManager } from "../../src/runtime-manager.js";
 
 const tempDirs: string[] = [];
+let nextClientRequestIdValue = 1;
 
 type StartThreadArgs = Parameters<AgentRuntime["startThread"]>[0];
 type ResumeThreadArgs = Parameters<AgentRuntime["resumeThread"]>[0];
@@ -37,6 +42,14 @@ function createDeferred<T>() {
     reject = innerReject;
   });
   return { promise, resolve, reject };
+}
+
+function nextClientRequestId(): ClientTurnRequestId {
+  const requestId = encodeClientTurnRequestIdNumber({
+    value: nextClientRequestIdValue,
+  });
+  nextClientRequestIdValue += 1;
+  return requestId;
 }
 
 interface FakeWorkspace extends HostWorkspace {
@@ -340,7 +353,7 @@ describe("CommandRouter", () => {
           ...createStandardRuntimeCommandContext({
             workspacePath: "/tmp/env-1",
           }),
-          eventSequence: 1,
+          requestId: nextClientRequestId(),
           input: [{ type: "text", text: "start thread" }],
         },
       },
@@ -615,7 +628,7 @@ describe("CommandRouter", () => {
           type: "turn.submit",
           environmentId: "env-1",
           threadId: "thread-a",
-          eventSequence: 1,
+          requestId: nextClientRequestId(),
           input: [{ type: "text", text: "A" }],
           options: {
             model: "gpt-5",
@@ -646,7 +659,7 @@ describe("CommandRouter", () => {
           type: "turn.submit",
           environmentId: "env-1",
           threadId: "thread-b",
-          eventSequence: 2,
+          requestId: nextClientRequestId(),
           input: [{ type: "text", text: "B" }],
           options: {
             model: "gpt-5",
@@ -720,7 +733,7 @@ describe("CommandRouter", () => {
           ...createStandardRuntimeCommandContext({
             workspacePath: "/tmp/env-1",
           }),
-          eventSequence: 5,
+          requestId: nextClientRequestId(),
           input: [{ type: "text", text: "start thread 1" }],
         },
       },
@@ -734,7 +747,7 @@ describe("CommandRouter", () => {
           ...createStandardRuntimeCommandContext({
             workspacePath: "/tmp/env-1",
           }),
-          eventSequence: 6,
+          requestId: nextClientRequestId(),
           input: [{ type: "text", text: "start thread 2" }],
         },
       },
@@ -748,7 +761,7 @@ describe("CommandRouter", () => {
           ...createStandardRuntimeCommandContext({
             workspacePath: "/tmp/env-1",
           }),
-          eventSequence: 7,
+          requestId: nextClientRequestId(),
           input: [{ type: "text", text: "start thread 3" }],
         },
       },
@@ -819,7 +832,7 @@ describe("CommandRouter", () => {
           ...createStandardRuntimeCommandContext({
             workspacePath: "/tmp/env-1",
           }),
-          eventSequence: 1,
+          requestId: nextClientRequestId(),
           input: [{ type: "text", text: "start thread 1" }],
         },
       },
@@ -833,7 +846,7 @@ describe("CommandRouter", () => {
           ...createStandardRuntimeCommandContext({
             workspacePath: "/tmp/env-1",
           }),
-          eventSequence: 2,
+          requestId: nextClientRequestId(),
           input: [{ type: "text", text: "start thread 2" }],
         },
       },
@@ -956,7 +969,7 @@ describe("CommandRouter", () => {
           ...createStandardRuntimeCommandContext({
             workspacePath: "/tmp/env-1",
           }),
-          eventSequence: 1,
+          requestId: nextClientRequestId(),
           input: [{ type: "text", text: "start thread 1" }],
         },
       },
@@ -975,7 +988,7 @@ describe("CommandRouter", () => {
           ...createStandardRuntimeCommandContext({
             workspacePath: "/tmp/env-1",
           }),
-          eventSequence: 2,
+          requestId: nextClientRequestId(),
           input: [{ type: "text", text: "start thread 2" }],
         },
       },

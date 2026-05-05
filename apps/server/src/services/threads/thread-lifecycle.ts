@@ -91,7 +91,7 @@ export interface QueueReadyThreadTurnCommandArgs {
     path: string;
     workspaceProvisionType: WorkspaceProvisionType;
   };
-  eventSequence: number;
+  requestId: QueueThreadStartCommandArgs["requestId"];
   execution: ResolvedThreadExecutionOptions;
   permissionEscalation: PermissionEscalation;
   input: PromptInput[];
@@ -459,19 +459,10 @@ function requestThreadStartHandoff(
           threadId: args.threadId,
           environmentId: args.environmentId,
         });
-      // The completed provisioning event is the last server-owned lifecycle event
-      // before daemon-owned thread.start events. Seed the daemon above it.
-      const command =
-        completedProvisionSequence === null
-          ? args.baseCommand
-          : {
-              ...args.baseCommand,
-              eventSequence: completedProvisionSequence,
-            };
       upsertThreadOperationRecord(tx, {
         threadId: args.threadId,
         kind: "start",
-        payload: JSON.stringify(command),
+        payload: JSON.stringify(args.baseCommand),
       });
       return {
         completedProvisionSequence,
@@ -574,7 +565,7 @@ export async function queueReadyThreadTurnCommand(
     await queueTurnSubmitCommand(deps, {
       thread: args.thread,
       input: args.input,
-      eventSequence: args.eventSequence,
+      requestId: args.requestId,
       execution: args.execution,
       permissionEscalation: args.permissionEscalation,
       environment: args.environment,
@@ -588,7 +579,7 @@ export async function queueReadyThreadTurnCommand(
     thread: args.thread,
     environment: args.environment,
     input: args.input,
-    eventSequence: args.eventSequence,
+    requestId: args.requestId,
     execution: args.execution,
     permissionEscalation: args.permissionEscalation,
     projectId: args.thread.projectId,

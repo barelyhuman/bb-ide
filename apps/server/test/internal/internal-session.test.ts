@@ -31,6 +31,7 @@ import {
   type ProvisioningTranscriptEntry,
   systemThreadProvisioningEventDataSchema,
   threadScope,
+  turnRequestEventDataSchema,
   threadSchema,
   turnScope,
 } from "@bb/domain";
@@ -177,9 +178,9 @@ describe("internal session routes", () => {
       await expect(readJson(response)).resolves.toMatchObject({
         code: "invalid_request",
       });
-      expect(
-        harness.db.select().from(hostDaemonSessions).all(),
-      ).toHaveLength(0);
+      expect(harness.db.select().from(hostDaemonSessions).all()).toHaveLength(
+        0,
+      );
     } finally {
       await harness.cleanup();
     }
@@ -445,7 +446,7 @@ describe("internal session routes", () => {
         status: "provisioning",
       });
 
-      const eventSequence = appendClientTurnEvent(harness.deps, {
+      const request = appendClientTurnEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
         type: "client/turn/requested",
@@ -472,7 +473,7 @@ describe("internal session routes", () => {
           path: environmentPath,
           workspaceProvisionType: environment.workspaceProvisionType,
         },
-        eventSequence,
+        requestId: request.requestId,
         input: [{ type: "text", text: "start with high-water response" }],
         execution: {
           model: "gpt-5",
@@ -600,7 +601,6 @@ describe("internal session routes", () => {
           initiator: {
             threadId: initiator.id,
             provisioningId: "tpv-session-shared-high-water",
-            eventSequence: 6,
           },
           workspaceProvisionType: "unmanaged",
           path: "/tmp/provision-shared-high-water",
@@ -659,7 +659,6 @@ describe("internal session routes", () => {
         [reuser.id]: reuserSequenceAfterResult,
       });
 
-      const daemonNextReuserSequence = reuserSequenceAfterResult + 1;
       const daemonEventResponse = await harness.app.request(
         "/internal/session/events",
         {
@@ -669,10 +668,8 @@ describe("internal session routes", () => {
             sessionId: session.id,
             events: [
               {
-                environmentId: environment.id,
+                producerEventId: "hdevt_23456789abcdefghijkm",
                 threadId: reuser.id,
-                sequence: daemonNextReuserSequence,
-                createdAt: Date.now(),
                 event: {
                   type: "thread/identity",
                   threadId: reuser.id,
@@ -686,6 +683,18 @@ describe("internal session routes", () => {
       );
 
       expect(daemonEventResponse.status).toBe(200);
+      const daemonEventBody = await readJson(daemonEventResponse);
+      expect(daemonEventBody).toMatchObject({
+        acceptedEvents: [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkm",
+            threadId: reuser.id,
+            sequence: expect.any(Number),
+          },
+        ],
+      });
+      const daemonEventSequence = daemonEventBody.acceptedEvents[0].sequence;
+      expect(daemonEventSequence).toBeGreaterThan(reuserSequenceAfterResult);
       expect(
         harness.db
           .select({ sequence: events.sequence })
@@ -694,12 +703,12 @@ describe("internal session routes", () => {
             and(
               eq(events.threadId, reuser.id),
               eq(events.type, "thread/identity"),
-              eq(events.sequence, daemonNextReuserSequence),
+              eq(events.sequence, daemonEventSequence),
             ),
           )
           .get(),
       ).toMatchObject({
-        sequence: daemonNextReuserSequence,
+        sequence: daemonEventSequence,
       });
     } finally {
       await harness.cleanup();
@@ -1048,7 +1057,6 @@ describe("internal session routes", () => {
             initiator: {
               threadId: successThread.id,
               provisioningId: "tpv-session-success",
-              eventSequence: 0,
             },
             workspaceProvisionType: "unmanaged",
             path: "/tmp/provision-success",
@@ -1130,7 +1138,6 @@ describe("internal session routes", () => {
             initiator: {
               threadId: failureThread.id,
               provisioningId: "tpv-session-failure",
-              eventSequence: 0,
             },
             workspaceProvisionType: "unmanaged",
             path: "/tmp/provision-failure",
@@ -1342,7 +1349,6 @@ describe("internal session routes", () => {
           initiator: {
             threadId: thread.id,
             provisioningId: "tpv-session-transcript",
-            eventSequence: 0,
           },
           workspaceProvisionType: "managed-worktree",
           targetPath: "/tmp/transcript-test",
@@ -1456,7 +1462,7 @@ describe("internal session routes", () => {
         type: "system/thread-provisioning",
         scope: threadScope(),
         data: {
-          provisioningId: "tpv-1",
+          provisioningId: "tpv-session-streamed",
           status: "active",
           environmentId: environment.id,
           entries: [
@@ -1479,7 +1485,6 @@ describe("internal session routes", () => {
           initiator: {
             threadId: thread.id,
             provisioningId: "tpv-session-streamed",
-            eventSequence: 10,
           },
           workspaceProvisionType: "managed-worktree",
           targetPath: "/tmp/streamed-transcript",
@@ -1578,7 +1583,7 @@ describe("internal session routes", () => {
       requestThreadReprovision(harness.deps, {
         thread,
         environment,
-        eventSequence: 0,
+        provisionEventSequence: 0,
         input: [{ type: "text", text: "Resume once" }],
         execution: {
           model: "gpt-5",
@@ -1667,7 +1672,7 @@ describe("internal session routes", () => {
       requestThreadReprovision(harness.deps, {
         thread,
         environment,
-        eventSequence: 0,
+        provisionEventSequence: 0,
         input: [{ type: "text", text: "Resume after reprovision" }],
         execution: {
           model: "gpt-5",
@@ -1680,6 +1685,21 @@ describe("internal session routes", () => {
         initiator: "user",
         provisioningId: createThreadProvisioningId(),
       });
+      const persistedTurnRequest = harness.db
+        .select({ data: events.data })
+        .from(events)
+        .where(
+          and(
+            eq(events.threadId, thread.id),
+            eq(events.type, "client/turn/requested"),
+          ),
+        )
+        .all()
+        .map((row) => turnRequestEventDataSchema.parse(JSON.parse(row.data)))
+        .find((event) => event.input[0]?.type === "text");
+      if (!persistedTurnRequest) {
+        throw new Error("Expected reprovisioning to persist a turn request");
+      }
       const provisionCommand = queueEnvironmentProvisionLifecycleCommand(
         harness,
         {
@@ -1692,7 +1712,6 @@ describe("internal session routes", () => {
             initiator: {
               threadId: thread.id,
               provisioningId: "tpv-session-direct",
-              eventSequence: 0,
             },
             workspaceProvisionType: "managed-worktree",
             targetPath: "/tmp/reprovision-start",
@@ -1755,8 +1774,8 @@ describe("internal session routes", () => {
         (event) => event.data.status === "completed",
       );
       expect(completedProvisioningEvent).toBeDefined();
-      expect(queuedRestart.command.eventSequence).toBe(
-        completedProvisioningEvent?.sequence,
+      expect(queuedRestart.command.requestId).toBe(
+        persistedTurnRequest.requestId,
       );
       const followupCommands = harness.db
         .select({
@@ -1809,6 +1828,7 @@ describe("internal session routes", () => {
         scope: threadScope(),
         data: {
           direction: "outbound",
+          requestId: "creq_23456789ab",
           input: [{ type: "text", text: "Valid earlier request" }],
           target: { kind: "new-turn" },
           execution: {
@@ -1846,7 +1866,7 @@ describe("internal session routes", () => {
       requestThreadReprovision(harness.deps, {
         thread,
         environment,
-        eventSequence: 0,
+        provisionEventSequence: 0,
         input: [{ type: "text", text: "Durable reprovision payload" }],
         execution: {
           model: "gpt-5",
@@ -1871,7 +1891,6 @@ describe("internal session routes", () => {
             initiator: {
               threadId: thread.id,
               provisioningId: "tpv-session-managed",
-              eventSequence: 0,
             },
             workspaceProvisionType: "managed-worktree",
             targetPath: "/tmp/reprovision-malformed",
@@ -1974,7 +1993,7 @@ describe("internal session routes", () => {
       requestThreadReprovision(harness.deps, {
         thread: provisioningThread,
         environment,
-        eventSequence: 0,
+        provisionEventSequence: 0,
         input: [{ type: "text", text: "Resume provisioning thread" }],
         execution: {
           model: "gpt-5",
@@ -2016,7 +2035,6 @@ describe("internal session routes", () => {
             initiator: {
               threadId: provisioningThread.id,
               provisioningId: "tpv-session-provisioning-thread",
-              eventSequence: 0,
             },
             workspaceProvisionType: "managed-worktree",
             targetPath: "/tmp/reprovision-filter",

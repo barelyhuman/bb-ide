@@ -27,7 +27,6 @@ export interface ThreadMetadataInferenceArgs {
 
 export interface ThreadMetadataInferenceResult {
   branchSlug: string | null;
-  eventSequence: number | null;
   titleApplied: boolean;
   title: string | null;
 }
@@ -104,7 +103,6 @@ export async function inferThreadMetadata(
   if (!args.generateTitle && !args.generateBranchName) {
     return {
       branchSlug: null,
-      eventSequence: null,
       title: null,
       titleApplied: false,
     };
@@ -142,23 +140,22 @@ export async function inferThreadMetadata(
     ...(args.timeoutMs ? { timeoutMs: args.timeoutMs } : {}),
   });
 
-  const eventSequence =
-    transcriptEnvironmentId && provisioningId
-      ? appendThreadProvisioningEvent(deps, {
-          threadId: args.threadId,
-          environmentId: transcriptEnvironmentId,
-          provisioningId,
-          status: "active",
-          entries: [
-            metadataCompletedEntry({
-              generateBranchName: args.generateBranchName,
-              generateTitle: args.generateTitle,
-              outcome,
-              startedAt,
-            }),
-          ],
-        })
-      : null;
+  if (transcriptEnvironmentId && provisioningId) {
+    appendThreadProvisioningEvent(deps, {
+      threadId: args.threadId,
+      environmentId: transcriptEnvironmentId,
+      provisioningId,
+      status: "active",
+      entries: [
+        metadataCompletedEntry({
+          generateBranchName: args.generateBranchName,
+          generateTitle: args.generateTitle,
+          outcome,
+          startedAt,
+        }),
+      ],
+    });
+  }
 
   let titleApplied = false;
   if (args.generateTitle && outcome.metadata?.title) {
@@ -179,7 +176,6 @@ export async function inferThreadMetadata(
     branchSlug: args.generateBranchName
       ? (outcome.metadata?.branchSlug ?? null)
       : null,
-    eventSequence,
     title: args.generateTitle ? (outcome.metadata?.title ?? null) : null,
     titleApplied,
   };

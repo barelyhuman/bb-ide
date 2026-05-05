@@ -94,11 +94,13 @@ describe("createAgentRuntime multi-thread routing", () => {
     // Run turns concurrently
     await Promise.all([
       runtime.runTurn({
+        clientRequestId: "creq_222222222b",
         threadId: "t1",
         input: [{ type: "text", text: "thread 1" }],
         options: fullRuntimeOptions,
       }),
       runtime.runTurn({
+        clientRequestId: "creq_222222222c",
         threadId: "t2",
         input: [{ type: "text", text: "thread 2" }],
         options: fullRuntimeOptions,
@@ -171,11 +173,13 @@ describe("createAgentRuntime multi-thread routing", () => {
 
     await Promise.all([
       runtime.runTurn({
+        clientRequestId: "creq_222222222d",
         threadId: "t1",
         input: [{ type: "text", text: "delay:500 thread A should stop" }],
         options: fullRuntimeOptions,
       }),
       runtime.runTurn({
+        clientRequestId: "creq_222222222e",
         threadId: "t2",
         input: [{ type: "text", text: "delay:500 thread B should survive" }],
         options: fullRuntimeOptions,
@@ -201,6 +205,7 @@ describe("createAgentRuntime multi-thread routing", () => {
     });
 
     await runtime.runTurn({
+      clientRequestId: "creq_222222222f",
       threadId: "t2",
       input: [{ type: "text", text: "thread B still accepts turns" }],
       options: fullRuntimeOptions,
@@ -236,6 +241,7 @@ describe("createAgentRuntime multi-thread routing", () => {
       options: fullRuntimeOptions,
     });
     await runtime.runTurn({
+      clientRequestId: "creq_222222222g",
       threadId: "my-thread",
       input: [{ type: "text", text: "check ids" }],
       options: fullRuntimeOptions,
@@ -289,11 +295,13 @@ describe("createAgentRuntime multi-thread routing", () => {
 
     await Promise.all([
       runtime.runTurn({
+        clientRequestId: "creq_222222222h",
         threadId: "t1",
         input: [{ type: "text", text: "from t1" }],
         options: fullRuntimeOptions,
       }),
       runtime.runTurn({
+        clientRequestId: "creq_222222222i",
         threadId: "t2",
         input: [{ type: "text", text: "from t2" }],
         options: fullRuntimeOptions,
@@ -526,11 +534,13 @@ rl.on("line", (line) => {
 
     await Promise.all([
       runtime.runTurn({
+        clientRequestId: "creq_222222222j",
         threadId: "t1",
         input: [{ type: "text", text: "from t1" }],
         options: fullRuntimeOptions,
       }),
       runtime.runTurn({
+        clientRequestId: "creq_222222222k",
         threadId: "t2",
         input: [{ type: "text", text: "from t2" }],
         options: fullRuntimeOptions,
@@ -610,11 +620,13 @@ rl.on("line", (line) => {
 
     await Promise.all([
       runtime.runTurn({
+        clientRequestId: "creq_222222222m",
         threadId: "t1",
         input: [{ type: "text", text: "from a" }],
         options: fullRuntimeOptions,
       }),
       runtime.runTurn({
+        clientRequestId: "creq_222222222n",
         threadId: "t2",
         input: [{ type: "text", text: "from b" }],
         options: fullRuntimeOptions,
@@ -664,6 +676,7 @@ rl.on("line", (line) => {
       options: fullRuntimeOptions,
     });
     await runtime1.runTurn({
+      clientRequestId: "creq_222222222p",
       threadId: "t1",
       input: [{ type: "text", text: "first runtime" }],
       options: fullRuntimeOptions,
@@ -696,6 +709,7 @@ rl.on("line", (line) => {
       options: fullRuntimeOptions,
     });
     await runtime2.runTurn({
+      clientRequestId: "creq_222222222q",
       threadId: "t1-resumed",
       input: [{ type: "text", text: "second runtime" }],
       options: fullRuntimeOptions,

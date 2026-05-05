@@ -237,6 +237,8 @@ const piAssistantMessageSchema = z
   .object({
     role: z.literal("assistant"),
     content: z.array(piMessageContentBlockSchema),
+    stopReason: z.string().optional(),
+    errorMessage: z.string().optional(),
     provider: z.string().optional(),
     model: z.string().optional(),
     usage: piAssistantUsageSchema.optional(),
@@ -247,6 +249,8 @@ const piConversationMessageSchema = z
   .object({
     role: z.string(),
     content: z.array(piMessageContentBlockSchema).optional(),
+    stopReason: z.string().optional(),
+    errorMessage: z.string().optional(),
     provider: z.string().optional(),
     model: z.string().optional(),
     usage: piAssistantUsageSchema.optional(),
@@ -332,6 +336,10 @@ const piFileEditArgsSchema = z
 type PiFileEditArgs = z.infer<typeof piFileEditArgsSchema>;
 type PiPendingFileChangeItem = Extract<ThreadEventItem, { type: "fileChange" }>;
 type PiAssistantMessage = z.infer<typeof piAssistantMessageSchema>;
+type PiAssistantErrorMessage = PiAssistantMessage & {
+  errorMessage: string;
+  stopReason: "error";
+};
 type PiConversationMessage = z.infer<typeof piConversationMessageSchema>;
 type PiToolExecutionUpdateEvent = z.infer<
   typeof piToolExecutionUpdateEventSchema
@@ -799,10 +807,8 @@ export function createPiProviderAdapter(
 
     const identityEnvelope = threadIdentityEnvelopeSchema.safeParse(event);
     if (identityEnvelope.success) {
-      const {
-        threadId = UNSTAMPED_THREAD_ID,
-        providerThreadId,
-      } = identityEnvelope.data.params;
+      const { threadId = UNSTAMPED_THREAD_ID, providerThreadId } =
+        identityEnvelope.data.params;
       return providerThreadId
         ? [
             {
@@ -935,6 +941,13 @@ export function createPiProviderAdapter(
           break;
         }
         const lastAssistant = findLastAssistantMessage(piEvent.data.messages);
+        if (lastAssistant && isPiAssistantError(lastAssistant)) {
+          resetPiCommandOutputSnapshots(state);
+          return translatePiErrorEnvelope({
+            context,
+            detail: lastAssistant.errorMessage,
+          });
+        }
         if (lastAssistant) {
           const text = extractAssistantText(lastAssistant);
           if (text) {
@@ -1356,21 +1369,21 @@ export function createPiProviderAdapter(
         const turnId = turnState.getCurrentOrLastTurnId({ state });
         if (turnId) {
           return buildAcceptedUserMessageEvent({
-            clientRequestSequence: command.clientRequestSequence,
+            clientRequestId: command.clientRequestId,
             providerThreadId: command.providerThreadId,
             threadId: command.threadId,
             turnId,
           });
         }
         queueAcceptedUserMessage({
-          clientRequestSequence: command.clientRequestSequence,
+          clientRequestId: command.clientRequestId,
           state,
         });
       }
 
       if (command.type === "turn/steer") {
         return buildAcceptedUserMessageEvent({
-          clientRequestSequence: command.clientRequestSequence,
+          clientRequestId: command.clientRequestId,
           providerThreadId: command.providerThreadId,
           threadId: command.threadId,
           turnId: command.expectedTurnId,
@@ -1429,6 +1442,16 @@ function extractAssistantText(message: PiAssistantMessage): string | undefined {
   }
   const text = chunks.join("\n").trim();
   return text.length > 0 ? text : undefined;
+}
+
+function isPiAssistantError(
+  message: PiAssistantMessage,
+): message is PiAssistantErrorMessage {
+  return (
+    message.stopReason === "error" &&
+    typeof message.errorMessage === "string" &&
+    message.errorMessage.trim().length > 0
+  );
 }
 
 function extractPiTokenUsage(

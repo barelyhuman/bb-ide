@@ -40,7 +40,9 @@ interface CaptureEnrichment {
   projectName: string | null;
 }
 
-function firstNonBlank(...values: Array<string | null | undefined>): string | null {
+function firstNonBlank(
+  ...values: Array<string | null | undefined>
+): string | null {
   for (const value of values) {
     if (typeof value === "string" && value.trim().length > 0) {
       return value;
@@ -217,10 +219,7 @@ async function findCapture(
   );
 }
 
-async function deleteCapture(
-  deps: AppDeps,
-  captureId: string,
-): Promise<void> {
+async function deleteCapture(deps: AppDeps, captureId: string): Promise<void> {
   requireReplayCaptureId(captureId);
 
   let firstUnexpectedError: Error | null = null;
@@ -322,7 +321,7 @@ export function registerDevelopmentOnlyReplayRoutes(
         title: `[Replay] ${resolved.title ?? manifest.captureId}`,
       });
       try {
-        appendClientTurnEvent(deps, {
+        const request = appendClientTurnEvent(deps, {
           threadId: replayThread.id,
           environmentId: resolved.environmentId,
           type: "client/turn/requested",
@@ -343,6 +342,7 @@ export function registerDevelopmentOnlyReplayRoutes(
             captureId: manifest.captureId,
             environmentId: resolved.environmentId,
             threadId: replayThread.id,
+            requestId: request.requestId,
             speed: payload.speed,
           }),
         });

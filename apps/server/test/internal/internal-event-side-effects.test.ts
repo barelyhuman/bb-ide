@@ -17,6 +17,7 @@ import { threadScope, turnRequestEventDataSchema, turnScope } from "@bb/domain";
 import { renderTemplate } from "@bb/templates";
 import { describe, expect, it, vi } from "vitest";
 import {
+  createTestDaemonEventEnvelope,
   internalAuthHeaders,
   reportQueuedCommandError,
   reportQueuedCommandSuccess,
@@ -84,11 +85,8 @@ describe("internal event side effects", () => {
         body: JSON.stringify({
           sessionId: session.id,
           events: [
-            {
-              environmentId: environment.id,
-              threadId: renamedThread.id,
-              sequence: 1,
-              createdAt: Date.now(),
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 1,
               event: {
                 type: "thread/name/updated",
                 threadId: renamedThread.id,
@@ -96,12 +94,9 @@ describe("internal event side effects", () => {
                 scope: threadScope(),
                 threadName: "Renamed thread",
               },
-            },
-            {
-              environmentId: environment.id,
-              threadId: startedThread.id,
-              sequence: 1,
-              createdAt: Date.now(),
+            }),
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 2,
               event: {
                 type: "turn/started",
                 threadId: startedThread.id,
@@ -109,7 +104,7 @@ describe("internal event side effects", () => {
                 turnId: "turn-resilience",
                 scope: turnScope("turn-resilience"),
               },
-            },
+            }),
           ],
         }),
       });
@@ -178,11 +173,8 @@ describe("internal event side effects", () => {
         body: JSON.stringify({
           sessionId: session.id,
           events: [
-            {
-              environmentId: environment.id,
-              threadId: thread.id,
-              sequence: 3,
-              createdAt: Date.now(),
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 1,
               event: {
                 type: "turn/completed",
                 threadId: thread.id,
@@ -191,7 +183,7 @@ describe("internal event side effects", () => {
                 scope: turnScope("turn-auto-send"),
                 status: "completed",
               },
-            },
+            }),
           ],
         }),
       });
@@ -262,11 +254,8 @@ describe("internal event side effects", () => {
         body: JSON.stringify({
           sessionId: session.id,
           events: [
-            {
-              environmentId: environment.id,
-              threadId: thread.id,
-              sequence: 3,
-              createdAt: Date.now(),
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 1,
               event: {
                 type: "turn/completed",
                 threadId: thread.id,
@@ -275,7 +264,7 @@ describe("internal event side effects", () => {
                 scope: turnScope("turn-manager-draft-auto-send"),
                 status: "completed",
               },
-            },
+            }),
           ],
         }),
       });
@@ -435,11 +424,8 @@ describe("internal event side effects", () => {
         body: JSON.stringify({
           sessionId: session.id,
           events: [
-            {
-              environmentId: environment.id,
-              threadId: thread.id,
-              sequence: 1,
-              createdAt: Date.now(),
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 1,
               event: {
                 type: "turn/started",
                 threadId: thread.id,
@@ -447,7 +433,7 @@ describe("internal event side effects", () => {
                 turnId: "turn-stop-requested-start",
                 scope: turnScope("turn-stop-requested-start"),
               },
-            },
+            }),
           ],
         }),
       });
@@ -530,11 +516,8 @@ describe("internal event side effects", () => {
         body: JSON.stringify({
           sessionId: session.id,
           events: [
-            {
-              environmentId: childEnvironment.id,
-              threadId: childThread.id,
-              sequence: 3,
-              createdAt: Date.now(),
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 1,
               event: {
                 type: "turn/completed",
                 threadId: childThread.id,
@@ -543,7 +526,7 @@ describe("internal event side effects", () => {
                 scope: turnScope("turn-manager-notify-failure"),
                 status: "completed",
               },
-            },
+            }),
           ],
         }),
       });
@@ -622,11 +605,8 @@ describe("internal event side effects", () => {
         body: JSON.stringify({
           sessionId: session.id,
           events: [
-            {
-              environmentId: environment.id,
-              threadId: childThread.id,
-              sequence: 1,
-              createdAt: Date.now(),
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 1,
               event: {
                 type: "turn/completed",
                 threadId: childThread.id,
@@ -635,7 +615,7 @@ describe("internal event side effects", () => {
                 scope: turnScope("turn-child-follow-up"),
                 status: "completed",
               },
-            },
+            }),
           ],
         }),
       });
@@ -746,11 +726,8 @@ describe("internal event side effects", () => {
         body: JSON.stringify({
           sessionId: session.id,
           events: [
-            {
-              environmentId: environment.id,
-              threadId: childThread.id,
-              sequence: 1,
-              createdAt: Date.now(),
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 1,
               event: {
                 type: "turn/completed",
                 threadId: childThread.id,
@@ -759,7 +736,7 @@ describe("internal event side effects", () => {
                 scope: turnScope("turn-child-deleted-manager-follow-up"),
                 status: "completed",
               },
-            },
+            }),
           ],
         }),
       });
@@ -817,11 +794,8 @@ describe("internal event side effects", () => {
         body: JSON.stringify({
           sessionId: session.id,
           events: [
-            {
-              environmentId: environment.id,
-              threadId: childThread.id,
-              sequence: 1,
-              createdAt: Date.now(),
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 1,
               event: {
                 type: "turn/completed",
                 threadId: childThread.id,
@@ -830,7 +804,7 @@ describe("internal event side effects", () => {
                 scope: turnScope("turn-child-failed-follow-up"),
                 status: "failed",
               },
-            },
+            }),
           ],
         }),
       });
@@ -938,11 +912,8 @@ describe("internal event side effects", () => {
         body: JSON.stringify({
           sessionId: session.id,
           events: [
-            {
-              environmentId: environment.id,
-              threadId: childThread.id,
-              sequence: 1,
-              createdAt: Date.now(),
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 1,
               event: {
                 type: "turn/completed",
                 threadId: childThread.id,
@@ -951,7 +922,7 @@ describe("internal event side effects", () => {
                 scope: turnScope("turn-child-interrupted-follow-up"),
                 status: "interrupted",
               },
-            },
+            }),
           ],
         }),
       });
@@ -1108,11 +1079,8 @@ describe("internal event side effects", () => {
         body: JSON.stringify({
           sessionId: session.id,
           events: [
-            {
-              environmentId: environment.id,
-              threadId: thread.id,
-              sequence: 1,
-              createdAt: Date.now(),
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 1,
               event: {
                 type: "turn/completed",
                 threadId: thread.id,
@@ -1121,7 +1089,7 @@ describe("internal event side effects", () => {
                 scope: turnScope("turn-manager-sync"),
                 status: "completed",
               },
-            },
+            }),
           ],
         }),
       });
@@ -1222,11 +1190,8 @@ describe("internal event side effects", () => {
         body: JSON.stringify({
           sessionId: session.id,
           events: [
-            {
-              environmentId: environment.id,
-              threadId: thread.id,
-              sequence: 1,
-              createdAt: Date.now(),
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 1,
               event: {
                 type: "turn/completed",
                 threadId: thread.id,
@@ -1235,7 +1200,7 @@ describe("internal event side effects", () => {
                 scope: turnScope("turn-auto-archive"),
                 status: "completed",
               },
-            },
+            }),
           ],
         }),
       });
@@ -1264,11 +1229,8 @@ describe("internal event side effects", () => {
           body: JSON.stringify({
             sessionId: session.id,
             events: [
-              {
-                environmentId: environment.id,
-                threadId: thread.id,
-                sequence: 2,
-                createdAt: Date.now(),
+              createTestDaemonEventEnvelope({
+                producerEventIdValue: 2,
                 event: {
                   type: "turn/completed",
                   threadId: thread.id,
@@ -1277,7 +1239,7 @@ describe("internal event side effects", () => {
                   scope: turnScope("turn-auto-archive-2"),
                   status: "completed",
                 },
-              },
+              }),
             ],
           }),
         },
@@ -1347,11 +1309,8 @@ describe("internal event side effects", () => {
         body: JSON.stringify({
           sessionId: session.id,
           events: [
-            {
-              environmentId: environment.id,
-              threadId: thread.id,
-              sequence: 1,
-              createdAt: Date.now(),
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 1,
               event: {
                 type: "turn/completed",
                 threadId: thread.id,
@@ -1360,7 +1319,7 @@ describe("internal event side effects", () => {
                 scope: turnScope("turn-no-auto-archive"),
                 status: "completed",
               },
-            },
+            }),
           ],
         }),
       });
@@ -1428,11 +1387,8 @@ describe("internal event side effects", () => {
       const requestBody = JSON.stringify({
         sessionId: session.id,
         events: [
-          {
-            environmentId: environment.id,
-            threadId: thread.id,
-            sequence: 3,
-            createdAt: Date.now(),
+          createTestDaemonEventEnvelope({
+            producerEventIdValue: 1,
             event: {
               type: "turn/completed",
               threadId: thread.id,
@@ -1441,7 +1397,7 @@ describe("internal event side effects", () => {
               scope: turnScope("turn-dedupe"),
               status: "completed",
             },
-          },
+          }),
         ],
       });
 
@@ -1558,11 +1514,8 @@ describe("internal event side effects", () => {
           body: JSON.stringify({
             sessionId: session.id,
             events: [
-              {
-                environmentId: environment.id,
-                threadId: threadA.id,
-                sequence: 3,
-                createdAt: Date.now(),
+              createTestDaemonEventEnvelope({
+                producerEventIdValue: 1,
                 event: {
                   type: "turn/completed",
                   threadId: threadA.id,
@@ -1571,7 +1524,7 @@ describe("internal event side effects", () => {
                   scope: turnScope(`turn-${threadA.id}`),
                   status: "completed",
                 },
-              },
+              }),
             ],
           }),
         },
@@ -1592,11 +1545,8 @@ describe("internal event side effects", () => {
           body: JSON.stringify({
             sessionId: session.id,
             events: [
-              {
-                environmentId: environment.id,
-                threadId: threadA.id,
-                sequence: 3,
-                createdAt: Date.now(),
+              createTestDaemonEventEnvelope({
+                producerEventIdValue: 1,
                 event: {
                   type: "turn/completed",
                   threadId: threadA.id,
@@ -1605,12 +1555,9 @@ describe("internal event side effects", () => {
                   scope: turnScope(`turn-${threadA.id}`),
                   status: "completed",
                 },
-              },
-              {
-                environmentId: environment.id,
-                threadId: threadB.id,
-                sequence: 3,
-                createdAt: Date.now(),
+              }),
+              createTestDaemonEventEnvelope({
+                producerEventIdValue: 2,
                 event: {
                   type: "turn/completed",
                   threadId: threadB.id,
@@ -1619,7 +1566,7 @@ describe("internal event side effects", () => {
                   scope: turnScope(`turn-${threadB.id}`),
                   status: "completed",
                 },
-              },
+              }),
             ],
           }),
         },

@@ -38,6 +38,7 @@ import type {
   ProviderAuditScenarioToolFixture,
   ProviderAuditUntranslatedRawEvent,
 } from "./types.js";
+import { buildProviderAuditClientRequestId } from "./types.js";
 
 const DEFAULT_PROVIDER_ID = "codex";
 const DEFAULT_SCENARIO_ID = "excalidraw-ttd-explanation";
@@ -592,6 +593,7 @@ function buildClientRequestRows(args: {
         threadId: args.threadId,
         scope: threadScope(),
         direction: "outbound",
+        requestId: request.requestId,
         source: "tell",
         initiator: "user",
         input: [{ type: "text", text: request.text }],
@@ -1025,8 +1027,10 @@ async function runScenario(args: {
 
   for (let index = 0; index < args.scenario.turns.length; index += 1) {
     const targetTurnCount = index + 1;
+    const requestId = buildProviderAuditClientRequestId(index);
     args.clientRequests.push({
       id: `audit-client-row-${index + 1}`,
+      requestId,
       turnIndex: index,
       type: "client/turn/requested",
       target: index === 0 ? { kind: "thread-start" } : { kind: "new-turn" },
@@ -1036,6 +1040,7 @@ async function runScenario(args: {
     });
     await args.runtime.runTurn({
       threadId: args.threadId,
+      clientRequestId: requestId,
       input: [{ type: "text", text: args.scenario.turns[index] }],
       options: buildExecutionOptions({
         model: args.model,

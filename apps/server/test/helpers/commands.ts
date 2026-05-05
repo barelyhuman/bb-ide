@@ -5,10 +5,17 @@ import {
   hostDaemonCommandResultSchemaByType,
   hostDaemonCommandSchema,
 } from "@bb/host-daemon-contract";
-import type { HostType } from "@bb/domain";
+import {
+  CLIENT_TURN_REQUEST_ID_ALPHABET,
+  hostDaemonProducerEventIdSchema,
+  type HostDaemonProducerEventId,
+  type HostType,
+  type ThreadEvent,
+} from "@bb/domain";
 import type {
   HostDaemonCommand,
   HostDaemonCommandResultByType,
+  HostDaemonEventEnvelope,
 } from "@bb/host-daemon-contract";
 import type { TestAppHarness } from "./test-app.js";
 import { createTestDaemonHostKey } from "./test-app.js";
@@ -18,6 +25,57 @@ export interface QueuedCommand<
 > {
   command: TCommand;
   row: typeof hostDaemonCommands.$inferSelect;
+}
+
+const TEST_PRODUCER_EVENT_ID_PREFIX = "hdevt_";
+const TEST_PRODUCER_EVENT_ID_SUFFIX_LENGTH = 20;
+
+export interface CreateTestProducerEventIdArgs {
+  value: number;
+}
+
+export interface CreateTestDaemonEventEnvelopeArgs {
+  event: ThreadEvent;
+  producerEventIdValue: number;
+  threadId?: string;
+}
+
+export function createTestProducerEventId(
+  args: CreateTestProducerEventIdArgs,
+): HostDaemonProducerEventId {
+  if (!Number.isSafeInteger(args.value) || args.value < 0) {
+    throw new Error(
+      "Producer event id number must be a safe non-negative integer",
+    );
+  }
+
+  let value = args.value;
+  let suffix = "";
+  for (
+    let index = 0;
+    index < TEST_PRODUCER_EVENT_ID_SUFFIX_LENGTH;
+    index += 1
+  ) {
+    const alphabetIndex = value % CLIENT_TURN_REQUEST_ID_ALPHABET.length;
+    suffix = CLIENT_TURN_REQUEST_ID_ALPHABET.charAt(alphabetIndex) + suffix;
+    value = Math.floor(value / CLIENT_TURN_REQUEST_ID_ALPHABET.length);
+  }
+
+  return hostDaemonProducerEventIdSchema.parse(
+    `${TEST_PRODUCER_EVENT_ID_PREFIX}${suffix}`,
+  );
+}
+
+export function createTestDaemonEventEnvelope(
+  args: CreateTestDaemonEventEnvelopeArgs,
+): HostDaemonEventEnvelope {
+  return {
+    producerEventId: createTestProducerEventId({
+      value: args.producerEventIdValue,
+    }),
+    threadId: args.threadId ?? args.event.threadId,
+    event: args.event,
+  };
 }
 
 export function internalAuthHeaders(

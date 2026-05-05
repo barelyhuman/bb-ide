@@ -56,6 +56,7 @@ export async function startThread(
     threadId: command.threadId,
     projectId: command.projectId,
     providerId: command.providerId,
+    clientRequestId: command.requestId,
     input: command.input,
     options: command.options,
     instructions: command.instructions,
@@ -123,7 +124,7 @@ async function runSubmittedTurn(
   await entry.runtime.runTurn({
     threadId: command.threadId,
     input: command.input,
-    clientRequestSequence: command.eventSequence,
+    clientRequestId: command.requestId,
     options: command.options,
     instructions: command.resumeContext.instructions,
   });
@@ -139,7 +140,7 @@ async function steerSubmittedTurn(
     threadId: command.threadId,
     expectedTurnId,
     input: command.input,
-    clientRequestSequence: command.eventSequence,
+    clientRequestId: command.requestId,
     options: command.options,
     instructions: command.resumeContext.instructions,
   });

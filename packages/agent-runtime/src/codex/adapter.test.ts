@@ -266,6 +266,7 @@ describe("codex provider adapter", () => {
       adapter.translateAcceptedCommand({
         command: {
           type: "turn/start",
+          clientRequestId: "creq_222222228e",
           threadId: "thread-1",
           providerThreadId: "provider-thread-1",
           input: [{ type: "text", text: "normal turn" }],
@@ -280,7 +281,7 @@ describe("codex provider adapter", () => {
           threadId: "thread-1",
           providerThreadId: "provider-thread-1",
           expectedTurnId: "turn-1",
-          clientRequestSequence: 17,
+          clientRequestId: "creq_23456789af",
           input: [{ type: "text", text: "steer turn" }],
           options: fullProviderExecutionContext,
         },
@@ -291,7 +292,7 @@ describe("codex provider adapter", () => {
         threadId: "thread-1",
         providerThreadId: "provider-thread-1",
         scope: turnScope("turn-1"),
-        clientRequestSequence: 17,
+        clientRequestId: "creq_23456789af",
       },
     ]);
   });
@@ -303,7 +304,7 @@ describe("codex provider adapter", () => {
       type: "turn/start",
       threadId: "thread-1",
       providerThreadId: "provider-thread-1",
-      clientRequestSequence: 42,
+      clientRequestId: "creq_23456789ag",
       input: [{ type: "text", text: "normal turn" }],
       options: fullProviderExecutionContext,
     });
@@ -327,7 +328,7 @@ describe("codex provider adapter", () => {
         threadId: "provider-thread-1",
         providerThreadId: "provider-thread-1",
         scope: turnScope("turn-1"),
-        clientRequestSequence: 42,
+        clientRequestId: "creq_23456789ag",
       },
     ]);
 
@@ -353,7 +354,7 @@ describe("codex provider adapter", () => {
       type: "turn/start",
       threadId: "thread-1",
       providerThreadId: "provider-thread-1",
-      clientRequestSequence: 42,
+      clientRequestId: "creq_23456789ag",
       input: [{ type: "text", text: "normal turn" }],
       options: fullProviderExecutionContext,
     });
@@ -492,6 +493,7 @@ describe("codex provider adapter", () => {
 
       const turnCmd = adapter.buildCommandPlan({
         type: "turn/start",
+        clientRequestId: "creq_222222228f",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
         input: [{ type: "text", text: "edit it" }],
@@ -571,6 +573,7 @@ describe("codex provider adapter", () => {
 
       const startTurnCmd = adapter.buildCommandPlan({
         type: "turn/start",
+        clientRequestId: "creq_222222228g",
         threadId: "bb-thread-start",
         providerThreadId: "codex-thread-start",
         input: [{ type: "text", text: "commit it" }],
@@ -578,6 +581,7 @@ describe("codex provider adapter", () => {
       });
       const resumeTurnCmd = adapter.buildCommandPlan({
         type: "turn/start",
+        clientRequestId: "creq_222222228h",
         threadId: "bb-thread-resume",
         providerThreadId: "codex-thread-resume",
         input: [{ type: "text", text: "commit it" }],
@@ -626,6 +630,7 @@ describe("codex provider adapter", () => {
 
       const turnCmd = adapter.buildCommandPlan({
         type: "turn/start",
+        clientRequestId: "creq_222222228i",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
         input: [{ type: "text", text: "edit it" }],
@@ -681,6 +686,7 @@ describe("codex provider adapter", () => {
 
       const firstTurnCmd = adapter.buildCommandPlan({
         type: "turn/start",
+        clientRequestId: "creq_222222228j",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
         input: [{ type: "text", text: "edit it" }],
@@ -688,6 +694,7 @@ describe("codex provider adapter", () => {
       });
       const secondTurnCmd = adapter.buildCommandPlan({
         type: "turn/start",
+        clientRequestId: "creq_222222228k",
         threadId: "bb-thread-2",
         providerThreadId: "codex-thread-2",
         input: [{ type: "text", text: "edit it" }],
@@ -743,6 +750,7 @@ describe("codex provider adapter", () => {
 
       const turnCmd = adapter.buildCommandPlan({
         type: "turn/start",
+        clientRequestId: "creq_222222228m",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
         input: [{ type: "text", text: "edit it" }],
@@ -792,6 +800,7 @@ describe("codex provider adapter", () => {
 
       const turnCmd = adapter.buildCommandPlan({
         type: "turn/start",
+        clientRequestId: "creq_222222228n",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
         input: [{ type: "text", text: "edit it" }],
@@ -836,6 +845,7 @@ describe("codex provider adapter", () => {
 
       const turnCmd = adapter.buildCommandPlan({
         type: "turn/start",
+        clientRequestId: "creq_222222228p",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
         input: [{ type: "text", text: "edit it" }],
@@ -965,6 +975,7 @@ describe("codex provider adapter", () => {
 
       const turnCmd = adapter.buildCommandPlan({
         type: "turn/start",
+        clientRequestId: "creq_222222228q",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
         input: [{ type: "text", text: "edit it" }],
@@ -1006,6 +1017,7 @@ describe("codex provider adapter", () => {
 
         const turnCmd = adapter.buildCommandPlan({
           type: "turn/start",
+          clientRequestId: "creq_222222228r",
           threadId: "bb-thread-1",
           providerThreadId: "codex-thread-1",
           input: [{ type: "text", text: "edit it" }],
@@ -1059,6 +1071,7 @@ describe("codex provider adapter", () => {
 
       const turnCmd = adapter.buildCommandPlan({
         type: "turn/start",
+        clientRequestId: "creq_222222228s",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
         input: [{ type: "text", text: "edit it" }],
@@ -1127,6 +1140,7 @@ describe("codex provider adapter", () => {
 
       const turnCmd = adapter.buildCommandPlan({
         type: "turn/start",
+        clientRequestId: "creq_222222228t",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
         input: [{ type: "text", text: "edit it" }],
@@ -1182,6 +1196,7 @@ describe("codex provider adapter", () => {
 
         const turnCmd = adapter.buildCommandPlan({
           type: "turn/start",
+          clientRequestId: "creq_222222228u",
           threadId: "bb-thread-1",
           providerThreadId: "codex-thread-1",
           input: [{ type: "text", text: "edit it" }],
@@ -1231,6 +1246,7 @@ describe("codex provider adapter", () => {
 
       const turnCmd = adapter.buildCommandPlan({
         type: "turn/start",
+        clientRequestId: "creq_222222228v",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
         input: [{ type: "text", text: "edit it" }],
@@ -1270,6 +1286,7 @@ describe("codex provider adapter", () => {
 
       const turnCmd = adapter.buildCommandPlan({
         type: "turn/start",
+        clientRequestId: "creq_222222228w",
         threadId: "bb-thread-1",
         providerThreadId: "codex-thread-1",
         input: [{ type: "text", text: "edit it" }],
@@ -1546,6 +1563,7 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommandPlan({
       type: "turn/start",
+      clientRequestId: "creq_222222228x",
       threadId: "t1",
       providerThreadId: "codex-1",
       input: [{ type: "text", text: "do it" }],
@@ -1565,6 +1583,7 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommandPlan({
       type: "turn/start",
+      clientRequestId: "creq_222222228y",
       threadId: "t1",
       providerThreadId: "codex-1",
       input: [{ type: "text", text: "do it" }],
@@ -1583,6 +1602,7 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommandPlan({
       type: "turn/start",
+      clientRequestId: "creq_222222228z",
       threadId: "t1",
       providerThreadId: "codex-1",
       input: [{ type: "text", text: "edit it" }],
@@ -1614,6 +1634,7 @@ describe("codex provider adapter", () => {
     });
     const cmd = adapter.buildCommandPlan({
       type: "turn/start",
+      clientRequestId: "creq_2222222292",
       threadId: "t1",
       providerThreadId: "codex-1",
       input: [{ type: "text", text: "commit it" }],
@@ -1639,6 +1660,7 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommandPlan({
       type: "turn/start",
+      clientRequestId: "creq_2222222293",
       threadId: "t1",
       providerThreadId: "codex-1",
       input: [{ type: "text", text: "inspect it" }],
@@ -1664,6 +1686,7 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommandPlan({
       type: "turn/start",
+      clientRequestId: "creq_2222222294",
       threadId: "t1",
       providerThreadId: "codex-1",
       input: [{ type: "text", text: "inspect it" }],
@@ -1687,6 +1710,7 @@ describe("codex provider adapter", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommandPlan({
       type: "turn/steer",
+      clientRequestId: "creq_2222222295",
       threadId: "t1",
       providerThreadId: "codex-1",
       expectedTurnId: "turn-3",

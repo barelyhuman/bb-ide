@@ -432,10 +432,12 @@ export async function createIntegrationHarness(
     await currentResources.daemonApp.connection
       .shutdown()
       .catch(() => undefined);
-    currentResources.daemonApp.eventBuffer.dispose();
     await currentResources.daemonApp.localApi?.close().catch(() => undefined);
     await currentResources.daemonApp.runtimeManager
       .shutdownAll()
+      .catch(() => undefined);
+    await currentResources.daemonApp.eventBuffer
+      .dispose()
       .catch(() => undefined);
     await currentResources.releaseLock().catch(() => undefined);
   }

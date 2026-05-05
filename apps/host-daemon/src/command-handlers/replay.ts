@@ -1,5 +1,6 @@
 import { createReplayRawProviderEventTranslator } from "@bb/agent-runtime";
 import {
+  requireThreadEventScopeTurnId,
   threadScope,
   turnScope,
   type ThreadEvent,
@@ -104,7 +105,6 @@ function emitReplaySystemError(args: {
   eventSink: EventSink;
 }): void {
   args.eventSink.emit({
-    environmentId: args.command.environmentId,
     threadId: args.command.threadId,
     event: {
       type: "system/error",
@@ -124,7 +124,6 @@ function emitReplayTerminal(args: {
   errorMessage?: string;
 }): void {
   args.eventSink.emit({
-    environmentId: args.command.environmentId,
     threadId: args.command.threadId,
     event: terminalEvent(args),
   });
@@ -134,6 +133,8 @@ async function replayTranslatedEvents(
   args: ReplayTranslatedEventsArgs,
 ): Promise<void> {
   let emittedTerminal = false;
+  let pendingInputAcceptedRequestId: typeof args.command.requestId | null =
+    args.command.requestId;
   for await (const replayEvent of args.events) {
     const { event, relativeMs } = replayEvent;
     await waitForReplayTime({
@@ -149,10 +150,29 @@ async function replayTranslatedEvents(
     args.terminal.turnId =
       replayEventTurnId(remappedEvent) ?? args.terminal.turnId;
     args.eventSink.emit({
-      environmentId: args.command.environmentId,
       threadId: args.command.threadId,
       event: remappedEvent,
     });
+    if (
+      pendingInputAcceptedRequestId !== null &&
+      remappedEvent.type === "turn/started"
+    ) {
+      const turnId = requireThreadEventScopeTurnId({
+        type: remappedEvent.type,
+        scope: remappedEvent.scope,
+      });
+      args.eventSink.emit({
+        threadId: args.command.threadId,
+        event: {
+          type: "turn/input/accepted",
+          threadId: args.command.threadId,
+          providerThreadId: remappedEvent.providerThreadId,
+          scope: turnScope(turnId),
+          clientRequestId: pendingInputAcceptedRequestId,
+        },
+      });
+      pendingInputAcceptedRequestId = null;
+    }
     emittedTerminal ||= remappedEvent.type === "turn/completed";
   }
 

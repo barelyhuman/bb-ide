@@ -146,13 +146,11 @@ export interface ParseUserFromClientRequestArgs {
   options?: BuildEventProjectionMessagesOptions;
 }
 
-export interface ParseAcceptedSteerFromClientRequestArgs
-  extends ParseUserFromClientRequestArgs {
+export interface ParseAcceptedSteerFromClientRequestArgs extends ParseUserFromClientRequestArgs {
   acceptedClientRequest: AcceptedClientRequest;
 }
 
-export interface ParsePendingSteerFromClientRequestArgs
-  extends ParseUserFromClientRequestArgs {
+export interface ParsePendingSteerFromClientRequestArgs extends ParseUserFromClientRequestArgs {
   acceptedClientRequest: AcceptedClientRequest | undefined;
 }
 
@@ -171,15 +169,15 @@ export interface ThreadEventWithMetaLike {
   meta: EventMeta;
 }
 
-export function buildAcceptedClientRequestBySequence(
+export function buildAcceptedClientRequestById(
   events: readonly ThreadEventWithMetaLike[],
-): Map<number, AcceptedClientRequest> {
-  const acceptedBySequence = new Map<number, AcceptedClientRequest>();
+): Map<string, AcceptedClientRequest> {
+  const acceptedById = new Map<string, AcceptedClientRequest>();
   for (const { event, meta } of events) {
     if (event.type !== "turn/input/accepted") {
       continue;
     }
-    acceptedBySequence.set(event.clientRequestSequence, {
+    acceptedById.set(event.clientRequestId, {
       meta,
       turnId: requireThreadEventScopeTurnId({
         type: event.type,
@@ -187,7 +185,7 @@ export function buildAcceptedClientRequestBySequence(
       }),
     });
   }
-  return acceptedBySequence;
+  return acceptedById;
 }
 
 export function isSteerRequest(decoded: ClientTurnRequestedEvent): boolean {

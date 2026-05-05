@@ -163,9 +163,10 @@ describe("environment command dispatch", () => {
   it("streams live events and flushes when initiator is provided", async () => {
     const harness = createHarness({ workspacePath: "/tmp/live-stream" });
     const sourcePath = await makeTempDir("bb-dispatch-stream-");
-    const emittedEvents: Array<{ environmentId: string; threadId: string }> =
-      [];
-    let seeded: { threadId: string; sequence: number } | undefined;
+    const emittedEvents: Array<{
+      event: { environmentId: string };
+      threadId: string;
+    }> = [];
     let flushCount = 0;
 
     const result = await dispatchCommand(
@@ -175,16 +176,12 @@ describe("environment command dispatch", () => {
         initiator: {
           threadId: "thr-initiator",
           provisioningId: "tpv-initiator",
-          eventSequence: 5,
         },
         workspaceProvisionType: "unmanaged",
         path: sourcePath,
       },
       {
         runtimeManager: harness.manager,
-        seedThreadHighWaterMark: (args) => {
-          seeded = args;
-        },
         eventSink: {
           emit: (event) => {
             emittedEvents.push(event);
@@ -196,11 +193,10 @@ describe("environment command dispatch", () => {
       },
     );
 
-    expect(seeded).toEqual({ threadId: "thr-initiator", sequence: 5 });
     expect(flushCount).toBe(1);
     expect(emittedEvents.length).toBeGreaterThan(0);
     expect(emittedEvents[0]?.threadId).toBe("thr-initiator");
-    expect(emittedEvents[0]?.environmentId).toBe("env-stream");
+    expect(emittedEvents[0]?.event.environmentId).toBe("env-stream");
     expect(result.transcript.length).toBeGreaterThan(0);
     expect(result.transcript).toEqual(
       expect.arrayContaining([
@@ -239,7 +235,6 @@ describe("environment command dispatch", () => {
           initiator: {
             threadId: "thr-failure",
             provisioningId: "tpv-failure",
-            eventSequence: 8,
           },
           workspaceProvisionType: "managed-worktree",
           sourcePath: "/tmp/source",
@@ -263,7 +258,7 @@ describe("environment command dispatch", () => {
 
     expect(emittedEvents).toEqual([
       expect.objectContaining({
-        environmentId: "env-failure",
+        event: expect.objectContaining({ environmentId: "env-failure" }),
         threadId: "thr-failure",
       }),
     ]);
@@ -294,7 +289,6 @@ describe("environment command dispatch", () => {
         initiator: {
           threadId: "thr-second",
           provisioningId: "tpv-second",
-          eventSequence: 3,
         },
         workspaceProvisionType: "unmanaged",
         path: sourcePath,

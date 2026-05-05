@@ -205,12 +205,12 @@ export function groupEventProjectionTurns(
   args: GroupEventProjectionTurnsArgs,
 ): EventProjection {
   const turnsById = new Map<string, ProjectionTurnDraft>();
-  const clientRequestMetaBySequence = new Map<number, EventMeta>();
+  const clientRequestMetaById = new Map<string, EventMeta>();
   const entryDrafts: ProjectionEntryDraft[] = [];
 
   for (const { event, meta } of args.events) {
     if (event.type === "client/turn/requested") {
-      clientRequestMetaBySequence.set(meta.seq, meta);
+      clientRequestMetaById.set(event.requestId, meta);
     }
   }
 
@@ -262,8 +262,8 @@ export function groupEventProjectionTurns(
           `Timeline projection found turn/input/accepted without turn/started for ${turnId}`,
         );
       }
-      const clientRequestMeta = clientRequestMetaBySequence.get(
-        event.clientRequestSequence,
+      const clientRequestMeta = clientRequestMetaById.get(
+        event.clientRequestId,
       );
       if (clientRequestMeta) {
         updateProjectionTurnBounds(existing, {

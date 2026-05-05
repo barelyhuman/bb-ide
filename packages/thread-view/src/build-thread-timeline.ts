@@ -35,7 +35,7 @@ import {
   type ThreadEventWithMeta,
 } from "./build-event-projection.js";
 import {
-  buildAcceptedClientRequestBySequence,
+  buildAcceptedClientRequestById,
   parsePendingSteerFromClientRequest,
 } from "./user-message-parsing.js";
 import { getOrderedThreadEvents } from "./group-event-projection-turns.js";
@@ -425,28 +425,27 @@ function convertMessage(
           pattern: message.pattern,
         },
       ];
-    case "delegation":
-      {
-        const base = buildTimelineRowBase(message, options.rowIdPrefix);
-        return [
-          {
-            ...base,
-            kind: "work",
-            workKind: "delegation",
-            status: message.status,
-            callId: message.callId,
-            toolName: message.toolName,
-            subagentType: message.subagentType ?? null,
-            description: message.description ?? null,
-            output: message.output,
-            durationMs: message.durationMs,
-            childRows: buildTimelineRows(message.childProjection, {
-              includeNestedRows: true,
-              rowIdPrefix: `${base.id}:child:`,
-            }),
-          },
-        ];
-      }
+    case "delegation": {
+      const base = buildTimelineRowBase(message, options.rowIdPrefix);
+      return [
+        {
+          ...base,
+          kind: "work",
+          workKind: "delegation",
+          status: message.status,
+          callId: message.callId,
+          toolName: message.toolName,
+          subagentType: message.subagentType ?? null,
+          description: message.description ?? null,
+          output: message.output,
+          durationMs: message.durationMs,
+          childRows: buildTimelineRows(message.childProjection, {
+            includeNestedRows: true,
+            rowIdPrefix: `${base.id}:child:`,
+          }),
+        },
+      ];
+    }
     case "permission-grant-lifecycle":
       return [
         {
@@ -519,13 +518,16 @@ function buildPendingSteerRowsFromEvents(
   options: ThreadTimelineFromEventsBaseOptions,
 ): TimelineUserConversationRow[] {
   const orderedEvents = getOrderedThreadEvents(events);
-  const acceptedClientRequestBySequence =
-    buildAcceptedClientRequestBySequence(orderedEvents);
+  const acceptedClientRequestById =
+    buildAcceptedClientRequestById(orderedEvents);
   const pendingSteerRows: TimelineUserConversationRow[] = [];
 
   for (const { event, meta } of orderedEvents) {
     const pendingSteer = parsePendingSteerFromClientRequest({
-      acceptedClientRequest: acceptedClientRequestBySequence.get(meta.seq),
+      acceptedClientRequest:
+        event.type === "client/turn/requested"
+          ? acceptedClientRequestById.get(event.requestId)
+          : undefined,
       decoded: event,
       meta,
       options,

@@ -24,7 +24,7 @@ import {
   getLastProviderThreadId,
 } from "../threads/thread-events.js";
 import {
-  addEventSequenceToTurnSubmitCommandPayload,
+  addRequestIdToTurnSubmitCommandPayload,
   buildExecutionOptions,
   prepareTurnSubmitCommandPayload,
   type PreparedTurnSubmitCommandPayload,
@@ -247,8 +247,7 @@ function nudgeTurnTargetIntentsEqual(
       return right.kind === "start";
     case "auto":
       return (
-        right.kind === "auto" &&
-        right.expectedTurnId === left.expectedTurnId
+        right.kind === "auto" && right.expectedTurnId === left.expectedTurnId
       );
   }
 }
@@ -512,7 +511,7 @@ function queueDueNudgeInTransaction(
     return { kind: "lost-race" };
   }
 
-  const eventSequence = appendClientTurnEventInTransaction(tx, {
+  const request = appendClientTurnEventInTransaction(tx, {
     threadId: args.preparation.thread.id,
     environmentId: args.preparation.environment.id,
     type: "client/turn/requested",
@@ -525,8 +524,8 @@ function queueDueNudgeInTransaction(
   });
 
   queueTurnSubmitCommandInTransaction(tx, {
-    command: addEventSequenceToTurnSubmitCommandPayload({
-      eventSequence,
+    command: addRequestIdToTurnSubmitCommandPayload({
+      requestId: request.requestId,
       preparedCommand: args.preparation.preparedCommand,
     }),
     hostId: args.preparation.environment.hostId,

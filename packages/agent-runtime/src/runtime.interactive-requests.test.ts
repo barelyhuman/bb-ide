@@ -161,6 +161,7 @@ rl.on("line", (line) => {
       options: fullRuntimeOptions,
     });
     await runtime.runTurn({
+      clientRequestId: "creq_222222224i",
       threadId: "t1",
       input: [{ type: "text", text: "trigger interactive request" }],
       options: fullRuntimeOptions,
@@ -331,6 +332,7 @@ rl.on("line", (line) => {
       },
     });
     await runtime.runTurn({
+      clientRequestId: "creq_222222224j",
       threadId: "t1",
       input: [{ type: "text", text: "trigger denied interactive request" }],
       options: {
@@ -480,6 +482,7 @@ rl.on("line", (line) => {
       options: fullRuntimeOptions,
     });
     await runtime.runTurn({
+      clientRequestId: "creq_222222224k",
       threadId: "t1",
       input: [{ type: "text", text: "trigger interactive request failure" }],
       options: fullRuntimeOptions,
@@ -618,6 +621,7 @@ rl.on("line", (line) => {
       options: fullRuntimeOptions,
     });
     await runtime.runTurn({
+      clientRequestId: "creq_222222224m",
       threadId: "t1",
       input: [
         { type: "text", text: "trigger unsupported interactive request" },
@@ -746,6 +750,7 @@ rl.on("line", (line) => {
       options: fullRuntimeOptions,
     });
     await runtime.runTurn({
+      clientRequestId: "creq_222222224n",
       threadId: "t1",
       input: [{ type: "text", text: "trigger invalid interactive request" }],
       options: fullRuntimeOptions,

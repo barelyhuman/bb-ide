@@ -81,6 +81,7 @@ describe("createAgentRuntime process lifecycle", () => {
     // This should reject because the provider returns a -32601 error
     await expect(
       runtime2.runTurn({
+        clientRequestId: "creq_222222224w",
         threadId: "t1",
         input: [{ type: "text", text: "hi" }],
         options: fullRuntimeOptions,
@@ -150,6 +151,75 @@ describe("createAgentRuntime process lifecycle", () => {
     });
     await runtime.shutdown();
     // Should not hang
+  });
+
+  it("ignores provider stdout emitted after shutdown starts", async () => {
+    const events: ThreadEvent[] = [];
+    const shutdownEventScript = join(tmpDir, "shutdown-event-provider.cjs");
+    writeFileSync(
+      shutdownEventScript,
+      `const rl = require("readline").createInterface({ input: process.stdin });
+      process.on("SIGTERM", () => {
+        process.stdout.write(JSON.stringify({
+          jsonrpc: "2.0",
+          method: "thread/identity",
+          params: { threadId: "t1", providerThreadId: "late-provider-thread" }
+        }) + "\\n");
+        setTimeout(() => process.exit(0), 10);
+      });
+      rl.on("line", (line) => {
+        const msg = JSON.parse(line);
+        if (msg.method === "initialize") {
+          process.stdout.write(JSON.stringify({ jsonrpc: "2.0", id: msg.id, result: {} }) + "\\n");
+        } else if (msg.method === "thread/start") {
+          process.stdout.write(JSON.stringify({
+            jsonrpc: "2.0",
+            id: msg.id,
+            result: { providerThreadId: "provider-thread" }
+          }) + "\\n");
+          process.stdout.write(JSON.stringify({
+            jsonrpc: "2.0",
+            method: "thread/identity",
+            params: { threadId: msg.params?.threadId, providerThreadId: "provider-thread" }
+          }) + "\\n");
+        }
+      });`,
+    );
+
+    const runtime = createAgentRuntimeWithAdapters({
+      workspacePath: tmpDir,
+      onEvent: (event) => {
+        events.push(event);
+      },
+      onToolCall: async () => ({
+        contentItems: [{ type: "inputText", text: "ok" }],
+        success: true,
+      }),
+      adapterFactory: () => createFakeAdapter(shutdownEventScript),
+    });
+
+    await runtime.startThread({
+      environmentId: "env-1",
+      threadId: "t1",
+      projectId: "p1",
+      providerId: "fake",
+      options: fullRuntimeOptions,
+    });
+    await waitForRuntimeState({
+      label: "initial provider identity event",
+      predicate: () =>
+        events.some(
+          (event) =>
+            event.type === "thread/identity" &&
+            event.providerThreadId === "provider-thread",
+        ),
+    });
+    events.splice(0, events.length);
+
+    await runtime.shutdown();
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    expect(events).toEqual([]);
   });
 
   // ---- Fail-fast behavior ----
@@ -250,6 +320,7 @@ describe("createAgentRuntime process lifecycle", () => {
 
     await expect(
       runtime.runTurn({
+        clientRequestId: "creq_222222224x",
         threadId: "t1",
         input: [{ type: "text", text: "hi" }],
         options: fullRuntimeOptions,
@@ -304,6 +375,7 @@ describe("createAgentRuntime process lifecycle", () => {
     // runTurn sends the request but the provider crashes without responding
     await expect(
       runtime.runTurn({
+        clientRequestId: "creq_222222224y",
         threadId: "t1",
         input: [{ type: "text", text: "hi" }],
         options: fullRuntimeOptions,

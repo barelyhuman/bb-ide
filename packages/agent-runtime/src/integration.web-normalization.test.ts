@@ -85,190 +85,178 @@ function buildCodexOpenPagePrompt(): string {
 }
 
 describe("web normalization integration", () => {
-  it(
-    "normalizes Codex native web search activity",
-    async () => {
-      const providerId = "codex";
-      const ctx = createTestRuntime(providerId);
-      const threadId = newThreadId();
+  it("normalizes Codex native web search activity", async () => {
+    const providerId = "codex";
+    const ctx = createTestRuntime(providerId);
+    const threadId = newThreadId();
 
-      try {
-        const options = await resolveRuntimeOptions({
-          ctx,
-          providerId,
-          preset: "full",
-        });
-        await ctx.runtime.startThread({
-          environmentId: "env-1",
-          threadId,
-          projectId: "test-project",
-          providerId,
-          options,
-        });
+    try {
+      const options = await resolveRuntimeOptions({
+        ctx,
+        providerId,
+        preset: "full",
+      });
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId,
+        options,
+      });
 
-        await ctx.runtime.runTurn({
-          threadId,
-          clientRequestSequence: 1,
-          input: [{ type: "text", text: buildCodexSearchPrompt() }],
-          options,
-        });
+      await ctx.runtime.runTurn({
+        threadId,
+        clientRequestId: "creq_23456789ab",
+        input: [{ type: "text", text: buildCodexSearchPrompt() }],
+        options,
+      });
 
-        await waitForThreadTurnCompleted({
-          ctx,
-          threadId,
-          timeoutMs: 60_000,
-          label: "codex web normalization turn/completed",
-        });
+      await waitForThreadTurnCompleted({
+        ctx,
+        threadId,
+        timeoutMs: 60_000,
+        label: "codex web normalization turn/completed",
+      });
 
-        const threadEvents = getEventsForThread(ctx.events, threadId);
-        const webSearchEvents = threadEvents.filter(isWebSearchLifecycleEvent);
-        const providerUnhandledEvents = threadEvents.filter(
-          (event) =>
-            event.type === "provider/unhandled" &&
-            (event.rawType === "item/started" ||
-              event.rawType === "item/completed"),
-        );
+      const threadEvents = getEventsForThread(ctx.events, threadId);
+      const webSearchEvents = threadEvents.filter(isWebSearchLifecycleEvent);
+      const providerUnhandledEvents = threadEvents.filter(
+        (event) =>
+          event.type === "provider/unhandled" &&
+          (event.rawType === "item/started" ||
+            event.rawType === "item/completed"),
+      );
 
-        expect(
-          webSearchEvents.some((event) => matchesExpectedWebQuery(event.item)),
-          describeRuntimeDiagnostics({ ctx, threadId }),
-        ).toBe(true);
-        expect(providerUnhandledEvents).toEqual([]);
-      } finally {
-        await ctx.runtime.shutdown();
-        cleanup(ctx);
-      }
-    },
-    90_000,
-  );
+      expect(
+        webSearchEvents.some((event) => matchesExpectedWebQuery(event.item)),
+        describeRuntimeDiagnostics({ ctx, threadId }),
+      ).toBe(true);
+      expect(providerUnhandledEvents).toEqual([]);
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 90_000);
 
-  it(
-    "normalizes Codex native open-page activity",
-    async () => {
-      const providerId = "codex";
-      const ctx = createTestRuntime(providerId);
-      const threadId = newThreadId();
+  it("normalizes Codex native open-page activity", async () => {
+    const providerId = "codex";
+    const ctx = createTestRuntime(providerId);
+    const threadId = newThreadId();
 
-      try {
-        const options = await resolveRuntimeOptions({
-          ctx,
-          providerId,
-          preset: "full",
-        });
-        await ctx.runtime.startThread({
-          environmentId: "env-1",
-          threadId,
-          projectId: "test-project",
-          providerId,
-          options,
-        });
+    try {
+      const options = await resolveRuntimeOptions({
+        ctx,
+        providerId,
+        preset: "full",
+      });
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId,
+        options,
+      });
 
-        await ctx.runtime.runTurn({
-          threadId,
-          clientRequestSequence: 1,
-          input: [{ type: "text", text: buildCodexOpenPagePrompt() }],
-          options,
-        });
+      await ctx.runtime.runTurn({
+        threadId,
+        clientRequestId: "creq_23456789ab",
+        input: [{ type: "text", text: buildCodexOpenPagePrompt() }],
+        options,
+      });
 
-        await waitForThreadTurnCompleted({
-          ctx,
-          threadId,
-          timeoutMs: 60_000,
-          label: "codex open-page normalization turn/completed",
-        });
+      await waitForThreadTurnCompleted({
+        ctx,
+        threadId,
+        timeoutMs: 60_000,
+        label: "codex open-page normalization turn/completed",
+      });
 
-        const threadEvents = getEventsForThread(ctx.events, threadId);
-        const completedWebFetch = threadEvents.find(
-          (event): event is WebFetchLifecycleEvent =>
-            isWebFetchLifecycleEvent(event) &&
-            event.type === "item/completed" &&
-            matchesExpectedWebUrl(event.item),
-        );
-        const providerUnhandledEvents = threadEvents.filter(
-          (event) =>
-            event.type === "provider/unhandled" &&
-            (event.rawType === "item/started" ||
-              event.rawType === "item/completed"),
-        );
+      const threadEvents = getEventsForThread(ctx.events, threadId);
+      const completedWebFetch = threadEvents.find(
+        (event): event is WebFetchLifecycleEvent =>
+          isWebFetchLifecycleEvent(event) &&
+          event.type === "item/completed" &&
+          matchesExpectedWebUrl(event.item),
+      );
+      const providerUnhandledEvents = threadEvents.filter(
+        (event) =>
+          event.type === "provider/unhandled" &&
+          (event.rawType === "item/started" ||
+            event.rawType === "item/completed"),
+      );
 
-        expect(
-          completedWebFetch,
-          describeRuntimeDiagnostics({ ctx, threadId }),
-        ).toBeDefined();
-        expect(providerUnhandledEvents).toEqual([]);
-      } finally {
-        await ctx.runtime.shutdown();
-        cleanup(ctx);
-      }
-    },
-    90_000,
-  );
+      expect(
+        completedWebFetch,
+        describeRuntimeDiagnostics({ ctx, threadId }),
+      ).toBeDefined();
+      expect(providerUnhandledEvents).toEqual([]);
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 90_000);
 
-  it(
-    "normalizes Claude web search and web fetch activity",
-    async () => {
-      const providerId = "claude-code";
-      const ctx = createTestRuntime(providerId);
-      const threadId = newThreadId();
+  it("normalizes Claude web search and web fetch activity", async () => {
+    const providerId = "claude-code";
+    const ctx = createTestRuntime(providerId);
+    const threadId = newThreadId();
 
-      try {
-        const options = await resolveRuntimeOptions({
-          ctx,
-          providerId,
-          preset: "full",
-        });
-        await ctx.runtime.startThread({
-          environmentId: "env-1",
-          threadId,
-          projectId: "test-project",
-          providerId,
-          options,
-        });
+    try {
+      const options = await resolveRuntimeOptions({
+        ctx,
+        providerId,
+        preset: "full",
+      });
+      await ctx.runtime.startThread({
+        environmentId: "env-1",
+        threadId,
+        projectId: "test-project",
+        providerId,
+        options,
+      });
 
-        await ctx.runtime.runTurn({
-          threadId,
-          clientRequestSequence: 1,
-          input: [{ type: "text", text: buildClaudeWebPrompt() }],
-          options,
-        });
+      await ctx.runtime.runTurn({
+        threadId,
+        clientRequestId: "creq_23456789ab",
+        input: [{ type: "text", text: buildClaudeWebPrompt() }],
+        options,
+      });
 
-        await waitForThreadTurnCompleted({
-          ctx,
-          threadId,
-          timeoutMs: 60_000,
-          label: "claude web normalization turn/completed",
-        });
+      await waitForThreadTurnCompleted({
+        ctx,
+        threadId,
+        timeoutMs: 60_000,
+        label: "claude web normalization turn/completed",
+      });
 
-        const threadEvents = getEventsForThread(ctx.events, threadId);
-        const completedWebSearch = threadEvents.find(
-          (event): event is WebSearchLifecycleEvent =>
-            isWebSearchLifecycleEvent(event) &&
-            event.type === "item/completed" &&
-            matchesExpectedWebQuery(event.item),
-        );
-        const completedWebFetch = threadEvents.find(
-          (event): event is WebFetchLifecycleEvent =>
-            isWebFetchLifecycleEvent(event) &&
-            event.type === "item/completed" &&
-            matchesExpectedWebUrl(event.item),
-        );
+      const threadEvents = getEventsForThread(ctx.events, threadId);
+      const completedWebSearch = threadEvents.find(
+        (event): event is WebSearchLifecycleEvent =>
+          isWebSearchLifecycleEvent(event) &&
+          event.type === "item/completed" &&
+          matchesExpectedWebQuery(event.item),
+      );
+      const completedWebFetch = threadEvents.find(
+        (event): event is WebFetchLifecycleEvent =>
+          isWebFetchLifecycleEvent(event) &&
+          event.type === "item/completed" &&
+          matchesExpectedWebUrl(event.item),
+      );
 
-        expect(
-          completedWebSearch,
-          describeRuntimeDiagnostics({ ctx, threadId }),
-        ).toBeDefined();
-        expect(completedWebSearch?.item.resultText).toBeTruthy();
+      expect(
+        completedWebSearch,
+        describeRuntimeDiagnostics({ ctx, threadId }),
+      ).toBeDefined();
+      expect(completedWebSearch?.item.resultText).toBeTruthy();
 
-        expect(
-          completedWebFetch,
-          describeRuntimeDiagnostics({ ctx, threadId }),
-        ).toBeDefined();
-        expect(completedWebFetch?.item.resultText).toBeTruthy();
-      } finally {
-        await ctx.runtime.shutdown();
-        cleanup(ctx);
-      }
-    },
-    90_000,
-  );
+      expect(
+        completedWebFetch,
+        describeRuntimeDiagnostics({ ctx, threadId }),
+      ).toBeDefined();
+      expect(completedWebFetch?.item.resultText).toBeTruthy();
+    } finally {
+      await ctx.runtime.shutdown();
+      cleanup(ctx);
+    }
+  }, 90_000);
 });

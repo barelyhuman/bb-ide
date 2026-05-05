@@ -56,6 +56,7 @@ for (const providerId of providers) {
         });
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_222222222a",
           threadId,
           options,
           input: [

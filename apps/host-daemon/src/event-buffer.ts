@@ -1,48 +1,109 @@
-import { createDebouncedCallbackScheduler, type ThreadEvent } from "@bb/domain";
-import type { HostDaemonEventSequenceKey } from "@bb/host-daemon-contract";
+import Database from "better-sqlite3";
+import {
+  createDebouncedCallbackScheduler,
+  canonicalizeProducerEventPayload,
+  hostDaemonProducerEventIdSchema,
+  threadEventSchema,
+  type HostDaemonProducerEventId,
+  type ThreadEvent,
+} from "@bb/domain";
+import {
+  HOST_DAEMON_PROTOCOL_VERSION,
+  type HostDaemonEventBatchResponse,
+  type HostDaemonEventEnvelope,
+} from "@bb/host-daemon-contract";
+import { createHash, randomBytes } from "node:crypto";
+import { mkdirSync } from "node:fs";
+import { join } from "node:path";
 import type { HostDaemonLogger } from "./logger.js";
 
-export interface BufferedEventInput {
-  environmentId: string;
+const DEFAULT_DEBOUNCE_MS = 100;
+const DEFAULT_MAX_WAIT_MS = 500;
+const EVENT_SPOOL_SCHEMA_VERSION = 1;
+const EVENT_SPOOL_FILE_NAME = "event-spool.sqlite";
+const MAX_CONSECUTIVE_NO_PROGRESS_FLUSHES = 3;
+const PRODUCER_EVENT_ID_ALPHABET = "23456789abcdefghijkmnpqrstuvwxyz";
+
+interface EventSpoolRow {
+  localOrder: number;
+  producerEventId: string;
   threadId: string;
-  event: ThreadEvent;
-  createdAt?: number;
+  eventType: string;
+  payloadJson: string;
+  payloadHash: string;
+  createdAt: string;
+  lastPostAttemptAt: string | null;
+  postAttemptCount: number;
 }
 
-export interface BufferedEvent extends BufferedEventInput {
-  sequence: number;
-  createdAt: number;
+interface TableInfoRow {
+  cid: number;
+  dflt_value: string | null;
+  name: string;
+  notnull: number;
+  pk: number;
+  type: string;
+}
+
+interface TableNameRow {
+  name: string;
+}
+
+interface ExpectedColumn {
+  dfltValue: string | null;
+  name: string;
+  notnull: number;
+  pk: number;
+  type: string;
+}
+
+interface SnapshotAttemptResult {
+  events: BufferedEvent[];
+  producerEventIds: HostDaemonProducerEventId[];
+}
+
+interface AcknowledgePostedBatchArgs {
+  acceptedEvents: HostDaemonEventBatchResponse["acceptedEvents"];
+  sentProducerEventIds: readonly HostDaemonProducerEventId[];
+}
+
+interface CreateBufferedEventRecordArgs {
+  input: BufferedEventInput;
+  producerEventId: HostDaemonProducerEventId;
+  createdAt: string;
+}
+
+interface BufferedEventLogSummary {
+  eventType: string;
+  localOrder: number;
+  payloadHash: string;
+  producerEventId: HostDaemonProducerEventId;
+  threadId: string;
+}
+
+export interface BufferedEventInput {
+  threadId: string;
+  event: ThreadEvent;
+}
+
+export interface BufferedEvent extends HostDaemonEventEnvelope {
+  createdAt: string;
+  localOrder: number;
+  payloadHash: string;
 }
 
 export interface EventPostAcceptedResult {
+  acceptedEvents: HostDaemonEventBatchResponse["acceptedEvents"];
   kind: "accepted";
-  threadHighWaterMarks: Record<string, number>;
 }
 
-export interface EventPostSequenceConflictResult {
-  acceptedSequences: HostDaemonEventSequenceKey[];
-  kind: "sequence-conflict";
-  threadHighWaterMarks: Record<string, number>;
-}
-
-export type EventPostResult =
-  | EventPostAcceptedResult
-  | EventPostSequenceConflictResult;
-
-interface EventFlushResult {
-  acknowledgedBatchCount: number;
-  rebased: boolean;
-  succeeded: boolean;
-}
-
-interface BufferedEventState extends BufferedEvent {
-  bufferId: number;
-}
+export type EventPostResult = EventPostAcceptedResult;
 
 export interface CreateEventBufferOptions {
-  logger: Pick<HostDaemonLogger, "warn">;
-  postEvents: (events: BufferedEvent[]) => Promise<EventPostResult>;
-  initialHighWaterMarks?: Record<string, number>;
+  dataDir: string;
+  logger: Pick<HostDaemonLogger, "error" | "warn">;
+  postEvents: (events: HostDaemonEventEnvelope[]) => Promise<EventPostResult>;
+  createProducerEventId?: () => HostDaemonProducerEventId;
   debounceMs?: number;
   maxWaitMs?: number;
   now?: () => number;
@@ -50,29 +111,89 @@ export interface CreateEventBufferOptions {
 
 export interface EventBuffer {
   /**
-   * Buffered events are retained until the server acknowledges them. This
-   * buffer is intentionally uncapped: during outages we prefer memory pressure
-   * and retry backoff over silently dropping daemon events.
+   * Buffered events are retained durably until the server acknowledges them.
+   * This buffer is intentionally uncapped: during outages we prefer host-local
+   * storage pressure and retry backoff over silently dropping daemon events.
    */
   push(event: BufferedEventInput): BufferedEvent;
-  ack(threadHighWaterMarks: Record<string, number>): void;
-  seed(threadHighWaterMarks: Record<string, number>): void;
-  /**
-   * Move still-buffered events above server-originated sequence advances after
-   * a command-result RPC. Command seed values establish the floor before events
-   * are emitted; rebase handles only later server appends that race with events
-   * still waiting in this buffer.
-   */
-  rebase(threadHighWaterMarks: Record<string, number>): void;
   flush(): Promise<void>;
   depth(): number;
   snapshot(): BufferedEvent[];
-  dispose(): void;
+  dispose(): Promise<void>;
 }
 
-const DEFAULT_DEBOUNCE_MS = 100;
-const DEFAULT_MAX_WAIT_MS = 500;
-const MAX_IMMEDIATE_REBASE_RETRIES = 3;
+export class EventBufferDisposedError extends Error {
+  constructor() {
+    super("Cannot push to disposed event buffer");
+    this.name = "EventBufferDisposedError";
+  }
+}
+
+const expectedOutboundEventColumns: ExpectedColumn[] = [
+  {
+    dfltValue: null,
+    name: "localOrder",
+    notnull: 0,
+    pk: 1,
+    type: "INTEGER",
+  },
+  {
+    dfltValue: null,
+    name: "producerEventId",
+    notnull: 1,
+    pk: 0,
+    type: "TEXT",
+  },
+  {
+    dfltValue: null,
+    name: "threadId",
+    notnull: 1,
+    pk: 0,
+    type: "TEXT",
+  },
+  {
+    dfltValue: null,
+    name: "eventType",
+    notnull: 1,
+    pk: 0,
+    type: "TEXT",
+  },
+  {
+    dfltValue: null,
+    name: "payloadJson",
+    notnull: 1,
+    pk: 0,
+    type: "TEXT",
+  },
+  {
+    dfltValue: null,
+    name: "payloadHash",
+    notnull: 1,
+    pk: 0,
+    type: "TEXT",
+  },
+  {
+    dfltValue: null,
+    name: "createdAt",
+    notnull: 1,
+    pk: 0,
+    type: "TEXT",
+  },
+  {
+    dfltValue: null,
+    name: "lastPostAttemptAt",
+    notnull: 0,
+    pk: 0,
+    type: "TEXT",
+  },
+  {
+    dfltValue: "0",
+    name: "postAttemptCount",
+    notnull: 1,
+    pk: 0,
+    type: "INTEGER",
+  },
+];
 
 function isWaitingForApprovalItemEvent(event: ThreadEvent): boolean {
   if (event.type !== "item/started" && event.type !== "item/completed") {
@@ -109,35 +230,381 @@ export function shouldFlushThreadEventImmediately(event: ThreadEvent): boolean {
   return isWaitingForApprovalItemEvent(event);
 }
 
+function createHostDaemonProducerEventId(): HostDaemonProducerEventId {
+  const bytes = randomBytes(20);
+  let suffix = "";
+  for (const byte of bytes) {
+    suffix += PRODUCER_EVENT_ID_ALPHABET.charAt(
+      byte % PRODUCER_EVENT_ID_ALPHABET.length,
+    );
+  }
+  return hostDaemonProducerEventIdSchema.parse(`hdevt_${suffix}`);
+}
+
+function formatTimestamp(value: number): string {
+  return new Date(value).toISOString();
+}
+
+function hashPayload(args: { event: ThreadEvent; threadId: string }): string {
+  return createHash("sha256")
+    .update(
+      canonicalizeProducerEventPayload({
+        event: args.event,
+        protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+        threadId: args.threadId,
+      }),
+    )
+    .digest("hex");
+}
+
+function toPostEvent(event: BufferedEvent): HostDaemonEventEnvelope {
+  return {
+    producerEventId: event.producerEventId,
+    threadId: event.threadId,
+    event: event.event,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function readUserVersion(db: Database.Database): number {
+  const rows = db.pragma("user_version");
+  if (!Array.isArray(rows)) {
+    throw new Error("Event spool schema version returned unexpected rows");
+  }
+  const row = rows[0];
+  if (
+    !isRecord(row) ||
+    !("user_version" in row) ||
+    typeof row.user_version !== "number"
+  ) {
+    throw new Error("Event spool schema version could not be read");
+  }
+  return row.user_version;
+}
+
+function runIntegrityCheck(db: Database.Database): void {
+  const rows = db.pragma("integrity_check");
+  if (!Array.isArray(rows)) {
+    throw new Error("Event spool integrity check returned unexpected rows");
+  }
+  if (rows.length !== 1) {
+    throw new Error("Event spool integrity check returned unexpected rows");
+  }
+  const row = rows[0];
+  if (
+    !isRecord(row) ||
+    !("integrity_check" in row) ||
+    typeof row.integrity_check !== "string"
+  ) {
+    throw new Error("Event spool integrity check returned unexpected shape");
+  }
+  if (row.integrity_check !== "ok") {
+    throw new Error(
+      `Event spool integrity check failed: ${row.integrity_check}`,
+    );
+  }
+}
+
+function createSchema(db: Database.Database): void {
+  const createSchemaTransaction = db.transaction(() => {
+    db.exec(`
+      CREATE TABLE outbound_events (
+        localOrder INTEGER PRIMARY KEY AUTOINCREMENT,
+        producerEventId TEXT NOT NULL UNIQUE,
+        threadId TEXT NOT NULL,
+        eventType TEXT NOT NULL,
+        payloadJson TEXT NOT NULL,
+        payloadHash TEXT NOT NULL,
+        createdAt TEXT NOT NULL,
+        lastPostAttemptAt TEXT,
+        postAttemptCount INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+    db.pragma(`user_version = ${EVENT_SPOOL_SCHEMA_VERSION}`);
+  });
+  createSchemaTransaction();
+}
+
+function outboundEventsTableExists(db: Database.Database): boolean {
+  const row = db
+    .prepare<
+      [],
+      TableNameRow
+    >("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'outbound_events'")
+    .get();
+  return row !== undefined;
+}
+
+function validateSchema(db: Database.Database): void {
+  const schemaVersion = readUserVersion(db);
+  if (schemaVersion !== EVENT_SPOOL_SCHEMA_VERSION) {
+    throw new Error(
+      `Event spool schema version mismatch: expected ${EVENT_SPOOL_SCHEMA_VERSION}, got ${schemaVersion}`,
+    );
+  }
+
+  const rows = db
+    .prepare<[], TableInfoRow>("PRAGMA table_info(outbound_events)")
+    .all();
+  if (rows.length !== expectedOutboundEventColumns.length) {
+    throw new Error(
+      "Event spool schema mismatch: outbound_events columns differ",
+    );
+  }
+
+  for (const [index, expected] of expectedOutboundEventColumns.entries()) {
+    const actual = rows[index];
+    if (
+      actual === undefined ||
+      actual.name !== expected.name ||
+      actual.type.toUpperCase() !== expected.type ||
+      actual.notnull !== expected.notnull ||
+      actual.pk !== expected.pk ||
+      actual.dflt_value !== expected.dfltValue
+    ) {
+      throw new Error(`Event spool schema mismatch at column ${expected.name}`);
+    }
+  }
+}
+
+function openSpoolDatabase(dataDir: string): Database.Database {
+  mkdirSync(dataDir, { recursive: true });
+  const db = new Database(join(dataDir, EVENT_SPOOL_FILE_NAME));
+  try {
+    db.pragma("journal_mode = WAL");
+    db.pragma("synchronous = FULL");
+    runIntegrityCheck(db);
+
+    const schemaVersion = readUserVersion(db);
+    if (schemaVersion === 0) {
+      if (outboundEventsTableExists(db)) {
+        throw new Error(
+          "Event spool schema mismatch: outbound_events exists with schema version 0",
+        );
+      }
+      createSchema(db);
+    }
+    validateSchema(db);
+    return db;
+  } catch (error) {
+    db.close();
+    throw error;
+  }
+}
+
+function toBufferedEvent(row: EventSpoolRow): BufferedEvent {
+  const producerEventId = hostDaemonProducerEventIdSchema.parse(
+    row.producerEventId,
+  );
+  const event = threadEventSchema.parse(JSON.parse(row.payloadJson));
+  if (event.type !== row.eventType) {
+    throw new Error("Event spool payload type does not match eventType");
+  }
+  if (event.threadId !== row.threadId) {
+    throw new Error("Event spool payload threadId does not match row threadId");
+  }
+  const expectedHash = hashPayload({
+    event,
+    threadId: row.threadId,
+  });
+  if (row.payloadHash !== expectedHash) {
+    throw new Error("Event spool payload hash mismatch");
+  }
+  return {
+    createdAt: row.createdAt,
+    event,
+    localOrder: row.localOrder,
+    payloadHash: row.payloadHash,
+    producerEventId,
+    threadId: row.threadId,
+  };
+}
+
+function summarizeBufferedEvents(
+  events: readonly BufferedEvent[],
+): BufferedEventLogSummary[] {
+  return events.map((event) => ({
+    eventType: event.event.type,
+    localOrder: event.localOrder,
+    payloadHash: event.payloadHash,
+    producerEventId: event.producerEventId,
+    threadId: event.threadId,
+  }));
+}
+
 export function createEventBuffer(
   options: CreateEventBufferOptions,
 ): EventBuffer {
   const debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS;
   const maxWaitMs = options.maxWaitMs ?? DEFAULT_MAX_WAIT_MS;
   const now = options.now ?? Date.now;
+  const createProducerEventId =
+    options.createProducerEventId ?? createHostDaemonProducerEventId;
+  const db = openSpoolDatabase(options.dataDir);
 
-  const nextSequenceByThread = new Map<string, number>();
-  for (const [threadId, highWaterMark] of Object.entries(
-    options.initialHighWaterMarks ?? {},
-  )) {
-    nextSequenceByThread.set(threadId, highWaterMark + 1);
-  }
+  const selectPendingRows = db.prepare<[], EventSpoolRow>(`
+    SELECT
+      localOrder,
+      producerEventId,
+      threadId,
+      eventType,
+      payloadJson,
+      payloadHash,
+      createdAt,
+      lastPostAttemptAt,
+      postAttemptCount
+    FROM outbound_events
+    ORDER BY localOrder ASC
+  `);
+  const countPendingRows = db.prepare<[], { count: number }>(`
+    SELECT COUNT(*) AS count
+    FROM outbound_events
+  `);
+  const insertEvent = db.prepare<
+    [string, string, string, string, string, string],
+    never
+  >(`
+    INSERT INTO outbound_events (
+      producerEventId,
+      threadId,
+      eventType,
+      payloadJson,
+      payloadHash,
+      createdAt
+    )
+    VALUES (?, ?, ?, ?, ?, ?)
+  `);
+  const selectEventByProducerId = db.prepare<
+    [HostDaemonProducerEventId],
+    EventSpoolRow
+  >(`
+    SELECT
+      localOrder,
+      producerEventId,
+      threadId,
+      eventType,
+      payloadJson,
+      payloadHash,
+      createdAt,
+      lastPostAttemptAt,
+      postAttemptCount
+    FROM outbound_events
+    WHERE producerEventId = ?
+  `);
+  const updatePostAttempt = db.prepare<[string, number], never>(`
+    UPDATE outbound_events
+    SET
+      lastPostAttemptAt = ?,
+      postAttemptCount = postAttemptCount + 1
+    WHERE localOrder = ?
+  `);
+  const deleteByProducerEventId = db.prepare<
+    [HostDaemonProducerEventId],
+    never
+  >(`
+    DELETE FROM outbound_events
+    WHERE producerEventId = ?
+  `);
 
-  let buffer: BufferedEventState[] = [];
-  let nextBufferId = 1;
   let disposed = false;
-  let flushPromise: Promise<{
-    acknowledgedBatchCount: number;
-    rebased: boolean;
-    succeeded: boolean;
-  }> | null = null;
+  let flushPromise: Promise<boolean> | null = null;
+  let disposePromise: Promise<void> | null = null;
+  let consecutiveNoProgressFlushes = 0;
   const flushScheduler = createDebouncedCallbackScheduler({
     debounceMs,
     maxWaitMs,
     onFlush: () => {
-      void flush();
+      void flush().catch((error) => {
+        options.logger.error(
+          { err: error },
+          "event flush failed closed after protocol inconsistency",
+        );
+      });
     },
   });
+
+  const insertEventTransaction = db.transaction(
+    (args: CreateBufferedEventRecordArgs): BufferedEvent => {
+      const event = threadEventSchema.parse(args.input.event);
+      if (event.threadId !== args.input.threadId) {
+        throw new Error(
+          "Buffered event threadId does not match payload threadId",
+        );
+      }
+      const payloadJson = JSON.stringify(event);
+      const payloadHash = hashPayload({
+        event,
+        threadId: args.input.threadId,
+      });
+      insertEvent.run(
+        args.producerEventId,
+        args.input.threadId,
+        event.type,
+        payloadJson,
+        payloadHash,
+        args.createdAt,
+      );
+      const row = selectEventByProducerId.get(args.producerEventId);
+      if (row === undefined) {
+        throw new Error("Event spool insert did not create a readable row");
+      }
+      return toBufferedEvent(row);
+    },
+  );
+
+  const snapshotPostAttemptTransaction = db.transaction(
+    (): SnapshotAttemptResult => {
+      // Validate every stored row before posting. One corrupt row fails the
+      // whole spool so the daemon cannot silently drop or reorder local events.
+      const rows = selectPendingRows.all();
+      const attemptedAt = formatTimestamp(now());
+      const events: BufferedEvent[] = [];
+      const producerEventIds: HostDaemonProducerEventId[] = [];
+      for (const row of rows) {
+        updatePostAttempt.run(attemptedAt, row.localOrder);
+        const event = toBufferedEvent({
+          ...row,
+          lastPostAttemptAt: attemptedAt,
+          postAttemptCount: row.postAttemptCount + 1,
+        });
+        events.push(event);
+        producerEventIds.push(event.producerEventId);
+      }
+      return {
+        events,
+        producerEventIds,
+      };
+    },
+  );
+
+  const acknowledgePostedBatchTransaction = db.transaction(
+    (args: AcknowledgePostedBatchArgs): number => {
+      const sentProducerEventIds = new Set(args.sentProducerEventIds);
+      const acceptedProducerEventIds = new Set<HostDaemonProducerEventId>();
+      for (const event of args.acceptedEvents) {
+        if (!sentProducerEventIds.has(event.producerEventId)) {
+          throw new Error(
+            `Event spool received acknowledgement for unsent producerEventId: ${event.producerEventId}`,
+          );
+        }
+        acceptedProducerEventIds.add(event.producerEventId);
+      }
+
+      let deletedCount = 0;
+      for (const producerEventId of acceptedProducerEventIds) {
+        deletedCount += deleteByProducerEventId.run(producerEventId).changes;
+      }
+      if (deletedCount !== acceptedProducerEventIds.size) {
+        throw new Error(
+          "Event spool acknowledgement referenced an already-deleted event",
+        );
+      }
+      return deletedCount;
+    },
+  );
 
   function scheduleFlush(): void {
     if (disposed) {
@@ -153,310 +620,134 @@ export function createEventBuffer(
     flushScheduler.flush();
   }
 
-  function nextSequence(threadId: string): number {
-    const nextValue = nextSequenceByThread.get(threadId) ?? 1;
-    nextSequenceByThread.set(threadId, nextValue + 1);
-    return nextValue;
-  }
+  function push(input: BufferedEventInput): BufferedEvent {
+    if (disposed) {
+      throw new EventBufferDisposedError();
+    }
+    const event = insertEventTransaction({
+      createdAt: formatTimestamp(now()),
+      input,
+      producerEventId: createProducerEventId(),
+    });
 
-  function toBufferedEvent(state: BufferedEventState): BufferedEvent {
-    return {
-      environmentId: state.environmentId,
-      threadId: state.threadId,
-      event: state.event,
-      sequence: state.sequence,
-      createdAt: state.createdAt,
-    };
-  }
-
-  function push(event: BufferedEventInput): BufferedEvent {
-    const sequence = nextSequence(event.threadId);
-    const bufferedEvent: BufferedEventState = {
-      ...event,
-      bufferId: nextBufferId,
-      sequence,
-      createdAt: event.createdAt ?? now(),
-    };
-    nextBufferId++;
-
-    buffer.push(bufferedEvent);
-    const publicEvent = toBufferedEvent(bufferedEvent);
-
-    if (shouldFlushThreadEventImmediately(event.event)) {
+    if (shouldFlushThreadEventImmediately(input.event)) {
       flushImmediately();
     } else {
       scheduleFlush();
     }
 
-    return publicEvent;
-  }
-
-  function ack(threadHighWaterMarks: Record<string, number>): void {
-    if (Object.keys(threadHighWaterMarks).length === 0) {
-      return;
-    }
-
-    for (const [threadId, highWaterMark] of Object.entries(
-      threadHighWaterMarks,
-    )) {
-      const nextValue = nextSequenceByThread.get(threadId) ?? 1;
-      nextSequenceByThread.set(
-        threadId,
-        Math.max(nextValue, highWaterMark + 1),
-      );
-    }
-
-    buffer = buffer.filter((event) => {
-      const highWaterMark = threadHighWaterMarks[event.threadId];
-      return highWaterMark === undefined || event.sequence > highWaterMark;
-    });
-  }
-
-  function seed(threadHighWaterMarks: Record<string, number>): void {
-    ack(threadHighWaterMarks);
-  }
-
-  function ackPostedBatch(
-    batch: readonly BufferedEventState[],
-    threadHighWaterMarks: Record<string, number>,
-  ): number {
-    const acceptedBufferIds = new Set<number>();
-    for (const event of batch) {
-      const highWaterMark = threadHighWaterMarks[event.threadId];
-      if (highWaterMark !== undefined && event.sequence <= highWaterMark) {
-        acceptedBufferIds.add(event.bufferId);
-      }
-    }
-
-    return removeBufferedEventsById(acceptedBufferIds);
-  }
-
-  function ackPostedSequences(
-    batch: readonly BufferedEventState[],
-    sequences: readonly HostDaemonEventSequenceKey[],
-  ): number {
-    if (sequences.length === 0) {
-      return 0;
-    }
-
-    const acceptedSequenceKeys = new Set(
-      sequences.map((sequence) => `${sequence.threadId}:${sequence.sequence}`),
-    );
-    const acceptedBufferIds = new Set<number>();
-    for (const event of batch) {
-      if (acceptedSequenceKeys.has(`${event.threadId}:${event.sequence}`)) {
-        acceptedBufferIds.add(event.bufferId);
-      }
-    }
-
-    return removeBufferedEventsById(acceptedBufferIds);
-  }
-
-  function removeBufferedEventsById(bufferIds: ReadonlySet<number>): number {
-    if (bufferIds.size === 0) {
-      return 0;
-    }
-
-    let removedCount = 0;
-    buffer = buffer.filter((event) => {
-      if (!bufferIds.has(event.bufferId)) {
-        return true;
-      }
-      removedCount++;
-      return false;
-    });
-    return removedCount;
-  }
-
-  function rebase(threadHighWaterMarks: Record<string, number>): void {
-    if (Object.keys(threadHighWaterMarks).length === 0) {
-      return;
-    }
-
-    for (const [threadId, highWaterMark] of Object.entries(
-      threadHighWaterMarks,
-    )) {
-      const shouldReassign = buffer.some(
-        (event) =>
-          event.threadId === threadId && event.sequence <= highWaterMark,
-      );
-      if (!shouldReassign) {
-        const nextValue = nextSequenceByThread.get(threadId) ?? 1;
-        nextSequenceByThread.set(
-          threadId,
-          Math.max(nextValue, highWaterMark + 1),
-        );
-        continue;
-      }
-
-      let nextValue = highWaterMark + 1;
-      buffer = buffer.map((event) => {
-        if (event.threadId !== threadId) {
-          return event;
-        }
-        const nextEvent = {
-          ...event,
-          sequence: nextValue,
-        };
-        nextValue++;
-        return nextEvent;
-      });
-      nextSequenceByThread.set(threadId, nextValue);
-    }
-  }
-
-  function applySequenceConflict(
-    batch: readonly BufferedEventState[],
-    result: EventPostSequenceConflictResult,
-  ): number {
-    const acknowledgedBatchCount = ackPostedSequences(
-      batch,
-      result.acceptedSequences,
-    );
-    rebase(result.threadHighWaterMarks);
-    return acknowledgedBatchCount;
+    return event;
   }
 
   async function flush(): Promise<void> {
-    let immediateRebaseRetryCount = 0;
-
-    function shouldRetryImmediatelyAfterRebase(): boolean {
-      immediateRebaseRetryCount++;
-      if (immediateRebaseRetryCount <= MAX_IMMEDIATE_REBASE_RETRIES) {
-        return true;
-      }
-
-      options.logger.warn(
-        {
-          bufferDepth: buffer.length,
-          immediateRebaseRetryCount,
-          maxImmediateRebaseRetries: MAX_IMMEDIATE_REBASE_RETRIES,
-        },
-        "event flush hit repeated sequence conflicts, will retry",
-      );
-      if (buffer.length > 0) {
-        scheduleFlush();
-      }
-      return false;
-    }
-
-    function shouldContinueAfterFlushResult(result: EventFlushResult): boolean {
-      if (!result.succeeded || result.acknowledgedBatchCount === 0) {
-        if (result.rebased) {
-          return shouldRetryImmediatelyAfterRebase();
-        }
-        if (buffer.length > 0) {
-          scheduleFlush();
-        }
-        return false;
-      }
-
-      immediateRebaseRetryCount = 0;
-      if (buffer.length === 0) {
-        return false;
-      }
-      return true;
-    }
-
-    while (true) {
-      if (disposed) {
-        return;
-      }
-
+    while (!disposed) {
       if (flushPromise) {
-        const result = await flushPromise;
-        if (disposed) {
-          return;
-        }
-        if (!shouldContinueAfterFlushResult(result)) {
+        const madeProgress = await flushPromise;
+        if (!madeProgress) {
           return;
         }
         continue;
       }
 
-      if (buffer.length === 0) {
+      const snapshot = snapshotPostAttemptTransaction();
+      if (snapshot.events.length === 0) {
         return;
       }
 
-      const batch = buffer.slice();
-
-      flushPromise = (async (): Promise<EventFlushResult> => {
-        let acknowledgedBatchCount = 0;
-        let rebased = false;
-        let succeeded = false;
+      flushPromise = (async (): Promise<boolean> => {
         try {
-          const postResult = await options.postEvents(
-            batch.map(toBufferedEvent),
-          );
-          if (postResult.kind === "sequence-conflict") {
-            acknowledgedBatchCount = applySequenceConflict(batch, postResult);
-            rebased = true;
-            succeeded = true;
-            return {
-              acknowledgedBatchCount,
-              rebased,
-              succeeded,
-            };
-          }
-          const { threadHighWaterMarks } = postResult;
-          acknowledgedBatchCount = ackPostedBatch(batch, threadHighWaterMarks);
-          rebase(threadHighWaterMarks);
-          if (acknowledgedBatchCount === 0) {
+          let postResult: EventPostResult;
+          try {
+            postResult = await options.postEvents(
+              snapshot.events.map(toPostEvent),
+            );
+          } catch (error) {
             options.logger.warn(
               {
-                bufferDepth: batch.length,
-                threadHighWaterMarks,
+                err: error,
+                bufferDepth: snapshot.events.length,
               },
-              "event flush made no progress, will retry",
+              "event flush failed, will retry",
             );
+            scheduleFlush();
+            return false;
           }
-          succeeded = true;
-        } catch (error) {
-          options.logger.warn(
-            {
-              err: error,
-              bufferDepth: batch.length,
-            },
-            "event flush failed, will retry",
-          );
+          const acknowledgedCount = acknowledgePostedBatchTransaction({
+            acceptedEvents: postResult.acceptedEvents,
+            sentProducerEventIds: snapshot.producerEventIds,
+          });
+          if (acknowledgedCount === 0) {
+            consecutiveNoProgressFlushes++;
+            const logContext = {
+              bufferDepth: snapshot.events.length,
+              events: summarizeBufferedEvents(snapshot.events),
+              noProgressCount: consecutiveNoProgressFlushes,
+              noProgressLimit: MAX_CONSECUTIVE_NO_PROGRESS_FLUSHES,
+            };
+            if (
+              consecutiveNoProgressFlushes >=
+              MAX_CONSECUTIVE_NO_PROGRESS_FLUSHES
+            ) {
+              options.logger.error(
+                logContext,
+                "event flush made no progress; failing closed",
+              );
+              throw new Error(
+                `Event spool flush made no progress after ${consecutiveNoProgressFlushes} attempts`,
+              );
+            }
+            options.logger.warn(logContext, "event flush made no progress");
+            scheduleFlush();
+            return false;
+          }
+          consecutiveNoProgressFlushes = 0;
+          return depth() > 0;
         } finally {
           flushPromise = null;
         }
-        return {
-          acknowledgedBatchCount,
-          rebased,
-          succeeded,
-        };
       })();
 
-      const result = await flushPromise;
-      if (disposed) {
+      const madeProgress = await flushPromise;
+      if (!madeProgress) {
         return;
       }
-      if (!shouldContinueAfterFlushResult(result)) {
-        return;
-      }
-      continue;
     }
   }
 
-  function dispose(): void {
+  function depth(): number {
+    return countPendingRows.get()?.count ?? 0;
+  }
+
+  function snapshot(): BufferedEvent[] {
+    // Snapshot parsing is intentionally all-or-nothing; fail closed rather than
+    // posting a partial view of a locally corrupted durable spool.
+    return selectPendingRows.all().map(toBufferedEvent);
+  }
+
+  async function dispose(): Promise<void> {
+    if (disposePromise) {
+      return disposePromise;
+    }
+
     disposed = true;
     flushScheduler.dispose();
+    disposePromise = (async () => {
+      try {
+        if (flushPromise) {
+          await flushPromise;
+        }
+      } finally {
+        db.close();
+      }
+    })();
+    return disposePromise;
   }
 
   return {
     push,
-    ack,
-    seed,
-    rebase,
     flush,
-    depth(): number {
-      return buffer.length;
-    },
-    snapshot(): BufferedEvent[] {
-      return buffer.map(toBufferedEvent);
-    },
+    depth,
+    snapshot,
     dispose,
   };
 }

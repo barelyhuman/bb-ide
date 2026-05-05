@@ -78,7 +78,7 @@ describe("claude-code provider adapter", () => {
           threadId: "thread-1",
           providerThreadId: "provider-thread-1",
           expectedTurnId: "turn-1",
-          clientRequestSequence: 9,
+          clientRequestId: "creq_23456789ad",
           input: [{ type: "text", text: "steer turn" }],
           options: fullProviderExecutionContext,
         },
@@ -89,7 +89,7 @@ describe("claude-code provider adapter", () => {
         threadId: "thread-1",
         providerThreadId: "provider-thread-1",
         scope: turnScope("turn-1"),
-        clientRequestSequence: 9,
+        clientRequestId: "creq_23456789ad",
       },
     ]);
   });
@@ -540,6 +540,7 @@ describe("claude-code provider adapter", () => {
     const adapter = createClaudeCodeProviderAdapter();
     const cmd = adapter.buildCommandPlan({
       type: "turn/start",
+      clientRequestId: "creq_2222222296",
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
       input: [{ type: "text", text: "follow up" }],
@@ -555,6 +556,7 @@ describe("claude-code provider adapter", () => {
     const adapter = createClaudeCodeProviderAdapter();
     const cmd = adapter.buildCommandPlan({
       type: "turn/steer",
+      clientRequestId: "creq_2222222297",
       threadId: "bb-thread-1",
       providerThreadId: "claude-session-1",
       expectedTurnId: "turn-1",

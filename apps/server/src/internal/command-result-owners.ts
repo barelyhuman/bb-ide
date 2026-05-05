@@ -1,9 +1,9 @@
-import { and, eq, gt } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   clearThreadStopRequested,
-  events,
   getEnvironment,
   getHost,
+  listStoredThreadProvisioningRowsByProvisioningId,
   getThread,
   getThreadOperation,
   threads,
@@ -220,25 +220,21 @@ const WORKSPACE_PROVISIONING_TRANSCRIPT_KEYS = new Set([
 function hasStreamedProvisioningTranscript(
   deps: CommandResultSideEffectsDeps,
   threadId: string,
-  afterSequence: number,
+  provisioningId: string,
 ): boolean {
-  const rows = deps.db
-    .select({ data: events.data })
-    .from(events)
-    .where(
-      and(
-        eq(events.threadId, threadId),
-        eq(events.type, "system/thread-provisioning"),
-        gt(events.sequence, afterSequence),
-      ),
-    )
-    .all();
+  const rows = listStoredThreadProvisioningRowsByProvisioningId(deps.db, {
+    threadId,
+    provisioningId,
+  });
 
   return rows.some((row) => {
     const eventData = systemThreadProvisioningEventDataSchema.parse(
       JSON.parse(row.data),
     );
-    return eventData.entries.some(isWorkspaceProvisioningTranscriptEntry);
+    return (
+      eventData.provisioningId === provisioningId &&
+      eventData.entries.some(isWorkspaceProvisioningTranscriptEntry)
+    );
   });
 }
 
@@ -323,7 +319,7 @@ async function handleProvisionCommandResult(
           ? hasStreamedProvisioningTranscript(
               args.deps,
               thread.id,
-              args.command.initiator.eventSequence,
+              args.command.initiator.provisioningId,
             )
           : false;
       const entries = hasStreamedTranscript

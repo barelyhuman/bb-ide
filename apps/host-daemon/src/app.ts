@@ -4,7 +4,11 @@ import {
 } from "@bb/host-runtime-material";
 import { CommandRouter } from "./command-router.js";
 import { createDaemon, type HostDaemon } from "./daemon.js";
-import { createEventBuffer, type EventBuffer } from "./event-buffer.js";
+import {
+  createEventBuffer,
+  EventBufferDisposedError,
+  type EventBuffer,
+} from "./event-buffer.js";
 import { createBufferedEnvironmentChangeReporter } from "./environment-change-reporter.js";
 import { InteractiveRequestRegistry } from "./interactive-request-registry.js";
 import {
@@ -422,6 +426,7 @@ export async function createHostDaemonApp(
   }
 
   const eventBuffer = createEventBuffer({
+    dataDir: options.dataDir,
     logger: options.logger,
     postEvents: (events) => serverClient.postEvents(events),
   });
@@ -460,13 +465,30 @@ export async function createHostDaemonApp(
       replayCapture?.recordRuntimeCaptureEntry(entry);
     },
     onEvent: ({ environmentId, event }) => {
-      const input = {
+      try {
+        eventBuffer.push({
+          threadId: event.threadId,
+          event,
+        });
+      } catch (error) {
+        if (error instanceof EventBufferDisposedError) {
+          options.logger.warn(
+            {
+              environmentId,
+              eventType: event.type,
+              threadId: event.threadId,
+            },
+            "Ignoring runtime event received after event buffer disposal",
+          );
+          return;
+        }
+        throw error;
+      }
+      replayCapture?.recordThreadEvent({
         environmentId,
         threadId: event.threadId,
         event,
-      };
-      replayCapture?.recordThreadEvent(input);
-      eventBuffer.push(input);
+      });
     },
     onThreadStorageChanged: ({ environmentId }) => {
       environmentChangeReporter.queue({
@@ -576,8 +598,6 @@ export async function createHostDaemonApp(
     replayTasks,
     threadStorageRootPath,
     logger: options.logger,
-    seedThreadHighWaterMark: ({ threadId, sequence }) =>
-      eventBuffer.seed({ [threadId]: sequence }),
     recordReplayCaptureThreadMetadata: (metadata) =>
       replayCapture?.recordThreadMetadata(metadata),
     recordReplayCaptureTurnRequest: (input) =>
@@ -587,8 +607,7 @@ export async function createHostDaemonApp(
       flush: () => eventBuffer.flush(),
     },
     reportResult: async (report) => {
-      const result = await serverClient.reportCommandResult(report);
-      eventBuffer.rebase(result.threadHighWaterMarks);
+      await serverClient.reportCommandResult(report);
     },
     persistRuntimeMaterial: (snapshot) =>
       writeRuntimeMaterialState(options.dataDir, snapshot),
@@ -618,7 +637,6 @@ export async function createHostDaemonApp(
       runtimeManager.replaceTrackedThreadStorageTargets(
         session.trackedThreadTargets,
       );
-      eventBuffer.seed(session.threadHighWaterMarks);
       void flushPendingInteractiveInterrupts();
       void commandFetchLoop.request();
     },
@@ -654,10 +672,11 @@ export async function createHostDaemonApp(
       await eventBuffer.flush();
     },
     shutdownRuntimes: async () => {
-      eventBuffer.dispose();
       environmentChangeReporter.dispose();
       await localApi?.close();
       await runtimeManager.shutdownAll();
+      await eventBuffer.flush();
+      await eventBuffer.dispose();
       await shutdownDefaultListModelsRuntimes();
       await replayCapture?.drain();
       await connection.shutdown();

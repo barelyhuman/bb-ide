@@ -29,6 +29,7 @@ import type {
   ProviderAuditImportFixturesResult,
   ProviderAuditManifest,
 } from "./types.js";
+import { buildProviderAuditClientRequestId } from "./types.js";
 
 const DEFAULT_CORPUS_ID = "excalidraw";
 const DEFAULT_DEV_REPLAY_CORPUS_ID = "dev-replays";
@@ -566,6 +567,7 @@ function importDevReplayFixture(
     clientRequests: [
       {
         id: `${manifest.captureId}:turn-0`,
+        requestId: buildProviderAuditClientRequestId(0),
         turnIndex: 0,
         type: "client/turn/requested",
         target: { kind: "thread-start" },

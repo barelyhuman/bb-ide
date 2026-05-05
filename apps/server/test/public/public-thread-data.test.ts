@@ -7,7 +7,12 @@ import {
   getThread,
   queuedThreadMessages,
 } from "@bb/db";
-import { threadScope, threadSchema, turnScope } from "@bb/domain";
+import {
+  encodeClientTurnRequestIdNumber,
+  threadScope,
+  threadSchema,
+  turnScope,
+} from "@bb/domain";
 import {
   type TimelineRow,
   threadDraftListResponseSchema,
@@ -96,7 +101,6 @@ describe("public thread data routes", () => {
           ]),
         }),
       );
-
     } finally {
       await harness.cleanup();
     }
@@ -331,6 +335,7 @@ describe("public thread data routes", () => {
         scope: threadScope(),
         data: {
           direction: "outbound",
+          requestId: encodeClientTurnRequestIdNumber({ value: 101 }),
           input: [{ type: "text", text: "Explain the result" }],
           target: { kind: "new-turn" },
           execution: {
@@ -547,6 +552,7 @@ describe("public thread data routes", () => {
         scope: threadScope(),
         data: {
           direction: "outbound",
+          requestId: encodeClientTurnRequestIdNumber({ value: 201 }),
           input: [{ type: "text", text: "Initial request" }],
           target: { kind: "thread-start" },
           execution: {
@@ -572,6 +578,7 @@ describe("public thread data routes", () => {
         scope: threadScope(),
         data: {
           direction: "outbound",
+          requestId: encodeClientTurnRequestIdNumber({ value: 202 }),
           input: [{ type: "text", text: "Follow up request" }],
           target: { kind: "new-turn" },
           execution: {
@@ -630,6 +637,7 @@ describe("public thread data routes", () => {
         scope: threadScope(),
         data: {
           direction: "outbound",
+          requestId: encodeClientTurnRequestIdNumber({ value: 301 }),
           input: [{ type: "text", text: "Earlier valid request" }],
           target: { kind: "new-turn" },
           execution: {
@@ -657,6 +665,7 @@ describe("public thread data routes", () => {
         scope: threadScope(),
         data: {
           direction: "outbound",
+          requestId: encodeClientTurnRequestIdNumber({ value: 302 }),
           input: [{ type: "text", text: "Malformed latest request" }],
           initiator: "user",
           request: {
@@ -755,6 +764,7 @@ describe("public thread data routes", () => {
         scope: threadScope(),
         data: {
           direction: "outbound",
+          requestId: encodeClientTurnRequestIdNumber({ value: 401 }),
           input: [{ type: "text", text: "Earlier work" }],
           target: { kind: "new-turn" },
           execution: {
@@ -956,6 +966,7 @@ describe("public thread data routes", () => {
         scope: threadScope(),
         data: {
           direction: "outbound",
+          requestId: encodeClientTurnRequestIdNumber({ value: 501 }),
           input: [{ type: "text", text: "Earlier work" }],
           target: { kind: "new-turn" },
           execution: {

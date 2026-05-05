@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import type { AgentRuntime } from "@bb/agent-runtime";
 import type {
+  ClientTurnRequestId,
   AvailableModel,
   DynamicTool,
   ThreadExecutionOptions,
@@ -15,22 +16,68 @@ import { noopEventSink } from "../../src/command-dispatch-support.js";
 
 const tempDirs: string[] = [];
 
+type FakeWorkspaceDiffTarget =
+  | { type: "uncommitted" }
+  | { type: "branch_committed"; mergeBaseBranch: string }
+  | { type: "all"; mergeBaseBranch: string }
+  | { type: "commit"; sha: string };
+
+interface FakeWorkspaceState {
+  demotedDefaultBranch: string | undefined;
+  demotedPrimaryPath: string | undefined;
+  destroyed: boolean;
+  lastCommitMessage: string | undefined;
+  lastDiffTarget: FakeWorkspaceDiffTarget | undefined;
+  listedModelsProviderId: string | undefined;
+  promotedPrimaryPath: string | undefined;
+  resetCount: number;
+  statusReads: number;
+}
+
+interface FakeRuntimeState {
+  archivedProviderId: string | undefined;
+  archivedProviderThreadId: string | undefined;
+  archivedThreadId: string | undefined;
+  listedModelsProviderId: string | undefined;
+  ranTurnClientRequestId: ClientTurnRequestId | undefined;
+  ranTurnInstructions: string | undefined;
+  ranTurnOptions: ThreadExecutionOptions | undefined;
+  ranTurnText: string | undefined;
+  renamedTitle: string | undefined;
+  resumedDynamicTools: DynamicTool[] | undefined;
+  resumedEnvironmentId: string | undefined;
+  resumedInstructions: string | undefined;
+  resumedOptions: ThreadExecutionOptions | undefined;
+  resumedProviderThreadId: string | undefined;
+  resumedThreadId: string | undefined;
+  runningProviders: string[];
+  shutdownCount: number;
+  startedDynamicTools: DynamicTool[] | undefined;
+  startedEnvironmentId: string | undefined;
+  startedInstructions: string | undefined;
+  startedOptions: ThreadExecutionOptions | undefined;
+  startedThreadId: string | undefined;
+  steeredClientRequestId: ClientTurnRequestId | undefined;
+  steeredTurnId: string | undefined;
+  steeredTurnInstructions: string | undefined;
+  steeredTurnOptions: ThreadExecutionOptions | undefined;
+  stoppedThreadId: string | undefined;
+  unarchivedProviderId: string | undefined;
+  unarchivedProviderThreadId: string | undefined;
+  unarchivedThreadId: string | undefined;
+}
+
 export function createFakeWorkspace(pathname: string) {
-  const state = {
+  const state: FakeWorkspaceState = {
     statusReads: 0,
-    lastDiffTarget: undefined as
-      | { type: "uncommitted" }
-      | { type: "branch_committed"; mergeBaseBranch: string }
-      | { type: "all"; mergeBaseBranch: string }
-      | { type: "commit"; sha: string }
-      | undefined,
-    lastCommitMessage: undefined as string | undefined,
+    lastDiffTarget: undefined,
+    lastCommitMessage: undefined,
     resetCount: 0,
-    promotedPrimaryPath: undefined as string | undefined,
-    demotedPrimaryPath: undefined as string | undefined,
-    demotedDefaultBranch: undefined as string | undefined,
+    promotedPrimaryPath: undefined,
+    demotedPrimaryPath: undefined,
+    demotedDefaultBranch: undefined,
     destroyed: false,
-    listedModelsProviderId: undefined as string | undefined,
+    listedModelsProviderId: undefined,
   };
   const workspace = {
     path: pathname,
@@ -138,35 +185,35 @@ export function createFakeWorkspace(pathname: string) {
 }
 
 export function createFakeRuntime() {
-  const state = {
-    resumedEnvironmentId: undefined as string | undefined,
-    startedThreadId: undefined as string | undefined,
-    startedEnvironmentId: undefined as string | undefined,
-    startedDynamicTools: undefined as DynamicTool[] | undefined,
-    startedOptions: undefined as ThreadExecutionOptions | undefined,
-    startedInstructions: undefined as string | undefined,
-    resumedThreadId: undefined as string | undefined,
-    resumedDynamicTools: undefined as DynamicTool[] | undefined,
-    resumedOptions: undefined as ThreadExecutionOptions | undefined,
-    resumedInstructions: undefined as string | undefined,
-    resumedProviderThreadId: undefined as string | undefined,
-    ranTurnText: undefined as string | undefined,
-    ranTurnClientRequestSequence: undefined as number | undefined,
-    ranTurnOptions: undefined as ThreadExecutionOptions | undefined,
-    ranTurnInstructions: undefined as string | undefined,
-    steeredTurnId: undefined as string | undefined,
-    steeredClientRequestSequence: undefined as number | undefined,
-    steeredTurnOptions: undefined as ThreadExecutionOptions | undefined,
-    steeredTurnInstructions: undefined as string | undefined,
-    stoppedThreadId: undefined as string | undefined,
-    renamedTitle: undefined as string | undefined,
-    archivedThreadId: undefined as string | undefined,
-    archivedProviderId: undefined as string | undefined,
-    archivedProviderThreadId: undefined as string | undefined,
-    unarchivedThreadId: undefined as string | undefined,
-    unarchivedProviderId: undefined as string | undefined,
-    unarchivedProviderThreadId: undefined as string | undefined,
-    runningProviders: [] as string[],
+  const state: FakeRuntimeState = {
+    resumedEnvironmentId: undefined,
+    startedThreadId: undefined,
+    startedEnvironmentId: undefined,
+    startedDynamicTools: undefined,
+    startedOptions: undefined,
+    startedInstructions: undefined,
+    resumedThreadId: undefined,
+    resumedDynamicTools: undefined,
+    resumedOptions: undefined,
+    resumedInstructions: undefined,
+    resumedProviderThreadId: undefined,
+    ranTurnText: undefined,
+    ranTurnClientRequestId: undefined,
+    ranTurnOptions: undefined,
+    ranTurnInstructions: undefined,
+    steeredTurnId: undefined,
+    steeredClientRequestId: undefined,
+    steeredTurnOptions: undefined,
+    steeredTurnInstructions: undefined,
+    stoppedThreadId: undefined,
+    renamedTitle: undefined,
+    archivedThreadId: undefined,
+    archivedProviderId: undefined,
+    archivedProviderThreadId: undefined,
+    unarchivedThreadId: undefined,
+    unarchivedProviderId: undefined,
+    unarchivedProviderThreadId: undefined,
+    runningProviders: [],
     shutdownCount: 0,
   };
   const runtime = {
@@ -204,19 +251,19 @@ export function createFakeRuntime() {
       };
     },
     async runTurn(args: {
-      clientRequestSequence?: number;
+      clientRequestId?: ClientTurnRequestId;
       input: Array<{ text?: string; type: string }>;
       instructions?: string;
       options?: ThreadExecutionOptions;
       threadId: string;
     }) {
       state.ranTurnText = args.input[0]?.text;
-      state.ranTurnClientRequestSequence = args.clientRequestSequence;
+      state.ranTurnClientRequestId = args.clientRequestId;
       state.ranTurnOptions = args.options;
       state.ranTurnInstructions = args.instructions;
     },
     async steerTurn(args: {
-      clientRequestSequence?: number;
+      clientRequestId?: ClientTurnRequestId;
       expectedTurnId: string;
       input: Array<{ text?: string; type: string }>;
       instructions?: string;
@@ -224,7 +271,7 @@ export function createFakeRuntime() {
       threadId: string;
     }) {
       state.steeredTurnId = args.expectedTurnId;
-      state.steeredClientRequestSequence = args.clientRequestSequence;
+      state.steeredClientRequestId = args.clientRequestId;
       state.steeredTurnOptions = args.options;
       state.steeredTurnInstructions = args.instructions;
       return { status: "steered" as const };

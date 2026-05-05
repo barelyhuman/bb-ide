@@ -5,6 +5,7 @@ import { migrate } from "../../src/migrate.js";
 import { noopNotifier } from "../../src/notifier.js";
 import type { DbNotifier } from "../../src/notifier.js";
 import {
+  appendDaemonEventsInTransaction,
   appendStoredThreadEvent,
   appendStoredThreadEventInTransaction,
   appendStoredThreadEventsInTransaction,
@@ -21,15 +22,18 @@ import {
   listCompletedTurnsByThreadIds,
   listEvents,
   listRecentStoredEventRows,
+  listStoredClientTurnRequestIdsInRange,
   listStoredEventRows,
   listStoredEventRowsInRange,
   listStoredEventRowsByThreadSequences,
-  listStoredTurnInputAcceptedRowsByClientRequestSequences,
+  listStoredThreadProvisioningRowsByProvisioningId,
+  listStoredTurnInputAcceptedRowsByClientRequestIds,
   listThreadTurnInterruptionEventStates,
   pruneContextWindowUsageEventsBeforeSequence,
   pruneTokenUsageEventsBeforeSequence,
   pruneResolvedItemDeltas,
   pruneThreadEventsBeforeSequence,
+  ProducerEventPayloadMismatchError,
 } from "../../src/data/events.js";
 import { createProject } from "../../src/data/projects.js";
 import { createThread } from "../../src/data/threads.js";
@@ -61,6 +65,12 @@ const emptyItemFields = {
 const threadEventFields = {
   ...emptyItemFields,
   scope: threadScope(),
+};
+
+const daemonThreadEventFields = {
+  ...threadEventFields,
+  environmentId: null,
+  providerThreadId: null,
 };
 
 interface CreateTurnEventFieldsArgs {
@@ -255,6 +265,168 @@ describe("events", () => {
     expect(all).toHaveLength(2);
     // Original data preserved for sequence 1
     expect(JSON.parse(all[0]!.data)).toMatchObject({ message: "first" });
+  });
+
+  it("appends daemon events with server-owned sequences and producer identities", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 5,
+        type: "system/error",
+        ...threadEventFields,
+        data: JSON.stringify({ message: "existing" }),
+      },
+    ]);
+
+    const result = db.transaction(
+      (tx) =>
+        appendDaemonEventsInTransaction(tx, [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkm",
+            producerEventPayloadHash: "hash-a",
+            threadId: thread.id,
+            type: "system/error",
+            ...daemonThreadEventFields,
+            data: JSON.stringify({ message: "first daemon" }),
+          },
+          {
+            producerEventId: "hdevt_23456789abcdefghijkn",
+            producerEventPayloadHash: "hash-b",
+            threadId: thread.id,
+            type: "system/error",
+            ...daemonThreadEventFields,
+            data: JSON.stringify({ message: "second daemon" }),
+          },
+        ]),
+      { behavior: "immediate" },
+    );
+
+    expect(result).toEqual({
+      acceptedEvents: [
+        {
+          producerEventId: "hdevt_23456789abcdefghijkm",
+          threadId: thread.id,
+          sequence: 6,
+        },
+        {
+          producerEventId: "hdevt_23456789abcdefghijkn",
+          threadId: thread.id,
+          sequence: 7,
+        },
+      ],
+      insertedInputIndexes: [0, 1],
+    });
+    expect(listEvents(db, { threadId: thread.id })).toMatchObject([
+      { sequence: 5, producerEventId: null },
+      {
+        sequence: 6,
+        producerEventId: "hdevt_23456789abcdefghijkm",
+        producerEventPayloadHash: "hash-a",
+      },
+      {
+        sequence: 7,
+        producerEventId: "hdevt_23456789abcdefghijkn",
+        producerEventPayloadHash: "hash-b",
+      },
+    ]);
+  });
+
+  it("accepts daemon retries idempotently by producerEventId and payload hash", () => {
+    const { db, thread } = setup();
+
+    db.transaction(
+      (tx) =>
+        appendDaemonEventsInTransaction(tx, [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkm",
+            producerEventPayloadHash: "hash-a",
+            threadId: thread.id,
+            type: "system/error",
+            ...daemonThreadEventFields,
+            data: JSON.stringify({ message: "first daemon" }),
+          },
+        ]),
+      { behavior: "immediate" },
+    );
+
+    const retry = db.transaction(
+      (tx) =>
+        appendDaemonEventsInTransaction(tx, [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkm",
+            producerEventPayloadHash: "hash-a",
+            threadId: thread.id,
+            type: "system/error",
+            ...daemonThreadEventFields,
+            data: JSON.stringify({ message: "first daemon" }),
+          },
+          {
+            producerEventId: "hdevt_23456789abcdefghijkn",
+            producerEventPayloadHash: "hash-b",
+            threadId: thread.id,
+            type: "system/error",
+            ...daemonThreadEventFields,
+            data: JSON.stringify({ message: "second daemon" }),
+          },
+        ]),
+      { behavior: "immediate" },
+    );
+
+    expect(retry).toEqual({
+      acceptedEvents: [
+        {
+          producerEventId: "hdevt_23456789abcdefghijkm",
+          threadId: thread.id,
+          sequence: 1,
+        },
+        {
+          producerEventId: "hdevt_23456789abcdefghijkn",
+          threadId: thread.id,
+          sequence: 2,
+        },
+      ],
+      insertedInputIndexes: [1],
+    });
+    expect(listEvents(db, { threadId: thread.id })).toHaveLength(2);
+  });
+
+  it("rejects daemon producerEventId retries with a different payload hash", () => {
+    const { db, thread } = setup();
+
+    db.transaction(
+      (tx) =>
+        appendDaemonEventsInTransaction(tx, [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkm",
+            producerEventPayloadHash: "hash-a",
+            threadId: thread.id,
+            type: "system/error",
+            ...daemonThreadEventFields,
+            data: JSON.stringify({ message: "first daemon" }),
+          },
+        ]),
+      { behavior: "immediate" },
+    );
+
+    expect(() =>
+      db.transaction(
+        (tx) =>
+          appendDaemonEventsInTransaction(tx, [
+            {
+              producerEventId: "hdevt_23456789abcdefghijkm",
+              producerEventPayloadHash: "hash-b",
+              threadId: thread.id,
+              type: "system/error",
+              ...daemonThreadEventFields,
+              data: JSON.stringify({ message: "second daemon" }),
+            },
+          ]),
+        { behavior: "immediate" },
+      ),
+    ).toThrow(ProducerEventPayloadMismatchError);
+    expect(listEvents(db, { threadId: thread.id })).toHaveLength(1);
   });
 
   it("stores the provided createdAt timestamp", () => {
@@ -514,6 +686,7 @@ describe("events", () => {
         ...threadEventFields,
         data: JSON.stringify({
           direction: "outbound",
+          requestId: "creq_23456789ab",
           source: "tell",
           initiator: "user",
           input: [{ type: "text", text: "first" }],
@@ -535,6 +708,7 @@ describe("events", () => {
         ...threadEventFields,
         data: JSON.stringify({
           direction: "outbound",
+          requestId: "creq_23456789ac",
           source: "tell",
           initiator: "user",
           input: [{ type: "text", text: "second" }],
@@ -555,7 +729,7 @@ describe("events", () => {
         type: "turn/input/accepted",
         ...createTurnEventFields({ turnId: "turn-1" }),
         data: JSON.stringify({
-          clientRequestSequence: 1,
+          clientRequestId: "creq_23456789ab",
         }),
       },
       {
@@ -564,7 +738,7 @@ describe("events", () => {
         type: "turn/input/accepted",
         ...createTurnEventFields({ turnId: "turn-2" }),
         data: JSON.stringify({
-          clientRequestSequence: 99,
+          clientRequestId: "creq_23456789ad",
         }),
       },
       {
@@ -573,18 +747,167 @@ describe("events", () => {
         type: "turn/input/accepted",
         ...createTurnEventFields({ turnId: "turn-3" }),
         data: JSON.stringify({
-          clientRequestSequence: 2,
+          clientRequestId: "creq_23456789ac",
         }),
       },
     ]);
 
     expect(
-      listStoredTurnInputAcceptedRowsByClientRequestSequences(db, {
+      listStoredTurnInputAcceptedRowsByClientRequestIds(db, {
         threadId: thread.id,
         afterSequence: 2,
-        clientRequestSequences: [1, 2],
+        clientRequestIds: ["creq_23456789ab", "creq_23456789ac"],
       }).map((row) => row.sequence),
     ).toEqual([3, 5]);
+  });
+
+  it("lists client turn request ids in range with a storage predicate", () => {
+    const { db, project, thread } = setup();
+    const otherThread = createThread(db, noopNotifier, {
+      projectId: project.id,
+      providerId: "codex",
+    });
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "client/turn/requested",
+        ...threadEventFields,
+        data: JSON.stringify({
+          direction: "outbound",
+          requestId: "creq_23456789ab",
+          source: "tell",
+          initiator: "user",
+          input: [{ type: "text", text: "first" }],
+          target: { kind: "new-turn" },
+          request: { method: "turn/start", params: {} },
+          execution: {
+            model: "gpt-5",
+            reasoningLevel: "medium",
+            permissionMode: "workspace-write",
+            source: "client/turn/requested",
+            serviceTier: "auto",
+          },
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        type: "system/error",
+        ...threadEventFields,
+        data: JSON.stringify({ code: "debug", message: "ignored" }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 3,
+        type: "client/turn/requested",
+        ...threadEventFields,
+        data: JSON.stringify({
+          direction: "outbound",
+          requestId: "creq_23456789ac",
+          source: "tell",
+          initiator: "user",
+          input: [{ type: "text", text: "second" }],
+          target: { kind: "new-turn" },
+          request: { method: "turn/start", params: {} },
+          execution: {
+            model: "gpt-5",
+            reasoningLevel: "medium",
+            permissionMode: "workspace-write",
+            source: "client/turn/requested",
+            serviceTier: "auto",
+          },
+        }),
+      },
+      {
+        threadId: otherThread.id,
+        sequence: 1,
+        type: "client/turn/requested",
+        ...threadEventFields,
+        data: JSON.stringify({
+          direction: "outbound",
+          requestId: "creq_23456789ad",
+          source: "tell",
+          initiator: "user",
+          input: [{ type: "text", text: "other thread" }],
+          target: { kind: "new-turn" },
+          request: { method: "turn/start", params: {} },
+          execution: {
+            model: "gpt-5",
+            reasoningLevel: "medium",
+            permissionMode: "workspace-write",
+            source: "client/turn/requested",
+            serviceTier: "auto",
+          },
+        }),
+      },
+    ]);
+
+    expect(
+      listStoredClientTurnRequestIdsInRange(db, {
+        threadId: thread.id,
+        seqStart: 1,
+        seqEnd: 3,
+      }),
+    ).toEqual(["creq_23456789ab", "creq_23456789ac"]);
+    expect(
+      listStoredClientTurnRequestIdsInRange(db, {
+        threadId: thread.id,
+        seqStart: 2,
+        seqEnd: 3,
+      }),
+    ).toEqual(["creq_23456789ac"]);
+  });
+
+  it("lists thread provisioning rows by provisioning id with a storage predicate", () => {
+    const { db, thread } = setup();
+
+    insertEvents(db, noopNotifier, [
+      {
+        threadId: thread.id,
+        sequence: 1,
+        type: "system/thread-provisioning",
+        ...threadEventFields,
+        data: JSON.stringify({
+          provisioningId: "tpv-target",
+          status: "active",
+          environmentId: "env-1",
+          entries: [],
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 2,
+        type: "system/thread-provisioning",
+        ...threadEventFields,
+        data: JSON.stringify({
+          provisioningId: "tpv-other",
+          status: "active",
+          environmentId: "env-1",
+          entries: [],
+        }),
+      },
+      {
+        threadId: thread.id,
+        sequence: 3,
+        type: "system/thread-provisioning",
+        ...threadEventFields,
+        data: JSON.stringify({
+          provisioningId: "tpv-target",
+          status: "completed",
+          environmentId: "env-1",
+          entries: [],
+        }),
+      },
+    ]);
+
+    expect(
+      listStoredThreadProvisioningRowsByProvisioningId(db, {
+        threadId: thread.id,
+        provisioningId: "tpv-target",
+      }).map((row) => row.sequence),
+    ).toEqual([1, 3]);
   });
 
   it("appends stored thread events and exposes the latest thread runtime markers", () => {

@@ -88,7 +88,7 @@ describe("thread operations", () => {
     const first = upsertThreadOperationRecord(db, {
       threadId: thread.id,
       kind: "provision",
-      payload: JSON.stringify({ clientRequestSequence: 1 }),
+      payload: JSON.stringify({ clientRequestId: "creq_23456789ab" }),
       provisioningState: {
         environmentId: null,
         provisionEventSequence: null,
@@ -100,7 +100,7 @@ describe("thread operations", () => {
     const second = upsertThreadOperationRecord(db, {
       threadId: thread.id,
       kind: "provision",
-      payload: JSON.stringify({ clientRequestSequence: 2 }),
+      payload: JSON.stringify({ clientRequestId: "creq_23456789ac" }),
       provisioningState: {
         environmentId: environment.id,
         provisionEventSequence: 12,
@@ -116,14 +116,14 @@ describe("thread operations", () => {
     });
 
     expect(first).toMatchObject({
-      payload: JSON.stringify({ clientRequestSequence: 1 }),
+      payload: JSON.stringify({ clientRequestId: "creq_23456789ab" }),
       provisioningId: "tpv-db-1",
       provisioningStage: "metadata-pending",
       provisioningEnvironmentId: null,
     });
     expect(second).toMatchObject({
       id: first.id,
-      payload: JSON.stringify({ clientRequestSequence: 2 }),
+      payload: JSON.stringify({ clientRequestId: "creq_23456789ac" }),
       provisioningId: "tpv-db-1",
       provisioningStage: "workspace-ready",
       provisioningEnvironmentId: environment.id,
@@ -137,7 +137,7 @@ describe("thread operations", () => {
       }),
     ).toMatchObject({
       commandId: command.id,
-      payload: JSON.stringify({ clientRequestSequence: 2 }),
+      payload: JSON.stringify({ clientRequestId: "creq_23456789ac" }),
       provisioningId: "tpv-db-1",
       provisioningStage: "workspace-ready",
       provisioningEnvironmentId: environment.id,

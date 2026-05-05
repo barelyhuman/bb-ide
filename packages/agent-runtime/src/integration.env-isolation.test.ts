@@ -98,7 +98,7 @@ for (const providerId of providers) {
         await Promise.all([
           ctx.runtime.runTurn({
             threadId: firstCapture.threadId,
-            clientRequestSequence: 1,
+            clientRequestId: "creq_23456789ab",
             options,
             input: [
               {
@@ -111,7 +111,7 @@ for (const providerId of providers) {
           }),
           ctx.runtime.runTurn({
             threadId: secondCapture.threadId,
-            clientRequestSequence: 1,
+            clientRequestId: "creq_23456789ab",
             options,
             input: [
               {

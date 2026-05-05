@@ -145,7 +145,7 @@ describe("ServerConnection", () => {
         type: "turn.submit",
         environmentId: "env-1",
         threadId: "thread-1",
-        eventSequence: 5,
+        requestId: "creq_23456789ab",
         input: [{ type: "text", text: "resume work" }],
         options: {
           model: "gpt-5",

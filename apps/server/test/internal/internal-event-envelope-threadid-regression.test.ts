@@ -1,7 +1,10 @@
 import { getThread } from "@bb/db";
 import { threadScope } from "@bb/domain";
 import { describe, expect, it } from "vitest";
-import { internalAuthHeaders } from "../helpers/commands.js";
+import {
+  createTestDaemonEventEnvelope,
+  internalAuthHeaders,
+} from "../helpers/commands.js";
 import {
   seedEnvironment,
   seedHostSession,
@@ -49,11 +52,9 @@ describe("internal event envelope threadId regression", () => {
         body: JSON.stringify({
           sessionId: hostA.session.id,
           events: [
-            {
-              environmentId: environmentA.id,
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 1,
               threadId: threadA.id,
-              sequence: 1,
-              createdAt: Date.now(),
               event: {
                 type: "thread/name/updated",
                 threadId: threadB.id,
@@ -61,7 +62,7 @@ describe("internal event envelope threadId regression", () => {
                 scope: threadScope(),
                 threadName: "hacked",
               },
-            },
+            }),
           ],
         }),
       });

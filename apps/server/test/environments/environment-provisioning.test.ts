@@ -65,7 +65,7 @@ describe("environment reprovisioning", () => {
 
       expect(firstAttempt).toMatchObject({
         status: MANAGED_REPROVISION_QUEUED,
-        eventSequence: expect.any(Number),
+        provisionEventSequence: expect.any(Number),
       });
       expect(secondAttempt).toBe(MANAGED_REPROVISION_IN_PROGRESS);
       expect(getEnvironment(harness.db, environment.id)?.status).toBe(

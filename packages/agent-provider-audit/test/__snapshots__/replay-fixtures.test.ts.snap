@@ -105,7 +105,7 @@ exports[`@bb/agent-provider-audit fixture replay > exports generated fixture dat
   {
     "id": "excalidraw/pi/magicframe-feature",
     "renderedTimelineRowCount": 5,
-    "semanticTimelineRowCount": 7,
+    "semanticTimelineRowCount": 5,
   },
   {
     "id": "excalidraw/pi/search-bugfix",
@@ -610,16 +610,17 @@ exports[`@bb/agent-provider-audit fixture replay > replays every checked-in fixt
     "fixture": "excalidraw/pi/magicframe-feature",
     "rawProviderEventCount": 1391,
     "renderedTimelineRowCount": 5,
-    "semanticTimelineRowCount": 7,
+    "semanticTimelineRowCount": 5,
     "timelinePreview": [
       "-- User ----------------------------------------------------",
       "Make the Magic Frame AI workflow discoverable from the command or search experience on desktop. It s... [truncated 188 chars]",
       "-- Worked for 9m 45s ---------------------------------------",
-      "-- Assistant -----------------------------------------------",
-      "OK the issue is that \`window.h.app.setState\` may not be the right way since the CommandPalette uses ... [truncated 120 chars]",
-      "-- Explored 3 searches -------------------------------------",
+      "-- Error ---------------------------------------------------",
+      "  Provider error - 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded. https://docs.claude.com/en/api/errors"},"request_id":"req_011CZTGZVTJyr4h1KiraytEz"}",
       "-- User ----------------------------------------------------",
       "Summarize the user-visible behavior and the validation you ran.",
+      "-- Error ---------------------------------------------------",
+      "  Provider error - 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded. https://docs.claude.com/en/api/errors"},"request_id":"req_011CZTGZiuSbLH2NCYKX4F91"}",
     ],
     "translatedThreadEventCount": 283,
     "unexpectedUntranslatedRawEventCount": 0,
@@ -986,11 +987,9 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots parsed context-wind
     "contextWindowUsage": null,
     "fixture": "excalidraw/pi/magicframe-feature",
     "tokenUsageSummary": {
-      "distinctModelContextWindows": [
-        1000000,
-      ],
-      "nonNullModelContextWindowCount": 2,
-      "tokenUsageEventCount": 2,
+      "distinctModelContextWindows": [],
+      "nonNullModelContextWindowCount": 0,
+      "tokenUsageEventCount": 0,
     },
   },
   {
@@ -4933,16 +4932,22 @@ Make the Magic Frame AI workflow discoverable from the command or search experie
     -- Searched for useUIAppState in packages/excalidraw/context/ui-appState.ts
     -- Read packages/excalidraw/context/ui-appState.ts
 
--- Assistant -----------------------------------------------
-OK the issue is that \`window.h.app.setState\` may not be the right way since the CommandPalette uses ... [truncated 120 chars]
+  -- Assistant
+  OK the issue is that \`window.h.app.setState\` may not be the right way since the CommandPalette uses ... [truncated 120 chars]
 
--- Explored 3 searches -------------------------------------
-  -- Searched for h\\b.*setState\\|setState.*h\\b in packages/excalidraw/tests/helpers/ui.ts
-  -- Searched for ^.*h\\s*= in packages/excalidraw/tests/helpers/ui.ts
-  -- Searched for ^const.*h  in packages/excalidraw/tests/helpers/ui.ts
+  -- Explored 3 searches
+    -- Searched for h\\b.*setState\\|setState.*h\\b in packages/excalidraw/tests/helpers/ui.ts
+    -- Searched for ^.*h\\s*= in packages/excalidraw/tests/helpers/ui.ts
+    -- Searched for ^const.*h  in packages/excalidraw/tests/helpers/ui.ts
+
+-- Error ---------------------------------------------------
+  Provider error - 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded. https://docs.claude.com/en/api/errors"},"request_id":"req_011CZTGZVTJyr4h1KiraytEz"}
 
 -- User ----------------------------------------------------
-Summarize the user-visible behavior and the validation you ran."
+Summarize the user-visible behavior and the validation you ran.
+
+-- Error ---------------------------------------------------
+  Provider error - 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded. https://docs.claude.com/en/api/errors"},"request_id":"req_011CZTGZiuSbLH2NCYKX4F91"}"
 `;
 
 exports[`@bb/agent-provider-audit fixture replay > snapshots readable verbose CLI timeline structure for every fixture > excalidraw/pi/search-bugfix 1`] = `
@@ -7423,17 +7428,18 @@ exports[`@bb/agent-provider-audit fixture replay > snapshots streaming prefix ti
     "lastEventType": "turn/completed",
     "prefixLength": 285,
     "renderedTimelineRowCount": 5,
-    "semanticTimelineRowCount": 7,
+    "semanticTimelineRowCount": 5,
     "threadStatus": "idle",
     "timelinePreview": [
       "-- User ----------------------------------------------------",
       "Make the Magic Frame AI workflow discoverable from the command or search experience on desktop. It s... [truncated 188 chars]",
       "-- Worked for 9m 45s ---------------------------------------",
-      "-- Assistant -----------------------------------------------",
-      "OK the issue is that \`window.h.app.setState\` may not be the right way since the CommandPalette uses ... [truncated 120 chars]",
-      "-- Explored 3 searches -------------------------------------",
+      "-- Error ---------------------------------------------------",
+      "  Provider error - 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded. https://docs.claude.com/en/api/errors"},"request_id":"req_011CZTGZVTJyr4h1KiraytEz"}",
       "-- User ----------------------------------------------------",
       "Summarize the user-visible behavior and the validation you ran.",
+      "-- Error ---------------------------------------------------",
+      "  Provider error - 529 {"type":"error","error":{"type":"overloaded_error","message":"Overloaded. https://docs.claude.com/en/api/errors"},"request_id":"req_011CZTGZiuSbLH2NCYKX4F91"}",
     ],
     "totalEventCount": 285,
   },
@@ -9260,6 +9266,12 @@ exports[`@bb/agent-provider-audit fixture replay > summarizes raw-event and tool
         },
         {
           "fixtureIds": [
+            "excalidraw/pi/magicframe-feature",
+          ],
+          "type": "provider/error",
+        },
+        {
+          "fixtureIds": [
             "excalidraw/pi/collab-startup-explanation",
             "excalidraw/pi/command-palette-map",
             "excalidraw/pi/eyedropper-preview-bugfix",
@@ -9275,7 +9287,6 @@ exports[`@bb/agent-provider-audit fixture replay > summarizes raw-event and tool
             "excalidraw/pi/collab-startup-explanation",
             "excalidraw/pi/command-palette-map",
             "excalidraw/pi/eyedropper-preview-bugfix",
-            "excalidraw/pi/magicframe-feature",
             "excalidraw/pi/search-bugfix",
             "excalidraw/pi/search-feature",
             "excalidraw/pi/ttd-explanation",

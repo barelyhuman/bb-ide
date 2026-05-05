@@ -1,38 +1,47 @@
 import { eq } from "drizzle-orm";
+import { events, getHost, openSession, threads, upsertHost } from "@bb/db";
+import { turnScope } from "@bb/domain";
 import {
-  createEventId,
-  events,
-  getHost,
-  openSession,
-  threads,
-  upsertHost,
-} from "@bb/db";
-import { threadScope, turnScope } from "@bb/domain";
-import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
+  HOST_DAEMON_PROTOCOL_VERSION,
+  type HostDaemonEventEnvelope,
+} from "@bb/host-daemon-contract";
 import { describe, expect, it } from "vitest";
 import { internalAuthHeaders } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
 import {
   seedEnvironment,
-  seedEvent,
   seedHostSession,
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
+import type { TestAppHarness } from "../helpers/test-app.js";
+
+async function postEventBatch(args: {
+  events: HostDaemonEventEnvelope[];
+  harness: TestAppHarness;
+  sessionId: string;
+}): Promise<Response> {
+  return args.harness.app.request("/internal/session/events", {
+    method: "POST",
+    headers: internalAuthHeaders(args.harness),
+    body: JSON.stringify({
+      sessionId: args.sessionId,
+      events: args.events,
+    }),
+  });
+}
 
 describe("internal event and tool-call routes", () => {
-  it("deduplicates events by thread and sequence and returns high-water marks", async () => {
+  it("appends event batches and returns accepted producer events", async () => {
     const harness = await createTestAppHarness();
     try {
-      const firstCreatedAt = 1_700_000_000_000;
-      const duplicateCreatedAt = firstCreatedAt + 50;
-      const { host, session } = seedHostSession(harness.deps);
+      const { session } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
+        hostId: session.hostId,
       });
       const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
+        hostId: session.hostId,
         projectId: project.id,
       });
       const thread = seedThread(harness.deps, {
@@ -41,114 +50,50 @@ describe("internal event and tool-call routes", () => {
         status: "active",
       });
 
-      const response = await harness.app.request("/internal/session/events", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          events: [
-            {
-              environmentId: environment.id,
+      const response = await postEventBatch({
+        harness,
+        sessionId: session.id,
+        events: [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkm",
+            threadId: thread.id,
+            event: {
+              type: "turn/started",
               threadId: thread.id,
-              sequence: 1,
-              createdAt: firstCreatedAt,
-              event: {
-                type: "turn/started",
-                threadId: thread.id,
-                providerThreadId: "provider-1",
-                turnId: "turn-1",
-                scope: turnScope("turn-1"),
-              },
+              providerThreadId: "provider-1",
+              turnId: "turn-1",
+              scope: turnScope("turn-1"),
             },
-            {
-              environmentId: environment.id,
+          },
+          {
+            producerEventId: "hdevt_23456789abcdefghijkn",
+            threadId: thread.id,
+            event: {
+              type: "turn/completed",
               threadId: thread.id,
-              sequence: 1,
-              createdAt: duplicateCreatedAt,
-              event: {
-                type: "turn/started",
-                threadId: thread.id,
-                providerThreadId: "provider-1",
-                turnId: "turn-1",
-                scope: turnScope("turn-1"),
-              },
+              providerThreadId: "provider-1",
+              turnId: "turn-1",
+              scope: turnScope("turn-1"),
+              status: "completed",
             },
-          ],
-        }),
+          },
+        ],
       });
 
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toEqual({
-        threadHighWaterMarks: {
-          [thread.id]: 1,
-        },
-      });
-      const storedEvents = harness.db.select().from(events).all();
-      expect(storedEvents).toHaveLength(1);
-      expect(storedEvents[0]?.createdAt).toBe(firstCreatedAt);
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("rejects mismatched duplicate event keys inside one batch", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host, session } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
-      });
-
-      const response = await harness.app.request("/internal/session/events", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          events: [
-            {
-              environmentId: environment.id,
-              threadId: thread.id,
-              sequence: 1,
-              createdAt: Date.now(),
-              event: {
-                type: "turn/started",
-                threadId: thread.id,
-                providerThreadId: "provider-1",
-                turnId: "turn-1",
-                scope: turnScope("turn-1"),
-              },
-            },
-            {
-              environmentId: environment.id,
-              threadId: thread.id,
-              sequence: 1,
-              createdAt: Date.now(),
-              event: {
-                type: "turn/started",
-                threadId: thread.id,
-                providerThreadId: "provider-2",
-                turnId: "turn-1",
-                scope: turnScope("turn-1"),
-              },
-            },
-          ],
-        }),
-      });
-
-      expect(response.status).toBe(409);
-      await expect(readJson(response)).resolves.toEqual({
-        acceptedSequences: [],
-        code: "sequence_conflict",
-        threadHighWaterMarks: {},
+        acceptedEvents: [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkm",
+            threadId: thread.id,
+            sequence: 1,
+          },
+          {
+            producerEventId: "hdevt_23456789abcdefghijkn",
+            threadId: thread.id,
+            sequence: 2,
+          },
+        ],
       });
       expect(
         harness.db
@@ -156,21 +101,21 @@ describe("internal event and tool-call routes", () => {
           .from(events)
           .where(eq(events.threadId, thread.id))
           .all(),
-      ).toHaveLength(0);
+      ).toHaveLength(2);
     } finally {
       await harness.cleanup();
     }
   });
 
-  it("accepts duplicate event data with different JSON key order", async () => {
+  it("rejects producer event id reuse with a different payload", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host, session } = seedHostSession(harness.deps);
+      const { session } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
+        hostId: session.hostId,
       });
       const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
+        hostId: session.hostId,
         projectId: project.id,
       });
       const thread = seedThread(harness.deps, {
@@ -179,48 +124,45 @@ describe("internal event and tool-call routes", () => {
         status: "active",
       });
 
-      seedEvent(harness.deps, {
+      const firstEvent: HostDaemonEventEnvelope = {
+        producerEventId: "hdevt_23456789abcdefghijkp",
         threadId: thread.id,
-        environmentId: environment.id,
-        providerThreadId: "provider-thread",
-        sequence: 1,
-        type: "turn/input/accepted",
-        scope: turnScope("turn-1"),
-        data: {
-          clientRequestSequence: 42,
-          providerThreadId: "provider-thread",
+        event: {
+          type: "turn/started",
+          threadId: thread.id,
+          providerThreadId: "provider-1",
+          turnId: "turn-1",
+          scope: turnScope("turn-1"),
         },
+      };
+      const firstResponse = await postEventBatch({
+        harness,
+        sessionId: session.id,
+        events: [firstEvent],
       });
+      expect(firstResponse.status).toBe(200);
 
-      const response = await harness.app.request("/internal/session/events", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          events: [
-            {
-              environmentId: environment.id,
+      const conflictResponse = await postEventBatch({
+        harness,
+        sessionId: session.id,
+        events: [
+          {
+            ...firstEvent,
+            event: {
+              type: "turn/started",
               threadId: thread.id,
-              sequence: 1,
-              createdAt: Date.now(),
-              event: {
-                type: "turn/input/accepted",
-                threadId: thread.id,
-                providerThreadId: "provider-thread",
-                turnId: "turn-1",
-                scope: turnScope("turn-1"),
-                clientRequestSequence: 42,
-              },
+              providerThreadId: "provider-2",
+              turnId: "turn-1",
+              scope: turnScope("turn-1"),
             },
-          ],
-        }),
+          },
+        ],
       });
 
-      expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toEqual({
-        threadHighWaterMarks: {
-          [thread.id]: 1,
-        },
+      expect(conflictResponse.status).toBe(409);
+      await expect(readJson(conflictResponse)).resolves.toEqual({
+        code: "producer_event_payload_mismatch",
+        message: "Producer event id was reused with a different payload",
       });
       expect(
         harness.db
@@ -234,239 +176,15 @@ describe("internal event and tool-call routes", () => {
     }
   });
 
-  it("fails loudly when duplicate comparison finds corrupt stored event JSON", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host, session } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
-      });
-
-      harness.db
-        .insert(events)
-        .values({
-          id: createEventId(),
-          threadId: thread.id,
-          environmentId: environment.id,
-          scopeKind: "turn",
-          turnId: "turn-1",
-          providerThreadId: "provider-thread",
-          sequence: 1,
-          type: "turn/input/accepted",
-          itemId: null,
-          itemKind: null,
-          data: "{not-json",
-          createdAt: Date.now(),
-        })
-        .run();
-
-      const response = await harness.app.request("/internal/session/events", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          events: [
-            {
-              environmentId: environment.id,
-              threadId: thread.id,
-              sequence: 1,
-              createdAt: Date.now(),
-              event: {
-                type: "turn/input/accepted",
-                threadId: thread.id,
-                providerThreadId: "provider-thread",
-                turnId: "turn-1",
-                scope: turnScope("turn-1"),
-                clientRequestSequence: 42,
-              },
-            },
-          ],
-        }),
-      });
-
-      expect(response.status).toBe(500);
-      await expect(readJson(response)).resolves.toMatchObject({
-        code: "internal_error",
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("rejects non-identical sequence collisions without partially inserting the batch", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host, session } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
-      });
-
-      seedEvent(harness.deps, {
-        threadId: thread.id,
-        environmentId: environment.id,
-        sequence: 1,
-        type: "client/turn/requested",
-        scope: threadScope(),
-        data: {
-          direction: "outbound",
-          source: "tell",
-          initiator: "user",
-          input: [{ type: "text", text: "Run the task" }],
-          target: { kind: "new-turn" },
-          request: { method: "turn/start", params: {} },
-          execution: {
-            model: "gpt-5",
-            serviceTier: "default",
-            reasoningLevel: "medium",
-            permissionMode: "full",
-            source: "client/turn/requested",
-          },
-        },
-      });
-
-      const conflictedResponse = await harness.app.request(
-        "/internal/session/events",
-        {
-          method: "POST",
-          headers: internalAuthHeaders(harness),
-          body: JSON.stringify({
-            sessionId: session.id,
-            events: [
-              {
-                environmentId: environment.id,
-                threadId: thread.id,
-                sequence: 1,
-                createdAt: Date.now(),
-                event: {
-                  type: "turn/started",
-                  threadId: thread.id,
-                  providerThreadId: "provider-thread",
-                  turnId: "turn-1",
-                  scope: turnScope("turn-1"),
-                },
-              },
-              {
-                environmentId: environment.id,
-                threadId: thread.id,
-                sequence: 2,
-                createdAt: Date.now(),
-                event: {
-                  type: "turn/input/accepted",
-                  threadId: thread.id,
-                  providerThreadId: "provider-thread",
-                  turnId: "turn-1",
-                  scope: turnScope("turn-1"),
-                  clientRequestSequence: 1,
-                },
-              },
-            ],
-          }),
-        },
-      );
-
-      expect(conflictedResponse.status).toBe(409);
-      await expect(readJson(conflictedResponse)).resolves.toEqual({
-        acceptedSequences: [],
-        code: "sequence_conflict",
-        threadHighWaterMarks: {
-          [thread.id]: 1,
-        },
-      });
-      expect(
-        harness.db
-          .select()
-          .from(events)
-          .where(eq(events.threadId, thread.id))
-          .all()
-          .map((event) => event.type),
-      ).toEqual(["client/turn/requested"]);
-
-      const retryResponse = await harness.app.request(
-        "/internal/session/events",
-        {
-          method: "POST",
-          headers: internalAuthHeaders(harness),
-          body: JSON.stringify({
-            sessionId: session.id,
-            events: [
-              {
-                environmentId: environment.id,
-                threadId: thread.id,
-                sequence: 2,
-                createdAt: Date.now(),
-                event: {
-                  type: "turn/started",
-                  threadId: thread.id,
-                  providerThreadId: "provider-thread",
-                  turnId: "turn-1",
-                  scope: turnScope("turn-1"),
-                },
-              },
-              {
-                environmentId: environment.id,
-                threadId: thread.id,
-                sequence: 3,
-                createdAt: Date.now(),
-                event: {
-                  type: "turn/input/accepted",
-                  threadId: thread.id,
-                  providerThreadId: "provider-thread",
-                  turnId: "turn-1",
-                  scope: turnScope("turn-1"),
-                  clientRequestSequence: 1,
-                },
-              },
-            ],
-          }),
-        },
-      );
-
-      expect(retryResponse.status).toBe(200);
-      expect(
-        harness.db
-          .select()
-          .from(events)
-          .where(eq(events.threadId, thread.id))
-          .orderBy(events.sequence)
-          .all()
-          .map((event) => event.type),
-      ).toEqual([
-        "client/turn/requested",
-        "turn/started",
-        "turn/input/accepted",
-      ]);
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
   it("transitions active threads back to idle for a started/completed event batch", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host, session } = seedHostSession(harness.deps);
+      const { session } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
+        hostId: session.hostId,
       });
       const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
+        hostId: session.hostId,
         projectId: project.id,
       });
       const thread = seedThread(harness.deps, {
@@ -475,41 +193,34 @@ describe("internal event and tool-call routes", () => {
         status: "active",
       });
 
-      const response = await harness.app.request("/internal/session/events", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          events: [
-            {
-              environmentId: environment.id,
+      const response = await postEventBatch({
+        harness,
+        sessionId: session.id,
+        events: [
+          {
+            producerEventId: "hdevt_23456789abcdefghijkq",
+            threadId: thread.id,
+            event: {
+              type: "turn/started",
               threadId: thread.id,
-              sequence: 1,
-              createdAt: Date.now(),
-              event: {
-                type: "turn/started",
-                threadId: thread.id,
-                providerThreadId: "provider-thread",
-                turnId: "turn-1",
-                scope: turnScope("turn-1"),
-              },
+              providerThreadId: "provider-thread",
+              turnId: "turn-1",
+              scope: turnScope("turn-1"),
             },
-            {
-              environmentId: environment.id,
+          },
+          {
+            producerEventId: "hdevt_23456789abcdefghijkr",
+            threadId: thread.id,
+            event: {
+              type: "turn/completed",
               threadId: thread.id,
-              sequence: 2,
-              createdAt: Date.now(),
-              event: {
-                type: "turn/completed",
-                threadId: thread.id,
-                providerThreadId: "provider-thread",
-                turnId: "turn-1",
-                scope: turnScope("turn-1"),
-                status: "completed",
-              },
+              providerThreadId: "provider-thread",
+              turnId: "turn-1",
+              scope: turnScope("turn-1"),
+              status: "completed",
             },
-          ],
-        }),
+          },
+        ],
       });
 
       expect(response.status).toBe(200);
@@ -563,10 +274,8 @@ describe("internal event and tool-call routes", () => {
           sessionId: session.id,
           events: [
             {
-              environmentId: environment.id,
+              producerEventId: "hdevt_23456789abcdefghijks",
               threadId: thread.id,
-              sequence: 1,
-              createdAt: Date.now(),
               event: {
                 type: "turn/started",
                 threadId: thread.id,
@@ -588,129 +297,15 @@ describe("internal event and tool-call routes", () => {
     }
   });
 
-  it("reports accepted duplicate events when a later event in the batch collides", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const createdAt = 1_700_000_000_000;
-      const { host, session } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
-      });
-
-      seedEvent(harness.deps, {
-        threadId: thread.id,
-        environmentId: environment.id,
-        providerThreadId: "provider-thread",
-        sequence: 1,
-        type: "turn/started",
-        scope: turnScope("turn-1"),
-        data: {
-          providerThreadId: "provider-thread",
-        },
-      });
-      seedEvent(harness.deps, {
-        threadId: thread.id,
-        environmentId: environment.id,
-        sequence: 2,
-        type: "client/turn/requested",
-        scope: threadScope(),
-        data: {
-          direction: "outbound",
-          source: "tell",
-          initiator: "user",
-          input: [{ type: "text", text: "Run the task" }],
-          target: { kind: "new-turn" },
-          request: { method: "turn/start", params: {} },
-          execution: {
-            model: "gpt-5",
-            serviceTier: "default",
-            reasoningLevel: "medium",
-            permissionMode: "full",
-            source: "client/turn/requested",
-          },
-        },
-      });
-
-      const response = await harness.app.request("/internal/session/events", {
-        method: "POST",
-        headers: internalAuthHeaders(harness),
-        body: JSON.stringify({
-          sessionId: session.id,
-          events: [
-            {
-              environmentId: environment.id,
-              threadId: thread.id,
-              sequence: 1,
-              createdAt,
-              event: {
-                type: "turn/started",
-                threadId: thread.id,
-                providerThreadId: "provider-thread",
-                turnId: "turn-1",
-                scope: turnScope("turn-1"),
-              },
-            },
-            {
-              environmentId: environment.id,
-              threadId: thread.id,
-              sequence: 2,
-              createdAt,
-              event: {
-                type: "turn/input/accepted",
-                threadId: thread.id,
-                providerThreadId: "provider-thread",
-                turnId: "turn-1",
-                scope: turnScope("turn-1"),
-                clientRequestSequence: 2,
-              },
-            },
-          ],
-        }),
-      });
-
-      expect(response.status).toBe(409);
-      await expect(readJson(response)).resolves.toEqual({
-        acceptedSequences: [
-          {
-            sequence: 1,
-            threadId: thread.id,
-          },
-        ],
-        code: "sequence_conflict",
-        threadHighWaterMarks: {
-          [thread.id]: 2,
-        },
-      });
-      expect(
-        harness.db
-          .select()
-          .from(events)
-          .where(eq(events.threadId, thread.id))
-          .all(),
-      ).toHaveLength(2);
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
   it("does not reactivate a thread when a started/completed batch is replayed", async () => {
     const harness = await createTestAppHarness();
     try {
-      const { host, session } = seedHostSession(harness.deps);
+      const { session } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
+        hostId: session.hostId,
       });
       const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
+        hostId: session.hostId,
         projectId: project.id,
       });
       const thread = seedThread(harness.deps, {
@@ -718,58 +313,43 @@ describe("internal event and tool-call routes", () => {
         environmentId: environment.id,
         status: "active",
       });
+      const eventBatch: HostDaemonEventEnvelope[] = [
+        {
+          producerEventId: "hdevt_23456789abcdefghijkt",
+          threadId: thread.id,
+          event: {
+            type: "turn/started",
+            threadId: thread.id,
+            providerThreadId: "provider-thread",
+            turnId: "turn-1",
+            scope: turnScope("turn-1"),
+          },
+        },
+        {
+          producerEventId: "hdevt_23456789abcdefghijkv",
+          threadId: thread.id,
+          event: {
+            type: "turn/completed",
+            threadId: thread.id,
+            providerThreadId: "provider-thread",
+            turnId: "turn-1",
+            scope: turnScope("turn-1"),
+            status: "completed",
+          },
+        },
+      ];
 
-      const requestBody = JSON.stringify({
+      const firstResponse = await postEventBatch({
+        harness,
         sessionId: session.id,
-        events: [
-          {
-            environmentId: environment.id,
-            threadId: thread.id,
-            sequence: 1,
-            createdAt: Date.now(),
-            event: {
-              type: "turn/started",
-              threadId: thread.id,
-              providerThreadId: "provider-thread",
-              turnId: "turn-1",
-              scope: turnScope("turn-1"),
-            },
-          },
-          {
-            environmentId: environment.id,
-            threadId: thread.id,
-            sequence: 2,
-            createdAt: Date.now(),
-            event: {
-              type: "turn/completed",
-              threadId: thread.id,
-              providerThreadId: "provider-thread",
-              turnId: "turn-1",
-              scope: turnScope("turn-1"),
-              status: "completed",
-            },
-          },
-        ],
+        events: eventBatch,
       });
-
-      const firstResponse = await harness.app.request(
-        "/internal/session/events",
-        {
-          method: "POST",
-          headers: internalAuthHeaders(harness),
-          body: requestBody,
-        },
-      );
       expect(firstResponse.status).toBe(200);
-
-      const duplicateResponse = await harness.app.request(
-        "/internal/session/events",
-        {
-          method: "POST",
-          headers: internalAuthHeaders(harness),
-          body: requestBody,
-        },
-      );
+      const duplicateResponse = await postEventBatch({
+        harness,
+        sessionId: session.id,
+        events: eventBatch,
+      });
       expect(duplicateResponse.status).toBe(200);
 
       expect(

@@ -23,14 +23,6 @@ export async function provisionEnvironment(
   const alreadyExists =
     options.runtimeManager.get(command.environmentId) != null;
 
-  // Seed event buffer so daemon-emitted sequences don't collide with server-side events
-  if (command.initiator) {
-    options.seedThreadHighWaterMark?.({
-      threadId: command.initiator.threadId,
-      sequence: command.initiator.eventSequence,
-    });
-  }
-
   const transcript: ProvisioningTranscriptEntry[] = [];
   const onProgress = buildOnProgress({
     command,
@@ -114,7 +106,6 @@ function buildOnProgress(args: BuildOnProgressArgs): ProvisionProgressCallback {
   return (entry) => {
     transcript.push(entry);
     eventSink.emit({
-      environmentId: command.environmentId,
       threadId,
       event: {
         type: "system/thread-provisioning",

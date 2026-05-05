@@ -57,6 +57,7 @@ describe("interactive request scenarios", () => {
         });
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_222222222x",
           threadId,
           input: [
             {
@@ -122,6 +123,7 @@ describe("interactive request scenarios", () => {
         });
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_222222222y",
           threadId,
           input: [
             {
@@ -191,6 +193,7 @@ describe("interactive request scenarios", () => {
         });
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_222222222z",
           threadId,
           options,
           input: [
@@ -247,6 +250,7 @@ describe("interactive request scenarios", () => {
         });
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_2222222232",
           threadId,
           options,
           input: [
@@ -305,6 +309,7 @@ describe("interactive request scenarios", () => {
         });
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_2222222233",
           threadId,
           options,
           input: [
@@ -361,6 +366,7 @@ describe("interactive request scenarios", () => {
         });
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_2222222234",
           threadId,
           options,
           input: [
@@ -421,6 +427,7 @@ describe("interactive request scenarios", () => {
         });
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_2222222235",
           threadId,
           options,
           input: [
@@ -486,6 +493,7 @@ describe("interactive request scenarios", () => {
         });
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_2222222236",
           threadId,
           options,
           input: [
@@ -550,6 +558,7 @@ describe("interactive request scenarios", () => {
         });
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_2222222237",
           threadId,
           options,
           input: [
@@ -662,6 +671,7 @@ describe("interactive request scenarios", () => {
         });
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_2222222238",
           threadId,
           options,
           input: [
@@ -729,6 +739,7 @@ describe("interactive request scenarios", () => {
         });
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_2222222239",
           threadId,
           options,
           input: [
@@ -783,6 +794,7 @@ describe("interactive request scenarios", () => {
         });
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_222222223a",
           threadId,
           options,
           input: [
@@ -863,6 +875,7 @@ describe("interactive request scenarios", () => {
         });
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_222222223b",
           threadId,
           options,
           input: [
@@ -944,6 +957,7 @@ describe("interactive request scenarios", () => {
         });
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_222222223c",
           threadId,
           options,
           input: [
@@ -1023,6 +1037,7 @@ describe("interactive request scenarios", () => {
         });
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_222222223d",
           threadId,
           options,
           input: [
@@ -1063,6 +1078,7 @@ describe("interactive request scenarios", () => {
         ).toBe(true);
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_222222223e",
           threadId,
           options,
           input: [
@@ -1129,6 +1145,7 @@ describe("interactive request scenarios", () => {
         });
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_222222223f",
           threadId,
           options,
           input: [
@@ -1196,6 +1213,7 @@ describe("interactive request scenarios", () => {
         });
 
         await ctx.runtime.runTurn({
+          clientRequestId: "creq_222222223g",
           threadId,
           options,
           input: [

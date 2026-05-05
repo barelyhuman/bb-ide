@@ -12,6 +12,7 @@ import {
   provisioningTranscriptEntrySchema,
   workspaceDiffTargetSchema,
   workspaceStatusSchema,
+  clientTurnRequestIdSchema,
 } from "@bb/domain";
 import {
   replayCaptureDaemonListResponseSchema,
@@ -21,7 +22,7 @@ import {
 import { z } from "zod";
 import { hostRuntimeMaterialSnapshotSchema } from "./local-state.js";
 
-export const HOST_DAEMON_PROTOCOL_VERSION = 12 as const;
+export const HOST_DAEMON_PROTOCOL_VERSION = 13 as const;
 
 export const FILE_LIST_QUERY_MAX_LENGTH = 256;
 export const FILE_LIST_LIMIT_MAX = 10_000;
@@ -125,10 +126,11 @@ export const threadStartCommandSchema = hostDaemonThreadTargetSchema
   .merge(hostDaemonThreadRuntimeContextSchema)
   .extend({
     type: z.literal("thread.start"),
-    eventSequence: z.number().int().nonnegative(),
+    requestId: clientTurnRequestIdSchema,
     input: z.array(promptInputSchema).min(1),
     threadStoragePath: z.string().min(1).optional(),
-  });
+  })
+  .strict();
 
 export const turnSubmitTargetSchema = z.discriminatedUnion("mode", [
   z.object({
@@ -149,14 +151,16 @@ export type TurnSubmitTarget = z.infer<typeof turnSubmitTargetSchema>;
  * Submit input for an existing provider thread. The daemon chooses whether
  * auto-targeted input steers the expected active turn or starts a new turn.
  */
-export const turnSubmitCommandSchema = hostDaemonThreadTargetSchema.extend({
-  type: z.literal("turn.submit"),
-  eventSequence: z.number().int().nonnegative(),
-  input: z.array(promptInputSchema).min(1),
-  options: hostDaemonExecutionOptionsSchema,
-  resumeContext: turnResumeContextSchema,
-  target: turnSubmitTargetSchema,
-});
+export const turnSubmitCommandSchema = hostDaemonThreadTargetSchema
+  .extend({
+    type: z.literal("turn.submit"),
+    requestId: clientTurnRequestIdSchema,
+    input: z.array(promptInputSchema).min(1),
+    options: hostDaemonExecutionOptionsSchema,
+    resumeContext: turnResumeContextSchema,
+    target: turnSubmitTargetSchema,
+  })
+  .strict();
 
 export const threadStopCommandSchema = hostDaemonThreadTargetSchema.extend({
   type: z.literal("thread.stop"),
@@ -203,6 +207,7 @@ export const replayRunCommandSchema = hostDaemonThreadTargetSchema
   .extend({
     type: z.literal("replay.run"),
     captureId: z.string().min(1),
+    requestId: clientTurnRequestIdSchema,
     speed: replaySpeedSchema,
   })
   .strict();
@@ -253,14 +258,14 @@ export const providerListModelsCommandSchema = z.object({
   selectedModel: z.string().min(1).optional(),
 });
 
-const provisionInitiatorSchema = z.object({
-  /** Thread that initiated provisioning. Used to stream progress events. */
-  threadId: z.string().min(1),
-  /** Stable provisioning lifecycle rendered by streamed progress events. */
-  provisioningId: z.string().min(1),
-  /** Current max event sequence for the thread. Seeds the event buffer so daemon-emitted events don't collide with server-side sequences. */
-  eventSequence: z.number().int().nonnegative(),
-});
+const provisionInitiatorSchema = z
+  .object({
+    /** Thread that initiated provisioning. Used to stream progress events. */
+    threadId: z.string().min(1),
+    /** Stable provisioning lifecycle rendered by streamed progress events. */
+    provisioningId: z.string().min(1),
+  })
+  .strict();
 
 const environmentProvisionCommandBaseSchema =
   hostDaemonEnvironmentTargetSchema.extend({

@@ -1,37 +1,89 @@
-import type { ThreadEvent } from "@bb/domain";
-import { threadScope, turnScope } from "@bb/domain";
-import type { HostDaemonEventSequenceKey } from "@bb/host-daemon-contract";
+import Database from "better-sqlite3";
+import {
+  hostDaemonProducerEventIdSchema,
+  threadScope,
+  turnScope,
+  type HostDaemonProducerEventId,
+  type ThreadEvent,
+} from "@bb/domain";
+import type { HostDaemonEventEnvelope } from "@bb/host-daemon-contract";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createEventBuffer,
   shouldFlushThreadEventImmediately,
-  type BufferedEvent,
+  type CreateEventBufferOptions,
   type EventPostResult,
 } from "./event-buffer.js";
 
+interface OutboundCountRow {
+  count: number;
+}
+
 function createLogger() {
   return {
+    error: vi.fn(),
     warn: vi.fn(),
   };
 }
 
-function acceptedPostResult(
-  threadHighWaterMarks: Record<string, number>,
-): EventPostResult {
-  return {
-    kind: "accepted",
-    threadHighWaterMarks,
+function createDataDir(): string {
+  return mkdtempSync(join(tmpdir(), "bb-event-buffer-"));
+}
+
+function removeDataDir(dataDir: string): void {
+  rmSync(dataDir, { force: true, recursive: true });
+}
+
+function createProducerEventId(value: string): HostDaemonProducerEventId {
+  return hostDaemonProducerEventIdSchema.parse(value);
+}
+
+function createProducerEventIdGenerator(
+  values: readonly string[],
+): CreateEventBufferOptions["createProducerEventId"] {
+  let index = 0;
+  return () => {
+    const value = values[index];
+    if (value === undefined) {
+      throw new Error("No producer event id left in test generator");
+    }
+    index++;
+    return createProducerEventId(value);
   };
 }
 
-function sequenceConflictPostResult(
-  threadHighWaterMarks: Record<string, number>,
-  acceptedSequences: HostDaemonEventSequenceKey[] = [],
+function openSpoolDatabase(dataDir: string): Database.Database {
+  return new Database(join(dataDir, "event-spool.sqlite"));
+}
+
+function countOutboundRows(dataDir: string): number {
+  const db = openSpoolDatabase(dataDir);
+  try {
+    const row = db
+      .prepare<
+        [],
+        OutboundCountRow
+      >("SELECT COUNT(*) AS count FROM outbound_events")
+      .get();
+    return row?.count ?? 0;
+  } finally {
+    db.close();
+  }
+}
+
+function acceptedPostResult(
+  events: readonly HostDaemonEventEnvelope[],
 ): EventPostResult {
   return {
-    acceptedSequences,
-    kind: "sequence-conflict",
-    threadHighWaterMarks,
+    acceptedEvents: events.map((event, index) => ({
+      producerEventId: event.producerEventId,
+      threadId: event.threadId,
+      sequence: index + 1,
+    })),
+    kind: "accepted",
   };
 }
 
@@ -75,24 +127,6 @@ function createWaitingForApprovalEvent(threadId: string): ThreadEvent {
   };
 }
 
-function createWaitingForApprovalFileChangeEvent(
-  threadId: string,
-): ThreadEvent {
-  return {
-    type: "item/completed",
-    threadId,
-    providerThreadId: `provider-${threadId}`,
-    scope: turnScope(`turn-${threadId}`),
-    item: {
-      type: "fileChange",
-      id: `change-${threadId}`,
-      status: "completed",
-      approvalStatus: "waiting_for_approval",
-      changes: [],
-    },
-  };
-}
-
 function createRetriableErrorEvent(threadId: string): ThreadEvent {
   return {
     type: "provider/error",
@@ -123,112 +157,557 @@ function createSystemErrorEvent(threadId: string): ThreadEvent {
   };
 }
 
-function createSystemThreadInterruptedEvent(threadId: string): ThreadEvent {
-  return {
-    type: "system/thread/interrupted",
-    threadId,
-    scope: threadScope(),
-    reason: "manual-stop",
-  };
-}
-
-function createDeferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  let reject!: (reason?: unknown) => void;
-  const promise = new Promise<T>((innerResolve, innerReject) => {
-    resolve = innerResolve;
-    reject = innerReject;
-  });
-  return { promise, resolve, reject };
-}
-
 describe("event buffer", () => {
+  const dataDirs: string[] = [];
+
   afterEach(() => {
     vi.useRealTimers();
+    for (const dataDir of dataDirs.splice(0)) {
+      removeDataDir(dataDir);
+    }
   });
+
+  function nextDataDir(): string {
+    const dataDir = createDataDir();
+    dataDirs.push(dataDir);
+    return dataDir;
+  }
 
   it("flushes pushed events through the poster callback", async () => {
-    vi.useFakeTimers();
-    const postEvents = vi.fn(async () => acceptedPostResult({ threadA: 1 }));
-    const buffer = createEventBuffer({ logger: createLogger(), postEvents });
-
-    const event = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-
-    await vi.advanceTimersByTimeAsync(100);
-
-    expect(event.sequence).toBe(1);
-    expect(postEvents).toHaveBeenCalledWith([event]);
-    expect(buffer.depth()).toBe(0);
-    buffer.dispose();
-  });
-
-  it("flushes normal-path events at max wait while pushes continue within the debounce window", async () => {
-    vi.useFakeTimers();
-    const postEvents = vi.fn(async () => acceptedPostResult({ threadA: 3 }));
+    const dataDir = nextDataDir();
+    const postEvents = vi.fn<CreateEventBufferOptions["postEvents"]>(
+      async (events) => acceptedPostResult(events),
+    );
     const buffer = createEventBuffer({
+      createProducerEventId: createProducerEventIdGenerator([
+        "hdevt_23456789abcdefghijkm",
+      ]),
+      dataDir,
       logger: createLogger(),
       postEvents,
-      debounceMs: 200,
-      maxWaitMs: 500,
-    });
-
-    buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-
-    await vi.advanceTimersByTimeAsync(150);
-
-    buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-
-    await vi.advanceTimersByTimeAsync(150);
-    buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-
-    await vi.advanceTimersByTimeAsync(150);
-    expect(postEvents).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(50);
-    expect(postEvents).toHaveBeenCalledTimes(1);
-    expect(buffer.depth()).toBe(0);
-    buffer.dispose();
-  });
-
-  it("flushes immediate-path events without waiting for the debounce window", async () => {
-    const postEvents = vi.fn(async () => acceptedPostResult({ threadA: 1 }));
-    const buffer = createEventBuffer({
-      logger: createLogger(),
-      postEvents,
-      debounceMs: 1_000,
-      maxWaitMs: 5_000,
     });
 
     const event = buffer.push({
-      environmentId: "env-1",
       threadId: "threadA",
-      event: createCompletedAssistantEvent("threadA"),
+      event: createThreadIdentityEvent("threadA"),
+    });
+    await buffer.flush();
+
+    expect(event).toMatchObject({
+      localOrder: 1,
+      producerEventId: "hdevt_23456789abcdefghijkm",
+      threadId: "threadA",
+    });
+    expect(postEvents).toHaveBeenCalledWith([
+      {
+        producerEventId: "hdevt_23456789abcdefghijkm",
+        threadId: "threadA",
+        event: createThreadIdentityEvent("threadA"),
+      },
+    ]);
+    expect(buffer.depth()).toBe(0);
+    await buffer.dispose();
+  });
+
+  it("retries a lost response with identical producer ids and payloads", async () => {
+    const dataDir = nextDataDir();
+    let calls = 0;
+    const postEvents = vi.fn<CreateEventBufferOptions["postEvents"]>(
+      async (events) => {
+        calls++;
+        if (calls === 1) {
+          throw new Error("lost response");
+        }
+        return acceptedPostResult(events);
+      },
+    );
+    const buffer = createEventBuffer({
+      createProducerEventId: createProducerEventIdGenerator([
+        "hdevt_23456789abcdefghijkm",
+      ]),
+      dataDir,
+      logger: createLogger(),
+      postEvents,
     });
 
+    buffer.push({
+      threadId: "threadA",
+      event: createThreadIdentityEvent("threadA"),
+    });
+    await buffer.flush();
+    expect(buffer.depth()).toBe(1);
+    await buffer.flush();
+
+    const firstBatch = postEvents.mock.calls[0]?.[0];
+    const secondBatch = postEvents.mock.calls[1]?.[0];
+    expect(firstBatch).toEqual(secondBatch);
+    expect(secondBatch?.[0]?.producerEventId).toBe(
+      "hdevt_23456789abcdefghijkm",
+    );
+    expect(buffer.depth()).toBe(0);
+    await buffer.dispose();
+  });
+
+  it("resends unacknowledged records with identical ids and payloads after restart", async () => {
+    const dataDir = nextDataDir();
+    const firstBuffer = createEventBuffer({
+      createProducerEventId: createProducerEventIdGenerator([
+        "hdevt_23456789abcdefghijkm",
+      ]),
+      dataDir,
+      logger: createLogger(),
+      postEvents: async (events) => acceptedPostResult(events),
+    });
+    const event = firstBuffer.push({
+      threadId: "threadA",
+      event: createThreadIdentityEvent("threadA"),
+    });
+    await firstBuffer.dispose();
+
+    const postEvents = vi.fn<CreateEventBufferOptions["postEvents"]>(
+      async (events) => acceptedPostResult(events),
+    );
+    const secondBuffer = createEventBuffer({
+      dataDir,
+      logger: createLogger(),
+      postEvents,
+    });
+    await secondBuffer.flush();
+
+    expect(postEvents).toHaveBeenCalledWith([
+      {
+        producerEventId: event.producerEventId,
+        threadId: event.threadId,
+        event: event.event,
+      },
+    ]);
+    expect(secondBuffer.depth()).toBe(0);
+    await secondBuffer.dispose();
+  });
+
+  it("preserves deterministic local order for same-process push submissions", async () => {
+    const dataDir = nextDataDir();
+    const buffer = createEventBuffer({
+      createProducerEventId: createProducerEventIdGenerator([
+        "hdevt_23456789abcdefghijkm",
+        "hdevt_23456789abcdefghijkn",
+        "hdevt_23456789abcdefghijkp",
+      ]),
+      dataDir,
+      logger: createLogger(),
+      postEvents: async (events) => acceptedPostResult(events),
+    });
+
+    // push() persists synchronously through better-sqlite3, so same-process
+    // calls cannot interleave inside the writer. This verifies that the
+    // in-process boundary assigns localOrder by submission order.
+    const pushedEvents = await Promise.all([
+      Promise.resolve().then(() =>
+        buffer.push({
+          threadId: "threadA",
+          event: createThreadIdentityEvent("threadA"),
+        }),
+      ),
+      Promise.resolve().then(() =>
+        buffer.push({
+          threadId: "threadA",
+          event: createThreadIdentityEvent("threadA"),
+        }),
+      ),
+      Promise.resolve().then(() =>
+        buffer.push({
+          threadId: "threadB",
+          event: createThreadIdentityEvent("threadB"),
+        }),
+      ),
+    ]);
+
+    expect(pushedEvents.map((event) => event.localOrder)).toEqual([1, 2, 3]);
+    expect(
+      buffer.snapshot().map((event) => ({
+        localOrder: event.localOrder,
+        producerEventId: event.producerEventId,
+      })),
+    ).toEqual([
+      {
+        localOrder: 1,
+        producerEventId: "hdevt_23456789abcdefghijkm",
+      },
+      {
+        localOrder: 2,
+        producerEventId: "hdevt_23456789abcdefghijkn",
+      },
+      {
+        localOrder: 3,
+        producerEventId: "hdevt_23456789abcdefghijkp",
+      },
+    ]);
+    await buffer.dispose();
+  });
+
+  it("deletes acknowledged rows by producerEventId", async () => {
+    const dataDir = nextDataDir();
+    let calls = 0;
+    const postEvents = vi.fn<CreateEventBufferOptions["postEvents"]>(
+      async (events) => {
+        calls++;
+        if (calls > 1) {
+          throw new Error("stop after partial acknowledgement");
+        }
+        const acknowledged = events[1];
+        if (acknowledged === undefined) {
+          throw new Error("missing second event");
+        }
+        return {
+          acceptedEvents: [
+            {
+              producerEventId: acknowledged.producerEventId,
+              sequence: 2,
+              threadId: acknowledged.threadId,
+            },
+          ],
+          kind: "accepted",
+        };
+      },
+    );
+    const buffer = createEventBuffer({
+      createProducerEventId: createProducerEventIdGenerator([
+        "hdevt_23456789abcdefghijkm",
+        "hdevt_23456789abcdefghijkn",
+      ]),
+      dataDir,
+      logger: createLogger(),
+      postEvents,
+    });
+
+    buffer.push({
+      threadId: "threadA",
+      event: createThreadIdentityEvent("threadA"),
+    });
+    buffer.push({
+      threadId: "threadA",
+      event: createThreadIdentityEvent("threadA"),
+    });
+    await buffer.flush();
+
+    expect(buffer.snapshot().map((event) => event.producerEventId)).toEqual([
+      "hdevt_23456789abcdefghijkm",
+    ]);
+    await buffer.dispose();
+  });
+
+  it("fails closed after repeated zero-ack flush responses", async () => {
+    const dataDir = nextDataDir();
+    const logger = createLogger();
+    const postEvents = vi.fn<CreateEventBufferOptions["postEvents"]>(
+      async () => ({
+        acceptedEvents: [],
+        kind: "accepted",
+      }),
+    );
+    const buffer = createEventBuffer({
+      createProducerEventId: createProducerEventIdGenerator([
+        "hdevt_23456789abcdefghijkm",
+      ]),
+      dataDir,
+      debounceMs: 60_000,
+      logger,
+      maxWaitMs: 60_000,
+      postEvents,
+    });
+
+    buffer.push({
+      threadId: "threadA",
+      event: createThreadIdentityEvent("threadA"),
+    });
+
+    await buffer.flush();
+    await buffer.flush();
+    await expect(buffer.flush()).rejects.toThrow(
+      /flush made no progress after 3 attempts/u,
+    );
+
+    expect(postEvents).toHaveBeenCalledTimes(3);
+    expect(logger.warn).toHaveBeenCalledTimes(2);
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({
+        events: [
+          expect.objectContaining({
+            localOrder: 1,
+            producerEventId: "hdevt_23456789abcdefghijkm",
+          }),
+        ],
+        noProgressCount: 3,
+        noProgressLimit: 3,
+      }),
+      "event flush made no progress; failing closed",
+    );
+    expect(buffer.depth()).toBe(1);
+    await buffer.dispose();
+  });
+
+  it("resets zero-ack budget after an acknowledged event", async () => {
+    const dataDir = nextDataDir();
+    let calls = 0;
+    const postEvents = vi.fn<CreateEventBufferOptions["postEvents"]>(
+      async (events) => {
+        calls++;
+        if (calls === 1) {
+          return {
+            acceptedEvents: [],
+            kind: "accepted",
+          };
+        }
+        return acceptedPostResult(events);
+      },
+    );
+    const buffer = createEventBuffer({
+      createProducerEventId: createProducerEventIdGenerator([
+        "hdevt_23456789abcdefghijkm",
+        "hdevt_23456789abcdefghijkn",
+      ]),
+      dataDir,
+      debounceMs: 60_000,
+      logger: createLogger(),
+      maxWaitMs: 60_000,
+      postEvents,
+    });
+
+    buffer.push({
+      threadId: "threadA",
+      event: createThreadIdentityEvent("threadA"),
+    });
+    await buffer.flush();
+    await buffer.flush();
+    buffer.push({
+      threadId: "threadA",
+      event: createThreadIdentityEvent("threadA"),
+    });
+    await buffer.flush();
+
+    expect(buffer.depth()).toBe(0);
+    expect(postEvents).toHaveBeenCalledTimes(3);
+    await buffer.dispose();
+  });
+
+  it("fails closed on spool schema mismatch", () => {
+    const dataDir = nextDataDir();
+    const db = openSpoolDatabase(dataDir);
+    db.pragma("user_version = 2");
+    db.close();
+
+    expect(() =>
+      createEventBuffer({
+        dataDir,
+        logger: createLogger(),
+        postEvents: async (events) => acceptedPostResult(events),
+      }),
+    ).toThrow(/schema version mismatch/u);
+  });
+
+  it("fails closed when version zero already has an outbound table", () => {
+    const dataDir = nextDataDir();
+    const db = openSpoolDatabase(dataDir);
+    db.exec(`
+      CREATE TABLE outbound_events (
+        localOrder INTEGER PRIMARY KEY AUTOINCREMENT
+      );
+    `);
+    db.close();
+
+    expect(() =>
+      createEventBuffer({
+        dataDir,
+        logger: createLogger(),
+        postEvents: async (events) => acceptedPostResult(events),
+      }),
+    ).toThrow(/outbound_events exists with schema version 0/u);
+  });
+
+  it("fails closed on spool column shape mismatch", () => {
+    const dataDir = nextDataDir();
+    const db = openSpoolDatabase(dataDir);
+    db.exec(`
+      CREATE TABLE outbound_events (
+        localOrder INTEGER PRIMARY KEY AUTOINCREMENT,
+        producerEventId TEXT NOT NULL UNIQUE
+      );
+    `);
+    db.pragma("user_version = 1");
+    db.close();
+
+    expect(() =>
+      createEventBuffer({
+        dataDir,
+        logger: createLogger(),
+        postEvents: async (events) => acceptedPostResult(events),
+      }),
+    ).toThrow(/schema mismatch: outbound_events columns differ/u);
+  });
+
+  it("fails closed when a stored payload hash does not match", async () => {
+    const dataDir = nextDataDir();
+    const buffer = createEventBuffer({
+      createProducerEventId: createProducerEventIdGenerator([
+        "hdevt_23456789abcdefghijkm",
+      ]),
+      dataDir,
+      logger: createLogger(),
+      postEvents: async (events) => acceptedPostResult(events),
+    });
+    buffer.push({
+      threadId: "threadA",
+      event: createThreadIdentityEvent("threadA"),
+    });
+    await buffer.dispose();
+
+    const db = openSpoolDatabase(dataDir);
+    db.prepare("UPDATE outbound_events SET payloadHash = ?").run("bad-hash");
+    db.close();
+
+    const reopenedBuffer = createEventBuffer({
+      dataDir,
+      logger: createLogger(),
+      postEvents: async (events) => acceptedPostResult(events),
+    });
+    expect(() => reopenedBuffer.snapshot()).toThrow(/payload hash mismatch/u);
+    await reopenedBuffer.dispose();
+  });
+
+  it("fails closed when a stored payload thread id diverges from the row", async () => {
+    const dataDir = nextDataDir();
+    const buffer = createEventBuffer({
+      createProducerEventId: createProducerEventIdGenerator([
+        "hdevt_23456789abcdefghijkm",
+      ]),
+      dataDir,
+      logger: createLogger(),
+      postEvents: async (events) => acceptedPostResult(events),
+    });
+    buffer.push({
+      threadId: "threadA",
+      event: createThreadIdentityEvent("threadA"),
+    });
+    await buffer.dispose();
+
+    const db = openSpoolDatabase(dataDir);
+    db.prepare("UPDATE outbound_events SET threadId = ?").run("threadB");
+    db.close();
+
+    const reopenedBuffer = createEventBuffer({
+      dataDir,
+      logger: createLogger(),
+      postEvents: async (events) => acceptedPostResult(events),
+    });
+    expect(() => reopenedBuffer.snapshot()).toThrow(
+      /payload threadId does not match row threadId/u,
+    );
+    await reopenedBuffer.dispose();
+  });
+
+  it("fails closed when an acknowledged row disappeared before deletion", async () => {
+    const dataDir = nextDataDir();
+    const postEvents = vi.fn<CreateEventBufferOptions["postEvents"]>(
+      async (events) => {
+        const acknowledged = events[0];
+        if (acknowledged === undefined) {
+          throw new Error("missing event");
+        }
+        const db = openSpoolDatabase(dataDir);
+        try {
+          db.prepare(
+            "DELETE FROM outbound_events WHERE producerEventId = ?",
+          ).run(acknowledged.producerEventId);
+        } finally {
+          db.close();
+        }
+        return acceptedPostResult(events);
+      },
+    );
+    const buffer = createEventBuffer({
+      createProducerEventId: createProducerEventIdGenerator([
+        "hdevt_23456789abcdefghijkm",
+      ]),
+      dataDir,
+      logger: createLogger(),
+      postEvents,
+    });
+
+    buffer.push({
+      threadId: "threadA",
+      event: createThreadIdentityEvent("threadA"),
+    });
+
+    await expect(buffer.flush()).rejects.toThrow(/already-deleted event/u);
+    await buffer.dispose();
+  });
+
+  it("awaits an in-flight flush before closing the spool database", async () => {
+    const dataDir = nextDataDir();
+    let resolvePost: (() => void) | undefined;
+    const postEvents = vi.fn<CreateEventBufferOptions["postEvents"]>(
+      async (events) => {
+        await new Promise<void>((resolve) => {
+          resolvePost = resolve;
+        });
+        return acceptedPostResult(events);
+      },
+    );
+    const buffer = createEventBuffer({
+      createProducerEventId: createProducerEventIdGenerator([
+        "hdevt_23456789abcdefghijkm",
+      ]),
+      dataDir,
+      logger: createLogger(),
+      postEvents,
+    });
+
+    buffer.push({
+      threadId: "threadA",
+      event: createThreadIdentityEvent("threadA"),
+    });
+    const flushPromise = buffer.flush();
     await vi.waitFor(() => {
-      expect(postEvents).toHaveBeenCalledWith([event]);
+      expect(postEvents).toHaveBeenCalledTimes(1);
     });
-    expect(buffer.depth()).toBe(0);
-    buffer.dispose();
+
+    let disposed = false;
+    const disposePromise = buffer.dispose().then(() => {
+      disposed = true;
+    });
+    expect(() =>
+      buffer.push({
+        threadId: "threadA",
+        event: createThreadIdentityEvent("threadA"),
+      }),
+    ).toThrow(/disposed event buffer/u);
+    await Promise.resolve();
+    expect(disposed).toBe(false);
+
+    resolvePost?.();
+    await flushPromise;
+    await disposePromise;
+
+    expect(countOutboundRows(dataDir)).toBe(0);
   });
 
-  it("classifies terminal and waiting-for-approval events for immediate flushes", () => {
+  it("fails closed on spool corruption", () => {
+    const dataDir = nextDataDir();
+    writeFileSync(join(dataDir, "event-spool.sqlite"), "not a sqlite database");
+
+    expect(() =>
+      createEventBuffer({
+        dataDir,
+        logger: createLogger(),
+        postEvents: async (events) => acceptedPostResult(events),
+      }),
+    ).toThrow();
+  });
+
+  it("classifies immediate flush event types", () => {
+    expect(
+      shouldFlushThreadEventImmediately(createThreadIdentityEvent("threadA")),
+    ).toBe(false);
     expect(
       shouldFlushThreadEventImmediately(
         createCompletedAssistantEvent("threadA"),
@@ -240,629 +719,13 @@ describe("event buffer", () => {
       ),
     ).toBe(true);
     expect(
-      shouldFlushThreadEventImmediately(
-        createWaitingForApprovalFileChangeEvent("threadA"),
-      ),
-    ).toBe(true);
+      shouldFlushThreadEventImmediately(createRetriableErrorEvent("threadA")),
+    ).toBe(false);
     expect(
       shouldFlushThreadEventImmediately(createTerminalErrorEvent("threadA")),
     ).toBe(true);
     expect(
       shouldFlushThreadEventImmediately(createSystemErrorEvent("threadA")),
     ).toBe(true);
-    expect(
-      shouldFlushThreadEventImmediately(
-        createSystemThreadInterruptedEvent("threadA"),
-      ),
-    ).toBe(true);
-    expect(
-      shouldFlushThreadEventImmediately(createRetriableErrorEvent("threadA")),
-    ).toBe(false);
-    expect(
-      shouldFlushThreadEventImmediately(createThreadIdentityEvent("threadA")),
-    ).toBe(false);
-  });
-
-  it("discards acked events at or below the thread high-water mark", async () => {
-    const buffer = createEventBuffer({
-      logger: createLogger(),
-      postEvents: async () => acceptedPostResult({}),
-    });
-
-    const first = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-    const second = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-    const other = buffer.push({
-      environmentId: "env-2",
-      threadId: "threadB",
-      event: createThreadIdentityEvent("threadB"),
-    });
-
-    buffer.ack({ threadA: first.sequence });
-
-    expect(buffer.snapshot()).toEqual([second, other]);
-    buffer.dispose();
-  });
-
-  it("rebases buffered events above a server-originated high-water mark", async () => {
-    const buffer = createEventBuffer({
-      logger: createLogger(),
-      postEvents: async () => acceptedPostResult({}),
-    });
-
-    const first = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-    const second = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-    const other = buffer.push({
-      environmentId: "env-2",
-      threadId: "threadB",
-      event: createThreadIdentityEvent("threadB"),
-    });
-
-    buffer.rebase({ threadA: first.sequence });
-
-    expect(buffer.snapshot()).toEqual([
-      { ...first, sequence: 2 },
-      { ...second, sequence: 3 },
-      other,
-    ]);
-
-    const next = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-    expect(next.sequence).toBe(4);
-    buffer.dispose();
-  });
-
-  it("retries failed flushes and keeps events until they are acknowledged", async () => {
-    vi.useFakeTimers();
-    const postEvents = vi
-      .fn<(events: BufferedEvent[]) => Promise<EventPostResult>>()
-      .mockRejectedValueOnce(new Error("boom"))
-      .mockResolvedValueOnce(acceptedPostResult({ threadA: 1 }));
-    const logger = createLogger();
-    const buffer = createEventBuffer({ logger, postEvents });
-
-    buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-
-    await vi.advanceTimersByTimeAsync(100);
-    expect(postEvents).toHaveBeenCalledTimes(1);
-    expect(buffer.depth()).toBe(1);
-
-    await vi.advanceTimersByTimeAsync(100);
-    expect(postEvents).toHaveBeenCalledTimes(2);
-    expect(buffer.depth()).toBe(0);
-    expect(logger.warn).toHaveBeenCalledTimes(1);
-    buffer.dispose();
-  });
-
-  it("retries later when a successful flush does not acknowledge buffered events", async () => {
-    vi.useFakeTimers();
-    const logger = createLogger();
-    const postEvents = vi
-      .fn<(events: BufferedEvent[]) => Promise<EventPostResult>>()
-      .mockResolvedValueOnce(acceptedPostResult({ threadA: 0 }))
-      .mockResolvedValueOnce(acceptedPostResult({ threadA: 1 }));
-    const buffer = createEventBuffer({ logger, postEvents });
-
-    buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-
-    await vi.advanceTimersByTimeAsync(100);
-    expect(postEvents).toHaveBeenCalledTimes(1);
-    expect(buffer.depth()).toBe(1);
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        bufferDepth: 1,
-        threadHighWaterMarks: { threadA: 0 },
-      }),
-      expect.any(String),
-    );
-
-    await vi.advanceTimersByTimeAsync(100);
-    expect(postEvents).toHaveBeenCalledTimes(2);
-    expect(buffer.depth()).toBe(0);
-    buffer.dispose();
-  });
-
-  it("rebases and retries buffered events after a server sequence conflict", async () => {
-    const postEvents = vi
-      .fn<(events: BufferedEvent[]) => Promise<EventPostResult>>()
-      .mockResolvedValueOnce(sequenceConflictPostResult({ threadA: 5 }))
-      .mockResolvedValueOnce(acceptedPostResult({ threadA: 7 }));
-    const buffer = createEventBuffer({
-      logger: createLogger(),
-      postEvents,
-      initialHighWaterMarks: {
-        threadA: 3,
-      },
-    });
-
-    const first = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-    const second = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-
-    await buffer.flush();
-
-    expect(postEvents).toHaveBeenCalledTimes(2);
-    expect(postEvents.mock.calls[0]?.[0]).toEqual([first, second]);
-    expect(
-      postEvents.mock.calls[1]?.[0].map((event) => event.sequence),
-    ).toEqual([6, 7]);
-    expect(buffer.depth()).toBe(0);
-    buffer.dispose();
-  });
-
-  it("falls back to scheduled retry after repeated sequence conflicts", async () => {
-    vi.useFakeTimers();
-    const logger = createLogger();
-    const postEvents = vi
-      .fn<(events: BufferedEvent[]) => Promise<EventPostResult>>()
-      .mockResolvedValueOnce(sequenceConflictPostResult({ threadA: 5 }))
-      .mockResolvedValueOnce(sequenceConflictPostResult({ threadA: 5 }))
-      .mockResolvedValueOnce(sequenceConflictPostResult({ threadA: 5 }))
-      .mockResolvedValueOnce(sequenceConflictPostResult({ threadA: 5 }))
-      .mockResolvedValueOnce(acceptedPostResult({ threadA: 6 }));
-    const buffer = createEventBuffer({
-      logger,
-      postEvents,
-      initialHighWaterMarks: {
-        threadA: 3,
-      },
-    });
-
-    buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-
-    await buffer.flush();
-
-    expect(postEvents).toHaveBeenCalledTimes(4);
-    expect(buffer.snapshot().map((event) => event.sequence)).toEqual([6]);
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        bufferDepth: 1,
-        immediateRebaseRetryCount: 4,
-        maxImmediateRebaseRetries: 3,
-      }),
-      expect.any(String),
-    );
-
-    await vi.advanceTimersByTimeAsync(100);
-
-    expect(postEvents).toHaveBeenCalledTimes(5);
-    expect(buffer.depth()).toBe(0);
-    buffer.dispose();
-  });
-
-  it("drops events the server already accepted before rebasing a conflicted retry", async () => {
-    const postEvents = vi
-      .fn<(events: BufferedEvent[]) => Promise<EventPostResult>>()
-      .mockResolvedValueOnce(
-        sequenceConflictPostResult({ threadA: 5 }, [
-          {
-            sequence: 4,
-            threadId: "threadA",
-          },
-        ]),
-      )
-      .mockResolvedValueOnce(acceptedPostResult({ threadA: 6 }));
-    const buffer = createEventBuffer({
-      logger: createLogger(),
-      postEvents,
-      initialHighWaterMarks: {
-        threadA: 3,
-      },
-    });
-
-    const alreadyAccepted = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-    const conflicted = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-
-    await buffer.flush();
-
-    expect(postEvents).toHaveBeenCalledTimes(2);
-    expect(postEvents.mock.calls[0]?.[0]).toEqual([
-      alreadyAccepted,
-      conflicted,
-    ]);
-    expect(postEvents.mock.calls[1]?.[0]).toEqual([
-      {
-        ...conflicted,
-        sequence: 6,
-      },
-    ]);
-    expect(buffer.depth()).toBe(0);
-    buffer.dispose();
-  });
-
-  it("drops accepted posted events when an in-flight rebase changes current sequences", async () => {
-    const firstFlush = createDeferred<EventPostResult>();
-    const postEvents = vi
-      .fn<(events: BufferedEvent[]) => Promise<EventPostResult>>()
-      .mockImplementationOnce(() => firstFlush.promise)
-      .mockResolvedValueOnce(acceptedPostResult({ threadA: 8 }));
-    const buffer = createEventBuffer({
-      logger: createLogger(),
-      postEvents,
-      initialHighWaterMarks: {
-        threadA: 3,
-      },
-    });
-
-    const alreadyAccepted = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-    const conflicted = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-
-    const flushPromise = buffer.flush();
-    await vi.waitFor(() => {
-      expect(postEvents).toHaveBeenCalledTimes(1);
-    });
-
-    buffer.rebase({ threadA: 6 });
-    expect(buffer.snapshot().map((event) => event.sequence)).toEqual([7, 8]);
-
-    firstFlush.resolve(
-      sequenceConflictPostResult({ threadA: 6 }, [
-        {
-          sequence: alreadyAccepted.sequence,
-          threadId: "threadA",
-        },
-      ]),
-    );
-
-    await flushPromise;
-
-    expect(postEvents).toHaveBeenCalledTimes(2);
-    expect(postEvents.mock.calls[0]?.[0]).toEqual([
-      alreadyAccepted,
-      conflicted,
-    ]);
-    expect(postEvents.mock.calls[1]?.[0]).toEqual([
-      {
-        ...conflicted,
-        sequence: 8,
-      },
-    ]);
-    expect(buffer.depth()).toBe(0);
-    buffer.dispose();
-  });
-
-  it("rebases unsent events below an accepted response high-water mark", async () => {
-    const firstFlush = createDeferred<EventPostResult>();
-    const postEvents = vi
-      .fn<(events: BufferedEvent[]) => Promise<EventPostResult>>()
-      .mockImplementationOnce(() => firstFlush.promise)
-      .mockResolvedValueOnce(acceptedPostResult({ threadA: 5 }));
-    const buffer = createEventBuffer({
-      logger: createLogger(),
-      postEvents,
-      initialHighWaterMarks: {
-        threadA: 1,
-      },
-    });
-
-    const posted = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-    const secondPosted = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-
-    const flushPromise = buffer.flush();
-    await vi.waitFor(() => {
-      expect(postEvents).toHaveBeenCalledTimes(1);
-    });
-    expect(postEvents.mock.calls[0]?.[0]).toEqual([posted, secondPosted]);
-
-    const bufferedDuringPost = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-
-    firstFlush.resolve(acceptedPostResult({ threadA: 4 }));
-
-    await flushPromise;
-
-    expect(postEvents).toHaveBeenCalledTimes(2);
-    expect(postEvents.mock.calls[1]?.[0]).toEqual([
-      {
-        ...bufferedDuringPost,
-        sequence: 5,
-      },
-    ]);
-    expect(buffer.depth()).toBe(0);
-    buffer.dispose();
-  });
-
-  it("coalesces concurrent flushes into a single in-flight post", async () => {
-    const firstFlush = createDeferred<EventPostResult>();
-    const postEvents = vi
-      .fn<(events: BufferedEvent[]) => Promise<EventPostResult>>()
-      .mockImplementationOnce(() => firstFlush.promise)
-      .mockResolvedValueOnce(acceptedPostResult({ threadA: 2 }));
-    const buffer = createEventBuffer({
-      logger: createLogger(),
-      postEvents,
-      debounceMs: 1_000,
-      maxWaitMs: 5_000,
-    });
-
-    buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createCompletedAssistantEvent("threadA"),
-    });
-
-    await vi.waitFor(() => {
-      expect(postEvents).toHaveBeenCalledTimes(1);
-    });
-
-    const secondFlush = buffer.flush();
-    expect(postEvents).toHaveBeenCalledTimes(1);
-
-    firstFlush.resolve(acceptedPostResult({ threadA: 1 }));
-    await secondFlush;
-
-    buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createCompletedAssistantEvent("threadA"),
-    });
-
-    await vi.waitFor(() => {
-      expect(postEvents).toHaveBeenCalledTimes(2);
-    });
-    expect(buffer.depth()).toBe(0);
-    buffer.dispose();
-  });
-
-  it("drains events buffered during an in-flight flush before resolving an explicit flush", async () => {
-    vi.useFakeTimers();
-    const firstFlush = createDeferred<EventPostResult>();
-    const postEvents = vi
-      .fn<(events: BufferedEvent[]) => Promise<EventPostResult>>()
-      .mockImplementationOnce(() => firstFlush.promise)
-      .mockResolvedValueOnce(acceptedPostResult({ threadA: 2 }));
-    const buffer = createEventBuffer({
-      logger: createLogger(),
-      postEvents,
-      debounceMs: 1_000,
-      maxWaitMs: 5_000,
-    });
-
-    const first = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-
-    const flushPromise = buffer.flush();
-    expect(postEvents).toHaveBeenCalledTimes(1);
-
-    const second = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-
-    expect(postEvents.mock.calls[0]?.[0]).toEqual([first]);
-
-    firstFlush.resolve(acceptedPostResult({ threadA: 1 }));
-    await flushPromise;
-
-    expect(postEvents).toHaveBeenCalledTimes(2);
-    expect(postEvents.mock.calls[1]?.[0]).toEqual([second]);
-    expect(buffer.depth()).toBe(0);
-    buffer.dispose();
-  });
-
-  it("treats in-flight rebases as no progress until the server actually acknowledges the batch", async () => {
-    vi.useFakeTimers();
-    const logger = createLogger();
-    const firstFlush = createDeferred<EventPostResult>();
-    const postEvents = vi
-      .fn<(events: BufferedEvent[]) => Promise<EventPostResult>>()
-      .mockImplementationOnce(() => firstFlush.promise)
-      .mockResolvedValueOnce(acceptedPostResult({ threadA: 2 }));
-    const buffer = createEventBuffer({ logger, postEvents });
-
-    const event = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createCompletedAssistantEvent("threadA"),
-    });
-
-    await vi.waitFor(() => {
-      expect(postEvents).toHaveBeenCalledWith([event]);
-    });
-
-    buffer.rebase({ threadA: event.sequence });
-    firstFlush.resolve(acceptedPostResult({ threadA: 0 }));
-    await vi.advanceTimersByTimeAsync(0);
-
-    expect(postEvents).toHaveBeenCalledTimes(1);
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        bufferDepth: 1,
-        threadHighWaterMarks: { threadA: 0 },
-      }),
-      expect.any(String),
-    );
-
-    await vi.advanceTimersByTimeAsync(100);
-    expect(postEvents).toHaveBeenCalledTimes(2);
-    expect(buffer.depth()).toBe(0);
-    buffer.dispose();
-  });
-
-  it("does not reschedule retries after disposal while a flush is in flight", async () => {
-    vi.useFakeTimers();
-    const firstFlush = createDeferred<EventPostResult>();
-    const postEvents = vi
-      .fn<(events: BufferedEvent[]) => Promise<EventPostResult>>()
-      .mockImplementationOnce(() => firstFlush.promise);
-    const buffer = createEventBuffer({ logger: createLogger(), postEvents });
-
-    buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createCompletedAssistantEvent("threadA"),
-    });
-
-    await vi.waitFor(() => {
-      expect(postEvents).toHaveBeenCalledTimes(1);
-    });
-
-    buffer.dispose();
-    firstFlush.resolve(acceptedPostResult({ threadA: 0 }));
-    await vi.advanceTimersByTimeAsync(200);
-
-    expect(postEvents).toHaveBeenCalledTimes(1);
-  });
-
-  it("assigns monotonic per-thread sequence numbers", () => {
-    const buffer = createEventBuffer({
-      logger: createLogger(),
-      postEvents: async () => acceptedPostResult({}),
-    });
-
-    const first = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-    const second = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-    const other = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadB",
-      event: createThreadIdentityEvent("threadB"),
-    });
-
-    expect(first.sequence).toBe(1);
-    expect(second.sequence).toBe(2);
-    expect(other.sequence).toBe(1);
-    buffer.dispose();
-  });
-
-  it("starts sequences from the provided high-water marks", () => {
-    const buffer = createEventBuffer({
-      logger: createLogger(),
-      postEvents: async () => acceptedPostResult({}),
-      initialHighWaterMarks: {
-        threadA: 41,
-      },
-    });
-
-    const event = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-
-    expect(event.sequence).toBe(42);
-    buffer.dispose();
-  });
-
-  it("seeds later high-water marks and prunes acknowledged events", () => {
-    const buffer = createEventBuffer({
-      logger: createLogger(),
-      postEvents: async () => acceptedPostResult({}),
-    });
-
-    buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-    buffer.seed({ threadA: 5 });
-
-    const event = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-
-    expect(buffer.snapshot()).toEqual([event]);
-    expect(event.sequence).toBe(6);
-    buffer.dispose();
-  });
-
-  it("bumps the next sequence after an explicit ack", () => {
-    const buffer = createEventBuffer({
-      logger: createLogger(),
-      postEvents: async () => acceptedPostResult({}),
-    });
-
-    buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-    buffer.ack({ threadA: 5 });
-
-    const event = buffer.push({
-      environmentId: "env-1",
-      threadId: "threadA",
-      event: createThreadIdentityEvent("threadA"),
-    });
-
-    expect(event.sequence).toBe(6);
-    buffer.dispose();
   });
 });

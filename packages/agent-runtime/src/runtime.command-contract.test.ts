@@ -309,6 +309,7 @@ rl.on("line", (line) => {
       expect(providerThreadId).toBe("codex-thread-runtime");
 
       await runtime.runTurn({
+        clientRequestId: "creq_222222224p",
         input: [{ type: "text", text: "commit" }],
         options: workspaceWriteOptions,
         threadId: "t1",
@@ -355,6 +356,7 @@ rl.on("line", (line) => {
     });
     await expect(
       runtime.runTurn({
+        clientRequestId: "creq_222222224q",
         threadId: "t1",
         input: [{ type: "text", text: "hello" }],
         options: fullRuntimeOptions,
@@ -392,6 +394,7 @@ rl.on("line", (line) => {
       options: fullRuntimeOptions,
     });
     await runtime.runTurn({
+      clientRequestId: "creq_222222224r",
       threadId: "t1",
       input: [{ type: "text", text: "delay:500" }],
       options: fullRuntimeOptions,
@@ -405,6 +408,7 @@ rl.on("line", (line) => {
     });
     await expect(
       runtime.steerTurn({
+        clientRequestId: "creq_222222224s",
         threadId: "t1",
         expectedTurnId: "turn-1",
         input: [{ type: "text", text: "steer" }],
@@ -464,6 +468,7 @@ rl.on("line", (line) => {
     await registerThreadWithoutProviderThreadId(runtime);
     await expect(
       runtime.runTurn({
+        clientRequestId: "creq_222222224t",
         threadId: missingProviderThreadId,
         input: [{ type: "text", text: "hello" }],
         options: fullRuntimeOptions,
@@ -611,6 +616,7 @@ process.on("SIGTERM", () => {
     });
     await expect(
       runtime.steerTurn({
+        clientRequestId: "creq_222222224u",
         threadId: missingProviderThreadId,
         expectedTurnId: "turn-1",
         input: [{ type: "text", text: "steer" }],
@@ -677,6 +683,7 @@ process.on("SIGTERM", () => {
     await runtime.stopThread({ threadId: "t1" });
 
     await runtime.runTurn({
+      clientRequestId: "creq_222222224v",
       threadId: "t1",
       input: [{ type: "text", text: "delay:500" }],
       options: fullRuntimeOptions,

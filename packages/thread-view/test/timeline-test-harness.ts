@@ -1,5 +1,10 @@
-import { threadScope, turnScope } from "@bb/domain";
+import {
+  encodeClientTurnRequestIdNumber,
+  threadScope,
+  turnScope,
+} from "@bb/domain";
 import type {
+  ClientTurnRequestId,
   PromptInput,
   ProviderRawEvent,
   ProvisioningTranscriptEntry,
@@ -74,6 +79,7 @@ type ClientTurnRequestedArgs = EventFactoryRowOptions & {
   execution?: ResolvedThreadExecutionOptions;
   initiator?: ThreadTurnInitiator;
   input?: PromptInput[];
+  requestId?: ClientTurnRequestId;
   requestMethod?: "thread/start" | "turn/start";
   source?: "spawn" | "tell";
   target?: TurnRequestTarget;
@@ -83,7 +89,7 @@ type ClientTurnRequestedArgs = EventFactoryRowOptions & {
 type ClientThreadStartArgs = ClientTurnRequestedArgs;
 
 interface InputAcceptedArgs extends ProviderTurnEventOptions {
-  clientRequestSequence: number;
+  clientRequestId: ClientTurnRequestId;
 }
 
 interface ProviderUserMessageArgs extends ProviderTurnEventOptions {
@@ -421,6 +427,10 @@ const defaultExecution: ResolvedThreadExecutionOptions = {
   source: "client/turn/requested",
 };
 
+function clientRequestIdForSequence(sequence: number): ClientTurnRequestId {
+  return encodeClientTurnRequestIdNumber({ value: sequence });
+}
+
 export function createTimelineEventFactory(
   defaults: TimelineEventFactoryDefaults,
 ): TimelineEventFactory {
@@ -539,6 +549,7 @@ export function createTimelineEventFactory(
         type: "client/turn/requested",
         data: {
           direction: "outbound",
+          requestId: args.requestId ?? clientRequestIdForSequence(base.seq),
           source: args.source ?? "tell",
           initiator: args.initiator ?? "user",
           input: args.input ?? [{ type: "text", text: args.text }],
@@ -694,7 +705,7 @@ export function createTimelineEventFactory(
         type: "turn/input/accepted",
         data: {
           ...providerFields(args),
-          clientRequestSequence: args.clientRequestSequence,
+          clientRequestId: args.clientRequestId,
         },
       };
     },

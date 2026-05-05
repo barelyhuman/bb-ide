@@ -16,7 +16,6 @@ import {
   hostDaemonEnvironmentChangeRequestSchema,
   hostDaemonEventBatchRequestSchema,
   hostDaemonEventBatchResponseSchema,
-  hostDaemonEventBatchSequenceConflictResponseSchema,
   hostDaemonInteractiveInterruptRequestSchema,
   hostDaemonInteractiveInterruptResponseSchema,
   hostDaemonInteractiveRequestResponseSchema,
@@ -25,6 +24,9 @@ import {
   hostDaemonSessionOpenRequestSchema,
   hostDaemonSessionOpenResponseSchema,
 } from "../src/index.js";
+
+const PRODUCER_EVENT_ID = "hdevt_23456789abcdefghijkm";
+const CLIENT_REQUEST_ID = "creq_23456789ab";
 
 const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
   "hostDaemonCommandSchema.mergeBaseBranch":
@@ -179,7 +181,6 @@ describe("host-daemon command schemas", () => {
         initiator: {
           threadId: "thr_123",
           provisioningId: "tpv_123",
-          eventSequence: 0,
         },
         workspaceProvisionType: "managed-worktree",
         sourcePath: "/tmp/project",
@@ -366,7 +367,7 @@ describe("host-daemon command schemas", () => {
         instructions: "Be concise.",
         dynamicTools: [],
         instructionMode: "append",
-        eventSequence: 0,
+        requestId: CLIENT_REQUEST_ID,
         input: [{ type: "text", text: "hello" }],
       }),
     ).toThrow();
@@ -375,7 +376,7 @@ describe("host-daemon command schemas", () => {
       hostDaemonCommandSchema.parse({
         type: "turn.submit",
         threadId: "thr_123",
-        eventSequence: 1,
+        requestId: CLIENT_REQUEST_ID,
         input: [{ type: "text", text: "follow up" }],
         options: {
           model: "gpt-5",
@@ -413,7 +414,7 @@ describe("host-daemon command schemas", () => {
         },
         projectId: "proj_123",
         providerId: "codex",
-        eventSequence: 1,
+        requestId: CLIENT_REQUEST_ID,
         input: [{ type: "text", text: "hello" }],
         options: {
           model: "gpt-5",
@@ -465,13 +466,13 @@ describe("host-daemon command schemas", () => {
     ).toBe(true);
   });
 
-  it("requires eventSequence, resumeContext, and target for turn.submit", () => {
+  it("requires requestId, resumeContext, and target for turn.submit", () => {
     expect(
       hostDaemonCommandSchema.parse({
         type: "turn.submit",
         environmentId: "env_123",
         threadId: "thr_123",
-        eventSequence: 12,
+        requestId: CLIENT_REQUEST_ID,
         input: [{ type: "text", text: "hello" }],
         options: {
           model: "gpt-5",
@@ -496,7 +497,7 @@ describe("host-daemon command schemas", () => {
       }),
     ).toMatchObject({
       type: "turn.submit",
-      eventSequence: 12,
+      requestId: CLIENT_REQUEST_ID,
       resumeContext: {
         workspaceContext: {
           workspacePath: "/tmp/workspace",
@@ -511,7 +512,7 @@ describe("host-daemon command schemas", () => {
         type: "turn.submit",
         environmentId: "env_123",
         threadId: "thr_123",
-        eventSequence: 13,
+        requestId: CLIENT_REQUEST_ID,
         input: [{ type: "text", text: "adjust" }],
         options: {
           model: "gpt-5",
@@ -536,7 +537,7 @@ describe("host-daemon command schemas", () => {
       }),
     ).toMatchObject({
       type: "turn.submit",
-      eventSequence: 13,
+      requestId: CLIENT_REQUEST_ID,
       target: { mode: "auto", expectedTurnId: "turn_123" },
     });
 
@@ -578,7 +579,7 @@ describe("host-daemon command schemas", () => {
         },
         projectId: "proj_123",
         providerId: "codex",
-        eventSequence: 0,
+        requestId: CLIENT_REQUEST_ID,
         input: [{ type: "text", text: "hello" }],
         options: {
           model: "gpt-5",
@@ -589,6 +590,83 @@ describe("host-daemon command schemas", () => {
         },
         instructions: "Be concise.",
         dynamicTools: [],
+      }),
+    ).toThrow();
+  });
+
+  it("rejects old eventSequence command fields", () => {
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "thread.start",
+        environmentId: "env_123",
+        threadId: "thr_123",
+        workspaceContext: {
+          workspacePath: "/tmp/workspace",
+          workspaceProvisionType: "unmanaged",
+        },
+        projectId: "proj_123",
+        providerId: "codex",
+        requestId: CLIENT_REQUEST_ID,
+        eventSequence: 1,
+        input: [{ type: "text", text: "hello" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+        },
+        instructions: "Be concise.",
+        dynamicTools: [],
+        instructionMode: "append",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "turn.submit",
+        environmentId: "env_123",
+        threadId: "thr_123",
+        requestId: CLIENT_REQUEST_ID,
+        eventSequence: 2,
+        input: [{ type: "text", text: "hello" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+        },
+        resumeContext: {
+          workspaceContext: {
+            workspacePath: "/tmp/workspace",
+            workspaceProvisionType: "unmanaged",
+          },
+          projectId: "proj_123",
+          providerId: "codex",
+          providerThreadId: "provider_123",
+          instructions: "Be a helpful coding agent.",
+          dynamicTools: [],
+          instructionMode: "append",
+        },
+        target: { mode: "start" },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "environment.provision",
+        environmentId: "env_123",
+        initiator: {
+          threadId: "thr_123",
+          provisioningId: "tpv_123",
+          eventSequence: 3,
+        },
+        workspaceProvisionType: "managed-worktree",
+        sourcePath: "/tmp/project",
+        targetPath: "/tmp/project/.bb/env",
+        branchName: "bb/env-123",
+        setupTimeoutMs: 900000,
       }),
     ).toThrow();
   });
@@ -630,6 +708,32 @@ describe("host-daemon command schemas", () => {
       defaultBranch: "main",
       envBranch: "bb/env-abc",
     });
+  });
+
+  it("requires replay.run request correlation", () => {
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "replay.run",
+        captureId: "cap_123",
+        environmentId: "env_123",
+        threadId: "thr_123",
+        requestId: CLIENT_REQUEST_ID,
+        speed: 10,
+      }),
+    ).toMatchObject({
+      type: "replay.run",
+      requestId: CLIENT_REQUEST_ID,
+    });
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "replay.run",
+        captureId: "cap_123",
+        environmentId: "env_123",
+        threadId: "thr_123",
+        speed: 10,
+      }),
+    ).toThrow();
   });
 
   it("bounds file list command queries and limits", () => {
@@ -841,10 +945,8 @@ describe("host-daemon session schemas", () => {
         sessionId: "session_123",
         events: [
           {
-            environmentId: "env_123",
+            producerEventId: PRODUCER_EVENT_ID,
             threadId: "thr_123",
-            sequence: 1,
-            createdAt: 1,
             event: {
               type: "system/error",
               threadId: "thr_123",
@@ -858,6 +960,7 @@ describe("host-daemon session schemas", () => {
       sessionId: "session_123",
       events: [
         {
+          producerEventId: PRODUCER_EVENT_ID,
           threadId: "thr_123",
         },
       ],
@@ -865,41 +968,57 @@ describe("host-daemon session schemas", () => {
 
     expect(
       hostDaemonEventBatchResponseSchema.parse({
-        threadHighWaterMarks: {
-          thr_123: 42,
-        },
-      }),
-    ).toEqual({
-      threadHighWaterMarks: {
-        thr_123: 42,
-      },
-    });
-
-    expect(
-      hostDaemonEventBatchSequenceConflictResponseSchema.parse({
-        acceptedSequences: [
+        acceptedEvents: [
           {
-            sequence: 41,
+            producerEventId: PRODUCER_EVENT_ID,
             threadId: "thr_123",
+            sequence: 42,
           },
         ],
-        code: "sequence_conflict",
+      }),
+    ).toEqual({
+      acceptedEvents: [
+        {
+          producerEventId: PRODUCER_EVENT_ID,
+          threadId: "thr_123",
+          sequence: 42,
+        },
+      ],
+    });
+
+    expect(() =>
+      hostDaemonEventBatchRequestSchema.parse({
+        sessionId: "session_123",
+        events: [
+          {
+            producerEventId: PRODUCER_EVENT_ID,
+            threadId: "thr_123",
+            sequence: 1,
+            event: {
+              type: "system/error",
+              threadId: "thr_123",
+              scope: threadScope(),
+              message: "boom",
+            },
+          },
+        ],
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonEventBatchResponseSchema.parse({
+        acceptedEvents: [
+          {
+            producerEventId: PRODUCER_EVENT_ID,
+            threadId: "thr_123",
+            sequence: 42,
+          },
+        ],
         threadHighWaterMarks: {
           thr_123: 42,
         },
       }),
-    ).toEqual({
-      acceptedSequences: [
-        {
-          sequence: 41,
-          threadId: "thr_123",
-        },
-      ],
-      code: "sequence_conflict",
-      threadHighWaterMarks: {
-        thr_123: 42,
-      },
-    });
+    ).toThrow();
 
     expect(
       hostDaemonCommandResultResponseSchema.parse({

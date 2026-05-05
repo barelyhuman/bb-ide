@@ -29,6 +29,13 @@
       "when": 1777824000000,
       "tag": "0003_threads_project_archived_deleted_index",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1777910400000,
+      "tag": "0004_event_producer_identity",
+      "breakpoints": true
     }
   ]
 }

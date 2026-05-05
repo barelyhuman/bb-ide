@@ -129,7 +129,7 @@ export async function queueTurnDuringReprovision(
   requestThreadReprovision(args.deps, {
     thread: args.thread,
     environment: args.environment,
-    eventSequence: reprovisionResult.eventSequence,
+    provisionEventSequence: reprovisionResult.provisionEventSequence,
     input: args.input,
     execution: args.execution,
     initiator: args.initiator,

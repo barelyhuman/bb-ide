@@ -336,6 +336,7 @@ function seedPendingSteerRow(
     scope: threadScope(),
     data: {
       direction: "outbound",
+      requestId: "creq_23456789ab",
       source: "tell",
       initiator: "system",
       input: [{ type: "text", text: args.text }],
@@ -1565,6 +1566,7 @@ describe("buildThreadTimeline", () => {
       scope: threadScope(),
       data: {
         direction: "outbound",
+        requestId: "creq_23456789ab",
         source: "tell",
         initiator: "user",
         request: { method: "turn/start", params: {} },
@@ -1587,7 +1589,7 @@ describe("buildThreadTimeline", () => {
       sequence: 8,
       type: "turn/input/accepted",
       data: {
-        clientRequestSequence: 5,
+        clientRequestId: "creq_23456789ab",
       },
     });
 
@@ -1699,6 +1701,7 @@ describe("buildThreadTimeline", () => {
       scope: threadScope(),
       data: {
         direction: "outbound",
+        requestId: "creq_23456789ac",
         source: "tell",
         initiator: "user",
         request: { method: "turn/start", params: {} },
@@ -1738,7 +1741,7 @@ describe("buildThreadTimeline", () => {
       sequence: 136,
       type: "turn/input/accepted",
       data: {
-        clientRequestSequence: 5,
+        clientRequestId: "creq_23456789ac",
       },
     });
 
@@ -2140,6 +2143,7 @@ describe("buildThreadTimeline", () => {
       scope: threadScope(),
       data: {
         direction: "outbound",
+        requestId: "creq_23456789ab",
         source: "spawn",
         initiator: "system",
         input: [{ type: "text", text: "[bb system] Welcome!" }],
@@ -2272,6 +2276,7 @@ describe("buildThreadTimeline", () => {
       scope: threadScope(),
       data: {
         direction: "outbound",
+        requestId: "creq_23456789ad",
         source: "tell",
         initiator: "user",
         input: [{ type: "text", text: "Thanks, do the thing" }],
@@ -2378,6 +2383,7 @@ describe("buildThreadTimeline", () => {
         scope: threadScope(),
         data: {
           direction: "outbound",
+          requestId: "creq_23456789ab",
           source: "tell",
           initiator: "system",
           input: [{ type: "text", text: "system-start-message" }],
@@ -2516,6 +2522,7 @@ describe("buildThreadTimeline", () => {
         scope: threadScope(),
         data: {
           direction: "outbound",
+          requestId: "creq_23456789ab",
           source: "tell",
           initiator: "system",
           input: [{ type: "text", text: "system-pending-steer" }],

@@ -18,8 +18,9 @@ import { THREAD_TIMELINE_DEFAULT_TOP_LEVEL_LIMIT } from "@bb/server-contract";
 import {
   listContextWindowUsageRows,
   listRecentStoredEventRows,
+  listStoredClientTurnRequestIdsInRange,
   listStoredEventRowsInRange,
-  listStoredTurnInputAcceptedRowsByClientRequestSequences,
+  listStoredTurnInputAcceptedRowsByClientRequestIds,
   listStoredTurnStartedRowsByTurnIdsUpToSequence,
 } from "@bb/db";
 import type { DbConnection, StoredEventRow } from "@bb/db";
@@ -325,19 +326,19 @@ export function buildTimelineTurnSummaryDetails(
     seqStart: options.sourceSeqStart,
     seqEnd: options.sourceSeqEnd,
   });
-  const clientRequestSequences = Array.from(
-    new Set(
-      exactEventRows.flatMap((row) =>
-        row.type === "client/turn/requested" ? [row.sequence] : [],
-      ),
-    ),
-  );
-  const acceptedInputRows =
-    listStoredTurnInputAcceptedRowsByClientRequestSequences(db, {
+  const clientRequestIds = listStoredClientTurnRequestIdsInRange(db, {
+    threadId: thread.id,
+    seqStart: options.sourceSeqStart,
+    seqEnd: options.sourceSeqEnd,
+  });
+  const acceptedInputRows = listStoredTurnInputAcceptedRowsByClientRequestIds(
+    db,
+    {
       threadId: thread.id,
       afterSequence: options.sourceSeqEnd,
-      clientRequestSequences,
-    });
+      clientRequestIds,
+    },
+  );
   const eventRows = [...exactEventRows, ...acceptedInputRows];
   const mismatchedTurnRow = eventRows.find(
     (row) => row.scopeKind === "turn" && row.turnId !== options.turnId,

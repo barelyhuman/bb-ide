@@ -146,6 +146,7 @@ export async function createTestServer(
 
   let commandResultAttemptCount = 0;
   let nextCursor = 1;
+  let nextEventSequence = 1;
   let nextSessionId = 1;
   let webSocketAvailable = true;
   const enrollKey = "enroll-secret";
@@ -258,13 +259,12 @@ export async function createTestServer(
       await context.req.json(),
     );
     events.push(...payload.events);
-    for (const event of payload.events) {
-      threadHighWaterMarks[event.threadId] = Math.max(
-        threadHighWaterMarks[event.threadId] ?? 0,
-        event.sequence,
-      );
-    }
-    return context.json({ threadHighWaterMarks });
+    const acceptedEvents = payload.events.map((event) => ({
+      producerEventId: event.producerEventId,
+      threadId: event.threadId,
+      sequence: nextEventSequence++,
+    }));
+    return context.json({ acceptedEvents });
   });
   app.post("/internal/session/environment-change", async (context) => {
     const payload = hostDaemonEnvironmentChangeRequestSchema.parse(

@@ -7,10 +7,7 @@ import {
   buildExecutionOptions,
   queueTurnSubmitCommand,
 } from "./thread-commands.js";
-import {
-  appendClientTurnEvent,
-  getActiveTurnId,
-} from "./thread-events.js";
+import { appendClientTurnEvent, getActiveTurnId } from "./thread-events.js";
 import {
   ensureThreadCanQueueStartRequest,
   queueReadyThreadTurnCommand,
@@ -95,11 +92,7 @@ function ensureRuntimeCanAcceptActiveSend(
     return;
   }
 
-  throw new ApiError(
-    502,
-    "host_disconnected",
-    "Host daemon is not connected",
-  );
+  throw new ApiError(502, "host_disconnected", "Host daemon is not connected");
 }
 
 export async function sendThreadMessage(
@@ -152,7 +145,7 @@ export async function sendThreadMessage(
     });
   }
 
-  const eventSequence = appendClientTurnEvent(deps, {
+  const request = appendClientTurnEvent(deps, {
     threadId: thread.id,
     environmentId: readyEnvironment.id,
     type: "client/turn/requested",
@@ -174,7 +167,7 @@ export async function sendThreadMessage(
     const queuedMode = await queueReadyThreadTurnCommand(deps, {
       thread,
       input: payload.input,
-      eventSequence,
+      requestId: request.requestId,
       execution,
       permissionEscalation,
       environment: {
@@ -193,7 +186,7 @@ export async function sendThreadMessage(
   await queueTurnSubmitCommand(deps, {
     thread,
     input: payload.input,
-    eventSequence,
+    requestId: request.requestId,
     execution,
     permissionEscalation,
     target: {

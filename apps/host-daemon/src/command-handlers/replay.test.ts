@@ -3,6 +3,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { encodeClientTurnRequestIdNumber } from "@bb/domain";
 import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import {
   createReplayCaptureId,
@@ -22,6 +23,10 @@ import { getReplayCapture, listReplayCaptures, runReplay } from "./replay.js";
 
 function threadStorageRoot(dataDir: string): string {
   return path.join(dataDir, "thread-storage");
+}
+
+function replayRequestId(value: number) {
+  return encodeClientTurnRequestIdNumber({ value });
 }
 
 function baseManifest(captureId: string): ReplayCaptureManifest {
@@ -301,6 +306,7 @@ describe("runReplay", () => {
       captureId,
       environmentId: "env-1",
       threadId: "thr-replay",
+      requestId: replayRequestId(1),
       speed: 10,
     };
     const replayTasks: ReplayTaskRegistry = new Map();
@@ -315,6 +321,7 @@ describe("runReplay", () => {
     await vi.waitFor(() => {
       expect(emitted.map((input) => input.event.type)).toEqual([
         "turn/started",
+        "turn/input/accepted",
         "thread/name/updated",
         "turn/completed",
       ]);
@@ -333,6 +340,10 @@ describe("runReplay", () => {
       ),
     ).toBe(true);
     expect(emitted[1]?.event).toMatchObject({
+      type: "turn/input/accepted",
+      clientRequestId: command.requestId,
+    });
+    expect(emitted[2]?.event).toMatchObject({
       type: "thread/name/updated",
       threadName: "[Replay] Original title",
     });
@@ -365,6 +376,7 @@ describe("runReplay", () => {
       captureId,
       environmentId: "env-1",
       threadId: "thr-replay",
+      requestId: replayRequestId(2),
       speed: 1,
     };
 
@@ -386,6 +398,7 @@ describe("runReplay", () => {
 
     expect(emitted.map((input) => input.event.type)).toEqual([
       "turn/started",
+      "turn/input/accepted",
       "turn/completed",
     ]);
     expect(replayTasks.has("thr-replay")).toBe(false);
@@ -415,6 +428,7 @@ describe("runReplay", () => {
       captureId,
       environmentId: "env-1",
       threadId: "thr-replay",
+      requestId: replayRequestId(3),
       speed: 0.5,
     };
 
@@ -477,6 +491,7 @@ describe("runReplay", () => {
       captureId,
       environmentId: "env-1",
       threadId: "thr-replay",
+      requestId: replayRequestId(4),
       speed: 10,
     };
     const replayTasks: ReplayTaskRegistry = new Map();
@@ -498,14 +513,19 @@ describe("runReplay", () => {
 
     expect(emitted.map((input) => input.event.type)).toEqual([
       "turn/started",
+      "turn/input/accepted",
       "system/error",
       "turn/completed",
     ]);
     expect(emitted[1]?.event).toMatchObject({
+      type: "turn/input/accepted",
+      clientRequestId: command.requestId,
+    });
+    expect(emitted[2]?.event).toMatchObject({
       type: "system/error",
       message: "Replay capture relativeMs decreased at record 2",
     });
-    expect(emitted[2]?.event).toMatchObject({
+    expect(emitted[3]?.event).toMatchObject({
       type: "turn/completed",
       status: "failed",
     });

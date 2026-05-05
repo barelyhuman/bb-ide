@@ -58,7 +58,7 @@ describe("expired commands", () => {
         type: "thread.start" as const,
         environmentId: args.environmentId,
         threadId: args.threadId,
-        eventSequence: 1,
+        requestId: "creq_23456789ab",
         input: [{ type: "text" as const, text: "hello" }],
         workspaceContext: {
           workspacePath: args.workspacePath,

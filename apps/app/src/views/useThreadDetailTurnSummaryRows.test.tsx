@@ -12,7 +12,7 @@ interface ThreadDetailTurnSummaryRowsHookProps {
   unrelatedValue: string;
 }
 
-function renderThreadDetailTurnSummaryRows({
+function useRenderedThreadDetailTurnSummaryRows({
   managerTimelineView,
   timelineRows,
 }: ThreadDetailTurnSummaryRowsHookProps) {
@@ -35,11 +35,15 @@ describe("useThreadDetailTurnSummaryRows", () => {
       timelineRows: [],
       unrelatedValue: "initial",
     };
-    const { result, rerender } = renderHook(renderThreadDetailTurnSummaryRows, {
-      initialProps,
-      wrapper,
-    });
-    const originalLoadTurnSummaryRows = result.current.handleLoadTurnSummaryRows;
+    const { result, rerender } = renderHook(
+      useRenderedThreadDetailTurnSummaryRows,
+      {
+        initialProps,
+        wrapper,
+      },
+    );
+    const originalLoadTurnSummaryRows =
+      result.current.handleLoadTurnSummaryRows;
 
     rerender({
       managerTimelineView: undefined,
@@ -59,11 +63,15 @@ describe("useThreadDetailTurnSummaryRows", () => {
       timelineRows: [],
       unrelatedValue: "initial",
     };
-    const { result, rerender } = renderHook(renderThreadDetailTurnSummaryRows, {
-      initialProps,
-      wrapper,
-    });
-    const originalLoadTurnSummaryRows = result.current.handleLoadTurnSummaryRows;
+    const { result, rerender } = renderHook(
+      useRenderedThreadDetailTurnSummaryRows,
+      {
+        initialProps,
+        wrapper,
+      },
+    );
+    const originalLoadTurnSummaryRows =
+      result.current.handleLoadTurnSummaryRows;
 
     rerender({
       managerTimelineView: "standard",

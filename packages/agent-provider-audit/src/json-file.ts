@@ -1,8 +1,11 @@
 import { readFileSync } from "node:fs";
-import { turnRequestTargetSchema } from "@bb/domain";
+import { clientTurnRequestIdSchema, turnRequestTargetSchema } from "@bb/domain";
 import type { TurnRequestTarget } from "@bb/domain";
 import { z } from "zod";
-import type { ProviderAuditClientRequest } from "./types.js";
+import {
+  buildProviderAuditClientRequestId,
+  type ProviderAuditClientRequest,
+} from "./types.js";
 
 const JSON_RPC_VERSION = "2.0" as const;
 
@@ -67,6 +70,7 @@ const NEW_TURN_TARGET = { kind: "new-turn" } satisfies TurnRequestTarget;
 
 const providerAuditClientRequestFileSchema = z.object({
   id: z.string(),
+  requestId: clientTurnRequestIdSchema.optional(),
   turnIndex: z.number(),
   type: z.enum(["client/thread/start", "client/turn/requested"]),
   target: turnRequestTargetSchema.optional(),
@@ -83,6 +87,8 @@ function normalizeProviderAuditClientRequest(
 ): ProviderAuditClientRequest {
   return {
     ...request,
+    requestId:
+      request.requestId ?? buildProviderAuditClientRequestId(request.turnIndex),
     type: CLIENT_TURN_REQUESTED_TYPE,
     target:
       request.target ??

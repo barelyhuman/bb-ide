@@ -9,6 +9,7 @@
     "start": "node dist/index.js",
     "start:prod": "cross-env NODE_ENV=production node dist/index.js",
     "dev": "node scripts/dev-supervisor.mjs",
+    "dev:event-protocol-cutover": "tsx src/scripts/run-event-protocol-hard-cutover-migration.ts",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts"
@@ -36,6 +37,7 @@
     "@hono/node-ws": "^1.3.0",
     "@mariozechner/pi-ai": "^0.70.5",
     "better-auth": "^1.5.6",
+    "better-sqlite3": "^11.7.0",
     "cron-parser": "^5.5.0",
     "drizzle-orm": "^0.38.4",
     "gray-matter": "^4.0.3",
@@ -48,6 +50,7 @@
     "@bb/agent-provider-audit": "workspace:*",
     "@bb/test-helpers": "workspace:*",
     "@bb/tsconfig": "workspace:*",
+    "@types/better-sqlite3": "^7.6.12",
     "@types/mime-types": "^3.0.1",
     "@types/node": "^22.0.0",
     "tsx": "^4.21.0",

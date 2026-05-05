@@ -9,7 +9,6 @@ import {
   hostDaemonEnvironmentChangeRequestSchema,
   hostDaemonEventBatchRequestSchema,
   hostDaemonEventBatchResponseSchema,
-  hostDaemonEventBatchSequenceConflictResponseSchema,
   hostDaemonRuntimeMaterialQuerySchema,
   hostDaemonInteractiveInterruptRequestSchema,
   hostDaemonInteractiveInterruptResponseSchema,
@@ -465,27 +464,14 @@ export function createServerClient(
       });
 
       if (!response.ok) {
-        if (response.status === 409) {
-          const conflict =
-            hostDaemonEventBatchSequenceConflictResponseSchema.parse(
-              await response.json(),
-            );
-          return {
-            acceptedSequences: conflict.acceptedSequences,
-            kind: "sequence-conflict",
-            threadHighWaterMarks: conflict.threadHighWaterMarks,
-          };
-        }
-        throw new Error(
-          `Failed to post events: ${response.status} ${response.statusText}`,
-        );
+        throw createResponseError("post events", response);
       }
 
       const json = await response.json();
       return {
+        acceptedEvents:
+          hostDaemonEventBatchResponseSchema.parse(json).acceptedEvents,
         kind: "accepted",
-        threadHighWaterMarks:
-          hostDaemonEventBatchResponseSchema.parse(json).threadHighWaterMarks,
       };
     },
 

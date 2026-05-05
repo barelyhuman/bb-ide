@@ -43,7 +43,7 @@ export interface RequestThreadProvisionArgs {
 
 export interface RequestThreadReprovisionArgs {
   environment: Environment;
-  eventSequence: number;
+  provisionEventSequence: number;
   execution: ResolvedThreadExecutionOptions;
   input: PromptInput[];
   initiator: ThreadTurnInitiator;
@@ -120,7 +120,7 @@ async function startThreadIfEnvironmentReady(
       workspaceProvisionType: args.environment.workspaceProvisionType,
     },
     input: args.context.request.input,
-    eventSequence: args.context.request.clientRequestSequence,
+    requestId: args.context.request.clientRequestId,
     execution: args.context.request.execution,
     permissionEscalation: resolvePermissionEscalation({
       thread: args.thread,
@@ -135,7 +135,7 @@ export function requestThreadProvision(
   deps: Pick<AppDeps, "db" | "hub">,
   args: RequestThreadProvisionArgs,
 ): void {
-  const clientRequestSequence = appendClientTurnEvent(deps, {
+  const request = appendClientTurnEvent(deps, {
     threadId: args.thread.id,
     environmentId: args.thread.environmentId,
     type: "client/turn/requested",
@@ -157,7 +157,7 @@ export function requestThreadProvision(
 
   const context = createMetadataPendingContext({
     ...args,
-    clientRequestSequence,
+    clientRequestId: request.requestId,
   });
   upsertThreadProvisionOperation(deps.db, {
     threadId: args.thread.id,
@@ -169,7 +169,7 @@ export function requestThreadReprovision(
   deps: Pick<AppDeps, "db" | "hub">,
   args: RequestThreadReprovisionArgs,
 ): void {
-  const clientRequestSequence = appendClientTurnEvent(deps, {
+  const request = appendClientTurnEvent(deps, {
     threadId: args.thread.id,
     environmentId: args.environment.id,
     type: "client/turn/requested",
@@ -182,8 +182,8 @@ export function requestThreadReprovision(
   });
 
   const context = createReprovisioningContext({
-    clientRequestSequence,
-    eventSequence: args.eventSequence,
+    clientRequestId: request.requestId,
+    provisionEventSequence: args.provisionEventSequence,
     execution: args.execution,
     environmentId: args.environment.id,
     input: args.input,

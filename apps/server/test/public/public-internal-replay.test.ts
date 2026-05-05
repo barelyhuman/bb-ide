@@ -1,6 +1,7 @@
 import { z } from "zod";
-import { eq } from "drizzle-orm";
-import { hostDaemonCommands, threads } from "@bb/db";
+import { and, eq } from "drizzle-orm";
+import { events, hostDaemonCommands, threads } from "@bb/db";
+import { turnRequestEventDataSchema } from "@bb/domain";
 import {
   hostDaemonCommandSchema,
   type HostDaemonCommand,
@@ -510,6 +511,22 @@ describe("public development-only replay routes", () => {
         status: "created",
       });
       expect(replayThread?.title).toMatch(/^\[Replay\]/u);
+      const replayRequestRow = harness.db
+        .select()
+        .from(events)
+        .where(
+          and(
+            eq(events.threadId, body.replayThreadId),
+            eq(events.type, "client/turn/requested"),
+          ),
+        )
+        .get();
+      if (!replayRequestRow) {
+        throw new Error("Expected replay request event");
+      }
+      const replayRequestData = turnRequestEventDataSchema.parse(
+        JSON.parse(replayRequestRow.data),
+      );
       const replayCommand = await waitForReplayRunCommand(harness, host.id);
       expect(replayCommand.row.id).toBe(body.commandId);
       const queuedRow = replayCommand.row;
@@ -523,6 +540,7 @@ describe("public development-only replay routes", () => {
         captureId,
         environmentId: environment.id,
         threadId: body.replayThreadId,
+        requestId: replayRequestData.requestId,
         speed: 10,
       });
     } finally {

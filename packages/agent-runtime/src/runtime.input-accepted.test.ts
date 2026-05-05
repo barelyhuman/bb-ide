@@ -45,6 +45,7 @@ describe("createAgentRuntime input accepted events", () => {
       options: fullRuntimeOptions,
     });
     await runtime.runTurn({
+      clientRequestId: "creq_222222222s",
       threadId: "t1",
       input: [{ type: "text", text: "delay:500 first input" }],
       options: fullRuntimeOptions,
@@ -58,6 +59,7 @@ describe("createAgentRuntime input accepted events", () => {
     });
 
     await runtime.steerTurn({
+      clientRequestId: "creq_222222222t",
       threadId: "t1",
       expectedTurnId: "turn-1",
       input: [{ type: "text", text: "steer input" }],
@@ -142,7 +144,7 @@ rl.on("line", (line) => {
           if (command.type !== "turn/steer") {
             return [];
           }
-          if (command.clientRequestSequence === undefined) {
+          if (command.clientRequestId === undefined) {
             return [];
           }
           return [
@@ -152,7 +154,7 @@ rl.on("line", (line) => {
               providerThreadId: command.providerThreadId,
               turnId: command.expectedTurnId,
               scope: turnScope(command.expectedTurnId),
-              clientRequestSequence: command.clientRequestSequence,
+              clientRequestId: command.clientRequestId,
             },
           ];
         },
@@ -167,6 +169,7 @@ rl.on("line", (line) => {
       options: fullRuntimeOptions,
     });
     await runtime.runTurn({
+      clientRequestId: "creq_222222222u",
       threadId: "t1",
       input: [{ type: "text", text: "active turn" }],
       options: fullRuntimeOptions,
@@ -181,7 +184,7 @@ rl.on("line", (line) => {
     await runtime.steerTurn({
       threadId: "t1",
       expectedTurnId: "turn-1",
-      clientRequestSequence: 12,
+      clientRequestId: "creq_23456789ae",
       input: [{ type: "text", text: "accepted steer" }],
       options: fullRuntimeOptions,
     });
@@ -190,7 +193,7 @@ rl.on("line", (line) => {
       events.some(
         (event) =>
           event.type === "turn/input/accepted" &&
-          event.clientRequestSequence === 12 &&
+          event.clientRequestId === "creq_23456789ae" &&
           getThreadEventScopeTurnId(event.scope) === "turn-1",
       ),
     ).toBe(true);
@@ -282,6 +285,7 @@ rl.on("line", (line) => {
       options: fullRuntimeOptions,
     });
     await runtime.runTurn({
+      clientRequestId: "creq_222222222v",
       threadId: "t1",
       input: [{ type: "text", text: "active turn" }],
       options: fullRuntimeOptions,
@@ -296,6 +300,7 @@ rl.on("line", (line) => {
 
     await expect(
       runtime.steerTurn({
+        clientRequestId: "creq_222222222w",
         threadId: "t1",
         expectedTurnId: "turn-1",
         input: [{ type: "text", text: "rejected steer" }],

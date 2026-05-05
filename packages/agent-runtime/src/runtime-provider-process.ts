@@ -233,6 +233,9 @@ export class RuntimeProviderProcessManager {
 
     const stdout = createInterface({ input: child.stdout });
     stdout.on("line", (line) => {
+      if (this.shuttingDown) {
+        return;
+      }
       this.args.handleStdoutLine({
         line,
         providerProcess,
@@ -241,6 +244,9 @@ export class RuntimeProviderProcessManager {
 
     const stderr = createInterface({ input: child.stderr });
     stderr.on("line", (line) => {
+      if (this.shuttingDown) {
+        return;
+      }
       providerProcess.stderrChunks.push(line);
       this.args.onStderr?.(line);
       this.args.emitCapture({
