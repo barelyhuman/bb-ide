@@ -1,4 +1,5 @@
 import {
+  type DbQueryConnection,
   getCommand,
   getHostOperation,
   getHostOperationByCommandId,
@@ -21,6 +22,10 @@ import type { AppDeps } from "../../types.js";
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
 
 const SANDBOX_RUNTIME_MATERIAL_OPERATION_KIND = "sync_runtime_material";
+
+interface SandboxRuntimeMaterialReadDeps {
+  db: DbQueryConnection;
+}
 
 const sandboxRuntimeMaterialOperationPayloadSchema = z
   .object({
@@ -53,7 +58,7 @@ export function parseRuntimeMaterialOperationPayload(
 }
 
 export function getRuntimeMaterialOperation(
-  deps: Pick<AppDeps, "db">,
+  deps: SandboxRuntimeMaterialReadDeps,
   hostId: string,
 ) {
   return getHostOperation(deps.db, {
@@ -63,7 +68,7 @@ export function getRuntimeMaterialOperation(
 }
 
 export function getRuntimeMaterialOperationByCommandId(
-  deps: Pick<AppDeps, "db">,
+  deps: SandboxRuntimeMaterialReadDeps,
   commandId: string,
 ) {
   const operation = getHostOperationByCommandId(deps.db, commandId);
@@ -84,7 +89,7 @@ export function hasDesiredRuntimeMaterialApplied(
 }
 
 export function hasQueuedRuntimeMaterialCommand(
-  deps: Pick<AppDeps, "db">,
+  deps: SandboxRuntimeMaterialReadDeps,
   commandId: string | null,
 ): boolean {
   if (!commandId) {
@@ -99,7 +104,7 @@ export function hasQueuedRuntimeMaterialCommand(
 }
 
 export function resetRuntimeMaterialOperationToRequested(
-  deps: Pick<AppDeps, "db">,
+  deps: SandboxRuntimeMaterialReadDeps,
   args: {
     hostId: string;
     payload: SandboxRuntimeMaterialOperationPayload;
@@ -113,7 +118,7 @@ export function resetRuntimeMaterialOperationToRequested(
 }
 
 export function hasActiveSandboxRuntimeMaterialSyncOperationForCommand(
-  deps: Pick<AppDeps, "db">,
+  deps: SandboxRuntimeMaterialReadDeps,
   args: { commandId: string },
 ): boolean {
   const operation = getRuntimeMaterialOperationByCommandId(
@@ -124,7 +129,7 @@ export function hasActiveSandboxRuntimeMaterialSyncOperationForCommand(
 }
 
 export function completeSandboxRuntimeMaterialSyncForCommand(
-  deps: Pick<AppDeps, "db">,
+  deps: SandboxRuntimeMaterialReadDeps,
   args: { appliedVersion: string; commandId: string; completedAt?: number },
 ): boolean {
   const operation = getRuntimeMaterialOperationByCommandId(
@@ -153,7 +158,7 @@ export function completeSandboxRuntimeMaterialSyncForCommand(
 }
 
 export function failSandboxRuntimeMaterialSyncForCommand(
-  deps: Pick<AppDeps, "db">,
+  deps: SandboxRuntimeMaterialReadDeps,
   args: { commandId: string; completedAt?: number; failureReason: string },
 ): boolean {
   const operation = getRuntimeMaterialOperationByCommandId(

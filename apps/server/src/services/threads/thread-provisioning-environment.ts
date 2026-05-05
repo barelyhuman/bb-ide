@@ -7,6 +7,7 @@ import {
   getThreadOperation,
   type CreateEnvironmentInput,
   type DbConnection,
+  type DbNotifier,
   type DbTransaction,
   type UpsertHostInput,
   updateThread,
@@ -104,6 +105,11 @@ interface EnsureWorkspaceReadyEventArgs {
   entries: ProvisioningTranscriptEntry[];
   environmentId: string;
   threadId: string;
+}
+
+interface ThreadProvisionTransactionDeps {
+  db: DbTransaction;
+  hub: DbNotifier;
 }
 
 interface SaveThreadProvisionContextArgs {
@@ -287,52 +293,65 @@ export function ensureWorkspaceReadyEvent(
   args: EnsureWorkspaceReadyEventArgs,
 ): number | null {
   const result = deps.db.transaction(
-    (tx) => {
-      const operation = getThreadOperation(tx, {
-        threadId: args.threadId,
-        kind: "provision",
-      });
-      if (!operation || !isActiveLifecycleOperationState(operation.state)) {
-        return null;
-      }
-      const context = {
-        request: parseJsonWithSchema(
-          operation.payload,
-          threadProvisionCommonPayloadSchema,
-        ),
-        state: readThreadProvisioningStateFromRecord(operation),
-      };
-      if (context.state.stage === "workspace-ready") {
-        return context.state.workspaceReadyEventSequence;
-      }
-      if (!isAttachableContext(context)) {
-        return null;
-      }
-      const provisionableContext = provisionableContextForWorkspaceReady(
-        context,
-        {
-          attachedEnvironmentId: args.environmentId,
-        },
-      );
-
-      const appendedSequence = appendThreadProvisioningEventInTransaction(tx, {
-        threadId: args.threadId,
-        environmentId: args.environmentId,
-        provisioningId: context.state.provisioningId,
-        status: "active",
-        entries: args.entries,
-      });
-      upsertThreadProvisionOperation(tx, {
-        threadId: args.threadId,
-        context: createWorkspaceReadyContext(provisionableContext, {
-          workspaceReadyEventSequence: appendedSequence,
-        }),
-      });
-      return appendedSequence;
-    },
+    (tx) => ensureWorkspaceReadyEventRecord(tx, args),
     { behavior: "immediate" },
   );
 
+  if (result !== null) {
+    deps.hub.notifyThread(args.threadId, ["events-appended"]);
+  }
+  return result;
+}
+
+function ensureWorkspaceReadyEventRecord(
+  db: DbTransaction,
+  args: EnsureWorkspaceReadyEventArgs,
+): number | null {
+  const operation = getThreadOperation(db, {
+    threadId: args.threadId,
+    kind: "provision",
+  });
+  if (!operation || !isActiveLifecycleOperationState(operation.state)) {
+    return null;
+  }
+  const context = {
+    request: parseJsonWithSchema(
+      operation.payload,
+      threadProvisionCommonPayloadSchema,
+    ),
+    state: readThreadProvisioningStateFromRecord(operation),
+  };
+  if (context.state.stage === "workspace-ready") {
+    return context.state.workspaceReadyEventSequence;
+  }
+  if (!isAttachableContext(context)) {
+    return null;
+  }
+  const provisionableContext = provisionableContextForWorkspaceReady(context, {
+    attachedEnvironmentId: args.environmentId,
+  });
+
+  const appendedSequence = appendThreadProvisioningEventInTransaction(db, {
+    threadId: args.threadId,
+    environmentId: args.environmentId,
+    provisioningId: context.state.provisioningId,
+    status: "active",
+    entries: args.entries,
+  });
+  upsertThreadProvisionOperation(db, {
+    threadId: args.threadId,
+    context: createWorkspaceReadyContext(provisionableContext, {
+      workspaceReadyEventSequence: appendedSequence,
+    }),
+  });
+  return appendedSequence;
+}
+
+export function ensureWorkspaceReadyEventInTransaction(
+  deps: ThreadProvisionTransactionDeps,
+  args: EnsureWorkspaceReadyEventArgs,
+): number | null {
+  const result = ensureWorkspaceReadyEventRecord(deps.db, args);
   if (result !== null) {
     deps.hub.notifyThread(args.threadId, ["events-appended"]);
   }

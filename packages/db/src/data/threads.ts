@@ -439,7 +439,7 @@ export function updateThread(
 }
 
 export function deleteThread(
-  db: DbConnection,
+  db: ThreadWriteConnection,
   notifier: DbNotifier,
   id: string,
 ) {
@@ -452,7 +452,7 @@ export function deleteThread(
 }
 
 export function markThreadStopRequested(
-  db: DbConnection,
+  db: ThreadWriteConnection,
   notifier: DbNotifier,
   args: MarkThreadStopRequestedArgs,
 ) {
@@ -474,7 +474,7 @@ export function markThreadStopRequested(
 }
 
 export function clearThreadStopRequested(
-  db: DbConnection,
+  db: ThreadWriteConnection,
   notifier: DbNotifier,
   threadId: string,
 ) {

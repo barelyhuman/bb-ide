@@ -13,6 +13,8 @@ import {
   getPendingEnvironmentCommand,
   hasPendingThreadShutdownInEnvironment,
   queueCommand,
+  type DbNotifier,
+  type DbQueryConnection,
 } from "@bb/db";
 import {
   markEnvironmentOperationRecordCompleted,
@@ -80,6 +82,14 @@ const destroyOperationPayloadSchema = z.object({
   mode: z.enum(["safe", "force"]),
 });
 type DestroyOperationPayload = z.infer<typeof destroyOperationPayloadSchema>;
+
+interface EnvironmentCleanupReadDeps {
+  db: DbQueryConnection;
+}
+
+interface EnvironmentCleanupWriteDeps extends EnvironmentCleanupReadDeps {
+  hub: DbNotifier;
+}
 
 function hasConnectedHostSession(
   deps: Pick<AppDeps, "db">,
@@ -187,7 +197,7 @@ function resolveRequestedCleanupMode(
 }
 
 function getDestroyOperationPayload(
-  deps: Pick<AppDeps, "db">,
+  deps: EnvironmentCleanupReadDeps,
   environmentId: string,
 ): DestroyOperationPayload | null {
   const operation = getEnvironmentOperation(deps.db, {
@@ -211,7 +221,7 @@ function getDestroyOperationPayload(
 }
 
 function getActiveDestroyOperationByCommandId(
-  deps: Pick<AppDeps, "db">,
+  deps: EnvironmentCleanupReadDeps,
   commandId: string,
 ) {
   const operation = getEnvironmentOperationByCommandId(deps.db, commandId);
@@ -227,14 +237,14 @@ function getActiveDestroyOperationByCommandId(
 }
 
 export function hasActiveEnvironmentDestroyOperationForCommand(
-  deps: Pick<AppDeps, "db">,
+  deps: EnvironmentCleanupReadDeps,
   args: EnvironmentCleanupCommandMutationArgs,
 ): boolean {
   return getActiveDestroyOperationByCommandId(deps, args.commandId) !== null;
 }
 
 export function completeEnvironmentDestroyForCommand(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: EnvironmentCleanupWriteDeps,
   args: EnvironmentCleanupCommandMutationArgs,
 ): boolean {
   const operation = getActiveDestroyOperationByCommandId(deps, args.commandId);
@@ -260,7 +270,7 @@ export function completeEnvironmentDestroyForCommand(
 }
 
 export function failEnvironmentDestroyForCommand(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: EnvironmentCleanupWriteDeps,
   args: FailEnvironmentCleanupForCommandArgs,
 ): boolean {
   const operation = getActiveDestroyOperationByCommandId(deps, args.commandId);
@@ -301,7 +311,7 @@ export async function validateEnvironmentCleanupRequest(
 }
 
 export function requestEnvironmentCleanup(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: EnvironmentCleanupWriteDeps,
   args: RequestEnvironmentCleanupArgs,
 ): void {
   if (!args.environmentId) {

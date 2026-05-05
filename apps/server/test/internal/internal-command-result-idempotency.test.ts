@@ -1,35 +1,41 @@
+import { setImmediate as waitImmediate } from "node:timers/promises";
 import { and, eq, sql } from "drizzle-orm";
 import {
+  archiveThread,
   cancelCommand,
   events,
+  fetchCommands,
+  getCommand,
   getEnvironment,
   getEnvironmentOperation,
-  getHostOperation,
   getThread,
   getThreadOperation,
   hostDaemonCommands,
-  queueCommand,
   reportCommandResult,
+  sweepExpiredCommands,
 } from "@bb/db";
-import {
-  markHostOperationRecordQueued,
-  setEnvironmentRecordDestroyed,
-  upsertHostOperationRecord,
-  upsertThreadOperationRecord,
-} from "@bb/db/internal-lifecycle";
+import { upsertThreadOperationRecord } from "@bb/db/internal-lifecycle";
 import { systemThreadProvisioningEventDataSchema } from "@bb/domain";
 import { describe, expect, it } from "vitest";
+import { handleCommandResult } from "../../src/internal/command-results.js";
+import {
+  advanceEnvironmentCleanup,
+  requestEnvironmentCleanup,
+} from "../../src/services/environments/environment-cleanup.js";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
 import {
   advanceEnvironmentProvisioning,
   requestEnvironmentProvision,
 } from "../../src/services/environments/environment-provisioning.js";
-import { requestEnvironmentCleanup } from "../../src/services/environments/environment-cleanup.js";
 import { buildDirectEnvironmentProvisionRequest } from "../../src/services/environments/environment-provision-request.js";
 import {
   requestThreadStart,
   requestThreadStop,
 } from "../../src/services/threads/thread-lifecycle.js";
+import {
+  runManagedEnvironmentArchiveCleanupSweep,
+  runThreadLifecycleSweep,
+} from "../../src/services/system/periodic-sweeps.js";
 import { buildEnvironmentProvisionCommand } from "../../src/services/threads/thread-create-helpers.js";
 import type { QueueThreadStartCommandArgs } from "../../src/services/threads/thread-commands.js";
 import {
@@ -38,14 +44,7 @@ import {
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
-import {
-  queueEnvironmentDestroyLifecycleCommand,
-  queueEnvironmentProvisionLifecycleCommand,
-} from "../helpers/lifecycle-commands.js";
-import {
-  createAllowOnceResolution,
-  createCommandApprovalPayload,
-} from "../helpers/pending-interactions.js";
+import { queueEnvironmentProvisionLifecycleCommand } from "../helpers/lifecycle-commands.js";
 import {
   seedEnvironment,
   seedHostSession,
@@ -96,204 +95,6 @@ function buildReuseThreadProvisionOperation(
 }
 
 describe("internal command result idempotency", () => {
-  it("replays active lifecycle state when a command-result retry arrives after partial settlement", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host, session } = seedHostSession(harness.deps, {
-        id: "host-result-retry-after-partial-settlement",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: "/tmp/retry-partial-provision",
-        status: "provisioning",
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "provisioning",
-      });
-      const provisionRequest = appendClientTurnEvent(harness.deps, {
-        threadId: thread.id,
-        environmentId: environment.id,
-        type: "client/turn/requested",
-        input: [{ type: "text", text: "Retry partial result" }],
-        target: { kind: "thread-start" },
-        execution: {
-          model: "gpt-5",
-          serviceTier: "default",
-          reasoningLevel: "medium",
-          permissionMode: "full",
-          source: "client/turn/requested",
-        },
-        initiator: "user",
-        requestMethod: "thread/start",
-        source: "spawn",
-      });
-      upsertThreadOperationRecord(harness.db, {
-        threadId: thread.id,
-        kind: "provision",
-        ...buildReuseThreadProvisionOperation({
-          clientRequestId: provisionRequest.requestId,
-          environmentId: environment.id,
-          inputText: "Retry partial result",
-          provisionEventSequence: provisionRequest.sequence,
-          provisioningId: "tpv-idempotency-1",
-          titleProvided: true,
-        }),
-      });
-      const command = queueEnvironmentProvisionLifecycleCommand(harness, {
-        hostId: host.id,
-        sessionId: session.id,
-        environmentId: environment.id,
-        command: {
-          type: "environment.provision",
-          environmentId: environment.id,
-          initiator: {
-            threadId: thread.id,
-            provisioningId: "tpv-idempotency-1",
-          },
-          workspaceProvisionType: "unmanaged",
-          path: "/tmp/retry-partial-provision",
-        },
-      });
-      const queued = await waitForQueuedCommand(
-        harness,
-        ({ row }) => row.id === command.id,
-      );
-      const result = {
-        path: "/tmp/retry-partial-provision",
-        branchName: "bb/retry-partial",
-        defaultBranch: "main",
-        isGitRepo: true,
-        isWorktree: false,
-        transcript: [],
-      };
-
-      reportCommandResult(harness.db, harness.hub, {
-        commandId: command.id,
-        state: "success",
-        completedAt: Date.now(),
-        resultPayload: JSON.stringify(result),
-      });
-
-      expect(
-        getEnvironmentOperation(harness.db, {
-          environmentId: environment.id,
-          kind: "provision",
-        })?.state,
-      ).toBe("queued");
-
-      const retryResponse = await reportQueuedCommandSuccess(
-        harness,
-        queued,
-        result,
-      );
-      expect(retryResponse.status).toBe(200);
-
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe("ready");
-      expect(
-        getEnvironmentOperation(harness.db, {
-          environmentId: environment.id,
-          kind: "provision",
-        }),
-      ).toMatchObject({
-        failureReason: null,
-        state: "completed",
-      });
-      expect(getThread(harness.db, thread.id)?.status).toBe("provisioning");
-
-      const startCommands = harness.db
-        .select()
-        .from(hostDaemonCommands)
-        .where(eq(hostDaemonCommands.type, "thread.start"))
-        .all();
-      expect(startCommands).toHaveLength(1);
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("fails lifecycle state when command-result side effects throw", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host, session } = seedHostSession(harness.deps, {
-        id: "host-result-side-effect-failure",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: "/tmp/side-effect-failure",
-        status: "provisioning",
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "provisioning",
-      });
-      upsertThreadOperationRecord(harness.db, {
-        threadId: thread.id,
-        kind: "provision",
-        payload: buildReuseThreadProvisionOperation({
-          clientRequestId: "creq_23456789ab",
-          environmentId: environment.id,
-          inputText: "Side-effect failure",
-          provisionEventSequence: 0,
-          provisioningId: "tpv-idempotency-side-effect-failure",
-          titleProvided: true,
-        }).payload,
-      });
-      const command = queueEnvironmentProvisionLifecycleCommand(harness, {
-        hostId: host.id,
-        sessionId: session.id,
-        environmentId: environment.id,
-        command: {
-          type: "environment.provision",
-          environmentId: environment.id,
-          initiator: null,
-          workspaceProvisionType: "unmanaged",
-          path: "/tmp/side-effect-failure",
-        },
-      });
-      const queued = await waitForQueuedCommand(
-        harness,
-        ({ row }) => row.id === command.id,
-      );
-
-      const response = await reportQueuedCommandSuccess(harness, queued, {
-        path: "/tmp/side-effect-failure",
-        branchName: "bb/side-effect-failure",
-        defaultBranch: "main",
-        isGitRepo: true,
-        isWorktree: false,
-        transcript: [],
-      });
-      expect(response.status).toBe(200);
-
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe("error");
-      expect(
-        getEnvironmentOperation(harness.db, {
-          environmentId: environment.id,
-          kind: "provision",
-        }),
-      ).toMatchObject({
-        failureReason: expect.stringContaining(
-          "Server failed to apply command result side effects",
-        ),
-        state: "failed",
-      });
-      expect(getThread(harness.db, thread.id)?.status).toBe("error");
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
   it("does not replay side effects when the same command result is reported twice", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -402,6 +203,376 @@ describe("internal command result idempotency", () => {
         .all();
       expect(startCommands).toHaveLength(1);
       expect(getEnvironment(harness.db, environment.id)?.status).toBe("ready");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rolls back owner side effects when command result settlement fails", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-command-result-rollback",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/rollback-before",
+        status: "provisioning",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "idle",
+      });
+      const command = queueEnvironmentProvisionLifecycleCommand(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        environmentId: environment.id,
+        command: {
+          type: "environment.provision",
+          environmentId: environment.id,
+          initiator: {
+            threadId: thread.id,
+            provisioningId: "tpv-command-result-rollback",
+          },
+          workspaceProvisionType: "unmanaged",
+          path: "/tmp/rollback-after",
+        },
+      });
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ row }) => row.id === command.id,
+      );
+      const threadNotifications: string[] = [];
+      const environmentNotifications: string[] = [];
+      const originalNotifyThread = harness.hub.notifyThread.bind(harness.hub);
+      const originalNotifyEnvironment =
+        harness.hub.notifyEnvironment.bind(harness.hub);
+      harness.hub.notifyThread = (threadId, changes) => {
+        threadNotifications.push(`${threadId}:${changes.join(",")}`);
+        originalNotifyThread(threadId, changes);
+      };
+      harness.hub.notifyEnvironment = (environmentId, changes) => {
+        environmentNotifications.push(
+          `${environmentId}:${changes.join(",")}`,
+        );
+        originalNotifyEnvironment(environmentId, changes);
+      };
+
+      harness.db.run(
+        sql.raw(`
+          CREATE TRIGGER abort_environment_provision_completion
+          BEFORE UPDATE ON environment_operations
+          WHEN OLD.kind = 'provision' AND NEW.state = 'completed'
+          BEGIN
+            SELECT RAISE(ABORT, 'abort provision completion');
+          END
+        `),
+      );
+
+      try {
+        const response = await reportQueuedCommandSuccess(harness, queued, {
+          path: "/tmp/rollback-after",
+          branchName: "bb/rollback-after",
+          defaultBranch: "main",
+          isGitRepo: true,
+          isWorktree: false,
+          transcript: [],
+        });
+        expect(response.status).toBe(500);
+      } finally {
+        harness.hub.notifyThread = originalNotifyThread;
+        harness.hub.notifyEnvironment = originalNotifyEnvironment;
+        harness.db.run(
+          sql.raw(
+            "DROP TRIGGER IF EXISTS abort_environment_provision_completion",
+          ),
+        );
+      }
+
+      const storedCommand = getCommand(harness.db, command.id);
+      expect(storedCommand?.state).toBe("pending");
+      expect(storedCommand?.completedAt).toBeNull();
+      expect(storedCommand?.resultPayload).toBeNull();
+
+      const storedEnvironment = getEnvironment(harness.db, environment.id);
+      expect(storedEnvironment?.status).toBe("provisioning");
+      expect(storedEnvironment?.path).toBe("/tmp/rollback-before");
+      expect(storedEnvironment?.branchName).toBe("bb/test");
+
+      const provisionOperation = getEnvironmentOperation(harness.db, {
+        environmentId: environment.id,
+        kind: "provision",
+      });
+      expect(provisionOperation?.state).toBe("queued");
+
+      const provisioningEvents = harness.db
+        .select()
+        .from(events)
+        .where(
+          and(
+            eq(events.threadId, thread.id),
+            eq(events.type, "system/thread-provisioning"),
+          ),
+        )
+        .all();
+      expect(provisioningEvents).toHaveLength(0);
+      expect(threadNotifications).toEqual([]);
+      expect(environmentNotifications).toEqual([]);
+
+      await expect(
+        harness.hub.waitForCommandResult(command.id, 25),
+      ).rejects.toThrow("Timed out waiting for command result");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("recovers environment provision post-commit work from the thread lifecycle sweep before scheduled dispatch runs", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-restart-window-provision-post-commit",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/restart-window-provision-post-commit",
+        status: "provisioning",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "provisioning",
+      });
+      const provisionRequest = appendClientTurnEvent(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        type: "client/turn/requested",
+        input: [
+          { type: "text", text: "Recover restart window provision action" },
+        ],
+        target: { kind: "thread-start" },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          source: "client/turn/requested",
+        },
+        initiator: "user",
+        requestMethod: "thread/start",
+        source: "spawn",
+      });
+      upsertThreadOperationRecord(harness.db, {
+        threadId: thread.id,
+        kind: "provision",
+        ...buildReuseThreadProvisionOperation({
+          clientRequestId: provisionRequest.requestId,
+          environmentId: environment.id,
+          inputText: "Recover restart window provision action",
+          provisionEventSequence: provisionRequest.sequence,
+          provisioningId: "tpv-restart-window-provision-post-commit",
+          titleProvided: true,
+        }),
+      });
+      const command = queueEnvironmentProvisionLifecycleCommand(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        environmentId: environment.id,
+        command: {
+          type: "environment.provision",
+          environmentId: environment.id,
+          initiator: {
+            threadId: thread.id,
+            provisioningId: "tpv-restart-window-provision-post-commit",
+          },
+          workspaceProvisionType: "unmanaged",
+          path: "/tmp/restart-window-provision-post-commit",
+        },
+      });
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ row }) => row.id === command.id,
+      );
+      fetchCommands(harness.db, harness.hub, { hostId: host.id });
+
+      await handleCommandResult(harness.deps, {
+        sessionId: session.id,
+        commandId: queued.row.id,
+        completedAt: Date.now(),
+        type: "environment.provision",
+        ok: true,
+        result: {
+          path: "/tmp/restart-window-provision-post-commit",
+          branchName: "bb/restart-window-provision",
+          defaultBranch: "main",
+          isGitRepo: true,
+          isWorktree: false,
+          transcript: [],
+        },
+      });
+      const startCommandsBeforeSweep = harness.db
+        .select()
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.type, "thread.start"))
+        .all();
+      expect(startCommandsBeforeSweep).toHaveLength(0);
+
+      await runThreadLifecycleSweep(harness.deps);
+
+      const threadStartCommand = await waitForQueuedCommandAfter(
+        harness,
+        command.cursor,
+        ({ command: queuedCommand }) =>
+          queuedCommand.type === "thread.start" &&
+          queuedCommand.threadId === thread.id,
+      );
+      expect(threadStartCommand.command).toMatchObject({
+        environmentId: environment.id,
+        threadId: thread.id,
+      });
+
+      await waitImmediate();
+      await expect(
+        waitForQueuedCommandAfter(
+          harness,
+          threadStartCommand.row.cursor,
+          ({ command: queuedCommand }) =>
+            queuedCommand.type === "thread.start" &&
+            queuedCommand.threadId === thread.id,
+          50,
+        ),
+      ).rejects.toThrow("Timed out waiting for queued command");
+      const startCommands = harness.db
+        .select()
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.type, "thread.start"))
+        .all();
+      expect(startCommands).toHaveLength(1);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("recovers thread stop cleanup post-commit work from the managed cleanup sweep before scheduled dispatch runs", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-restart-window-stop-cleanup-post-commit",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        managed: true,
+        path: "/tmp/restart-window-stop-cleanup-post-commit",
+        status: "ready",
+        workspaceProvisionType: "managed-worktree",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      archiveThread(harness.db, harness.hub, thread.id);
+      requestThreadStop(harness.deps, {
+        environmentId: environment.id,
+        hostId: host.id,
+        stopRequestedAt: null,
+        threadId: thread.id,
+      });
+      requestEnvironmentCleanup(harness.deps, {
+        environmentId: environment.id,
+        mode: "force",
+      });
+      const queuedStop = await waitForQueuedCommand(
+        harness,
+        ({ command: queuedCommand }) =>
+          queuedCommand.type === "thread.stop" &&
+          queuedCommand.threadId === thread.id,
+      );
+      const fetchedStopCommands = fetchCommands(harness.db, harness.hub, {
+        hostId: host.id,
+      });
+      expect(fetchedStopCommands.map((command) => command.id)).toContain(
+        queuedStop.row.id,
+      );
+      expect(getCommand(harness.db, queuedStop.row.id)?.state).toBe("fetched");
+
+      await handleCommandResult(harness.deps, {
+        sessionId: session.id,
+        commandId: queuedStop.row.id,
+        completedAt: Date.now(),
+        type: "thread.stop",
+        ok: true,
+        result: {},
+      });
+      expect(
+        getThreadOperation(harness.db, {
+          threadId: thread.id,
+          kind: "stop",
+        }),
+      ).toMatchObject({ commandId: queuedStop.row.id, state: "completed" });
+
+      expect(getThread(harness.db, thread.id)?.stopRequestedAt).toBeNull();
+      expect(getEnvironment(harness.db, environment.id)?.cleanupRequestedAt)
+        .not.toBeNull();
+      expect(
+        getEnvironmentOperation(harness.db, {
+          environmentId: environment.id,
+          kind: "destroy",
+        }),
+      ).toMatchObject({ state: "requested" });
+      const destroyCommandsBeforeSweep = harness.db
+        .select()
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.type, "environment.destroy"))
+        .all();
+      expect(destroyCommandsBeforeSweep).toHaveLength(0);
+
+      await runManagedEnvironmentArchiveCleanupSweep(
+        harness.deps,
+        advanceEnvironmentCleanup,
+      );
+
+      const destroyCommand = await waitForQueuedCommandAfter(
+        harness,
+        queuedStop.row.cursor,
+        ({ command: queuedCommand }) =>
+          queuedCommand.type === "environment.destroy" &&
+          queuedCommand.environmentId === environment.id,
+      );
+      expect(destroyCommand.command).toMatchObject({
+        environmentId: environment.id,
+      });
+
+      await waitImmediate();
+      await expect(
+        waitForQueuedCommandAfter(
+          harness,
+          destroyCommand.row.cursor,
+          ({ command: queuedCommand }) =>
+            queuedCommand.type === "environment.destroy" &&
+            queuedCommand.environmentId === environment.id,
+          50,
+        ),
+      ).rejects.toThrow("Timed out waiting for queued command");
+      const destroyCommands = harness.db
+        .select()
+        .from(hostDaemonCommands)
+        .where(eq(hostDaemonCommands.type, "environment.destroy"))
+        .all();
+      expect(destroyCommands).toHaveLength(1);
     } finally {
       await harness.cleanup();
     }
@@ -671,320 +842,6 @@ describe("internal command result idempotency", () => {
     }
   });
 
-  it("replays settled thread.start side effects", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host } = seedHostSession(harness.deps, {
-        id: "host-settled-thread-start-retry",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: "/tmp/settled-thread-start-retry",
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "created",
-      });
-
-      await requestThreadStart(harness.deps, {
-        thread,
-        environment: {
-          id: environment.id,
-          hostId: environment.hostId,
-          path: environment.path,
-          workspaceProvisionType: environment.workspaceProvisionType,
-        },
-        requestId: "creq_23456789ab",
-        input: [{ type: "text", text: "Start retry guard thread" }],
-        execution: {
-          model: "gpt-5",
-          reasoningLevel: "medium",
-          permissionMode: "full",
-          serviceTier: "default",
-          source: "client/turn/requested",
-        },
-        permissionEscalation: "ask",
-        projectId: project.id,
-        providerId: thread.providerId,
-      });
-
-      const queuedStart = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "thread.start" && command.threadId === thread.id,
-      );
-      const result = { providerThreadId: "provider-thread-settled-retry" };
-      reportCommandResult(harness.db, harness.hub, {
-        commandId: queuedStart.row.id,
-        state: "success",
-        completedAt: Date.now(),
-        resultPayload: JSON.stringify(result),
-      });
-
-      const provisioningEventsBeforeRetry = harness.db
-        .select()
-        .from(events)
-        .where(eq(events.threadId, thread.id))
-        .all()
-        .filter((event) => event.type === "system/thread-provisioning");
-      const errorEventsBeforeRetry = harness.db
-        .select()
-        .from(events)
-        .where(eq(events.threadId, thread.id))
-        .all()
-        .filter((event) => event.type === "system/error");
-      const retryResponse = await reportQueuedCommandSuccess(
-        harness,
-        queuedStart,
-        result,
-      );
-      expect(retryResponse.status).toBe(200);
-
-      const provisioningEventsAfterRetry = harness.db
-        .select()
-        .from(events)
-        .where(eq(events.threadId, thread.id))
-        .all()
-        .filter((event) => event.type === "system/thread-provisioning");
-      const errorEventsAfterRetry = harness.db
-        .select()
-        .from(events)
-        .where(eq(events.threadId, thread.id))
-        .all()
-        .filter((event) => event.type === "system/error");
-      expect(provisioningEventsAfterRetry).toHaveLength(
-        provisioningEventsBeforeRetry.length,
-      );
-      expect(errorEventsAfterRetry).toHaveLength(errorEventsBeforeRetry.length);
-      expect(
-        getThreadOperation(harness.db, {
-          threadId: thread.id,
-          kind: "start",
-        }),
-      ).toMatchObject({
-        commandId: queuedStart.row.id,
-        failureReason: null,
-        state: "completed",
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("replays settled environment.destroy side effects when a success retry arrives", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host, session } = seedHostSession(harness.deps, {
-        id: "host-settled-destroy-retry",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-        path: "/tmp/settled-destroy-retry",
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        managed: true,
-        path: "/tmp/settled-destroy-retry",
-        projectId: project.id,
-        status: "destroying",
-        workspaceProvisionType: "managed-worktree",
-      });
-      requestEnvironmentCleanup(harness.deps, {
-        environmentId: environment.id,
-        mode: "force",
-      });
-      const command = queueEnvironmentDestroyLifecycleCommand(harness, {
-        hostId: host.id,
-        sessionId: session.id,
-        environmentId: environment.id,
-        command: {
-          type: "environment.destroy",
-          environmentId: environment.id,
-          workspaceContext: {
-            workspacePath: environment.path,
-            workspaceProvisionType: environment.workspaceProvisionType,
-          },
-        },
-      });
-      const queuedDestroy = await waitForQueuedCommand(
-        harness,
-        ({ row }) => row.id === command.id,
-      );
-      reportCommandResult(harness.db, harness.hub, {
-        commandId: command.id,
-        state: "success",
-        completedAt: Date.now(),
-        resultPayload: JSON.stringify({}),
-      });
-
-      const retryResponse = await reportQueuedCommandSuccess(
-        harness,
-        queuedDestroy,
-        {},
-      );
-      expect(retryResponse.status).toBe(200);
-
-      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
-        cleanupRequestedAt: null,
-        status: "destroyed",
-      });
-      expect(
-        getEnvironmentOperation(harness.db, {
-          environmentId: environment.id,
-          kind: "destroy",
-        }),
-      ).toMatchObject({
-        commandId: command.id,
-        failureReason: null,
-        state: "completed",
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("completes environment.destroy replay when the environment row is already destroyed", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host, session } = seedHostSession(harness.deps, {
-        id: "host-settled-destroy-already-destroyed",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-        path: "/tmp/settled-destroy-already-destroyed",
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        managed: true,
-        path: "/tmp/settled-destroy-already-destroyed",
-        projectId: project.id,
-        status: "destroying",
-        workspaceProvisionType: "managed-worktree",
-      });
-      requestEnvironmentCleanup(harness.deps, {
-        environmentId: environment.id,
-        mode: "force",
-      });
-      const command = queueEnvironmentDestroyLifecycleCommand(harness, {
-        hostId: host.id,
-        sessionId: session.id,
-        environmentId: environment.id,
-        command: {
-          type: "environment.destroy",
-          environmentId: environment.id,
-          workspaceContext: {
-            workspacePath: environment.path,
-            workspaceProvisionType: environment.workspaceProvisionType,
-          },
-        },
-      });
-      const queuedDestroy = await waitForQueuedCommand(
-        harness,
-        ({ row }) => row.id === command.id,
-      );
-      reportCommandResult(harness.db, harness.hub, {
-        commandId: command.id,
-        state: "success",
-        completedAt: Date.now(),
-        resultPayload: JSON.stringify({}),
-      });
-      setEnvironmentRecordDestroyed(harness.db, harness.hub, environment.id);
-
-      const retryResponse = await reportQueuedCommandSuccess(
-        harness,
-        queuedDestroy,
-        {},
-      );
-      expect(retryResponse.status).toBe(200);
-
-      expect(getEnvironment(harness.db, environment.id)).toMatchObject({
-        cleanupRequestedAt: null,
-        status: "destroyed",
-      });
-      expect(
-        getEnvironmentOperation(harness.db, {
-          environmentId: environment.id,
-          kind: "destroy",
-        }),
-      ).toMatchObject({
-        commandId: command.id,
-        failureReason: null,
-        state: "completed",
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("replays settled thread.stop side effects when a success retry arrives", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host } = seedHostSession(harness.deps, {
-        id: "host-settled-stop-retry",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-        path: "/tmp/settled-stop-retry",
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-        path: "/tmp/settled-stop-retry",
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "active",
-      });
-      requestThreadStop(harness.deps, {
-        environmentId: environment.id,
-        hostId: host.id,
-        stopRequestedAt: null,
-        threadId: thread.id,
-      });
-      const queuedStop = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "thread.stop" && command.threadId === thread.id,
-      );
-      reportCommandResult(harness.db, harness.hub, {
-        commandId: queuedStop.row.id,
-        state: "success",
-        completedAt: Date.now(),
-        resultPayload: JSON.stringify({}),
-      });
-
-      const retryResponse = await reportQueuedCommandSuccess(
-        harness,
-        queuedStop,
-        {},
-      );
-      expect(retryResponse.status).toBe(200);
-
-      expect(getThread(harness.db, thread.id)).toMatchObject({
-        status: "idle",
-        stopRequestedAt: null,
-      });
-      expect(
-        getThreadOperation(harness.db, {
-          threadId: thread.id,
-          kind: "stop",
-        }),
-      ).toMatchObject({
-        commandId: queuedStop.row.id,
-        failureReason: null,
-        state: "completed",
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
   it("keeps the stored error cached when a settled command retry reports success", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -1049,6 +906,84 @@ describe("internal command result idempotency", () => {
     }
   });
 
+  it("keeps the canonical expired error cached when a late daemon result arrives after sweep expiry", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-expired-late-result",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/expired-late-result",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/expired-late-result",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      requestThreadStop(harness.deps, {
+        environmentId: environment.id,
+        hostId: host.id,
+        stopRequestedAt: null,
+        threadId: thread.id,
+      });
+      const queuedStop = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.stop" && command.threadId === thread.id,
+      );
+      fetchCommands(harness.db, harness.hub, { hostId: host.id });
+      const now = Date.now();
+      harness.db
+        .update(hostDaemonCommands)
+        .set({ fetchedAt: now - 70_000, retryCount: 1 })
+        .where(eq(hostDaemonCommands.id, queuedStop.row.id))
+        .run();
+
+      const expired = sweepExpiredCommands(harness.db, harness.hub, now);
+      expect(expired.erroredCommandIds).toEqual([queuedStop.row.id]);
+      expect(getCommand(harness.db, queuedStop.row.id)).toMatchObject({
+        state: "error",
+        resultPayload: JSON.stringify({
+          errorCode: "command_expired",
+          errorMessage: "Command expired after retry",
+        }),
+      });
+
+      const lateResponse = await reportQueuedCommandSuccess(
+        harness,
+        queuedStop,
+        {},
+      );
+      expect(lateResponse.status).toBe(200);
+
+      await expect(
+        harness.hub.waitForCommandResult(queuedStop.row.id, 1_000),
+      ).resolves.toEqual({
+        commandId: queuedStop.row.id,
+        errorCode: "command_expired",
+        errorMessage: "Command expired after retry",
+        ok: false,
+        type: "thread.stop",
+      });
+      expect(getCommand(harness.db, queuedStop.row.id)).toMatchObject({
+        state: "error",
+        resultPayload: JSON.stringify({
+          errorCode: "command_expired",
+          errorMessage: "Command expired after retry",
+        }),
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("keeps the stored success cached when a settled command retry reports error", async () => {
     const harness = await createTestAppHarness();
     try {
@@ -1106,151 +1041,6 @@ describe("internal command result idempotency", () => {
         ok: true,
         result: {},
         type: "thread.stop",
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("replays settled interactive.resolve side effects when a success retry arrives", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host, session } = seedHostSession(harness.deps, {
-        id: "host-settled-interaction-retry",
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-      });
-      const registered =
-        harness.deps.pendingInteractions.registerPendingInteraction({
-          interaction: {
-            threadId: thread.id,
-            turnId: "turn-settled-interaction-retry",
-            providerId: "codex",
-            providerThreadId: "provider-thread-settled-interaction-retry",
-            providerRequestId: "request-settled-interaction-retry",
-            payload: createCommandApprovalPayload({
-              itemId: "item-settled-interaction-retry",
-              reason: "Approve command",
-              command: "git push",
-              cwd: "/tmp/project",
-            }),
-          },
-          sessionId: session.id,
-        });
-      if (registered.outcome === "rejected") {
-        throw new Error(
-          `Expected interaction registration to succeed: ${registered.reason}`,
-        );
-      }
-
-      harness.deps.pendingInteractions.resolvePendingInteraction({
-        threadId: thread.id,
-        interactionId: registered.interaction.id,
-        resolution: createAllowOnceResolution(),
-      });
-      const queuedResolve = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "interactive.resolve" &&
-          command.interactionId === registered.interaction.id,
-      );
-      reportCommandResult(harness.db, harness.hub, {
-        commandId: queuedResolve.row.id,
-        state: "success",
-        completedAt: Date.now(),
-        resultPayload: JSON.stringify({}),
-      });
-
-      const retryResponse = await reportQueuedCommandSuccess(
-        harness,
-        queuedResolve,
-        {},
-      );
-      expect(retryResponse.status).toBe(200);
-
-      expect(
-        harness.deps.pendingInteractions.getThreadInteraction({
-          threadId: thread.id,
-          interactionId: registered.interaction.id,
-        }),
-      ).toMatchObject({
-        status: "resolved",
-        statusReason: null,
-      });
-    } finally {
-      await harness.cleanup();
-    }
-  });
-
-  it("replays settled runtime material side effects when a success retry arrives", async () => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host, session } = seedHostSession(harness.deps, {
-        id: "host-settled-runtime-retry",
-        type: "ephemeral",
-      });
-      upsertHostOperationRecord(harness.db, {
-        hostId: host.id,
-        kind: "sync_runtime_material",
-        payload: JSON.stringify({
-          appliedVersion: null,
-          desiredVersion: "runtime-settled-retry",
-        }),
-      });
-      const command = queueCommand(harness.db, harness.hub, {
-        hostId: host.id,
-        sessionId: session.id,
-        type: "host.sync_runtime_material",
-        payload: JSON.stringify({
-          type: "host.sync_runtime_material",
-          version: "runtime-settled-retry",
-        }),
-      });
-      markHostOperationRecordQueued(harness.db, {
-        hostId: host.id,
-        kind: "sync_runtime_material",
-        commandId: command.id,
-      });
-      const queuedSync = await waitForQueuedCommand(
-        harness,
-        ({ row }) => row.id === command.id,
-      );
-      reportCommandResult(harness.db, harness.hub, {
-        commandId: command.id,
-        state: "success",
-        completedAt: Date.now(),
-        resultPayload: JSON.stringify({
-          appliedVersion: "runtime-settled-retry",
-        }),
-      });
-
-      const retryResponse = await reportQueuedCommandSuccess(
-        harness,
-        queuedSync,
-        {
-          appliedVersion: "runtime-settled-retry",
-        },
-      );
-      expect(retryResponse.status).toBe(200);
-
-      expect(
-        getHostOperation(harness.db, {
-          hostId: host.id,
-          kind: "sync_runtime_material",
-        }),
-      ).toMatchObject({
-        commandId: command.id,
-        failureReason: null,
-        state: "completed",
       });
     } finally {
       await harness.cleanup();

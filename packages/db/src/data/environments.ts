@@ -211,7 +211,7 @@ function buildEnvironmentChangeKinds(args: {
 }
 
 function updateEnvironmentRecord(
-  db: DbConnection,
+  db: EnvironmentWriteConnection,
   notifier: DbNotifier,
   id: string,
   args: {
@@ -254,7 +254,7 @@ function updateEnvironmentRecord(
 }
 
 function updateEnvironmentMetadataRecord(
-  db: DbConnection,
+  db: EnvironmentWriteConnection,
   notifier: DbNotifier,
   id: string,
   metadata: EnvironmentMetadataUpdateColumns,
@@ -263,7 +263,7 @@ function updateEnvironmentMetadataRecord(
 }
 
 function updateEnvironmentLifecycleRecord(
-  db: DbConnection,
+  db: EnvironmentWriteConnection,
   notifier: DbNotifier,
   id: string,
   lifecycle: EnvironmentLifecycleUpdateColumns,
@@ -272,7 +272,7 @@ function updateEnvironmentLifecycleRecord(
 }
 
 export function applyProvisionedEnvironmentRecord(
-  db: DbConnection,
+  db: EnvironmentWriteConnection,
   notifier: DbNotifier,
   id: string,
   input: ApplyProvisionedEnvironmentInput,
@@ -292,7 +292,7 @@ export function applyProvisionedEnvironmentRecord(
 }
 
 export function updateEnvironmentMetadata(
-  db: DbConnection,
+  db: EnvironmentWriteConnection,
   notifier: DbNotifier,
   id: string,
   input: UpdateEnvironmentMetadataInput,
@@ -303,7 +303,7 @@ export function updateEnvironmentMetadata(
 }
 
 export function setEnvironmentStatus(
-  db: DbConnection,
+  db: EnvironmentWriteConnection,
   notifier: DbNotifier,
   id: string,
   input: UpdateEnvironmentStatusInput,
@@ -324,7 +324,7 @@ function resolveRequestedCleanupMode(
 }
 
 export function recordEnvironmentCleanupRequest(
-  db: DbConnection,
+  db: EnvironmentWriteConnection,
   notifier: DbNotifier,
   id: string,
   input: RequestEnvironmentCleanupInput,
@@ -345,7 +345,7 @@ export function recordEnvironmentCleanupRequest(
 }
 
 export function clearEnvironmentCleanupRequestRecord(
-  db: DbConnection,
+  db: EnvironmentWriteConnection,
   notifier: DbNotifier,
   id: string,
 ) {
@@ -356,7 +356,7 @@ export function clearEnvironmentCleanupRequestRecord(
 }
 
 export function setEnvironmentRecordDestroyed(
-  db: DbConnection,
+  db: EnvironmentWriteConnection,
   notifier: DbNotifier,
   id: string,
 ) {

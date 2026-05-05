@@ -120,6 +120,10 @@ describe("sweepExpiredCommands", () => {
       .where(eq(hostDaemonCommands.id, cmd.id))
       .get();
     expect(updated?.state).toBe("error");
+    expect(JSON.parse(updated?.resultPayload ?? "")).toEqual({
+      errorCode: "command_expired",
+      errorMessage: "Command expired after retry",
+    });
 
     // Thread should be errored
     const updatedThread = db

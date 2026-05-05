@@ -1,5 +1,8 @@
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import {
+  type DbNotifier,
+  type DbQueryConnection,
+  type DbTransaction,
   type EnvironmentOperationRow,
   getActiveSession,
   getCommand,
@@ -37,6 +40,8 @@ import { ApiError } from "../../errors.js";
 import {
   appendThreadProvisioningEvent,
   appendSystemErrorEvent,
+  appendSystemErrorEventInTransaction,
+  appendThreadProvisioningEventInTransaction,
 } from "../threads/thread-events.js";
 import {
   buildEnvironmentProvisionCommand,
@@ -58,7 +63,10 @@ import {
   ensureSandboxHostSessionReady,
 } from "../hosts/host-lifecycle.js";
 import { advanceEnvironmentCleanup } from "./environment-cleanup.js";
-import { tryTransition } from "../threads/thread-transitions.js";
+import {
+  tryTransition,
+  tryTransitionInTransaction,
+} from "../threads/thread-transitions.js";
 import { readThreadProvisioningIdFromRecord } from "../threads/thread-provisioning-state.js";
 
 type EnvironmentProvisionOperationKind = Extract<
@@ -70,6 +78,19 @@ type EnvironmentProvisionCommand = Extract<
   HostDaemonCommand,
   { type: "environment.provision" }
 >;
+
+interface EnvironmentProvisionReadDeps {
+  db: DbQueryConnection;
+}
+
+interface EnvironmentProvisionWriteDeps extends EnvironmentProvisionReadDeps {
+  hub: DbNotifier;
+}
+
+interface EnvironmentProvisionTransactionDeps
+  extends EnvironmentProvisionWriteDeps {
+  db: DbTransaction;
+}
 
 export interface RequestEnvironmentProvisionArgs {
   environmentId: string;
@@ -124,7 +145,7 @@ interface AppendThreadProvisioningEventToEnvironmentThreadsArgs {
 }
 
 function listLiveEnvironmentThreads(
-  deps: Pick<AppDeps, "db">,
+  deps: EnvironmentProvisionReadDeps,
   environmentId: string,
 ): LiveEnvironmentThread[] {
   return deps.db
@@ -197,6 +218,29 @@ function appendThreadProvisioningEventToEnvironmentThreads(
   }
 }
 
+function appendThreadProvisioningEventToEnvironmentThreadsInTransaction(
+  deps: EnvironmentProvisionTransactionDeps,
+  args: AppendThreadProvisioningEventToEnvironmentThreadsArgs,
+): void {
+  const liveThreads =
+    args.threads ?? listLiveEnvironmentThreads(deps, args.environmentId);
+
+  for (const thread of liveThreads) {
+    const provisioningId = resolveLiveThreadProvisioningId(
+      thread,
+      args.fallbackProvisioningId,
+    );
+    appendThreadProvisioningEventInTransaction(deps.db, {
+      entries: args.entries,
+      environmentId: args.environmentId,
+      provisioningId,
+      status: args.status,
+      threadId: thread.id,
+    });
+    deps.hub.notifyThread(thread.id, ["events-appended"]);
+  }
+}
+
 function assertNeverSandboxHostProgressStage(value: never): never {
   throw new Error(`Unsupported sandbox host progress stage: ${String(value)}`);
 }
@@ -260,7 +304,7 @@ function queueEnvironmentProvisionCommand(
 }
 
 function getActiveProvisionOperation(
-  deps: Pick<AppDeps, "db">,
+  deps: EnvironmentProvisionReadDeps,
   environmentId: string,
 ):
   | (EnvironmentOperationRow & { kind: EnvironmentProvisionOperationKind })
@@ -282,7 +326,7 @@ function getActiveProvisionOperation(
 }
 
 function getActiveProvisionOperationByCommandId(
-  deps: Pick<AppDeps, "db">,
+  deps: EnvironmentProvisionReadDeps,
   commandId: string,
 ) {
   const operation = getEnvironmentOperationByCommandId(deps.db, commandId);
@@ -307,7 +351,7 @@ function readEnvironmentProvisioningIdFromOperation(
 }
 
 export function getEnvironmentProvisioningIdForCommand(
-  deps: Pick<AppDeps, "db">,
+  deps: EnvironmentProvisionReadDeps,
   args: EnvironmentProvisioningCommandLookupArgs,
 ): string | null {
   const operation = getActiveProvisionOperationByCommandId(
@@ -321,7 +365,7 @@ export function getEnvironmentProvisioningIdForCommand(
 }
 
 function hasQueuedProvisionCommand(
-  deps: Pick<AppDeps, "db">,
+  deps: EnvironmentProvisionReadDeps,
   commandId: string | null,
 ): boolean {
   if (!commandId) {
@@ -336,7 +380,7 @@ function hasQueuedProvisionCommand(
 }
 
 export function completeEnvironmentProvisioning(
-  deps: Pick<AppDeps, "db">,
+  deps: EnvironmentProvisionReadDeps,
   args: { environmentId: string },
 ): boolean {
   const operation = getActiveProvisionOperation(deps, args.environmentId);
@@ -352,14 +396,14 @@ export function completeEnvironmentProvisioning(
 }
 
 export function hasActiveEnvironmentProvisionOperationForCommand(
-  deps: Pick<AppDeps, "db">,
+  deps: EnvironmentProvisionReadDeps,
   args: EnvironmentProvisioningCommandMutationArgs,
 ): boolean {
   return getActiveProvisionOperationByCommandId(deps, args.commandId) !== null;
 }
 
 export function completeEnvironmentProvisioningForCommand(
-  deps: Pick<AppDeps, "db">,
+  deps: EnvironmentProvisionReadDeps,
   args: EnvironmentProvisioningCommandMutationArgs,
 ): boolean {
   const operation = getActiveProvisionOperationByCommandId(
@@ -378,7 +422,7 @@ export function completeEnvironmentProvisioningForCommand(
 }
 
 export function failEnvironmentProvisioningForCommand(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: EnvironmentProvisionWriteDeps,
   args: FailEnvironmentProvisioningForCommandArgs,
 ): boolean {
   const operation = getActiveProvisionOperationByCommandId(
@@ -410,7 +454,7 @@ export function failEnvironmentProvisioningForCommand(
 }
 
 export function failEnvironmentProvisioning(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: EnvironmentProvisionWriteDeps,
   args: { environmentId: string; failureReason: string },
 ): boolean {
   const operation = getActiveProvisionOperation(deps, args.environmentId);
@@ -438,30 +482,19 @@ export function failEnvironmentProvisioning(
   return true;
 }
 
-export async function failEnvironmentProvisioningDurably(
-  deps: Pick<
-    AppDeps,
-    | "cloudAuth"
-    | "config"
-    | "db"
-    | "hostLifecycle"
-    | "hub"
-    | "lifecycleDedupers"
-    | "machineAuth"
-    | "sandboxEnv"
-    | "sandboxRegistry"
-  >,
+export function recordEnvironmentProvisioningFailure(
+  deps: Pick<AppDeps, "db" | "hub">,
   args: FailEnvironmentProvisioningDurablyArgs,
-): Promise<void> {
+): boolean {
   const environment = getEnvironment(deps.db, args.environmentId);
   if (!environment) {
-    return;
+    return false;
   }
   const operation = args.commandId
     ? getActiveProvisionOperationByCommandId(deps, args.commandId)
     : getActiveProvisionOperation(deps, environment.id);
   if (!operation) {
-    return;
+    return false;
   }
   const liveThreads = listLiveEnvironmentThreads(deps, environment.id);
   const provisioningId = readEnvironmentProvisioningIdFromOperation(operation);
@@ -498,8 +531,83 @@ export async function failEnvironmentProvisioningDurably(
     tryTransition(deps.db, deps.hub, thread.id, "error");
   }
 
-  await advanceEnvironmentCleanup(deps, {
+  return true;
+}
+
+export function recordEnvironmentProvisioningFailureInTransaction(
+  deps: EnvironmentProvisionTransactionDeps,
+  args: FailEnvironmentProvisioningDurablyArgs,
+): boolean {
+  const environment = getEnvironment(deps.db, args.environmentId);
+  if (!environment) {
+    return false;
+  }
+  const operation = args.commandId
+    ? getActiveProvisionOperationByCommandId(deps, args.commandId)
+    : getActiveProvisionOperation(deps, environment.id);
+  if (!operation) {
+    return false;
+  }
+  const liveThreads = listLiveEnvironmentThreads(deps, environment.id);
+  const provisioningId = readEnvironmentProvisioningIdFromOperation(operation);
+
+  if (args.commandId) {
+    failEnvironmentProvisioningForCommand(deps, {
+      commandId: args.commandId,
+      failureReason: args.failureReason,
+    });
+  } else {
+    failEnvironmentProvisioning(deps, {
+      environmentId: environment.id,
+      failureReason: args.failureReason,
+    });
+  }
+
+  appendThreadProvisioningEventToEnvironmentThreadsInTransaction(deps, {
     environmentId: environment.id,
+    fallbackProvisioningId: provisioningId,
+    status: "failed",
+    threads: liveThreads,
+    entries: [args.failureEntry],
+  });
+
+  for (const thread of liveThreads) {
+    appendSystemErrorEventInTransaction(deps, {
+      threadId: thread.id,
+      environmentId: environment.id,
+      code: "thread_provisioning_failed",
+      message: "Provisioning thread failed",
+      detail: args.failureReason,
+      scope: threadScope(),
+    });
+    tryTransitionInTransaction(deps.db, deps.hub, thread.id, "error");
+  }
+
+  return true;
+}
+
+export async function failEnvironmentProvisioningDurably(
+  deps: Pick<
+    AppDeps,
+    | "cloudAuth"
+    | "config"
+    | "db"
+    | "hostLifecycle"
+    | "hub"
+    | "lifecycleDedupers"
+    | "machineAuth"
+    | "sandboxEnv"
+    | "sandboxRegistry"
+  >,
+  args: FailEnvironmentProvisioningDurablyArgs,
+): Promise<void> {
+  const recorded = recordEnvironmentProvisioningFailure(deps, args);
+  if (!recorded) {
+    return;
+  }
+
+  await advanceEnvironmentCleanup(deps, {
+    environmentId: args.environmentId,
   });
 }
 

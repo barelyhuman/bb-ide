@@ -18,6 +18,8 @@ import {
   setPendingInteractionResolved,
   setPendingInteractionResolving,
   type PendingInteractionRow,
+  type DbNotifier,
+  type DbTransaction,
 } from "@bb/db";
 import {
   type PendingInteraction,
@@ -27,7 +29,10 @@ import {
 import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
-import { appendPendingInteractionTimelineEvent } from "./pending-interaction-timeline.js";
+import {
+  appendPendingInteractionTimelineEvent,
+  appendPendingInteractionTimelineEventInTransaction,
+} from "./pending-interaction-timeline.js";
 import {
   PendingInteractionSerializationError,
   toPendingInteraction,
@@ -83,6 +88,11 @@ interface GetThreadInteractionArgs {
 interface InterruptPendingInteractionArgs {
   interactionId: string;
   reason: string;
+}
+
+interface PendingInteractionTransactionDeps {
+  db: DbTransaction;
+  hub: DbNotifier;
 }
 
 interface InterruptPendingInteractionsForThreadsLifecycleArgs {
@@ -391,6 +401,23 @@ export class PendingInteractionLifecycle {
     return interaction;
   }
 
+  completeResolvingInteractionInTransaction(
+    deps: PendingInteractionTransactionDeps,
+    args: CompleteResolvingInteractionArgs,
+  ): PendingInteraction | null {
+    const updated = setPendingInteractionResolved(deps.db, {
+      id: args.interactionId,
+      resolution: JSON.stringify(args.resolution),
+    });
+    if (!updated) {
+      return null;
+    }
+
+    const interaction = toPendingInteraction(updated);
+    this.settleInteractionTerminalStateInTransaction(deps, interaction);
+    return interaction;
+  }
+
   interruptPendingInteraction(
     args: InterruptPendingInteractionArgs,
   ): PendingInteraction | null {
@@ -404,6 +431,23 @@ export class PendingInteractionLifecycle {
 
     const interaction = toPendingInteraction(updated);
     this.settleInteractionTerminalState(interaction);
+    return interaction;
+  }
+
+  interruptPendingInteractionInTransaction(
+    deps: PendingInteractionTransactionDeps,
+    args: InterruptPendingInteractionArgs,
+  ): PendingInteraction | null {
+    const updated = setPendingInteractionInterrupted(deps.db, {
+      id: args.interactionId,
+      statusReason: args.reason,
+    });
+    if (!updated) {
+      return null;
+    }
+
+    const interaction = toPendingInteraction(updated);
+    this.settleInteractionTerminalStateInTransaction(deps, interaction);
     return interaction;
   }
 
@@ -430,6 +474,19 @@ export class PendingInteractionLifecycle {
     );
   }
 
+  interruptPendingInteractionsForThreadIdsInTransaction(
+    deps: PendingInteractionTransactionDeps,
+    args: InterruptPendingInteractionsForThreadIdsLifecycleArgs,
+  ): PendingInteraction[] {
+    return this.settleInterruptedRowsInTransaction(
+      deps,
+      interruptPendingInteractionsForThreadIds(deps.db, {
+        threadIds: args.threadIds,
+        statusReason: args.reason,
+      }),
+    );
+  }
+
   interruptPendingInteractionsForSessionIds(
     args: InterruptPendingInteractionsForSessionIdsLifecycleArgs,
   ): PendingInteraction[] {
@@ -447,6 +504,17 @@ export class PendingInteractionLifecycle {
     const interactions = rows.map(toPendingInteraction);
     for (const interaction of interactions) {
       this.settleInteractionTerminalState(interaction);
+    }
+    return interactions;
+  }
+
+  private settleInterruptedRowsInTransaction(
+    deps: PendingInteractionTransactionDeps,
+    rows: PendingInteractionRow[],
+  ): PendingInteraction[] {
+    const interactions = rows.map(toPendingInteraction);
+    for (const interaction of interactions) {
+      this.settleInteractionTerminalStateInTransaction(deps, interaction);
     }
     return interactions;
   }
@@ -658,5 +726,14 @@ export class PendingInteractionLifecycle {
     this.clearExpiryTimer(interaction.id);
     appendPendingInteractionTimelineEvent(this.deps, interaction);
     notifyInteractionChanged(this.deps, interaction.threadId);
+  }
+
+  private settleInteractionTerminalStateInTransaction(
+    deps: PendingInteractionTransactionDeps,
+    interaction: PendingInteraction,
+  ): void {
+    this.clearExpiryTimer(interaction.id);
+    appendPendingInteractionTimelineEventInTransaction(deps, interaction);
+    deps.hub.notifyThread(interaction.threadId, ["interactions-changed"]);
   }
 }

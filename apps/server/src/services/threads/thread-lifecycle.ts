@@ -12,7 +12,8 @@ import {
   markThreadStopRequested,
   queueCommand,
   transitionThreadStatusInTransaction,
-  type DbConnection,
+  type DbNotifier,
+  type DbQueryConnection,
   type DbTransaction,
 } from "@bb/db";
 import { assertNever } from "@bb/core-ui";
@@ -51,16 +52,15 @@ import {
 import {
   appendThreadEventInTransaction,
   appendThreadEventsInTransaction,
-  appendThreadInterruptedEvent,
   appendThreadInterruptedEventInTransaction,
   getActiveTurnId,
   getLastProviderThreadId,
 } from "./thread-events.js";
-import { tryTransition } from "./thread-transitions.js";
+import { tryTransitionInTransaction } from "./thread-transitions.js";
 import {
   buildThreadStartCommand,
   buildThreadStopCommand,
-  queueThreadDeletedCommand,
+  queueThreadDeletedCommandInTransaction,
   queueTurnSubmitCommand,
   type QueueThreadStartCommandArgs,
   type QueueThreadStopCommandArgs,
@@ -68,6 +68,7 @@ import {
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { createAsyncDeduper } from "../lib/async-deduper.js";
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
+import { NotificationBuffer } from "../lib/notification-buffer.js";
 import { completeThreadProvisioningForStartHandoff } from "./thread-provisioning-handoff.js";
 import { isPreStartThreadStatus } from "./thread-status.js";
 
@@ -168,9 +169,26 @@ interface RequestThreadStartHandoffResult {
   startOperationCreated: boolean;
 }
 
+interface ThreadLifecycleReadDeps {
+  db: DbQueryConnection;
+}
+
+interface ThreadLifecycleWriteDeps extends ThreadLifecycleReadDeps {
+  hub: DbNotifier;
+}
+
+interface ThreadLifecycleTransactionDeps extends ThreadLifecycleWriteDeps {
+  db: DbTransaction;
+}
+
+interface FinalizeStoppedThreadTransactionDeps
+  extends ThreadLifecycleTransactionDeps {
+  pendingInteractions: AppDeps["pendingInteractions"];
+}
+
 interface HasQueuedThreadOperationCommandArgs {
   commandId: string | null;
-  db: DbConnection | DbTransaction;
+  db: DbQueryConnection;
 }
 
 function hasQueuedThreadOperationCommandForDb(
@@ -188,7 +206,7 @@ function hasQueuedThreadOperationCommandForDb(
 }
 
 function hasQueuedThreadOperationCommand(
-  deps: Pick<AppDeps, "db">,
+  deps: ThreadLifecycleReadDeps,
   commandId: string | null,
 ): boolean {
   return hasQueuedThreadOperationCommandForDb({
@@ -198,7 +216,7 @@ function hasQueuedThreadOperationCommand(
 }
 
 function getActiveThreadOperation(
-  deps: Pick<AppDeps, "db">,
+  deps: ThreadLifecycleReadDeps,
   args: {
     kind: "start" | "stop";
     threadId: string;
@@ -213,7 +231,7 @@ function getActiveThreadOperation(
 }
 
 function getActiveThreadOperationByCommandId(
-  deps: Pick<AppDeps, "db">,
+  deps: ThreadLifecycleReadDeps,
   args: {
     commandId: string;
     kind: "start" | "stop";
@@ -232,7 +250,7 @@ function getActiveThreadOperationByCommandId(
 }
 
 function getThreadOperationCommandState(
-  deps: Pick<AppDeps, "db">,
+  deps: ThreadLifecycleReadDeps,
   commandId: string | null,
 ): "pending" | "fetched" | "settled" | null {
   if (!commandId) {
@@ -251,7 +269,7 @@ function getThreadOperationCommandState(
 }
 
 export function hasActiveThreadStartOperation(
-  deps: Pick<AppDeps, "db">,
+  deps: ThreadLifecycleReadDeps,
   threadId: string,
 ): boolean {
   return (
@@ -263,7 +281,7 @@ export function hasActiveThreadStartOperation(
 }
 
 export function ensureThreadCanQueueStartRequest(
-  deps: Pick<AppDeps, "db">,
+  deps: ThreadLifecycleReadDeps,
   thread: Pick<Thread, "id" | "status">,
 ): void {
   if (
@@ -275,7 +293,7 @@ export function ensureThreadCanQueueStartRequest(
 }
 
 export function hasActiveThreadStartOperationForCommand(
-  deps: Pick<AppDeps, "db">,
+  deps: ThreadLifecycleReadDeps,
   args: ThreadOperationCommandMutationArgs,
 ): boolean {
   return (
@@ -287,7 +305,7 @@ export function hasActiveThreadStartOperationForCommand(
 }
 
 export function hasActiveThreadStopOperationForCommand(
-  deps: Pick<AppDeps, "db">,
+  deps: ThreadLifecycleReadDeps,
   args: ThreadOperationCommandMutationArgs,
 ): boolean {
   return (
@@ -299,7 +317,7 @@ export function hasActiveThreadStopOperationForCommand(
 }
 
 function completeThreadOperation(
-  deps: Pick<AppDeps, "db">,
+  deps: ThreadLifecycleReadDeps,
   args: {
     kind: "start" | "stop";
     threadId: string;
@@ -318,7 +336,7 @@ function completeThreadOperation(
 }
 
 function completeThreadOperationForCommand(
-  deps: Pick<AppDeps, "db">,
+  deps: ThreadLifecycleReadDeps,
   args: {
     commandId: string;
     kind: "start" | "stop";
@@ -337,7 +355,7 @@ function completeThreadOperationForCommand(
 }
 
 function failThreadOperationForCommand(
-  deps: Pick<AppDeps, "db">,
+  deps: ThreadLifecycleReadDeps,
   args: {
     commandId: string;
     failureReason: string;
@@ -358,7 +376,7 @@ function failThreadOperationForCommand(
 }
 
 export function completeThreadStart(
-  deps: Pick<AppDeps, "db">,
+  deps: ThreadLifecycleReadDeps,
   args: ThreadOperationMutationArgs,
 ): boolean {
   return completeThreadOperation(deps, {
@@ -368,7 +386,7 @@ export function completeThreadStart(
 }
 
 export function completeThreadStartForCommand(
-  deps: Pick<AppDeps, "db">,
+  deps: ThreadLifecycleReadDeps,
   args: ThreadOperationCommandMutationArgs,
 ): boolean {
   return completeThreadOperationForCommand(deps, {
@@ -378,7 +396,7 @@ export function completeThreadStartForCommand(
 }
 
 export function failThreadStartForCommand(
-  deps: Pick<AppDeps, "db">,
+  deps: ThreadLifecycleReadDeps,
   args: FailThreadOperationForCommandArgs,
 ): boolean {
   return failThreadOperationForCommand(deps, {
@@ -389,7 +407,7 @@ export function failThreadStartForCommand(
 }
 
 export function failThreadStopForCommand(
-  deps: Pick<AppDeps, "db">,
+  deps: ThreadLifecycleReadDeps,
   args: FailThreadOperationForCommandArgs,
 ): boolean {
   return failThreadOperationForCommand(deps, {
@@ -685,6 +703,42 @@ export function interruptActiveTurnForThread(
   return true;
 }
 
+function interruptActiveTurnForThreadInTransaction(
+  deps: ThreadLifecycleTransactionDeps,
+  args: InterruptActiveTurnForThreadArgs,
+): boolean {
+  const activeTurnId = getActiveTurnId(deps, args.threadId);
+  if (!activeTurnId) {
+    return false;
+  }
+
+  const providerThreadId = getLastProviderThreadId(deps, args.threadId);
+  const nextStatus = nextStatusForInterruptedThread(args.reason);
+
+  appendThreadEventInTransaction(deps.db, {
+    threadId: args.threadId,
+    environmentId: args.environmentId,
+    providerThreadId,
+    type: "turn/completed",
+    scope: turnScope(activeTurnId),
+    data: {
+      providerThreadId,
+      status: "interrupted",
+    },
+  });
+  appendThreadInterruptedEventInTransaction(deps.db, {
+    threadId: args.threadId,
+    reason: args.reason,
+  });
+  transitionThreadStatusInTransaction(deps.db, {
+    id: args.threadId,
+    newStatus: nextStatus,
+  });
+  deps.hub.notifyThread(args.threadId, ["events-appended", "status-changed"]);
+
+  return true;
+}
+
 /**
  * Reconciles threads whose server status is active after the host runtime no
  * longer reports them. Every supplied thread gets a thread interruption event;
@@ -801,10 +855,31 @@ function advanceThreadStop(
   return queuedCommand.id;
 }
 
-export async function finalizeStoppedThread(
+export function finalizeStoppedThread(
   deps: PendingInteractionWorkSessionDeps,
   args: FinalizeStoppedThreadArgs,
-): Promise<boolean> {
+): boolean {
+  const notificationBuffer = new NotificationBuffer();
+  const finalized = deps.db.transaction(
+    (tx) =>
+      finalizeStoppedThreadInTransaction(
+        {
+          ...deps,
+          db: tx,
+          hub: notificationBuffer,
+        },
+        args,
+      ),
+    { behavior: "immediate" },
+  );
+  notificationBuffer.flushInto(deps.hub);
+  return finalized;
+}
+
+export function finalizeStoppedThreadInTransaction(
+  deps: FinalizeStoppedThreadTransactionDeps,
+  args: FinalizeStoppedThreadArgs,
+): boolean {
   const currentThread = getThread(deps.db, args.threadId);
   if (!currentThread) {
     return true;
@@ -833,10 +908,17 @@ export async function finalizeStoppedThread(
     deps,
     stopOperation?.commandId ?? null,
   );
-  if (stopCommandState === "fetched") {
+  const isSettlingExpectedCommand =
+    args.expectedCommandId !== undefined &&
+    stopOperation?.commandId === args.expectedCommandId;
+  if (stopCommandState === "fetched" && !isSettlingExpectedCommand) {
     return false;
   }
-  if (stopCommandState === "pending" && stopOperation?.commandId) {
+  if (
+    stopCommandState === "pending" &&
+    stopOperation?.commandId &&
+    !isSettlingExpectedCommand
+  ) {
     if (args.cancelPendingCommand === false) {
       return false;
     }
@@ -847,13 +929,16 @@ export async function finalizeStoppedThread(
 
   let appendedThreadInterruptedEvent = false;
   if (currentThread.status === "active") {
-    appendedThreadInterruptedEvent = interruptActiveTurnForThread(deps, {
-      environmentId: currentThread.environmentId,
-      threadId: currentThread.id,
-      reason: "manual-stop",
-    });
+    appendedThreadInterruptedEvent = interruptActiveTurnForThreadInTransaction(
+      deps,
+      {
+        environmentId: currentThread.environmentId,
+        threadId: currentThread.id,
+        reason: "manual-stop",
+      },
+    );
     if (!appendedThreadInterruptedEvent) {
-      tryTransition(deps.db, deps.hub, currentThread.id, "idle");
+      tryTransitionInTransaction(deps.db, deps.hub, currentThread.id, "idle");
     }
   }
 
@@ -872,36 +957,44 @@ export async function finalizeStoppedThread(
   }
 
   if (finalizedThread.deletedAt === null) {
-    deps.pendingInteractions.interruptPendingInteractionsForThreadIds({
-      threadIds: [finalizedThread.id],
-      reason: "Thread stopped by user request",
-    });
+    deps.pendingInteractions.interruptPendingInteractionsForThreadIdsInTransaction(
+      deps,
+      {
+        threadIds: [finalizedThread.id],
+        reason: "Thread stopped by user request",
+      },
+    );
     if (!appendedThreadInterruptedEvent) {
-      appendThreadInterruptedEvent(deps, {
+      appendThreadInterruptedEventInTransaction(deps.db, {
         threadId: finalizedThread.id,
         reason: "manual-stop",
       });
+      deps.hub.notifyThread(finalizedThread.id, ["events-appended"]);
     }
   }
 
   if (finalizedThread.deletedAt !== null) {
-    deps.pendingInteractions.interruptPendingInteractionsForThreadIds({
-      threadIds: [finalizedThread.id],
-      reason: "Thread was deleted while awaiting user interaction",
-    });
+    deps.pendingInteractions.interruptPendingInteractionsForThreadIdsInTransaction(
+      deps,
+      {
+        threadIds: [finalizedThread.id],
+        reason: "Thread was deleted while awaiting user interaction",
+      },
+    );
 
     const environmentId = finalizedThread.environmentId;
     const environment = environmentId
       ? getEnvironment(deps.db, environmentId)
       : null;
     if (environment) {
-      const queuedDelete = queueThreadDeletedCommand(deps, {
+      const queuedDelete = queueThreadDeletedCommandInTransaction(deps.db, {
         environment: { hostId: environment.hostId, id: environment.id },
         threadId: finalizedThread.id,
       });
       if (!queuedDelete) {
         return false;
       }
+      deps.hub.notifyCommand(environment.hostId);
     }
     deleteThread(deps.db, deps.hub, finalizedThread.id);
     requestEnvironmentCleanup(deps, {
@@ -919,7 +1012,7 @@ export async function finalizeStoppedThreadAndAdvanceCleanup(
   args: FinalizeStoppedThreadArgs,
 ): Promise<boolean> {
   const threadBeforeFinalize = getThread(deps.db, args.threadId);
-  const finalized = await finalizeStoppedThread(deps, args);
+  const finalized = finalizeStoppedThread(deps, args);
   if (!finalized) {
     return false;
   }

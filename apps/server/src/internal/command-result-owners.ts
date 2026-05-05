@@ -1,18 +1,16 @@
 import { eq } from "drizzle-orm";
 import {
-  clearThreadStopRequested,
   getEnvironment,
   getHost,
   listStoredThreadProvisioningRowsByProvisioningId,
   getThread,
   getThreadOperation,
   threads,
+  type DbNotifier,
+  type DbTransaction,
   type HostDaemonCommandRow,
 } from "@bb/db";
-import {
-  applyProvisionedEnvironmentRecord,
-  clearEnvironmentCleanupRequestRecord,
-} from "@bb/db/internal-lifecycle";
+import { applyProvisionedEnvironmentRecord } from "@bb/db/internal-lifecycle";
 import {
   hostDaemonCommandSchema,
   type HostDaemonCommandResult,
@@ -28,19 +26,18 @@ import {
 import type { ThreadEventScope } from "@bb/domain";
 import type {
   InteractiveLifecycleCoordinationDeps,
-  LifecycleCoordinationDeps,
 } from "../lifecycle-coordination-deps.js";
 import {
   completeEnvironmentDestroyForCommand,
   failEnvironmentDestroyForCommand,
   hasActiveEnvironmentDestroyOperationForCommand,
-  requestEnvironmentCleanupAdvance,
+  runEnvironmentCleanupAdvance,
 } from "../services/environments/environment-cleanup.js";
 import {
   completeEnvironmentProvisioningForCommand,
-  failEnvironmentProvisioningDurably,
   getEnvironmentProvisioningIdForCommand,
   hasActiveEnvironmentProvisionOperationForCommand,
+  recordEnvironmentProvisioningFailureInTransaction,
 } from "../services/environments/environment-provisioning.js";
 import { destroyEphemeralHostIfReady } from "../services/hosts/host-lifecycle.js";
 import {
@@ -48,37 +45,70 @@ import {
   failSandboxRuntimeMaterialSyncForCommand,
   hasActiveSandboxRuntimeMaterialSyncOperationForCommand,
 } from "../services/hosts/sandbox-runtime-material-operation.js";
-import { queueThreadRenameCommand } from "../services/threads/thread-commands.js";
 import {
-  appendThreadProvisioningEvent,
-  appendSystemErrorEvent,
+  queueThreadRenameCommandInTransaction,
+} from "../services/threads/thread-commands.js";
+import {
+  appendThreadProvisioningEventInTransaction,
+  appendSystemErrorEventInTransaction,
   buildCwdBranchEntries,
 } from "../services/threads/thread-events.js";
 import {
   advanceThreadProvisioning,
-  recordThreadProvisionWorkspaceReady,
+  recordThreadProvisionWorkspaceReadyInTransaction,
   shouldSyncGeneratedThreadTitle,
 } from "../services/threads/thread-provisioning.js";
 import {
   completeThreadStartForCommand,
   failThreadStartForCommand,
   failThreadStopForCommand,
-  finalizeStoppedThread,
+  finalizeStoppedThreadInTransaction,
   hasActiveThreadStartOperationForCommand,
   hasActiveThreadStopOperationForCommand,
 } from "../services/threads/thread-lifecycle.js";
-import { tryTransition } from "../services/threads/thread-transitions.js";
-import {
-  COMMAND_RESULT_SIDE_EFFECT_FAILURE_CODE,
-  COMMAND_RESULT_SIDE_EFFECT_FAILURE_SUMMARY,
-  type CommandResultSideEffectFailureArgs,
-  type CommandResultSideEffectFailureDeps,
-  settledCommandSideEffectFailureReason,
-} from "./command-result-side-effect-failure-common.js";
+import { tryTransitionInTransaction } from "../services/threads/thread-transitions.js";
 
 export type CommandResultSideEffectsDeps = InteractiveLifecycleCoordinationDeps;
+export type CommandResultSettlementDeps = Omit<
+  CommandResultSideEffectsDeps,
+  "db" | "hub"
+> & {
+  db: DbTransaction;
+  hub: DbNotifier;
+};
 export type CommandResultSideEffectReport =
   HostDaemonCommandResultReportWithoutSession;
+export interface CommandResultPostCommitActionContext {
+  environmentId?: string | null;
+  hostId?: string;
+  threadId?: string;
+}
+
+export interface CommandResultPostCommitAction {
+  context?: CommandResultPostCommitActionContext;
+  name: string;
+  run(deps: CommandResultSideEffectsDeps): Promise<void> | void;
+}
+
+export interface CommandResultSideEffectsResult {
+  postCommitActions: CommandResultPostCommitAction[];
+}
+
+export interface BuildCommandResultSettlementDepsArgs {
+  db: DbTransaction;
+  deps: CommandResultSideEffectsDeps;
+  hub: DbNotifier;
+}
+
+export function buildCommandResultSettlementDeps(
+  args: BuildCommandResultSettlementDepsArgs,
+): CommandResultSettlementDeps {
+  return {
+    ...args.deps,
+    db: args.db,
+    hub: args.hub,
+  };
+}
 
 function parseCommand(commandRow: HostDaemonCommandRow) {
   return hostDaemonCommandSchema.parse(JSON.parse(commandRow.payload));
@@ -123,37 +153,25 @@ type ThreadFailureCommand = ParsedCommandForType<
 type ThreadFailureResultReport =
   | CommandResultFailureReportForType<"thread.start">
   | CommandResultFailureReportForType<"turn.submit">;
-type CommandResultOwnerMode =
-  | "result-handler-error"
-  | "settled-active-side-effects";
 
-// Command-result owners apply durable command-owned state inline before the
-// daemon response. Work that can queue or wait for another daemon command must
-// be requested through its lifecycle owner so the ingress route can return.
+// Command-result owners apply durable DB side effects before the command row is
+// marked terminal. Work that can queue or wait for another daemon command must
+// be returned as an explicit post-commit action.
 interface ApplyCommandResultSideEffectsArgs<TType extends ParsedCommandType> {
   command: ParsedCommandForType<TType>;
   commandRow: HostDaemonCommandRow;
-  deps: CommandResultSideEffectsDeps;
+  deps: CommandResultSettlementDeps;
   report: CommandResultReportForType<TType>;
-}
-
-interface FailCommandResultSideEffectsArgs<
-  TType extends ParsedCommandType,
-> extends CommandResultSideEffectFailureArgs {
-  command: ParsedCommandForType<TType>;
-  deps: CommandResultSideEffectFailureDeps;
-  mode: CommandResultOwnerMode;
 }
 
 interface CommandResultOwner<TType extends ParsedCommandType> {
   applySideEffects?(
     args: ApplyCommandResultSideEffectsArgs<TType>,
-  ): Promise<void> | void;
-  failSettledSideEffects: boolean;
-  failSideEffects?(
-    args: FailCommandResultSideEffectsArgs<TType>,
-  ): Promise<boolean> | boolean;
-  replaySettledSideEffects: boolean;
+  ): CommandResultSideEffectsResult | void;
+}
+
+function emptyCommandResultSideEffects(): CommandResultSideEffectsResult {
+  return { postCommitActions: [] };
 }
 
 function getThreadFailureCommandErrorScope(
@@ -218,7 +236,7 @@ const WORKSPACE_PROVISIONING_TRANSCRIPT_KEYS = new Set([
 ]);
 
 function hasStreamedProvisioningTranscript(
-  deps: CommandResultSideEffectsDeps,
+  deps: CommandResultSettlementDeps,
   threadId: string,
   provisioningId: string,
 ): boolean {
@@ -239,7 +257,7 @@ function hasStreamedProvisioningTranscript(
 }
 
 function hasActiveThreadProvisionOperation(
-  deps: Pick<LifecycleCoordinationDeps, "db">,
+  deps: Pick<CommandResultSettlementDeps, "db">,
   threadId: string,
 ): boolean {
   const operation = getThreadOperation(deps.db, {
@@ -249,15 +267,16 @@ function hasActiveThreadProvisionOperation(
   return Boolean(operation && isActiveLifecycleOperationState(operation.state));
 }
 
-async function handleProvisionCommandResult(
+function handleProvisionCommandResult(
   args: ApplyCommandResultSideEffectsArgs<"environment.provision">,
-): Promise<void> {
+): CommandResultSideEffectsResult {
+  const postCommitActions: CommandResultPostCommitAction[] = [];
   if (
     !hasActiveEnvironmentProvisionOperationForCommand(args.deps, {
       commandId: args.commandRow.id,
     })
   ) {
-    return;
+    return emptyCommandResultSideEffects();
   }
 
   const environmentProvisioningId = getEnvironmentProvisioningIdForCommand(
@@ -267,7 +286,7 @@ async function handleProvisionCommandResult(
     },
   );
   if (environmentProvisioningId === null) {
-    return;
+    return emptyCommandResultSideEffects();
   }
 
   const boundThreads = args.deps.db
@@ -301,11 +320,19 @@ async function handleProvisionCommandResult(
 
     for (const thread of boundThreads) {
       if (thread.deletedAt !== null) {
-        await finalizeStoppedThread(args.deps, {
+        finalizeStoppedThreadInTransaction(args.deps, {
           threadId: thread.id,
         });
-        requestEnvironmentCleanupAdvance(args.deps, {
-          environmentId: thread.environmentId,
+        postCommitActions.push({
+          name: "Environment cleanup advance after deleted thread finalize",
+          context: {
+            environmentId: args.command.environmentId,
+            threadId: thread.id,
+          },
+          run: (deps) =>
+            runEnvironmentCleanupAdvance(deps, {
+              environmentId: args.command.environmentId,
+            }),
         });
         continue;
       }
@@ -329,23 +356,30 @@ async function handleProvisionCommandResult(
           : cwdBranchEntries;
 
       if (!hasActiveThreadProvisionOperation(args.deps, thread.id)) {
-        appendThreadProvisioningEvent(args.deps, {
+        appendThreadProvisioningEventInTransaction(args.deps.db, {
           threadId: thread.id,
           environmentId: args.command.environmentId,
           provisioningId: environmentProvisioningId,
           status: thread.status === "provisioning" ? "active" : "completed",
           entries,
         });
+        args.deps.hub.notifyThread(thread.id, ["events-appended"]);
         continue;
       }
 
-      recordThreadProvisionWorkspaceReady(args.deps, {
+      recordThreadProvisionWorkspaceReadyInTransaction(args.deps, {
         threadId: thread.id,
         environmentId: args.command.environmentId,
         entries,
       });
-      await advanceThreadProvisioning(args.deps, {
-        threadId: thread.id,
+      postCommitActions.push({
+        name: "Thread provisioning advance after workspace ready",
+        context: {
+          environmentId: args.command.environmentId,
+          threadId: thread.id,
+        },
+        run: (deps) =>
+          advanceThreadProvisioning(deps, { threadId: thread.id }),
       });
     }
 
@@ -353,36 +387,60 @@ async function handleProvisionCommandResult(
       commandId: args.commandRow.id,
     });
 
-    requestEnvironmentCleanupAdvance(args.deps, {
-      environmentId: args.command.environmentId,
+    postCommitActions.push({
+      name: "Environment cleanup advance after provision result",
+      context: {
+        environmentId: args.command.environmentId,
+      },
+      run: (deps) =>
+        runEnvironmentCleanupAdvance(deps, {
+          environmentId: args.command.environmentId,
+        }),
     });
-    return;
+    return { postCommitActions };
   }
 
-  await failEnvironmentProvisioningDurably(args.deps, {
-    commandId: args.commandRow.id,
-    environmentId: args.command.environmentId,
-    failureReason: args.report.errorMessage,
-    failureEntry: {
-      type: "step",
-      key: "workspace-failed",
-      text: "Workspace setup failed",
-      status: "failed",
-      startedAt: args.commandRow.createdAt,
-      metadata: { durationMs: Date.now() - args.commandRow.createdAt },
+  const failureRecorded = recordEnvironmentProvisioningFailureInTransaction(
+    args.deps,
+    {
+      commandId: args.commandRow.id,
+      environmentId: args.command.environmentId,
+      failureReason: args.report.errorMessage,
+      failureEntry: {
+        type: "step",
+        key: "workspace-failed",
+        text: "Workspace setup failed",
+        status: "failed",
+        startedAt: args.commandRow.createdAt,
+        metadata: { durationMs: Date.now() - args.commandRow.createdAt },
+      },
     },
-  });
+  );
+  if (failureRecorded) {
+    postCommitActions.push({
+      name: "Environment cleanup advance after provision failure",
+      context: {
+        environmentId: args.command.environmentId,
+      },
+      run: (deps) =>
+        runEnvironmentCleanupAdvance(deps, {
+          environmentId: args.command.environmentId,
+        }),
+    });
+  }
+  return { postCommitActions };
 }
 
-async function handleEnvironmentDestroyResult(
+function handleEnvironmentDestroyResult(
   args: ApplyCommandResultSideEffectsArgs<"environment.destroy">,
-): Promise<void> {
+): CommandResultSideEffectsResult {
+  const postCommitActions: CommandResultPostCommitAction[] = [];
   if (
     !hasActiveEnvironmentDestroyOperationForCommand(args.deps, {
       commandId: args.commandRow.id,
     })
   ) {
-    return;
+    return emptyCommandResultSideEffects();
   }
 
   const environment = getEnvironment(args.deps.db, args.command.environmentId);
@@ -391,40 +449,50 @@ async function handleEnvironmentDestroyResult(
       commandId: args.commandRow.id,
       failureReason: args.report.errorMessage,
     });
-    return;
+    return emptyCommandResultSideEffects();
   }
   if (!environment) {
-    return;
+    return emptyCommandResultSideEffects();
   }
   if (
     !completeEnvironmentDestroyForCommand(args.deps, {
       commandId: args.commandRow.id,
     })
   ) {
-    return;
+    return emptyCommandResultSideEffects();
   }
 
   const host = getHost(args.deps.db, environment.hostId);
   if (host?.type !== "ephemeral") {
-    return;
+    return emptyCommandResultSideEffects();
   }
 
-  try {
-    await destroyEphemeralHostIfReady(args.deps, host.id);
-  } catch (error) {
-    args.deps.logger.warn(
-      {
-        environmentId: environment.id,
-        err: error,
-        hostId: host.id,
-      },
-      "Ephemeral sandbox host cleanup failed after environment destroy",
-    );
-  }
+  postCommitActions.push({
+    name: "Ephemeral sandbox host cleanup after environment destroy",
+    context: {
+      environmentId: environment.id,
+      hostId: host.id,
+    },
+    run: async (deps) => {
+      try {
+        await destroyEphemeralHostIfReady(deps, host.id);
+      } catch (error) {
+        deps.logger.warn(
+          {
+            environmentId: environment.id,
+            err: error,
+            hostId: host.id,
+          },
+          "Ephemeral sandbox host cleanup failed after environment destroy",
+        );
+      }
+    },
+  });
+  return { postCommitActions };
 }
 
 function handleThreadCommandFailure(
-  deps: Pick<LifecycleCoordinationDeps, "db" | "hub">,
+  deps: Pick<CommandResultSettlementDeps, "db" | "hub">,
   command: ThreadFailureCommand,
   report: ThreadFailureResultReport,
 ): void {
@@ -432,7 +500,7 @@ function handleThreadCommandFailure(
   if (!thread || thread.deletedAt !== null || thread.stopRequestedAt !== null) {
     return;
   }
-  appendSystemErrorEvent(deps, {
+  appendSystemErrorEventInTransaction(deps, {
     threadId: thread.id,
     environmentId: command.environmentId,
     code: "thread_command_failed",
@@ -440,7 +508,7 @@ function handleThreadCommandFailure(
     detail: report.errorMessage,
     scope: getThreadFailureCommandErrorScope(command),
   });
-  tryTransition(deps.db, deps.hub, thread.id, "error");
+  tryTransitionInTransaction(deps.db, deps.hub, thread.id, "error");
 }
 
 function handleThreadStartResult(
@@ -477,7 +545,7 @@ function handleThreadStartResult(
     commandId: args.commandRow.id,
   });
   if (thread.title && shouldSyncGeneratedThreadTitle(args.deps, thread.id)) {
-    queueThreadRenameCommand(args.deps, {
+    const queuedRename = queueThreadRenameCommandInTransaction(args.deps.db, {
       environment: {
         id: args.command.environmentId,
         hostId: args.commandRow.hostId,
@@ -486,52 +554,72 @@ function handleThreadStartResult(
       threadId: thread.id,
       title: thread.title,
     });
+    if (queuedRename) {
+      args.deps.hub.notifyCommand(args.commandRow.hostId);
+    }
   }
 }
 
-async function handleThreadStopResult(
+function handleThreadStopResult(
   args: ApplyCommandResultSideEffectsArgs<"thread.stop">,
-): Promise<void> {
+): CommandResultSideEffectsResult {
+  const postCommitActions: CommandResultPostCommitAction[] = [];
   if (
     !hasActiveThreadStopOperationForCommand(args.deps, {
       commandId: args.commandRow.id,
     })
   ) {
-    return;
+    return emptyCommandResultSideEffects();
   }
   if (!args.report.ok) {
     failThreadStopForCommand(args.deps, {
       commandId: args.commandRow.id,
       failureReason: args.report.errorMessage,
     });
-    return;
+    return emptyCommandResultSideEffects();
   }
 
-  await finalizeStoppedThread(args.deps, {
+  finalizeStoppedThreadInTransaction(args.deps, {
     cancelPendingCommand: false,
     expectedCommandId: args.commandRow.id,
     threadId: args.command.threadId,
   });
-  requestEnvironmentCleanupAdvance(args.deps, {
-    environmentId: args.command.environmentId,
+  postCommitActions.push({
+    name: "Environment cleanup advance after thread stop",
+    context: {
+      environmentId: args.command.environmentId,
+      threadId: args.command.threadId,
+    },
+    run: (deps) =>
+      runEnvironmentCleanupAdvance(deps, {
+        environmentId: args.command.environmentId,
+      }),
   });
+  return { postCommitActions };
 }
 
 function handleInteractiveResolveResult(
   args: ApplyCommandResultSideEffectsArgs<"interactive.resolve">,
 ): void {
   if (!args.report.ok) {
-    args.deps.pendingInteractions.interruptPendingInteraction({
-      interactionId: args.command.interactionId,
-      reason: args.report.errorMessage,
-    });
+    args.deps.pendingInteractions.interruptPendingInteractionInTransaction(
+      args.deps,
+      {
+        interactionId: args.command.interactionId,
+        reason: args.report.errorMessage,
+      },
+    );
     return;
   }
 
-  const completed = args.deps.pendingInteractions.completeResolvingInteraction({
-    interactionId: args.command.interactionId,
-    resolution: args.command.resolution,
-  });
+  const completed =
+    args.deps.pendingInteractions.completeResolvingInteractionInTransaction(
+      args.deps,
+      {
+        interactionId: args.command.interactionId,
+        resolution: args.command.resolution,
+      },
+    );
   if (!completed) {
     args.deps.logger.info(
       {
@@ -544,7 +632,7 @@ function handleInteractiveResolveResult(
 }
 
 function handleWorkspaceMutationResult(
-  deps: Pick<LifecycleCoordinationDeps, "hub">,
+  deps: Pick<CommandResultSettlementDeps, "hub">,
   command: WorkspaceMutationCommand,
   report: WorkspaceMutationResultReport,
 ): void {
@@ -581,188 +669,20 @@ function handleSandboxRuntimeMaterialResult(
   });
 }
 
-function commandStartedAt(commandRow: HostDaemonCommandRow): number {
-  return commandRow.completedAt ?? commandRow.createdAt;
-}
-
-async function failEnvironmentProvisionSideEffects(
-  args: FailCommandResultSideEffectsArgs<"environment.provision">,
-): Promise<boolean> {
-  if (
-    !hasActiveEnvironmentProvisionOperationForCommand(args.deps, {
-      commandId: args.commandRow.id,
-    })
-  ) {
-    return false;
-  }
-
-  await failEnvironmentProvisioningDurably(args.deps, {
-    commandId: args.commandRow.id,
-    environmentId: args.command.environmentId,
-    failureReason: args.failureReason,
-    failureEntry: {
-      type: "step",
-      key: "command-result-side-effects-failed",
-      text: COMMAND_RESULT_SIDE_EFFECT_FAILURE_SUMMARY,
-      status: "failed",
-      startedAt: commandStartedAt(args.commandRow),
-      metadata: {
-        commandId: args.commandRow.id,
-        commandType: args.commandRow.type,
-      },
-    },
-  });
-  return true;
-}
-
-function failEnvironmentDestroySideEffects(
-  args: FailCommandResultSideEffectsArgs<"environment.destroy">,
-): boolean {
-  if (
-    !hasActiveEnvironmentDestroyOperationForCommand(args.deps, {
-      commandId: args.commandRow.id,
-    })
-  ) {
-    return false;
-  }
-
-  const failed = failEnvironmentDestroyForCommand(args.deps, {
-    commandId: args.commandRow.id,
-    failureReason: args.failureReason,
-  });
-  if (failed) {
-    clearEnvironmentCleanupRequestRecord(
-      args.deps.db,
-      args.deps.hub,
-      args.command.environmentId,
-    );
-  }
-  return failed;
-}
-
-function failThreadStartSideEffects(
-  args: FailCommandResultSideEffectsArgs<"thread.start">,
-): boolean {
-  if (
-    !hasActiveThreadStartOperationForCommand(args.deps, {
-      commandId: args.commandRow.id,
-    })
-  ) {
-    return false;
-  }
-
-  const failed = failThreadStartForCommand(args.deps, {
-    commandId: args.commandRow.id,
-    failureReason: args.failureReason,
-  });
-  if (!failed) {
-    return false;
-  }
-
-  const thread = getThread(args.deps.db, args.command.threadId);
-  if (!thread) {
-    return true;
-  }
-  if (thread.deletedAt === null && thread.stopRequestedAt === null) {
-    appendSystemErrorEvent(args.deps, {
-      threadId: thread.id,
-      environmentId: args.command.environmentId,
-      code: COMMAND_RESULT_SIDE_EFFECT_FAILURE_CODE,
-      message: "Thread start failed",
-      detail: args.failureReason,
-      scope: threadScope(),
-    });
-    tryTransition(args.deps.db, args.deps.hub, thread.id, "error");
-  }
-  return true;
-}
-
-function failThreadStopSideEffects(
-  args: FailCommandResultSideEffectsArgs<"thread.stop">,
-): boolean {
-  const failed = failThreadStopForCommand(args.deps, {
-    commandId: args.commandRow.id,
-    failureReason: args.failureReason,
-  });
-  if (!failed) {
-    return false;
-  }
-
-  const thread = getThread(args.deps.db, args.command.threadId);
-  if (!thread) {
-    return true;
-  }
-  if (thread.stopRequestedAt !== null) {
-    clearThreadStopRequested(args.deps.db, args.deps.hub, thread.id);
-  }
-  if (thread.deletedAt === null) {
-    appendSystemErrorEvent(args.deps, {
-      threadId: thread.id,
-      environmentId: args.command.environmentId,
-      code: COMMAND_RESULT_SIDE_EFFECT_FAILURE_CODE,
-      message: "Thread stop result handling failed",
-      detail: args.failureReason,
-      scope: threadScope(),
-    });
-    tryTransition(args.deps.db, args.deps.hub, thread.id, "error");
-  }
-  return true;
-}
-
-function failThreadCommandSideEffects(
-  args: FailCommandResultSideEffectsArgs<"turn.submit">,
-): boolean {
-  const thread = getThread(args.deps.db, args.command.threadId);
-  if (!thread || thread.deletedAt !== null || thread.stopRequestedAt !== null) {
-    return false;
-  }
-  appendSystemErrorEvent(args.deps, {
-    threadId: thread.id,
-    environmentId: args.command.environmentId,
-    code: COMMAND_RESULT_SIDE_EFFECT_FAILURE_CODE,
-    message: "Thread command result handling failed",
-    detail: args.failureReason,
-    scope: getThreadFailureCommandErrorScope(args.command),
-  });
-  tryTransition(args.deps.db, args.deps.hub, thread.id, "error");
-  return true;
-}
-
 const commandResultOwners: CommandResultOwnerRegistry = {
   "environment.destroy": defineCommandResultOwner({
-    replaySettledSideEffects: true,
-    failSettledSideEffects: true,
     applySideEffects: handleEnvironmentDestroyResult,
-    failSideEffects: failEnvironmentDestroySideEffects,
   }),
   "environment.provision": defineCommandResultOwner({
-    replaySettledSideEffects: true,
-    failSettledSideEffects: true,
     applySideEffects: handleProvisionCommandResult,
-    failSideEffects: failEnvironmentProvisionSideEffects,
   }),
   "host.sync_runtime_material": defineCommandResultOwner({
-    replaySettledSideEffects: true,
-    failSettledSideEffects: true,
     applySideEffects: handleSandboxRuntimeMaterialResult,
-    failSideEffects: ({ deps, commandRow, failureReason }) =>
-      failSandboxRuntimeMaterialSyncForCommand(deps, {
-        commandId: commandRow.id,
-        completedAt: Date.now(),
-        failureReason,
-      }),
   }),
   "host.list_files": null,
   "host.read_file": null,
   "interactive.resolve": defineCommandResultOwner({
-    replaySettledSideEffects: true,
-    failSettledSideEffects: true,
     applySideEffects: handleInteractiveResolveResult,
-    failSideEffects: ({ deps, command, failureReason }) =>
-      deps.pendingInteractions.interruptPendingInteraction({
-        interactionId: command.interactionId,
-        reason: failureReason,
-      }) !== null,
   }),
   "provider.list": null,
   "provider.list_models": null,
@@ -775,37 +695,24 @@ const commandResultOwners: CommandResultOwnerRegistry = {
   "thread.rename": null,
   "thread.unarchive": null,
   "thread.start": defineCommandResultOwner({
-    replaySettledSideEffects: true,
-    failSettledSideEffects: true,
     applySideEffects: handleThreadStartResult,
-    failSideEffects: failThreadStartSideEffects,
   }),
   "thread.stop": defineCommandResultOwner({
-    replaySettledSideEffects: true,
-    failSettledSideEffects: true,
     applySideEffects: handleThreadStopResult,
-    failSideEffects: failThreadStopSideEffects,
   }),
   "turn.submit": defineCommandResultOwner({
-    replaySettledSideEffects: false,
-    failSettledSideEffects: false,
     applySideEffects: ({ deps, command, report }) => {
       if (!report.ok) {
         handleThreadCommandFailure(deps, command, report);
       }
     },
-    failSideEffects: failThreadCommandSideEffects,
   }),
   "workspace.commit": defineCommandResultOwner({
-    replaySettledSideEffects: false,
-    failSettledSideEffects: false,
     applySideEffects: ({ deps, command, report }) => {
       handleWorkspaceMutationResult(deps, command, report);
     },
   }),
   "workspace.demote": defineCommandResultOwner({
-    replaySettledSideEffects: false,
-    failSettledSideEffects: false,
     applySideEffects: ({ deps, command, report }) => {
       handleWorkspaceMutationResult(deps, command, report);
     },
@@ -814,15 +721,11 @@ const commandResultOwners: CommandResultOwnerRegistry = {
   "workspace.list_branches": null,
   "workspace.list_files": null,
   "workspace.promote": defineCommandResultOwner({
-    replaySettledSideEffects: false,
-    failSettledSideEffects: false,
     applySideEffects: ({ deps, command, report }) => {
       handleWorkspaceMutationResult(deps, command, report);
     },
   }),
   "workspace.squash_merge": defineCommandResultOwner({
-    replaySettledSideEffects: false,
-    failSettledSideEffects: false,
     applySideEffects: ({ deps, command, report }) => {
       handleWorkspaceMutationResult(deps, command, report);
     },
@@ -830,61 +733,21 @@ const commandResultOwners: CommandResultOwnerRegistry = {
   "workspace.status": null,
 };
 
-export function commandResultOwnerReplaysSettledSideEffects(
-  commandRow: HostDaemonCommandRow,
-): boolean {
-  const command = parseCommand(commandRow);
-  return getCommandResultOwner(command)?.replaySettledSideEffects ?? false;
-}
-
-export async function handleCommandResultSideEffects(
-  deps: CommandResultSideEffectsDeps,
+export function handleCommandResultSideEffects(
+  deps: CommandResultSettlementDeps,
   report: CommandResultSideEffectReport,
   commandRow: HostDaemonCommandRow,
-): Promise<void> {
+): CommandResultSideEffectsResult {
   const command = parseCommand(commandRow);
   if (!reportMatchesCommandType(command, report)) {
-    return;
+    return emptyCommandResultSideEffects();
   }
-  await getCommandResultOwner(command)?.applySideEffects?.({
-    deps,
-    report,
-    command,
-    commandRow,
-  });
-}
-
-export async function failCommandResultSideEffects(
-  deps: CommandResultSideEffectFailureDeps,
-  args: CommandResultSideEffectFailureArgs,
-): Promise<boolean> {
-  const command = parseCommand(args.commandRow);
   return (
-    (await getCommandResultOwner(command)?.failSideEffects?.({
-      ...args,
-      command,
+    getCommandResultOwner(command)?.applySideEffects?.({
       deps,
-      mode: "result-handler-error",
-    })) ?? false
-  );
-}
-
-export async function failSettledCommandActiveSideEffects(
-  deps: CommandResultSideEffectFailureDeps,
-  commandRow: HostDaemonCommandRow,
-): Promise<boolean> {
-  const command = parseCommand(commandRow);
-  const owner = getCommandResultOwner(command);
-  if (!owner?.failSettledSideEffects) {
-    return false;
-  }
-  return (
-    (await owner.failSideEffects?.({
+      report,
       command,
       commandRow,
-      deps,
-      failureReason: settledCommandSideEffectFailureReason(),
-      mode: "settled-active-side-effects",
-    })) ?? false
+    }) ?? emptyCommandResultSideEffects()
   );
 }

@@ -1,4 +1,10 @@
-import { getThread, getThreadOperation } from "@bb/db";
+import {
+  getThread,
+  getThreadOperation,
+  type DbNotifier,
+  type DbQueryConnection,
+  type DbTransaction,
+} from "@bb/db";
 import { markThreadOperationRecordFailed } from "@bb/db/internal-lifecycle";
 import {
   type Environment,
@@ -27,6 +33,7 @@ import {
 import {
   ensureThreadProvisionEnvironmentReady,
   ensureWorkspaceReadyEvent,
+  ensureWorkspaceReadyEventInTransaction,
   failThreadProvisioning,
   loadActiveThreadProvisionContext,
   upsertThreadProvisionOperation,
@@ -59,6 +66,15 @@ export interface RecordThreadProvisionWorkspaceReadyArgs {
   entries: ProvisioningTranscriptEntry[];
   environmentId: string;
   threadId: string;
+}
+
+export interface ThreadProvisionWorkspaceReadyTransactionDeps {
+  db: DbTransaction;
+  hub: DbNotifier;
+}
+
+interface ThreadProvisionReadDeps {
+  db: DbQueryConnection;
 }
 
 interface EnvironmentPayloadThreadArgs {
@@ -196,7 +212,7 @@ export function requestThreadReprovision(
 }
 
 export function shouldSyncGeneratedThreadTitle(
-  deps: Pick<AppDeps, "db">,
+  deps: ThreadProvisionReadDeps,
   threadId: string,
 ): boolean {
   const operation = getThreadOperation(deps.db, {
@@ -218,6 +234,17 @@ export function recordThreadProvisionWorkspaceReady(
   args: RecordThreadProvisionWorkspaceReadyArgs,
 ): void {
   ensureWorkspaceReadyEvent(deps, {
+    threadId: args.threadId,
+    environmentId: args.environmentId,
+    entries: args.entries,
+  });
+}
+
+export function recordThreadProvisionWorkspaceReadyInTransaction(
+  deps: ThreadProvisionWorkspaceReadyTransactionDeps,
+  args: RecordThreadProvisionWorkspaceReadyArgs,
+): void {
+  ensureWorkspaceReadyEventInTransaction(deps, {
     threadId: args.threadId,
     environmentId: args.environmentId,
     entries: args.entries,

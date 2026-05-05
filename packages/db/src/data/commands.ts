@@ -219,7 +219,7 @@ export interface CancelCommandArgs {
  * Report the result of a command execution.
  */
 export function reportCommandResult(
-  db: DbConnection,
+  db: CommandWriteConnection,
   notifier: DbNotifier,
   input: ReportCommandResultInput,
 ) {
@@ -237,7 +237,10 @@ export function reportCommandResult(
   );
 }
 
-export function cancelCommand(db: DbConnection, args: CancelCommandArgs) {
+export function cancelCommand(
+  db: CommandWriteConnection,
+  args: CancelCommandArgs,
+) {
   return (
     db
       .update(hostDaemonCommands)

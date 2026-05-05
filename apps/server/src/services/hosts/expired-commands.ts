@@ -1,10 +1,18 @@
 import { getCommand } from "@bb/db";
 import {
   hostDaemonCommandSchema,
+  type HostDaemonCommand,
   type HostDaemonCommandResultReport,
 } from "@bb/host-daemon-contract";
 import type { AppDeps } from "../../types.js";
-import { handleCommandResultSideEffects } from "../../internal/command-result-owners.js";
+import {
+  buildCommandResultSettlementDeps,
+  handleCommandResultSideEffects,
+} from "../../internal/command-result-owners.js";
+import {
+  dispatchCommandResultPostCommitActions,
+} from "../../internal/command-result-post-commit-actions.js";
+import { NotificationBuffer } from "../lib/notification-buffer.js";
 import { parseJsonWithSchema } from "../lib/json-parsing.js";
 
 const EXPIRED_COMMAND_ERROR_CODE = "command_expired";
@@ -36,6 +44,26 @@ type ExpiredCommandDeps = Pick<
   | "sandboxEnv"
   | "sandboxRegistry"
 >;
+
+interface RecordExpiredCommandWaiterResponseArgs {
+  commandId: string;
+  type: HostDaemonCommand["type"];
+}
+
+type ExpiredCommandWaiterResponseDeps = Pick<ExpiredCommandDeps, "hub">;
+
+function recordExpiredCommandWaiterResponse(
+  deps: ExpiredCommandWaiterResponseDeps,
+  args: RecordExpiredCommandWaiterResponseArgs,
+): void {
+  deps.hub.recordCommandResult(args.commandId, {
+    commandId: args.commandId,
+    errorCode: EXPIRED_COMMAND_ERROR_CODE,
+    errorMessage: EXPIRED_COMMAND_ERROR_MESSAGE,
+    ok: false,
+    type: args.type,
+  });
+}
 
 function buildExpiredLifecycleFailureReport(args: {
   commandId: string;
@@ -77,26 +105,48 @@ export async function handleExpiredCommands(
       case "environment.provision":
       case "thread.start":
       case "thread.stop":
-      case "interactive.resolve":
-        await handleCommandResultSideEffects(
-          deps,
-          buildExpiredLifecycleFailureReport({
-            commandId,
-            completedAt,
-            type: command.type,
-          }),
-          commandRow,
+      case "interactive.resolve": {
+        const notificationBuffer = new NotificationBuffer();
+        const failureReport = buildExpiredLifecycleFailureReport({
+          commandId,
+          completedAt,
+          type: command.type,
+        });
+        const sideEffects = deps.db.transaction(
+          (tx) =>
+            handleCommandResultSideEffects(
+              buildCommandResultSettlementDeps({
+                db: tx,
+                deps,
+                hub: notificationBuffer,
+              }),
+              failureReport,
+              commandRow,
+            ),
+          { behavior: "immediate" },
         );
-        break;
+        notificationBuffer.flushInto(deps.hub);
+        recordExpiredCommandWaiterResponse(deps, {
+          commandId,
+          type: command.type,
+        });
+        // Expired-command sweeps already run outside daemon ingress, so execute
+        // the shared post-commit actions inline and surface failures to the
+        // sweep caller.
+        await dispatchCommandResultPostCommitActions({
+          actions: sideEffects.postCommitActions,
+          command: commandRow,
+          deps,
+          mode: "inline",
+        });
+        continue;
+      }
       default:
         break;
     }
 
-    deps.hub.recordCommandResult(commandId, {
+    recordExpiredCommandWaiterResponse(deps, {
       commandId,
-      errorCode: EXPIRED_COMMAND_ERROR_CODE,
-      errorMessage: EXPIRED_COMMAND_ERROR_MESSAGE,
-      ok: false,
       type: command.type,
     });
   }

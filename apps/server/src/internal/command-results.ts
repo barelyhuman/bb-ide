@@ -3,22 +3,46 @@ import {
   reportCommandResult,
   type HostDaemonCommandRow,
 } from "@bb/db";
-import type { HostDaemonCommandResultReport } from "@bb/host-daemon-contract";
 import {
+  hostDaemonCommandTypeSchema,
+  type HostDaemonCommandResultReport,
+  type HostDaemonCommandType,
+} from "@bb/host-daemon-contract";
+import { z } from "zod";
+import {
+  buildCommandResultSettlementDeps,
   handleCommandResultSideEffects,
-  failCommandResultSideEffects,
+  type CommandResultPostCommitAction,
   type CommandResultSideEffectsDeps,
-  failSettledCommandActiveSideEffects,
 } from "./command-result-owners.js";
 import type { CommandResultWaiterResponse } from "./command-result-response.js";
 import {
-  buildCommandResultSideEffectFailureResponse,
-  commandResultSideEffectFailureReason,
-  errorDetail,
-  settledCommandSideEffectFailureReason,
-} from "./command-result-side-effect-failure-common.js";
-import { replaySettledCommandActiveSideEffects } from "./command-result-side-effect-sweep.js";
-import { buildStoredCommandResultResponse } from "./stored-command-result-report.js";
+  dispatchCommandResultPostCommitActions,
+} from "./command-result-post-commit-actions.js";
+import { NotificationBuffer } from "../services/lib/notification-buffer.js";
+
+interface MissingCommandResultSettlement {
+  outcome: "missing";
+}
+
+interface StoredCommandResultSettlement {
+  command: HostDaemonCommandRow;
+  outcome: "stored";
+  response: CommandResultWaiterResponse | null;
+}
+
+interface UpdatedCommandResultSettlement {
+  command: HostDaemonCommandRow;
+  outcome: "updated";
+  postCommitActions: CommandResultPostCommitAction[];
+  response: CommandResultWaiterResponse;
+  updated: HostDaemonCommandRow;
+}
+
+type CommandResultSettlement =
+  | MissingCommandResultSettlement
+  | StoredCommandResultSettlement
+  | UpdatedCommandResultSettlement;
 
 function buildCommandResultResponse(
   commandId: string,
@@ -42,98 +66,146 @@ function buildCommandResultResponse(
   };
 }
 
-function settledCommandMatchesReport(
-  command: HostDaemonCommandRow,
+function buildCommandResultPayload(
   report: HostDaemonCommandResultReport,
-): boolean {
-  if (command.type !== report.type) {
-    return false;
+): string {
+  return report.ok
+    ? JSON.stringify(report.result)
+    : JSON.stringify({
+        errorCode: report.errorCode,
+        errorMessage: report.errorMessage,
+      });
+}
+
+const storedCommandErrorPayloadSchema = z.object({
+  errorCode: z.string().min(1),
+  errorMessage: z.string().min(1),
+});
+
+function parseStoredCommandType(
+  commandRow: HostDaemonCommandRow,
+): HostDaemonCommandType {
+  return hostDaemonCommandTypeSchema.parse(commandRow.type);
+}
+
+function buildStoredCommandResultResponse(
+  commandRow: HostDaemonCommandRow,
+): CommandResultWaiterResponse | null {
+  if (!commandRow.completedAt || !commandRow.resultPayload) {
+    return null;
   }
-  return report.ok ? command.state === "success" : command.state === "error";
+  const commandType = parseStoredCommandType(commandRow);
+
+  if (commandRow.state === "success") {
+    return {
+      commandId: commandRow.id,
+      ok: true,
+      result: JSON.parse(commandRow.resultPayload),
+      type: commandType,
+    };
+  }
+
+  if (commandRow.state === "error") {
+    const payload = storedCommandErrorPayloadSchema.parse(
+      JSON.parse(commandRow.resultPayload),
+    );
+    return {
+      commandId: commandRow.id,
+      errorCode: payload.errorCode,
+      errorMessage: payload.errorMessage,
+      ok: false,
+      type: commandType,
+    };
+  }
+
+  return null;
 }
 
 export async function handleCommandResult(
   deps: CommandResultSideEffectsDeps,
   report: HostDaemonCommandResultReport,
 ): Promise<HostDaemonCommandRow | null> {
-  const command = getCommand(deps.db, report.commandId);
-
-  if (!command) {
-    return null;
-  }
-
-  if (command.state === "success" || command.state === "error") {
-    const reportMatchesCommand = settledCommandMatchesReport(command, report);
-    const replayedActiveSideEffects = reportMatchesCommand
-      ? await replaySettledCommandActiveSideEffects(deps, command)
-      : false;
-    const failedActiveSideEffects =
-      reportMatchesCommand && !replayedActiveSideEffects
-        ? await failSettledCommandActiveSideEffects(deps, command)
-        : false;
-    const settledResponse = failedActiveSideEffects
-      ? buildCommandResultSideEffectFailureResponse({
-          commandId: command.id,
-          commandType: report.type,
-          failureReason: settledCommandSideEffectFailureReason(),
-        })
-      : buildStoredCommandResultResponse(command);
-    if (settledResponse) {
-      deps.hub.recordCommandResult(command.id, settledResponse);
-    }
-    return command;
-  }
-
-  const resultPayload = report.ok
-    ? JSON.stringify(report.result)
-    : JSON.stringify({
-        errorCode: report.errorCode,
-        errorMessage: report.errorMessage,
-      });
-
-  const updated = reportCommandResult(deps.db, deps.hub, {
-    commandId: command.id,
-    state: report.ok ? "success" : "error",
-    completedAt: report.completedAt,
-    resultPayload,
-  });
-  if (!updated) {
-    return null;
-  }
-
+  let settlement: CommandResultSettlement;
+  const notificationBuffer = new NotificationBuffer();
   try {
-    await handleCommandResultSideEffects(deps, report, updated);
-  } catch (error) {
-    const failureReason = commandResultSideEffectFailureReason(
-      errorDetail(error),
+    settlement = deps.db.transaction(
+      (tx) => {
+        const command = getCommand(tx, report.commandId);
+        if (!command) {
+          return { outcome: "missing" };
+        }
+
+        if (command.state === "success" || command.state === "error") {
+          return {
+            command,
+            outcome: "stored",
+            response: buildStoredCommandResultResponse(command),
+          };
+        }
+
+        const settlementDeps = buildCommandResultSettlementDeps({
+          db: tx,
+          deps,
+          hub: notificationBuffer,
+        });
+        const sideEffects = handleCommandResultSideEffects(
+          settlementDeps,
+          report,
+          command,
+        );
+        const updated = reportCommandResult(tx, notificationBuffer, {
+          commandId: command.id,
+          state: report.ok ? "success" : "error",
+          completedAt: report.completedAt,
+          resultPayload: buildCommandResultPayload(report),
+        });
+        if (!updated) {
+          throw new Error(
+            `Command ${command.id} disappeared during result settlement`,
+          );
+        }
+        return {
+          command,
+          outcome: "updated",
+          postCommitActions: sideEffects.postCommitActions,
+          response: buildCommandResultResponse(command.id, report),
+          updated,
+        };
+      },
+      { behavior: "immediate" },
     );
+  } catch (error) {
     deps.logger.error(
       {
-        commandId: command.id,
+        commandId: report.commandId,
         err: error,
         reportOk: report.ok,
         reportType: report.type,
       },
-      "Command result side effects failed",
+      "Command result settlement transaction failed",
     );
-    await failCommandResultSideEffects(deps, {
-      commandRow: updated,
-      failureReason,
-    });
-    deps.hub.recordCommandResult(
-      command.id,
-      buildCommandResultSideEffectFailureResponse({
-        commandId: command.id,
-        commandType: report.type,
-        failureReason,
-      }),
-    );
-    return updated;
+    throw error;
   }
 
-  deps.hub.recordCommandResult(
-    command.id,
-    buildCommandResultResponse(command.id, report),
-  );
-  return updated;
+  if (settlement.outcome === "missing") {
+    return null;
+  }
+
+  if (settlement.outcome === "updated") {
+    notificationBuffer.flushInto(deps.hub);
+  }
+  if (settlement.response) {
+    deps.hub.recordCommandResult(settlement.command.id, settlement.response);
+  }
+  if (settlement.outcome === "stored") {
+    return settlement.command;
+  }
+
+  await dispatchCommandResultPostCommitActions({
+    actions: settlement.postCommitActions,
+    command: settlement.command,
+    deps,
+    mode: "schedule-after-daemon-ingress",
+  });
+  return settlement.updated;
 }

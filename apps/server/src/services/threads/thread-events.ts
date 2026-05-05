@@ -36,8 +36,17 @@ import type {
 } from "@bb/domain";
 import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
-import type { DbTransaction } from "@bb/db";
+import type { DbNotifier, DbQueryConnection, DbTransaction } from "@bb/db";
 import type { AppendStoredThreadEventArgs as AppendThreadEventArgs } from "@bb/db";
+
+interface ThreadEventReadDeps {
+  db: DbQueryConnection;
+}
+
+interface ThreadEventTransactionDeps {
+  db: DbTransaction;
+  hub: DbNotifier;
+}
 
 export interface ClientTurnRequestedEventArgs {
   environmentId: string | null;
@@ -454,6 +463,21 @@ export function appendSystemErrorEvent(
   });
 }
 
+export function appendSystemErrorEventInTransaction(
+  deps: ThreadEventTransactionDeps,
+  args: AppendSystemErrorEventArgs,
+): number {
+  const sequence = appendThreadEventInTransaction(deps.db, {
+    threadId: args.threadId,
+    environmentId: args.environmentId ?? null,
+    type: "system/error",
+    scope: args.scope,
+    data: buildSystemErrorEventData(args),
+  });
+  deps.hub.notifyThread(args.threadId, ["events-appended"]);
+  return sequence;
+}
+
 export function buildSystemErrorEventData(
   args: Pick<
     AppendSystemErrorEventArgs,
@@ -561,14 +585,14 @@ export function appendThreadOwnershipChangeEvent(
 }
 
 export function getActiveTurnId(
-  deps: Pick<AppDeps, "db">,
+  deps: ThreadEventReadDeps,
   threadId: string,
 ): string | null {
   return getActiveStoredTurnId(deps.db, threadId);
 }
 
 export function getLastProviderThreadId(
-  deps: Pick<AppDeps, "db">,
+  deps: ThreadEventReadDeps,
   threadId: string,
 ): string | null {
   return getLastStoredProviderThreadId(deps.db, threadId);

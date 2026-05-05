@@ -119,7 +119,7 @@ export function upsertHost(
   }
 }
 
-export function getHost(db: DbConnection, id: string) {
+export function getHost(db: HostWriteConnection, id: string) {
   return db.select().from(hosts).where(eq(hosts.id, id)).get() ?? null;
 }
 

@@ -202,12 +202,6 @@ export type {
   UpsertHostOperationInput,
 } from "./host-operations.js";
 
-export { listActiveLifecycleOperationTerminalCommands } from "./lifecycle-operation-terminal-commands.js";
-export type {
-  ActiveLifecycleOperationTerminalCommand,
-  LifecycleOperationOwner,
-} from "./lifecycle-operation-terminal-commands.js";
-
 export {
   markHostResumed,
   markHostSuspended,

@@ -469,6 +469,29 @@ export function queueThreadRenameCommand(
   });
 }
 
+export function queueThreadRenameCommandInTransaction(
+  db: DbTransaction,
+  args: QueueThreadRenameCommandArgs,
+): boolean {
+  if (!providerSupportsThreadRename(args.providerId)) {
+    return false;
+  }
+
+  const session = getActiveSession(db, args.environment.hostId);
+  queueCommandInTransaction(db, {
+    hostId: args.environment.hostId,
+    sessionId: session?.id ?? null,
+    type: "thread.rename",
+    payload: JSON.stringify({
+      type: "thread.rename",
+      environmentId: args.environment.id,
+      threadId: args.threadId,
+      title: args.title,
+    }),
+  });
+  return true;
+}
+
 export function queueThreadArchiveCommand(
   deps: Pick<AppDeps, "db" | "hub">,
   args: QueueThreadArchiveCommandArgs,
@@ -533,6 +556,27 @@ export function queueThreadDeletedCommand(
     return false;
   }
   queueCommand(deps.db, deps.hub, {
+    hostId: args.environment.hostId,
+    sessionId: session.id,
+    type: "thread.deleted",
+    payload: JSON.stringify({
+      type: "thread.deleted",
+      environmentId: args.environment.id,
+      threadId: args.threadId,
+    }),
+  });
+  return true;
+}
+
+export function queueThreadDeletedCommandInTransaction(
+  db: DbTransaction,
+  args: QueueThreadDeletedCommandArgs,
+): boolean {
+  const session = getActiveSession(db, args.environment.hostId);
+  if (!session) {
+    return false;
+  }
+  queueCommandInTransaction(db, {
     hostId: args.environment.hostId,
     sessionId: session.id,
     type: "thread.deleted",

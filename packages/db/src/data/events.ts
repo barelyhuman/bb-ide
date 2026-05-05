@@ -807,7 +807,7 @@ export function listStoredTurnInputAcceptedRowsByClientRequestIds(
 }
 
 export function listStoredThreadProvisioningRowsByProvisioningId(
-  db: DbConnection,
+  db: DbQueryConnection,
   args: ListStoredThreadProvisioningRowsByProvisioningIdArgs,
 ): StoredEventRow[] {
   return db
@@ -1020,7 +1020,7 @@ export function getActiveStoredTurnId(
 }
 
 export function getLastStoredProviderThreadId(
-  db: DbConnection,
+  db: DbQueryConnection,
   threadId: string,
 ): string | null {
   const row = db
@@ -1157,7 +1157,7 @@ export function listThreadIdsWithLatestHostDaemonRestartInterruption(
 }
 
 export function getLastStoredTurnRequestEvent(
-  db: DbConnection,
+  db: DbQueryConnection,
   threadId: string,
 ): StoredTurnRequestEventRow | null {
   return (

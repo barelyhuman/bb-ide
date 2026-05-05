@@ -17,6 +17,9 @@ const STANDARD_COMMAND_TTL_MS = 60_000;
 /** Provision command TTL: 20 minutes */
 const PROVISION_COMMAND_TTL_MS = 20 * 60_000;
 
+const EXPIRED_COMMAND_ERROR_CODE = "command_expired";
+const EXPIRED_COMMAND_ERROR_MESSAGE = "Command expired after retry";
+
 /** Destroyed environments are hard-deleted after 7 days. */
 const DESTROYING_ENVIRONMENT_TTL_MS = 7 * 24 * 60 * 60_000;
 
@@ -96,7 +99,8 @@ export function sweepExpiredCommands(
         state: "error",
         completedAt: currentTime,
         resultPayload: JSON.stringify({
-          error: "Command expired after retry",
+          errorCode: EXPIRED_COMMAND_ERROR_CODE,
+          errorMessage: EXPIRED_COMMAND_ERROR_MESSAGE,
         }),
       })
       .where(inArray(hostDaemonCommands.id, erroredCommandIds))
