@@ -9,7 +9,7 @@ import {
   EventBufferDisposedError,
   type EventBuffer,
 } from "./event-buffer.js";
-import { createBufferedEnvironmentChangeReporter } from "./environment-change-reporter.js";
+import { createEnvironmentChangeReporter } from "./environment-change-reporter.js";
 import { InteractiveRequestRegistry } from "./interactive-request-registry.js";
 import {
   defaultListModels,
@@ -48,8 +48,6 @@ const COMMAND_FETCH_RETRY_DELAY_MS = 2_000;
 const COMMAND_FETCH_RETRY_MAX_DELAY_MS = 30_000;
 const COMMAND_FETCH_RETRY_JITTER_RATIO = 0.25;
 const ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS = 150;
-const ENVIRONMENT_CHANGE_REPORT_RETRY_DELAY_MS = 1_000;
-const ENVIRONMENT_CHANGE_REPORT_MAX_RETRY_DELAY_MS = 30_000;
 const INTERACTIVE_INTERRUPT_RETRY_DELAY_MS = 1_000;
 // Keeps unrelated thread/provider work moving while bounding memory and provider
 // pressure when the server has a large backlog.
@@ -333,13 +331,11 @@ export async function createHostDaemonApp(
     fetchFn: options.fetchFn,
   });
 
-  const environmentChangeReporter = createBufferedEnvironmentChangeReporter({
+  const environmentChangeReporter = createEnvironmentChangeReporter({
     debounceMs: ENVIRONMENT_CHANGE_REPORT_DEBOUNCE_MS,
     logger: options.logger,
     reportEnvironmentChange: (change) =>
       serverClient.postEnvironmentChange(change),
-    retryDelayMs: ENVIRONMENT_CHANGE_REPORT_RETRY_DELAY_MS,
-    retryMaxDelayMs: ENVIRONMENT_CHANGE_REPORT_MAX_RETRY_DELAY_MS,
   });
 
   function buildInteractiveInterruptKey(
