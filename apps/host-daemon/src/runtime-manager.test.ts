@@ -172,6 +172,7 @@ function createFakeWorkspace(path: string) {
     squashMerge: vi.fn(async (..._args: SquashMergeArgs) => ({
       merged: true,
       commitSha: "commit-1",
+      commitSubject: "commit",
       targetBranch: "main",
     })),
     setLocalStateFingerprint(value: GetLocalStateFingerprintResult) {

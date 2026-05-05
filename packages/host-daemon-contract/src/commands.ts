@@ -523,6 +523,7 @@ export const hostDaemonCommandResultSchemaByType = {
   "workspace.squash_merge": z.object({
     merged: z.boolean(),
     commitSha: z.string().min(1),
+    commitSubject: z.string().min(1),
   }),
   "workspace.promote": z.object({
     ok: z.boolean(),

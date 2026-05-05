@@ -102,7 +102,11 @@ describe("workspace command dispatch", () => {
       commitSha: "commit-1",
       commitSubject: "Commit message",
     });
-    expect(squashResult).toEqual({ merged: true, commitSha: "merge-main" });
+    expect(squashResult).toEqual({
+      merged: true,
+      commitSha: "merge-main",
+      commitSubject: "feat: squash merge",
+    });
     expect(promoteResult).toEqual({ ok: true });
     expect(demoteResult).toEqual({ ok: true });
     expect(harness.workspaceState.statusReads).toBe(1);

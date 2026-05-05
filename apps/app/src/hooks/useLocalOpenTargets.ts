@@ -11,10 +11,9 @@ import {
 import { useHostDaemon } from "./useHostDaemon";
 import { useWorkspaceOpenTargets } from "./useWorkspaceOpenTargets";
 
-const LOCALHOST_DISCONNECTED_OPEN_DESCRIPTION =
-  "Open in editor is available when localhost is connected.";
-const LOCALHOST_NO_OPEN_TARGETS_DESCRIPTION =
-  "No supported local open targets are available on localhost.";
+const LOCAL_OPEN_FAILURE_TITLE = "Failed to open file locally";
+const LOCALHOST_DISCONNECTED_OPEN_DESCRIPTION = "Localhost is disconnected.";
+const LOCALHOST_NO_OPEN_TARGETS_DESCRIPTION = "No local editor is available.";
 
 export interface UseLocalOpenTargetsArgs {
   enabled: boolean;
@@ -79,7 +78,7 @@ export function useLocalOpenTargets(
         (candidate) => candidate.id === request.targetId,
       );
       if (!target || !openWorkspace) {
-        toast.error("Could not open locally.", {
+        toast.error(LOCAL_OPEN_FAILURE_TITLE, {
           description: getOpenUnavailableDescription({
             hasDaemon,
           }),
@@ -100,7 +99,7 @@ export function useLocalOpenTargets(
         });
         return true;
       } catch (error) {
-        toast.error(`Could not open in ${target.label}.`, {
+        toast.error(LOCAL_OPEN_FAILURE_TITLE, {
           description: error instanceof Error ? error.message : undefined,
         });
         return false;
@@ -117,7 +116,7 @@ export function useLocalOpenTargets(
   const openPathInPreferredTarget = useCallback(
     async (request: OpenPathInPreferredTargetArgs) => {
       if (!preferredTarget) {
-        toast.error("Could not open locally.", {
+        toast.error(LOCAL_OPEN_FAILURE_TITLE, {
           description: getOpenUnavailableDescription({
             hasDaemon,
           }),

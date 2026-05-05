@@ -381,8 +381,8 @@ describe("useLocalOpenTargets", () => {
     fireEvent.click(screen.getByRole("button", { name: "open preferred" }));
 
     await waitFor(() => {
-      expect(toastError).toHaveBeenCalledWith("Could not open locally.", {
-        description: "Open in editor is available when localhost is connected.",
+      expect(toastError).toHaveBeenCalledWith("Failed to open file locally", {
+        description: "Localhost is disconnected.",
       });
     });
     expect(openTargetRequests).toEqual([]);
@@ -435,8 +435,8 @@ describe("useLocalOpenTargets", () => {
     fireEvent.click(screen.getByRole("button", { name: "open preferred" }));
 
     await waitFor(() => {
-      expect(toastError).toHaveBeenCalledWith("Could not open locally.", {
-        description: "No supported local open targets are available on localhost.",
+      expect(toastError).toHaveBeenCalledWith("Failed to open file locally", {
+        description: "No local editor is available.",
       });
     });
     expect(openTargetRequests).toEqual([]);

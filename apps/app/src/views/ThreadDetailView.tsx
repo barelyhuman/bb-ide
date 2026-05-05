@@ -350,7 +350,7 @@ export function ThreadDetailView() {
         return false;
       }
       if (resolution.kind === "error") {
-        toast.error("Could not open locally.", {
+        toast.error("Failed to open file locally", {
           description: resolution.description,
         });
         return true;

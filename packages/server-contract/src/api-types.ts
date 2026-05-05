@@ -847,6 +847,7 @@ export const squashMergeActionResponseSchema = z.object({
   merged: z.boolean(),
   message: z.string().min(1),
   commitSha: z.string().min(1),
+  commitSubject: z.string().min(1),
 });
 export type SquashMergeActionResponse = z.infer<
   typeof squashMergeActionResponseSchema

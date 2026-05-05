@@ -862,6 +862,7 @@ describe("public environment and system routes", () => {
       await reportQueuedCommandSuccess(harness, mergeCommand, {
         merged: true,
         commitSha: "merge123",
+        commitSubject: "bb: squash merge",
       });
 
       const response = await responsePromise;
@@ -871,6 +872,7 @@ describe("public environment and system routes", () => {
         action: "squash_merge",
         merged: true,
         commitSha: "merge123",
+        commitSubject: "bb: squash merge",
       });
     } finally {
       await harness.cleanup();
@@ -1107,6 +1109,7 @@ describe("public environment and system routes", () => {
       await reportQueuedCommandSuccess(harness, mergeCommand, {
         merged: true,
         commitSha: "squash-sha",
+        commitSubject: "bb: squash merge",
       });
 
       const response = await responsePromise;
@@ -1116,6 +1119,7 @@ describe("public environment and system routes", () => {
         action: "squash_merge",
         merged: true,
         commitSha: "squash-sha",
+        commitSubject: "bb: squash merge",
       });
     } finally {
       await harness.cleanup();

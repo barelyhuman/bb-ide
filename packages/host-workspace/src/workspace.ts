@@ -69,6 +69,7 @@ export interface SquashMergeOptions {
 export interface SquashMergeResult {
   merged: boolean;
   commitSha: string;
+  commitSubject: string;
   targetBranch: string;
 }
 
@@ -654,22 +655,29 @@ export class Workspace {
         ["worktree", "add", "--detach", tempDir, target.baseRef],
         { cwd: this.path },
       );
-      const commitSha = await new Workspace(tempDir).withMutation(async () => {
-        await runGit(["merge", "--squash", sourceBranch], { cwd: tempDir });
-        await runGit(["commit", "--no-verify", "-m", options.commitMessage], {
-          cwd: tempDir,
-        });
-        return revParse(tempDir, "HEAD");
-      });
+      const squashCommit = await new Workspace(tempDir).withMutation(
+        async () => {
+          await runGit(["merge", "--squash", sourceBranch], { cwd: tempDir });
+          await runGit(["commit", "--no-verify", "-m", options.commitMessage], {
+            cwd: tempDir,
+          });
+          const commitSha = await revParse(tempDir, "HEAD");
+          const commitSubject = (
+            await runGit(["log", "-1", "--pretty=%s"], { cwd: tempDir })
+          ).stdout.trim();
+          return { commitSha, commitSubject };
+        },
+      );
       await this.publishSquashMergeCommit({
         targetBranch: options.targetBranch,
         target,
-        commitSha,
+        commitSha: squashCommit.commitSha,
       });
 
       return {
         merged: true,
-        commitSha,
+        commitSha: squashCommit.commitSha,
+        commitSubject: squashCommit.commitSubject,
         targetBranch: options.targetBranch,
       };
     } finally {

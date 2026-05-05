@@ -162,6 +162,7 @@ export function createFakeWorkspace(pathname: string) {
       return {
         merged: true,
         commitSha: `merge-${options.targetBranch}`,
+        commitSubject: options.commitMessage,
         targetBranch: options.targetBranch,
       };
     },

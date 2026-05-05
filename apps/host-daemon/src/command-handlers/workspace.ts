@@ -17,6 +17,7 @@ export async function squashMerge(
   return {
     merged: result.merged,
     commitSha: result.commitSha,
+    commitSubject: result.commitSubject,
   };
 }
 

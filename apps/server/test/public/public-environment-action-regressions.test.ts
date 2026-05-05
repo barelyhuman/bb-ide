@@ -97,7 +97,7 @@ async function driveCommitFlow(
 async function driveSquashMergeFlow(
   harness: Awaited<ReturnType<typeof createTestAppHarness>>,
   environmentId: string,
-  mergeResult: { merged: boolean; commitSha: string },
+  mergeResult: { merged: boolean; commitSha: string; commitSubject: string },
 ) {
   const statusCommand = await waitForQueuedCommand(
     harness,

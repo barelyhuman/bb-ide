@@ -122,7 +122,7 @@ function makeWorkspaceStatus(
 function makeCommitActionResponse(): EnvironmentActionResponse {
   return {
     action: "commit",
-    commitSha: "abc123",
+    commitSha: "abc123456789",
     commitSubject: "Commit subject",
     message: "Committed changes",
     ok: true,
@@ -132,7 +132,8 @@ function makeCommitActionResponse(): EnvironmentActionResponse {
 function makeSquashMergeActionResponse(): EnvironmentActionResponse {
   return {
     action: "squash_merge",
-    commitSha: "def456",
+    commitSha: "def456789012",
+    commitSubject: "Squash merge subject",
     merged: true,
     message: "Squash merge completed",
     ok: true,
@@ -277,9 +278,9 @@ describe("useThreadGitActions", () => {
       action: "commit",
       id: "environment-commit",
     });
-    expect(toast.loading).toHaveBeenCalledWith("Committing changes...");
-    expect(toast.success).toHaveBeenCalledWith("Committed changes", {
-      description: "Commit subject",
+    expect(toast.loading).toHaveBeenCalledWith("Creating commit...");
+    expect(toast.success).toHaveBeenCalledWith("Commit created", {
+      description: "abc1234 · Commit subject",
       id: "toast-id",
     });
   });
@@ -318,8 +319,9 @@ describe("useThreadGitActions", () => {
         mergeBaseBranch: "main",
       },
     });
-    expect(toast.loading).toHaveBeenCalledWith("Squash merge in progress...");
+    expect(toast.loading).toHaveBeenCalledWith("Squash merging...");
     expect(toast.success).toHaveBeenCalledWith("Squash merge completed", {
+      description: "def4567 · Squash merge subject",
       id: "toast-id",
     });
   });
@@ -364,7 +366,7 @@ describe("useThreadGitActions", () => {
       });
     });
 
-    expect(toast.loading).toHaveBeenCalledWith("Squash merge in progress...");
+    expect(toast.loading).toHaveBeenCalledWith("Squash merging...");
     expect(toast.error).toHaveBeenCalledWith(
       "Squash merge failed",
       expect.objectContaining({
@@ -582,15 +584,10 @@ describe("useThreadGitActions", () => {
       input,
       mode: "auto",
     });
-    expect(toast.loading).toHaveBeenCalledWith(
-      "Asking the agent to fix this...",
-    );
-    expect(toast.success).toHaveBeenCalledWith(
-      "Asked the agent to fix this.",
-      {
-        id: "toast-id",
-      },
-    );
+    expect(toast.loading).toHaveBeenCalledWith("Sending message...");
+    expect(toast.success).toHaveBeenCalledWith("Message sent to agent", {
+      id: "toast-id",
+    });
   });
 
   it("updates the ask-agent toast when the follow-up message fails", async () => {
@@ -630,10 +627,9 @@ describe("useThreadGitActions", () => {
       input,
       mode: "auto",
     });
-    expect(toast.loading).toHaveBeenCalledWith(
-      "Asking the agent to fix this...",
-    );
-    expect(toast.error).toHaveBeenCalledWith("Queue unavailable", {
+    expect(toast.loading).toHaveBeenCalledWith("Sending message...");
+    expect(toast.error).toHaveBeenCalledWith("Failed to message agent", {
+      description: "Queue unavailable",
       id: "toast-id",
     });
   });

@@ -107,6 +107,7 @@ function createFakeWorkspace(path: string): FakeWorkspace {
     squashMerge: vi.fn(async () => ({
       merged: true,
       commitSha: "commit-3",
+      commitSubject: "squash subject",
       targetBranch: "main",
     })),
     promote: vi.fn(async () => undefined),

@@ -31,6 +31,11 @@ interface BuildAskAgentInputForGitOperationParams {
   mergeBaseBranch?: string;
 }
 
+interface FormatGitActionDescriptionParams {
+  commitSha: string;
+  commitSubject: string;
+}
+
 interface GitActionFailure {
   askAgentInput?: PromptInput[];
   message: string;
@@ -50,7 +55,10 @@ type AskAgentToFixGitAction = (
   params: AskAgentToFixGitActionParams,
 ) => void;
 
+type GitActionKind = "commit" | "squash_merge";
+
 interface ShowGitActionErrorToastParams {
+  action: GitActionKind;
   error: unknown;
   mergeBaseBranch?: string;
   onAskAgentToFix: AskAgentToFixGitAction;
@@ -84,6 +92,8 @@ type GitActionSuccessResponse =
   | CommitActionResponse
   | SquashMergeActionResponse;
 
+const GIT_SHA_DETAIL_LENGTH = 7;
+
 function toEnvironmentActionFailureDetails(
   error: unknown,
 ): EnvironmentActionFailureDetails | undefined {
@@ -102,6 +112,23 @@ function toEnvironmentActionFailureDetails(
     error.body.details,
   );
   return result.success ? result.data : undefined;
+}
+
+function getEnvironmentActionFailureDetailMessage(
+  details: EnvironmentActionFailureDetails,
+): string | undefined {
+  switch (details.kind) {
+    case "commit_failed":
+      return details.errorMessage;
+    case "squash_merge_conflict":
+      return details.conflictFiles.length > 0
+        ? `Conflicts: ${details.conflictFiles.join(", ")}`
+        : undefined;
+    case "squash_merge_commit_failed":
+      return details.errorMessage;
+    default:
+      return undefined;
+  }
 }
 
 function buildAskAgentInputForGitOperation({
@@ -171,13 +198,18 @@ function toGitActionFailure({
   error,
   mergeBaseBranch,
 }: ToGitActionFailureParams): GitActionFailure {
-  const message = getMutationErrorMessage({
-    error,
-    fallbackMessage: "Failed to start git action.",
-  });
+  const details = toEnvironmentActionFailureDetails(error);
+  const detailsMessage = details
+    ? getEnvironmentActionFailureDetailMessage(details)
+    : undefined;
 
   return {
-    message,
+    message:
+      detailsMessage ??
+      getMutationErrorMessage({
+        error,
+        fallbackMessage: "Failed to start git action.",
+      }),
     askAgentInput: buildAskAgentInputForGitOperation({
       error,
       mergeBaseBranch,
@@ -185,20 +217,50 @@ function toGitActionFailure({
   };
 }
 
+function getGitActionSuccessTitle(action: GitActionKind): string {
+  switch (action) {
+    case "commit":
+      return "Commit created";
+    case "squash_merge":
+      return "Squash merge completed";
+    default:
+      return action;
+  }
+}
+
+function getGitActionErrorTitle(action: GitActionKind): string {
+  switch (action) {
+    case "commit":
+      return "Commit failed";
+    case "squash_merge":
+      return "Squash merge failed";
+    default:
+      return action;
+  }
+}
+
+function formatGitActionDescription({
+  commitSha,
+  commitSubject,
+}: FormatGitActionDescriptionParams): string {
+  return `${commitSha.slice(0, GIT_SHA_DETAIL_LENGTH)} · ${commitSubject}`;
+}
+
 function showGitActionSuccessToast({
   response,
   toastId,
 }: ShowGitActionSuccessToastParams): void {
-  const description =
-    response.action === "commit" ? response.commitSubject : undefined;
-
-  toast.success(response.message, {
+  toast.success(getGitActionSuccessTitle(response.action), {
     id: toastId,
-    ...(description ? { description } : {}),
+    description: formatGitActionDescription({
+      commitSha: response.commitSha,
+      commitSubject: response.commitSubject,
+    }),
   });
 }
 
 function showGitActionErrorToast({
+  action,
   error,
   mergeBaseBranch,
   onAskAgentToFix,
@@ -207,9 +269,12 @@ function showGitActionErrorToast({
 }: ShowGitActionErrorToastParams): void {
   const failure = toGitActionFailure({ error, mergeBaseBranch });
   const askAgentInput = failure.askAgentInput;
+  const title = getGitActionErrorTitle(action);
+  const description = failure.message === title ? undefined : failure.message;
 
-  toast.error(failure.message, {
+  toast.error(title, {
     id: toastId,
+    ...(description ? { description } : {}),
     ...(askAgentInput
       ? {
           action: {
@@ -289,7 +354,7 @@ export function useThreadGitActions({
         return;
       }
 
-      const toastId = toast.loading("Asking the agent to fix this...");
+      const toastId = toast.loading("Sending message...");
 
       try {
         await sendMessage.mutateAsync({
@@ -297,15 +362,15 @@ export function useThreadGitActions({
           input,
           mode: "auto",
         });
-        toast.success("Asked the agent to fix this.", { id: toastId });
+        toast.success("Message sent to agent", { id: toastId });
       } catch (error) {
-        toast.error(
-          getMutationErrorMessage({
+        toast.error("Failed to message agent", {
+          id: toastId,
+          description: getMutationErrorMessage({
             error,
-            fallbackMessage: "Failed to ask the agent to fix this.",
+            fallbackMessage: "Message was not sent.",
           }),
-          { id: toastId },
-        );
+        });
       }
     },
     [sendMessage],
@@ -318,7 +383,7 @@ export function useThreadGitActions({
     }
     const threadId = thread.id;
 
-    const toastId = toast.loading("Committing changes...");
+    const toastId = toast.loading("Creating commit...");
 
     try {
       const response = await requestEnvironmentAction.mutateAsync({
@@ -334,6 +399,7 @@ export function useThreadGitActions({
       });
     } catch (nextError) {
       showGitActionErrorToast({
+        action: "commit",
         error: nextError,
         onAskAgentToFix: (params) => void handleAskAgentToFixGitAction(params),
         threadId,
@@ -350,7 +416,7 @@ export function useThreadGitActions({
       }
       const threadId = thread.id;
 
-      const toastId = toast.loading("Squash merge in progress...");
+      const toastId = toast.loading("Squash merging...");
 
       try {
         const response = await requestEnvironmentAction.mutateAsync({
@@ -369,6 +435,7 @@ export function useThreadGitActions({
         });
       } catch (nextError) {
         showGitActionErrorToast({
+          action: "squash_merge",
           error: nextError,
           onAskAgentToFix: (params) =>
             void handleAskAgentToFixGitAction(params),

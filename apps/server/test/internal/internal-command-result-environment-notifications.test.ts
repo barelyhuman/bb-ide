@@ -55,6 +55,7 @@ const WORKSPACE_MUTATION_CASES: WorkspaceMutationCase[] = [
     name: "workspace.squash_merge",
     result: {
       commitSha: "def456",
+      commitSubject: "Squash branch",
       merged: true,
     },
     toPayload: ({ environmentId, workspacePath }) =>

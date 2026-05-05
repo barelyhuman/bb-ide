@@ -331,6 +331,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
             merged: result.merged,
             message: "Squash merge completed",
             commitSha: result.commitSha,
+            commitSubject: result.commitSubject,
           });
         }
         case "promote": {

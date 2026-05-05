@@ -488,6 +488,7 @@ describe("server-contract canonical schemas", () => {
       contract.environmentActionResponseSchema.parse({
         action: "squash_merge",
         commitSha: "sha",
+        commitSubject: "subject",
         merged: true,
         message: "",
         ok: true,
