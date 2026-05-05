@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { Suspense, type ReactNode } from "react";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Provider as JotaiProvider } from "jotai";
 import type { ThreadListEntry } from "@bb/domain";
@@ -27,6 +27,8 @@ interface ProjectRowTestWrapperProps {
   children: ReactNode;
 }
 
+type ThreadListEntryOverrides = Partial<ThreadListEntry>;
+
 function makeProjectResponse(): ProjectResponse {
   return {
     createdAt: 1,
@@ -38,7 +40,7 @@ function makeProjectResponse(): ProjectResponse {
 }
 
 function createThread(
-  overrides: Partial<ThreadListEntry> = {},
+  overrides: ThreadListEntryOverrides = {},
 ): ThreadListEntry {
   return {
     id: "thr_1",
@@ -49,7 +51,7 @@ function createThread(
     type: "standard",
     title: "Thread One",
     titleFallback: "Thread One",
-    status: "active",
+    status: "idle",
     parentThreadId: null,
     archivedAt: null,
     stopRequestedAt: null,
@@ -63,7 +65,7 @@ function createThread(
     environmentBranchName: null,
     environmentWorkspaceDisplayKind: "other",
     runtime: {
-      displayStatus: "active",
+      displayStatus: "idle",
       hostReconnectGraceExpiresAt: null,
     },
     ...overrides,
@@ -93,6 +95,7 @@ async function renderProjectRow(args: RenderProjectRowArgs = {}) {
       mutations: { retry: false },
       queries: { gcTime: Infinity, retry: false },
     },
+    showMutationErrorToasts: false,
   });
   const wrapper = ({ children }: ProjectRowTestWrapperProps) => (
     <JotaiProvider>
@@ -148,6 +151,15 @@ function isBefore(left: HTMLElement, right: HTMLElement): boolean {
   );
 }
 
+function getThreadOpenLabels(): string[] {
+  return screen
+    .getAllByLabelText(/^Open /u)
+    .flatMap((link) => {
+      const label = link.getAttribute("aria-label")?.replace(/^Open /u, "");
+      return label === undefined ? [] : [label];
+    });
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -155,7 +167,7 @@ afterEach(() => {
 });
 
 describe("ProjectRow", () => {
-  it("keeps project and manager rows sticky without changing thread order", async () => {
+  it("keeps project and manager rows sticky while standard rows stay flat", async () => {
     const managerThread = createThread({
       id: "thr_manager",
       type: "manager",
@@ -169,12 +181,14 @@ describe("ProjectRow", () => {
       title: "Managed Child",
       titleFallback: "Managed Child",
       createdAt: 20,
+      updatedAt: 20,
     });
     const regularThread = createThread({
       id: "thr_regular",
       title: "Regular Thread",
       titleFallback: "Regular Thread",
       createdAt: 10,
+      updatedAt: 10,
     });
 
     await renderProjectRow({
@@ -205,8 +219,13 @@ describe("ProjectRow", () => {
 
     expect(projectRow.getAttribute("data-sidebar-sticky-tier")).toBe("project");
     expect(managerRow.getAttribute("data-sidebar-sticky-tier")).toBe("manager");
+    expect(managerRow.classList.contains("relative")).toBe(false);
     expect(managedRow.hasAttribute("data-sidebar-sticky-tier")).toBe(false);
     expect(regularRow.hasAttribute("data-sidebar-sticky-tier")).toBe(false);
+    expect(managedRow.classList.contains("relative")).toBe(true);
+    expect(regularRow.classList.contains("relative")).toBe(true);
+    expect(managedRow.classList.contains("pl-2")).toBe(true);
+    expect(managedRow.classList.contains("pl-6")).toBe(false);
 
     expect(projectRow.querySelector("[data-overflow-fade]")).toBeNull();
     expect(managerRow.querySelector("[data-overflow-fade]")).toBeNull();
@@ -215,7 +234,6 @@ describe("ProjectRow", () => {
     expect(isBefore(projectRow, managerRow)).toBe(true);
     expect(isBefore(managerRow, managedRow)).toBe(true);
     expect(isBefore(managedRow, regularRow)).toBe(true);
-
   });
 
   it("preserves collapsed project behavior while keeping the project row sticky", async () => {
@@ -286,7 +304,7 @@ describe("ProjectRow", () => {
     expect(screen.queryByLabelText("Open Managed Child")).toBeNull();
   });
 
-  it("uses opaque active backgrounds for sticky project and manager rows", async () => {
+  it("uses selected backgrounds for active project and manager rows", async () => {
     const managerThread = createThread({
       id: "thr_manager",
       type: "manager",
@@ -315,8 +333,152 @@ describe("ProjectRow", () => {
     );
 
     expect(projectRow.classList.contains("bg-sidebar-border")).toBe(true);
+    expect(projectRow.classList.contains("bg-sidebar")).toBe(false);
     expect(projectRow.classList.contains("bg-sidebar-border/80")).toBe(false);
     expect(managerRow.classList.contains("bg-sidebar-border")).toBe(true);
+    expect(managerRow.classList.contains("bg-sidebar")).toBe(false);
     expect(managerRow.classList.contains("bg-sidebar-border/80")).toBe(false);
+  });
+
+  it("renders managers first and sorts standard rows by effective activity time", async () => {
+    const managerOlder = createThread({
+      id: "thr_manager_older",
+      type: "manager",
+      title: "Manager older",
+      titleFallback: "Manager older",
+      createdAt: 10,
+      updatedAt: 10,
+    });
+    const managerNewer = createThread({
+      id: "thr_manager_newer",
+      type: "manager",
+      title: "Manager newer",
+      titleFallback: "Manager newer",
+      createdAt: 20,
+      updatedAt: 20,
+    });
+    const activeNewer = createThread({
+      id: "thr_active_newer",
+      title: "Active newer",
+      titleFallback: "Active newer",
+      status: "active",
+      runtime: {
+        displayStatus: "active",
+        hostReconnectGraceExpiresAt: null,
+      },
+      createdAt: 700,
+      updatedAt: 5,
+    });
+    const managedRecent = createThread({
+      id: "thr_managed_recent",
+      title: "Managed recent",
+      titleFallback: "Managed recent",
+      parentThreadId: managerOlder.id,
+      createdAt: 30,
+      updatedAt: 650,
+    });
+    const idleRecent = createThread({
+      id: "thr_idle_recent",
+      title: "Idle recent",
+      titleFallback: "Idle recent",
+      createdAt: 40,
+      updatedAt: 600,
+    });
+    const activeOlder = createThread({
+      id: "thr_active_older",
+      title: "Active older",
+      titleFallback: "Active older",
+      status: "active",
+      runtime: {
+        displayStatus: "active",
+        hostReconnectGraceExpiresAt: null,
+      },
+      createdAt: 500,
+      updatedAt: 5_000,
+    });
+    const idleOlder = createThread({
+      id: "thr_idle_older",
+      title: "Idle older",
+      titleFallback: "Idle older",
+      createdAt: 50,
+      updatedAt: 400,
+    });
+
+    await renderProjectRow({
+      threadListState: {
+        status: "ready",
+        threads: [
+          idleOlder,
+          activeOlder,
+          managerOlder,
+          managedRecent,
+          managerNewer,
+          idleRecent,
+          activeNewer,
+        ],
+      },
+    });
+
+    await waitFor(() => {
+      expect(getThreadOpenLabels()).toEqual([
+        "Manager newer",
+        "Manager older",
+        "Active newer",
+        "Managed recent",
+        "Idle recent",
+        "Active older",
+        "Idle older",
+      ]);
+    });
+  });
+
+  it("hides collapsed managed children while leaving unrelated standard rows visible", async () => {
+    const manager = createThread({
+      id: "thr_manager",
+      type: "manager",
+      title: "Manager",
+      titleFallback: "Manager",
+      createdAt: 10,
+      updatedAt: 10,
+    });
+    const managedChild = createThread({
+      id: "thr_managed_child",
+      title: "Managed child",
+      titleFallback: "Managed child",
+      parentThreadId: manager.id,
+      createdAt: 20,
+      updatedAt: 500,
+    });
+    const orphanChild = createThread({
+      id: "thr_orphan_child",
+      title: "Orphan child",
+      titleFallback: "Orphan child",
+      parentThreadId: "thr_missing_manager",
+      createdAt: 30,
+      updatedAt: 400,
+    });
+    const unrelatedThread = createThread({
+      id: "thr_unrelated",
+      title: "Unrelated standard",
+      titleFallback: "Unrelated standard",
+      createdAt: 40,
+      updatedAt: 300,
+    });
+
+    await renderProjectRow({
+      collapsedManagerIds: new Set([manager.id]),
+      threadListState: {
+        status: "ready",
+        threads: [manager, managedChild, orphanChild, unrelatedThread],
+      },
+    });
+
+    await waitFor(() => {
+      expect(getThreadOpenLabels()).toEqual([
+        "Manager",
+        "Orphan child",
+        "Unrelated standard",
+      ]);
+    });
   });
 });

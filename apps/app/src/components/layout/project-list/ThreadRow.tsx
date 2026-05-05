@@ -1,21 +1,19 @@
 import { memo, useState } from "react";
 import type { ThreadListEntry } from "@bb/domain";
-import { Pill, SidebarStickyTier } from "@bb/ui-core";
 import {
-  ChevronDown,
-  ChevronRight,
-  CircleDashed,
-  UserRound,
-} from "lucide-react";
+  Pill,
+  SidebarMenuBadge,
+  SidebarStickyTier,
+  StatusPill,
+} from "@bb/ui-core";
+import { ChevronRight, CircleDashed, UserRound } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { ThreadActionsMenu } from "@/components/thread/ThreadActionsMenu";
-import { SidebarMenuBadge } from "@bb/ui-core";
 import {
   COARSE_POINTER_DOT_SIZE_CLASS,
   COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS,
   COARSE_POINTER_GLYPH_BOX_CLASS,
   COARSE_POINTER_ICON_SIZE_CLASS,
-  COARSE_POINTER_ICON_SIZE_SHRINK_CLASS,
   COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
   COARSE_POINTER_ROW_HEIGHT_CLASS,
 } from "@bb/ui-core";
@@ -27,46 +25,35 @@ import { isBusyThread, isUnreadDoneThread } from "@/lib/thread-activity";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { cn } from "@/lib/utils";
 
-interface BaseThreadRowProps {
+export type ThreadRowOptions =
+  | {
+      kind: "default";
+    }
+  | {
+      kind: "manager";
+      isCollapsed: boolean;
+      managedChildCount: number;
+      managedChildBusyCount: number;
+      onToggleCollapsed: (threadId: string) => void;
+    };
+
+interface ThreadRowProps {
   projectId: string;
   thread: ThreadListEntry;
   isActive: boolean;
   isPromoted?: boolean;
   onProjectSelect?: () => void;
-  onToggleManagerCollapsed?: (threadId: string) => void;
+  options: ThreadRowOptions;
 }
-
-interface DefaultThreadRowProps extends BaseThreadRowProps {
-  kind: "default";
-}
-
-interface ManagerThreadRowProps extends BaseThreadRowProps {
-  kind: "manager";
-  hasManagedChildren: boolean;
-  isCollapsed: boolean;
-  managedChildCount: number;
-  managedChildBusyCount: number;
-}
-
-interface ManagedChildThreadRowProps extends BaseThreadRowProps {
-  kind: "managed-child";
-}
-
-export type ThreadRowProps =
-  | DefaultThreadRowProps
-  | ManagerThreadRowProps
-  | ManagedChildThreadRowProps;
 
 interface ManagerChevronProps {
   isCollapsed: boolean;
-  isBusy: boolean;
   onToggle: () => void;
   threadTitle: string;
 }
 
 function ManagerChevron({
   isCollapsed,
-  isBusy,
   onToggle,
   threadTitle,
 }: ManagerChevronProps) {
@@ -92,46 +79,25 @@ function ManagerChevron({
         COARSE_POINTER_GLYPH_BOX_CLASS,
       )}
     >
-      <span
+      <ChevronRight
         className={cn(
-          "relative inline-flex items-center justify-center",
+          "transition-transform duration-150",
           COARSE_POINTER_ICON_SIZE_CLASS,
+          !isCollapsed && "rotate-90",
         )}
-      >
-        {isBusy ? (
-          <CircleDashed
-            className={cn(
-              "absolute animate-spin opacity-100 transition-opacity duration-150 group-hover/thread-row:opacity-0",
-              COARSE_POINTER_ICON_SIZE_CLASS,
-            )}
-            aria-hidden
-          />
-        ) : null}
-        <ChevronRight
-          className={cn(
-            "absolute transition-all duration-150",
-            COARSE_POINTER_ICON_SIZE_CLASS,
-            !isCollapsed && "rotate-90",
-            isBusy
-              ? "opacity-0 group-hover/thread-row:opacity-100"
-              : "opacity-100",
-          )}
-        />
-      </span>
+      />
     </button>
   );
 }
 
 interface ThreadLeadingGlyphProps {
   hasPendingInteraction: boolean;
-  isManagedChild: boolean;
   isBusy: boolean;
   showUnreadBadge: boolean;
 }
 
 function ThreadLeadingGlyph({
   hasPendingInteraction,
-  isManagedChild,
   isBusy,
   showUnreadBadge,
 }: ThreadLeadingGlyphProps) {
@@ -142,12 +108,7 @@ function ThreadLeadingGlyph({
         COARSE_POINTER_GLYPH_BOX_CLASS,
       )}
     >
-      {isManagedChild ? (
-        <ChevronDown
-          aria-hidden="true"
-          className={cn("rotate-45", COARSE_POINTER_ICON_SIZE_SHRINK_CLASS)}
-        />
-      ) : hasPendingInteraction ? (
+      {hasPendingInteraction ? (
         <span
           className={cn(
             "rounded-full bg-attention",
@@ -159,6 +120,7 @@ function ThreadLeadingGlyph({
       ) : isBusy ? (
         <CircleDashed
           className={cn("animate-spin", COARSE_POINTER_ICON_SIZE_CLASS)}
+          aria-label="Thread working"
         />
       ) : showUnreadBadge ? (
         <span
@@ -174,29 +136,30 @@ function ThreadLeadingGlyph({
   );
 }
 
-function ThreadRowComponent(props: ThreadRowProps) {
-  const {
-    projectId,
-    thread,
-    isActive,
-    isPromoted = false,
-    onProjectSelect,
-    onToggleManagerCollapsed,
-  } = props;
+function ThreadRowComponent({
+  projectId,
+  thread,
+  isActive,
+  isPromoted = false,
+  onProjectSelect,
+  options,
+}: ThreadRowProps) {
   const [isActionsOpen, setIsActionsOpen] = useState(false);
   const hasPendingInteraction = thread.hasPendingInteraction;
   const threadIsBusy = isBusyThread(thread) && !hasPendingInteraction;
   const showUnreadBadge = !hasPendingInteraction && isUnreadDoneThread(thread);
   const threadTitle = getThreadDisplayTitle(thread);
-  const isManager = props.kind === "manager";
-  const isManagedChild = props.kind === "managed-child";
-  const hasManagedChildren = isManager && props.hasManagedChildren;
-  const isManagerCollapsed = isManager && props.isCollapsed;
-  const managedChildCount = isManager ? props.managedChildCount : 0;
-  const managedChildBusyCount =
-    isManager ? props.managedChildBusyCount : 0;
+  const managerOptions = options.kind === "manager" ? options : null;
+  const isManager = managerOptions !== null;
+  const isManagerCollapsed = managerOptions?.isCollapsed ?? false;
+  const managedChildCount = managerOptions?.managedChildCount ?? 0;
+  const hasManagedChildren = managedChildCount > 0;
+  const managedChildBusyCount = managerOptions?.managedChildBusyCount ?? 0;
   const isManagerBusy =
     isManager && (threadIsBusy || managedChildBusyCount > 0);
+  // Manager busy state is rendered over the trailing manager icon so the
+  // leading glyph remains reserved for the manager expand/collapse affordance.
+  const leadingGlyphIsBusy = isManager ? false : threadIsBusy;
   const EnvironmentIcon = getEnvironmentWorkspaceDisplayIcon(
     thread.environmentWorkspaceDisplayKind,
   );
@@ -206,12 +169,8 @@ function ThreadRowComponent(props: ThreadRowProps) {
   const rowClassName = cn(
     "group/thread-row flex w-full items-center gap-2 rounded-md pr-0 text-sm transition-colors",
     !isManager && "relative",
-    isManager
-      ? undefined
-      : isManagedChild
-        ? COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS
-        : COARSE_POINTER_ROW_HEIGHT_CLASS,
-    isManagedChild ? "pl-6 text-sidebar-foreground/60" : "pl-2",
+    COARSE_POINTER_ROW_HEIGHT_CLASS,
+    "pl-2",
     isActive
       ? "bg-sidebar-border text-sidebar-foreground"
       : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
@@ -225,24 +184,29 @@ function ThreadRowComponent(props: ThreadRowProps) {
         title={`Open ${threadTitle}`}
         className="absolute inset-0 rounded-md outline-none ring-sidebar-ring focus-visible:ring-2"
       />
-      {isManager && hasManagedChildren && onToggleManagerCollapsed ? (
+      {managerOptions && hasManagedChildren ? (
         <ManagerChevron
           isCollapsed={isManagerCollapsed}
-          isBusy={isManagerBusy}
           onToggle={() => {
-            onToggleManagerCollapsed(thread.id);
+            managerOptions.onToggleCollapsed(thread.id);
           }}
           threadTitle={threadTitle}
         />
       ) : (
         <ThreadLeadingGlyph
           hasPendingInteraction={hasPendingInteraction}
-          isManagedChild={isManagedChild}
-          isBusy={threadIsBusy}
+          isBusy={leadingGlyphIsBusy}
           showUnreadBadge={showUnreadBadge}
         />
       )}
-      <span className="min-w-0 flex-1 truncate">{threadTitle}</span>
+      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+        <span className="min-w-0 truncate">{threadTitle}</span>
+        {isManager ? (
+          <StatusPill variant="outline" className="shrink-0">
+            manager
+          </StatusPill>
+        ) : null}
+      </span>
       {isPromoted ? (
         <Pill variant="emphasis" className="relative z-10">
           promoted
@@ -281,20 +245,30 @@ function ThreadRowComponent(props: ThreadRowProps) {
             )}
           >
             {isManager ? (
-              <UserRound
+              <span
                 className={cn(
-                  "text-sidebar-foreground/70",
+                  "relative inline-flex items-center justify-center",
                   COARSE_POINTER_ICON_SIZE_CLASS,
                 )}
-                aria-label="Manager"
-              />
-            ) : isManagedChild && threadIsBusy ? (
-              <CircleDashed
-                className={cn(
-                  "animate-spin text-sidebar-foreground/70",
-                  COARSE_POINTER_ICON_SIZE_CLASS,
-                )}
-              />
+              >
+                <UserRound
+                  className={cn(
+                    "text-sidebar-foreground/70",
+                    COARSE_POINTER_ICON_SIZE_CLASS,
+                    isManagerBusy && "opacity-40",
+                  )}
+                  aria-label="Manager"
+                />
+                {isManagerBusy ? (
+                  <CircleDashed
+                    className={cn(
+                      "absolute animate-spin text-sidebar-foreground/80",
+                      COARSE_POINTER_ICON_SIZE_CLASS,
+                    )}
+                    aria-label="Manager working"
+                  />
+                ) : null}
+              </span>
             ) : EnvironmentIcon ? (
               <EnvironmentIcon
                 className={cn(

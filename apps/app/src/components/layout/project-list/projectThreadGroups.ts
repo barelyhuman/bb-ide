@@ -1,11 +1,16 @@
 import type { ThreadListEntry } from "@bb/domain";
 import { isBusyThread } from "@/lib/thread-activity";
 
+export interface ManagerThreadStats {
+  managedChildCount: number;
+  managedChildBusyCount: number;
+}
+
 export interface ProjectThreadGroups {
   managerThreads: ThreadListEntry[];
-  managedChildBusyCountsByManagerId: Map<string, number>;
-  managedThreadsByManagerId: Map<string, ThreadListEntry[]>;
-  otherThreads: ThreadListEntry[];
+  managerThreadIds: Set<string>;
+  managerThreadStatsByManagerId: Map<string, ManagerThreadStats>;
+  standardThreads: ThreadListEntry[];
 }
 
 interface KnownManagerParentArgs {
@@ -13,8 +18,36 @@ interface KnownManagerParentArgs {
   thread: ThreadListEntry;
 }
 
-function sortNewestFirst(threads: ThreadListEntry[]): void {
-  threads.sort((a, b) => b.createdAt - a.createdAt);
+function compareByCreatedAtDescending(
+  left: ThreadListEntry,
+  right: ThreadListEntry,
+): number {
+  const createdAtDelta = right.createdAt - left.createdAt;
+  if (createdAtDelta !== 0) {
+    return createdAtDelta;
+  }
+
+  return left.id.localeCompare(right.id);
+}
+
+function getStandardThreadSortTimestamp(thread: ThreadListEntry): number {
+  // Active threads receive frequent updates while work is streaming, so keep
+  // their row position tied to the thread start time instead.
+  return thread.status === "active" ? thread.createdAt : thread.updatedAt;
+}
+
+function compareStandardThreads(
+  left: ThreadListEntry,
+  right: ThreadListEntry,
+): number {
+  const timestampDelta =
+    getStandardThreadSortTimestamp(right) -
+    getStandardThreadSortTimestamp(left);
+  if (timestampDelta !== 0) {
+    return timestampDelta;
+  }
+
+  return compareByCreatedAtDescending(left, right);
 }
 
 function getKnownManagerParentId({
@@ -31,49 +64,39 @@ function getKnownManagerParentId({
 export function buildProjectThreadGroups(
   projectThreads: ThreadListEntry[],
 ): ProjectThreadGroups {
-  const managerThreads = projectThreads.filter(
-    (thread) => thread.type === "manager",
-  );
-  sortNewestFirst(managerThreads);
-
+  const managerThreads = projectThreads
+    .filter((thread) => thread.type === "manager")
+    .sort(compareByCreatedAtDescending);
   const managerThreadIds = new Set(managerThreads.map((thread) => thread.id));
-  const managedThreadsByManagerId = new Map<string, ThreadListEntry[]>();
-  const managedChildBusyCountsByManagerId = new Map<string, number>();
-  const otherThreads: ThreadListEntry[] = [];
+  const managerThreadStatsByManagerId = new Map<string, ManagerThreadStats>();
 
   for (const thread of projectThreads) {
     const managerId = getKnownManagerParentId({ managerThreadIds, thread });
-    if (managerId === null) {
-      if (thread.type !== "manager") {
-        otherThreads.push(thread);
+    if (managerId === null) continue;
+
+    const existing = managerThreadStatsByManagerId.get(managerId);
+    if (existing) {
+      existing.managedChildCount += 1;
+      if (isBusyThread(thread)) {
+        existing.managedChildBusyCount += 1;
       }
       continue;
     }
 
-    const existing = managedThreadsByManagerId.get(managerId);
-    if (existing) {
-      existing.push(thread);
-    } else {
-      managedThreadsByManagerId.set(managerId, [thread]);
-    }
-
-    if (isBusyThread(thread)) {
-      managedChildBusyCountsByManagerId.set(
-        managerId,
-        (managedChildBusyCountsByManagerId.get(managerId) ?? 0) + 1,
-      );
-    }
+    managerThreadStatsByManagerId.set(managerId, {
+      managedChildCount: 1,
+      managedChildBusyCount: isBusyThread(thread) ? 1 : 0,
+    });
   }
 
-  for (const managedThreads of managedThreadsByManagerId.values()) {
-    sortNewestFirst(managedThreads);
-  }
-  sortNewestFirst(otherThreads);
+  const standardThreads = projectThreads
+    .filter((thread) => thread.type === "standard")
+    .sort(compareStandardThreads);
 
   return {
     managerThreads,
-    managedChildBusyCountsByManagerId,
-    managedThreadsByManagerId,
-    otherThreads,
+    managerThreadIds,
+    managerThreadStatsByManagerId,
+    standardThreads,
   };
 }

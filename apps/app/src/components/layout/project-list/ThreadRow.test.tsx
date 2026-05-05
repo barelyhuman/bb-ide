@@ -9,49 +9,26 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAppQueryClient } from "@/lib/query-client";
 import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider";
-import { ThreadRow } from "./ThreadRow";
+import { ThreadRow, type ThreadRowOptions } from "./ThreadRow";
 
 vi.mock("sonner", () => ({
   toast: { error: vi.fn(), success: vi.fn() },
 }));
 
-interface ThreadListEntryOverrides extends Partial<ThreadListEntry> {}
+type ThreadListEntryOverrides = Partial<ThreadListEntry>;
 
 interface TestWrapperProps {
   children: ReactNode;
 }
 
-interface BaseRenderThreadRowOptions {
+interface RenderThreadRowOptions {
   isActive?: boolean;
   isPromoted?: boolean;
-  onToggleManagerCollapsed?: (threadId: string) => void;
+  rowOptions?: ThreadRowOptions;
 }
-
-interface DefaultRenderThreadRowOptions extends BaseRenderThreadRowOptions {
-  kind?: "default";
-}
-
-interface ManagerRenderThreadRowOptions extends BaseRenderThreadRowOptions {
-  kind: "manager";
-  hasManagedChildren: boolean;
-  isCollapsed: boolean;
-  managedChildCount: number;
-  managedChildBusyCount: number;
-}
-
-interface ManagedChildRenderThreadRowOptions extends BaseRenderThreadRowOptions {
-  kind: "managed-child";
-}
-
-type RenderThreadRowOptions =
-  | DefaultRenderThreadRowOptions
-  | ManagerRenderThreadRowOptions
-  | ManagedChildRenderThreadRowOptions;
-
-interface ManagerRenderThreadRowOptionOverrides extends Partial<ManagerRenderThreadRowOptions> {}
 
 interface ThreadRowElementArgs {
-  rowProps?: RenderThreadRowOptions;
+  rowOptions?: RenderThreadRowOptions;
   thread: ThreadListEntry;
 }
 
@@ -59,6 +36,10 @@ interface ThreadRenderProbeArgs {
   onRenderRead: () => void;
   thread: ThreadListEntry;
 }
+
+type ManagerThreadRowOptions = Extract<ThreadRowOptions, { kind: "manager" }>;
+
+type ManagerThreadRowOptionOverrides = Partial<ManagerThreadRowOptions>;
 
 function createThread(
   overrides: ThreadListEntryOverrides = {},
@@ -108,63 +89,30 @@ function installThreadRenderProbe({
   return thread;
 }
 
-function createManagerRowProps(
-  overrides: ManagerRenderThreadRowOptionOverrides = {},
-): ManagerRenderThreadRowOptions {
+function createManagerRowOptions(
+  overrides: ManagerThreadRowOptionOverrides = {},
+): ManagerThreadRowOptions {
   return {
     kind: "manager",
-    hasManagedChildren: true,
     isCollapsed: false,
     managedChildCount: 1,
     managedChildBusyCount: 0,
+    onToggleCollapsed: vi.fn(),
     ...overrides,
   };
 }
 
 function createThreadRowElement({
-  rowProps = { kind: "default" },
+  rowOptions = {},
   thread,
 }: ThreadRowElementArgs) {
-  const isActive = rowProps.isActive ?? false;
-  const { isPromoted, onToggleManagerCollapsed } = rowProps;
-
-  if (rowProps.kind === "manager") {
-    return (
-      <ThreadRow
-        projectId="proj_1"
-        thread={thread}
-        isActive={isActive}
-        isPromoted={isPromoted}
-        onToggleManagerCollapsed={onToggleManagerCollapsed}
-        kind="manager"
-        hasManagedChildren={rowProps.hasManagedChildren}
-        isCollapsed={rowProps.isCollapsed}
-        managedChildCount={rowProps.managedChildCount}
-        managedChildBusyCount={rowProps.managedChildBusyCount}
-      />
-    );
-  }
-
-  if (rowProps.kind === "managed-child") {
-    return (
-      <ThreadRow
-        projectId="proj_1"
-        thread={thread}
-        isActive={isActive}
-        isPromoted={isPromoted}
-        kind="managed-child"
-      />
-    );
-  }
-
   return (
     <ThreadRow
       projectId="proj_1"
       thread={thread}
-      isActive={isActive}
-      isPromoted={isPromoted}
-      onToggleManagerCollapsed={onToggleManagerCollapsed}
-      kind="default"
+      isActive={rowOptions.isActive ?? false}
+      isPromoted={rowOptions.isPromoted}
+      options={rowOptions.rowOptions ?? { kind: "default" }}
     />
   );
 }
@@ -189,13 +137,14 @@ function renderThreadRow(
     </JotaiProvider>
   );
 
-  return render(createThreadRowElement({ rowProps: options, thread }), {
+  return render(createThreadRowElement({ rowOptions: options, thread }), {
     wrapper,
   });
 }
 
 afterEach(() => {
   cleanup();
+  vi.clearAllMocks();
 });
 
 describe("ThreadRow", () => {
@@ -209,7 +158,7 @@ describe("ThreadRow", () => {
     });
   });
 
-  it("shows the pending interaction dot for managed child threads", () => {
+  it("shows the pending interaction dot for threads with a manager parent", () => {
     renderThreadRow(
       createThread({
         id: "thr_child",
@@ -250,9 +199,27 @@ describe("ThreadRow", () => {
   });
 
   it("shows a promoted pill", () => {
-    renderThreadRow(createThread(), { kind: "default", isPromoted: true });
+    renderThreadRow(createThread(), { isPromoted: true });
 
     expect(screen.getByText("promoted")).not.toBeNull();
+  });
+
+  it("shows a working spinner for busy rows with a manager parent", () => {
+    renderThreadRow(
+      createThread({
+        id: "thr_managed_child",
+        title: "Managed child",
+        titleFallback: "Managed child",
+        parentThreadId: "thr_manager",
+        runtime: {
+          displayStatus: "active",
+          hostReconnectGraceExpiresAt: null,
+        },
+      }),
+    );
+
+    expect(screen.getByLabelText("Open Managed child")).not.toBeNull();
+    expect(screen.getByLabelText("Thread working")).not.toBeNull();
   });
 
   it("rerenders when promoted state changes", () => {
@@ -264,7 +231,6 @@ describe("ThreadRow", () => {
       thread: createThread(),
     });
     const result = renderThreadRow(thread, {
-      kind: "default",
       isPromoted: false,
     });
 
@@ -274,7 +240,7 @@ describe("ThreadRow", () => {
 
     result.rerender(
       createThreadRowElement({
-        rowProps: { kind: "default", isPromoted: true },
+        rowOptions: { isPromoted: true },
         thread,
       }),
     );
@@ -295,11 +261,9 @@ describe("ThreadRow", () => {
         titleFallback: "Manager thread",
       }),
     });
-    const onToggleManagerCollapsed = vi.fn();
-    const result = renderThreadRow(
-      thread,
-      createManagerRowProps({ onToggleManagerCollapsed }),
-    );
+    const result = renderThreadRow(thread, {
+      rowOptions: createManagerRowOptions(),
+    });
 
     const initialRenderCount = renderCount;
     expect(initialRenderCount).toBeGreaterThan(0);
@@ -307,10 +271,11 @@ describe("ThreadRow", () => {
 
     result.rerender(
       createThreadRowElement({
-        rowProps: createManagerRowProps({
-          managedChildCount: 2,
-          onToggleManagerCollapsed,
-        }),
+        rowOptions: {
+          rowOptions: createManagerRowOptions({
+            managedChildCount: 2,
+          }),
+        },
         thread,
       }),
     );
@@ -331,22 +296,47 @@ describe("ThreadRow", () => {
         titleFallback: "Manager thread",
       }),
     });
-    const onToggleManagerCollapsed = vi.fn();
-    const result = renderThreadRow(
-      thread,
-      createManagerRowProps({ onToggleManagerCollapsed }),
-    );
+    const rowOptions = createManagerRowOptions();
+    const result = renderThreadRow(thread, { rowOptions });
 
     const initialRenderCount = renderCount;
     expect(initialRenderCount).toBeGreaterThan(0);
 
     result.rerender(
       createThreadRowElement({
-        rowProps: createManagerRowProps({ onToggleManagerCollapsed }),
+        rowOptions: { rowOptions },
         thread,
       }),
     );
 
     expect(renderCount).toBe(initialRenderCount);
+  });
+
+  it("shows the manager pill and places the working spinner over the manager icon", () => {
+    renderThreadRow(
+      createThread({
+        id: "thr_manager",
+        type: "manager",
+        title: "Manager thread",
+        titleFallback: "Manager thread",
+      }),
+      {
+        rowOptions: createManagerRowOptions({
+          isCollapsed: true,
+          managedChildCount: 2,
+          managedChildBusyCount: 1,
+        }),
+      },
+    );
+
+    const managerIcon = screen.getByLabelText("Manager");
+    const managerSpinner = screen.getByLabelText("Manager working");
+    const managerChevron = screen.getByRole("button", {
+      name: "Expand Manager thread threads",
+    });
+
+    expect(screen.getByText("manager")).not.toBeNull();
+    expect(managerSpinner.parentElement).toBe(managerIcon.parentElement);
+    expect(managerChevron.querySelector(".animate-spin")).toBeNull();
   });
 });

@@ -16,7 +16,7 @@ function createThread(
     type: "standard",
     title: "Thread",
     titleFallback: "Thread",
-    status: "active",
+    status: "idle",
     parentThreadId: null,
     archivedAt: null,
     stopRequestedAt: null,
@@ -42,26 +42,30 @@ function threadIds(threads: readonly ThreadListEntry[]): string[] {
 }
 
 describe("buildProjectThreadGroups", () => {
-  it("classifies managers, known managed children, and other threads", () => {
+  it("classifies managers and managed child stats while sorting standard threads globally", () => {
     const groups = buildProjectThreadGroups([
       createThread({
         id: "root-old",
         createdAt: 10,
+        updatedAt: 10,
       }),
       createThread({
         id: "manager-old",
         type: "manager",
         createdAt: 20,
+        updatedAt: 20,
       }),
       createThread({
         id: "manager-new",
         type: "manager",
         createdAt: 40,
+        updatedAt: 40,
       }),
       createThread({
         id: "child-busy",
         parentThreadId: "manager-old",
         createdAt: 50,
+        updatedAt: 80,
         runtime: {
           displayStatus: "active",
           hostReconnectGraceExpiresAt: null,
@@ -71,11 +75,13 @@ describe("buildProjectThreadGroups", () => {
         id: "child-idle",
         parentThreadId: "manager-old",
         createdAt: 30,
+        updatedAt: 90,
       }),
       createThread({
         id: "orphan-child",
         parentThreadId: "missing-manager",
         createdAt: 60,
+        updatedAt: 70,
       }),
     ]);
 
@@ -83,16 +89,54 @@ describe("buildProjectThreadGroups", () => {
       "manager-new",
       "manager-old",
     ]);
+    expect(groups.managerThreadStatsByManagerId.get("manager-old")).toEqual({
+      managedChildBusyCount: 1,
+      managedChildCount: 2,
+    });
     expect(
-      threadIds(groups.managedThreadsByManagerId.get("manager-old") ?? []),
-    ).toEqual(["child-busy", "child-idle"]);
-    expect(
-      groups.managedThreadsByManagerId.get("manager-new"),
+      groups.managerThreadStatsByManagerId.get("manager-new"),
     ).toBeUndefined();
-    expect(groups.managedChildBusyCountsByManagerId.get("manager-old")).toBe(1);
-    expect(threadIds(groups.otherThreads)).toEqual([
+    expect(threadIds(groups.standardThreads)).toEqual([
+      "child-idle",
+      "child-busy",
       "orphan-child",
       "root-old",
+    ]);
+  });
+
+  it("sorts active standard threads by creation time instead of update time", () => {
+    const groups = buildProjectThreadGroups([
+      createThread({
+        id: "active-old",
+        status: "active",
+        createdAt: 10,
+        updatedAt: 1_000,
+        runtime: {
+          displayStatus: "active",
+          hostReconnectGraceExpiresAt: null,
+        },
+      }),
+      createThread({
+        id: "idle-recent",
+        createdAt: 20,
+        updatedAt: 900,
+      }),
+      createThread({
+        id: "active-new",
+        status: "active",
+        createdAt: 950,
+        updatedAt: 30,
+        runtime: {
+          displayStatus: "active",
+          hostReconnectGraceExpiresAt: null,
+        },
+      }),
+    ]);
+
+    expect(threadIds(groups.standardThreads)).toEqual([
+      "active-new",
+      "idle-recent",
+      "active-old",
     ]);
   });
 });

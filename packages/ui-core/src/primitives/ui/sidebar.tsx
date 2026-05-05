@@ -501,6 +501,7 @@ const SidebarStickyTier = React.forwardRef<
       className={cn(
         tier === "label" && SIDEBAR_GROUP_LABEL_BASE_CLASS,
         tier === "label" && SIDEBAR_GROUP_LABEL_COLLAPSED_CLASS,
+        "bg-sidebar",
         className,
       )}
     >
