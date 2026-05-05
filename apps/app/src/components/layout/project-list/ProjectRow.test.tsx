@@ -222,8 +222,18 @@ describe("ProjectRow", () => {
     expect(regularRow.hasAttribute("data-sidebar-sticky-tier")).toBe(false);
     expect(managedRow.classList.contains("relative")).toBe(true);
     expect(regularRow.classList.contains("relative")).toBe(true);
-    expect(managedRow.classList.contains("pl-2")).toBe(true);
-    expect(managedRow.classList.contains("pl-6")).toBe(false);
+    expect(managedRow.classList.contains("pl-6")).toBe(true);
+    expect(managedRow.classList.contains("pl-2")).toBe(false);
+    expect(managedRow.classList.contains("h-7")).toBe(true);
+    expect(
+      managedRow.classList.contains("h-[var(--bb-sidebar-row-height)]"),
+    ).toBe(false);
+    expect(managedRow.classList.contains("text-sidebar-foreground/60")).toBe(
+      true,
+    );
+    expect(managedRow.classList.contains("text-sidebar-foreground/80")).toBe(
+      false,
+    );
     expect(
       managedRow.querySelector("[data-managed-child-marker]"),
     ).not.toBeNull();

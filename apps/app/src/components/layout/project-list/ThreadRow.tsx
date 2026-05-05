@@ -299,11 +299,15 @@ function ThreadRowComponent({
   const rowClassName = cn(
     "group/thread-row flex w-full items-center gap-2 rounded-md pr-0 text-sm transition-colors",
     !isManager && "relative",
-    COARSE_POINTER_ROW_HEIGHT_CLASS,
-    "pl-2",
+    isManagedChild
+      ? COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS
+      : COARSE_POINTER_ROW_HEIGHT_CLASS,
+    isManagedChild ? "pl-6" : "pl-2",
     isActive
       ? "bg-sidebar-border text-sidebar-foreground"
-      : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+      : isManagedChild
+        ? "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
   );
   const rowContent = (
     <>

@@ -247,7 +247,19 @@ describe("ThreadRow", () => {
       { rowOptions: { kind: "managed-child" } },
     );
 
-    expectManagedChildTitlePosition("Managed child");
+    const position = expectManagedChildTitlePosition("Managed child");
+    expect(position.row.classList.contains("pl-6")).toBe(true);
+    expect(position.row.classList.contains("pl-2")).toBe(false);
+    expect(position.row.classList.contains("h-7")).toBe(true);
+    expect(
+      position.row.classList.contains("h-[var(--bb-sidebar-row-height)]"),
+    ).toBe(false);
+    expect(
+      position.row.classList.contains("text-sidebar-foreground/60"),
+    ).toBe(true);
+    expect(
+      position.row.classList.contains("text-sidebar-foreground/80"),
+    ).toBe(false);
     expect(screen.queryByLabelText("Managed thread")).toBeNull();
     expect(screen.queryByLabelText("Thread working")).toBeNull();
     expect(
@@ -256,6 +268,23 @@ describe("ThreadRow", () => {
     expect(
       screen.queryByLabelText("Unread thread requires attention"),
     ).toBeNull();
+  });
+
+  it("uses selected styling instead of muted text for active managed child rows", () => {
+    renderThreadRow(
+      createThread({
+        id: "thr_child",
+        title: "Managed child",
+        titleFallback: "Managed child",
+        parentThreadId: "thr_parent",
+      }),
+      { isActive: true, rowOptions: { kind: "managed-child" } },
+    );
+
+    const row = getThreadRow("Managed child");
+    expect(row.classList.contains("bg-sidebar-border")).toBe(true);
+    expect(row.classList.contains("text-sidebar-foreground")).toBe(true);
+    expect(row.classList.contains("text-sidebar-foreground/60")).toBe(false);
   });
 
   it("keeps managed child title position stable and shows busy status in the trailing slot", () => {

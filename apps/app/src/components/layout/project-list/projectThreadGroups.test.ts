@@ -144,6 +144,57 @@ describe("buildProjectThreadGroups", () => {
     ]);
   });
 
+  it("sorts managed children with the regular standard-thread rule", () => {
+    const groups = buildProjectThreadGroups([
+      createThread({
+        id: "manager",
+        type: "manager",
+      }),
+      createThread({
+        id: "active-old-child",
+        parentThreadId: "manager",
+        status: "active",
+        createdAt: 10,
+        updatedAt: 5_000,
+        runtime: {
+          displayStatus: "active",
+          hostReconnectGraceExpiresAt: null,
+        },
+      }),
+      createThread({
+        id: "idle-recent-child",
+        parentThreadId: "manager",
+        createdAt: 20,
+        updatedAt: 900,
+      }),
+      createThread({
+        id: "active-new-child",
+        parentThreadId: "manager",
+        status: "active",
+        createdAt: 950,
+        updatedAt: 30,
+        runtime: {
+          displayStatus: "active",
+          hostReconnectGraceExpiresAt: null,
+        },
+      }),
+      createThread({
+        id: "idle-newest-child",
+        parentThreadId: "manager",
+        createdAt: 40,
+        updatedAt: 1_000,
+      }),
+    ]);
+
+    expect(threadIds(groups.managerThreadGroups[0]?.managedThreads ?? []))
+      .toEqual([
+        "idle-newest-child",
+        "active-new-child",
+        "idle-recent-child",
+        "active-old-child",
+      ]);
+  });
+
   it("keeps managed children inside their manager group instead of globally interleaving them", () => {
     const groups = buildProjectThreadGroups([
       createThread({
