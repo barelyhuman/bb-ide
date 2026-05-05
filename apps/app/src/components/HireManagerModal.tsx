@@ -45,7 +45,6 @@ const REASONING_LABELS: Record<ReasoningLevel, string> = {
   xhigh: "Extra High",
 };
 const EMPTY_SYSTEM_PROVIDERS: SystemProviderInfo[] = [];
-const SERVER_DEFAULT_PROVIDER_VALUE = "";
 type ReasoningSelectionSource = "default" | "user";
 
 interface HireManagerModalProps {
@@ -62,7 +61,9 @@ export function HireManagerModal({
   onHired,
 }: HireManagerModalProps) {
   const nameInputId = useId();
-  const providers = useSystemProviders().data ?? EMPTY_SYSTEM_PROVIDERS;
+  const providersQuery = useSystemProviders();
+  const providers = providersQuery.data ?? EMPTY_SYSTEM_PROVIDERS;
+  const providersAreLoaded = providersQuery.data !== undefined;
   const { data: projects } = useProjects();
   const { data: hosts = [] } = useEffectiveHosts();
   const { isLocalHost } = useHostDaemon();
@@ -73,9 +74,7 @@ export function HireManagerModal({
   }, [projects, projectId]);
 
   const [managerName, setManagerName] = useState("");
-  const [selectedProviderId, setSelectedProviderId] = useState<string | null>(
-    null,
-  );
+  const [selectedProviderId, setSelectedProviderId] = useState("");
   const [selectedModel, setSelectedModel] = useState<string>("");
   const [selectedReasoningLevel, setSelectedReasoningLevel] = useState<
     ReasoningLevel | ""
@@ -86,18 +85,25 @@ export function HireManagerModal({
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const selectedProvider = useMemo(
-    () =>
-      selectedProviderId
-        ? providers.find((provider) => provider.id === selectedProviderId) ?? null
-        : null,
+    () => {
+      if (selectedProviderId) {
+        const matchingProvider = providers.find(
+          (provider) => provider.id === selectedProviderId,
+        );
+        if (matchingProvider) return matchingProvider;
+      }
+      return providers[0] ?? null;
+    },
     [providers, selectedProviderId],
   );
-  const selectedProviderValue =
-    selectedProviderId ?? SERVER_DEFAULT_PROVIDER_VALUE;
-  const hasProviderOverride = selectedProvider !== null;
+  const selectedProviderValue = selectedProvider?.id ?? "";
+  const hasSelectedProvider = selectedProvider !== null;
+  const unavailableProviderMessage = providersAreLoaded
+    ? "No providers available"
+    : "Loading providers…";
   const modelsQuery = useAvailableModels({
     providerId: selectedProvider?.id,
-    enabled: hasProviderOverride,
+    enabled: hasSelectedProvider,
   });
   const models = useMemo(() => modelsQuery.data ?? [], [modelsQuery.data]);
 
@@ -117,19 +123,12 @@ export function HireManagerModal({
     }, [selectedModelData]);
 
   const providerOptions = useMemo(
-    (): readonly PromptOption<string>[] => [
-      {
-        value: SERVER_DEFAULT_PROVIDER_VALUE,
-        label: "Server Default",
-        description:
-          "Use remembered manager defaults for this project, otherwise the server manager default.",
-      },
-      ...providers.map((p) => ({
+    (): readonly PromptOption<string>[] =>
+      providers.map((p) => ({
         value: p.id,
         label: p.displayName,
         icon: getProviderIconInfo(p.id)?.icon,
       })),
-    ],
     [providers],
   );
 
@@ -139,22 +138,29 @@ export function HireManagerModal({
         value: model.model,
         label: formatModelLabel(
           model.displayName || model.model,
-          selectedProvider?.id ?? SERVER_DEFAULT_PROVIDER_VALUE,
+          selectedProvider?.id,
         ),
       })),
     [models, selectedProvider],
   );
+
+  useEffect(() => {
+    if (!providersAreLoaded || selectedProviderId === selectedProviderValue) {
+      return;
+    }
+    setSelectedProviderId(selectedProviderValue);
+  }, [providersAreLoaded, selectedProviderId, selectedProviderValue]);
 
   // Reset model and reasoning when provider changes.
   useEffect(() => {
     setSelectedModel("");
     setSelectedReasoningLevel("");
     setReasoningSelectionSource("default");
-  }, [selectedProviderId]);
+  }, [selectedProviderValue]);
 
   useEffect(() => {
     if (
-      hasProviderOverride &&
+      hasSelectedProvider &&
       models.length > 0 &&
       !models.some((m) => m.model === selectedModel)
     ) {
@@ -162,7 +168,7 @@ export function HireManagerModal({
         models.find((model) => model.isDefault)?.model ?? models[0]?.model ?? "",
       );
     }
-  }, [hasProviderOverride, models, selectedModel]);
+  }, [hasSelectedProvider, models, selectedModel]);
 
   useEffect(() => {
     if (!selectedModelData) {
@@ -215,9 +221,7 @@ export function HireManagerModal({
   }, [eligibleHosts, selectedHostId, isLocalHost]);
 
   const handleProviderChange = useCallback((value: string) => {
-    setSelectedProviderId(
-      value === SERVER_DEFAULT_PROVIDER_VALUE ? null : value,
-    );
+    setSelectedProviderId(value);
     setError(null);
   }, []);
 
@@ -242,8 +246,12 @@ export function HireManagerModal({
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
       if (!projectId || isPending) return;
-      if (selectedProvider && !selectedModel) {
-        setError("A model is required when overriding the server default");
+      if (!selectedProvider) {
+        setError("A provider is required");
+        return;
+      }
+      if (!selectedModel) {
+        setError("A model is required");
         return;
       }
       if (!selectedHostId) {
@@ -257,14 +265,10 @@ export function HireManagerModal({
         const thread = await hireManager.mutateAsync({
           projectId,
           ...(trimmedManagerName ? { name: trimmedManagerName } : {}),
-          ...(selectedProvider
-            ? {
-                providerId: selectedProvider.id,
-                model: selectedModel,
-                ...(effectiveReasoningLevel
-                  ? { reasoningLevel: effectiveReasoningLevel }
-                  : {}),
-              }
+          providerId: selectedProvider.id,
+          model: selectedModel,
+          ...(effectiveReasoningLevel
+            ? { reasoningLevel: effectiveReasoningLevel }
             : {}),
           environment: { type: "host", hostId: selectedHostId },
         });
@@ -338,7 +342,7 @@ export function HireManagerModal({
                   className="text-foreground"
                   contentClassName="min-w-64"
                 />
-                {hasProviderOverride ? (
+                {hasSelectedProvider ? (
                   modelOptions.length > 0 ? (
                     <>
                       <PromptOptionPicker
@@ -366,7 +370,7 @@ export function HireManagerModal({
                   )
                 ) : (
                   <span className="text-sm text-muted-foreground">
-                    Using server-owned manager defaults unless you choose an override.
+                    {unavailableProviderMessage}
                   </span>
                 )}
               </div>

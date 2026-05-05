@@ -10,9 +10,13 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { AvailableModel, Host, Thread } from "@bb/domain";
-import type { ProjectResponse } from "@bb/server-contract";
+import type { ProjectResponse, SystemProviderInfo } from "@bb/server-contract";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { availableModelsQueryKey, threadQueryKey } from "@/hooks/queries/query-keys";
+import {
+  availableModelsQueryKey,
+  systemProvidersQueryKey,
+  threadQueryKey,
+} from "@/hooks/queries/query-keys";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { resetFakeReconnectingWebSockets } from "@/test/fake-reconnecting-websocket";
 import {
@@ -35,7 +39,10 @@ vi.mock("partysocket/ws", async () => {
 interface InstallHireManagerRoutesArgs {
   managerThread?: Thread;
   modelResponsesByProvider?: Record<string, AvailableModel[]>;
+  systemProviders?: SystemProvidersFixture;
 }
+
+type SystemProvidersFixture = SystemProviderInfo[] | (() => SystemProviderInfo[]);
 
 function installMatchMedia() {
   Object.defineProperty(window, "matchMedia", {
@@ -151,11 +158,8 @@ function findOptionLabel(text: string): HTMLElement {
   return label;
 }
 
-function installHireManagerRoutes(args: InstallHireManagerRoutesArgs = {}) {
-  const managerThread = args.managerThread ?? makeThread();
-  const managerRequests: unknown[] = [];
-  const requestedModelProviders: Array<string | null> = [];
-  const providers = [
+function createDefaultSystemProviders(): SystemProviderInfo[] {
+  return [
     createTestSystemProvider({
       capabilities: {
         supportsArchive: false,
@@ -173,6 +177,22 @@ function installHireManagerRoutes(args: InstallHireManagerRoutesArgs = {}) {
       id: "codex",
     }),
   ];
+}
+
+function resolveSystemProviders(
+  systemProviders: SystemProvidersFixture,
+): SystemProviderInfo[] {
+  return typeof systemProviders === "function"
+    ? systemProviders()
+    : systemProviders;
+}
+
+function installHireManagerRoutes(args: InstallHireManagerRoutesArgs = {}) {
+  const managerThread = args.managerThread ?? makeThread();
+  const managerRequests: unknown[] = [];
+  const requestedModelProviders: Array<string | null> = [];
+  const systemProviders =
+    args.systemProviders ?? createDefaultSystemProviders();
   const projects = [makeProjectResponse()];
   const hosts = [makeHost("host-local", "Local Host")];
 
@@ -209,7 +229,7 @@ function installHireManagerRoutes(args: InstallHireManagerRoutesArgs = {}) {
     },
     {
       pathname: "/api/v1/system/providers",
-      handler: async () => jsonResponse(providers),
+      handler: async () => jsonResponse(resolveSystemProviders(systemProviders)),
     },
     {
       method: "POST",
@@ -276,8 +296,35 @@ afterEach(() => {
 });
 
 describe("HireManagerModal", () => {
-  it("submits a real hire request without provider or model when using the server default", async () => {
-    const { managerRequests, managerThread } = installHireManagerRoutes();
+  it("shows an empty provider state after providers load with no entries", async () => {
+    installHireManagerRoutes({
+      systemProviders: [],
+    });
+    const { wrapper } = createSuspenseWrapper();
+
+    await renderOpenHireManagerModal({
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("No providers available")).toBeTruthy();
+    });
+    expect(screen.queryByText("Loading providers…")).toBeNull();
+  });
+
+  it("omits the server default option and submits the selected provider and model", async () => {
+    const piModels = [
+      makeModel("anthropic/claude-opus-4-7", {
+        displayName: "Claude Opus 4.7",
+        isDefault: true,
+      }),
+    ];
+    const { managerRequests, managerThread, requestedModelProviders } =
+      installHireManagerRoutes({
+        modelResponsesByProvider: {
+          pi: piModels,
+        },
+      });
     const { queryClient, wrapper } = createSuspenseWrapper();
     const onHired = vi.fn();
 
@@ -291,11 +338,24 @@ describe("HireManagerModal", () => {
         "Local Host",
       );
     });
-    expect(
-      screen.getByText(
-        "Using server-owned manager defaults unless you choose an override.",
-      ),
-    ).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Provider" }).title).toContain(
+        "Pi",
+      );
+      expect(screen.getByRole("button", { name: "Model" }).title).toContain(
+        "Claude Opus 4.7",
+      );
+    });
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Provider" }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    await waitFor(() => findOptionLabel("Pi"));
+    expect(screen.queryByText("Server Default")).toBeNull();
+    fireEvent.keyDown(screen.getByRole("menu", { name: "Provider" }), {
+      key: "Escape",
+    });
 
     fireEvent.click(screen.getByRole("button", { name: "Hire Manager" }));
 
@@ -303,6 +363,9 @@ describe("HireManagerModal", () => {
       expect(managerRequests).toEqual([
         {
           origin: "app",
+          providerId: "pi",
+          model: "anthropic/claude-opus-4-7",
+          reasoningLevel: "medium",
           environment: { type: "host", hostId: "host-local" },
         },
       ]);
@@ -313,6 +376,71 @@ describe("HireManagerModal", () => {
     expect(queryClient.getQueryData(threadQueryKey(managerThread.id))).toEqual(
       managerThread,
     );
+    expect(requestedModelProviders).toEqual(["pi"]);
+  });
+
+  it("keeps the visible fallback provider selected when a stale provider returns", async () => {
+    let systemProviders = createDefaultSystemProviders();
+    const piModels = [
+      makeModel("anthropic/claude-opus-4-7", {
+        displayName: "Claude Opus 4.7",
+        isDefault: true,
+      }),
+    ];
+    const codexModels = [
+      makeModel("openai-codex/gpt-5.4", {
+        displayName: "GPT-5.4",
+        isDefault: true,
+      }),
+    ];
+    installHireManagerRoutes({
+      modelResponsesByProvider: {
+        pi: piModels,
+        codex: codexModels,
+      },
+      systemProviders: () => systemProviders,
+    });
+    const { queryClient, wrapper } = createSuspenseWrapper();
+
+    await renderOpenHireManagerModal({
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Provider" }).title).toContain(
+        "Pi",
+      );
+    });
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Provider" }), {
+      button: 0,
+      ctrlKey: false,
+    });
+    fireEvent.click(await waitFor(() => findOptionLabel("Codex")));
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Provider" }).title).toContain(
+        "Codex",
+      );
+    });
+
+    systemProviders = systemProviders.filter((provider) => provider.id === "pi");
+    await queryClient.refetchQueries({ queryKey: systemProvidersQueryKey() });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Provider" }).title).toContain(
+        "Pi",
+      );
+    });
+
+    systemProviders = createDefaultSystemProviders();
+    await queryClient.refetchQueries({ queryKey: systemProvidersQueryKey() });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Provider" }).title).toContain(
+        "Pi",
+      );
+    });
   });
 
   it("submits the selected provider override through the real models query and hire mutation", async () => {
@@ -334,10 +462,17 @@ describe("HireManagerModal", () => {
         isDefault: true,
       }),
     ];
+    const codexModels = [
+      makeModel("openai-codex/gpt-5.4", {
+        displayName: "GPT-5.4",
+        isDefault: true,
+      }),
+    ];
     const { managerRequests, requestedModelProviders } =
       installHireManagerRoutes({
         modelResponsesByProvider: {
           pi: piModels,
+          codex: codexModels,
         },
       });
     const { queryClient, wrapper } = createSuspenseWrapper();
@@ -356,17 +491,17 @@ describe("HireManagerModal", () => {
       button: 0,
       ctrlKey: false,
     });
-    fireEvent.click(await waitFor(() => findOptionLabel("Pi")));
+    fireEvent.click(await waitFor(() => findOptionLabel("Codex")));
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Model" }).title).toContain(
-        "Claude Opus 4.7",
+        "GPT-5.4",
       );
     });
     await waitFor(() => {
       expect(
         screen.getByRole("button", { name: "Reasoning" }).title,
-      ).toContain("Extra High");
+      ).toContain("Medium");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Hire Manager" }));
@@ -375,17 +510,17 @@ describe("HireManagerModal", () => {
       expect(managerRequests).toEqual([
         {
           origin: "app",
-          providerId: "pi",
-          model: "anthropic/claude-opus-4-7",
-          reasoningLevel: "xhigh",
+          providerId: "codex",
+          model: "openai-codex/gpt-5.4",
+          reasoningLevel: "medium",
           environment: { type: "host", hostId: "host-local" },
         },
       ]);
     });
-    expect(requestedModelProviders).toEqual(["pi"]);
+    expect(requestedModelProviders).toEqual(["pi", "codex"]);
     expect(
-      queryClient.getQueryData(availableModelsQueryKey("pi", null)),
-    ).toEqual(piModels);
+      queryClient.getQueryData(availableModelsQueryKey("codex", null)),
+    ).toEqual(codexModels);
   });
 
   it("preserves a user-selected reasoning level across real model refetches", async () => {
@@ -423,12 +558,6 @@ describe("HireManagerModal", () => {
         "Local Host",
       );
     });
-
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Provider" }), {
-      button: 0,
-      ctrlKey: false,
-    });
-    fireEvent.click(await waitFor(() => findOptionLabel("Pi")));
 
     await waitFor(() => {
       expect(
