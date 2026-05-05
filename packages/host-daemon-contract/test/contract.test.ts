@@ -927,7 +927,6 @@ describe("host-daemon session schemas", () => {
             threadId: "thr_123",
           },
         ],
-        threadHighWaterMarks: { thr_123: 10 },
       }),
     ).toMatchObject({
       sessionId: "session_123",
@@ -937,8 +936,17 @@ describe("host-daemon session schemas", () => {
           threadId: "thr_123",
         },
       ],
-      threadHighWaterMarks: { thr_123: 10 },
     });
+
+    expect(() =>
+      hostDaemonSessionOpenResponseSchema.parse({
+        sessionId: "session_123",
+        heartbeatIntervalMs: 5_000,
+        leaseTimeoutMs: 30_000,
+        trackedThreadTargets: [],
+        threadHighWaterMarks: { thr_123: 10 },
+      }),
+    ).toThrow();
 
     expect(
       hostDaemonEventBatchRequestSchema.parse({
@@ -1023,16 +1031,19 @@ describe("host-daemon session schemas", () => {
     expect(
       hostDaemonCommandResultResponseSchema.parse({
         ok: true,
+      }),
+    ).toEqual({
+      ok: true,
+    });
+
+    expect(() =>
+      hostDaemonCommandResultResponseSchema.parse({
+        ok: true,
         threadHighWaterMarks: {
           thr_123: 43,
         },
       }),
-    ).toEqual({
-      ok: true,
-      threadHighWaterMarks: {
-        thr_123: 43,
-      },
-    });
+    ).toThrow();
 
     expect(
       hostDaemonEnvironmentChangeRequestSchema.parse({

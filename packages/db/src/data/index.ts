@@ -252,7 +252,6 @@ export {
   appendStoredThreadEventsInTransaction,
   findStoredEventRow,
   getActiveStoredTurnId,
-  getHighWaterMarks,
   getLastStoredProviderThreadId,
   getLastStoredTurnId,
   getLastStoredTurnRequestEvent,

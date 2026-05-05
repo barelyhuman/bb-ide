@@ -15,16 +15,13 @@ roadmaps; only the durable payload and lifecycle abstraction phases need to wait
 for the server/daemon protocol changes that reshape command results and
 lifecycle ownership.
 
-This plan does not replace:
-
-- `plans/host-daemon-event-protocol-hard-cutover.md`
-- `plans/server-daemon-protocol-simplification.md`
-
-Those two plans remove the largest correctness risk and should lead protocol
-implementation. This plan covers repository-level simplification work that is
-not fundamentally a daemon transport problem. Phases 1, 2, 3, 4, 7, and 8 can be
-scheduled independently; Phases 5 and 6 should wait for the protocol work that
-changes durable command/result ownership.
+This plan does not replace `plans/server-daemon-protocol-simplification.md`.
+The host-daemon event protocol hard cutover is complete and its plan has been
+deleted. The server/daemon protocol simplification roadmap should still lead
+transport and lifecycle work. This plan covers repository-level simplification
+work that is not fundamentally a daemon transport problem. Phases 1, 2, 3, 4, 7,
+and 8 can be scheduled independently; Phases 5 and 6 should wait for the
+protocol work that changes durable command/result ownership.
 
 ## Current Status (2026-05-04)
 

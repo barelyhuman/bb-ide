@@ -71,13 +71,14 @@ export type HostDaemonEnrollResponse = z.infer<
   typeof hostDaemonEnrollResponseSchema
 >;
 
-export const hostDaemonSessionOpenResponseSchema = z.object({
-  sessionId: z.string().min(1),
-  heartbeatIntervalMs: z.number().int().positive(),
-  leaseTimeoutMs: z.number().int().positive(),
-  trackedThreadTargets: z.array(hostDaemonTrackedThreadTargetSchema),
-  threadHighWaterMarks: z.record(z.string(), z.number().int().nonnegative()),
-});
+export const hostDaemonSessionOpenResponseSchema = z
+  .object({
+    sessionId: z.string().min(1),
+    heartbeatIntervalMs: z.number().int().positive(),
+    leaseTimeoutMs: z.number().int().positive(),
+    trackedThreadTargets: z.array(hostDaemonTrackedThreadTargetSchema),
+  })
+  .strict();
 export type HostDaemonSessionOpenResponse = z.infer<
   typeof hostDaemonSessionOpenResponseSchema
 >;
@@ -142,10 +143,11 @@ export type HostDaemonEventBatchResponse = z.infer<
   typeof hostDaemonEventBatchResponseSchema
 >;
 
-export const hostDaemonCommandResultResponseSchema = z.object({
-  ok: z.literal(true),
-  threadHighWaterMarks: z.record(z.string(), z.number().int().nonnegative()),
-});
+export const hostDaemonCommandResultResponseSchema = z
+  .object({
+    ok: z.literal(true),
+  })
+  .strict();
 export type HostDaemonCommandResultResponse = z.infer<
   typeof hostDaemonCommandResultResponseSchema
 >;
@@ -312,7 +314,7 @@ export type HostDaemonInternalSchema = {
     >;
   };
   "/session/command-result": {
-    /** Used by the daemon to report command completion and receive post-side-effect event high-water marks. */
+    /** Used by the daemon to report command completion. */
     $post: Endpoint<
       { json: HostDaemonCommandResultReport },
       HostDaemonCommandResultResponse

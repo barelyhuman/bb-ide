@@ -79,7 +79,7 @@ import { createCommandApprovalPayload } from "../helpers/pending-interactions.js
 import { createTestAppHarness } from "../helpers/test-app.js";
 
 describe("internal session routes", () => {
-  it("opens sessions, replaces existing ones, and returns thread high-water marks", async () => {
+  it("opens sessions, replaces existing ones, and returns tracked thread targets", async () => {
     const harness = await createTestAppHarness();
     try {
       const existing = seedHostSession(harness.deps, {
@@ -135,9 +135,6 @@ describe("internal session routes", () => {
             threadId: thread.id,
           },
         ],
-        threadHighWaterMarks: {
-          [thread.id]: 6,
-        },
       });
       const replaced = harness.db
         .select()
@@ -424,16 +421,16 @@ describe("internal session routes", () => {
     }
   });
 
-  it("returns thread high-water marks after thread.start results", async () => {
+  it("returns ok after thread.start results without appending provisioning events", async () => {
     const harness = await createTestAppHarness();
     try {
       const { host } = seedHostSession(harness.deps, {
-        id: "host-thread-start-high-water",
+        id: "host-thread-start-result",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
       });
-      const environmentPath = "/tmp/thread-start-high-water";
+      const environmentPath = "/tmp/thread-start-result";
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -450,7 +447,7 @@ describe("internal session routes", () => {
         threadId: thread.id,
         environmentId: environment.id,
         type: "client/turn/requested",
-        input: [{ type: "text", text: "start with high-water response" }],
+        input: [{ type: "text", text: "start with command result response" }],
         execution: {
           model: "gpt-5",
           serviceTier: "default",
@@ -474,7 +471,7 @@ describe("internal session routes", () => {
           workspaceProvisionType: environment.workspaceProvisionType,
         },
         requestId: request.requestId,
-        input: [{ type: "text", text: "start with high-water response" }],
+        input: [{ type: "text", text: "start with command result response" }],
         execution: {
           model: "gpt-5",
           serviceTier: "default",
@@ -509,7 +506,7 @@ describe("internal session routes", () => {
             type: "thread.start",
             ok: true,
             result: {
-              providerThreadId: "provider-thread-start-high-water",
+              providerThreadId: "provider-thread-start-result",
             },
           }),
         },
@@ -524,9 +521,7 @@ describe("internal session routes", () => {
       });
 
       expect(sequenceAfterResult).toBe(sequenceBeforeResult);
-      expect(body.threadHighWaterMarks).toMatchObject({
-        [thread.id]: sequenceAfterResult,
-      });
+      expect(body).toEqual({ ok: true });
       const provisioningEvents = harness.db
         .select({ data: events.data })
         .from(events)
@@ -550,16 +545,16 @@ describe("internal session routes", () => {
     const harness = await createTestAppHarness();
     try {
       const { host, session } = seedHostSession(harness.deps, {
-        id: "host-provision-shared-high-water",
+        id: "host-provision-shared-sequence",
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
-        path: "/tmp/provision-shared-high-water",
+        path: "/tmp/provision-shared-sequence",
       });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
-        path: "/tmp/provision-shared-high-water",
+        path: "/tmp/provision-shared-sequence",
         status: "provisioning",
       });
       const initiator = seedThread(harness.deps, {
@@ -600,10 +595,10 @@ describe("internal session routes", () => {
           environmentId: environment.id,
           initiator: {
             threadId: initiator.id,
-            provisioningId: "tpv-session-shared-high-water",
+            provisioningId: "tpv-session-shared-sequence",
           },
           workspaceProvisionType: "unmanaged",
-          path: "/tmp/provision-shared-high-water",
+          path: "/tmp/provision-shared-sequence",
         },
       });
 
@@ -619,8 +614,8 @@ describe("internal session routes", () => {
             type: "environment.provision",
             ok: true,
             result: {
-              path: "/tmp/provision-shared-high-water",
-              branchName: "bb/shared-high-water",
+              path: "/tmp/provision-shared-sequence",
+              branchName: "bb/shared-sequence",
               defaultBranch: "main",
               isGitRepo: true,
               isWorktree: false,
@@ -654,10 +649,7 @@ describe("internal session routes", () => {
       expect(reuserProvisioningEvents).toHaveLength(1);
       expect(reuserSequenceAfterResult).toBeGreaterThan(3);
       expect(initiatorSequenceAfterResult).toBeGreaterThan(6);
-      expect(body.threadHighWaterMarks).toMatchObject({
-        [initiator.id]: initiatorSequenceAfterResult,
-        [reuser.id]: reuserSequenceAfterResult,
-      });
+      expect(body).toEqual({ ok: true });
 
       const daemonEventResponse = await harness.app.request(
         "/internal/session/events",

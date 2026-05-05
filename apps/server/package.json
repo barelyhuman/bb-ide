@@ -9,7 +9,6 @@
     "start": "node dist/index.js",
     "start:prod": "cross-env NODE_ENV=production node dist/index.js",
     "dev": "node scripts/dev-supervisor.mjs",
-    "dev:event-protocol-cutover": "tsx src/scripts/run-event-protocol-hard-cutover-migration.ts",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts"
@@ -53,7 +52,6 @@
     "@types/better-sqlite3": "^7.6.12",
     "@types/mime-types": "^3.0.1",
     "@types/node": "^22.0.0",
-    "tsx": "^4.21.0",
     "typescript": "^5.7.0",
     "vitest": "^4.1.1",
     "ws": "^8.19.0"

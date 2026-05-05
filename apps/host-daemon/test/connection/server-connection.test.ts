@@ -124,7 +124,7 @@ describe("ServerConnection", () => {
     const session = await connection.start();
 
     expect(session.sessionId).toBe("session-1");
-    expect(session.threadHighWaterMarks).toEqual({ threadA: 4 });
+    expect(Object.hasOwn(session, "threadHighWaterMarks")).toBe(false);
     expect(testServer.sessionOpenCalls).toHaveLength(1);
 
     await connection.shutdown();
@@ -278,7 +278,7 @@ describe("ServerConnection", () => {
     });
 
     expect(testServer.commandResultAttemptCount).toBe(2);
-    expect(result.threadHighWaterMarks).toEqual({ threadA: 4 });
+    expect(result).toEqual({ ok: true });
     expect(testServer.commandResultReports).toEqual([
       hostDaemonCommandResultReportSchema.parse({
         sessionId: "session-1",

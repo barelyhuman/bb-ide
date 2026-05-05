@@ -17,20 +17,19 @@ The goal of this plan is to make each boundary explicit:
   caller-guessed positions or transport session ids;
 - durable jobs and synchronous host queries use different protocols.
 
-This plan is a parent roadmap. The detailed event-log hard cutover remains in
-`plans/host-daemon-event-protocol-hard-cutover.md` and should land first.
+This plan is a parent roadmap. The event-log hard cutover has completed and the
+one-off cutover plan has been deleted; the remaining work is the broader
+server/daemon lifecycle and transport simplification below.
 
-## Current Status (2026-05-04)
+## Current Status (2026-05-05)
 
-Open future work. The short-term timeline safety fixes have landed separately in
-this branch and should be reviewed as bug fixes, not as partial implementation of
-this roadmap. They harden the current daemon event protocol with conflict
-detection, daemon rebase, bounded retry, duplicate canonicalization, and active
-manager nudge safeguards.
+Open future work after the event hard cutover. The server now owns event log
+ordering and request correlation, and the live dev database has been migrated to
+the post-cutover event protocol. Old event sequence/high-water compatibility is
+kept only as rejection tests and historical fixture text.
 
 The codebase still has protocol complexity in several adjacent areas:
 
-- daemon-assigned event sequences and server high-water marks;
 - command rows that become `fetched` without a delivery attempt identity;
 - synchronous read commands flowing through the durable command queue;
 - command result state persisted before lifecycle side effects complete;
@@ -49,8 +48,6 @@ The codebase still has protocol complexity in several adjacent areas:
 `sequence` is server-assigned final thread log order only. The daemon sends
 events with opaque `producerEventId`; the server deduplicates retries by that id
 and assigns sequence transactionally.
-
-Detailed plan: `plans/host-daemon-event-protocol-hard-cutover.md`.
 
 ### Durable Jobs
 
@@ -184,12 +181,9 @@ them:
 
 ## Implementation Plan
 
-### Phase 1: Finish Event Protocol Hard Cutover
+### Phase 1: Event Protocol Hard Cutover
 
-Complete all six phases and completion criteria in
-`plans/host-daemon-event-protocol-hard-cutover.md`.
-
-This removes:
+Status: complete. This removed:
 
 - daemon event `sequence`;
 - event buffer seeding and rebasing;
@@ -199,9 +193,7 @@ This removes:
 
 Exit criteria:
 
-- The completion criteria in `plans/host-daemon-event-protocol-hard-cutover.md`
-  are met.
-- `rg "clientRequestSequence|eventSequence|sequence_conflict|acceptedSequences" apps packages` returns no production matches except migration scripts or unrelated text.
+- `rg "clientRequestSequence|eventSequence|sequence_conflict|acceptedSequences" apps packages` returns no production matches except rejection tests, historical fixtures, or unrelated text.
 
 ### Phase 2: Add Command Delivery Attempts
 
@@ -628,9 +620,6 @@ Exit criteria:
 The cleanup is successful only if code disappears. Expected deletion/reduction
 targets:
 
-- event buffer seed/rebase/sequence conflict code;
-- event high-water mark response plumbing;
-- `clientRequestSequence` and daemon command `eventSequence`;
 - `retryCount` and `fetched` command state;
 - command wait guard machinery;
 - queue-and-wait usage for host-local reads;

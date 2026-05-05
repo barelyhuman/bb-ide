@@ -364,9 +364,9 @@ async function applyEventEffects(
   deps: LoggedPendingInteractionWorkSessionDeps,
   events: HostDaemonEventEnvelope[],
 ): Promise<EventEffectResult> {
-  // Keep event-owned state changes inline so the daemon response contains the
-  // right high-water marks. Defer follow-ups that may queue daemon work until
-  // after the ingress route returns.
+  // Apply event-owned state changes before returning so the accepted batch and
+  // immediately visible thread state agree. Follow-ups that may queue daemon
+  // work stay deferred to avoid command waits inside daemon ingress.
   const followUps: EventEffectFollowUp[] = [];
   for (const entry of events) {
     try {

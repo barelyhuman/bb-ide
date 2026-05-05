@@ -448,10 +448,7 @@ async function setupDaemonHarness(
   await fs.mkdir(envAPath, { recursive: true });
   await fs.mkdir(envBPath, { recursive: true });
 
-  const server = await createTestServer({
-    threadHighWaterMarks: {},
-    ...args.serverOptions,
-  });
+  const server = await createTestServer(args.serverOptions);
   const daemon = await startHostDaemon({
     dataDir,
     enrollKey: server.enrollKey,
@@ -914,9 +911,7 @@ describe("host daemon integration", () => {
     const envPath = path.join(workspaceRoot, "env-bootstrap");
     await fs.mkdir(envPath, { recursive: true });
 
-    const server = await createTestServer({
-      threadHighWaterMarks: {},
-    });
+    const server = await createTestServer();
     const hostId = "host-local-bootstrap";
 
     const daemon = await startHostDaemon({

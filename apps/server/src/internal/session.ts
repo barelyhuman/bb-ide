@@ -1,6 +1,5 @@
 import {
   getActiveSession,
-  getHighWaterMarks,
   listThreadEnvironmentAssignmentsOnHost,
   openSession,
   upsertHost,
@@ -129,7 +128,6 @@ export function registerInternalSessionRoutes(app: Hono, deps: AppDeps): void {
                   threadIds: hostThreadIds,
                 },
               ),
-              threadHighWaterMarks: getHighWaterMarks(deps.db, hostThreadIds),
             },
             201,
           );
