@@ -1917,6 +1917,12 @@ describe("internal session routes", () => {
       );
 
       expect(response.status).toBe(200);
+      await waitForQueuedCommandAfter(
+        harness,
+        provisionCommand.cursor,
+        ({ command }) =>
+          command.type === "thread.start" && command.threadId === thread.id,
+      );
       const followupCommands = harness.db
         .select({
           cursor: hostDaemonCommands.cursor,
@@ -2167,6 +2173,13 @@ describe("internal session routes", () => {
         ]),
       );
 
+      await waitForQueuedCommandAfter(
+        harness,
+        provisionCommand.cursor,
+        ({ command }) =>
+          command.type === "thread.start" &&
+          command.threadId === provisioningThread.id,
+      );
       const queuedStarts = harness.db
         .select({
           cursor: hostDaemonCommands.cursor,
@@ -3343,12 +3356,14 @@ describe("internal session routes", () => {
       );
 
       expect(response.status).toBe(200);
-      expect(cachedHost.destroy).toHaveBeenCalledTimes(1);
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
-        "destroyed",
-      );
-      expect(getHost(harness.db, host.id)).toMatchObject({
-        destroyedAt: expect.any(Number),
+      await vi.waitFor(() => {
+        expect(cachedHost.destroy).toHaveBeenCalledTimes(1);
+        expect(getEnvironment(harness.db, environment.id)?.status).toBe(
+          "destroyed",
+        );
+        expect(getHost(harness.db, host.id)).toMatchObject({
+          destroyedAt: expect.any(Number),
+        });
       });
     } finally {
       await harness.cleanup();
