@@ -523,12 +523,52 @@ export type ThreadListQuery = z.infer<typeof threadListQuerySchema>;
 export const managerTimelineViewSchema = z.enum(["conversation", "standard"]);
 export type ManagerTimelineView = z.infer<typeof managerTimelineViewSchema>;
 
+export const THREAD_TIMELINE_DEFAULT_TOP_LEVEL_LIMIT = 100;
+
+export const timelinePaginationCursorSchema = z
+  .object({
+    topLevelSortSeq: z.number().int().nonnegative(),
+    rowId: z.string().min(1),
+  })
+  .strict();
+export type TimelinePaginationCursor = z.infer<
+  typeof timelinePaginationCursorSchema
+>;
+
+export const timelinePageMetadataSchema = z
+  .object({
+    kind: z.enum(["latest", "older"]),
+    topLevelLimit: z.number().int().positive(),
+    returnedOlderTopLevelRowCount: z.number().int().nonnegative(),
+    hasOlderRows: z.boolean(),
+    olderCursor: timelinePaginationCursorSchema.nullable(),
+  })
+  .strict();
+export type TimelinePageMetadata = z.infer<typeof timelinePageMetadataSchema>;
+
 export const threadTimelineQuerySchema = z
   .object({
     managerTimelineView: managerTimelineViewSchema,
     includeNestedRows: z.enum(["true", "false"]),
+    topLevelLimit: z.string().regex(/^\d+$/),
+    beforeTopLevelSortSeq: z.string().regex(/^\d+$/),
+    beforeRowId: z.string().min(1),
   })
-  .partial();
+  .partial()
+  .superRefine((query, context) => {
+    const hasBeforeTopLevelSortSeq = query.beforeTopLevelSortSeq !== undefined;
+    const hasBeforeRowId = query.beforeRowId !== undefined;
+
+    if (hasBeforeTopLevelSortSeq === hasBeforeRowId) {
+      return;
+    }
+
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      message:
+        "beforeTopLevelSortSeq and beforeRowId must be provided together",
+    });
+  });
 export type ThreadTimelineQuery = z.infer<typeof threadTimelineQuerySchema>;
 
 export const timelineTurnSummaryDetailsQuerySchema = z.object({
@@ -943,6 +983,7 @@ export const threadTimelineResponseSchema = z.object({
   rows: z.array(timelineRowSchema),
   activeThinking: activeThinkingSchema.nullable(),
   contextWindowUsage: threadContextWindowUsageSchema.optional(),
+  timelinePage: timelinePageMetadataSchema,
 });
 export type ThreadTimelineResponse = z.infer<
   typeof threadTimelineResponseSchema

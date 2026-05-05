@@ -23,6 +23,7 @@ import {
   resolveThreadTimelinePlaceholder,
 } from "./query-placeholders";
 import {
+  DEFAULT_THREAD_TIMELINE_TOP_LEVEL_LIMIT,
   disabledThreadListQueryKey,
   threadDefaultExecutionOptionsQueryKey,
   threadDraftsQueryKey,
@@ -32,7 +33,7 @@ import {
   threadQueryKey,
   threadStorageFilesQueryKey,
   threadStorageFilePreviewQueryKey,
-  threadTimelineQueryKey,
+  threadTimelineLatestQueryKey,
 } from "./query-keys";
 
 interface QueryOptions {
@@ -69,9 +70,7 @@ export function useThreads(filters: UseThreadsFilters, options?: QueryOptions) {
   const queryKey =
     enabled && projectId
       ? threadListQueryKey({ ...rest, projectId })
-      : disabledThreadListQueryKey(
-          projectId ? { ...rest, projectId } : rest,
-        );
+      : disabledThreadListQueryKey(projectId ? { ...rest, projectId } : rest);
 
   return useQuery<ThreadListResponse>({
     queryKey,
@@ -195,13 +194,13 @@ export function useThreadTimeline(
   const managerTimelineView = options?.managerTimelineView;
 
   return useQuery<ThreadTimelineResponse>({
-    queryKey: threadTimelineQueryKey(id, managerTimelineView),
+    queryKey: threadTimelineLatestQueryKey(id, managerTimelineView),
     queryFn: () =>
-      api.getThreadTimeline(
-        requireThreadId(id, "useThreadTimeline"),
-        false,
+      api.getThreadTimeline({
+        id: requireThreadId(id, "useThreadTimeline"),
         managerTimelineView,
-      ),
+        topLevelLimit: DEFAULT_THREAD_TIMELINE_TOP_LEVEL_LIMIT,
+      }),
     enabled: (options?.enabled ?? true) && Boolean(id),
     refetchOnMount: options?.refetchOnMount ?? true,
     placeholderData: (previousData, previousQuery) =>

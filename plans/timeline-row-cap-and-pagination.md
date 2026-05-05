@@ -47,9 +47,11 @@ Exit criteria:
 - Pending and active rows are still visible for each timeline surface when they are older than the 100-row historical window.
 - Payload size and row render count are measurably lower on long threads across all timeline surfaces.
 
-## Phase 2: Page Metadata And Limit Semantics
+## Phase 2: Page Metadata, Limit Semantics, And Temporary Manual Pagination
 
-Goal: make the latest cap explicit at the route, contract, and query-cache layers before adding older-page loading.
+Goal: make the latest cap explicit at the route, contract, and query-cache layers, then provide manual older-page loading without pretending the DB/projection cost is solved.
+
+Current follow-up implementation note: Phase 2 manual pagination is intentionally a temporary post-projection path. The server still builds the full projected timeline, splits historical rows from the active/pending tail, then returns either the latest capped page or an older historical slice before the cursor. This satisfies manual pagination and payload/render behavior, but it does not solve full-history event reads or projection cost. Phase 3 remains required for durable row indexes and targeted event-range reads.
 
 Contract shape:
 
@@ -83,6 +85,8 @@ Client query shape:
 - Add a separate older-page query key rather than overloading the latest-page cache entry.
 - Merge older pages ahead of already-loaded rows by stable row id. If a row id repeats with a different `sourceSeqStart/sourceSeqEnd`, prefer the newer query result and clear stale nested details for that row.
 - Keep pending steers and active tail outside older-page merges; older pages should not invent a second active tail.
+- Treat the latest page cap as an initial/refetch payload bound, not as a continuously enforced client-visible row window. Once a row has been loaded in the current thread/view session, a later latest-page refetch must merge into the loaded window without evicting that row merely because the server's 100-row latest window advanced.
+- After manual older-page loads, subsequent latest-page refetches must preserve the expanded loaded range. A full hard reset is allowed only for intentional visible surface changes such as switching thread or timeline view.
 
 Exit criteria:
 
@@ -90,6 +94,8 @@ Exit criteria:
 - Query keys distinguish latest page, older pages, timeline surface/view, `topLevelLimit`, and the full `beforeCursor` tuple.
 - Tests cover that `beforeCursor` uses the total `(topLevelSortSeq, rowId)` order and does not skip duplicate-sequence siblings.
 - The route fills default values once at the boundary and internal service calls receive explicit values.
+- App tests prove latest-page refetch/streaming past the cap appends or updates rows without dropping already loaded rows for regular standard, manager standard, and manager conversation timeline surfaces.
+- App tests prove manually loaded older rows remain visible after later latest-page refetches.
 
 ## Phase 3: Real Row Index And Anchor Lifecycle
 

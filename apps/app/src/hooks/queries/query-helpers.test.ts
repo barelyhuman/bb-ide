@@ -23,6 +23,8 @@ import {
   environmentGitDiffQueryKey,
   environmentWorkStatusQueryKey,
   threadListQueryKey,
+  threadTimelineLatestQueryKey,
+  threadTimelineOlderQueryKey,
   threadsQueryKey,
 } from "./query-keys";
 import {
@@ -199,6 +201,13 @@ describe("resolveThreadTimelinePlaceholder", () => {
   it("keeps previous timeline rows when the same thread query refreshes", () => {
     const previousTimeline: ThreadTimelineResponse = {
       activeThinking: null,
+      timelinePage: {
+        kind: "latest",
+        topLevelLimit: 100,
+        returnedOlderTopLevelRowCount: 1,
+        hasOlderRows: false,
+        olderCursor: null,
+      },
       rows: [
         {
           id: "assistant-1",
@@ -220,7 +229,7 @@ describe("resolveThreadTimelinePlaceholder", () => {
     expect(
       resolveThreadTimelinePlaceholder(
         previousTimeline,
-        ["threadTimeline", "thread-1", "conversation"],
+        threadTimelineLatestQueryKey("thread-1", "conversation"),
         "thread-1",
         "conversation",
       ),
@@ -230,6 +239,13 @@ describe("resolveThreadTimelinePlaceholder", () => {
   it("drops previous timeline rows when switching manager timeline view", () => {
     const previousTimeline: ThreadTimelineResponse = {
       activeThinking: null,
+      timelinePage: {
+        kind: "latest",
+        topLevelLimit: 100,
+        returnedOlderTopLevelRowCount: 1,
+        hasOlderRows: false,
+        olderCursor: null,
+      },
       rows: [
         {
           id: "manager-conversation-row",
@@ -251,7 +267,7 @@ describe("resolveThreadTimelinePlaceholder", () => {
     expect(
       resolveThreadTimelinePlaceholder(
         previousTimeline,
-        ["threadTimeline", "thread-1", "conversation"],
+        threadTimelineLatestQueryKey("thread-1", "conversation"),
         "thread-1",
         "standard",
       ),
@@ -261,14 +277,47 @@ describe("resolveThreadTimelinePlaceholder", () => {
   it("drops previous timeline rows when switching to a different thread", () => {
     const previousTimeline: ThreadTimelineResponse = {
       activeThinking: null,
+      timelinePage: {
+        kind: "latest",
+        topLevelLimit: 100,
+        returnedOlderTopLevelRowCount: 0,
+        hasOlderRows: false,
+        olderCursor: null,
+      },
       rows: [],
     };
 
     expect(
       resolveThreadTimelinePlaceholder(
         previousTimeline,
-        ["threadTimeline", "thread-1", undefined],
+        threadTimelineLatestQueryKey("thread-1", undefined),
         "thread-2",
+        undefined,
+      ),
+    ).toBeUndefined();
+  });
+
+  it("drops older-page timeline rows as latest-page placeholder data", () => {
+    const previousTimeline: ThreadTimelineResponse = {
+      activeThinking: null,
+      timelinePage: {
+        kind: "older",
+        topLevelLimit: 100,
+        returnedOlderTopLevelRowCount: 1,
+        hasOlderRows: false,
+        olderCursor: null,
+      },
+      rows: [],
+    };
+
+    expect(
+      resolveThreadTimelinePlaceholder(
+        previousTimeline,
+        threadTimelineOlderQueryKey("thread-1", undefined, {
+          topLevelSortSeq: 10,
+          rowId: "row-10",
+        }),
+        "thread-1",
         undefined,
       ),
     ).toBeUndefined();

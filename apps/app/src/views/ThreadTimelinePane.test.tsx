@@ -3,6 +3,7 @@
 import {
   act,
   cleanup,
+  fireEvent,
   render,
   screen,
   type RenderResult,
@@ -38,17 +39,32 @@ function commandRow(): TimelineCommandWorkRow {
   };
 }
 
-function renderTimelinePane(rows: TimelineRow[]): HTMLElement {
+interface RenderTimelinePaneOptions {
+  hasOlderTimelineRows?: boolean;
+  isLoadingOlderTimelineRows?: boolean;
+  onLoadOlderRows?: () => void;
+  rows: TimelineRow[];
+}
+
+function renderTimelinePane({
+  hasOlderTimelineRows = false,
+  isLoadingOlderTimelineRows = false,
+  onLoadOlderRows = () => {},
+  rows,
+}: RenderTimelinePaneOptions): HTMLElement {
   const view = render(
     <ThreadTimelinePane
       activeThinking={null}
       footer={<div>Composer</div>}
+      hasOlderTimelineRows={hasOlderTimelineRows}
       header={<div>Header</div>}
       hostConnectionNotice={null}
+      isLoadingOlderTimelineRows={isLoadingOlderTimelineRows}
       isThreadTimelinePending={false}
       timelineError={false}
       loadingTurnSummaryIds={new Set()}
       erroredTurnSummaryIds={new Set()}
+      onLoadOlderRows={onLoadOlderRows}
       onLoadTurnSummaryRows={() => {}}
       showOngoingIndicator={true}
       timelineRows={rows}
@@ -66,12 +82,15 @@ function renderLoadingTimelinePane(): RenderResult {
     <ThreadTimelinePane
       activeThinking={null}
       footer={<div>Composer</div>}
+      hasOlderTimelineRows={false}
       header={<div>Header</div>}
       hostConnectionNotice={null}
+      isLoadingOlderTimelineRows={false}
       isThreadTimelinePending={true}
       timelineError={false}
       loadingTurnSummaryIds={new Set()}
       erroredTurnSummaryIds={new Set()}
+      onLoadOlderRows={() => {}}
       onLoadTurnSummaryRows={() => {}}
       showOngoingIndicator={false}
       timelineRows={[]}
@@ -91,7 +110,7 @@ afterEach(() => {
 
 describe("ThreadTimelinePane", () => {
   it("keeps the working indicator attached to the rendered timeline rows", () => {
-    const container = renderTimelinePane([commandRow()]);
+    const container = renderTimelinePane({ rows: [commandRow()] });
 
     const timelineRowList = container.querySelector(
       '[data-timeline-row-list="top-level"]',
@@ -126,12 +145,15 @@ describe("ThreadTimelinePane", () => {
       <ThreadTimelinePane
         activeThinking={null}
         footer={<div>Composer</div>}
+        hasOlderTimelineRows={false}
         header={<div>Header</div>}
         hostConnectionNotice={null}
+        isLoadingOlderTimelineRows={false}
         isThreadTimelinePending={false}
         timelineError={false}
         loadingTurnSummaryIds={new Set()}
         erroredTurnSummaryIds={new Set()}
+        onLoadOlderRows={() => {}}
         onLoadTurnSummaryRows={() => {}}
         showOngoingIndicator={false}
         timelineRows={[]}
@@ -143,5 +165,31 @@ describe("ThreadTimelinePane", () => {
     );
     act(() => vi.advanceTimersByTime(1));
     expect(screen.queryByText("Loading thread...")).toBeNull();
+  });
+
+  it("shows a manual load-older affordance when older rows exist", () => {
+    const onLoadOlderRows = vi.fn();
+
+    renderTimelinePane({
+      hasOlderTimelineRows: true,
+      onLoadOlderRows,
+      rows: [commandRow()],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Load older rows" }));
+
+    expect(onLoadOlderRows).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables the load-older affordance while older rows are loading", () => {
+    renderTimelinePane({
+      hasOlderTimelineRows: true,
+      isLoadingOlderTimelineRows: true,
+      rows: [commandRow()],
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Loading older rows..." }),
+    ).toHaveProperty("disabled", true);
   });
 });

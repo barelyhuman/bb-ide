@@ -1,9 +1,5 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
-import type {
-  Thread,
-  ThreadListEntry,
-  ThreadWithRuntime,
-} from "@bb/domain";
+import type { Thread, ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
 import type {
   ThreadTimelineResponse,
   TimelineRow,
@@ -19,6 +15,7 @@ import {
   environmentQueryKey,
   environmentWorkStatusQueryKey,
   environmentWorkStatusQueryKeyPrefix,
+  isLatestThreadTimelineQueryKey,
   isStandardManagerThreadTimelineQueryKey,
   projectSourceWorkspaceStatusQueryKeyPrefix,
   THREADS_QUERY_KEY,
@@ -314,7 +311,8 @@ export function optimisticallyInsertThread(
   }
 }
 
-const updateEveryTimelineQuery: TimelineRowsUpdatePredicate = () => true;
+const updateLatestTimelineQueries: TimelineRowsUpdatePredicate =
+  isLatestThreadTimelineQueryKey;
 const updateNoTimelineQueries: TimelineRowsUpdatePredicate = () => false;
 
 function updateCachedTimelineRows({
@@ -365,9 +363,11 @@ function buildPendingSteerTimelineQueryPredicate(
     return updateNoTimelineQueries;
   }
   if (thread.type !== "manager") {
-    return updateEveryTimelineQuery;
+    return updateLatestTimelineQueries;
   }
-  return isStandardManagerThreadTimelineQueryKey;
+  return (queryKey) =>
+    isLatestThreadTimelineQueryKey(queryKey) &&
+    isStandardManagerThreadTimelineQueryKey(queryKey);
 }
 
 export function insertOptimisticTimelineRow(
@@ -379,7 +379,7 @@ export function insertOptimisticTimelineRow(
     ? buildPendingSteerTimelineQueryPredicate(
         queryClient.getQueryData<ThreadWithRuntime>(threadQueryKey(threadId)),
       )
-    : updateEveryTimelineQuery;
+    : updateLatestTimelineQueries;
   updateCachedTimelineRows({
     queryClient,
     shouldUpdate,
@@ -395,7 +395,7 @@ export function removeOptimisticTimelineRow(
 ): void {
   updateCachedTimelineRows({
     queryClient,
-    shouldUpdate: updateEveryTimelineQuery,
+    shouldUpdate: updateLatestTimelineQueries,
     threadId,
     updater: (rows) => {
       const nextRows = rows.filter((row) => row.id !== rowId);

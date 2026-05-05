@@ -147,6 +147,12 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Timeline queries may omit managerTimelineView unless explicitly requesting the standard manager timeline.",
   "threadTimelineQuerySchema.includeNestedRows":
     "Timeline queries may omit nested rows unless explicitly requested.",
+  "threadTimelineQuerySchema.beforeRowId":
+    "Timeline queries omit beforeRowId on the latest page and include it with beforeTopLevelSortSeq for older pages.",
+  "threadTimelineQuerySchema.beforeTopLevelSortSeq":
+    "Timeline queries omit beforeTopLevelSortSeq on the latest page and include it with beforeRowId for older pages.",
+  "threadTimelineQuerySchema.topLevelLimit":
+    "Timeline queries may omit topLevelLimit to use the server-side default page size.",
   "threadTimelineResponseSchema.contextWindowUsage":
     "Timeline responses omit context window usage when the provider did not report it.",
   "timelineTurnSummaryDetailsQuerySchema.managerTimelineView":

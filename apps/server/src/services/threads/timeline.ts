@@ -9,10 +9,12 @@ import {
 import type { Thread } from "@bb/domain";
 import type {
   ManagerTimelineView,
+  TimelinePaginationCursor,
   ThreadTimelineResponse,
   TimelineRow,
   TimelineTurnSummaryDetailsResponse,
 } from "@bb/server-contract";
+import { THREAD_TIMELINE_DEFAULT_TOP_LEVEL_LIMIT } from "@bb/server-contract";
 import {
   listContextWindowUsageRows,
   listRecentStoredEventRows,
@@ -33,18 +35,54 @@ interface TimelineTurnSummarySelection {
 interface BuildThreadTimelineOptions {
   isDevelopment: boolean;
   includeNestedRows?: boolean;
+  page: ThreadTimelinePageRequest;
   timelineViewMode: ThreadTimelineServiceViewMode;
 }
 
-interface BuildTimelineTurnSummaryDetailsOptions
-  extends TimelineTurnSummarySelection {
+interface BuildTimelineTurnSummaryDetailsOptions extends TimelineTurnSummarySelection {
   isDevelopment: boolean;
   timelineViewMode: ThreadTimelineServiceViewMode;
 }
 
 export type ThreadTimelineServiceViewMode = "manager-conversation" | "standard";
 
-export const THREAD_TIMELINE_OLDER_ROW_LIMIT = 100;
+export const THREAD_TIMELINE_OLDER_ROW_LIMIT =
+  THREAD_TIMELINE_DEFAULT_TOP_LEVEL_LIMIT;
+
+export interface LatestThreadTimelinePageRequest {
+  kind: "latest";
+  topLevelLimit: number;
+}
+
+export interface OlderThreadTimelinePageRequest {
+  beforeCursor: TimelinePaginationCursor;
+  kind: "older";
+  topLevelLimit: number;
+}
+
+export type ThreadTimelinePageRequest =
+  | LatestThreadTimelinePageRequest
+  | OlderThreadTimelinePageRequest;
+
+interface SplitTimelineRowsByActiveTailResult {
+  activeTailRows: TimelineRow[];
+  historicalRows: TimelineRow[];
+}
+
+interface PaginateHistoricalTimelineRowsResult {
+  hasOlderRows: boolean;
+  olderCursor: TimelinePaginationCursor | null;
+  rows: TimelineRow[];
+}
+
+interface PaginatedTimelineRowsResult {
+  hasOlderRows: boolean;
+  kind: ThreadTimelinePageRequest["kind"];
+  olderCursor: TimelinePaginationCursor | null;
+  returnedOlderTopLevelRowCount: number;
+  rows: TimelineRow[];
+  topLevelLimit: number;
+}
 
 export interface ResolveThreadTimelineServiceViewModeArgs {
   managerTimelineView: ManagerTimelineView | undefined;
@@ -119,20 +157,84 @@ function isActiveTopLevelTimelineRow(row: TimelineRow): boolean {
   }
 }
 
-function capLatestTimelineRows(
+function splitTimelineRowsByActiveTail(
   rows: readonly TimelineRow[],
-): TimelineRow[] {
+): SplitTimelineRowsByActiveTailResult {
   const activeTailStartIndex = rows.findIndex(isActiveTopLevelTimelineRow);
   if (activeTailStartIndex === -1) {
-    return rows.slice(-THREAD_TIMELINE_OLDER_ROW_LIMIT);
+    return {
+      activeTailRows: [],
+      historicalRows: [...rows],
+    };
   }
 
-  const olderRows = rows.slice(0, activeTailStartIndex);
-  const activeTailRows = rows.slice(activeTailStartIndex);
-  return [
-    ...olderRows.slice(-THREAD_TIMELINE_OLDER_ROW_LIMIT),
-    ...activeTailRows,
-  ];
+  return {
+    activeTailRows: rows.slice(activeTailStartIndex),
+    historicalRows: rows.slice(0, activeTailStartIndex),
+  };
+}
+
+function toTimelinePaginationCursor(
+  row: TimelineRow,
+): TimelinePaginationCursor {
+  return {
+    topLevelSortSeq: row.sourceSeqStart,
+    rowId: row.id,
+  };
+}
+
+function isTimelineRowBeforeCursor(
+  row: TimelineRow,
+  cursor: TimelinePaginationCursor,
+): boolean {
+  if (row.sourceSeqStart !== cursor.topLevelSortSeq) {
+    return row.sourceSeqStart < cursor.topLevelSortSeq;
+  }
+  return row.id < cursor.rowId;
+}
+
+function paginateHistoricalTimelineRows(
+  rows: readonly TimelineRow[],
+  page: ThreadTimelinePageRequest,
+): PaginateHistoricalTimelineRowsResult {
+  const candidateRows =
+    page.kind === "latest"
+      ? rows
+      : rows.filter((row) => isTimelineRowBeforeCursor(row, page.beforeCursor));
+  const selectedRows = candidateRows.slice(-page.topLevelLimit);
+  const hasOlderRows = candidateRows.length > selectedRows.length;
+  const oldestSelectedRow = selectedRows[0];
+
+  return {
+    hasOlderRows,
+    olderCursor:
+      hasOlderRows && oldestSelectedRow
+        ? toTimelinePaginationCursor(oldestSelectedRow)
+        : null,
+    rows: selectedRows,
+  };
+}
+
+function paginateTimelineRows(
+  rows: readonly TimelineRow[],
+  page: ThreadTimelinePageRequest,
+): PaginatedTimelineRowsResult {
+  const { activeTailRows, historicalRows } =
+    splitTimelineRowsByActiveTail(rows);
+  const pageRows = paginateHistoricalTimelineRows(historicalRows, page);
+  const returnedRows =
+    page.kind === "latest"
+      ? [...pageRows.rows, ...activeTailRows]
+      : pageRows.rows;
+
+  return {
+    rows: returnedRows,
+    kind: page.kind,
+    topLevelLimit: page.topLevelLimit,
+    returnedOlderTopLevelRowCount: pageRows.rows.length,
+    hasOlderRows: pageRows.hasOlderRows,
+    olderCursor: pageRows.olderCursor,
+  };
 }
 
 export function buildThreadTimeline(
@@ -183,11 +285,24 @@ export function buildThreadTimeline(
             viewMode,
           },
   });
+  const paginatedTimeline = paginateTimelineRows(timeline.rows, options.page);
 
   return {
-    rows: capLatestTimelineRows(timeline.rows),
-    activeThinking: timeline.activeThinking,
-    contextWindowUsage: timeline.contextWindowUsage ?? undefined,
+    rows: paginatedTimeline.rows,
+    activeThinking:
+      options.page.kind === "latest" ? timeline.activeThinking : null,
+    contextWindowUsage:
+      options.page.kind === "latest"
+        ? (timeline.contextWindowUsage ?? undefined)
+        : undefined,
+    timelinePage: {
+      kind: paginatedTimeline.kind,
+      topLevelLimit: paginatedTimeline.topLevelLimit,
+      returnedOlderTopLevelRowCount:
+        paginatedTimeline.returnedOlderTopLevelRowCount,
+      hasOlderRows: paginatedTimeline.hasOlderRows,
+      olderCursor: paginatedTimeline.olderCursor,
+    },
   };
 }
 

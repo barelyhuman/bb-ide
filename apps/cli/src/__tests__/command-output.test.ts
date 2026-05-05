@@ -74,6 +74,13 @@ function makeTimelineResponse(rows: TimelineRow[]): ThreadTimelineResponse {
   return {
     rows,
     activeThinking: null,
+    timelinePage: {
+      kind: "latest",
+      topLevelLimit: 100,
+      returnedOlderTopLevelRowCount: rows.length,
+      hasOlderRows: false,
+      olderCursor: null,
+    },
   };
 }
 
@@ -3269,6 +3276,13 @@ describe("CLI JSON output contracts", () => {
     const getTimeline = vi.fn(async () => ({
       rows: [],
       activeThinking: null,
+      timelinePage: {
+        kind: "latest",
+        topLevelLimit: 100,
+        returnedOlderTopLevelRowCount: 0,
+        hasOlderRows: false,
+        olderCursor: null,
+      },
     }));
     createClientMock.mockReturnValue(
       asServerClient({

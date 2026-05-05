@@ -13,6 +13,7 @@ import {
   timelineTurnSummaryDetailsQuerySchema,
   typedRoutes,
   type PublicApiSchema,
+  type ThreadTimelineQuery,
 } from "@bb/server-contract";
 import type { AppDeps, SandboxWorkSessionDeps } from "../../types.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
@@ -32,6 +33,8 @@ import {
   buildThreadTimeline,
   buildTimelineTurnSummaryDetails,
   resolveThreadTimelineServiceViewMode,
+  THREAD_TIMELINE_OLDER_ROW_LIMIT,
+  type ThreadTimelinePageRequest,
 } from "../../services/threads/timeline.js";
 import {
   findThreadEvent,
@@ -79,6 +82,67 @@ function parseThreadStorageFileListLimit(rawLimit: string | undefined): number {
   return limit;
 }
 
+function parseThreadTimelineTopLevelLimit(
+  rawLimit: string | undefined,
+): number {
+  const limit =
+    parseOptionalInteger(rawLimit, "topLevelLimit") ??
+    THREAD_TIMELINE_OLDER_ROW_LIMIT;
+  if (limit <= 0) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "topLevelLimit must be a positive integer",
+    );
+  }
+  if (limit > THREAD_TIMELINE_OLDER_ROW_LIMIT) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      `topLevelLimit must be less than or equal to ${THREAD_TIMELINE_OLDER_ROW_LIMIT}`,
+    );
+  }
+  return limit;
+}
+
+function parseThreadTimelinePage(
+  query: ThreadTimelineQuery,
+): ThreadTimelinePageRequest {
+  const topLevelLimit = parseThreadTimelineTopLevelLimit(query.topLevelLimit);
+  if (
+    query.beforeTopLevelSortSeq === undefined &&
+    query.beforeRowId === undefined
+  ) {
+    return {
+      kind: "latest",
+      topLevelLimit,
+    };
+  }
+
+  if (
+    query.beforeTopLevelSortSeq === undefined ||
+    query.beforeRowId === undefined
+  ) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "beforeTopLevelSortSeq and beforeRowId must be provided together",
+    );
+  }
+
+  return {
+    beforeCursor: {
+      topLevelSortSeq: parseInteger(
+        query.beforeTopLevelSortSeq,
+        "beforeTopLevelSortSeq",
+      ),
+      rowId: query.beforeRowId,
+    },
+    kind: "older",
+    topLevelLimit,
+  };
+}
+
 async function requireThreadStorageTarget(
   deps: SandboxWorkSessionDeps,
   args: RequireThreadStorageTargetArgs,
@@ -107,6 +171,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     return context.json(
       buildThreadTimeline(deps.db, thread, {
         isDevelopment: deps.config.isDevelopment,
+        page: parseThreadTimelinePage(query),
         timelineViewMode: resolveThreadTimelineServiceViewMode({
           managerTimelineView: query.managerTimelineView,
           thread,

@@ -13,6 +13,7 @@ import {
   ENVIRONMENT_WORK_STATUS_QUERY_KEY,
   THREAD_QUERY_KEY,
   THREAD_TIMELINE_QUERY_KEY,
+  isLatestThreadTimelineQueryKey,
   managerTimelineViewFromThreadTimelineQueryKey,
 } from "./query-keys";
 
@@ -109,6 +110,7 @@ export function resolveThreadTimelinePlaceholder(
     managerTimelineViewFromThreadTimelineQueryKey(previousQueryKey);
 
   return previousThreadId === nextThreadId &&
+    isLatestThreadTimelineQueryKey(previousQueryKey ?? []) &&
     previousManagerTimelineView === nextManagerTimelineView
     ? previousData
     : undefined;

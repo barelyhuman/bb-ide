@@ -23,7 +23,6 @@ import {
   getLatestPendingInteraction,
   useThread,
   useThreadPendingInteractions,
-  useThreadTimeline,
   useThreads,
 } from "../hooks/queries/thread-queries";
 import { ThreadGitActionDialog } from "@/components/thread/ThreadGitActionDialog";
@@ -58,6 +57,7 @@ import { useEnvironmentMergeBase } from "./useEnvironmentMergeBase";
 import { useThreadGitActions } from "./useThreadGitActions";
 import { useThreadEnvironmentPromotionActions } from "./useThreadEnvironmentPromotionActions";
 import { useThreadReadTracking } from "./useThreadReadTracking";
+import { useThreadTimelinePages } from "./useThreadTimelinePages";
 import {
   resolveThreadLocalWorkspaceRootPath,
   resolveThreadWorkspaceOpenPath,
@@ -168,12 +168,17 @@ export function ThreadDetailView() {
   );
   const managerThreads = managerThreadsQuery.data ?? EMPTY_MANAGER_THREADS;
   const {
-    data: timeline,
-    isLoading: timelineLoading,
-    error: timelineError,
-  } = useThreadTimeline(threadId ?? "", {
-    refetchOnMount: "always",
+    activeThinking,
+    contextWindowUsage,
+    hasOlderTimelineRows,
+    isLoadingOlderTimelineRows,
+    loadOlderTimelineRows,
+    timelineError,
+    timelineLoading,
+    timelineRows,
+  } = useThreadTimelinePages({
     managerTimelineView,
+    threadId: threadId ?? "",
   });
   const sendMessage = useSendThreadMessage();
   const requestEnvironmentAction = useRequestEnvironmentAction();
@@ -181,16 +186,10 @@ export function ThreadDetailView() {
   const markThreadRead = useMarkThreadRead();
   const updateEnvironment = useUpdateEnvironment();
   const updateThread = useUpdateThread();
-  const timelineRows = useMemo(
-    () => timeline?.rows ?? [],
-    [timeline?.rows],
-  );
   const hostConnectionNotice = useMemo(
     () => (thread ? buildHostConnectionNotice(thread) : null),
     [thread],
   );
-  const activeThinking = timeline?.activeThinking ?? null;
-  const contextWindowUsage = timeline?.contextWindowUsage ?? undefined;
   const environmentQuery = useEnvironment(thread?.environmentId);
   const environment = environmentQuery.data;
   const {
@@ -695,10 +694,13 @@ export function ThreadDetailView() {
         timeline={{
           activeThinking,
           hostConnectionNotice,
+          hasOlderTimelineRows,
           isThreadTimelinePending,
+          isLoadingOlderTimelineRows,
           timelineError: Boolean(timelineError),
           loadingTurnSummaryIds,
           erroredTurnSummaryIds,
+          onLoadOlderRows: loadOlderTimelineRows,
           onLoadTurnSummaryRows: handleLoadTurnSummaryRows,
           onOpenLocalFileLink: handleOpenTimelineLocalFileLink,
           onTitleAction: handleTimelineTitleAction,

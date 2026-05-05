@@ -55,6 +55,13 @@ describe("timeline response helpers", () => {
         },
       ],
       activeThinking: null,
+      timelinePage: {
+        kind: "latest",
+        topLevelLimit: 100,
+        returnedOlderTopLevelRowCount: 1,
+        hasOlderRows: false,
+        olderCursor: null,
+      },
     } satisfies ThreadTimelineResponse;
 
     expect(timelineHasAssistantConversation(timeline)).toBe(true);
@@ -87,6 +94,13 @@ describe("timeline response helpers", () => {
         },
       ],
       activeThinking: null,
+      timelinePage: {
+        kind: "latest",
+        topLevelLimit: 100,
+        returnedOlderTopLevelRowCount: 1,
+        hasOlderRows: false,
+        olderCursor: null,
+      },
     } satisfies ThreadTimelineResponse;
 
     expect(timelineHasAssistantConversation(timeline)).toBe(true);
@@ -99,6 +113,13 @@ describe("timeline response helpers", () => {
     const timeline = {
       rows: [USER_ROW],
       activeThinking: null,
+      timelinePage: {
+        kind: "latest",
+        topLevelLimit: 100,
+        returnedOlderTopLevelRowCount: 1,
+        hasOlderRows: false,
+        olderCursor: null,
+      },
     } satisfies ThreadTimelineResponse;
 
     expect(timelineHasAssistantConversation(timeline)).toBe(false);

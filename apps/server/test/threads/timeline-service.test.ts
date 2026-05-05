@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import { threadScope, turnScope } from "@bb/domain";
 import type { Thread } from "@bb/domain";
 import type { DbConnection } from "@bb/db";
-import type { TimelineRow } from "@bb/server-contract";
+import type {
+  TimelinePaginationCursor,
+  TimelineRow,
+} from "@bb/server-contract";
 import { createTestAppHarness } from "../helpers/test-app.js";
 import {
   seedEnvironment,
@@ -20,8 +23,10 @@ import {
 } from "../../src/services/threads/timeline.js";
 
 interface TimelineServiceTestOptions {
+  beforeCursor?: TimelinePaginationCursor;
   includeNestedRows?: boolean;
   isDevelopment: boolean;
+  topLevelLimit?: number;
 }
 
 interface TimelineTurnSummaryDetailsTestOptions {
@@ -111,7 +116,20 @@ function buildThreadTimeline(
   options: TimelineServiceTestOptions,
 ) {
   return buildThreadTimelineWithResolvedMode(db, thread, {
-    ...options,
+    includeNestedRows: options.includeNestedRows,
+    isDevelopment: options.isDevelopment,
+    page: options.beforeCursor
+      ? {
+          beforeCursor: options.beforeCursor,
+          kind: "older",
+          topLevelLimit:
+            options.topLevelLimit ?? THREAD_TIMELINE_OLDER_ROW_LIMIT,
+        }
+      : {
+          kind: "latest",
+          topLevelLimit:
+            options.topLevelLimit ?? THREAD_TIMELINE_OLDER_ROW_LIMIT,
+        },
     timelineViewMode: "standard",
   });
 }
@@ -122,9 +140,32 @@ function buildManagerConversationTimeline(
   options: TimelineServiceTestOptions,
 ) {
   return buildThreadTimelineWithResolvedMode(db, thread, {
-    ...options,
+    includeNestedRows: options.includeNestedRows,
+    isDevelopment: options.isDevelopment,
+    page: options.beforeCursor
+      ? {
+          beforeCursor: options.beforeCursor,
+          kind: "older",
+          topLevelLimit:
+            options.topLevelLimit ?? THREAD_TIMELINE_OLDER_ROW_LIMIT,
+        }
+      : {
+          kind: "latest",
+          topLevelLimit:
+            options.topLevelLimit ?? THREAD_TIMELINE_OLDER_ROW_LIMIT,
+        },
     timelineViewMode: "manager-conversation",
   });
+}
+
+function requireOlderCursor(
+  cursor: TimelinePaginationCursor | null,
+): TimelinePaginationCursor {
+  expect(cursor).not.toBeNull();
+  if (cursor === null) {
+    throw new Error("Expected older timeline cursor");
+  }
+  return cursor;
 }
 
 function buildTimelineTurnSummaryDetails(
@@ -2247,9 +2288,13 @@ describe("buildThreadTimeline", () => {
     });
 
     // Default view — should show only operation, message_user, and user message
-    const defaultTimeline = buildManagerConversationTimeline(harness.db, thread, {
-      isDevelopment: true,
-    });
+    const defaultTimeline = buildManagerConversationTimeline(
+      harness.db,
+      thread,
+      {
+        isDevelopment: true,
+      },
+    );
     const defaultKinds = defaultTimeline.rows.map((row) =>
       row.kind === "conversation" ? row.role : row.kind,
     );
@@ -2284,9 +2329,7 @@ describe("buildThreadTimeline", () => {
     expect(standardRowsText).not.toContain("found something");
     expect(standardRowsText).toContain("[bb system] Welcome!");
 
-    const standardSourceRows = flattenTimelineSourceRows(
-      standardTimeline.rows,
-    );
+    const standardSourceRows = flattenTimelineSourceRows(standardTimeline.rows);
     expect(standardSourceRows).toContainEqual(
       expect.objectContaining({
         kind: "conversation",
@@ -2510,14 +2553,13 @@ describe("buildThreadTimeline", () => {
         isDevelopment: false,
       },
     );
-    const managerStandardPendingSteerRows =
-      managerStandardTimeline.rows.filter(
-        (row) =>
-          row.kind === "conversation" &&
-          row.role === "user" &&
-          row.userRequest.kind === "steer" &&
-          row.userRequest.status === "pending",
-      );
+    const managerStandardPendingSteerRows = managerStandardTimeline.rows.filter(
+      (row) =>
+        row.kind === "conversation" &&
+        row.role === "user" &&
+        row.userRequest.kind === "steer" &&
+        row.userRequest.status === "pending",
+    );
     expect(managerStandardPendingSteerRows).toHaveLength(1);
     expect(managerStandardPendingSteerRows[0]).toMatchObject({
       role: "user",
@@ -2562,6 +2604,16 @@ describe("buildThreadTimeline", () => {
     expect(timeline.rows).toHaveLength(THREAD_TIMELINE_OLDER_ROW_LIMIT);
     expect(timeline.rows[0]?.sourceSeqStart).toBe(6);
     expect(timeline.rows.at(-1)?.sourceSeqStart).toBe(105);
+    expect(timeline.timelinePage).toEqual({
+      kind: "latest",
+      topLevelLimit: THREAD_TIMELINE_OLDER_ROW_LIMIT,
+      returnedOlderTopLevelRowCount: THREAD_TIMELINE_OLDER_ROW_LIMIT,
+      hasOlderRows: true,
+      olderCursor: {
+        topLevelSortSeq: 6,
+        rowId: timeline.rows[0]?.id,
+      },
+    });
   });
 
   it("caps manager standard latest timelines to the last 100 older top-level rows", async () => {
@@ -2587,6 +2639,15 @@ describe("buildThreadTimeline", () => {
     expect(timeline.rows).toHaveLength(THREAD_TIMELINE_OLDER_ROW_LIMIT);
     expect(timeline.rows[0]?.sourceSeqStart).toBe(6);
     expect(timeline.rows.at(-1)?.sourceSeqStart).toBe(105);
+    expect(timeline.timelinePage).toMatchObject({
+      kind: "latest",
+      returnedOlderTopLevelRowCount: THREAD_TIMELINE_OLDER_ROW_LIMIT,
+      hasOlderRows: true,
+      olderCursor: {
+        topLevelSortSeq: 6,
+        rowId: timeline.rows[0]?.id,
+      },
+    });
   });
 
   it("caps manager conversation latest timelines to the last 100 older top-level rows", async () => {
@@ -2612,6 +2673,177 @@ describe("buildThreadTimeline", () => {
     expect(timeline.rows).toHaveLength(THREAD_TIMELINE_OLDER_ROW_LIMIT);
     expect(timeline.rows[0]?.sourceSeqStart).toBe(6);
     expect(timeline.rows.at(-1)?.sourceSeqStart).toBe(105);
+    expect(timeline.timelinePage).toMatchObject({
+      kind: "latest",
+      returnedOlderTopLevelRowCount: THREAD_TIMELINE_OLDER_ROW_LIMIT,
+      hasOlderRows: true,
+      olderCursor: {
+        topLevelSortSeq: 6,
+        rowId: timeline.rows[0]?.id,
+      },
+    });
+  });
+
+  it("loads older regular standard rows before the latest-page cursor", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+    const { environmentId, thread } = seedTimelineThread(harness, {
+      type: "standard",
+    });
+
+    seedOperationRows(harness, {
+      count: THREAD_TIMELINE_OLDER_ROW_LIMIT + 5,
+      environmentId,
+      sequenceStart: 1,
+      status: "completed",
+      thread,
+      titlePrefix: "regular operation",
+    });
+
+    const latestTimeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: false,
+    });
+    const olderTimeline = buildThreadTimeline(harness.db, thread, {
+      beforeCursor: requireOlderCursor(latestTimeline.timelinePage.olderCursor),
+      isDevelopment: false,
+    });
+
+    expect(olderTimeline.rows.map((row) => row.sourceSeqStart)).toEqual([
+      1, 2, 3, 4, 5,
+    ]);
+    expect(olderTimeline.timelinePage).toEqual({
+      kind: "older",
+      topLevelLimit: THREAD_TIMELINE_OLDER_ROW_LIMIT,
+      returnedOlderTopLevelRowCount: 5,
+      hasOlderRows: false,
+      olderCursor: null,
+    });
+    expect(
+      new Set([
+        ...latestTimeline.rows.map((row) => row.id),
+        ...olderTimeline.rows.map((row) => row.id),
+      ]).size,
+    ).toBe(latestTimeline.rows.length + olderTimeline.rows.length);
+    expect(olderTimeline.activeThinking).toBeNull();
+    expect(olderTimeline.contextWindowUsage).toBeUndefined();
+  });
+
+  it("loads older manager standard rows before the latest-page cursor", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+    const { environmentId, thread } = seedTimelineThread(harness, {
+      type: "manager",
+    });
+
+    seedOperationRows(harness, {
+      count: THREAD_TIMELINE_OLDER_ROW_LIMIT + 5,
+      environmentId,
+      sequenceStart: 1,
+      status: "completed",
+      thread,
+      titlePrefix: "completed operation",
+    });
+
+    const latestTimeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: false,
+    });
+    const olderTimeline = buildThreadTimeline(harness.db, thread, {
+      beforeCursor: requireOlderCursor(latestTimeline.timelinePage.olderCursor),
+      isDevelopment: false,
+    });
+
+    expect(olderTimeline.rows.map((row) => row.sourceSeqStart)).toEqual([
+      1, 2, 3, 4, 5,
+    ]);
+    expect(olderTimeline.timelinePage.kind).toBe("older");
+    expect(olderTimeline.timelinePage.hasOlderRows).toBe(false);
+  });
+
+  it("loads older manager conversation rows before the latest-page cursor", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+    const { environmentId, thread } = seedTimelineThread(harness, {
+      type: "manager",
+    });
+
+    seedOperationRows(harness, {
+      count: THREAD_TIMELINE_OLDER_ROW_LIMIT + 5,
+      environmentId,
+      sequenceStart: 1,
+      status: "completed",
+      thread,
+      titlePrefix: "manager conversation operation",
+    });
+
+    const latestTimeline = buildManagerConversationTimeline(
+      harness.db,
+      thread,
+      {
+        isDevelopment: false,
+      },
+    );
+    const olderTimeline = buildManagerConversationTimeline(harness.db, thread, {
+      beforeCursor: requireOlderCursor(latestTimeline.timelinePage.olderCursor),
+      isDevelopment: false,
+    });
+
+    expect(olderTimeline.rows.map((row) => row.sourceSeqStart)).toEqual([
+      1, 2, 3, 4, 5,
+    ]);
+    expect(olderTimeline.timelinePage.kind).toBe("older");
+    expect(olderTimeline.timelinePage.hasOlderRows).toBe(false);
+  });
+
+  it("uses the cursor tuple to include duplicate-sequence siblings before the cursor row", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+    const { environmentId, thread } = seedTimelineThread(harness, {
+      type: "standard",
+    });
+
+    seedOperationRows(harness, {
+      count: THREAD_TIMELINE_OLDER_ROW_LIMIT + 5,
+      environmentId,
+      sequenceStart: 1,
+      status: "completed",
+      thread,
+      titlePrefix: "completed operation",
+    });
+    seedFileChangeSiblingRows(harness, {
+      environmentId,
+      sequence: THREAD_TIMELINE_OLDER_ROW_LIMIT + 6,
+      thread,
+      turnId: "turn-file-change",
+    });
+
+    const latestTimeline = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: false,
+    });
+    const fileChangeRows = latestTimeline.rows.filter(
+      (row) => row.kind === "work" && row.workKind === "file-change",
+    );
+    expect(fileChangeRows).toHaveLength(2);
+    const secondFileChangeRow = fileChangeRows[1];
+    if (!secondFileChangeRow) {
+      throw new Error("Expected second file change row");
+    }
+
+    const olderTimeline = buildThreadTimeline(harness.db, thread, {
+      beforeCursor: {
+        topLevelSortSeq: secondFileChangeRow.sourceSeqStart,
+        rowId: secondFileChangeRow.id,
+      },
+      isDevelopment: false,
+    });
+    const olderFileChangeRows = olderTimeline.rows.filter(
+      (row) => row.kind === "work" && row.workKind === "file-change",
+    );
+
+    expect(olderFileChangeRows).toHaveLength(1);
+    expect(olderFileChangeRows[0]?.change.path).toBe("first.txt");
+    expect(olderTimeline.rows).not.toContainEqual(
+      expect.objectContaining({ id: secondFileChangeRow.id }),
+    );
   });
 
   it("keeps the active tail outside the regular standard older-row cap", async () => {
@@ -2663,6 +2895,17 @@ describe("buildThreadTimeline", () => {
       workKind: "command",
     });
     expect(timeline.rows.at(-1)?.sourceSeqStart).toBe(227);
+
+    const olderTimeline = buildThreadTimeline(harness.db, thread, {
+      beforeCursor: requireOlderCursor(timeline.timelinePage.olderCursor),
+      isDevelopment: false,
+    });
+    expect(olderTimeline.rows.map((row) => row.sourceSeqStart)).toEqual([
+      1, 2, 3, 4, 5,
+    ]);
+    expect(olderTimeline.rows).not.toContainEqual(
+      expect.objectContaining({ id: activeRow?.id }),
+    );
   });
 
   it("keeps pending steers outside the manager standard older-row cap", async () => {

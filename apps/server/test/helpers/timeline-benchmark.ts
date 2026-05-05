@@ -24,6 +24,7 @@ import { buildThreadEvent } from "@bb/domain";
 import {
   buildThreadTimeline,
   compactSummaryStoredEventRows,
+  THREAD_TIMELINE_OLDER_ROW_LIMIT,
   toThreadEventWithMeta,
 } from "../../src/services/threads/timeline.js";
 
@@ -153,7 +154,14 @@ function createTimelineBenchmarkScenario(
   const timelineViewMode =
     thread.type === "manager" ? "manager-conversation" : "standard";
   const buildSummary = () =>
-    buildThreadTimeline(db, thread, { isDevelopment: true, timelineViewMode });
+    buildThreadTimeline(db, thread, {
+      isDevelopment: true,
+      page: {
+        kind: "latest",
+        topLevelLimit: THREAD_TIMELINE_OLDER_ROW_LIMIT,
+      },
+      timelineViewMode,
+    });
 
   const buildAndSerializeSummary = () => JSON.stringify(buildSummary());
   const loadSummaryStoredRows = () =>

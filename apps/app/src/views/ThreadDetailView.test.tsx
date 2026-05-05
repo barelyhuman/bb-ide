@@ -67,6 +67,13 @@ type ThreadListHandler = (request: Request) => Response;
 
 const EMPTY_THREAD_TIMELINE_RESPONSE = {
   activeThinking: null,
+  timelinePage: {
+    kind: "latest",
+    topLevelLimit: 100,
+    returnedOlderTopLevelRowCount: 0,
+    hasOlderRows: false,
+    olderCursor: null,
+  },
   rows: [],
 } satisfies ThreadTimelineResponse;
 

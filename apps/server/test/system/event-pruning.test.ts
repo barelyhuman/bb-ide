@@ -6,7 +6,10 @@ import {
   pruneThreadEventHistory,
   pruneThreadEventHistoryBestEffort,
 } from "../../src/services/system/event-pruning.js";
-import { buildThreadTimeline } from "../../src/services/threads/timeline.js";
+import {
+  buildThreadTimeline,
+  THREAD_TIMELINE_OLDER_ROW_LIMIT,
+} from "../../src/services/threads/timeline.js";
 import { internalAuthHeaders } from "../helpers/commands.js";
 import {
   seedEnvironment,
@@ -251,6 +254,10 @@ describe("thread event pruning", () => {
       });
       const timeline = buildThreadTimeline(harness.db, thread, {
         isDevelopment: true,
+        page: {
+          kind: "latest",
+          topLevelLimit: THREAD_TIMELINE_OLDER_ROW_LIMIT,
+        },
         timelineViewMode: "standard",
       });
 
