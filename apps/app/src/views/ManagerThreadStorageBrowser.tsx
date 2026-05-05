@@ -18,6 +18,7 @@ import {
   Search,
 } from "lucide-react";
 import { CopyButton, EmptyState, Input, MarkdownPreview } from "@bb/ui-core";
+import { usePreferredTheme } from "@/hooks/useTheme";
 import { cn } from "@/lib/utils";
 import {
   isMarkdownFilePreview,
@@ -28,7 +29,44 @@ import {
 export const MARKDOWN_PREVIEW_RENDER_MAX_CHARS = 200_000;
 const SOURCE_PREVIEW_MAX_CHARS = 200_000;
 const STORAGE_PREVIEW_MAX_HEIGHT_CLASS = "max-h-[34rem]";
-const FILE_TREE_HOST_STYLE: CSSProperties = {
+
+interface FileTreeHostStyle extends CSSProperties {
+  "--trees-accent-override": string;
+  "--trees-bg-muted-override": string;
+  "--trees-bg-override": string;
+  "--trees-border-color-override": string;
+  "--trees-fg-muted-override": string;
+  "--trees-fg-override": string;
+  "--trees-focus-ring-color-override": string;
+  "--trees-font-family-override": string;
+  "--trees-font-size-override": string;
+  "--trees-item-margin-x-override": string;
+  "--trees-padding-inline-override": string;
+  "--trees-scrollbar-thumb-override": string;
+  "--trees-selected-bg-override": string;
+  "--trees-selected-fg-override": string;
+  "--trees-selected-focused-border-color-override": string;
+}
+
+const FILE_TREE_BASE_HOST_STYLE: FileTreeHostStyle = {
+  "--trees-accent-override": "var(--ring)",
+  "--trees-bg-muted-override":
+    "color-mix(in srgb, var(--muted) 45%, transparent)",
+  "--trees-bg-override": "transparent",
+  "--trees-border-color-override": "var(--border)",
+  "--trees-fg-muted-override": "var(--muted-foreground)",
+  "--trees-fg-override": "var(--foreground)",
+  "--trees-focus-ring-color-override": "var(--ring)",
+  "--trees-font-family-override": "var(--font-sans)",
+  "--trees-font-size-override": "var(--text-sm)",
+  "--trees-item-margin-x-override": "0.25rem",
+  "--trees-padding-inline-override": "0.5rem",
+  "--trees-scrollbar-thumb-override":
+    "color-mix(in srgb, var(--muted-foreground) 35%, transparent)",
+  "--trees-selected-bg-override":
+    "color-mix(in srgb, var(--accent) 65%, transparent)",
+  "--trees-selected-fg-override": "var(--foreground)",
+  "--trees-selected-focused-border-color-override": "var(--ring)",
   height: "100%",
 };
 const EMPTY_STORAGE_FILES: readonly WorkspaceFile[] = [];
@@ -263,6 +301,7 @@ export function ManagerThreadStorageBrowser({
   selectedPath,
   truncated,
 }: ManagerThreadStorageBrowserProps) {
+  const preferredTheme = usePreferredTheme();
   const [searchQuery, setSearchQuery] = useState("");
   const loadedFiles = files ?? EMPTY_STORAGE_FILES;
   const filteredFiles = useMemo(
@@ -276,6 +315,14 @@ export function ManagerThreadStorageBrowser({
   const expandedDirectoryPaths = useMemo(
     () => buildDirectoryPaths(filteredFilePaths),
     [filteredFilePaths],
+  );
+  const fileTreeHostStyle = useMemo<FileTreeHostStyle>(
+    () => ({
+      ...FILE_TREE_BASE_HOST_STYLE,
+      // Keeps native shadow-root chrome such as scrollbars aligned with the app theme.
+      colorScheme: preferredTheme,
+    }),
+    [preferredTheme],
   );
   const filePathSet = useMemo(
     () => new Set(filteredFilePaths),
@@ -405,7 +452,7 @@ export function ManagerThreadStorageBrowser({
               aria-label="Thread storage file tree"
               className="block h-full min-h-0"
               model={model}
-              style={FILE_TREE_HOST_STYLE}
+              style={fileTreeHostStyle}
             />
           ) : (
             <div className="flex h-full min-h-40 items-center justify-center px-4">

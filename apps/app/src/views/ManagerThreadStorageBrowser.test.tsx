@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   cleanup,
   fireEvent,
@@ -72,7 +72,9 @@ vi.mock("@pierre/trees/react", () => {
 
   interface MockFileTreeProps {
     "aria-label"?: string;
+    className?: string;
     model: MockFileTreeModel;
+    style?: CSSProperties;
   }
 
   function buildVisiblePaths(paths: readonly string[]): string[] {
@@ -160,7 +162,12 @@ vi.mock("@pierre/trees/react", () => {
     return { model: modelRef.current };
   }
 
-  function FileTree({ "aria-label": ariaLabel, model }: MockFileTreeProps) {
+  function FileTree({
+    "aria-label": ariaLabel,
+    className,
+    model,
+    style,
+  }: MockFileTreeProps) {
     const [, setVersion] = useState(0);
 
     useEffect(
@@ -169,7 +176,12 @@ vi.mock("@pierre/trees/react", () => {
     );
 
     return (
-      <div aria-label={ariaLabel} role="tree">
+      <div
+        aria-label={ariaLabel}
+        className={className}
+        role="tree"
+        style={style}
+      >
         {buildVisiblePaths(model.paths).map((path) => (
           <button
             key={path}
@@ -233,6 +245,7 @@ function installClipboardWriteTextMock() {
 
 afterEach(() => {
   cleanup();
+  document.documentElement.classList.remove("dark");
   treeResetCalls.length = 0;
   vi.clearAllMocks();
 });
@@ -273,6 +286,43 @@ describe("ManagerThreadStorageBrowser", () => {
     expect(treeResetCalls.at(-1)).toEqual({
       initialExpandedPaths: ["docs/", "docs/reports/"],
       paths: ["README.md", "docs/guide.md", "docs/reports/q1.md"],
+    });
+  });
+
+  it("themes the shadow-root tree host with app tokens", async () => {
+    renderBrowser({
+      files: makeFiles(["README.md"]),
+      selectedPath: null,
+    });
+
+    const tree = await screen.findByRole("tree", {
+      name: "Thread storage file tree",
+    });
+
+    expect(tree.style.getPropertyValue("--trees-bg-override")).toBe(
+      "transparent",
+    );
+    expect(tree.style.getPropertyValue("--trees-fg-override")).toBe(
+      "var(--foreground)",
+    );
+    expect(tree.style.getPropertyValue("--trees-fg-muted-override")).toBe(
+      "var(--muted-foreground)",
+    );
+    expect(tree.style.getPropertyValue("--trees-font-size-override")).toBe(
+      "var(--text-sm)",
+    );
+    expect(tree.style.getPropertyValue("--trees-selected-bg-override")).toBe(
+      "color-mix(in srgb, var(--accent) 65%, transparent)",
+    );
+    expect(tree.style.getPropertyValue("--trees-border-color-override")).toBe(
+      "var(--border)",
+    );
+    expect(tree.style.getPropertyValue("color-scheme")).toBe("light");
+
+    document.documentElement.classList.add("dark");
+
+    await waitFor(() => {
+      expect(tree.style.getPropertyValue("color-scheme")).toBe("dark");
     });
   });
 
