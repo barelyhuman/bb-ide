@@ -195,7 +195,12 @@ function MarkdownTextPreview({ preview }: MarkdownTextPreviewProps) {
     );
   }
 
-  return <MarkdownPreview content={preview.content} />;
+  return (
+    <MarkdownPreview
+      className="mx-auto w-full max-w-[760px]"
+      content={preview.content}
+    />
+  );
 }
 
 function UnsupportedPreview({ mimeType }: UnsupportedPreviewProps) {
@@ -462,7 +467,7 @@ export function ManagerThreadStorageBrowser({
         </StorageBrowserPane>
 
         <StorageBrowserPane
-          bodyClassName="overflow-auto p-3"
+          bodyClassName="@container/page overflow-auto p-3"
           header={
             <>
               {filePreview?.kind === "image" &&

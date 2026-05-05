@@ -76,6 +76,9 @@ type MarkdownTableHeadProps = ComponentPropsWithoutRef<"thead"> & ExtraProps;
 type MarkdownTableHeaderProps = ComponentPropsWithoutRef<"th"> & ExtraProps;
 type MarkdownUnorderedListProps = ComponentPropsWithoutRef<"ul"> & ExtraProps;
 
+const MARKDOWN_TABLE_BREAKOUT_WIDTH =
+  "max(100%, min(1100px, 100cqw - 2rem))";
+
 function safeDecodeURIComponent(value: string): string {
   try {
     return decodeURIComponent(value);
@@ -263,9 +266,8 @@ function MarkdownTable({ children }: MarkdownTableProps) {
     <div
       className="my-2"
       style={{
-        width: "max(100%, min(1100px, 100cqw - 2rem))",
-        marginInline:
-          "calc((100% - max(100%, min(1100px, 100cqw - 2rem))) / 2)",
+        width: MARKDOWN_TABLE_BREAKOUT_WIDTH,
+        marginInline: `calc((100% - ${MARKDOWN_TABLE_BREAKOUT_WIDTH}) / 2)`,
       }}
     >
       <div className="mx-auto w-max max-w-full overflow-x-auto">
