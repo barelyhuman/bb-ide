@@ -38,6 +38,7 @@ import { transcribeVoiceInput } from "@/lib/api";
 import { createJsonLocalStorage } from "@/lib/browser-storage";
 import {
   arePromptDraftStatesEqual,
+  isPromptDraftEmpty,
   type PromptDraftAttachment,
   type PromptDraftState,
 } from "@/lib/prompt-draft";
@@ -260,6 +261,17 @@ export function PromptBox({
     [resolvedZenModeStorageKey],
   );
   const [isZenMode, setIsZenMode] = useAtom(zenModeAtom);
+  const autoFocusScopeKey = history?.resetKey;
+
+  useLayoutEffect(() => {
+    if (!autoFocus) return;
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    textarea.focus();
+    const caretPosition = textarea.value.length;
+    textarea.setSelectionRange(caretPosition, caretPosition);
+  }, [autoFocus, autoFocusScopeKey]);
 
   useEffect(() => {
     if (!textareaRef.current) return;
@@ -626,7 +638,7 @@ export function PromptBox({
   ]);
 
   const applyHistoryDraft = useCallback(
-    (draft: PromptDraftState, caret: "start" | "end") => {
+    (draft: PromptDraftState) => {
       if (!history) {
         return;
       }
@@ -639,7 +651,7 @@ export function PromptBox({
         }
 
         textarea.focus();
-        const caretPosition = caret === "start" ? 0 : textarea.value.length;
+        const caretPosition = textarea.value.length;
         textarea.setSelectionRange(caretPosition, caretPosition);
         if (isZenMode) {
           textarea.style.height = "100%";
@@ -692,15 +704,52 @@ export function PromptBox({
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    const selectionStart = event.currentTarget.selectionStart;
+    const selectionEnd = event.currentTarget.selectionEnd;
+    const hasCollapsedSelection =
+      selectionStart !== null &&
+      selectionEnd !== null &&
+      selectionStart === selectionEnd;
+    const hasArrowNavigationModifier =
+      event.shiftKey || event.altKey || event.metaKey || event.ctrlKey;
+    const hasCursorAtEnd =
+      hasCollapsedSelection &&
+      selectionStart === event.currentTarget.value.length;
+    const activeHistoryEntry =
+      history && activeHistoryIndex !== null
+        ? history.entries[activeHistoryIndex]
+        : null;
+    const hasSelectedHistoryEntry = Boolean(
+      history &&
+        activeHistoryEntry !== null &&
+        activeHistoryEntry !== undefined &&
+        arePromptDraftStatesEqual(history.currentDraft, activeHistoryEntry),
+    );
+    const canNavigateHistory =
+      history !== undefined &&
+      !hasArrowNavigationModifier &&
+      hasCursorAtEnd &&
+      (isPromptDraftEmpty(history.currentDraft) || hasSelectedHistoryEntry);
+    const canNavigateMentions =
+      showMentionMenu && !hasArrowNavigationModifier && !canNavigateHistory;
+
     if (showMentionMenu) {
-      if (event.key === "ArrowDown" && mentionSuggestions.length > 0) {
+      if (
+        event.key === "ArrowDown" &&
+        canNavigateMentions &&
+        mentionSuggestions.length > 0
+      ) {
         event.preventDefault();
         setSelectedMentionIndex(
           (prev) => (prev + 1) % mentionSuggestions.length,
         );
         return;
       }
-      if (event.key === "ArrowUp" && mentionSuggestions.length > 0) {
+      if (
+        event.key === "ArrowUp" &&
+        canNavigateMentions &&
+        mentionSuggestions.length > 0
+      ) {
         event.preventDefault();
         setSelectedMentionIndex(
           (prev) =>
@@ -730,17 +779,9 @@ export function PromptBox({
     }
 
     if (history) {
-      const selectionStart = event.currentTarget.selectionStart;
-      const selectionEnd = event.currentTarget.selectionEnd;
-      const hasCollapsedSelection =
-        selectionStart !== null &&
-        selectionEnd !== null &&
-        selectionStart === selectionEnd;
-
       if (
         event.key === "ArrowUp" &&
-        hasCollapsedSelection &&
-        selectionStart === 0 &&
+        canNavigateHistory &&
         history.entries.length > 0
       ) {
         event.preventDefault();
@@ -754,20 +795,19 @@ export function PromptBox({
         setActiveHistoryIndex(nextHistoryIndex);
         const nextDraft = history.entries[nextHistoryIndex];
         setRecalledHistoryDraft(nextDraft);
-        applyHistoryDraft(nextDraft, "start");
+        applyHistoryDraft(nextDraft);
         return;
       }
 
       if (
         event.key === "ArrowDown" &&
-        hasCollapsedSelection &&
-        selectionStart === event.currentTarget.value.length &&
+        canNavigateHistory &&
         activeHistoryIndex !== null
       ) {
         event.preventDefault();
         if (activeHistoryIndex === 0) {
           if (temporaryHistoryDraft) {
-            applyHistoryDraft(temporaryHistoryDraft, "end");
+            applyHistoryDraft(temporaryHistoryDraft);
           }
           resetHistorySession();
           return;
@@ -777,7 +817,7 @@ export function PromptBox({
         setActiveHistoryIndex(nextHistoryIndex);
         const nextDraft = history.entries[nextHistoryIndex];
         setRecalledHistoryDraft(nextDraft);
-        applyHistoryDraft(nextDraft, "end");
+        applyHistoryDraft(nextDraft);
         return;
       }
     }

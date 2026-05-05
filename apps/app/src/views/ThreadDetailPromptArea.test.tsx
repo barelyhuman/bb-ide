@@ -332,6 +332,9 @@ describe("ThreadDetailPromptArea", () => {
 
     const textarea = await screen.findByRole<HTMLTextAreaElement>("textbox");
     expect(textarea.value).toBe(draftText);
+    expect(document.activeElement).toBe(textarea);
+    expect(textarea.selectionStart).toBe(draftText.length);
+    expect(textarea.selectionEnd).toBe(draftText.length);
 
     const submitButton = await screen.findByTitle("Submit (Enter)");
     fireEvent.click(submitButton);
