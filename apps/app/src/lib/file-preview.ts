@@ -18,6 +18,8 @@ const UTF8_TEXT_MIME_TYPES = new Set([
   "application/yaml",
 ]);
 
+const MARKDOWN_FILE_EXTENSIONS = [".md", ".markdown"];
+const MARKDOWN_MIME_TYPES = new Set(["text/markdown", "text/x-markdown"]);
 const NULL_CHARACTER = "\u0000";
 
 export interface FilePreviewTarget {
@@ -77,11 +79,29 @@ function decodeDeclaredTextContent(contentBytes: Uint8Array): string | null {
   return content.includes(NULL_CHARACTER) ? null : content;
 }
 
+function hasMarkdownExtension(path: string): boolean {
+  const normalizedPath = path.toLowerCase();
+  return MARKDOWN_FILE_EXTENSIONS.some((extension) =>
+    normalizedPath.endsWith(extension),
+  );
+}
+
 export function normalizeFilePreviewMimeType(value: string | null): string {
   const normalizedValue = value?.split(";")[0]?.trim().toLowerCase();
   return normalizedValue && normalizedValue.length > 0
     ? normalizedValue
     : DEFAULT_FILE_PREVIEW_MIME_TYPE;
+}
+
+export function isMarkdownFilePreview(
+  preview: FilePreview,
+): boolean {
+  return (
+    preview.kind === "text" &&
+    (MARKDOWN_MIME_TYPES.has(preview.mimeType) ||
+      hasMarkdownExtension(preview.path) ||
+      (preview.name ? hasMarkdownExtension(preview.name) : false))
+  );
 }
 
 export function buildFilePreview(args: BuildFilePreviewArgs): FilePreview {

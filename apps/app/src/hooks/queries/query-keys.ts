@@ -1,6 +1,10 @@
 import type { QueryKey } from "@tanstack/react-query";
 import type { ThreadListFilters } from "@/lib/api";
 import {
+  DEFAULT_THREAD_STORAGE_FILE_LIST_OPTIONS,
+  type ThreadStorageFileListOptions,
+} from "@/lib/thread-storage-files";
+import {
   THREAD_TIMELINE_DEFAULT_TOP_LEVEL_LIMIT,
   type ManagerTimelineView,
   type TimelinePaginationCursor,
@@ -146,9 +150,14 @@ export type ThreadPendingInteractionsQueryKey = readonly [
 export type ThreadStorageFilesQueryKey = readonly [
   typeof THREAD_STORAGE_FILES_QUERY_KEY,
   string,
+  ThreadStorageFileListOptions,
 ];
-export type ThreadStorageFilesQueryKeyPrefix = readonly [
+export type AllThreadStorageFilesQueryKeyPrefix = readonly [
   typeof THREAD_STORAGE_FILES_QUERY_KEY,
+];
+export type ThreadStorageFilesForThreadQueryKeyPrefix = readonly [
+  typeof THREAD_STORAGE_FILES_QUERY_KEY,
+  string,
 ];
 export type AllThreadStorageFilePreviewQueryKeyPrefix = readonly [
   typeof THREAD_STORAGE_FILE_PREVIEW_QUERY_KEY,
@@ -391,12 +400,19 @@ export function allThreadPendingInteractionsQueryKeyPrefix(): ThreadPendingInter
 
 export function threadStorageFilesQueryKey(
   threadId: string,
+  options: ThreadStorageFileListOptions = DEFAULT_THREAD_STORAGE_FILE_LIST_OPTIONS,
 ): ThreadStorageFilesQueryKey {
-  return [THREAD_STORAGE_FILES_QUERY_KEY, threadId];
+  return [THREAD_STORAGE_FILES_QUERY_KEY, threadId, options];
 }
 
-export function allThreadStorageFilesQueryKeyPrefix(): ThreadStorageFilesQueryKeyPrefix {
+export function allThreadStorageFilesQueryKeyPrefix(): AllThreadStorageFilesQueryKeyPrefix {
   return [THREAD_STORAGE_FILES_QUERY_KEY];
+}
+
+export function threadStorageFilesForThreadQueryKeyPrefix(
+  threadId: string,
+): ThreadStorageFilesForThreadQueryKeyPrefix {
+  return [THREAD_STORAGE_FILES_QUERY_KEY, threadId];
 }
 
 export function threadStorageFilePreviewQueryKey(

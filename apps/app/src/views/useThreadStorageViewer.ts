@@ -1,16 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ThreadType } from "@bb/domain";
 import {
+  DEFAULT_THREAD_STORAGE_FILE_LIST_OPTIONS,
+  type ThreadStorageFileListOptions,
+} from "@/lib/thread-storage-files";
+import {
   useThreadStorageFilePreview,
   useThreadStorageFiles,
 } from "../hooks/queries/thread-queries";
 
 interface UseThreadStorageViewerParams {
+  fileListOptions?: ThreadStorageFileListOptions;
   threadId?: string;
   threadType?: ThreadType;
 }
 
 export function useThreadStorageViewer({
+  fileListOptions = DEFAULT_THREAD_STORAGE_FILE_LIST_OPTIONS,
   threadId,
   threadType,
 }: UseThreadStorageViewerParams) {
@@ -18,7 +24,11 @@ export function useThreadStorageViewer({
   const [selectedThreadStoragePath, setSelectedThreadStoragePath] = useState<
     string | null
   >(null);
-  const { data: threadStorageFiles } = useThreadStorageFiles(threadId ?? "", {
+  const {
+    data: threadStorageFiles,
+    isLoading: isThreadStorageFilesLoading,
+    error: threadStorageFilesError,
+  } = useThreadStorageFiles(threadId ?? "", fileListOptions, {
     enabled: isManagerThread,
   });
   const effectiveThreadStoragePath = useMemo(() => {
@@ -58,11 +68,13 @@ export function useThreadStorageViewer({
   }, [isManagerThread, threadStorageFiles?.files]);
 
   return {
+    isThreadStorageFilesLoading,
     isThreadStorageFilePreviewLoading,
     threadStorageFilePreview,
     threadStorageFilePreviewError,
+    threadStorageFilesError,
     threadStorageFiles,
-    selectedThreadStoragePath,
+    selectedThreadStoragePath: effectiveThreadStoragePath,
     setSelectedThreadStoragePath,
   };
 }

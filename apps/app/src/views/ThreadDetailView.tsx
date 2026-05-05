@@ -134,9 +134,11 @@ export function ThreadDetailView() {
     : undefined;
   const {
     isThreadStorageFilePreviewLoading,
+    isThreadStorageFilesLoading,
     threadStorageFilePreview,
     threadStorageFilePreviewError,
     threadStorageFiles,
+    threadStorageFilesError,
     selectedThreadStoragePath,
     setSelectedThreadStoragePath,
   } = useThreadStorageViewer({
@@ -332,11 +334,9 @@ export function ThreadDetailView() {
     },
     [thread, updateThread],
   );
-  const handleThreadStoragePathToggle = useCallback(
+  const handleThreadStoragePathSelect = useCallback(
     (path: string) => {
-      setSelectedThreadStoragePath((currentPath) =>
-        currentPath === path ? null : path,
-      );
+      setSelectedThreadStoragePath(path);
     },
     [setSelectedThreadStoragePath],
   );
@@ -599,16 +599,14 @@ export function ThreadDetailView() {
     thread.type === "manager"
       ? {
           filePreview: threadStorageFilePreview,
-          fileError:
-            threadStorageFilePreviewError instanceof Error
-              ? threadStorageFilePreviewError
-              : threadStorageFilePreviewError
-                ? new Error("Failed to load thread storage file")
-                : null,
+          fileError: threadStorageFilePreviewError,
+          filesError: threadStorageFilesError,
           files: threadStorageFiles?.files,
+          isFilesLoading: isThreadStorageFilesLoading,
           isFileLoading: isThreadStorageFilePreviewLoading,
-          onTogglePath: handleThreadStoragePathToggle,
+          onSelectPath: handleThreadStoragePathSelect,
           selectedPath: selectedThreadStoragePath,
+          truncated: threadStorageFiles?.truncated ?? false,
         }
       : undefined;
 

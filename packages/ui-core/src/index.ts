@@ -196,6 +196,12 @@ export {
   type ImageLightboxProps,
   type WrappedImageIndexInput,
 } from "./primitives/image-lightbox.js";
+export {
+  MarkdownPreview,
+  type MarkdownPreviewLocalFileLink,
+  type MarkdownPreviewLocalFileLinkHandler,
+  type MarkdownPreviewProps,
+} from "./primitives/markdown-preview.js";
 export { PageShell, type PageShellProps } from "./primitives/page-shell.js";
 export {
   OverflowFade,

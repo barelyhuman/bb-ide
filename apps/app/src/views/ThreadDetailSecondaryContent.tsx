@@ -1,7 +1,7 @@
 import { type ComponentProps, type ReactNode, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { HostStatusBadge } from "@/components/HostStatusIndicator";
-import { Check, ChevronDown, ChevronRight, Copy, X } from "lucide-react";
+import { Check, ChevronDown, Copy, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Panel, PanelGroup } from "react-resizable-panels";
 import { Button } from "@bb/ui-core";
@@ -24,6 +24,7 @@ import { useIsSecondaryPanelOpen } from "@/lib/thread-secondary-panel";
 import type { ThreadGitStatusDisplay } from "@/lib/workspace-status";
 import { ThreadSecondaryPanel } from "./ThreadSecondaryPanel";
 import { ThreadTimelinePane } from "./ThreadTimelinePane";
+import { ManagerThreadStorageBrowser } from "./ManagerThreadStorageBrowser";
 import { DetailCard, DetailRow, LocalhostBadge } from "@bb/ui-core";
 import type { Thread } from "@bb/domain";
 import type { WorkspaceFile } from "@bb/server-contract";
@@ -79,13 +80,18 @@ interface ThreadDetailMetadataProps {
   workspaceStatusFilesLabel?: string;
 }
 
+type ThreadStoragePathSelectHandler = (path: string) => void;
+
 interface ThreadDetailThreadStorageProps {
   fileError?: Error | null;
   filePreview?: FilePreview;
+  filesError?: Error | null;
   files?: readonly WorkspaceFile[];
+  isFilesLoading: boolean;
   isFileLoading: boolean;
-  onTogglePath: (path: string) => void;
+  onSelectPath: ThreadStoragePathSelectHandler;
   selectedPath: string | null;
+  truncated: boolean;
 }
 
 interface ThreadDetailSecondaryContentProps {
@@ -352,91 +358,6 @@ function ThreadMetadataContent({
   );
 }
 
-function ThreadStorageContent({
-  fileError,
-  filePreview,
-  files,
-  isFileLoading,
-  onTogglePath,
-  selectedPath,
-}: ThreadDetailThreadStorageProps) {
-  if ((files?.length ?? 0) === 0) {
-    return (
-      <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
-        No files yet.
-      </p>
-    );
-  }
-
-  return (
-    <div className="space-y-2">
-      {files?.map((file) => {
-        const isExpanded = selectedPath === file.path;
-
-        return (
-          <div
-            key={file.path}
-            className="overflow-hidden rounded-lg border border-border/70 bg-background/45"
-          >
-            <button
-              type="button"
-              className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-accent/20"
-              onClick={() => {
-                onTogglePath(file.path);
-              }}
-              aria-expanded={isExpanded}
-            >
-              {isExpanded ? (
-                <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
-              ) : (
-                <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
-              )}
-              <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">
-                {file.path}
-              </span>
-            </button>
-            {isExpanded ? (
-              <div className="border-t border-border/70 px-3 py-3">
-                {isFileLoading ? (
-                  <p className="text-xs text-muted-foreground">
-                    Loading file...
-                  </p>
-                ) : fileError ? (
-                  <p className="text-xs text-destructive">
-                    {fileError.message}
-                  </p>
-                ) : filePreview?.kind === "text" ? (
-                  filePreview.content.length > 0 ? (
-                    <pre className="overflow-auto whitespace-pre-wrap break-words font-mono text-xs text-foreground">
-                      {filePreview.content}
-                    </pre>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">Empty file.</p>
-                  )
-                ) : filePreview?.kind === "image" ? (
-                  <img
-                    src={filePreview.url}
-                    alt={filePreview.path}
-                    className="max-h-96 w-auto max-w-full rounded-md border border-border/70 bg-background object-contain"
-                  />
-                ) : filePreview?.kind === "unsupported" ? (
-                  <p className="text-xs text-muted-foreground">
-                    Preview not available for {filePreview.mimeType}.
-                  </p>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Select a thread storage file to view it.
-                  </p>
-                )}
-              </div>
-            ) : null}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 export function ThreadDetailSecondaryContent({
   footer,
   header,
@@ -471,7 +392,7 @@ export function ThreadDetailSecondaryContent({
     </div>
   );
   const threadStorageContent = threadStorage ? (
-    <ThreadStorageContent {...threadStorage} />
+    <ManagerThreadStorageBrowser {...threadStorage} />
   ) : undefined;
   const desktopSecondaryPanelContent = !isMobile ? (
     <ThreadSecondaryPanel

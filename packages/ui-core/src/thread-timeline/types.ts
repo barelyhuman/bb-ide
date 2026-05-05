@@ -1,17 +1,14 @@
+import type {
+  MarkdownPreviewLocalFileLink,
+  MarkdownPreviewLocalFileLinkHandler,
+} from "../primitives/markdown-preview.js";
+
 export type ThreadTimelineTheme = "light" | "dark";
 
-export interface ThreadTimelineLocalFileLink {
-  lineNumber: number | null;
-  path: string;
-}
+export type ThreadTimelineLocalFileLink = MarkdownPreviewLocalFileLink;
 
-/**
- * Return `true` when the link was handled and anchor navigation should be
- * prevented. Return `false` to leave the link as a normal anchor.
- */
-export type ThreadTimelineLocalFileLinkHandler = (
-  link: ThreadTimelineLocalFileLink,
-) => boolean;
+export type ThreadTimelineLocalFileLinkHandler =
+  MarkdownPreviewLocalFileLinkHandler;
 
 export type UserAttachmentImageSrcResolver = (
   pathOrUrl: string,

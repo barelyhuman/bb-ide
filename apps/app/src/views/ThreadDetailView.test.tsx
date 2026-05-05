@@ -21,9 +21,11 @@ import {
   type ThreadListQueryFilters,
 } from "@/hooks/queries/query-keys";
 import { wsManager } from "@/lib/ws";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ThreadDetailView } from "./ThreadDetailView";
 import { buildManagerSelectorOptions } from "./threadManagerSelectorOptions";
+
+vi.unmock("@/lib/api");
 
 vi.mock("partysocket/ws", async () => {
   const { FakeReconnectingWebSocket: FakeSocket } =
@@ -51,6 +53,7 @@ interface CreateThreadDetailSuccessRoutesArgs {
   thread: ThreadWithRuntime;
   threadListHandler?: ThreadListHandler;
   threadListRequests?: URL[];
+  threadStorageFilesHandler?: ThreadStorageFilesHandler;
 }
 
 interface ThreadListEntryOverrides extends Partial<ThreadListEntry> {}
@@ -61,9 +64,11 @@ interface ThreadDetailSuccessFetchRoutesArgs {
   listThreadsHandler: ThreadListHandler;
   parentThread?: ThreadWithRuntime;
   thread: ThreadWithRuntime;
+  threadStorageFilesHandler?: ThreadStorageFilesHandler;
 }
 
 type ThreadListHandler = (request: Request) => Response;
+type ThreadStorageFilesHandler = (request: Request) => Response;
 
 const EMPTY_THREAD_TIMELINE_RESPONSE = {
   activeThinking: null,
@@ -126,12 +131,14 @@ function installThreadDetailSuccessFetchRoutes({
   listThreadsHandler,
   parentThread,
   thread,
+  threadStorageFilesHandler,
 }: ThreadDetailSuccessFetchRoutesArgs) {
   return installFetchRoutes(
     createThreadDetailSuccessRoutes({
       parentThread,
       thread,
       threadListHandler: listThreadsHandler,
+      threadStorageFilesHandler,
     }),
   );
 }
@@ -177,7 +184,6 @@ async function renderThreadDetailView(
       options.cachedProjectThreads,
     );
   }
-
   await act(async () => {
     render(<ThreadDetailView />, { wrapper });
   });
@@ -204,6 +210,12 @@ function createThreadDetailSuccessRoutes(
     {
       pathname: "/api/v1/threads/thr-1/timeline",
       handler: () => jsonResponse(EMPTY_THREAD_TIMELINE_RESPONSE),
+    },
+    {
+      pathname: "/api/v1/threads/thr-1/thread-storage/files",
+      handler:
+        args.threadStorageFilesHandler ??
+        (() => jsonResponse({ files: [], truncated: false })),
     },
     {
       pathname: "/api/v1/threads",
@@ -306,49 +318,20 @@ function getThreadListObserverCount(
   );
 }
 
+beforeEach(() => {
+  window.localStorage.clear();
+});
+
 afterEach(() => {
   wsManager.disconnect();
   cleanup();
+  window.localStorage.clear();
   resetFakeReconnectingWebSockets();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe("ThreadDetailView", () => {
-  it("loads active manager threads for manager selector data", async () => {
-    const threadListRequests: URL[] = [];
-    const activeManager = createThreadListEntry({
-      id: "thr-manager-active",
-      title: "Active manager",
-      titleFallback: "Active manager",
-      type: "manager",
-    });
-
-    installFetchRoutes(
-      createThreadDetailSuccessRoutes({
-        managerThreads: [activeManager],
-        thread: createThreadResponse({ title: "Standard thread" }),
-        threadListRequests,
-      }),
-    );
-
-    wsManager.connect();
-
-    await renderThreadDetailView();
-
-    await waitFor(() => {
-      expect(threadListRequests.length).toBeGreaterThan(0);
-    });
-    expect(
-      threadListRequests.every(
-        (requestUrl) =>
-          requestUrl.searchParams.get("projectId") === "project-1" &&
-          requestUrl.searchParams.get("archived") === "false" &&
-          requestUrl.searchParams.get("type") === "manager",
-      ),
-    ).toBe(true);
-  });
-
   it("builds new assignment targets from active manager query results", () => {
     const thread = createThreadResponse({ title: "Standard thread" });
     const activeManager = createThreadListEntry({
@@ -498,9 +481,11 @@ describe("ThreadDetailView", () => {
 
   it("loads project threads for root standard threads so they can be assigned to managers", async () => {
     let listThreadsRequestCount = 0;
+    const threadListRequests: URL[] = [];
     installThreadDetailSuccessFetchRoutes({
       thread: createThreadResponse(),
-      listThreadsHandler: () => {
+      listThreadsHandler: (request) => {
+        threadListRequests.push(new URL(request.url));
         listThreadsRequestCount += 1;
         return jsonResponse([
           createThreadListEntry({
@@ -519,6 +504,14 @@ describe("ThreadDetailView", () => {
     await waitFor(() => {
       expect(listThreadsRequestCount).toBe(1);
     });
+    expect(
+      threadListRequests.every(
+        (requestUrl) =>
+          requestUrl.searchParams.get("projectId") === "project-1" &&
+          requestUrl.searchParams.get("archived") === "false" &&
+          requestUrl.searchParams.get("type") === "manager",
+      ),
+    ).toBe(true);
   });
 
   it("does not add a manager-selector thread-list observer for manager threads", async () => {
@@ -581,5 +574,41 @@ describe("ThreadDetailView", () => {
     expect(getThreadListObserverCount(queryClient, managerThreadFilters)).toBe(
       1,
     );
+  });
+
+  it("only loads thread storage files for manager threads", async () => {
+    let standardStorageRequestCount = 0;
+    installFetchRoutes(
+      createThreadDetailSuccessRoutes({
+        thread: createThreadResponse({ type: "standard" }),
+        threadStorageFilesHandler: () => {
+          standardStorageRequestCount += 1;
+          return jsonResponse({ files: [], truncated: false });
+        },
+      }),
+    );
+
+    await renderThreadDetailView();
+    await screen.findByText("Loaded thread");
+    expect(standardStorageRequestCount).toBe(0);
+    cleanup();
+    wsManager.disconnect();
+    resetFakeReconnectingWebSockets();
+
+    let managerStorageRequestCount = 0;
+    installFetchRoutes(
+      createThreadDetailSuccessRoutes({
+        thread: createThreadResponse({ type: "manager" }),
+        threadStorageFilesHandler: () => {
+          managerStorageRequestCount += 1;
+          return jsonResponse({ files: [], truncated: false });
+        },
+      }),
+    );
+
+    await renderThreadDetailView();
+    await waitFor(() => {
+      expect(managerStorageRequestCount).toBe(1);
+    });
   });
 });

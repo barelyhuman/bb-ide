@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildFilePreview, normalizeFilePreviewMimeType } from "./file-preview";
+import {
+  buildFilePreview,
+  isMarkdownFilePreview,
+  normalizeFilePreviewMimeType,
+} from "./file-preview";
 
 describe("file-preview", () => {
   it("builds text previews for declared text mime types", () => {
@@ -93,5 +97,30 @@ describe("file-preview", () => {
       "text/plain",
     );
     expect(normalizeFilePreviewMimeType(null)).toBe("application/octet-stream");
+  });
+
+  it("detects Markdown text previews by extension and mime type", () => {
+    const markdownByPath = buildFilePreview({
+      contentBytes: new TextEncoder().encode("# Notes\n"),
+      mimeType: "text/plain",
+      path: "docs/notes.md",
+      url: "/files/docs/notes.md",
+    });
+    const markdownByMime = buildFilePreview({
+      contentBytes: new TextEncoder().encode("# Notes\n"),
+      mimeType: "text/markdown",
+      path: "docs/notes",
+      url: "/files/docs/notes",
+    });
+    const plainText = buildFilePreview({
+      contentBytes: new TextEncoder().encode("# Notes\n"),
+      mimeType: "text/plain",
+      path: "docs/notes.txt",
+      url: "/files/docs/notes.txt",
+    });
+
+    expect(isMarkdownFilePreview(markdownByPath)).toBe(true);
+    expect(isMarkdownFilePreview(markdownByMime)).toBe(true);
+    expect(isMarkdownFilePreview(plainText)).toBe(false);
   });
 });

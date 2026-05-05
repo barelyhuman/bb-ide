@@ -16,6 +16,7 @@ import type {
   WorkspaceFileListResponse,
 } from "@bb/server-contract";
 import type { ThreadListFilters, FilePreview } from "@/lib/api";
+import type { ThreadStorageFileListOptions } from "@/lib/thread-storage-files";
 import * as api from "@/lib/api";
 import { getCachedThreadListPlaceholder } from "./query-cache";
 import {
@@ -155,11 +156,19 @@ export function useThreadPendingInteractions(
   });
 }
 
-export function useThreadStorageFiles(id: string, options?: QueryOptions) {
+export function useThreadStorageFiles(
+  id: string,
+  listOptions: ThreadStorageFileListOptions,
+  options?: QueryOptions,
+) {
   return useQuery<WorkspaceFileListResponse>({
-    queryKey: threadStorageFilesQueryKey(id),
-    queryFn: () =>
-      api.listThreadStorageFiles(requireThreadId(id, "useThreadStorageFiles")),
+    queryKey: threadStorageFilesQueryKey(id, listOptions),
+    queryFn: ({ signal }) =>
+      api.listThreadStorageFiles({
+        id: requireThreadId(id, "useThreadStorageFiles"),
+        options: listOptions,
+        signal,
+      }),
     enabled: (options?.enabled ?? true) && Boolean(id),
     refetchOnWindowFocus: false,
   });

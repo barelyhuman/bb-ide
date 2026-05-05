@@ -12,7 +12,7 @@ import {
   environmentMergeBaseBranchesQueryKeyPrefix,
   environmentWorkStatusQueryKeyPrefix,
   threadStorageFilePreviewQueryKeyPrefix,
-  threadStorageFilesQueryKey,
+  threadStorageFilesForThreadQueryKeyPrefix,
 } from "./queries/query-keys";
 import type {
   EnvironmentArg,
@@ -147,7 +147,7 @@ export function invalidateThreadStorageQueries({
   threadId,
 }: ThreadArg): void {
   queryClient.invalidateQueries({
-    queryKey: threadStorageFilesQueryKey(threadId),
+    queryKey: threadStorageFilesForThreadQueryKeyPrefix(threadId),
   });
   queryClient.invalidateQueries({
     queryKey: threadStorageFilePreviewQueryKeyPrefix(threadId),

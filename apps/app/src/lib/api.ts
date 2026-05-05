@@ -46,6 +46,7 @@ import type {
   ThreadDraftListResponse,
   ThreadListResponse,
   ThreadResponse,
+  ThreadStorageFilesQuery,
   ThreadTimelineResponse,
   TimelinePaginationCursor,
   TimelineTurnSummaryDetailsRequest,
@@ -70,6 +71,7 @@ import {
   type FilePreviewTarget,
 } from "./file-preview";
 import { buildThreadStorageContentUrl } from "./file-content-urls";
+import type { ThreadStorageFileListOptions } from "./thread-storage-files";
 export type { FilePreview } from "./file-preview";
 
 interface GetThreadTimelineTurnSummaryDetailsArgs extends TimelineTurnSummaryDetailsRequest {
@@ -512,11 +514,35 @@ export async function getThreadAssignedChildSummary(
   );
 }
 
-export async function listThreadStorageFiles(
-  id: string,
-): Promise<WorkspaceFileListResponse> {
+interface ListThreadStorageFilesArgs {
+  id: string;
+  options: ThreadStorageFileListOptions;
+  signal?: AbortSignal;
+}
+
+function toThreadStorageFilesQuery(
+  options: ThreadStorageFileListOptions,
+): ThreadStorageFilesQuery {
+  const trimmedQuery = options.query?.trim() ?? "";
+  return {
+    ...(trimmedQuery.length > 0 ? { query: trimmedQuery } : {}),
+    limit: String(options.limit),
+  };
+}
+
+export async function listThreadStorageFiles({
+  id,
+  options,
+  signal,
+}: ListThreadStorageFilesArgs): Promise<WorkspaceFileListResponse> {
   return request<WorkspaceFileListResponse>(
-    apiClient.threads[":id"]["thread-storage"].files.$get({ param: { id } }),
+    apiClient.threads[":id"]["thread-storage"].files.$get(
+      {
+        param: { id },
+        query: toThreadStorageFilesQuery(options),
+      },
+      requestOptions(signal),
+    ),
   );
 }
 
