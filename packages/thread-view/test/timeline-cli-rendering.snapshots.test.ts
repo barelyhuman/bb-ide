@@ -686,6 +686,58 @@ describe("timeline CLI rendering snapshots", () => {
     `);
   });
 
+  it("keeps completed thread provisioning after the initial user request", () => {
+    const event = createTimelineEventFactory({ threadId: "thread-1" });
+    const initialRequest = event.clientTurnRequested({
+      requestMethod: "thread/start",
+      source: "spawn",
+      target: { kind: "thread-start" },
+      text: "Start the workspace",
+    });
+    const timeline = renderActiveTimeline([
+      initialRequest,
+      event.threadProvisioning({
+        status: "active",
+        entries: [
+          {
+            type: "step",
+            key: "workspace",
+            text: "Preparing workspace",
+            status: "started",
+          },
+        ],
+      }),
+      event.threadProvisioning({
+        status: "completed",
+        entries: [],
+      }),
+      event.turnStarted(),
+      event.inputAccepted({
+        clientRequestId: initialRequest.data.requestId,
+      }),
+      event.assistantCompleted({
+        itemId: "assistant-1",
+        text: "I can work now.",
+      }),
+    ]);
+
+    expect(
+      timeline.rows.map((row) => {
+        if (row.kind === "conversation") {
+          return `${row.role}:${row.text}`;
+        }
+        if (row.kind === "system") {
+          return row.title;
+        }
+        return row.kind;
+      }),
+    ).toEqual([
+      "user:Start the workspace",
+      "Provisioned thread",
+      "assistant:I can work now.",
+    ]);
+  });
+
   it("shows provisioning failure as user input, operation, and error", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
     const timeline = renderTimelineFixture({

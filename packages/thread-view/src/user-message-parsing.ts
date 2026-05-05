@@ -212,6 +212,19 @@ function buildUserRequest(
   };
 }
 
+function resolveClientUserMessageTurnId(
+  decoded: ClientTurnRequestedEvent,
+  acceptedClientRequest: AcceptedClientRequest | undefined,
+): string | null {
+  if (decoded.target.kind === "thread-start") {
+    return null;
+  }
+  return (
+    acceptedClientRequest?.turnId ??
+    ("expectedTurnId" in decoded.target ? decoded.target.expectedTurnId : null)
+  );
+}
+
 interface BuildClientUserMessageArgs {
   acceptedClientRequest?: AcceptedClientRequest;
   decoded: ClientTurnRequestedEvent;
@@ -227,9 +240,10 @@ function buildClientUserMessage({
   parsedInput,
   requestStatus,
 }: BuildClientUserMessageArgs): EventProjectionUserMessage {
-  const targetTurnId =
-    acceptedClientRequest?.turnId ??
-    ("expectedTurnId" in decoded.target ? decoded.target.expectedTurnId : null);
+  const targetTurnId = resolveClientUserMessageTurnId(
+    decoded,
+    acceptedClientRequest,
+  );
   const rowMeta =
     isSteerRequest(decoded) && acceptedClientRequest
       ? acceptedClientRequest.meta
